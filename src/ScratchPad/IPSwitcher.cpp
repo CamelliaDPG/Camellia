@@ -27,7 +27,7 @@ IPSwitcher::IPSwitcher(IPPtr ip1, IPPtr ip2, double minH)
 LinearTermPtr IPSwitcher::evaluate(map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Evaluation of switched IPs not supported yet");
-  return Teuchos::rcp((LinearTerm *)NULL);
+//  return Teuchos::rcp((LinearTerm *)NULL);
 }
 
 void IPSwitcher::computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
@@ -76,9 +76,10 @@ double IPSwitcher::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCach
 
 // compute IP vector when var==fxn
 void IPSwitcher::computeInnerProductVector(Camellia::FieldContainer<double> &ipVector,
-    VarPtr var, TFunctionPtr<double> fxn,
-    Teuchos::RCP<DofOrdering> dofOrdering,
-    Teuchos::RCP<BasisCache> basisCache)
+                                           VarPtr var, TFunctionPtr<double> fxn,
+                                           Teuchos::RCP<DofOrdering> dofOrdering,
+                                           Teuchos::RCP<BasisCache> basisCache,
+                                           bool sumInto)
 {
 
   MeshPtr mesh = basisCache->mesh();
@@ -103,9 +104,19 @@ void IPSwitcher::computeInnerProductVector(Camellia::FieldContainer<double> &ipV
       _ip2->computeInnerProductVector(cellVec,var,fxn,dofOrdering,cellCache);
     }
 
-    for (int i = 0; i<numDofs; i++)
+    if (sumInto)
     {
-      ipVector(c,i) = cellVec(1,i);
+      for (int i = 0; i<numDofs; i++)
+      {
+        ipVector(c,i) += cellVec(1,i);
+      }
+    }
+    else
+    {
+      for (int i = 0; i<numDofs; i++)
+      {
+        ipVector(c,i) = cellVec(1,i);
+      }
     }
   }
 

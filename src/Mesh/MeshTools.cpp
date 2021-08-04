@@ -214,6 +214,7 @@ public:
     _spaceTimeFunction = spaceTimeFunction;
     _t = t;
   }
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr sliceBasisCache)
   {
     vector<GlobalIndexType> sliceCellIDs = sliceBasisCache->cellIDs();
@@ -229,14 +230,14 @@ public:
       int enumeration = SerialDenseWrapper::getEnumeration(offset,values);
       Camellia::FieldContainer<double>valuesForCell(dim,&values[enumeration]);
       GlobalIndexType sliceCellID = sliceCellIDs[cellOrdinal];
-      int numPoints = sliceBasisCache->getPhysicalCubaturePoints().dimension(1);
-      int spaceDim = sliceBasisCache->getPhysicalCubaturePoints().dimension(2);
+      int numPoints = sliceBasisCache->getPhysicalCubaturePointsFC().dimension(1);
+      int spaceDim = sliceBasisCache->getPhysicalCubaturePointsFC().dimension(2);
       Camellia::FieldContainer<double> spaceTimePhysicalPoints(1,numPoints,spaceDim+1);
       for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
       {
         for (int d=0; d<spaceDim; d++)
         {
-          spaceTimePhysicalPoints(0,ptOrdinal,d) = sliceBasisCache->getPhysicalCubaturePoints()(cellOrdinal,ptOrdinal,d);
+          spaceTimePhysicalPoints(0,ptOrdinal,d) = sliceBasisCache->getPhysicalCubaturePointsFC()(cellOrdinal,ptOrdinal,d);
         }
         spaceTimePhysicalPoints(0,ptOrdinal,spaceDim) = _t;
       }

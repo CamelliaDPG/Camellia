@@ -84,7 +84,7 @@ Camellia::FieldContainer<double> cubaturePoints(shards::CellTopology cellTopo, i
   CamelliaCellTools::refCellNodesForTopology(permutedCellNodes, cellTopo, nodePermutation);
   permutedCellNodes.resize(1, permutedCellNodes.dimension(0), permutedCellNodes.dimension(1));
   basisCache->setPhysicalCellNodes(permutedCellNodes, vector<GlobalIndexType>(), false);
-  Camellia::FieldContainer<double> permutedCubaturePoints = basisCache->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> permutedCubaturePoints = basisCache->getPhysicalCubaturePointsFC();
   permutedCubaturePoints.resize(permutedCubaturePoints.dimension(1), permutedCubaturePoints.dimension(2));
   return permutedCubaturePoints;
 }
@@ -101,7 +101,7 @@ Camellia::FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTop
   fineCellNodesInCoarseCell.resize(1,fineCellNodesInCoarseCell.dimension(0),fineCellNodesInCoarseCell.dimension(1));
 
   fineBasisCache->setPhysicalCellNodes(fineCellNodesInCoarseCell, vector<GlobalIndexType>(), false);
-  Camellia::FieldContainer<double> fineCubPoints = fineBasisCache->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> fineCubPoints = fineBasisCache->getPhysicalCubaturePointsFC();
   fineCubPoints.resize(fineCubPoints.dimension(1), fineCubPoints.dimension(2));
 
   return fineCubPoints;
@@ -123,29 +123,6 @@ RefinementBranch demoRefinementsOnSide(shards::CellTopology cellTopo, unsigned s
     demoRefinements.push_back(make_pair(refPattern.get(),childIndex));
   }
   return demoRefinements;
-}
-
-// copied from DPGTests's BasisReconciliationTests
-Camellia::FieldContainer<double> filterValues(Camellia::FieldContainer<double> &basisValues, set<unsigned> &dofOrdinalFilter, bool includesCellDimension)
-{
-  Teuchos::Array<int> dim;
-  basisValues.dimensions(dim); // dimensions are ordered (C,F,P[,D,…]) if there is a cell dimension, (F,P[,D,…]) otherwise
-  int fieldDimOrdinal = includesCellDimension ? 1 : 0;
-  dim[fieldDimOrdinal] = dofOrdinalFilter.size();
-  Camellia::FieldContainer<double> filteredValues(dim);
-  if (dofOrdinalFilter.size() == 0) return filteredValues; // empty container
-  int valuesPerField = filteredValues.size() / dofOrdinalFilter.size();
-  double *filteredValue = &filteredValues[0];
-  for (set<unsigned>::iterator dofOrdinalIt=dofOrdinalFilter.begin(); dofOrdinalIt != dofOrdinalFilter.end(); dofOrdinalIt++)
-  {
-    unsigned dofOrdinal = *dofOrdinalIt;
-    for (int i=0; i<valuesPerField; i++)
-    {
-      *filteredValue = basisValues[dofOrdinal * valuesPerField + i];
-      filteredValue++;
-    }
-  }
-  return filteredValues;
 }
 
 // copied from DPGTests's BasisReconciliationTests
@@ -238,7 +215,7 @@ Camellia::FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTo
   sideCache->setRefCellPointsFC(pointsRefCell);
   sideCache->setPhysicalCellNodes(sideNodes, vector<GlobalIndexType>(), false);
 
-  Camellia::FieldContainer<double> permutedPoints = sideCache->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> permutedPoints = sideCache->getPhysicalCubaturePointsFC();
   permutedPoints.resize(permutedPoints.dimension(1), permutedPoints.dimension(2));
   return permutedPoints;
 }
@@ -484,8 +461,8 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
   fineCache->getSideBasisCache(fineSideIndex)->setRefCellPointsFC(sidePointsFine);
   coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPointsFC(sidePointsCoarse);
 
-  Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
-  Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePointsFC();
+  Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePointsFC();
 
   Camellia::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
   Camellia::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
@@ -582,8 +559,8 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, Camell
   fineCache->getSideBasisCache(fineSideIndex)->setRefCellPointsFC(sidePointsFine);
   coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPointsFC(sidePointsCoarse);
 
-  Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
-  Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePointsFC();
+  Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePointsFC();
 
   Camellia::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
   Camellia::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
@@ -746,13 +723,13 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
 
               bool oldSuccess = success;
               success = true;
-              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(sideCache1->getPhysicalCubaturePoints(), sideCache2->getPhysicalCubaturePoints(), 1e-14, 1e-16);
+              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(sideCache1->getPhysicalCubaturePointsFC(), sideCache2->getPhysicalCubaturePointsFC(), 1e-14, 1e-16);
               bool justFailed = !success;
               success = success && oldSuccess;
               if (justFailed)
               {
-                out << "sideCache1->getPhysicalCubaturePoints():\n" << sideCache1->getPhysicalCubaturePoints();
-                out << "sideCache2->getPhysicalCubaturePoints():\n" << sideCache2->getPhysicalCubaturePoints();
+                out << "sideCache1->getPhysicalCubaturePointsFC():\n" << sideCache1->getPhysicalCubaturePointsFC();
+                out << "sideCache2->getPhysicalCubaturePointsFC():\n" << sideCache2->getPhysicalCubaturePointsFC();
               }
 
               Camellia::FieldContainer<double> values1 = *sideCache1->getTransformedValues(basis1, OP_VALUE);
@@ -1062,7 +1039,7 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
                                       physicalCellNodes2, createSideCaches);
           basisCache2->setRefCellPointsFC(subcellPointsInRefCell2);
 
-          TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(basisCache1->getPhysicalCubaturePoints(), basisCache2->getPhysicalCubaturePoints(), 1e-14, 1e-16);
+          TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(basisCache1->getPhysicalCubaturePointsFC(), basisCache2->getPhysicalCubaturePointsFC(), 1e-14, 1e-16);
 
           Camellia::FieldContainer<double> values1 = *basisCache1->getTransformedValues(basis1, OP_VALUE);
           Camellia::FieldContainer<double> values2 = *basisCache2->getTransformedValues(basis2, OP_VALUE);
@@ -1164,8 +1141,8 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, h_Slow )
 
   vector< pair< pair< BasisPtr, BasisPtr >, RefinementBranch > > basisPairsToCheck;
 
-  BasisPtr fineBasis = Camellia::intrepidLineHGRAD(fineOrder);
-  BasisPtr coarseBasis = Camellia::intrepidLineHGRAD(coarseOrder);
+  BasisPtr fineBasis = Camellia::intrepid2LineHGRAD(fineOrder);
+  BasisPtr coarseBasis = Camellia::intrepid2LineHGRAD(coarseOrder);
   basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), lineRefinementsZero ) );
   basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), lineRefinementsAlternating ) );
 
@@ -1228,7 +1205,13 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, hSide )
 
   hSideTest test;
 
-  int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
+  // side numbering is counter-clockwise, beginning at bottom.
+    // we comment out SOUTH and NORTH below because they are not actually used in the code that follows,
+    // and some compilers warn about that fact.
+  //  int SOUTH = 0;
+    int EAST  = 1;
+  //  int NORTH = 2;
+    int WEST  = 3;
 
   vector< hSideTest > sideTests;
 
@@ -1273,8 +1256,8 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, hSide )
   /* ************** HEXES ************* */
 
   // redefine NORTH, SOUTH, EAST and WEST:
-  NORTH = 2;
-  SOUTH = 0;
+//  NORTH = 2;
+//  SOUTH = 0;
   EAST = 1;
   WEST = 3;
   int FRONT = 4; // FRONT is -z direction
@@ -1409,7 +1392,6 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_TwoQuadCCW )
   vector<vector<double>> vertices1 = {{0,0},{1,0},{1,1},{0,1}};
   vector<vector<double>> vertices2 = {{1,0},{2,0},{2,1},{1,1}};
   MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(volumeTopo->getDimension()));
-  GlobalIndexType nextCellID = 0;
   meshTopo->addCell(volumeTopo, vertices1);
   meshTopo->addCell(volumeTopo, vertices2);
   testHGRADTrace(meshTopo, polyOrder, out, success);
@@ -1586,7 +1568,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, IdentityWeightCompositions )
 TEUCHOS_UNIT_TEST( BasisReconciliation, InternalSubcellOrdinals )
 {
   // Copied from DPGTests's BasisReconciliationTests::testInternalSubcellOrdinals()
-  BasisPtr fineBasis = Camellia::intrepidLineHGRAD(2); // quadratic
+  BasisPtr fineBasis = Camellia::intrepid2LineHGRAD(2); // quadratic
 
   RefinementBranch emptyBranch;
 
@@ -2614,8 +2596,8 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
 
       coarseCache->setRefCellPointsFC(coarseDomainPoints);
 
-      Camellia::FieldContainer<double> finePhysicalPoints = fineCache->getPhysicalCubaturePoints();
-      Camellia::FieldContainer<double> coarsePhysicalPoints = coarseCache->getPhysicalCubaturePoints();
+      Camellia::FieldContainer<double> finePhysicalPoints = fineCache->getPhysicalCubaturePointsFC();
+      Camellia::FieldContainer<double> coarsePhysicalPoints = coarseCache->getPhysicalCubaturePointsFC();
 
       out << "Mapping side ordinal " << fineSideOrdinal << ", edge " << fineEdgeOrdinal;
       out << " to side ordinal " << coarseSideOrdinal << ", edge " << coarseEdgeOrdinal;
@@ -2682,8 +2664,8 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, p)
 
   vector< pair< BasisPtr, BasisPtr > > basisPairsToCheck;
 
-  BasisPtr fineBasis = Camellia::intrepidLineHGRAD(fineOrder);
-  BasisPtr coarseBasis = Camellia::intrepidLineHGRAD(coarseOrder);
+  BasisPtr fineBasis = Camellia::intrepid2LineHGRAD(fineOrder);
+  BasisPtr coarseBasis = Camellia::intrepid2LineHGRAD(coarseOrder);
   basisPairsToCheck.push_back( make_pair(fineBasis, coarseBasis) );
 
   fineBasis = Camellia::intrepidQuadHGRAD(fineOrder);
@@ -2737,7 +2719,13 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, pSide)
 
   pSideTest test;
 
-  int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
+  // side numbering is counter-clockwise, beginning at bottom.
+  // we comment out SOUTH and NORTH below because they are not actually used in the code that follows,
+  // and some compilers warn about that fact.
+//  int SOUTH = 0;
+  int EAST  = 1;
+//  int NORTH = 2;
+  int WEST  = 3;
 
   vector< pSideTest > sideTests;
 
@@ -2771,8 +2759,8 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, pSide)
   /* ************** HEXES ************* */
 
   // redefine NORTH, SOUTH, EAST and WEST:
-  NORTH = 2;
-  SOUTH = 0;
+//  NORTH = 2;
+//  SOUTH = 0;
   EAST = 1;
   WEST = 3;
   int FRONT = 4; // FRONT is -z direction

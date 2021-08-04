@@ -42,8 +42,8 @@
 #include "Var.h"
 #include "VectorizedFunction.h"
 
-#include "Intrepid_CellTools.hpp"
-#include "Teuchos_GlobalMPISession.hpp"
+#include <Intrepid2_TensorArgumentIterator.hpp>
+#include <Teuchos_GlobalMPISession.hpp>
 
 namespace Camellia
 {
@@ -102,6 +102,8 @@ public:
   {
     return _vectorFxn->boundaryValueOnly();
   }
+  
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     // note this allocation.  There might be ways of reusing memory here, if we had a slightly richer API.
@@ -136,6 +138,8 @@ public:
   {
     return true;
   }
+  
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     _fxn->values(values, basisCache);
@@ -152,10 +156,13 @@ public:
   {
     _xShift = xShift;
   }
+  
+  using SimpleFunction<double>::value;
   double value(double x)
   {
     return (x < _xShift) ? 0.0 : 1.0;
   }
+  
   std::string displayString()
   {
     ostringstream name;
@@ -174,10 +181,13 @@ public:
   {
     _yShift = yShift;
   }
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y)
   {
     return (y < _yShift) ? 0.0 : 1.0;
   }
+  
   std::string displayString()
   {
     ostringstream name;
@@ -200,6 +210,8 @@ public:
   {
     return "|_{\\Gamma}";
   }
+  
+  using TFunction<double>::values;
   void values(FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
@@ -258,6 +270,8 @@ public:
   {
     return "|_{\\Gamma_h}";
   }
+  
+  using SimpleFunction<double>::value;
   double value()
   {
     return 1.0;
@@ -305,7 +319,7 @@ string TFunction<Scalar>::displayString()
 }
 
 template <typename Scalar>
-int TFunction<Scalar>::rank()
+int TFunction<Scalar>::rank() const
 {
   return _rank;
 }
@@ -421,9 +435,8 @@ TFunctionPtr<Scalar> TFunction<Scalar>::op(TFunctionPtr<Scalar> f, Camellia::EOp
       return f * TFunction<Scalar>::normal();
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
-      break;
   }
-  return Teuchos::rcp((TFunction<Scalar>*)NULL);
+//  return Teuchos::rcp((TFunction<Scalar>*)NULL);
 }
 
 template <typename Scalar>
@@ -436,7 +449,7 @@ bool TFunction<Scalar>::equals(TFunctionPtr<Scalar> f, BasisCachePtr basisCacheF
   TFunctionPtr<Scalar> thisPtr = Teuchos::rcp(this,false);
   TFunctionPtr<Scalar> diff = thisPtr-f;
 
-  int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePoints().dimension(0);
+  int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePointsFC().dimension(0);
   // compute L^2 norm of difference on the cells
   FieldContainer<Scalar> diffs_squared(numCells);
   (diff*diff)->integrate(diffs_squared, basisCacheForCellsToCompare);
@@ -684,8 +697,8 @@ std::vector<GlobalIndexType> TFunction<Scalar>::localCellsWithNegativeValues(Mes
     double cellMin = numeric_limits<double>::max();
     
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
-    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
     Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
     this->values(fxnValues,basisCache);
     
@@ -703,8 +716,8 @@ std::vector<GlobalIndexType> TFunction<Scalar>::localCellsWithNegativeValues(Mes
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
       {
         auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
-        int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-        int numSidePoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+        int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+        int numSidePoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
         Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
         this->values(fxnValues,sideCache);
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -730,6 +743,15 @@ template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::neighborFunction(TFunctionPtr<Scalar> f, MeshPtr mesh)
 {
   return Teuchos::rcp(new NeighborFunction<Scalar>(f,mesh));
+}
+
+template <typename Scalar>
+int TFunction<Scalar>:: numVectorComponents() const
+{
+  if (_rank == 0)
+    return 0;
+  else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "numVectorComponents() should be implemented by all Functions with rank > 0");
 }
   
 template <typename Scalar>
@@ -820,17 +842,13 @@ TFunctionPtr<Scalar> TFunction<Scalar>::t()
     switch (d) {
       case 1:
         return x();
-        break;
       case 2:
         return y();
-        break;
       case 3:
         return z();
-        break;
         
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported spatial component number.");
-        break;
     }
   }
 
@@ -857,10 +875,9 @@ TFunctionPtr<Scalar> TFunction<Scalar>::dt()
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::di(int i) // 1-based: 1 for dx, 2 for dy(), 3 for dz()
 {
-  const int dimensionEnumValue = 1 << (i-1);
-  const bool variesInDimension = dimensionEnumValue & _variationDimensions;
+  const bool variesInDimensionI = variesInDimension(i-1); // variesInDimension() is 0-based
   
-  if (!variesInDimension) return Function::zero(_rank);
+  if (!variesInDimensionI) return Function::zero(_rank);
   
   switch (i) {
     case 1: return dx();
@@ -975,7 +992,7 @@ TFunctionPtr<Scalar> TFunction<Scalar>::grad(int numComponents)
     }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported numComponents");
-  return Teuchos::rcp((TFunction<Scalar>*) NULL);
+//  return Teuchos::rcp((TFunction<Scalar>*) NULL);
 }
 //template <typename Scalar>
 //TFunctionPtr<Scalar> TFunction<Scalar>::inverse() {
@@ -1080,7 +1097,7 @@ void TFunction<Scalar>::addToValues(Camellia::FieldContainer<Scalar> &valuesToAd
 template <typename Scalar>
 Scalar  TFunction<Scalar>::integrate(BasisCachePtr basisCache)
 {
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
   Camellia::FieldContainer<Scalar> cellIntegrals(numCells);
   this->integrate(cellIntegrals, basisCache);
   Scalar sum = 0;
@@ -1091,14 +1108,20 @@ Scalar  TFunction<Scalar>::integrate(BasisCachePtr basisCache)
   return sum;
 }
 
+template <typename Scalar>
+bool TFunction<Scalar>::isDefined(BasisCachePtr basisCache) const
+{
+  return true;
+}
+
 // added by Jesse to check positivity of a function
 // this should only be defined for doubles, but leaving it be for the moment
 // TODO: Fix for complex
 template <typename Scalar>
 bool TFunction<Scalar>::isPositive(BasisCachePtr basisCache)
 {
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   Camellia::FieldContainer<double> fxnValues(numCells,numPoints);
   this->values(fxnValues, basisCache);
 
@@ -1511,7 +1534,7 @@ void TFunction<Scalar>::integrate(Camellia::FieldContainer<Scalar> &cellIntegral
     for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
     {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-      int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+      int numPoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
       Camellia::FieldContainer<Scalar> values(numCells,numPoints);
       this->values(values,sideCache);
 
@@ -1527,8 +1550,8 @@ void TFunction<Scalar>::integrate(Camellia::FieldContainer<Scalar> &cellIntegral
   }
   else
   {
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    //  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
+    int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
+    //  cout << "integrate: basisCache->getPhysicalCubaturePointsFC():\n" << basisCache->getPhysicalCubaturePointsFC();
     Camellia::FieldContainer<Scalar> values(numCells,numPoints);
     this->values(values,basisCache);
 
@@ -1797,7 +1820,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         if (sideDim > 0)
         {
           using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-          using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+          using Cubature = Intrepid2::Cubature<DeviceType,double,double>;
           Teuchos::RCP< Cubature > sideCub;
           if (cubDegree >= 0)
             sideCub = cubFactory.create(mySideTopo, cubDegree);
@@ -1886,7 +1909,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
           
           // now, the "physical" points in ancestral cache are the ones we want
-          myRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
+          myRefPoints = ancestralBasisCache->getPhysicalCubaturePointsFC();
           myRefPoints.resize(myRefPoints.dimension(1),myRefPoints.dimension(2)); // strip cell dimension
           
           /*******  Determine ancestor's permutation of the side relative to neighbor ******/
@@ -1932,7 +1955,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         std::vector<GlobalIndexType> cellIDs = {0}; // unused
         referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
         // now, the "physical" points are the ones we should use as ref points for the neighbor
-        Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
+        Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePointsFC();
         neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
         
         Camellia::FieldContainer<double> neighborCellNodes = mesh->physicalCellNodesForCell(neighborCellID);
@@ -1960,8 +1983,8 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         {
           // Sanity check that the physical points agree:
           double tol = 1e-8;
-          Camellia::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePoints();
-          Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePoints();
+          Camellia::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePointsFC();
+          Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePointsFC();
           
           bool pointsMatch = (myPhysicalPoints.size() == neighborPhysicalPoints.size()); // true unless we find a point that doesn't match
           double maxDiff = 0.0;
@@ -2200,12 +2223,12 @@ Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, 
   return MPIWrapper::sum(integral);
 }
 
-  template <typename Scalar>
-  bool TFunction<Scalar>::isZero(BasisCachePtr basisCache)
-  {
-    // default implementation: we only attest to being zero on basisCache if we are zero everywhere
-    return isZero();
-  }
+template <typename Scalar>
+bool TFunction<Scalar>::isZero(BasisCachePtr basisCache)
+{
+  // default implementation: we only attest to being zero on basisCache if we are zero everywhere
+  return isZero();
+}
 
 template <typename Scalar>
 double TFunction<Scalar>::l1norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool spatialSidesOnly)
@@ -2236,8 +2259,8 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
   for (GlobalIndexType cellID : cellIDs)
   {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
-    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
     Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
     this->values(fxnValues,basisCache);
 
@@ -2264,8 +2287,8 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
     for (GlobalIndexType cellID : cellIDs)
     {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
-      int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-      int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+      int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+      int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
       Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
       this->values(fxnValues,basisCache);
       
@@ -2282,8 +2305,8 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
         for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
         {
           auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
-          int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-          int numSidePoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+          int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+          int numSidePoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
           Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
           this->values(fxnValues,sideCache);
           for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -2311,8 +2334,8 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
     for (GlobalIndexType cellID : cellIDs)
     {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
-      int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-      int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+      int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+      int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
       Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
       this->values(fxnValues,basisCache);
       
@@ -2330,8 +2353,8 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
         for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
         {
           auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
-          int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-          int numSidePoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+          int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+          int numSidePoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
           Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
           this->values(fxnValues,sideCache);
           for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -2431,10 +2454,10 @@ void TFunction<Scalar>::valuesDottedWithTensor(typename FieldContainer<Scalar>::
     tensorValueIndex[d+2] = spaceDim;
   }
   
-  auto dv_myTensorValues = Allocation<Scalar>::checkoutDeviceView(tensorValueIndex);
+  auto dv_myTensorValues = Allocation<Scalar>::checkoutDeviceView(tensorValueIndex, "Function::valuesDottedWithTensor: dv_myTensorValues");
   this->values(dv_myTensorValues,ValueModificationType::ASSIGN,basisCache);
   
-  auto dv_otherTensorValues = Allocation<Scalar>::checkoutDeviceView(tensorValueIndex);
+  auto dv_otherTensorValues = Allocation<Scalar>::checkoutDeviceView(tensorValueIndex, "Function::valuesDottedWithTensor: dv_otherTensorValues");
   tensorFunctionOfLikeRank->values(dv_otherTensorValues,ValueModificationType::ASSIGN,basisCache);
 
   const int dim2 = (_rank+2 > 2) ? spaceDim : 1;
@@ -2497,7 +2520,7 @@ void TFunction<Scalar>::scalarModifyFunctionValues(typename FieldContainer<Scala
   const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
   
   const std::vector<int> dims {numCells, numPoints};
-  auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims);
+  auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims,"scalarModifyFunctionValues()::dv_scalar");
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
@@ -2541,7 +2564,7 @@ void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double>
   const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
 
   std::vector<int> dims {numCells, numPoints};
-  auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims);
+  auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims, "Function::scalarModifyBasisValues, dv_scalar");
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
@@ -2568,7 +2591,6 @@ void TFunction<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh,
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
-  vector< ElementTypePtr >::iterator elemTypeIt;
   int spaceDim = 2; // TODO: generalize to 3D...
 
   PartitionIndexType rank = mesh->Comm()->MyPID();
@@ -2598,7 +2620,7 @@ void TFunction<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh,
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
       sideBasisCache->setRefCellPointsFC(refPoints);
-      int numCubPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
+      int numCubPoints = sideBasisCache->getPhysicalCubaturePointsFC().dimension(1);
 
 
       Camellia::FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
@@ -2612,7 +2634,7 @@ void TFunction<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh,
         {
           for (int dimInd=0; dimInd<spaceDim; dimInd++)
           {
-            fout << (basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints())(cellIndex,pointIndex,dimInd) << " ";
+            fout << (basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePointsFC())(cellIndex,pointIndex,dimInd) << " ";
           }
           fout << computedValues(cellIndex,pointIndex) << endl;
         }
@@ -2654,7 +2676,6 @@ void TFunction<Scalar>::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const s
   }
 
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
-  vector< ElementTypePtr >::iterator elemTypeIt;
 
   fout << "numCells = " << mesh->numActiveElements() << endl;
   fout << "x=cell(numCells,1);y=cell(numCells,1);z=cell(numCells,1);" << endl;
@@ -2681,7 +2702,7 @@ void TFunction<Scalar>::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const s
     vector<GlobalIndexType> cellIDs = mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, false); // false: don't create side cache
 
-    Camellia::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePointsFC();
 
     Camellia::FieldContainer<double> computedValues(numCells,numPoints);
     this->values(computedValues, basisCache);
@@ -2819,6 +2840,102 @@ TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar
     return Teuchos::rcp( new SqrtFunction<Scalar>(f) );
   }
   
+  template <typename Scalar>
+  Intrepid2::DimensionInfo TFunction<Scalar>::generalVariationDimensionInfo(const int &extent)
+  {
+    Intrepid2::DimensionInfo dimInfo;
+    dimInfo.logicalExtent = extent;
+    dimInfo.dataExtent = extent;
+    dimInfo.variationModulus = extent;
+    dimInfo.variationType = Intrepid2::GENERAL;
+    
+    return dimInfo;
+  }
+
+  template <typename Scalar>
+  Intrepid2::DimensionInfo TFunction<Scalar>::constantDimensionInfo(const int &logicalExtent)
+  {
+    Intrepid2::DimensionInfo dimInfo;
+    dimInfo.logicalExtent = logicalExtent;
+    dimInfo.dataExtent = 1;
+    dimInfo.variationModulus = 1;
+    dimInfo.variationType = Intrepid2::CONSTANT;
+    
+    return dimInfo;
+  }
+
+template <typename Scalar>
+std::vector<Intrepid2::DimensionInfo> TFunction<Scalar>::valuesDataDims(BasisCachePtr basisCache)
+{
+  // default implementation uses _variationDimensions -- this is the bitwise or of enumeration values indicating which in coordinate
+  // dimensions the function can vary.  Even if it does not vary in any coordinate dimensions, though, it can still vary in cell
+  // and vector-value dimensions.  I.e., a vector-valued function has nominal output shape (C,P,D).  _variationDimensions tells you
+  // something about the structure of P in cases where the point set has structure; it does not tell you anything about C or D.
+  
+  const PhysicalTensorPoints & physicalTensorPoints = basisCache->getPhysicalCubaturePoints();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(physicalTensorPoints.numTensorComponents() == 0, std::invalid_argument, "physicalTensorPoints is not initialized");
+  
+  using Intrepid2::DimensionInfo;
+  using std::vector;
+  
+  vector<DimensionInfo> dimensionInfo;
+  const int numCells = basisCache->numCells();
+  DimensionInfo cellDimension = generalVariationDimensionInfo(numCells);
+  
+  dimensionInfo.push_back(cellDimension);
+  
+  int spaceDimSoFar = 0; // running total of the spatial dimensions covered by physicalTensorPoints components
+  for (int r=0; r<physicalTensorPoints.numTensorComponents(); r++)
+  {
+    const auto & pointsComponent = physicalTensorPoints.getTensorComponent(r);
+    const int componentNumDims = pointsComponent.extent_int(2);
+    
+    bool variesInComponent = false;
+    for (int compDim=0; compDim<componentNumDims; compDim++)
+    {
+      if (variesInDimension(compDim + spaceDimSoFar))
+        variesInComponent = true;
+    }
+    spaceDimSoFar += componentNumDims;
+    
+    const int componentPointCount = pointsComponent.extent_int(1);
+    DimensionInfo compPointDimInfo = variesInComponent ? generalVariationDimensionInfo(componentPointCount) : constantDimensionInfo(componentPointCount);
+    
+    dimensionInfo.push_back(compPointDimInfo);
+  }
+  const int spaceDim = physicalTensorPoints.extent_int(2);
+  for (int d=0; d<_rank; d++)
+  {
+    dimensionInfo.push_back(generalVariationDimensionInfo(spaceDim));
+  }
+  
+  return dimensionInfo;
+}
+
+template <typename Scalar>
+Intrepid2::Data<Scalar, Camellia::DeviceType> TFunction<Scalar>::checkoutValuesData(BasisCachePtr basisCache)
+{
+  ostringstream description;
+  description << this->getClassName() << "::checkoutValuesData()";
+  
+  const auto valuesDataDims = this->valuesDataDims(basisCache);
+  for (const auto & dimInfo : valuesDataDims)
+  {
+    if (dimInfo.logicalExtent == 0)
+    {
+      std::cout << "WARNING: requesting Data with *nominal* extent 0.\n";
+    }
+  }
+  return SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchData(valuesDataDims,description.str());
+}
+
+template <typename Scalar>
+void TFunction<Scalar>::checkinValuesData(const Intrepid2::Data<Scalar, Camellia::DeviceType> &data)
+{
+  SharedScratchStorage<double>::sharedScratchStorage().checkinScratchData(data);
+}
+
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::vectorize(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
 {
@@ -2869,9 +2986,152 @@ TFunctionPtr<double> TFunction<Scalar>::tn(int n)
 }
 
 template <typename Scalar>
+void TFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> data, BasisCachePtr basisCache)
+{
+  // default base (Function) class implementation.
+  // This is not optimal, but it's probably not too bad as a basic, default implementation
+  
+  TEUCHOS_FUNC_TIME_MONITOR("TFunction<Scalar> values(Data,BasisCachePtr)");
+  
+  /*
+   This implementation calls TFunction<Scalar>::values(DeviceView,ASSIGN,BasisCachePtr).
+   
+   To manage this, we allocate a DeviceView, and then copy from DeviceView to Data.
+   
+   This is not the most efficient approach possible; it would be better to get the underlying View from Data, and write to
+   it directly.  But as written, the values() implementations we call does not support the multi-component point enumeration that
+   we require for Data, when PhysicalTensorPoints has tensor structure.
+   
+   We may revisit this in the future.
+   */
+  
+  // for now, anyway, we only support this for scalar Function values.  Enforcing this probably leads to better performance anyway, as it
+  // forces component-wise evaluations, which should generally have a smaller memory footprint, and increases the chances of reuse through
+  // SharedScratchStorage.
+  TEUCHOS_TEST_FOR_EXCEPTION(this->rank() != 0, std::invalid_argument, "values(Data,BasisCachePtr) is only supported for scalar Solution values");
+ 
+  const int numCells  = basisCache->getPhysicalCubaturePoints().extent_int(0);
+  const int numPoints = basisCache->getPhysicalCubaturePoints().extent_int(1); // (C,P,D)
+  
+  // set up to create a DeviceView to use as argument to the other values() implementation, below
+  std::vector<int> viewDims {numCells,numPoints};
+  
+  const int numPointComponents = data.rank() - 1 - this->rank(); // vector (rank 1) Function has data shape (C,P0[,P1,…],D); this counts how many Pn's there are
+  std::vector<int> pointComponentBounds(numPointComponents);
+  for (int d=1; d<=numPointComponents; d++)
+  {
+    pointComponentBounds[d-1] = data.extent_int(d);
+  }
+  for (int d=numPointComponents+1; d<data.rank(); d++)
+  {
+    viewDims.push_back(data.extent_int(d));
+  }
+  
+  auto valuesView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorage(viewDims,"Function::values(Data,…) scratch view");
+  
+  // compute values:
+  this->values(valuesView,ASSIGN,basisCache);
+  
+  // create a TensorArgumentIterator to interface between point enumeration in valuesView and the potentially multi-component point arguments
+  // in Intrepid2::Data.
+  Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> pointBoundsArray;
+  for (int d=0; d<numPointComponents; d++)
+  {
+    pointBoundsArray[d] = pointComponentBounds[d];
+  }
+  for (int d=numPointComponents; d<Intrepid2::Parameters::MaxTensorComponents; d++)
+  {
+    pointBoundsArray[d] = 1;
+  }
+  
+  auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(valuesView); // (C,P)
+  
+  auto dataView = data.getUnderlyingView(); // underlying view as DynRankView.  The fixed-rank View may have faster access speeds, but this allows
+                                            // us a common implementation independent of the rank.  See values.getUnderlyingView<rank>() for the alternative.
+    
+  Kokkos::parallel_for("TFunction<Scalar>::values(), copy from DeviceView to Data's view", rangePolicy,
+  KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointOrdinal)
+  {
+    // it's unfortunate to have the overhead of TensorArgumentIterator construction call (etc.) within the lambda.
+    // TODO: look for a better way.
+    Intrepid2::TensorArgumentIterator pi(pointBoundsArray); // point iterator; values has shape (C,P1[,P2,…][,D,…]) where P = P1 * P2 * …
+    
+    pi.setEnumerationIndex(pointOrdinal);
+    
+    Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> dataArgs;
+    for (int d=0; d<Intrepid2::Parameters::MaxTensorComponents; d++)
+    {
+      dataArgs[d] = 0;
+    }
+    dataArgs[0] = cellOrdinal;
+    for (int d=1; d<numPointComponents+1; d++)
+    {
+      dataArgs[d] = pi.argument(d-1);
+    }
+    
+    if (numPointComponents == 1)
+    {
+      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1]);
+      
+      dataValue = valuesView(cellOrdinal,pointOrdinal);
+    }
+    else if (numPointComponents == 2)
+    {
+      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2]);
+      dataValue = valuesView(cellOrdinal,pointOrdinal);
+    }
+    else if (numPointComponents == 3)
+    {
+      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3]);
+      dataValue = valuesView(cellOrdinal,pointOrdinal);
+    }
+    else if (numPointComponents == 4)
+    {
+      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4]);
+      dataValue = valuesView(cellOrdinal,pointOrdinal);
+    }
+    else if (numPointComponents == 5)
+    {
+      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5]);
+      dataValue = valuesView(cellOrdinal,pointOrdinal);
+    }
+    else if (numPointComponents == 6)
+    {
+      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5],dataArgs[6]);
+      dataValue = valuesView(cellOrdinal,pointOrdinal);
+    }
+    else
+    {
+      // the following line does not compile under CUDA (error is 'identifier "device_assert" is undefined')
+      //INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "unsupported numPointComponents.");
+    }
+  });
+  
+  SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(valuesView);
+}
+
+template <typename Scalar>
 int TFunction<Scalar>::variationDimensions() const
 {
   return _variationDimensions;
+}
+
+template <typename Scalar>
+bool TFunction<Scalar>::variesInDimension(const int &d) const
+{
+  switch (d)
+  {
+    case 0: return VARIES_IN_DIMENSION_0 & _variationDimensions;
+    case 1: return VARIES_IN_DIMENSION_1 & _variationDimensions;
+    case 2: return VARIES_IN_DIMENSION_2 & _variationDimensions;
+    case 3: return VARIES_IN_DIMENSION_3 & _variationDimensions;
+    case 4: return VARIES_IN_DIMENSION_4 & _variationDimensions;
+    case 5: return VARIES_IN_DIMENSION_5 & _variationDimensions;
+    case 6: return VARIES_IN_DIMENSION_6 & _variationDimensions;
+    case 7: return VARIES_IN_DIMENSION_7 & _variationDimensions;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported dimension");
+  }
 }
 
 template <typename Scalar>
@@ -2928,11 +3188,13 @@ public:
     _f = f;
     _arg_g = arg_g;
   }
+  
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
-    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
     int spaceDim = basisCache->getSpaceDim();
     Camellia::FieldContainer<double> fArgPoints(numCells,numPoints,spaceDim);
     if (spaceDim==1)   // special case: arg_g is then reasonably scalar-valued
@@ -3025,6 +3287,35 @@ TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"functions have incompatible rank for product.");
     }
+  }
+  // if this is a vector/tensor contraction, let's replace with a sum of scalar components:
+  if ((f1->rank() > 0) && (f2->rank() > 0))
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "operator* is only defined for functions that have like rank (for rank > 1, it is defined as a tensor contraction to scalar.");
+    int numVectorComponents = -1;
+    const int f1ComponentCount = f1->numVectorComponents();
+    const int f2ComponentCount = f2->numVectorComponents();
+    if ((f1ComponentCount == -1) || (f2ComponentCount == -1))
+    {
+      // -1 indicates an arbitrary number of dimensions are available; can't limit it a priori
+      // take the one that isn't -1 as the number of non-zero vector components we need to consider.
+      numVectorComponents = std::max(f1ComponentCount,f2ComponentCount);
+      TEUCHOS_TEST_FOR_EXCEPTION(numVectorComponents == -1, std::invalid_argument, "Contractions of two arbitrary-length vectors are not supported by operator*().");
+    }
+    else
+    {
+      numVectorComponents = std::min(f1ComponentCount,f2ComponentCount);
+      TEUCHOS_TEST_FOR_EXCEPTION(numVectorComponents <= 0, std::invalid_argument, "Unsupported/unexpected numVectorComponents.");
+    }
+    // We probably should not construct vectors beyond 3D; for Boltzmann, etc., we should work with scalar values only.
+    // That's why spatialComponents() doesn't support beyond 3D.  We check that our arguments don't define more components than that.
+    TEUCHOS_TEST_FOR_EXCEPTION(numVectorComponents > 3, std::invalid_argument, "spatialComponent doesn't (yet) support components beyond 3");
+    FunctionPtr sum = Function::zero();
+    for (int d=0; d<numVectorComponents; d++)
+    {
+      sum = sum + f1->spatialComponent(d+1) * f2->spatialComponent(d+1);  // spatialComponent() is 1-based
+    }
+    return sum;
   }
   
   ProductFunction<Scalar>* f1_product = dynamic_cast<ProductFunction<Scalar>*> (f1.get());

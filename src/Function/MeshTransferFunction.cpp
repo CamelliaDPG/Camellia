@@ -99,7 +99,7 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
       pair<unsigned, unsigned> subcellInfo = parent->refinementPattern()->mapSubcellFromChildToParent(childOrdinalInParent, sideDim, newMeshCellSideAncestor.second);
 
       unsigned parentSideOrdinal = subcellInfo.second;
-      if ((parentSideOrdinal == -1) || (subcellInfo.first != sideDim))
+      if ((parentSideOrdinal == INVALID_CELLTOPOLOGY_SIDE_ORDINAL) || (subcellInfo.first != sideDim))
       {
         return false;
       }
@@ -360,11 +360,11 @@ void MeshTransferFunction::values(Camellia::FieldContainer<double> &values, Basi
       {
         for (int d=0; d<_newMesh->getDimension(); d++)
         {
-          originalPhysicalPoints(0,pointOrdinal,d) = basisCache->getPhysicalCubaturePoints()(cellOrdinal,pointOrdinal,d);
+          originalPhysicalPoints(0,pointOrdinal,d) = basisCache->getPhysicalCubaturePointsFC()(cellOrdinal,pointOrdinal,d);
         }
       }
 
-      Camellia::FieldContainer<double> ancestorPhysicalPoints = ancestorSideBasisCache->getPhysicalCubaturePoints();
+      Camellia::FieldContainer<double> ancestorPhysicalPoints = ancestorSideBasisCache->getPhysicalCubaturePointsFC();
       double tol = 1e-15;
       double maxDiff = 0;
       for (int pointOrdinal=0; pointOrdinal<newMeshCellReferencePoints.dimension(0); pointOrdinal++)

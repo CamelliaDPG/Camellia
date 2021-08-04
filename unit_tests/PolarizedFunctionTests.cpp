@@ -33,7 +33,7 @@ namespace
     
     for (int cellID : mesh->cellIDsInPartition()) {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePointsFC());
       int numPoints = points->dimension(1);
       auto fc_cos = FieldContainer<double>(1,numPoints);
       auto fc_sin = FieldContainer<double>(1,numPoints);

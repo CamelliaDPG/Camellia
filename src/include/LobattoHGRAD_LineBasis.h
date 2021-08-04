@@ -33,6 +33,7 @@ protected:
 public:
   LobattoHGRAD_LineBasis(int degree, bool conforming); // conforming means vertex dofs defined...
 
+  using Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
 
   bool isConforming() const;

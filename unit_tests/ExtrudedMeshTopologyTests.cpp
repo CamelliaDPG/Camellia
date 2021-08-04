@@ -146,13 +146,10 @@ namespace
 
   TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, CellVertexIndicesPeriodic_1D3V )
   {
-    const int numPhysicalDims = 1;
     const int numExtrusionDims = 3;
     
     // by the construction below (a 2D mesh, extruded by 1 cell in 2 further dimensions), each vertex should participate in at least two cells, and in at most four.
     std::map<IndexType,int> vertexIncidenceCount;
-    
-    const int totalDim = numPhysicalDims + numExtrusionDims;
     
     using std::vector;
     vector<double> physicalDims {1.0};

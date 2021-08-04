@@ -863,7 +863,7 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
     else
     {
       // we are restricting a volume basis to the side indicated
-      TEUCHOS_TEST_FOR_EXCEPTION(!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_ORDINAL), std::invalid_argument, "Basis not found");
+      TEUCHOS_TEST_FOR_EXCEPTION(!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_INDEX), std::invalid_argument, "Basis not found");
       BasisPtr volumeBasis = dofOrdering->getBasis(varID);
       set<int> basisDofOrdinals = volumeBasis->dofOrdinalsForSide(sideOrdinal);
       TEUCHOS_TEST_FOR_EXCEPTION(basisDofOrdinals.size() != basisCoefficients.size(), std::invalid_argument, "basisCoefficients should be sized to match either the basis cardinality (when whole bases are matched) or the cardinality of the restriction");
@@ -990,7 +990,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
       unsigned ancestralSubcellOrdinal = ancestralSubcell.first;
       unsigned ancestralSubcellDimension = ancestralSubcell.second;
       
-      if (ancestralSubcellOrdinal == -1)
+      if (ancestralSubcellOrdinal == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
       {
         cout << "Internal error: ancestral subcell ordinal was not found.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: ancestral subcell ordinal was not found.");
@@ -1546,7 +1546,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
   
    const static int DEBUG_VAR_ID = -1;
    const static GlobalIndexType DEBUG_CELL_ID = 0;
-   const static unsigned DEBUG_SIDE_ORDINAL = -1;
+   const static unsigned DEBUG_SIDE_ORDINAL = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
    const static GlobalIndexType DEBUG_GLOBAL_DOF = -3;
 
 //  if ((cellID==2) && (sideOrdinal==1) && (var->ID() == 0)) {
@@ -1658,7 +1658,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
         volumeRefinements = {{noRefinementPattern.get(),0}};
       }
       
-      if (ancestralSubcellOrdinal == -1)
+      if (ancestralSubcellOrdinal == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
       {
         cout << "Internal error: ancestral subcell ordinal was not found.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: ancestral subcell ordinal was not found.");
@@ -1690,7 +1690,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
         {
           IndexType descendantSideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
           
-          ancestralSideOrdinal = -1;
+          ancestralSideOrdinal = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
           int sideCount = ancestralCell->getSideCount();
           for (int side=0; side<sideCount; side++)
           {
@@ -1708,7 +1708,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
             }
           }
           
-          if (ancestralSideOrdinal == -1)
+          if (ancestralSideOrdinal == INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
           {
             cout << "Error: no ancestor of side found.\n";
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: no ancestor of side contains the ancestral subcell.");
@@ -1731,7 +1731,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
           // (there should be at least two; which one shouldn't matter, except in the case of space-only trace variables
           vector<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
           
-          ancestralSideOrdinal = -1;
+          ancestralSideOrdinal = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
           int sideCount = ancestralCell->getSideCount();
           // search among the spatial sides first:
           for (int side=0; side<sideCount; side++)
@@ -1745,7 +1745,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
             }
           }
           // if we haven't found among the spatial sides, then search in the non-spatial ones
-          if (ancestralSideOrdinal == -1)
+          if (ancestralSideOrdinal == INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
           {
             for (int side=0; side<sideCount; side++)
             {
@@ -1761,7 +1761,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
         }
       }
       
-      if (ancestralSideOrdinal == -1)
+      if (ancestralSideOrdinal == INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
       {
         cout << "Error: ancestralSideOrdinal not found.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: ancestralSideOrdinal not found.");
@@ -2461,7 +2461,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
                   {
                     // spatial side.  Does it contain the constraining entity?
                     unsigned subcellOrdinalInSide = constrainingCell->findSubcellOrdinalInSide(constrainingEntityDimension, constrainingEntityIndex, newSideOrdinal);
-                    if (subcellOrdinalInSide != -1)
+                    if (subcellOrdinalInSide != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
                     {
                       constrainingSideOrdinal = newSideOrdinal;
                       break;
@@ -2527,7 +2527,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
                 {
                   // spatial side.  Does it contain the entity?
                   unsigned subcellOrdinalInSide = owningCell->findSubcellOrdinalInSide(d, entityIndex, owningSideOrdinal);
-                  if (subcellOrdinalInSide != -1)
+                  if (subcellOrdinalInSide != INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
                   {
                     found = true;
                     
@@ -2576,8 +2576,8 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 
     // fill in constraining subcell info for the volume (namely, it constrains itself):
     constrainingSubcellInfo[spaceDim][0].cellID = cellID;
-    constrainingSubcellInfo[spaceDim][0].subcellOrdinal = -1;
-    constrainingSubcellInfo[spaceDim][0].sideOrdinal = -1;
+    constrainingSubcellInfo[spaceDim][0].subcellOrdinal = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
+    constrainingSubcellInfo[spaceDim][0].sideOrdinal = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
     constrainingSubcellInfo[spaceDim][0].dimension = spaceDim;
 
     CellConstraints cellConstraints;
@@ -3122,6 +3122,11 @@ SubcellDofIndices& GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID)
   return _globalDofIndicesForCellCache[cellID];
 }
 
+//std::set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal)
+//{
+//  return getFittableGlobalDofIndices(cellID, sideOrdinal, varID);
+//}
+
 vector<GlobalIndexType> GDAMinimumRule::globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID)
 {
   map<int, VarPtr> trialVars = _varFactory->trialVars();
@@ -3637,7 +3642,7 @@ namespace Camellia
   std::ostream& operator << (std::ostream& os, AnnotatedEntity& annotatedEntity)
   {
     os << "cell " << annotatedEntity.cellID;
-    if (annotatedEntity.sideOrdinal != -1)
+    if (annotatedEntity.sideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
     {
       os << "'s side " << annotatedEntity.sideOrdinal;
     }

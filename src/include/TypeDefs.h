@@ -200,12 +200,13 @@ using TVectorPtr = Teuchos::RCP< TVector<Scalar> >;
 // typedef TVectorPtr<double> VectorPtr;
   
 #ifdef KOKKOS_ENABLE_CUDA
-  using DeviceMemorySpace = Kokkos::CudaSpace; // we want to avoid UVM; Kokkos default may be Kokkos::CudaUVMSpace
+  using DeviceType = Kokkos::Device<Kokkos::Cuda,Kokkos::CudaSpace>;  // we want to avoid UVM; Kokkos default may be Kokkos::CudaUVMSpace
 #else
-  using DeviceMemorySpace = Kokkos::DefaultExecutionSpace::memory_space;
+  using DeviceType = typename Kokkos::DefaultExecutionSpace::device_type;
 #endif
-  using DeviceExecutionSpace = DeviceMemorySpace::execution_space;
-  using HostMemorySpace   = Kokkos::HostSpace::memory_space;
+  using DeviceMemorySpace    = DeviceType::memory_space;
+  using DeviceExecutionSpace = DeviceType::execution_space;
+  using HostMemorySpace      = Kokkos::HostSpace::memory_space;
   
   template<typename Scalar>
   using HostView   = Kokkos::DynRankView<Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
@@ -214,10 +215,10 @@ using TVectorPtr = Teuchos::RCP< TVector<Scalar> >;
   using ViewTraits = typename HostView<Scalar>::drvtraits;
   
   template<typename Scalar>
-  using DeviceView = Kokkos::DynRankView<typename ViewTraits<Scalar>::value_type, typename ViewTraits<Scalar>::array_layout, DeviceMemorySpace>;
+  using DeviceView = Kokkos::DynRankView<typename ViewTraits<Scalar>::value_type, typename ViewTraits<Scalar>::array_layout, DeviceType>;
   
   template<typename Scalar>
-  using DeviceViewConst = Kokkos::DynRankView<const typename ViewTraits<Scalar>::value_type, typename ViewTraits<Scalar>::array_layout, DeviceMemorySpace>;
+  using DeviceViewConst = Kokkos::DynRankView<const typename ViewTraits<Scalar>::value_type, typename ViewTraits<Scalar>::array_layout, DeviceType>;
   
   template<typename Scalar>
   using HostViewConst   = Kokkos::DynRankView<const Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;

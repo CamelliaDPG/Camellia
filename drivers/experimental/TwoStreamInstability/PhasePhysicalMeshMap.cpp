@@ -209,9 +209,7 @@ void PhasePhysicalMeshMap::rebuildMap()
 {
   auto & myPhaseCells = _phaseMesh->cellIDsInPartition();
   _phaseSpaceCellIDToPhysicalCellInfo.clear();
-  
-  const int DIM_X = 0;
-  
+    
   auto phaseMeshTopo = _phaseMesh->getTopology();
   auto meshTopo_1D = _physicalMesh->getTopology();
   

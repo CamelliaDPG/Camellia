@@ -100,11 +100,11 @@ public:
     return true;
   }
 
-  // ! get the global dof indices corresponding to the specified cellID/varID/sideOrdinal.  GDAMinimumRule's implementation overrides to return only "fittable" dof indices, as required by CondensedDofInterpreter.
+  //! get the global dof indices corresponding to the specified cellID/varID/sideOrdinal.
   std::set<GlobalIndexType> getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal);
   
-  // ! Returns the global dof indices, in the same order as the basis ordinals, for a discontinuous variable.
-  // ! For minimum-rule meshes, may throw an exception if invoked with a continuous variable's ID as argument.
+  //! Returns the global dof indices, in the same order as the basis ordinals, for a discontinuous variable.
+  //! For minimum-rule meshes, may throw an exception if invoked with a continuous variable's ID as argument.
   std::vector<GlobalIndexType> globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID);
   
   std::vector<int> getH1Order(GlobalIndexType cellID);
@@ -117,6 +117,8 @@ public:
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
   GlobalIndexType globalDofCount();
+  
+  using DofInterpreter::interpretLocalData;
   void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localDofs, Camellia::FieldContainer<double> &globalDofs, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
                                        Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);

@@ -28,7 +28,20 @@ namespace Camellia {
       _f = f;
     }
     ~SqrtFunction() {}
-    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+    using TFunction<Scalar>::values;
+    void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override
+    {
+      _f->values(values, basisCache);
+      auto sqrtOp = KOKKOS_LAMBDA(const double &a) -> double
+      {
+#ifndef KOKKOS_ENABLE_CUDA
+        using std::sqrt;
+#endif
+        return sqrt(a);
+      };
+      values.applyOperator(sqrtOp);
+    }
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override
     {
       _f->values(values,basisCache);
       for (int i=0; i<values.size(); i++)
@@ -36,17 +49,21 @@ namespace Camellia {
         values[i] = sqrt(values[i]);
       }
     }
-    TFunctionPtr<Scalar> dx()
+    std::vector<Intrepid2::DimensionInfo> valuesDataDims(BasisCachePtr basisCache) override
+    {
+      return _f->valuesDataDims(basisCache);
+    }
+    TFunctionPtr<Scalar> dx() override
     {
       TFunctionPtr<Scalar> sqrt_f = Teuchos::rcp( new SqrtFunction(_f) );
       return 0.5 * _f->dx() / sqrt_f;
     }
-    TFunctionPtr<Scalar> dy()
+    TFunctionPtr<Scalar> dy() override
     {
       TFunctionPtr<Scalar> sqrt_f = Teuchos::rcp( new SqrtFunction(_f) );
       return 0.5 * _f->dy() / sqrt_f;
     }
-    TFunctionPtr<Scalar> dz()
+    TFunctionPtr<Scalar> dz() override
     {
       TFunctionPtr<Scalar> sqrt_f = Teuchos::rcp( new SqrtFunction(_f) );
       return 0.5 * _f->dz() / sqrt_f;

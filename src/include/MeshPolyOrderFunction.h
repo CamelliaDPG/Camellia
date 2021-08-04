@@ -29,6 +29,8 @@ public:
   {
     _mesh = mesh; // scalar
   }
+  
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 };
 }

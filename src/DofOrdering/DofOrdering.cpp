@@ -18,7 +18,7 @@ DofOrdering::DofOrdering(CellTopoPtr cellTopo)   // constructor
 {
   _nextIndex = 0;
   _indexNeedsToBeRebuilt = false;
-  _cellTopologyForSide[VOLUME_INTERIOR_SIDE_ORDINAL] = cellTopo;
+  _cellTopologyForSide[VOLUME_INTERIOR_SIDE_INDEX] = cellTopo;
   _indices.resize(cellTopo->getSideCount() + 1); // +1 for volume
   _volumeIndex = cellTopo->getSideCount();
 }
@@ -144,15 +144,15 @@ BasisPtr DofOrdering::getBasis(int varID, int sideIndex) const
 
 void DofOrdering::getDofCoords(Camellia::FieldContainer<double> &dofCoords, int varID, int sideOrdinal)
 {
-  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
-  bool createSideCache = (sideOrdinal != VOLUME_INTERIOR_SIDE_ORDINAL);
+  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_INDEX)->second;
+  bool createSideCache = (sideOrdinal != VOLUME_INTERIOR_SIDE_INDEX);
   BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, createSideCache); // 1: faux cubature degree; true: also create side cache
   BasisPtr basis = getBasis(varID, sideOrdinal);
   int basisCardinality = basis->getCardinality();
   int spaceDim = volumeTopo->getDimension();
   
   dofCoords.resize(basisCardinality, spaceDim);
-  if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
+  if (sideOrdinal == VOLUME_INTERIOR_SIDE_INDEX)
   {
     basis->getDofCoords(dofCoords);
   }
@@ -162,7 +162,7 @@ void DofOrdering::getDofCoords(Camellia::FieldContainer<double> &dofCoords, int 
     Camellia::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
     sideCache->setRefCellPointsFC(sideDofCoords);
-    const Camellia::FieldContainer<double>* volumeCoords = &sideCache->getPhysicalCubaturePoints();
+    const Camellia::FieldContainer<double>* volumeCoords = &sideCache->getPhysicalCubaturePointsFC();
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
     {
       for (int d=0; d<spaceDim; d++)
@@ -175,31 +175,31 @@ void DofOrdering::getDofCoords(Camellia::FieldContainer<double> &dofCoords, int 
 
 //
 void DofOrdering::getDofCoords(const Camellia::FieldContainer<double> &physicalCellNodes,
-                               Camellia::FieldContainer<double> &dofCoords, int varID, int sideOrdinal)
+                               Camellia::FieldContainer<double> &dofCoords, int varID, int sideIndex)
 {
-  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
-  bool createSideCache = (sideOrdinal != VOLUME_INTERIOR_SIDE_ORDINAL);
+  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_INDEX)->second;
+  bool createSideCache = (sideIndex != VOLUME_INTERIOR_SIDE_INDEX);
   BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1); // 1: faux cubature degree; true: also create side cache
   basisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(), createSideCache);
   
-  BasisPtr basis = getBasis(varID, sideOrdinal);
+  BasisPtr basis = getBasis(varID, sideIndex);
   int basisCardinality = basis->getCardinality();
   int spaceDim = volumeTopo->getDimension();
   
-  if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
+  if (sideIndex == VOLUME_INTERIOR_SIDE_INDEX)
   {
     Camellia::FieldContainer<double> refSpaceDofCoords(basisCardinality, spaceDim);
     basis->getDofCoords(refSpaceDofCoords);
     basisCache->setRefCellPointsFC(refSpaceDofCoords);
-    dofCoords = basisCache->getPhysicalCubaturePoints();
+    dofCoords = basisCache->getPhysicalCubaturePointsFC();
   }
   else
   {
-    BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
+    BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
     Camellia::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
     sideCache->setRefCellPointsFC(sideDofCoords);
-    dofCoords = sideCache->getPhysicalCubaturePoints();
+    dofCoords = sideCache->getPhysicalCubaturePointsFC();
   }
 }
 
@@ -239,7 +239,7 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideOrdinal, in
   {
     cout << "No entry found for dofIndex\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
-    return -1;
+//    return -1;
   }
 }
 
@@ -387,7 +387,7 @@ int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with
     int varID = *varIt;
     if (numSidesForVarID[varID]==1)
     {
-      pair<int,int> key = make_pair(varID, VOLUME_INTERIOR_SIDE_ORDINAL);
+      pair<int,int> key = make_pair(varID, VOLUME_INTERIOR_SIDE_INDEX);
       int degree = bases[key]->getDegree();
       if (maxBasisDegree < degree )
       {
@@ -400,7 +400,7 @@ int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with
 
 int DofOrdering::minimumSubcellDimensionForContinuity() const // across all bases
 {
-  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
+  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_INDEX)->second;
   int minSubcellDimension = volumeTopo->getDimension();
   
   for (auto entry : bases)
@@ -440,7 +440,7 @@ void DofOrdering::printDofCoords(int varID, std::ostream& os) const
   os << "******** Ref Space Dof Coords for var " << varID << ": *********\n";
   const vector<int>* sidesForVar = &this->getSidesForVarID(varID);
   
-  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
+  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_INDEX)->second;
   BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, true); // 1: faux cubature degree; true: also create side cache
   for (int sideOrdinal : *sidesForVar)
   {
@@ -448,7 +448,7 @@ void DofOrdering::printDofCoords(int varID, std::ostream& os) const
     const vector<int>* dofIndices = &getDofIndices(varID, sideOrdinal);
     
     Camellia::FieldContainer<double> basisDofCoords(basis->getCardinality(), basis->domainTopology()->getDimension());
-    if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
+    if (sideOrdinal == VOLUME_INTERIOR_SIDE_INDEX)
     {
       os << "Volume dof ordinal:" << setw(20) << "Local Dof Index:" << setw(20) << "Coordinates:\n" << endl;
       for (int basisOrdinal=0; basisOrdinal < basis->getCardinality(); basisOrdinal++)
@@ -460,7 +460,7 @@ void DofOrdering::printDofCoords(int varID, std::ostream& os) const
     {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
       sideCache->setRefCellPointsFC(basisDofCoords);
-      Camellia::FieldContainer<double> basisDofCoordsVolume = sideCache->getPhysicalCubaturePoints();
+      Camellia::FieldContainer<double> basisDofCoordsVolume = sideCache->getPhysicalCubaturePointsFC();
       basisDofCoordsVolume.resize(basisDofCoordsVolume.dimension(1),basisDofCoordsVolume.dimension(2));
       
       os << "Side " << sideOrdinal << " dof ordinal:" << setw(20) << "Local Dof Index:" << setw(20) << "Coordinates:\n" << endl;

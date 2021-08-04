@@ -39,6 +39,7 @@ public:
 
   void updateCells(const set<GlobalIndexType> &cellIDs);
 
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   bool mapRefCellPointsUsingExactGeometry(Camellia::FieldContainer<double> &cellPoints, const Camellia::FieldContainer<double> &refCellPoints, GlobalIndexType cellID);

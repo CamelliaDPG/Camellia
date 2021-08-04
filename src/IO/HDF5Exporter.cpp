@@ -685,7 +685,7 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
 
       basisCache->setRefCellPointsFC(refPoints);
       int numPoints = refPoints.dimension(0);
-      const Camellia::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+      const Camellia::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePointsFC();
       // Function Values
       std::vector< Camellia::FieldContainer<double> > computedValues(nFcns);
       for (int i = 0; i < nFcns; i++)
@@ -696,6 +696,7 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
           computedValues[i].resize(1, numPoints, spaceDim);
         else
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+        if (! functions[i]->isDefined(basisCache)) continue; // skip this function if it's not defined on this side
         functions[i]->values(computedValues[i], basisCache);
 //        {
 //          // DEBUGGING

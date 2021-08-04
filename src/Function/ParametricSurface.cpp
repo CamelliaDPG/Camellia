@@ -207,17 +207,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(Camellia::FieldContainer<
   set<int> edgeNodeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
 
   Camellia::FieldContainer<double> dofCoords(compBasis->getCardinality(),2);
-  IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* intrepidBasisWrapper = dynamic_cast< IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* >(compBasis.get());
-  if (!intrepidBasisWrapper)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "compBasis does not appear to be an instance of IntrepidBasisWrapper");
-  }
-  Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* intrepidBasis = dynamic_cast< Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* >(intrepidBasisWrapper->intrepidBasis().get());
-  if (!intrepidBasis)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IntrepidBasisWrapper does not appear to wrap Basis_HGRAD_QUAD_Cn_FEM.");
-  }
-  intrepidBasis->getDofCoords(dofCoords);
+  compBasis->getDofCoords(dofCoords);
 
   int edgeDim = 1;
   int vertexDim = 0;

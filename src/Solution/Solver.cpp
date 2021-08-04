@@ -38,7 +38,6 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
   {
   case KLU:
     return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "klu") );
-    break;
 #if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
   case SuperLUDist:
     return Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );

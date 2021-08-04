@@ -87,7 +87,7 @@ EFunctionSpace Camellia::discontinuousSpaceForContinuous(Camellia::EFunctionSpac
     return FUNCTION_SPACE_TENSOR_HGRAD_DISC;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No known discontinuous version for fs_continuous.");
-    return fs_continuous;
+//    return fs_continuous;
   }
 }
 
@@ -115,7 +115,7 @@ EFunctionSpace Camellia::continuousSpaceForDiscontinuous(Camellia::EFunctionSpac
     return FUNCTION_SPACE_TENSOR_HGRAD;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No known continuous version for fs_disc.");
-    return fs_disc;
+//    return fs_disc;
   }
 }
 
@@ -134,7 +134,6 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
           return OP_DZ;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
-          break;
       }
     case OP_DX:
       switch (op_second) {
@@ -146,7 +145,6 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
           return OP_DXDZ;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
-          break;
       }
     case OP_DY:
       switch (op_second) {
@@ -158,7 +156,6 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
           return OP_DYDZ;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
-          break;
       }
     case OP_DZ:
       switch (op_second) {
@@ -170,11 +167,9 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
           return OP_DZDZ;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
-          break;
       }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
-      break;
   }
 }
 

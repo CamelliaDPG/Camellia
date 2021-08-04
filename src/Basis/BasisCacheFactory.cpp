@@ -29,7 +29,8 @@ namespace Camellia {
       
     }
     
-    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+    using Function::values;
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override
     {
       // Note that we could avoid copies here by appropriate Camellia::FieldContainer games using pointers and offsets into the passed-in values container
       // For the moment, though, we accept the cost for ease/certainty of implementation
@@ -263,7 +264,7 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
       parentCubatureWeights(ptOrdinal+pointOffset) = childCubatureWeights(ptOrdinal) * parentJacobianDeterminantForChildPoints(0,ptOrdinal);
     }
     
-    auto & childPhysicalPoints = basisCache->getPhysicalCubaturePoints();
+    auto & childPhysicalPoints = basisCache->getPhysicalCubaturePointsFC();
     
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
     {

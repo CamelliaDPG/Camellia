@@ -1400,7 +1400,7 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++)
   {
-    (*meshIt)->pRefine(cellIDsForPRefinements, repartitionAndRebuild); // TODO: add pToAdd argument!
+    (*meshIt)->pRefine(cellIDsForPRefinements, pToAdd, repartitionAndRebuild);
   }
 
   _gda->didPRefine(cellIDsForPRefinements, pToAdd);
@@ -1539,6 +1539,11 @@ void Mesh::setUsePatchBasis( bool value )
 {
   // TODO: throw an exception if we've already been refined??
   _usePatchBasis = value;
+}
+
+double Mesh::sideParity(GlobalIndexType cellID, unsigned sideOrdinal)
+{
+  return _gda->sideParity(cellID, sideOrdinal);
 }
 
 bool Mesh::usePatchBasis()

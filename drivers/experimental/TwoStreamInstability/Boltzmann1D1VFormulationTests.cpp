@@ -71,6 +71,39 @@ namespace {
     return form;
   }
 
+  class Maxwellian1V : public TFunction<double>
+  {
+    double _u;
+    double _sigma;
+    double _n;
+  public:
+    Maxwellian1V(double u, double sigma, double n)
+    :
+    _u(u),
+    _sigma(sigma),
+    _n(n)
+    {}
+    
+    using TFunction<double>::values;
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      auto & phaseSpacePoints = basisCache->getPhysicalCubaturePointsFC();
+      const int numCells  = phaseSpacePoints.dimension(0);
+      const int numPoints = phaseSpacePoints.dimension(1);
+      
+      const double weight = _n / (sqrt(2. * M_PI) * _sigma);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          const double vx = phaseSpacePoints(cellOrdinal,pointOrdinal,1); // vx is the second dimension for 1D1V
+          const double exponent = - 0.5 * (vx - _u) * (vx - _u) / (_sigma * _sigma);
+          values(cellOrdinal,pointOrdinal) = weight * std::exp(exponent);
+        }
+      }
+    }
+  };
+
   TEUCHOS_UNIT_TEST( Boltzmann1D1VFormulation, MapToPhaseSpaceMesh )
   {
     const int xElements = 3;
@@ -214,5 +247,87 @@ namespace {
     soln_magnitude = f0->l2norm(boltzmannSoln->mesh());
     err_l2 = (f_soln-f0)->l2norm(boltzmannSoln->mesh());
     TEST_COMPARE(err_l2, <, tol * soln_magnitude);
+  }
+
+  TEUCHOS_UNIT_TEST( Boltzmann1D1VFormulation, TimeStepStabilityUltraweakImplicit )
+  {
+    // confirm, for an example problem, that || u^{n+1} || ≤ || u^n ||
+    // we set everything up as in two-stream instability, and use a coarse (2 x 2) high-order (H1Order = 4) mesh.
+    // We run with both our usual test space norm, and the automatic graph norm for the bilinear form.
+    // We use dt's that go from 1e0 to 1e-5.
+    // run test suite with --details=ALL argument to see numerical details.
+    
+    // set things up as in two-stream
+    double k_x    = 0.2; // wavelength
+    double u0     = 3.0; // initial drift velocity
+    double gamma  = 1e-3; // initial perturbation
+    double sigma  = 1.0; // temperature
+    double n0     = 1.0; // density
+    
+    double q      =  1.0;
+    double eps0   =  1.0;
+    double m      =  1.0;
+    double x0     =  0.0;
+    double xWidth =  2 * M_PI / k_x;
+    double v0     = -10.0;
+    double vWidth =  20.0;
+    
+    FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
+    double n = 0.5 * n0;
+    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1V( u0, sigma, n) );
+    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1V(-u0, sigma, n) );
+    FunctionPtr f0           = (fM_u0 + fM_minus_u0) * (1. + gamma * cos_kx);
+    
+    const int xElements = 2;
+    const int vElements = 2;
+    const int H1Order   = 4; // cubic L^2 functions
+    
+    const int delta_k = 2;
+    const double dt = 1.0;
+    using FormulationChoice = Camellia::Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice;
+    FormulationChoice formulation = FormulationChoice::ULTRAWEAK_IMPLICIT_L2_TRACE;
+    const bool usePeriodicBCs = true;
+    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, Teuchos::null, 0);
+    
+    auto boltzmannSoln = form.boltzmannSolution();
+    IPPtr defaultIP = boltzmannSoln->ip(); // our default inner product for Boltzmann; at present, this is one inspired by Führer et al.
+    IPPtr graphNorm = boltzmannSoln->bf()->graphNorm(); // the usual default choice for generic DPG discretization (has unit weight on the extra L^2 terms)
+    
+    std::vector<IPPtr> ipsToTest {defaultIP, graphNorm};
+    
+    std::vector<double> dtsToTest {1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5};
+    
+    int ipOrdinal = 0;
+    for (const auto & ipToTest : ipsToTest)
+    {
+      out << "************************************************************\n";
+      out << "testing IP: " << ipToTest->displayString() << std::endl;
+      boltzmannSoln->setIP(ipToTest);
+      
+      for (const auto & dt : dtsToTest)
+      {
+        out << "testing dt: " << dt << std::endl;
+        form.setTimeStep(dt);
+        
+        form.setInitialConditions(f0);
+        
+        // we should measure the projected f0 rather than the exact.  (For the patch test initial conditions we're using now, this should not
+        // matter, but we may want to harden this test by using multiple f0's, including some that are non-polynomial.)
+        
+        FunctionPtr f_soln = Function::solution(form.f(), boltzmannSoln);
+        const double f0_l2 = f_soln->l2norm(form.boltzmannMesh());
+        out << "f0_l2: " << f0_l2 << std::endl;
+
+        form.takeTimeStep();
+        
+        const double f1_l2 = f_soln->l2norm(form.boltzmannMesh());
+        
+        out << "f1_l2: " << f1_l2 << std::endl;
+        out << "f1_l2 / f0_l2: " << f1_l2 / f0_l2 << std::endl;
+        out << "1 - f1_l2 / f0_l2 = " << 1 - f1_l2 / f0_l2 << std::endl;
+        
+        TEST_COMPARE(f1_l2, <=, f0_l2);
+      }
+    }
   }
 } // end anonymous namespace

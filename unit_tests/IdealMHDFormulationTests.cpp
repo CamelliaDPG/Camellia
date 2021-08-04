@@ -31,7 +31,7 @@ namespace
   static const double TEST_R = TEST_CP - TEST_CV;
   
   static const double DEFAULT_RESIDUAL_TOLERANCE = 1e-12; // now that we do a solve, need to be a bit more relaxed
-  static const double DEFAULT_NL_SOLVE_TOLERANCE =  1e-6; // for nonlinear stepping
+//  static const double DEFAULT_NL_SOLVE_TOLERANCE =  1e-6; // for nonlinear stepping
   
   
   // since we have defined things in other tests in terms of temperature: conversion here

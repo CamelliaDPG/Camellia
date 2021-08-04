@@ -112,7 +112,7 @@ public:
 
   virtual void printInteractions();
 
-  std::string displayString();
+  std::string displayString() const;
 
   static TIPPtr<Scalar> ip();
 

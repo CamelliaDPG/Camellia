@@ -10,7 +10,7 @@ using namespace Camellia;
 
 template <typename Scalar>
 ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value)
-: TFunction<Scalar>("ConstantScalarFunction",0)
+: TFunction<Scalar>("ConstantScalarFunction",0,TFunction<Scalar>::VARIES_IN_NO_DIMENSION)
 {
   _value = value;
   ostringstream valueStream;
@@ -20,7 +20,7 @@ ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value)
 
 template <typename Scalar>
 ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value, string stringDisplay)
-: TFunction<Scalar>("ConstantScalarFunction",0)
+: TFunction<Scalar>("ConstantScalarFunction",0,TFunction<Scalar>::VARIES_IN_NO_DIMENSION)
 {
   _value = value;
   _stringDisplay = stringDisplay;
@@ -36,6 +36,32 @@ template <typename Scalar>
 bool ConstantScalarFunction<Scalar>::isZero()
 {
   return 0.0 == _value;
+}
+
+template <typename Scalar>
+std::vector<Intrepid2::DimensionInfo> ConstantScalarFunction<Scalar>::valuesDataDims(BasisCachePtr basisCache)
+{
+  // get dimensions from base class
+  std::vector<Intrepid2::DimensionInfo> dataDims = this->TFunction<Scalar>::valuesDataDims(basisCache);
+  
+  // override cell dimension: base class doesn't know that we're constant across cells
+  const int numCells = dataDims[0].logicalExtent;
+  auto cellDim  = TFunction<Scalar>::constantDimensionInfo(numCells);
+  dataDims[0] = cellDim;
+  
+  return dataDims;
+}
+
+template <typename Scalar>
+void ConstantScalarFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache)
+{
+  auto underlyingView1 = values.template getUnderlyingView<1>();
+  
+  auto value = _value;
+  Kokkos::parallel_for("set values", 1,
+  KOKKOS_LAMBDA (const int & /*entryOrdinal*/) {
+    underlyingView1(0) = value;
+  });
 }
 
 template <typename Scalar>

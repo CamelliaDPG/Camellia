@@ -53,7 +53,9 @@ namespace Camellia
     std::pair<BasisCachePtr, std::vector<int> > physicalCellBasisCache(const GlobalIndexType physicalCellID, bool testVsTest, int quadratureEnrichment) const;
       
     // RefinementObserver overrides:
+    using RefinementObserver::didHRefine;
     void didHRefine(MeshTopologyPtr phaseSpaceMesh, const set<GlobalIndexType> &phaseSpaceCellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool willRepartitionAndRebuild) override;
+    using RefinementObserver::didHUnrefine;
     void didHUnrefine(MeshTopologyPtr phaseSpaceMesh, const std::set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild) override;
     void didRepartition(MeshTopologyPtr phaseSpaceMesh) override;
   };

@@ -27,7 +27,8 @@
 
 namespace Camellia
 {
-  const static int VOLUME_INTERIOR_SIDE_ORDINAL = -1;
+  const unsigned VOLUME_INTERIOR_SIDE_ORDINAL = static_cast<unsigned>(-1);
+  const int VOLUME_INTERIOR_SIDE_INDEX = -1; // "index": signed integer type; "ordinal": unsigned
 class DofOrdering
 {
   int _indexNeedsToBeRebuilt;
@@ -42,7 +43,7 @@ class DofOrdering
   // values: <sideIndex, dofOrdinal>
   std::map< int, std::vector<int> > _sidesForVarID; // to replace numSidesForVarID
   std::map<int,int> numSidesForVarID;
-//  std::map< std::pair<int,int>, std::vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL for field (volume) variables
+//  std::map< std::pair<int,int>, std::vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = VOLUME_INTERIOR_SIDE_INDEX for field (volume) variables
   std::vector<map<int,vector<int>>> _indices; // outer index is sideOrdinal (or _volumeIndex); next is varID.
   // values for indices: list of the indices used in the DofOrdering by this <varID, sideIndex> pair's basis, ordered according to that basis's ordering
   std::map< std::pair<int,int>, BasisPtr > bases; // keys are <varID, sideIndex>
@@ -57,7 +58,7 @@ class DofOrdering
 public:
   DofOrdering(CellTopoPtr cellTopo = Teuchos::null); // constructor
 
-  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL);
+  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = VOLUME_INTERIOR_SIDE_INDEX);
 
   bool hasBasisEntry(int varID, int sideIndex) const;
   bool hasSideVarIDs();
@@ -66,9 +67,9 @@ public:
                              const Camellia::FieldContainer<double> &oldValues );
 
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
-  int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL, int subSideIndex = -1);
+  int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=VOLUME_INTERIOR_SIDE_INDEX, int subSideIndex = -1);
 
-  const std::vector<int> & getDofIndices(int varID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL) const;
+  const std::vector<int> & getDofIndices(int varID, int sideIndex=VOLUME_INTERIOR_SIDE_INDEX) const;
 
   const std::set<int> & getVarIDs() const;
 
@@ -76,7 +77,7 @@ public:
 
   int getBasisCardinality(int varID, int sideIndex);
 
-  BasisPtr getBasis(int varID, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL) const;
+  BasisPtr getBasis(int varID, int sideIndex = VOLUME_INTERIOR_SIDE_INDEX) const;
 
   int getBasisRank(int varID)
   {
@@ -86,14 +87,14 @@ public:
   // ! returns the dof coordinates (nodes in case of a nodal basis) for the variable on the side indicated.
   // ! The order of the coordinates corresponds to the basis ordering.  The coordinates are in volume reference space.
   // ! dofCoords shape: (F,D), where D is the dimension of the volume topology.
-  void getDofCoords(Camellia::FieldContainer<double> &dofCoords, int varID, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
+  void getDofCoords(Camellia::FieldContainer<double> &dofCoords, int varID, int sideOrdinal = VOLUME_INTERIOR_SIDE_INDEX);
 
   // ! returns the dof coordinates (nodes in case of a nodal basis) for the variable on the side indicated, given a physical cell
   // ! with nodes as indicated.
   // ! The order of the coordinates corresponds to the basis ordering.  The coordinates are in physical space.
   // ! dofCoords shape: (C,F,D), where D is the dimension of the volume topology.
   void getDofCoords(const Camellia::FieldContainer<double> &physicalCellNodes, Camellia::FieldContainer<double> &dofCoords,
-                    int varID, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
+                    int varID, int sideOrdinal = VOLUME_INTERIOR_SIDE_INDEX);
   
   bool hasEntryForVarID( int varID ); // returns true if we have any basis on any side for varID
 

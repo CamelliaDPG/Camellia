@@ -264,7 +264,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
       break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-      break;
     }
     break;
   case(Intrepid::OPERATOR_GRAD):
@@ -339,7 +338,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
     break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-      break;
     }
     break;
   case(Intrepid::OPERATOR_CURL):
@@ -372,9 +370,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
     case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-      break;
     }
-    break;
   case(Intrepid::OPERATOR_DIV):
     switch(fs)
     {
@@ -388,12 +384,10 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
     case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-      break;
     }
     break;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-    break;
   }
 
   FCPtr result = getComponentOfInterest(transformedValues,op,fs,componentOfInterest);
@@ -461,7 +455,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-        break;
     }
       break;
     case(Intrepid::OPERATOR_GRAD):
@@ -561,7 +554,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-        break;
     }
       break;
     case(Intrepid::OPERATOR_CURL):
@@ -594,7 +586,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
       case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-        break;
     }
       break;
     case(Intrepid::OPERATOR_DIV):
@@ -610,7 +601,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
       case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-        break;
     }
       break;
     case(Intrepid::OPERATOR_D2):
@@ -672,7 +662,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
-        break;
     }
       break;
     default:

@@ -156,8 +156,8 @@ double MPIWrapper::sum(double mySum)
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   return sum(Comm, mySum);
 #else
-#endif
   return mySum;
+#endif
 }
 
 void MPIWrapper::entryWiseSum(Camellia::FieldContainer<int> &values)
@@ -198,8 +198,8 @@ int MPIWrapper::sum(int mySum)
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   return sum(Comm, mySum);
 #else
-#endif
   return mySum;
+#endif
 }
 
 Teuchos_CommPtr& MPIWrapper::TeuchosCommSerial()

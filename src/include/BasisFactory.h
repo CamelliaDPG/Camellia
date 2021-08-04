@@ -106,7 +106,7 @@ public:
   BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);
 
   int basisPolyOrder(BasisPtr basis);
-  int getBasisRank(BasisPtr basis);
+  int getBasisRank(BasisPtr basis, EOperator op=OP_VALUE);
   Camellia::EFunctionSpace getBasisFunctionSpace(BasisPtr basis);
 
   bool basisKnown(BasisPtr basis);

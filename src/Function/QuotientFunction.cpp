@@ -123,6 +123,46 @@ std::vector<TFunctionPtr<Scalar>> QuotientFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
+int QuotientFunction<Scalar>::numVectorComponents() const
+{
+  return _f->numVectorComponents();
+}
+
+template <typename Scalar>
+std::vector<Intrepid2::DimensionInfo> QuotientFunction<Scalar>::valuesDataDims(BasisCachePtr basisCache)
+{
+  auto fDims = _f->valuesDataDims(basisCache);
+  auto divisorDims = _scalarDivisor->valuesDataDims(basisCache);
+  
+  // if f is not scalar, we would expect the data dims to be of different sizes; right now,
+  // we are only supporting Intrepid2::Data for scalar f.
+  TEUCHOS_TEST_FOR_EXCEPTION(fDims.size() != divisorDims.size(), std::invalid_argument, "Only scalar f supported by valuesDataDims() at present");
+  
+  const int numDims = fDims.size();
+  std::vector<Intrepid2::DimensionInfo> combinedDims(numDims);
+  for (int d=0; d<numDims; d++)
+  {
+    combinedDims[d] = Intrepid2::combinedDimensionInfo(fDims[d], divisorDims[d]);
+  }
+  return combinedDims;
+}
+
+template <typename Scalar>
+void QuotientFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache)
+{
+  auto fData       = _f->checkoutValuesData(basisCache);
+  auto divisorData = _scalarDivisor->checkoutValuesData(basisCache);
+  
+  _f->values(fData,basisCache);
+  _scalarDivisor->values(divisorData,basisCache);
+  
+  values.storeInPlaceQuotient(fData, divisorData);
+  
+  _f->checkinValuesData(fData);
+  _scalarDivisor->checkinValuesData(divisorData);
+}
+
+template <typename Scalar>
 void QuotientFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType,  BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("QuotientFunction values()");

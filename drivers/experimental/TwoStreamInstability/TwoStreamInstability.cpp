@@ -38,7 +38,7 @@ public:
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
   {
-    auto & phaseSpacePoints = basisCache->getPhysicalCubaturePoints();
+    auto & phaseSpacePoints = basisCache->getPhysicalCubaturePointsFC();
     const int numCells  = phaseSpacePoints.dimension(0);
     const int numPoints = phaseSpacePoints.dimension(1);
     
@@ -417,7 +417,7 @@ std::map<GlobalIndexType, std::vector<double> > readOverkillSolutionCoefficients
   const auto &myCellIDs = fineForm.boltzmannMesh()->cellIDsInPartition();
   for (const auto &cellID : myCellIDs)
   {
-    int dofCount = fineForm.boltzmannMesh()->getElementType(cellID)->trialOrderPtr->getBasisCardinality(f->ID(), VOLUME_INTERIOR_SIDE_ORDINAL);
+    int dofCount = fineForm.boltzmannMesh()->getElementType(cellID)->trialOrderPtr->getBasisCardinality(f->ID(), VOLUME_INTERIOR_SIDE_INDEX);
     
     TEUCHOS_TEST_FOR_EXCEPTION(dofCount + offset > receivedPackedSolution.size(), std::invalid_argument, "out of bounds");
     

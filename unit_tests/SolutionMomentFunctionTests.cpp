@@ -12,6 +12,7 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "CamelliaDataHelpers.h"
 #include "CamelliaTestingHelpers.h"
 #include "ExtrudedMeshTopology.h"
 #include "SolutionMomentFunction.h"
@@ -162,6 +163,27 @@ namespace
     FunctionPtr solnMomentFunctionPtr = Teuchos::rcp(&solnMomentFunction,false);
     FunctionPtr errorFxn = expectedIntegral - solnMomentFunctionPtr;
     
+    if (numExtrusionDims == 1)
+    {
+      out << "Testing whether solnMomentFunction Data path matches View path" << std::endl;
+      const auto & myCells = physicalMesh->cellIDsInPartition();
+      for (const auto & physicalCellID : myCells)
+      {
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, physicalCellID);
+        testFunctionDataPathMatchesViewPath1V(solnMomentFunctionPtr, basisCache, tol, out, success);
+      }
+    }
+    else if (numExtrusionDims == 3)
+    {
+      out << "Testing whether solnMomentFunction Data path matches View path" << std::endl;
+      const auto & myCells = physicalMesh->cellIDsInPartition();
+      for (const auto & physicalCellID : myCells)
+      {
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, physicalCellID);
+        testFunctionDataPathMatchesViewPath3V(solnMomentFunctionPtr, basisCache, tol, out, success);
+      }
+    }
+    
     const double expectedL2 = expectedIntegral->l2norm(physicalMesh);
     const double error = errorFxn->l2norm(physicalMesh);
     const double relativeError = error / expectedL2;
@@ -182,7 +204,7 @@ namespace
         expectedIntegral->values(physicalValuesExpected, basisCache);
         solnMomentFunctionPtr->values(physicalValuesActual, basisCache);
         
-        const auto & physicalCubaturePointsFC = basisCache->getPhysicalCubaturePoints();
+        const auto & physicalCubaturePointsFC = basisCache->getPhysicalCubaturePointsFC();
         for (int pointOrdinal=0; pointOrdinal < numPoints; pointOrdinal++)
         {
           const double &actualValue   = physicalValuesActual(0,pointOrdinal);
@@ -219,7 +241,6 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -237,7 +258,6 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -253,7 +273,6 @@ namespace
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -271,7 +290,6 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -287,7 +305,6 @@ namespace
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -305,7 +322,6 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -321,7 +337,6 @@ namespace
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -339,7 +354,6 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -355,7 +369,6 @@ namespace
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -373,7 +386,6 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -389,7 +401,6 @@ namespace
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -407,7 +418,6 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -423,7 +433,6 @@ namespace
     FunctionPtr f = Function::xn(1);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -446,7 +455,6 @@ namespace
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -467,7 +475,6 @@ namespace
     const double y_min = EXTRUSION_ORIGIN;
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -491,7 +498,6 @@ namespace
     const double z_integral = EXTRUSION_EXTENT; // does not vary in z
     FunctionPtr f_integral = y_integral * x * z_integral;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -514,7 +520,6 @@ namespace
     const double z_integral = EXTRUSION_EXTENT; // does not vary in z
     FunctionPtr f_integral = y_integral * x * z_integral;
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -535,7 +540,6 @@ namespace
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = Function::constant(y_integral);
     
-    
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
@@ -555,7 +559,6 @@ namespace
     const double y_min = EXTRUSION_ORIGIN;
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = Function::constant(y_integral);
-    
     
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
@@ -643,6 +646,29 @@ namespace
     testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xz2_1D3V_to_xy ) // to xy: (x,v_x) dimensions survive integration
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 0; // y dimension (first extrusion dim) does not get integrated
+    const bool refine          = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr z2 = Function::zn(2);
+    FunctionPtr f = x * z2;
+    // integral in z is z^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double z_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double z_min = EXTRUSION_ORIGIN;
+    const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
+    FunctionPtr f_integral = z_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
   // TODO: test higher-order moments
   // TODO: test more refinements
   // TODO: test more partial integrals
@@ -655,8 +681,6 @@ namespace
     const int polyOrder = 3; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     const int delta_k = 0;
-    
-    const int momentNumber = 0;
     
     std::vector<int> H1Order(1 + numExtrusionDims, polyOrder + 1);
     

@@ -329,7 +329,6 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideO
   }
 
   vector< pair<unsigned,unsigned> > childIndices = _refPattern->childrenForSides()[sideOrdinal];
-  vector< pair<unsigned,unsigned> >::iterator entryIt;
 
   for (pair<unsigned,unsigned> entry : childIndices)
   {
@@ -374,13 +373,13 @@ map<string, long long> Cell::approximateMemoryCosts()
   map<string, long long> variableCosts;
 
   // calibrate by computing some sizes
-  map<int, int> emptyMap;
+//  map<int, int> emptyMap;
   vector<int> emptyVector;
 
-  int MAP_OVERHEAD = sizeof(emptyMap);
+//  int MAP_OVERHEAD = sizeof(emptyMap);
   int VECTOR_OVERHEAD = sizeof(emptyVector);
 
-  int MAP_NODE_OVERHEAD = 32; // according to http://info.prelert.com/blog/stl-container-memory-usage, this appears to be basically universal
+//  int MAP_NODE_OVERHEAD = 32; // according to http://info.prelert.com/blog/stl-container-memory-usage, this appears to be basically universal
 
   variableCosts["_cellIndex"] = sizeof(_cellIndex);
   variableCosts["_cellTopo"] = sizeof(_cellTopo);
@@ -438,7 +437,7 @@ unsigned Cell::childOrdinal(IndexType childIndex)
   }
   cout << "ERROR: child with ID childIndex not found in parent.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child with ID childIndex not found in parent");
-  return -1; // NOT FOUND
+//  return -1; // NOT FOUND
 }
 
 const vector< CellPtr > &Cell::children()
@@ -566,14 +565,14 @@ unsigned Cell::findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex)
       return scord;
     }
   }
-  return -1; // NOT FOUND
+  return INVALID_CELLTOPOLOGY_SIDE_ORDINAL; // NOT FOUND
 }
 
 unsigned Cell::findSubcellOrdinalInSide(unsigned int subcdim, IndexType subcEntityIndex, unsigned sideOrdinal)
 {
   unsigned subcOrdinalInCell = findSubcellOrdinal(subcdim, subcEntityIndex);
   int sideDim = _cellTopo->getDimension() - 1;
-  if (subcOrdinalInCell == -1) return -1;
+  if (subcOrdinalInCell == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL) return INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
   bool assertContainment = false; // don't throw exception if not found (return -1)
   return CamelliaCellTools::subcellReverseOrdinalMap(topology(), sideDim, sideOrdinal, subcdim, subcOrdinalInCell, assertContainment);
 }
@@ -745,7 +744,7 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
         childOrdinals.push_back(i);
 
         subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcellEntityDimension, subcord);
-        if (subcord == -1)
+        if (subcord == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
         {
           // then it should be the case that the subcell entity has as generalized parent a higher-dimension subcell of currentAncestor
           pair<IndexType, unsigned> generalizedParent = _meshTopo->getEntityGeneralizedParent(subcellEntityDimension, subcellEntityIndex);
@@ -763,7 +762,7 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
             subcord = currentAncestor->findSubcellOrdinal(subcellEntityDimension, subcellEntityIndex);
           }
         }
-        if (subcord==-1)
+        if (subcord == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
         {
           cout << "Error: corresponding subcell not found in parent, even though the subcell is constrained...\n";
           cout << "Subcell entity:\n";
@@ -834,7 +833,7 @@ unsigned Cell::ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord
 
   unsigned constrainingSubcellOrdinal = ancestralCell->findSubcellOrdinal(constrainingEntity.second, constrainingEntity.first);
 
-  if (constrainingSubcellOrdinal == -1)
+  if (constrainingSubcellOrdinal == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
   {
     cout << "constraining subcell ordinal not found.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constraining subcell ordinal not found.");

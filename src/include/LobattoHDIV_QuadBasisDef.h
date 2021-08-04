@@ -103,7 +103,7 @@ void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::initializeTags() const
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "initializeTags() called for non-conforming Lobatto basis.");
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LobattoHDIV_QuadBasis: conforming basis not supported yet");
-  cout << "LobattoHDIV_QuadBasis::initializeTags(): untested method!  It might be that the conforming basis itself is wrong.  See notes in edgeOrdinals[] initialization...\n";
+//  cout << "LobattoHDIV_QuadBasis::initializeTags(): untested method!  It might be that the conforming basis itself is wrong.  See notes in edgeOrdinals[] initialization...\n";
 }
 
 template<class Scalar, class ArrayScalar>
@@ -150,7 +150,6 @@ void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
 
           default:
             TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
-            break;
           }
         }
         else if ((i > 0) && (j > 0))     // then there will be some non-divergence-free members
@@ -172,7 +171,6 @@ void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
             break;
           default:
             TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
-            break;
           }
         }
       }

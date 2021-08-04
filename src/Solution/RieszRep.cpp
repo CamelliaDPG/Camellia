@@ -181,7 +181,7 @@ void TRieszRep<Scalar>::computeRepresentationValues(Camellia::FieldContainer<Sca
   // all elems coming in should be of same type
   ElementTypePtr elemTypePtr = _mesh->getElementType(cellIDs[0]);
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-  int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, VOLUME_INTERIOR_SIDE_ORDINAL);
+  int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, VOLUME_INTERIOR_SIDE_INDEX);
   BasisPtr testBasis = testOrderingPtr->getBasis(testID);
 
   bool testBasisIsVolumeBasis = (spaceDim == testBasis->domainTopology()->getDimension());

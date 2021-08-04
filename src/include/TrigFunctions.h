@@ -23,6 +23,7 @@ class Cos_y : public SimpleFunction<double>
 {
 public:
   Cos_y() : SimpleFunction<double>("Cos_y",VARIES_IN_DIMENSION_1) {}
+  using SimpleFunction<double>::value;
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -34,6 +35,7 @@ class Sin_y : public SimpleFunction<double>
 {
 public:
   Sin_y() : SimpleFunction<double>("Sin_y",VARIES_IN_DIMENSION_1) {}
+  using SimpleFunction<double>::value;
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -45,6 +47,7 @@ class Cos_x : public SimpleFunction<double>
 {
 public:
   Cos_x() : SimpleFunction<double>("Cos_x",VARIES_IN_DIMENSION_0) {}
+  using SimpleFunction<double>::value;
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -56,6 +59,7 @@ class Sin_x : public SimpleFunction<double>
 {
 public:
   Sin_x() : SimpleFunction<double>("Sin_x",VARIES_IN_DIMENSION_0) {}
+  using SimpleFunction<double>::value;
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -72,7 +76,9 @@ public:
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
 
+  using TFunction<double>::values;
   void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
   
   std::string displayString() override;
 };
@@ -86,6 +92,7 @@ public:
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
   
+  using TFunction<double>::values;
   void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   
   std::string displayString() override;
@@ -96,6 +103,7 @@ class Cos_ay : public SimpleFunction<double>
   double _a;
 public:
   Cos_ay(double a);
+  using SimpleFunction<double>::value;
   double value(double x, double y) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
@@ -109,6 +117,7 @@ class Sin_ay : public SimpleFunction<double>
   double _a;
 public:
   Sin_ay(double a);
+  using SimpleFunction<double>::value;
   double value(double x, double y) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
@@ -121,6 +130,7 @@ class ArcTan_ax : public SimpleFunction<double>
   double _a, _b;
 public:
   ArcTan_ax(double a, double b=0);
+  using SimpleFunction<double>::value;
   double value(double x) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
@@ -133,6 +143,7 @@ class ArcTan_ay : public SimpleFunction<double>
   double _a, _b;
 public:
   ArcTan_ay(double a, double b=0);
+  using SimpleFunction<double>::value;
   double value(double x, double y) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;

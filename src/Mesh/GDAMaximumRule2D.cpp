@@ -157,10 +157,10 @@ void GDAMaximumRule2D::buildLocalToGlobalMap()
       if (! isFluxOrTrace )
       {
         // then all these dofs are interior, so there's no overlap with other elements...
-        int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,VOLUME_INTERIOR_SIDE_ORDINAL);
+        int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,VOLUME_INTERIOR_SIDE_INDEX);
         for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++)
         {
-          int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,VOLUME_INTERIOR_SIDE_ORDINAL);
+          int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,VOLUME_INTERIOR_SIDE_INDEX);
           _localToGlobalMap[make_pair(cellID,localDofIndex)] = globalIndex;
 //          cout << "added localToGlobalMap(cellID=" << cellID << ", localDofIndex=" << localDofIndex;
 //          cout << ") = " << globalIndex << "\n";
@@ -177,7 +177,6 @@ void GDAMaximumRule2D::buildLocalToGlobalMap()
           {
             int myLocalDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
             pair<int, int> myKey = make_pair(cellID,myLocalDofIndex);
-            pair<int, int> myValue;
             if ( _dofPairingIndex.find(myKey) != _dofPairingIndex.end() )
             {
 //              GlobalIndexType earlierCellID = _dofPairingIndex[myKey].first;
@@ -428,11 +427,11 @@ void GDAMaximumRule2D::determineDofPairings()
         for (int sideIndex=0; sideIndex<numSides; sideIndex++)
         {
           int myNumDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-          pair<unsigned, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex, _meshTopology);
-          unsigned neighborCellID = neighborInfo.first;
+          auto neighborInfo = cell->getNeighborInfo(sideIndex, _meshTopology);
+          auto neighborCellID = neighborInfo.first;
           unsigned mySideIndexInNeighbor = neighborInfo.second;
 
-          bool neighborIsPeer = (neighborCellID != -1) && (_meshTopology->getCell(neighborCellID)->getNeighborInfo(mySideIndexInNeighbor, _meshTopology).first==cellID);
+          bool neighborIsPeer = (neighborCellID != MESHTOPOLOGY_INVALID_CELL_INDEX) && (_meshTopology->getCell(neighborCellID)->getNeighborInfo(mySideIndexInNeighbor, _meshTopology).first==cellID);
 
           if (neighborIsPeer)
           {
@@ -785,7 +784,7 @@ vector< Teuchos::RCP< ElementType > > GDAMaximumRule2D::elementTypes(PartitionIn
   }
 }
 
-// ! get the global dof indices corresponding to the specified cellID/varID/sideOrdinal.  GDAMinimumRule's implementation overrides to return only "fittable" dof indices, as required by CondensedDofInterpreter.
+//! get the global dof indices corresponding to the specified cellID/varID/sideOrdinal.
 set<GlobalIndexType> GDAMaximumRule2D::getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal)
 {
   DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
@@ -804,7 +803,7 @@ set<GlobalIndexType> GDAMaximumRule2D::getGlobalDofIndices(GlobalIndexType cellI
 vector<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID)
 {
   DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
-  int numDofs = trialOrdering->getBasisCardinality(varID, VOLUME_INTERIOR_SIDE_ORDINAL);
+  int numDofs = trialOrdering->getBasisCardinality(varID, VOLUME_INTERIOR_SIDE_INDEX);
   vector<GlobalIndexType> globalDofIndices;
   for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++)
   {

@@ -46,6 +46,9 @@ public:
   static SpatialFilterPtr allSpace();
   static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
   static SpatialFilterPtr intersectionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
+  
+  //! returns a SpatialFilter that matches wherever the convective direction c (indicated by the input function) dotted with the outward normal is negative.
+  static SpatialFilterPtr inflowFilter(std::vector<FunctionPtr> convectionComponents);
 
   static SpatialFilterPtr negatedFilter(SpatialFilterPtr filterToNegate);
 
@@ -79,8 +82,10 @@ public:
 class SpatialFilterUnfiltered : public SpatialFilter
 {
 public:
+  using SpatialFilter::matchesPoints;
   void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override;
   
+  using SpatialFilter::matchesPoint;
   virtual bool matchesPoint(const vector<double> &point) override;
 
   virtual bool matchesPoint(double x) override;
@@ -95,12 +100,14 @@ class SpatialFilterLogicalOr : public SpatialFilter
 public:
   SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
   
+  using SpatialFilter::matchesPoints;
   void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override;
   bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)  override;
 
   //  bool matchesPoint( double x, double y ) {
   //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
   //  }
+  using SpatialFilter::matchesPoint;
   virtual bool matchesPoint(double x) override;
   virtual bool matchesPoint(double x, double y) override;
   virtual bool matchesPoint(double x, double y, double z) override;
@@ -121,6 +128,7 @@ public:
   //  bool matchesPoint( double x, double y ) {
   //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
   //  }
+  using SpatialFilter::matchesPoint;
   virtual bool matchesPoint(double x) override;
   virtual bool matchesPoint(double x, double y) override;
   virtual bool matchesPoint(double x, double y, double z) override;
@@ -135,9 +143,11 @@ class NegatedSpatialFilter : public SpatialFilter
   SpatialFilterPtr _filterToNegate;
 public:
   NegatedSpatialFilter(SpatialFilterPtr FilterToNegate);
+  using SpatialFilter::matchesPoints;
   bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) override;
   void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override;
 
+  using SpatialFilter::matchesPoint;
   virtual bool matchesPoint(double x) override;
   virtual bool matchesPoint(double x, double y) override;
   virtual bool matchesPoint(double x, double y, double z) override;

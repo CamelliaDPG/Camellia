@@ -46,7 +46,7 @@ void MinFunction::values(DeviceView<double> &values, ValueModificationType modTy
   }
   else
   {
-    auto minValues = Allocation<double>::checkoutDeviceView(values);
+    auto minValues = Allocation<double>::checkoutDeviceView(values,"MinFunction: minValues");
     _f1->values(minValues, ValueModificationType::ASSIGN, basisCache);
     Kokkos::fence();
     _f2->values(minValues, ValueModificationType::MINIMUM, basisCache);
@@ -118,7 +118,7 @@ void MaxFunction::values(typename FieldContainer<double>::DeviceView &values, Va
   }
   else
   {
-    auto maxValues = Allocation<double>::checkoutDeviceView(values);
+    auto maxValues = Allocation<double>::checkoutDeviceView(values, "MaxFunction maxValues");
     _f1->values(maxValues, ValueModificationType::ASSIGN, basisCache);
     Kokkos::fence();
     _f2->values(maxValues, ValueModificationType::MAXIMUM, basisCache);

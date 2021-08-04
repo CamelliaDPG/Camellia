@@ -246,7 +246,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     BasisCachePtr scaledBasisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubDegree, scaledRefCellNodes);
     
     FunctionPtr h = Function::h();
-    int numPoints = refBasisCache->getPhysicalCubaturePoints().dimension(1); // C, P, D
+    int numPoints = refBasisCache->getPhysicalCubaturePointsFC().dimension(1); // C, P, D
     Camellia::FieldContainer<double> refValues(cellCount,numPoints);
     Camellia::FieldContainer<double> scaledRefValues(cellCount,numPoints);
     
@@ -799,7 +799,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
       u_neighbor->values(neighborValues, sideBasisCache);
       
       double tol = 1e-15;
-      auto &physicalPoints = sideBasisCache->getPhysicalCubaturePoints();
+      auto &physicalPoints = sideBasisCache->getPhysicalCubaturePointsFC();
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
         double expectedValue;
@@ -1057,6 +1057,8 @@ public:
       values[i] = _value;
     }
   }
+  
+  using TFunction<double>::values;
 };
   
 TEUCHOS_UNIT_TEST( Function, ValuesDevicePath )

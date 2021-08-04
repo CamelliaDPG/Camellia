@@ -136,7 +136,7 @@ void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::initializeTags() const
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "initializeTags() called for non-conforming Lobatto basis.");
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LobattoHDIV_QuadBasis_separable: conforming basis not supported yet");
-  cout << "LobattoHDIV_QuadBasis_separable::initializeTags(): untested method!  It might be that the conforming basis itself is wrong.  See notes in edgeOrdinals[] initialization...\n";
+//  cout << "LobattoHDIV_QuadBasis_separable::initializeTags(): untested method!  It might be that the conforming basis itself is wrong.  See notes in edgeOrdinals[] initialization...\n";
 
   // the following is a plausible first effort, but I really haven't thought this through carefully.
   // hence the exception thrown above, and the code commented out below.
@@ -268,7 +268,6 @@ void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::getValues(ArrayScalar 
 
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
-          break;
         }
 
         if ( ! _onlyDivFreeFunctions )
@@ -297,7 +296,6 @@ void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::getValues(ArrayScalar 
 //                  break;
             default:
               TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
-              break;
             }
           }
         }

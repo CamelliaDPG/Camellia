@@ -13,15 +13,31 @@
 
 #include "TypeDefs.h"
 
+#include <Intrepid2_Data.hpp>
+#include <Intrepid2_Utils.hpp>
+
+#include "SharedScratchStorageDynRankView.h"
+#include "SharedScratchStorageFixedRankView.h"
+
 namespace Camellia {
+
   template<typename Scalar>
   class SharedScratchStorage
   {
-    long _hitCount = 0; // number of times we reuse a device view
+    SharedScratchStorageFixedRankView<Scalar, 1> _fixedRank1;
+    SharedScratchStorageFixedRankView<Scalar, 2> _fixedRank2;
+    SharedScratchStorageFixedRankView<Scalar, 3> _fixedRank3;
+    SharedScratchStorageFixedRankView<Scalar, 4> _fixedRank4;
+    SharedScratchStorageFixedRankView<Scalar, 5> _fixedRank5;
+    SharedScratchStorageFixedRankView<Scalar, 6> _fixedRank6;
+    SharedScratchStorageFixedRankView<Scalar, 7> _fixedRank7;
     
+    SharedScratchStorageDynRankView<Scalar> _dynRank;
   public:
     using DeviceView = Camellia::DeviceView<Scalar>;
     using HostView   = Camellia::HostView<Scalar>;
+    
+    using Data = Intrepid2::Data<Scalar, DeviceType>;
     
     using ScratchStorageDimensions = std::vector<int>;
     using ScratchStorageEntry = std::tuple<DeviceView, bool, std::string>; // true means checked out right now
@@ -31,6 +47,10 @@ namespace Camellia {
     DeviceView checkoutScratchStorageMatchingDeviceView(DeviceView &deviceView, std::string description="");
     DeviceView checkoutScratchStorageMatchingHostView(HostView &hostView, std::string description="");
     
+    using ScratchDataDimensions = std::vector<Intrepid2::DimensionInfo>;
+    Data checkoutScratchData(const ScratchDataDimensions &dataDims, std::string description="");
+    void checkinScratchData(const Data &data);
+    
     void checkinScratchStorage(DeviceView &scratchView);
     
     void clear();
@@ -38,21 +58,6 @@ namespace Camellia {
     long hitCount();
     
     static SharedScratchStorage & sharedScratchStorage(); // returns singleton instance
-    
-    template<typename ViewType>
-    static ScratchStorageDimensions viewDimensions(ViewType &view)
-    {
-      ScratchStorageDimensions dim(view.rank());
-      for (int i=0; i<view.rank(); i++)
-      {
-        dim[i] = view.extent_int(i);
-      }
-      return dim;
-    }
-  private:
-    DeviceView allocateView(const ScratchStorageDimensions &dims, const std::string &label) const;
-    
-    ScratchStorageCache _scratchStorageCache;
   };
   
   void clearSharedScratchStorage(); // should be called during finalize()

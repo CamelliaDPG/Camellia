@@ -51,7 +51,7 @@ namespace
     Camellia::FieldContainer<double> refCellNodes(spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, spaceTimeTopo);
     basisCache->setRefCellPointsFC(refCellNodes);
-    Camellia::FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePointsFC();
     TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(physicalCellNodes, mappedPhysicalCellNodes, 1e-15);
   }
   
@@ -149,7 +149,7 @@ namespace
 //    Camellia::FieldContainer<double> refCellNodes(spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
 //    CamelliaCellTools::refCellNodesForTopology(refCellNodes, spaceTimeTopo);
 //    basisCache->setRefCellPointsFC(refCellNodes);
-//    Camellia::FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePoints();
+//    Camellia::FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePointsFC();
 //    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(physicalCellNodes, mappedPhysicalCellNodes, 1e-15);
   }
 } // namespace

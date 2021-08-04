@@ -254,7 +254,7 @@ public:
                       SolutionComponent standardOrInfluence=STANDARD_SOLUTION, int stageOrdinal=0,
                       bool weightForCubature = false, Camellia::EOperator op = OP_VALUE);
 
-  void solnCoeffsForCellID(Camellia::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL,
+  void solnCoeffsForCellID(Camellia::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_INDEX,
                            int solutionOrdinal=0);
   void setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID,
                               int sideIndex, int solutionOrdinal=0);

@@ -299,6 +299,13 @@ public:
                                     const int                     subcellOrd,
                                     CellTopoPtr                   parentCell);
 
+  // TensorPoints version of mapToReferenceSubcell().  Initial implementation does *not* preserve tensor structure.
+  static void mapToReferenceSubcell(Intrepid2::TensorPoints<double,Camellia::DeviceType> &refSubcellPoints,
+                                    const Intrepid2::TensorPoints<double,Camellia::DeviceType> &paramPoints,
+                                    const int   subcellDim,
+                                    const int   subcellOrd,
+                                    CellTopoPtr parentCell);
+  
   static string entityTypeString(unsigned entityDimension); // vertex, edge, face, solid, hypersolid
 };
 }

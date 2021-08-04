@@ -13,6 +13,7 @@
 #include "BasisCache.h"
 #include "BasisFactory.h"
 #include "CamelliaDebugUtility.h"
+#include "CamelliaTestingHelpers.h"
 #include "GDAMinimumRule.h"
 #include "GlobalDofAssignment.h"
 #include "MeshFactory.h"
@@ -103,39 +104,6 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
   {
     // TODO: handle other space-time mesh options for non-1D spatial meshes
   }
-  return mesh;
-}
-
-MeshPtr makeSingleElementExtrudedTestMesh( int baseSpaceDim, int numTensorExtrusions )
-{
-  MeshPtr mesh;
-
-  std::vector<double> x0        (baseSpaceDim, 0.0);
-  std::vector<double> xWidths   (baseSpaceDim, 1.0);
-  std::vector<int>    meshWidths(baseSpaceDim, 1  );
-  auto baseMeshTopology = MeshFactory::rectilinearMeshTopology(xWidths, meshWidths, x0);
-  
-  std::vector<double> v0         (numTensorExtrusions, 0.0);
-  std::vector<double> vWidths    (numTensorExtrusions, 2.0);
-  std::vector<int>    vMeshWidths(numTensorExtrusions, 1);
-  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(baseMeshTopology, v0, vWidths, vMeshWidths);
-  
-  ////////////////////   DECLARE VARIABLES   ///////////////////////
-  // define test variables
-  VarFactoryPtr varFactory = VarFactory::varFactory();
-  VarPtr v = varFactory->testVar("v", HGRAD);
-
-  // define trial variables
-  VarPtr u    = varFactory->fieldVar("u");
-  VarPtr uhat = varFactory->fluxVar("uhat");
-
-  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  BFPtr bf = BF::bf(varFactory);
-
-  ////////////////////   BUILD MESH   ///////////////////////
-  int H1Order = 1, pToAdd = 1;
-  mesh = Teuchos::rcp( new Mesh (extrudedMeshTopology, bf, H1Order, pToAdd) );
-
   return mesh;
 }
 
@@ -1435,7 +1403,9 @@ TEUCHOS_UNIT_TEST( Mesh, TensorExtrusionBasisRangeDimension )
       out << ", extrusions = " << extrusions << std::endl;
       const int totalDim = baseDim + extrusions;
       
-      auto mesh = makeSingleElementExtrudedTestMesh(baseDim, extrusions);
+      std::vector<int> H1Orders(extrusions+1,1);
+      
+      auto mesh = makeSingleElementExtrudedTestMesh(baseDim, extrusions, H1Orders);
       auto testVar = mesh->bilinearForm()->varFactory()->testVar("v");
       auto trialVar = mesh->bilinearForm()->varFactory()->fieldVar("u");
       
@@ -1453,7 +1423,6 @@ TEUCHOS_UNIT_TEST( Mesh, TensorExtrusionBasisRangeDimension )
       }
     }
   }
-  
 }
   
 void testUnrefine(int levels, int spaceDim, Teuchos::FancyOStream &out, bool &success)

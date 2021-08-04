@@ -30,6 +30,8 @@ public:
   TFunctionPtr<Scalar> y() override;
   TFunctionPtr<Scalar> z() override;
   TFunctionPtr<Scalar> t() override;
+  
+  int numVectorComponents() const override;
 
   TFunctionPtr<Scalar> dx() override;
   TFunctionPtr<Scalar> dy() override;
@@ -41,8 +43,12 @@ public:
   TFunctionPtr<Scalar> grad(int numComponents=-1) override; // gradient of sum is the sum of gradients
   TFunctionPtr<Scalar> div() override;  // divergence of sum is sum of divergences
 
+  using TFunction<Scalar>::values;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly() override;
+  
+  std::vector<Intrepid2::DimensionInfo> valuesDataDims(BasisCachePtr basisCache) override;
+  void values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
 
   string displayString() override;
   

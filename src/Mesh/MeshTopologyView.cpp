@@ -330,7 +330,6 @@ vector<IndexType> MeshTopologyView::cellIDsWithCentroids(const std::vector<std::
       while ( cell->isParent(thisPtr) && !foundMatch )
       {
         int numChildren = cell->numChildren();
-        bool foundMatchingChild = false;
         for (int childOrdinal = 0; childOrdinal < numChildren; childOrdinal++)
         {
           CellPtr child = cell->children()[childOrdinal];
@@ -342,7 +341,6 @@ vector<IndexType> MeshTopologyView::cellIDsWithCentroids(const std::vector<std::
           if (baseMeshTopology()->cellContainsPoint(child->cellIndex(),point,cubatureDegreeForCell) )
           {
             cell = child;
-            foundMatchingChild = true;
             if (cellHasCentroid(cell,pointIndex))
             {
               foundMatch = true;
@@ -556,7 +554,7 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingSides(const
         cellIndex = baseMeshTopo->getFirstCellForSide(sideEntityIndex).first;
       else
         cellIndex =  baseMeshTopo->getSecondCellForSide(sideEntityIndex).first;
-      unsigned sideOrdinalInCell = -1;
+      unsigned sideOrdinalInCell = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
       int sideDim = baseMeshTopo->getDimension() - 1;
       while ((cellIndex != -1) && !isValidCellIndex(cellIndex))
       {
@@ -569,7 +567,7 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingSides(const
         {
           // check whether the parent contains the side:
           unsigned sideOrdinal = parent->findSubcellOrdinal(sideDim, sideEntityIndex);
-          if (sideOrdinal != -1) cellIndex = parent->cellIndex();
+          if (sideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL) cellIndex = parent->cellIndex();
           else cellIndex = -1;
         }
         else
@@ -619,7 +617,7 @@ vector<IndexType> MeshTopologyView::getCellsForSide(IndexType sideEntityIndex) c
         // check whether the parent contains the side:
         int sideDim = _meshTopo->getDimension() - 1;
         unsigned sideOrdinal = parent->findSubcellOrdinal(sideDim, sideEntityIndex);
-        if (sideOrdinal != -1) cellIndex = parent->cellIndex();
+        if (sideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL) cellIndex = parent->cellIndex();
         else cellIndex = -1;
       }
       else

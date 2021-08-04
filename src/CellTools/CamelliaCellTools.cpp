@@ -11,6 +11,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "Camellia_FieldContainerConversion.hpp"
+
 #include "BasisCache.h"
 #include "CellTopology.h"
 #include "BasisFactory.h"
@@ -43,42 +45,36 @@ CellTopoPtrLegacy CamelliaCellTools::cellTopoForKey(unsigned key)
       node = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Node >() ));
     }
     return node;
-    break;
   case shards::Line<2>::key:
     if (line.get()==NULL)
     {
       line = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Line<2> >() ));
     }
     return line;
-    break;
   case shards::Triangle<3>::key:
     if (triangle.get()==NULL)
     {
       triangle = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Triangle<3> >() ));
     }
     return triangle;
-    break;
   case shards::Quadrilateral<4>::key:
     if (quad.get()==NULL)
     {
       quad = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Quadrilateral<4> >() ));
     }
     return quad;
-    break;
   case shards::Tetrahedron<4>::key:
     if (tet.get()==NULL)
     {
       tet = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Tetrahedron<4> >() ));
     }
     return tet;
-    break;
   case shards::Hexahedron<8>::key:
     if (hex.get()==NULL)
     {
       hex = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Hexahedron<8> >() ));
     }
     return hex;
-    break;
   default:
     cout << "Unhandled CellTopology.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled CellTopology.");
@@ -656,7 +652,7 @@ unsigned CamelliaCellTools::permutationMatchingOrder( CellTopoPtr cellTopo, cons
   Camellia::print("toOrder", toOrder);
 
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching permutation found");
-  return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
+//  return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
 }
 
 unsigned CamelliaCellTools::permutationMatchingOrder( const shards::CellTopology &cellTopo, const vector<int> &fromOrder, const vector<int> &toOrder)
@@ -686,7 +682,7 @@ unsigned CamelliaCellTools::permutationMatchingOrder( const shards::CellTopology
   Camellia::print("toOrder", toOrder);
 
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching permutation found");
-  return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
+//  return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
 }
 
 unsigned CamelliaCellTools::permutationComposition( const shards::CellTopology &shardsTopo, unsigned a_permutation, unsigned b_permutation )
@@ -906,19 +902,7 @@ void CamelliaCellTools::setJacobian(Camellia::FieldContainer<double> &jacobian, 
   int numPoints = (points.rank() == 2) ? points.dimension(0) : points.dimension(1);
 
   // Jacobian is computed using gradients of an appropriate H(grad) basis function, nodalBasis
-
-  BasisPtr shardsNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo->getShardsTopology().getKey());
-
-  BasisPtr lineNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(shards::Line<2>::key);
-
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
-
-  BasisPtr nodalBasis = shardsNodalBasis;
-  bool rangeDimensionIsSum = true;
-  for (int i=0; i<cellTopo->getTensorialDegree(); i++)
-  {
-    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis, rangeDimensionIsSum) );
-  }
+  BasisPtr nodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo);
 
   int basisCardinality = nodalBasis -> getCardinality();
   Camellia::FieldContainer<double> basisGrads(basisCardinality, numPoints, spaceDim);
@@ -1236,7 +1220,7 @@ unsigned CamelliaCellTools::subcellOrdinalMap(CellTopoPtr cellTopo, unsigned sub
     cout << "For topology " << cellTopo->getName() << " and subcell " << subcord << " of dim " << subcdim;
     cout << ", subsubcell " << subsubcord << " of dim " << subsubcdim << " not found.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subsubcell not found");
-    return -1; // NOT FOUND
+//    return INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL; // NOT FOUND
   }
 }
 
@@ -1348,7 +1332,7 @@ unsigned CamelliaCellTools::subcellOrdinalMap(const shards::CellTopology &cellTo
     cout << "For topology " << cellTopo.getName() << " and subcell " << subcord << " of dim " << subcdim;
     cout << ", subsubcell " << subsubcord << " of dim " << subsubcdim << " not found.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subsubcell not found");
-    return -1; // NOT FOUND
+//    return INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL; // NOT FOUND
   }
 }
 
@@ -1376,7 +1360,7 @@ unsigned CamelliaCellTools::subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsig
 
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
   }
-  return -1; // NOT FOUND
+  return INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL; // NOT FOUND
 }
 
 unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell, bool assertContainment)
@@ -1403,7 +1387,7 @@ unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology 
 
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
   }
-  return -1; // NOT FOUND
+  return INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL; // NOT FOUND
 }
 
 void CamelliaCellTools::getTensorPoints(Camellia::FieldContainer<double>& tensorPoints, const Camellia::FieldContainer<double> & spatialPoints,
@@ -1518,7 +1502,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContai
     xOld.resize(numCells,numPoints,spaceDim);
 
     // The Newton step.
-    xTem = basisCache->getPhysicalCubaturePoints();                    // xTem <- F(xOld)
+    xTem = basisCache->getPhysicalCubaturePointsFC();                    // xTem <- F(xOld)
     Intrepid::RealSpaceTools<double>::subtract( xTem, physPoints, xTem );        // xTem <- physPoints - F(xOld)
     Intrepid::RealSpaceTools<double>::matvec( refPoints, basisCache->getJacobianInv(), xTem);        // refPoints <- DF^{-1}( physPoints - F(xOld) )
     Intrepid::RealSpaceTools<double>::add( refPoints, xOld );                    // refPoints <- DF^{-1}( physPoints - F(xOld) ) + xOld
@@ -1626,10 +1610,10 @@ void CamelliaCellTools::mapToReferenceFrame(      Camellia::FieldContainer<doubl
 }
 
 void CamelliaCellTools::mapToReferenceSubcell(Camellia::FieldContainer<double>       &refSubcellPoints,
-    const Camellia::FieldContainer<double> &paramPoints,
-    const int                     subcellDim,
-    const int                     subcellOrd,
-    CellTopoPtr                   parentCell)
+                                              const Camellia::FieldContainer<double> &paramPoints,
+                                              const int                     subcellDim,
+                                              const int                     subcellOrd,
+                                              CellTopoPtr                   parentCell)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(subcellDim > parentCell->getDimension(), std::invalid_argument,
                              "subcellDim cannot exceed parentCell dimension.");
@@ -1662,10 +1646,10 @@ void CamelliaCellTools::mapToReferenceSubcell(Camellia::FieldContainer<double>  
 }
 
 void CamelliaCellTools::mapToReferenceSubcell(Camellia::FieldContainer<double>       &refSubcellPoints,
-    const Camellia::FieldContainer<double> &paramPoints,
-    const int                     subcellDim,
-    const int                     subcellOrd,
-    const shards::CellTopology   &parentCell)
+                                              const Camellia::FieldContainer<double> &paramPoints,
+                                              const int                     subcellDim,
+                                              const int                     subcellOrd,
+                                              const shards::CellTopology   &parentCell)
 {
   // for cells that Intrepid's CellTools supports, we just use that
   int cellDim = parentCell.getDimension();
@@ -1695,6 +1679,25 @@ void CamelliaCellTools::mapToReferenceSubcell(Camellia::FieldContainer<double>  
     cout << "CamelliaCellTools::mapToReferenceSubcell -- unsupported arguments.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::mapToReferenceSubcell -- unsupported arguments.");
   }
+}
+
+void CamelliaCellTools::mapToReferenceSubcell(Intrepid2::TensorPoints<double,Camellia::DeviceType> &refSubcellPoints,
+                                              const Intrepid2::TensorPoints<double,Camellia::DeviceType> &paramPoints,
+                                              const int   subcellDim,
+                                              const int   subcellOrd,
+                                              CellTopoPtr parentCell)
+{
+  // this initial implementation does the simplest possible thing: convert to FC, and do the mapping there, then convert back.
+  // This does *not* preserve any tensor structure.  This may be a performance concern for high-dimensional extruded meshes.
+  
+  const int numPoints = paramPoints.extent_int(0);
+  
+  auto paramPointsFC  = FieldContainerConversion<double>::fromTensorPoints(paramPoints);
+  FieldContainer<double> refSubcellPointsFC(numPoints,parentCell->getDimension());
+  
+  mapToReferenceSubcell(refSubcellPointsFC, paramPointsFC, subcellDim, subcellOrd, parentCell);
+  
+  refSubcellPoints = FieldContainerConversion<double>::toTensorPoints(refSubcellPointsFC);
 }
 
 void CamelliaCellTools::pointsVectorFromFC(std::vector< vector<double> > &pointsVector, const Camellia::FieldContainer<double> &pointsFC)

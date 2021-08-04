@@ -25,6 +25,8 @@ class BCFunction : public TFunction<Scalar>
   TFunctionPtr<Scalar> _spatiallyFilteredFunction;
 public:
   BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank);
+  
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache);
   

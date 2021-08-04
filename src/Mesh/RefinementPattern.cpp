@@ -8,7 +8,6 @@
 
 #include "MeshTopology.h"
 
-#include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 
 #include "BasisCache.h"
@@ -383,7 +382,7 @@ unsigned RefinementPattern::ancestralSubcellOrdinal(RefinementBranch &refBranch,
     RefinementPattern* refPattern = refBranch[i].first;
     unsigned childOrdinal = refBranch[i].second;
     ancestralSubcord = refPattern->mapSubcellOrdinalFromChildToParent(childOrdinal, subcdim, ancestralSubcord);
-    if (ancestralSubcord == -1) return ancestralSubcord; // no more mapping to do, then!
+    if (ancestralSubcord == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL) return ancestralSubcord; // no more mapping to do, then!
   }
   return ancestralSubcord;
 }
@@ -418,7 +417,6 @@ RefinementPatternPtr RefinementPattern::anisotropicRefinementPattern(CellTopoPtr
   {
     RefinementPatternPtr lineRefPattern = regularRefinementPatternLine();
     RefinementPatternPtr noRefinementLinePattern = noRefinementPatternLine();
-    int childOrdinal = 0;
     Camellia::FieldContainer<double> previousDimensionNodes;
     int previousDimensionChildCount = 1;
     int nodeCount = 1;
@@ -707,7 +705,7 @@ unsigned RefinementPattern::childOrdinalForPoint(const std::vector<double> &poin
       return i;
     }
   }
-  return -1;
+  return INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
 }
 
 vector< vector<GlobalIndexType> > RefinementPattern::children(const map<unsigned, GlobalIndexType> &localToGlobalVertexIndex)
@@ -780,8 +778,8 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
   GeneralizedRefinementBranch genRefBranch;
 
   RefinementBranchTier tier;
-  tier.leafSubcellOrdinal = -1;
-  tier.leafSubcellDimension = -1;
+  tier.leafSubcellOrdinal = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
+  tier.leafSubcellDimension = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
 
   int refCount = volumeRefinementBranch.size();
   for (int refNumber = refCount - 1; refNumber >= 0; refNumber--)
@@ -810,11 +808,11 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
     // triangle refinements where the interior triangle is under consideration; each vertex has as its parent an edge
     // of the parent triangle which intersects the child in a vertex.
     
-    unsigned subcellRefChild = -1;
+    unsigned subcellRefChild = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
     if (parentSubcellDimension == subcdim)
     {
       subcellRefChild = refPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, childOrdinal);
-      TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
+      TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL, std::invalid_argument, "subcellRefChild = -1");
     }
     // subcellRefChild for cases when parentSubcellDimension != subcdim are determined below
     if ((tier.refBranch.size() == 0) && (genRefBranch.size() == 0))
@@ -837,13 +835,13 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
       {
         // We had better be working on a new tier, in this case:
         TEUCHOS_TEST_FOR_EXCEPTION(tier.refBranch.size() != 0, std::invalid_argument, "Should only have parentSubcellDimension > subcdim when working on a new tier");
-        tier.leafSubcellOrdinal = -1; // allows us to detect whether this is unset, below
+        tier.leafSubcellOrdinal = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL; // allows us to detect whether this is unset, below
         refPattern->determineChildSubcellInfoInSubcellRefinement(tier.leafSubcellDimension, tier.leafSubcellOrdinal,
                                                                  tier.leafSubcellPermutation, subcellRefChild,
                                                                  subcdim, subcord, childOrdinal,
                                                                  preferSubcellsBelongingToVolumeChild);
-        TEUCHOS_TEST_FOR_EXCEPTION(tier.leafSubcellOrdinal == -1, std::invalid_argument, "tier.leafSubcellOrdinal could not be determined");
-        TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
+        TEUCHOS_TEST_FOR_EXCEPTION(tier.leafSubcellOrdinal == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL, std::invalid_argument, "tier.leafSubcellOrdinal could not be determined");
+        TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL, std::invalid_argument, "subcellRefChild = -1");
       }
 
     }
@@ -876,18 +874,18 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
       tier.leafSubcellOrdinal = tier.previousTierSubcellOrdinal; // old tier's "previous" subcell ordinal is new tier's leaf ordinal
       tier.leafSubcellPermutation = tier.previousTierSubcellPermutation;
       tier.previousTierTopo = Teuchos::null;
-      tier.previousTierSubcellOrdinal = -1;
-      tier.previousTierSubcellPermutation = -1;
-      tier.rootDimension = -1;
+      tier.previousTierSubcellOrdinal = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
+      tier.previousTierSubcellPermutation = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
+      tier.rootDimension = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
       
       // from here on out, replace subcdim and subcord with those from childSubcell:
       subcdim = childSubcell.first;
       subcord = childSubcell.second;
       subcellRefChild = refPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, childOrdinal);
-      TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
+      TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL, std::invalid_argument, "subcellRefChild is invalid");
     }
 
-    TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
+    TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL, std::invalid_argument, "subcellRefChild is invalid");
     
     tier.refBranch.insert(tier.refBranch.begin(), make_pair(subcellRefPattern, subcellRefChild));
 
@@ -1080,7 +1078,7 @@ unsigned RefinementPattern::mapSideOrdinalFromLeafToAncestor(unsigned descendant
     map<unsigned,unsigned> sideLookup = parentRefPattern->parentSideLookupForChild(childOrdinal);
     if (sideLookup.find(descendantSideOrdinal) == sideLookup.end())
     {
-      return -1;
+      return INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
     }
     descendantSideOrdinal = sideLookup[descendantSideOrdinal];
   }
@@ -1096,7 +1094,7 @@ unsigned RefinementPattern::mapSubcellChildOrdinalToVolumeChildOrdinal(unsigned 
   for (int childOrdinal=0; childOrdinal < parentCell->children().size(); childOrdinal++)
   {
     CellPtr childCell = parentCell->children()[childOrdinal];
-    if (childCell->findSubcellOrdinal(subcdim, subcellChildEntityIndex) != -1)
+    if (childCell->findSubcellOrdinal(subcdim, subcellChildEntityIndex) != INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
     {
       // found!
       return childOrdinal;
@@ -1104,7 +1102,7 @@ unsigned RefinementPattern::mapSubcellChildOrdinalToVolumeChildOrdinal(unsigned 
   }
   cout << "Corresponding volume child ordinal not found.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Corresponding volume child ordinal not found");
-  return -1;
+//  return -1;
 }
 
 unsigned RefinementPattern::mapSubcellOrdinalFromChildToParent(unsigned childOrdinal, unsigned int subcdim, unsigned int childSubcord)
@@ -1158,7 +1156,7 @@ unsigned RefinementPattern::mapSubcellOrdinalFromParentToChild(unsigned childOrd
   }
   cout << "ERROR: descendant subcell not found in child.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: descendant subcell not found in child.");
-  return -1;
+//  return -1;
 }
 
 pair<unsigned, unsigned> RefinementPattern::mapSubcellFromParentToChild(unsigned childOrdinal, unsigned subcdim, unsigned parentSubcord)
@@ -1221,10 +1219,10 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromChildToParent(unsigned
   IndexType childEntityIndex = childCell->entityIndex(subcdim, childSubcord);
   // if parent has the child's entity as a subcell, then we should return the ordinal of that entity in the parent.
   unsigned parentSubcord = parentCell->findSubcellOrdinal(subcdim, childEntityIndex);
-  if (parentSubcord == -1)
+  if (parentSubcord == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
   {
     pair<IndexType,unsigned> generalizedParent = _refinementTopology->getEntityGeneralizedParent(subcdim, childEntityIndex);
-    if (generalizedParent.first == -1) return make_pair(-1,-1);
+    if (generalizedParent.first == -1) return make_pair(-1,INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL);
     parentSubcord = parentCell->findSubcellOrdinal(generalizedParent.second, generalizedParent.first);
     return make_pair(generalizedParent.second, parentSubcord);
   }
@@ -1264,9 +1262,8 @@ unsigned RefinementPattern::mapVolumeChildOrdinalToSubcellChildOrdinal(unsigned 
   }
   cout << "Internal error: could not find child subcell entity in refinement topology.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: could not find child subcell entity in refinement topology.");
-  return -1;
+//  return -1;
 }
-
 
 RefinementPatternPtr RefinementPattern::noRefinementPattern(CellTopoPtr cellTopo)
 {
@@ -1729,7 +1726,7 @@ RefinementPatternPtr RefinementPattern::regularRefinementPattern(unsigned cellTo
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported cellTopology");
   }
-  return Teuchos::rcp( (RefinementPattern*) NULL );
+//  return Teuchos::rcp( (RefinementPattern*) NULL );
 }
 
 RefinementPatternPtr RefinementPattern::regularRefinementPattern(Camellia::CellTopologyKey cellTopoKey)
@@ -2062,7 +2059,7 @@ RefinementBranch RefinementPattern::subcellRefinementBranch(RefinementBranch &vo
 
     pair<unsigned,unsigned> subcellChild = refPattern->mapSubcellFromParentToChild(volumeBranchChild, subcdim, subcord);
 
-    unsigned subcellBranchChild = -1;
+    unsigned subcellBranchChild = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
     if (subcellChild.first < subcdim)
     {
       if (! tolerateSubcellsWithoutDescendants)
@@ -2248,7 +2245,7 @@ void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, 
   fineCellRefNodes.resize(1,fineCellRefNodes.dimension(0),fineCellRefNodes.dimension(1));
   fineCellCache->setPhysicalCellNodes(fineCellRefNodes, vector<GlobalIndexType>(), false);
 
-  rootRefCellPoints = fineCellCache->getPhysicalCubaturePoints();
+  rootRefCellPoints = fineCellCache->getPhysicalCubaturePointsFC();
   rootRefCellPoints.resize(rootRefCellPoints.dimension(1),rootRefCellPoints.dimension(2)); // eliminate cell dimension
 }
 

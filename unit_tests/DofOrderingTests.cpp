@@ -34,7 +34,7 @@ TEUCHOS_UNIT_TEST( DofOrdering, TrialOrderingConsistency )
 
   Teuchos::RCP<DofOrdering> trialOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
   int trialID = 0;
-  BasisPtr trialBasis = Camellia::intrepidLineHGRAD(polyOrder);
+  BasisPtr trialBasis = Camellia::intrepid2LineHGRAD(polyOrder);
   for (int sideIndex=0; sideIndex<numSides; sideIndex++)
   {
     trialOrdering->addEntry(trialID, trialBasis, trialBasis->rangeRank(), sideIndex);
@@ -68,7 +68,7 @@ TEUCHOS_UNIT_TEST( DofOrdering, SidesForVarID )
 
   Teuchos::RCP<DofOrdering> trialOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
   int trialID = 2;
-  BasisPtr trialBasis = Camellia::intrepidLineHGRAD(polyOrder);
+  BasisPtr trialBasis = Camellia::intrepid2LineHGRAD(polyOrder);
   for (vector<int>::iterator sideIt = sidesExpected.begin(); sideIt != sidesExpected.end(); sideIt++)
   {
     trialOrdering->addEntry(trialID, trialBasis, trialBasis->rangeRank(), *sideIt);

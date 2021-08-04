@@ -27,7 +27,10 @@ namespace Camellia
     TFunctionPtr<Scalar> _power;
   public:
     Exp(TFunctionPtr<Scalar> power);
+    
+    using TFunction<Scalar>::values;
     void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+    
     TFunctionPtr<Scalar> dx() override;
     TFunctionPtr<Scalar> dy() override;
     TFunctionPtr<Scalar> dz() override;
@@ -46,7 +49,10 @@ namespace Camellia
     TFunctionPtr<Scalar> _argument;
   public:
     Ln(TFunctionPtr<Scalar> argument);
+    
+    using TFunction<Scalar>::values;
     void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+    
     TFunctionPtr<Scalar> dx() override;
     TFunctionPtr<Scalar> dy() override;
     TFunctionPtr<Scalar> dz() override;
@@ -60,7 +66,10 @@ class Exp_x : public SimpleFunction<double>
 {
 public:
   Exp_x();
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y);
+  
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
   TFunctionPtr<double> dz();
@@ -71,7 +80,10 @@ class Exp_y : public SimpleFunction<double>
 {
 public:
   Exp_y();
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y);
+  
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
   TFunctionPtr<double> dz();
@@ -82,7 +94,10 @@ class Exp_z : public SimpleFunction<double>
 {
 public:
   Exp_z();
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y, double z);
+  
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
   TFunctionPtr<double> dz();
@@ -94,7 +109,10 @@ class Exp_ax : public SimpleFunction<double>
   double _a;
 public:
   Exp_ax(double a);
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y);
+  
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
   std::string displayString();
@@ -105,7 +123,10 @@ class Exp_ay : public SimpleFunction<double>
   double _a;
 public:
   Exp_ay(double a);
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y);
+  
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
   string displayString();
@@ -116,9 +137,12 @@ class Exp_at : public SimpleFunction<double>
   double _a;
 public:
   Exp_at(double a);
+  
+  using SimpleFunction<double>::value;
   double value(double x, double t);
   double value(double x, double y, double t);
   double value(double x, double y, double z, double t);
+  
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
   TFunctionPtr<double> dz();

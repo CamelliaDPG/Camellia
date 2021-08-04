@@ -5,12 +5,6 @@
 #include "PenaltyMethodFilter.h"
 #include "Mesh.h"
 
-// Intrepid includes - for numerical integration
-//#include "Intrepid_CellTools.hpp"
-//#include "Intrepid_DefaultCubatureFactory.hpp"
-//#include "Intrepid_FunctionSpaceTools.hpp"
-//#include "Intrepid_PointTools.hpp"
-
 #include "BasisCache.h"
 #include "DofOrdering.h"
 

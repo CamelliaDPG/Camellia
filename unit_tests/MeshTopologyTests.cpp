@@ -36,9 +36,9 @@ namespace
 
     // pick arbitrary cell to refine:
     GlobalIndexType activeCellWithBigNeighbor = 1;
-    unsigned sharedSideOrdinal = -1;
     CellPtr activeCell = meshTopo->getCell(activeCellWithBigNeighbor);
-    for (int sideOrdinal=0; sideOrdinal<activeCell->getSideCount(); sideOrdinal++)
+    unsigned sharedSideOrdinal = activeCell->getSideCount();
+    for (unsigned sideOrdinal=0; sideOrdinal<activeCell->getSideCount(); sideOrdinal++)
     {
       if (activeCell->getNeighbor(sideOrdinal, meshTopo) != Teuchos::null)
       {

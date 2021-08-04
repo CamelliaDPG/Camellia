@@ -24,21 +24,10 @@ class Xn : public TFunction<double>
   int _n;
 public:
   Xn(int n);
+  
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-  TFunctionPtr<double> dx() override;
-  TFunctionPtr<double> dy() override;
-  TFunctionPtr<double> dz() override;
-  TFunctionPtr<double> dt() override;
-  TFunctionPtr<double> di(int i) override;
-  string displayString() override;
-};
-
-class Yn : public TFunction<double>
-{
-  int _n;
-public:
-  Yn(int n);
-  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
@@ -52,7 +41,10 @@ class Zn : public TFunction<double>
   int _n;
 public:
   Zn(int n);
+  
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
@@ -66,7 +58,10 @@ class Tn : public TFunction<double>
   int _n;
 public:
   Tn(int n);
+  
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
@@ -81,14 +76,29 @@ class MonomialFunction : public TFunction<double>
 public:
   MonomialFunction(int componentDimension, int power);
   
-  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  using TFunction<double>::values;
+  void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  void values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache) override;
+  
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
   TFunctionPtr<double> di(int i) override;
-  string displayString() override;
+  virtual string displayString() override;
+  
+  //! the integer power to which the monomial is raised
+  int n() const;
   
   static TFunctionPtr<double> xi_n(int i, int n);
 };
+
+class Yn : public MonomialFunction
+{
+public:
+  Yn(int n);
+  TFunctionPtr<double> dt() override;
+  string displayString() override;
+};
+
 }
 #endif

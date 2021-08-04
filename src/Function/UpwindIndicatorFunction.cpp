@@ -29,8 +29,8 @@ UpwindIndicatorFunction::UpwindIndicatorFunction(FunctionPtr beta, bool upwind)
 
 bool UpwindIndicatorFunction::isZero(BasisCachePtr basisCache)
 {
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   int spaceDim = basisCache->getSpaceDim();
   
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != _beta.size(), std::invalid_argument, "spaceDim and length of beta do not match");
@@ -68,8 +68,8 @@ std::vector< TFunctionPtr<double> > UpwindIndicatorFunction::memberFunctions()
 
 void UpwindIndicatorFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   int spaceDim = basisCache->getSpaceDim();
   
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != _beta.size(), std::invalid_argument, "spaceDim and length of beta do not match");

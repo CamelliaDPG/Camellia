@@ -43,6 +43,8 @@ public:
   virtual std::vector< TFunctionPtr<double> > memberFunctions() = 0;
   
   virtual void value(double t1, double t2, double &x, double &y) = 0;
+  
+  using TFunction<double>::values;
   virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   static Camellia::FieldContainer<double> parametricQuadNodes(); // for CellTools cellWorkset argument

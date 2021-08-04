@@ -446,8 +446,8 @@ int CellDataMigration::solutionDataSize(Mesh *mesh, GlobalIndexType cellID, bool
   }
   ElementTypePtr elemType = mesh->getElementType(cellIDForCoefficients);
   
-  int packedDofsBelongToParent = 0; // 0 for false, anything else for true
-  size += sizeof(packedDofsBelongToParent);
+//  int packedDofsBelongToParent = 0; // 0 for false, anything else for true
+  size += sizeof(int); // sizeof(packedDofsBelongToParent)
   
   vector<TSolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   // store # of solution objects
@@ -469,8 +469,8 @@ int CellDataMigration::solutionDataSize(Mesh *mesh, GlobalIndexType cellID, bool
       bool thisLHSHasCoefficients = solutions[i]->cellHasCoefficientsAssigned(cellIDForCoefficients, lhsOrdinal);
       if ( !thisLHSHasCoefficients )
       {
-        int localDofs = 0;
-        size += sizeof(localDofs);
+//        int localDofs = 0;
+        size += sizeof(int); // localDof count
         continue; // no dofs to assign; proceed to next solution
       }
       int localDofs = elemType->trialOrderPtr->totalDofs();
@@ -781,8 +781,7 @@ int CellDataMigration::getGeometryDataSize(const MeshGeometryInfo &geometryInfo)
     dataSize += sizeof(numRefTypes);
     for (auto entry : geometryInfo.refinementLevels[level])
     {
-      RefinementPatternKey refPatternKey = entry.first;
-      dataSize += sizeof(refPatternKey);
+      dataSize += sizeof(entry.first); // sizeof(RefinementPatternKey)
       int numRefinements = entry.second.size();
       dataSize += sizeof(numRefinements);
       dataSize += numRefinements * sizeof(pair<GlobalIndexType,GlobalIndexType>);

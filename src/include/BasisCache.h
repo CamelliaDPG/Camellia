@@ -28,6 +28,7 @@
 #include "Function.h"
 
 #include "Mesh.h"
+#include "PhysicalTensorPoints.h"
 #include "TypeDefs.h"
 
 #include <array>
@@ -40,7 +41,6 @@ class BasisCache
 public:
   template<typename Scalar>
   using DeviceView = typename Camellia::FieldContainer<Scalar>::DeviceView;
-  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
 private:
   IndexType _numCells;
   int _spaceDim;
@@ -49,8 +49,8 @@ private:
 
   MeshPtr _mesh;
   // Intrepid2 supports economical storage for tensor-product quadrature:
-  Intrepid2::TensorPoints<double,ExecSpaceType> _cubPoints;
-  Intrepid2::TensorData<double, ExecSpaceType>  _cubWeights;
+  Intrepid2::TensorPoints<double,DeviceType> _cubPoints;
+  Intrepid2::TensorData<double, DeviceType>  _cubWeights;
   // FC containers kept around for compatibility, for now, with existing code.  Plan is to remove support for this as part of 2.0.
   Camellia::FieldContainer<double> _cubPointsFC, _cubWeightsFC;
 
@@ -58,9 +58,11 @@ private:
   Camellia::FieldContainer<double> _cellJacobInvFC;
   Camellia::FieldContainer<double> _cellJacobDetFC;
   Camellia::FieldContainer<double> _weightedMeasure;
-  Camellia::FieldContainer<double> _physCubPoints;
+  Camellia::FieldContainer<double> _physCubPointsFC;
   Camellia::FieldContainer<double> _cellSideParities;
   Camellia::FieldContainer<double> _physicalCellNodes;
+  
+  PhysicalTensorPoints _physicalCubaturePoints;
 
   bool _cellJacobianIsValid, _cellJacobianInverseIsValid, _cellJacobianDeterminantIsValid;
   bool _sideNormalsIsValid, _weightedMeasureIsValid, _physCubPointsIsValid;
@@ -80,7 +82,7 @@ private:
   vector<int> _cubDegrees;
 
   // containers specifically for sides:
-  Intrepid2::TensorPoints<double,ExecSpaceType> _cubPointsSideRefCell; // in volume coords
+  Intrepid2::TensorPoints<double,DeviceType> _cubPointsSideRefCell; // in volume coords
   Camellia::FieldContainer<double> _cubPointsSideRefCellFC; // _cubPoints is the one in the side coordinates; this one in volume coords
   Camellia::FieldContainer<double> _sideNormals;
   Camellia::FieldContainer<double> _sideNormalsSpaceTime; // for space-time CellTopologies, a copy of _sideNormals that includes the temporal component
@@ -96,6 +98,9 @@ private:
   void determineJacobian();
   void determineJacobianInverseAndDeterminant();
   void determinePhysicalPoints();
+  
+  //! utility method for setting the _physicalCubaturePoints (a PhysicalTensorPoints object) from the FieldContainer
+  void copyPhysicalPointsFieldContainerToPhysicalTensorPoints();
   
   int maxTestDegree();
   
@@ -113,7 +118,7 @@ protected:
   }
 
   map< pair< Camellia::Basis<>*, Intrepid2::EOperator >,
-       Intrepid2::BasisValues<double,ExecSpaceType> > _knownValues;
+       Intrepid2::BasisValues<double,DeviceType> > _knownValues;
   
   map< pair< Camellia::Basis<>*, Camellia::EOperator >,
        Teuchos::RCP< const Camellia::FieldContainer<double> > > _knownValuesFC;
@@ -200,8 +205,8 @@ public:
   Camellia::FieldContainer<double> & getWeightedMeasures();
   Camellia::FieldContainer<double> getCellMeasures();
 
-  Intrepid2::BasisValues<double,ExecSpaceType> getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
-                                                         const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints);
+  Intrepid2::BasisValues<double,DeviceType> getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
+                                                         const Intrepid2::TensorPoints<double,DeviceType> inputPoints);
   
   virtual Teuchos::RCP< const Camellia::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   virtual Teuchos::RCP< const Camellia::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
@@ -218,6 +223,8 @@ public:
 
   const std::vector<GlobalIndexType> & cellIDs();
   void setCellIDs(const std::vector<GlobalIndexType> &cellIDs);
+  
+  int numCells() const;
 
   CellTopoPtr cellTopology();
 
@@ -247,13 +254,15 @@ public:
   
   Camellia::FieldContainer<double> computeParametricPoints();
 
-  virtual const Camellia::FieldContainer<double> & getPhysicalCubaturePoints();
+  const PhysicalTensorPoints & getPhysicalCubaturePoints();
+  
+  virtual const Camellia::FieldContainer<double> & getPhysicalCubaturePointsFC();
   const Camellia::FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
   const Camellia::FieldContainer<double> & getCellSideParities();
   
   virtual void setPhysicalCubaturePoints(const Camellia::FieldContainer<double> &physicalCubaturePoints);
 
-  const Intrepid2::TensorData<double, ExecSpaceType> getCubatureWeights() const;
+  const Intrepid2::TensorData<double, DeviceType> getCubatureWeights() const;
   
   const Camellia::FieldContainer<double> & getCubatureWeightsFC();
 
@@ -273,10 +282,10 @@ public:
   const Camellia::FieldContainer<double> &getRefCellPointsFC();
   const Camellia::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
   
-  const Intrepid2::TensorPoints<double,ExecSpaceType> getRefCellPoints() const;
+  const Intrepid2::TensorPoints<double,DeviceType> getRefCellPoints() const;
   
-  void setRefCellPoints(Intrepid2::TensorPoints<double,ExecSpaceType> pointsRefCell);
-  void setRefCellPoints(Intrepid2::TensorPoints<double,ExecSpaceType> pointsRefCell, Intrepid2::TensorData<double,ExecSpaceType> weightsRefCell);
+  void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell);
+  void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell);
 
   // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
   Camellia::FieldContainer<double> getRefCellPointsForPhysicalPoints(const Camellia::FieldContainer<double> &physicalPoints, int cellIndex=0);

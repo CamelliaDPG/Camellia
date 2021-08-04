@@ -125,7 +125,7 @@ public:
                  TLinearTermPtr<Scalar> otherTerm, VarPtr otherVarID, TFunctionPtr<Scalar> fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
-  // CrsMatrix versions (for the two-LT (matrix) variants of integrate)
+  // CrsMatrix versions (for the two-LinearTerm (matrix) variants of integrate)
   void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
                  TLinearTermPtr<double> otherTerm, DofOrderingPtr otherDofOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);

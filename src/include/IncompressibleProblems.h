@@ -248,6 +248,7 @@ public:
     double enlargement_factor = 1.1*sqrt(2);
     _enlarged_radius = radius * enlargement_factor;
   }
+  using SpatialFilter::matchesPoints;
   void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
   {
     double enlarged_radius_squared = _enlarged_radius * _enlarged_radius;
@@ -263,6 +264,7 @@ public:
     });
   }
   
+  using SpatialFilter::matchesPoint;
   bool matchesPoint(double x, double y)
   {
     if (x*x + y*y < _enlarged_radius * _enlarged_radius)

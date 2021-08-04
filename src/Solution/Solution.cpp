@@ -7,9 +7,7 @@
 // Intrepid includes
 #include "Camellia_FieldContainer.hpp"
 #include "Camellia_FieldContainerConversion.hpp"
-#include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
-#include "Intrepid_Basis.hpp"
 
 #include "Amesos_Klu.h"
 #include "Amesos.h"
@@ -589,8 +587,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               int cubDegree = cubKey.second;
               if (sideDim > 0)
               {
-                using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-                using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+                using Cubature = Intrepid2::Cubature<DeviceType,double,double>;
                 Teuchos::RCP< Cubature > sideCub;
                 
                 if (cubDegree >= 0)
@@ -720,7 +717,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
               
               // now, the "physical" points in ancestral cache are the ones we want
-              myRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
+              myRefPoints = ancestralBasisCache->getPhysicalCubaturePointsFC();
               myRefPoints.resize(myRefPoints.dimension(1),myRefPoints.dimension(2)); // strip cell dimension
               
               /*******  Determine ancestor's permutation of the side relative to neighbor ******/
@@ -765,7 +762,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
             std::vector<GlobalIndexType> cellIDs = {0}; // unused
             referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
             // now, the "physical" points are the ones we should use as ref points for the neighbor
-            Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
+            Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePointsFC();
             neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
             
             Camellia::FieldContainer<double> neighborCellNodes = _mesh->physicalCellNodesForCell(neighborCellID);
@@ -792,8 +789,8 @@ void TSolution<Scalar>::applyDGJumpTerms()
             {
               // Sanity check that the physical points agree:
               double tol = 1e-15;
-              Camellia::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePoints();
-              Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePoints();
+              Camellia::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePointsFC();
+              Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePointsFC();
               
               bool pointsMatch = (myPhysicalPoints.size() == neighborPhysicalPoints.size()); // true unless we find a point that doesn't match
               if (pointsMatch)
@@ -2167,7 +2164,8 @@ TIPPtr<Scalar> TSolution<Scalar>::ip() const
 template <typename Scalar>
 TBFPtr<Scalar> TSolution<Scalar>::bf() const
 {
-  return _bf;
+  if (_bf == Teuchos::null) return _mesh->bilinearForm();
+  else                      return _bf;
 }
 
 template <typename Scalar>
@@ -2525,7 +2523,7 @@ void TSolution<Scalar>::integrateBasisFunctions(Camellia::FieldContainer<GlobalI
   int rank = Teuchos::GlobalMPISession::getRank();
 
   // only supports scalar-valued field bases right now...
-  int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL; // field variables only
+  int sideIndex = VOLUME_INTERIOR_SIDE_INDEX; // field variables only
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
   vector<GlobalIndexType> globalIndicesVector;
@@ -2610,7 +2608,7 @@ void TSolution<Scalar>::integrateBasisFunctions(Camellia::FieldContainer<Scalar>
     return;
   }
 
-  int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL;
+  int sideIndex = VOLUME_INTERIOR_SIDE_INDEX;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
   TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
                              std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
@@ -2715,7 +2713,7 @@ double TSolution<Scalar>::InfNormOfSolution(int trialID)
     bool createSideCacheToo = false;
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
 
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
     Camellia::FieldContainer<Scalar> values(numCells,numPoints);
     solutionValues(values, trialID, basisCache);
 
@@ -3046,7 +3044,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of values should == numCells.");
   }
   int spaceDim = basisCache->getSpaceDim();
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
   {
     GlobalIndexType cellID = cellIDs[cellIndex];
@@ -3159,7 +3157,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
     for (int fieldVarOrdinal = 0; fieldVarOrdinal<fieldVars.size(); fieldVarOrdinal++)
     {
       const int fieldID = fieldVars[fieldVarOrdinal]->ID();
-      const int basisCardinality = trialOrder->getBasisCardinality(fieldID, VOLUME_INTERIOR_SIDE_ORDINAL);
+      const int basisCardinality = trialOrder->getBasisCardinality(fieldID, VOLUME_INTERIOR_SIDE_INDEX);
       Camellia::FieldContainer<Scalar> basisCoeffs(basisCardinality);
       
       Teuchos::RCP< Camellia::FieldContainer<double> > fieldBasisCoefficientsForCell = Teuchos::rcp(new FieldContainer<double>(numCells, basisCardinality));
@@ -4343,7 +4341,7 @@ void TSolution<Scalar>::projectChildrenOntoParent(GlobalIndexType parentCellID, 
     
     Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(basisCoefficients, childFxn, basis, refPattern, subdomainCaches);
     
-    int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL;
+    int sideOrdinal = VOLUME_INTERIOR_SIDE_INDEX;
     for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++)
     {
       int dofIndex = parentTrialOrdering->getDofIndex(fieldVar->ID(), basisOrdinal, sideOrdinal);
@@ -4431,7 +4429,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
     else
     {
       TEUCHOS_TEST_FOR_EXCEPTION(side != -1, std::invalid_argument, "sideIndex for fields must = -1");
-      if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, VOLUME_INTERIOR_SIDE_ORDINAL))   // DofOrdering uses side VOLUME_INTERIOR_SIDE_ORDINAL for fields...
+      if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, VOLUME_INTERIOR_SIDE_INDEX))   // DofOrdering uses side VOLUME_INTERIOR_SIDE_INDEX for fields...
       {
         continue;
       }
@@ -4440,7 +4438,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
       Camellia::FieldContainer<Scalar> basisCoefficients(1,basis->getCardinality());
       Projector<Scalar>::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
       basisCoefficients.resize(basis->getCardinality());
-      setSolnCoeffsForCellID(basisCoefficients,cellID,trialID,VOLUME_INTERIOR_SIDE_ORDINAL,solutionOrdinal);
+      setSolnCoeffsForCellID(basisCoefficients,cellID,trialID,VOLUME_INTERIOR_SIDE_INDEX,solutionOrdinal);
     }
   }
 }
@@ -4614,7 +4612,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
                                      : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
 
         RefinementBranch sideBranch;
-        if (parentSideOrdinal != -1)
+        if (parentSideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
           sideBranch = RefinementPattern::subcellRefinementBranch(refBranch, sideDim, parentSideOrdinal);
         if (sideBranch.size()==0)
         {
@@ -4665,7 +4663,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
       unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
                                    : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
 
-      map<int,TFunctionPtr<Scalar>>* traceMapForSide = (parentSideOrdinal != -1) ? &traceMap[parentSideOrdinal] : &interiorTraceMap;
+      map<int,TFunctionPtr<Scalar>>* traceMapForSide = (parentSideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL) ? &traceMap[parentSideOrdinal] : &interiorTraceMap;
       // which BasisCache to use depends on whether we want the BasisCache's notion of "physical" space to be in the volume or on the side:
       // we want it to be on the side if parent shares the side (and we therefore have proper trace data)
       // and on the volume in parent doesn't share the side (in which case we use the interior trace map).
@@ -4673,7 +4671,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
       
       Camellia::FieldContainer<double> sideParities;
       bool parityFlipped = false;
-      if (parentSideOrdinal != -1)
+      if (parentSideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
       {
         basisCacheForSide = sideBasisCache[sideOrdinal];
         /*

@@ -155,8 +155,8 @@ namespace
           
           bool didFailForPointIterator = false;
           
-          auto &phaseSpacePhysCubPoints = basisCache->getPhysicalCubaturePoints();
-          auto &physicalPhysCubPoints   = physicalBasisCache->getPhysicalCubaturePoints();
+          auto &phaseSpacePhysCubPoints = basisCache->getPhysicalCubaturePointsFC();
+          auto &physicalPhysCubPoints   = physicalBasisCache->getPhysicalCubaturePointsFC();
           
           for (int velocityPointOrdinal=0; velocityPointOrdinal<numVelocityPoints; velocityPointOrdinal++)
           {

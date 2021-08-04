@@ -50,6 +50,51 @@ namespace Camellia
   void print(std::ostream &out, const std::string &name, const std::set<long long> &data);
   void print(std::ostream &out, const std::string &name, const std::set<double> &data);
   
+  template<class Rank1Functor>
+  void print1(std::ostream &out, const std::string &name, const Rank1Functor &functor)
+  {
+    int dim0 = functor.extent_int(0);
+    out << name << ":\n";
+    for (int i0=0; i0<dim0; i0++)
+    {
+      out << "(" << i0 << "): " << functor(i0) << std::endl;
+    }
+  }
+
+  template<class Rank2Functor>
+  void print2(std::ostream &out, const std::string &name, const Rank2Functor &functor)
+  {
+    const int dim0 = functor.extent_int(0);
+    const int dim1 = functor.extent_int(1);
+    out << name << ":\n";
+    for (int i0=0; i0<dim0; i0++)
+    {
+      for (int i1=0; i1<dim1; i1++)
+      {
+        out << "(" << i0 << "," << i1 << "): " << functor(i0,i1) << std::endl;
+      }
+    }
+  }
+
+  template<class Rank3Functor>
+  void print3(std::ostream &out, const std::string &name, const Rank3Functor &functor)
+  {
+    const int dim0 = functor.extent_int(0);
+    const int dim1 = functor.extent_int(1);
+    const int dim2 = functor.extent_int(2);
+    out << name << ":\n";
+    for (int i0=0; i0<dim0; i0++)
+    {
+      for (int i1=0; i1<dim1; i1++)
+      {
+        for (int i2=0; i2<dim2; i2++)
+        {
+          out << "(" << i0 << "," << i1 << "," << i2 << "): " << functor(i0,i1,i2) << std::endl;
+        }
+      }
+    }
+  }
+
   // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
   // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
   // ! otherwise, interprets them as test space variables.

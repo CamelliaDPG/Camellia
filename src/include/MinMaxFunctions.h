@@ -29,6 +29,7 @@ public:
   TFunctionPtr<double> y() override;
   TFunctionPtr<double> z() override;
 
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly() override;
 
@@ -47,6 +48,7 @@ public:
   TFunctionPtr<double> y() override;
   TFunctionPtr<double> z() override;
 
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly() override;
 

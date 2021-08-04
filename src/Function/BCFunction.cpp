@@ -8,6 +8,8 @@
 #include "BCFunction.h"
 #include "BC.h"
 
+#include <Intrepid2_TensorArgumentIterator.hpp>
+
 using namespace Camellia;
 
 template <typename Scalar>
@@ -36,7 +38,7 @@ template <typename Scalar>
 void BCFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   int numCells = basisCache->cellIDs().size();
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   _imposeHere.resize(numCells,numPoints);
   Camellia::FieldContainer<double> unitNormals = basisCache->getSideNormals();
   _bc->imposeBC(values, _imposeHere, _varID, unitNormals, basisCache);
@@ -46,10 +48,12 @@ template <typename Scalar>
 void BCFunction<Scalar>::values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   int numCells = basisCache->cellIDs().size();
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   _imposeHere.resize(numCells,numPoints);
   DeviceView<bool> imposeHereView = _imposeHere.checkoutDeviceView(false); // don't deep copy; _bc will overwrite
-  DeviceViewConst<Scalar> unitNormalsView = basisCache->getSideNormals().checkoutDeviceView();
+  
+  auto unitNormals = basisCache->getSideNormals(); // copy; basisCache may change/recompute side normals container inside imposeBC() call
+  DeviceViewConst<Scalar> unitNormalsView = unitNormals.checkoutDeviceView();
   
   if (modType == ASSIGN)
   {
@@ -68,10 +72,8 @@ void BCFunction<Scalar>::values(DeviceView<Scalar> &values, ValueModificationTyp
     SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(bcValues);
   }
   
-//  points.checkinDeviceView();
-  basisCache->getSideNormals().checkinDeviceView(false);
+  unitNormals.checkinDeviceView(false);
   _imposeHere.checkinDeviceView(true);
-  basisCache->getSideNormals().checkinDeviceView(false);
 }
 
 template <typename Scalar>

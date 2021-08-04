@@ -94,6 +94,12 @@ TFunctionPtr<Scalar> ProductFunction<Scalar>::evaluateAt(const map<int, TFunctio
 }
 
 template <typename Scalar>
+bool ProductFunction<Scalar>::isZero()
+{
+  return _f1->isZero() || _f2->isZero();
+}
+
+template <typename Scalar>
 bool ProductFunction<Scalar>::isZero(BasisCachePtr basisCache)
 {
   return _f1->isZero(basisCache) || _f2->isZero(basisCache);
@@ -119,6 +125,13 @@ TLinearTermPtr<Scalar> ProductFunction<Scalar>::jacobian(const map<int, TFunctio
   auto df1 = _f1->jacobian(valueMap);
   auto df2 = _f2->jacobian(valueMap);
   return f1 * df2 + df1 * f2;
+}
+
+template <typename Scalar>
+int ProductFunction<Scalar>::numVectorComponents() const
+{
+  if (this->rank() == 0) return 0;
+  else return _f2->numVectorComponents();
 }
 
 template <typename Scalar>
@@ -188,7 +201,7 @@ int ProductFunction<Scalar>::productRank(TFunctionPtr<Scalar> f1, TFunctionPtr<S
   if (f1->rank() == 0) return f2->rank();
   if (f2->rank() == 0) return f1->rank();
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank pairing for function product.");
-  return -1;
+//  return -1;
 }
 
 template <typename Scalar>
@@ -204,6 +217,11 @@ ProductFunction<Scalar>::ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<S
   {
     _f1 = f2;
     _f2 = f1;
+  }
+  if (_f1->rank() != 0)
+  {
+    // New 5-13-21: consider a rule that we *don't* do tensor contractions within ProductFunction; instead, these should be reduced analytically to sums of scalars.
+    cout << "Warning: creating a ProductFunction in which both multiplicands have positive rank.\n";
   }
   // the following should be false for all the automatic products.  Added the test for debugging...
   if ((_f1->isZero()) || (_f2->isZero()))
@@ -225,12 +243,89 @@ std::vector<TFunctionPtr<Scalar>> ProductFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
+std::vector<Intrepid2::DimensionInfo> ProductFunction<Scalar>::valuesDataDims(BasisCachePtr basisCache)
+{
+  auto f1Dims = _f1->valuesDataDims(basisCache);
+  auto f2Dims = _f2->valuesDataDims(basisCache);
+ 
+  bool tensorContraction = ( _f2->rank() > 0) && (this->rank() == 0); // tensor contraction resulting in scalar value
+  int numContractionDims = tensorContraction ? _f2->rank() : 0; // dims that are contracted away don't affect variation dims (i.e., we don't need to include them in combinedDims below)
+  
+  // if _f1 and _f2 have differing rank, by construction _f2 is the higher-rank
+  
+  const int numDims = f1Dims.size() - numContractionDims;
+  std::vector<Intrepid2::DimensionInfo> combinedDims(f2Dims.size()-numContractionDims);
+  for (int d=0; d<numDims; d++)
+  {
+    combinedDims[d] = Intrepid2::combinedDimensionInfo(f1Dims[d], f2Dims[d]);
+  }
+  for (int d=numDims; d<combinedDims.size(); d++)
+  {
+    combinedDims[d] = f2Dims[d];
+  }
+  return combinedDims;
+}
+
+template <typename Scalar>
+void ProductFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache)
+{
+  auto f1Data = _f1->checkoutValuesData(basisCache);
+  auto f2Data = _f2->checkoutValuesData(basisCache);
+  
+  _f1->values(f1Data,basisCache);
+  _f2->values(f2Data,basisCache);
+  
+  using ExecutionSpace = Camellia::DeviceExecutionSpace;
+  if ((_f1->rank() == 0) && (_f2->rank() == 0))
+  {
+    // scalar multiplicands
+    values.storeInPlaceProduct(f1Data, f2Data);
+  }
+  else if (_f1->rank() == 0)
+  {
+    // scalar times a higher-rank function
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unfinished implementation");
+  }
+  else if (this->rank() == 0)
+  {
+    // higher-rank multiplicands, contracted to a scalar
+    if (values.rank() == 2)
+    {
+      // (C,P)
+      TEUCHOS_TEST_FOR_EXCEPTION(f1Data.rank() != 3, std::invalid_argument, "Support for functions with rank > 1 not yet implemented");
+      int d_extent = f1Data.extent_int(2);
+      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{values.getDataExtent(0),values.getDataExtent(1)});
+      Kokkos::parallel_for("compute contraction", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointOrdinal) {
+        auto & val = values.getWritableEntry(cellOrdinal, pointOrdinal);
+        val = 0;
+        for (int d=0; d<d_extent; d++)
+        {
+          val += f1Data(cellOrdinal,pointOrdinal,d) * f2Data(cellOrdinal,pointOrdinal,d);
+        }
+      });
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unfinished implementation");
+    }
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank combination");
+  }
+  
+  _f1->checkinValuesData(f1Data);
+  _f2->checkinValuesData(f2Data);
+}
+
+template <typename Scalar>
 void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("ProductFunction values()");
   if (modType == ASSIGN)
   {
-    if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor product resulting in scalar value
+    if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor contraction resulting in scalar value
     {
       _f2->valuesDottedWithTensor(values, _f1, basisCache);
     }
@@ -244,7 +339,7 @@ void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView
   else
   {
     auto valuesScratch = basisCache->checkoutScratchStorage<Scalar>(values);
-    if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor product resulting in scalar value
+    if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor contraction resulting in scalar value
     {
       _f2->valuesDottedWithTensor(valuesScratch, _f1, basisCache);
     }

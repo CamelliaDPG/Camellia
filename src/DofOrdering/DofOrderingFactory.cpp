@@ -60,8 +60,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
   
   // vector<int> testIDs = _bilinearForm->testIDs();
   vector<int> testIDs = _varFactory->testIDs();
-  vector<int>::iterator testIterator;
-
+  
   DofOrderingPtr testOrder = Teuchos::rcp(new DofOrdering(cellTopo));
 
   vector<int> testIDPolyOrder(polyOrder.size());
@@ -171,7 +170,6 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
 
   // vector<int> trialIDs = _bilinearForm->trialIDs();
   vector<int> trialIDs = _varFactory->trialIDs();
-  vector<int>::iterator trialIterator;
 
   DofOrderingPtr trialOrder = Teuchos::rcp(new DofOrdering(cellTopo));
   DofOrderingPtr traceOrder = Teuchos::rcp(new DofOrdering(cellTopo));
@@ -273,8 +271,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
         basis = BasisFactory::basisFactory()->getConformingBasis(trialIDPolyOrder, cellTopo, fs);
       }
       basisRank = basis->rangeRank();
-      trialOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_ORDINAL);
-      fieldOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_ORDINAL);
+      trialOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_INDEX);
+      fieldOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_INDEX);
     }
   }
   trialOrder->rebuildIndex();

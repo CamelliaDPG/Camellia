@@ -51,6 +51,8 @@ public:
     _h = h;
     _usePeriodicData = usePeriodicData;
   }
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y)
   {
     if (_usePeriodicData)
@@ -87,6 +89,9 @@ public:
     _xMiddle = rotationCenter_x;
     _yMiddle = rotationCenter_y;
   }
+  using SpatialFilter::matchesPoint;
+  using SpatialFilter::matchesPoints;
+  
   bool matchesPoint(double x, double y, double z)
   {
     double tol = 1e-14;

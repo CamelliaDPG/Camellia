@@ -7,6 +7,7 @@
 #include "BasisCache.h"
 #include "CamelliaCellTools.h"
 #include "GlobalDofAssignment.h"
+#include "SharedScratchStorage.h"
 #include "Solution.h"
 
 using namespace Camellia;
@@ -61,6 +62,26 @@ size_t SimpleSolutionFunction<Scalar>::getCellDataSize(GlobalIndexType cellID)
 }
 
 template <typename Scalar>
+int SimpleSolutionFunction<Scalar>::numVectorComponents() const
+{
+  if (_var->rank() == 0)
+  {
+    return 0;
+  }
+  else
+  {
+    if (! _var->isSpaceTime() )
+    {
+      return _soln->mesh()->getDimension(); // this is an upper bound on the number of vector components; it may be that we can be a bit more granular, depending on _var and the mesh.
+    }
+    else
+    {
+      return _soln->mesh()->getDimension() - 1;
+    }
+  }
+}
+
+template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength)
 {
   const int solutionOrdinal = _soln->solutionOrdinal(_solutionComponent,_solutionStage);
@@ -104,6 +125,31 @@ void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType>
 }
 
 template <typename Scalar>
+bool SimpleSolutionFunction<Scalar>::isDefined(BasisCachePtr basisCache) const
+{
+  bool volumeCache = !basisCache->isSideCache();
+  if (volumeCache)
+  {
+    return _var->isDefinedOnVolume();
+  }
+  else // sideCache
+  {
+    int sideIndex = basisCache->getSideIndex();
+    
+    bool temporalSide = _var->isSpaceTime() && !basisCache->cellTopology()->sideIsSpatial(sideIndex);
+    
+    if (temporalSide)
+    {
+      return _var->isDefinedOnTemporalInterface();
+    }
+    else
+    {
+      return true;
+    }
+  }
+}
+
+template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("SimpleSolutionFunction values() - host path");
@@ -133,7 +179,7 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
     // that class with this one at some point...
     LinearTermPtr solnExpression = 1.0 * _var;
     // get the physicalPoints, and make a basisCache for each...
-    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePointsFC();
     Camellia::FieldContainer<Scalar> value(1,1); // assumes scalar-valued solution function.
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
@@ -169,7 +215,7 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
         refPoint.resize(1,spaceDim);
         basisCacheOnePoint->setRefCellPointsFC(refPoint);
         //          cout << "refCellPoints:\n " << refPoint;
-        //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();
+        //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePointsFC();
         const bool applyCubatureWeights = false;
         solnExpression->evaluate(value, _soln, basisCacheOnePoint, applyCubatureWeights, _solutionComponent, _solutionStage);
         //          cout << "value at point (" << point(0,0) << ", " << point(0,1) << ") = " << value(0,0) << endl;
@@ -343,21 +389,21 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::grad(int spaceDim)
 template <typename Scalar>
 TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::x()
 {
-  return TFunction<Scalar>::solution(_var->x(), _soln, _weightFluxesBySideParity);
+  return TFunction<Scalar>::solution(_var->x(), _soln, _weightFluxesBySideParity, _solutionComponent, _solutionStage, _solutionIdentifierExponent);
 //  if (_var->op() != Camellia::OP_VALUE)
 //  {
 //    return TFunction<Scalar>::null();
 //  }
 //  else
 //  {
-//    return TFunction<Scalar>::solution(_var->x(), _soln, _weightFluxesBySideParity);
+//    return TFunction<Scalar>::solution(_var->x(), _soln, _weightFluxesBySideParity, _solutionComponent, _solutionStage, _solutionIdentifierExponent);
 //  }
 }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y()
 {
-  return TFunction<Scalar>::solution(_var->y(), _soln, _weightFluxesBySideParity);
+  return TFunction<Scalar>::solution(_var->y(), _soln, _weightFluxesBySideParity, _solutionComponent, _solutionStage, _solutionIdentifierExponent);
 
 //  if (_var->op() != Camellia::OP_VALUE)
 //  {
@@ -365,21 +411,21 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y()
 //  }
 //  else
 //  {
-//    return TFunction<Scalar>::solution(_var->y(), _soln, _weightFluxesBySideParity);
+//    return TFunction<Scalar>::solution(_var->y(), _soln, _weightFluxesBySideParity, _solutionComponent, _solutionStage, _solutionIdentifierExponent);
 //  }
 }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z()
 {
-  return TFunction<Scalar>::solution(_var->z(), _soln, _weightFluxesBySideParity);
+  return TFunction<Scalar>::solution(_var->z(), _soln, _weightFluxesBySideParity, _solutionComponent, _solutionStage, _solutionIdentifierExponent);
 //  if (_var->op() != Camellia::OP_VALUE)
 //  {
 //    return TFunction<Scalar>::null();
 //  }
 //  else
 //  {
-//    return TFunction<Scalar>::solution(_var->z(), _soln, _weightFluxesBySideParity);
+//    return TFunction<Scalar>::solution(_var->z(), _soln, _weightFluxesBySideParity, _solutionComponent, _solutionStage, _solutionIdentifierExponent);
 //  }
 }
 

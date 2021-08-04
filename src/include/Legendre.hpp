@@ -44,6 +44,8 @@ namespace Camellia {
       _derivatives.resize(_polyOrder+1);
       _derivative = derivative;
     }
+    
+    using SimpleFunction<double>::value;
     double value(double x) {
       Legendre<double>::values(_values,_derivatives,x,_polyOrder);
       //      cout << "Lobatto values:\n" << _values;

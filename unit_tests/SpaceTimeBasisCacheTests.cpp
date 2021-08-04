@@ -393,16 +393,16 @@ void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo
 //        cout << "spatialBasisCacheSide for spatial side " << spatialSideOrdinal << ", cubature degree: ";
 //        cout << spatialBasisCacheSide->cubatureDegree() << endl;
 
-      FC spatialPoints = spatialBasisCacheSide->getPhysicalCubaturePoints();
+      FC spatialPoints = spatialBasisCacheSide->getPhysicalCubaturePointsFC();
       int numSpatialPoints = spatialPoints.dimension(1);
 
-      FC temporalPoints = temporalCache->getPhysicalCubaturePoints();
+      FC temporalPoints = temporalCache->getPhysicalCubaturePointsFC();
       int numTemporalPoints = temporalPoints.dimension(1);
 
       FC expectedPhysicalPoints(1,numSpatialPoints*numTemporalPoints,spaceTimeTopo->getDimension());
       tensorBasis->getTensorPoints(expectedPhysicalPoints, spatialPoints, temporalPoints);
 
-      FC actualPhysicalPoints = sideCache->getPhysicalCubaturePoints();
+      FC actualPhysicalPoints = sideCache->getPhysicalCubaturePointsFC();
 
       if (actualPhysicalPoints.size() != expectedPhysicalPoints.size())
       {
@@ -414,7 +414,7 @@ void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo
     }
     else
     {
-      FC spatialPoints = spatialCache->getPhysicalCubaturePoints();
+      FC spatialPoints = spatialCache->getPhysicalCubaturePointsFC();
       int numSpatialPoints = spatialPoints.dimension(1);
 
       FC temporalPoints(1,1,1);
@@ -425,7 +425,7 @@ void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo
       FC expectedPhysicalPoints(1,numSpatialPoints*numTemporalPoints,spaceTimeTopo->getDimension());
       tensorBasis->getTensorPoints(expectedPhysicalPoints, spatialPoints, temporalPoints);
 
-      FC actualPhysicalPoints = sideCache->getPhysicalCubaturePoints();
+      FC actualPhysicalPoints = sideCache->getPhysicalCubaturePointsFC();
       TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(expectedPhysicalPoints, actualPhysicalPoints, 1e-15);
     }
   }

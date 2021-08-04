@@ -165,8 +165,8 @@ TEUCHOS_UNIT_TEST( Cell, EntitiesOnNeighborInterfacesHangingNodes_2D )
   const unsigned SIDE_DIM = 1;
   
   const unsigned sideCount = cell1->getSideCount();
-  unsigned sharedSideOrdinalInCell1 = -1;
-  unsigned sharedSideOrdinalInCell0 = -1;
+  unsigned sharedSideOrdinalInCell1 = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
+  unsigned sharedSideOrdinalInCell0 = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
   for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
   {
     auto neighbor = cell1->getNeighbor(sideOrdinal, meshTopo);
@@ -229,8 +229,8 @@ TEUCHOS_UNIT_TEST( Cell, EntitiesOnNeighborInterfacesHangingNodes_3D )
   
   CellPtr cell0 = meshTopo->getCell(0);
   const unsigned sideCount = cell0->getSideCount();
-  unsigned sharedSideOrdinalInCell1 = -1;
-  unsigned sharedSideOrdinalInCell0 = -1;
+  unsigned sharedSideOrdinalInCell1 = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
+  unsigned sharedSideOrdinalInCell0 = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
   for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
   {
     auto neighbor = cell0->getNeighbor(sideOrdinal, meshTopo);

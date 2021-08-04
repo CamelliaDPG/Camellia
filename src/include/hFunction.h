@@ -23,7 +23,10 @@ class hFunction : public TFunction<double>
 {
 public:
   hFunction() : TFunction<double>("hFunction") {}
+  
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
   string displayString() override;
 };
 }

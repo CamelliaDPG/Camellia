@@ -236,7 +236,6 @@ namespace
         out << "Unsupported formulation choice!\n";
         success = false;
         return;
-        break;
     }
     
     MeshPtr mesh = minimalPoissonHangingNodeMesh(H1Order, delta_k, spaceDim, formChoice);
@@ -353,10 +352,10 @@ namespace
     testSolvePoissonHangingNode(spaceDim, PoissonFormulation::CONTINUOUS_GALERKIN, out, success);
   }
  
-  void testSolvePoissonPrimalHangingNode(int spaceDim, Teuchos::FancyOStream &out, bool &success)
-  {
-    testSolvePoissonHangingNode(spaceDim, PoissonFormulation::PRIMAL, out, success);
-  }
+//  void testSolvePoissonPrimalHangingNode(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+//  {
+//    testSolvePoissonHangingNode(spaceDim, PoissonFormulation::PRIMAL, out, success);
+//  }
   
   void testSolvePoissonUltraweakHangingNode(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
@@ -449,20 +448,20 @@ namespace
       auto dofOwnershipInfo = gda->getGlobalDofIndices(cellID);
       DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
       
-      for (int sideOrdinal : trialOrder->getSidesForVarID(var->ID()))
+      for (int sideIndex : trialOrder->getSidesForVarID(var->ID()))
       {
         BasisMap basisMap;
-        if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
+        if (sideIndex == VOLUME_INTERIOR_SIDE_INDEX)
         {
           basisMap = gda->getBasisMap(cellID, dofOwnershipInfo, var);
         }
         else
         {
-          basisMap = gda->getBasisMap(cellID, dofOwnershipInfo, var, sideOrdinal);
+          basisMap = gda->getBasisMap(cellID, dofOwnershipInfo, var, sideIndex);
         }
         
         Camellia::FieldContainer<double> dofCoordsFC;
-        trialOrder->getDofCoords(mesh->physicalCellNodesForCell(cellID), dofCoordsFC, var->ID(), sideOrdinal);
+        trialOrder->getDofCoords(mesh->physicalCellNodesForCell(cellID), dofCoordsFC, var->ID(), sideIndex);
         
         for (SubBasisDofMapperPtr subBasisMap : basisMap)
         {
@@ -952,8 +951,8 @@ namespace
             constrainingDomainBasisCache->setRefCellPointsFC(constrainingDomainPoints);
             
             // As a sanity check, compare the physical points for coarse and fine:
-            Camellia::FieldContainer<double> finePhysicalPoints = domainBasisCache->getPhysicalCubaturePoints();
-            Camellia::FieldContainer<double> coarsePhysicalPoints = constrainingDomainBasisCache->getPhysicalCubaturePoints();
+            Camellia::FieldContainer<double> finePhysicalPoints = domainBasisCache->getPhysicalCubaturePointsFC();
+            Camellia::FieldContainer<double> coarsePhysicalPoints = constrainingDomainBasisCache->getPhysicalCubaturePointsFC();
             bool oldSuccess = success;
             success = true;
             TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(finePhysicalPoints, coarsePhysicalPoints, 1e-15);
@@ -1192,6 +1191,7 @@ namespace
       bool zMatch = (abs(z) < tol) || (abs(z-1.0) < tol);
       return xMatch || yMatch || zMatch;
     }
+    using SpatialFilter::matchesPoint;
     void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
     {
       auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
@@ -1207,6 +1207,7 @@ namespace
         pointsMatch(cellOrdinal,pointOrdinal) = xMatch || yMatch || zMatch;
       });
     }
+    using SpatialFilter::matchesPoints;
   };
   
   // ! copied from DPGTests GDAMinimumRuleTests
@@ -1446,37 +1447,39 @@ namespace
     return poissonUniformMesh(3, 2, 2, true);
   }
   
-  MeshPtr stokesUniformMesh(vector<int> elementWidths, int H1Order, bool useConformingTraces)
-  {
-    int spaceDim = elementWidths.size();
-    int testSpaceEnrichment = spaceDim; //
-    double mu = 1.0;
-    double span = 1.0; // in each spatial dimension
-    
-    vector<double> dimensions(spaceDim,span);
-    
-    StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, mu, useConformingTraces);
-    
-    map<int,int> trialOrderEnhancements;
-    if (useConformingTraces)
-    {
-      // also enhance the fields, then:
-      for (int d=1; d<=spaceDim; d++)
-      {
-        trialOrderEnhancements[stokesForm.u(d)->ID()] = 1;
-      }
-    }
-    vector<double> x0(0,spaceDim);
-    MeshPtr mesh = MeshFactory::rectilinearMesh(stokesForm.bf(), dimensions, elementWidths, H1Order, testSpaceEnrichment,
-                                                x0, trialOrderEnhancements);
-    return mesh;
-  }
-  
-  MeshPtr stokesUniformMesh(int spaceDim, int elementWidth, int H1Order, bool useConformingTraces)
-  {
-    vector<int> elementCounts(spaceDim,elementWidth);
-    return stokesUniformMesh(elementCounts, H1Order, useConformingTraces);
-  }
+// stokesUniformMesh methods are only called by (expensive) tests that are commented out right now; we comment them
+// out here to avoid compiler warnings about unused methods.
+//  MeshPtr stokesUniformMesh(vector<int> elementWidths, int H1Order, bool useConformingTraces)
+//  {
+//    int spaceDim = elementWidths.size();
+//    int testSpaceEnrichment = spaceDim; //
+//    double mu = 1.0;
+//    double span = 1.0; // in each spatial dimension
+//
+//    vector<double> dimensions(spaceDim,span);
+//
+//    StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, mu, useConformingTraces);
+//
+//    map<int,int> trialOrderEnhancements;
+//    if (useConformingTraces)
+//    {
+//      // also enhance the fields, then:
+//      for (int d=1; d<=spaceDim; d++)
+//      {
+//        trialOrderEnhancements[stokesForm.u(d)->ID()] = 1;
+//      }
+//    }
+//    vector<double> x0(0,spaceDim);
+//    MeshPtr mesh = MeshFactory::rectilinearMesh(stokesForm.bf(), dimensions, elementWidths, H1Order, testSpaceEnrichment,
+//                                                x0, trialOrderEnhancements);
+//    return mesh;
+//  }
+//
+//  MeshPtr stokesUniformMesh(int spaceDim, int elementWidth, int H1Order, bool useConformingTraces)
+//  {
+//    vector<int> elementCounts(spaceDim,elementWidth);
+//    return stokesUniformMesh(elementCounts, H1Order, useConformingTraces);
+//  }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson1D)
   {
@@ -2033,7 +2036,7 @@ namespace
         
         // are there some physical points that lie on the boundary?
         // we expect to match prescribedValue at these
-        const Camellia::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePoints();
+        const Camellia::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePointsFC();
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
         {
           double x = (*physicalPoints)(0,pointOrdinal,0);

@@ -72,10 +72,12 @@ namespace Camellia {
     virtual Teuchos::RCP<MeshTopology> deepCopy() const override;
     
     // RefinementObserver interface (we observe refinements in the phase space mesh):
+    using RefinementObserver::didHRefine;
     void didHRefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern,
                     bool didRepartitionAndRebuild) override;
     
     // RefinementObserver interface:
+    using RefinementObserver::didHUnrefine;
     void didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild) override;
     
     virtual bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent) const override;

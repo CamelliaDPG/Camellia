@@ -133,6 +133,7 @@ public:
   void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localStiffnessData, const Camellia::FieldContainer<Scalar> &localLoadData,
                           Camellia::FieldContainer<Scalar> &globalStiffnessData, Camellia::FieldContainer<Scalar> &globalLoadData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
 
+  using DofInterpreter::interpretLocalCoefficients;
   virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localCoefficients, Epetra_MultiVector &globalCoefficients, int columnOrdinal);
 
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<Scalar> &basisCoefficients,

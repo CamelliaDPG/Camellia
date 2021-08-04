@@ -85,7 +85,7 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
 
 //      cout << "f: " << f->displayString() << endl;
 //      cout << "basisCoefficients:\n" << basisCoefficients;
-//      cout << "physicalCubaturePoints:\n" << sideBasisCache->getPhysicalCubaturePoints();
+//      cout << "physicalCubaturePoints:\n" << sideBasisCache->getPhysicalCubaturePointsFC();
 
 //      cout << "expectedIntegral: " << expectedIntegral << endl;
 

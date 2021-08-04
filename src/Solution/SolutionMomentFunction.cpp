@@ -12,6 +12,58 @@
 
 #include "SolutionMomentFunction.h"
 
+namespace
+{
+  // private (anonymous-namespaced) class to define a simple basis integration kernel.  We moved this out of a lambda defined in the SolutionMomentFunction constructor because nvcc complained about not being able to take the address of the enclosing function.
+  class BasisIntegral
+  {
+    const int numPoints_;
+    const int momentNumber_;
+    
+    using DeviceType = ::Camellia::DeviceType;
+    
+    Intrepid2::TensorPoints<double, DeviceType> refPoints_;
+    Intrepid2::TensorData<double,DeviceType> cubatureWeights_;
+    Camellia::DeviceView<double> basisValues_;
+    Camellia::DeviceView<double> extrusionBasisIntegral_;
+  public:
+    BasisIntegral(const int &momentNumber,
+                  Intrepid2::TensorPoints<double, DeviceType> refPoints,
+                  Intrepid2::TensorData<double,DeviceType> cubatureWeights,
+                  Camellia::DeviceView<double> basisValues,
+                  Camellia::DeviceView<double> extrusionBasisIntegral)
+    :
+    momentNumber_(momentNumber),
+    numPoints_(refPoints.extent_int(0)),
+    refPoints_(refPoints),
+    cubatureWeights_(cubatureWeights),
+    basisValues_(basisValues),
+    extrusionBasisIntegral_(extrusionBasisIntegral)
+    {
+      
+    }
+    
+    KOKKOS_INLINE_FUNCTION
+    void operator()(const int &basisOrdinal) const
+    {
+      double integralValue = 0.0;
+      for (int pointOrdinal=0; pointOrdinal<numPoints_; pointOrdinal++)
+      {
+        const double &x = refPoints_(pointOrdinal,0);
+        double xWeight = 1.0;
+        for (int i=0; i<momentNumber_; i++) // NOTE: this is not enough to define the higher-order moments; higher moments are tensor-valued, etc.
+        {
+          xWeight *= x;
+        }
+        const double &quadratureWeight = cubatureWeights_(pointOrdinal);
+        const double &basisValue = basisValues_(basisOrdinal,pointOrdinal);
+        integralValue += quadratureWeight * xWeight * basisValue;
+      }
+      extrusionBasisIntegral_(basisOrdinal) = integralValue / 2.0;
+    }
+  };
+}
+
 namespace Camellia
 {
   SolutionMomentFunction::SolutionMomentFunction(SolutionPtr phaseSpaceSoln, VarPtr fieldVar, int momentNumber, MeshPtr physicalMesh, int survivingExtrusionDimension)
@@ -102,27 +154,38 @@ namespace Camellia
       
       auto values = valuesFC.checkoutDeviceView(true); // true: deep copy from host
       
-      Kokkos::parallel_for("integrate", basisCardinality,
-      KOKKOS_LAMBDA (const int basisOrdinal) {
-        double integralValue = 0.0;
-        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-        {
-          const double &x = refPoints(pointOrdinal,0);
-          double xWeight = 1.0;
-          for (int i=0; i<momentNumber; i++) // NOTE: this is not enough to define the higher-order moments; higher moments are tensor-valued, etc.
-          {
-            xWeight *= x;
-          }
-          const double &quadratureWeight = cubatureWeights(pointOrdinal);
-          const double &basisValue = values(basisOrdinal,pointOrdinal);
-          integralValue += quadratureWeight * xWeight * basisValue;
-        }
-        extrusionBasisIntegral(basisOrdinal) = integralValue / 2.0;
-      });
+      BasisIntegral basisIntegralFunctor(momentNumber, refPoints, cubatureWeights, values, extrusionBasisIntegral);
+      
+      Kokkos::parallel_for("integrate", basisCardinality, basisIntegralFunctor);
+      
       valuesFC.checkinDeviceView(false); // false: don't deep copy to host
       
       _extrusionBasisIntegrals[extrusionOrdinal] = extrusionBasisIntegral;
     }
+    int physicalVariationDimensions;
+    const int numPhysicalDimensions = _spatialBasis->domainTopology()->getDimension();
+    if (numPhysicalDimensions == 1)
+    {
+      physicalVariationDimensions = VARIES_IN_DIMENSION_0;
+    }
+    else if (numPhysicalDimensions == 2)
+    {
+      physicalVariationDimensions = VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1;
+    }
+    else if (numPhysicalDimensions == 3)
+    {
+      physicalVariationDimensions = VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1 | VARIES_IN_DIMENSION_2;
+    }
+    int variationDimensions;
+    if (numSurvivingExtrusionDimensions == 0)
+    {
+      variationDimensions = physicalVariationDimensions;
+    }
+    else
+    {
+      variationDimensions = physicalVariationDimensions | (1 >> numPhysicalDimensions);
+    }
+    this->setVariationDimensions(variationDimensions); // this is on the once-extruded mesh (at most 4D, but 1D or 2D for 1D3V Boltzmann)
   }
 
   const Camellia::DeviceView<double> SolutionMomentFunction::basisCoefficients() const
@@ -165,11 +228,9 @@ namespace Camellia
     
     // the "extruded spatial" basis is the spatial basis, times any extrusion basis not integrated away
     int extrudedSpatialBasisCardinality = _extrudedSpatialBasis->getCardinality();
-    int compOrdinal = 0;
     // copy containers to avoid implicit references to this in lambdas below:
     auto componentBasisCardinalities    = _componentBasisCardinalities;
     int survivingExtrusionDimension = _survivingExtrusionDimension;
-    const int numExtrudedSpatialBasisComponents = compOrdinal;
     
     const int phaseSpaceBasisCardinality = _phaseSpaceBasis->getCardinality();
     const int numPhaseBasisFunctionsPerSpatialBasisFunction = phaseSpaceBasisCardinality / extrudedSpatialBasisCardinality;
@@ -209,12 +270,11 @@ namespace Camellia
     
     std::map<IndexType, FieldContainer<double> > activePhysicalCellContributions;
     
-    auto coarsePhysicalCellContributions = coarsePhysicalCellContributionsFC.checkoutDeviceView(false); // false: don't deep copy from host
-    
     const int physicalCellCount = phaseSpaceMeshTopology->physicalMeshTopology()->cellCount();
     auto possiblyExtrudedPhysicalMeshTopology = _possiblyExtrudedPhysicalMesh->getTopology();
     for (const auto &phaseSpaceCellID : myPhaseSpaceCells)
     {
+      auto coarsePhysicalCellContributions = coarsePhysicalCellContributionsFC.checkoutDeviceView(false); // false: don't deep copy from host
       const double extrusionMeasure = phaseSpaceMeshTopology->extrusionMeasureForPhaseSpaceCell(phaseSpaceCellID, _survivingExtrusionDimension);
       _soln->getBasisCoefficientsForCell(phaseSpaceBasisCoefficientsFC, _fieldVar->ID(), phaseSpaceCellID, STANDARD_SOLUTION, 0);
       auto phaseSpaceBasisCoefficients = phaseSpaceBasisCoefficientsFC.checkoutDeviceView(true); // true: deep copy from host
@@ -238,7 +298,7 @@ namespace Camellia
           int remainingIntegratedExtrusionFieldOrdinal = integratedExtrusionFieldOrdinal;
           for (int d=0; d<numExtrusionDimensions; d++)
           {
-            if (_survivingExtrusionDimension != d)
+            if (survivingExtrusionDimension != d)
             {
               extractNextComponentOrdinal(phaseFieldOrdinalComponents[d+1], remainingIntegratedExtrusionFieldOrdinal, componentBasisCardinalities[d+1]);
             }
@@ -251,11 +311,12 @@ namespace Camellia
           double extrusionComponentProduct = phaseFieldCoefficient;
           for (int d=0; d<numExtrusionDimensions; d++)
           {
-            if (_survivingExtrusionDimension == d) continue; // this dimension remains un-integrated; skip
+            if (survivingExtrusionDimension == d) continue; // this dimension remains un-integrated; skip
             const auto & extrusionBasisIntegrals = extrusionBasisIntegralsArray[d];
             const int extrusionBasisCardinality = extrusionBasisIntegrals.extent_int(0);
             const int &extrusionComponentFieldOrdinal = phaseFieldOrdinalComponents[d+1];
-            extrusionComponentProduct *= extrusionBasisIntegrals(extrusionComponentFieldOrdinal);
+            const double & extrusionBasisIntegral = extrusionBasisIntegrals(extrusionComponentFieldOrdinal);
+            extrusionComponentProduct *= extrusionBasisIntegral;
           }
           extrusionIntegralValue += extrusionComponentProduct;
         }
@@ -263,9 +324,9 @@ namespace Camellia
         
         coarsePhysicalCellContributions(extrudedSpatialBasisOrdinal) = extrusionIntegralValue;
       });
-              
-      phaseSpaceBasisCoefficientsFC.checkinDeviceView(false); // false: don't deep copy back to host
-      coarsePhysicalCellContributionsFC.checkinDeviceView(true);
+      
+      coarsePhysicalCellContributionsFC.checkinDeviceView(true); // true:  do deep copy back to host
+      phaseSpaceBasisCoefficientsFC.checkinDeviceView(false);    // false: don't deep copy back to host
       
       IndexType possiblyExtrudedPhysicalCellID; // extruded, if there is an extrusion dimension in which we do not integrate
       
@@ -404,12 +465,9 @@ namespace Camellia
             }
           }
         }
-        activePhysicalCellContributionFC.checkinDeviceView(true); // true: deep copy back to host
       }
-      
-      phaseSpaceBasisCoefficientsFC.checkinDeviceView(false); // false: don't deep copy back to host
     }
-    
+        
     // send the physical cell contributions to their owners, and store in _spatialBasisCoefficients container
     // we use a convenience method in MPIWrapper for this; note that this sends a bunch of extra data that a manual data-packing implementation would not need to.  (The convenience method requires that we have a vector of fixed-length entries; that's where the inefficiency comes from.)
     using DataType = std::tuple<IndexType,int,double>; // (possiblyExtrudedPhysicalCellID,spatialBasisOrdinal,integralContribution)
@@ -480,7 +538,102 @@ namespace Camellia
     }
     Kokkos::deep_copy(_spatialBasisCoefficients,spatialBasisCoefficientsHost);
   }
-  
+
+  void SolutionMomentFunction::values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+  {
+    TEUCHOS_FUNC_TIME_MONITOR("SolutionMomentFunction values(Data,BasisCachePtr)");
+   
+    // this implementation adapted from BasisSumFunction
+    
+    const int numDofs = _extrudedSpatialBasis->getCardinality();
+    const int spaceDim = basisCache->cellTopology()->getDimension();
+
+    bool basisIsVolumeBasis = _extrudedSpatialBasis->domainTopology()->getDimension() == spaceDim;
+    bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(useCubPointsSideRefCell, std::invalid_argument, "Side caches not (yet) supported by SolutionMomentFunction");
+    
+    Intrepid2::TensorPoints<double,Camellia::DeviceType> points = basisCache->getRefCellPoints();
+    Intrepid2::BasisValues<double,Camellia::DeviceType> basisValues = _extrudedSpatialBasis->allocateBasisValues(points);
+    
+    _extrudedSpatialBasis->getValues(basisValues, points);
+
+    // we implicitly assume here that reference-to-physical transform is identity
+    
+    // local copies to avoid implicit references to this
+    auto spatialBasisCoefficients  = _spatialBasisCoefficients;
+    auto physicalCellOrdinalLookup = _physicalCellOrdinalLookup;
+    
+    auto cellOrdinalLookupHost = Kokkos::create_mirror_view(_physicalCellOrdinalLookup);
+    int basisCacheCellOrdinal = 0;
+    for (const auto &cellID : basisCache->cellIDs())
+    {
+      auto matchingEntry = std::lower_bound(_physicalCellIDs.begin(), _physicalCellIDs.end(), cellID);
+      TEUCHOS_TEST_FOR_EXCEPTION((matchingEntry == _physicalCellIDs.end()) || *matchingEntry != cellID,std::invalid_argument,"cellID not found");
+      
+      int cellOrdinal = matchingEntry - _physicalCellIDs.begin();
+      
+      cellOrdinalLookupHost(basisCacheCellOrdinal) = cellOrdinal;
+      basisCacheCellOrdinal++;
+    }
+    Kokkos::deep_copy(physicalCellOrdinalLookup, cellOrdinalLookupHost);
+    
+    using ExecutionSpace = Camellia::DeviceExecutionSpace;
+
+    const int underlyingViewRank = values.getUnderlyingViewRank(); // can be (C,P0,P1) or (C,P)
+    if (underlyingViewRank == 2)
+    {
+      auto view = values.getUnderlyingView<2>();
+      Kokkos::deep_copy(view, 0.0); // initialize
+      
+      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{view.extent(0),view.extent(1)});
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+      
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const array_index_type &physicalCellOrdinalInBasisCache, const array_index_type &pointOrdinal)
+      {
+        const int &cellOrdinal = physicalCellOrdinalLookup(physicalCellOrdinalInBasisCache);
+        for (int dof = 0; dof < numDofs; dof++)
+        {
+          double weight = spatialBasisCoefficients(cellOrdinal,dof);
+          const double & basisValue = basisValues(dof,pointOrdinal);
+          view(physicalCellOrdinalInBasisCache,pointOrdinal) += basisValue * weight;
+        }
+      });
+    }
+    else if (underlyingViewRank == 3)
+    {
+      auto view = values.getUnderlyingView<3>();
+      Kokkos::deep_copy(view, 0.0); // initialize
+      
+      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{view.extent(0),view.extent(1),view.extent(2)});
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(basisValues.numTensorDataFamilies() != 1, std::invalid_argument, "basisValues has unexpected number of TensorData families");
+      
+      auto tensorBasisValues = basisValues.tensorData();
+      
+      auto spatialValues   = basisValues.tensorData().getTensorComponent(0);
+      auto extrusionValues = basisValues.tensorData().getTensorComponent(1);
+      
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const array_index_type &physicalCellOrdinalInBasisCache, const array_index_type &physicalPointOrdinal, const array_index_type &extrusionPointOrdinal)
+      {
+        const int &cellOrdinal = physicalCellOrdinalLookup(physicalCellOrdinalInBasisCache);
+        for (int dof = 0; dof < numDofs; dof++)
+        {
+          double weight = spatialBasisCoefficients(cellOrdinal,dof);
+          const int fieldIndex = 0;
+          const long long spatialFieldOrdinal   = tensorBasisValues.getTensorComponentIndex(0, fieldIndex, dof);
+          const long long extrusionFieldOrdinal = tensorBasisValues.getTensorComponentIndex(1, fieldIndex, dof);
+          const double & spatialBasisValue   = spatialValues(spatialFieldOrdinal,physicalPointOrdinal);
+          const double & extrusionBasisValue = extrusionValues(extrusionFieldOrdinal,extrusionPointOrdinal);
+          view(physicalCellOrdinalInBasisCache,physicalPointOrdinal,extrusionPointOrdinal) += spatialBasisValue * extrusionBasisValue * weight;
+        }
+      });
+    }
+  }
+
   void SolutionMomentFunction::values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache)
   {
     TEUCHOS_FUNC_TIME_MONITOR("SolutionMomentFunction values()");

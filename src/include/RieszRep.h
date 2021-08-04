@@ -158,6 +158,8 @@ public:
     return Teuchos::rcp(new RepFunction<Scalar>(_testID,_rep,OP_DIV));
   }
 
+  using TFunction<Scalar>::values;
+  
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     _rep->computeRepresentationValues(values, _testID, _op, basisCache);

@@ -146,6 +146,7 @@ public:
     ParametricSurface::basisWeightsForProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
   }
 
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     // sets values(_cellIndex,P,D)
@@ -222,12 +223,12 @@ public:
           if (d < spaceDim)
             values(_cellIndex,ptIndex,d) = 0.0;
           else if ((spaceTimeBasisCache != Teuchos::null) && (spaceTimeSideOrdinal == -1))
-            values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getPhysicalCubaturePoints()(_cellIndex,ptIndex,spaceDim);
+            values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getPhysicalCubaturePointsFC()(_cellIndex,ptIndex,spaceDim);
           else if ((spaceTimeBasisCache != Teuchos::null) && (spaceTimeSideOrdinal != -1))
           {
             if (spaceTimeBasisCache->cellTopology()->sideIsSpatial(spaceTimeSideOrdinal))
             {
-              values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getPhysicalCubaturePoints()(_cellIndex,ptIndex,spaceDim-1);
+              values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getPhysicalCubaturePointsFC()(_cellIndex,ptIndex,spaceDim-1);
             }
             else
             {
@@ -473,7 +474,7 @@ void MeshTransformationFunction::values(Camellia::FieldContainer<double> &values
   TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellTopology()->getDimension() != spaceDim, std::invalid_argument, "cellTopology dimension does not match the shape of the values container");
   if (_op == OP_VALUE)
   {
-    values = basisCache->getPhysicalCubaturePoints(); // identity
+    values = basisCache->getPhysicalCubaturePointsFC(); // identity
   }
   else if (_op == OP_DX)
   {

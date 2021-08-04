@@ -35,6 +35,7 @@ public:
     this->_time = time;
     _f->setTime(time);
   }
+  using TFunction<Scalar>::values;
   virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     _f->values(values, basisCache);
@@ -212,7 +213,6 @@ bool TBC<Scalar>::bcsImposed(int varID)
   {
     cout << "legacy BC subclasses must override bcsImposed().\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "legacy BC subclasses must override bcsImposed().");
-    return false; // unreachable
   }
   else
   {
@@ -227,14 +227,14 @@ void TBC<Scalar>::imposeBC(Camellia::FieldContainer<Scalar> &dirichletValues, Ca
   if (_legacyBCSubclass)
   {
     // by default, call legacy version:
-    // (basisCache->getPhysicalCubaturePoints() doesn't really return *cubature* points, but the boundary points
+    // (basisCache->getPhysicalCubaturePointsFC() doesn't really return *cubature* points, but the boundary points
     //  that we're interested in)
-    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePointsFC();
     imposeBC(varID,physicalPoints,unitNormals,dirichletValues,imposeHere);
   }
   else
   {
-    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    const Camellia::FieldContainer<double> & physicalPoints = basisCache->getPhysicalCubaturePointsFC();
 
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
@@ -250,9 +250,6 @@ void TBC<Scalar>::imposeBC(Camellia::FieldContainer<Scalar> &dirichletValues, Ca
                                 || ( imposeHere.rank() != 2  ),
                                 std::invalid_argument,
                                 "imposeHere dimensions should be (numCells,numPoints).");
-
-    TEUCHOS_TEST_FOR_EXCEPTION( spaceDim > 3, std::invalid_argument,
-                                "spaceDim > 3 not yet supported by imposeBC." );
 
     imposeHere.initialize(false);
     if ( _dirichletBCs.find(varID) == _dirichletBCs.end() )
@@ -292,7 +289,7 @@ template <typename Scalar>
 void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> imposeHere,
                            int varID, DeviceViewConst<Scalar> unitNormals, BasisCachePtr basisCache)
 {
-  Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePointsFC();
   
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
@@ -324,8 +321,8 @@ void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> 
   SpatialFilterPtr filter = bc.first;
   TFunctionPtr<Scalar> f = bc.second;
   
-  auto & points        = basisCache->getPhysicalCubaturePoints();
-  auto pointsView      = points.checkoutDeviceView();
+  auto & points   = basisCache->getPhysicalCubaturePointsFC();
+  auto pointsView = points.checkoutDeviceView();
   
   if (basisCache->isSideCache())
   {
@@ -336,20 +333,22 @@ void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> 
     if (isSpatialSide && filter->matchesSpatialSides())
     {
       filter->matchesPoints(imposeHere,pointsView);
+      points.checkinDeviceView(false); // false: don't deep copy to host (no changes to points)
       f->values(dirichletValues,ASSIGN,basisCache);
     }
     else if (!isSpatialSide && filter->matchesTemporalSides())
     {
       filter->matchesPoints(imposeHere,pointsView);
+      points.checkinDeviceView(false); // false: don't deep copy to host (no changes to points)
       f->values(dirichletValues,ASSIGN,basisCache);
     }
   }
   else
   {
     filter->matchesPoints(imposeHere,pointsView);
+    points.checkinDeviceView(false); // false: don't deep copy to host (no changes to points)
     f->values(dirichletValues,ASSIGN,basisCache);
   }
-  points.checkinDeviceView(false); // false: don't deep copy to host (no changes to points)
 }
 
 template <typename Scalar>

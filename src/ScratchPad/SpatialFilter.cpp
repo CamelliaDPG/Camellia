@@ -19,6 +19,7 @@ public:
   _compValueToMatch(compValueToMatch)
   {}
 
+  using SpatialFilter::matchesPoints;
   virtual void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     int    comp             = _comp;
@@ -32,6 +33,7 @@ public:
     });
   }
   
+  using SpatialFilter::matchesPoint;
   virtual bool matchesPoint(double x) override
   {
     if (_comp == 0)
@@ -70,6 +72,62 @@ public:
   
 };
 
+class SpatialFilterInflow : public SpatialFilter
+{
+  std::vector<FunctionPtr> _convectionComponents;
+public:
+  SpatialFilterInflow(std::vector<FunctionPtr> convectionComponents)
+  :
+  _convectionComponents(convectionComponents)
+  {}
+  
+  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) override
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(basisCache->getSpaceDim() != _convectionComponents.size(), std::invalid_argument, "length of convectionComponents does not match spatial dimension")
+    
+    // TODO: Kokkos implementation
+    const auto & normals = basisCache->getSideNormals(); // shape: C,P,D
+    
+    const int numCells  = normals.dimension(0);
+    const int numPoints = normals.dimension(1);
+    const int spaceDim  = normals.dimension(2);
+    FieldContainer<double> convectionComponentValues(normals.dimension(0),normals.dimension(1)); // C,P
+    FieldContainer<double> convectionDottedWithNormal(normals.dimension(0),normals.dimension(1)); // C,P
+    for (int d=0; d<spaceDim; d++)
+    {
+      const auto & convectionComponent = _convectionComponents[d];
+      convectionComponent->values(convectionComponentValues, basisCache);
+      for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
+      {
+        for (int pointOrdinal=0; pointOrdinal < numPoints; pointOrdinal++)
+        {
+          const auto & convectionValue = convectionComponentValues(cellOrdinal,pointOrdinal);
+          const auto & normalValue     = normals(cellOrdinal,pointOrdinal,d);
+          convectionDottedWithNormal(cellOrdinal,pointOrdinal) += convectionValue * normalValue;
+        }
+      }
+    }
+    
+    bool somePointMatches = false;
+    for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal < numPoints; pointOrdinal++)
+      {
+        const auto & convectionDottedWithNormalValue = convectionDottedWithNormal(cellOrdinal,pointOrdinal);
+        const bool matches = (convectionDottedWithNormalValue < 0);
+        pointsMatch(cellOrdinal,pointOrdinal) = matches;
+        if (matches) somePointMatches = true;
+      }
+    }
+    return somePointMatches;
+  }
+  
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Not supported");
+  }
+};
+
 class SpatialFilterMatchingT : public SpatialFilter
 {
   double _tol;
@@ -82,7 +140,8 @@ public:
     _matchSpatialSides = matchSpatialSides;
     _tol = tol;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double tToMatch  = _tToMatch;
     double tol       = _tol;
@@ -94,7 +153,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(t-tToMatch) < tol);
     });
   }
-  bool matchesPoint(double x, double t)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x, double t) override
   {
     if (abs(t-_tToMatch)<_tol)
     {
@@ -105,7 +165,7 @@ public:
       return false;
     }
   }
-  bool matchesPoint(double x, double y, double t)
+  bool matchesPoint(double x, double y, double t) override
   {
     if (abs(t-_tToMatch)<_tol)
     {
@@ -116,7 +176,7 @@ public:
       return false;
     }
   }
-  bool matchesPoint(double x, double y, double z, double t)
+  bool matchesPoint(double x, double y, double z, double t) override
   {
     if (abs(t-_tToMatch)<_tol)
     {
@@ -127,11 +187,11 @@ public:
       return false;
     }
   }
-  bool matchesSpatialSides()
+  bool matchesSpatialSides() override
   {
     return _matchSpatialSides;
   }
-  bool matchesTemporalSides()
+  bool matchesTemporalSides() override
   {
     return true;
   }
@@ -145,7 +205,8 @@ public:
   {
     _xToMatch = xToMatch;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double xToMatch = _xToMatch;
     auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
@@ -155,7 +216,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (x<xToMatch);
     });
   }
-  bool matchesPoint(double x)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x) override
   {
     if (x<_xToMatch)
     {
@@ -166,11 +228,11 @@ public:
       return false;
     }
   }
-  bool matchesPoint(double x, double y)
+  bool matchesPoint(double x, double y) override
   {
     return matchesPoint(x);
   }
-  bool matchesPoint(double x, double y, double z)
+  bool matchesPoint(double x, double y, double z) override
   {
     return matchesPoint(x);
   }
@@ -184,7 +246,8 @@ public:
   {
     _yToMatch = yToMatch;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double yToMatch = _yToMatch;
     auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
@@ -194,7 +257,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (y<yToMatch);
     });
   }
-  bool matchesPoint(double x, double y)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x, double y) override
   {
     if (y<_yToMatch)
     {
@@ -205,7 +269,7 @@ public:
       return false;
     }
   }
-  bool matchesPoint(double x, double y, double z)
+  bool matchesPoint(double x, double y, double z) override
   {
     return matchesPoint(x,y);
   }
@@ -219,7 +283,8 @@ public:
   {
     _zToMatch = zToMatch;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double zToMatch = _zToMatch;
     auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
@@ -229,7 +294,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (z<zToMatch);
     });
   }
-  bool matchesPoint(double x, double y, double z)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x, double y, double z) override
   {
     if (z<_zToMatch)
     {
@@ -250,7 +316,8 @@ public:
   {
     _xToMatch = xToMatch;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double xToMatch = _xToMatch;
     auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
@@ -260,7 +327,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (x>xToMatch);
     });
   }
-  bool matchesPoint(double x)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x) override
   {
     if (x>_xToMatch)
     {
@@ -271,11 +339,11 @@ public:
       return false;
     }
   }
-  bool matchesPoint(double x, double y)
+  bool matchesPoint(double x, double y) override
   {
     return matchesPoint(x);
   }
-  bool matchesPoint(double x, double y, double z)
+  bool matchesPoint(double x, double y, double z) override
   {
     return matchesPoint(x);
   }
@@ -289,7 +357,8 @@ public:
   {
     _yToMatch = yToMatch;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double yToMatch = _yToMatch;
     auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
@@ -299,7 +368,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (y>yToMatch);
     });
   }
-  bool matchesPoint(double x, double y)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x, double y) override
   {
     if (y>_yToMatch)
     {
@@ -310,7 +380,7 @@ public:
       return false;
     }
   }
-  bool matchesPoint(double x, double y, double z)
+  bool matchesPoint(double x, double y, double z) override
   {
     return matchesPoint(x,y);
   }
@@ -324,7 +394,8 @@ public:
   {
     _zToMatch = zToMatch;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double zToMatch = _zToMatch;
     auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
@@ -334,7 +405,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (z>zToMatch);
     });
   }
-  bool matchesPoint(double x, double y, double z)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x, double y, double z) override
   {
     if (z>_zToMatch)
     {
@@ -361,14 +433,14 @@ bool SpatialFilter::matchesPoint(double x)
 {
   cout << "matchesPoint(x) unimplemented.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x) unimplemented.");
-  return false;
+//  return false;
 }
 
 bool SpatialFilter::matchesPoint(double x, double y)
 {
   cout << "matchesPoint(x,y) unimplemented.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y) unimplemented.");
-  return false;
+//  return false;
 }
 
 bool SpatialFilter::matchesPoint(double x, double y, double z)
@@ -434,20 +506,19 @@ bool SpatialFilter::matchesPoint(const vector<double> &point)
   else
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point is of unsupported dimension.");
-    return false;
+//    return false;
   }
 }
 
 bool SpatialFilter::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePointsFC());
   //    cout << "points:\n" << *points;
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
   int spaceDim = points->dimension(2);
   TEUCHOS_TEST_FOR_EXCEPTION(numCells != pointsMatch.dimension(0), std::invalid_argument, "numCells do not match.");
   TEUCHOS_TEST_FOR_EXCEPTION(numPoints != pointsMatch.dimension(1), std::invalid_argument, "numPoints do not match.");
-  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > 3, std::invalid_argument, "matchesPoints supports 1D, 2D, and 3D only.");
   pointsMatch.initialize(false);
   bool somePointMatches = false;
   
@@ -464,14 +535,14 @@ bool SpatialFilter::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, B
     }
   }
   
+  vector<double> point(spaceDim);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
     {
-      vector<double> point;
       for (int d=0; d<spaceDim; d++)
       {
-        point.push_back((*points)(cellIndex,ptIndex,d));
+        point[d] = (*points)(cellIndex,ptIndex,d);
       }
       if (matchesPoint(point))
       {
@@ -486,6 +557,11 @@ bool SpatialFilter::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, B
 SpatialFilterPtr SpatialFilter::allSpace()
 {
   return Teuchos::rcp( new SpatialFilterUnfiltered );
+}
+
+SpatialFilterPtr SpatialFilter::inflowFilter(std::vector<FunctionPtr> convectionComponents)
+{
+  return Teuchos::rcp( new SpatialFilterInflow(convectionComponents) );
 }
 
 SpatialFilterPtr SpatialFilter::unionFilter(SpatialFilterPtr a, SpatialFilterPtr b)
@@ -646,7 +722,7 @@ bool SpatialFilterLogicalOr::matchesPoint(double x, double y, double z, double t
 
 void SpatialFilterLogicalOr::matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
 {
-  auto pointsMatch2 = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(pointsMatch);
+  auto pointsMatch2 = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(pointsMatch, "SpatialFilterLogicalOr::matchesPoints: pointsMatch2");
   Kokkos::deep_copy(pointsMatch2,false);
   
   _sf1->matchesPoints(pointsMatch, points);
@@ -664,7 +740,7 @@ void SpatialFilterLogicalOr::matchesPoints(DeviceView<bool> pointsMatch, DeviceV
 
 bool SpatialFilterLogicalOr::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePointsFC());
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
   Camellia::FieldContainer<bool> pointsMatch2(pointsMatch);
@@ -714,7 +790,7 @@ SpatialFilterLogicalAnd::SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFi
 
 void SpatialFilterLogicalAnd::matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
 {
-  auto pointsMatch2 = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(pointsMatch);
+  auto pointsMatch2 = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(pointsMatch, "SpatialFilterLogicalAnd::matchesPoints(): pointsMatch2");
   Kokkos::deep_copy(pointsMatch2,false);
   
   _sf1->matchesPoints(pointsMatch, points);
@@ -752,7 +828,7 @@ bool SpatialFilterLogicalAnd::matchesPoint(double x, double y, double z, double 
 
 bool SpatialFilterLogicalAnd::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePointsFC());
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
   Camellia::FieldContainer<bool> pointsMatch1(pointsMatch);
@@ -829,7 +905,7 @@ bool NegatedSpatialFilter::matchesPoint(double x, double y, double z, double t)
 
 bool NegatedSpatialFilter::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePointsFC());
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
   _filterToNegate->matchesPoints(pointsMatch,basisCache);

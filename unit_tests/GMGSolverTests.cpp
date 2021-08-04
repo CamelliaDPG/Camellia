@@ -141,7 +141,6 @@ namespace
         break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled spaceDim");
-        break;
     }
 //    cout << "rhs: " << f->displayString() << " * v\n";
 

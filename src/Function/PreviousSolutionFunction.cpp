@@ -149,7 +149,7 @@ void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &
       warningIssued = true;
     }
     // get the physicalPoints, and make a basisCache for each...
-    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePointsFC();
     Camellia::FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
@@ -185,7 +185,7 @@ void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &
         refPoint.resize(1,spaceDim);
         basisCacheOnePoint->setRefCellPointsFC(refPoint);
         //          cout << "refCellPoints:\n " << refPoint;
-        //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();
+        //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePointsFC();
         _solnExpression->evaluate(value, _soln, basisCacheOnePoint, applyCubatureWeights, _solnComponent, _stageNumber);
         //          cout << "value at point (" << point(0,0) << ", " << point(0,1) << ") = " << value(0,0) << endl;
         values(cellIndex,ptIndex) = value(0,0);

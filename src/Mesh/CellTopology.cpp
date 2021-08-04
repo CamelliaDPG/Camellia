@@ -129,13 +129,11 @@ unsigned CellTopology::convertHypercubeOrdinalToShardsNodeOrdinal(unsigned space
   case 0:
   case 1:
     return hypercubeOrdinal;
-    break;
   case 2:
     switch (hypercubeOrdinal)
     {
     case 0:
       return 0;
-      break;
     case 1:
       return 1;
     case 2:
@@ -150,7 +148,6 @@ unsigned CellTopology::convertHypercubeOrdinalToShardsNodeOrdinal(unsigned space
     {
     case 0:
       return 0;
-      break;
     case 1:
       return 1;
     case 2:
@@ -181,13 +178,11 @@ unsigned CellTopology::convertShardsNodeOrdinalToHypercubeOrdinal(unsigned space
   case 0:
   case 1:
     return shards_node_ord;
-    break;
   case 2:
     switch (shards_node_ord)
     {
     case 0:
       return 0;
-      break;
     case 1:
       return 1;
     case 2:
@@ -202,7 +197,6 @@ unsigned CellTopology::convertShardsNodeOrdinalToHypercubeOrdinal(unsigned space
     {
     case 0:
       return 0;
-      break;
     case 1:
       return 1;
     case 2:
@@ -224,6 +218,11 @@ unsigned CellTopology::convertShardsNodeOrdinalToHypercubeOrdinal(unsigned space
     break;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled shards_node_ord");
+}
+
+CellTopoPtr CellTopology::getBaseTopology() const
+{
+  return cellTopology(_shardsBaseTopology);
 }
 
 unsigned CellTopology::getTensorialDegree() const
@@ -260,7 +259,7 @@ unsigned CellTopology::getExtrudedSubcellOrdinal( const unsigned subcell_dim_in_
 
   if (_tensorialDegree==0)
   {
-    return -1;
+    return INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
   }
   else
   {

@@ -202,11 +202,10 @@ void SpaceTimeBasisCache::getSpaceTimeCubatureDegrees(ElementTypePtr spaceTimeTy
 
   set<int> trialIDs = spaceTimeTrial->getVarIDs();
 
-  int maxSpaceTrialDegree = 0, maxTimeTrialDegree = 0;
-
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "implementation incomplete");
 
   // TODO: finish this method
+//  int maxSpaceTrialDegree = 0, maxTimeTrialDegree = 0;
 //  for (set<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
 //    int trialID = *trialIt;
 //    const vector<int> *sides = &spaceTimeTrial->getSidesForVarID(trialID);
@@ -222,7 +221,7 @@ void SpaceTimeBasisCache::getSpaceTimeCubatureDegrees(ElementTypePtr spaceTimeTy
 //
 //  then, do the same thing for trial IDs
 
-//  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL);
+//  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = VOLUME_INTERIOR_SIDE_INDEX);
 }
 
 BasisCachePtr SpaceTimeBasisCache::getSpatialBasisCache()
@@ -678,7 +677,6 @@ Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op)
     return OP_VALUE;
   default:
     return op;
-    break;
   }
 }
 
@@ -700,11 +698,9 @@ Intrepid::EOperator SpaceTimeBasisCache::spaceOpForSizing(Camellia::EOperator op
   // rank-switching (0 to 1, 1 to 0) in 2D, rank-preserving in 3D:
   case OP_CURL:
     return Intrepid::OPERATOR_CURL;
-    break;
   // rank-preserving:
   default:
     return Intrepid::OPERATOR_VALUE;
-    break;
   }
 }
 
@@ -719,7 +715,6 @@ Camellia::EOperator SpaceTimeBasisCache::timeOp(Camellia::EOperator op)
     return OP_DX;
   default:
     return OP_VALUE;
-    break;
   }
 }
 

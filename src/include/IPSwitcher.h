@@ -30,23 +30,26 @@ class IPSwitcher : public IP
 public:
   IPSwitcher(IPPtr ip1, IPPtr ip2, double minH);
 
+  using IP::computeInnerProductMatrix;
+  
   void computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
                                  Teuchos::RCP<DofOrdering> dofOrdering,
-                                 Teuchos::RCP<BasisCache> basisCache);
+                                 Teuchos::RCP<BasisCache> basisCache) override;
 
   void computeInnerProductVector(Camellia::FieldContainer<double> &ipVector,
                                  VarPtr var, TFunctionPtr<double> fxn,
                                  Teuchos::RCP<DofOrdering> dofOrdering,
-                                 Teuchos::RCP<BasisCache> basisCache);
+                                 Teuchos::RCP<BasisCache> basisCache,
+                                 bool sumInto=false) override;
 
   double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
 
   // added by Jesse
   LinearTermPtr evaluate(map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart);
 
-  bool hasBoundaryTerms();
+  bool hasBoundaryTerms() override;
 
-  void printInteractions();
+  void printInteractions() override;
 };
 }
 

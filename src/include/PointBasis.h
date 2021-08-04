@@ -40,6 +40,7 @@ template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Ba
 public:
   PointBasis();
 
+  using Camellia::Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
                  const Intrepid::EOperator operatorType) const;
   

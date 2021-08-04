@@ -131,7 +131,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
   auto &sideRefPoints = basisCache->getRefCellPointsFC();
   
   // allPhysicalPoints is used cell-wise below for a sanity check
-  auto &allPhysicalPoints = basisCache->getPhysicalCubaturePoints();
+  auto &allPhysicalPoints = basisCache->getPhysicalCubaturePointsFC();
   
   int numPoints = sideRefPoints.dimension(0);
   int spaceDim  = _mesh->getDimension();
@@ -215,7 +215,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
         ancestralBasisCache->setRefCellPointsFC(mySideRefPoints, emptyQuadratureWeights, dummyQuadratureOrder, true);
         
         // now, the "physical" points in ancestral cache are the ones we want
-        mySideRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
+        mySideRefPoints = ancestralBasisCache->getPhysicalCubaturePointsFC();
         mySideRefPoints.resize(numPoints,sideDim); // strip cell dimension
         
         /*******  Determine ancestor's permutation of the side relative to neighbor ******/
@@ -262,7 +262,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
       std::vector<GlobalIndexType> cellIDs = {0}; // unused
       referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
       // now, the "physical" points are the ones we should use as ref points for the neighbor
-      Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
+      Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePointsFC();
       neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
       
       Camellia::FieldContainer<double> neighborCellNodes = _mesh->physicalCellNodesForCell(neighborCellID);
@@ -291,7 +291,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
         // Sanity check that the physical points agree:
         double tol = 1e-8;
         
-        Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePoints();
+        Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePointsFC();
         Camellia::FieldContainer<double> myPhysicalPoints(numPoints,spaceDim);
         // once we move to Kokkos, "myPhysicalPoints" here could be defined as a subview of allPhysicalPoints
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)

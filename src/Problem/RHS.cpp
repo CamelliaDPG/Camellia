@@ -93,7 +93,7 @@ void TRHS<Scalar>::integrateAgainstStandardBasis(Camellia::FieldContainer<Scalar
 
     CellTopoPtr cellTopo = basisCache->cellTopology();
 
-    unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    unsigned numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
     unsigned spaceDim = cellTopo->getDimension();
 
     TEUCHOS_TEST_FOR_EXCEPTION( ( testOrdering->totalDofs() != rhsVector.dimension(1) ),
@@ -129,9 +129,9 @@ void TRHS<Scalar>::integrateAgainstStandardBasis(Camellia::FieldContainer<Scalar
           Teuchos::RCP< const Camellia::FieldContainer<Scalar> > testValuesTransformedWeighted;
 
           testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
-          Camellia::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
+          Camellia::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePointsFC();
 
-          vector<int> testDofIndices = testOrdering->getDofIndices(testID,VOLUME_INTERIOR_SIDE_ORDINAL);
+          vector<int> testDofIndices = testOrdering->getDofIndices(testID,VOLUME_INTERIOR_SIDE_INDEX);
 
           this->rhs(testID,operatorIndex,basisCache,rhsPointValues);
 
@@ -182,7 +182,7 @@ void TRHS<Scalar>::integrateAgainstOptimalTests(Camellia::FieldContainer<Scalar>
                               "optimalTestWeights.dimension(1) (=" << optimalTestWeights.dimension(1) << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
 
   // can represent this as the multiplication of optTestWeights matrix against the standard-basis RHS vector
-  unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  unsigned numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
 
   unsigned numTrialDofs = optimalTestWeights.dimension(1);
   unsigned numTestDofs = testOrdering->totalDofs();
@@ -219,7 +219,7 @@ vector<Camellia::EOperator> TRHS<Scalar>::operatorsForTestID(int testID)
 template <typename Scalar>
 void TRHS<Scalar>::rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, Camellia::FieldContainer<Scalar> &values)
 {
-  rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePoints(), values);
+  rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePointsFC(), values);
 }
 
 template <typename Scalar>

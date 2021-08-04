@@ -29,6 +29,8 @@ public:
   virtual Scalar value(double x, double y);
   virtual Scalar value(double x, double y, double z);
   virtual Scalar value(double x, double y, double z, double t);
+  
+  using TFunction<Scalar>::values;
   virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 };
 }

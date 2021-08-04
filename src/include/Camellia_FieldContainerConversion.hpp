@@ -35,11 +35,11 @@ namespace Camellia {
   template<class Scalar>
   class FieldContainerConversion
   {
-    using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-    using BasisValues   = Intrepid2::BasisValues<Scalar,ExecSpaceType>;
-    using TensorData    = Intrepid2::TensorData<Scalar,ExecSpaceType>;
-    using TensorPoints  = Intrepid2::TensorPoints<Scalar,ExecSpaceType>;
-    using DynRankView   = Kokkos::DynRankView<Scalar,ExecSpaceType>;
+    using BasisValues   = Intrepid2::BasisValues<Scalar,DeviceType>;
+    using TensorData    = Intrepid2::TensorData<Scalar,DeviceType>;
+    using Data          = Intrepid2::Data<Scalar,DeviceType>;
+    using TensorPoints  = Intrepid2::TensorPoints<Scalar,DeviceType>;
+    using DynRankView   = Kokkos::DynRankView<Scalar,DeviceType>;
   private:
     template<class ViewLikeContainer, int rank>
     static Camellia::FieldContainer<Scalar, 0> fromDeviceContainerWithRank(ViewLikeContainer &viewLikeContainer)
@@ -56,7 +56,7 @@ namespace Camellia {
       
       auto deviceView = fc.checkoutDeviceView(false); // false: don't deep copy from host
       
-      deepCopy<DeviceView,ViewLikeContainer,rank>(deviceView, viewLikeContainer);
+      deepCopy<rank,DeviceView,ViewLikeContainer>(deviceView, viewLikeContainer);
       fc.checkinDeviceView(true); // true: do deep copy to host
       return fc;
     }
@@ -134,12 +134,38 @@ namespace Camellia {
       return fromDeviceContainer(view);
     }
     
+    static TensorData toTensorData(Camellia::FieldContainer<Scalar, 0> &dataFC)
+    {
+      // we allow empty/invalid containers here; for FCs, this is indicated by having size 0
+      if (dataFC.size() == 0)
+      {
+        return TensorData();
+      }
+      
+      // dataFC has shape (P)
+      auto deviceView = dataFC.checkoutDeviceView(true); // true: deep copy from host
+      auto dataView = Allocation<Scalar>::allocateDeviceViewMatchingView(deviceView);
+      Kokkos::deep_copy(dataView,deviceView);
+      // the following deallocation record is a cheat: since dataView is wrapped in TensorData (which is Intrepid2), we don't have a great hook for determining when it goes out of scope and the deallocation is about to occur.  Ultimately, usage of this conversion method will be replaced by native Intrepid2 methods, which probably will do their own allocations, not necessarily recorded by Camellia.
+      Allocation<Scalar>::recordDeviceViewDeallocation(dataView);
+      
+      // Under CUDA, layouts may differ between Intrepid2 ScalarView and Camellia Device View; the following allocates a Scalar View and copies the data.
+      // This serves to underscore the point that all these conversion methods are conveniences, and necessarily represent inefficiencies.  We should use
+      // Intrepid2 (or compatible) containers in all performance-critical portions of the code.
+      auto dataViewIntrepid2 = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(dataView);
+      deepCopy(dataViewIntrepid2, dataView);
+      
+      auto data = Data(dataViewIntrepid2);
+      return TensorData(data); // will have trivial tensor product structure
+    }
+    
     static TensorPoints toTensorPoints(Camellia::FieldContainer<Scalar, 0> &pointsFC)
     {
       // pointsFC is shape (P,D)
       auto deviceView = pointsFC.checkoutDeviceView(true); // true: deep copy from host
       auto pointsView = Allocation<Scalar>::allocateDeviceViewMatchingView(deviceView);
       Kokkos::deep_copy(pointsView,deviceView);
+      pointsFC.checkinDeviceView(false); // false: don't deep copy back to host (no change)
       // the following deallocation record is a cheat: since pointsView is wrapped in TensorPoints (which is Intrepid2), we don't have a great hook for determining when it goes out of scope and the deallocation is about to occur.  Ultimately, usage of this conversion method will be replaced by native Intrepid2 methods, which probably will do their own allocations, not necessarily recorded by Camellia.
       Allocation<Scalar>::recordDeviceViewDeallocation(pointsView);
       
@@ -151,7 +177,7 @@ namespace Camellia {
       return TensorPoints(pointsViewIntrepid2); // will have trivial tensor product structure
     }
     
-    static Intrepid2::ScalarView<double, ExecSpaceType> toScalarView(Camellia::FieldContainer<Scalar, 0> &fc)
+    static Intrepid2::ScalarView<double, DeviceType> toScalarView(Camellia::FieldContainer<Scalar, 0> &fc)
     {
       auto deviceView = fc.checkoutDeviceView(true); // true: deep copy from host
       auto scalarView = Allocation<Scalar>::allocateDeviceViewMatchingView(deviceView);

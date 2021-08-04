@@ -48,6 +48,53 @@ TLinearTermPtr<Scalar> SumFunction<Scalar>::jacobian(const map<int, TFunctionPtr
 }
 
 template <typename Scalar>
+int SumFunction<Scalar>::numVectorComponents() const
+{
+  if (this->rank() == 0)
+  {
+    return 0;
+  }
+  else
+  {
+    const int f1Components = _f1->numVectorComponents();
+    const int f2Components = _f2->numVectorComponents();
+    return std::max(f1Components, f2Components);
+  }
+}
+
+template <typename Scalar>
+std::vector<Intrepid2::DimensionInfo> SumFunction<Scalar>::valuesDataDims(BasisCachePtr basisCache)
+{
+  auto f1Dims = _f1->valuesDataDims(basisCache);
+  auto f2Dims = _f2->valuesDataDims(basisCache);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(f1Dims.size() != f2Dims.size(), std::invalid_argument, "summands do not have like rank!");
+  
+  const int numDims = f1Dims.size();
+  std::vector<Intrepid2::DimensionInfo> combinedDims(numDims);
+  for (int d=0; d<numDims; d++)
+  {
+    combinedDims[d] = Intrepid2::combinedDimensionInfo(f1Dims[d], f2Dims[d]);
+  }
+  return combinedDims;
+}
+
+template <typename Scalar>
+void SumFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache)
+{
+  auto f1Data = _f1->checkoutValuesData(basisCache);
+  auto f2Data = _f2->checkoutValuesData(basisCache);
+  
+  _f1->values(f1Data,basisCache);
+  _f2->values(f2Data,basisCache);
+  
+  values.storeInPlaceSum(f1Data, f2Data);
+  
+  _f1->checkinValuesData(f1Data);
+  _f2->checkinValuesData(f2Data);
+}
+
+template <typename Scalar>
 void SumFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType,  BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("SumFunction values()");

@@ -136,7 +136,7 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   cout << "coarse side index: " << coarseSideIndex << endl;
   cout << "coarse nodes:\n" << coarseCellNodes;
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matching permutation not found");
-  return -1; // just for compilers that would otherwise warn that we're missing a return value...
+//  return -1; // just for compilers that would otherwise warn that we're missing a return value...
 }
 
 SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliationWeights(const SubBasisReconciliationWeights &aWeights,
@@ -313,7 +313,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   // figure out ancestralSubcellOrdinal
   unsigned ancestralSubcellOrdinal = RefinementPattern::ancestralSubcellOrdinal(refinements, subcellDimension, finerBasisSubcellOrdinal);
 
-  if (ancestralSubcellOrdinal == -1)
+  if (ancestralSubcellOrdinal == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL)
   {
     cout << "ancestralSubcellOrdinal not found!\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ancestralSubcellOrdinal not found!");
@@ -390,7 +390,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     }
 
     // now, fineSubcellCache's physicalCubaturePoints are exactly the ones in the ancestral subcell
-    Camellia::FieldContainer<double> ancestralSubcellCubaturePoints = fineSubcellCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> ancestralSubcellCubaturePoints = fineSubcellCache->getPhysicalCubaturePointsFC();
     ancestralSubcellCubaturePoints.resize(ancestralSubcellCubaturePoints.dimension(1), ancestralSubcellCubaturePoints.dimension(2)); // get rid of cellIndex dimension
 
     // now, we need first to map the ancestralSubcellCubaturePoints to the subcell as seen by the coarse neigbor, then to map those points into the coarse volume topology
@@ -407,7 +407,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     coarseSubcellNodes.resize(1,coarseSubcellNodes.dimension(0),coarseSubcellNodes.dimension(1));
 
     ancestralSubcellCache->setPhysicalCellNodes(coarseSubcellNodes, vector<GlobalIndexType>(), false);
-    Camellia::FieldContainer<double> coarseSubcellCubaturePoints = ancestralSubcellCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> coarseSubcellCubaturePoints = ancestralSubcellCache->getPhysicalCubaturePointsFC();
     coarseSubcellCubaturePoints.resize(coarseSubcellCubaturePoints.dimension(1),coarseSubcellCubaturePoints.dimension(2));
 
     coarseVolumeCubaturePoints.resize(numPoints,spaceDim); // points at which the coarse basis will be evaluated
@@ -582,8 +582,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       coarseCellTopo, coarseSubcellDimension, coarserBasis,
       coarseSubcellOrdinalInCoarseDomain, coarseDomainOrdinalInCoarseCellTopo, coarseSubcellPermutation);
 
-//  cout << "fineDomainCache->getPhysicalCubaturePoints():\n" << fineDomainCache->getPhysicalCubaturePoints();
-//  cout << "coarseDomainCache->getPhysicalCubaturePoints():\n" << coarseDomainCache->getPhysicalCubaturePoints();
+//  cout << "fineDomainCache->getPhysicalCubaturePointsFC():\n" << fineDomainCache->getPhysicalCubaturePointsFC();
+//  cout << "coarseDomainCache->getPhysicalCubaturePointsFC():\n" << coarseDomainCache->getPhysicalCubaturePointsFC();
 
 //  cout << "fineDomainCache->getRefCellPointsFC():\n" << fineDomainCache->getRefCellPointsFC();
 //  cout << "coarseDomainCache->getRefCellPointsFC():\n" << coarseDomainCache->getRefCellPointsFC();
@@ -591,7 +591,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 //  cout << "fineDomainCache->getPhysicalCellNodes():\n" << fineDomainCache->getPhysicalCellNodes();
 //  cout << "coarseDomainCache->getPhysicalCellNodes():\n" << coarseDomainCache->getPhysicalCellNodes();
 
-  int numPoints = fineDomainCache->getPhysicalCubaturePoints().dimension(1); // (C,P,D): 1 is the points dimension
+  int numPoints = fineDomainCache->getPhysicalCubaturePointsFC().dimension(1); // (C,P,D): 1 is the points dimension
 
   Teuchos::RCP< const Camellia::FieldContainer<double> > finerBasisValues = fineDomainCache->getTransformedValues(finerBasis, OP_VALUE, false);
   Teuchos::RCP< const Camellia::FieldContainer<double> > finerBasisValuesWeighted = fineDomainCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
@@ -1291,7 +1291,6 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
   default:
     cout << "ERROR: Unhandled functionSpace in BasisReconciliation.";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
-    break;
   }
   return minSubcellDimension;
 }

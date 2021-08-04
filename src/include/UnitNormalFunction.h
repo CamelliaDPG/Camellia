@@ -33,7 +33,11 @@ public:
 
   bool boundaryValueOnly() override;
   string displayString() override;
+  
+  using TFunction<double>::values;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
+  int numVectorComponents() const override;
 };
 }
 

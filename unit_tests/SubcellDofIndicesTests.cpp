@@ -25,7 +25,7 @@ namespace
   {
     int dataSize = scDofIndices.dataSize();
     // allocate a buffer 3x that, initialized with -3
-    vector<char> dataBuffer(3*dataSize,-3);
+    vector<char> dataBuffer(3*dataSize,char(-3));
     char* dataLocation = &dataBuffer[0];
     scDofIndices.write(dataLocation, dataSize);
     int bytesWritten = dataLocation - &dataBuffer[0];
