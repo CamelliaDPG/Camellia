@@ -20,6 +20,7 @@
 #include "BF.h"
 #include "GMGSolver.h"
 #include "PhasePhysicalMeshMap.h"
+#include "PoissonFormulation.h"
 #include "QuadraturePointFunction.h"
 #include "SolutionMomentFunction.h"
 #include "SolutionStage.h"
@@ -41,6 +42,8 @@ public:
   };
 private:
   Boltzmann1D3VFormulationChoice _formulationChoice;
+  
+  Teuchos::RCP<PoissonFormulation> _poissonForm; // used by Gauss
   
   BFPtr _boltzmannBF;
   BFPtr _gaussBF;
@@ -109,7 +112,8 @@ public:
   // traces:
   VarPtr f_hat(); // Boltzmann
   VarPtr t_n_hat(); // Boltzmann
-  VarPtr E_hat();   // Gauss
+  VarPtr E_hat();   // Gauss electric field trace
+  VarPtr VE_hat();  // Gauss electric potential trace
 
   // test variables:
   VarPtr w();   // Boltzmann
