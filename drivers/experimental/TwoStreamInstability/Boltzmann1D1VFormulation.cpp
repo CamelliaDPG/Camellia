@@ -652,7 +652,27 @@ _formulationChoice(formulationChoice)
 //    gaussBC->addDirichlet(E_hat, SpatialFilter::matchingX(x0), Function::zero());
     if (usePeriodicBCs)
     {
-      gaussBC->addSpatialPointBC(_poissonForm->u_hat()->ID(), 0.0, {x0});
+      // create an empty entity set.  In higher dimensions, this could be an edge or face; on refinement,
+      // the entity set contains the descendants of the original.
+      EntitySetPtr x0EntitySet = intervalMeshTopology->createEntitySet();
+      
+      // vertex lookup.  There are quite a few ways to look up entities in the MeshTopology.
+      IndexType x0Vertex;
+      bool x0Found = intervalMeshTopology->getVertexIndex({x0}, x0Vertex);
+      TEUCHOS_TEST_FOR_EXCEPTION(!x0Found, std::invalid_argument, "x0 not found");
+      
+      x0EntitySet->addEntity(0, x0Vertex); // add entity of dimension 0 with ID x0Vertex to the entity set.
+      
+      // choose an arbitrary tag ID for this BC.  We could have multiple entity sets for a given tag,
+      // as well as multiple tags for an entity set.  MeshTopology maintains the connection between
+      // tags and entity sets; it's our responsibility to set tag IDs.
+      // Tag *names*, on the other hand, indicate a type or category.  The constant DIRICHLET_SET_TAG_NAME
+      // is for Dirichlet BCs, and this is used during BC imposition; if a tag is applied to MeshTopology with some
+      // other name, it will be ignored during BC imposition.
+      const int GAUSS_TAG_X0 = 0;
+      intervalMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, GAUSS_TAG_X0, x0EntitySet); // DIRICHLET_SET_TAG_NAME is required; otherwise the BC will not be imposed…
+      
+      gaussBC->addDirichlet(this->VE_hat(), GAUSS_TAG_X0, Function::constant(0.0));
     }
     else
     {
