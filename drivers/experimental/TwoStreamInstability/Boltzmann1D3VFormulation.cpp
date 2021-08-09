@@ -521,29 +521,12 @@ _formulationChoice(formulationChoice)
 
     // tests
     VarPtr w;   // Boltzmann test function
-    VarPtr tau; // Gauss
-
-    VarFactoryPtr gaussVF = VarFactory::varFactory();
     
-    Ex = gaussVF->fieldVar(S_E, ESpace);
-    if (spaceDim == 1)
-    {
-      auto fluxWeight = Function::normal_1D() * Function::sideParity(); // for "termTraced" argument below
-      Ex_hat = gaussVF->fluxVar(S_E_HAT, Ex * fluxWeight, E_hat_space);
-    }
-    else
-    {
-      Ex_hat = gaussVF->traceVar(S_E_HAT, Ex, E_hat_space);
-    }
-    tau   = gaussVF->testVar(S_TAU, tauSpace);
+    _poissonForm = Teuchos::rcp(new PoissonFormulation(spaceDim,true,PoissonFormulation::ULTRAWEAK));
+    _gaussBF = _poissonForm->bf();
+    Ex       = _poissonForm->sigma(); // the negative gradient of the potential
+    Ex_hat = _poissonForm->sigma_n_hat();
     
-    _gaussBF = BF::bf(gaussVF);
-    if (spaceDim == 1)
-      _gaussBF->addTerm(-Ex, tau->dx());
-    else
-      _gaussBF->addTerm(-Ex, tau->grad());
-    
-    _gaussBF->addTerm(Ex_hat, tau);
     Epetra_CommPtr comm = Teuchos::null;
     const bool allowPruning = false;
     MeshPtr gaussMesh = MeshFactory::minRuleMesh(intervalMeshTopology, _gaussBF, H1Order, delta_k, comm, allowPruning);
@@ -624,14 +607,13 @@ _formulationChoice(formulationChoice)
     _f_velocityIntegral = Teuchos::rcp( new SolutionMomentFunction(_boltzmannSoln, f, 0, _gaussSoln->mesh(), -1) );
     
     // set RHS for the two problems
-    auto gaussRHS = RHS::rhs();
     // casts to allow FunctionPtr overloads to be used:
     auto qFunction = FunctionPtr(_q);
     auto mFunction = FunctionPtr(_m);
     auto epsFxn = FunctionPtr(_eps0);
     auto n0Fxn  = FunctionPtr(_n0); // _n0 will be initialized when initial values are specified
     auto f_velocityIntegralFxn = FunctionPtr(_f_velocityIntegral);
-    gaussRHS->addTerm(qFunction / epsFxn * (f_velocityIntegralFxn - n0Fxn) * tau);
+    auto gaussRHS = _poissonForm->rhs(qFunction / epsFxn * (f_velocityIntegralFxn - n0Fxn));
     _gaussSoln->setRHS(gaussRHS);
     
     auto boltzmannRHS = RHS::rhs();
@@ -699,7 +681,16 @@ _formulationChoice(formulationChoice)
     _boltzmannSoln->setBC(boltzmannBC);
     
     auto gaussBC = BC::bc();
-    gaussBC->addSpatialPointBC(Ex_hat->ID(), 0.0, {x0}); // this does a vertex lookup, basically; we can't impose standard Dirichlet BCs at periodic boundaries...
+    //    gaussBC->addDirichlet(E_hat, SpatialFilter::matchingX(x0), Function::zero());
+    if (usePeriodicBCs)
+    {
+      gaussBC->addSpatialPointBC(_poissonForm->u_hat()->ID(), 0.0, {x0});
+    }
+    else
+    {
+      gaussBC->addDirichlet(_poissonForm->u_hat(), SpatialFilter::matchingX(x0), Function::zero()); // pin the potential to 0 at x0
+      gaussBC->addDirichlet(_poissonForm->u_hat(), SpatialFilter::matchingX(x0+xWidth), Function::zero()); // pin the potential to 0 at x0+xWidth
+    }
     _gaussSoln->setBC(gaussBC);
   }
   else
@@ -757,14 +748,12 @@ bool Boltzmann1D3VFormulation::hasL2Trace() const {
 
 VarPtr Boltzmann1D3VFormulation::E()
 {
-  VarFactoryPtr vf = _gaussBF->varFactory();
-  return vf->trialVar(S_E);
+  return _poissonForm->sigma();
 }
 
 VarPtr Boltzmann1D3VFormulation::E_hat()
 {
-  VarFactoryPtr vf = _gaussBF->varFactory();
-  return vf->trialVar(S_E_HAT);
+  return _poissonForm->sigma_n_hat();
 }
 
 Teuchos::RCP<PhasePhysicalMeshMap> Boltzmann1D3VFormulation::phaseSpacePhysicalMeshMap()
@@ -917,14 +906,6 @@ void Boltzmann1D3VFormulation::updateElectricField()
   // solve for E, E_hat:
   _gaussSoln->solve();
   
-  // post-process to make E have a zero mean:
-  FunctionPtr E_soln = Function::solution(E(), _gaussSoln);
-  double E_avg = E_soln->integrate(_gaussSoln->mesh()) / _gaussMeshMeasure;
-  std::map<int,FunctionPtr> projectionMap;
-  projectionMap[E()->ID()] = E_soln - E_avg;
-  projectionMap[E_hat()->ID()] = E_soln - E_avg;
-  _gaussSoln->projectOntoMesh(projectionMap);
-  
   static_cast<VelocitySpaceExtrusion1D3V*>(_Ex_extruded.get())->updateValues();
 }
 
@@ -950,6 +931,11 @@ VarPtr Boltzmann1D3VFormulation::t_n_hat()
 {
   VarFactoryPtr vf = _boltzmannSoln->bf()->varFactory();
   return vf->trialVar(S_T_N_HAT);
+}
+
+VarPtr Boltzmann1D3VFormulation::VE_hat()
+{
+  return _poissonForm->u_hat();
 }
 
 // below, we set up unit tests against the private classes above
