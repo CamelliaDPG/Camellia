@@ -19,7 +19,7 @@ AnisotropicRefinementStrategy<Scalar>::AnisotropicRefinementStrategy(TSolutionPt
   this->_relativeErrorThreshold = relativeEnergyThreshold;
   this->_enforceOneIrregularity = true;
   _anisotropicThreshhold = 10.0;
-  _maxAspectRatio = 2^5; // five anisotropic refinements of an element
+  _maxAspectRatio = 1 << 5; // five anisotropic refinements of an element
   this->_min_h = min_h;
   this->_preferPRefinements = preferPRefinements;
   this->_max_p = max_p;
@@ -34,7 +34,7 @@ AnisotropicRefinementStrategy<Scalar>::AnisotropicRefinementStrategy(MeshPtr mes
   this->_relativeErrorThreshold = relativeEnergyThreshold;
   this->_enforceOneIrregularity = true;
   _anisotropicThreshhold = 10.0;
-  _maxAspectRatio = 2^5; // five anisotropic refinements of an element
+  _maxAspectRatio = 1 << 5; // five anisotropic refinements of an element
   this->_min_h = min_h;
   this->_preferPRefinements = preferPRefinements;
   this->_max_p = max_p;
