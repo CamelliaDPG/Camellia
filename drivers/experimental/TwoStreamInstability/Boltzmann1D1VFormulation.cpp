@@ -420,7 +420,8 @@ Boltzmann1D1VFormulation::Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoic
                                                    const int H1Order, const int delta_k, const bool usePeriodicBCs,
                                                    ERKTableauPtr erkTableau, const int numUniformRefinements)
 :
-_formulationChoice(formulationChoice)
+_formulationChoice(formulationChoice),
+_usePeriodicBCs(usePeriodicBCs)
 {
 //  {
 //    double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
@@ -639,45 +640,84 @@ _formulationChoice(formulationChoice)
     }
     _boltzmannSoln->setIP(boltzmannTestNorm);
     
-    // set BCs
-    // set homogeneous conditions on the v boundaries
-    // if we are not periodic in x, then the user must add conditions for left and right boundaries
-    auto boltzmannBC = BC::bc();
-    auto traceVar = l2Trace ? t_n_hat : f_hat;
-    boltzmannBC->addDirichlet(traceVar, SpatialFilter::matchingY(v0),        Function::zero());
-    boltzmannBC->addDirichlet(traceVar, SpatialFilter::matchingY(v0+vWidth), Function::zero());
-    _boltzmannSoln->setBC(boltzmannBC);
-    
-    auto gaussBC = BC::bc();
-//    gaussBC->addDirichlet(E_hat, SpatialFilter::matchingX(x0), Function::zero());
-    if (usePeriodicBCs)
+    // create entity sets for BCs:
     {
+      // 1D mesh entity sets:
       // create an empty entity set.  In higher dimensions, this could be an edge or face; on refinement,
       // the entity set contains the descendants of the original.
       EntitySetPtr x0EntitySet = intervalMeshTopology->createEntitySet();
+      EntitySetPtr x1EntitySet = intervalMeshTopology->createEntitySet();
       
       // vertex lookup.  There are quite a few ways to look up entities in the MeshTopology.
       IndexType x0Vertex;
       bool x0Found = intervalMeshTopology->getVertexIndex({x0}, x0Vertex);
       TEUCHOS_TEST_FOR_EXCEPTION(!x0Found, std::invalid_argument, "x0 not found");
       
-      x0EntitySet->addEntity(0, x0Vertex); // add entity of dimension 0 with ID x0Vertex to the entity set.
+      IndexType x1Vertex;
+      bool x1Found = intervalMeshTopology->getVertexIndex({x0+xWidth}, x1Vertex);
+      TEUCHOS_TEST_FOR_EXCEPTION(!x1Found, std::invalid_argument, "x1 not found");
       
-      // choose an arbitrary tag ID for this BC.  We could have multiple entity sets for a given tag,
-      // as well as multiple tags for an entity set.  MeshTopology maintains the connection between
-      // tags and entity sets; it's our responsibility to set tag IDs.
-      // Tag *names*, on the other hand, indicate a type or category.  The constant DIRICHLET_SET_TAG_NAME
-      // is for Dirichlet BCs, and this is used during BC imposition; if a tag is applied to MeshTopology with some
-      // other name, it will be ignored during BC imposition.
-      const int GAUSS_TAG_X0 = 0;
-      intervalMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, GAUSS_TAG_X0, x0EntitySet); // DIRICHLET_SET_TAG_NAME is required; otherwise the BC will not be imposed…
+      x0EntitySet->addEntity(0, x0Vertex); // add entity of dimension 0 with ID x0Vertex to the x0 entity set.
+      x1EntitySet->addEntity(0, x1Vertex); // add entity of dimension 0 with ID x1Vertex to the x1 entity set.
       
+      intervalMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, GAUSS_TAG_X0, x0EntitySet);
+      intervalMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, GAUSS_TAG_X1, x1EntitySet);
+    }
+    {
+      // 2D mesh entity sets:
+      auto bottomSideSet = extrudedMeshTopology->createEntitySet();
+      std::vector<IndexType> bottomSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(SpatialFilter::matchingY(v0));
+      for (const auto & bottomSideIndex : bottomSideIndices)
+      {
+        bottomSideSet->addEntity(1, bottomSideIndex);
+      }
+      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, BOLTZMANN_TAG_VMIN, bottomSideSet);
+      auto topSideSet = extrudedMeshTopology->createEntitySet();
+      std::vector<IndexType> topSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(SpatialFilter::matchingY(v0+vWidth));
+      for (const auto & topSideIndex : topSideIndices)
+      {
+        topSideSet->addEntity(1, topSideIndex);
+      }
+      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, BOLTZMANN_TAG_VMAX, topSideSet);
+      
+      SpatialFilterPtr inflowLeftFilter  = SpatialFilter::matchingX(x0)          & SpatialFilter::greaterThanOrEqualToY(0.0);
+      SpatialFilterPtr inflowRightFilter = SpatialFilter::matchingX(x0 + xWidth) & SpatialFilter::lessThanOrEqualToY   (0.0);
+      
+      auto inflowLeftSideSet = extrudedMeshTopology->createEntitySet();
+      std::vector<IndexType> inflowLeftSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(inflowLeftFilter);
+      for (const auto & leftSideIndex : inflowLeftSideIndices)
+      {
+        inflowLeftSideSet->addEntity(1, leftSideIndex);
+      }
+      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, BOLTZMANN_TAG_INFLOW_LEFT, inflowLeftSideSet);
+      auto inflowRightSideSet = extrudedMeshTopology->createEntitySet();
+      std::vector<IndexType> inflowRightSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(inflowRightFilter);
+      for (const auto & inflowRightSideIndex : inflowRightSideIndices)
+      {
+        inflowRightSideSet->addEntity(1, inflowRightSideIndex);
+      }
+      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, BOLTZMANN_TAG_INFLOW_RIGHT, inflowRightSideSet);
+    }
+
+    // set BCs
+    // set homogeneous conditions on the v boundaries
+    // if we are not periodic in x, then the user must add conditions for left and right boundaries
+    auto boltzmannBC = BC::bc();
+    auto traceVar = l2Trace ? t_n_hat : f_hat;
+    boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_VMIN, Function::zero());
+    boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_VMAX, Function::zero());
+    _boltzmannSoln->setBC(boltzmannBC);
+    
+    auto gaussBC = BC::bc();
+    
+    if (usePeriodicBCs)
+    {
       gaussBC->addDirichlet(this->VE_hat(), GAUSS_TAG_X0, Function::constant(0.0));
     }
     else
     {
-      gaussBC->addDirichlet(_poissonForm->u_hat(), SpatialFilter::matchingX(x0), Function::zero()); // pin the potential to 0 at x0
-      gaussBC->addDirichlet(_poissonForm->u_hat(), SpatialFilter::matchingX(x0+xWidth), Function::zero()); // pin the potential to 0 at x0+xWidth
+      gaussBC->addDirichlet(this->VE_hat(), GAUSS_TAG_X0, Function::constant(0.0)); // pin the potential to 0 at x0
+      gaussBC->addDirichlet(this->VE_hat(), GAUSS_TAG_X1, Function::constant(0.0)); // pin the potential to 0 at x0+xWidth
     }
     _gaussSoln->setBC(gaussBC);
     
@@ -769,14 +809,42 @@ Teuchos::RCP<PhasePhysicalMeshMap> Boltzmann1D1VFormulation::phaseSpacePhysicalM
   return _phaseSpacePhysicalMeshMap;
 }
 
-void Boltzmann1D1VFormulation::setBoltzmannBCs(BCPtr bc)
+void Boltzmann1D1VFormulation::setBoltzmannInflow(FunctionPtr f_left, FunctionPtr f_right)
 {
-  _boltzmannSoln->setBC(bc);
+  TEUCHOS_TEST_FOR_EXCEPTION(_usePeriodicBCs, std::invalid_argument, "setting inflow BCs is not allowed for periodic meshes");
+
+  auto boltzmannBC = BC::bc();
+  const bool l2Trace = hasL2Trace();
+  VarPtr traceVar = l2Trace ? this->t_n_hat() : this->f_hat();
+  boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_VMIN, Function::zero());
+  boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_VMAX, Function::zero());
+  
+  if (l2Trace)
+  {
+    FunctionPtr v = Function::yn(1);
+    FunctionPtr leftTrace  = - f_left * v; // minus sign is thanks to outward normal
+    FunctionPtr rightTrace =  f_right * v;
+    boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_INFLOW_LEFT,   leftTrace);
+    boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_INFLOW_RIGHT, rightTrace);
+  }
+  else
+  {
+    boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_INFLOW_LEFT,   f_left);
+    boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_INFLOW_RIGHT, f_right);
+  }
+  _boltzmannSoln->setBC(boltzmannBC);
 }
 
-void Boltzmann1D1VFormulation::setGaussBCs(BCPtr bc)
+void Boltzmann1D1VFormulation::setGaussBCs(FunctionPtr VE_left, FunctionPtr VE_right)
 {
-  _gaussSoln->setBC(bc);
+  auto gaussBC = BC::bc();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(_usePeriodicBCs, std::invalid_argument, "setting left and right Gauss BCs is not allowed for periodic meshes");
+  
+  gaussBC->addDirichlet(this->VE_hat(), GAUSS_TAG_X0, VE_left);  // set the left potential
+  gaussBC->addDirichlet(this->VE_hat(), GAUSS_TAG_X1, VE_right); // set the right potential
+  
+  _gaussSoln->setBC(gaussBC);
 }
 
 void Boltzmann1D1VFormulation::setInitialConditions(FunctionPtr f0)

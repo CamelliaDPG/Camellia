@@ -42,6 +42,7 @@ public:
   };
 private:
   Boltzmann1D1VFormulationChoice _formulationChoice;
+  bool _usePeriodicBCs;
   
   Teuchos::RCP<PoissonFormulation> _poissonForm; // used by Gauss
   
@@ -109,6 +110,15 @@ private:
   static const string S_E_HAT; // trace variable - trace of E in H^1/2
   static const string S_TAU;   // test variable
   
+  // tags for BCs:
+  static const int GAUSS_TAG_X0 = 0; // left  (x=0)
+  static const int GAUSS_TAG_X1 = 1; // right (x=x_max)
+  
+  static const int BOLTZMANN_TAG_INFLOW_LEFT  = 0; // left  (x=0,     v > 0)
+  static const int BOLTZMANN_TAG_INFLOW_RIGHT = 1; // right (x=x_max, v < 0)
+  static const int BOLTZMANN_TAG_VMIN         = 2; // bottom
+  static const int BOLTZMANN_TAG_VMAX         = 3; // top
+  
   std::vector< std::vector<int> > _iterationCounts; // outer vector index: time step number; inner: substep number.
   
   void updateElectricField();
@@ -161,10 +171,10 @@ public:
   const std::vector< std::vector<int> > & iterationCounts() const;
   
   //! Set the boundary conditions for Boltzmann (relevant for the non-periodic case).
-  void setBoltzmannBCs(BCPtr bc);
+  void setBoltzmannInflow(FunctionPtr f_left, FunctionPtr f_right);
   
   //! Set the boundary conditions for Gauss (relevant for the non-periodic case).
-  void setGaussBCs(BCPtr bc);
+  void setGaussBCs(FunctionPtr VE_left, FunctionPtr VE_right);
   
   /** \brief  Set the level of console output.
       \param  azOutputLevel   [in]  - Corresponds to the Aztec output level (though Belos is doing the output); here, 0 means no output (the default); -1 means final residual + warnings; -2 means summary, final residual, and warnings; and -3 means only print warnings.  Positive number n means print out residual every n steps.
