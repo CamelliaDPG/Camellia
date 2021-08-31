@@ -502,8 +502,9 @@ int main(int argc, char *argv[])
     double dt = dt_max;
     
     const bool usePeriodicBCs = true;
+    const bool enforceQuasiNeutrality = true;
     Boltzmann1D3VFormulation form1D3V(formulationChoice1D3V, q, eps0, m, dt, x0, xWidth, xElements, v0,    vDomainWidths,    vMeshWidths,    H1Order, delta_k, usePeriodicBCs, erkTableau);
-    Boltzmann1D1VFormulation form1D1V(formulationChoice1D1V, q, eps0, m, dt, x0, xWidth, xElements, v0[0], vDomainWidths[0], vMeshWidths[0], H1Order, delta_k, usePeriodicBCs, erkTableau);
+    Boltzmann1D1VFormulation form1D1V(formulationChoice1D1V, q, eps0, m, dt, x0, xWidth, xElements, v0[0], vDomainWidths[0], vMeshWidths[0], H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau);
     
     FunctionPtr f0;
     FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));

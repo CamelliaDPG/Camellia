@@ -23,7 +23,15 @@ const string PoissonFormulation::S_SIGMA_N_HAT = "\\widehat{\\sigma}_n";
 const string PoissonFormulation::S_V = "v";
 const string PoissonFormulation::S_TAU = "\\tau";
 
-PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces, PoissonFormulationChoice formulationChoice)
+PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces, PoissonFormulationChoice formulationChoice,
+                                       const std::string &scalarVarName, const std::string &vectorVarName,
+                                       const std::string &scalarTraceName, const std::string &vectorTraceName,
+                                       bool reverseVectorVarSign)
+:
+_scalarVarName(scalarVarName),
+_vectorVarName(vectorVarName),
+_scalarTraceName(scalarTraceName),
+_vectorTraceName(vectorTraceName)
 {
   _spaceDim = spaceDim;
 
@@ -45,33 +53,35 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces, P
     VarPtr tau;
 
     VarFactoryPtr vf = VarFactory::varFactory();
-    u = vf->fieldVar(S_U);
-    sigma = vf->fieldVar(S_SIGMA, sigmaSpace);
+    u = vf->fieldVar(_scalarVarName);
+    sigma = vf->fieldVar(_vectorVarName, sigmaSpace);
 
     TFunctionPtr<double> parity = TFunction<double>::sideParity();
     
     if (spaceDim > 1)
-      u_hat = vf->traceVar(S_U_HAT, u, u_hat_space);
+      u_hat = vf->traceVar(_scalarTraceName, u, u_hat_space);
     else
-      u_hat = vf->fluxVar(S_U_HAT, u * (Function::normal_1D() * parity), u_hat_space); // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
+      u_hat = vf->fluxVar(_scalarTraceName, u * (Function::normal_1D() * parity), u_hat_space); // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
 
     TFunctionPtr<double> n = TFunction<double>::normal();
 
     if (spaceDim > 1)
-      sigma_n_hat = vf->fluxVar(S_SIGMA_N_HAT, sigma * (n * parity));
+      sigma_n_hat = vf->fluxVar(_vectorTraceName, sigma * (n * parity));
     else
-      sigma_n_hat = vf->fluxVar(S_SIGMA_N_HAT, sigma * (Function::normal_1D() * parity));
+      sigma_n_hat = vf->fluxVar(_vectorTraceName, sigma * (Function::normal_1D() * parity));
 
     v = vf->testVar(S_V, HGRAD);
     tau = vf->testVar(S_TAU, tauSpace);
 
     _poissonBF = Teuchos::rcp( new BF(vf) );
 
+    double sigmaDefWeight = reverseVectorVarSign ? -1 : 1;
+    
     if (spaceDim==1)
     {
       // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
       _poissonBF->addTerm(u, tau->dx());
-      _poissonBF->addTerm(sigma, tau);
+      _poissonBF->addTerm(sigmaDefWeight * sigma, tau);
       _poissonBF->addTerm(-u_hat, tau);
 
       _poissonBF->addTerm(-sigma, v->dx());
@@ -80,7 +90,7 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces, P
     else
     {
       _poissonBF->addTerm(u, tau->div());
-      _poissonBF->addTerm(sigma, tau);
+      _poissonBF->addTerm(sigmaDefWeight * sigma, tau);
       _poissonBF->addTerm(-u_hat, tau->dot_normal());
 
       _poissonBF->addTerm(-sigma, v->grad());
@@ -99,7 +109,7 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces, P
     VarPtr v;
     
     VarFactoryPtr vf = VarFactory::varFactory();
-    u = vf->fieldVar(S_U, HGRAD);
+    u = vf->fieldVar(_scalarVarName, HGRAD);
     
     TFunctionPtr<double> parity = TFunction<double>::sideParity();
     TFunctionPtr<double> n = TFunction<double>::normal();
@@ -107,9 +117,9 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces, P
     if (formulationChoice == PRIMAL)
     {
       if (spaceDim > 1)
-        sigma_n_hat = vf->fluxVar(S_SIGMA_N_HAT, u->grad() * (n * parity));
+        sigma_n_hat = vf->fluxVar(_vectorTraceName, u->grad() * (n * parity));
       else
-        sigma_n_hat = vf->fluxVar(S_SIGMA_N_HAT, u->dx() * (Function::normal_1D() * parity));
+        sigma_n_hat = vf->fluxVar(_vectorTraceName, u->dx() * (Function::normal_1D() * parity));
     }
     v = vf->testVar(S_V, HGRAD);
     
@@ -148,26 +158,26 @@ RHSPtr PoissonFormulation::rhs(FunctionPtr forcingFunction)
 VarPtr PoissonFormulation::u()
 {
   VarFactoryPtr vf = _poissonBF->varFactory();
-  return vf->fieldVar(S_U);
+  return vf->fieldVar(_scalarVarName);
 }
 
 VarPtr PoissonFormulation::sigma()
 {
   VarFactoryPtr vf = _poissonBF->varFactory();
-  return vf->fieldVar(S_SIGMA);
+  return vf->fieldVar(_vectorVarName);
 }
 
 // traces:
 VarPtr PoissonFormulation::sigma_n_hat()
 {
   VarFactoryPtr vf = _poissonBF->varFactory();
-  return vf->fluxVar(S_SIGMA_N_HAT);
+  return vf->fluxVar(_vectorTraceName);
 }
 
 VarPtr PoissonFormulation::u_hat()
 {
   VarFactoryPtr vf = _poissonBF->varFactory();
-  return vf->traceVar(S_U_HAT);
+  return vf->traceVar(_scalarTraceName);
 }
 
 // test variables:

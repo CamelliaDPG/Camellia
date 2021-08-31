@@ -43,6 +43,7 @@ public:
 private:
   Boltzmann1D1VFormulationChoice _formulationChoice;
   bool _usePeriodicBCs;
+  bool _enforceQuasiNeutrality;
   
   Teuchos::RCP<PoissonFormulation> _poissonForm; // used by Gauss
   
@@ -126,7 +127,8 @@ public:
   Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoice formulationChoice, double q, double eps0, double m, double dt,
                            const double x0, const double xWidth, const int xElements,
                            const double v0, const double vWidth, const int vElements,
-                           const int H1Order, const int delta_k, const bool usePeriodicBCs, ERKTableauPtr erkTableau,
+                           const int H1Order, const int delta_k, const bool usePeriodicBCs,
+                           const bool enforceQuasiNeutrality, ERKTableauPtr erkTableau,
                            const int numUniformRefinements = 0);
 
   //! set initial conditions.  Solves for initial E, E_hat, and sets t=0;

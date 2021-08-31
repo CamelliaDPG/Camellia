@@ -43,8 +43,16 @@ private:
 
   static const string S_V;
   static const string S_TAU;
+  
+  std::string _scalarVarName;
+  std::string _vectorVarName;
+  std::string _scalarTraceName;
+  std::string _vectorTraceName;
 public:
-  PoissonFormulation(int spaceDim, bool useConformingTraces, PoissonFormulationChoice formulationChoice=ULTRAWEAK);
+  PoissonFormulation(int spaceDim, bool useConformingTraces, PoissonFormulationChoice formulationChoice=ULTRAWEAK,
+                     const std::string &scalarVarName = S_U, const std::string &vectorVarName = S_SIGMA,
+                     const std::string &scalarTraceName = S_U_HAT, const std::string &vectorTraceName = S_SIGMA_N_HAT,
+                     bool reverseVectorVarSign = false);
 
   BFPtr bf();
   

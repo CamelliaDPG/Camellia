@@ -43,6 +43,7 @@ public:
     const int numPoints = phaseSpacePoints.dimension(1);
     
     const double weight = _n / (sqrt(2. * M_PI) * _sigma);
+//    std::cout << "weight: " << weight << std::endl;
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
     {
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
@@ -57,15 +58,17 @@ public:
 
 static const std::string S_TWO_STREAM   = "two-stream";
 static const std::string S_BUMP_ON_TAIL = "bump-on-tail";
+static const std::string S_COLD_DIODE   = "cold-diode";
 
 enum ProblemChoice
 {
   TWO_STREAM,
-  BUMP_ON_TAIL
+  BUMP_ON_TAIL,
+  COLD_DIODE
 };
 
-static const std::map<std::string, ProblemChoice> stringToProblemChoice {{S_BUMP_ON_TAIL,BUMP_ON_TAIL},{S_TWO_STREAM,TWO_STREAM}};
-static const std::map<ProblemChoice, std::string> problemChoiceToString {{BUMP_ON_TAIL,S_BUMP_ON_TAIL},{TWO_STREAM,S_TWO_STREAM}};
+static const std::map<std::string, ProblemChoice> stringToProblemChoice {{S_BUMP_ON_TAIL,BUMP_ON_TAIL},{S_TWO_STREAM,TWO_STREAM}, {S_COLD_DIODE,COLD_DIODE}};
+static const std::map<ProblemChoice, std::string> problemChoiceToString {{BUMP_ON_TAIL,S_BUMP_ON_TAIL},{TWO_STREAM,S_TWO_STREAM},{COLD_DIODE,S_COLD_DIODE}};
 
 ProblemChoice getProblemChoice(const std::string &problemChoiceString)
 {
@@ -1173,6 +1176,8 @@ int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   
+  Kokkos::initialize(argc, argv); // initialize Kokkos
+  
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
   mpiSession.barrier();
@@ -1192,6 +1197,8 @@ int main(int argc, char *argv[])
   double v0     = -10.0;
   double vWidth =  20.0;
   
+  bool enforceQuasiNeutrality = true;
+  
   bool useAdaptivity = false;
 //  double refinementThreshold   = 0.999999; // essentially, refine just the maximum error element (and any that thanks to solution symmetry have same error)
 //  double unrefinementThreshold = 1.000001; // similarly, unrefine just the minimum-error parent element
@@ -1202,13 +1209,13 @@ int main(int argc, char *argv[])
   int xElements = 8;
   int vElements = 8;
   int delta_k   = 2;
-  double dt_max = 1e-1;
+  double dt_max = -1.0;
   int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   int numTimeSteps = 500;
   int outputFrequency = 10; // number of time steps to take before outputting viz.
   double timeStepC0 = -1.0;
   bool useL2Trace = true;
-  std::string problemChoiceString = "two-stream"; // "bump-on-tail" the alternative
+  std::string problemChoiceString = "two-stream"; // "bump-on-tail", "cold-diode" the other options
   ProblemChoice problemChoice = TWO_STREAM;
   int maximumRefinementLevel = std::numeric_limits<int>::max(); // default to no maximum refinement level
   bool runOverkillVersusAdaptiveComparison = false;
@@ -1268,12 +1275,60 @@ int main(int argc, char *argv[])
   
   problemChoice = getProblemChoice(problemChoiceString);
   
+  bool usePeriodicBCs = true;
   if (problemChoice == BUMP_ON_TAIL)
   {
     k_x = 0.3;
     xWidth =  2 * M_PI / k_x;
     u0 = 4.5;
     n0 = 0.1;
+    usePeriodicBCs = true;
+  }
+  else if (problemChoice == COLD_DIODE)
+  {
+    const double e               = 1.602176634e-19; // electron's electric charge in Coulombs
+    const double m_e             =  9.10938356e-31;  // m_e, mass of electron in kg
+    
+    const double W               = 1e4;       // beam intensity from SAND report [eV]
+    const double J               = 9.33582e4; // current density from SAND report [A/m^2]
+    
+    // v_beam is defined by 1/2 m v^2 = W ==> v_beam = sqrt( 2 W /m ):
+    const double v_beam          = sqrt(2 * W * e / m_e ); // e converts from eV to Joules
+    
+    const double velocityScaling = v_beam;
+    const double q0              = e;
+    const double m0              = m_e;
+    
+    const double timeScaling     = 1.97485663509e-9; // final time from SAND report [s]
+    const double spatialScaling  = velocityScaling * timeScaling; // [m]
+    
+    const double EScaling        = m0 * velocityScaling / (q0 * timeScaling);
+    
+    std::cout << "Characteristic E-field strength E_0 : " << EScaling << std::endl;
+    
+    const double permittivity    = 8.85418782e-12; // permittivity of free space
+    
+    const double nScaling        = J / (e * v_beam); // number density of plasma
+    
+    const double omega_p = sqrt( q0 * q0 * nScaling / (m0 * permittivity));
+    
+    xWidth = 0.01 / spatialScaling;
+    u0     = 1.0;
+    n0     = 1.0;
+    sigma  = 1e5 / velocityScaling;
+    q      = -1.0; // experimental, but this does make the sign of E agree with the SAND report at the left-hand side of the domain.  (Though this is not much confirmation, as the E-field still dies off for us with time.)
+    
+    // eps0 is a weight that enters BoltmannFormulation; we use this to scale the problem:
+    eps0   = 1.0 / (omega_p * omega_p * timeScaling * timeScaling);
+    usePeriodicBCs = false;
+    enforceQuasiNeutrality = false;
+    v0     = 0.80;
+    vWidth = 0.30;
+  }
+  
+  if (dt_max < 0)
+  {
+    dt_max = 1e-1;
   }
   
   Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice formulationChoice;
@@ -1309,17 +1364,19 @@ int main(int argc, char *argv[])
   
   const int numUniformRefinements = 0;
   double dt = dt_max;
-  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, erkTableau, numUniformRefinements);
+  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements);
   
   FunctionPtr f0;
   FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
   
+  bool adaptToCaptureInitialData = true;
   if (problemChoice == TWO_STREAM)
   {
     double n = 0.5 * n0;
     FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1V( u0, sigma, n) );
     FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1V(-u0, sigma, n) );
     f0                       = (fM_u0 + fM_minus_u0) * (1. + gamma * cos_kx);
+    adaptToCaptureInitialData = true;
   }
   else if (problemChoice == BUMP_ON_TAIL)
   {
@@ -1327,19 +1384,31 @@ int main(int argc, char *argv[])
     FunctionPtr fM_b = Teuchos::rcp(new Maxwellian1V(  u0, 0.5,     n0) );
     f0               = (fM_0 + 0.5 * fM_b) * (1. + gamma * cos_kx);
     std::cout << "f0 for bump-on-tail: " << f0->displayString() << "\n";
+    adaptToCaptureInitialData = true;
+  }
+  else if (problemChoice == COLD_DIODE)
+  {
+    // experimentally: start with a beam that goes all the way across
+//    FunctionPtr fM_u0 = Teuchos::rcp(new Maxwellian1V( u0, sigma, n0) );
+//    f0 = fM_u0;
+//    adaptToCaptureInitialData = true;
+    
+    f0 = Function::zero(); // start with vacuum
+    adaptToCaptureInitialData = false; // zero solution is always exactly captured…
+    // TODO: we *will* want to refine to capture the (rather narrow) inflow BC.  But that will require something different than the adaptation for f0 for the other problems.
   }
   
   if (convertOverkillSolutionFiles)
   {
-    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, erkTableau, numUniformRefinements+overkillRefinementLevel);
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements+overkillRefinementLevel);
     convertOverkillSolution(fineForm, numTimeSteps, overkillSolutionDir);
     return 0; // exit
   }
   else if (runOverkillVersusAdaptiveComparison)
   {
-    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, erkTableau, numUniformRefinements+overkillRefinementLevel);
-    Boltzmann1D1VFormulation adaptiveForm(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, erkTableau, numUniformRefinements  );
-    Boltzmann1D1VFormulation modestForm  (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, erkTableau, numUniformRefinements+uniformMeshRefinementLevel);
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements+overkillRefinementLevel);
+    Boltzmann1D1VFormulation adaptiveForm(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements  );
+    Boltzmann1D1VFormulation modestForm  (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements+uniformMeshRefinementLevel);
     
 //    {
 //      // DEBUGGING/PROFILING
@@ -1367,10 +1436,21 @@ int main(int argc, char *argv[])
     return 0; // exit
   }
   
+  if (!usePeriodicBCs)
+  {
+    if (problemChoice == COLD_DIODE)
+    {
+      // pin potential to zero at left and right:
+      form.setGaussBCs(Function::zero(), Function::zero());
+      // set a Maxwellian at the inflow:
+      FunctionPtr fM_u0 = Teuchos::rcp(new Maxwellian1V( u0, sigma, n0) );
+      form.setBoltzmannInflow(fM_u0, Function::zero());  // the right BC is only for negative velocity, so won't actually get triggered on our mesh
+    }
+  }
   form.setInitialConditions(f0);
   
   // adapt to capture initial data:
-  if (useAdaptivity)
+  if (useAdaptivity && adaptToCaptureInitialData)
   {
     FunctionPtr f_soln = Function::solution(form.f(), form.boltzmannSolution());
     
@@ -1472,6 +1552,10 @@ int main(int argc, char *argv[])
   else if (problemChoice == BUMP_ON_TAIL)
   {
     problemPrefix = "BumpOnTail";
+  }
+  else
+  {
+    problemPrefix = "ColdDiode";
   }
   
   std::ostringstream boltzmannSS;
