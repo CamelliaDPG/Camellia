@@ -522,7 +522,8 @@ _formulationChoice(formulationChoice)
     // tests
     VarPtr w;   // Boltzmann test function
     
-    _poissonForm = Teuchos::rcp(new PoissonFormulation(spaceDim,true,PoissonFormulation::ULTRAWEAK));
+    _poissonForm = Teuchos::rcp(new PoissonFormulation(spaceDim,true,PoissonFormulation::ULTRAWEAK,
+                                                       "V_E", "E", "\\hat{V_E}", "\\hat{E}", true));
     _gaussBF = _poissonForm->bf();
     Ex       = _poissonForm->sigma(); // the negative gradient of the potential
     Ex_hat = _poissonForm->sigma_n_hat();

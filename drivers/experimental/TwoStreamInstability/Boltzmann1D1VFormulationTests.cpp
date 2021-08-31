@@ -29,7 +29,7 @@ namespace {
   const double TEST_M      = 1.0;
   const double TEST_EPS0   = 1e-4;
 
-  Boltzmann1D1VFormulation getFormulation(const int xElements, const int vElements, bool implicit, bool l2Trace, const int H1Order, const bool usePeriodicBCs, double q = TEST_Q, ERKTableauPtr tableau = Teuchos::null)
+  Boltzmann1D1VFormulation getFormulation(const int xElements, const int vElements, bool implicit, bool l2Trace, const int H1Order, const bool usePeriodicBCs, const bool enforceQuasiNeutrality, double q = TEST_Q, ERKTableauPtr tableau = Teuchos::null)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -66,7 +66,7 @@ namespace {
         formulation = FormulationChoice::ULTRAWEAK_EXPLICIT_H1_TRACE;
       }
     }
-    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, tableau);
+    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, tableau);
     return form;
   }
 
@@ -109,12 +109,13 @@ namespace {
     const int vElements = 3;
     const int H1Order   = 2;
     const bool usePeriodicBCs = true;
+    const bool enforceQuasiNeutrality = true;
     
     // the map to phase space mesh shouldn't be materially affected by the formulation choice; the following are arbitrary
     const bool implicit = true;
     const bool l2Trace  = false;
     
-    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs);
+    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, enforceQuasiNeutrality);
     
     auto gaussMeshTopo     = form.gaussMesh()->getTopology();
     auto boltzmannMeshTopo = form.boltzmannMesh()->getTopology();
@@ -167,12 +168,13 @@ namespace {
     const int vElements = 4;
     const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
     const bool usePeriodicBCs = false;
+    const bool enforceQuasiNeutrality = true;
     
     // probably worth testing more choices than these (maybe all 4 possibilities):
     const bool implicit = true;
     const bool l2Trace  = true;
     
-    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, q);
+    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
     
     form.setInitialConditions(f0);
     
@@ -236,12 +238,13 @@ namespace {
 //    const int vElements = 4;
 //    const int H1Order   = 4; // cubic L^2 functions; allows exact representation of analytic solution trace
 //    const bool usePeriodicBCs = false;
+//    const bool enforceQuasiNeutrality = true;
 //
 //    // probably worth testing more choices than these (maybe all 4 possibilities):
 //    const bool implicit = false;
 //    const bool l2Trace  = true;
 //
-//    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, q);
+//    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
 //
 //    form.setInitialConditions(f0);
 //
@@ -325,12 +328,13 @@ namespace {
     const int vElements = 3;
     const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
     const bool usePeriodicBCs = false;
+    const bool enforceQuasiNeutrality = true;
     
     // probably worth testing more choices than these (maybe all 4 possibilities):
     const bool implicit = false;
     const bool l2Trace  = true;
     
-    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, q);
+    auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
     
     form.setInitialConditions(f0);
     
@@ -443,7 +447,8 @@ namespace {
     using FormulationChoice = Camellia::Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice;
     FormulationChoice formulation = FormulationChoice::ULTRAWEAK_IMPLICIT_L2_TRACE;
     const bool usePeriodicBCs = true;
-    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, Teuchos::null, 0);
+    const bool enforceQuasiNeutrality = true;
+    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null, 0);
     
     auto boltzmannSoln = form.boltzmannSolution();
     IPPtr defaultIP = boltzmannSoln->ip(); // our default inner product for Boltzmann; at present, this is one inspired by Führer et al.

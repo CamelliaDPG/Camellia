@@ -33,13 +33,14 @@ Boltzmann1D1VFormulation boltzmannFormulationUniformMesh(vector<int> elementWidt
   const double vElements = elementWidths[1];
   const int delta_k = 1;
   const bool usePeriodicBCs = true;
+  const bool enforceQuasiNeutrality = true;
   
   auto formulationChoice = Boltzmann1D1VFormulation::ULTRAWEAK_IMPLICIT_L2_TRACE;
   
   Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt,
                                 x0, xWidth, xElements,
                                 v0, vWidth, vElements,
-                                H1Order, delta_k, usePeriodicBCs, Teuchos::null);
+                                H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
   
   return form;
 }

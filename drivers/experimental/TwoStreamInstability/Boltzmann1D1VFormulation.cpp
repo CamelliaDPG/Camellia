@@ -418,10 +418,12 @@ Boltzmann1D1VFormulation::Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoic
                                                    const double x0, const double xWidth, const int xElementsCoarse,
                                                    const double v0, const double vWidth, const int vElementsCoarse,
                                                    const int H1Order, const int delta_k, const bool usePeriodicBCs,
-                                                   ERKTableauPtr erkTableau, const int numUniformRefinements)
+                                                   const bool enforceQuasiNeutrality, ERKTableauPtr erkTableau,
+                                                   const int numUniformRefinements)
 :
 _formulationChoice(formulationChoice),
-_usePeriodicBCs(usePeriodicBCs)
+_usePeriodicBCs(usePeriodicBCs),
+_enforceQuasiNeutrality(enforceQuasiNeutrality)
 {
 //  {
 //    double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
@@ -450,9 +452,8 @@ _usePeriodicBCs(usePeriodicBCs)
   _eps0 = ParameterFunction::parameterFunction(eps0);
   _m    = ParameterFunction::parameterFunction(m);
   
-  _n0   = ParameterFunction::parameterFunction(0.0); // will be set/updated during solve
+  _n0   = ParameterFunction::parameterFunction(0.0); // will be set/updated during solve if quasi-neutrality enforced
   
-  PeriodicBCPtr xLeftToRight     = PeriodicBC::xIdentification(x0, x0+xWidth);
   auto intervalMeshTopology      = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElementsCoarse, usePeriodicBCs);
   
   MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(intervalMeshTopology, {v0}, {vWidth}, {vElementsCoarse});
@@ -495,7 +496,8 @@ _usePeriodicBCs(usePeriodicBCs)
     // tests
     VarPtr w;   // Boltzmann test function
     
-    _poissonForm = Teuchos::rcp(new PoissonFormulation(spaceDim,true,PoissonFormulation::ULTRAWEAK));
+    _poissonForm = Teuchos::rcp(new PoissonFormulation(spaceDim,true,PoissonFormulation::ULTRAWEAK,
+                                                       "V_E", "E", "\\hat{V_E}", "\\hat{E}", true));
     _gaussBF = _poissonForm->bf();
     E     = _poissonForm->sigma(); // the negative gradient of the potential
     E_hat = _poissonForm->sigma_n_hat();
@@ -584,7 +586,7 @@ _usePeriodicBCs(usePeriodicBCs)
     auto qFunction = FunctionPtr(_q);
     auto mFunction = FunctionPtr(_m);
     auto epsFxn = FunctionPtr(_eps0);
-    auto n0Fxn  = FunctionPtr(_n0); // _n0 will be initialized when initial values are specified
+    auto n0Fxn  = _enforceQuasiNeutrality ? FunctionPtr(_n0) : Function::zero(); // _n0 will be initialized when initial values are specified, if quasi-neutrality is enforced
     auto f_velocityIntegralFxn = FunctionPtr(_f_velocityIntegral);
     auto gaussRHS = _poissonForm->rhs(qFunction / epsFxn * (f_velocityIntegralFxn - n0Fxn));
     _gaussSoln->setRHS(gaussRHS);
@@ -1118,8 +1120,17 @@ void Boltzmann1D1VFormulation::updateElectricField()
   // update f integral, n0
   _f_velocityIntegral->updateValues();
   double f_integral   = _f_velocityIntegral->integrate(_gaussSoln->mesh());
-  double n0 = f_integral / _gaussMeshMeasure;
-//  std::cout << "1D1V n0 = " << n0 << std::endl;
+  
+  double n0;
+  if (_enforceQuasiNeutrality)
+  {
+    n0 = f_integral / _gaussMeshMeasure;
+//    std::cout << "1D1V n0 = " << n0 << std::endl;
+  }
+  else
+  {
+    n0 = 0;
+  }
   _n0->setValue(n0);
 //  {
 //    // DEBUGGING
@@ -1201,6 +1212,7 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 2;
   const bool usePeriodicBCs = true;
+  const bool enforceQuasiNeutrality = true;
   
   using FormulationChoice = Camellia::Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice;
   std::vector<FormulationChoice> formulationChoices {
@@ -1218,7 +1230,7 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
+    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
     
     FunctionPtr x  = Function::xn(1);
     FunctionPtr y  = Function::yn(1);
@@ -1327,6 +1339,7 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 2;
   const bool usePeriodicBCs = true;
+  const bool enforceQuasiNeutrality = true;
   
   using FormulationChoice = Camellia::Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice;
   std::vector<FormulationChoice> formulationChoices {
@@ -1338,7 +1351,7 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
+    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
     
     FunctionPtr x  = Function::xn(1);
     
