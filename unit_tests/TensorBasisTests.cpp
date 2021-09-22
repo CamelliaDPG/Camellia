@@ -162,19 +162,19 @@ FC tensorPointsForDimension(int spaceDim)
   return tensorPoints;
 }
 
-void sizeFCForBasisValues(FC &values, BasisPtr basis, int numPoints, Intrepid::EOperator op)
+void sizeFCForBasisValues(FC &values, BasisPtr basis, int numPoints, ::Camellia::EOperator op)
 {
-  std::map<Intrepid::EOperator, int> rankAdjustmentForOperator;
+  std::map<Camellia::EOperator, int> rankAdjustmentForOperator;
 
-  rankAdjustmentForOperator[Intrepid::OPERATOR_VALUE] = 0;
-  rankAdjustmentForOperator[Intrepid::OPERATOR_GRAD] = 1;
-  rankAdjustmentForOperator[Intrepid::OPERATOR_DIV] = -1;
-  rankAdjustmentForOperator[Intrepid::OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
+  rankAdjustmentForOperator[OP_VALUE] = 0;
+  rankAdjustmentForOperator[OP_GRAD] = 1;
+  rankAdjustmentForOperator[OP_DIV] = -1;
+  rankAdjustmentForOperator[OP_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
 
   int spaceDim = basis->rangeDimension();
 
   int rank = basis->rangeRank() + rankAdjustmentForOperator[op];
-  if ((basis->rangeDimension() == 2) && (op==Intrepid::OPERATOR_CURL))
+  if ((basis->rangeDimension() == 2) && (op==OP_CURL))
   {
     if (basis->rangeRank() == 0) rank += 1;
     if (basis->rangeRank() == 1) rank -= 1;
@@ -290,7 +290,7 @@ void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, int
 
         vector<int> dofOrdinals = tensorBasis->dofOrdinalsForSubcell(subcellDim, subcellOrdinal);
         Camellia::FieldContainer<double> values(tensorBasis->getCardinality(), numPoints);
-        tensorBasis->getValues(values, subcellPointsInParent, Intrepid::OPERATOR_VALUE);
+        tensorBasis->getValues(values, subcellPointsInParent, OP_VALUE);
 
         for (auto dofOrdinal : dofOrdinals)
         {
@@ -321,7 +321,7 @@ void testTensorBasisFillsFieldContainer(BasisPtr spatialBasis, BasisPtr temporal
   int spaceDim = spatialBasis->rangeDimension();
   FC tensorPoints = tensorPointsForDimension(spaceDim);
   FC myValues;
-  Intrepid::EOperator op = Intrepid::OPERATOR_VALUE;
+  Camellia::EOperator op = OP_VALUE;
   typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, temporalBasis) );
 
@@ -353,8 +353,8 @@ void testTensorBasisValuesAreTensorProduct(BasisPtr spatialBasis, BasisPtr timeB
   typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
   FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValues;
-  Intrepid::EOperator op = Intrepid::OPERATOR_VALUE;
-  Intrepid::EOperator timeOp = Intrepid::OPERATOR_VALUE;
+  ::Camellia::EOperator op = OP_VALUE;
+  ::Camellia::EOperator timeOp = OP_VALUE;
 
   sizeFCForBasisValues(spatialValues, spatialBasis, numSpacePoints, op);
   sizeFCForBasisValues(tensorValues, tensorBasis, numTensorPoints, op);
@@ -562,8 +562,8 @@ TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues )
     typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
     Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
     FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValuesExpected, tensorValuesActual;
-    Intrepid::EOperator op = Intrepid::OPERATOR_VALUE;
-    Intrepid::EOperator timeOp = Intrepid::OPERATOR_VALUE;
+    ::Camellia::EOperator op = OP_VALUE;
+    ::Camellia::EOperator timeOp = OP_VALUE;
 
     sizeFCForBasisValues(spatialValues, spatialBasis, numSpacePoints, op);
     sizeFCForBasisValues(tensorValuesExpected, tensorBasis, numTensorPoints, op);
@@ -580,7 +580,7 @@ TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues )
     componentValues[0] = spatialValues;
     componentValues[1] = temporalValues;
 
-    vector<Intrepid::EOperator> componentOps(2);
+    vector<::Camellia::EOperator> componentOps(2);
     componentOps[0] = op;
     componentOps[1] = timeOp;
 

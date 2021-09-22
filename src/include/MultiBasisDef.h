@@ -170,7 +170,7 @@ void MultiBasis<Scalar, ArrayScalar>::getCubature(CamelliaArrayScalar &cubatureP
 
 template<class Scalar, class ArrayScalar>
 void MultiBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-    const Intrepid::EOperator operatorType) const
+                                                Camellia::EOperator operatorType) const
 {
   // compute cellJacobian, etc. for inputPoints:
   // inputPoints dimensions (P, D)

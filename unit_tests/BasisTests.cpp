@@ -157,7 +157,7 @@ TEUCHOS_UNIT_TEST( Basis, LineC1_Unisolvence )
 
   Camellia::FieldContainer<double> valuesAtNodes(linearBasis->getCardinality(), cellTopo->getNodeCount()); // (F, P)
 
-  linearBasis->getValues(valuesAtNodes, refCellNodes, Intrepid::OPERATOR_VALUE);
+  linearBasis->getValues(valuesAtNodes, refCellNodes, OP_VALUE);
 
   for (int basisOrdinal=0; basisOrdinal < linearBasis->getCardinality(); basisOrdinal++)
   {

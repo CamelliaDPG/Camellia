@@ -408,6 +408,15 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
         {
           dofsToSkip.erase(dofOrdinal);
         }
+//        {
+//          // DEBUGGING
+//          const int numPoints = domainBasisCache->getRefCellPointsFC().dimension(0);
+//          Camellia::FieldContainer<Scalar> fxnValues(domainBasisCache->numCells(), numPoints);
+//          fxnToApproximate->values(fxnValues, domainBasisCache);
+//
+//          std::cout << "fxnToApproximate values:\n" << fxnValues << std::endl;
+//        }
+         
         Camellia::FieldContainer<Scalar> newBasisCoefficients;
         projectFunctionOntoBasis(newBasisCoefficients, fxnToApproximate, basis, domainBasisCache, ipForProjection, v, dofsToSkip);
         for (int cellOrdinal=0; cellOrdinal<newBasisCoefficients.dimension(0); cellOrdinal++)

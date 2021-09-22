@@ -51,6 +51,50 @@ namespace Camellia
     
     f->checkinValuesData(data_actual);
   }
+
+  void testFunctionDataPathMatchesViewPath1T1V(FunctionPtr f, BasisCachePtr basisCache1T1V, const double &tol, Teuchos::FancyOStream &out, bool &success)
+  {
+    using Scalar = double;
+    using ViewType = Camellia::DeviceView<Scalar>;
+    //template<class Scalar, class DataContainer, int expandedRank, int startCollapseDim, int lastCollapseDim>
+    using ViewInterpreter = ViewCollapseDimensions<Scalar,ViewType,4,1,3>; // maps (C,P0,P1,P2) --> (C,P)
+    
+    static_assert(Intrepid2::supports_rank<ViewInterpreter, 4>::value, "ViewInterpreter should support rank 4");
+    auto data_actual = f->checkoutValuesData(basisCache1T1V);
+    f->values(data_actual, basisCache1T1V);
+      
+    const int numCells = basisCache1T1V->numCells();
+    
+    const int numPoints = basisCache1T1V->getPhysicalCubaturePointsFC().dimension(1);
+    Camellia::FieldContainer<Scalar> valuesFC(numCells, numPoints);
+    f->values(valuesFC, basisCache1T1V);
+    auto fcView = valuesFC.checkoutDeviceView(true); // true: deep_copy from host
+      
+    auto tensorPoints = basisCache1T1V->getPhysicalCubaturePoints();
+    Kokkos::Array<int,3> pointComponentBounds;
+    for (int r=0; r<3; r++)
+    {
+      const auto & pointComponent = tensorPoints.getTensorComponent(r);
+      pointComponentBounds[r] = pointComponent.extent_int(1); // (C,P)
+    }
+    
+    if (data_actual.rank() == 4)
+    {
+      // data nominal shape is (C,P1D,P1T,P1V); hence we interpret to the (C,P) fcView
+      ViewInterpreter interpretedView(fcView, pointComponentBounds);
+      Intrepid2::testFloatingEquality4(interpretedView, data_actual, tol, tol, out, success, "view path", "data path");
+    }
+    else
+    {
+      // if data's nominal rank is not 4, then it should have shape (C,P)
+      TEUCHOS_TEST_FOR_EXCEPTION(data_actual.rank() != 2, std::invalid_argument, "Unexpected rank for Data");
+      Intrepid2::testFloatingEquality2(fcView, data_actual, tol, tol, out, success, "view path", "data path");
+    }
+    
+    valuesFC.checkinDeviceView(false); // false: don't deep copy back to host
+    
+    f->checkinValuesData(data_actual);
+  }
     
   void testFunctionDataPathMatchesViewPath3V(FunctionPtr f, BasisCachePtr basisCache3V, const double &tol, Teuchos::FancyOStream &out, bool &success)
   {

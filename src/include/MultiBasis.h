@@ -41,7 +41,7 @@ public:
 
   using Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                 const Intrepid::EOperator operatorType) const;
+                 Camellia::EOperator operatorType) const;
 
   Teuchos::RCP< Basis<Scalar,ArrayScalar> > getSubBasis(int basisIndex) const;
   Teuchos::RCP< Basis<Scalar,ArrayScalar> > getLeafBasis(int leafOrdinal) const;

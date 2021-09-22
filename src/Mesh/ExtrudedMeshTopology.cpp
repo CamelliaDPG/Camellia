@@ -147,8 +147,10 @@ namespace Camellia
   {
     // cellVertices are ordered so that the physical cell comes first; it gets repeated according to the extrusion
     // TODO: add checks that cellVertices is consistent with this claim.
-    auto physicalTopo = CellTopology::cellTopology(cellTopo->getShardsTopology());
     const int physicalSpaceDim = _lowerDimensionalMeshTopology->getDimension();
+    const int physicalTensorialDegree = physicalSpaceDim - cellTopo->getShardsTopology().getDimension();
+    auto physicalTopo = CellTopology::cellTopology(cellTopo->getShardsTopology(), physicalTensorialDegree);
+    
     const int numExtrusionDims = _extrusionMeshTopologies.size();
     
     _phaseToComponentMap[cellIndex] = std::vector<IndexType>(1 + numExtrusionDims);

@@ -107,7 +107,7 @@ void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::initializeTags() const
 }
 
 template<class Scalar, class ArrayScalar>
-void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
 
@@ -137,14 +137,14 @@ void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
 
           switch (operatorType)
           {
-          case Intrepid::OPERATOR_VALUE:
+          case OP_VALUE:
           {
             // one of these is zero:
             values(fieldIndex,pointIndex,0) =  lobattoValues_x(i) * lobattoValues_dy(j) / divFreeScalingFactor;
             values(fieldIndex,pointIndex,1) = -lobattoValues_dx(i) * lobattoValues_y(j) / divFreeScalingFactor;
           }
           break;
-          case Intrepid::OPERATOR_DIV:
+          case OP_DIV:
             values(fieldIndex,pointIndex) = 0;
             break;
 
@@ -161,11 +161,11 @@ void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
 
           switch (operatorType)
           {
-          case Intrepid::OPERATOR_VALUE:
+          case OP_VALUE:
             values(xFieldIndex,pointIndex,0) = lobattoValues_x(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
             values(yFieldIndex,pointIndex,1) = lobattoValues_dx(i) * lobattoValues_y(j) / nonDivFreeScalingFactor;
             break;
-          case Intrepid::OPERATOR_DIV:
+          case OP_DIV:
             values(xFieldIndex,pointIndex) = lobattoValues_dx(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
             values(yFieldIndex,pointIndex) = lobattoValues_dx(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
             break;

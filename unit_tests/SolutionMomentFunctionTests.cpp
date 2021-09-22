@@ -30,16 +30,30 @@ namespace
   static const double PHYSICAL_EXTENT  =  1.0; // extent in each physical dimension
   static const double PHYSICAL_ORIGIN  =  0.0; // starting coordinate in each physical dimension
   
-  static const int PHYSICAL_MESH_WIDTH = 2;
+  static const double TEMPORAL_ORIGIN  =  0.0;  // used for space-time meshes
+  static const double TEMPORAL_EXTENT  =  1.0;  // used for space-time meshes
+  
+  static const int PHYSICAL_MESH_WIDTH  = 2;
   static const int EXTRUSION_MESH_WIDTH = 2;
+  static const int TEMPORAL_MESH_WIDTH  = 2;  // used for space-time meshes
 
-  Teuchos::RCP<ExtrudedMeshTopology> makeTestMeshTopology( int numPhysicalDims, int numExtrusionDims )
+  Teuchos::RCP<ExtrudedMeshTopology> makeTestMeshTopology( int numPhysicalDims, int numExtrusionDims, bool useSpaceTime )
   {
     using std::vector;
     vector<double> physicalDims(numPhysicalDims,PHYSICAL_EXTENT);
     vector<int> physicalElementCounts(numPhysicalDims,PHYSICAL_MESH_WIDTH);
     vector<double> physicalOrigin(numPhysicalDims,PHYSICAL_ORIGIN);
     auto physicalMeshTopo = MeshFactory::rectilinearMeshTopology(physicalDims, physicalElementCounts, physicalOrigin);
+    
+    if (useSpaceTime)
+    {
+      const int numTemporalExtrusionDims = 1;
+      vector<double> temporalStartCoords(numTemporalExtrusionDims, TEMPORAL_ORIGIN);
+      vector<double> temporalExtents(numTemporalExtrusionDims, TEMPORAL_EXTENT);
+      vector<int> temporalElementCounts(numTemporalExtrusionDims,TEMPORAL_MESH_WIDTH);
+      
+      physicalMeshTopo = Teuchos::rcp(new ExtrudedMeshTopology(physicalMeshTopo,temporalStartCoords,temporalExtents,temporalElementCounts));
+    }
     
     vector<double> extrusionStartCoords(numExtrusionDims, EXTRUSION_ORIGIN);
     vector<double> extrusionExtents(numExtrusionDims, EXTRUSION_EXTENT);
@@ -49,7 +63,7 @@ namespace
     return extrudedMeshTopology;
   }
 
-  void testIntegrate(const int numPhysicalDims, const int numExtrusionDims,
+  void testIntegrate(const int numPhysicalDims, const int numExtrusionDims, const bool useSpaceTime,
                      int survivingExtrusionDim, // use -1 for no surviving dims
                      const int fxnPolyOrder,
                      FunctionPtr phaseSpaceFxn, FunctionPtr expectedIntegral,
@@ -65,7 +79,7 @@ namespace
     
     std::vector<int> H1Order(1 + numExtrusionDims, fxnPolyOrder + 1);
     
-    auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims);
+    auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
     
     VarFactoryPtr vf = VarFactory::varFactory();
     auto f = vf->fieldVar("f");
@@ -105,6 +119,10 @@ namespace
     {
       startingPhysicalCellCount *= PHYSICAL_MESH_WIDTH;
     }
+    if (useSpaceTime)
+    {
+      startingPhysicalCellCount *= TEMPORAL_MESH_WIDTH;
+    }
     int expectedActivePhaseSpaceCellCount = startingPhysicalCellCount;
     for (int d=0; d<numExtrusionDims; d++)
     {
@@ -122,9 +140,11 @@ namespace
     {
       const IndexType cellToRefine = 0;
       
-      int newCellsPerRefinement = 1 << (numExtrusionDims + numPhysicalDims); // isotropic refinement
-      set<GlobalIndexType> cellsToRefine {cellToRefine}; // DEBUGGING
-//      set<GlobalIndexType> cellsToRefine {0,2}; // DEBUGGING
+      int numTemporalDims = useSpaceTime ? 1 : 0;
+      
+      int newCellsPerRefinement = 1 << (numExtrusionDims + numPhysicalDims + numTemporalDims); // isotropic refinement
+      
+      set<GlobalIndexType> cellsToRefine {cellToRefine};
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(mesh->getElementType(cellToRefine)->cellTopoPtr);
       mesh->hRefine(cellsToRefine, refPattern);
       
@@ -132,7 +152,7 @@ namespace
       
       expectedActivePhaseSpaceCellCount += newCellsPerRefinement - 1; // -1: the parent cell is no longer active
       
-      int newPhysicalCellsPerRefinement = 1 << numPhysicalDims;
+      int newPhysicalCellsPerRefinement = 1 << (numPhysicalDims + numTemporalDims);
       const int newExtrusionCellsPerRefinement = 2;
       if (survivingExtrusionDim != -1)
       {
@@ -233,6 +253,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -241,7 +262,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1V_Refine )
@@ -250,6 +271,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = true;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -258,7 +280,48 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  /*
+   The "1T" here is a temporal dimension.  For space-time Vlasov, we have a space-time physical mesh,
+   which is then further extruded in velocity dimensions.  So the lower-dimensional mesh is also an
+   extruded mesh, so that e.g. "1D1T1V" is a slightly different use case than e.g. 2D1V.
+   */
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1T1V )
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1T1V_Refine )
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = true;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D2V )
@@ -266,6 +329,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 2;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -274,7 +338,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D2V_Refine )
@@ -282,6 +346,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 2;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = true;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -290,7 +355,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D3V )
@@ -298,6 +363,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 3;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -306,7 +372,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_2D1V )
@@ -314,6 +380,7 @@ namespace
     const int numPhysicalDims  = 2;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -322,7 +389,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_2D2V )
@@ -330,6 +397,7 @@ namespace
     const int numPhysicalDims  = 2;
     const int numExtrusionDims = 2;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -338,7 +406,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_2D3V )
@@ -346,6 +414,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 3;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -354,7 +423,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_3D1V )
@@ -362,6 +431,7 @@ namespace
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -370,7 +440,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_3D2V )
@@ -378,6 +448,7 @@ namespace
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 2;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 0; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
@@ -386,7 +457,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_3D3V )
@@ -394,6 +465,7 @@ namespace
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 3;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
@@ -402,7 +474,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1V )
@@ -410,6 +482,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
@@ -418,7 +491,7 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1V_Refine )
@@ -426,6 +499,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = true;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
@@ -434,7 +508,41 @@ namespace
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::xn(1);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V_Refine )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::xn(1);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D1V )
@@ -442,6 +550,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
@@ -455,7 +564,7 @@ namespace
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D1V_Refine )
@@ -463,6 +572,7 @@ namespace
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
     const bool refine          = true;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
@@ -476,183 +586,15 @@ namespace
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D2V )
-  {
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 2;
-    const int survivingExtrusionDim = -1;
-    const bool refine          = false;
-    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr x  = Function::xn(1);
-    FunctionPtr y2 = Function::yn(2);
-    FunctionPtr f = x * y2;
-    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
-    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
-    const double y_min = EXTRUSION_ORIGIN;
-    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
-    const double z_integral = EXTRUSION_EXTENT; // does not vary in z
-    FunctionPtr f_integral = y_integral * x * z_integral;
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D2V_Refine )
-  {
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 2;
-    const int survivingExtrusionDim = -1;
-    const bool refine          = true;
-    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr x  = Function::xn(1);
-    FunctionPtr y2 = Function::yn(2);
-    FunctionPtr f = x * y2;
-    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
-    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
-    const double y_min = EXTRUSION_ORIGIN;
-    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
-    const double z_integral = EXTRUSION_EXTENT; // does not vary in z
-    FunctionPtr f_integral = y_integral * x * z_integral;
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_y2_1D1V )
+  
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xz2_1D1T1V )
   {
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const int survivingExtrusionDim = -1;
-    const bool refine          = false;
-    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr y2 = Function::yn(2);
-    FunctionPtr f = y2;
-    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
-    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
-    const double y_min = EXTRUSION_ORIGIN;
-    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
-    FunctionPtr f_integral = Function::constant(y_integral);
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_y2_1D1V_Refine )
-  {
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 1;
-    const int survivingExtrusionDim = -1;
-    const bool refine          = true;
-    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr y2 = Function::yn(2);
-    FunctionPtr f = y2;
-    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
-    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
-    const double y_min = EXTRUSION_ORIGIN;
-    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
-    FunctionPtr f_integral = Function::constant(y_integral);
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_Constant_1D2V_to_xz ) // to xz: x,z dimensions survive integration
-  {
-    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
-    
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 2;
-    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
-    const bool refine          = false;
-    const int polyOrder = 1; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr f = Function::constant(1.0);
-    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
-    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims-1) * f;
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_Constant_1D2V_to_xz_Refine ) // to xz: x,z dimensions survive integration
-  {
-    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
-    
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 2;
-    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
-    const bool refine          = true;
-    const int polyOrder = 1; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr f = Function::constant(1.0);
-    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
-    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims-1) * f;
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xy2_1D2V_to_xz ) // to xz: x,z dimensions survive integration
-  {
-    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
-    
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 2;
-    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
-    const bool refine          = false;
-    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr x  = Function::xn(1);
-    FunctionPtr y2 = Function::yn(2);
-    FunctionPtr f = x * y2;
-    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
-    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
-    const double y_min = EXTRUSION_ORIGIN;
-    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
-    FunctionPtr f_integral = y_integral * x;
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xy2_1D2V_to_xz_Refine ) // to xz: x,z dimensions survive integration
-  {
-    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
-    
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 2;
-    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
-    const bool refine          = true;
-    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
-    
-    FunctionPtr x  = Function::xn(1);
-    FunctionPtr y2 = Function::yn(2);
-    FunctionPtr f = x * y2;
-    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
-    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
-    const double y_min = EXTRUSION_ORIGIN;
-    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
-    FunctionPtr f_integral = y_integral * x;
-    
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xz2_1D3V_to_xy ) // to xy: (x,v_x) dimensions survive integration
-  {
-    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
-    
-    const int numPhysicalDims  = 1;
-    const int numExtrusionDims = 2;
-    const int survivingExtrusionDim = 0; // y dimension (first extrusion dim) does not get integrated
+    const bool spaceTime       = true;
     const bool refine          = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
@@ -666,7 +608,228 @@ namespace
     const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
     FunctionPtr f_integral = z_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xz2_1D1T1V_Refine )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr z2 = Function::zn(2);
+    FunctionPtr f = x * z2;
+    // integral in z is z^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double z_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double z_min = EXTRUSION_ORIGIN;
+    const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
+    FunctionPtr f_integral = z_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D2V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = x * y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    const double z_integral = EXTRUSION_EXTENT; // does not vary in z
+    FunctionPtr f_integral = y_integral * x * z_integral;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D2V_Refine )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = x * y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    const double z_integral = EXTRUSION_EXTENT; // does not vary in z
+    FunctionPtr f_integral = y_integral * x * z_integral;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_y2_1D1V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    FunctionPtr f_integral = Function::constant(y_integral);
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_y2_1D1V_Refine )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    FunctionPtr f_integral = Function::constant(y_integral);
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_Constant_1D2V_to_xz ) // to xz: x,z dimensions survive integration
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims-1) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_Constant_1D2V_to_xz_Refine ) // to xz: x,z dimensions survive integration
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
+    const bool spaceTime       = false;
+    const bool refine          = true;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims-1) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xy2_1D2V_to_xz ) // to xz: x,z dimensions survive integration
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = x * y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    FunctionPtr f_integral = y_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xy2_1D2V_to_xz_Refine ) // to xz: x,z dimensions survive integration
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
+    const bool spaceTime       = false;
+    const bool refine          = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = x * y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    FunctionPtr f_integral = y_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xz2_1D3V_to_xy ) // to xy: (x,v_x) dimensions survive integration
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 0; // y dimension (first extrusion dim) does not get integrated
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr z2 = Function::zn(2);
+    FunctionPtr f = x * z2;
+    // integral in z is z^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double z_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double z_min = EXTRUSION_ORIGIN;
+    const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
+    FunctionPtr f_integral = z_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
   }
 
   // TODO: test higher-order moments
@@ -678,13 +841,14 @@ namespace
     // TODO: revise this to avoid allocating the whole tensor-product containers (use Intrepid2 tensor containers instead)
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 3;
+    const bool spaceTime       = false;
     const int polyOrder = 3; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     const int delta_k = 0;
     
     std::vector<int> H1Order(1 + numExtrusionDims, polyOrder + 1);
     
-    auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims);
+    auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, spaceTime);
     
     VarFactoryPtr vf = VarFactory::varFactory();
     auto f = vf->fieldVar("f");
@@ -711,13 +875,13 @@ namespace
     const int physicalBasisCardinality = physicalBasis->getCardinality();
     const int numPhysicalPoints        = physicalRefPoints.dimension(0);
     FieldContainer<double> physicalBasisValues(physicalBasisCardinality, numPhysicalPoints);
-    physicalBasis->getValues(physicalBasisValues, physicalRefPoints, Intrepid::OPERATOR_VALUE);
+    physicalBasis->getValues(physicalBasisValues, physicalRefPoints, OP_VALUE);
     
     const auto & phaseRefPoints     = phaseBasisCache->getRefCellPointsFC();
     const int phaseBasisCardinality = phaseSpaceBasis->getCardinality();
     const int numPhasePoints        = phaseRefPoints.dimension(0);
     FieldContainer<double> phaseBasisValues(phaseBasisCardinality, numPhasePoints);
-    phaseSpaceBasis->getValues(phaseBasisValues, phaseRefPoints, Intrepid::OPERATOR_VALUE);
+    phaseSpaceBasis->getValues(phaseBasisValues, phaseRefPoints, OP_VALUE);
     
     BasisPtr remainingPhaseSpaceBasis = phaseSpaceBasis;
     std::vector<BasisPtr> extrusionBases(numExtrusionDims);
@@ -739,7 +903,7 @@ namespace
       numExtrusionPoints[d] = extrusionPointsView.extent_int(0);
       extrusionPoints[d] = FieldContainerConversion<double>::fromDynRankView(extrusionPointsView);
       extrusionValues[d] = FieldContainer<double>(extrusionBasis->getCardinality(),numExtrusionPoints[d]);
-      extrusionBasis->getValues(extrusionValues[d], extrusionPoints[d], Intrepid::OPERATOR_VALUE);
+      extrusionBasis->getValues(extrusionValues[d], extrusionPoints[d], OP_VALUE);
     }
     
     int totalExtrusionPointCount = numPhasePoints / numPhysicalPoints;

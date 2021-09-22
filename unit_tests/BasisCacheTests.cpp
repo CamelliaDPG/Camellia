@@ -592,7 +592,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     // get gradients in reference space
     int numPoints = basisCache->getRefCellPointsFC().dimension(0);
     Camellia::FieldContainer<double> values(basisCardinality, numPoints, spaceDim);
-    basis->getValues(values, basisCache->getRefCellPointsFC(), opIntrepid);
+    basis->getValues(values, basisCache->getRefCellPointsFC(), op);
     
     // if x dimension has doubled, then we expect d/dx to be scaled by 1/2
     // scale values accordingly
@@ -968,15 +968,16 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     int H1Order = 3;
     BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, H1Order, cellNodes);
     Camellia::EOperator op = OP_LAPLACIAN;
-    Intrepid::EOperator opIntrepid = Intrepid::OPERATOR_D2;
+    Intrepid::EOperator intrepid_op_d2 = Intrepid::OPERATOR_D2;
+    Camellia::EOperator op_d2 = Camellia::OP_D2;
     BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
     int basisCardinality = basis->getCardinality();
     
     // get gradients in reference space
     int numPoints = basisCache->getRefCellPointsFC().dimension(0);
-    int refSpaceValuesPerPoint = Intrepid::getDkCardinality(opIntrepid, spaceDim);
+    int refSpaceValuesPerPoint = Intrepid::getDkCardinality(intrepid_op_d2, spaceDim);
     Camellia::FieldContainer<double> valuesRefSpace(basisCardinality, numPoints, refSpaceValuesPerPoint);
-    basis->getValues(valuesRefSpace, basisCache->getRefCellPointsFC(), opIntrepid);
+    basis->getValues(valuesRefSpace, basisCache->getRefCellPointsFC(), op_d2);
     
     vector<int> d2_enumeration(3);
     d2_enumeration[0] = Intrepid::getDkEnumeration(2,0,0);

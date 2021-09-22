@@ -16,7 +16,9 @@
 #ifndef Camellia_debug_doubleBasisConstruction_h
 #define Camellia_debug_doubleBasisConstruction_h
 
-#include "Basis.h"
+#include "TypeDefs.h"
+
+#include <Shards_CellTopology.hpp>
 
 namespace Camellia
 {

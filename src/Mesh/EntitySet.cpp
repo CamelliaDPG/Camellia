@@ -35,9 +35,20 @@ bool EntitySet::containsEntity(int d, IndexType entityIndex) const
   return _entities[d].find(entityIndex) != _entities[d].end();
 }
 
+const std::set<IndexType> & EntitySet::entitiesOfDimension(unsigned int d ) const
+{
+  assert( d <= maxEntityDimension() );
+  return _entities[d];
+}
+
 EntityHandle EntitySet::getHandle() const
 {
   return _handle;
+}
+
+unsigned EntitySet::maxEntityDimension() const
+{
+  return _entities.size() - 1;
 }
 
 void EntitySet::removeEntity(int d, IndexType entityIndex)

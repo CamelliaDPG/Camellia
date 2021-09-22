@@ -44,6 +44,10 @@ namespace Camellia {
     // ! Returns the subcell ordinals of the given dimension for entities that belong to the indicated cell.
     std::vector<unsigned> subcellOrdinalsOnSide(ConstMeshTopologyViewPtr meshTopo, IndexType cellID, unsigned sideOrdinal, unsigned d) const;
     
+    const std::set<IndexType> & entitiesOfDimension(unsigned d) const;
+    
+    unsigned maxEntityDimension() const;
+    
     // ! updates entity indices according to the lookup table, which is indexed by [d][oldEntityIndex]
     void updateEntityIndices(const vector<map<IndexType,IndexType>> &reverseLookup);
   };

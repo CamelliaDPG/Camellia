@@ -60,6 +60,14 @@ public:
    */
   virtual ~TensorBasis() {}
 
+  virtual Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,DeviceType> points,
+                                                                         const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
+  
+  //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)  Non-Intrepid2 bases throw an exception.
+  virtual void getValues( Intrepid2::BasisValues<Scalar,DeviceType> outputValues,
+                         const Intrepid2::TensorPoints<Scalar,DeviceType>  inputPoints,
+                         const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const;
+  
   /** \brief Returns the cardinality of the basis, computed as the product of the cardinalities of the component bases.
    */
   int getCardinality() const;
@@ -92,7 +100,7 @@ public:
 
    */
   void getTensorValues(ArrayScalar& outputValues, const std::vector< ArrayScalar> & componentOutputValues,
-                       std::vector<Intrepid::EOperator> operatorTypes) const;
+                       std::vector<::Camellia::EOperator> operatorTypes) const;
 
   /** \brief  Returns the basis corresponding to the provided tensorial rank.
 
@@ -119,6 +127,9 @@ public:
   /** \brief  Tensorial rank of the basis values -- 0 for scalars, 1 for vectors, etc.
    */
   int rangeRank() const;
+  
+  //! returns true if the basis accepts the specified operator (modulo Intrepid or Intrepid2 enumeration conversion) in getValues().  This does not mean that the basis will not throw an exception, etc., but rather that the operator specified is "known to" the basis.  Some of the extended Camellia operators are not known to Intrepid/Intrepid2 bases.
+  virtual bool supportsOperator(::Camellia::EOperator &op) const;
 
   using Camellia::Basis<Scalar,ArrayScalar>::getValues;
   
@@ -129,7 +140,7 @@ public:
    \param  operatorType   [in] - the operator to use when evaluating the spatial basis.  (OPERATOR_VALUE assumed for the temporal basis)
 
    */
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const;
 
   /** \brief  Computes the values of the basis at the provided points.
 
@@ -139,7 +150,8 @@ public:
    \param  temporalOperatorType  [in] - the operator to use when evaluating the temporal basis.
 
    */
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator spatialOperatorType, Intrepid::EOperator temporalOperatorType) const;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints,
+                 ::Camellia::EOperator spatialOperatorType, ::Camellia::EOperator temporalOperatorType) const;
 };
 
 typedef Teuchos::RCP<TensorBasis<> > TensorBasisPtr;

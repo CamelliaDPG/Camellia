@@ -126,10 +126,13 @@ public:
   // range info for basis values:
   virtual int rangeDimension() const;
   virtual int rangeRank() const;
+  
+  //! returns true if the basis accepts the specified operator (modulo Intrepid or Intrepid2 enumeration conversion) in getValues().  This does not mean that the basis will not throw an exception, etc., but rather that the operator specified is "known to" the basis.  Some of the extended Camellia operators are not known to Intrepid/Intrepid2 bases.
+  virtual bool supportsOperator(::Camellia::EOperator &op) const;
 
-  virtual void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const = 0;
+  virtual void getValues(ArrayScalar &values, const ArrayScalar &refPoints, ::Camellia::EOperator operatorType) const = 0;
 
-  virtual void CHECK_VALUES_ARGUMENTS(const ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+  virtual void CHECK_VALUES_ARGUMENTS(const ArrayScalar &values, const ArrayScalar &refPoints, ::Camellia::EOperator operatorType) const;
 
   //! Fills the provided array with (F,D)-shaped nodal coordinates corresponding to the basis functions.
   //! May throw an exception if the basis is not nodal.
@@ -159,7 +162,7 @@ public:
   virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
   
   using Basis<Scalar,ArrayScalar>::getValues;
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const;
   
   void getDofCoords(ArrayScalar & DofCoords) const;
 };
@@ -184,7 +187,7 @@ public:
 
   virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const override;
   
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const override;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const override;
   
   //! allocation method for Intrepid2-style getValues() output argument.
   Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,DeviceType> points,
@@ -221,8 +224,6 @@ public:
   }
 };
 } // namespace Camellia
-
-typedef Teuchos::RCP< Camellia::Basis<> > BasisPtr;
 
 #include "BasisDef.h"
 

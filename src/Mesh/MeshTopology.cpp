@@ -1430,6 +1430,30 @@ const map<EntityHandle, EntitySetPtr>& MeshTopology::getEntitySets() const
   return _entitySets;
 }
 
+vector<IndexType> MeshTopology::getSidesThatMatch(SpatialFilterPtr spatialFilter) const
+{
+  int sideDim = getDimension() - 1;
+  vector<IndexType> matchingSides;
+  
+  const vector< vector<IndexType> > & sideEntities = _entities[sideDim];
+  
+  for (int sideEntityIndex = 0; sideEntityIndex < sideEntities.size(); sideEntityIndex++)
+  {
+    const vector<IndexType> & nodesForSide = sideEntities[sideEntityIndex];
+    bool allMatch = true;
+    for (const IndexType & vertexIndex : nodesForSide)
+    {
+      if (! spatialFilter->matchesPoint(_vertices[vertexIndex]) )
+      {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) matchingSides.push_back(sideEntityIndex);
+  }
+  return matchingSides;
+}
+
 const map<string, vector<pair<EntityHandle, int>>>& MeshTopology::getTagSetsInteger() const
 {
   // tags with integer value, applied to EntitySets.

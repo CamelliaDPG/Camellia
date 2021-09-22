@@ -41,8 +41,7 @@ public:
   PointBasis();
 
   using Camellia::Basis<Scalar,ArrayScalar>::getValues;
-  void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                 const Intrepid::EOperator operatorType) const;
+  void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints, Camellia::EOperator operatorType) const;
   
   //! Returns true.
   bool isConforming() const;

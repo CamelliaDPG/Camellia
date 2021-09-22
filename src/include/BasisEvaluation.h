@@ -18,11 +18,10 @@
 
 #include "Camellia_FieldContainer.hpp"
 
+#include "Basis.h"
+
 // Shards includes
 #include "Shards_CellTopology.hpp"
-
-#include "VectorizedBasis.h"
-#include "Basis.h"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
@@ -40,7 +39,7 @@ public:
                          const Camellia::FieldContainer<double> &refPoints);
   
   //! Intrepid2-style getValues()
-  static Intrepid2::BasisValues<double,ExecSpaceType> getValues(Intrepid2BasisWrapper<double>* intrepid2Basis,
+  static Intrepid2::BasisValues<double,ExecSpaceType> getValues(Intrepid2BasisWrapper<double, Intrepid::FieldContainer<double,0> >* intrepid2Basis,
                                                                 Intrepid2::EOperator op,
                                                                 const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints);
   
@@ -72,7 +71,9 @@ public:
   static FCPtr getValuesTimesNormals(constFCPtr values,const Camellia::FieldContainer<double> &sideNormals);
   static FCPtr getValuesTimesNormals(constFCPtr values,const Camellia::FieldContainer<double> &sideNormals, int normalComponent);
   static FCPtr getVectorizedValues(constFCPtr values, int spaceDim);
-  static Intrepid::EOperator relatedOperator(Camellia::EOperator op, Camellia::EFunctionSpace fs, int spaceDim, int &componentOfInterest);
+  
+  //! Returns a related operator that the provided basis can evaluate directly (will be the same operator if the basis supports that).
+  static Camellia::EOperator relatedOperator(BasisPtr basis, Camellia::EOperator op, int &componentOfInterest);
   static FCPtr getComponentOfInterest(constFCPtr values, Camellia::EOperator op, Camellia::EFunctionSpace fs, int componentOfInterest);
 };
 }

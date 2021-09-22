@@ -53,7 +53,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetNodalBasisForCellTopology_Shards )
 
     Camellia::FieldContainer<double> basisValues(nodalBasis->getCardinality(),topo->getNodeCount());
 
-    nodalBasis->getValues(basisValues, refNodes, Intrepid::OPERATOR_VALUE);
+    nodalBasis->getValues(basisValues, refNodes, OP_VALUE);
 
     // require that the nodal basis be numbered the same way as the topology i.e.
     // basisValues(i,j) = (i==j) ? 1 : 0;
@@ -94,7 +94,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetNodalBasisForCellTopology_SpaceTime )
 
 //      cout << "refNodes:\n" << refNodes;
 
-    nodalBasis->getValues(basisValues, refNodes, Intrepid::OPERATOR_VALUE);
+    nodalBasis->getValues(basisValues, refNodes, OP_VALUE);
 
 //      cout << "basisValues:\n" << basisValues;
 

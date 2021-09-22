@@ -12,6 +12,7 @@
 //
 //
 
+#include "BasisEvaluation.h"
 #include "CamelliaCellTools.h"
 #include "SerialDenseWrapper.h"
 
@@ -104,6 +105,95 @@ TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scala
   this->_domainTopology = CellTopology::cellTopology(_spatialBasis->domainTopology()->getShardsTopology(), tensorialDegree);
 
   this->_basisCardinality = _spatialBasis->getCardinality() * _temporalBasis->getCardinality();
+}
+
+template<class Scalar, class ArrayScalar>
+Intrepid2::BasisValues<Scalar,Camellia::DeviceType> TensorBasis<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> points,
+                                                                                                             const Intrepid2::EOperator op) const
+{
+  // for the moment, we only support the simplest case: VALUE operators, on scalar tensorial components
+  const bool operatorSupported = (op == Intrepid2::OPERATOR_VALUE);
+  INTREPID2_TEST_FOR_EXCEPTION(!operatorSupported, std::invalid_argument, "operator is not supported by allocateBasisValues");
+  
+  using ViewType = decltype(points.getTensorComponent(0));
+  const int numSpatialPointComponents = points.numTensorComponents() - 1;
+  std::vector<ViewType> spatialPointComponents(numSpatialPointComponents);
+  for (int comp=0; comp<numSpatialPointComponents; comp++)
+  {
+    spatialPointComponents[comp] = points.getTensorComponent(comp);
+  }
+  
+  std::vector<ViewType> temporalPointComponents { points.getTensorComponent(numSpatialPointComponents) };
+  
+  using TensorPoints = Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>;
+  TensorPoints spatialPoints(spatialPointComponents);
+  TensorPoints temporalPoints(temporalPointComponents);
+  
+  auto spatialBasisValues  = _spatialBasis->allocateBasisValues(spatialPoints, op);
+  auto temporalBasisValues = _temporalBasis->allocateBasisValues(temporalPoints, op);
+  
+  std::vector< Intrepid2::Data<double,Camellia::DeviceType> > componentData;
+  
+  const auto & spatialData  = spatialBasisValues.tensorData();
+  const auto & temporalData = temporalBasisValues.tensorData();
+  
+  for (int comp=0; comp<numSpatialPointComponents; comp++)
+  {
+    componentData.push_back(spatialData.getTensorComponent(comp));
+  }
+  componentData.push_back(temporalData.getTensorComponent(0));
+  
+  Intrepid2::TensorData<double,Camellia::DeviceType> tensorData(componentData);
+  
+  std::vector< Intrepid2::TensorData<double,Camellia::DeviceType> > tensorDataEntries {tensorData};
+  return Intrepid2::BasisValues<double,Camellia::DeviceType>(tensorDataEntries);
+}
+
+template<class Scalar, class ArrayScalar>
+void TensorBasis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,Camellia::DeviceType> outputValues,
+                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>  inputPoints,
+                                          const Intrepid2::EOperator op ) const
+{
+  // for the moment, we only support the simplest case: VALUE operators, on scalar tensorial components
+  const bool operatorSupported = (op == Intrepid2::OPERATOR_VALUE);
+  INTREPID2_TEST_FOR_EXCEPTION(!operatorSupported, std::invalid_argument, "operator is not supported by getValues()");
+  
+  using ViewType = decltype(inputPoints.getTensorComponent(0));
+  const int numSpatialPointComponents = inputPoints.numTensorComponents() - 1;
+  std::vector<ViewType> spatialPointComponents(numSpatialPointComponents);
+  for (int comp=0; comp<numSpatialPointComponents; comp++)
+  {
+    spatialPointComponents[comp] = inputPoints.getTensorComponent(comp);
+  }
+  
+  std::vector<ViewType> temporalPointComponents { inputPoints.getTensorComponent(numSpatialPointComponents) };
+  
+  using TensorPoints = Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>;
+  TensorPoints spatialPoints(spatialPointComponents);
+  TensorPoints temporalPoints(temporalPointComponents);
+  
+  std::vector< Intrepid2::Data<double,Camellia::DeviceType> > spatialComponentData;
+  
+  const auto & tensorData = outputValues.tensorData();
+  
+  for (int comp=0; comp<numSpatialPointComponents; comp++)
+  {
+    spatialComponentData.push_back(tensorData.getTensorComponent(comp));
+  }
+  
+  std::vector< Intrepid2::Data<double,Camellia::DeviceType> > temporalComponentData {tensorData.getTensorComponent(numSpatialPointComponents)};
+  
+  Intrepid2::TensorData<double,Camellia::DeviceType> spatialData(spatialComponentData);
+  Intrepid2::TensorData<double,Camellia::DeviceType> temporalData(temporalComponentData);
+  
+  std::vector< Intrepid2::TensorData<double,Camellia::DeviceType> > spatialTensorDataEntries {spatialData};
+  Intrepid2::BasisValues<double,Camellia::DeviceType> spatialValues(spatialTensorDataEntries);
+  
+  std::vector< Intrepid2::TensorData<double,Camellia::DeviceType> > temporalTensorDataEntries {temporalData};
+  Intrepid2::BasisValues<double,Camellia::DeviceType> temporalValues(temporalTensorDataEntries);
+  
+  _spatialBasis->getValues(spatialValues, spatialPoints, op);
+  _temporalBasis->getValues(temporalValues, temporalPoints, op);
 }
 
 template<class Scalar, class ArrayScalar>
@@ -209,7 +299,7 @@ void TensorBasis<Scalar, ArrayScalar>::getTensorPoints(ArrayScalar& tensorPoints
 
 template<class Scalar, class ArrayScalar>
 void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, const std::vector< ArrayScalar> & componentOutputValuesVector,
-    std::vector<Intrepid::EOperator> operatorTypes) const
+    std::vector<::Camellia::EOperator> operatorTypes) const
 {
   // outputValues can have dimensions (C,F,P,...) or (F,P,...)
 
@@ -218,22 +308,22 @@ void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues,
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "only two-component tensor bases supported right now");
   }
 
-  Intrepid::EOperator spaceOp = operatorTypes[0], timeOp = operatorTypes[1];
+  ::Camellia::EOperator spaceOp = operatorTypes[0], timeOp = operatorTypes[1];
 
-  if (timeOp == Intrepid::OPERATOR_GRAD)
+  if (timeOp == OP_GRAD)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getTensorBasisValues() doesn't support taking gradient of temporal basis.");
   }
 
-  std::map<Intrepid::EOperator, int> rankAdjustmentForOperator;
+  std::map<::Camellia::EOperator, int> rankAdjustmentForOperator;
 
-  rankAdjustmentForOperator[Intrepid::OPERATOR_VALUE] = 0;
-  rankAdjustmentForOperator[Intrepid::OPERATOR_GRAD] = 1;
-  rankAdjustmentForOperator[Intrepid::OPERATOR_DIV] = -1;
-  rankAdjustmentForOperator[Intrepid::OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
+  rankAdjustmentForOperator[OP_VALUE] = 0;
+  rankAdjustmentForOperator[OP_GRAD] = 1;
+  rankAdjustmentForOperator[OP_DIV] = -1;
+  rankAdjustmentForOperator[OP_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
 
   int valuesRank = _spatialBasis->rangeRank() + rankAdjustmentForOperator[spaceOp];
-  if ((_spatialBasis->rangeDimension() == 2) && (spaceOp==Intrepid::OPERATOR_CURL))
+  if ((_spatialBasis->rangeDimension() == 2) && (spaceOp==OP_CURL))
   {
     if (_spatialBasis->rangeRank() == 0) valuesRank += 1;
     if (_spatialBasis->rangeRank() == 1) valuesRank -= 1;
@@ -365,14 +455,28 @@ int TensorBasis<Scalar,ArrayScalar>::rangeRank() const
 }
 
 template<class Scalar, class ArrayScalar>
-void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
-    Intrepid::EOperator operatorType) const
+bool TensorBasis<Scalar,ArrayScalar>::supportsOperator(::Camellia::EOperator &op) const
 {
-  // we actually allow op to be outside the valid range of Intrepid::EOperator; Camellia::EOperator extends the Intrepid enum (and matches values for the shared operators)
-  const Camellia::EOperator camelliaOp = static_cast<Camellia::EOperator>(operatorType);
-  const bool camelliaOpDIn = (camelliaOp >= Camellia::OP_DI1) && (camelliaOp <= Camellia::OP_DI7);
+  // default implementation returns true if the op is known to Intrepid/Intrepid2.
+  const bool standardIntrepidOperator = (op >= Camellia::OP_VALUE) && (op <= Camellia::OP_D10);
+  const bool camelliaOpDIn            = (op >= Camellia::OP_DI1)   && (op <= Camellia::OP_DI7);
+  
+  // subclasses should override insofar as they support other operators.
+  return standardIntrepidOperator || camelliaOpDIn;
+}
 
-  Intrepid::EOperator temporalOperator, spatialOperator;
+template<class Scalar, class ArrayScalar>
+void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
+                                                Camellia::EOperator camelliaOp) const
+{
+  const bool camelliaOpDIn = (camelliaOp >= Camellia::OP_DI1) && (camelliaOp <= Camellia::OP_DI7);
+//  if (camelliaOpDIn)
+//  {
+//    // DEBUGGING
+//    std::cout << "TensorBasis::getValues(), camelliaOpDIn is TRUE.\n";
+//  }
+
+  Camellia::EOperator temporalOperator, spatialOperator;
   if (camelliaOpDIn)
   {
     // take the derivative in dimension n:
@@ -380,41 +484,41 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
     if (n == _spatialBasis->rangeDimension())
     {
       // temporal basis gets the derivative
-      spatialOperator = Intrepid::OPERATOR_VALUE;
-      temporalOperator = Intrepid::OPERATOR_GRAD;
+      spatialOperator = OP_VALUE;
+      temporalOperator = OP_GRAD;
     }
     else if ((n == 0) && (_spatialBasis->rangeDimension() == 1))
     {
       // spatial basis is 1D basis and operator is OP_D1
-      spatialOperator = Intrepid::OPERATOR_GRAD;
-      temporalOperator = Intrepid::OPERATOR_VALUE;
+      spatialOperator = OP_GRAD;
+      temporalOperator = OP_VALUE;
     }
     else
     {
       // derivative is in some dimension prior to final: it's within the range dimension of _spatialBasis
-      spatialOperator = operatorType;
-      temporalOperator = Intrepid::OPERATOR_VALUE;
+      spatialOperator = camelliaOp;
+      temporalOperator = OP_VALUE;
     }
   }
   else
   {
-    if (operatorType==Intrepid::OPERATOR_GRAD)
+    if (camelliaOp==OP_GRAD)
     {
-      spatialOperator  = Intrepid::OPERATOR_GRAD;
-      temporalOperator = Intrepid::OPERATOR_VALUE; // default
+      spatialOperator  = OP_GRAD;
+      temporalOperator = OP_VALUE; // default
       if (values.rank() == 3)   // F, P, D
       {
         if (_spatialBasis->rangeDimension() + _temporalBasis->rangeDimension() == values.dimension(2))
         {
-          // then we can/should use Intrepid::OPERATOR_GRAD for the temporal operator as well
-          temporalOperator = Intrepid::OPERATOR_GRAD;
+          // then we can/should use OP_GRAD for the temporal operator as well
+          temporalOperator = OP_GRAD;
         }
       }
     }
     else
     {
-      spatialOperator = operatorType;
-      temporalOperator = Intrepid::OPERATOR_VALUE;
+      spatialOperator = camelliaOp;
+      temporalOperator = OP_VALUE;
     }
   }
   getValues(values, refPoints, spatialOperator, temporalOperator);
@@ -422,19 +526,19 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
 
 template<class Scalar, class ArrayScalar>
 void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
-    Intrepid::EOperator spatialOperatorType, Intrepid::EOperator temporalOperatorType) const
+    Camellia::EOperator spatialOperatorType, Camellia::EOperator temporalOperatorType) const
 {
   // TODO: Consider rewriting this method to call getTensorValues().
-  bool gradInBoth = (spatialOperatorType==Intrepid::OPERATOR_GRAD) && (temporalOperatorType==Intrepid::OPERATOR_GRAD);
+  bool gradInBoth = (spatialOperatorType==OP_GRAD) && (temporalOperatorType==OP_GRAD);
   // for 1D spatial-only gradient, we expect to have scalar-sized values.
-  bool spatialGrad1D = !gradInBoth && (spatialOperatorType==Intrepid::OPERATOR_GRAD) && (_spatialBasis->rangeDimension() == 1);
+  bool spatialGrad1D = !gradInBoth && (spatialOperatorType==OP_GRAD) && (_spatialBasis->rangeDimension() == 1);
   if (!spatialGrad1D)
   {
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
   }
   else
   {
-    this->CHECK_VALUES_ARGUMENTS(values,refPoints,Intrepid::OPERATOR_VALUE);
+    this->CHECK_VALUES_ARGUMENTS(values,refPoints,OP_VALUE);
   }
 
   static const bool CHECK_ENUMERATIONS = false;
@@ -461,30 +565,9 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
     }
     refPointsTemporal(pointOrdinal,0) = refPoints(pointOrdinal,spaceDim);
   }
-
-  Teuchos::Array<int> valuesDim; // will use to size our space and time values arrays
-  values.dimensions(valuesDim); // F, P[,D,...]
-
-  int valuesPerPointSpace = 1;
-  for (int d=2; d<valuesDim.size(); d++)   // for vector and tensor-valued bases, take the spatial range dimension in each tensorial rank
-  {
-    valuesDim[d] = max(_spatialBasis->rangeDimension(), 1); // ensure that for 0-dimensional topologies, we still define a value
-    valuesPerPointSpace *= valuesDim[d];
-  }
-  valuesDim[0] = _spatialBasis->getCardinality(); // field dimension
-  ArrayScalar spatialValues(valuesDim);
-  if (spatialOperatorType==Intrepid::OPERATOR_GRAD)
-  {
-    spatialValues.resize(valuesDim[0], valuesDim[1], _spatialBasis->rangeDimension());
-  }
-  _spatialBasis->getValues(spatialValues, refPointsSpatial, spatialOperatorType);
-
-  ArrayScalar temporalValues(_temporalBasis->getCardinality(), numPoints);
-  if (temporalOperatorType==Intrepid::OPERATOR_GRAD)
-  {
-    temporalValues.resize(_temporalBasis->getCardinality(), numPoints, _temporalBasis->rangeDimension());
-  }
-  _temporalBasis->getValues(temporalValues, refPointsTemporal, temporalOperatorType);
+  
+  auto spatialValuesPtr  = BasisEvaluation::getValues(_spatialBasis, spatialOperatorType, refPointsSpatial);
+  auto temporalValuesPtr = BasisEvaluation::getValues(_temporalBasis, temporalOperatorType, refPointsTemporal);
 
   ArrayScalar spatialValues_opValue;
   ArrayScalar temporalValues_opValue;
@@ -492,8 +575,8 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
   {
     spatialValues_opValue.resize(_spatialBasis->getCardinality(), numPoints);
     temporalValues_opValue.resize(_temporalBasis->getCardinality(), numPoints);
-    _spatialBasis->getValues(spatialValues_opValue, refPointsSpatial, Intrepid::OPERATOR_VALUE);
-    _temporalBasis->getValues(temporalValues_opValue, refPointsTemporal, Intrepid::OPERATOR_VALUE);
+    _spatialBasis->getValues(spatialValues_opValue, refPointsSpatial, OP_VALUE);
+    _temporalBasis->getValues(temporalValues_opValue, refPointsTemporal, OP_VALUE);
   }
 
 //    cout << "refPointsTemporal:\n" << refPointsTemporal;
@@ -501,11 +584,26 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
 //    cout << "spatialValues:\n" << spatialValues;
 //    cout << "temporalValues:\n" << temporalValues;
 
-  std::vector<int> spaceTimeValueCoordinate(valuesDim.size(), 0);
-  std::vector<int> spatialValueCoordinate(valuesDim.size(), 0);
+  const auto & spatialValues  = *spatialValuesPtr;
+  const auto & temporalValues = *temporalValuesPtr;
   
+  int valuesRank = spatialValuesPtr->rank();
+  std::vector<int> spaceTimeValueCoordinate(valuesRank, 0);
+  std::vector<int> spatialValueCoordinate(valuesRank, 0);
+  
+  int valuesPerPointSpace = 1;
   if (gradInBoth && (_spatialBasis->rangeDimension() == 0))
+  {
     valuesPerPointSpace = 0;
+  }
+  else
+  {
+    for (int d=2; d<valuesRank; d++)   // for vector and tensor-valued bases, take the spatial range dimension in each tensorial rank
+    {
+      int dim = spatialValuesPtr->dimension(d);
+      valuesPerPointSpace *= dim;
+    }
+  }
   
   // combine values:
   for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++)
@@ -528,7 +626,7 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
         spaceTimeValueCoordinate[1] = pointOrdinal;
         spatialValueCoordinate[1] = pointOrdinal;
         double temporalValue;
-        if (temporalOperatorType!=Intrepid::OPERATOR_GRAD)
+        if (temporalOperatorType!=OP_GRAD)
           temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal);
         else
           temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal, 0);

@@ -773,7 +773,14 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
           // cellTopoKey = shards::Quadrilateral<4>::key;
           break;
         case 2:
-          cellTopoKey = shards::Hexahedron<8>::key;
+          if (exportingBoundaryValues && spaceDim == 3)
+          {
+            cellTopoKey = shards::Quadrilateral<4>::key;
+          }
+          else
+          {
+            cellTopoKey = shards::Hexahedron<8>::key;
+          }
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");

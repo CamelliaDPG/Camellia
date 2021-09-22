@@ -174,8 +174,8 @@ public:
 
     // check if we're taking a temporal derivative
     int component;
-    Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(_op, _basis->functionSpace(), spaceDim, component);
-    if ((relatedOp == Intrepid::OPERATOR_GRAD) && (component==spaceDim)) {
+    Camellia::EOperator relatedOp = BasisEvaluation::relatedOperator(_basis, _op, component);
+    if ((relatedOp == OP_GRAD) && (component==spaceDim)) {
       // then we are taking the temporal part of the Jacobian of the reference to curvilinear-reference space
       // based on our assumptions that curvilinearity is just in the spatial direction (and is orthogonally extruded in the
       // temporal direction), this is always the identity.

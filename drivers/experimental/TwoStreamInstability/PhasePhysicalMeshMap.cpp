@@ -25,15 +25,15 @@ _phaseMesh(phaseSpaceMesh)
   _phaseMesh->registerObserver(thisWeakPtr);
   this->rebuildMap();
   
-  _physicalMesh->globalDofAssignment()->setAllowMeshTopologyPruning(false); // want to keep all 1D geometry info available to all MPI ranks
-  
-  TEUCHOS_TEST_FOR_EXCEPTION(_physicalMesh->getDimension() != 1, std::invalid_argument, "Physical meshes beyond 1D not yet supported by PhasePhysicalMeshMap");
+  _physicalMesh->globalDofAssignment()->setAllowMeshTopologyPruning(false); // want to keep all physical geometry info available to all MPI ranks
 }
 
 PhasePhysicalPointIterator PhasePhysicalMeshMap::getPhysicalPointIterator(BasisCachePtr phaseSpaceBasisCache, GlobalIndexType phaseSpaceCellID,
                                                                           map< GlobalIndexType , pair<BasisCachePtr, vector<int> > > &physicalBasisCachePairs) const
 {
   const auto &physicalCellInfoVector = this->physicalCellInfo(phaseSpaceCellID);
+  
+  const int numVelocityDimensions = _phaseMesh->getDimension() - _physicalMesh->getDimension();
   
   bool isSideCache = (phaseSpaceBasisCache->getSideIndex() != -1);
   int physicalSpaceSideOrdinal;
@@ -45,7 +45,8 @@ PhasePhysicalPointIterator PhasePhysicalMeshMap::getPhysicalPointIterator(BasisC
   {
     const int phaseSpaceSideOrdinal = phaseSpaceBasisCache->getSideIndex();
     // what follows assumes 1DnV with extruded line elements, 1 ≤ n ≤ 3; let's throw an exception if we're not on such an element
-    auto phaseCellTopo = phaseSpaceBasisCache->cellTopology();
+    auto phaseCellTopo    = phaseSpaceBasisCache->cellTopology();
+    auto physicalCellTopo = CellTopology::cellTopology(phaseCellTopo->getShardsTopology(), phaseCellTopo->getTensorialDegree() - numVelocityDimensions);
     
     if (phaseCellTopo->getTensorialDegree() + _physicalMesh->getDimension() != _phaseMesh->getDimension())
     {
@@ -67,7 +68,7 @@ PhasePhysicalPointIterator PhasePhysicalMeshMap::getPhysicalPointIterator(BasisC
        space sides of interest will be the last N sides.)
        */
       
-    const int numPhysicalSides = 2;
+    const int numPhysicalSides = physicalCellTopo->getSideCount();
     
     if (phaseSpaceSideOrdinal < phaseCellTopo->getSideCount() - numPhysicalSides)
     {

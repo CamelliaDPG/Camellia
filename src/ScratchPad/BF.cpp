@@ -1468,6 +1468,15 @@ namespace Camellia
             }
           }
           
+//          {
+//            // DEBUGGING
+//            std::cout << "cellIPMatrix for cell " << cellIndex << ":\n";
+//            std::cout << cellIPMatrix;
+//            
+//            std::ostringstream filePath;
+//            filePath << "/tmp/A" << cellIndex << ".dat";
+//            SerialDenseWrapper::writeMatrixToMatlabFile(filePath.str(), cellIPMatrix);
+//          }
           int result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, cellStiffness, cellRHS);
           TEUCHOS_TEST_FOR_EXCEPTION(result != 0, std::invalid_argument, "Cholesky solve returned non-zero result");
         }

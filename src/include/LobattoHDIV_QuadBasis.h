@@ -35,7 +35,7 @@ public:
   LobattoHDIV_QuadBasis(int degree_x, int degree_y, bool conforming = false);
 
   using Basis<Scalar,ArrayScalar>::getValues;
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const;
 };
 }
 

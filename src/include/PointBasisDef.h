@@ -72,7 +72,7 @@ bool PointBasis<Scalar,ArrayScalar>::isConforming() const
 
 template<class Scalar, class ArrayScalar>
 void PointBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-    const Intrepid::EOperator operatorType) const
+                                                Camellia::EOperator operatorType) const
 {
   // TODO: add parameter checking
   for (int i=0; i<outputValues.size(); i++)

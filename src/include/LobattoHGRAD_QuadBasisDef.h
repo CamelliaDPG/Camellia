@@ -175,7 +175,7 @@ void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::initializeTags() const
 }
 
 template<class Scalar, class ArrayScalar>
-void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
 
@@ -203,14 +203,14 @@ void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, 
 
         switch (operatorType)
         {
-        case Intrepid::OPERATOR_VALUE:
+        case OP_VALUE:
           values(fieldIndex,pointIndex) = lobattoValues_x(i) * lobattoValues_y(j) / scalingFactor;
           break;
-        case Intrepid::OPERATOR_GRAD:
+        case OP_GRAD:
           values(fieldIndex,pointIndex,0) = lobattoValues_dx(i) * lobattoValues_y(j) / scalingFactor;
           values(fieldIndex,pointIndex,1) = lobattoValues_x(i) * lobattoValues_dy(j) / scalingFactor;
           break;
-        case Intrepid::OPERATOR_CURL:
+        case OP_CURL:
           values(fieldIndex,pointIndex,0) =  lobattoValues_x(i) * lobattoValues_dy(j) / scalingFactor;
           values(fieldIndex,pointIndex,1) = -lobattoValues_dx(i) * lobattoValues_y(j) / scalingFactor;
           break;
