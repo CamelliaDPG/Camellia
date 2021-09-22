@@ -274,9 +274,9 @@ constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensor
   componentValues.push_back(*spatialValues);
   componentValues.push_back(*temporalValues);
 
-  vector< Intrepid::EOperator > componentOps(2);
-  componentOps[0] = spaceOpForSizing;
-  componentOps[1] = timeOpForSizing;
+  vector< ::Camellia::EOperator > componentOps(2);
+  componentOps[0] = static_cast<::Camellia::EOperator>(spaceOpForSizing);
+  componentOps[1] = static_cast<::Camellia::EOperator>(timeOpForSizing);
 
   tensorBasis->getTensorValues(*tensorValues, componentValues, componentOps);
 

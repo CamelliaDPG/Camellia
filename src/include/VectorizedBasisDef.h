@@ -189,7 +189,7 @@ int VectorizedBasis<Scalar,ArrayScalar>::rangeRank() const
 }
 template<class Scalar, class ArrayScalar>
 void VectorizedBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
-    Intrepid::EOperator operatorType) const
+                                                    Camellia::EOperator operatorType) const
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
   Teuchos::Array<int> dimensions;

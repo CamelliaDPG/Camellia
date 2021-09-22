@@ -190,6 +190,15 @@ public:
   BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   
+  //! Volume constructor with tensor-product point/weight support.  (Side caches not generated automatically.)
+  BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+             const Intrepid2::TensorPoints<double, Camellia::DeviceType> &refCellPoints,
+             const Intrepid2::TensorData<double, Camellia::DeviceType> &cubWeights, int cubatureDegree);
+  
+  //! Volume constructor with tensor-product point support.  (Side caches not generated automatically.)
+  BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+             const Intrepid2::TensorPoints<double, Camellia::DeviceType> &refCellPoints);
+  
   virtual ~BasisCache();
 
   template<typename Scalar>

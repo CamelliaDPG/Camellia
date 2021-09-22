@@ -100,7 +100,7 @@ void LobattoHGRAD_LineBasis<Scalar,ArrayScalar>::initializeTags() const
 }
 
 template<class Scalar, class ArrayScalar>
-void LobattoHGRAD_LineBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+void LobattoHGRAD_LineBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
 
@@ -121,10 +121,10 @@ void LobattoHGRAD_LineBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, 
 
       switch (operatorType)
       {
-      case Intrepid::OPERATOR_VALUE:
+      case OP_VALUE:
         values(fieldIndex,pointIndex) = lobattoValues_x(i) / scalingFactor;
         break;
-      case Intrepid::OPERATOR_GRAD:
+      case OP_GRAD:
         values(fieldIndex,pointIndex) = lobattoValues_dx(i) / scalingFactor;
         break;
       default:

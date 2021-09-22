@@ -10,6 +10,16 @@ target_link_libraries(TwoStreamInstability
   Camellia
 )
 
+MESSAGE("Adding executables for SpaceTimeVlasovPoisson.")
+add_executable( SpaceTimeVlasovPoisson "SpaceTimeVlasovPoisson.cpp" 
+                VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
+                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+
+target_link_libraries(SpaceTimeVlasovPoisson 
+  Camellia
+)
+
 add_executable( Boltzmann1D3V_TwoStreamVerification Boltzmann1D3V_TwoStreamVerification.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
                 Boltzmann1D1VFormulation.cpp Boltzmann1D1VFormulation.h
@@ -27,9 +37,11 @@ add_executable( BoltzmannTests BoltzmannTests.cpp
                 Boltzmann1D1VFormulationTests.cpp
                 PhasePhysicalMeshMap1D1VTests.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
+		VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
                 Boltzmann1D3VFormulationTests.cpp
                 PhasePhysicalMeshMap1D3VTests.cpp
-                QuadraturePointFunctionTests.cpp )
+                QuadraturePointFunctionTests.cpp
+		VlasovSpaceTimeFormulationTests.cpp )
 
 target_link_libraries(BoltzmannTests 
   Camellia

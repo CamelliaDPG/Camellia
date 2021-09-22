@@ -4,6 +4,8 @@
 
 #include "doubleBasisConstruction.h"
 
+#include "Basis.h"
+
 #include "LobattoHGRAD_QuadBasis.h"
 #include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
 #include "Intrepid_HGRAD_HEX_Cn_FEM.hpp"

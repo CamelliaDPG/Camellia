@@ -71,7 +71,7 @@ public:
 
 class MonomialFunction : public TFunction<double>
 {
-  int _comp;
+  int _comp; // zero-based
   int _n;
 public:
   MonomialFunction(int componentDimension, int power);
@@ -89,6 +89,7 @@ public:
   //! the integer power to which the monomial is raised
   int n() const;
   
+  //! i is zero-based here (i.e., xi_n(0,1) == x, xi_n(1,1) == y).
   static TFunctionPtr<double> xi_n(int i, int n);
 };
 

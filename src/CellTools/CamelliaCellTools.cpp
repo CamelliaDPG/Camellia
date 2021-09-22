@@ -554,7 +554,7 @@ void CamelliaCellTools::mapToPhysicalFrame(Camellia::FieldContainer<double> &phy
   {
   case 2:
   {
-    nodalBasis->getValues(basisValues, refPoints, Intrepid::OPERATOR_VALUE);
+    nodalBasis->getValues(basisValues, refPoints, OP_VALUE);
     // If whichCell = -1, ref pt. set is mapped to all cells, otherwise, the set is mapped to one cell only
     int cellLoop = (whichCell == -1) ? numCells : 1 ;
 
@@ -599,7 +599,7 @@ void CamelliaCellTools::mapToPhysicalFrame(Camellia::FieldContainer<double> &phy
       }
 
       // Compute basis values for this set of ref. points
-      nodalBasis -> getValues(basisValues, refPointsForCell, Intrepid::OPERATOR_VALUE);
+      nodalBasis -> getValues(basisValues, refPointsForCell, OP_VALUE);
 
       for(int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++)
       {
@@ -916,7 +916,7 @@ void CamelliaCellTools::setJacobian(Camellia::FieldContainer<double> &jacobian, 
   // refPoints is (P,D): a single or multiple cell jacobians computed for a single set of ref. points
   case 2:
   {
-    nodalBasis -> getValues(basisGrads, points, Intrepid::OPERATOR_GRAD);
+    nodalBasis -> getValues(basisGrads, points, OP_GRAD);
 
     // The outer loops select the multi-index of the Jacobian entry: cell, point, row, col
     // If whichCell = -1, all jacobians are computed, otherwise a single cell jacobian is computed
@@ -986,7 +986,7 @@ void CamelliaCellTools::setJacobian(Camellia::FieldContainer<double> &jacobian, 
       }//pt
 
       // Compute gradients of basis functions at this set of ref. points
-      nodalBasis -> getValues(basisGrads, tempPoints, Intrepid::OPERATOR_GRAD);
+      nodalBasis -> getValues(basisGrads, tempPoints, OP_GRAD);
 
       // Compute jacobians for the point set corresponding to the current cellordinal
       for(int pointOrd = 0; pointOrd < numPoints; pointOrd++)

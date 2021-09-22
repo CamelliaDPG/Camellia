@@ -117,28 +117,28 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
     spaceOp = op;
     timeOp = OP_VALUE;
   }
-  Intrepid::EOperator spaceOpForSizing;
+  ::Camellia::EOperator spaceOpForSizing;
   switch (spaceOp)
   {
   // rank-increasing:
   case OP_GRAD:
-    spaceOpForSizing = Intrepid::OPERATOR_GRAD;
+    spaceOpForSizing = OP_GRAD;
   // rank-decreasing:
   case OP_DIV:
   case OP_X:
   case OP_Y:
   case OP_Z:
-    spaceOpForSizing = Intrepid::OPERATOR_DIV;
+    spaceOpForSizing = OP_DIV;
   // rank-switching (0 to 1, 1 to 0) in 2D, rank-preserving in 3D:
   case OP_CURL:
-    spaceOpForSizing = Intrepid::OPERATOR_CURL;
+    spaceOpForSizing = OP_CURL;
     break;
   // rank-preserving:
   default:
-    spaceOpForSizing = Intrepid::OPERATOR_VALUE;
+    spaceOpForSizing = OP_VALUE;
     break;
   }
-  Intrepid::EOperator timeOpForSizing = Intrepid::OPERATOR_VALUE;
+  ::Camellia::EOperator timeOpForSizing = OP_VALUE;
 
   bool createSideCaches = true;
 
@@ -187,7 +187,7 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
   FC expectedValues = spaceTimeValues;
   expectedValues.initialize(0.0); // zero out
   vector< Intrepid::FieldContainer<double> > componentValues = {spaceValues, timeValues};
-  vector<Intrepid::EOperator> componentOps = {spaceOpForSizing, timeOpForSizing};
+  vector<::Camellia::EOperator> componentOps = {spaceOpForSizing, timeOpForSizing};
   tensorBasis->getTensorValues(expectedValues, componentValues, componentOps);
 
   FC lineRefNodes(2,1);
@@ -493,10 +493,6 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, GetValues )
   Camellia::EOperator temporalOp = OP_VALUE;
   Camellia::EOperator spaceTimeOp = OP_CURL;
 
-  vector<Intrepid::EOperator> intrepidOperatorTypes(2);
-  intrepidOperatorTypes[0] = Intrepid::OPERATOR_CURL;
-  intrepidOperatorTypes[1] = Intrepid::OPERATOR_VALUE;
-
   CellTopoPtr timeTopo = CellTopology::line();
   CellTopoPtr spaceTopo = CellTopology::triangle();
   CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo,1);
@@ -532,7 +528,8 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, GetValues )
     componentValues[1] = transformedTemporalValues;
     FC transformedSpaceTimeValuesExpected = transformedSpaceTimeValues;
     transformedSpaceTimeValuesExpected.initialize(0.0);
-    tensorBasis->getTensorValues(transformedSpaceTimeValuesExpected, componentValues, intrepidOperatorTypes);
+    vector<::Camellia::EOperator> operatorTypes {spatialOp, temporalOp};
+    tensorBasis->getTensorValues(transformedSpaceTimeValuesExpected, componentValues, operatorTypes);
   }
 }
 

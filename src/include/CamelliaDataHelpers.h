@@ -158,6 +158,17 @@ namespace Camellia
     
     template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
     KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==4) && (P0 == 1) && (Pn == 3), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3) const
+    {
+      // the (C,P0,P1,P2) --> (C,P) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,_componentDims[0],_componentDims[1]);
+      return _view(i0,pointOrdinal);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
     enable_if_t<(M==5) && (P0 == 1) && (Pn == 4), return_type>
     operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
                const array_index_type & i3, const array_index_type & i4) const
@@ -186,6 +197,7 @@ namespace Camellia
   };
   
   void testFunctionDataPathMatchesViewPath1V(FunctionPtr f, BasisCachePtr basisCache1V, const double &tol, Teuchos::FancyOStream &out, bool &success);
+  void testFunctionDataPathMatchesViewPath1T1V(FunctionPtr f, BasisCachePtr basisCache1V, const double &tol, Teuchos::FancyOStream &out, bool &success);
   void testFunctionDataPathMatchesViewPath3V(FunctionPtr f, BasisCachePtr basisCache3V, const double &tol, Teuchos::FancyOStream &out, bool &success);
 } // namespace Camellia
 #endif  // CAMELLIA_DATA_HELPERS_HPP

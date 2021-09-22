@@ -131,6 +131,23 @@ void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndi
               Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, f, basis, basisCacheForImposition);
               basisCoefficients.resize(basis->getCardinality());
               
+//              {
+//                // DEBUGGING
+//                bool hasNonZeros = false;
+//                for (int i=0; i<basisCoefficients.size(); i++)
+//                {
+//                  if (basisCoefficients[i] != 0.0)
+//                  {
+//                    hasNonZeros = true;
+//                  }
+//                }
+//
+//                if (hasNonZeros)
+//                {
+//                  std::cout << "basisCoefficients:\n" << basisCoefficients;
+//                }
+//              }
+              
               set<GlobalIndexType> matchingGlobalIndices;
               for (unsigned matchingSubcell : matchingSubcells)
               {
@@ -144,11 +161,31 @@ void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndi
               Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
 //              dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficientsToImpose, globalData, globalDofIndices);
               dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficients, globalData, globalDofIndices);
+//              {
+//                // DEBUGGING
+//                bool hasNonZeros = false;
+//                for (int i=0; i<globalData.size(); i++)
+//                {
+//                  if (globalData[i] != 0.0)
+//                  {
+//                    hasNonZeros = true;
+//                  }
+//                }
+//                
+//                if (hasNonZeros)
+//                {
+//                  std::cout << "globalData for side " << sideOrdinal << ":\n" << globalData << std::endl;
+//                }
+//              }
+              
               for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
               {
                 GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
                 if (matchingGlobalIndices.find(globalDofIndex) != matchingGlobalIndices.end())
+                {
                   bcTagGlobalIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
+//                  std::cout << "setting bcTagGlobalIndicesAndValues[" << globalDofIndex << "] = " << globalData(globalDofOrdinal) << std::endl;
+                }
               }
             }
           }

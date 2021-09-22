@@ -93,7 +93,10 @@ namespace Camellia
     auto elemType = _soln->mesh()->getElementType(sampleCellID);
     auto cellTopo = elemType->cellTopoPtr;
     
-    TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getTensorialDegree() != _numExtrusionDimensions, std::invalid_argument, "CellTopology and _numExtrusionDimensions differ on the number of tensorial extrusions");
+    auto physicalElemType = _possiblyExtrudedPhysicalMesh->getElementType(sampleCellID);
+    auto physicalCellTopo = physicalElemType->cellTopoPtr;
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getTensorialDegree() - physicalCellTopo->getTensorialDegree() + numSurvivingExtrusionDimensions != _numExtrusionDimensions, std::invalid_argument, "Physical/Phase CellTopology and _numExtrusionDimensions don't agree on the number of tensorial extrusions");
     
     auto trialOrdering = elemType->trialOrderPtr;
     _phaseSpaceBasis = trialOrdering->getBasis(fieldVar->ID());
@@ -150,7 +153,7 @@ namespace Camellia
       auto refPointsFC = FieldContainerConversion<double>::fromTensorPoints(refPoints);
       
       FieldContainer<double> valuesFC(basisCardinality, numPoints);
-      extrusionBasis->getValues(valuesFC, refPointsFC, Intrepid::OPERATOR_VALUE);
+      extrusionBasis->getValues(valuesFC, refPointsFC, OP_VALUE);
       
       auto values = valuesFC.checkoutDeviceView(true); // true: deep copy from host
       

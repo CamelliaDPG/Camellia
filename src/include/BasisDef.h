@@ -46,26 +46,26 @@ void Basis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,Camelli
 }
 
 template<class Scalar, class ArrayScalar>
-void Basis<Scalar,ArrayScalar>::CHECK_VALUES_ARGUMENTS(const ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+void Basis<Scalar,ArrayScalar>::CHECK_VALUES_ARGUMENTS(const ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
 {
   // for VALUE, GRAD, and DIV, we can say what happens to the rank:
   // (for CURL, it's different between 2D and 3D--and in 2D it depends on whether you're taking the curl of a scalar or a vector quantity)
   int UNKNOWN_RANK_CHANGE = -2;
   int rankChange=UNKNOWN_RANK_CHANGE;
 
-  if (operatorType == Intrepid::OPERATOR_VALUE)
+  if (operatorType == OP_VALUE)
   {
     rankChange = 0;
   }
-  else if (operatorType == Intrepid::OPERATOR_DIV)
+  else if (operatorType == OP_DIV)
   {
     rankChange = -1;
   }
-  else if (operatorType == Intrepid::OPERATOR_GRAD)
+  else if (operatorType == OP_GRAD)
   {
     rankChange = 1;
   }
-  if (operatorType == Intrepid::OPERATOR_CURL)
+  if (operatorType == OP_CURL)
   {
     if (this->rangeDimension() == 3)
     {
@@ -550,6 +550,16 @@ int Basis<Scalar,ArrayScalar>::rangeRank() const
 }
 
 template<class Scalar, class ArrayScalar>
+bool Basis<Scalar,ArrayScalar>::supportsOperator(::Camellia::EOperator &op) const
+{
+  // default implementation returns true if the op is known to Intrepid/Intrepid2.
+  const bool standardIntrepidOperator = (op >= Camellia::OP_VALUE) && (op <= Camellia::OP_D10);
+  
+  // subclasses should override insofar as they support other operators.
+  return standardIntrepidOperator;
+}
+
+template<class Scalar, class ArrayScalar>
 bool IntrepidBasisWrapper<Scalar,ArrayScalar>::isConforming() const
 {
   return true;
@@ -667,10 +677,14 @@ Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > IntrepidBasisWrapper<Scalar,
   }
   
 template<class Scalar, class ArrayScalar>
-void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
-  return _intrepidBasis->getValues(values,refPoints,operatorType);
+  const bool convertible = ((operatorType >= OP_VALUE) && (operatorType <= OP_D10));
+  TEUCHOS_TEST_FOR_EXCEPTION(!convertible, std::invalid_argument, "operator is not int the valid range for Intrepid");
+  
+  const Intrepid::EOperator intrepidOp = static_cast<Intrepid::EOperator>(operatorType);
+  return _intrepidBasis->getValues(values,refPoints,intrepidOp);
 }
 
 template<class Scalar, class ArrayScalar>
@@ -846,11 +860,15 @@ Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > Intrepid2Ba
   }
   
 template<class Scalar, class ArrayScalar>
-void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
   
-  // TODO: write a different getValues() that accepts Kokkos views as arguments, and then make sure that's most commonly called (or even delete this one).
+  const bool convertible = ((operatorType >= OP_VALUE) && (operatorType <= OP_D10));
+  TEUCHOS_TEST_FOR_EXCEPTION(!convertible, std::invalid_argument, "operator is not in the valid range for Intrepid2");
+  
+  const Intrepid2::EOperator opIntrepid2 = static_cast<Intrepid2::EOperator>(operatorType);
+  
   // (This version does a bunch of extra copies to achieve compatibility with the original Intrepid basis interface.)
   
   Camellia::FieldContainer<Scalar> refPointsCamellia = refPoints;
@@ -858,9 +876,7 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
   
   auto refPointsView = refPointsCamellia.checkoutDeviceView(true); // true: do deep copy from host
   auto valuesView    = valuesCamellia.checkoutDeviceView(false);   // false: don't deep copy from host
-  
-  Intrepid2::EOperator opIntrepid2 = intrepidOpToIntrepid2Op(operatorType);
-  
+    
   // on CUDA, layouts may differ; we therefore allocate a second view and copy.  This is obviously inefficient; we should use Intrepid2-compatible views in all performance-critical code.
   using Intrepid2Values = Intrepid2::Basis<Camellia::DeviceType,double,double>::OutputViewType;
   Intrepid2Values intrepid2Values = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(valuesView);

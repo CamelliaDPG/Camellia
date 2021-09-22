@@ -65,14 +65,14 @@ namespace Camellia
         {
           std::map<double,std::vector<GlobalIndexType>, less_or_greater> reverseLocalMap;
           double minLocal = std::numeric_limits<double>::max();
-          double maxLocal = std::numeric_limits<double>::min();
+          double maxLocal = std::numeric_limits<double>::lowest();
           for (const auto & entry : localEntries)
           {
             reverseLocalMap[entry.second].push_back(entry.first);
             maxLocal = std::fmax(maxLocal, entry.first);
             minLocal = std::fmin(minLocal, entry.first);
           }
-          double localThreshold = std::numeric_limits<double>::min();
+          double localThreshold = std::numeric_limits<double>::lowest();
           int matchesThusFar = 0;
           for (const auto & entry : reverseLocalMap)
           {

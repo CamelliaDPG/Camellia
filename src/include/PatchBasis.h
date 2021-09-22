@@ -37,7 +37,7 @@ public:
   PatchBasis(BasisPtr parentBasis, ArrayScalar &patchNodesInParentRefCell, shards::CellTopology &patchCellTopo);
 
   void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                 const Intrepid::EOperator operatorType) const;
+                 Camellia::EOperator operatorType) const;
 
   Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > getSubBasis(int basisIndex) const;
   Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > getLeafBasis(int leafOrdinal) const;

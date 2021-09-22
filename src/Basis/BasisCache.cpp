@@ -336,6 +336,45 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
 }
 
 BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+                       const Intrepid2::TensorPoints<double, Camellia::DeviceType> &refCellPoints)
+:
+BasisCache(physicalCellNodes, cellTopo, refCellPoints, Intrepid2::TensorData<double, Camellia::DeviceType>(), 0)
+{}
+
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+                       const Intrepid2::TensorPoints<double, Camellia::DeviceType> &refCellPoints,
+                       const Intrepid2::TensorData<double, Camellia::DeviceType> &cubWeights, int cubatureDegree)
+{
+  _cellTopo = cellTopo;
+  _isSideCache = false;
+  initCubatureDegree(cubatureDegree,0,0);
+  
+  _sideIndex = -1;
+  _spaceDim = _cellTopo->getDimension();
+  _isSideCache = false; // VOLUME constructor
+
+  _cubPoints  = refCellPoints;
+  _cubWeights = cubWeights;
+  
+  bool initializeFCs = true;
+  if (initializeFCs)
+  {
+    _cubPointsFC  = FieldContainerConversion<double>::fromTensorPoints(_cubPoints);
+    _cubWeightsFC = FieldContainerConversion<double>::fromTensorData(_cubWeights);
+  }
+
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _sideNormalsIsValid = false;
+  _physCubPointsIsValid = false;
+  
+  setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),false);
+}
+
+
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
                        const Camellia::FieldContainer<double> &refCellPoints, const Camellia::FieldContainer<double> &cubWeights, int cubatureDegree)
 {
   _cellTopo = cellTopo;
@@ -680,7 +719,7 @@ double BasisCache::extrusionWidth(const int &d, const int &cellOrdinal)
   const auto meshTopo = _mesh->getTopology();
   const auto &vertexIndices = meshTopo->getCell(_cellIDs[cellOrdinal])->vertices();
   const double tol = 1e-14;
-  double maxValue = std::numeric_limits<double>::min();
+  double maxValue = std::numeric_limits<double>::lowest();
   double minValue = std::numeric_limits<double>::max();
   for (const auto & vertexIndex : vertexIndices)
   {
@@ -950,13 +989,12 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
   }
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
-  Camellia::EFunctionSpace fs = basis->functionSpace();
-  Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, _spaceDim, componentOfInterest);
+  Camellia::EOperator relatedOp = BasisEvaluation::relatedOperator(basis, op, componentOfInterest);
 
   pair<Camellia::Basis<>*, Camellia::EOperator> relatedKey = key;
-  if ((Camellia::EOperator)relatedOp != op)
+  if (relatedOp != op)
   {
-    relatedKey = make_pair(basis.get(), (Camellia::EOperator) relatedOp);
+    relatedKey = make_pair(basis.get(), relatedOp);
     if (_knownValuesFC.find(relatedKey) == _knownValuesFC.end() )
     {
       // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDim)
@@ -966,6 +1004,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
 
     constFCPtr relatedResults = _knownValuesFC[relatedKey];
     //    constFCPtr relatedResults = _knownValues[key];
+    Camellia::EFunctionSpace fs = basis->functionSpace();
     constFCPtr result = BasisEvaluation::getComponentOfInterest(relatedResults,op,fs,componentOfInterest);
     if ( result.get() == 0 )
     {
@@ -980,6 +1019,12 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
   // Let's assert that that's the case:
   const bool standardIntrepidOperator = (op >= Camellia::OP_VALUE) && (op <= Camellia::OP_D10);
   const bool camelliaOpDIn            = (op >= Camellia::OP_DI1)   && (op <= Camellia::OP_DI7);
+//  if (camelliaOpDIn)
+//  {
+//    // DEBUGGING
+//    std::cout << "BasisCache::getValues(), camelliaOpDIn is TRUE.\n";
+//  }
+  
   const bool validOperator = standardIntrepidOperator || camelliaOpDIn;
   if ( !validOperator )
   {
@@ -1003,15 +1048,15 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
   }
 
   int componentOfInterest;
-  Camellia::EFunctionSpace fs = basis->functionSpace();
-  Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, _spaceDim, componentOfInterest);
+  ::Camellia::EOperator relatedOp = BasisEvaluation::relatedOperator(basis, op, componentOfInterest);
 
   pair<Camellia::Basis<>*, Camellia::EOperator> relatedKey = make_pair(basis.get(),(Camellia::EOperator) relatedOp);
   if (_knownValuesTransformedFC.find(relatedKey) == _knownValuesTransformedFC.end())
   {
     constFCPtr transformedValues;
+    Camellia::EFunctionSpace fs = basis->functionSpace();
     bool vectorizedBasis = functionSpaceIsVectorized(fs);
-    if ( (vectorizedBasis) && (relatedOp ==  Intrepid::OPERATOR_VALUE))
+    if ( (vectorizedBasis) && (relatedOp == OP_VALUE))
     {
       VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<double, Intrepid::FieldContainer<double> > *) basis.get(), false );
       BasisPtr componentBasis = vectorBasis->getComponentBasis();
@@ -1026,7 +1071,10 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       constFCPtr referenceValues;
       if (basisAsIntrepid2 != NULL)
       {
-        auto intrepid2Op = Intrepid2BasisWrapper<double>::intrepidOpToIntrepid2Op(relatedOp);
+        const bool standardIntrepidOperator = (relatedOp >= Camellia::OP_VALUE) && (relatedOp <= Camellia::OP_D10);
+        TEUCHOS_TEST_FOR_EXCEPTION(!standardIntrepidOperator, std::invalid_argument, "relatedOp must be known to Intrepid2");
+        
+        Intrepid2::EOperator intrepid2Op = static_cast<Intrepid2::EOperator>(relatedOp);
         const auto &points = useCubPointsSideRefCell ? _cubPointsSideRefCell : _cubPoints;
         TEUCHOS_TEST_FOR_EXCEPTION(!points.isValid(), std::logic_error, "points container is not valid!");
         auto basisValues = getValues(basisAsIntrepid2,intrepid2Op,points);
@@ -1065,6 +1113,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
            && (op != Camellia::OP_TIMES_NORMAL_Z) && (op != Camellia::OP_TIMES_NORMAL_T)
      )
   {
+    Camellia::EFunctionSpace fs = basis->functionSpace();
     result = BasisEvaluation::getComponentOfInterest(relatedValuesTransformed,op,fs,componentOfInterest);
     if ( result.get() == 0 )
     {

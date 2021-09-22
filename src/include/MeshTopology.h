@@ -260,8 +260,11 @@ public:
   // ! Specifies an EntitySet corresponding to the initial time, for a space-time MeshTopology.  Called by MeshFactory.
   void setEntitySetInitialTime(EntitySetPtr entitySet);
 
-  // ! Returns boundary sides whose vertices all match the specified SpatialFilter
+  //! Returns boundary sides whose vertices all match the specified SpatialFilter
   vector<IndexType> getBoundarySidesThatMatch(SpatialFilterPtr spatialFilter) const;
+  
+  //! Returns all sides whose vertices all match the specified SpatialFilter
+  vector<IndexType> getSidesThatMatch(SpatialFilterPtr spatialFilter) const;
   
   // ! maxConstraint made public for the sake of MeshTopologyView; not intended for general use
   IndexType maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2) const;

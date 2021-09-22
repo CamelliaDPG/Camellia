@@ -213,7 +213,7 @@ void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::initializeTags() const
 }
 
 template<class Scalar, class ArrayScalar>
-void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
 
@@ -250,13 +250,13 @@ void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::getValues(ArrayScalar 
 
         switch (operatorType)
         {
-        case Intrepid::OPERATOR_VALUE:
+        case OP_VALUE:
         {
           values(fieldIndex,pointIndex,0) =  lobattoValues_x(i) * lobattoValues_dy(j) / divFreeScalingFactor;
           values(fieldIndex,pointIndex,1) = -lobattoValues_dx(i) * lobattoValues_y(j) / divFreeScalingFactor;
         }
         break;
-        case Intrepid::OPERATOR_DIV:
+        case OP_DIV:
           values(fieldIndex,pointIndex) = 0;
           break;
 //            case Intrepid::OPERATOR_CURL: // the "2D" curl operator, with scalar range
@@ -282,11 +282,11 @@ void LobattoHDIV_QuadBasis_separable<Scalar,ArrayScalar>::getValues(ArrayScalar 
 //              nonDivFreeScalingFactor = divFreeScalingFactor;
             switch (operatorType)
             {
-            case Intrepid::OPERATOR_VALUE:
+            case OP_VALUE:
               values(fieldIndex,pointIndex,0) = lobattoValues_x(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
               values(fieldIndex,pointIndex,1) = lobattoValues_dx(i) * lobattoValues_y(j) / nonDivFreeScalingFactor;
               break;
-            case Intrepid::OPERATOR_DIV:
+            case OP_DIV:
               values(fieldIndex,pointIndex) = ( lobattoValues_dx(i) * lobattoValues_dy(j) + lobattoValues_dx(i) * lobattoValues_dy(j) ) / nonDivFreeScalingFactor;
               break;
 

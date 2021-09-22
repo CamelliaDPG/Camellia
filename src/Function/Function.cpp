@@ -1550,19 +1550,174 @@ void TFunction<Scalar>::integrate(Camellia::FieldContainer<Scalar> &cellIntegral
   }
   else
   {
+    auto valuesData = this->checkoutValuesData(basisCache);
+    
     int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
     //  cout << "integrate: basisCache->getPhysicalCubaturePointsFC():\n" << basisCache->getPhysicalCubaturePointsFC();
-    Camellia::FieldContainer<Scalar> values(numCells,numPoints);
-    this->values(values,basisCache);
+//    Camellia::FieldContainer<Scalar> values(numCells,numPoints);
+//    this->values(values,basisCache);
+    this->values(valuesData,basisCache);
+    
+    // TODO: examine structure of valuesData to see if it is constant in some dimensions (and use this for faster integration).
 
-    Camellia::FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    const int numPointComponents = valuesData.rank() - 1; // first dimension is cell ordinal
+    const auto & weightedMeasuresFC = basisCache->getWeightedMeasures();
+    const auto weightedMeasuresView = weightedMeasuresFC.checkoutDeviceView();
+    auto cellIntegralsView = cellIntegrals.checkoutDeviceView();
+    
+    using ExecutionSpace = Camellia::DeviceExecutionSpace;
+    auto policy = Kokkos::RangePolicy<ExecutionSpace>(0,numCells);
+    if (numPointComponents == 1)
     {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal)
       {
-        cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
-      }
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          cellIntegralsView(cellOrdinal) += valuesData(cellOrdinal,pointOrdinal) * weightedMeasuresView(cellOrdinal,pointOrdinal);
+        }
+      });
     }
+    else if (numPointComponents == 2)
+    {
+      const int numPts0 = valuesData.extent_int(1);
+      const int numPts1 = valuesData.extent_int(2);
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal)
+      {
+        int pointOrdinal = 0;
+        for (int pt1=0; pt1<numPts1; pt1++)
+        {
+          for (int pt0=0; pt0<numPts0; pt0++)
+          {
+            cellIntegralsView(cellOrdinal) += valuesData(cellOrdinal,pt0,pt1) * weightedMeasuresView(cellOrdinal,pointOrdinal);
+            pointOrdinal++;
+          }
+        }
+      });
+    }
+    else if (numPointComponents == 3)
+    {
+      const int numPts0 = valuesData.extent_int(1);
+      const int numPts1 = valuesData.extent_int(2);
+      const int numPts2 = valuesData.extent_int(3);
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal)
+      {
+        int pointOrdinal = 0; // x dim is fastest moving, then y, then z
+        for (int pt2=0; pt2<numPts2; pt2++)
+        {
+          for (int pt1=0; pt1<numPts1; pt1++)
+          {
+            for (int pt0=0; pt0<numPts0; pt0++)
+            {
+              cellIntegralsView(cellOrdinal) += valuesData(cellOrdinal,pt0,pt1,pt2) * weightedMeasuresView(cellOrdinal,pointOrdinal);
+              pointOrdinal++;
+            }
+          }
+        }
+      });
+    }
+    else if (numPointComponents == 4)
+    {
+      const int numPts0 = valuesData.extent_int(1);
+      const int numPts1 = valuesData.extent_int(2);
+      const int numPts2 = valuesData.extent_int(3);
+      const int numPts3 = valuesData.extent_int(4);
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal)
+      {
+        int pointOrdinal = 0; // x dim is fastest moving, then y, then z
+        for (int pt3=0; pt3<numPts3; pt3++)
+        {
+          for (int pt2=0; pt2<numPts2; pt2++)
+          {
+            for (int pt1=0; pt1<numPts1; pt1++)
+            {
+              for (int pt0=0; pt0<numPts0; pt0++)
+              {
+                cellIntegralsView(cellOrdinal) += valuesData(cellOrdinal,pt0,pt1,pt2,pt3) * weightedMeasuresView(cellOrdinal,pointOrdinal);
+                pointOrdinal++;
+              }
+            }
+          }
+        }
+      });
+    }
+    else if (numPointComponents == 5)
+    {
+      const int numPts0 = valuesData.extent_int(1);
+      const int numPts1 = valuesData.extent_int(2);
+      const int numPts2 = valuesData.extent_int(3);
+      const int numPts3 = valuesData.extent_int(4);
+      const int numPts4 = valuesData.extent_int(5);
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal)
+      {
+        int pointOrdinal = 0; // x dim is fastest moving, then y, then z
+        for (int pt4=0; pt4<numPts4; pt4++)
+        {
+          for (int pt3=0; pt3<numPts3; pt3++)
+          {
+            for (int pt2=0; pt2<numPts2; pt2++)
+            {
+              for (int pt1=0; pt1<numPts1; pt1++)
+              {
+                for (int pt0=0; pt0<numPts0; pt0++)
+                {
+                  cellIntegralsView(cellOrdinal) += valuesData(cellOrdinal,pt0,pt1,pt2,pt3,pt4) * weightedMeasuresView(cellOrdinal,pointOrdinal);
+                  pointOrdinal++;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+    else if (numPointComponents == 6)
+    {
+      const int numPts0 = valuesData.extent_int(1);
+      const int numPts1 = valuesData.extent_int(2);
+      const int numPts2 = valuesData.extent_int(3);
+      const int numPts3 = valuesData.extent_int(4);
+      const int numPts4 = valuesData.extent_int(5);
+      const int numPts5 = valuesData.extent_int(6);
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal)
+      {
+        int pointOrdinal = 0; // x dim is fastest moving, then y, then z
+        for (int pt5=0; pt5<numPts5; pt5++)
+        {
+          for (int pt4=0; pt4<numPts4; pt4++)
+          {
+            for (int pt3=0; pt3<numPts3; pt3++)
+            {
+              for (int pt2=0; pt2<numPts2; pt2++)
+              {
+                for (int pt1=0; pt1<numPts1; pt1++)
+                {
+                  for (int pt0=0; pt0<numPts0; pt0++)
+                  {
+                    cellIntegralsView(cellOrdinal) += valuesData(cellOrdinal,pt0,pt1,pt2,pt3,pt4,pt5) * weightedMeasuresView(cellOrdinal,pointOrdinal);
+                    pointOrdinal++;
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+    else
+    {
+      // TODO: implement this for other point component counts
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented case: numPointComponents = " + std::to_string(numPointComponents));
+    }
+    
+    cellIntegrals.checkinDeviceView(true);
+    weightedMeasuresFC.checkinDeviceView(false);
+    
+    this->checkinValuesData(valuesData);
   }
 }
 
