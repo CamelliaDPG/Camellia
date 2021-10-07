@@ -1208,6 +1208,7 @@ int main(int argc, char *argv[])
   
   int xElements = 8;
   int vElements = 8;
+  int numUniformRefinements = 0;
   int delta_k   = 2;
   double dt_max = -1.0;
   int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
@@ -1231,11 +1232,16 @@ int main(int argc, char *argv[])
   int solutionOutputFrequency = 1;
   int overkillTimeStepsBetweenComparisons = 1;
   int solutionComparisonFrequency = 1;
+  int vlasovTraceEnrichment = -1; // if left unset by user, will default to 0 for all problems but cold diode, where it is 1 (at least for now).
+  
+  std::string resultsFile = "";
   
   cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
   cmdp.setOption("implicit", "explicit", &implicit);
+  cmdp.setOption("resultsFile", &resultsFile);
   cmdp.setOption("xElements", &xElements);
   cmdp.setOption("vElements", &vElements);
+  cmdp.setOption("numUniformRefinements", &numUniformRefinements);
   cmdp.setOption("H1Order", &H1Order);
   cmdp.setOption("delta_k", &delta_k);
   cmdp.setOption("dt", &dt_max );
@@ -1262,6 +1268,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("overkillMeshRefinementLevel", &overkillRefinementLevel);
   cmdp.setOption("overkillH1Order", &overkillH1Order);
   cmdp.setOption("uniformMeshRefinementLevel", &uniformMeshRefinementLevel);
+  cmdp.setOption("vlasovTraceEnrichment", &vlasovTraceEnrichment);
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -1274,6 +1281,26 @@ int main(int argc, char *argv[])
   const int rank = mpiSession.getRank();
   
   problemChoice = getProblemChoice(problemChoiceString);
+  
+  // for cold diode, we non-dimensionalize; we modify the below accordingly so that we can output dimensional values to results file.
+  double velocityScaling = 1.;
+  double timeScaling     = 1.;
+  double spatialScaling  = 1.;
+  double EScaling        = 1.;
+  
+  if (vlasovTraceEnrichment == -1)
+  {
+    if (problemChoice == COLD_DIODE)
+    {
+      // this helps resolve the very fine BCs
+      vlasovTraceEnrichment = 1;
+    }
+    else
+    {
+      // theory says that H^1 order is enough for convergence rates (if BCs are resolved)
+      vlasovTraceEnrichment = 0;
+    }
+  }
   
   bool usePeriodicBCs = true;
   if (problemChoice == BUMP_ON_TAIL)
@@ -1295,35 +1322,39 @@ int main(int argc, char *argv[])
     // v_beam is defined by 1/2 m v^2 = W ==> v_beam = sqrt( 2 W /m ):
     const double v_beam          = sqrt(2 * W * e / m_e ); // e converts from eV to Joules
     
-    const double velocityScaling = v_beam;
     const double q0              = e;
     const double m0              = m_e;
     
-    const double timeScaling     = 1.97485663509e-9; // final time from SAND report [s]
-    const double spatialScaling  = velocityScaling * timeScaling; // [m]
-    
-    const double EScaling        = m0 * velocityScaling / (q0 * timeScaling);
+    velocityScaling = v_beam;
+    timeScaling     = 1.97485663509e-9; // final time from SAND report [s]
+    spatialScaling  = velocityScaling * timeScaling; // [m]
+    EScaling        = m0 * velocityScaling / (q0 * timeScaling);
     
     std::cout << "Characteristic E-field strength E_0 : " << EScaling << std::endl;
+    std::cout << "spatial scaling : " << spatialScaling << std::endl;
     
-    const double permittivity    = 8.85418782e-12; // permittivity of free space
+    const double permittivity = 8.85418782e-12; // permittivity of free space
     
-    const double nScaling        = J / (e * v_beam); // number density of plasma
+    const double nScaling     = J / (e * v_beam); // number density of plasma
     
     const double omega_p = sqrt( q0 * q0 * nScaling / (m0 * permittivity));
     
     xWidth = 0.01 / spatialScaling;
     u0     = 1.0;
     n0     = 1.0;
-    sigma  = 1e5 / velocityScaling;
-    q      = -1.0; // experimental, but this does make the sign of E agree with the SAND report at the left-hand side of the domain.  (Though this is not much confirmation, as the E-field still dies off for us with time.)
+    sigma  = 1e6 / velocityScaling;
+    q      = -1.0;
     
     // eps0 is a weight that enters BoltmannFormulation; we use this to scale the problem:
     eps0   = 1.0 / (omega_p * omega_p * timeScaling * timeScaling);
     usePeriodicBCs = false;
     enforceQuasiNeutrality = false;
     v0     = 0.80;
-    vWidth = 0.30;
+    vWidth = 0.40;
+    
+    std::cout << "sigma = " << sigma << std::endl;
+    std::cout << "u0 = " << u0 << std::endl;
+    std::cout << "n0 = " << n0 << std::endl;
   }
   
   if (dt_max < 0)
@@ -1362,9 +1393,8 @@ int main(int argc, char *argv[])
     erkTableau = ERKTableau::ssprk3();
   }
   
-  const int numUniformRefinements = 0;
   double dt = dt_max;
-  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements);
+  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, vlasovTraceEnrichment, numUniformRefinements);
   
   FunctionPtr f0;
   FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
@@ -1400,15 +1430,15 @@ int main(int argc, char *argv[])
   
   if (convertOverkillSolutionFiles)
   {
-    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements+overkillRefinementLevel);
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, vlasovTraceEnrichment, numUniformRefinements+overkillRefinementLevel);
     convertOverkillSolution(fineForm, numTimeSteps, overkillSolutionDir);
     return 0; // exit
   }
   else if (runOverkillVersusAdaptiveComparison)
   {
-    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements+overkillRefinementLevel);
-    Boltzmann1D1VFormulation adaptiveForm(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements  );
-    Boltzmann1D1VFormulation modestForm  (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, numUniformRefinements+uniformMeshRefinementLevel);
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, vlasovTraceEnrichment, numUniformRefinements+overkillRefinementLevel);
+    Boltzmann1D1VFormulation adaptiveForm(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, vlasovTraceEnrichment, numUniformRefinements  );
+    Boltzmann1D1VFormulation modestForm  (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, vlasovTraceEnrichment, numUniformRefinements+uniformMeshRefinementLevel);
     
 //    {
 //      // DEBUGGING/PROFILING
@@ -1542,6 +1572,11 @@ int main(int argc, char *argv[])
   suffix << "_u0" << u0;
   suffix << "_dt" << dt_max;
   suffix << "_H1Order" << H1Order;
+  
+  // adjust x and v element counts according to the number of uniform refinements requested.
+  xElements <<= numUniformRefinements;
+  vElements <<= numUniformRefinements;
+  
   suffix << "_" << xElements << "x" << vElements;
   
   std::string problemPrefix;
@@ -1568,6 +1603,13 @@ int main(int argc, char *argv[])
 //  std::cout << "gauss name: " << gaussSS.str() << std::endl;
   
   const std::string directoryPath = outputDir;
+  
+  if (resultsFile == "")
+  {
+    std::ostringstream resultsFileStream;
+    resultsFileStream << directoryPath << "/" << problemPrefix << "_results" << suffix.str() << ".dat";
+    resultsFile = resultsFileStream.str();
+  }
   
   Teuchos::RCP<HDF5Exporter> boltzmannViz, gaussViz;
   if (saveViz)
@@ -1683,6 +1725,153 @@ int main(int argc, char *argv[])
   if (rank == 0)
   {
     E_magnitudeOut.close();
+  }
+  
+  // output to results file:
+  auto activePhysicalCells = form.gaussMesh()->getActiveCellIDsGlobal();
+  form.gaussSolution()->importSolutionForOffRankCells(activePhysicalCells);
+    
+  if (rank == 0)
+  {
+    std::map<double,double> E_values; // map from x coordinate to final E field value; we use a map so it's sorted by x, regardless of the cell numbering (which for adaptive meshes may be out of order)
+    std::map<double,double> pointWeight_values; // map from x coordinate to cell measure-weighted quadrature weight
+    GlobalIndexType firstPhysicalCellID = *activePhysicalCells.begin();
+    
+    auto basisCache = BasisCache::basisCacheForCell(form.gaussMesh(), firstPhysicalCellID);
+    std::vector<GlobalIndexType> physicalCellIDsVector(activePhysicalCells.begin(),activePhysicalCells.end());
+    
+    auto physicalCellNodes = form.gaussMesh()->physicalCellNodes(physicalCellIDsVector);
+    basisCache->setPhysicalCellNodes(physicalCellNodes, physicalCellIDsVector, false);
+    
+    const FieldContainer<double> & physicalQuadraturePoints = basisCache->getPhysicalCubaturePointsFC();
+    const FieldContainer<double> & cubatureWeights = basisCache->getCubatureWeightsFC();
+    
+    const int numCells  = physicalQuadraturePoints.dimension(0);
+    const int numPoints = physicalQuadraturePoints.dimension(1);
+    
+    FieldContainer<double> E_values_FC(physicalCellIDsVector.size(), numPoints);
+    E_soln->values(E_values_FC, basisCache);
+    
+    for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+    {
+      const double cellWidth = physicalCellNodes(cellOrdinal,1,0) - physicalCellNodes(cellOrdinal,0,0);
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        const double & x = physicalQuadraturePoints(cellOrdinal,pointOrdinal,0);
+        const double & E = E_values_FC(cellOrdinal,pointOrdinal);
+        const double pointWeight = cubatureWeights(pointOrdinal) * cellWidth;
+        
+        E_values[x]           = E;
+        pointWeight_values[x] = pointWeight;
+      }
+    }
+    
+    std::ofstream resultsFileStream(resultsFile, std::ios::out);
+    
+    resultsFileStream << "x\tquadrature weight\tE\n";
+    resultsFileStream << setprecision(15);
+    
+    for (const auto & pointEntry : pointWeight_values)
+    {
+      const auto x           = pointEntry.first * spatialScaling;
+      const auto pointWeight = pointEntry.second * spatialScaling;
+      const auto E           = E_values[pointEntry.first] * EScaling;
+      
+      resultsFileStream << x           << "\t";
+      resultsFileStream << pointWeight << "\t";
+      resultsFileStream << E           << "\n";
+    }
+    
+    resultsFileStream.close();
+    
+    std::cout << "Wrote results to " << resultsFile << std::endl;
+  }
+    
+  const bool outputInflowValues = true;
+  if (outputInflowValues && (problemChoice == COLD_DIODE))
+  {
+    // output t_n / v along inflow boundary (which is x=0)
+    const int X_COMP_ZERO_BASED  = 0;
+    const int VX_COMP_ZERO_BASED = 1;
+    SpatialFilterPtr inflowFilter = SpatialFilter::matchingComponent(X_COMP_ZERO_BASED, x0);
+    
+    auto vlasovMeshTopo = form.boltzmannMesh()->getTopology()->baseMeshTopology();
+    auto inflowSideIndices = vlasovMeshTopo->getBoundarySidesThatMatch(inflowFilter);
+    std::set<GlobalIndexType> phaseInflowCells;
+    
+    const unsigned leftSideOrdinal = 2;
+    const unsigned sideDim = vlasovMeshTopo->getDimension() - 1;
+    
+    for (const auto & sideEntityIndex : inflowSideIndices)
+    {
+      IndexType phaseCellID = vlasovMeshTopo->getFirstCellForSide(sideEntityIndex).first;
+      if (!vlasovMeshTopo->isParent(phaseCellID))
+      {
+        phaseInflowCells.insert(phaseCellID);
+      }
+      // assert that the sideEntityIndex we found is in fact the leftSideOrdinal
+      assert( sideEntityIndex == vlasovMeshTopo->getCell(phaseCellID)->entityIndex(sideDim, leftSideOrdinal) );
+    }
+    
+    form.boltzmannSolution()->importSolutionForOffRankCells(phaseInflowCells);
+    
+    if (rank == 0)
+    {
+      std::map<double,double> f_values; // map from v_x coordinate to a computed f = t_n / v value; we use a map so it's sorted by v_x, regardless of the cell numbering (which for adaptive meshes may be out of order)
+      GlobalIndexType firstPhaseCellID = *phaseInflowCells.begin();
+      
+      const bool testVsTest = false;
+      const int cubatureEnrichment = 10; // get a bunch of extra points
+      auto basisCache = BasisCache::basisCacheForCell(form.boltzmannMesh(), firstPhaseCellID, testVsTest, cubatureEnrichment)->getSideBasisCache(leftSideOrdinal);
+      std::vector<GlobalIndexType> phaseCellIDsVector(phaseInflowCells.begin(),phaseInflowCells.end());
+      
+      const auto & cubPointsFC  = basisCache->getRefCellPointsFC();
+      const int numPoints = cubPointsFC.dimension(0); // (P,D)
+      
+      auto physicalCellNodes = form.boltzmannMesh()->physicalCellNodes(phaseCellIDsVector);
+      basisCache->setPhysicalCellNodes(physicalCellNodes, phaseCellIDsVector, false);
+      
+      FunctionPtr tn_soln = Function::solution(form.t_n_hat(), form.boltzmannSolution(), false);
+      
+      FieldContainer<double> tn_values_FC(phaseCellIDsVector.size(), numPoints);
+      tn_soln->values(tn_values_FC, basisCache);
+      
+      const FieldContainer<double> & physicalQuadraturePoints = basisCache->getPhysicalCubaturePointsFC();
+      
+      const int numCells  = physicalQuadraturePoints.dimension(0);
+      
+      std::ostringstream gnuPlotStringStream;
+      gnuPlotStringStream << directoryPath << "/" << problemPrefix << "_inflowBC" << suffix.str() << ".gnuplot";
+      std::string gnuPlotFile = gnuPlotStringStream.str();
+      
+      std::ofstream gnuPlotFileStream(gnuPlotFile, std::ios::out);
+      
+      gnuPlotFileStream << setprecision(15);
+      gnuPlotFileStream << "set term png\n";
+      gnuPlotFileStream << "set output \"" << problemPrefix << "_inflowBC" << suffix.str() << ".png\"\n";
+      gnuPlotFileStream << "plot '-' using 1:2 t \"f inflow\" smooth unique\n";
+      gnuPlotFileStream << "set term png\n";
+      
+      /*
+       set term png
+       set output "inflowBCs.png"
+       plot '-' using 1:2 t "f inflow" smooth unique
+       */
+      gnuPlotFileStream << "plot '-' using 1:2 smooth unique\n"; // inline data
+      for (int cellOrdinal=0; cellOrdinal<phaseCellIDsVector.size(); cellOrdinal++)
+      {
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          const double & v_x = physicalQuadraturePoints(cellOrdinal,pointOrdinal,VX_COMP_ZERO_BASED);
+          const double & t_n = tn_values_FC(cellOrdinal,pointOrdinal);
+          
+          const double f = t_n / v_x;
+          gnuPlotFileStream << "  " << v_x << " " << f << std::endl;
+        }
+      }
+      gnuPlotFileStream << "  e\n";
+      gnuPlotFileStream.close();
+    }
   }
   
   return 0;

@@ -1867,7 +1867,7 @@ void TSolution<Scalar>::importSolution()
 
 //  cout << "on rank " << rank << ", about to create myDofs container of size "<< globalDofIndicesForMyCells.size() << "\n";
   const int myDofCount = static_cast<int>(globalDofIndicesForMyCells.size());
-  GlobalIndexTypeToCast myDofs[myDofCount];
+  GlobalIndexTypeToCast myDofs[std::max(myDofCount,1)];
   GlobalIndexTypeToCast* myDof = (myDofCount > 0) ? &myDofs[0] : NULL;
   for (GlobalIndexType globalDof : globalDofIndicesForMyCells)
   {
@@ -4294,18 +4294,6 @@ void TSolution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< El
 template <typename Scalar>
 void TSolution<Scalar>::projectChildrenOntoParent(GlobalIndexType parentCellID, int solutionOrdinal)
 {
-  // 4-20-2021: removing this warning.  Unrefinements are no longer a new addition, and now have modest testing…
-//  static bool haveWarned = false;
-//  if (!haveWarned)
-//  {
-//    int rank = _mesh->Comm()->MyPID();
-//    if (rank == 0)
-//    {
-//      std::cout << "WARNING: unrefinements are a new addition, with limited testing.  Note also that at present skeleton degrees of freedom are *not* mapped from children onto parent during unrefinement (volume degrees of freedom are mapped).\n";
-//    }
-//    haveWarned = true;
-//  }
-  
   VarFactoryPtr vf;
   if (_bf != Teuchos::null)
     vf = _bf->varFactory();

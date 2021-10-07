@@ -1130,6 +1130,10 @@ int main(int argc, char *argv[])
   int solutionOutputFrequency = 1;
   int overkillTimeStepsBetweenComparisons = 1;
   int solutionComparisonFrequency = 1;
+  bool useGeometricMultigrid = true;
+  int numUniformRefinements = 0;
+  int numSubsteps = 5; // for fixed-point iteration.  (May want more for coarser meshes?)
+  int vlasovTraceEnrichment = -1; // if left unset by user, will default to 0 for all problems but cold diode, where it is 1 (at least for now).
   
   std::string resultsFile = "";
   
@@ -1137,11 +1141,13 @@ int main(int argc, char *argv[])
   cmdp.setOption("xElements", &xElements);
   cmdp.setOption("tElements", &tElements);
   cmdp.setOption("vElements", &vElements);
+  cmdp.setOption("numUniformRefinements", &numUniformRefinements);
   cmdp.setOption("H1Order", &H1Order);
-  cmdp.setOption("resultsFile", &H1Order);
+  cmdp.setOption("resultsFile", &resultsFile);
   cmdp.setOption("u0", &u0);
   cmdp.setOption("maxElements", &maxElements);
   cmdp.setOption("maximumRefinementLevel", &maximumRefinementLevel);
+  cmdp.setOption("numSubsteps", &numSubsteps);
   cmdp.setOption("viz", "noViz", &saveViz);
   cmdp.setOption("gateRefinements", "dontGateRefinements", &gateRefinements);
   cmdp.setOption("outputFrequency", &outputFrequency);
@@ -1161,6 +1167,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("overkillMeshRefinementLevel", &overkillRefinementLevel);
   cmdp.setOption("overkillH1Order", &overkillH1Order);
   cmdp.setOption("uniformMeshRefinementLevel", &uniformMeshRefinementLevel);
+  cmdp.setOption("useGeometricMultigrid", "useDirectSolver", &useGeometricMultigrid);
+  cmdp.setOption("vlasovTraceEnrichment", &vlasovTraceEnrichment);
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -1170,31 +1178,29 @@ int main(int argc, char *argv[])
     return -1;
   }
   
-  std::ostringstream suffix;
-  if (useL2Trace)
-  {
-    suffix << "_L2Trace";
-  }
-  else
-  {
-    suffix << "_H1Trace";
-  }
-  suffix << "_u0" << u0;
-  suffix << "_H1Order" << H1Order;
-  suffix << "_" << xElements << "x" << tElements << "x" << vElements;
-  
-  const std::string problemPrefix = problemChoiceString;
-  
-  if (resultsFile == "")
-  {
-    std::ostringstream resultsFileStream;
-    resultsFileStream << problemPrefix << "_results" << suffix.str() << ".dat";
-    resultsFile = resultsFileStream.str();
-  }
-  
   const int rank = mpiSession.getRank();
   
   problemChoice = getProblemChoice(problemChoiceString);
+  
+  // for cold diode, we non-dimensionalize; we modify the below accordingly so that we can output dimensional values to results file.
+  double velocityScaling = 1.;
+  double timeScaling     = 1.;
+  double spatialScaling  = 1.;
+  double EScaling        = 1.;
+  
+  if (vlasovTraceEnrichment == -1)
+  {
+    if (problemChoice == COLD_DIODE)
+    {
+      // this helps resolve the very fine BCs
+      vlasovTraceEnrichment = 1;
+    }
+    else
+    {
+      // theory says that H^1 order is enough for convergence rates (if BCs are resolved)
+      vlasovTraceEnrichment = 0;
+    }
+  }
   
   bool usePeriodicBCs = true;
   if (problemChoice == BUMP_ON_TAIL)
@@ -1207,11 +1213,6 @@ int main(int argc, char *argv[])
   }
   else if (problemChoice == COLD_DIODE)
   {
-    if (resultsFile == "")
-    {
-      
-    }
-    
     const double e               = 1.602176634e-19; // electron's electric charge in Coulombs
     const double m_e             =  9.10938356e-31;  // m_e, mass of electron in kg
     
@@ -1221,16 +1222,16 @@ int main(int argc, char *argv[])
     // v_beam is defined by 1/2 m v^2 = W ==> v_beam = sqrt( 2 W /m ):
     const double v_beam          = sqrt(2 * W * e / m_e ); // e converts from eV to Joules
     
-    const double velocityScaling = v_beam;
     const double q0              = e;
     const double m0              = m_e;
     
-    const double timeScaling     = 1.97485663509e-9; // final time from SAND report [s]
-    const double spatialScaling  = velocityScaling * timeScaling; // [m]
-    
-    const double EScaling        = m0 * velocityScaling / (q0 * timeScaling);
+    velocityScaling = v_beam;
+    timeScaling     = 1.97485663509e-9; // final time from SAND report [s]
+    spatialScaling  = velocityScaling * timeScaling; // [m]
+    EScaling        = m0 * velocityScaling / (q0 * timeScaling);
     
     std::cout << "Characteristic E-field strength E_0 : " << EScaling << std::endl;
+    std::cout << "spatial scaling : " << spatialScaling << std::endl;
     
     const double permittivity    = 8.85418782e-12; // permittivity of free space
     
@@ -1241,8 +1242,8 @@ int main(int argc, char *argv[])
     xWidth = 0.01 / spatialScaling;
     u0     = 1.0;
     n0     = 1.0;
-    sigma  = 1e5 / velocityScaling;
-    q      = -1.0; // experimental, but this does make the sign of E agree with the SAND report at the left-hand side of the domain.  (Though this is not much confirmation, as the E-field still dies off for us with time.)
+    sigma  = 1e6 / velocityScaling;
+    q      = -1.0;
     
     // eps0 is a weight that enters VlasovPoissonSpaceTimeFormulation; we use this to scale the problem:
     eps0   = 1.0 / (omega_p * omega_p * timeScaling * timeScaling);
@@ -1250,14 +1251,34 @@ int main(int argc, char *argv[])
     enforceQuasiNeutrality = false;
     v0     = 0.80;
     vWidth = 0.40;
+    
+    std::cout << "sigma = " << sigma << std::endl;
+    std::cout << "u0 = " << u0 << std::endl;
+    std::cout << "n0 = " << n0 << std::endl;
   }
   
   VlasovPoissonSpaceTimeFormulation::VlasovPoissonSpaceTimeFormulationChoice formulationChoice;
   using FormulationChoice = Camellia::VlasovPoissonSpaceTimeFormulation::VlasovPoissonSpaceTimeFormulationChoice;
   formulationChoice = FormulationChoice::ULTRAWEAK;
   
-  const int numUniformRefinements = 0;
-  VlasovPoissonSpaceTimeFormulation form(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+  VlasovPoissonSpaceTimeFormulation form(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
+  
+  form.setUseGeometricMultigrid(useGeometricMultigrid);
+  
+  if (numUniformRefinements > 0)
+  {
+    for (int i=0; i<numUniformRefinements; i++)
+    {
+      const auto & activeCells  = form.vlasovMesh()->getActiveCellIDsGlobal();
+      form.vlasovMesh()->hRefine(activeCells);
+      
+      xElements *= 2;
+      tElements *= 2;
+      vElements *= 2;
+      
+      // it should be the case that Poisson mesh is automatically refined when the Vlasov mesh is
+    }
+  }
   
   FunctionPtr f0;
   FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
@@ -1293,7 +1314,7 @@ int main(int argc, char *argv[])
   
   if (convertOverkillSolutionFiles)
   {
-    VlasovPoissonSpaceTimeFormulation fineForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+    VlasovPoissonSpaceTimeFormulation fineForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
     // TODO: do uniform refinements on fineForm meshes: numUniformRefinements+overkillRefinementLevel
     
     convertOverkillSolution(fineForm, overkillSolutionDir);
@@ -1301,11 +1322,11 @@ int main(int argc, char *argv[])
   }
   else if (runOverkillVersusAdaptiveComparison)
   {
-    VlasovPoissonSpaceTimeFormulation fineForm    (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+    VlasovPoissonSpaceTimeFormulation fineForm    (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
     // TODO: do uniform refinements on fineForm meshes: numUniformRefinements+overkillRefinementLevel
-    VlasovPoissonSpaceTimeFormulation adaptiveForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+    VlasovPoissonSpaceTimeFormulation adaptiveForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
     // TODO: do uniform refinements on adaptiveForm meshes: numUniformRefinements
-    VlasovPoissonSpaceTimeFormulation modestForm  (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+    VlasovPoissonSpaceTimeFormulation modestForm  (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
     // TODO: do uniform refinements on modestForm meshes: numUniformRefinements+uniformMeshRefinementLevel
     
 //    {
@@ -1350,6 +1371,28 @@ int main(int argc, char *argv[])
     form.setVlasovInitialConditions(f0);
   }
   
+  std::ostringstream suffix;
+  if (useL2Trace)
+  {
+    suffix << "_L2Trace";
+  }
+  else
+  {
+    suffix << "_H1Trace";
+  }
+  suffix << "_u0" << u0;
+  suffix << "_H1Order" << H1Order;
+  suffix << "_" << xElements << "x" << tElements << "x" << vElements;
+  
+  const std::string problemPrefix = problemChoiceString;
+  
+  if (resultsFile == "")
+  {
+    std::ostringstream resultsFileStream;
+    resultsFileStream << problemPrefix << "_results" << suffix.str() << ".dat";
+    resultsFile = resultsFileStream.str();
+  }
+  
   std::ostringstream vlasovSS;
   vlasovSS << problemPrefix << "Vlasov" << suffix.str();
   
@@ -1372,7 +1415,9 @@ int main(int argc, char *argv[])
   FunctionPtr E_squared = E_soln * E_soln;
   FunctionPtr abs_E_soln = Teuchos::rcp( new AbsFunction(E_soln) );
   
-  form.setSubstepsForFixedPoint(5);
+  form.setSubstepsForFixedPoint(numSubsteps);
+  
+//  form.vlasovSolution()->setWriteMatrixToFile(true, "/tmp/A_Vlasov.dat");
   
   form.solve();
   
@@ -1408,7 +1453,10 @@ int main(int argc, char *argv[])
     for (const auto & sideEntityIndex : finalTimeSideIndices)
     {
       IndexType physicalCellID = poissonMeshTopo->getFirstCellForSide(sideEntityIndex).first;
-      physicalCellsFinalTime.insert(physicalCellID);
+      if (!poissonMeshTopo->isParent(physicalCellID))
+      {
+        physicalCellsFinalTime.insert(physicalCellID);
+      }
     }
     
     form.poissonSolution()->importSolutionForOffRankCells(physicalCellsFinalTime);
@@ -1416,6 +1464,7 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
       std::map<double,double> E_values; // map from x coordinate to final E field value; we use a map so it's sorted by x, regardless of the cell numbering (which for adaptive meshes may be out of order)
+      std::map<double,double> pointWeight_values; // map from x coordinate to cell measure-weighted quadrature weight
       GlobalIndexType firstPhysicalCellID = *physicalCellsFinalTime.begin();
       
       auto basisCache = BasisCache::basisCacheForCell(form.poissonMesh(), firstPhysicalCellID);
@@ -1424,16 +1473,33 @@ int main(int argc, char *argv[])
       auto cubWeights = basisCache->getCubatureWeights();
       auto cubPoints  = basisCache->getRefCellPoints();
       
-      // we want to rewrite cubPoints/weights so that in the temporal dimension, there is only one point (and it corresponds to final time)
+      // we want to rewrite cubPoints/weights so that the temporal dimension only extends over a thin slice of the element
+      // for now, we assume that the temporal extent of each element at final time is the same
       auto spatialCubWeights = cubWeights.getTensorComponent(0);
       auto spatialPoints     = cubPoints.getTensorComponent(0);
+      auto temporalWeights   = cubWeights.getTensorComponent(1);
+      auto temporalPoints    = cubPoints.getTensorComponent(1);
       
       using Data       = Intrepid2::Data<double, Camellia::DeviceType>;
+      using DataHost   = Intrepid2::Data<double, Kokkos::HostSpace>;
       using ScalarView = Kokkos::DynRankView<double, Camellia::DeviceType>;
-      ScalarView temporalPoints("temporalPoints",1,1);
-      Data temporalWeights(1.0, Kokkos::Array<int,1>{1});
       
-      Kokkos::deep_copy(temporalPoints, 1.0);
+      auto temporalWeightsView = temporalWeights.getUnderlyingView<1>();
+      
+      const int numTemporalPoints = temporalPoints.extent_int(0); // (P,D)
+      Kokkos::parallel_for(numTemporalPoints, KOKKOS_LAMBDA(const int &pointOrdinal)
+      {
+        // map points from (-1,1) to (.98,1)
+        // x_new = 0.01 * x_old + 0.99
+        auto x_old = temporalPoints(pointOrdinal,0);
+        temporalPoints(pointOrdinal,0) = .01 * x_old + 0.99;
+        
+        // quadrature weights should likewise be scaled by .01
+        temporalWeightsView(pointOrdinal) *= .01;
+      });
+      
+      DataHost spatialCubatureWeightsHost(spatialCubWeights);
+      DataHost temporalCubatureWeightsHost(temporalWeights);
       
       std::vector<ScalarView> refPointsComponents {spatialPoints, temporalPoints};
       std::vector<Data> cubWeightsComponents {spatialCubWeights, temporalWeights};
@@ -1448,12 +1514,56 @@ int main(int argc, char *argv[])
       FieldContainer<double> E_values_FC(physicalCellIDsVector.size(), finalTimeRefPoints.extent_int(0));
       E_soln->values(E_values_FC, basisCache);
       
-      // TODO: place x values, E values, weighted point measures into containers
-      // TODO: write those things to results file
+      const FieldContainer<double> & physicalQuadraturePoints = basisCache->getPhysicalCubaturePointsFC();
+      
+      const int numCells         = physicalQuadraturePoints.dimension(0);
+      const int numSpatialPoints = spatialPoints.extent_int(0);
+      
+      for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+      {
+        const double cellWidth = physicalCellNodes(cellOrdinal,1,0) - physicalCellNodes(cellOrdinal,0,0);
+        const double temporalWidth = physicalCellNodes(cellOrdinal,2,1) - physicalCellNodes(cellOrdinal,0,1);
+        for (int spatialPointOrdinal=0; spatialPointOrdinal<numSpatialPoints; spatialPointOrdinal++)
+        {
+          const int firstTensorPointOrdinal = spatialPointOrdinal; // formula is temporalPointOrdinal * numSpatialPoints + spatialPointOrdinal; this is the point ordinal corresponding to temporalPointOrdinal = 0.
+          const double & x = physicalQuadraturePoints(cellOrdinal,firstTensorPointOrdinal,0);
+          double E_integral = 0.0;   // integral in time
+          double one_integral = 0.0; // integrate 1 so that we can divide by that to get the average
+          for (int temporalPointOrdinal=0; temporalPointOrdinal < numTemporalPoints; temporalPointOrdinal++)
+          {
+            const int pointOrdinal = temporalPointOrdinal * numSpatialPoints + spatialPointOrdinal;
+            const double & E = E_values_FC(cellOrdinal,pointOrdinal);
+            
+            const double & temporalWeight = temporalCubatureWeightsHost(temporalPointOrdinal);
+            E_integral   += E * temporalWeight;
+            one_integral += temporalWeight;
+          }
+          const double pointWeight = spatialCubatureWeightsHost(spatialPointOrdinal) * cellWidth;
+          
+          E_values[x]           = E_integral / one_integral;
+          pointWeight_values[x] = pointWeight;
+        }
+      }
+      
+      std::ofstream resultsFileStream(resultsFile, std::ios::out);
+      
+      resultsFileStream << "x\tquadrature weight\tE\n";
+      resultsFileStream << setprecision(15);
+      
+      for (const auto & pointEntry : pointWeight_values)
+      {
+        const auto x           = pointEntry.first * spatialScaling;
+        const auto pointWeight = pointEntry.second * spatialScaling;
+        const auto E           = E_values[pointEntry.first] * EScaling;
+        
+        resultsFileStream << x           << "\t";
+        resultsFileStream << pointWeight << "\t";
+        resultsFileStream << E           << "\n";
+      }
+      
+      resultsFileStream.close();
     }
-    
   }
-    
   
   BasisCachePtr physicalBasisCache = BasisCache::basisCacheForCell(form.poissonMesh(), 0);
   

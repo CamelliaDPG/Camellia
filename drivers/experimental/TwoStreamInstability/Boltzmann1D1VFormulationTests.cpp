@@ -66,7 +66,9 @@ namespace {
         formulation = FormulationChoice::ULTRAWEAK_EXPLICIT_H1_TRACE;
       }
     }
-    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, tableau);
+    const int vlasovTraceEnrichment = 0;
+    const int numUniformRefinements = 0;
+    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, tableau, vlasovTraceEnrichment, numUniformRefinements);
     return form;
   }
 
@@ -448,7 +450,9 @@ namespace {
     FormulationChoice formulation = FormulationChoice::ULTRAWEAK_IMPLICIT_L2_TRACE;
     const bool usePeriodicBCs = true;
     const bool enforceQuasiNeutrality = true;
-    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null, 0);
+    const int vlasovTraceEnrichment = 0;
+    const int numUniformRefinements = 0;
+    Boltzmann1D1VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null, vlasovTraceEnrichment, numUniformRefinements);
     
     auto boltzmannSoln = form.boltzmannSolution();
     IPPtr defaultIP = boltzmannSoln->ip(); // our default inner product for Boltzmann; at present, this is one inspired by Führer et al.

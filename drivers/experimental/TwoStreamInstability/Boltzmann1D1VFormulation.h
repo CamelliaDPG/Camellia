@@ -50,6 +50,7 @@ private:
   BFPtr _boltzmannBF;
   BFPtr _gaussBF;
   int _delta_k;
+  int _tn_enrichment = 0;
   
   SolutionPtr _boltzmannSoln;
   SolutionPtr _boltzmannSolnPrev;
@@ -124,12 +125,14 @@ private:
   
   void updateElectricField();
 public:
+  //! Traces in Vlasov by default match the H^1 order in polynomial order (i.e., they are one order higher than volumetric variable).  To use a higher order, set vlasovTraceEnrichment to 1 or more.
   Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoice formulationChoice, double q, double eps0, double m, double dt,
                            const double x0, const double xWidth, const int xElements,
                            const double v0, const double vWidth, const int vElements,
                            const int H1Order, const int delta_k, const bool usePeriodicBCs,
                            const bool enforceQuasiNeutrality, ERKTableauPtr erkTableau,
-                           const int numUniformRefinements = 0);
+                           const int vlasovTraceEnrichment,
+                           const int numUniformRefinements);
 
   //! set initial conditions.  Solves for initial E, E_hat, and sets t=0;
   void setInitialConditions(FunctionPtr f0);

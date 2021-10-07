@@ -44,30 +44,99 @@ const string VlasovPoissonSpaceTimeFormulation::S_W = "w";
 const string VlasovPoissonSpaceTimeFormulation::S_V_POISSON = "v_{\rm Poisson}";
 const string VlasovPoissonSpaceTimeFormulation::S_TAU_POISSON = "\\tau_{\rm Poisson}";
 
-class PhaseSpaceExtrusion : public TFunction<double>
+class PhysicalSolutionExtrusion : public TFunction<double>
 {
-  FunctionPtr _g_physical; // arbitrary function on physical mesh -- can depend on mesh/physical solution
+  SolutionPtr _physicalSoln;    // the solution on the physical mesh
+  VarPtr      _fieldVar;        // the physical field var whose solution we extrude.
+  FunctionPtr _physicalSolnFxn; // the solution function for the field var, defined on the physical mesh.
   
-  Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap;
+  Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap; // TODO: eliminate this member variable; we don't use the PhasePhysicalMeshMap except to allow reference to phase and physical meshes individually.
+  static int variationDimensions(Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap)
+  {
+    auto physicalMeshDims = phaseSpacePhysicalMeshMap->physicalMesh()->getDimension();
+    int variationDimensions = VARIES_IN_NO_DIMENSION;
+    for (int d=0; d<physicalMeshDims; d++)
+    {
+      int varDim = VARIES_IN_DIMENSION_0 << d; // will give VARIES_IN_DIMENSION_1 for d == 1, etc.
+      variationDimensions |= varDim;
+    }
+    return variationDimensions;
+  }
 public:
-  PhaseSpaceExtrusion( FunctionPtr g_physical, Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap)
+  PhysicalSolutionExtrusion( SolutionPtr physicalSoln, VarPtr fieldVar,
+                            Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap)
   :
-  Function("PhaseSpaceExtrusion",g_physical->rank(),VARIES_IN_DIMENSION_0),
-  _g_physical(g_physical),
+  Function("PhysicalSolutionExtrusion",fieldVar->rank(),variationDimensions(phaseSpacePhysicalMeshMap)), // varies in space-time, but not in velocity dimensions
+  _physicalSoln(physicalSoln),
+  _fieldVar(fieldVar),
   _phaseSpacePhysicalMeshMap(phaseSpacePhysicalMeshMap)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(g_physical->rank() != 0, std::invalid_argument, "Only scalar-valued functions supported right now");
+    auto physicalSolnWeakPtr = Teuchos::rcp(_physicalSoln.get(), false);
+    _physicalSolnFxn = Function::solution(_fieldVar, physicalSolnWeakPtr);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(_physicalSolnFxn->rank() != 0, std::invalid_argument, "Only scalar-valued functions supported");
   }
   
   void updateValues()
   {
     auto & phaseSpaceCellIDs = _phaseSpacePhysicalMeshMap->phaseMesh()->cellIDsInPartition();
+        
+    // determine all active descendants of the physical cells needed locally; import *their* data
+    set<GlobalIndexType> activePhysicalCellIDDescendants;
     
-    const set<GlobalIndexType> physicalCellIDs = _phaseSpacePhysicalMeshMap->physicalCellIDsForPhaseSpaceCells(phaseSpaceCellIDs);
-    map<GlobalIndexType, Camellia::FieldContainer<double> > physicalValuesMap;
+    vector< set<GlobalIndexType> > parentCellsForLevel;
+    auto physicalMeshTopo = _phaseSpacePhysicalMeshMap->physicalMesh()->getTopology();
+    ExtrudedMeshTopology* phaseSpaceMeshTopo = dynamic_cast<ExtrudedMeshTopology*>( _phaseSpacePhysicalMeshMap->phaseMesh()->getTopology().get());
     
-    const std::vector<GlobalIndexType> physicalCellIDsVector(physicalCellIDs.begin(), physicalCellIDs.end());
-    _g_physical->importCellData(physicalCellIDsVector);
+    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopo == NULL, std::invalid_argument, "Phase-space MeshTopology must be an ExtrudedMeshTopology");
+    
+    set<GlobalIndexType> physicalCellIDs;
+    for (const auto & phaseSpaceCellID : phaseSpaceCellIDs)
+    {
+      auto physicalCellID = phaseSpaceMeshTopo->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID);
+      physicalCellIDs.insert(physicalCellID);
+    }
+    
+    for (const auto &physicalCellID : physicalCellIDs)
+    {
+      auto physicalCell = physicalMeshTopo->getCell(physicalCellID);
+      const bool leafNodesOnly = true; // only the active descendants
+      auto activeDescendants = physicalCell->getDescendants(physicalMeshTopo, leafNodesOnly);
+      activePhysicalCellIDDescendants.insert(activeDescendants.begin(),activeDescendants.end());
+      
+      if (physicalCell->isParent(physicalMeshTopo))
+      {
+        auto allDescendants = physicalCell->getDescendants(physicalMeshTopo, false); // false: not just the leaf nodes
+        for (const auto & descendantID : allDescendants)
+        {
+          if (descendantID == physicalCellID) continue; // getDescendants() includes the cell itself, too, when leafNodesOnly = false.  (We only want proper descendants.)
+          auto descendant = physicalMeshTopo->getCell(descendantID);
+          auto parentCellID = descendant->getParent()->cellIndex();
+          
+          int descendantLevel = descendant->level();
+          if (descendantLevel >= parentCellsForLevel.size())
+          {
+            parentCellsForLevel.resize(descendantLevel);
+          }
+          parentCellsForLevel[descendantLevel - 1].insert(parentCellID);
+        }
+      }
+    }
+    
+    _physicalSoln->discardInactiveCellCoefficients(); // clear any previously computed parent data -- this is mostly to avoid hiding bugs due to using stale data
+    
+    const std::vector<GlobalIndexType> physicalCellIDsVector(activePhysicalCellIDDescendants.begin(), activePhysicalCellIDDescendants.end());
+    _physicalSolnFxn->importCellData(physicalCellIDsVector);
+    
+    int maxLevel = parentCellsForLevel.size() - 1;
+    for (int level=maxLevel; level >= 0; level--)
+    {
+      const auto & parentCellIDsForLevel = parentCellsForLevel[level];
+      for (const auto & parentCellID : parentCellIDsForLevel)
+      {
+        _physicalSoln->projectChildrenOntoParent(parentCellID);
+      }
+    }
   }
   
   using TFunction<double>::values;
@@ -123,7 +192,7 @@ public:
     
     TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 1 + numPhaseDimensions, std::invalid_argument, "Expect values to have shape (C,P0,P1,…,Pn) for n = # phase dimensions - 1");
     int extrusionExtentCount = 1;
-    for (int dataIndex=numPhysicalDimensions; dataIndex<values.rank(); dataIndex++)
+    for (int dataIndex=numPhysicalDimensions+1; dataIndex<values.rank(); dataIndex++) // expect variation in C, plus each physical dimension (including time, for space-time)
     {
       extrusionExtentCount *= values.getDataExtent(dataIndex);
     }
@@ -162,55 +231,43 @@ public:
       CellPtr physicalCell = physicalMeshTopology->getCell(physicalCellID);
       
       const int cubatureDegree = basisCache->cubatureDegree();
-      if (!physicalCell->isParent(physicalMeshTopology))
+
+      FieldContainer<double> physicalCellNodes = physicalMesh->physicalCellNodesForCell(physicalCellID);
+      BasisCachePtr physicalBasisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, physicalCell->topology(), physicalRefPoints) );
+      physicalBasisCache->setMesh(physicalMesh);
+      physicalBasisCache->setCellIDs({physicalCellID});
+      
+      auto g_dataValues = _physicalSolnFxn->checkoutValuesData(physicalBasisCache);
+      
+      _physicalSolnFxn->values(g_dataValues, physicalBasisCache);
+      
+      // copy g_dataValues into values
+      using ExecutionSpace = Camellia::DeviceExecutionSpace;
+      if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
       {
-        // then we can evaluate _g_physical directly on the physical cell
+        // this is the 1D1T1V case (space-time 1D1V)
+        auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{physicalPointCounts[0],physicalPointCounts[1]});
         
-        FieldContainer<double> physicalCellNodes = physicalMesh->physicalCellNodesForCell(physicalCellID);
-        BasisCachePtr physicalBasisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, physicalCell->topology(), physicalRefPoints) );
-        physicalBasisCache->setMesh(physicalMesh);
-        physicalBasisCache->setCellIDs({physicalCellID});
-        
-        auto g_dataValues = _g_physical->checkoutValuesData(physicalBasisCache);
-        
-        _g_physical->values(g_dataValues, physicalBasisCache);
-        
-        // copy g_dataValues into values
-        using ExecutionSpace = Camellia::DeviceExecutionSpace;
-        if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
+        Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+        KOKKOS_LAMBDA (const int &x0, const int &x1)
         {
-          // this is the 1D1T1V case (space-time 1D1V)
-          auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{physicalPointCounts[0],physicalPointCounts[1]});
-          
-          Kokkos::parallel_for("SolutionMomentFunction_values", policy,
-          KOKKOS_LAMBDA (const int &x0, const int &x1)
-          {
-            values.getWritableEntry(phaseSpaceCellOrdinal,x0,x1,0) = g_dataValues(0,x0,x1);
-          });
-        }
-        else
-        {
-          // TODO: add support for other physical/velocity component counts
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported physical/velocity component count");
-        }
-        
-        _g_physical->checkinValuesData(g_dataValues);
+          values.getWritableEntry(phaseSpaceCellOrdinal,x0,x1,0) = g_dataValues(0,x0,x1);
+        });
       }
       else
       {
-        // TODO: finish this; support refinements
-        // The basic thing we need is a way to map physical ref points to the appropriate descendants.  This
-        // does involve a transformation of the point coordinates; there should be something in RefinementPattern
-        // that does this already, but we should implement something fresh that exploits and maintains the tensor
-        // product structures.
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Physical cell refinements are not yet supported");
+        // TODO: add support for other physical/velocity component counts
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported physical/velocity component count");
       }
+      
+      _physicalSolnFxn->checkinValuesData(g_dataValues);
     }
   }
   
   bool boundaryValueOnly() override
   {
-    return _g_physical->boundaryValueOnly();
+    // should always be false
+    return _physicalSolnFxn->boundaryValueOnly();
   }
 };
 
@@ -625,7 +682,8 @@ VlasovPoissonSpaceTimeFormulation::VlasovPoissonSpaceTimeFormulation(VlasovPoiss
                                                                      const double t0, const double tFinal, const int tElementsCoarse,
                                                                      const double v0, const double vWidth, const int vElementsCoarse,
                                                                      const int H1Order, const int delta_k,
-                                                                     const bool usePeriodicBCs, const bool enforceQuasiNeutrality)
+                                                                     const bool usePeriodicBCs, const bool enforceQuasiNeutrality,
+                                                                     const int vlasovTraceEnrichment)
 :
 _formulationChoice(formulationChoice),
 _usePeriodicBCs(usePeriodicBCs),
@@ -639,6 +697,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
   const int spaceDim = 1;
   const int velocityDim = 1;
   _delta_k = delta_k;
+  _tn_enrichment = vlasovTraceEnrichment;
   
   _q    = ParameterFunction::parameterFunction(q);
   _eps0 = ParameterFunction::parameterFunction(eps0);
@@ -758,7 +817,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     testOrderEnhancements.clear();
     if (l2Trace)
     {
-      trialOrderEnhancements[t_n_hat->ID()] = 1;
+      trialOrderEnhancements[t_n_hat->ID()] = 1 + _tn_enrichment; // +1 for non-conforming, + whatever user requested
     }
     
     MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, H1Order, delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );
@@ -766,7 +825,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     _phaseSpacePhysicalMeshMap = Teuchos::rcp( new PhasePhysicalMeshMap( poissonMesh, vlasovMesh ) );
     auto meshMapWeakPtr        = Teuchos::rcp( _phaseSpacePhysicalMeshMap.get(), false);
     
-    _E_extruded = Teuchos::rcp( new PhaseSpaceExtrusion(E_soln, meshMapWeakPtr) );
+    _E_extruded = Teuchos::rcp( new PhysicalSolutionExtrusion(_poissonSoln, E, meshMapWeakPtr) );
 
     // the di() methods are 1-based:
     static const int SPATIAL_INDEX  = 1;
@@ -1047,8 +1106,7 @@ void VlasovPoissonSpaceTimeFormulation::solve()
 {
   const bool useAdaptivity = _refStrategy != Teuchos::null;
   
-  bool useGMG = false;
-  if (useGMG && (_gmgSolver == Teuchos::null))
+  if (_useGeometricMultigrid && (_gmgSolver == Teuchos::null))
   {
 //    {
 //      double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
@@ -1061,8 +1119,8 @@ void VlasovPoissonSpaceTimeFormulation::solve()
 
     bool useCondensedSolve = _vlasovSoln->usesCondensedSolve();
 
-    //    auto multigridStrategy = GMGOperator::V_CYCLE;
-    auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
+    auto multigridStrategy = GMGOperator::V_CYCLE;
+//    auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
     GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ; // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL; // as configured, this is very slow; I think it's treating all data on an MPI rank as a block…
@@ -1111,6 +1169,8 @@ void VlasovPoissonSpaceTimeFormulation::solve()
     poissonViz = Teuchos::rcp(new HDF5Exporter (this->poissonMesh(), poissonSS.str(), directoryPath) );
   }
   
+  // get the PhysicalSolutionExtrusion ready to evaluate (in context of Vlasov BF)
+  static_cast<PhysicalSolutionExtrusion*>(_E_extruded.get())->updateValues();
   for (int substepOrdinal=0; substepOrdinal < _numSubsteps; substepOrdinal++)
   {
     std::cout << "Solving substep " << substepOrdinal+1 << " of " << _numSubsteps << std::endl;
@@ -1125,7 +1185,6 @@ void VlasovPoissonSpaceTimeFormulation::solve()
       _vlasovSoln->solve(_gmgSolver);
       substepIterationCounts[substepOrdinal] = _gmgSolver->iterationCount();
     }
-    // if we have a tableau, then electric field will be updated when the solution stage is set.
     updateElectricField();
     
     if (exportViz)
@@ -1183,7 +1242,7 @@ void VlasovPoissonSpaceTimeFormulation::updateElectricField()
   // solve for E, E_hat:
   _poissonSoln->solve();
     
-  static_cast<PhaseSpaceExtrusion*>(_E_extruded.get())->updateValues();
+  static_cast<PhysicalSolutionExtrusion*>(_E_extruded.get())->updateValues();
 }
 
 void VlasovPoissonSpaceTimeFormulation::setVlasovInitialConditions(FunctionPtr f0)
@@ -1244,6 +1303,11 @@ VarPtr VlasovPoissonSpaceTimeFormulation::w()
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
   return vf->testVar(S_W, HGRAD);
+}
+
+void VlasovPoissonSpaceTimeFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
+{
+  _useGeometricMultigrid = useGeometricMultigrid;
 }
 
 VarPtr VlasovPoissonSpaceTimeFormulation::tau()
@@ -1344,12 +1408,14 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
   
   for (auto formulationChoice : formulationChoices)
   {
+    const int vlasovTraceEnrichment = 0;
     VlasovPoissonSpaceTimeFormulation form(formulationChoice,
                                            q, eps0, m,
                                            x0, xWidth, xElements,
                                            t0, tWidth, tElements,
                                            v0, vWidth, vElements,
-                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality,
+                                           vlasovTraceEnrichment);
     
     FunctionPtr x  = Function::xn(1);
     FunctionPtr z  = Function::zn(1);
@@ -1438,7 +1504,7 @@ public:
   }
 };
 
-void testVelocityExtrusion1D1T(bool volumeVariable, bool doRefinement, Teuchos::FancyOStream &out, bool &success)
+void testVelocityExtrusion1D1T(bool doRefinement, Teuchos::FancyOStream &out, bool &success)
 {
   double tol = 1e-14;
   // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
@@ -1468,41 +1534,31 @@ void testVelocityExtrusion1D1T(bool volumeVariable, bool doRefinement, Teuchos::
   
   for (auto formulationChoice : formulationChoices)
   {
+    const int vlasovTraceEnrichment = 0;
     VlasovPoissonSpaceTimeFormulation form(formulationChoice,
                                            q, eps0, m,
                                            x0, xWidth, xElements,
                                            t0, tWidth, tElements,
                                            v0, vWidth, vElements,
-                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality,
+                                           vlasovTraceEnrichment);
     
-    FunctionPtr x  = Function::xn(1);
+    FunctionPtr xt = Function::xn(1) * Function::yn(1);
     
     FunctionPtr physicalSoln;
     
     auto poissonSoln = form.poissonSolution();
     std::map<int, FunctionPtr> projectionMap;
-    if (volumeVariable)
-    {
-      auto E = form.E();
-      projectionMap[E->ID()] = x;
-      physicalSoln = Function::solution(E, poissonSoln);
-    }
-    else
-    {
-      auto E     = form.E();
-      auto E_hat = form.E_hat();
-      projectionMap[E->ID()] = x * (xWidth - x);
-      projectionMap[E_hat->ID()] = x * (xWidth - x); // for skeleton values, due to periodic BCs, want something that agrees on left/right side: having zeros there makes this simpler
-      physicalSoln = Function::solution(E_hat, poissonSoln, false); // false: don't weight by parity (makes uniquely-valued)
-    }
     
-    TEST_ASSERT(physicalSoln->boundaryValueOnly() == !volumeVariable);
+    auto E = form.E();
+    projectionMap[E->ID()] = xt;
+    physicalSoln = Function::solution(E, poissonSoln);
     
     auto poissonMesh = form.poissonMesh();
     auto vlasovMesh = form.vlasovMesh();
     
     auto meshMap = Teuchos::rcp( new PhasePhysicalMeshMap( poissonMesh, vlasovMesh ) );
-    auto extrusion = Teuchos::rcp( new PhaseSpaceExtrusion(physicalSoln, meshMap) );
+    auto extrusion = Teuchos::rcp( new PhysicalSolutionExtrusion(poissonSoln, E, meshMap) );
     
     auto cellTopo = CellTopology::cellTopology(CellTopology::line(), 2);
     
@@ -1514,28 +1570,12 @@ void testVelocityExtrusion1D1T(bool volumeVariable, bool doRefinement, Teuchos::
       vlasovMesh->hRefine(cellIDs_2D, refPattern);
     }
     
-    const int solutionOrdinal =0;
+    const int solutionOrdinal = 0;
     poissonSoln->projectOntoMesh(projectionMap, solutionOrdinal);
     
     extrusion->updateValues();
     
-    FunctionPtr expected;
-    if (volumeVariable)
-    {
-      expected = x;
-    }
-    else
-    {
-      // restrict x to the spatial sides of the mesh skeleton
-      // these are the sides of the hypercube corresponding to left and right sides of the physical cell (sides that do not vary in x)
-      // because of the way tensor cell topologies are numbered, the final sides are the ones of interest: here, the final two sides;
-      const int sideCount = cellTopo->getSideCount();
-      std::vector<int> spatialSides { sideCount - 2, sideCount - 1 };
-      TEUCHOS_TEST_FOR_EXCEPTION( !cellTopo->sideIsSpatial(spatialSides[0]), std::logic_error, "Spatial sides are not enumerated as expected");
-      TEUCHOS_TEST_FOR_EXCEPTION( !cellTopo->sideIsSpatial(spatialSides[1]), std::logic_error, "Spatial sides are not enumerated as expected");
-      FunctionPtr sideRestriction = Teuchos::rcp(new SideRestriction(spatialSides) );
-      expected = x * (xWidth - x) * sideRestriction;
-    }
+    FunctionPtr expected = xt;
     
     FunctionPtr err = FunctionPtr(extrusion) - expected;
     
@@ -1547,6 +1587,26 @@ void testVelocityExtrusion1D1T(bool volumeVariable, bool doRefinement, Teuchos::
     double err_l2 = err->l2norm(vlasovMesh);
     
     TEST_COMPARE(err_l2, <, tol * magnitudeExpected);
+    
+//    if (!success)
+//    {
+//      Teuchos::RCP<HDF5Exporter> vlasovViz, poissonViz;
+//      std::string prefix = "VlasovPoissonSpaceTimeFormulation_";
+//      std::ostringstream vlasovSS;
+//      vlasovSS << prefix << "Vlasov";
+//
+//      std::ostringstream poissonSS;
+//      poissonSS << prefix << "Poisson";
+//
+//      const std::string directoryPath = "/tmp";
+//
+//      vlasovViz = Teuchos::rcp(new HDF5Exporter(form.vlasovMesh(), vlasovSS.str(), directoryPath));
+//      poissonViz = Teuchos::rcp(new HDF5Exporter (form.poissonMesh(), poissonSS.str(), directoryPath) );
+//
+//      poissonViz->exportSolution(form.poissonSolution(),0);
+//      // right now, can't export E extrusion because it only implements a Data-based values(), which HDF5Exporter does not support.
+////      vlasovViz->exportSolution(form.vlasovSolution(),{expected, extrusion, err},{"exact E extrusion","actual E extrusion", "err"},0);
+//    }
     
     // we now only implement data path, so we can't test that View path matches it…
 //    const auto & phaseCellIDs = vlasovMesh->cellIDsInPartition();
@@ -1570,33 +1630,14 @@ void testVelocityExtrusion1D1T(bool volumeVariable, bool doRefinement, Teuchos::
   }
 }
 
-// for now, we do not support extrusion of space-time skeleton variables.  (This is complicated because
-// some space-time skeleton variables are not supported on all sides.)  Leaving the code here for now in case we
-// change our minds.  (Right now, it does not appear we need to extrude skeleton variables at all.)
-//TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonSpaceTimeFormulation, SkeletonExtrusion )
-//{
-//  const bool volumeVariable = false;
-//  const bool doRefinement = false;
-//  testVelocityExtrusion1D1T(volumeVariable, doRefinement, out, success);
-//}
-//
-//TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonSpaceTimeFormulation, SkeletonExtrusionWithRefinement )
-//{
-//  const bool volumeVariable = false;
-//  const bool doRefinement = true;
-//  testVelocityExtrusion1D1T(volumeVariable, doRefinement, out, success);
-//}
-
 TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonSpaceTimeFormulation, VolumeExtrusion )
 {
-  const bool volumeVariable = true;
   const bool doRefinement = false;
-  testVelocityExtrusion1D1T(volumeVariable, doRefinement, out, success);
+  testVelocityExtrusion1D1T(doRefinement, out, success);
 }
 
 TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonSpaceTimeFormulation, VolumeExtrusionWithRefinement )
 {
-  const bool volumeVariable = true;
   const bool doRefinement = true;
-  testVelocityExtrusion1D1T(volumeVariable, doRefinement, out, success);
+  testVelocityExtrusion1D1T(doRefinement, out, success);
 }
