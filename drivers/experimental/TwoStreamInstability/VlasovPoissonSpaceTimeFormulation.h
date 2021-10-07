@@ -44,6 +44,9 @@ private:
   BFPtr _vlasovBF;
   BFPtr _poissonBF;
   int _delta_k;
+  int _tn_enrichment;
+  
+  bool _useGeometricMultigrid = false;
   
   SolutionPtr _vlasovSoln;
   
@@ -120,7 +123,8 @@ public:
                                     const double t0, const double tFinal, const int tElementsCoarse,
                                     const double v0, const double vWidth, const int vElementsCoarse,
                                     const int H1Order, const int delta_k,
-                                    const bool usePeriodicBCs, const bool enforceQuasiNeutrality);
+                                    const bool usePeriodicBCs, const bool enforceQuasiNeutrality,
+                                    const int vlasovTraceEnrichment);
 
   //! take time step.
   void solve();
@@ -182,6 +186,8 @@ public:
                                bool gateRefinements = false);
   
   void setSubstepsForFixedPoint(int numSubsteps);
+
+  void setUseGeometricMultigrid(bool useGeometricMultigrid);
   
   int tagVlasovInitialTime() const;
   int tagVlasovLeftInflow() const;

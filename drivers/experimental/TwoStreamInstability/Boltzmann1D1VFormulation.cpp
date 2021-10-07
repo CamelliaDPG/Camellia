@@ -419,6 +419,7 @@ Boltzmann1D1VFormulation::Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoic
                                                    const double v0, const double vWidth, const int vElementsCoarse,
                                                    const int H1Order, const int delta_k, const bool usePeriodicBCs,
                                                    const bool enforceQuasiNeutrality, ERKTableauPtr erkTableau,
+                                                   const int vlasovTraceEnrichment,
                                                    const int numUniformRefinements)
 :
 _formulationChoice(formulationChoice),
@@ -432,6 +433,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
   
   const int spaceDim = 1;
   _delta_k = delta_k;
+  _tn_enrichment = vlasovTraceEnrichment;
   
   SolutionStagePtr solnStage = Teuchos::null;
   _haveTableau = (erkTableau != Teuchos::null);
@@ -535,7 +537,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     map<int,int> testOrderEnhancements;
     if (l2Trace)
     {
-      trialOrderEnhancements[t_n_hat->ID()] = 1;
+      trialOrderEnhancements[t_n_hat->ID()] = 1 + _tn_enrichment;
     }
     
     MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
@@ -1230,7 +1232,9 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
+    const int numUniformRefinements = 0;
+    const int vlasovTraceEnrichment = 0;
+    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null, vlasovTraceEnrichment, numUniformRefinements);
     
     FunctionPtr x  = Function::xn(1);
     FunctionPtr y  = Function::yn(1);
@@ -1351,7 +1355,9 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
+    const int numUniformRefinements = 0;
+    const int vlasovTraceEnrichment = 0;
+    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null, vlasovTraceEnrichment, numUniformRefinements);
     
     FunctionPtr x  = Function::xn(1);
     

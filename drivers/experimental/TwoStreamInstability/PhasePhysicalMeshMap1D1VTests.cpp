@@ -37,10 +37,13 @@ Boltzmann1D1VFormulation boltzmannFormulationUniformMesh(vector<int> elementWidt
   
   auto formulationChoice = Boltzmann1D1VFormulation::ULTRAWEAK_IMPLICIT_L2_TRACE;
   
+  const int vlasovTraceEnrichment = 0;
+  const int numUniformRefinements = 0;
   Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt,
                                 x0, xWidth, xElements,
                                 v0, vWidth, vElements,
-                                H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
+                                H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null,
+                                vlasovTraceEnrichment, numUniformRefinements);
   
   return form;
 }

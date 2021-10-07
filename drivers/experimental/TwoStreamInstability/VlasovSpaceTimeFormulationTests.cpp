@@ -78,10 +78,11 @@ namespace {
     
     using FormulationChoice = ::Camellia::VlasovPoissonSpaceTimeFormulation::VlasovPoissonSpaceTimeFormulationChoice;
     FormulationChoice formulation = FormulationChoice::ULTRAWEAK;
+    const int vlasovTraceEnrichment = 0;
     VlasovPoissonSpaceTimeFormulation form(formulation, q, eps0, m, x0, xWidth, xElements,
                                            t0, tWidth, tElements,
                                            v0, vWidth, vElements,
-                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality);
+                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
     return form;
   }
 
@@ -468,8 +469,6 @@ namespace {
 
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_constant_E_linear )
   {
-    // TODO: fix this test.  The exact solution is not compatible with the boundary conditions imposed (zeroing of t_n at v extrema)
-    
     const double q      = TEST_Q;
     
     const int spaceDim = 1;
@@ -489,14 +488,12 @@ namespace {
     
     const bool outputViz = false;
     const std::string vizPrefix = "PatchTest_f_constant_E_linear";
-    const bool overrideVlasovBCs = true;
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_linear_E_quadratic )
   {
-    // TODO: fix this test.  The exact solution is not compatible with the boundary conditions imposed (zeroing of t_n at v extrema)
-    
     const double q      = TEST_Q;
     const double eps0   = TEST_EPS0;
     const double m      = TEST_M;
@@ -515,7 +512,7 @@ namespace {
     const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
     const double tol = 1e-9; // unclear why the tolerance needs to be so loose here; it may have to do with the scaling of tn, which has an extra v factor on some sides…
     
-    const bool overrideVlasovBCs = true;
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
