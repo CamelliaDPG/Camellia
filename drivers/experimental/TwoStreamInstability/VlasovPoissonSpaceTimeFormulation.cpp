@@ -860,11 +860,14 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
 
     _vlasovSoln     = Solution::solution(_vlasovBF,vlasovMesh);
     
+    const int maxMomentNumber = 0; // for now, we only do the zeroth moment
+    _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln, f, poissonMesh) );
+    
     // note: although the temporal dimension here is also an extrusion dimension, we do NOT indicate it as a
     //       "surviving" extrusion dimension; the extrusions referred to in SolutionMomentFunction are extrusions
     //       in the higher-dimensional *relative* to the lower-dimensional one.  Here, there is only one such dimension,
     //       the velocity dimension.
-    _f_velocityIntegral = Teuchos::rcp( new SolutionMomentFunction(_vlasovSoln, f, 0, _poissonSoln->mesh()) );
+    _f_velocityIntegral = _solutionMoments->solutionMomentFunction(0);
     
     // set RHS for the two problems
     // casts to allow FunctionPtr overloads to be used:
@@ -1200,12 +1203,12 @@ void VlasovPoissonSpaceTimeFormulation::solve()
 void VlasovPoissonSpaceTimeFormulation::updateElectricField()
 {
   // update f integral, n0
-  _f_velocityIntegral->updateValues();
-  double f_integral   = _f_velocityIntegral->integrate(_poissonSoln->mesh());
+  _solutionMoments->update();
   
   double n0;
   if (_enforceQuasiNeutrality)
   {
+    double f_integral = _f_velocityIntegral->integrate(_poissonSoln->mesh());
     n0 = f_integral / _poissonMeshMeasure;
 //    std::cout << "1D1V n0 = " << n0 << std::endl;
   }
@@ -1298,6 +1301,11 @@ void VlasovPoissonSpaceTimeFormulation::setVlasovInitialAndInflowConditions(Func
   _vlasovSoln->setBC(vlasovBC);
 }
 
+Teuchos::RCP<SolutionMoments> VlasovPoissonSpaceTimeFormulation::solutionMoments()
+{
+  return _solutionMoments;
+}
+
 // test variables:
 VarPtr VlasovPoissonSpaceTimeFormulation::w()
 {
@@ -1366,7 +1374,7 @@ FunctionPtr VlasovPoissonSpaceTimeFormulation::vx() const
   return MonomialFunction::xi_n(vx_component_zero_based, 1);
 }
 
-Teuchos::RCP<SolutionMomentFunction> VlasovPoissonSpaceTimeFormulation::zerothMoment()
+FunctionPtr VlasovPoissonSpaceTimeFormulation::zerothMoment()
 {
   return _f_velocityIntegral;
 }
@@ -1447,10 +1455,11 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
     
     auto poissonMesh = form.poissonMesh();
     
-    auto velocitySpaceIntegral = Teuchos::rcp(new SolutionMomentFunction(vlasovSoln, f, 0, poissonMesh, -1) );
+    SolutionMoments solutionMoments(0, vlasovSoln, f, poissonMesh);
+    auto velocitySpaceIntegral = solutionMoments.solutionMomentFunction(0);
     FunctionPtr err = FunctionPtr(velocitySpaceIntegral) - expectedIntegral;
     
-    velocitySpaceIntegral->updateValues();
+    solutionMoments.update();
     
     double magnitudeExpected = expectedIntegral->l2norm(poissonMesh);
     double err_l2 = err->l2norm(poissonMesh);

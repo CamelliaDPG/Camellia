@@ -278,23 +278,30 @@ namespace Camellia
   }
   
   //! computes the measure in the specified extrusion dimensions, starting with the first extrusion dimension.  Involves map lookups; consider caching the result if performance is critical.
-  double ExtrudedMeshTopology::extrusionMeasureForPhaseSpaceCell(const IndexType &phaseSpaceCellID, int extrusionDimensionToExclude) const
+  void ExtrudedMeshTopology::extrusionVerticesForPhaseSpaceCell(double &v0, double &v1, const IndexType &phaseSpaceCellID, int extrusionDimension) const
   {
-    double result = 1.0;
     auto entry = _phaseToComponentMap.find(phaseSpaceCellID);
     TEUCHOS_TEST_FOR_EXCEPTION(entry == _phaseToComponentMap.end(), std::invalid_argument, "phase space cellID not found");
     const auto &componentCellIDs = entry->second;
     
+    const IndexType &extrusionCellID = componentCellIDs[1+extrusionDimension]; // first componentCellID is the physical cellID
+    auto extrusionCell = _extrusionMeshTopologies[extrusionDimension]->getCell(extrusionCellID);
+    const IndexType &vertexIndex0 = extrusionCell->vertices()[0];
+    const IndexType &vertexIndex1 = extrusionCell->vertices()[1];
+    v0 = _extrusionMeshTopologies[extrusionDimension]->getVertex(vertexIndex0)[0];
+    v1 = _extrusionMeshTopologies[extrusionDimension]->getVertex(vertexIndex1)[0];
+  }
+
+  //! computes the measure in the specified extrusion dimensions, starting with the first extrusion dimension.  Involves map lookups; consider caching the result if performance is critical.
+  double ExtrudedMeshTopology::extrusionMeasureForPhaseSpaceCell(const IndexType &phaseSpaceCellID, int extrusionDimensionToExclude) const
+  {
+    double result = 1.0;
     for (int extrusionOrdinal=0; extrusionOrdinal < _extrusionMeshTopologies.size(); extrusionOrdinal++)
     {
       if (extrusionDimensionToExclude != extrusionOrdinal)
       {
-        const IndexType &extrusionCellID = componentCellIDs[1+extrusionOrdinal]; // first componentCellID is the physical cellID
-        auto extrusionCell = _extrusionMeshTopologies[extrusionOrdinal]->getCell(extrusionCellID);
-        const IndexType &vertexIndex0 = extrusionCell->vertices()[0];
-        const IndexType &vertexIndex1 = extrusionCell->vertices()[1];
-        const double &vertex0 = _extrusionMeshTopologies[extrusionOrdinal]->getVertex(vertexIndex0)[0];
-        const double &vertex1 = _extrusionMeshTopologies[extrusionOrdinal]->getVertex(vertexIndex1)[0];
+        double vertex0, vertex1;
+        this->extrusionVerticesForPhaseSpaceCell(vertex0, vertex1, phaseSpaceCellID, extrusionOrdinal);
         result *= std::fabs(vertex1 - vertex0);
       }
     }

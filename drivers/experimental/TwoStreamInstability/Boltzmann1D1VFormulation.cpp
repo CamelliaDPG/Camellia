@@ -581,7 +581,10 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
       _boltzmannSolnPrev = Solution::solution(_boltzmannBF,boltzmannMesh);
     }
     
-    _f_velocityIntegral = Teuchos::rcp( new SolutionMomentFunction(_boltzmannSoln, f, 0, _gaussSoln->mesh(), -1) );
+    const int maxMomentNumber = 0; // for now, we only do the zeroth moment
+    _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _boltzmannSoln, f, gaussMesh) );
+    
+    _f_velocityIntegral = _solutionMoments->solutionMomentFunction(0);
     
     // set RHS for the two problems
     // casts to allow FunctionPtr overloads to be used:
@@ -1120,12 +1123,12 @@ const std::map<GlobalIndexType, std::vector<GlobalIndexType> > & Boltzmann1D1VFo
 void Boltzmann1D1VFormulation::updateElectricField()
 {
   // update f integral, n0
-  _f_velocityIntegral->updateValues();
-  double f_integral   = _f_velocityIntegral->integrate(_gaussSoln->mesh());
+  _solutionMoments->update();
   
   double n0;
   if (_enforceQuasiNeutrality)
   {
+    double f_integral   = _f_velocityIntegral->integrate(_gaussSoln->mesh());
     n0 = f_integral / _gaussMeshMeasure;
 //    std::cout << "1D1V n0 = " << n0 << std::endl;
   }
@@ -1267,10 +1270,12 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
     auto gaussMesh = form.gaussMesh();
     auto spatialToPhaseSpaceMap = form.spatialCellIDToPhaseSpaceCellIDsMap();
     
-    auto velocitySpaceIntegral = Teuchos::rcp(new SolutionMomentFunction(boltzmannSoln, f, 0, gaussMesh, -1) );
+    const int maxMomentNumber = 0; // for now, we only do the zeroth moment
+    SolutionMoments solutionMoments(maxMomentNumber, boltzmannSoln, f, gaussMesh);
+    auto velocitySpaceIntegral = solutionMoments.solutionMomentFunction(0); // one argument because 1V
     FunctionPtr err = FunctionPtr(velocitySpaceIntegral) - expectedIntegral;
     
-    velocitySpaceIntegral->updateValues();
+    solutionMoments.update();
     
     double magnitudeExpected = expectedIntegral->l2norm(gaussMesh);
     double err_l2 = err->l2norm(gaussMesh);
