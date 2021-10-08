@@ -69,7 +69,8 @@ private:
   // set during solve process:
   ParameterFunctionPtr _n0; // integral of f over the whole 1D1V space
   
-  Teuchos::RCP<SolutionMomentFunction> _f_velocityIntegral; // integral of f over all velocity space
+  Teuchos::RCP<SolutionMoments> _solutionMoments;
+  FunctionPtr _f_velocityIntegral; // integral of f over all velocity space
   FunctionPtr _Ex_extruded;  // E_x solution extended to the Boltzmann mesh
     
   Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap;

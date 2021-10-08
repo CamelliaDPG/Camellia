@@ -87,6 +87,9 @@ namespace Camellia {
     //! returns the 1D extrusionMeshTopology (the extrusionDimension is numbered from 0, and is independent of the number of physical/base dimensions).
     MeshTopologyPtr extrusionMeshTopology(int extrusionDimension) const;
     
+    //! sets v0 and v1 to be the coordinates in the specified extrusion dimension of the phase space cell corresponding to phaseSpaceCellID.
+    void extrusionVerticesForPhaseSpaceCell(double &v0, double &v1, const IndexType &phaseSpaceCellID, int extrusionDimension) const;
+    
     //! computes the measure in the specified extrusion dimensions, starting with the first extrusion dimension.  Involves map lookups; consider caching the result if performance is critical.
     double extrusionMeasureForPhaseSpaceCell(const IndexType &phaseSpaceCellID, int extrusionDimensionToExclude=-1) const;
     

@@ -605,7 +605,10 @@ _formulationChoice(formulationChoice)
       _boltzmannSolnPrev = Solution::solution(_boltzmannBF,boltzmannMesh);
     }
     
-    _f_velocityIntegral = Teuchos::rcp( new SolutionMomentFunction(_boltzmannSoln, f, 0, _gaussSoln->mesh(), -1) );
+    const int maxMomentNumber = 0; // for now, we only do the zeroth moment
+    _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _boltzmannSoln, f, gaussMesh) );
+    
+    _f_velocityIntegral = _solutionMoments->solutionMomentFunction(0,0,0);
     
     // set RHS for the two problems
     // casts to allow FunctionPtr overloads to be used:
@@ -918,7 +921,8 @@ void Boltzmann1D3VFormulation::takeTimeStep()
 void Boltzmann1D3VFormulation::updateElectricField()
 {
   // update f integral, n0
-  _f_velocityIntegral->updateValues();
+  _solutionMoments->update();
+  // TOOD: guard this with a boolean member _enforceQuasiNeutrality (see 1D1V implementation)
   double f_integral   = _f_velocityIntegral->integrate(_gaussSoln->mesh());
   double n0 = f_integral / _gaussMeshMeasure;
 //  std::cout << "1D3V n0 = " << n0 << std::endl;
@@ -1086,10 +1090,11 @@ void testVelocitySpace3DIntegral(const bool &doRefinement, Teuchos::FancyOStream
       
       auto gaussMesh = form.gaussMesh();
       
-      auto velocitySpaceIntegral = Teuchos::rcp( new SolutionMomentFunction(boltzmannSoln, f, 0, gaussMesh, -1) );
-      FunctionPtr err = FunctionPtr(velocitySpaceIntegral) - expectedVelocitySpaceIntegral;
+      SolutionMoments solutionMoments(0, boltzmannSoln, f, gaussMesh);
+      auto velocitySpaceIntegral = solutionMoments.solutionMomentFunction(0,0,0);  // three arguments because 3V
+      FunctionPtr err = velocitySpaceIntegral - expectedVelocitySpaceIntegral;
       
-      velocitySpaceIntegral->updateValues();
+      solutionMoments.update();
       
 //      {
 //        // DEBUGGING

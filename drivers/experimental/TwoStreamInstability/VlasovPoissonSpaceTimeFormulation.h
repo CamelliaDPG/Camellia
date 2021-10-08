@@ -78,7 +78,8 @@ private:
   // set during solve process:
   ParameterFunctionPtr _n0; // integral of f over the whole 1D1V space
   
-  Teuchos::RCP<SolutionMomentFunction> _f_velocityIntegral; // integral of f over all velocity space
+  Teuchos::RCP<SolutionMoments> _solutionMoments;
+  FunctionPtr _f_velocityIntegral; // integral of f over all velocity space
   FunctionPtr _E_extruded;  // E solution extended to the Vlasov mesh
   
   Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap;
@@ -150,8 +151,10 @@ public:
   MeshPtr vlasovMesh();
   MeshPtr poissonMesh();
   
-  //! Returns a SolutionMomentFunction corresponding to the zero moment, that is, the integral of f over velocity space.  Call updateValues() to ensure that the integral has been performed after the last update to f.
-  Teuchos::RCP<SolutionMomentFunction> zerothMoment();
+  Teuchos::RCP<SolutionMoments> solutionMoments();
+  
+  //! Returns a SolutionMomentFunction corresponding to the zero moment, that is, the integral of f over velocity space.  Call solutionMoments()->updateValues() to ensure that the integral has been performed after the last update to f.
+  FunctionPtr zerothMoment();
   
   Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap();
   

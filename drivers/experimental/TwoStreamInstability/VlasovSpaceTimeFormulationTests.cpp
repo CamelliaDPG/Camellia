@@ -183,7 +183,7 @@ namespace {
     initialGuess_Vlasov[form.f()->ID()] = f_exact;
     vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
 
-    form.zerothMoment()->updateValues(); // ensure that SolutionMomentFunction is properly set with the zero value that we just projected.
+    form.solutionMoments()->update(); // ensure that SolutionMomentFunction is properly set with the zero value that we just projected.
 
     poissonSoln->solve();
 

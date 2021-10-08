@@ -9,12 +9,14 @@
 #define PhaseSpaceVisualization_h
 
 #include "HDF5Exporter.h"
+#include "SolutionMoments.h"
 #include "SolutionMomentFunction.h"
 
 namespace Camellia {
   class PhaseSpaceVisualization
   {
-    std::vector<Teuchos::RCP<SolutionMomentFunction> > _solutionMomentFunctions; // used for extruded meshes beyond 3D
+    std::vector<Teuchos::RCP<SolutionMoments> > _solutionMoments; //
+    std::vector<FunctionPtr > _solutionMomentFunctions; // used for extruded meshes beyond 3D
     std::vector<Teuchos::RCP<HDF5Exporter> > _exporters;
     std::vector<std::string> _names;
     
@@ -38,6 +40,7 @@ namespace Camellia {
       
       std::vector<std::string> v_comp_str {"vx","vy","vz"};
       
+      int numVelocityDims = phaseSpaceMesh->getDimension() - physicalDim;
       
       for (int d=0; d<_numExtrusionDims; d++)
       {
@@ -49,7 +52,24 @@ namespace Camellia {
         const int physicalH1Order = phaseSpaceMesh->globalDofAssignment()->getInitialH1Order()[0];
         MeshPtr extrudedPhysicalMesh = MeshFactory::minRuleMesh(extrudedPhysicalMeshTopology, phaseSpaceMesh->bilinearForm(), physicalH1Order, delta_k, phaseSpaceMesh->Comm(), allowPruning);
         const int momentNumber = 0; // only zeroth moment used/supported thus far
-        auto solnMomentFxn = Teuchos::rcp(new SolutionMomentFunction(phaseSpaceSoln, fieldVar, momentNumber, extrudedPhysicalMesh, d) );
+        
+        auto solutionMoments = Teuchos::rcp( new SolutionMoments(momentNumber, phaseSpaceSoln, fieldVar, extrudedPhysicalMesh, d) );
+        
+        _solutionMoments.push_back(solutionMoments);
+        
+        FunctionPtr solnMomentFxn;
+        if (numVelocityDims == 1)
+        {
+          solnMomentFxn = solutionMoments->solutionMomentFunction(0);
+        }
+        else if (numVelocityDims == 2)
+        {
+          solnMomentFxn = solutionMoments->solutionMomentFunction(0,0);
+        }
+        else if (numVelocityDims == 3)
+        {
+          solnMomentFxn = solutionMoments->solutionMomentFunction(0,0,0);
+        }
         _solutionMomentFunctions.push_back(solnMomentFxn);
         
         std::string suffix = std::string("_x") + v_comp_str[d];
@@ -65,7 +85,7 @@ namespace Camellia {
     {
       for (int d=0; d<_numExtrusionDims; d++)
       {
-        _solutionMomentFunctions[d]->updateValues();
+        _solutionMoments[d]->update();
         _exporters[d]->exportFunction(_solutionMomentFunctions[d], _names[d], timeVal);
       }
       // DEBUGGING
