@@ -77,10 +77,10 @@ void stripCellDimensionFromFC(Camellia::FieldContainer<double> &fc)
 }
 
 // copied from DPGTests's BasisReconciliationTests
-Camellia::FieldContainer<double> cubaturePoints(shards::CellTopology cellTopo, int cubatureDegree, unsigned nodePermutation)
+Camellia::FieldContainer<double> cubaturePoints(CellTopoPtr cellTopo, int cubatureDegree, unsigned nodePermutation)
 {
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, cubatureDegree, false) );
-  Camellia::FieldContainer<double> permutedCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+  Camellia::FieldContainer<double> permutedCellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(permutedCellNodes, cellTopo, nodePermutation);
   permutedCellNodes.resize(1, permutedCellNodes.dimension(0), permutedCellNodes.dimension(1));
   basisCache->setPhysicalCellNodes(permutedCellNodes, vector<GlobalIndexType>(), false);
@@ -90,11 +90,11 @@ Camellia::FieldContainer<double> cubaturePoints(shards::CellTopology cellTopo, i
 }
 
 // copied from DPGTests's BasisReconciliationTests
-Camellia::FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cubatureDegree,
-                                      shards::CellTopology coarseCellTopo, unsigned nodePermutation, RefinementBranch &refinements)
+Camellia::FieldContainer<double> cubaturePoints(CellTopoPtr fineCellTopo, int cubatureDegree,
+                                                CellTopoPtr coarseCellTopo, unsigned nodePermutation, RefinementBranch &refinements)
 {
   BasisCachePtr fineBasisCache = Teuchos::rcp( new BasisCache(fineCellTopo, cubatureDegree, false) );
-  Camellia::FieldContainer<double> coarseCellNodes(coarseCellTopo.getNodeCount(),coarseCellTopo.getDimension());
+  Camellia::FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo, nodePermutation);
 
   Camellia::FieldContainer<double> fineCellNodesInCoarseCell = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
@@ -114,6 +114,23 @@ RefinementBranch demoRefinementsOnSide(shards::CellTopology cellTopo, unsigned s
   for (int refIndex = 0; refIndex < numRefinements; refIndex++)
   {
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo.getKey());
+    vector< pair<unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[sideIndex];
+    // pick one randomly
+    unsigned indexOfChildInSide = rand() % childrenForSide.size();
+    unsigned childIndex = childrenForSide[indexOfChildInSide].first;
+
+    sideIndex = childrenForSide[indexOfChildInSide].second; // the side child shares with parent...
+    demoRefinements.push_back(make_pair(refPattern.get(),childIndex));
+  }
+  return demoRefinements;
+}
+
+RefinementBranch demoRefinementsOnSide(CellTopoPtr cellTopo, unsigned sideIndex, int numRefinements)
+{
+  RefinementBranch demoRefinements;
+  for (int refIndex = 0; refIndex < numRefinements; refIndex++)
+  {
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
     vector< pair<unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[sideIndex];
     // pick one randomly
     unsigned indexOfChildInSide = rand() % childrenForSide.size();
@@ -203,9 +220,9 @@ RefinementBranch makeRefinementBranch( RefinementPatternPtr refPattern, vector<u
 }
 
 // copied from DPGTests's BasisReconciliationTests
-Camellia::FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTopo, Camellia::FieldContainer<double> &pointsRefCell, unsigned permutation)
+Camellia::FieldContainer<double> permutedSidePoints(CellTopoPtr sideTopo, Camellia::FieldContainer<double> &pointsRefCell, unsigned permutation)
 {
-  Camellia::FieldContainer<double> sideNodes (sideTopo.getNodeCount(), sideTopo.getDimension());
+  Camellia::FieldContainer<double> sideNodes (sideTopo->getNodeCount(), sideTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(sideNodes, sideTopo, permutation);
 
   unsigned cubDegree = 1;
@@ -320,15 +337,8 @@ void testHConstraintInternalBasis(BasisPtr fineBasis, RefinementBranch &refineme
 
   //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
 
-  if ( (coarseBasis->domainTopology()->getTensorialDegree() > 0) || (fineBasis->domainTopology()->getTensorialDegree() > 0) )
-  {
-    out << "ERROR: hConstraintInternalBasisSubTest() does not support tensorial degree > 0.\n";
-    success = false;
-    return;
-  }
-
-  Camellia::FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, 0);
-  Camellia::FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, coarseBasis->domainTopology()->getShardsTopology(), 0, refinements);
+  Camellia::FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology(), 1, 0);
+  Camellia::FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology(), 1, coarseBasis->domainTopology(), 0, refinements);
 
   Camellia::FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, refinements);
   RefinementBranch noRefinements;
@@ -345,23 +355,23 @@ void testHConstraintInternalBasis(BasisPtr fineBasis, RefinementBranch &refineme
 }
 
 // copied from DPGTests's BasisReconciliationTests
-unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, Camellia::FieldContainer<double> &fineCellNodes,
-                           shards::CellTopology &coarseTopo, unsigned coarseSideIndex, Camellia::FieldContainer<double> &coarseCellNodes)
+unsigned vertexPermutation(CellTopoPtr fineTopo, unsigned fineSideIndex, Camellia::FieldContainer<double> &fineCellNodes,
+                           CellTopoPtr coarseTopo, unsigned coarseSideIndex, Camellia::FieldContainer<double> &coarseCellNodes)
 {
-  int d = fineTopo.getDimension();
-  shards::CellTopology sideTopo = fineTopo.getBaseCellTopologyData(d-1, fineSideIndex);
+  auto d = fineTopo->getDimension();
+  auto sideTopo = fineTopo->getSide(fineSideIndex);
 
   // a brute force search for a matching permutation going from fineTopo's view of the side to coarseTopo's
-  int permutationCount = sideTopo.getNodePermutationCount();
+  int permutationCount = sideTopo->getNodePermutationCount();
   double tol = 1e-14;
   for (unsigned permutation=0; permutation<permutationCount; permutation++)
   {
     bool matches = true;
-    for (unsigned sideNode=0; sideNode<sideTopo.getNodeCount(); sideNode++)
+    for (unsigned sideNode=0; sideNode<sideTopo->getNodeCount(); sideNode++)
     {
-      unsigned fineNode = fineTopo.getNodeMap(d-1, fineSideIndex, sideNode);
-      unsigned permutedSideNode = sideTopo.getNodePermutation(permutation, sideNode);
-      unsigned putativeCoarseNode = coarseTopo.getNodeMap(d-1, coarseSideIndex, permutedSideNode);
+      unsigned fineNode = fineTopo->getNodeMap(d-1, fineSideIndex, sideNode);
+      unsigned permutedSideNode = sideTopo->getNodePermutation(permutation, sideNode);
+      unsigned putativeCoarseNode = coarseTopo->getNodeMap(d-1, coarseSideIndex, permutedSideNode);
       for (int dim=0; dim<d; dim++)
       {
         if (abs(fineCellNodes(0,fineNode,dim) - coarseCellNodes(0,putativeCoarseNode,dim)) > tol)
@@ -393,7 +403,7 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
 {
   // copied from DPGTests's BasisReconciliationTests
 
-  BasisReconciliation br;
+  static BasisReconciliation br; // static: harden the tests by sharing BasisReconciliation cache across all tests that call this method.  This is perhaps a little ugly from a debugging point of view.
 
   RefinementBranch sideRefinements = determineSideRefinements(volumeRefinements, fineAncestralSideIndex);
 
@@ -405,12 +415,6 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
   // want to figure out a set of physical cell nodes that corresponds to this combination
   CellTopoPtr coarseTopo = coarseBasis->domainTopology();
   CellTopoPtr fineTopo = fineBasis->domainTopology();
-
-  if ( (coarseTopo->getTensorialDegree() > 0) || (fineTopo->getTensorialDegree() > 0) )
-  {
-    out << "ERROR: hConstraintSideBasisSubTest() does not support tensorial degree > 0.\n";
-    success = false;
-  }
 
   CellTopoPtr ancestralTopo = volumeRefinements[0].first->parentTopology();
 
@@ -438,25 +442,20 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
   fineCellNodes.resize(oneCell, fineCellNodes.dimension(0), fineCellNodes.dimension(1));
   coarseCellNodes.resize(oneCell, coarseCellNodes.dimension(0), coarseCellNodes.dimension(1));
 
-  shards::CellTopology shardsAncestralTopo = ancestralTopo->getShardsTopology();
-  shards::CellTopology shardsCoarseTopo = coarseTopo->getShardsTopology();
-  unsigned permutation = vertexPermutation(shardsAncestralTopo, fineAncestralSideIndex, fineCellAncestralNodes, shardsCoarseTopo, coarseSideIndex, coarseCellNodes);
+  unsigned permutation = vertexPermutation(ancestralTopo, fineAncestralSideIndex, fineCellAncestralNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
 
   SubBasisReconciliationWeights weights = br.constrainedWeights(sideDim, fineBasis, fineSideIndex, volumeRefinements, coarseBasis, coarseSideIndex, permutation);
 
-  shards::CellTopology shardsFineSideTopo = fineSideTopo->getShardsTopology();
-  shards::CellTopology shardsCoarseSideTopo = coarseSideTopo->getShardsTopology();
-
   int cubDegree = 1;
-  Camellia::FieldContainer<double> sidePointsFine = cubaturePoints(shardsFineSideTopo, cubDegree, 0);
-  Camellia::FieldContainer<double> sidePointsCoarse = cubaturePoints(shardsFineSideTopo, cubDegree, shardsCoarseSideTopo, permutation, sideRefinements);
+  Camellia::FieldContainer<double> sidePointsFine = cubaturePoints(fineSideTopo, cubDegree, 0);
+  Camellia::FieldContainer<double> sidePointsCoarse = cubaturePoints(fineSideTopo, cubDegree, coarseSideTopo, permutation, sideRefinements);
 
   cubDegree = fineBasis->getDegree() * 2;
 
   shards::CellTopology shardsFineTopo = fineTopo->getShardsTopology();
 
-  BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, shardsFineTopo, cubDegree, true) );
-  BasisCachePtr coarseCache = Teuchos::rcp( new BasisCache(coarseCellNodes, shardsCoarseTopo, cubDegree, true) );
+  BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, fineTopo, cubDegree, true) );
+  BasisCachePtr coarseCache = Teuchos::rcp( new BasisCache(coarseCellNodes, coarseTopo, cubDegree, true) );
 
   fineCache->getSideBasisCache(fineSideIndex)->setRefCellPointsFC(sidePointsFine);
   coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPointsFC(sidePointsCoarse);
@@ -503,10 +502,10 @@ void testPConstraintInternalBasis(BasisPtr fineBasis, BasisPtr coarseBasis, Teuc
 
     //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
 
-    Camellia::FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, 0);
+    Camellia::FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology(), 5, 0);
     RefinementBranch noRefinements;
     Camellia::FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, points, noRefinements);
-    Camellia::FieldContainer<double> coarseBasisPoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, permutation);
+    Camellia::FieldContainer<double> coarseBasisPoints = cubaturePoints(fineBasis->domainTopology(), 5, permutation);
     Camellia::FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarseBasisPoints, noRefinements);
 
     stripCellDimensionFromFC(fineBasisValues);
@@ -540,10 +539,10 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, Camell
   }
 
   // want to figure out a set of physical cell nodes that corresponds to this combination
-  shards::CellTopology coarseTopo = coarseBasis->domainTopology()->getShardsTopology();
-  shards::CellTopology fineTopo = fineBasis->domainTopology()->getShardsTopology();
+  CellTopoPtr coarseTopo = coarseBasis->domainTopology();
+  CellTopoPtr fineTopo = fineBasis->domainTopology();
 
-  shards::CellTopology sideTopo = fineTopo.getBaseCellTopologyData(d-1, fineSideIndex);
+  auto sideTopo = fineTopo->getSide(fineSideIndex);
 
   unsigned permutation = vertexPermutation(fineTopo, fineSideIndex, fineCellNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
 
@@ -1338,6 +1337,204 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, hSide )
   test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 1);
   sideTests.push_back(test);
   test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 3);
+  sideTests.push_back(test);
+
+  for (auto test : sideTests)
+  {
+    testHConstraintSideBasis(test.fineBasis, test.fineSideIndex, test.fineCellNodes,
+                             test.volumeRefinements,
+                             test.coarseBasis, test.coarseSideIndex, test.coarseCellNodes,
+                             out, success);
+  }
+}
+
+TEUCHOS_UNIT_TEST( BasisReconciliation, hSideTensorTopology )
+{
+  // Worth noting that this uses bases defined on the whole volume, rather than traces thereof.
+  // We may want to add another test that checks bases defined on the mesh skeleton for tensor topologies.
+
+  auto basisFactory = BasisFactory::basisFactory();
+  
+  int fineOrder = 3;
+  int coarseOrder = 3;
+
+  CellTopoPtr line = CellTopology::line();
+  CellTopoPtr tensorQuad = CellTopology::cellTopology(line, 1);
+  CellTopoPtr tensorHex  = CellTopology::cellTopology(line, 2);
+  
+  double width = 2;
+  double height = 2;
+  Camellia::FieldContainer<double> centeredQuad(4,2);
+  centeredQuad(0,0) = -width / 2;  // bottom left vertex
+  centeredQuad(0,1) = -height / 2;
+  centeredQuad(1,0) =  width / 2;  // bottom right vertex
+  centeredQuad(1,1) = -height / 2;
+  centeredQuad(2,0) = -width / 2;  // top left vertex
+  centeredQuad(2,1) =  height / 2;
+  centeredQuad(3,0) =  width / 2;  // top right vertex
+  centeredQuad(3,1) =  height / 2;
+
+  Camellia::FieldContainer<double> eastQuad = translateQuad(centeredQuad, width, 0);
+  Camellia::FieldContainer<double> westQuad = translateQuad(centeredQuad, -width, 0);
+  Camellia::FieldContainer<double> southQuad = translateQuad(centeredQuad, -height, 0);
+  Camellia::FieldContainer<double> northQuad = translateQuad(centeredQuad, height, 0);
+
+  hSideTest test;
+
+  // side numbering is bottom to top, in reverse order of dimensions.  (I.e. in 2D, the order is: MIN_Y, MAX_Y, MIN_X, MAX_X)
+    // we comment out  and NORTH below because they are not actually used in the code that follows,
+    // and some compilers warn about that fact.
+  int MIN_Y = 0; // AKA SOUTH
+  int MAX_Y = 1; // AKA NORTH
+  int MIN_X = 2; // AKA WEST
+  int MAX_X = 3; // AKA EAST
+
+  vector< hSideTest > sideTests;
+
+  // HGRAD
+  auto fineBasis   = basisFactory->getBasis(fineOrder,   tensorQuad, FUNCTION_SPACE_HGRAD);
+  auto coarseBasis = basisFactory->getBasis(coarseOrder, tensorQuad, FUNCTION_SPACE_HGRAD);
+  
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = MAX_X;
+  test.coarseCellNodes = eastQuad;
+  test.coarseSideIndex = MIN_X;
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorQuad, MAX_X, 1);
+  sideTests.push_back(test);
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorQuad, MAX_X, 3);
+  sideTests.push_back(test);
+
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = MIN_X;
+  test.coarseCellNodes = westQuad;
+  test.coarseSideIndex = MAX_X;
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorQuad, MIN_X, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(tensorQuad, MIN_X, 3);
+  sideTests.push_back(test);
+
+  /* ************** HEXES ************* */
+  
+  int MIN_Z = 0; // AKA FRONT
+  int MAX_Z = 1; // AKA BACK
+  MIN_Y = 2;     // AKA SOUTH
+  MAX_Y = 3;     // AKA NORTH
+  MIN_X = 4;     // AKA WEST
+  MAX_X = 5;     // AKA EAST
+  
+  Camellia::FieldContainer<double> centeredHex(8,3);
+  double depth = 8;
+  centeredHex(0,0) = -width / 2;  // front, lower-left
+  centeredHex(0,1) = -height / 2;
+  centeredHex(0,2) = -depth / 2;
+
+  centeredHex(1,0) =  width / 2;  // front, lower-right
+  centeredHex(1,1) = -height / 2;
+  centeredHex(1,2) = -depth / 2;
+
+  centeredHex(2,0) = -width / 2;  // front, upper-left
+  centeredHex(2,1) =  height / 2;
+  centeredHex(2,2) = -depth / 2;
+
+  centeredHex(3,0) =  width / 2;  // front, upper-right
+  centeredHex(3,1) =  height / 2;
+  centeredHex(3,2) = -depth / 2;
+
+  centeredHex(4,0) = -width / 2;  // back, lower-left
+  centeredHex(4,1) = -height / 2;
+  centeredHex(4,2) =  depth / 2;
+
+  centeredHex(5,0) =  width / 2;  // back, lower-right
+  centeredHex(5,1) = -height / 2;
+  centeredHex(5,2) =  depth / 2;
+
+  centeredHex(6,0) = -width / 2;  // back, upper-left
+  centeredHex(6,1) =  height / 2;
+  centeredHex(6,2) =  depth / 2;
+
+  centeredHex(7,0) =  width / 2;  // back, upper-right
+  centeredHex(7,1) =  height / 2;
+  centeredHex(7,2) =  depth / 2;
+
+  Camellia::FieldContainer<double> eastHex = translateHex(centeredHex, width, 0, 0);
+  Camellia::FieldContainer<double> westHex = translateHex(centeredHex, -width, 0, 0);
+  Camellia::FieldContainer<double> northHex = translateHex(centeredHex, 0, height, 0);
+  Camellia::FieldContainer<double> southHex = translateHex(centeredHex, 0, -height, 0);
+  Camellia::FieldContainer<double> frontHex = translateHex(centeredHex, 0, 0, -depth);
+  Camellia::FieldContainer<double> backHex = translateHex(centeredHex, 0, 0, depth);
+  
+  // HGRAD
+  fineBasis   = basisFactory->getBasis(fineOrder,   tensorHex, FUNCTION_SPACE_HGRAD);
+  coarseBasis = basisFactory->getBasis(coarseOrder, tensorHex, FUNCTION_SPACE_HGRAD);
+
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = MIN_X;
+  test.coarseCellNodes = westHex;
+  test.coarseSideIndex = MAX_X;
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MIN_X, 1);
+  sideTests.push_back(test);
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MIN_X, 3);
+  sideTests.push_back(test);
+
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = MAX_X;
+  test.coarseCellNodes = eastHex;
+  test.coarseSideIndex = MIN_X;
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MAX_X, 1);
+  sideTests.push_back(test);
+  
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = MIN_Y;
+  test.coarseCellNodes = southHex;
+  test.coarseSideIndex = MAX_Y;
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MIN_Y, 1);
+  sideTests.push_back(test);
+  
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = MAX_Y;
+  test.coarseCellNodes = northHex;
+  test.coarseSideIndex = MIN_Y;
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MAX_Y, 1);
+  sideTests.push_back(test);
+  
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = MIN_Z;
+  test.coarseCellNodes = frontHex;
+  test.coarseSideIndex = MAX_Z;
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MIN_Z, 1);
+  sideTests.push_back(test);
+  
+  test.fineBasis   = fineBasis;
+  test.coarseBasis = coarseBasis;
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = MAX_Z;
+  test.coarseCellNodes = backHex;
+  test.coarseSideIndex = MIN_Z;
+
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MAX_Z, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(tensorHex, MAX_Z, 3);
   sideTests.push_back(test);
 
   for (auto test : sideTests)

@@ -70,6 +70,16 @@ namespace Camellia {
                          std::vector<double> extents,
                          std::vector<int> initialSubdivisions);
     
+    /** \brief Constructor.
+    
+     \param lowerDimensionalMeshTopology     [in] - the MeshTopology that is being extruded
+     \param extrusionVertices                             [in] - outer index is the extrusion dimension, inner is vertex ordinal in that dimension
+     
+     If there are periodic BCs, these should be specified (even for higher dimensions, if applicable) in lowerDimensionalMeshTopology.
+    */
+    ExtrudedMeshTopology(MeshTopologyPtr lowerDimensionalMeshTopology,
+                         std::vector< std::vector<double> > extrusionVertices);
+    
     virtual ~ExtrudedMeshTopology();
 
     IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1) override;

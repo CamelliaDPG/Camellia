@@ -1163,7 +1163,9 @@ public:
   }
 };
 
-void testVelocityExtrusion1D3V(bool volumeVariable, bool doRefinement, Teuchos::FancyOStream &out, bool &success)
+void testVelocityExtrusion1D3V(bool volumeVariable, const int &xMeshWidth, const Kokkos::Array<int,3> vMeshWidths,
+                               const std::vector< std::vector<GlobalIndexType> > &refinements,
+                               Teuchos::FancyOStream &out, bool &success)
 {
   double tol = 1e-15;
   // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
@@ -1176,14 +1178,12 @@ void testVelocityExtrusion1D3V(bool volumeVariable, bool doRefinement, Teuchos::
   
   double vWidth = 20.0;
   
-  const int xElements   = 2;
   const int vElements_x = 2;
   const int vElements_y = 1;
   const int vElements_z = 1;
   
   const Kokkos::Array<double,3> v0 {0, 0, 0};
   const Kokkos::Array<double,3> vDomainWidths {vWidth, vWidth, vWidth};
-  const Kokkos::Array<int,3> vMeshWidths {vElements_x, vElements_y, vElements_z};
   
   const double dt = 0.1;
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
@@ -1200,7 +1200,7 @@ void testVelocityExtrusion1D3V(bool volumeVariable, bool doRefinement, Teuchos::
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D3VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
+    Boltzmann1D3VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xMeshWidth, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
     
     FunctionPtr x  = Function::xn(1);
     
@@ -1234,11 +1234,16 @@ void testVelocityExtrusion1D3V(bool volumeVariable, bool doRefinement, Teuchos::
     auto sampleCell     = boltzmannMesh->getTopology()->getCell(0);
     auto sampleCellTopo = sampleCell->topology();
     
-    if (doRefinement)
+    if (refinements.size() > 0)
     {
-      const set<GlobalIndexType> cellIDs_4D {0,1};
-      auto refPattern = RefinementPattern::regularRefinementPattern(sampleCellTopo);
-      boltzmannMesh->hRefine(cellIDs_4D, refPattern);
+      for (auto &cellsToRefine : refinements)
+      {
+        auto refPattern = RefinementPattern::regularRefinementPattern(sampleCellTopo);
+        boltzmannMesh->hRefine(cellsToRefine, refPattern, false); // false: don't rebuild yet (wait for 1-irregularity enforcement)
+        boltzmannMesh->enforceOneIrregularity(true);
+        
+        gaussMesh->repartitionAndRebuild();
+      }
     }
     
     const int solutionOrdinal = 0;
@@ -1292,6 +1297,26 @@ void testVelocityExtrusion1D3V(bool volumeVariable, bool doRefinement, Teuchos::
       }
     }
   }
+}
+
+void testVelocityExtrusion1D3V(bool volumeVariable, bool doRefinement, Teuchos::FancyOStream &out, bool &success)
+{
+  using std::vector;
+  vector< vector<GlobalIndexType> > refinements;
+  
+  if (doRefinement)
+  {
+    refinements = vector< vector<GlobalIndexType> >({{0,1}}); // one refinement, of cells 0 and 1.
+  }
+  
+  const int xElements   = 2;
+  const int vElements_x = 2;
+  const int vElements_y = 1;
+  const int vElements_z = 1;
+  
+  const Kokkos::Array<int,3> vMeshWidths {vElements_x, vElements_y, vElements_z};
+  
+  testVelocityExtrusion1D3V(volumeVariable, xElements, vMeshWidths, refinements, out, success);
 }
 
 TEUCHOS_UNIT_TEST( VelocitySpaceExtrusion1D3VBoltzmann1D3VFormulation, SkeletonExtrusion )

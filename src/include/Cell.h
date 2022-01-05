@@ -153,6 +153,7 @@ public:
   std::vector< std::pair<unsigned, unsigned> > boundarySubcells();
   
   void printApproximateMemoryReport(); // in bytes
+  void printNeighborInfo(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
 
   const vector< vector< unsigned > > &subcellPermutations();
 

@@ -41,19 +41,25 @@ const static bool CACHE_TRANSFORMED_VALUES = false; // save some memory by not c
 // TODO: add exceptions for side cache arguments to methods that don't make sense
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
-int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey)
+int boundDegreeToMaxCubatureForCellTopo(int degree, CellTopoPtr cellTopo)
 {
+  // TODO: update this with Intrepid2 maximums
   // limit cubature degree to max that Intrepid will support
-  switch (cellTopoKey)
+  auto baseKey = cellTopo->getBaseTopology()->getShardsTopology().getKey();
+  const bool lineOrExtrudedLine = baseKey == shards::Line<2>::key;
+  const bool triOrExtrudedTri   = baseKey == shards::Triangle<3>::key;
+  if (lineOrExtrudedLine)
   {
-  case shards::Line<2>::key:
-  case shards::Quadrilateral<4>::key:
-  case shards::Hexahedron<8>::key:
     return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
-  case shards::Triangle<3>::key:
+  }
+  else if (triOrExtrudedTri)
+  {
     return min(INTREPID_CUBATURE_TRI_DEFAULT_MAX, degree);
-  default:
-    return degree; // unhandled cell topo--we'll get an exception if we go beyond the max...
+  }
+  else
+  {
+    // unhandled cell topo--we'll get an exception if we go beyond the max...
+    return degree;
   }
 }
 
@@ -79,13 +85,13 @@ void BasisCache::initCubatureDegree(int maxTrialDegree, int maxTestDegree, int c
 
   if (! _isSideCache)
   {
-    _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, _cellTopo->getShardsTopology().getKey());
+    _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, _cellTopo);
   }
   else
   {
     int sideDim = _cellTopo->getDimension() - 1;
     CellTopoPtr side = _cellTopo->getSubcell(sideDim,_sideIndex); // create relevant subcell (side) topology
-    _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side->getShardsTopology().getKey());
+    _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side);
   }
   _cubatureEnrichmentDegree = cubatureEnrichmentDegree;
   _maxTestDegree = maxTestDegree;
@@ -106,7 +112,7 @@ void BasisCache::initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vect
     _maxTestDegree = max(_maxTestDegree, maxTestDegrees[i]);
 
     int cubDegree = maxTrialDegrees[i] + maxTestDegrees[i];
-    _cubDegrees[i] = boundDegreeToMaxCubatureForCellTopo(cubDegree, _cellTopo->getShardsTopology().getKey());
+    _cubDegrees[i] = boundDegreeToMaxCubatureForCellTopo(cubDegree, _cellTopo);
   }
 }
 

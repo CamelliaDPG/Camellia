@@ -206,6 +206,14 @@ public:
   
   //! map that is reverse of the above; there is exactly one spatial cell for each phase space cell
   const std::map<GlobalIndexType, std::set<GlobalIndexType> > &phaseSpaceCellIDToSpatialCellIDs();
+  
+  int tagBoltzmannLeftInflow() const;
+  int tagBoltzmannRightInflow() const;
+  int tagBoltzmannMaxVelocity() const;
+  int tagBoltzmannMinVelocity() const;
+  
+  //! x-velocity function
+  FunctionPtr vx() const;
 };
 
 }

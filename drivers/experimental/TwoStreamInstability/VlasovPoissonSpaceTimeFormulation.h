@@ -19,7 +19,6 @@
 
 #include "BF.h"
 #include "GMGSolver.h"
-#include "PhasePhysicalMeshMap.h"
 #include "PoissonFormulation.h"
 #include "QuadraturePointFunction.h"
 #include "SolutionMomentFunction.h"
@@ -49,11 +48,13 @@ private:
   bool _useGeometricMultigrid = false;
   
   SolutionPtr _vlasovSoln;
+  SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
   
   double _poissonMeshMeasure;
   double _vlasovMeshMeasure;
     
   SolutionPtr _poissonSoln;
+  SolutionPtr _poissonSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
   
   //! on each refinement, refine any element with error greater than threshold times the maximum element error.  Values > 1.0 mean no refinement
   double _refinementThreshold   = 1.1;
@@ -82,13 +83,20 @@ private:
   FunctionPtr _f_velocityIntegral; // integral of f over all velocity space
   FunctionPtr _E_extruded;  // E solution extended to the Vlasov mesh
   
-  Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap;
+  FunctionPtr _fSoln; // Camellia Function defining the solution of distribution f (refers to _vlasovSoln)
+  FunctionPtr _ESoln; // Camellia Function defining the solution of electric field E (refers to _poissonSoln)
   
-  int _numSubsteps = 3; // number of fixed-point iterations to take (alternating vlasov, poisson solves)
+  FunctionPtr _fDiff; // fixed-point step in Vlasov field f
+  FunctionPtr _EDiff; // fixed-point step in electric field E
+    
+  int _minSubsteps = 3;  // minimum number of fixed-point iterations to run (alternating vlasov, poisson solves)
+  int _maxSubsteps = 15; // maximum number of fixed-point iterations to run
+  double _fixedPointTolerance = 1e-5; // relative difference in f between fixed-point substeps
   
-  // first
   int _aztecOutputLevel = 0; // AZ_none -- no output.
-  Teuchos::RCP<GMGSolver> _gmgSolver;
+  double _cgTol = 1e-6;
+  std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
+  int _maxIters = 10000;
   
   // Vlasov itself (discretization is 2D because 1D1V):
   static const string S_F;       // trial variable - distribution function f
@@ -114,7 +122,10 @@ private:
   static const int VLASOV_TAG_VMAX         = 3; // top
   static const int VLASOV_TAG_TMIN         = 4; // initial time
   
-  std::vector< std::vector<int> > _iterationCounts; // outer vector index: time step number; inner: substep number.
+  std::vector< std::vector<int> > _iterationCounts; // outer vector index: solve number; inner: substep number.
+  
+  std::vector< std::vector<double> > _fixedPointL2StepSizesVlasov; // outer vector index: solve number; inner: substep number.
+  std::vector< std::vector<double> > _fixedPointL2StepSizesPoisson; // outer vector index: solve number; inner: substep number.
   
   void updateElectricField();
 public:
@@ -125,10 +136,14 @@ public:
                                     const double v0, const double vWidth, const int vElementsCoarse,
                                     const int H1Order, const int delta_k,
                                     const bool usePeriodicBCs, const bool enforceQuasiNeutrality,
-                                    const int vlasovTraceEnrichment);
+                                    const int vlasovTraceEnrichment,
+                                    const double firstTimeDivisionSize = 0.0); // firstTimeDivisionSize: set this to a positive value to introduce an extra time division from t=0 to firstTimeDivisionSize.  tFinal will still be the final time.
 
   //! take time step.
   void solve();
+  
+  //! clear previously computed solution
+  void clearSolution();
   
   // field variables:
   VarPtr f();  // Vlasov
@@ -155,9 +170,7 @@ public:
   
   //! Returns a SolutionMomentFunction corresponding to the zero moment, that is, the integral of f over velocity space.  Call solutionMoments()->updateValues() to ensure that the integral has been performed after the last update to f.
   FunctionPtr zerothMoment();
-  
-  Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap();
-  
+    
   SolutionPtr vlasovSolution();
   SolutionPtr poissonSolution();
   
@@ -174,10 +187,41 @@ public:
   //! Set the potential boundary conditions on the physical mesh (relevant for the non-periodic case).
   void setPotentialBCs(FunctionPtr VE_left, FunctionPtr VE_right);
   
+  /** \brief  Set the tolerance for the fixed point iteration.
+      \param  fTol   [in]  - the target relative difference in f between one substep and the next, as measured in the L^2 norm.
+  */
+  void setFixedPointTolerance(const double fTol);
+  
+  /** \brief  Set the minimum number of substeps to take for the fixed point iteration.
+      \param  minSubsteps   [in]  - the minimum number of substeps to take for the fixed point solve.
+  */
+  void setFixedPointMinSubsteps(const int minSubsteps);
+  
+  /** \brief  Set the maximum number of substeps to take for the fixed point iteration.
+      \param  maxSubsteps   [in]  - the maximum number of substeps to take for the fixed point solve.
+  */
+  void setFixedPointMaxSubsteps(const int maxSubsteps);
+  
+  /** \brief  Set the tolerance for the iterative solve (relevant for geometric multigrid).
+      \param  cgTols   [in]  - the tolerance for the conjugate gradient solve in each fixed-point step; used in the stopping criterion for the CG iteration
+  */
+  
   /** \brief  Set the level of console output.
       \param  azOutputLevel   [in]  - Corresponds to the Aztec output level (though Belos is doing the output); here, 0 means no output (the default); -1 means final residual + warnings; -2 means summary, final residual, and warnings; and -3 means only print warnings.  Positive number n means print out residual every n steps.
   */
   void setIterativeSolveOutputLevel(int azOutputLevel);
+  
+  /** \brief  Set the tolerance for the iterative solve (relevant for geometric multigrid).
+      \param  cgTol   [in]  - the tolerance for the conjugate gradient solve; used in the stopping criterion for the CG iteration
+  */
+  void setIterativeSolveTolerance(const double cgTol);
+  
+  void setIterativeSolveTolerances(const std::vector<double> cgTols);
+  
+  /** \brief  Set the maximum number of iterations for the iterative solve (relevant for geometric multigrid).
+      \param  maxIters   [in]  - the maximum number of conjugate gradient iterations to take; will stop if either maxIters are reached, or the relative residual falls below the CG tolerance.
+  */
+  void setIterativeSolveMaxIterations(const int maxIters);
   
   /** \brief  Sets thresholds for adaptivity
       \param  refinementThreshold   [in]  - on each refinement, refine any element with error greater than refinementThreshold times the maximum element error.  Values > 1.0 mean no refinement.
@@ -188,9 +232,9 @@ public:
   void setRefinementThresholds(double refinementThreshold, int maxElements, int maxRefinementLevel, ErrorIndicatorPtr unrefinementErrorIndicator = Teuchos::null,
                                bool gateRefinements = false);
   
-  void setSubstepsForFixedPoint(int numSubsteps);
-
   void setUseGeometricMultigrid(bool useGeometricMultigrid);
+  
+  Teuchos::RCP<GMGSolver> constructGMGSolver();
   
   int tagVlasovInitialTime() const;
   int tagVlasovLeftInflow() const;

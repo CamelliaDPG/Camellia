@@ -92,21 +92,19 @@ namespace Camellia
     
     using BasisIntegralView = Camellia::DeviceView<double>;
     int _numExtrusionDimensions;
-    Kokkos::Array<BasisIntegralView,Intrepid2::Parameters::MaxTensorComponents> _extrusionBasisIntegrals; // one entry per extrusion dimension; each has shape (F); each is a *unit reference space* integral: we integrate over [-1,1], and then divide by 2.  That way, we can simply multiply by the a physical measure to get the physical integral.
+    Kokkos::Array<BasisIntegralView,Intrepid2::Parameters::MaxTensorComponents> _extrusionBasisIntegrals; // one entry per extrusion dimension; each has shape (F); each is a *unit reference space* integral: we integrate over [-1,1], and then divide by 2.  That way, we can simply multiply by the physical measure to get the physical integral.
     
     SolutionPtr _soln; // in phase space, defined on an ExtrudedMeshTopology
     VarPtr _fieldVar;
     
     MeshPtr _possiblyExtrudedPhysicalMesh; // to start, this is only allowed to be defined on the physical MeshTopology from the ExtrudedMeshTopology in _soln, but we will eventually support a more general slice (extrusions of that physical MeshTopology)
     
-    std::vector<IndexType> _physicalCellIDs; // sorted list of physical cell IDs, for which moments are stored in _moments
+    std::vector<IndexType> _physicalCellIDs; // sorted list of physical cell IDs, for which moments are stored in _spatialBasisCoefficients
     
     BasisIntegralView _spatialBasisCoefficients; // (M,C,F) container, defined on the rank-owned cells of the physicalMesh
     bool _spatialBasisCoefficientsHasBeenCheckedOut = false;
     
     using IndexView = Camellia::DeviceView<IndexType>;
-    IndexView _physicalCellOrdinalLookup; // resized on updateValues(); recomputed during values(); allows lookup of the BasisCache's cell ordinal in the _spatialBasisCoefficients container…
-    bool _physicalCellOrdinalLookupHasBeenCheckedOut = false;
     
     int _survivingExtrusionDimension = -1; // if non-negative, indicates a single dimension which is *not* integrated away
     
@@ -114,6 +112,9 @@ namespace Camellia
   public:
     SolutionMoments(const int &maxMomentNumber, SolutionPtr phaseSpaceSoln, VarPtr fieldVar, MeshPtr physicalMesh,
                     int survivingExtrusionDimension = -1);
+    
+    //! Sends all data to MPI rank 0.  Call update() first to ensure that the data sent is up to date.
+    void gatherOnRankZero();
     
     //! 1V variant
     FunctionPtr solutionMomentFunction(const int &xMoment);
@@ -146,8 +147,6 @@ namespace Camellia
     
     //! sorted list of physical cell IDs, for which moments are stored in _moments
     const std::vector<IndexType> & physicalCellIDs() const;
-    
-    IndexView physicalCellLookup();
   };
 }
 

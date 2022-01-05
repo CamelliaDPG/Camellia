@@ -350,7 +350,7 @@ namespace {
     double soln_magnitude = E_soln->l2norm(gaussSoln->mesh());
     double err_l2 = (E_soln-E0)->l2norm(gaussSoln->mesh());
     
-    double tol = 1e-13;
+    double tol = 1e-12;
     TEST_COMPARE(err_l2, <, tol * soln_magnitude);
     
     auto boltzmannSoln = form.boltzmannSolution();

@@ -98,8 +98,11 @@ namespace Camellia
     auto allSpatialBasisCoefficients  = _solutionMoments.getSpatialBasisCoefficients();
     
     auto spatialBasisCoefficients  = Kokkos::subview(allSpatialBasisCoefficients, _momentEntryOrdinal, Kokkos::ALL(), Kokkos::ALL());
-    auto physicalCellOrdinalLookup = _solutionMoments.physicalCellLookup();
     auto physicalCellIDs           = _solutionMoments.physicalCellIDs();
+    
+    int numCellIDs = basisCache->cellIDs().size();
+    std::vector<int> physicalCellOrdinalLookupDims {numCellIDs};
+    auto physicalCellOrdinalLookup = SharedScratchStorage<IndexType>::sharedScratchStorage().checkoutScratchStorage(physicalCellOrdinalLookupDims, "SolutionMomentFunction physical cell ordinal lookup");
     
     auto cellOrdinalLookupHost = Kokkos::create_mirror_view(physicalCellOrdinalLookup);
     int basisCacheCellOrdinal = 0;
@@ -107,6 +110,11 @@ namespace Camellia
     for (const auto &cellID : basisCache->cellIDs())
     {
       auto matchingEntry = std::lower_bound(physicalCellIDs.begin(), physicalCellIDs.end(), cellID);
+      if ((matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID)
+      {
+        int rank = basisCache->mesh()->Comm()->MyPID();
+        std::cout << "physical cell " << cellID << " not found in physicalCellIDs container on rank " << rank << std::endl;
+      }
       TEUCHOS_TEST_FOR_EXCEPTION((matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID,std::invalid_argument,"cellID not found");
       
       int cellOrdinal = matchingEntry - physicalCellIDs.begin();
@@ -170,6 +178,7 @@ namespace Camellia
         }
       });
     }
+    SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(physicalCellOrdinalLookup);
   }
 
   void SolutionMomentFunction::values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache)
@@ -197,15 +206,24 @@ namespace Camellia
     auto allSpatialBasisCoefficients  = _solutionMoments.getSpatialBasisCoefficients();
     
     auto spatialBasisCoefficients  = Kokkos::subview(allSpatialBasisCoefficients, _momentEntryOrdinal, Kokkos::ALL(), Kokkos::ALL());
-    auto physicalCellOrdinalLookup = _solutionMoments.physicalCellLookup();
     auto physicalCellIDs           = _solutionMoments.physicalCellIDs();
+    
+    int numCellIDs = basisCache->cellIDs().size();
+    std::vector<int> physicalCellOrdinalLookupDims {numCellIDs};
+    auto physicalCellOrdinalLookup = SharedScratchStorage<IndexType>::sharedScratchStorage().checkoutScratchStorage(physicalCellOrdinalLookupDims, "SolutionMomentFunction physical cell ordinal lookup");
     
     auto cellOrdinalLookupHost = Kokkos::create_mirror_view(physicalCellOrdinalLookup);
     int basisCacheCellOrdinal = 0;
     for (const auto &cellID : basisCache->cellIDs())
     {
       auto matchingEntry = std::lower_bound(physicalCellIDs.begin(), physicalCellIDs.end(), cellID);
-      TEUCHOS_TEST_FOR_EXCEPTION((matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID,std::invalid_argument,"cellID not found");
+      const bool notFound = (matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID;
+      if ( notFound )
+      {
+        int rank = basisCache->mesh()->Comm()->MyPID();
+        std::cout << "physical cell " << cellID << " not found in physicalCellIDs container on rank " << rank << std::endl;
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(notFound,std::invalid_argument,"cellID not found");
       
       int cellOrdinal = matchingEntry - physicalCellIDs.begin();
       
@@ -260,6 +278,7 @@ namespace Camellia
       Allocation<double>::recordDeviceViewDeallocation(basisSumValues);
     }
     transformedValues->checkinDeviceView(false); // false: don't copy back to host (has not changed)
+    SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(physicalCellOrdinalLookup);
   }
 
 } // namespace Camellia

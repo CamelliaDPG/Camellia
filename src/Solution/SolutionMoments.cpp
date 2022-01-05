@@ -10,6 +10,8 @@
 #include "SolutionMomentFunction.h"
 #include "TensorBasis.h"
 
+#include "CamelliaDebugUtility.h"
+
 using namespace Camellia;
 
 namespace
@@ -201,6 +203,108 @@ BasisPtr SolutionMoments::extrudedSpatialBasis()
   return _extrudedSpatialBasis;
 }
 
+void SolutionMoments::gatherOnRankZero()
+{
+  // send the physical cell contributions to their owners, and store in _spatialBasisCoefficients container
+  // we use a convenience method in MPIWrapper for this; note that this sends a bunch of extra data that a manual data-packing implementation would not need to.  (The convenience method requires that we have a vector of fixed-length entries; that's where the inefficiency comes from.)
+  using DataType = std::tuple<IndexType,int,int,double>; // (physicalCellID,momentEntryOrdinal,spatialBasisOrdinal,value)
+  const auto & myPhysicalCells = _possiblyExtrudedPhysicalMesh->cellIDsInPartition();
+  
+  auto spatialBasisCoefficientsHost = Kokkos::create_mirror_view(_spatialBasisCoefficients);
+  Kokkos::deep_copy(spatialBasisCoefficientsHost,_spatialBasisCoefficients);
+  
+  const int numSurvivingExtrusionDimensions = (_survivingExtrusionDimension >= 0) ? 1 : 0;
+  const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, _numExtrusionDimensions - numSurvivingExtrusionDimensions);
+  const int basisCardinality = _extrudedSpatialBasis->getCardinality();
+ 
+  std::vector<DataType> dataVector;
+  
+  for (const auto & physicalCellID : myPhysicalCells)
+  {
+    auto cellOrdinal = this->localCellOrdinal(physicalCellID);
+    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
+    {
+      for (int momentOrdinal=0; momentOrdinal<numMomentEntries; momentOrdinal++)
+      {
+        const auto & value = spatialBasisCoefficientsHost(momentOrdinal,cellOrdinal,basisOrdinal);
+        DataType dataEntry = make_tuple(physicalCellID,momentOrdinal,basisOrdinal,value);
+        dataVector.push_back(dataEntry);
+      }
+    }
+  }
+  
+  std::map<int,std::vector<DataType>> dataToSend;
+  PartitionIndexType destinationRank = 0;
+  dataToSend[destinationRank] = dataVector;
+  std::vector<DataType> dataReceived;
+  MPIWrapper::sendDataVectors(_possiblyExtrudedPhysicalMesh->Comm(), dataToSend, dataReceived);
+  
+  auto globalActiveCellIDs = _possiblyExtrudedPhysicalMesh->getActiveCellIDsGlobal();
+  const GlobalIndexType numGlobalActiveCells = globalActiveCellIDs.size();
+  
+  if (_possiblyExtrudedPhysicalMesh->Comm()->MyPID() == 0)
+  {
+    // check out a fresh _spatialBasisCoefficients, if size has changed
+    if (_spatialBasisCoefficients.extent_int(1) != numGlobalActiveCells)
+    {
+      // check in previous, if any
+      if (_spatialBasisCoefficientsHasBeenCheckedOut)
+      {
+        SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(_spatialBasisCoefficients);
+      }
+      std::vector<int> spatialBasisCoefficientsDims {numMomentEntries, numGlobalActiveCells, basisCardinality};
+      // check out a container matching latest dimensions
+      _spatialBasisCoefficients = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(spatialBasisCoefficientsDims, "SolutionMomentFunction spatial basis coefficients");
+      _spatialBasisCoefficientsHasBeenCheckedOut = true;
+    }
+    
+    _physicalCellIDs = std::vector<IndexType>(globalActiveCellIDs.begin(), globalActiveCellIDs.end());
+    
+    auto spatialBasisCoefficientsHost = Kokkos::create_mirror_view(_spatialBasisCoefficients);
+    Kokkos::deep_copy(spatialBasisCoefficientsHost,0.0);
+    
+    for (const DataType &dataEntry : dataReceived)
+    {
+      using std::get;
+      const IndexType & physicalCellID = get<0>(dataEntry);
+      const int &momentEntryOrdinal    = get<1>(dataEntry);
+      const int &spatialBasisOrdinal   = get<2>(dataEntry);
+      const double &value              = get<3>(dataEntry);
+      
+      // since we updated _physicalCellIDs above, localCellOrdinal() will return the right offset
+      auto cellOrdinal = this->localCellOrdinal(physicalCellID);
+      {
+        // DEBUGGING
+        bool outOfBounds = false;
+        if (spatialBasisCoefficientsHost.extent_int(0) <= momentEntryOrdinal)
+        {
+          std::cout << "momentEntryOrdinal " << momentEntryOrdinal << " is out of bounds.\n";
+          outOfBounds = true;
+        }
+        if (spatialBasisCoefficientsHost.extent_int(1) <= cellOrdinal)
+        {
+          std::cout << "cellOrdinal " << cellOrdinal << " is out of bounds.\n";
+          outOfBounds = true;
+        }
+        if (spatialBasisCoefficientsHost.extent_int(2) <= spatialBasisOrdinal)
+        {
+          std::cout << "spatialBasisOrdinal " << spatialBasisOrdinal << " is out of bounds.\n";
+          outOfBounds = true;
+        }
+        if (outOfBounds)
+        {
+          std::cout << "spatialBasisCoefficientsHost dimensions: (";
+          std::cout << spatialBasisCoefficientsHost.extent_int(0) << ",";
+          std::cout << spatialBasisCoefficientsHost.extent_int(1) << ",";
+          std::cout << spatialBasisCoefficientsHost.extent_int(2) << ")\n";
+        }
+      }
+      spatialBasisCoefficientsHost(momentEntryOrdinal,cellOrdinal,spatialBasisOrdinal) = value;
+    }
+  }
+  Kokkos::deep_copy(_spatialBasisCoefficients,spatialBasisCoefficientsHost);
+}
+
 Camellia::DeviceView<double> SolutionMoments::getSpatialBasisCoefficients()
 {
   return _spatialBasisCoefficients;
@@ -229,11 +333,6 @@ MeshPtr SolutionMoments::mesh()
 const std::vector<IndexType> & SolutionMoments::physicalCellIDs() const
 {
   return _physicalCellIDs;
-}
-
-SolutionMoments::IndexView SolutionMoments::physicalCellLookup()
-{
-  return _physicalCellOrdinalLookup;
 }
 
 FunctionPtr SolutionMoments::solutionMomentFunction(const int &xMoment)
@@ -311,24 +410,17 @@ void SolutionMoments::update()
   // make sure _spatialBasisCoefficients is properly allocated
   if (numCells != numCellsPrevious)
   {
-    // reallocate _spatialBasisCoefficients, _physicalCellOrdinalLookup containers
+    // reallocate _spatialBasisCoefficients containers
     std::vector<int> spatialBasisCoefficientsDims {numMomentEntries, numCells, extrudedSpatialBasisCardinality};
-    std::vector<int> physicalCellOrdinalLookupDims {numCells};
     
     // check in previous, if any
     if (_spatialBasisCoefficientsHasBeenCheckedOut)
     {
       SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(_spatialBasisCoefficients);
     }
-    if (_physicalCellOrdinalLookupHasBeenCheckedOut)
-    {
-      SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(_physicalCellOrdinalLookup);
-    }
     // check out current
     _spatialBasisCoefficients = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(spatialBasisCoefficientsDims, "SolutionMomentFunction spatial basis coefficients");
     _spatialBasisCoefficientsHasBeenCheckedOut = true;
-    _physicalCellOrdinalLookup = SharedScratchStorage<IndexType>::sharedScratchStorage().checkoutScratchStorage(physicalCellOrdinalLookupDims, "SolutionMomentFunction physical cell ordinal lookup");
-    _physicalCellOrdinalLookupHasBeenCheckedOut = true;
   }
   
   // clear values before accumulating
@@ -691,10 +783,6 @@ SolutionMoments::~SolutionMoments()
   if (_spatialBasisCoefficientsHasBeenCheckedOut)
   {
     SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(_spatialBasisCoefficients);
-  }
-  if (_physicalCellOrdinalLookupHasBeenCheckedOut)
-  {
-    SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(_physicalCellOrdinalLookup);
   }
 }
 

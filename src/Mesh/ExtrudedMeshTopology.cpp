@@ -37,21 +37,55 @@ namespace Camellia
     return physicalRefinementEntry->second;
   }
 
+namespace
+{
+  //! private method to allow us to use delegate constructor below
+  std::vector< std::vector<double> > determineExtrusionVertices(std::vector<double> startCoords,
+                                                                std::vector<double> extents,
+                                                                std::vector<int> initialSubdivisions)
+  {
+    const int numExtrusionDims = startCoords.size();
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDims != extents.size(),             std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
+    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDims != initialSubdivisions.size(), std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
+    
+    using std::vector;
+    vector<vector<double>> extrusionVertices(numExtrusionDims);
+    for (int d=0; d<numExtrusionDims; d++)
+    {
+      const double startCoord = startCoords[d];
+      const double extent = extents[d];
+      extrusionVertices[d].push_back(startCoord);
+      const int numSubdivisions = initialSubdivisions[d];
+      for (int i=0; i<numSubdivisions; i++)
+      {
+        const double coord = startCoord + ((i + 1) * extent) / numSubdivisions;
+        extrusionVertices[d].push_back(coord);
+      }
+    }
+    return extrusionVertices;
+  }
+}
   ExtrudedMeshTopology::ExtrudedMeshTopology(MeshTopologyPtr lowerDimensionalMeshTopology,
                                              std::vector<double> startCoords,
                                              std::vector<double> extents,
                                              std::vector<int> initialSubdivisions)
   :
+  ExtrudedMeshTopology(lowerDimensionalMeshTopology,
+                       determineExtrusionVertices(startCoords, extents, initialSubdivisions)) {}
+
+
+  ExtrudedMeshTopology::ExtrudedMeshTopology(MeshTopologyPtr lowerDimensionalMeshTopology,
+                                             std::vector<std::vector<double>> extrusionVertices)
+  :
   _lowerDimensionalMeshTopology(lowerDimensionalMeshTopology),
-  MeshTopology(lowerDimensionalMeshTopology->getDimension() + startCoords.size(), lowerDimensionalMeshTopology->getPeriodicBCs())
+  MeshTopology(lowerDimensionalMeshTopology->getDimension() + extrusionVertices.size(), lowerDimensionalMeshTopology->getPeriodicBCs())
   {
     const int numPhysicalDimensions = lowerDimensionalMeshTopology->getDimension();
-    const int numExtrusionDimensions = startCoords.size();
+    const int numExtrusionDimensions = extrusionVertices.size();
     
     _componentToPhaseMaps = std::vector<std::map<IndexType,std::set<IndexType>> >(numExtrusionDimensions+1); // first map is for physical MeshTopology, then one per extrusion dimension
     
-    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDimensions != extents.size(),             std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
-    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDimensions != initialSubdivisions.size(), std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
     _extrusionMeshTopologies = std::vector<MeshTopologyPtr>(numExtrusionDimensions);
     int vertexMultiplier = 1; // doubles with each extrusion dimension
     
@@ -76,10 +110,8 @@ namespace Camellia
     
     for (int d=0; d<numExtrusionDimensions; d++)
     {
-      const double leastCoord = startCoords[d];
-      const double maxCoord   = extents[d] + leastCoord;
-      const int numElements   = initialSubdivisions[d];
-      _extrusionMeshTopologies[d] = MeshFactory::intervalMeshTopology(leastCoord, maxCoord, numElements);
+      const int numElements = extrusionVertices[d].size() - 1;
+      _extrusionMeshTopologies[d] = MeshFactory::intervalMeshTopology(extrusionVertices[d]);
       vertexMultiplier *= 2;
       
       Kokkos::View<IndexType*,Kokkos::HostSpace> cellIndexView("1D Cells View", numElements);

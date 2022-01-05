@@ -1103,6 +1103,26 @@ void Cell::printApproximateMemoryReport()
   cout << "Total: " << memSize << " bytes.\n";
 }
 
+void Cell::printNeighborInfo(ConstMeshTopologyViewPtr meshTopoView)
+{
+  cout << "**** Cell " << _cellIndex << " Neighbors ****\n";
+  int sideCount = getSideCount();
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  {
+    pair<GlobalIndexType, unsigned> neighborInfo = getNeighborInfo(sideOrdinal, meshTopoView);
+    auto neighborID = neighborInfo.first;
+    cout << "Side " << sideOrdinal << ": ";
+    if (neighborID >= 0)
+    {
+      cout << neighborID << std::endl;
+    }
+    else
+    {
+      cout << "[NONE]\n";
+    }
+  }
+}
+
 const vector< vector< unsigned > > &Cell::subcellPermutations()
 {
   return _subcellPermutations;
