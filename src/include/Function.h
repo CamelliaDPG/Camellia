@@ -314,6 +314,8 @@ public:
   // ! Square root of the specified function.
   static TFunctionPtr<Scalar> sqrtFunction(TFunctionPtr<Scalar> f);
 
+  static TFunctionPtr<double> meshSideSetCharacteristic(const std::string &tagName, int sideSetTag); // 1 on specified side set; 0 elsewhere
+  
   static TFunctionPtr<double> meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static TFunctionPtr<double> meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
   static TFunctionPtr<Scalar> polarize(TFunctionPtr<Scalar> f);

@@ -21,7 +21,7 @@ using namespace Camellia;
 
 namespace {
   const double TEST_X0     = 0.0;
-  const double TEST_KX     = 0.2; // wavelength
+  const double TEST_KX     = 1.0; // wavelength -- DEBUGGING: set to to 1.0 to reduce roundoff/scaling errors (was 0.2)
   const double TEST_XWIDTH = 2 * M_PI / TEST_KX;
   const double TEST_T0     = 0.0;
   const double TEST_TWIDTH = 1.0;
@@ -130,15 +130,22 @@ namespace {
   void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
                               const double q,
                               const int H1Order, const int xElements, const int tElements, const int vElements,
+                              std::vector<std::vector<GlobalIndexType> > refinementSequence,
                               const bool overrideVlasovBCs,
                               const double tol,
                               Teuchos::FancyOStream &out, bool &success,
-                              const bool outputViz=false, const string vizPrefix="")
+                              const bool outputViz, const string vizPrefix)
   {
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
     
     auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
+    
+    form.setUseGeometricMultigrid(true);
+    form.setIterativeSolveTolerance(tol / 100.0);
+//    form.setIterativeSolveOutputLevel(10);
+    form.setFixedPointMaxSubsteps(5);
+    form.setFixedPointMinSubsteps(5);
     
     FunctionPtr vx = form.vx();
 
@@ -164,7 +171,6 @@ namespace {
       const int minVelocityTag = form.tagVlasovMinVelocity();
       const int maxVelocityTag = form.tagVlasovMaxVelocity();
       
-      f_exact * (q/TEST_M) * E_exact;
       vlasovBC->addDirichlet(traceVar, minVelocityTag, -f_exact * (q/TEST_M) * E_exact); // outward normal is negative
       vlasovBC->addDirichlet(traceVar, maxVelocityTag,  f_exact * (q/TEST_M) * E_exact); // outward normal is positive
       
@@ -178,12 +184,36 @@ namespace {
       vlasovSoln->setBC(vlasovBC);
     }
     
+    auto cellTopo = CellTopology::cellTopology(CellTopology::line(), 2);
+    auto vlasovMesh  = vlasovSoln->mesh();
+    auto poissonMesh = poissonSoln->mesh();
+    for (const auto &cellsToRefine : refinementSequence)
+    {
+      auto refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+      vlasovMesh->hRefine(cellsToRefine, refPattern, false); // false: don't rebuild yet (wait for 1-irregularity enforcement)
+      vlasovMesh->enforceOneIrregularity(true);
+      
+      poissonMesh->repartitionAndRebuild();
+    }
+    
+    const double eps0 = TEST_EPS0;
+    const double m    = TEST_M;
+    
+    FunctionPtr sgn = Function::sideParity();
+    FunctionPtr n   = Function::normal();
+    FunctionPtr tn_0 = f_exact * (vx * n->x() + n->y() + (q/m) * E_exact * n->z()) * sgn;
+    
     // to do the "pure" Poisson solve, we do need to have an f solution defined, since that enters the RHS
     std::map<int, FunctionPtr> initialGuess_Vlasov; // project the exact field solution onto the mesh
     initialGuess_Vlasov[form.f()->ID()] = f_exact;
+    {
+      // DEBUGGING: do we move from correct solution if we start there?
+      out << "NOTE: projecting exact tn_hat onto solution -- for iterative solver, this is cheating.\n";
+      initialGuess_Vlasov[form.t_n_hat()->ID()] = tn_0;
+    }
     vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
 
-    form.solutionMoments()->update(); // ensure that SolutionMomentFunction is properly set with the zero value that we just projected.
+    form.solutionMoments()->update(); // ensure that SolutionMomentFunction is properly set with the value that we just projected.
 
     poissonSoln->solve();
 
@@ -238,17 +268,10 @@ namespace {
     TEST_COMPARE(err_l2, <=, tol * soln_magnitude);
 
     out << "Comparing tn_0 with t_n_soln after Vlasov-Poisson solve.\n";
-    FunctionPtr sgn = Function::sideParity();
-    FunctionPtr n   = Function::normal();
     
     FunctionPtr tn_soln = Function::solution(form.t_n_hat(), vlasovSoln, false);
     soln_magnitude = tn_soln->l2norm(vlasovSoln->mesh());
     out << "soln_magnitude = " << soln_magnitude << std::endl;
-    
-    const double eps0 = TEST_EPS0;
-    const double m    = TEST_M;
-
-    FunctionPtr tn_0 = f_exact * (vx * n->x() + n->y() + (q/m) * E_exact * n->z()) * sgn;
 
     const int time_comp_zero_based = form.poissonMesh()->getDimension() - 1; // time is last dimension of Poisson mesh
     SpatialFilterPtr initialTimeFilter = SpatialFilter::matchingComponent(time_comp_zero_based, TEST_T0);
@@ -288,6 +311,19 @@ namespace {
       auto poissonViz = Teuchos::rcp(new HDF5Exporter(form.poissonMesh(), poissonVizPath.str(), "/tmp"));
       poissonViz->exportSolution(form.poissonSolution(), std::vector<FunctionPtr> {E_soln-E_exact, E_exact, VE_soln-VE_exact, VE_exact}, std::vector<string>{"E err", "E exact", "V_E err", "V_E exact"});
     }
+  }
+
+  void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
+                                const double q,
+                                const int H1Order, const int xElements, const int tElements, const int vElements,
+                                const bool overrideVlasovBCs,
+                                const double tol,
+                                Teuchos::FancyOStream &out, bool &success,
+                                const bool outputViz=false, const string vizPrefix="")
+  {
+    std::vector<std::vector<GlobalIndexType> > refinementSequence;
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact,
+                           q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, tol, out, success, outputViz, vizPrefix);
   }
 
 /*  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, MapToPhaseSpaceMesh )
@@ -484,7 +520,7 @@ namespace {
     const int tElements = 1;
     const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
     const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of f0 * E0, required for trace solution
-    const double tol = 1e-9; // unsure why it is that the tolerance has to be so loose here.
+    const double tol = 1e-12;
     
     const bool outputViz = false;
     const std::string vizPrefix = "PatchTest_f_constant_E_linear";
@@ -519,6 +555,55 @@ namespace {
     patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success,
                            outputViz, testPrefix);
   }
+
+
+//  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, ProblematicRefinementSequence )
+//  {
+//    // this test is not intended to be run regularly; just trying to diagnose a refinement sequence that leads to a big jump in energy error
+//    
+//    using std::vector;
+//
+//    vector<GlobalIndexType> firstRefinement {6,7,8,9,10,11};
+//    vector<GlobalIndexType> secondRefinement {21,23,24,25,26,27,28,30,32,33,34,35,36,37,38,39,40,41,42,44,45,46,47,48,49,51,52,54,61,63};
+//    vector<GlobalIndexType> thirdRefinement {53,60,65,69,71,72,73,74,84,85,87,92,93,96,97,99,116,120,121,132,133,136,137,138,144,164,165,167,168,169,172,173,176,177,196,197,198,200,201,202,204,205,206,207,208,212,214,216,218,220,221,222,224,225,228,230,232,235,252,253,256,257,259,260,261,262,263,264,265,267,269,271,273,275,276,292,293,294,295,296,297,299,305};
+//    
+//    vector<vector<GlobalIndexType> > refinementSequence {firstRefinement, secondRefinement, thirdRefinement};
+//    {
+//      const double q      = -1.0;
+//      const double xWidth = TEST_XWIDTH;
+//      const double vMin   = TEST_V0;
+//      const double vMax   = TEST_VMAX;
+//      const double eps0   = TEST_EPS0;
+//      
+//      // a patch exact solution, zero at the v boundaries.  (Requires H^1 order of 3, I believe, for exact recovery.)
+//
+//      FunctionPtr x           = Function::xn(1);
+//      FunctionPtr t           = Function::yn(1);
+//      FunctionPtr v           = Function::zn(1);
+//      FunctionPtr f_exact     = (v-vMin) *(vMax-v) * (x + xWidth) * t / xWidth; // integral in v of this is vIntegral / x_w * (x + x_w) * t
+//      double vIntegral        = 1./6. * (vMax * vMax * vMax - vMin * vMin * vMin) + 0.5 * (vMin * vMin * vMax - vMin * vMax * vMax); // definite integral of (v-vMin) *(vMax-v) from vMin to vMax
+//
+//      FunctionPtr C         = - 2. * q * vIntegral / (3. * eps0) * xWidth * t;
+//      const double D        = 0.0;
+//      FunctionPtr E_exact   = q * vIntegral / (2. * eps0 * xWidth) * x * x * t + q * vIntegral / eps0 * x * t + C;
+//      // set V_E to give 0 value at left and right boundaries:
+//      FunctionPtr V_E      = - q * vIntegral / (6. * eps0 * xWidth) * x * x * x * t - q * vIntegral / (2. * eps0) * x * x * t - C * x + D;
+//      
+//      const int xElements = 2;
+//      const int tElements = 1;
+//      const int vElements = 10;
+//      const int H1Order   = 4; // cubic L^2 functions; allows exact representation of solution
+//      const double tol = 1e-10;
+//      
+//      const bool outputViz = false;
+//      const std::string vizPrefix = "PatchTest_f_constant_E_linear_AMR";
+//      const bool overrideVlasovBCs = false; // f is 0 at v_max, v_min: we don't need to override…
+//      patchTestVlasovPoisson(f_exact, E_exact, V_E, q,
+//                             H1Order, xElements, tElements, vElements,
+//                             refinementSequence,
+//                             overrideVlasovBCs, tol, out, success, outputViz, vizPrefix);
+//    }
+//  }
 
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, SideSetInitialTime )
   {

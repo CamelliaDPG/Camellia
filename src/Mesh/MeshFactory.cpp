@@ -41,6 +41,11 @@ MeshTopologyPtr MeshFactory::extrudedMeshTopology(MeshTopologyPtr baseMeshTopolo
   return Teuchos::rcp(new ExtrudedMeshTopology(baseMeshTopology,extrusionStartCoords,extrusionExtents,extrusionElementCounts));
 }
 
+MeshTopologyPtr MeshFactory::extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, std::vector<std::vector<double>> extrusionVertices)
+{
+  return Teuchos::rcp(new ExtrudedMeshTopology(baseMeshTopology,extrusionVertices));
+}
+
 #ifdef HAVE_EPETRAEXT_HDF5
 MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_CommPtr Comm)
 {
@@ -544,6 +549,44 @@ MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, i
   {
     vertex[0] = xLeft + i * elementWidth;
     //    cout << "vertex " << i << ": " << vertex[0] << endl;
+    vertices[i] = vertex;
+    if (i != n)
+    {
+      oneElement[0] = i;
+      oneElement[1] = i+1;
+      elementVertices[i] = oneElement;
+    }
+  }
+  CellTopoPtr topo = Camellia::CellTopology::line();
+  vector< CellTopoPtr > cellTopos(numElements, topo);
+  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
+  
+  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
+  return meshTopology;
+}
+
+MeshTopologyPtr MeshFactory::intervalMeshTopology(std::vector<double> vertices_1D, bool usePeriodicBCs)
+{
+  std::vector<PeriodicBCPtr> periodicBCs;
+  const double xLeft  = vertices_1D[0];
+  const double xRight = vertices_1D[vertices_1D.size()-1];
+  const int numElements = vertices_1D.size() - 1;
+  if (usePeriodicBCs)
+  {
+    auto bc = PeriodicBC::xIdentification(xLeft, xRight);
+    periodicBCs.push_back(bc);
+  }
+  
+  int n = numElements;
+  vector< vector<double> > vertices(n+1);
+  vector<double> vertex(1);
+  double length = xRight - xLeft;
+  double elementWidth = length / n;
+  vector< vector<IndexType> > elementVertices(n);
+  vector<IndexType> oneElement(2);
+  for (int i=0; i<n+1; i++)
+  {
+    vertex[0] = vertices_1D[i];
     vertices[i] = vertex;
     if (i != n)
     {

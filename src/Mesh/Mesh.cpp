@@ -595,7 +595,7 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
     }
   }
   
-  if (meshChanged && repartitionAndMigrate)
+  if (repartitionAndMigrate)
   {
     // then repartition and migrate now
     repartitionAndRebuild();

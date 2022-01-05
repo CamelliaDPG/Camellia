@@ -1092,7 +1092,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     {
       cout << "Note: using tensor-product polynomial orders in GMGOperator.  This is supported so long as no anisotropic";
       cout << " refinements are done in the polynomial order.  A small upgrade to GMGOperator's lookup tables would be";
-      cout << " required to support anistropic p-refinements.\n";
+      cout << " required to support anisotropic p-refinements.\n";
       haveWarned = true;
     }
   }

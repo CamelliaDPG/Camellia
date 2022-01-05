@@ -14,11 +14,24 @@ MESSAGE("Adding executables for SpaceTimeVlasovPoisson.")
 add_executable( SpaceTimeVlasovPoisson "SpaceTimeVlasovPoisson.cpp" 
                 VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
                 PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
+                PhysicalSolutionExtrusion.cpp PhysicalSolutionExtrusion.hpp
                 QuadraturePointFunction.cpp QuadraturePointFunction.h )
 
 target_link_libraries(SpaceTimeVlasovPoisson 
   Camellia
 )
+
+MESSAGE("Adding executables for ColdDiodeProblemProblem.")
+add_executable( ColdDiodeProblemProblem "ColdDiodeProblemProblem.cpp" 
+                VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
+                PhysicalSolutionExtrusion.cpp PhysicalSolutionExtrusion.hpp
+                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+
+target_link_libraries(ColdDiodeProblemProblem 
+  Camellia
+)
+
 
 add_executable( Boltzmann1D3V_TwoStreamVerification Boltzmann1D3V_TwoStreamVerification.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
@@ -41,6 +54,7 @@ add_executable( BoltzmannTests BoltzmannTests.cpp
                 Boltzmann1D3VFormulationTests.cpp
                 PhasePhysicalMeshMap1D3VTests.cpp
                 QuadraturePointFunctionTests.cpp
+                PhysicalSolutionExtrusion.cpp PhysicalSolutionExtrusion.hpp
 		VlasovSpaceTimeFormulationTests.cpp )
 
 target_link_libraries(BoltzmannTests 

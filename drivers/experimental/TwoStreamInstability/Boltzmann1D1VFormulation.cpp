@@ -1099,6 +1099,9 @@ void Boltzmann1D1VFormulation::takeTimeStep()
             const bool printToConsole = _boltzmannSoln->mesh()->Comm()->MyPID() == 0;
             const bool doUnrefinements = (_maxElements < std::numeric_limits<int>::max());
             _refStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
+            
+            // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+            _gaussSoln->mesh()->repartitionAndRebuild();
           }
         }
         
@@ -1186,6 +1189,26 @@ VarPtr Boltzmann1D1VFormulation::tau()
   return vf->testVar(S_TAU);
 }
 
+int Boltzmann1D1VFormulation::tagBoltzmannLeftInflow() const
+{
+  return BOLTZMANN_TAG_INFLOW_LEFT;
+}
+
+int Boltzmann1D1VFormulation::tagBoltzmannRightInflow() const
+{
+  return BOLTZMANN_TAG_INFLOW_RIGHT;
+}
+
+int Boltzmann1D1VFormulation::tagBoltzmannMaxVelocity() const
+{
+  return BOLTZMANN_TAG_VMAX;
+}
+
+int Boltzmann1D1VFormulation::tagBoltzmannMinVelocity() const
+{
+  return BOLTZMANN_TAG_VMIN;
+}
+
 VarPtr Boltzmann1D1VFormulation::t_n_hat()
 {
   VarFactoryPtr vf = _boltzmannSoln->bf()->varFactory();
@@ -1195,6 +1218,12 @@ VarPtr Boltzmann1D1VFormulation::t_n_hat()
 VarPtr Boltzmann1D1VFormulation::VE_hat()
 {
   return _poissonForm->u_hat();
+}
+
+// x-velocity function:
+FunctionPtr Boltzmann1D1VFormulation::vx() const
+{
+  return Function::yn(1); // 1D1V: y coordinate is vx
 }
 
 // below, we set up unit tests against the private classes above

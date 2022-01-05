@@ -76,11 +76,14 @@ public:
   
   static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, std::vector<double> extrusionStartCoords, std::vector<double> extrusionExtents, std::vector<int> extrusionSubdivisions);
   
+  static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, std::vector<std::vector<double>> extrusionVertices);
+  
   static MeshTopologyPtr importMOABMesh(string filePath, bool readInParallel=false);
   
   static MeshPtr intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
 
   static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements, bool periodicBCs=false); // 1D equispaced
+  static MeshTopologyPtr intervalMeshTopology(std::vector<double> vertices, bool periodicBCs=false); // arbitrarily spaced 1D
   static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements, vector<PeriodicBCPtr> periodicBCs);
 
   static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);

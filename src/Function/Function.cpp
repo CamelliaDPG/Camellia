@@ -255,6 +255,79 @@ public:
   //  }
 };
 
+class MeshSideSetCharacteristicFunction : public TFunction<double>
+{
+  std::string _tagName;
+  int _sideSetTag;
+public:
+  MeshSideSetCharacteristicFunction(std::string tagName, int sideSetTag)
+  :
+  TFunction<double>("MeshSideSetCharacteristicFunction",0),
+  _tagName(tagName),
+  _sideSetTag(sideSetTag)
+  {}
+  bool boundaryValueOnly()
+  {
+    return true;
+  }
+  string displayString()
+  {
+    return "\\chi_{\\rm side set}";
+  }
+  
+  using TFunction<double>::values;
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    this->CHECK_VALUES_RANK(values);
+    auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+    this->values(dv, ASSIGN, basisCache);
+    values.checkinDeviceView(true);
+  }
+  void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+    int numCells  = values.extent_int(0);
+    int sideOrdinal = basisCache->getSideIndex();
+    MeshPtr mesh = basisCache->mesh();
+    auto meshTopo = mesh->getTopology()->baseMeshTopology();
+    auto entitySets = meshTopo->getEntitySetsForTagID(_tagName, _sideSetTag);
+    unsigned sideDim = mesh->getDimension() - 1;
+    TEUCHOS_TEST_FOR_EXCEPTION(mesh.get() == NULL, std::invalid_argument, "MeshSideSetCharacteristicFunction requires a mesh!");
+    TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinal == -1, std::invalid_argument, "MeshSideSetCharacteristicFunction is only defined on cell boundaries");
+    Camellia::FieldContainer<bool> cellMatches(numCells);
+    for (int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++)
+    {
+      int cellID = basisCache->cellIDs()[cellOrdinal];
+      auto sideEntityIndex = mesh->getTopology()->getCell(cellID)->entityIndex(sideDim, sideOrdinal);
+      bool sideMatchesTag = false;
+      for (const auto entitySet : entitySets)
+      {
+        sideMatchesTag |= entitySet->containsEntity(sideDim, sideEntityIndex);
+      }
+      cellMatches[cellOrdinal] = sideMatchesTag;
+    }
+    auto dv_cellMatchesTag = cellMatches.checkoutDeviceView();
+    auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values);
+    Kokkos::parallel_for("MeshSideSetCharacteristic_values", rangePolicy,
+    KOKKOS_LAMBDA (const int i0, const int i1) {
+      double value = dv_cellMatchesTag(i0) ? 1 : 0;
+      assignValue(values(i0,i1), modType, value);
+    });
+    cellMatches.checkinDeviceView(false);
+  }
+  TFunctionPtr<double> dx()
+  {
+    return TFunction<double>::zero();
+  }
+  TFunctionPtr<double> dy()
+  {
+    return TFunction<double>::zero();
+  }
+  TFunctionPtr<double> dz() {
+    return TFunction<double>::zero();
+  }
+};
+
 class MeshSkeletonCharacteristicFunction : public SimpleFunction<double>
 {
 public:
@@ -2899,6 +2972,13 @@ TFunctionPtr<double> TFunction<Scalar>::meshBoundaryCharacteristic()
 {
   // 1 on mesh boundary, 0 elsewhere
   return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
+}
+
+template <typename Scalar>
+TFunctionPtr<double> TFunction<Scalar>::meshSideSetCharacteristic(const std::string &tagName, int sideSetTag)
+{
+  // 1 on specified side set; 0 elsewhere
+  return Teuchos::rcp( new MeshSideSetCharacteristicFunction(tagName, sideSetTag) );
 }
 
 template <typename Scalar>

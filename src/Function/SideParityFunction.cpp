@@ -1,9 +1,6 @@
 //
 // © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
-//
-// © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
-//
 
 #include "SideParityFunction.h"
 

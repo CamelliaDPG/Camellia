@@ -96,7 +96,7 @@ std::string getProblemChoiceString(ProblemChoice problem)
   }
 }
 
-void checkMeshParities( MeshPtr mesh)
+void checkMesh( MeshPtr mesh)
 {
   const auto & myCellIDs = mesh->cellIDsInPartition();
   
@@ -1399,6 +1399,8 @@ int main(int argc, char *argv[])
   FunctionPtr f0;
   FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
   
+  // the following flags are considered only if useAdaptivity is true:
+  bool adaptToCaptureInitialBCs  = false; // true for cold diode
   bool adaptToCaptureInitialData = true;
   if (problemChoice == TWO_STREAM)
   {
@@ -1418,14 +1420,9 @@ int main(int argc, char *argv[])
   }
   else if (problemChoice == COLD_DIODE)
   {
-    // experimentally: start with a beam that goes all the way across
-//    FunctionPtr fM_u0 = Teuchos::rcp(new Maxwellian1V( u0, sigma, n0) );
-//    f0 = fM_u0;
-//    adaptToCaptureInitialData = true;
-    
     f0 = Function::zero(); // start with vacuum
     adaptToCaptureInitialData = false; // zero solution is always exactly captured…
-    // TODO: we *will* want to refine to capture the (rather narrow) inflow BC.  But that will require something different than the adaptation for f0 for the other problems.
+    adaptToCaptureInitialBCs  = true;
   }
   
   if (convertOverkillSolutionFiles)
@@ -1554,6 +1551,100 @@ int main(int argc, char *argv[])
       std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
     }
     form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
+    
+    // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+    form.gaussMesh()->repartitionAndRebuild();
+  }
+  else if (useAdaptivity && adaptToCaptureInitialBCs)
+  {
+    FunctionPtr fM_u0 = Teuchos::rcp(new Maxwellian1V( u0, sigma, n0) );
+    const bool weightFluxesBySideParity = true;
+    FunctionPtr tn_soln = Function::solution(form.t_n_hat(), form.boltzmannSolution(), weightFluxesBySideParity);
+    
+    FunctionPtr vx = form.vx();
+    
+    const std::string & tagName = DIRICHLET_SET_TAG_NAME;
+    int inflowTag = form.tagBoltzmannLeftInflow();
+    FunctionPtr inflowRestriction = Function::meshSideSetCharacteristic(tagName, inflowTag);
+    
+    FunctionPtr leftTrace  = - fM_u0 * vx; // minus sign is thanks to outward normal
+    // project onto boltzmannSolution:
+    std::map<int,FunctionPtr> bcMap;
+    bcMap[form.t_n_hat()->ID()] = leftTrace * inflowRestriction;
+    form.boltzmannSolution()->projectOntoMesh(bcMap);
+    
+    FunctionPtr bc_err = leftTrace * inflowRestriction - tn_soln * inflowRestriction;
+    int quadratureEnrichment = 4;
+    
+    auto errorIndicator = ErrorIndicator::functionErrorIndicator<double>(form.boltzmannMesh(), bc_err, quadratureEnrichment);
+    
+    double refinementThresholdForInitialData = 0.20;
+    auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
+    refStrategy->setMaxElements(maxElements);
+    ErrorIndicatorPtr unrefinementErrorIndicator;
+    if (!useEnergyForUnrefinements)
+    {
+      unrefinementErrorIndicator = ErrorIndicator::unrefinementProjectionErrorIndicator(form.boltzmannSolution(), form.f());
+    }
+    refStrategy->setUnrefinementErrorIndicator(unrefinementErrorIndicator);
+    refStrategy->setMaximumRefinementLevel(maximumRefinementLevel);
+    refStrategy->setMaxP(H1Order);
+    
+    auto bc_exact = fM_u0 * inflowRestriction;
+    
+    double bc_norm = bc_exact->l2norm(form.boltzmannMesh(), quadratureEnrichment);
+    double relErr = bc_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / bc_norm;
+    
+    int numInitialRefinements = 0;
+    
+    while (form.boltzmannMesh()->numActiveElements() < maxElements * 0.90)
+    {
+      if (rank==0)
+      {
+        std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and BC's relErr is " << relErr << ".\n";
+        std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
+      }
+      const bool unrefine = true;
+      const bool printToConsole = (rank == 0);
+      refStrategy->refineAndUnrefine(unrefine, printToConsole);
+      form.boltzmannSolution()->projectOntoMesh(bcMap);
+      numInitialRefinements++;
+      relErr = bc_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / bc_norm;
+      
+      if (form.boltzmannMesh()->numActiveElements() > maxElements)
+      {
+        // do one more refine + unrefine, and then switch to unrefinements only
+        refStrategy->refineAndUnrefine(unrefine, printToConsole);
+        while (form.boltzmannMesh()->numActiveElements() > maxElements)
+        {
+          // repeat until unrefinement gets us down to maxElements or below
+          if (rank==0)
+          {
+            std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and BC's relErr is " << relErr << ".\n";
+            std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
+          }
+          
+          refStrategy->setRelativeErrorThreshold(1.1); // ensure one unrefinement-only pass
+          refStrategy->refineAndUnrefine(unrefine, printToConsole);
+          refStrategy->setRelativeErrorThreshold(refinementThresholdForInitialData);
+          
+          form.boltzmannSolution()->projectOntoMesh(bcMap);
+          numInitialRefinements++;
+          relErr = bc_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / bc_norm;
+          
+          if (numInitialRefinements > 25)
+          {
+            // that seems like too many; break
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not get initial mesh down to maxElements through refine/unrefine after 25 adaptive steps");
+          }
+        }
+      }
+    }
+    
+    // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+    form.gaussMesh()->repartitionAndRebuild();
+    
+    form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
   }
     
   std::ostringstream suffix;
@@ -1668,7 +1759,7 @@ int main(int argc, char *argv[])
     form.takeTimeStep();
     t += dt;
     
-    checkMeshParities(form.boltzmannMesh());
+    checkMesh(form.boltzmannMesh());
     
     const bool computeMinimum_bn = false; // average value on a side
     if ((timeStepNumber % outputFrequency == 0) || (timeStepNumber == numTimeSteps))

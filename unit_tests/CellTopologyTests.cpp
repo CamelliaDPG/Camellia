@@ -14,8 +14,10 @@
 
 #include "Camellia_FieldContainer.hpp"
 
+#include "BasisCache.h"
 #include "CellTopology.h"
 
+#include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
 
 using namespace Camellia;
@@ -349,6 +351,70 @@ TEUCHOS_UNIT_TEST( CellTopology, ShardsTopologiesPermutations )
     CellTopoPtr cellTopo = shardsTopologies[topoOrdinal];
     TEST_ASSERT(checkPermutationCount(cellTopo));
     TEST_ASSERT(checkPermutations(cellTopo));
+  }
+}
+
+TEUCHOS_UNIT_TEST( CellTopology, SideNormals_Line_x_Line_x_Line )
+{
+  auto line = CellTopology::line();
+  auto line_cubed = CellTopology::cellTopology(line, 2);
+  
+  FieldContainer<double> cellNodes(line_cubed->getNodeCount(), line_cubed->getDimension());
+  CamelliaCellTools::refCellNodesForTopology(cellNodes, line_cubed);
+  cellNodes.resize(1, cellNodes.dimension(0), cellNodes.dimension(1));
+  int cubatureDegree = 1;
+  bool createSideCacheToo = true;
+  
+  BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(line_cubed, cubatureDegree, cellNodes, createSideCacheToo);
+  
+  // we expect -1 normals for min x, min y, min z sides -- sides 4, 2, 0, respectively
+  // we expect +1 normals for max x, max y, max z sides -- sides 5, 3, 1, respectively
+  
+  const int MIN_Z = 0, MAX_Z = 1;
+  const int MIN_Y = 2, MAX_Y = 3;
+  const int MIN_X = 4, MAX_X = 5;
+  
+  std::vector<int> expectedNonzeroComponentIndex(6);
+  std::vector<double> expectedNonzeroComponentSign(6);
+  expectedNonzeroComponentIndex[MIN_X] =  0; // min x: normal is -1 in x direction
+  expectedNonzeroComponentSign [MIN_X] = -1;
+  expectedNonzeroComponentIndex[MAX_X] =  0; // max x: normal is +1 in x direction
+  expectedNonzeroComponentSign [MAX_X] =  1;
+  expectedNonzeroComponentIndex[MIN_Y] =  1; // min y: normal is -1 in y direction
+  expectedNonzeroComponentSign [MIN_Y] = -1;
+  expectedNonzeroComponentIndex[MAX_Y] =  1; // max y: normal is +1 in y direction
+  expectedNonzeroComponentSign [MAX_Y] =  1;
+  expectedNonzeroComponentIndex[MIN_Z] =  2; // min z: normal is -1 in z direction
+  expectedNonzeroComponentSign [MIN_Z] = -1;
+  expectedNonzeroComponentIndex[MAX_Z] =  2; // max z: normal is +1 in z direction
+  expectedNonzeroComponentSign [MAX_Z] =  1;
+  
+  const double tol = 1e-15;
+  
+  for (int sideOrdinal=0; sideOrdinal<line_cubed->getSideCount(); sideOrdinal++)
+  {
+    auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
+    FieldContainer<double> sideNormals = sideCache->getSideNormals(); // (C,P,D) container
+    const int cellOrdinal = 0;
+    int nonzeroComponentIndex = expectedNonzeroComponentIndex[sideOrdinal];
+    double sign = expectedNonzeroComponentSign[sideOrdinal];
+    for (int pointOrdinal=0; pointOrdinal < sideNormals.dimension(1); pointOrdinal++)
+    {
+      for (int d=0; d<3; d++)
+      {
+        const double value = sideNormals(cellOrdinal,pointOrdinal,d);
+        if (d == nonzeroComponentIndex)
+        {
+          // expect ±1
+          TEST_FLOATING_EQUALITY(sign, value, tol);
+        }
+        else
+        {
+          // expect 0
+          TEST_COMPARE(std::abs(value), <, tol);
+        }
+      }
+    }
   }
 }
 

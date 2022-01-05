@@ -2394,16 +2394,16 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
   if (_constraintsCache.find(cellID) == _constraintsCache.end())
   {
 //    cout << "Getting cell constraints for cellID " << cellID << endl;
-
     typedef pair< IndexType, unsigned > CellPair;
 
     CellPtr cell = _meshTopology->getCell(cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(cell->isParent(_meshTopology), std::invalid_argument, "Error: cell is not active (it is a parent) -- constraint tables are not valid for inactive cells…");
     DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
     CellTopoPtr topo = cell->topology();
     unsigned spaceDim = topo->getDimension();
     unsigned sideDim = spaceDim - 1;
 
-    vector< vector< bool > > processedSubcells(spaceDim+1); // we process dimensions from high to low -- since we deal here with the volume basis case, we initialize this to spaceDim + 1
+    vector< vector< bool > > processedSubcells(spaceDim+1); // we process dimensions from high to low -- since we deal here with the volume basis case, we allocate spaceDim + 1 entries
     vector< vector< AnnotatedEntity > > constrainingSubcellInfo(spaceDim + 1);
     
     Teuchos::RCP<CellConstraints> spatialSliceConstraints;
@@ -3394,7 +3394,8 @@ void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID)
   cout << "***** Constraints for cell " << cellID << " ****** \n";
   CellPtr cell = _meshTopology->getCell(cellID);
   int spaceDim = cell->topology()->getDimension();
-  for (int d=0; d<spaceDim; d++)
+  const int d_min = minimumSubcellDimensionForContinuityEnforcement();
+  for (int d=d_min; d<spaceDim; d++)
   {
     cout << "  dimension " << d << " subcells: " << endl;
     int subcellCount = cell->topology()->getSubcellCount(d);
@@ -3407,7 +3408,7 @@ void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID)
   }
 
   cout << "Ownership info:\n";
-  for (int d=0; d<spaceDim; d++)
+  for (int d=d_min; d<spaceDim; d++)
   {
     cout << "  dimension " << d << " subcells: " << endl;
     int subcellCount = cell->topology()->getSubcellCount(d);

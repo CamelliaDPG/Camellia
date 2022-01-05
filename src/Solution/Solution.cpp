@@ -4773,12 +4773,17 @@ void TSolution<Scalar>::reverseParitiesForLocalCoefficients(GlobalIndexType cell
     auto fluxVars = _mesh->bilinearForm()->varFactory()->fluxVars();
     for (VarPtr fluxVar : fluxVars)
     {
+      const auto & sidesForVarVector = trialOrder->getSidesForVarID(fluxVar->ID());
+      std::set<int> sidesForVar(sidesForVarVector.begin(), sidesForVarVector.end());
       for (int side : sidesWithChangedParities)
       {
-        auto dofIndices = &trialOrder->getDofIndices(fluxVar->ID(),side);
-        for (auto dofIndex : *dofIndices)
+        if (sidesForVar.find(side) != sidesForVar.end())
         {
-          coefficients[dofIndex] *= -1.0;
+          auto dofIndices = &trialOrder->getDofIndices(fluxVar->ID(),side);
+          for (auto dofIndex : *dofIndices)
+          {
+            coefficients[dofIndex] *= -1.0;
+          }
         }
       }
     }
