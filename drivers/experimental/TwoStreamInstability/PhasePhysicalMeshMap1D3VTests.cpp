@@ -56,6 +56,13 @@ namespace
     return mesh;
   }
 
+  CellTopoPtr sampleCellTopology1D3V()
+  {
+    auto line = CellTopology::line();
+    const int numExtrusionDimensions = 3;
+    return CellTopology::cellTopology(line, numExtrusionDimensions);
+  }
+
   void testPhysicalPointsAgree(const PhasePhysicalMeshMap &phasePhysicalMap, Teuchos::FancyOStream &out, bool &success)
   {
     // test each active phase space element, both volume and side BasisCache
@@ -215,8 +222,7 @@ TEUCHOS_UNIT_TEST( PhasePhysicalMeshMap1D3V, RefinedMeshes )
   PhasePhysicalMeshMap phasePhysicalMap(mesh_1D, mesh_4D);
   
   std::set<GlobalIndexType> cellsToRefine4D {0};
-  auto sampleCell     = mesh_4D->getTopology()->getCell(0);
-  auto sampleCellTopo = sampleCell->topology();
+  auto sampleCellTopo = sampleCellTopology1D3V();
   auto refPattern = RefinementPattern::regularRefinementPattern(sampleCellTopo);
   mesh_4D->hRefine(cellsToRefine4D, refPattern);
   
@@ -257,8 +263,7 @@ TEUCHOS_UNIT_TEST( PhasePhysicalMeshMap1D3V, UnrefinedMeshes )
   centroids.push_back(std::vector<double>{0.25, 0.75, 0.25, 0.25});
   
   std::vector<GlobalIndexType> cellsToRefine4D = mesh_4D->getTopology()->cellIDsWithCentroids(centroids);
-  auto sampleCell     = mesh_4D->getTopology()->getCell(0);
-  auto sampleCellTopo = sampleCell->topology();
+  auto sampleCellTopo = sampleCellTopology1D3V();
   auto refPattern = RefinementPattern::regularRefinementPattern(sampleCellTopo);
   
   mesh_4D->hRefine(cellsToRefine4D, refPattern);
