@@ -1937,6 +1937,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("maximumRefinementLevel", &maximumRefinementLevel);
     cmdp.setOption("minSubsteps", &minSubsteps);
     cmdp.setOption("maxSubsteps", &maxSubsteps);
+    cmdp.setOption("fixedPointTol", &fixedPointTol);
     cmdp.setOption("viz", "noViz", &saveViz);
     cmdp.setOption("initialTimeDivision", &initialTimeDivision);
     cmdp.setOption("gateRefinements", "dontGateRefinements", &gateRefinements);
