@@ -42,42 +42,43 @@ namespace Camellia {
       
       int numVelocityDims = phaseSpaceMesh->getDimension() - physicalDim;
       
-      for (int d=0; d<_numExtrusionDims; d++)
+      if (numVelocityDims > 1)
       {
-        MeshTopologyViewPtr extrudedPhysicalMeshTopology;
-        extrudedPhysicalMeshTopology = Teuchos::rcp( new SubExtrudedMeshTopology(extrudedMeshTopoRCP, d) );
-        
-        const bool allowPruning = false;
-        const int delta_k = 0;
-        const int physicalH1Order = phaseSpaceMesh->globalDofAssignment()->getInitialH1Order()[0];
-        MeshPtr extrudedPhysicalMesh = MeshFactory::minRuleMesh(extrudedPhysicalMeshTopology, phaseSpaceMesh->bilinearForm(), physicalH1Order, delta_k, phaseSpaceMesh->Comm(), allowPruning);
-        const int momentNumber = 0; // only zeroth moment used/supported thus far
-        
-        auto solutionMoments = Teuchos::rcp( new SolutionMoments(momentNumber, phaseSpaceSoln, fieldVar, extrudedPhysicalMesh, d) );
-        
-        _solutionMoments.push_back(solutionMoments);
-        
-        FunctionPtr solnMomentFxn;
-        if (numVelocityDims == 1)
+        for (int d=0; d<_numExtrusionDims; d++)
         {
-          solnMomentFxn = solutionMoments->solutionMomentFunction(0);
+          MeshTopologyViewPtr extrudedPhysicalMeshTopology;
+          extrudedPhysicalMeshTopology = Teuchos::rcp( new SubExtrudedMeshTopology(extrudedMeshTopoRCP, d) );
+          
+          const bool allowPruning = false;
+          const int delta_k = 0;
+          const int physicalH1Order = phaseSpaceMesh->globalDofAssignment()->getInitialH1Order()[0];
+          MeshPtr extrudedPhysicalMesh = MeshFactory::minRuleMesh(extrudedPhysicalMeshTopology, phaseSpaceMesh->bilinearForm(), physicalH1Order, delta_k, phaseSpaceMesh->Comm(), allowPruning);
+          const int momentNumber = 0; // only zeroth moment used/supported thus far
+          
+          auto solutionMoments = Teuchos::rcp( new SolutionMoments(momentNumber, phaseSpaceSoln, fieldVar, extrudedPhysicalMesh, d) );
+          
+          _solutionMoments.push_back(solutionMoments);
+          
+          int numVelocityDimsToIntegrate = numVelocityDims - 1; // the "d" dimension remains unintegrated…
+          
+          FunctionPtr solnMomentFxn;
+          if (numVelocityDimsToIntegrate == 1)
+          {
+            solnMomentFxn = solutionMoments->solutionMomentFunction(0);
+          }
+          else if (numVelocityDimsToIntegrate == 2)
+          {
+            solnMomentFxn = solutionMoments->solutionMomentFunction(0,0);
+          }
+          _solutionMomentFunctions.push_back(solnMomentFxn);
+          
+          std::string suffix = std::string("_x") + v_comp_str[d];
+          
+          auto hdf5Exporter = Teuchos::rcp( new HDF5Exporter(extrudedPhysicalMesh, outputDirName + suffix, outputDirSuperPath));
+          _exporters.push_back(hdf5Exporter);
+          
+          _names.push_back( fieldVar->name() + suffix);
         }
-        else if (numVelocityDims == 2)
-        {
-          solnMomentFxn = solutionMoments->solutionMomentFunction(0,0);
-        }
-        else if (numVelocityDims == 3)
-        {
-          solnMomentFxn = solutionMoments->solutionMomentFunction(0,0,0);
-        }
-        _solutionMomentFunctions.push_back(solnMomentFxn);
-        
-        std::string suffix = std::string("_x") + v_comp_str[d];
-        
-        auto hdf5Exporter = Teuchos::rcp( new HDF5Exporter(extrudedPhysicalMesh, outputDirName + suffix, outputDirSuperPath));
-        _exporters.push_back(hdf5Exporter);
-        
-        _names.push_back( fieldVar->name() + suffix);
       }
     }
     
