@@ -50,14 +50,24 @@ add_executable( BoltzmannTests BoltzmannTests.cpp
                 Boltzmann1D1VFormulationTests.cpp
                 PhasePhysicalMeshMap1D1VTests.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
-		VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
+                VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
                 Boltzmann1D3VFormulationTests.cpp
                 PhasePhysicalMeshMap1D3VTests.cpp
                 QuadraturePointFunctionTests.cpp
                 PhysicalSolutionExtrusion.cpp PhysicalSolutionExtrusion.hpp
-		VlasovSpaceTimeFormulationTests.cpp )
+                VlasovSpaceTimeFormulationTests.cpp
+)
 
 target_link_libraries(BoltzmannTests 
+  Camellia
+)
+
+add_executable( Vlasov1D3VTimeMarchingWithCollisions Vlasov1D3VTimeMarchingWithCollisions.cpp
+                Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
+                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+
+target_link_libraries(Vlasov1D3VTimeMarchingWithCollisions
   Camellia
 )
 

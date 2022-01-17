@@ -125,17 +125,26 @@ namespace Camellia
     //! for 3V
     FunctionPtr solutionMomentFunction(const int &xMoment, const int &yMoment, const int &zMoment);
     
+    //! \brief Fills values container, with shape (C,P,M), with computed moments (dimension M).
+    void valuesForAllMoments(DeviceView<double> values, BasisCachePtr configurationSpaceBasisCache);
+    
     //! Returns the mesh on which SolutionMoments is defined — may be the physical mesh, or the physical mesh extruded.
     MeshPtr mesh();
     
     //! returns the cell index in the basisCoefficients container corresponding to the specified cellID, or -1 if the cellID is not owned by this MPI rank.
     int localCellOrdinal(const IndexType &cellID) const;
     
+    //! returns the number of velocity-space dimensions (1 for 1V, 2 for 2V, 3 for 3V)
+    int numVelocityDims() const;
+    
     //! A (C,F) container containing the coefficients for locally-owned cells.  See localCellOrdinal().
     const BasisIntegralView basisCoefficients() const;
     
     //! recomputes all moments on (extruded) spatial mesh.  MPI collective method.
     void update();
+    
+    int maxMomentNumber() const;
+    int numMomentEntries() const;
     
     ~SolutionMoments();
     

@@ -75,6 +75,17 @@ if(ADDITIONAL_LIBRARY_DIRS)
 ${ADDITIONAL_LIBRARIES})
 endif()
 
+if (DEFINED mlc_ROOT)
+  find_package(mlc REQUIRED)
+
+  MESSAGE("Found mlc; will link, and define HAVE_MLC preprocessor variable")
+  add_compile_definitions(HAVE_MLC)
+
+  link_libraries(mlc)
+else()
+  MESSAGE("mlc_ROOT not defined; mlc support will not be available.")
+endif()
+
 MESSAGE(" Looking for Trilinos in ${TRILINOS_PATH}/lib/cmake/Trilinos
   ${TRILINOS_PATH} $ENV{TRILINOS_DIR}")
 

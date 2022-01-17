@@ -325,9 +325,28 @@ int SolutionMoments::localCellOrdinal(const IndexType &cellID) const
   }
 }
 
+int SolutionMoments::maxMomentNumber() const
+{
+  return _maxMomentNumber;
+}
+
 MeshPtr SolutionMoments::mesh()
 {
   return _possiblyExtrudedPhysicalMesh;
+}
+
+int SolutionMoments::numMomentEntries() const
+{
+  const int numDims = numVelocityDims();
+  return MomentIndices::getNumMomentEntries(_maxMomentNumber+1,numDims);
+}
+
+int SolutionMoments::numVelocityDims() const
+{
+  const int numSurvivingExtrusionDimensions = (_survivingExtrusionDimension >= 0) ? 1 : 0;
+  const int numDims = _numExtrusionDimensions - numSurvivingExtrusionDimensions;
+  
+  return numDims;
 }
 
 const std::vector<IndexType> & SolutionMoments::physicalCellIDs() const
@@ -771,6 +790,70 @@ void SolutionMoments::update()
     cellOrdinal++;
   }
   Kokkos::deep_copy(_spatialBasisCoefficients,spatialBasisCoefficientsHost);
+}
+
+void SolutionMoments::valuesForAllMoments(DeviceView<double> values, BasisCachePtr configurationSpaceBasisCache)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("SolutionMoments::valuesForAllMoments()");
+ 
+  const int numMomentEntries = _spatialBasisCoefficients.extent_int(0);
+  TEUCHOS_TEST_FOR_EXCEPTION(numMomentEntries != values.extent_int(2), std::invalid_argument, "values must have shape (C,P,M)");
+  
+  // this implementation adapted from BasisSumFunction
+  
+  BasisPtr extrudedSpatialBasis = this->extrudedSpatialBasis();
+  
+  const int numDofs = extrudedSpatialBasis->getCardinality();
+  const int spaceDim = configurationSpaceBasisCache->cellTopology()->getDimension();
+
+  bool basisIsVolumeBasis = extrudedSpatialBasis->domainTopology()->getDimension() == spaceDim;
+  bool useCubPointsSideRefCell = basisIsVolumeBasis && configurationSpaceBasisCache->isSideCache();
+
+  constFCPtr transformedValues = configurationSpaceBasisCache->getTransformedValues(extrudedSpatialBasis, OP_VALUE, useCubPointsSideRefCell);
+  
+  // transformedValues has dimensions (C,F,P)
+  // therefore, the rank of the sum is transformedValues->rank() - 3
+  TEUCHOS_TEST_FOR_EXCEPTION(3 != values.rank(), std::invalid_argument, "values rank must be 3 (C,P,M).");
+  TEUCHOS_TEST_FOR_EXCEPTION(3 != transformedValues->rank(), std::invalid_argument, "transformedValues rank must be 3 (C,F,P).");
+
+  auto dv_transformedValues = transformedValues->checkoutDeviceView();
+  
+  auto spatialBasisCoefficients  = this->getSpatialBasisCoefficients();
+  
+  int numCellIDs = configurationSpaceBasisCache->cellIDs().size();
+  std::vector<int> physicalCellOrdinalLookupDims {numCellIDs};
+  auto physicalCellOrdinalLookup = SharedScratchStorage<IndexType>::sharedScratchStorage().checkoutScratchStorage(physicalCellOrdinalLookupDims, "SolutionMomentFunction physical cell ordinal lookup");
+  
+  const auto & physicalCellIDs   = this->physicalCellIDs();
+  
+  auto cellOrdinalLookupHost = Kokkos::create_mirror_view(physicalCellOrdinalLookup);
+  int basisCacheCellOrdinal = 0;
+  for (const auto &cellID : configurationSpaceBasisCache->cellIDs())
+  {
+    auto matchingEntry = std::lower_bound(physicalCellIDs.begin(), physicalCellIDs.end(), cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION((matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID,std::invalid_argument,"cellID not found");
+    
+    int cellOrdinal = matchingEntry - physicalCellIDs.begin();
+    
+    cellOrdinalLookupHost(basisCacheCellOrdinal) = cellOrdinal;
+    basisCacheCellOrdinal++;
+  }
+  Kokkos::deep_copy(physicalCellOrdinalLookup, cellOrdinalLookupHost);
+  
+  Kokkos::deep_copy(values, 0.0); // initialize
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
+  Kokkos::parallel_for("SolutionMomentFunction_values", FieldContainer<double>::getMDRangePolicy3(values),
+  KOKKOS_LAMBDA (const array_index_type cellOrdinal, const array_index_type pointOrdinal, const array_index_type momentEntryOrdinal)
+  {
+    const int &cellOrdinalInSpatialBasisCoefficients = physicalCellOrdinalLookup(cellOrdinal);
+    for (int dof = 0; dof < numDofs; dof++)
+    {
+      double weight = spatialBasisCoefficients(momentEntryOrdinal,cellOrdinalInSpatialBasisCoefficients,dof);
+      values(cellOrdinal,pointOrdinal,momentEntryOrdinal) += dv_transformedValues.access(cellOrdinal,dof,pointOrdinal) * weight;
+    }
+  });
+  transformedValues->checkinDeviceView(false); // false: don't copy back to host (has not changed)
+  SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(physicalCellOrdinalLookup);
 }
 
 SolutionMoments::~SolutionMoments()

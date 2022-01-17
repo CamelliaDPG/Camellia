@@ -39,7 +39,7 @@ int testCollisionModel(mlc::CollisionModel &model, const unsigned int num_points
 
   /*
 
-  So to avoid doing actual physics, we are going to instead solve this problem from the middle.
+  So to avoid doing actual physics, we are going to instead solve th is problem from the middle.
   Basically we have two parts to evaluating a collision operator:
 
   conserved moments -> input hermite coefficients               (pre-processing in CollisionModel)
@@ -93,7 +93,7 @@ int testCollisionModel(mlc::CollisionModel &model, const unsigned int num_points
           ml_to_moment_index[idx] = moment_indexer(i,j,k);
       }
   
-  // The model defines these coefficients (important since the model internal converts things to number density and temperature)
+  // The model defines these coefficients (important since the model internally converts things to number density and temperature)
   const double kB = model.getBoltzmannConstant();
   const double mass = model.getMass();
 
@@ -388,7 +388,7 @@ int main(int argc, char *argv[])
   }
   
   {
-    // body goes here; allow objects with interal Kokkos allocations to go out of scope before calling Camellia::finalize() at bottom.
+    // body goes here; allow objects with internal Kokkos allocations to go out of scope before calling Camellia::finalize() at bottom.
     
     const int numPoints = 2;
 
