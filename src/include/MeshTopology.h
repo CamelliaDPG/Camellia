@@ -263,6 +263,9 @@ public:
   //! Returns boundary sides whose vertices all match the specified SpatialFilter
   vector<IndexType> getBoundarySidesThatMatch(SpatialFilterPtr spatialFilter) const;
   
+  //! Returns boundary sides whose vertices all match the specified SpatialFilter.  Variant that supports spatialFilters that require BasisCache for evaluation.
+  vector<IndexType> getBoundarySidesThatMatch(SpatialFilterPtr spatialFilter, MeshPtr meshForEvaluation) const;
+  
   //! Returns all sides whose vertices all match the specified SpatialFilter
   vector<IndexType> getSidesThatMatch(SpatialFilterPtr spatialFilter) const;
   

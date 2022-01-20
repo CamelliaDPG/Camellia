@@ -865,11 +865,6 @@ FunctionPtr VlasovPoissonSpaceTimeFormulation::vx() const
   return MonomialFunction::xi_n(vx_component_zero_based, 1);
 }
 
-FunctionPtr VlasovPoissonSpaceTimeFormulation::zerothMoment()
-{
-  return _f_velocityIntegral;
-}
-
 // below, we set up unit tests against the private classes above
 #include "Teuchos_UnitTestHarness.hpp"
 

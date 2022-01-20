@@ -51,6 +51,11 @@ add_executable( BoltzmannTests BoltzmannTests.cpp
                 PhasePhysicalMeshMap1D1VTests.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
                 VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
+                ConfigurationSpaceFormulation.cpp ConfigurationSpaceFormulation.h
+                ConfigurationSpaceFormulationMaxwell.cpp ConfigurationSpaceFormulationMaxwell.h
+                ConfigurationSpaceFormulationPoisson.cpp ConfigurationSpaceFormulationPoisson.h
+                ConfigurationSpaceFormulationTrivial.cpp ConfigurationSpaceFormulationTrivial.h
+                VlasovSpaceTimeFormulation.cpp VlasovSpaceTimeFormulation.h
                 Boltzmann1D3VFormulationTests.cpp
                 PhasePhysicalMeshMap1D3VTests.cpp
                 QuadraturePointFunctionTests.cpp

@@ -100,14 +100,16 @@ _basisReconciliation(true) // true: cache results
 {
   _soln = phaseSpaceSoln;
   _fieldVar = fieldVar;
-  _possiblyExtrudedPhysicalMesh = physicalMesh;
   
   // check that physical mesh has the right number of dimensions:
-  const int numDimensionsPhysicalMesh = physicalMesh->getDimension();
   const int numDimensionsPhaseSpace   = phaseSpaceSoln->mesh()->getDimension();
   
   int numSurvivingExtrusionDimensions = (_survivingExtrusionDimension == -1) ? 0 : 1;
-  _numExtrusionDimensions = numDimensionsPhaseSpace - numDimensionsPhysicalMesh + numSurvivingExtrusionDimensions;
+  ExtrudedMeshTopology* phaseSpaceExtrudedMeshTopology = dynamic_cast<ExtrudedMeshTopology*>(phaseSpaceSoln->mesh()->getTopology().get());
+  _numExtrusionDimensions = phaseSpaceExtrudedMeshTopology->numExtrusionDimensions();
+  _numDimensionsPhysicalMesh = numDimensionsPhaseSpace - _numExtrusionDimensions + numSurvivingExtrusionDimensions;
+  
+  setMesh(physicalMesh);
 
   // we assume p is constant throughout the domain
   // we also assume that all elements have the same topology
@@ -116,11 +118,6 @@ _basisReconciliation(true) // true: cache results
   const IndexType sampleCellID = 0;
   auto elemType = _soln->mesh()->getElementType(sampleCellID);
   auto cellTopo = elemType->cellTopoPtr;
-  
-  auto physicalElemType = _possiblyExtrudedPhysicalMesh->getElementType(sampleCellID);
-  auto physicalCellTopo = physicalElemType->cellTopoPtr;
-  
-  TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getTensorialDegree() - physicalCellTopo->getTensorialDegree() + numSurvivingExtrusionDimensions != _numExtrusionDimensions, std::invalid_argument, "Physical/Phase CellTopology and _numExtrusionDimensions don't agree on the number of tensorial extrusions");
   
   auto trialOrdering = elemType->trialOrderPtr;
   _phaseSpaceBasis = trialOrdering->getBasis(fieldVar->ID());
@@ -208,7 +205,7 @@ void SolutionMoments::gatherOnRankZero()
   // send the physical cell contributions to their owners, and store in _spatialBasisCoefficients container
   // we use a convenience method in MPIWrapper for this; note that this sends a bunch of extra data that a manual data-packing implementation would not need to.  (The convenience method requires that we have a vector of fixed-length entries; that's where the inefficiency comes from.)
   using DataType = std::tuple<IndexType,int,int,double>; // (physicalCellID,momentEntryOrdinal,spatialBasisOrdinal,value)
-  const auto & myPhysicalCells = _possiblyExtrudedPhysicalMesh->cellIDsInPartition();
+  const auto & myPhysicalCells = _configurationSpaceMesh->cellIDsInPartition();
   
   auto spatialBasisCoefficientsHost = Kokkos::create_mirror_view(_spatialBasisCoefficients);
   Kokkos::deep_copy(spatialBasisCoefficientsHost,_spatialBasisCoefficients);
@@ -237,12 +234,12 @@ void SolutionMoments::gatherOnRankZero()
   PartitionIndexType destinationRank = 0;
   dataToSend[destinationRank] = dataVector;
   std::vector<DataType> dataReceived;
-  MPIWrapper::sendDataVectors(_possiblyExtrudedPhysicalMesh->Comm(), dataToSend, dataReceived);
+  MPIWrapper::sendDataVectors(_configurationSpaceMesh->Comm(), dataToSend, dataReceived);
   
-  auto globalActiveCellIDs = _possiblyExtrudedPhysicalMesh->getActiveCellIDsGlobal();
+  auto globalActiveCellIDs = _configurationSpaceMesh->getActiveCellIDsGlobal();
   const GlobalIndexType numGlobalActiveCells = globalActiveCellIDs.size();
   
-  if (_possiblyExtrudedPhysicalMesh->Comm()->MyPID() == 0)
+  if (_configurationSpaceMesh->Comm()->MyPID() == 0)
   {
     // check out a fresh _spatialBasisCoefficients, if size has changed
     if (_spatialBasisCoefficients.extent_int(1) != numGlobalActiveCells)
@@ -332,7 +329,12 @@ int SolutionMoments::maxMomentNumber() const
 
 MeshPtr SolutionMoments::mesh()
 {
-  return _possiblyExtrudedPhysicalMesh;
+  return _configurationSpaceMesh;
+}
+
+MeshPtr SolutionMoments::phaseSpaceMesh()
+{
+  return _soln->mesh();
 }
 
 int SolutionMoments::numMomentEntries() const
@@ -352,6 +354,15 @@ int SolutionMoments::numVelocityDims() const
 const std::vector<IndexType> & SolutionMoments::physicalCellIDs() const
 {
   return _physicalCellIDs;
+}
+                               
+void SolutionMoments::setMesh(MeshPtr configurationSpaceMesh)
+{
+  _configurationSpaceMesh = configurationSpaceMesh;
+  if (_configurationSpaceMesh != Teuchos::null)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_numDimensionsPhysicalMesh != configurationSpaceMesh->getDimension(), std::invalid_argument, "dimension does not match expected");
+  }
 }
 
 FunctionPtr SolutionMoments::solutionMomentFunction(const int &xMoment)
@@ -408,7 +419,7 @@ void SolutionMoments::update()
 {
   MeshPtr phaseSpaceMesh = _soln->mesh();
   const auto & myPhaseSpaceCells = phaseSpaceMesh->cellIDsInPartition();
-  const auto & myPhysicalCells = _possiblyExtrudedPhysicalMesh->cellIDsInPartition();
+  const auto & myPhysicalCells = _configurationSpaceMesh->cellIDsInPartition();
   
   const int numCells = myPhysicalCells.size();
   
@@ -456,7 +467,7 @@ void SolutionMoments::update()
   
   const int maxMomentNumber   = _maxMomentNumber; // copy for use in lambda below
   const int physicalCellCount = phaseSpaceMeshTopology->physicalMeshTopology()->cellCount();
-  auto possiblyExtrudedPhysicalMeshTopology = _possiblyExtrudedPhysicalMesh->getTopology();
+  auto possiblyExtrudedPhysicalMeshTopology = _configurationSpaceMesh->getTopology();
   for (const auto &phaseSpaceCellID : myPhaseSpaceCells)
   {
     auto coarsePhysicalCellContributions = coarsePhysicalCellContributionsFC.checkoutDeviceView(false); // false: don't deep copy from host
@@ -723,7 +734,7 @@ void SolutionMoments::update()
     const IndexType & physicalCellID = entry.first;
     const FieldContainer<double> &physicalCellContribution = entry.second;
     
-    const PartitionIndexType physicalCellOwner = _possiblyExtrudedPhysicalMesh->partitionForCellID(physicalCellID);
+    const PartitionIndexType physicalCellOwner = _configurationSpaceMesh->partitionForCellID(physicalCellID);
     TEUCHOS_TEST_FOR_EXCEPTION(physicalCellOwner == -1, std::logic_error, "partition not assigned for physicalCellID -- inactive?");
     
     std::vector<DataType> & ownerDataVector = dataToSend[physicalCellOwner];
@@ -740,7 +751,7 @@ void SolutionMoments::update()
   }
   
   std::vector<DataType> dataReceived;
-  MPIWrapper::sendDataVectors(_possiblyExtrudedPhysicalMesh->Comm(), dataToSend, dataReceived);
+  MPIWrapper::sendDataVectors(_configurationSpaceMesh->Comm(), dataToSend, dataReceived);
   
     // note that the following map logic is not maximally efficient, but it's unlikely to be a bottleneck due to the relatively small size of the data
   using std::map;
