@@ -1481,6 +1481,49 @@ vector<IndexType> MeshTopology::getBoundarySidesThatMatch(SpatialFilterPtr spati
   return matchingSides;
 }
 
+vector<IndexType> MeshTopology::getBoundarySidesThatMatch(SpatialFilterPtr spatialFilter, MeshPtr meshForEvaluation) const
+{
+  int sideDim = getDimension() - 1;
+  vector<IndexType> matchingSides;
+  
+  FieldContainer<double> refNodes;
+  FieldContainer<bool> nodesMatch;
+  for (IndexType sideEntityIndex : _boundarySides)
+  {
+    auto cellIDAndSide = getFirstCellForSide(sideEntityIndex);
+    auto cellID = cellIDAndSide.first;
+    auto sideOrdinal = cellIDAndSide.second;
+    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(meshForEvaluation, cellID);
+    auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
+    
+    auto sideTopo = basisCache->cellTopology()->getSide(sideOrdinal);
+    refNodes.resize(sideTopo->getNodeCount(), sideDim);
+    
+    const int oneCell = 1;
+    nodesMatch.resize(oneCell,sideTopo->getNodeCount());
+    
+    CamelliaCellTools::refCellNodesForTopology(refNodes, sideTopo);
+    
+    sideCache->setRefCellPointsFC(refNodes);
+    
+    spatialFilter->matchesPoints(nodesMatch, sideCache);
+    
+    bool allMatch = true;
+    for (int node=0; node<sideTopo->getNodeCount(); node++)
+    {
+      if (! nodesMatch(0,node) )
+      {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) matchingSides.push_back(sideEntityIndex);
+  }
+  return matchingSides;
+}
+
+
 const std::vector<PeriodicBCPtr> & MeshTopology::getPeriodicBCs() const
 {
   return _periodicBCs;

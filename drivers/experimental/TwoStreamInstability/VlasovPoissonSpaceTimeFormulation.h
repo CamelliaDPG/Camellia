@@ -168,9 +168,6 @@ public:
   
   Teuchos::RCP<SolutionMoments> solutionMoments();
   
-  //! Returns a SolutionMomentFunction corresponding to the zero moment, that is, the integral of f over velocity space.  Call solutionMoments()->updateValues() to ensure that the integral has been performed after the last update to f.
-  FunctionPtr zerothMoment();
-    
   SolutionPtr vlasovSolution();
   SolutionPtr poissonSolution();
   

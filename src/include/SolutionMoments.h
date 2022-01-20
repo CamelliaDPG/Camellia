@@ -97,7 +97,7 @@ namespace Camellia
     SolutionPtr _soln; // in phase space, defined on an ExtrudedMeshTopology
     VarPtr _fieldVar;
     
-    MeshPtr _possiblyExtrudedPhysicalMesh; // to start, this is only allowed to be defined on the physical MeshTopology from the ExtrudedMeshTopology in _soln, but we will eventually support a more general slice (extrusions of that physical MeshTopology)
+    MeshPtr _configurationSpaceMesh; // to start, this is only allowed to be defined on the physical MeshTopology from the ExtrudedMeshTopology in _soln, but we will eventually support a more general slice (extrusions of that physical MeshTopology)
     
     std::vector<IndexType> _physicalCellIDs; // sorted list of physical cell IDs, for which moments are stored in _spatialBasisCoefficients
     
@@ -107,6 +107,7 @@ namespace Camellia
     using IndexView = Camellia::DeviceView<IndexType>;
     
     int _survivingExtrusionDimension = -1; // if non-negative, indicates a single dimension which is *not* integrated away
+    int _numDimensionsPhysicalMesh;
     
     BasisReconciliation _basisReconciliation;
   public:
@@ -131,6 +132,9 @@ namespace Camellia
     //! Returns the mesh on which SolutionMoments is defined — may be the physical mesh, or the physical mesh extruded.
     MeshPtr mesh();
     
+    //! Sets the mesh on which SolutionMoments is defined — may be the configuration-space mesh, or the configuration-space mesh extruded.  Must match dimensionally what was set at construction time (i.e., if there was a surviving extrusion dimension, should be the configuration-space mesh extruded…).
+    void setMesh(MeshPtr configurationSpaceMesh);
+    
     //! returns the cell index in the basisCoefficients container corresponding to the specified cellID, or -1 if the cellID is not owned by this MPI rank.
     int localCellOrdinal(const IndexType &cellID) const;
     
@@ -139,6 +143,8 @@ namespace Camellia
     
     //! A (C,F) container containing the coefficients for locally-owned cells.  See localCellOrdinal().
     const BasisIntegralView basisCoefficients() const;
+    
+    MeshPtr phaseSpaceMesh();
     
     //! recomputes all moments on (extruded) spatial mesh.  MPI collective method.
     void update();
