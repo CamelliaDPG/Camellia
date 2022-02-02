@@ -2839,7 +2839,7 @@ int main(int argc, char *argv[])
 //      refStrategy->setMaxElements(maxElements);
       refStrategy->setMaxP(H1Order);
       
-      double bc_norm = bcFxnExact->l2norm(form.vlasovMesh(), quadratureEnrichment);
+      double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
       double relErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
       
       int numBCRefinements = 0;
@@ -2860,7 +2860,7 @@ int main(int argc, char *argv[])
         // project the BC onto the mesh again
         form.vlasovSolution()->projectOntoMesh(bcMap);
         
-        bc_norm = bcFxnExact->l2norm(form.vlasovMesh(), quadratureEnrichment);
+        bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
         relErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
         
         numVlasovElements = form.vlasovMesh()->numActiveElements();
@@ -3241,6 +3241,30 @@ int main(int argc, char *argv[])
         solutionMoments->update();
         
         writeResults(refinementNumber);
+        
+        for (auto bcPair : bcFunctionsToResolve)
+        {
+          FunctionPtr bcFxnExact = bcPair.first.first;
+          FunctionPtr bcFxnSoln  = bcPair.first.second;
+          int bcTag = bcPair.second;
+          
+          const std::string & tagName = DIRICHLET_SET_TAG_NAME;
+          FunctionPtr bcRestriction = Function::meshSideSetCharacteristic(tagName, bcTag);
+          
+          FunctionPtr bc_err = bcFxnExact * bcRestriction - bcFxnSoln * bcRestriction;
+          int quadratureEnrichment = 4;
+          
+          double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
+          double relErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
+          
+          int numBCRefinements = 0;
+          int numVlasovElements = form.vlasovMesh()->numActiveElements();
+          
+          if (rank==0)
+          {
+            std::cout << "BC resolution, relative error in L^2 norm: " << relErr << std::endl;
+          }
+        }
         
         if (rank == 0)
         {
