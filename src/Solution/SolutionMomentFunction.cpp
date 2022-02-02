@@ -93,7 +93,7 @@ namespace Camellia
     
     extrudedSpatialBasis->getValues(basisValues, points);
 
-    // we implicitly assume here that reference-to-physical transform is identity
+    // we implicitly assume here that reference-to-physical transform (the pullback due to the function space) is identity
     
     auto allSpatialBasisCoefficients  = _solutionMoments.getSpatialBasisCoefficients();
     
