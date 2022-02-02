@@ -202,6 +202,8 @@ BasisPtr SolutionMoments::extrudedSpatialBasis()
 
 void SolutionMoments::gatherOnRankZero()
 {
+  const int rank = _configurationSpaceMesh->Comm()->MyPID();
+  
   // send the physical cell contributions to their owners, and store in _spatialBasisCoefficients container
   // we use a convenience method in MPIWrapper for this; note that this sends a bunch of extra data that a manual data-packing implementation would not need to.  (The convenience method requires that we have a vector of fixed-length entries; that's where the inefficiency comes from.)
   using DataType = std::tuple<IndexType,int,int,double>; // (physicalCellID,momentEntryOrdinal,spatialBasisOrdinal,value)
@@ -239,7 +241,7 @@ void SolutionMoments::gatherOnRankZero()
   auto globalActiveCellIDs = _configurationSpaceMesh->getActiveCellIDsGlobal();
   const GlobalIndexType numGlobalActiveCells = globalActiveCellIDs.size();
   
-  if (_configurationSpaceMesh->Comm()->MyPID() == 0)
+  if (rank == 0)
   {
     // check out a fresh _spatialBasisCoefficients, if size has changed
     if (_spatialBasisCoefficients.extent_int(1) != numGlobalActiveCells)
@@ -298,8 +300,8 @@ void SolutionMoments::gatherOnRankZero()
       }
       spatialBasisCoefficientsHost(momentEntryOrdinal,cellOrdinal,spatialBasisOrdinal) = value;
     }
+    Kokkos::deep_copy(_spatialBasisCoefficients,spatialBasisCoefficientsHost);
   }
-  Kokkos::deep_copy(_spatialBasisCoefficients,spatialBasisCoefficientsHost);
 }
 
 Camellia::DeviceView<double> SolutionMoments::getSpatialBasisCoefficients()
