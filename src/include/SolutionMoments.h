@@ -141,7 +141,7 @@ namespace Camellia
     //! returns the number of velocity-space dimensions (1 for 1V, 2 for 2V, 3 for 3V)
     int numVelocityDims() const;
     
-    //! A (C,F) container containing the coefficients for locally-owned cells.  See localCellOrdinal().
+    //! A (M,C,F) container containing the coefficients for locally-owned cells.  See localCellOrdinal().
     const BasisIntegralView basisCoefficients() const;
     
     MeshPtr phaseSpaceMesh();
