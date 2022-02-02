@@ -615,8 +615,6 @@ void VlasovPoissonSpaceTimeFormulation::solve()
     solveNumber++;
   }
   
-  updateElectricField(); // doing the Poisson solve first may help with fixed point convergence.  (And this is far cheaper than the Vlasov solve, so well worth it if it does help…)
-  
   // get the PhysicalSolutionExtrusion ready to evaluate (in context of Vlasov BF)
   // updateValues() will do MPI communication of physical solution values so they're where they need to be for phase space mesh:
   static_cast<PhysicalSolutionExtrusion*>(_E_extruded.get())->updateValues();
