@@ -1863,8 +1863,11 @@ int main(int argc, char *argv[])
     double xWidth =  2 * M_PI / k_x;
     double t0     =  0.0;
     double tWidth =  1.0;
-    double v0     = -10.0;
-    double vWidth =  20.0;
+    
+    const double DEFAULT_V0     = 0.50;
+    const double DEFAULT_VWIDTH = 1.00;
+    double v0     = std::numeric_limits<double>::infinity();
+    double vWidth = std::numeric_limits<double>::infinity();
     
     bool enforceQuasiNeutrality = true;
     
@@ -1932,6 +1935,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("delta_k", &delta_k);
     cmdp.setOption("resultsFilePrefix", &resultsFilePrefix);
     cmdp.setOption("u0", &u0);
+    cmdp.setOption("v0", &v0, "minimum velocity coordinate in domain");
+    cmdp.setOption("vWidth", &vWidth, "span of velocity coordinates in domain");
     cmdp.setOption("sigma", &coldDiodeSigma); // sigma for cold diode -- ignored for other problems
     cmdp.setOption("maxElements", &maxElements);
     cmdp.setOption("maximumRefinementLevel", &maximumRefinementLevel);
@@ -2004,6 +2009,15 @@ int main(int argc, char *argv[])
     bool usePeriodicBCs = true;
     if (problemChoice == BUMP_ON_TAIL)
     {
+      if (vWidth == std::numeric_limits<double>::infinity())
+      {
+        vWidth = 20.0;
+      }
+      if (v0 == std::numeric_limits<double>::infinity())
+      {
+        v0 = -10.0;
+      }
+      
       k_x = 0.3;
       xWidth =  2 * M_PI / k_x;
       u0 = 4.5;
@@ -2037,8 +2051,15 @@ int main(int argc, char *argv[])
       const double omega_p = sqrt( q0 * q0 * nScaling / (m0 * permittivity));
       
       xWidth = 0.01 / spatialScaling;
-      v0     = 0.50;
-      vWidth = 1.00;
+      
+      if (vWidth == std::numeric_limits<double>::infinity())
+      {
+        vWidth = 1.00;
+      }
+      if (v0 == std::numeric_limits<double>::infinity())
+      {
+        v0 = 0.50;
+      }
       
       u0     = 1.0;
       
@@ -2898,6 +2919,19 @@ int main(int argc, char *argv[])
       return resultsFileStream.str();
     };
     
+    auto getSpatialMeshFilePath = [&](int refNumber = -1) {
+      std::ostringstream spatialMeshFileStream;
+      spatialMeshFileStream << problemPrefix << "_mesh1D" << suffix.str();
+      
+      if (useAdaptivity)
+      {
+        spatialMeshFileStream << "_AMR_" << refNumber << "_refs";
+      }
+      spatialMeshFileStream << ".dat";
+      
+      return spatialMeshFileStream.str();
+    };
+    
     std::ostringstream vlasovSS;
     vlasovSS << problemPrefix << "Vlasov" << suffix.str();
     
@@ -3080,7 +3114,7 @@ int main(int argc, char *argv[])
             
             E_values[x]           = E_integral / one_integral;
             potential_values[x]   = potential_integral / one_integral;
-            ne_values[x]     = density_integral / one_integral;
+            ne_values[x]          = density_integral / one_integral;
             velocity_values[x]    = velocity_integral / one_integral;
             pointWeight_values[x] = pointWeight;
           }
@@ -3110,6 +3144,21 @@ int main(int argc, char *argv[])
         }
         
         resultsFileStream.close();
+        
+        auto spatialMeshFile = getSpatialMeshFilePath(refinementNumber);
+        std::ofstream spatialMeshFileStream(spatialMeshFile, std::ios::out);
+        // let's collect the spatial nodes and sort them
+        std::set<double> spatialNodes;
+        for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+        {
+          spatialNodes.insert(physicalCellNodes(cellOrdinal,0,0)); // (min x, min t)
+          spatialNodes.insert(physicalCellNodes(cellOrdinal,1,0)); // (max x, min t)
+        }
+        resultsFileStream << "x\n";
+        for (const auto & node : spatialNodes)
+        {
+          spatialMeshFileStream << node << "\n";
+        }
       }
     };
     
@@ -3193,6 +3242,11 @@ int main(int argc, char *argv[])
         
         writeResults(refinementNumber);
         
+        if (rank == 0)
+        {
+          std::cout << "******************************  Refinement " << refinementNumber << " complete. ******************************\n";
+        }
+        
         energyError = refStrategy.computeTotalEnergyError(); // forces update to energyErrorFunction
         
         if (saveViz)
@@ -3258,6 +3312,10 @@ int main(int argc, char *argv[])
         vlasovViz->exportSolution(form.vlasovSolution(), {energyErrorFunction,cellIDFunction}, {"energy error","cell ID (Vlasov)"}, numRefinements);
       }
       writeResults(numRefinements);
+      if (rank == 0)
+      {
+        std::cout << "******************************  Refinement " << numRefinements << " complete. ******************************\n";
+      }
     }
   }
   
