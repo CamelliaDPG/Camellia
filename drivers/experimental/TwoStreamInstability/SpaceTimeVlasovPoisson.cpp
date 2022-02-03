@@ -1996,7 +1996,7 @@ int main(int argc, char *argv[])
     {
       if (problemChoice == COLD_DIODE)
       {
-        // this helps resolve the very fine BCs
+        // we no longer think it's a good idea to enrich the traces separately; refine to resolve the BCs; don't change the polynomial order of traces globally
         vlasovTraceEnrichment = 0;
       }
       else
@@ -3193,6 +3193,40 @@ int main(int argc, char *argv[])
       }
     };
     
+    auto reportBCResolutionAndRefinementComplete = [&](const int &refinementNumber, const double energyError) {
+      double bcRelErr = -1;
+      for (auto bcPair : bcFunctionsToResolve)
+      {
+        FunctionPtr bcFxnExact = bcPair.first.first;
+        FunctionPtr bcFxnSoln  = bcPair.first.second;
+        int bcTag = bcPair.second;
+        
+        const std::string & tagName = DIRICHLET_SET_TAG_NAME;
+        FunctionPtr bcRestriction = Function::meshSideSetCharacteristic(tagName, bcTag);
+        
+        FunctionPtr bc_err = bcFxnExact * bcRestriction - bcFxnSoln * bcRestriction;
+        int quadratureEnrichment = 4;
+        
+        double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
+        bcRelErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
+                  
+        if (rank==0)
+        {
+          std::cout << "BC resolution, relative error in L^2 norm: " << bcRelErr << std::endl;
+        }
+      }
+      auto numVlasovDofs = form.vlasovSolution()->mesh()->numGlobalDofs();
+      auto vlasovElementCount  = form.vlasovMesh()->numActiveElements();
+      auto poissonElementCount = form.poissonMesh()->numActiveElements();
+      auto poissonDofCount     = form.poissonMesh()->numGlobalDofs();
+            
+      if (rank == 0)
+      {
+        writeRefReport(vlasovElementCount, numVlasovDofs, poissonElementCount, poissonDofCount, bcRelErr, energyError);
+        std::cout << "******************************  Refinement " << refinementNumber << " complete. ******************************\n";
+      }
+    };
+    
     if (!useAdaptivity)
     {
       auto numVlasovDofs = form.vlasovSolution()->mesh()->numGlobalDofs();
@@ -3273,38 +3307,8 @@ int main(int argc, char *argv[])
         
         writeResults(refinementNumber);
         
-        double bcRelErr = -1;
-        for (auto bcPair : bcFunctionsToResolve)
-        {
-          FunctionPtr bcFxnExact = bcPair.first.first;
-          FunctionPtr bcFxnSoln  = bcPair.first.second;
-          int bcTag = bcPair.second;
-          
-          const std::string & tagName = DIRICHLET_SET_TAG_NAME;
-          FunctionPtr bcRestriction = Function::meshSideSetCharacteristic(tagName, bcTag);
-          
-          FunctionPtr bc_err = bcFxnExact * bcRestriction - bcFxnSoln * bcRestriction;
-          int quadratureEnrichment = 4;
-          
-          double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
-          bcRelErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
-                    
-          if (rank==0)
-          {
-            std::cout << "BC resolution, relative error in L^2 norm: " << bcRelErr << std::endl;
-          }
-        }
-        auto vlasovElementCount  = form.vlasovMesh()->numActiveElements();
-        auto poissonElementCount = form.poissonMesh()->numActiveElements();
-        auto poissonDofCount     = form.poissonMesh()->numGlobalDofs();
-        
         energyError = refStrategy.computeTotalEnergyError(); // forces update to energyErrorFunction
-        
-        if (rank == 0)
-        {
-          writeRefReport(vlasovElementCount, numVlasovDofs, poissonElementCount, poissonDofCount, bcRelErr, energyError);
-          std::cout << "******************************  Refinement " << refinementNumber << " complete. ******************************\n";
-        }
+        reportBCResolutionAndRefinementComplete(refinementNumber, energyError);
         
         if (saveViz)
         {
@@ -3316,8 +3320,8 @@ int main(int argc, char *argv[])
         
         // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
         form.poissonMesh()->repartitionAndRebuild();
-        poissonElementCount = form.poissonMesh()->numActiveElements();
-        poissonDofCount     = form.poissonMesh()->numGlobalDofs();
+        auto poissonElementCount = form.poissonMesh()->numActiveElements();
+        auto poissonDofCount     = form.poissonMesh()->numGlobalDofs();
         if (rank == 0)
         {
           std::cout << "Poisson mesh has " << poissonElementCount << " active elements and " << poissonDofCount << " global degrees of freedom.\n";
@@ -3370,41 +3374,7 @@ int main(int argc, char *argv[])
       }
       writeResults(numRefinements);
       
-      {
-        // final refinement report:
-        
-        double bcRelErr = -1;
-        for (auto bcPair : bcFunctionsToResolve)
-        {
-          FunctionPtr bcFxnExact = bcPair.first.first;
-          FunctionPtr bcFxnSoln  = bcPair.first.second;
-          int bcTag = bcPair.second;
-          
-          const std::string & tagName = DIRICHLET_SET_TAG_NAME;
-          FunctionPtr bcRestriction = Function::meshSideSetCharacteristic(tagName, bcTag);
-          
-          FunctionPtr bc_err = bcFxnExact * bcRestriction - bcFxnSoln * bcRestriction;
-          int quadratureEnrichment = 4;
-          
-          double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
-          bcRelErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
-        }
-        auto vlasovElementCount  = form.vlasovMesh()->numActiveElements();
-        auto poissonElementCount = form.poissonMesh()->numActiveElements();
-        auto poissonDofCount     = form.poissonMesh()->numGlobalDofs();
-        
-        if (rank==0)
-        {
-          std::cout << "BC resolution, relative error in L^2 norm: " << bcRelErr << std::endl;
-          writeRefReport(vlasovElementCount, numVlasovDofs, poissonElementCount, poissonDofCount, bcRelErr, energyError);
-        }
-      }
-      
-      
-      if (rank == 0)
-      {
-        std::cout << "******************************  Refinement " << numRefinements << " complete. ******************************\n";
-      }
+      reportBCResolutionAndRefinementComplete(numRefinements, energyError);
     }
   }
   
