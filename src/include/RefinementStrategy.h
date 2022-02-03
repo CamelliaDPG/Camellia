@@ -98,6 +98,9 @@ public:
   GlobalIndexType getNumElements(int refinementNumber);
   GlobalIndexType getNumDofs(int refinementNumber);
   
+  //! return the number of refinements that have been recorded in the internal results container; used for getEnergyError(), getNumElements(), and getNumDofs().
+  int getNumRefinements() const;
+  
   static RefinementStrategyPtr energyErrorRefinementStrategy(SolutionPtr soln, double relativeEnergyThreshold);
   static RefinementStrategyPtr energyErrorRefinementStrategy(MeshPtr mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip,
                                                              double relativeEnergyThreshold, int cubatureEnrichmentDegree = 0);

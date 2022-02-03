@@ -542,6 +542,12 @@ GlobalIndexType TRefinementStrategy<Scalar>::getNumDofs(int refinementNumber)
 }
 
 template <typename Scalar>
+GlobalIndexType TRefinementStrategy<Scalar>::getNumRefinements() const
+{
+  return _results.size();
+}
+
+template <typename Scalar>
 void TRefinementStrategy<Scalar>::unrefineCells(const std::set<GlobalIndexType> &cellIDs)
 {
   const bool repartitionAndRebuild = false;
