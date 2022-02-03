@@ -806,6 +806,43 @@ const std::vector< std::vector<int> > & Boltzmann1D1VFormulation::iterationCount
   return _iterationCounts;
 }
 
+void Boltzmann1D1VFormulation::performRefinements()
+{
+  bool shouldRefine;
+  if (_gateRefinements)
+  {
+    // we compute error indicator first; if no refinement-eligible element has error greater than what would have been refined last time, then we don't do a refinement step now.
+    
+    auto localCellsToExclude = _refStrategy->localCellsIneligibleForRefinement();
+    
+    ErrorIndicatorPtr errorIndicator = _refStrategy->errorIndicator();
+    errorIndicator->measureError();
+    const double maxError = errorIndicator->maxError(localCellsToExclude);
+    
+    shouldRefine = maxError > _refinementThreshold * _lastRefinementMaxElementError;
+    
+    if (shouldRefine)
+    {
+      _lastRefinementMaxElementError = maxError;
+    }
+  }
+  else
+  {
+    shouldRefine = true;
+  }
+  
+  if (shouldRefine)
+  {
+    // for now, print refinement info to console on rank 0.
+    const bool printToConsole = _boltzmannSoln->mesh()->Comm()->MyPID() == 0;
+    const bool doUnrefinements = (_maxElements < std::numeric_limits<int>::max());
+    _refStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
+    
+    // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+    _gaussSoln->mesh()->repartitionAndRebuild();
+  }
+}
+
 const std::map<GlobalIndexType, std::set<GlobalIndexType> > & Boltzmann1D1VFormulation::phaseSpaceCellIDToSpatialCellIDs()
 {
   return _phaseSpaceCellIDToSpatialCellID;
@@ -814,6 +851,11 @@ const std::map<GlobalIndexType, std::set<GlobalIndexType> > & Boltzmann1D1VFormu
 Teuchos::RCP<PhasePhysicalMeshMap> Boltzmann1D1VFormulation::phaseSpacePhysicalMeshMap()
 {
   return _phaseSpacePhysicalMeshMap;
+}
+
+RefinementStrategyPtr Boltzmann1D1VFormulation::refinementStrategy()
+{
+  return _refStrategy;
 }
 
 void Boltzmann1D1VFormulation::setBoltzmannInflow(FunctionPtr f_left, FunctionPtr f_right)
@@ -902,6 +944,11 @@ void Boltzmann1D1VFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
   _aztecOutputLevel = azOutputLevel;
 }
 
+void Boltzmann1D1VFormulation::setPerformRefinementsDuringTimeSteps(bool value)
+{
+  _performRefinementsDuringTimeSteps = value;
+}
+
 void Boltzmann1D1VFormulation::setRefinementThresholds(double refinementThreshold, int maxElements, int maxRefinementLevel, ErrorIndicatorPtr unrefinementErrorIndicator, bool gateRefinements)
 {
   _refinementThreshold = refinementThreshold;
@@ -940,6 +987,11 @@ void Boltzmann1D1VFormulation::setSubstepsForImplicit(int numSubsteps)
 double Boltzmann1D1VFormulation::t() const
 {
   return _t;
+}
+
+Teuchos::RCP<SolutionMoments> Boltzmann1D1VFormulation::solutionMoments()
+{
+  return _solutionMoments;
 }
 
 void Boltzmann1D1VFormulation::takeTimeStep()
@@ -1068,41 +1120,9 @@ void Boltzmann1D1VFormulation::takeTimeStep()
       {
         const bool useAdaptivity = _refStrategy != Teuchos::null;
         
-        if (useAdaptivity)
+        if (useAdaptivity && _performRefinementsDuringTimeSteps)
         {
-          bool shouldRefine;
-          if (_gateRefinements)
-          {
-            // we compute error indicator first; if no refinement-eligible element has error greater than what would have been refined last time, then we don't do a refinement step now.
-            
-            auto localCellsToExclude = _refStrategy->localCellsIneligibleForRefinement();
-            
-            ErrorIndicatorPtr errorIndicator = _refStrategy->errorIndicator();
-            errorIndicator->measureError();
-            const double maxError = errorIndicator->maxError(localCellsToExclude);
-            
-            shouldRefine = maxError > _refinementThreshold * _lastRefinementMaxElementError;
-            
-            if (shouldRefine)
-            {
-              _lastRefinementMaxElementError = maxError;
-            }
-          }
-          else
-          {
-            shouldRefine = true;
-          }
-          
-          if (shouldRefine)
-          {
-            // for now, print refinement info to console on rank 0.
-            const bool printToConsole = _boltzmannSoln->mesh()->Comm()->MyPID() == 0;
-            const bool doUnrefinements = (_maxElements < std::numeric_limits<int>::max());
-            _refStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
-            
-            // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
-            _gaussSoln->mesh()->repartitionAndRebuild();
-          }
+          performRefinements();
         }
         
         // last substep
@@ -1218,6 +1238,11 @@ VarPtr Boltzmann1D1VFormulation::t_n_hat()
 VarPtr Boltzmann1D1VFormulation::VE_hat()
 {
   return _poissonForm->u_hat();
+}
+
+VarPtr Boltzmann1D1VFormulation::VE()
+{
+  return _poissonForm->u();
 }
 
 // x-velocity function:

@@ -78,6 +78,8 @@ private:
   //! If true, only refine when max element error is greater than the least error that would have induced a refinement in the last round of refinements
   bool _gateRefinements = false;
   
+  bool _performRefinementsDuringTimeSteps = true;
+  
   // set by user:
   ParameterFunctionPtr _dt;
   ParameterFunctionPtr _q;
@@ -149,6 +151,7 @@ public:
   // field variables:
   VarPtr f();  // Boltzmann
   VarPtr E();  // Gauss
+  VarPtr VE();  // Gauss
 
   // traces:
   VarPtr f_hat(); // Boltzmann
@@ -196,10 +199,20 @@ public:
   void setRefinementThresholds(double refinementThreshold, int maxElements, int maxRefinementLevel, ErrorIndicatorPtr unrefinementErrorIndicator = Teuchos::null,
                                bool gateRefinements = false);
   
+  //! perform refinements according to settings given during call to setRefinementThreshold().  (If gateRefinements was true, then refinements might not actually take place.)
+  void performRefinements();
+  
+  //! Defaults to true; set to false if you want to manually call performRefinements after the time step is taken.  Useful if you want to examine the solution before a refinement takes place.
+  void setPerformRefinementsDuringTimeSteps(bool value);
+  
+  RefinementStrategyPtr refinementStrategy();
+  
   void setSubstepsForImplicit(int numSubsteps);
   
   //! notification that the boltzmann solve has set the RK stage:
   void setStage(const int stageNumber);
+  
+  Teuchos::RCP<SolutionMoments> solutionMoments();
   
   //! map from gauss mesh cellIDs to corresponding cellIDs in boltzmann mesh
   const std::map<GlobalIndexType, std::vector<GlobalIndexType> > &spatialCellIDToPhaseSpaceCellIDsMap();
