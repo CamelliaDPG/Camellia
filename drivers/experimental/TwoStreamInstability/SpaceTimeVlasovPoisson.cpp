@@ -2901,6 +2901,7 @@ int main(int argc, char *argv[])
     
     auto getResultsFilePath = [&](int refNumber = -1) {
       std::ostringstream resultsFileStream;
+      resultsFileStream << outputDir << "/";
       if (resultsFilePrefix == "")
       {
         resultsFileStream << problemPrefix << "_results" << suffix.str();
@@ -2920,16 +2921,31 @@ int main(int argc, char *argv[])
     };
     
     auto getSpatialMeshFilePath = [&](int refNumber = -1) {
-      std::ostringstream spatialMeshFileStream;
-      spatialMeshFileStream << problemPrefix << "_mesh1D" << suffix.str();
+      std::ostringstream spatialMeshInfoPathStringStream;
+      spatialMeshInfoPathStringStream << outputDir << "/";
+      spatialMeshInfoPathStringStream << problemPrefix << "_mesh1D" << suffix.str();
       
       if (useAdaptivity)
       {
-        spatialMeshFileStream << "_AMR_" << refNumber << "_refs";
+        spatialMeshInfoPathStringStream << "_AMR_" << refNumber << "_refs";
       }
-      spatialMeshFileStream << ".dat";
+      spatialMeshInfoPathStringStream << ".dat";
       
-      return spatialMeshFileStream.str();
+      return spatialMeshInfoPathStringStream.str();
+    };
+    
+    auto getRefinementReportFilePath = [&]() {
+      std::ostringstream refReportPathStringStream;
+      refReportPathStringStream << outputDir << "/";
+      refReportPathStringStream << problemPrefix << "_refReport" << suffix.str();
+      
+      if (useAdaptivity)
+      {
+        refReportPathStringStream << "_AMR_" << numRefinements << "_refs";
+      }
+      refReportPathStringStream << ".dat";
+      
+      return refReportPathStringStream.str();
     };
     
     std::ostringstream vlasovSS;
@@ -2972,6 +2988,19 @@ int main(int argc, char *argv[])
     auto momentum = solutionMoments->solutionMomentFunction(1);
     
     auto velocity = momentum / density;
+    
+    auto refReportFilePath = getRefinementReportFilePath();
+    std::ofstream refReportFileStream(refReportFilePath, std::ios::out);
+    
+    refReportFileStream << "Vlasov Elements\tVlasov Dofs\tPoisson Elements\tPoisson Dofs\tBC err\tEnergy Error\n";
+    refReportFileStream.close();
+    
+    auto writeRefReport = [&](const int numElementsVlasov, const int numDofsVlasov, const int numElementsPoisson, const int numDofsPoisson, const double bcErr, const double energyError) {
+      auto refReportFilePath = getRefinementReportFilePath();
+      std::ofstream refReportFileStream(refReportFilePath, std::ios_base::app);
+      refReportFileStream << numElementsVlasov << "\t" << numDofsVlasov << "\t" << numElementsPoisson << "\t" << numDofsPoisson << "\t" << bcErr << "\t" << energyError << std::endl;
+      refReportFileStream.close();
+    };
     
     auto writeResults = [&](const int refinementNumber) {
       
@@ -3021,7 +3050,8 @@ int main(int argc, char *argv[])
         std::map<double,double> pointWeight_values; // map from x coordinate to cell measure-weighted quadrature weight
         GlobalIndexType firstPhysicalCellID = *physicalCellsFinalTime.begin();
         
-        auto basisCache = BasisCache::basisCacheForCell(form.poissonMesh(), firstPhysicalCellID);
+        const int cubatureEnrichmentDegree = 5; // over-integrate to make up for undermeasurement on coarse initial meshes
+        auto basisCache = BasisCache::basisCacheForCell(form.poissonMesh(), firstPhysicalCellID, false, cubatureEnrichmentDegree); // false: not test versus test
         std::vector<GlobalIndexType> physicalCellIDsVector(physicalCellsFinalTime.begin(),physicalCellsFinalTime.end());
         
         auto cubWeights = basisCache->getCubatureWeights();
@@ -3159,6 +3189,7 @@ int main(int argc, char *argv[])
         {
           spatialMeshFileStream << node << "\n";
         }
+        spatialMeshFileStream.close();
       }
     };
     
@@ -3242,6 +3273,7 @@ int main(int argc, char *argv[])
         
         writeResults(refinementNumber);
         
+        double bcRelErr = -1;
         for (auto bcPair : bcFunctionsToResolve)
         {
           FunctionPtr bcFxnExact = bcPair.first.first;
@@ -3255,23 +3287,24 @@ int main(int argc, char *argv[])
           int quadratureEnrichment = 4;
           
           double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
-          double relErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
-          
-          int numBCRefinements = 0;
-          int numVlasovElements = form.vlasovMesh()->numActiveElements();
-          
+          bcRelErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
+                    
           if (rank==0)
           {
-            std::cout << "BC resolution, relative error in L^2 norm: " << relErr << std::endl;
+            std::cout << "BC resolution, relative error in L^2 norm: " << bcRelErr << std::endl;
           }
         }
+        auto vlasovElementCount  = form.vlasovMesh()->numActiveElements();
+        auto poissonElementCount = form.poissonMesh()->numActiveElements();
+        auto poissonDofCount     = form.poissonMesh()->numGlobalDofs();
+        
+        energyError = refStrategy.computeTotalEnergyError(); // forces update to energyErrorFunction
         
         if (rank == 0)
         {
+          writeRefReport(vlasovElementCount, numVlasovDofs, poissonElementCount, poissonDofCount, bcRelErr, energyError);
           std::cout << "******************************  Refinement " << refinementNumber << " complete. ******************************\n";
         }
-        
-        energyError = refStrategy.computeTotalEnergyError(); // forces update to energyErrorFunction
         
         if (saveViz)
         {
@@ -3283,8 +3316,8 @@ int main(int argc, char *argv[])
         
         // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
         form.poissonMesh()->repartitionAndRebuild();
-        auto poissonElementCount = form.poissonMesh()->numActiveElements();
-        auto poissonDofCount     = form.poissonMesh()->numGlobalDofs();
+        poissonElementCount = form.poissonMesh()->numActiveElements();
+        poissonDofCount     = form.poissonMesh()->numGlobalDofs();
         if (rank == 0)
         {
           std::cout << "Poisson mesh has " << poissonElementCount << " active elements and " << poissonDofCount << " global degrees of freedom.\n";
@@ -3336,6 +3369,38 @@ int main(int argc, char *argv[])
         vlasovViz->exportSolution(form.vlasovSolution(), {energyErrorFunction,cellIDFunction}, {"energy error","cell ID (Vlasov)"}, numRefinements);
       }
       writeResults(numRefinements);
+      
+      {
+        // final refinement report:
+        
+        double bcRelErr = -1;
+        for (auto bcPair : bcFunctionsToResolve)
+        {
+          FunctionPtr bcFxnExact = bcPair.first.first;
+          FunctionPtr bcFxnSoln  = bcPair.first.second;
+          int bcTag = bcPair.second;
+          
+          const std::string & tagName = DIRICHLET_SET_TAG_NAME;
+          FunctionPtr bcRestriction = Function::meshSideSetCharacteristic(tagName, bcTag);
+          
+          FunctionPtr bc_err = bcFxnExact * bcRestriction - bcFxnSoln * bcRestriction;
+          int quadratureEnrichment = 4;
+          
+          double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form.vlasovMesh(), quadratureEnrichment);
+          bcRelErr = bc_err->l2norm(form.vlasovMesh(), quadratureEnrichment) / bc_norm;
+        }
+        auto vlasovElementCount  = form.vlasovMesh()->numActiveElements();
+        auto poissonElementCount = form.poissonMesh()->numActiveElements();
+        auto poissonDofCount     = form.poissonMesh()->numGlobalDofs();
+        
+        if (rank==0)
+        {
+          std::cout << "BC resolution, relative error in L^2 norm: " << bcRelErr << std::endl;
+          writeRefReport(vlasovElementCount, numVlasovDofs, poissonElementCount, poissonDofCount, bcRelErr, energyError);
+        }
+      }
+      
+      
       if (rank == 0)
       {
         std::cout << "******************************  Refinement " << numRefinements << " complete. ******************************\n";
