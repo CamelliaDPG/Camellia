@@ -1375,9 +1375,12 @@ int main(int argc, char *argv[])
       v0     = 0.50;
       vWidth = 1.00;
       
-      std::cout << "sigma = " << sigma << std::endl;
-      std::cout << "u0 = " << u0 << std::endl;
-      std::cout << "n0 = " << n0 << std::endl;
+      if (rank == 0)
+      {
+        std::cout << "sigma = " << sigma << std::endl;
+        std::cout << "u0 = " << u0 << std::endl;
+        std::cout << "n0 = " << n0 << std::endl;
+      }
     }
     
     if (dt_max < 0)
@@ -1803,6 +1806,7 @@ int main(int argc, char *argv[])
       
       if (rank == 0)
       {
+        std::cout << "BC resolution, relative error in L^2 norm: " << bcRelErr << std::endl;
         writeTimeStepReport(vlasovElementCount, numVlasovDofs, poissonElementCount, poissonDofCount, bcRelErr, energyError);
         std::cout << "Time step " << timeStepNumber << " complete.\n";
       }
@@ -1928,7 +1932,7 @@ int main(int argc, char *argv[])
           gaussViz->exportSolution(form.gaussSolution(),t);
         }
         
-        reportBCResolutionAndTimeStepComplete(timeStepNumber,energyError,bcRelErr);
+        reportBCResolutionAndTimeStepComplete(timeStepNumber,bcRelErr,energyError);
         
   //      double E_mag = E_squared->integrate(form.gaussMesh());
   //      if (rank == 0)
