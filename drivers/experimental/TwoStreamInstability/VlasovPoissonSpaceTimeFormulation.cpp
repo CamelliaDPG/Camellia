@@ -587,7 +587,7 @@ void VlasovPoissonSpaceTimeFormulation::setRefinementThresholds(double refinemen
 void VlasovPoissonSpaceTimeFormulation::solve()
 {
   const bool useAdaptivity = _refStrategy != Teuchos::null;
-  const int rank = MPIWrapper::CommWorld()->MyPID();
+  const int rank = _vlasovSoln->mesh()->Comm()->MyPID();
   
   Teuchos::RCP<GMGSolver> gmgSolver;
   
