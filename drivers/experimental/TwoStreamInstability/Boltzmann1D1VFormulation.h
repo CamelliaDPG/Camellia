@@ -61,6 +61,7 @@ private:
   bool _haveTableau = false;
   
   SolutionPtr _gaussSoln;
+  SolutionPtr _gaussSolnPrev;
   double _t = 0; // current time
   
   //! on each refinement, refine any element with error greater than threshold times the maximum element error.  Values > 1.0 mean no refinement
@@ -89,6 +90,16 @@ private:
   // set during solve process:
   ParameterFunctionPtr _n0; // integral of f over the whole 1D1V space
   
+  FunctionPtr _fSoln; // Camellia Function defining the solution of distribution f (refers to _vlasovSoln)
+  FunctionPtr _ESoln; // Camellia Function defining the solution of electric field E (refers to _poissonSoln)
+  
+  FunctionPtr _fDiff; // fixed-point step in Vlasov field f
+  FunctionPtr _EDiff; // fixed-point step in electric field E
+  
+  int _minSubstepsForImplicit = 3;  // minimum number of fixed-point iterations to run (alternating vlasov, poisson solves)
+  int _maxSubstepsForImplicit = 15; // maximum number of fixed-point iterations to run
+  double _fixedPointTolerance = 1e-5; // relative difference in f between fixed-point substeps
+  
   Teuchos::RCP<SolutionMoments> _solutionMoments;
   FunctionPtr _f_velocityIntegral; // integral of f over all velocity space
   FunctionPtr _E_extruded;  // E solution extended to the Boltzmann mesh
@@ -99,7 +110,9 @@ private:
   
   Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap;
   
-  int _numSubstepsForImplicit = 3; // usually the first solution is close enough to meet CG tolerance even after the electric field has been updated, so 3 is overkill
+  double _cgTol = 1e-6;
+  std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
+  int _maxIters = 10000;
   
   int _aztecOutputLevel = 0; // AZ_none -- no output.
   Teuchos::RCP<GMGSolver> _gmgSolver;
@@ -124,7 +137,10 @@ private:
   static const int BOLTZMANN_TAG_VMIN         = 2; // bottom
   static const int BOLTZMANN_TAG_VMAX         = 3; // top
   
-  std::vector< std::vector<int> > _iterationCounts; // outer vector index: time step number; inner: substep number.
+  std::vector< std::vector<int> > _iterationCounts; // outer vector index: solve number; inner: substep number.
+  
+  std::vector< std::vector<double> > _fixedPointL2StepSizesVlasov; // outer vector index: solve number; inner: substep number.
+  std::vector< std::vector<double> > _fixedPointL2StepSizesPoisson; // outer vector index: solve number; inner: substep number.
   
   void updateElectricField();
 public:
@@ -185,11 +201,6 @@ public:
   //! Set the boundary conditions for Gauss (relevant for the non-periodic case).
   void setGaussBCs(FunctionPtr VE_left, FunctionPtr VE_right);
   
-  /** \brief  Set the level of console output.
-      \param  azOutputLevel   [in]  - Corresponds to the Aztec output level (though Belos is doing the output); here, 0 means no output (the default); -1 means final residual + warnings; -2 means summary, final residual, and warnings; and -3 means only print warnings.  Positive number n means print out residual every n steps.
-  */
-  void setIterativeSolveOutputLevel(int azOutputLevel);
-  
   /** \brief  Sets thresholds for adaptivity
       \param  refinementThreshold   [in]  - on each refinement, refine any element with error greater than refinementThreshold times the maximum element error.  Values > 1.0 mean no refinement.
       \param  maxElements [in]  - maximum number of active elements allowed in the mesh (unrefinements will be performed to maintain this rule)
@@ -207,7 +218,44 @@ public:
   
   RefinementStrategyPtr refinementStrategy();
   
-  void setSubstepsForImplicit(int numSubsteps);
+  /** \brief  Set the tolerance for the fixed point iteration; relevant for implicit solves.
+      \param  fTol   [in]  - the target relative difference in f between one substep and the next, as measured in the L^2 norm.
+  */
+  void setFixedPointTolerance(const double fTol);
+  
+  /** \brief  Set the minimum number of substeps to take for the fixed point iteration; relevant for implicit solves.
+      \param  minSubsteps   [in]  - the minimum number of substeps to take for the fixed point solve.
+  */
+  void setFixedPointMinSubstepsForImplicit(const int minSubsteps);
+  
+  /** \brief  Set the maximum number of substeps to take for the fixed point iteration; relevant for implicit solves.
+      \param  maxSubsteps   [in]  - the maximum number of substeps to take for the fixed point solve.
+  */
+  void setFixedPointMaxSubstepsForImplicit(const int maxSubsteps);
+  
+  /** \brief  Set the tolerance for the iterative solve (relevant for geometric multigrid).
+      \param  cgTols   [in]  - the tolerance for the conjugate gradient solve in each fixed-point step; used in the stopping criterion for the CG iteration
+  */
+  
+  /** \brief  Set the level of console output.
+      \param  azOutputLevel   [in]  - Corresponds to the Aztec output level (though Belos is doing the output); here, 0 means no output (the default); -1 means final residual + warnings; -2 means summary, final residual, and warnings; and -3 means only print warnings.  Positive number n means print out residual every n steps.
+  */
+  void setIterativeSolveOutputLevel(int azOutputLevel);
+  
+  /** \brief  Set the tolerance for the iterative solve (relevant for geometric multigrid).
+      \param  cgTol   [in]  - the tolerance for the conjugate gradient solve; used in the stopping criterion for the CG iteration
+  */
+  void setIterativeSolveTolerance(const double cgTol);
+  
+  /** \brief  Set the tolerance for the iterative solve (relevant for geometric multigrid).
+      \param  cgTol   [in]  - the tolerance for the conjugate gradient solve; used in the stopping criterion for the CG iteration
+  */
+  void setIterativeSolveTolerances(const std::vector<double> cgTols);
+  
+  /** \brief  Set the maximum number of iterations for the iterative solve (relevant for geometric multigrid).
+      \param  maxIters   [in]  - the maximum number of conjugate gradient iterations to take; will stop if either maxIters are reached, or the relative residual falls below the CG tolerance.
+  */
+  void setIterativeSolveMaxIterations(const int maxIters);
   
   //! notification that the boltzmann solve has set the RK stage:
   void setStage(const int stageNumber);

@@ -509,7 +509,14 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     MeshPtr gaussMesh = MeshFactory::minRuleMesh(intervalMeshTopology, _gaussBF, H1Order, delta_k, comm, allowPruning);
     
     _gaussSoln = Solution::solution(_gaussBF, gaussMesh);
+    _gaussSolnPrev = Solution::solution(_gaussBF, gaussMesh);
     auto gaussSolnWeakPtr = Teuchos::rcp(_gaussSoln.get(), false);
+    auto gaussSolnPrevWeakPtr = Teuchos::rcp(_gaussSolnPrev.get(), false);
+    
+    _ESoln     = Function::solution(E, gaussSolnWeakPtr);
+    FunctionPtr E_solnPrev = Function::solution(E, gaussSolnPrevWeakPtr);
+    
+    _EDiff = _ESoln - E_solnPrev;
     
     FunctionPtr dt = FunctionPtr(_dt);
     FunctionPtr E_soln = Function::solution(E, gaussSolnWeakPtr);
@@ -580,6 +587,14 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     {
       _boltzmannSolnPrev = Solution::solution(_boltzmannBF,boltzmannMesh);
     }
+    
+    auto vlasovSolnWeakPtr     = Teuchos::rcp(_boltzmannSoln.get(),     false);
+    auto vlasovSolnPrevWeakPtr = Teuchos::rcp(_boltzmannSolnPrev.get(), false);
+    
+    _fSoln     = Function::solution(f, vlasovSolnWeakPtr);
+    FunctionPtr f_solnPrev = Function::solution(f, vlasovSolnPrevWeakPtr);
+    
+    _fDiff = _fSoln - f_solnPrev;
     
     const int maxMomentNumber = 0; // for now, we only do the zeroth moment
     _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _boltzmannSoln, f, gaussMesh) );
@@ -825,6 +840,14 @@ void Boltzmann1D1VFormulation::performRefinements()
     {
       _lastRefinementMaxElementError = maxError;
     }
+    else
+    {
+      // let's still record the measured error in RefinementStrategy's records
+      const double totalEnergyError = errorIndicator->totalError();
+      const int numElements = _boltzmannSoln->mesh()->numActiveElements();
+      const int numDofs     = _boltzmannSoln->mesh()->numGlobalDofs();
+      _refStrategy->recordResults(numElements, numDofs, totalEnergyError);
+    }
   }
   else
   {
@@ -979,10 +1002,36 @@ void Boltzmann1D1VFormulation::setTimeStep(double dt)
   _dt->setValue(dt);
 }
 
-void Boltzmann1D1VFormulation::setSubstepsForImplicit(int numSubsteps)
+void Boltzmann1D1VFormulation::setFixedPointMaxSubstepsForImplicit(const int maxSubsteps)
 {
-  _numSubstepsForImplicit = numSubsteps;
+  _maxSubstepsForImplicit = maxSubsteps;
 }
+
+void Boltzmann1D1VFormulation::setFixedPointMinSubstepsForImplicit(const int minSubsteps)
+{
+  _minSubstepsForImplicit = minSubsteps;
+}
+
+void Boltzmann1D1VFormulation::setFixedPointTolerance(const double fTol)
+{
+  _fixedPointTolerance = fTol;
+}
+
+void Boltzmann1D1VFormulation::setIterativeSolveMaxIterations(const int maxIters)
+{
+  _maxIters = maxIters;
+}
+
+void Boltzmann1D1VFormulation::setIterativeSolveTolerance(const double cgTol)
+{
+  _cgTol = cgTol;
+}
+
+void Boltzmann1D1VFormulation::setIterativeSolveTolerances(const std::vector<double> cgTols)
+{
+  _cgTols = cgTols;
+}
+
 
 double Boltzmann1D1VFormulation::t() const
 {
@@ -996,10 +1045,12 @@ Teuchos::RCP<SolutionMoments> Boltzmann1D1VFormulation::solutionMoments()
 
 void Boltzmann1D1VFormulation::takeTimeStep()
 {
+  const int rank = _boltzmannSoln->mesh()->Comm()->MyPID();
+  
   // for implicit solves, we cycle through the f solve and the E solve a few times;
   // for explicit, we do each solve just once per time step.
   const bool implicit = _formulationChoice == ULTRAWEAK_IMPLICIT_H1_TRACE || _formulationChoice == ULTRAWEAK_IMPLICIT_L2_TRACE;
-  int numSubsteps = implicit ? _numSubstepsForImplicit : 1;
+  int maxSubsteps = implicit ? _maxSubstepsForImplicit : 1;
 //  int numSubsteps = implicit ? 1 : 1; // 1 for implicit for faster debugging
   
   const bool useAdaptivity = _refStrategy != Teuchos::null;
@@ -1010,6 +1061,9 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "adaptivity is only supported for implicit time-stepping");
   }
   
+  auto vlasovMesh  = _boltzmannSoln->mesh();
+  auto poissonMesh = _gaussSoln->mesh();
+  
   bool useGMG = true;
   if (useGMG && (_gmgSolver == Teuchos::null))
   {
@@ -1019,7 +1073,6 @@ void Boltzmann1D1VFormulation::takeTimeStep()
 //    }
     
     int kCoarse = 0;
-    const double cgTol = 1e-6;
     const int maxIters = 10000;
 
     bool useCondensedSolve = _boltzmannSoln->usesCondensedSolve();
@@ -1034,14 +1087,14 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     
     if (multigridStrategy != GMGOperator::SMOOTHER_ONLY)
     {
-      meshes = GMGSolver::meshesForMultigrid(_boltzmannSoln->mesh(), kCoarse, 1);
+      meshes = GMGSolver::meshesForMultigrid(vlasovMesh, kCoarse, 1);
     }
     else
     {
-      meshes = vector<MeshPtr> {_boltzmannSoln->mesh()};
+      meshes = vector<MeshPtr> {vlasovMesh};
     }
     
-    _gmgSolver = Teuchos::rcp( new GMGSolver(_boltzmannSoln, meshes, maxIters, cgTol, multigridStrategy,
+    _gmgSolver = Teuchos::rcp( new GMGSolver(_boltzmannSoln, meshes, maxIters, _cgTol, multigridStrategy,
                                              Solver::getDirectSolver(true), useCondensedSolve) );
     
     _gmgSolver->setSmootherType(smootherChoice);
@@ -1054,86 +1107,77 @@ void Boltzmann1D1VFormulation::takeTimeStep()
 //    }
   }
   
-  std::vector<int> substepIterationCounts(numSubsteps);
+  std::vector<int> substepIterationCounts;
+  std::vector<double> substepStepSizesVlasov;
+  std::vector<double> substepStepSizesPoisson;
   
-  for (int substepOrdinal=0; substepOrdinal < numSubsteps; substepOrdinal++)
+  for (int substepOrdinal=0; substepOrdinal < maxSubsteps; substepOrdinal++)
   {
+    if ((rank == 0) && (maxSubsteps > 1))
+    {
+      std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
+    }
+    
     // solve for f:
     if (_gmgSolver == Teuchos::null)
     {
+      if (_cgTols.size() > 0) // then we should have one per substep
+      {
+        _gmgSolver->setTolerance(_cgTols[substepOrdinal]);
+      }
+      
       _boltzmannSoln->solve();
-      substepIterationCounts[substepOrdinal] = -1; // -1 to indicate not an iterative solver
+      substepIterationCounts.push_back(-1); // -1 to indicate not an iterative solver
     }
     else
     {
       _boltzmannSoln->solve(_gmgSolver);
-      substepIterationCounts[substepOrdinal] = _gmgSolver->iterationCount();
+      substepIterationCounts.push_back(_gmgSolver->iterationCount());
     }
     
-    const bool correctConservation = false;
+    const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
+    const double EDiff_L2 = _EDiff->l2norm(poissonMesh);
     
-    if (correctConservation)
+    const double f_L2 = _fSoln->l2norm(vlasovMesh);
+    const double E_L2 = _ESoln->l2norm(poissonMesh);
+    
+    const double fRelDiff = fDiff_L2 / f_L2;
+    const double ERelDiff = EDiff_L2 / E_L2;
+    
+    substepStepSizesVlasov.push_back(fRelDiff);
+    substepStepSizesPoisson.push_back(ERelDiff);
+    
+    if (rank == 0)
     {
-      // EXPERIMENT: check "conservation" and correct
-      auto mesh = _boltzmannSoln->mesh();
-      std::map<int, FunctionPtr> testMap;
-      testMap[this->w()->ID()] = Function::constant(1.0);
-      auto trialFunctional = _boltzmannBF->trialFunctional(testMap);
-      std::map<int, FunctionPtr> trialMap;
-      auto f_soln = Function::solution(this->f(), _boltzmannSoln, std::string("k+1"));
-      trialMap[this->f()->ID()] = f_soln;
-      auto lhsFunction = trialFunctional->evaluate(trialMap);
-      
-      auto rhsLT = _boltzmannSoln->rhs()->linearTerm();
-      auto rhsFunctionBoundaryPart = rhsLT->getBoundaryOnlyPart()->evaluate(testMap);
-      auto rhsFunctionVolumePart = rhsLT->getNonBoundaryOnlyPart()->evaluate(testMap);
-      
-      double rhsVolumeIntegral = rhsFunctionVolumePart->integrate(mesh);
-      double rhsTraceIntegral  = rhsFunctionBoundaryPart->integrate(mesh);
-      double rhsIntegral = rhsVolumeIntegral + rhsTraceIntegral;
-      
-      double lhsIntegral = lhsFunction->integrate(mesh);
-      double residualIntegral = lhsIntegral - rhsIntegral;
-      
-      double error = _dt->getConstantValue() * residualIntegral;
-      std::cout << "Conservation error before correction: " << error << std::endl;
-      double correctionFactor = rhsIntegral / lhsIntegral;
-      std::cout << "correctionFactor = 1 + " << (correctionFactor-1.0) << std::endl;
-      FunctionPtr f_soln_corrected = f_soln * correctionFactor;
-      
-      std::map<int,FunctionPtr> correctedSolnMap;
-      correctedSolnMap[this->f()->ID()] = f_soln_corrected;
-      _boltzmannSoln->projectOntoMesh(correctedSolnMap);
-      
-      lhsIntegral      = lhsFunction->integrate(mesh);
-      
-      rhsVolumeIntegral = rhsFunctionVolumePart->integrate(mesh);
-      rhsTraceIntegral  = rhsFunctionBoundaryPart->integrate(mesh);
-      rhsIntegral = rhsVolumeIntegral + rhsTraceIntegral;
-      
-      error = _dt->getConstantValue() * (lhsIntegral  - rhsIntegral);
-      std::cout << "Conservation error after correction: " << error << std::endl;
+      std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
+      std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E: " << ERelDiff << std::endl << std::endl;
     }
-    if ( !_haveTableau )
+    
+    if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubstepsForImplicit-1))
     {
-      if (substepOrdinal == numSubsteps-1)
-      {
-        const bool useAdaptivity = _refStrategy != Teuchos::null;
-        
-        if (useAdaptivity && _performRefinementsDuringTimeSteps)
-        {
-          performRefinements();
-        }
-        
-        // last substep
-        _boltzmannSolnPrev->setSolution(_boltzmannSoln);
-      }
-      // if we have a tableau, then electric field will be updated when the solution stage is set.
-      updateElectricField();
+      // tolerance reached, min substeps taken
+      break;
     }
   }
   
+  if (useAdaptivity && _performRefinementsDuringTimeSteps)
+  {
+    performRefinements();
+  }
+  
+  // last substep
+  _boltzmannSolnPrev->setSolution(_boltzmannSoln);
+  _gaussSolnPrev->setSolution(_gaussSoln);
+  
+  if ( !_haveTableau )
+  {
+    // if we have a tableau, then electric field will be updated when the solution stage is set.
+    updateElectricField();
+  }
+  
   _iterationCounts.push_back(substepIterationCounts);
+  _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
+  _fixedPointL2StepSizesPoisson.push_back(substepStepSizesPoisson);
   
   _t += _dt->getConstantValue();
 }

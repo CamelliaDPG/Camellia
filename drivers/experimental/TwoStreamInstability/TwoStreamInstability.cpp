@@ -719,8 +719,11 @@ void runAdaptiveComparisonExperiment(Boltzmann1D1VFormulation &adaptiveForm, Bol
     auto mesh = fineForm.boltzmannMesh();
     auto soln = fineForm.boltzmannSolution();
           
-    const int numSubsteps = 3;
-    fineForm.setSubstepsForImplicit(numSubsteps);
+    const int minSubsteps = 3;
+    const int maxSubsteps = 15;
+    fineForm.setFixedPointMinSubstepsForImplicit(minSubsteps);
+    fineForm.setFixedPointMaxSubstepsForImplicit(maxSubsteps);
+    fineForm.setFixedPointTolerance(1e-6);
     
     auto f = fineForm.f();
     int timeStepNumber = 0;
@@ -1045,10 +1048,18 @@ void runAdaptiveComparisonExperiment(Boltzmann1D1VFormulation &adaptiveForm, Bol
   const auto & adaptiveIterationCounts = adaptiveForm.iterationCounts();
   const auto & uniformIterationCounts  = modestForm.iterationCounts();
   
-  const int numSubsteps = 3;
-  adaptiveForm.setSubstepsForImplicit(numSubsteps);
-  modestForm.setSubstepsForImplicit(numSubsteps);
-  fineForm.setSubstepsForImplicit(numSubsteps);
+  const int minSubsteps = 3;
+  const int maxSubsteps = 15;
+  const double fixedPointTol = 1e-6;
+  adaptiveForm.setFixedPointMinSubstepsForImplicit(minSubsteps);
+  adaptiveForm.setFixedPointMaxSubstepsForImplicit(maxSubsteps);
+  adaptiveForm.setFixedPointTolerance(fixedPointTol);
+  modestForm.setFixedPointMinSubstepsForImplicit(minSubsteps);
+  modestForm.setFixedPointMaxSubstepsForImplicit(maxSubsteps);
+  modestForm.setFixedPointTolerance(fixedPointTol);
+  fineForm.setFixedPointMinSubstepsForImplicit(minSubsteps);
+  fineForm.setFixedPointMaxSubstepsForImplicit(maxSubsteps);
+  fineForm.setFixedPointTolerance(fixedPointTol);
   
   // set up timers
   int numProcs = comm->NumProc();
@@ -1128,11 +1139,21 @@ void runAdaptiveComparisonExperiment(Boltzmann1D1VFormulation &adaptiveForm, Bol
         
     if (rank == 0)
     {
-      for (int substep=0; substep<numSubsteps; substep++)
+      iterationCountStream << timeStepNumber << "\t";
+      const int numAdaptiveSubsteps = adaptiveIterationCounts[timeStepNumber-1].size();
+      const int numUniformSubsteps = uniformIterationCounts[timeStepNumber-1].size();
+      const int maxSubsteps = std::max(numAdaptiveSubsteps,numUniformSubsteps);
+      for (int substep=0; substep<maxSubsteps; substep++)
       {
-        iterationCountStream << timeStepNumber << "\t" << substep << "\t";
-        iterationCountStream << adaptiveIterationCounts[timeStepNumber-1][substep] << "\t";
-        iterationCountStream << uniformIterationCounts[timeStepNumber-1][substep]  << "\n";
+        iterationCountStream << substep << "\t";
+        if (substep < numAdaptiveSubsteps)
+          iterationCountStream << adaptiveIterationCounts[timeStepNumber-1][substep] << "\t";
+        else
+          iterationCountStream << -1 << "\t";
+        if (substep < numUniformSubsteps)
+          iterationCountStream << uniformIterationCounts[timeStepNumber-1][substep]  << "\n";
+        else
+          iterationCountStream << -1  << "\n";
         iterationCountStream.flush();
       }
     }
@@ -1216,6 +1237,9 @@ int main(int argc, char *argv[])
     int delta_k   = 2;
     double dt_max = -1.0;
     int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
+    int minSubsteps = 5;  // for fixed-point iteration.
+    int maxSubsteps = 15; // for fixed-point iteration.
+    double fixedPointTol = 1e-8;
     int numTimeSteps = 500;
     int outputFrequency = 10; // number of time steps to take before outputting viz.
     double timeStepC0 = -1.0;
@@ -1236,9 +1260,13 @@ int main(int argc, char *argv[])
     int solutionOutputFrequency = 1;
     int overkillTimeStepsBetweenComparisons = 1;
     int solutionComparisonFrequency = 1;
+    int iterativeSolveOutputLevel = 100; // output every one hundred CG iterations
+    double iterativeSolveTolerance = 1e-9;
+    double iterativeSolveMaxIters  = 10000;
+    
     int vlasovTraceEnrichment = -1; // if left unset by user, will default to 0 for all problems but cold diode, where it is 1 (at least for now).
     double coldDiodeSigma = -1.0; // will be set automatically below if not specified by user
-    double bcResolutionTolerance = 1e-3;  // only applies if doing an adaptive solve (and so far only for cold diode)
+    double bcResolutionTolerance = -1;  // only applies if doing an adaptive solve (and so far only for cold diode); -1 indicates to spend the whole element budget to resolve; unrefinements at later time steps will tend to reduce the BC resolution over time, though experimentally the loss is often negligible (but this will depend on precise settings!).
     std::string resultsFilePrefix = "";
     
     std::string resultsFile = "";
@@ -1257,6 +1285,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("u0", &u0);
     cmdp.setOption("maxElements", &maxElements);
     cmdp.setOption("maximumRefinementLevel", &maximumRefinementLevel);
+    cmdp.setOption("minSubsteps", &minSubsteps);
+    cmdp.setOption("maxSubsteps", &maxSubsteps);
+    cmdp.setOption("fixedPointTol", &fixedPointTol);
     cmdp.setOption("viz", "noViz", &saveViz);
     cmdp.setOption("gateRefinements", "dontGateRefinements", &gateRefinements);
     cmdp.setOption("numTimeSteps", &numTimeSteps);
@@ -1277,6 +1308,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("overkillMeshRefinementLevel", &overkillRefinementLevel);
     cmdp.setOption("overkillH1Order", &overkillH1Order);
     cmdp.setOption("uniformMeshRefinementLevel", &uniformMeshRefinementLevel);
+    cmdp.setOption("iterativeSolveOutputLevel", &iterativeSolveOutputLevel);
+    cmdp.setOption("iterativeSolveMaxIters", &iterativeSolveMaxIters);
+    cmdp.setOption("iterativeSolveTolerance", &iterativeSolveTolerance);
     cmdp.setOption("vlasovTraceEnrichment", &vlasovTraceEnrichment);
     cmdp.setOption("bcResolutionTolerance", &bcResolutionTolerance);
     
@@ -1287,7 +1321,6 @@ int main(int argc, char *argv[])
   #endif
       return -1;
     }
-    
     
     problemChoice = getProblemChoice(problemChoiceString);
     
@@ -1421,6 +1454,20 @@ int main(int argc, char *argv[])
     
     double dt = dt_max;
     Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, vlasovTraceEnrichment, numUniformRefinements);
+    
+//    form.setUseGeometricMultigrid(useGeometricMultigrid);
+    form.setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
+//    form.setIterativeSolveTolerance(iterativeSolveTolerance);
+    std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
+    if (maxSubsteps > 3)
+    {
+      // use looser tolerances for the first couple steps
+      cgTols[0] = iterativeSolveTolerance * 100.0;
+      cgTols[1] = iterativeSolveTolerance * 10.0;
+    }
+    form.setIterativeSolveTolerances(cgTols);
+    form.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+
     
     FunctionPtr f0;
     FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
@@ -1683,9 +1730,21 @@ int main(int argc, char *argv[])
     {
       suffix << "_H1Trace";
     }
-    suffix << "_u0" << u0;
+    if (problemChoice != COLD_DIODE)
+    {
+      suffix << "_u0" << u0;
+    }
+    else
+    {
+      suffix << "_sigma" << sigma;
+    }
+    if (useAdaptivity)
+    {
+      suffix << "_AMR_threshold" << refinementThreshold;
+    }
     suffix << "_dt" << dt_max;
     suffix << "_H1Order" << H1Order;
+    suffix << "_delta_k" << delta_k;
 
     // adjust x and v element counts according to the number of uniform refinements requested.
     xElements <<= numUniformRefinements;
@@ -1704,7 +1763,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-      problemPrefix = "ColdDiode_sigma" + to_string(sigma);
+      problemPrefix = "ColdDiode";
     }
 
     std::ostringstream boltzmannSS;
@@ -1719,17 +1778,13 @@ int main(int argc, char *argv[])
       resultsFileStream << outputDir << "/";
       if (resultsFilePrefix == "")
       {
-        resultsFileStream << problemPrefix << "_results" << suffix.str();
+        resultsFileStream << "results_" << problemPrefix << "_" << suffix.str();
       }
       else
       {
         resultsFileStream << resultsFilePrefix;
       }
       
-      if (useAdaptivity)
-      {
-        resultsFileStream << "_AMR_";
-      }
       resultsFileStream << numTimeSteps << "_timeSteps";
       resultsFileStream << ".dat";
       resultsFile = resultsFileStream.str();
@@ -1738,12 +1793,8 @@ int main(int argc, char *argv[])
     auto getSpatialMeshFilePath = [&]() {
       std::ostringstream spatialMeshInfoPathStringStream;
       spatialMeshInfoPathStringStream << outputDir << "/";
-      spatialMeshInfoPathStringStream << problemPrefix << "_mesh1D" << suffix.str();
+      spatialMeshInfoPathStringStream << "mesh1D_" << problemPrefix << suffix.str();
       
-      if (useAdaptivity)
-      {
-        spatialMeshInfoPathStringStream << "_AMR_";
-      }
       spatialMeshInfoPathStringStream << numTimeSteps << "_timeSteps";
       spatialMeshInfoPathStringStream << ".dat";
       
@@ -1753,12 +1804,8 @@ int main(int argc, char *argv[])
     auto getTimeStepReportFilePath = [&]() {
       std::ostringstream timeStepReportPathStringStream;
       timeStepReportPathStringStream << outputDir << "/";
-      timeStepReportPathStringStream << problemPrefix << "_timeStepReport" << suffix.str();
+      timeStepReportPathStringStream << "timeStepReport_" << problemPrefix << suffix.str();
       
-      if (useAdaptivity)
-      {
-        timeStepReportPathStringStream << "_AMR_";
-      }
       timeStepReportPathStringStream << numTimeSteps << "_timeSteps";
       timeStepReportPathStringStream << ".dat";
       
