@@ -112,6 +112,13 @@ MeshPtr TRefinementStrategy<Scalar>::mesh()
 }
 
 template <typename Scalar>
+void TRefinementStrategy<Scalar>::recordResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError)
+{
+  auto resultsRecord = setResults(numElements, numDofs, totalEnergyError);
+  _results.push_back(resultsRecord);
+}
+
+template <typename Scalar>
 void TRefinementStrategy<Scalar>::refine(bool printToConsole)
 {
   const bool unrefine = (_maxElementCount != std::numeric_limits<int>::max());

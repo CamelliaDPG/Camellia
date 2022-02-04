@@ -86,6 +86,9 @@ public:
   static void hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineUniformly(MeshPtr mesh);
 
+  //! Record element count, dof count, energy error as if a refinement had taken place.  Useful when error is measured but no refinement is actually performed.
+  void recordResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
+  
   std::set<GlobalIndexType> localCellsIneligibleForRefinement();
   
   void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine, std::set<GlobalIndexType> localCellsToExclude = std::set<GlobalIndexType>());
