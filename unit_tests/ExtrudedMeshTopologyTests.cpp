@@ -228,6 +228,36 @@ namespace
     testComponentMap(numPhysicalDims, numExtrusionDims, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, Unrefine )
+  {
+    // this test reproduces conditions that led to extra cells being incorrectly added to MeshToologyView::_rootCells (before we fixed the bug).
+    
+    const int numPhysicalDims = 1;
+    const int numExtrusionDims = 1;
+    
+    auto extrudedMeshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims);
+    
+    const int rootCellCount = extrudedMeshTopo->getRootCellIndicesGlobal().size();
+    
+    const IndexType cellIDZero = 0;
+    
+    auto cellZero = extrudedMeshTopo->getCell(cellIDZero);
+    
+    auto cellTopo = cellZero->topology();
+    
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+    
+    const IndexType firstChildCellID = extrudedMeshTopo->nextCellID();
+    extrudedMeshTopo->refineCell(cellIDZero, refPattern, firstChildCellID);
+    
+    const IndexType firstGrandchildCellID = extrudedMeshTopo->nextCellID();
+    extrudedMeshTopo->refineCell(firstChildCellID, refPattern, firstGrandchildCellID);
+    
+    extrudedMeshTopo->unrefineCell(firstChildCellID, refPattern);
+    
+    TEST_EQUALITY(rootCellCount, extrudedMeshTopo->getRootCellIndicesGlobal().size());
+  }
+
   TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, VertexOrdering_1D1V )
   {
     const int numPhysicalDims = 1;

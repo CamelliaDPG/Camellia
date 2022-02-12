@@ -7,6 +7,7 @@
 #include "AbsFunction.h"
 #include "BasisSumFunction.h"
 #include "CamelliaDataHelpers.h"
+#include "DoerflerRefinementStrategy.h"
 #include "VlasovPoissonSpaceTimeFormulation.h"
 #include "EnergyErrorFunction.h"
 #include "ErrorIndicator.h"
@@ -1879,6 +1880,7 @@ int main(int argc, char *argv[])
     double refinementThreshold = 0.80; // refine elements with at least 80% of the maximum per-element error
     int maxElements = 64 * 64; // do unrefinements to keep total mesh size smaller than this
     bool gateRefinements = true;
+    double doerflerTarget = 0; // if set to positive value by user, use Doerfler instead of greedy strategy
     
     int xElements = 8;
     int vElements = 8;
@@ -1952,6 +1954,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
     cmdp.setOption("numRefinements", &numRefinements);
     cmdp.setOption("problem", &problemChoiceString);
+    cmdp.setOption("doerflerTarget", &doerflerTarget);
     cmdp.setOption("refinementThreshold", &refinementThreshold);
     cmdp.setOption("useEnergyForUnrefinements", "useL2ProjectionForUnrefinements", &useEnergyForUnrefinements);
     cmdp.setOption("runOverkillVersusAdaptiveComparison", "runStandard", &runOverkillVersusAdaptiveComparison);
@@ -2006,8 +2009,7 @@ int main(int argc, char *argv[])
       }
     }
     
-    bool usePeriodicBCs = true;
-    if (problemChoice == BUMP_ON_TAIL)
+    if (problemChoice != COLD_DIODE)
     {
       if (vWidth == std::numeric_limits<double>::infinity())
       {
@@ -2017,7 +2019,11 @@ int main(int argc, char *argv[])
       {
         v0 = -10.0;
       }
-      
+    }
+    
+    bool usePeriodicBCs = true;
+    if (problemChoice == BUMP_ON_TAIL)
+    {
       k_x = 0.3;
       xWidth =  2 * M_PI / k_x;
       u0 = 4.5;
@@ -2873,11 +2879,7 @@ int main(int argc, char *argv[])
     }
     
     std::ostringstream suffix;
-    if (useL2Trace)
-    {
-      suffix << "_L2Trace";
-    }
-    else
+    if (!useL2Trace)
     {
       suffix << "_H1Trace";
     }
@@ -2889,8 +2891,8 @@ int main(int argc, char *argv[])
     {
       suffix << "_sigma" << sigma;
     }
-    suffix << "_H1Order" << H1Order;
-    suffix << "_delta_k" << delta_k;
+    suffix << "_p" << H1Order;
+    suffix << "_dp" << delta_k;
     suffix << "_" << xElements << "x" << tElements << "x" << vElements;
     if (initialTimeDivision > 0)
     {
@@ -2899,22 +2901,44 @@ int main(int argc, char *argv[])
     
     const std::string problemPrefix = problemChoiceString;
     
+    std::string AMR_suffix = "";
+    if (useAdaptivity)
+    {
+      std::ostringstream AMR_suffix_ss;
+      AMR_suffix_ss << "_AMR_";
+      if (doerflerTarget > 0)
+      {
+        AMR_suffix_ss << "Doerfler" << doerflerTarget << "_";
+      }
+      else
+      {
+        AMR_suffix_ss << "theta" << refinementThreshold << "_";
+      }
+      AMR_suffix = AMR_suffix_ss.str();
+    }
+    
+    auto getAMRSuffixForRefNumber = [&](int refNumber = -1) {
+      std::ostringstream AMR_suffix_ss;
+      AMR_suffix_ss << AMR_suffix;
+      if (useAdaptivity)
+      {
+        AMR_suffix_ss << refNumber << "_refs";
+      }
+      return AMR_suffix_ss.str();
+    };
+    
     auto getResultsFilePath = [&](int refNumber = -1) {
       std::ostringstream resultsFileStream;
       resultsFileStream << outputDir << "/";
       if (resultsFilePrefix == "")
       {
-        resultsFileStream << problemPrefix << "_results" << suffix.str();
+        resultsFileStream << "results_" << problemPrefix << "_" << suffix.str();
       }
       else
       {
         resultsFileStream << resultsFilePrefix;
       }
-      
-      if (useAdaptivity)
-      {
-        resultsFileStream << "_AMR_" << refNumber << "_refs";
-      }
+      resultsFileStream << getAMRSuffixForRefNumber(refNumber);
       resultsFileStream << ".dat";
       
       return resultsFileStream.str();
@@ -2925,10 +2949,7 @@ int main(int argc, char *argv[])
       spatialMeshInfoPathStringStream << outputDir << "/";
       spatialMeshInfoPathStringStream << problemPrefix << "_mesh1D" << suffix.str();
       
-      if (useAdaptivity)
-      {
-        spatialMeshInfoPathStringStream << "_AMR_" << refNumber << "_refs";
-      }
+      spatialMeshInfoPathStringStream << getAMRSuffixForRefNumber(refNumber);
       spatialMeshInfoPathStringStream << ".dat";
       
       return spatialMeshInfoPathStringStream.str();
@@ -2939,10 +2960,7 @@ int main(int argc, char *argv[])
       refReportPathStringStream << outputDir << "/";
       refReportPathStringStream << problemPrefix << "_refReport" << suffix.str();
       
-      if (useAdaptivity)
-      {
-        refReportPathStringStream << "_AMR_" << numRefinements << "_refs";
-      }
+      refReportPathStringStream << getAMRSuffixForRefNumber(numRefinements);
       refReportPathStringStream << ".dat";
       
       return refReportPathStringStream.str();
@@ -2956,8 +2974,8 @@ int main(int argc, char *argv[])
     
     if (useAdaptivity)
     {
-      vlasovSS  << "_AMR_" << numRefinements << "_refs";
-      poissonSS << "_AMR_" << numRefinements << "_refs";
+      vlasovSS  << getAMRSuffixForRefNumber(numRefinements);
+      poissonSS << getAMRSuffixForRefNumber(numRefinements);
     }
     
     const std::string directoryPath = outputDir;
@@ -3048,74 +3066,82 @@ int main(int argc, char *argv[])
         std::map<double,double> velocity_values; // map from x coordinate to time-averaged velocity value; we use a map so it's sorted by x, regardless of the cell numbering (which for adaptive meshes may be out of order)
         std::map<double,double> potential_values; // map from x coordinate to time-averaged potential value; we use a map so it's sorted by x, regardless of the cell numbering (which for adaptive meshes may be out of order)
         std::map<double,double> pointWeight_values; // map from x coordinate to cell measure-weighted quadrature weight
-        GlobalIndexType firstPhysicalCellID = *physicalCellsFinalTime.begin();
         
-        const int cubatureEnrichmentDegree = 5; // over-integrate to make up for undermeasurement on coarse initial meshes
-        auto basisCache = BasisCache::basisCacheForCell(form.poissonMesh(), firstPhysicalCellID, false, cubatureEnrichmentDegree); // false: not test versus test
         std::vector<GlobalIndexType> physicalCellIDsVector(physicalCellsFinalTime.begin(),physicalCellsFinalTime.end());
         
-        auto cubWeights = basisCache->getCubatureWeights();
-        auto cubPoints  = basisCache->getRefCellPoints();
-        
-        // we want to rewrite cubPoints/weights so that the temporal dimension only extends over a thin slice of the element
-        // for now, we assume that the temporal extent of each element at final time is the same
-        auto spatialCubWeights = cubWeights.getTensorComponent(0);
-        auto spatialPoints     = cubPoints.getTensorComponent(0);
-        auto temporalWeights   = cubWeights.getTensorComponent(1);
-        auto temporalPoints    = cubPoints.getTensorComponent(1);
-        
-        using Data       = Intrepid2::Data<double, Camellia::DeviceType>;
-        using DataHost   = Intrepid2::Data<double, Kokkos::HostSpace>;
-        using ScalarView = Kokkos::DynRankView<double, Camellia::DeviceType>;
-        
-        auto temporalWeightsView = temporalWeights.getUnderlyingView<1>();
-        
-        const int numTemporalPoints = temporalPoints.extent_int(0); // (P,D)
-        Kokkos::parallel_for(numTemporalPoints, KOKKOS_LAMBDA(const int &pointOrdinal)
+        for (const auto &physicalCellID : physicalCellIDsVector)
         {
-          // map points from (-1,1) to (.98,1)
-          // x_new = 0.01 * x_old + 0.99
-          auto x_old = temporalPoints(pointOrdinal,0);
-          temporalPoints(pointOrdinal,0) = .01 * x_old + 0.99;
+          const int cubatureEnrichmentDegree = 5; // over-integrate to make up for undermeasurement on coarse initial meshes
+          auto basisCache = BasisCache::basisCacheForCell(form.poissonMesh(), physicalCellID, false, cubatureEnrichmentDegree); // false: not test versus test
           
-          // quadrature weights should likewise be scaled by .01
-          temporalWeightsView(pointOrdinal) *= .01;
-        });
-        
-        DataHost spatialCubatureWeightsHost(spatialCubWeights);
-        DataHost temporalCubatureWeightsHost(temporalWeights);
-        
-        std::vector<ScalarView> refPointsComponents {spatialPoints, temporalPoints};
-        std::vector<Data> cubWeightsComponents {spatialCubWeights, temporalWeights};
-        Intrepid2::TensorPoints<double, Camellia::DeviceType> finalTimeRefPoints(refPointsComponents);
-        Intrepid2::TensorData<double, Camellia::DeviceType> finalTimeCubWeights(cubWeightsComponents);
-        
-        basisCache->setRefCellPoints(finalTimeRefPoints, finalTimeCubWeights);
-        
-        auto physicalCellNodes = form.poissonMesh()->physicalCellNodes(physicalCellIDsVector);
-        basisCache->setPhysicalCellNodes(physicalCellNodes, physicalCellIDsVector, false);
-        
-        FieldContainer<double> E_values_FC(physicalCellIDsVector.size(), finalTimeRefPoints.extent_int(0));
-        E_soln->values(E_values_FC, basisCache);
-        
-        FieldContainer<double> potential_values_FC(physicalCellIDsVector.size(), finalTimeRefPoints.extent_int(0));
-        potential->values(potential_values_FC, basisCache);
-        
-        FieldContainer<double> density_values_FC(physicalCellIDsVector.size(), finalTimeRefPoints.extent_int(0));
-        density->values(density_values_FC, basisCache);
-        
-        FieldContainer<double> velocity_values_FC(physicalCellIDsVector.size(), finalTimeRefPoints.extent_int(0));
-        velocity->values(velocity_values_FC, basisCache);
-        
-        const FieldContainer<double> & physicalQuadraturePoints = basisCache->getPhysicalCubaturePointsFC();
-        
-        const int numCells         = physicalQuadraturePoints.dimension(0);
-        const int numSpatialPoints = spatialPoints.extent_int(0);
-        
-        for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
-        {
+          const auto & physicalCellNodes = basisCache->getPhysicalCellNodes();
+          
+          const int cellOrdinal = 0;
           const double cellWidth = physicalCellNodes(cellOrdinal,1,0) - physicalCellNodes(cellOrdinal,0,0);
           const double temporalWidth = physicalCellNodes(cellOrdinal,2,1) - physicalCellNodes(cellOrdinal,0,1);
+          
+          auto cubWeights = basisCache->getCubatureWeights();
+          auto cubPoints  = basisCache->getRefCellPoints();
+          
+          // we want to rewrite cubPoints/weights so that the temporal dimension only extends over a thin slice of the element
+          // we scale the temporal dimension so that the extent we integrate in time is .001
+          auto spatialCubWeights = cubWeights.getTensorComponent(0);
+          auto spatialPoints     = cubPoints.getTensorComponent(0);
+          auto temporalWeights   = cubWeights.getTensorComponent(1);
+          auto temporalPoints    = cubPoints.getTensorComponent(1);
+          
+          using Data       = Intrepid2::Data<double, Camellia::DeviceType>;
+          using DataHost   = Intrepid2::Data<double, Kokkos::HostSpace>;
+          using ScalarView = Kokkos::DynRankView<double, Camellia::DeviceType>;
+          
+          auto temporalWeightsView = temporalWeights.getUnderlyingView<1>();
+          
+          const int numTemporalPoints = temporalPoints.extent_int(0); // (P,D)
+          Kokkos::parallel_for(numTemporalPoints, KOKKOS_LAMBDA(const int &pointOrdinal)
+          {
+            // map points from (-1,1) to the reference-space preimage of (.999,1.0) in physical space
+            // ref space scaling goes from (-1,1) to (1.0 - temporalWidth, 1.0)
+            // formula is t_physical = (t_ref + 1) * w/2 + 1 - w
+            //                 t_ref = 1 + (t_phys - 1) * 2 / w
+            // pre-image of (.999, 1.0) is thus (1 - .002 / w, 1.0)
+            // we scale by .001 / w, and shift by 1 - .001 / w
+            const double scale = .001 / temporalWidth;
+            const double shift = 1 - scale;
+            
+            auto t_old = temporalPoints(pointOrdinal,0);
+            temporalPoints(pointOrdinal,0) = scale * t_old + shift;
+            
+            // quadrature weights should likewise be scaled
+            temporalWeightsView(pointOrdinal) *= scale;
+          });
+          
+          DataHost spatialCubatureWeightsHost(spatialCubWeights);
+          DataHost temporalCubatureWeightsHost(temporalWeights);
+          
+          std::vector<ScalarView> refPointsComponents {spatialPoints, temporalPoints};
+          std::vector<Data> cubWeightsComponents {spatialCubWeights, temporalWeights};
+          Intrepid2::TensorPoints<double, Camellia::DeviceType> finalTimeRefPoints(refPointsComponents);
+          Intrepid2::TensorData<double, Camellia::DeviceType> finalTimeCubWeights(cubWeightsComponents);
+          
+          basisCache->setRefCellPoints(finalTimeRefPoints, finalTimeCubWeights);
+          
+          const int numCells = 1;
+          FieldContainer<double> E_values_FC(numCells, finalTimeRefPoints.extent_int(0));
+          E_soln->values(E_values_FC, basisCache);
+          
+          FieldContainer<double> potential_values_FC(numCells, finalTimeRefPoints.extent_int(0));
+          potential->values(potential_values_FC, basisCache);
+          
+          FieldContainer<double> density_values_FC(numCells, finalTimeRefPoints.extent_int(0));
+          density->values(density_values_FC, basisCache);
+          
+          FieldContainer<double> velocity_values_FC(numCells, finalTimeRefPoints.extent_int(0));
+          velocity->values(velocity_values_FC, basisCache);
+          
+          const FieldContainer<double> & physicalQuadraturePoints = basisCache->getPhysicalCubaturePointsFC();
+          
+          const int numSpatialPoints = spatialPoints.extent_int(0);
+          
           for (int spatialPointOrdinal=0; spatialPointOrdinal<numSpatialPoints; spatialPointOrdinal++)
           {
             const int firstTensorPointOrdinal = spatialPointOrdinal; // formula is temporalPointOrdinal * numSpatialPoints + spatialPointOrdinal; this is the point ordinal corresponding to temporalPointOrdinal = 0.
@@ -3175,6 +3201,7 @@ int main(int argc, char *argv[])
         
         resultsFileStream.close();
         
+        auto physicalCellNodes = form.poissonMesh()->physicalCellNodes(physicalCellIDsVector);
         auto spatialMeshFile = getSpatialMeshFilePath(refinementNumber);
         std::ofstream spatialMeshFileStream(spatialMeshFile, std::ios::out);
         // let's collect the spatial nodes and sort them
@@ -3260,7 +3287,18 @@ int main(int argc, char *argv[])
     }
     else
     {
-      RefinementStrategy refStrategy(form.vlasovSolution(), refinementThreshold);
+      RefinementStrategyPtr refStrategy;
+      
+      if (doerflerTarget <= 0)
+      {
+        refStrategy = Teuchos::rcp(new RefinementStrategy(form.vlasovSolution(), refinementThreshold));
+      }
+      else
+      {
+        ErrorIndicatorPtr errorIndicator = ErrorIndicator::energyErrorIndicator(form.vlasovSolution());
+        
+        refStrategy = Teuchos::rcp(new DoerflerRefinementStrategy(errorIndicator, doerflerTarget) );
+      }
       
       double energyError;
       auto energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.vlasovSolution());
@@ -3307,7 +3345,7 @@ int main(int argc, char *argv[])
         
         writeResults(refinementNumber);
         
-        energyError = refStrategy.computeTotalEnergyError(); // forces update to energyErrorFunction
+        energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
         reportBCResolutionAndRefinementComplete(refinementNumber, energyError);
         
         if (saveViz)
@@ -3316,7 +3354,7 @@ int main(int argc, char *argv[])
           vlasovViz->exportSolution(form.vlasovSolution(), {energyErrorFunction,cellIDFunction}, {"energy error","cell ID (Vlasov)"}, refinementNumber);
         }
         
-        refStrategy.refine(rank==0);
+        refStrategy->refine(rank==0);
         
         // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
         form.poissonMesh()->repartitionAndRebuild();
@@ -3363,7 +3401,7 @@ int main(int argc, char *argv[])
 //      }
       
       form.solve();
-      energyError = refStrategy.computeTotalEnergyError(); // forces update to energyErrorFunction
+      energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
 
       solutionMoments->update();
       

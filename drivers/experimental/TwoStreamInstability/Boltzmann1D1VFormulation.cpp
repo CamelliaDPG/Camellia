@@ -14,6 +14,7 @@
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
 #include "ExtrudedMeshTopology.h"
+#include "FixedCountRefinementStrategy.h"
 #include "GlobalDofAssignment.h"
 #include "GMGSolver.h"
 #include "MeshFactory.h"
@@ -509,12 +510,12 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     MeshPtr gaussMesh = MeshFactory::minRuleMesh(intervalMeshTopology, _gaussBF, H1Order, delta_k, comm, allowPruning);
     
     _gaussSoln = Solution::solution(_gaussBF, gaussMesh);
-    _gaussSolnPrev = Solution::solution(_gaussBF, gaussMesh);
+    _gaussSolnPrevSubstep = Solution::solution(_gaussBF, gaussMesh);
     auto gaussSolnWeakPtr = Teuchos::rcp(_gaussSoln.get(), false);
-    auto gaussSolnPrevWeakPtr = Teuchos::rcp(_gaussSolnPrev.get(), false);
+    auto gaussSolnPrevSubstepWeakPtr = Teuchos::rcp(_gaussSolnPrevSubstep.get(), false);
     
     _ESoln     = Function::solution(E, gaussSolnWeakPtr);
-    FunctionPtr E_solnPrev = Function::solution(E, gaussSolnPrevWeakPtr);
+    FunctionPtr E_solnPrev = Function::solution(E, gaussSolnPrevSubstepWeakPtr);
     
     _EDiff = _ESoln - E_solnPrev;
     
@@ -587,12 +588,13 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     {
       _boltzmannSolnPrev = Solution::solution(_boltzmannBF,boltzmannMesh);
     }
+    _boltzmannSolnPrevSubstep = Solution::solution(_boltzmannBF,boltzmannMesh);
     
     auto vlasovSolnWeakPtr     = Teuchos::rcp(_boltzmannSoln.get(),     false);
-    auto vlasovSolnPrevWeakPtr = Teuchos::rcp(_boltzmannSolnPrev.get(), false);
+    auto vlasovSolnPrevSubstepWeakPtr = Teuchos::rcp(_boltzmannSolnPrevSubstep.get(), false);
     
     _fSoln     = Function::solution(f, vlasovSolnWeakPtr);
-    FunctionPtr f_solnPrev = Function::solution(f, vlasovSolnPrevWeakPtr);
+    FunctionPtr f_solnPrev = Function::solution(f, vlasovSolnPrevSubstepWeakPtr);
     
     _fDiff = _fSoln - f_solnPrev;
     
@@ -775,6 +777,38 @@ SolutionPtr Boltzmann1D1VFormulation::boltzmannSolution()
   return _boltzmannSoln;
 }
 
+Teuchos::RCP<GMGSolver> Boltzmann1D1VFormulation::constructGMGSolver()
+{
+  int kCoarse = 0;
+
+  bool useCondensedSolve = _boltzmannSoln->usesCondensedSolve();
+
+  auto multigridStrategy = GMGOperator::V_CYCLE;
+//    auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
+//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
+  GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ; // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
+//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL; // as configured, this is very slow; I think it's treating all data on an MPI rank as a block…
+//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
+  vector<MeshPtr> meshes;
+  
+  if (multigridStrategy != GMGOperator::SMOOTHER_ONLY)
+  {
+    meshes = GMGSolver::meshesForMultigrid(_boltzmannSoln->mesh(), kCoarse, 1);
+  }
+  else
+  {
+    meshes = vector<MeshPtr> {_boltzmannSoln->mesh()};
+  }
+  
+  auto gmgSolver = Teuchos::rcp( new GMGSolver(_boltzmannSoln, meshes, _maxIters, _cgTol, multigridStrategy,
+                                               Solver::getDirectSolver(true), useCondensedSolve) );
+  
+  gmgSolver->setSmootherType(smootherChoice);
+  
+  gmgSolver->setAztecOutput(_aztecOutputLevel);
+  return gmgSolver;
+}
+
 FunctionPtr Boltzmann1D1VFormulation::E_extruded()
 {
   return _E_extruded;
@@ -823,6 +857,7 @@ const std::vector< std::vector<int> > & Boltzmann1D1VFormulation::iterationCount
 
 void Boltzmann1D1VFormulation::performRefinements()
 {
+  if (_refStrategy == Teuchos::null) return;
   bool shouldRefine;
   if (_gateRefinements)
   {
@@ -863,6 +898,12 @@ void Boltzmann1D1VFormulation::performRefinements()
     
     // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
     _gaussSoln->mesh()->repartitionAndRebuild();
+    
+    // also reconstruct the GMG solver, if any:
+    if (_useGeometricMultigrid)
+    {
+      _gmgSolver = constructGMGSolver();
+    }
   }
 }
 
@@ -905,6 +946,20 @@ void Boltzmann1D1VFormulation::setBoltzmannInflow(FunctionPtr f_left, FunctionPt
     boltzmannBC->addDirichlet(traceVar, BOLTZMANN_TAG_INFLOW_RIGHT, f_right);
   }
   _boltzmannSoln->setBC(boltzmannBC);
+}
+
+void Boltzmann1D1VFormulation::setFixedCountRefinementStrategy(int targetRefinementCount)
+{
+  ErrorIndicatorPtr errorIndicator = ErrorIndicator::energyErrorIndicator(_boltzmannSoln);
+  
+  _refStrategy = Teuchos::rcp(new FixedCountRefinementStrategy(errorIndicator, targetRefinementCount) );
+  
+  _refinementThreshold = 1.01;
+  
+  _maxElements = std::numeric_limits<int>::max();
+  _maxRefinementLevel = -1;
+  _lastRefinementMaxElementError = -1.0;
+  _gateRefinements = false;
 }
 
 void Boltzmann1D1VFormulation::setGaussBCs(FunctionPtr VE_left, FunctionPtr VE_right)
@@ -1032,6 +1087,10 @@ void Boltzmann1D1VFormulation::setIterativeSolveTolerances(const std::vector<dou
   _cgTols = cgTols;
 }
 
+void Boltzmann1D1VFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
+{
+  _useGeometricMultigrid = useGeometricMultigrid;
+}
 
 double Boltzmann1D1VFormulation::t() const
 {
@@ -1064,47 +1123,9 @@ void Boltzmann1D1VFormulation::takeTimeStep()
   auto vlasovMesh  = _boltzmannSoln->mesh();
   auto poissonMesh = _gaussSoln->mesh();
   
-  bool useGMG = true;
-  if (useGMG && (_gmgSolver == Teuchos::null))
+  if (_useGeometricMultigrid && (_gmgSolver == Teuchos::null))
   {
-//    {
-//      double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
-//      std::cout << "Before GMG construction, memory HWM: " << memoryUsageInGigabytes << " GB.\n";
-//    }
-    
-    int kCoarse = 0;
-    const int maxIters = 10000;
-
-    bool useCondensedSolve = _boltzmannSoln->usesCondensedSolve();
-
-    //    auto multigridStrategy = GMGOperator::V_CYCLE;
-    auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
-//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
-    GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ; // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
-//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL; // as configured, this is very slow; I think it's treating all data on an MPI rank as a block…
-//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
-    vector<MeshPtr> meshes;
-    
-    if (multigridStrategy != GMGOperator::SMOOTHER_ONLY)
-    {
-      meshes = GMGSolver::meshesForMultigrid(vlasovMesh, kCoarse, 1);
-    }
-    else
-    {
-      meshes = vector<MeshPtr> {vlasovMesh};
-    }
-    
-    _gmgSolver = Teuchos::rcp( new GMGSolver(_boltzmannSoln, meshes, maxIters, _cgTol, multigridStrategy,
-                                             Solver::getDirectSolver(true), useCondensedSolve) );
-    
-    _gmgSolver->setSmootherType(smootherChoice);
-    
-    _gmgSolver->setAztecOutput(_aztecOutputLevel);
-    
-//    {
-//      double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
-//      std::cout << "After GMG construction, memory HWM:  " << memoryUsageInGigabytes << " GB.\n";
-//    }
+    _gmgSolver = constructGMGSolver();
   }
   
   std::vector<int> substepIterationCounts;
@@ -1113,6 +1134,9 @@ void Boltzmann1D1VFormulation::takeTimeStep()
   
   for (int substepOrdinal=0; substepOrdinal < maxSubsteps; substepOrdinal++)
   {
+    _boltzmannSolnPrevSubstep->setSolution(_boltzmannSoln);
+    _gaussSolnPrevSubstep->setSolution(_gaussSoln);
+    
     if ((rank == 0) && (maxSubsteps > 1))
     {
       std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
@@ -1121,18 +1145,24 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     // solve for f:
     if (_gmgSolver == Teuchos::null)
     {
-      if (_cgTols.size() > 0) // then we should have one per substep
-      {
-        _gmgSolver->setTolerance(_cgTols[substepOrdinal]);
-      }
-      
       _boltzmannSoln->solve();
       substepIterationCounts.push_back(-1); // -1 to indicate not an iterative solver
     }
     else
     {
+      if (_cgTols.size() > 0) // then we should have one per substep
+      {
+        _gmgSolver->setTolerance(_cgTols[substepOrdinal]);
+      }
+      
       _boltzmannSoln->solve(_gmgSolver);
       substepIterationCounts.push_back(_gmgSolver->iterationCount());
+    }
+    
+    if ( !_haveTableau )
+    {
+      // if we have a tableau, then electric field will be updated when the solution stage is set.
+      updateElectricField();
     }
     
     const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
@@ -1147,7 +1177,7 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     substepStepSizesVlasov.push_back(fRelDiff);
     substepStepSizesPoisson.push_back(ERelDiff);
     
-    if (rank == 0)
+    if ((rank == 0) && (maxSubsteps > 1))
     {
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E: " << ERelDiff << std::endl << std::endl;
@@ -1167,13 +1197,6 @@ void Boltzmann1D1VFormulation::takeTimeStep()
   
   // last substep
   _boltzmannSolnPrev->setSolution(_boltzmannSoln);
-  _gaussSolnPrev->setSolution(_gaussSoln);
-  
-  if ( !_haveTableau )
-  {
-    // if we have a tableau, then electric field will be updated when the solution stage is set.
-    updateElectricField();
-  }
   
   _iterationCounts.push_back(substepIterationCounts);
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);

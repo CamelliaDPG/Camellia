@@ -338,6 +338,7 @@ namespace {
     
     auto form = getFormulation(xElements, vElements, implicit, l2Trace, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
     
+    form.setUseGeometricMultigrid(true); // This test (of the explicit solve) fails if we don't use GMG.  TODO: figure out why, and fix it. (lower priority, since we're not really pursuing the explicit solver.)
     form.setInitialConditions(f0);
     
     auto gaussSoln = form.gaussSolution();

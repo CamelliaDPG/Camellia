@@ -1219,8 +1219,11 @@ int main(int argc, char *argv[])
     double m      =  1.0;
     double x0     =  0.0;
     double xWidth =  2 * M_PI / k_x;
-    double v0     = -10.0;
-    double vWidth =  20.0;
+    
+    const double DEFAULT_V0     = 0.50;
+    const double DEFAULT_VWIDTH = 1.00;
+    double v0     = std::numeric_limits<double>::infinity();
+    double vWidth = std::numeric_limits<double>::infinity();
     
     bool enforceQuasiNeutrality = true;
     
@@ -1263,6 +1266,8 @@ int main(int argc, char *argv[])
     int iterativeSolveOutputLevel = 100; // output every one hundred CG iterations
     double iterativeSolveTolerance = 1e-9;
     double iterativeSolveMaxIters  = 10000;
+    int maxDofsForDirectSolve = 20000;
+    int fixedCountRefinementTarget = -1; // set to positive number to used fixed-count ref strategy instead of greedy strategy
     
     int vlasovTraceEnrichment = -1; // if left unset by user, will default to 0 for all problems but cold diode, where it is 1 (at least for now).
     double coldDiodeSigma = -1.0; // will be set automatically below if not specified by user
@@ -1283,6 +1288,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("dt", &dt_max );
     cmdp.setOption("resultsFilePrefix", &resultsFilePrefix);
     cmdp.setOption("u0", &u0);
+    cmdp.setOption("v0", &v0, "minimum velocity coordinate in domain");
+    cmdp.setOption("vWidth", &vWidth, "span of velocity coordinates in domain");
     cmdp.setOption("maxElements", &maxElements);
     cmdp.setOption("maximumRefinementLevel", &maximumRefinementLevel);
     cmdp.setOption("minSubsteps", &minSubsteps);
@@ -1297,6 +1304,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
     cmdp.setOption("problem", &problemChoiceString);
     cmdp.setOption("refinementThreshold", &refinementThreshold);
+    cmdp.setOption("fixedCountRefTarget", &fixedCountRefinementTarget);
     cmdp.setOption("useEnergyForUnrefinements", "useL2ProjectionForUnrefinements", &useEnergyForUnrefinements);
     cmdp.setOption("runOverkillVersusAdaptiveComparison", "runStandard", &runOverkillVersusAdaptiveComparison);
     cmdp.setOption("saveOverkillSolutionAndQuit", "dontSolveOverkill", &saveOverkillSolutionAndQuit);
@@ -1311,6 +1319,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("iterativeSolveOutputLevel", &iterativeSolveOutputLevel);
     cmdp.setOption("iterativeSolveMaxIters", &iterativeSolveMaxIters);
     cmdp.setOption("iterativeSolveTolerance", &iterativeSolveTolerance);
+    cmdp.setOption("maxDofsForDirectSolve", &maxDofsForDirectSolve);
     cmdp.setOption("vlasovTraceEnrichment", &vlasovTraceEnrichment);
     cmdp.setOption("bcResolutionTolerance", &bcResolutionTolerance);
     
@@ -1343,6 +1352,18 @@ int main(int argc, char *argv[])
       {
         // theory says that H^1 order is enough for convergence rates (if BCs are resolved)
         vlasovTraceEnrichment = 0;
+      }
+    }
+    
+    if (problemChoice != COLD_DIODE)
+    {
+      if (vWidth == std::numeric_limits<double>::infinity())
+      {
+        vWidth = 20.0;
+      }
+      if (v0 == std::numeric_limits<double>::infinity())
+      {
+        v0 = -10.0;
       }
     }
     
@@ -1405,8 +1426,15 @@ int main(int argc, char *argv[])
       eps0   = 1.0 / (omega_p * omega_p * timeScaling * timeScaling);
       usePeriodicBCs = false;
       enforceQuasiNeutrality = false;
-      v0     = 0.50;
-      vWidth = 1.00;
+      
+      if (vWidth == std::numeric_limits<double>::infinity())
+      {
+        vWidth = 1.00;
+      }
+      if (v0 == std::numeric_limits<double>::infinity())
+      {
+        v0 = 0.50;
+      }
       
       if (rank == 0)
       {
@@ -1455,19 +1483,18 @@ int main(int argc, char *argv[])
     double dt = dt_max;
     Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, vlasovTraceEnrichment, numUniformRefinements);
     
-//    form.setUseGeometricMultigrid(useGeometricMultigrid);
     form.setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
-//    form.setIterativeSolveTolerance(iterativeSolveTolerance);
+    form.setIterativeSolveTolerance(iterativeSolveTolerance);
     std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
     if (maxSubsteps > 3)
     {
       // use looser tolerances for the first couple steps
       cgTols[0] = iterativeSolveTolerance * 100.0;
       cgTols[1] = iterativeSolveTolerance * 10.0;
+      form.setIterativeSolveTolerances(cgTols);
     }
-    form.setIterativeSolveTolerances(cgTols);
     form.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
-
+    form.setFixedPointTolerance(fixedPointTol);
     
     FunctionPtr f0;
     FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
@@ -1644,10 +1671,17 @@ int main(int argc, char *argv[])
         std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and relErr is " << relErr << ".\n";
         std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
       }
-      form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
-      
       // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
       form.gaussMesh()->repartitionAndRebuild();
+      
+      if (fixedCountRefinementTarget > 0)
+      {
+        form.setFixedCountRefinementStrategy(fixedCountRefinementTarget);
+      }
+      else
+      {
+        form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
+      }
     }
     else if (useAdaptivity && adaptToCaptureInitialBCs)
     {
@@ -1714,7 +1748,14 @@ int main(int argc, char *argv[])
         unrefinementErrorIndicator = ErrorIndicator::unrefinementProjectionErrorIndicator(form.boltzmannSolution(), form.f());
       }
       
-      form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
+      if (fixedCountRefinementTarget > 0)
+      {
+        form.setFixedCountRefinementStrategy(fixedCountRefinementTarget);
+      }
+      else
+      {
+        form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
+      }
     }
     
     std::ostringstream suffix;
@@ -1785,7 +1826,7 @@ int main(int argc, char *argv[])
         resultsFileStream << resultsFilePrefix;
       }
       
-      resultsFileStream << numTimeSteps << "_timeSteps";
+      resultsFileStream << "_" << numTimeSteps << "_timeSteps";
       resultsFileStream << ".dat";
       resultsFile = resultsFileStream.str();
     }
@@ -1882,7 +1923,7 @@ int main(int argc, char *argv[])
     std::ostringstream E_magnitudeFilePath;
     E_magnitudeFilePath << directoryPath << "/" << "E_magnitude" << suffix.str() << ".dat";
     std::fstream E_magnitudeOut;
-    if (rank == 0)
+    if ((rank == 0) && (problemChoice == TWO_STREAM))
     {
       E_magnitudeOut.open(E_magnitudeFilePath.str(), std::ios::out);
       if (!E_magnitudeOut.is_open())
@@ -1911,8 +1952,43 @@ int main(int argc, char *argv[])
     
     form.setPerformRefinementsDuringTimeSteps(false); //
     
+    bool previousSolveUsedGeometricMultigrid = false;
+    bool previousSolveUsedDirect = false;
+    
+    
+//    {
+//      // DEBUGGING an issue in InducedMeshPartitionPolicy
+//      std::vector<GlobalIndexType> cellsToRefine {8144, 8146, 8168, 8170, 8176, 8178, 8520, 8522, 8528, 8530, 8552};
+//      refStrategy->refineCells(cellsToRefine);
+//      std::set<GlobalIndexType> cellsToUnrefine{3312, 3314, 3315, 3317, 3318, 3319, 3322, 3328, 3330, 3331, 3334};
+//      refStrategy->unrefineCells(cellsToUnrefine);
+//      auto gmgSolver = form.constructGMGSolver(); // failure here
+//    }
+    
     for (int timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
     {
+      auto numVlasovDofs = form.boltzmannSolution()->mesh()->numGlobalDofs();
+      if (numVlasovDofs > maxDofsForDirectSolve)
+      {
+        if ((rank == 0) && (!previousSolveUsedGeometricMultigrid))
+        {
+          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
+        }
+        form.setUseGeometricMultigrid(true);
+        previousSolveUsedGeometricMultigrid = true;
+        previousSolveUsedDirect = false;
+      }
+      else
+      {
+        if ((rank == 0) && (previousSolveUsedGeometricMultigrid))
+        {
+          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+        }
+        form.setUseGeometricMultigrid(false);
+        previousSolveUsedGeometricMultigrid = false;
+        previousSolveUsedDirect = true;
+      }
+      
       if (timeStepC0 > 0)
       {
         // adapt time step
@@ -1981,20 +2057,19 @@ int main(int argc, char *argv[])
         
         reportBCResolutionAndTimeStepComplete(timeStepNumber,bcRelErr,energyError);
         
-  //      double E_mag = E_squared->integrate(form.gaussMesh());
-  //      if (rank == 0)
-  //      {
-  //        std::cout << "Completed time step " << timeStepNumber << " (t = " << t << ")" << std::endl;
-  //        std::cout << "|E|^2 integral = " << E_mag << std::endl;
-  //        E_magnitudeOut << t << "\t" << E_mag << std::endl << std::flush;
-  //        if (computeMinimum_bn)
-  //        {
-  //          std::cout << "Minimum average value for b_n on a side: " << min_bn << std::endl;
-  //        }
-  //      }
+        double E_mag = E_squared->integrate(form.gaussMesh());
+        if ((rank == 0) && (problemChoice == TWO_STREAM))
+        {
+          std::cout << "|E|^2 integral = " << E_mag << std::endl;
+          E_magnitudeOut << t << "\t" << E_mag << std::endl << std::flush;
+          if (computeMinimum_bn)
+          {
+            std::cout << "Minimum average value for b_n on a side: " << min_bn << std::endl;
+          }
+        }
       }
     } // end time step loop
-    if (rank == 0)
+    if ((rank == 0) && (problemChoice == TWO_STREAM))
     {
       E_magnitudeOut.close();
     }
