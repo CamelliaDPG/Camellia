@@ -30,7 +30,9 @@ namespace Camellia
     
     // CollisionModel takes numPoints as a construction argument.  Until we make mlc more flexible on this front, we need to reload from disk every time we want a different number of points.
     int _numPointsForLoadedModel = 0;
+#ifdef HAVE_MLC
     Teuchos::RCP<mlc::CollisionModel> _loadedModel;
+#endif
   public:
     MLCollisionFunction(FunctionPtr f_soln, Teuchos::RCP<SolutionMoments> f_solnMoments, std::string &modelDirPath);
     
