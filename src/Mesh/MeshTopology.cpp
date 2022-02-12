@@ -4008,7 +4008,7 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
   }
   
   // add the cell back in -- this will activate it, establish neighbor relationships, etc.
-  this->addCell(cellIndex, cellTopo, cellVertices);
+  this->addCell(cellIndex, cellTopo, cellVertices); // this also adds the cell to _rootCells; we'll erase in a minute if it doesn't belong there
   
   // addCell does *not* rediscover parent-child relationships
   // if the original cell had a parent, we need to tell it about that parent again here
@@ -4016,6 +4016,7 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
   {
     auto childIndices = cell->getParent()->getChildIndices(thisPtr);
     cell->getParent()->setChildren(childIndices); // this will call setParent() on each of the children
+    _rootCells.erase(cellIndex); // if cell has a parent, it isn't a root cell.
   }
 }
 

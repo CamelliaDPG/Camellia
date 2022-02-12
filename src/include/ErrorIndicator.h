@@ -45,6 +45,9 @@ namespace Camellia {
     //! adds to the provided container locally-owned parents cells with error below the threshold
     virtual void localParentCellsBelowErrorThreshold(double threshold, vector<GlobalIndexType> &cellsBelowThreshold);
     
+    //! Returns the cellCountTarget cells with maximum error.  May return more, in the case of a tie, or less, if there are not that many active cells in the mesh.  Excludes the cells indicated in excludedCells from consideration.
+    std::vector< std::pair<GlobalIndexType,double> > globalMaximumErrorCells(const int cellCountTarget, const std::set<GlobalIndexType> &excludedCells);
+    
     std::vector< std::pair<GlobalIndexType,double> > globalMinimumErrorParentCells(const int cellReductionTarget, const std::set<GlobalIndexType> &excludedChildren);
     
     //! determine rank-local error measures.  Subclasses should populate _localErrorMeasures

@@ -207,6 +207,46 @@ void ErrorIndicator::gatherParentError(const std::set<GlobalIndexType> &excluded
   }
 }
 
+std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMaximumErrorCells(const int cellCountTarget, const std::set<GlobalIndexType> &excludedCells)
+{
+  if (cellCountTarget == 0)
+  {
+    // can skip computing errors, etc.
+    return std::vector< std::pair<GlobalIndexType,double> >();
+  }
+  
+  auto comm = _mesh->Comm();
+  
+  std::map<GlobalIndexType,double> localErrorMeasures = _localErrorMeasures; // copy, then erase any entries from excludedCells
+  for (const auto & excludedCellID : excludedCells)
+  {
+    localErrorMeasures.erase(excludedCellID);
+  }
+  
+  const int maxGatherCount = std::max(10000,cellCountTarget*4);
+  auto globalEntries = MPIGlobalMinMax::globalMaximums(comm, localErrorMeasures, cellCountTarget, maxGatherCount);
+  
+  const int myPID = comm->MyPID();
+  
+  auto meshTopo = _mesh->getTopology();
+  
+  const auto &myCellIDs = _mesh->cellIDsInPartition();
+  
+  if (globalEntries.size() > cellCountTarget)
+  {
+    // globalEntries is sorted, with max values at end.  If there is a tie, we want to include the entries that tied.
+    int firstEntryToInclude = globalEntries.size() - cellCountTarget;
+    double firstEntryError = globalEntries[firstEntryToInclude].second;
+    while ((globalEntries[firstEntryToInclude].second == firstEntryError) && (firstEntryToInclude >= 0))
+    {
+      firstEntryError--;
+    }
+    // delete the entries that precede firstEntryToInclude
+    globalEntries.erase(globalEntries.begin(),globalEntries.begin()+firstEntryToInclude);
+  }
+  return globalEntries;
+}
+
 std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumErrorParentCells(const int cellReductionTarget, const std::set<GlobalIndexType> &excludedChildren)
 {
   if (cellReductionTarget == 0)
@@ -241,7 +281,7 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumEr
   
   auto comm = _mesh->Comm();
   
-  const int maxGatherCount = std::max(10000,cellReductionTarget*4);
+  const int maxGatherCount = std::max(100000,cellReductionTarget*4);
   auto globalEntries = MPIGlobalMinMax::globalMinimums(comm, parentErrorMeasures, cellReductionTarget, maxGatherCount);
   
   const int myPID = comm->MyPID();

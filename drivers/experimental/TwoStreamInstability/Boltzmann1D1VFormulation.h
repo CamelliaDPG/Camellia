@@ -52,7 +52,10 @@ private:
   int _delta_k;
   int _tn_enrichment = 0;
   
+  bool _useGeometricMultigrid = false;
+  
   SolutionPtr _boltzmannSoln;
+  SolutionPtr _boltzmannSolnPrevSubstep; // for fixed-point iteration, the current-time solution from a previous substep
   SolutionPtr _boltzmannSolnPrev;
   
   double _gaussMeshMeasure;
@@ -61,7 +64,7 @@ private:
   bool _haveTableau = false;
   
   SolutionPtr _gaussSoln;
-  SolutionPtr _gaussSolnPrev;
+  SolutionPtr _gaussSolnPrevSubstep; // for fixed-point iteration, the current-time solution from a previous substep
   double _t = 0; // current time
   
   //! on each refinement, refine any element with error greater than threshold times the maximum element error.  Values > 1.0 mean no refinement
@@ -210,6 +213,10 @@ public:
   void setRefinementThresholds(double refinementThreshold, int maxElements, int maxRefinementLevel, ErrorIndicatorPtr unrefinementErrorIndicator = Teuchos::null,
                                bool gateRefinements = false);
   
+  /** \brief  Sets a fixed-count refinement strategy; will aim to refine the specified number of elements on each time step.
+  */
+  void setFixedCountRefinementStrategy(int count);
+  
   //! perform refinements according to settings given during call to setRefinementThreshold().  (If gateRefinements was true, then refinements might not actually take place.)
   void performRefinements();
   
@@ -275,6 +282,10 @@ public:
   
   //! x-velocity function
   FunctionPtr vx() const;
+  
+  void setUseGeometricMultigrid(bool useGeometricMultigrid);
+  
+  Teuchos::RCP<GMGSolver> constructGMGSolver();
 };
 
 }
