@@ -64,6 +64,11 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
     if (mpiPath is None):
         print("MPIRUN_COMMAND environment variable must be set")
         sys.exit(1)
+    mpiNumProcsString = os.environ.get("MPIRUN_NUM_PROCS")
+    if (mpiNumProcsString is None):
+        print("MPIRUN_NUM_PROCS environment variable must be set")
+        sys.exit(1)
+    mpiNumProcs = int(mpiNumProcsString)
     driverName = ""
     if spaceTime:
         driverName = "SpaceTimeVlasovPoisson"
@@ -128,7 +133,7 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
     fullCommand = commandArgs
     fullCommand.insert(0,commandPath)
     fullCommandString = " ".join(fullCommand)
-    mpiCommand = [mpiPath,"--np","24"]
+    mpiCommand = [mpiPath,"--np",str(mpiNumProcs)]
     mpiCommand.extend(fullCommand)
     #print(commandPath)
     #print(commandArgs)
