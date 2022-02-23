@@ -120,6 +120,7 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
     if adaptive:
         outputDir += "_AMR_theta" + energyThreshold + "_" + refinementCount + "_refs"
         #sigma0.025_p3_dp4_4x10x40_timeRamp0_AMR_theta0.2_4_refs
+    commandArgs.append("--numUniformRefinements=" + numUniformRefinements)
     commandArgs.append("--outputDir=" + outputDir)
     os.chdir(buildDir)
     mkdirProcess = subprocess.run(["mkdir", "-p", outputDir])
