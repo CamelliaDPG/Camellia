@@ -50,7 +50,7 @@ def printRepoStatus(repoPath):
 
 def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
                  xMeshWidth, tMeshWidth, vMeshWidth, numUniformRefinements, \
-                 numTimeSteps, timeRamp, sigma, p, dp, v0, vWidth):
+                 numTimeSteps, timeRamp, sigma, p, dp, v0, vWidth, maxElements):
     buildDir = os.environ.get("CAMELLIA_BUILD_DIR")
     if (buildDir is None):
         print("CAMELLIA_BUILD_DIR environment variable must be set")
@@ -83,6 +83,8 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
     commandArgs.append("--vElements=" + vMeshWidth)
     if not spaceTime:
         commandArgs.append("--numTimeSteps=" + numTimeSteps)
+        commandArgs.append("--dt=" + str(1.0 / float(numTimeSteps)))
+        commandArgs.append("--dontGateRefinements")
     commandArgs.append("--sigma=" + sigma)
     if spaceTime:
         driverName = "SpaceTimeVlasovPoisson"
@@ -95,6 +97,8 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
         commandArgs.append("--refinementThreshold=" + energyThreshold)
         if spaceTime:
             commandArgs.append("--numRefinements=" + refinementCount)
+        if (maxElements is not None):
+          commandArgs.append("--maxElements=" + maxElements)
         commandArgs.append("--bcResolutionTolerance=" + bcTol)
         outputDir += "/bcTol" + bcTol
     else:
@@ -119,6 +123,8 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
         commandArgs.append("--initialTimeDivision=" + timeRamp)
     if adaptive:
         outputDir += "_AMR_theta" + energyThreshold + "_" + refinementCount + "_refs"
+        if (maxElements is not None):
+          outputDir += "_maxElements_" + maxElements
         #sigma0.025_p3_dp4_4x10x40_timeRamp0_AMR_theta0.2_4_refs
     commandArgs.append("--numUniformRefinements=" + numUniformRefinements)
     commandArgs.append("--outputDir=" + outputDir)
@@ -169,6 +175,8 @@ if __name__ == '__main__':
     parser.add_option("--adaptive", action="store_true", dest="useAdaptivity")
     parser.add_option("--fixedMesh", action="store_false", dest="useAdaptivity")
     
+    parser.add_option("--maxElements", action="store", dest="maxElements")
+    
     parser.add_option("--refinementCount", action="store", type="string", dest="numRefinements", default="-1") # non-negative value must be provided for adaptive runs
     parser.add_option("--energyThreshold", action="store", type="string", dest="energyThreshold", default="0.0")
     parser.add_option("--bcTol", action="store", type="string", dest="bcTol", default="1.0") # 1.0 means no BC-related refinement will take place
@@ -199,6 +207,6 @@ if __name__ == '__main__':
     
     runColdDiode(opt.spaceTime, opt.useAdaptivity, opt.numRefinements, opt.energyThreshold, opt.bcTol, \
                  opt.xMeshWidth, opt.tMeshWidth, opt.vMeshWidth, opt.numUniformRefinements, \
-                 opt.numTimeSteps, opt.timeRamp, opt.sigma, opt.p, opt.dp, opt.v0, opt.vWidth)
+                 opt.numTimeSteps, opt.timeRamp, opt.sigma, opt.p, opt.dp, opt.v0, opt.vWidth, opt.maxElements)
 
     
