@@ -149,6 +149,7 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
     startTime = time.time()
     consoleOutputFileName = "console-" + repoBranch() + "-" + repoHash() + ".txt"
     consoleOutputFile = open(outputDir + "/" + consoleOutputFileName, "w")
+    consoleOutputFile.write(" ".join(mpiCommand))
     runProcess = subprocess.run(mpiCommand,stdout=consoleOutputFile,stderr=consoleOutputFile)
     endTime = time.time()
     runTime = (endTime - startTime)
