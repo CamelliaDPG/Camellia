@@ -3292,6 +3292,7 @@ int main(int argc, char *argv[])
       if (doerflerTarget <= 0)
       {
         refStrategy = Teuchos::rcp(new RefinementStrategy(form.vlasovSolution(), refinementThreshold));
+        refStrategy->setMaxElements(maxElements); // allow unrefinements
       }
       else
       {
