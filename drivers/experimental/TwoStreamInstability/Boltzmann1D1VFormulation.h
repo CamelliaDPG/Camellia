@@ -275,6 +275,9 @@ public:
   //! map that is reverse of the above; there is exactly one spatial cell for each phase space cell
   const std::map<GlobalIndexType, std::set<GlobalIndexType> > &phaseSpaceCellIDToSpatialCellIDs();
   
+  //! Added this when we switched to using graph norms for both Poisson and Vlasov.  This gives access to what we used to use, which was a more complex choice arrived at experimentally.  The graph norm is a choice that's easier to justify.  This legacy mode lets us try reversing the change in case we run into unexpected behavior as we repeat our experiments, now with the grahp norm.
+  void setLegacyTestSpaceNorms(bool useLegacyNorms);
+  
   int tagBoltzmannLeftInflow() const;
   int tagBoltzmannRightInflow() const;
   int tagBoltzmannMaxVelocity() const;
