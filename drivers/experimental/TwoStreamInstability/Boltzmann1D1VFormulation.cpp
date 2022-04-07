@@ -633,36 +633,13 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     _boltzmannSoln->setRHS(boltzmannRHS);
     
     // set the test-space inner products.
-    _gaussSoln->setIP(_gaussBF->naiveNorm(spaceDim));
+    _gaussSoln->setIP(_gaussBF->graphNorm());
     
     gaussMesh->registerSolution(_gaussSoln);
     boltzmannMesh->registerSolution(_boltzmannSoln);
     boltzmannMesh->registerSolution(_boltzmannSolnPrev);
     
-    IPPtr boltzmannTestNorm = IP::ip();
-    const bool useSimpleL2Norm = false;
-    if (useSimpleL2Norm)
-    {
-      boltzmannTestNorm->addTerm(w);
-      std::cout << "NOTE: using simple L^2 norm for explicit Boltzmann...\n";
-    }
-    else
-    {
-      const bool useExperimentalNormForExplicit = false;
-      if (!useExperimentalNormForExplicit || implicit)
-      {
-        // experiments so far suggest that the norm below is the most robust for explicit time-stepping
-        boltzmannTestNorm->addTerm(Function::sqrtFunction((dt + 1)/dt) * w);
-        boltzmannTestNorm->addTerm(v * w->dx() + (q/m)*_E_extruded * w->dy());
-      }
-      else
-      {
-        std::cout << "NOTE: using experimental test norm for explicit Boltzmann...\n";
-        boltzmannTestNorm->addTerm(Function::sqrtFunction((dt + 1)/dt) * w);
-        boltzmannTestNorm->addTerm(v * w->dx() + 1e-3 * (q/m)*_E_extruded * w->dy());
-      }
-    }
-    _boltzmannSoln->setIP(boltzmannTestNorm);
+    _boltzmannSoln->setIP(_boltzmannBF->graphNorm());
     
     // create entity sets for BCs:
     {
@@ -1085,6 +1062,52 @@ void Boltzmann1D1VFormulation::setIterativeSolveTolerance(const double cgTol)
 void Boltzmann1D1VFormulation::setIterativeSolveTolerances(const std::vector<double> cgTols)
 {
   _cgTols = cgTols;
+}
+
+void Boltzmann1D1VFormulation::setLegacyTestSpaceNorms(bool useLegacyNorms)
+{
+  if (useLegacyNorms)
+  {
+    const int spaceDim = 1;
+    _gaussSoln->setIP(_gaussBF->naiveNorm(spaceDim));
+    
+    VarPtr w = this->w();
+    FunctionPtr v = this->vx();
+    const bool implicit = usesImplicitSolve();
+    
+    IPPtr boltzmannTestNorm = IP::ip();
+    const bool useSimpleL2Norm = false;
+    if (useSimpleL2Norm)
+    {
+      boltzmannTestNorm->addTerm(w);
+      std::cout << "NOTE: using simple L^2 norm for explicit Boltzmann...\n";
+    }
+    else
+    {
+      const bool useExperimentalNormForExplicit = false;
+      double q = _q->getConstantValue();
+      double m = _m->getConstantValue();
+      FunctionPtr dt = _dt;
+      if (!useExperimentalNormForExplicit || implicit)
+      {
+        // experiments so far suggest that the norm below is the most robust for explicit time-stepping
+        boltzmannTestNorm->addTerm(Function::sqrtFunction((dt + 1)/dt) * w);
+        boltzmannTestNorm->addTerm(v * w->dx() + (q/m)*_E_extruded * w->dy());
+      }
+      else
+      {
+        std::cout << "NOTE: using experimental test norm for explicit Boltzmann...\n";
+        boltzmannTestNorm->addTerm(Function::sqrtFunction((dt + 1)/dt) * w);
+        boltzmannTestNorm->addTerm(v * w->dx() + 1e-3 * (q/m)*_E_extruded * w->dy());
+      }
+    }
+    _boltzmannSoln->setIP(boltzmannTestNorm);
+  }
+  else
+  {
+    _gaussSoln->setIP(_gaussBF->graphNorm());
+    _boltzmannSoln->setIP(_boltzmannBF->graphNorm());
+  }
 }
 
 void Boltzmann1D1VFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
