@@ -1948,6 +1948,11 @@ int main(int argc, char *argv[])
     FunctionPtr E_squared = E_soln * E_soln;
     FunctionPtr abs_E_soln = Teuchos::rcp( new AbsFunction(E_soln) );
     
+    auto solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form.vlasovSolution(), form.f(), form.poissonMesh()) );
+        
+    auto density  = solutionMoments->solutionMomentFunction(0);
+    auto momentum = solutionMoments->solutionMomentFunction(1);
+    
     auto refStrategy = form.refinementStrategy();
     
     form.setPerformRefinementsDuringTimeSteps(false); //
@@ -2051,8 +2056,9 @@ int main(int argc, char *argv[])
         
         if (saveViz)
         {
+          solutionMoments->update(); // update to get latest density, velocity
           boltzmannViz->exportSolution(form.boltzmannSolution(),t);
-          gaussViz->exportSolution(form.gaussSolution(),t);
+          gaussViz->exportSolution(form.gaussSolution(), {density,velocity}, {"n_e","v"},t);
         }
         
         reportBCResolutionAndTimeStepComplete(timeStepNumber,bcRelErr,energyError);

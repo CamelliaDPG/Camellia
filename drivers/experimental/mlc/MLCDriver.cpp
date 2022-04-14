@@ -39,7 +39,7 @@ int testCollisionModel(mlc::CollisionModel &model, const unsigned int num_points
 
   /*
 
-  So to avoid doing actual physics, we are going to instead solve th is problem from the middle.
+  So to avoid doing actual physics, we are going to instead solve this problem from the middle.
   Basically we have two parts to evaluating a collision operator:
 
   conserved moments -> input hermite coefficients               (pre-processing in CollisionModel)

@@ -460,9 +460,12 @@ public:
 Boltzmann1D3VFormulation::Boltzmann1D3VFormulation(Boltzmann1D3VFormulationChoice formulationChoice, double q, double eps0, double m, double dt,
                                                    const double x0, const double xWidth, const int xElementsCoarse,
                                                    const Kokkos::Array<double,3> v0, const Kokkos::Array<double,3> vDomainWidths, const Kokkos::Array<int,3> vMeshWidths,
-                                                   const int H1Order, const int delta_k, const bool usePeriodicBCs, ERKTableauPtr erkTableau)
+                                                   const int H1Order, const int delta_k, const bool usePeriodicBCs, const bool enforceQuasiNeutrality, ERKTableauPtr erkTableau,
+                                                   const int maxMomentNumberRequired)
 :
-_formulationChoice(formulationChoice)
+_formulationChoice(formulationChoice),
+_usePeriodicBCs(usePeriodicBCs),
+_enforceQuasiNeutrality(enforceQuasiNeutrality)
 {
   const int spaceDim = 1;
   const int velocityDim = 3;
@@ -605,7 +608,7 @@ _formulationChoice(formulationChoice)
       _boltzmannSolnPrev = Solution::solution(_boltzmannBF,boltzmannMesh);
     }
     
-    const int maxMomentNumber = 0; // for now, we only do the zeroth moment
+    const int maxMomentNumber = std::max(0,maxMomentNumberRequired); // internally, we only require 0th, but e.g. collision function might require more.
     _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _boltzmannSoln, f, gaussMesh) );
     
     _f_velocityIntegral = _solutionMoments->solutionMomentFunction(0,0,0);
@@ -615,7 +618,7 @@ _formulationChoice(formulationChoice)
     auto qFunction = FunctionPtr(_q);
     auto mFunction = FunctionPtr(_m);
     auto epsFxn = FunctionPtr(_eps0);
-    auto n0Fxn  = FunctionPtr(_n0); // _n0 will be initialized when initial values are specified
+    auto n0Fxn  = _enforceQuasiNeutrality ? FunctionPtr(_n0) : Function::zero(); // _n0 will be initialized when initial values are specified, if quasi-neutrality is enforced
     auto f_velocityIntegralFxn = FunctionPtr(_f_velocityIntegral);
     auto gaussRHS = _poissonForm->rhs(qFunction / epsFxn * (f_velocityIntegralFxn - n0Fxn));
     _gaussSoln->setRHS(gaussRHS);
@@ -848,6 +851,11 @@ void Boltzmann1D3VFormulation::setTimeStep(double dt)
   _dt->setValue(dt);
 }
 
+Teuchos::RCP<SolutionMoments> Boltzmann1D3VFormulation::solutionMoments()
+{
+  return _solutionMoments;
+}
+
 double Boltzmann1D3VFormulation::t() const
 {
   return _t;
@@ -858,7 +866,7 @@ void Boltzmann1D3VFormulation::takeTimeStep()
   // for implicit solves, we cycle through the f solve and the E solve a few times;
   // for explicit, we do each solve just once per time step.
   const bool implicit = _formulationChoice == ULTRAWEAK_IMPLICIT_H1_TRACE || _formulationChoice == ULTRAWEAK_IMPLICIT_L2_TRACE;
-  int numSubsteps = implicit ? 3 : 1;
+  int numSubsteps = implicit ? 10 : 1; // TODO: make this imitate what we do for 1D1V -- give external control, track the update sizes, etc.
   
   bool useGMG = true;
   if (useGMG && (_gmgSolver == Teuchos::null))
@@ -922,10 +930,17 @@ void Boltzmann1D3VFormulation::updateElectricField()
 {
   // update f integral, n0
   _solutionMoments->update();
-  // TOOD: guard this with a boolean member _enforceQuasiNeutrality (see 1D1V implementation)
-  double f_integral   = _f_velocityIntegral->integrate(_gaussSoln->mesh());
-  double n0 = f_integral / _gaussMeshMeasure;
-//  std::cout << "1D3V n0 = " << n0 << std::endl;
+  
+  double n0;
+  if (_enforceQuasiNeutrality)
+  {
+    double f_integral   = _f_velocityIntegral->integrate(_gaussSoln->mesh());
+    n0 = f_integral / _gaussMeshMeasure;
+  }
+  else
+  {
+    n0 = 0;
+  }
   _n0->setValue(n0);
   
   // solve for E, E_hat:
@@ -989,6 +1004,7 @@ void testVelocitySpace3DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 2;
   const bool usePeriodicBCs = true;
+  const bool enforceQuasiNeutrality = false;
   
   using FormulationChoice = Camellia::Boltzmann1D3VFormulation::Boltzmann1D3VFormulationChoice;
   
@@ -1050,7 +1066,7 @@ void testVelocitySpace3DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D3VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
+    Boltzmann1D3VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
     
     if (boltzmannCellsToRefine.size() > 0)
     {
@@ -1189,6 +1205,7 @@ void testVelocityExtrusion1D3V(bool volumeVariable, const int &xMeshWidth, const
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 1;
   const bool usePeriodicBCs = true;
+  const bool enforceQuasiNeutrality = true;
   
   using FormulationChoice = Camellia::Boltzmann1D3VFormulation::Boltzmann1D3VFormulationChoice;
   std::vector<FormulationChoice> formulationChoices {
@@ -1200,7 +1217,7 @@ void testVelocityExtrusion1D3V(bool volumeVariable, const int &xMeshWidth, const
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D3VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xMeshWidth, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
+    Boltzmann1D3VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xMeshWidth, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, Teuchos::null);
     
     FunctionPtr x  = Function::xn(1);
     
