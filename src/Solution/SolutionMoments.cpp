@@ -807,6 +807,11 @@ void SolutionMoments::update()
 
 void SolutionMoments::valuesForAllMoments(DeviceView<double> values, BasisCachePtr configurationSpaceBasisCache)
 {
+  /*
+   TODO: During update(), ensure that the physicalCellIDs corresponding to owned phase-space cellIDs are present in _spatialBasisCoefficients.
+   (update() is expected/allowed to do MPI communication.  valuesForAllMoments() is not.)
+   */
+  
   TEUCHOS_FUNC_TIME_MONITOR("SolutionMoments::valuesForAllMoments()");
  
   const int numMomentEntries = _spatialBasisCoefficients.extent_int(0);

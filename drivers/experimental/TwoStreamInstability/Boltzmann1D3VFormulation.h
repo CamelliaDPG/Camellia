@@ -42,6 +42,8 @@ public:
   };
 private:
   Boltzmann1D3VFormulationChoice _formulationChoice;
+  bool _usePeriodicBCs;
+  bool _enforceQuasiNeutrality;
   
   Teuchos::RCP<PoissonFormulation> _poissonForm; // used by Gauss
   
@@ -93,7 +95,8 @@ public:
   Boltzmann1D3VFormulation(Boltzmann1D3VFormulationChoice formulationChoice, double q, double eps0, double m, double dt,
                            const double x0, const double xWidth, const int xElements,
                            const Kokkos::Array<double,3> v0, const Kokkos::Array<double,3> vDomainWidths, const Kokkos::Array<int,3> vMeshWidths,
-                           const int H1Order, const int delta_k, const bool usePeriodicBCs, ERKTableauPtr erkTableau);
+                           const int H1Order, const int delta_k, const bool usePeriodicBCs, const bool enforceQuasiNeutrality, ERKTableauPtr erkTableau,
+                           const int maxMomentNumberRequired = 0);
 
   //! set initial conditions.  Solves for initial E, E_hat, and sets t=0;
   void setInitialConditions(FunctionPtr f0);
@@ -142,6 +145,8 @@ public:
   
   //! notification that the boltzmann solve has set the RK stage:
   void setStage(const int stageNumber);
+  
+  Teuchos::RCP<SolutionMoments> solutionMoments();
 };
 
 }

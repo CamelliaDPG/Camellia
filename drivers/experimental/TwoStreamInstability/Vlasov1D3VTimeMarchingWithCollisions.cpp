@@ -40,32 +40,21 @@ int main(int argc, char *argv[])
   bool success = true;
   {
     bool implicit = true;
-    double u0     = 3.0; // initial drift velocity
-    double sigma  = 1.0; // temperature
-    double n0     = 1.0; // density
     
     double q      =  0.0; // pure vlasov mode: electric field will always be 0
     double eps0   =  1.0;
     double m      =  1.0;
     double x0     =  0.0;
-    double xWidth =  20;
+    double xWidth =  1.0;
     
-    const Kokkos::Array<double,3> v0 {-10.0, -10.0, -10.0};
-    const Kokkos::Array<double,3> vDomainWidths {20, 20, 20};
+    double vDomainWidth = 20;
         
-    //  const bool useAdaptivity = false; // adaptivity not supported; we'd need to do something to keep 1D3V and 1D1V meshes in sync.
-    
-    // relative tolerance: require 1D1V and 1D3V solutions to be within 1e-8 of each other, in terms of |E|^2 norm.
-    // We also require the f_xvx solution to agree to this tolerance.  The E tolerance is the harder one to hit, since
-    // |E|^2 can be pretty close to zero.
-    // The agreement should hold for arbitrary meshes (coarse and fine ones) and time step sizes: mathematically, 1D3V
-    // and 1D1V should be identical for this problem.  The only differences should be due to roundoff and solver stopping criteria.
     double tol = 1e-8;
     
     int xElements = 2;
-    int vElements_x = 2;
+    int vElements_x = 4; // need enough elements to avoid having nonzero velocity near the velocity boundary (2 is not enough; 4 seems to be)
     int delta_k   = 2;
-    double dt_max = 1e-1;
+    double dt_max = 1e-4;
     int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
     int numTimeSteps = 10;
     int outputFrequency = 1; // number of time steps to take before outputting viz.
@@ -77,10 +66,10 @@ int main(int argc, char *argv[])
     cmdp.setOption("implicit", "explicit", &implicit);
     cmdp.setOption("xElements", &xElements);
     cmdp.setOption("vMeshWidth", &vElements_x);
+    cmdp.setOption("vDomainWidth", &vDomainWidth);
     cmdp.setOption("H1Order", &H1Order);
     cmdp.setOption("delta_k", &delta_k);
     cmdp.setOption("dt", &dt_max );
-    cmdp.setOption("u0", &u0);
     cmdp.setOption("numTimeSteps", &numTimeSteps);
     cmdp.setOption("outputFrequency", &outputFrequency);
     cmdp.setOption("modelDir", &modelDir);
@@ -94,11 +83,18 @@ int main(int argc, char *argv[])
       return -1;
     }
     
+    const double vMin = -vDomainWidth/2.;
+    
+    const Kokkos::Array<double,3> v0 {vMin, vMin, vMin};
+    const Kokkos::Array<double,3> vDomainWidths {vDomainWidth, vDomainWidth, vDomainWidth};
+    
     const int vElements_y = vElements_x, vElements_z = vElements_x;
     
     const Kokkos::Array<int,3> vMeshWidths {vElements_x, vElements_y, vElements_z};
     
     const int rank = mpiSession.getRank();
+    
+    bool enforceQuasiNeutrality = false;
     
     using FormulationChoice1D3V = Camellia::Boltzmann1D3VFormulation::Boltzmann1D3VFormulationChoice;
     FormulationChoice1D3V formulationChoice1D3V;
@@ -133,19 +129,32 @@ int main(int argc, char *argv[])
     
     double dt = dt_max;
     
-    const bool usePeriodicBCs = true;
-    const bool enforceQuasiNeutrality = true;
-    Boltzmann1D3VFormulation form1D3V(formulationChoice1D3V, q, eps0, m, dt, x0, xWidth, xElements, v0,    vDomainWidths,    vMeshWidths,    H1Order, delta_k, usePeriodicBCs, erkTableau);
     
     // setup a Maxwellian for initial condition -- should result in a near-0 collisional response (I think)
     const int firstVelocityDimensionZeroBased = 1;
     const int numVelocityDims = 3;
-    std::vector<double> u {1,1,1};
-    const double sigmaSquared = 1.0e3;
+    std::vector<double> u {0,0,0};
+    const double sigmaSquared = 1.0;
     const double n = 1.0;
     FunctionPtr f0 = MaxwellianFunction::maxwellian(firstVelocityDimensionZeroBased, numVelocityDims, u, sigmaSquared, n);
     
-    form1D3V.setInitialConditions(f0);
+    // scaling factors:
+    const double n0_scaling = 1.e21;
+    const double L0_scaling = 5000;
+    const double mass = 6.6335209e-26;
+    const double kB = 1.602e-19; // for plasmas, we want to use electron volts (eV) rather than Kelvin -- that's why "Boltzmann's constant" is set to to the charge of an electron.
+    const double T0 = 20;
+    const double vth = std::sqrt(kB * T0 / mass);
+    const double u0_scaling = vth;
+    
+    if (rank == 0)
+    {
+      std::cout << "dt = " << dt << std::endl;
+      std::cout << "Scalings:\n";
+      std::cout << "n0 = " << n0_scaling << std::endl;
+      std::cout << "L0 = " << L0_scaling << std::endl;
+      std::cout << "u0 = " << u0_scaling << std::endl;
+    }
     
     std::ostringstream suffix;
     if (implicit)
@@ -160,12 +169,11 @@ int main(int argc, char *argv[])
     {
       suffix << "_H1Trace";
     }
-    suffix << "_u0" << u0;
     suffix << "_dt" << dt_max;
     suffix << "_H1Order" << H1Order;
     suffix << "_" << xElements << "x" << vElements_x << "x" << vElements_y << "x" << vElements_z;
     
-    std::string problemPrefix = "ZeroInitialConditions";
+    std::string problemPrefix = "MaxwellianInitialConditions";
     
     std::ostringstream boltzmannSS1D3V;
     boltzmannSS1D3V << problemPrefix <<"Boltzmann1D3V" << suffix.str();
@@ -175,11 +183,30 @@ int main(int argc, char *argv[])
     
     const std::string directoryPath = ".";
     
+    int maxMomentNumber = MLCollisionFunction::maxMomentNumber(modelDir);
+    
+    const bool usePeriodicBCs = true;
+    Boltzmann1D3VFormulation form1D3V(formulationChoice1D3V, q, eps0, m, dt, x0, xWidth, xElements, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, erkTableau, maxMomentNumber);
+    
+    form1D3V.setInitialConditions(f0);
+    
+    Teuchos::RCP<SolutionMoments> solnMoments = form1D3V.solutionMoments();
+    
+    auto density  = solnMoments->solutionMomentFunction(0,0,0);
+    auto momentum_x = solnMoments->solutionMomentFunction(1,0,0);
+    auto momentum_y = solnMoments->solutionMomentFunction(0,1,0);
+    auto momentum_z = solnMoments->solutionMomentFunction(0,0,1);
+    
+    auto velocity_x = momentum_x / density;
+    auto velocity_y = momentum_y / density;
+    auto velocity_z = momentum_z / density;
+    
     PhaseSpaceVisualization phaseSpaceViz1D3V(form1D3V.boltzmannSolution(), form1D3V.f(), boltzmannSS1D3V.str(), ".");
     HDF5Exporter gaussViz1D3V(form1D3V.gaussMesh(), gaussSS1D3V.str(), directoryPath);
     
+    solnMoments->update(); // since we need solnMoments on the RHS, it will be evaluated even in first time step.  This sets it up for evaluation.
     double t = 0.0;
-    gaussViz1D3V.exportSolution(form1D3V.gaussSolution(),t);
+    gaussViz1D3V.exportSolution(form1D3V.gaussSolution(), {density,velocity_x,velocity_y,velocity_z}, {"n_e","v_x","v_y","v_z"},t);
     phaseSpaceViz1D3V.exportTimeStep(t);
     
     FunctionPtr f_soln1D3V = Function::solution(form1D3V.f(), form1D3V.boltzmannSolution());
@@ -187,20 +214,28 @@ int main(int argc, char *argv[])
     auto subMeshTopo1D3V_xvx = SubExtrudedMeshTopology::subExtrudedMeshTopology(form1D3V.boltzmannMesh()->getTopology(), 0);
     MeshPtr subMesh1D3V_xvx = MeshFactory::minRuleMesh(subMeshTopo1D3V_xvx, form1D3V.boltzmannMesh()->bilinearForm(), H1Order, delta_k, form1D3V.boltzmannMesh()->Comm(), false);
     
-    int maxMomentNumber = MLCollisionFunction::maxMomentNumber(modelDir);
-    
-    // TODO: incorporate this solnMoments into form1D3V so that it can be automatically updated after each solve, and so that we aren't redundantly computing moments multiple times.
-    Teuchos::RCP<SolutionMoments> solnMoments = Teuchos::rcp(new SolutionMoments(maxMomentNumber, form1D3V.boltzmannSolution(), form1D3V.f(), form1D3V.gaussMesh()));
-    
     auto f_soln = Function::solution(form1D3V.f(), form1D3V.boltzmannSolution());
     
-    Teuchos::RCP<MLCollisionFunction> mlCollisionFunction = Teuchos::rcp(new MLCollisionFunction(f_soln, solnMoments, modelDir) );
+    // TODO: measure the error in the moments we provide to MLCollisionFunction (we know the exact Maxwellian moments, so we can compute the error)
+    // TODO: try providing exact values to MLCollisionFunction; how does it behave?
+    
+    Teuchos::RCP<MLCollisionFunction> mlCollisionFunction = Teuchos::rcp(new MLCollisionFunction(n0_scaling, L0_scaling, u0_scaling, f_soln, solnMoments, modelDir) );
     
     auto w = form1D3V.w(); // test function for Vlasov
     LinearTermPtr collisionTerm = mlCollisionFunction * w;
     form1D3V.boltzmannSolution()->rhs()->addTerm(collisionTerm);
     
-    solnMoments->update(); // since we need solnMoments on the RHS, it will be evaluated even in first time step.  This sets it up for evaluation.
+    // DEBUGGING: create a second Solution object onto which we can project the mlCollisionFunction, and then take moments of that
+    auto collisionRepresentation = Solution::solution(form1D3V.boltzmannSolution()->bf(),form1D3V.boltzmannMesh());
+    std::map<int,FunctionPtr> collisionMap;
+    collisionMap[form1D3V.f()->ID()] = mlCollisionFunction;
+    collisionRepresentation->projectOntoMesh(collisionMap);
+    
+    PhaseSpaceVisualization phaseSpaceVizCollisions(collisionRepresentation, form1D3V.f(), "CollisionDebugViz", ".");
+    phaseSpaceVizCollisions.exportTimeStep(0);
+    
+    std::cout << "Exported CollisionDebugViz.\n";
+    
     for (int timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
     {
       form1D3V.takeTimeStep();
@@ -211,7 +246,7 @@ int main(int argc, char *argv[])
       
       if ((timeStepNumber % outputFrequency == 0) || (timeStepNumber == numTimeSteps))
       {
-        gaussViz1D3V.exportSolution(form1D3V.gaussSolution(),t);
+        gaussViz1D3V.exportSolution(form1D3V.gaussSolution(), {density,velocity_x,velocity_y,velocity_z}, {"n_e","v_x","v_y","v_z"},t);
         phaseSpaceViz1D3V.exportTimeStep(t);
 
         if (rank == 0)

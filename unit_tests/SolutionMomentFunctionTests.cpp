@@ -16,6 +16,7 @@
 #include "CamelliaDataHelpers.h"
 #include "CamelliaTestingHelpers.h"
 #include "ExtrudedMeshTopology.h"
+#include "MaxwellianFunction.h"
 #include "SolutionMoments.h"
 #include "SolutionMomentFunction.h"
 #include "SubExtrudedMeshTopology.h"
@@ -39,7 +40,9 @@ namespace
   static const int EXTRUSION_MESH_WIDTH = 2;
   static const int TEMPORAL_MESH_WIDTH  = 2;  // used for space-time meshes
 
-  Teuchos::RCP<ExtrudedMeshTopology> makeTestMeshTopology( int numPhysicalDims, int numExtrusionDims, bool useSpaceTime )
+  Teuchos::RCP<ExtrudedMeshTopology> makeTestMeshTopology( int numPhysicalDims, int numExtrusionDims, bool useSpaceTime,
+                                                          double extrusionOrigin = EXTRUSION_ORIGIN, double extrusionExtent = EXTRUSION_EXTENT,
+                                                          int extrusionMeshWidth = EXTRUSION_MESH_WIDTH)
   {
     using std::vector;
     vector<double> physicalDims(numPhysicalDims,PHYSICAL_EXTENT);
@@ -57,9 +60,9 @@ namespace
       physicalMeshTopo = Teuchos::rcp(new ExtrudedMeshTopology(physicalMeshTopo,temporalStartCoords,temporalExtents,temporalElementCounts));
     }
     
-    vector<double> extrusionStartCoords(numExtrusionDims, EXTRUSION_ORIGIN);
-    vector<double> extrusionExtents(numExtrusionDims, EXTRUSION_EXTENT);
-    vector<int> extrusionElementCounts(numExtrusionDims,EXTRUSION_MESH_WIDTH);
+    vector<double> extrusionStartCoords(numExtrusionDims, extrusionOrigin);
+    vector<double> extrusionExtents(numExtrusionDims, extrusionExtent);
+    vector<int> extrusionElementCounts(numExtrusionDims,extrusionMeshWidth);
     
     auto extrudedMeshTopology = Teuchos::rcp(new ExtrudedMeshTopology(physicalMeshTopo,extrusionStartCoords,extrusionExtents,extrusionElementCounts));
     return extrudedMeshTopology;
@@ -296,13 +299,15 @@ namespace
 
 //! expectedMoments: has momentNumber+1 entries in each of the three dimensions.  When i + j + k > momentNumber, entries ignored (may be null)
 void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bool useSpaceTime,
-                   int survivingExtrusionDim, // use -1 for no surviving dims
-                   const int fxnPolyOrder,
-                   FunctionPtr phaseSpaceFxn, std::vector<std::vector<std::vector<FunctionPtr> > > expectedMoments,
-                   const int &momentNumber,
-                   bool refine,
-                   const double tol,
-                   Teuchos::FancyOStream &out, bool &success)
+                 int survivingExtrusionDim, // use -1 for no surviving dims
+                 const int fxnPolyOrder,
+                 FunctionPtr phaseSpaceFxn, std::vector<std::vector<std::vector<FunctionPtr> > > expectedMoments,
+                 const int &momentNumber,
+                 bool refine,
+                 const double tol,
+                 Teuchos::FancyOStream &out, bool &success,
+                 double extrusionOrigin = EXTRUSION_ORIGIN, double extrusionExtent = EXTRUSION_EXTENT,
+                 int extrusionMeshWidth = EXTRUSION_MESH_WIDTH)
 {
   // TODO: something to test anisotropy in p
   
@@ -310,7 +315,7 @@ void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bo
   
   std::vector<int> H1Order(1 + numExtrusionDims, fxnPolyOrder + 1);
   
-  auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
+  auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime, extrusionOrigin, extrusionExtent, extrusionMeshWidth);
   
   VarFactoryPtr vf = VarFactory::varFactory();
   auto f = vf->fieldVar("f");
@@ -357,12 +362,12 @@ void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bo
   int expectedActivePhaseSpaceCellCount = startingPhysicalCellCount;
   for (int d=0; d<numExtrusionDims; d++)
   {
-    expectedActivePhaseSpaceCellCount *= EXTRUSION_MESH_WIDTH;
+    expectedActivePhaseSpaceCellCount *= extrusionMeshWidth;
   }
   int expectedActivePhysicalCellCount = startingPhysicalCellCount;
   if (survivingExtrusionDim != -1)
   {
-    expectedActivePhysicalCellCount *= EXTRUSION_MESH_WIDTH;
+    expectedActivePhysicalCellCount *= extrusionMeshWidth;
   }
   TEST_EQUALITY(expectedActivePhysicalCellCount, physicalMesh->numActiveElements());
   TEST_EQUALITY(expectedActivePhaseSpaceCellCount, mesh->numActiveElements());
@@ -411,6 +416,36 @@ void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bo
   const int numSurvivingDims  = (survivingExtrusionDim == -1) ? 0 : 1;
   const int numIntegratedDims = numExtrusionDims - numSurvivingDims;
   
+  // the commented-out phaseViz export only works for total dim <= 3.  The configViz should work for any spatial dimension, though.
+//  {
+//    // DEBUGGING: export viz
+//
+//    FunctionPtr f_soln = Function::solution(f, soln);
+//    FunctionPtr f_err  = phaseSpaceFxn - f_soln;
+//    std::vector<FunctionPtr> fxnsToExport {phaseSpaceFxn, f_err};
+//    std::vector<std::string> fxnNames {"f_exact", "f_err"};
+//
+//    auto phaseViz = Teuchos::rcp(new HDF5Exporter(soln->mesh(), "TestMoments", "/tmp"));
+//    phaseViz->exportSolution(soln, fxnsToExport, fxnNames);
+//
+//    FunctionPtr zeroMoment;
+//    if (numIntegratedDims == 1)
+//    {
+//      zeroMoment = solnMoments.solutionMomentFunction(0);
+//    }
+//    else if (numIntegratedDims == 2)
+//    {
+//      zeroMoment = solnMoments.solutionMomentFunction(0,0);
+//    }
+//    else if (numIntegratedDims == 3)
+//    {
+//      zeroMoment = solnMoments.solutionMomentFunction(0,0,0);
+//    }
+//
+//    auto configViz = Teuchos::rcp(new HDF5Exporter(solnMoments.mesh(), "TestMomentsConfig", "/tmp"));
+//    configViz->exportFunction({zeroMoment}, "M_000");
+//  }
+  
   for (int i=0; i<=momentNumber; i++)
   {
     const int j_max = (numIntegratedDims > 1) ? momentNumber - i : 0;
@@ -419,6 +454,7 @@ void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bo
       const int k_max = (numIntegratedDims > 2) ? momentNumber - i - j : 0;
       for (int k=0; k<=k_max; k++)
       {
+        out << "*** Moment (" << i << "," << j << "," << k << ") ***\n";
         FunctionPtr solnMomentFunction;
         if (numIntegratedDims == 1)
         {
@@ -579,6 +615,74 @@ void testConstantMoments(const int numPhysicalDims, const int numExtrusionDims,
   
   testMoments(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
               f, expectedMoments, maxMoment, refine, tol, out, success);
+}
+
+void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims,
+                           const double n,
+                           const double ux, const double uy, const double uz,
+                           const double sigmaSquared,
+                           bool refine,
+                           const double extrusionOrigin, const double extrusionExtent,
+                           const int extrusionMeshWidth,
+                           const double tol,
+                           Teuchos::FancyOStream &out, bool &success)
+{
+  const int survivingExtrusionDim = -1;
+  const bool spaceTime       = false;
+  const int polyOrder = 6; // for L^2 fields, one less than H^1 order; here we use 6 to get a decent approximation of the Maxwellian on only two elements…
+  
+  std::vector<double> u;
+  if      (numExtrusionDims == 1) u = std::vector<double>{ux};
+  else if (numExtrusionDims == 2) u = std::vector<double>{ux,uy};
+  else                            u = std::vector<double>{ux,uy,uz};
+  FunctionPtr f = MaxwellianFunction::maxwellian(numPhysicalDims, numExtrusionDims, u, sigmaSquared, n);
+  
+  int maxMoment = 5;
+
+  using std::vector;
+  vector<FunctionPtr> nullFunctions(maxMoment + 1);
+  vector<vector<vector<FunctionPtr>>> expectedMoments(maxMoment+1, vector<vector<FunctionPtr>>(maxMoment+1, nullFunctions));
+  
+  std::vector<vector<double> > integrals_1D(numExtrusionDims, vector<double>(maxMoment+1));
+  for (int i=0; i<=maxMoment; i++)
+  {
+    for (int d=0; d<numExtrusionDims; d++)
+    {
+      const double moment = MaxwellianFunction::momentNormalized1D(u[d], sigmaSquared, i);
+      integrals_1D[d][i] = moment;
+    }
+  }
+  
+  for (int i=0; i<=maxMoment; i++)
+  {
+    if (numExtrusionDims == 1)
+    {
+      const double moment = n * integrals_1D[0][i];
+      expectedMoments[i][0][0] = Function::constant(moment);
+    }
+    else
+    {
+      for (int j=0; j<=maxMoment-i; j++)
+      {
+        if (numExtrusionDims == 2)
+        {
+          const double moment = n * integrals_1D[0][i] * integrals_1D[1][j];
+          expectedMoments[i][j][0] = Function::constant(moment);
+        }
+        else
+        {
+          for (int k=0; k<=maxMoment-i-j; k++)
+          {
+            const double moment = n * integrals_1D[0][i] * integrals_1D[1][j] * integrals_1D[2][k];
+            expectedMoments[i][j][k] = Function::constant(moment);
+          }
+        }
+      }
+    }
+  }
+  
+  testMoments(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+              f, expectedMoments, maxMoment, refine, tol, out, success, extrusionOrigin, extrusionExtent, extrusionMeshWidth);
 }
 
 
@@ -751,6 +855,52 @@ void testConstantMoments(const int numPhysicalDims, const int numExtrusionDims,
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, MaxwellianMoments_1D1V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const bool refine          = false;
+    const double tol = 1e-13; // first 5 moments can be resolved to this tolerance with 64-wide velocity-space mesh
+    
+    const double n  = 1.0;
+    const double ux = 0.0;
+    const double uy = 0.0;
+    const double uz = 0.0;
+    const double sigmaSquared = 0.10; // need to keep this not too wide (< O(1)) to keep the tails from hitting the edge of the domain (at ±1)
+    
+    const double extrusionOrigin = -10.0;
+    const double extrusionExtent =  20.0;
+    const int extrusionMeshWidth =    64;
+    
+    testMaxwellianMoments(numPhysicalDims, numExtrusionDims, n, ux, uy, uz, sigmaSquared, refine,
+                          extrusionOrigin, extrusionExtent, extrusionMeshWidth,
+                          tol, out, success);
+  }
+
+// 2-24-22: the test commented out below passes, but is quite expensive.  We might want to revisit once we have Serendipity working.
+//  TEUCHOS_UNIT_TEST( SolutionMomentFunction, MaxwellianMoments_1D3V_SuperSlow )
+//  {
+//    const int numPhysicalDims  = 1;
+//    const int numExtrusionDims = 3;
+//    const bool refine          = false;
+//    const double tol = 0.25; // 128 4D 6th-order elements only resolves this to tol 0.21 or so, but doing even this much as part of a standard unit test is prohibitive (takes about 10 seconds on 24 MPI ranks)
+//
+//
+//    const double n  = 1.0;
+//    const double ux = 0.0;
+//    const double uy = 0.0;
+//    const double uz = 0.0;
+//    const double sigmaSquared = 0.10; // need to keep this not too wide (< O(1)) to keep the tails from hitting the edge of the domain (at ±1)
+//
+//    const double extrusionOrigin = -10.0;
+//    const double extrusionExtent =  20.0;
+//    const int extrusionMeshWidth =     4;
+//
+//    testMaxwellianMoments(numPhysicalDims, numExtrusionDims, n, ux, uy, uz, sigmaSquared, refine,
+//                          extrusionOrigin, extrusionExtent, extrusionMeshWidth,
+//                          tol, out, success);
+//  }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1V )
   {

@@ -742,7 +742,7 @@ namespace Camellia
     }
     
     template<int rank>
-    static Kokkos::MDRangePolicy< Kokkos::Rank<rank> > getMDRangePolicy(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<rank> > getMDRangePolicy(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       using array_index_type = typename Kokkos::MDRangePolicy< Kokkos::Rank<rank> >::array_index_type;
       Kokkos::Array<array_index_type,rank> mdRangeBegin;
       Kokkos::Array<array_index_type,rank> mdRangeEnd;
@@ -761,23 +761,23 @@ namespace Camellia
       return Kokkos::MDRangePolicy< Kokkos::Rank<rank> >(mdRangeBegin,mdRangeEnd);
     }
     
-    static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       return getMDRangePolicy<2>(dv);
     }
     
-    static Kokkos::MDRangePolicy< Kokkos::Rank<3> > getMDRangePolicy3(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<3> > getMDRangePolicy3(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       return getMDRangePolicy<3>(dv);
     }
     
-    static Kokkos::MDRangePolicy< Kokkos::Rank<4> > getMDRangePolicy4(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<4> > getMDRangePolicy4(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       return getMDRangePolicy<4>(dv);
     }
     
-    static Kokkos::MDRangePolicy< Kokkos::Rank<5> > getMDRangePolicy5(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<5> > getMDRangePolicy5(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       return getMDRangePolicy<5>(dv);
     }
 
-    static Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       return getMDRangePolicy<6>(dv);
     }
 

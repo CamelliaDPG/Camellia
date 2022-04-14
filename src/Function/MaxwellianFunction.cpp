@@ -49,7 +49,7 @@ void MaxwellianFunction::values(typename FieldContainer<double>::DeviceView &val
   const int numCells  = points.extent_int(0);
   const int numPoints = points.extent_int(1);
   
-  const double weight = _n / std::pow(2. * M_PI * _sigmaSquared, 1.5);
+  const double weight = _n / std::pow(2. * M_PI * _sigmaSquared, _numVelocityDims / 2.);
   
   const auto u = _u;
   const int vdimOffset = _firstVelocityDimension;
