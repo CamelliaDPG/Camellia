@@ -51,6 +51,8 @@ _mu0(mu0)
 
 void ConfigurationSpaceFormulationMaxwell::initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k)
 {
+  this->_configurationMeshTopo = meshTopo;
+  
   _spaceDim = meshTopo->getDimension() - 1; // assumption is meshTopo is space-time
   
   Space tauSpace    = (_spaceDim > 1) ? HDIV : HGRAD;
@@ -317,9 +319,9 @@ int ConfigurationSpaceFormulationMaxwell::maxMomentNumber()
   return 0;
 }
 
-void ConfigurationSpaceFormulationMaxwell::setMoments(Teuchos::RCP<SolutionMoments> fMoments)
+void ConfigurationSpaceFormulationMaxwell::setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0)
 {
-  this->ConfigurationSpaceFormulation::setMoments(fMoments);
+  this->ConfigurationSpaceFormulation::setMoments(fMoments,n0);
   FunctionPtr velocityIntegral;
   FunctionPtr firstMoment_x, firstMoment_y, firstMoment_z;
   int numVelocityDims = fMoments->numVelocityDims();
@@ -353,7 +355,7 @@ void ConfigurationSpaceFormulationMaxwell::setMoments(Teuchos::RCP<SolutionMomen
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of velocity dims");
   }
   
-  FunctionPtr rho = _q / _eps0 * velocityIntegral;
+  FunctionPtr rho = _q / _eps0 * (velocityIntegral - n0);
   FunctionPtr Jx  = _q * firstMoment_x;
   FunctionPtr Jy  = _q * firstMoment_y;
   FunctionPtr Jz  = _q * firstMoment_z;

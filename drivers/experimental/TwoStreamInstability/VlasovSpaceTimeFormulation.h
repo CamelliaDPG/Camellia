@@ -21,7 +21,6 @@
 #include "ConfigurationSpaceFormulation.h"
 #include "GMGSolver.h"
 #include "PoissonFormulation.h"
-#include "QuadraturePointFunction.h"
 #include "SolutionMomentFunction.h"
 #include "TensorUtilities.h"
 #include "VarFactory.h"
@@ -39,6 +38,7 @@ private:
   int _delta_k;
   
   bool _useGeometricMultigrid = false;
+  bool _enforceQuasiNeutrality = false;
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
@@ -50,6 +50,7 @@ private:
   double _m;
     
   Teuchos::RCP<SolutionMoments> _solutionMoments;
+  ParameterFunctionPtr _n0; // if quasi-neutrality is enforced, this is set when initial conditions are set, as the integral of f0 over the whole of phase space, divided by the measure of the configuration-space mesh.
   
   FunctionPtr _fSoln; // Camellia Function defining the solution of distribution f (refers to _vlasovSoln)
   FunctionPtr _fDiff; // fixed-point step in Vlasov field f
@@ -127,6 +128,8 @@ public:
   
   //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).
   void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in);
+  
+  void setEnforceQuasiNeutrality(bool enforceQuasiNeutrality);
   
   /** \brief  Set the tolerance for the fixed point iteration.
       \param  fTol   [in]  - the target relative difference in f between one substep and the next, as measured in the L^2 norm.

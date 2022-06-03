@@ -207,7 +207,7 @@ endif(ENABLE_MOAB)
 project(Camellia)
 
 # Find all library source files
-FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp" "${CAMELLIA_SOURCE_DIR}/include/*.h")
+FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp" "${CAMELLIA_SOURCE_DIR}/include/*.h" "${CAMELLIA_SOURCE_DIR}/include/*.hpp")
 set(HEADERS 
   ${CAMELLIA_SOURCE_DIR}/include
 )

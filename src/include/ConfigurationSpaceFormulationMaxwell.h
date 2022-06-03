@@ -65,8 +65,7 @@ namespace Camellia
 
     void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) override;
     
-    // override allows us to set RHS in response.
-    virtual void setMoments(Teuchos::RCP<SolutionMoments> fMoments) override;
+    virtual void setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0) override;
     
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Maxwell", "Gauss" are all possibilities.
     virtual std::string name() const override;

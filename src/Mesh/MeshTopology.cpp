@@ -1487,6 +1487,7 @@ vector<IndexType> MeshTopology::getBoundarySidesThatMatch(SpatialFilterPtr spati
   vector<IndexType> matchingSides;
   
   FieldContainer<double> refNodes;
+  FieldContainer<double> refNodesInterior; // convex combination of refNodes to get to the strict interior; we usually don't want to exclude a side just because e.g. its vertex falls on the boundary between inflow and outflow.
   FieldContainer<bool> nodesMatch;
   for (IndexType sideEntityIndex : _boundarySides)
   {
@@ -1496,16 +1497,37 @@ vector<IndexType> MeshTopology::getBoundarySidesThatMatch(SpatialFilterPtr spati
     
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(meshForEvaluation, cellID);
     auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
-    
     auto sideTopo = basisCache->cellTopology()->getSide(sideOrdinal);
-    refNodes.resize(sideTopo->getNodeCount(), sideDim);
+
+    const int nodeCount = sideTopo->getNodeCount();
+    refNodes.resize(nodeCount, sideDim);
     
     const int oneCell = 1;
-    nodesMatch.resize(oneCell,sideTopo->getNodeCount());
+    nodesMatch.resize(oneCell, nodeCount);
     
     CamelliaCellTools::refCellNodesForTopology(refNodes, sideTopo);
     
-    sideCache->setRefCellPointsFC(refNodes);
+    // compute refNodesInterior
+    {
+      refNodesInterior.resize(nodeCount, sideDim);
+      const double otherWeight = .01;
+      const double selfWeight = 1.0 - otherWeight * (nodeCount - 1);
+      for (int i = 0; i<nodeCount; i++)
+      {
+        for (int d=0; d<sideDim; d++)
+        {
+          double x_d = 0.0;
+          for (int j=0; j < nodeCount; j++)
+          {
+            const double weight = (i==j) ? selfWeight : otherWeight;
+            x_d += weight * refNodes(j,d);
+          }
+          refNodesInterior(i,d) = x_d;
+        }
+      }
+    }
+    
+    sideCache->setRefCellPointsFC(refNodesInterior);
     
     spatialFilter->matchesPoints(nodesMatch, sideCache);
     

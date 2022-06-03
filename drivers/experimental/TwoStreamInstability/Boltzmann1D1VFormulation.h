@@ -21,7 +21,6 @@
 #include "GMGSolver.h"
 #include "PhasePhysicalMeshMap.h"
 #include "PoissonFormulation.h"
-#include "QuadraturePointFunction.h"
 #include "SolutionMomentFunction.h"
 #include "SolutionStage.h"
 #include "TensorUtilities.h"

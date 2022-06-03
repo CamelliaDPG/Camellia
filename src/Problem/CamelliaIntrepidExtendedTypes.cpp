@@ -271,10 +271,13 @@ const std::string & Camellia::operatorName(Camellia::EOperator op)
   case Camellia::OP_Z:
     return S_OP_Z;
   case Camellia::OP_DX:
+  case Camellia::OP_DI1:
     return S_OP_DX;
   case Camellia::OP_DY:
+  case Camellia::OP_DI2:
     return S_OP_DY;
   case Camellia::OP_DZ:
+  case Camellia::OP_DI3:
     return S_OP_DZ;
   case Camellia::OP_DT:
     return S_OP_DT;

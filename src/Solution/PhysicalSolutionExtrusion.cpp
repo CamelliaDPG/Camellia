@@ -13,7 +13,7 @@ using namespace Camellia;
 
 PhysicalSolutionExtrusion::PhysicalSolutionExtrusion( SolutionPtr physicalSoln, VarPtr fieldVar, MeshPtr phaseMesh)
 :
-Function("PhysicalSolutionExtrusion",fieldVar->rank(),variationDimensions(physicalSoln)), // varies in space-time, but not in velocity dimensions
+Function("PhysicalSolutionExtrusion",fieldVar->rank(),variationDimensions(physicalSoln)), // varies in space(-time), but not in velocity dimensions
 _physicalSoln(physicalSoln),
 _fieldVar(fieldVar),
 _phaseMesh(phaseMesh)
@@ -22,6 +22,11 @@ _phaseMesh(phaseMesh)
   _physicalSolnFxn = Function::solution(_fieldVar, physicalSolnWeakPtr);
   
   TEUCHOS_TEST_FOR_EXCEPTION(_physicalSolnFxn->rank() != 0, std::invalid_argument, "Only scalar-valued functions supported");
+}
+
+std::string PhysicalSolutionExtrusion::displayString()
+{
+  return _fieldVar->displayString();
 }
 
 void PhysicalSolutionExtrusion::updateValues()
@@ -123,17 +128,24 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   
   int numPhysicalPoints = 1;
   int numPhysicalPointsInValues = 1;
-  for (int r=0; r<tensorPoints.numTensorComponents() - numVelocityDimensions; r++)
+  int numTensorPhysicalPointComponents = tensorPoints.numTensorComponents() - numVelocityDimensions;
+  for (int r=0; r<numTensorPhysicalPointComponents; r++)
   {
     physicalPointCounts[r] = tensorPoints.getTensorComponent(r).extent_int(1);
     numPhysicalPoints *= physicalPointCounts[r];
     numPhysicalPointsInValues *= values.extent_int(1+r);
   }
   
-  TEUCHOS_TEST_FOR_EXCEPTION(numPhysicalPoints != numPhysicalPointsInValues, std::invalid_argument, "numPhysicalPoints should match the product of the extents in dimension 1 of values");
+  for (int r=numTensorPhysicalPointComponents; r<tensorPoints.numTensorComponents(); r++)
+  {
+    const int numPointsInTensorComponent = tensorPoints.getTensorComponent(r).extent_int(1);
+    const int numPointsInValuesExtent    = values.extent_int(r+1); // (C,P0,P1,…,Pn)
+    TEUCHOS_TEST_FOR_EXCEPTION(numPointsInTensorComponent != numPointsInValuesExtent, std::invalid_argument, "tensorPoints and values should match in point extents");
+    TEUCHOS_TEST_FOR_EXCEPTION(values.getVariationModulus(r+1) != 1, std::invalid_argument, "values should not vary in velocity dimension(s)");
+  }
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(numPhysicalPoints != numPhysicalPointsInValues, std::invalid_argument, "numPhysicalPoints should match the product of the extents in the first dimensions of values");
   const int numVelocityPoints = numPoints / numPhysicalPoints;
-  TEUCHOS_TEST_FOR_EXCEPTION(numVelocityPoints != values.extent_int(3), std::invalid_argument, "numVelocityPoints should match the extent in dimension 3 of values");
-  TEUCHOS_TEST_FOR_EXCEPTION(values.getVariationModulus(3) != 1, std::invalid_argument, "values should not vary in velocity dimension");
   
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 1 + numPhaseDimensions, std::invalid_argument, "Expect values to have shape (C,P0,P1,…,Pn) for n = # phase dimensions - 1");
   int extrusionExtentCount = 1;
@@ -188,9 +200,20 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
     
     // copy g_dataValues into values
     using ExecutionSpace = Camellia::DeviceExecutionSpace;
-    if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
+    if ((numPhysicalPointComponents == 1) && (numVelocityDimensions == 1))
     {
-      // this is the 1D1T1V case (space-time 1D1V)
+      // 1D1V case
+      auto policy = Kokkos::RangePolicy<ExecutionSpace>(0,physicalPointCounts[0]);
+      
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const int &x0)
+      {
+        values.getWritableEntry(phaseSpaceCellOrdinal,x0,0) = g_dataValues(0,x0);
+      });
+    }
+    else if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
+    {
+      // 2D1V or 1D1T1V case (space-time 1D1V)
       auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{physicalPointCounts[0],physicalPointCounts[1]});
       
       Kokkos::parallel_for("SolutionMomentFunction_values", policy,

@@ -69,7 +69,9 @@ namespace  {
     const Kokkos::Array<double,3> vDomainWidths {vWidth, vWidth, vWidth};
     const Kokkos::Array<int,3> vMeshWidths {vElements_x, vElements_y, vElements_z};
     
-    Boltzmann1D3VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs, tableau);
+    const bool enforceQuasiNeutrality = false;
+    Boltzmann1D3VFormulation form(formulation, q, eps0, m, dt, x0, xWidth, xElements, v0, vDomainWidths, vMeshWidths, H1Order, delta_k, usePeriodicBCs,
+                                  enforceQuasiNeutrality, tableau);
     return form;
   }
 }

@@ -16,7 +16,7 @@ ConfigurationSpaceFormulation()
 
 void ConfigurationSpaceFormulationTrivial::initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k)
 {
-  // no mesh; nothing to do…
+  this->_configurationMeshTopo = meshTopo;
 }
 
 std::string ConfigurationSpaceFormulationTrivial::name() const

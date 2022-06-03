@@ -35,6 +35,8 @@ namespace Camellia
   public:
     PhysicalSolutionExtrusion( SolutionPtr physicalSoln, VarPtr fieldVar, MeshPtr phaseMesh);
     
+    std::string displayString() override;
+    
     void updateValues();
     
     using TFunction<double>::values;
