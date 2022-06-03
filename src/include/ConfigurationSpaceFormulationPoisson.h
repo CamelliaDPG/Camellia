@@ -23,6 +23,8 @@ namespace Camellia
   {
     double _q;
     double _eps0;
+    
+    TimeDiscretizationType _timeDiscretizationType;
     int _spaceDim;
     
     BFPtr _poissonBF;
@@ -41,12 +43,11 @@ namespace Camellia
     static const string S_V_POISSON;   // scalar test variable
     static const string S_TAU_POISSON; // vector test variable
   public:
-    ConfigurationSpaceFormulationPoisson(const double q, const double eps0);
+    ConfigurationSpaceFormulationPoisson(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType);
 
     void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) override;
     
-    // override allows us to set RHS in response.
-    virtual void setMoments(Teuchos::RCP<SolutionMoments> fMoments) override;
+    virtual void setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0) override;
     
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Poisson", "Gauss" are all possibilities.
     virtual std::string name() const override;
@@ -65,7 +66,12 @@ namespace Camellia
     
     // electric field variables
     VarPtr E_fieldVar(int zeroBasedComp) override;
-    VarPtr E_hat();
+    
+    //! returns the trace variable corresponding to the specified E component.  Defined in 1D for Poisson and Maxwell; defined in higher dimensions for Maxwell.  See En_hat().
+    VarPtr E_hat(int zeroBasedComp) override;
+    
+    //! returns the trace variable corresponding to E (in 1D) or E dot n (in higher dimensions).  Defined in higher dimensions for Poisson, but not for Maxwell.
+    VarPtr En_hat() override;
     
     // potential variables:
     VarPtr VE_fieldVar() override;
@@ -74,6 +80,9 @@ namespace Camellia
     // test variables:
     VarPtr v();   // scalar test variable
     VarPtr tau(); // vector test variable
+    
+    //! The relative L^2 norm of the difference between E for solution() and solutionPrevious().
+    double l2NormOfSolutionUpdate() override;
   };
 }
 

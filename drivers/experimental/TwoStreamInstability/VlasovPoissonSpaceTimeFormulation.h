@@ -20,7 +20,6 @@
 #include "BF.h"
 #include "GMGSolver.h"
 #include "PoissonFormulation.h"
-#include "QuadraturePointFunction.h"
 #include "SolutionMomentFunction.h"
 #include "TensorUtilities.h"
 #include "VarFactory.h"
@@ -28,7 +27,7 @@
 namespace Camellia
 {
 
-  class VlasovPoissonSpaceTimeFormulation
+class VlasovPoissonSpaceTimeFormulation
 {
 public:
   enum VlasovPoissonSpaceTimeFormulationChoice

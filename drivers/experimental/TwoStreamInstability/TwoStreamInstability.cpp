@@ -1633,6 +1633,8 @@ int main(int argc, char *argv[])
         const bool unrefine = true;
         const bool printToConsole = (rank == 0);
         refStrategy->refineAndUnrefine(unrefine, printToConsole);
+        // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+        form.gaussMesh()->repartitionAndRebuild();
         form.setInitialConditions(f0); // do projection again
         numInitialRefinements++;
         relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
@@ -1948,10 +1950,12 @@ int main(int argc, char *argv[])
     FunctionPtr E_squared = E_soln * E_soln;
     FunctionPtr abs_E_soln = Teuchos::rcp( new AbsFunction(E_soln) );
     
-    auto solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form.vlasovSolution(), form.f(), form.poissonMesh()) );
+    const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
+    auto solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form.boltzmannSolution(), form.f(), form.gaussMesh()) );
         
     auto density  = solutionMoments->solutionMomentFunction(0);
     auto momentum = solutionMoments->solutionMomentFunction(1);
+    auto velocity = momentum / density;
     
     auto refStrategy = form.refinementStrategy();
     
@@ -2080,16 +2084,8 @@ int main(int argc, char *argv[])
       E_magnitudeOut.close();
     }
     
-    const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
-    auto solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form.boltzmannSolution(), form.f(), form.gaussMesh()) );
-        
     FunctionPtr potential = Function::solution(form.VE(), form.gaussSolution());
-    
-    auto density  = solutionMoments->solutionMomentFunction(0);
-    auto momentum = solutionMoments->solutionMomentFunction(1);
-    
-    auto velocity = momentum / density;
-    
+        
     // output to results file:
     {
       // output (physical/dimensional) results

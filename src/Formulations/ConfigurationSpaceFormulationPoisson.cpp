@@ -8,6 +8,8 @@
 #include "ConfigurationSpaceFormulationPoisson.h"
 #include "PhysicalSolutionExtrusion.hpp"
 
+#include "Camellia_TimeDiscretizationType.h"
+
 using namespace Camellia;
 
 // fields:
@@ -21,19 +23,26 @@ const string ConfigurationSpaceFormulationPoisson::S_E_HAT = "\\widehat{E}";
 const string ConfigurationSpaceFormulationPoisson::S_VE_HAT = "\\widehat{V}_E";
 
 // tests:
-const string ConfigurationSpaceFormulationPoisson::S_V_POISSON = "v_{\rm Poisson}";
-const string ConfigurationSpaceFormulationPoisson::S_TAU_POISSON = "\\tau_{\rm Poisson}";
+const string ConfigurationSpaceFormulationPoisson::S_V_POISSON = "v_{\\rm Poisson}";
+const string ConfigurationSpaceFormulationPoisson::S_TAU_POISSON = "\\tau_{\\rm Poisson}";
 
-ConfigurationSpaceFormulationPoisson::ConfigurationSpaceFormulationPoisson(const double q, const double eps0)
+ConfigurationSpaceFormulationPoisson::ConfigurationSpaceFormulationPoisson(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType)
 :
 ConfigurationSpaceFormulation(),
 _q(q),
-_eps0(eps0)
+_eps0(eps0),
+_timeDiscretizationType(timeDiscretizationType)
 {}
 
 void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k)
 {
-  _spaceDim = meshTopo->getDimension() - 1; // assumption is meshTopo is space-time
+  this->_configurationMeshTopo = meshTopo;
+  
+  const bool spaceTime = (_timeDiscretizationType == SPACE_TIME) || (_timeDiscretizationType == EXPONENTIAL_INTEGRATOR);
+  _spaceDim = spaceTime ? meshTopo->getDimension() - 1 : meshTopo->getDimension();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim < 1, std::invalid_argument, "Invalid spaceDim");
+  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim > 3, std::invalid_argument, "Invalid spaceDim");
   
   Space tauSpace    = (_spaceDim > 1) ? HDIV : HGRAD;
   Space E_hat_space = L2; // non-conforming
@@ -50,10 +59,20 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
   VarPtr w;   // Vlasov test function
 
   VarFactoryPtr poissonVF = VarFactory::varFactory();
-  Ex = poissonVF->fieldVarSpaceTime(S_EX, ESpace, L2); // L2 in time, too
-  if (_spaceDim > 1) Ey = poissonVF->fieldVarSpaceTime(S_EY, ESpace, L2);
-  if (_spaceDim > 2) Ez = poissonVF->fieldVarSpaceTime(S_EZ, ESpace, L2);
-  VE = poissonVF->fieldVarSpaceTime(S_VE, L2,     L2); // L2 in time, too
+  if (spaceTime)
+  {
+    VE = poissonVF->fieldVarSpaceTime(S_VE, L2,     L2); // L2 in time, too
+    Ex = poissonVF->fieldVarSpaceTime(S_EX, ESpace, L2); // L2 in time, too
+    if (_spaceDim > 1) Ey = poissonVF->fieldVarSpaceTime(S_EY, ESpace, L2);
+    if (_spaceDim > 2) Ez = poissonVF->fieldVarSpaceTime(S_EZ, ESpace, L2);
+  }
+  else
+  {
+    VE = poissonVF->fieldVar(S_VE, L2);
+    Ex = poissonVF->fieldVar(S_EX, ESpace); // L2 in time, too
+    if (_spaceDim > 1) Ey = poissonVF->fieldVar(S_EY, ESpace);
+    if (_spaceDim > 2) Ez = poissonVF->fieldVar(S_EZ, ESpace);
+  }
       
   TFunctionPtr<double> parity = TFunction<double>::sideParity();
   TFunctionPtr<double> n = TFunction<double>::normal();
@@ -62,6 +81,21 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
   if (_spaceDim == 1)      E = std::vector<VarPtr>{Ex};
   else if (_spaceDim == 2) E = std::vector<VarPtr>{Ex,Ey};
   else if (_spaceDim == 3) E = std::vector<VarPtr>{Ex,Ey,Ez};
+  
+  if (spaceTime)
+  {
+    if (_spaceDim > 1)
+      VE_hat = poissonVF->traceVarSpaceOnly(S_VE_HAT, VE, L2);
+    else
+      VE_hat = poissonVF->fluxVarSpaceOnly(S_VE_HAT, VE * (Function::normal_1D() * parity), L2); // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
+  }
+  else
+  {
+    if (_spaceDim > 1)
+      VE_hat = poissonVF->traceVar(S_VE_HAT, VE, L2);
+    else
+      VE_hat = poissonVF->fluxVar(S_VE_HAT, VE * (Function::normal_1D() * parity), L2); // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
+  }
   
   if (_spaceDim > 1)
   {
@@ -75,19 +109,39 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
       E_dot_n = Ex * n->x() + Ey * n->y() + Ez * n->z();
     }
     
-    E_hat = poissonVF->fluxVarSpaceOnly(S_E_HAT, E_dot_n * parity);
+    if (spaceTime)
+    {
+      E_hat = poissonVF->fluxVarSpaceOnly(S_E_HAT, E_dot_n * parity);
+    }
+    else
+    {
+      E_hat = poissonVF->fluxVar(S_E_HAT, E_dot_n * parity);
+    }
   }
   else
-    E_hat = poissonVF->fluxVarSpaceOnly(S_E_HAT, Ex * (Function::normal_1D() * parity));
+  {
+    if (spaceTime)
+    {
+      E_hat = poissonVF->fluxVarSpaceOnly(S_E_HAT, Ex * (Function::normal_1D() * parity));
+    }
+    else
+    {
+      E_hat = poissonVF->fluxVar(S_E_HAT, Ex * (Function::normal_1D() * parity));
+    }
+  }
   
-  if (_spaceDim > 1)
-    VE_hat = poissonVF->traceVarSpaceOnly(S_VE_HAT, VE, L2);
+  VarPtr v_Poisson, tau_Poisson;
+  
+  if (spaceTime)
+  {
+    v_Poisson   = poissonVF->testVarSpaceTime(S_V_POISSON, HGRAD, HGRAD);   // HGRAD in space, HGRAD in time
+    tau_Poisson = poissonVF->testVarSpaceTime(S_TAU_POISSON, tauSpace, HGRAD); // HDIV or HGRAD in space, HGRAD in time
+  }
   else
-    VE_hat = poissonVF->fluxVarSpaceOnly(S_VE_HAT, VE * (Function::normal_1D() * parity), L2); // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
-  
-  VarPtr v_Poisson   = poissonVF->testVarSpaceTime(S_V_POISSON, HGRAD, HGRAD);   // HGRAD in space, HGRAD in time
-  VarPtr tau_Poisson = poissonVF->testVarSpaceTime(S_TAU_POISSON, tauSpace, HGRAD); // HDIV or HGRAD in space, HGRAD in time
-  
+  {
+    v_Poisson   = poissonVF->testVar(S_V_POISSON, HGRAD);   // HGRAD in space
+    tau_Poisson = poissonVF->testVar(S_TAU_POISSON, tauSpace); // HDIV or HGRAD in space
+  }
   _poissonBF = BF::bf(poissonVF);
   
   if (_spaceDim==1)
@@ -132,6 +186,17 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
   setConfigurationSolution(poissonSoln);
   setConfigurationSolutionPrevious(poissonSolnPrev);
   
+  if (spaceTime)
+  {
+    setConfigurationSolutionPriorTime(Teuchos::null);
+  }
+  else
+  {
+    // it's not clear to me that we actually need this for Poisson
+    auto poissonSolnPriorTime = Solution::solution(_poissonBF, poissonMesh);
+    setConfigurationSolutionPriorTime(poissonSolnPriorTime);
+  }
+  
   auto poissonSolnWeakPtr     = Teuchos::rcp(poissonSoln.get(),     false);
   auto poissonSolnPrevWeakPtr = Teuchos::rcp(poissonSolnPrev.get(), false);
   
@@ -155,7 +220,7 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
     {
       zeroPoisson[this->E_fieldVar(i)->ID()] = zero;
     }
-    zeroPoisson[this->E_hat()->ID()] = zero;
+    zeroPoisson[this->En_hat()->ID()] = zero;
     poissonSoln->projectOntoMesh(zeroPoisson);
   }
 }
@@ -187,7 +252,18 @@ VarPtr ConfigurationSpaceFormulationPoisson::E_fieldVar(int zeroBasedComp)
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid component index");
 }
 
-VarPtr ConfigurationSpaceFormulationPoisson::E_hat()
+VarPtr ConfigurationSpaceFormulationPoisson::E_hat(int zeroBasedComp)
+{
+  if ((_spaceDim > 1) || (zeroBasedComp != 0))
+  {
+    // Poisson does not define individual components of E_hat; it defines the trace of E dot n.
+    return Teuchos::null;
+  }
+  VarFactoryPtr vf = _poissonBF->varFactory();
+  return vf->trialVar(S_E_HAT);
+}
+
+VarPtr ConfigurationSpaceFormulationPoisson::En_hat()
 {
   VarFactoryPtr vf = _poissonBF->varFactory();
   return vf->trialVar(S_E_HAT);
@@ -205,15 +281,21 @@ FunctionPtr ConfigurationSpaceFormulationPoisson::E_i(int zeroBasedComp)
   }
 }
 
+double ConfigurationSpaceFormulationPoisson::l2NormOfSolutionUpdate()
+{
+  const double E_L2 = _ESoln->l2norm(_configurationSoln->mesh());
+  return _EDiff->l2norm(_configurationSoln->mesh()) / E_L2;
+}
+
 //! maximum moment number (starting from 0 for the unweighted integral over velocity space) required by the ConfigurationSpaceFormulation.
 int ConfigurationSpaceFormulationPoisson::maxMomentNumber()
 {
   return 0;
 }
 
-void ConfigurationSpaceFormulationPoisson::setMoments(Teuchos::RCP<SolutionMoments> fMoments)
+void ConfigurationSpaceFormulationPoisson::setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0)
 {
-  this->ConfigurationSpaceFormulation::setMoments(fMoments);
+  this->ConfigurationSpaceFormulation::setMoments(fMoments, n0);
   FunctionPtr velocityIntegral = _fMoments->solutionMomentFunction(0);
   
   auto vlasovMesh = fMoments->phaseSpaceMesh();
@@ -222,7 +304,7 @@ void ConfigurationSpaceFormulationPoisson::setMoments(Teuchos::RCP<SolutionMomen
   // set RHS
   auto poissonRHS = RHS::rhs();
   auto v_Poisson  = this->v();
-  poissonRHS->addTerm( _q / _eps0 * velocityIntegral * v_Poisson);
+  poissonRHS->addTerm( _q / _eps0 * (velocityIntegral - n0) * v_Poisson);
   _configurationSoln->setRHS(poissonRHS);
   
   // define extrusion of E to the phase-space mesh

@@ -179,7 +179,8 @@ _m(m)
   const int maxMomentNumber = _configurationSpaceFormulation->maxMomentNumber();
   _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln, f, _configurationSpaceFormulation->configurationSpaceMesh()) );
   
-  _configurationSpaceFormulation->setMoments(_solutionMoments);
+  _n0 = ParameterFunction::parameterFunction(0); // we'll update this when initial conditions are set, if _enforceQuasiNeutrality is true
+  _configurationSpaceFormulation->setMoments(_solutionMoments,_n0);
   
   // the di() methods are 1-based:
   const int indexOffsetSpaceOneBased    = 1;
@@ -457,6 +458,11 @@ bool VlasovSpaceTimeFormulation::hasL2Trace() const {
   return true;
 }
 
+void VlasovSpaceTimeFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
+{
+  _enforceQuasiNeutrality = enforceQuasiNeutrality;
+}
+
 void VlasovSpaceTimeFormulation::setFixedPointMaxSubsteps(const int maxSubsteps)
 {
   _maxSubsteps = maxSubsteps;
@@ -546,7 +552,24 @@ void VlasovSpaceTimeFormulation::solve()
       _vlasovSoln->solve(gmgSolver);
       substepIterationCounts[substepOrdinal] = gmgSolver->iterationCount();
     }
-    _configurationSpaceFormulation->solve(true); // true: do update solution moments
+    _solutionMoments->update();
+    {
+      double n0;
+      if (_enforceQuasiNeutrality)
+      {
+        FunctionPtr zeroMoment   = _solutionMoments->solutionMomentFunction(0);
+        auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+        const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+        const double f_integral  = zeroMoment->integrate(configurationMesh);
+        n0 = f_integral / meshMeasure;
+      }
+      else
+      {
+        n0 = 0;
+      }
+      _n0->setValue(n0);
+    }
+    _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
     
     // Copy vlasov, Poisson solution to Prev solutions.  For substepOrdinal > 0, measure difference between the two solutions first.
     
@@ -601,6 +624,20 @@ void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
   vlasovBC->addDirichlet(t_n, tagInitialTime, -f0); // minus sign thanks to outward normal on temporal interface
   
   _vlasovSoln->setBC(vlasovBC);
+  
+  double n0;
+  if (_enforceQuasiNeutrality)
+  {
+    auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+    const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+    const double f_integral  = f0->integrate(_vlasovSoln->mesh());
+    n0 = f_integral / meshMeasure;
+  }
+  else
+  {
+    n0 = 0;
+  }
+  _n0->setValue(n0);
 }
 
 void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
@@ -632,6 +669,20 @@ void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, F
   vlasovBC->addDirichlet(t_n, tagSpatialInflow, v_dot_nx * f_in);
 
   _vlasovSoln->setBC(vlasovBC);
+  
+  double n0;
+  if (_enforceQuasiNeutrality)
+  {
+    auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+    const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+    const double f_integral  = f0->integrate(_vlasovSoln->mesh());
+    n0 = f_integral / meshMeasure;
+  }
+  else
+  {
+    n0 = 0;
+  }
+  _n0->setValue(n0);
 }
 
 Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments()

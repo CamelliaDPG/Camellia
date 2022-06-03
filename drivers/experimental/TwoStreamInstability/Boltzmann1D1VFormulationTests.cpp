@@ -183,9 +183,6 @@ namespace {
     FunctionPtr n = Function::normal();
     FunctionPtr sgn = Function::sideParity();
     
-    const auto VMAX = TEST_VWIDTH + TEST_V0;
-    const auto VMIN = TEST_V0;
-    
     auto boltzmannSoln = form.boltzmannSolution();
     
     // want to set up RHS/BCs so that f0 is a stationary solution

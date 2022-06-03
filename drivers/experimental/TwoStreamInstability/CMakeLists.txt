@@ -3,8 +3,7 @@ project(TwoStreamInstability)
 MESSAGE("Adding executables for TwoStreamInstability.")
 add_executable( TwoStreamInstability "TwoStreamInstability.cpp" 
                 Boltzmann1D1VFormulation.cpp Boltzmann1D1VFormulation.h
-                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
-                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h )
 
 target_link_libraries(TwoStreamInstability 
   Camellia
@@ -13,9 +12,7 @@ target_link_libraries(TwoStreamInstability
 MESSAGE("Adding executables for SpaceTimeVlasovPoisson.")
 add_executable( SpaceTimeVlasovPoisson "SpaceTimeVlasovPoisson.cpp" 
                 VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
-                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
-                PhysicalSolutionExtrusion.cpp PhysicalSolutionExtrusion.hpp
-                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h )
 
 target_link_libraries(SpaceTimeVlasovPoisson 
   Camellia
@@ -24,9 +21,7 @@ target_link_libraries(SpaceTimeVlasovPoisson
 MESSAGE("Adding executables for ColdDiodeProblemProblem.")
 add_executable( ColdDiodeProblemProblem "ColdDiodeProblemProblem.cpp" 
                 VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
-                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
-                PhysicalSolutionExtrusion.cpp PhysicalSolutionExtrusion.hpp
-                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h )
 
 target_link_libraries(ColdDiodeProblemProblem 
   Camellia
@@ -36,8 +31,7 @@ target_link_libraries(ColdDiodeProblemProblem
 add_executable( Boltzmann1D3V_TwoStreamVerification Boltzmann1D3V_TwoStreamVerification.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
                 Boltzmann1D1VFormulation.cpp Boltzmann1D1VFormulation.h
-                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
-                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h )
 
 target_link_libraries(Boltzmann1D3V_TwoStreamVerification
   Camellia
@@ -46,20 +40,13 @@ target_link_libraries(Boltzmann1D3V_TwoStreamVerification
 add_executable( BoltzmannTests BoltzmannTests.cpp
                 Boltzmann1D1VFormulation.cpp Boltzmann1D1VFormulation.h
                 PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
-                QuadraturePointFunction.cpp QuadraturePointFunction.h
                 Boltzmann1D1VFormulationTests.cpp
                 PhasePhysicalMeshMap1D1VTests.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
                 VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
-                ConfigurationSpaceFormulation.cpp ConfigurationSpaceFormulation.h
-                ConfigurationSpaceFormulationMaxwell.cpp ConfigurationSpaceFormulationMaxwell.h
-                ConfigurationSpaceFormulationPoisson.cpp ConfigurationSpaceFormulationPoisson.h
-                ConfigurationSpaceFormulationTrivial.cpp ConfigurationSpaceFormulationTrivial.h
                 VlasovSpaceTimeFormulation.cpp VlasovSpaceTimeFormulation.h
                 Boltzmann1D3VFormulationTests.cpp
                 PhasePhysicalMeshMap1D3VTests.cpp
-                QuadraturePointFunctionTests.cpp
-                PhysicalSolutionExtrusion.cpp PhysicalSolutionExtrusion.hpp
                 VlasovSpaceTimeFormulationTests.cpp
 )
 
@@ -69,8 +56,7 @@ target_link_libraries(BoltzmannTests
 
 add_executable( Vlasov1D3VTimeMarchingWithCollisions Vlasov1D3VTimeMarchingWithCollisions.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
-                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
-                QuadraturePointFunction.cpp QuadraturePointFunction.h )
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h )
 
 target_link_libraries(Vlasov1D3VTimeMarchingWithCollisions
   Camellia

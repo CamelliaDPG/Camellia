@@ -957,10 +957,6 @@ void Boltzmann1D1VFormulation::setInitialConditions(FunctionPtr f0)
   
   std::map<int,FunctionPtr> projectionMap;
   projectionMap[this->f()->ID()] = f0;
-  if ( !hasL2Trace() )
-  {
-    projectionMap[this->f_hat()->ID()] = f0;
-  }
   
   const int solutionOrdinal = 0;
   _boltzmannSoln->projectOntoMesh(projectionMap, solutionOrdinal);
@@ -973,24 +969,31 @@ void Boltzmann1D1VFormulation::setInitialConditions(FunctionPtr f0)
 
   updateElectricField();
   
-  // set initial tn value:
-  auto gaussSolnWeakPtr = Teuchos::rcp(_gaussSoln.get(), false);
-  
-  if (hasL2Trace())
+  if (!usesImplicitSolve())
   {
-    FunctionPtr sgn = Function::sideParity();
-    FunctionPtr q(_q);
-    FunctionPtr m(_m);
-    FunctionPtr v = Function::yn(1);
-    FunctionPtr n = Function::normal();
-    FunctionPtr tn_0 = f0 * (v * n->x() + (q/m) * _E_extruded * n->y()) * sgn;
-    projectionMap[this->t_n_hat()->ID()] = tn_0;
+    // explicit solves may require an initial value to be set on the traces
+    if ( !hasL2Trace() )
+    {
+      projectionMap[this->f_hat()->ID()] = f0;
+    }
+    else if (hasL2Trace())
+    {
+      FunctionPtr sgn = Function::sideParity();
+      FunctionPtr q(_q);
+      FunctionPtr m(_m);
+      FunctionPtr v = Function::yn(1);
+      FunctionPtr n = Function::normal();
+      FunctionPtr tn_0 = f0 * (v * n->x() + (q/m) * _E_extruded * n->y()) * sgn;
+      projectionMap[this->t_n_hat()->ID()] = tn_0;
+    }
     _boltzmannSoln->projectOntoMesh(projectionMap, solutionOrdinal);
+    
     if (!_haveTableau)
     {
       _boltzmannSolnPrev->setSolution(_boltzmannSoln);
     }
   }
+  
   _t = 0;
 }
 
@@ -1129,6 +1132,8 @@ void Boltzmann1D1VFormulation::takeTimeStep()
 {
   const int rank = _boltzmannSoln->mesh()->Comm()->MyPID();
   
+  _boltzmannSolnPrev->setSolution(_boltzmannSoln);
+  
   // for implicit solves, we cycle through the f solve and the E solve a few times;
   // for explicit, we do each solve just once per time step.
   const bool implicit = _formulationChoice == ULTRAWEAK_IMPLICIT_H1_TRACE || _formulationChoice == ULTRAWEAK_IMPLICIT_L2_TRACE;
@@ -1151,10 +1156,35 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     _gmgSolver = constructGMGSolver();
   }
   
+  Teuchos::RCP<HDF5Exporter> vlasovViz, configurationViz;
+  const bool exportViz = true; // for debugging of fixed-point iteration, set to true.  TODO: make this subject to external control.
+  
+  if (exportViz)
+  {
+    static int solveNumber = 0;
+    std::string prefix = "Boltzmann1D1VFormulation_";
+    std::ostringstream vlasovSS;
+    vlasovSS << prefix << "Vlasov" << solveNumber;
+    
+    std::ostringstream configurationSS;
+    configurationSS << prefix << "Poisson" << solveNumber;
+      
+    const std::string directoryPath = "/tmp";
+    
+    vlasovViz = Teuchos::rcp(new HDF5Exporter(this->boltzmannMesh(), vlasovSS.str(), directoryPath));
+    configurationViz = Teuchos::rcp(new HDF5Exporter (_gaussSoln->mesh(), configurationSS.str(), directoryPath) );
+    
+    configurationViz->exportSolution(gaussSolution(),0);
+    vlasovViz->exportSolution(boltzmannSolution(),0);
+    
+    solveNumber++;
+  }
+  
   std::vector<int> substepIterationCounts;
   std::vector<double> substepStepSizesVlasov;
   std::vector<double> substepStepSizesPoisson;
   
+  static_cast<VelocitySpaceExtrusion*>(_E_extruded.get())->updateValues();
   for (int substepOrdinal=0; substepOrdinal < maxSubsteps; substepOrdinal++)
   {
     _boltzmannSolnPrevSubstep->setSolution(_boltzmannSoln);
@@ -1200,6 +1230,12 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     substepStepSizesVlasov.push_back(fRelDiff);
     substepStepSizesPoisson.push_back(ERelDiff);
     
+    if (exportViz)
+    {
+      configurationViz->exportSolution(gaussSolution(),substepOrdinal+1);
+      vlasovViz->exportSolution(boltzmannSolution(),substepOrdinal+1);
+    }
+    
     if ((rank == 0) && (maxSubsteps > 1))
     {
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
@@ -1217,9 +1253,6 @@ void Boltzmann1D1VFormulation::takeTimeStep()
   {
     performRefinements();
   }
-  
-  // last substep
-  _boltzmannSolnPrev->setSolution(_boltzmannSoln);
   
   _iterationCounts.push_back(substepIterationCounts);
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
