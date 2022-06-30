@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.1)
 set (CMAKE_CXX_STANDARD 11)
 
 cmake_policy(SET CMP0074 NEW)
+cmake_policy(SET CMP0057 NEW)
 
 # Fix behavior of CMAKE_CXX_STANDARD when targeting macOS.
 if (POLICY CMP0025)

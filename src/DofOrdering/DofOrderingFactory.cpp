@@ -44,7 +44,7 @@ DofOrderingFactory::DofOrderingFactory(TBFPtr<double> bilinearForm,
                                        map<int,int> trialOrderEnhancements,
                                        map<int,int> testOrderEnhancements)
 {
-  // _bilinearForm = bilinearForm;
+  TEUCHOS_TEST_FOR_EXCEPTION(bilinearForm == Teuchos::null, std::invalid_argument, "bilinearForm argument is null!");
   _varFactory = bilinearForm->varFactory();
   _trialOrderEnhancements = trialOrderEnhancements;
   _testOrderEnhancements = testOrderEnhancements;

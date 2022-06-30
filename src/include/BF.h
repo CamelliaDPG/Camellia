@@ -116,12 +116,6 @@ public:
                                    Camellia::FieldContainer<Scalar> &rhsEnriched, Camellia::FieldContainer<Scalar> &stiffness,
                                    Camellia::FieldContainer<Scalar> &rhs);
   
-  // computes local stiffness matrix and RHS for the discrete least squares formulation.
-  virtual void localStiffnessMatrixAndRHS_DLS(Camellia::FieldContainer<Scalar> &stiffnessEnriched,
-                                              Camellia::FieldContainer<Scalar> &rhsEnriched,
-                                              TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache,
-                                              TRHSPtr<Scalar> rhs, BasisCachePtr basisCache);
-  
   virtual void localStiffnessMatrixAndRHS(Camellia::FieldContainer<Scalar> &localStiffness,
                                           Camellia::FieldContainer<Scalar> &rhsVector,
                                           TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache,
