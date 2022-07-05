@@ -34,17 +34,12 @@ using namespace std;
 namespace Camellia
 {
 template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class PointBasis;
-template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Basis<Scalar,ArrayScalar>
+template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Intrepid2BasisWrapper<>
 {
-  void initializeTags() const;
 public:
   PointBasis();
-
-  using Camellia::Basis<Scalar,ArrayScalar>::getValues;
-  void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints, Camellia::EOperator operatorType) const;
   
-  //! Returns true.
-  bool isConforming() const;
+  static Teuchos::RCP< PointBasis<Scalar,ArrayScalar> > pointBasis();
 };
 
 typedef Teuchos::RCP< PointBasis<> > PointBasisPtr;

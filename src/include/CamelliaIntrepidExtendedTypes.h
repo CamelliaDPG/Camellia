@@ -10,6 +10,9 @@
 #include <set>
 #include <string>
 
+
+#include <Intrepid2_Types.hpp>
+
 namespace Camellia
 {
   enum EOperator   // first 13 simply copied from Intrepid::EOperator
@@ -90,11 +93,18 @@ namespace Camellia
     FUNCTION_SPACE_UNKNOWN
   };
 
+  //! returns the corresponding H^1 order for a basis of the specified degree and function space.  (HVOL returns basisDegree +1; all others return basisDegree.)
+  int getH1Order(int basisDegree, EFunctionSpace fs);
+
   bool functionSpaceIsVectorized(EFunctionSpace fs);
+  bool functionSpaceIsBroken(EFunctionSpace fs);
   bool functionSpaceIsDiscontinuous(EFunctionSpace fs);
   EFunctionSpace continuousSpaceForDiscontinuous(EFunctionSpace fs_disc, bool upgradeHVOL = true);
   EFunctionSpace discontinuousSpaceForContinuous(EFunctionSpace fs_continuous);
   
+  EFunctionSpace fromIntrepid2FunctionSpace(const ::Intrepid2::EFunctionSpace &fs);
+  ::Intrepid2::EFunctionSpace toIntrepid2FunctionSpace(const EFunctionSpace &fs);
+
   //! not all legal combinations yet supported -- for now, just first-order single component derivative (e.g. OP_DX + OP_DY = OP_DXDY)
   EOperator combineOperators(EOperator op_first, EOperator op_second);
   

@@ -1871,6 +1871,7 @@ int main(int argc, char *argv[])
     double vWidth = std::numeric_limits<double>::infinity();
     
     bool enforceQuasiNeutrality = true;
+    bool useSerendipityBasis = true;
     
     bool useAdaptivity = false;
     int numRefinements = 3;
@@ -2398,7 +2399,7 @@ int main(int argc, char *argv[])
         // TEST 9
         // a non-patch exact solution with q = 0, varying in all dimensions
 
-        VlasovPoissonSpaceTimeFormulation form_q0(formulationChoice, 0, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
+        VlasovPoissonSpaceTimeFormulation form_q0(formulationChoice, 0, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment);
 
         performDebuggingRefinementSeries(form_q0);
 
@@ -2744,7 +2745,7 @@ int main(int argc, char *argv[])
     
     if (convertOverkillSolutionFiles)
     {
-      VlasovPoissonSpaceTimeFormulation fineForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
+      VlasovPoissonSpaceTimeFormulation fineForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment);
       // TODO: do uniform refinements on fineForm meshes: numUniformRefinements+overkillRefinementLevel
       
       convertOverkillSolution(fineForm, overkillSolutionDir);
@@ -2752,11 +2753,11 @@ int main(int argc, char *argv[])
     }
     else if (runOverkillVersusAdaptiveComparison)
     {
-      VlasovPoissonSpaceTimeFormulation fineForm    (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
+      VlasovPoissonSpaceTimeFormulation fineForm    (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, overkillH1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment);
       // TODO: do uniform refinements on fineForm meshes: numUniformRefinements+overkillRefinementLevel
-      VlasovPoissonSpaceTimeFormulation adaptiveForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
+      VlasovPoissonSpaceTimeFormulation adaptiveForm(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment);
       // TODO: do uniform refinements on adaptiveForm meshes: numUniformRefinements
-      VlasovPoissonSpaceTimeFormulation modestForm  (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
+      VlasovPoissonSpaceTimeFormulation modestForm  (formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment);
       // TODO: do uniform refinements on modestForm meshes: numUniformRefinements+uniformMeshRefinementLevel
             
       const int maxAdaptiveMeshElements = modestForm.vlasovMesh()->numActiveElements();

@@ -98,7 +98,13 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
           continue;
         }
         
-        if (testVar->isSpaceTime() && cellTopo->sideIsSpatial(sideOrdinal))
+        if (testVar->getBasisFamily() != Teuchos::null)
+        {
+          std::vector<int> pVector = testIDPolyOrder;
+          pVector.push_back(testPolyOrderTime);
+          basis = testVar->getBasis(cellTopo, pVector, sideOrdinal);
+        }
+        else if (testVar->isSpaceTime() && cellTopo->sideIsSpatial(sideOrdinal))
         {
           basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(testIDPolyOrder, testPolyOrderTime, sideTopo, testIDFunctionSpace, fsTemporal);
         }
@@ -113,7 +119,11 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
     }
     else
     {
-      if (testVar->isSpaceTime())
+      if (testVar->getBasisFamily() != Teuchos::null)
+      {
+        basis = testVar->getBasis(cellTopo, testIDPolyOrder);
+      }
+      else if (testVar->isSpaceTime())
       {
         vector<int> testIDPolyOrderSpace;
         vector<Camellia::EFunctionSpace> testIDFunctionSpaceSpace;
@@ -186,7 +196,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
     int trialOrderEnhancement = getTrialOrderEnhancement(trialID);
     for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++)
     {
-      trialIDPolyOrder[pComponent] = polyOrder[pComponent] + trialOrderEnhancement; // uses the fact that map defaults to 0 for entries that aren't found
+      trialIDPolyOrder[pComponent]     = polyOrder[pComponent] + trialOrderEnhancement; // uses the fact that map defaults to 0 for entries that aren't found
     }
     const int trialIDPolyOrderTime = polyOrderTime + trialOrderEnhancement;
 
@@ -213,7 +223,11 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
         vector<int> trialIDPolyOrderSide = PolynomialOrder::sidePolynomialOrder(trialIDPolyOrder, cellTopo, sideOrdinal);
         
         CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
-        if (trialVar->isSpaceTime() && cellTopo->sideIsSpatial(sideOrdinal))
+        if (trialVar->getBasisFamily() != Teuchos::null)
+        {
+          basis = trialVar->getBasis(cellTopo, trialIDPolyOrder, sideOrdinal);
+        }
+        else if (trialVar->isSpaceTime() && cellTopo->sideIsSpatial(sideOrdinal))
         {
           // side is extruded in time
           vector<int> trialIDPolyOrderSideSpatialPart;
@@ -251,7 +265,11 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
     }
     else
     {
-      if (trialVar->isSpaceTime())
+      if (trialVar->getBasisFamily() != Teuchos::null)
+      {
+        basis = trialVar->getBasis(cellTopo, trialIDPolyOrder);
+      }
+      else if (trialVar->isSpaceTime())
       {
         vector<int> trialIDPolyOrderSpace;
         if (trialIDPolyOrder.size() == 1)
@@ -374,11 +392,10 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
   bool interiorVariableFound = false;
   int minSidePolyOrder = INT_MAX;
 
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  for (const auto & varID : varIDs)
   {
-    int varID = *idIt;
-    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
-    int numSides = sidesForVar->size();
+    const vector<int> & sidesForVar = dofOrdering->getSidesForVarID(varID);
+    int numSides = sidesForVar.size();
     int varIDEnhancement = isTestOrdering ? getTestOrderEnhancement(varID) : getTrialOrderEnhancement(varID);
     if (numSides == 1)
     {
@@ -388,11 +405,11 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
     }
     else
     {
-      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+      for (const auto & sideOrdinal : sidesForVar)
       {
-        int sideOrdinal = *sideIt;
-        int polyOrder = BasisFactory::basisFactory()->basisPolyOrder( dofOrdering->getBasis(varID,sideOrdinal) ) - varIDEnhancement;
-        minSidePolyOrder = min(minSidePolyOrder,polyOrder);
+        auto basis = dofOrdering->getBasis(varID,sideOrdinal);
+        int p_H1 = getH1Order( basis->getDegree(), basis->functionSpace() ) - varIDEnhancement;
+        minSidePolyOrder = min(minSidePolyOrder,p_H1);
       }
     }
   }
@@ -648,6 +665,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
 
 DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoPtr cellTopo, int pToAdd, bool isTestOrdering)
 {
+  // TODO: eliminate the dependence on BasisFactory here
   // could consider adding a cache that lets you go from (DofOrdering*,pToAdd) --> enrichedDofOrdering...
   // (since likely we'll be upgrading the same DofOrdering a bunch of times)
   set<int> varIDs = dofOrdering->getVarIDs();
@@ -730,6 +748,7 @@ int DofOrderingFactory::trialPolyOrder(DofOrderingPtr trialOrdering)
 
 DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, int basisDegreeToSet, bool replaceDiscontinuousFSWithContinuous)
 {
+  // TODO: eliminate the dependence on BasisFactory here
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
 
@@ -796,6 +815,7 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
 DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet,
     int newPolyOrder, bool replacePatchBasis)
 {
+  // TODO: eliminate the dependence on BasisFactory here
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   set<int> varIDs = dofOrdering->getVarIDs();

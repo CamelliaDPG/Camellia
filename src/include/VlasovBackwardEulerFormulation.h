@@ -36,6 +36,7 @@ public RefinementObserver
 private:
   int _spaceDim;
   int _velocityDim;
+  const bool _useSerendipityBasis; // const because we construct the mesh based on this in the constructor; we'd have to recreate the mesh when this changed.
   
   BFPtr _vlasovBF;
   int _delta_k;
@@ -114,7 +115,7 @@ private:
   
   int _nextConfigurationSpaceTag = 0;
 public:
-  VlasovBackwardEulerFormulation(double q, double m,
+  VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                  MeshTopologyPtr spatialMeshTopology,
                                  double dt,
@@ -123,7 +124,7 @@ public:
                                  std::vector<double> velocitySpaceVertices_z,
                                  const int H1Order, const int delta_k);
   
-  VlasovBackwardEulerFormulation(double q, double m,
+  VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                  MeshTopologyPtr spatialMeshTopology,
                                  double dt,
@@ -131,7 +132,7 @@ public:
                                  std::vector<double> velocitySpaceVertices_y,
                                  const int H1Order, const int delta_k);
   
-  VlasovBackwardEulerFormulation(double q, double m,
+  VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                  MeshTopologyPtr spatialMeshTopology,
                                  double dt,

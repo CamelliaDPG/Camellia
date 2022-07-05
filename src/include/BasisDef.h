@@ -17,6 +17,8 @@
 
 #include "Intrepid_Basis.hpp"
 
+#include <Intrepid2_TensorBasis.hpp>
+
 #include "Camellia_KokkosHelpers.h"
 
 namespace Camellia
@@ -101,9 +103,15 @@ void Basis<Scalar,ArrayScalar>::CHECK_VALUES_ARGUMENTS(const ArrayScalar &values
   {
     TEUCHOS_TEST_FOR_EXCEPTION(refPoints.rank() != 2, std::invalid_argument, "refPoints should have shape (P,D).");
   }
-  if ( refPoints.dimension(1) != domainTopology()->getDimension() )
+  const int domainDim = domainTopology()->getDimension();
+  if (refPoints.dimension(1) != domainDim)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(refPoints.dimension(1) != domainTopology()->getDimension(), std::invalid_argument, "refPoints should have shape (P,D).");
+    // we allow the two dimensions to differ in exactly one case: bases defined on the node topology, where we allow refPoints dimension to be 1.
+    const bool nodeTopo = (refPoints.dimension(1) == 1) && (domainDim == 0);
+    if (!nodeTopo)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(refPoints.dimension(1) != domainDim, std::invalid_argument, "refPoints should have shape (P,D).");
+    }
   }
 }
 
@@ -182,6 +190,23 @@ const std::vector<std::vector<int> > & Basis<Scalar, ArrayScalar>::getAllDofTags
     _basisTagsAreSet = true;
   }
   return _ordinalToTag;
+}
+
+template<class Scalar, class ArrayScalar>
+int Basis<Scalar,ArrayScalar>::getNumTensorialComponents() const
+{
+  using BasisBase   = Intrepid2::Basis<Camellia::DeviceType,double,double>;
+  using TensorBasis = Intrepid2::Basis_TensorBasis<BasisBase>;
+  
+  auto tensorBasis = dynamic_cast<TensorBasis*>(this->intrepid2Basis().get());
+  if (tensorBasis != NULL)
+  {
+    return tensorBasis->getTensorBasisComponents().size();
+  }
+  else
+  {
+    return 1; // trivial tensor structure
+  }
 }
 
   template<class Scalar, class ArrayScalar>
@@ -428,12 +453,30 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace() const
 }
 
 template<class Scalar, class ArrayScalar>
-Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialRank) const
+Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialComponent) const
 {
-  if (tensorialRank==0)
+  using BasisBase   = Intrepid2::Basis<Camellia::DeviceType,double,double>;
+  using TensorBasis = Intrepid2::Basis_TensorBasis<BasisBase>;
+  
+  auto tensorBasis = dynamic_cast<TensorBasis*>(this->intrepid2Basis().get());
+  if (tensorBasis != NULL)
+  {
+    auto basisComponents = tensorBasis->getTensorBasisComponents();
+    const int numBasisComponents = basisComponents.size();
+    if (numBasisComponents > tensorialComponent)
+    {
+      auto intrepid2FS = basisComponents[tensorialComponent]->getFunctionSpace();
+      return fromIntrepid2FunctionSpace(intrepid2FS);
+    }
+  }
+  if (tensorialComponent==0)
+  {
     return this->_functionSpace;
+  }
   else
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"tensorialRank exceeds the tensorial degree of the basis");
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"tensorialComponent exceeds the tensorial degree of the basis");
+  }
 }
   
   template<class Scalar, class ArrayScalar>
@@ -513,10 +556,41 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialR
 
 template<class Scalar, class ArrayScalar>
 Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> >
-Basis<Scalar,ArrayScalar>::intrepid2Basis()
+Basis<Scalar,ArrayScalar>::intrepid2Basis() const
 {
   // Intrepid2 basis wrapper overrides
   return Teuchos::null;
+}
+
+template<class Scalar, class ArrayScalar>
+std::vector< Teuchos::RCP< ::Camellia::Basis<Scalar, ArrayScalar> > >
+Basis<Scalar,ArrayScalar>::intrepid2TensorBasisComponents()
+{
+  if (_intrepid2TensorBasisComponents.size() > 0) return _intrepid2TensorBasisComponents;
+  using BasisBase        = Intrepid2::Basis<Camellia::DeviceType,double,double>;
+  using TensorBasis      = Intrepid2::Basis_TensorBasis<BasisBase>;
+  
+  // compute tensorial components:
+  auto tensorBasis = dynamic_cast<TensorBasis*>(this->intrepid2Basis().get());
+
+  if (tensorBasis == NULL)
+  {
+    _intrepid2TensorBasisComponents.push_back(Teuchos::rcp(this,false));
+    return _intrepid2TensorBasisComponents;
+  }
+
+  auto basisComponents = tensorBasis->getTensorBasisComponents();
+  
+  for (const auto & basisComponent : basisComponents)
+  {
+    Camellia::EFunctionSpace fs = fromIntrepid2FunctionSpace(basisComponent->getFunctionSpace());
+    const bool isVectorFS = (fs == FUNCTION_SPACE_HCURL) || (fs == FUNCTION_SPACE_HDIV) || functionSpaceIsVectorized(fs);
+    const int rank = isVectorFS ? 1 : 0;
+    const int spaceDim = basisComponent->getBaseCellTopology().getDimension();
+    auto camelliaBasis = Teuchos::rcp(new Intrepid2BasisWrapper<Scalar,ArrayScalar>( basisComponent, spaceDim, rank, fs) );
+    _intrepid2TensorBasisComponents.push_back(camelliaBasis);
+  }
+  return _intrepid2TensorBasisComponents;
 }
 
 template<class Scalar, class ArrayScalar>
@@ -722,7 +796,7 @@ Intrepid2BasisWrapper<Scalar,ArrayScalar>::Intrepid2BasisWrapper(Teuchos::RCP< I
   this->_functionSpace = fs;
   this->_basisCardinality = _intrepid2Basis->getCardinality();
   this->_basisDegree = _intrepid2Basis->getDegree();
-  this->_domainTopology = CellTopology::cellTopology( _intrepid2Basis->getBaseCellTopology() );
+  this->_domainTopology = CellTopology::cellTopology( _intrepid2Basis->getBaseCellTopology(), _intrepid2Basis->getNumTensorialExtrusions() );
 
   bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
   
@@ -820,7 +894,7 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::initializeTags() const
 }
 
 template<class Scalar, class ArrayScalar>
-Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > Intrepid2BasisWrapper<Scalar,ArrayScalar>::intrepid2Basis()
+Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > Intrepid2BasisWrapper<Scalar,ArrayScalar>::intrepid2Basis() const
 {
   return _intrepid2Basis;
 }

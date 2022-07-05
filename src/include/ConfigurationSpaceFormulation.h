@@ -28,8 +28,9 @@ namespace Camellia
     SolutionPtr _configurationSolnPriorTime; // prior-time solution; null for space-time configurations.
     MeshPtr _phaseMesh;
     MeshTopologyPtr _configurationMeshTopo;
+    bool _useSerendipityBasis;
   public:
-    ConfigurationSpaceFormulation();
+    ConfigurationSpaceFormulation(bool useSerendipityBasis = false);
     
     //! Create the configuration-space mesh based on the provided space-time MeshTopology.
     virtual void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) = 0;
@@ -106,6 +107,8 @@ namespace Camellia
     
     //! Perform MPI communication, etc. to ensure that the B_i, E_i function values for a given configuration-space cell are available on each MPI rank that has a corresponding phase-space cell.
     virtual void updateConfigurationSpaceFunctions() = 0;
+    
+    bool useSerendipityBasis() const;
     
     static Teuchos::RCP<ConfigurationSpaceFormulation> poissonFormulation(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType);
   };

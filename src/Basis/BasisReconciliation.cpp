@@ -1233,29 +1233,9 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
   return internalDofOrdinals;
 }
 
-unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
+unsigned BasisReconciliation::minimumSubcellDimension(int topoDim, EFunctionSpace fs)
 {
-  // use the functionSpace to determine what continuities should be enforced:
-  Camellia::EFunctionSpace fs = basis->functionSpace();
-
-  if (fs == FUNCTION_SPACE_UNKNOWN)
-  {
-    typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
-    TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(basis.get());
-
-    if (tensorBasis != NULL)
-    {
-      // TODO: consider whether the below is in fact the right formula.
-      // then the minimum subcell dimension is the sum of the minimum for the two components
-      BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
-      BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
-      return minimumSubcellDimension(spatialBasis) + minimumSubcellDimension(temporalBasis);
-    }
-    cout << "ERROR: Unhandled functionSpace in BasisReconciliation.";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
-  }
-
-  int d = basis->domainTopology()->getDimension();
+  const int d = topoDim;
   int minSubcellDimension = d-1;
   switch (fs)
   {
@@ -1293,6 +1273,41 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
   }
   return minSubcellDimension;
+}
+
+unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
+{
+  // use the functionSpace to determine what continuities should be enforced:
+  Camellia::EFunctionSpace fs = basis->functionSpace();
+
+  if (fs == FUNCTION_SPACE_UNKNOWN)
+  {
+    typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+    TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(basis.get());
+
+    if (tensorBasis != NULL)
+    {
+      // TODO: consider whether the below is in fact the right formula.
+      // then the minimum subcell dimension is the sum of the minimum for the two components
+      BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+      BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+      return minimumSubcellDimension(spatialBasis) + minimumSubcellDimension(temporalBasis);
+    }
+    else if (basis->getNumTensorialComponents() > 1)
+    {
+      int numTensorComponents = basis->getNumTensorialComponents();
+      int minSubcellDim = 0;
+      for (int r=0; r<numTensorComponents; r++)
+      {
+        minSubcellDim += minimumSubcellDimension(basis->domainTopology()->getDimension(), basis->functionSpace(r));
+      }
+      return minSubcellDim;
+    }
+    cout << "ERROR: Unhandled functionSpace in BasisReconciliation.";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
+  }
+
+  return minimumSubcellDimension(basis->domainTopology()->getDimension(), fs);
 }
 
 void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(Camellia::FieldContainer<double> &coarseDomainPoints,

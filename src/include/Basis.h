@@ -23,6 +23,8 @@
 #include "CellTopology.h"
 #include "CamelliaIntrepidExtendedTypes.h"
 
+#include <Intrepid2_TensorBasis.hpp>
+
 namespace Camellia
 {
 template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar> > class Basis;
@@ -35,6 +37,9 @@ template<class Scalar, class ArrayScalar> class Basis
   void initializeTagsAndTrim() const;
   
   using DeviceType = Camellia::DeviceType;
+  
+  // The (stored) result of casting to Intrepid2 TensorBasis and separating out into components.  Just a single weak ref to this if the cast fails.
+  std::vector< Teuchos::RCP< ::Camellia::Basis<Scalar, ArrayScalar> > > _intrepid2TensorBasisComponents;
 protected:
   Basis();
 
@@ -112,11 +117,17 @@ public:
   virtual const std::vector<int>& getDofTag(int dofOrd) const;
   virtual const std::vector<std::vector<int> > & getAllDofTags() const;
 
+  /** \brief returns the number of tensorial components.
+   */
+  virtual int getNumTensorialComponents() const;
+  
   virtual Camellia::EFunctionSpace functionSpace() const;
-  virtual Camellia::EFunctionSpace functionSpace(int tensorialRank) const; // 0 for space, 1 for time, in space-time bases
+  virtual Camellia::EFunctionSpace functionSpace(int tensorialComponent) const; // 0 for space, 1 for time, in space-time bases
   virtual Camellia::EFunctionSpace functionSpace(int subcDim, int subcellOrdinal) const; // particularly relevant for space-time bases
 
-  virtual Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis();
+  virtual Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis() const;
+  
+  virtual std::vector< Teuchos::RCP< ::Camellia::Basis<Scalar, ArrayScalar> > > intrepid2TensorBasisComponents();
   
   // methods identifying the type of basis:
   virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
@@ -180,7 +191,7 @@ public:
   Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis,
                         int rangeDimension, int rangeRank, Camellia::EFunctionSpace functionSpace);
 
-  Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis() override;
+  Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis() const override;
 
   virtual bool isConforming() const override;
   virtual bool isNodal() const override;

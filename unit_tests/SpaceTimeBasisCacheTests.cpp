@@ -141,15 +141,12 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
   ::Camellia::EOperator timeOpForSizing = OP_VALUE;
 
   bool createSideCaches = true;
-
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
-  TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(spaceTimeBasis.get());
-
-  BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
-  BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+  
+  BasisPtr spatialBasis  = spaceTimeBasis->intrepid2TensorBasisComponents()[0];
+  BasisPtr temporalBasis = spaceTimeBasis->intrepid2TensorBasisComponents()[1];
 
   vector<FC> tensorComponentNodes;
-  int cubatureDegree = tensorBasis->getDegree();
+  int cubatureDegree = spaceTimeBasis->getDegree();
   double scaling = 0.5;
   double translation = 0.5;
   FC spaceNodes = getScaledTranslatedRefNodes(spaceTopo, scaling, translation);
@@ -184,6 +181,9 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
   stripCellDimension(timeValues);
   stripCellDimension(spaceTimeValues);
 
+  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp(new TensorBasis(spatialBasis, temporalBasis) );
+  
   FC expectedValues = spaceTimeValues;
   expectedValues.initialize(0.0); // zero out
   vector< Intrepid::FieldContainer<double> > componentValues = {spaceValues, timeValues};
@@ -521,8 +521,8 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, GetValues )
 
     FC transformedSpaceTimeValues = *spaceTimeBasisCache->getTransformedValues(spaceTimeBasis, spaceTimeOp);
 
-    TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
-
+    Teuchos::RCP<TensorBasis<> > tensorBasis = Teuchos::rcp(new TensorBasis<>(spatialBasis, temporalBasis) );
+    
     vector< Intrepid::FieldContainer<double> > componentValues(2);
     componentValues[0] = transformedSpatialValues;
     componentValues[1] = transformedTemporalValues;

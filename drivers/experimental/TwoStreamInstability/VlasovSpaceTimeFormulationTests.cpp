@@ -20,6 +20,8 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include <Intrepid2_SerendipityBasis.hpp>
+
 using namespace Camellia;
 
 namespace {
@@ -92,7 +94,7 @@ namespace {
     return lhsAtExactSoln * w;
   }
 
-  VlasovPoissonSpaceTimeFormulation getFormulation(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, const bool enforceQuasiNeutrality, double q)
+  VlasovPoissonSpaceTimeFormulation getFormulation(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, const bool enforceQuasiNeutrality, double q, const bool useSerendipity = true)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -112,7 +114,7 @@ namespace {
     VlasovPoissonSpaceTimeFormulation form(formulation, q, eps0, m, x0, xWidth, xElements,
                                            t0, tWidth, tElements,
                                            v0, vWidth, vElements,
-                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment);
+                                           H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipity, vlasovTraceEnrichment);
     return form;
   }
 
@@ -151,7 +153,8 @@ namespace {
     std::vector<double> velocitySpaceVertices_y; // empty
     std::vector<double> velocitySpaceVertices_z; // empty
     
-    VlasovSpaceTimeFormulation form(q, m, configForm, spatialMeshTopo,
+    const bool useSerendipityBasis = true;
+    VlasovSpaceTimeFormulation form(q, m, useSerendipityBasis, configForm, spatialMeshTopo,
                                     temporalVertices,
                                     velocitySpaceVertices_x,
                                     velocitySpaceVertices_y,
@@ -670,7 +673,7 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int xElements = 4;
     const int tElements = 1;
     const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
-    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+    const int H1Order   = 5; // quadratic L^2 functions; allows exact representation of analytic solution trace
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
     
@@ -697,7 +700,7 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int xElements = 4;
     const int tElements = 1;
     const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
-    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+    const int H1Order   = 5; // quadratic L^2 functions; allows exact representation of analytic solution trace
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
     
@@ -712,7 +715,7 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     FunctionPtr VE_exact = Function::zero();
     
     const bool overrideVlasovBCs = false;
-    const double tol = 1e-13;
+    const double tol = 1e-12;
     
     patchTestVlasovPoisson2(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success);
   }
@@ -923,6 +926,257 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
 //                             overrideVlasovBCs, tol, out, success, outputViz, vizPrefix);
 //    }
 //  }
+
+  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, SerendipityIsNestedWithinTensor )
+  {
+    // create Vlasov formulation (H^1 order 3), with Serendipity and without.
+    
+    const double q    = 0; // 0 charge --> zero electric field
+    
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vElements = 1;
+    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+    const bool usePeriodicBCs = false;
+    const bool enforceQuasiNeutrality = false;
+    
+    const int spaceDim = 1;
+    const bool spaceTimeMesh = true;
+    
+    const double tol = 1e-13;
+    
+    auto serendipityForm = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, true);  // true: use Serendipity
+    auto fullTensorForm  = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, false); // false: don't use Serendipity
+    
+    auto serendipityIP = serendipityForm.vlasovSolution()->ip();
+    auto fullTensorIP  = fullTensorForm.vlasovSolution()->ip();
+    
+    auto serendipityBF = serendipityForm.vlasovSolution()->bf();
+    auto fullTensorBF  = fullTensorForm.vlasovSolution()->bf();
+    
+    auto serendipityMesh = serendipityForm.vlasovMesh();
+    auto fullTensorMesh  = fullTensorForm.vlasovMesh();
+    
+    // Compute IP for each.  Test that the Serendipity basis IP maps onto the correct subset of the tensor basis IP.
+    if (serendipityMesh->myCellsInclude(0))
+    {
+      const GlobalIndexType cellID = 0;
+      auto serendipityTestOrdering = serendipityMesh->getElementType(cellID)->testOrderPtr;
+      auto fullTensorTestOrdering  = fullTensorMesh->getElementType(cellID)->testOrderPtr;
+      
+      auto serendipityTrialOrdering = serendipityMesh->getElementType(cellID)->trialOrderPtr;
+      auto fullTensorTrialOrdering  = fullTensorMesh->getElementType(cellID)->trialOrderPtr;
+      
+      auto serendipityBasisCache = BasisCache::basisCacheForCell(serendipityMesh, cellID);
+      auto fullTensorBasisCache  = BasisCache::basisCacheForCell(fullTensorMesh,  cellID);
+      
+      auto serendipityTestDofCount = serendipityTestOrdering->totalDofs();
+      auto fullTensorTestDofCount  = fullTensorTestOrdering->totalDofs();
+      
+      auto serendipityTrialDofCount = serendipityTrialOrdering->totalDofs();
+      auto fullTensorTrialDofCount  = fullTensorTrialOrdering->totalDofs();
+      
+      map<int,int> testDofOrderingMap, trialDofOrderingMap;
+      
+      auto testVarIDs = serendipityTestOrdering->getVarIDs();
+      for (const auto &varID : testVarIDs)
+      {
+        auto sides = serendipityTestOrdering->getSidesForVarID(varID);
+        for (const auto & side : sides)
+        {
+          BasisPtr basis = serendipityTestOrdering->getBasis(varID, side);
+          
+          // try Intrepid2 TensorBasis
+          using Intrepid2Basis = Intrepid2::Basis<DeviceType,double,double>;
+          
+          using SerendipityBasis = Intrepid2::SerendipityBasis<Intrepid2Basis>;
+          
+          SerendipityBasis* serendipityBasis = dynamic_cast<SerendipityBasis*>(basis->intrepid2Basis().get());
+          
+          TEUCHOS_TEST_FOR_EXCEPTION(serendipityBasis == NULL, std::invalid_argument, "Serendipity formulation has a non-Serendipity basis.");
+          
+          auto ordinalMap = serendipityBasis->ordinalMap();
+          auto ordinalMapHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), ordinalMap);
+          
+          for (int i=0; i<ordinalMapHost.extent_int(0); i++)
+          {
+            int iTensor = ordinalMapHost(i);
+            int serendipityDofOrdinal = serendipityTestOrdering->getDofIndex(varID,      i, side);
+            int fullTensorDofOrdinal  = fullTensorTestOrdering->getDofIndex(varID, iTensor, side);
+            
+            testDofOrderingMap[serendipityDofOrdinal] = fullTensorDofOrdinal;
+          }
+          
+          // while we're here, let's also check the basis values:
+          auto fullTensorBasisIntrepid2 = serendipityBasis->getUnderlyingBasis();
+          auto fullTensorBasis = Teuchos::rcp(new Intrepid2BasisWrapper<>(fullTensorBasisIntrepid2, basis->rangeDimension(), basis->rangeRank(), basis->functionSpace()));
+          
+          Teuchos::RCP< const FieldContainer<double> > fullTensorValues, serendipityValues;
+          if (side == -1)
+          {
+            fullTensorValues  = fullTensorBasisCache->getTransformedValues(fullTensorBasis, OP_VALUE);
+            serendipityValues = serendipityBasisCache->getTransformedValues(basis,          OP_VALUE);
+          }
+          else
+          {
+            fullTensorValues  =  fullTensorBasisCache->getSideBasisCache(side)->getTransformedValues(fullTensorBasis, OP_VALUE);
+            serendipityValues = serendipityBasisCache->getSideBasisCache(side)->getTransformedValues(basis,           OP_VALUE);
+          }
+          
+          const int cellOrdinal = 0;
+          const int numPoints   = fullTensorValues->dimension(2);
+          TEUCHOS_TEST_FOR_EXCEPTION(serendipityValues->dimension(2) != numPoints, std::invalid_argument, "numPoints do not match");
+          for (int i=0; i<ordinalMapHost.extent_int(0); i++)
+          {
+            int iTensor = ordinalMapHost(i);
+            for (int l=0; l<numPoints; l++)
+            {
+              const double diff = std::abs((*serendipityValues)(cellOrdinal,i,l) - (*fullTensorValues)(cellOrdinal,iTensor,l));
+              if (diff > tol)
+              {
+                out << "(" << i << "," << l << ")\n";
+                TEST_FLOATING_EQUALITY((*serendipityValues)(cellOrdinal,i,l), (*fullTensorValues)(cellOrdinal,iTensor,l), tol);
+              }
+            }
+          }
+        }
+      }
+      
+      out << "testDofOrderingMap:\n";
+      for (auto entry : testDofOrderingMap)
+      {
+        out << entry.first << " --> " << entry.second << std::endl;
+      }
+      
+      auto trialVarIDs = serendipityTrialOrdering->getVarIDs();
+      for (const auto &varID : trialVarIDs)
+      {
+        auto sides = serendipityTrialOrdering->getSidesForVarID(varID);
+        for (const auto & side : sides)
+        {
+          BasisPtr basis = serendipityTrialOrdering->getBasis(varID, side);
+          
+          // try Intrepid2 TensorBasis
+          using Intrepid2Basis = Intrepid2::Basis<DeviceType,double,double>;
+          
+          using SerendipityBasis = Intrepid2::SerendipityBasis<Intrepid2Basis>;
+          
+          SerendipityBasis* serendipityBasis = dynamic_cast<SerendipityBasis*>(basis->intrepid2Basis().get());
+          
+          TEUCHOS_TEST_FOR_EXCEPTION(serendipityBasis == NULL, std::invalid_argument, "Serendipity formulation has a non-Serendipity basis.");
+          
+          auto ordinalMap = serendipityBasis->ordinalMap();
+          auto ordinalMapHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), ordinalMap);
+          
+          for (int i=0; i<ordinalMapHost.extent_int(0); i++)
+          {
+            int iTensor = ordinalMapHost(i);
+            int serendipityDofOrdinal = serendipityTrialOrdering->getDofIndex(varID,      i, side);
+            int fullTensorDofOrdinal  = fullTensorTrialOrdering->getDofIndex(varID, iTensor, side);
+            
+            trialDofOrderingMap[serendipityDofOrdinal] = fullTensorDofOrdinal;
+          }
+          
+          // while we're here, let's also check the basis values:
+          auto fullTensorBasisIntrepid2 = serendipityBasis->getUnderlyingBasis();
+          auto fullTensorBasis = Teuchos::rcp(new Intrepid2BasisWrapper<>(fullTensorBasisIntrepid2, basis->rangeDimension(), basis->rangeRank(), basis->functionSpace()));
+          
+          Teuchos::RCP< const FieldContainer<double> > fullTensorValues, serendipityValues;
+          if (side == -1)
+          {
+            fullTensorValues  = fullTensorBasisCache->getTransformedValues(fullTensorBasis, OP_VALUE);
+            serendipityValues = serendipityBasisCache->getTransformedValues(basis,          OP_VALUE);
+          }
+          else
+          {
+            fullTensorValues  =  fullTensorBasisCache->getSideBasisCache(side)->getTransformedValues(fullTensorBasis, OP_VALUE);
+            serendipityValues = serendipityBasisCache->getSideBasisCache(side)->getTransformedValues(basis,           OP_VALUE);
+          }
+          
+          const int cellOrdinal = 0;
+          const int numPoints   = fullTensorValues->dimension(2);
+          TEUCHOS_TEST_FOR_EXCEPTION(serendipityValues->dimension(2) != numPoints, std::invalid_argument, "numPoints do not match");
+          for (int i=0; i<ordinalMapHost.extent_int(0); i++)
+          {
+            int iTensor = ordinalMapHost(i);
+            for (int l=0; l<numPoints; l++)
+            {
+              const double diff = std::abs((*serendipityValues)(cellOrdinal,i,l) - (*fullTensorValues)(cellOrdinal,iTensor,l));
+              if (diff > tol)
+              {
+                out << "(" << i << "," << l << ")\n";
+                TEST_FLOATING_EQUALITY((*serendipityValues)(cellOrdinal,i,l), (*fullTensorValues)(cellOrdinal,iTensor,l), tol);
+              }
+            }
+          }
+        }
+      }
+      
+      out << "trialDofOrderingMap:\n";
+      for (auto entry : trialDofOrderingMap)
+      {
+        out << entry.first << " --> " << entry.second << std::endl;
+      }
+      
+      const int numCells = 1;
+      FieldContainer<double> serendipityGramMatrix(numCells,serendipityTestDofCount,serendipityTestDofCount);
+      FieldContainer<double> fullTensorGramMatrix (numCells, fullTensorTestDofCount, fullTensorTestDofCount);
+      
+      serendipityIP->computeInnerProductMatrix(serendipityGramMatrix, serendipityTestOrdering, serendipityBasisCache);
+      fullTensorIP->computeInnerProductMatrix( fullTensorGramMatrix,  fullTensorTestOrdering,  fullTensorBasisCache);
+      
+      const int cellOrdinal = 0;
+      for (int i=0; i<serendipityTestDofCount; i++)
+      {
+        const int iTensor = testDofOrderingMap[i];
+        for (int j=0; j<serendipityTestDofCount; j++)
+        {
+          const int jTensor = testDofOrderingMap[j];
+          
+          const double diff = std::abs(serendipityGramMatrix(cellOrdinal,i,j) - fullTensorGramMatrix(cellOrdinal,iTensor,jTensor));
+          
+          // we really expect exact zero difference, on current implementations.
+          if (diff > tol)
+          {
+            out << "(" << i << "," << j << ")\n";
+            TEST_FLOATING_EQUALITY(serendipityGramMatrix(cellOrdinal,i,j), fullTensorGramMatrix(cellOrdinal,iTensor,jTensor), tol);
+          }
+        }
+      }
+    
+      // Do the same for the rectangular BF.  (The square BF will not precisely nest: the discrete test space differs...)
+      FieldContainer<double> serendipityStiffnessMatrix(numCells,serendipityTestDofCount,serendipityTrialDofCount);
+      FieldContainer<double> fullTensorStiffnessMatrix (numCells, fullTensorTestDofCount, fullTensorTrialDofCount);
+      
+      const int numElements = 1;
+      auto elemTypeSerendipity = serendipityMesh->getElementType(cellID);
+      auto elemTypeFullTensor  = fullTensorMesh-> getElementType(cellID);
+      FieldContainer<double> K_serendipity(numElements,serendipityTestDofCount,serendipityTrialDofCount);
+      FieldContainer<double> K_fullTensor (numElements, fullTensorTestDofCount, fullTensorTrialDofCount);
+      BasisCachePtr basisCacheSerendipity = BasisCache::basisCacheForCell(serendipityMesh, cellID);
+      BasisCachePtr basisCacheFullTensor  = BasisCache::basisCacheForCell( fullTensorMesh, cellID);
+      serendipityBF->stiffnessMatrix(K_serendipity, elemTypeSerendipity, basisCacheSerendipity->getCellSideParities(), basisCacheSerendipity);
+      fullTensorBF ->stiffnessMatrix(K_fullTensor,  elemTypeFullTensor,  basisCacheFullTensor->getCellSideParities(),  basisCacheFullTensor );
+      
+      for (int i=0; i<serendipityTestDofCount; i++)
+      {
+        const int iTensor = testDofOrderingMap[i];
+        for (int j=0; j<serendipityTrialDofCount; j++)
+        {
+          const int jTensor = trialDofOrderingMap[j];
+          
+          const double diff = std::abs(K_serendipity(cellOrdinal,i,j) - K_fullTensor(cellOrdinal,iTensor,jTensor));
+          
+          // we really expect exact zero difference, on current implementations.
+          if (diff > tol)
+          {
+            out << "(" << i << "," << j << ")\n";
+            TEST_FLOATING_EQUALITY(K_serendipity(cellOrdinal,i,j), K_fullTensor(cellOrdinal,iTensor,jTensor), tol);
+          }
+        }
+      }
+    }
+  }
 
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, SideSetInitialTime )
   {

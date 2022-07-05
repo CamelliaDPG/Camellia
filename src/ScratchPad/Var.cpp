@@ -271,6 +271,51 @@ VarPtr Var::applyOp(Camellia::EOperator op, int spaceDim) const
   }
 }
 
+BasisPtr Var::getBasis(CellTopoPtr cellTopo, const std::vector<int> &p_H1, const int sideOrdinal) const
+{
+  EFunctionSpace efsBase = efsForSpace(_fs);
+  std::vector<EFunctionSpace> fs(1,efsBase);
+  
+  if (sideOrdinal == -1)
+  {
+    if (isSpaceTime())
+    {
+      fs.push_back(efsForSpace(_temporalFS));
+    }
+    
+    return _basisFamily->getBasis(cellTopo, fs, p_H1);
+  }
+  else
+  {
+    std::vector<int> p_H1_forSide = p_H1;
+    if (isSpaceTime())
+    {
+      if (cellTopo->sideIsSpatial(sideOrdinal))
+      {
+        // spatial sides *are* extruded in the final tensorial dimension (time, for space-time variables)
+        // therefore we set the final fs as the temporal fs:
+        if (fs.size() == 1)
+        {
+          fs.push_back(efsForSpace(_temporalFS));
+        }
+      }
+      else
+      {
+        // non-spatial sides have the same fs as that defined on the base (spatial) topology,
+        // but the p_H1 can be expected to include the temporal degree; we drop that here:
+        p_H1_forSide.pop_back();
+      }
+      
+    }
+    return _basisFamily->getBasis(cellTopo->getSide(sideOrdinal), fs, p_H1_forSide);
+  }
+}
+
+BasisFamilyPtr Var::getBasisFamily() const
+{
+  return _basisFamily;
+}
+
 int Var::ID() const
 {
   return _id;
@@ -432,6 +477,11 @@ VarPtr Var::dt() const
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "dt() operator can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dt() only supported for vars of rank 0.");
   return Teuchos::rcp( new Var(_id, _rank, _name, Camellia::OP_DT, UNKNOWN_FS, _varType ) );
+}
+
+void Var::setBasisFamily(BasisFamilyPtr basisFamily)
+{
+  _basisFamily = basisFamily;
 }
 
 VarPtr Var::x() const

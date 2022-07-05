@@ -1687,17 +1687,82 @@ void CamelliaCellTools::mapToReferenceSubcell(Intrepid2::TensorPoints<double,Cam
                                               const int   subcellOrd,
                                               CellTopoPtr parentCell)
 {
-  // this initial implementation does the simplest possible thing: convert to FC, and do the mapping there, then convert back.
-  // This does *not* preserve any tensor structure.  This may be a performance concern for high-dimensional extruded meshes.
-  
-  const int numPoints = paramPoints.extent_int(0);
-  
-  auto paramPointsFC  = FieldContainerConversion<double>::fromTensorPoints(paramPoints);
-  FieldContainer<double> refSubcellPointsFC(numPoints,parentCell->getDimension());
-  
-  mapToReferenceSubcell(refSubcellPointsFC, paramPointsFC, subcellDim, subcellOrd, parentCell);
-  
-  refSubcellPoints = FieldContainerConversion<double>::toTensorPoints(refSubcellPointsFC);
+  if (parentCell->getBaseTopology()->getDimension() == 0)
+  {
+    // The base topology is a node; recast to an once-less-extruded line topology
+    auto parentCellAsExtrudedLine = CellTopology::cellTopology(CellTopology::line(), parentCell->getTensorialDegree() - 1);
+    return mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCellAsExtrudedLine);
+  }
+  else if (parentCell->getTensorialDegree() == 0)
+  {
+    // then we can do the simplest possible thing: convert to FC, and do the mapping there, then convert back.
+    const int numPoints = paramPoints.extent_int(0);
+    
+    auto paramPointsFC  = FieldContainerConversion<double>::fromTensorPoints(paramPoints);
+    FieldContainer<double> refSubcellPointsFC(numPoints,parentCell->getDimension());
+    
+    mapToReferenceSubcell(refSubcellPointsFC, paramPointsFC, subcellDim, subcellOrd, parentCell);
+    
+    refSubcellPoints = FieldContainerConversion<double>::toTensorPoints(refSubcellPointsFC);
+  }
+  else
+  {
+    using Data               = Intrepid2::Data<double,DeviceType>;
+    using TensorPoints       = Intrepid2::TensorPoints<double, DeviceType>;
+    using TensorData         = Intrepid2::TensorData<double,DeviceType>;
+    using PointComponentView = Intrepid2::ScalarView<double,DeviceType>;
+    
+    CellTopoPtr subcell  = parentCell->getSubcell(subcellDim, subcellOrd);
+    CellTopoPtr tensorialComponent = parentCell->getTensorialComponent(); // parent cell with the final extrusion dimension removed
+    
+    CellTopologyTensorSubcellInfo subcellInfo = parentCell->getTensorialComponentSubcellInfo(subcellDim, subcellOrd);
+    
+    const int numComponents = parentCell->getTensorialDegree() + 1;
+    std::vector< PointComponentView > pointComponents(numComponents);
+    
+    if (! subcellInfo.isExtruded)
+    {
+      // then subcell is in one or the other of the two "copies" of the once-less-extruded topology
+      // we can recursively call the mapToReferenceSubcell on the tensorial component:
+      TensorPoints tensorialComponentRefSubcellPoints;
+      mapToReferenceSubcell(tensorialComponentRefSubcellPoints, paramPoints, subcellInfo.subcellDimension, subcellInfo.subcellOrdinal, tensorialComponent);
+      
+      // now, we concatenate the final extrusion coordinate:
+      // line reference cell has nodes -1, +1.
+      const double extrusionCoord = (subcellInfo.extrusionNodeOrdinal == 0) ? -1 : 1;
+      PointComponentView extrusionCoordView("CamelliaCellTools::mapToReferenceSubcell - extrusion coord", 1, 1);
+      Kokkos::deep_copy(extrusionCoordView, extrusionCoord);
+      
+      const int numComponents = parentCell->getTensorialDegree() + 1;
+      pointComponents = std::vector< PointComponentView >(numComponents);
+      for (int r=0; r<numComponents-1; r++)
+      {
+        pointComponents[r] = tensorialComponentRefSubcellPoints.getTensorComponent(r);
+      }
+      pointComponents[numComponents-1] = extrusionCoordView;
+    }
+    else
+    {
+      // otherwise, subcell is itself extruded in the final dimension; we want paramPoints, but without its final component, for the recursive call
+      std::vector< PointComponentView > paramPointComponents(paramPoints.numTensorComponents() - 1);
+      for (int r=0; r<paramPointComponents.size(); r++)
+      {
+        paramPointComponents[r] = paramPoints.getTensorComponent(r);
+      }
+      TensorPoints paramPointsForTensorialComponent(paramPointComponents);
+      TensorPoints tensorialComponentRefSubcellPoints;
+      mapToReferenceSubcell(tensorialComponentRefSubcellPoints, paramPointsForTensorialComponent, subcellInfo.subcellDimension, subcellInfo.subcellOrdinal, tensorialComponent);
+      
+      for (int r=0; r<numComponents-1; r++)
+      {
+        pointComponents[r] = tensorialComponentRefSubcellPoints.getTensorComponent(r);
+      }
+      // now, we simply want to concatenate the paramPoints in the extrusion dimension:
+      pointComponents[numComponents-1] = paramPoints.getTensorComponent(paramPoints.numTensorComponents() - 1);
+    }
+    refSubcellPoints = TensorPoints(pointComponents);
+  }
+
 }
 
 void CamelliaCellTools::pointsVectorFromFC(std::vector< vector<double> > &pointsVector, const Camellia::FieldContainer<double> &pointsFC)

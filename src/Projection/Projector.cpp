@@ -22,6 +22,7 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 #include "Camellia_FieldContainer.hpp"
+#include "Camellia_FieldContainerConversion.hpp"
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
@@ -310,17 +311,38 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
     allDofs.insert(i);
   }
   
-  BasisPtr continuousBasis;
+  BasisPtr conformingBasis;
   int startingDimensionForProjection; // 0 to start with vertices, e.g.
-  if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
+  bool wrapsHGRADBasis = false;
+  {
+    if ((basis->intrepid2Basis() != Teuchos::null) && (basis->intrepid2Basis()->getFunctionSpace() == Intrepid2::FUNCTION_SPACE_HGRAD))
+    {
+      wrapsHGRADBasis = true;
+    }
+  }
+  if (Camellia::functionSpaceIsBroken(basis->functionSpace()))
   {
     const bool spaceTime = domainBasisCache->cellTopologyIsSpaceTime();
-    continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
+    conformingBasis = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
+    TEUCHOS_TEST_FOR_EXCEPTION(conformingBasis->getCardinality() != basis->getCardinality(), std::logic_error, "continuous basis should have same cardinality as discontinuous");
+    startingDimensionForProjection = domainDim;
+  }
+  else if (wrapsHGRADBasis && (basis->getDegree() > 0))
+  {
+    // sometimes discretizations wrap an Intrepid2 HGRAD basis with a Camellia basis that claims to be HVOL (discontinuous);
+    // by using HGRAD basis for projections, we allow "cheating" imposition of BCs on e.g. vertices, since the underlying basis has well-defined vertex functions.
+    auto intrepid2Basis = basis->intrepid2Basis();
+    conformingBasis = BasisFactory::basisFactory()->getBasis(intrepid2Basis->getDegree(), basis->domainTopology(), FUNCTION_SPACE_HGRAD);
+    startingDimensionForProjection = 0;
+  }
+  else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
+  {
+    conformingBasis = basis;
     startingDimensionForProjection = domainDim;
   }
   else
   {
-    continuousBasis = basis;
+    conformingBasis = basis;
     startingDimensionForProjection = 0;
   }
   
@@ -332,7 +354,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
   }
   else
   {
-    dofsForDomain = continuousBasis->dofOrdinalsForSide(sideOrdinal);
+    dofsForDomain = conformingBasis->dofOrdinalsForSide(sideOrdinal);
   }
   
   int numCells = basisCoefficients.dimension(0);
@@ -354,68 +376,76 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
       if (basisDomainDim == domainDim)
       {
         if (d > startingDimensionForProjection)
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcord);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcord);
         else
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcord, 0);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcord, 0);
       }
       else
       {
         // need to map from the subcord on the side to the one the basis sees
         int subcordBasis = CamelliaCellTools::subcellOrdinalMap(basisDomainTopo, domainDim, sideOrdinal, d, subcord);
         if (d > startingDimensionForProjection)
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcordBasis);
         else
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis, 0);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcordBasis, 0);
       }
         
       if (subcellDofOrdinals.size() > 0)
       {
-        Camellia::FieldContainer<double> refCellPoints;
-        Camellia::FieldContainer<double> cubatureWeightsSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
-        if (d == 0)
-        {
-          refCellPoints.resize(1,domainDim);
-          for (int d1=0; d1<domainDim; d1++)
-          {
-            refCellPoints(0,d1) = referenceDomainNodes(subcord,d1);
-          }
-          cubatureWeightsSubcell.resize(1);
-          cubatureWeightsSubcell(0) = 1.0;
-        }
-        else
-        {
+        Intrepid2::TensorPoints<double,DeviceType> pointsRefCell;
+        Intrepid2::TensorData<double,DeviceType> weightsRefCell;
           CellTopoPtr subcellTopo = domainTopo->getSubcell(d, subcord);
-//          Teuchos::RCP<Intrepid::Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
           BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, domainBasisCache->cubatureDegree(), false) );
-          int numPoints = subcellCache->getRefCellPointsFC().dimension(0);
-          refCellPoints.resize(numPoints,domainDim);
-          cubatureWeightsSubcell = subcellCache->getCubatureWeightsFC();
+          int numPoints = subcellCache->getRefCellPoints().extent_int(0);
+          weightsRefCell = subcellCache->getCubatureWeights();
 
           if (d == domainDim)
           {
-            refCellPoints = subcellCache->getRefCellPointsFC();
+            pointsRefCell = subcellCache->getRefCellPoints();
           }
           else
           {
-            CamelliaCellTools::mapToReferenceSubcell(refCellPoints, subcellCache->getRefCellPointsFC(), d,
-                subcord, domainTopo);
+            CamelliaCellTools::mapToReferenceSubcell(pointsRefCell, subcellCache->getRefCellPoints(), d, subcord, domainTopo);
+            
+            if (pointsRefCell.numTensorComponents() > weightsRefCell.numTensorComponents())
+            {
+              // then one (or more) of the point components should be a singleton, corresponding to a node
+              // we want to pad weightsRefCell accordingly.
+              std::vector< Intrepid2::Data<double,DeviceType> > weightComponents;
+              
+              int weightComponentOrdinal = 0; // in original weightsRefCell
+              
+              Intrepid2::Data<double,DeviceType> one(1.0, Kokkos::Array<int,1>{1});
+              for (int r = 0; r<pointsRefCell.numTensorComponents(); r++)
+              {
+                const auto & pointComponent = pointsRefCell.getTensorComponent(r);
+                if (pointComponent.extent_int(0) == 1)
+                {
+                  weightComponents.push_back(one);
+                }
+                else
+                {
+                  weightComponents.push_back(weightsRefCell.getTensorComponent(weightComponentOrdinal++));
+                }
+              }
+              weightsRefCell = Intrepid2::TensorData<double, DeviceType>(weightComponents);
+            }
+            else if (pointsRefCell.numTensorComponents() < weightsRefCell.numTensorComponents())
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(pointsRefCell.numTensorComponents() != 1, std::invalid_argument, "Error: weightsRefCell does not have the same number of tensorial components as pointsRefCell, and pointsRefCell has non-trivial tensor structure…");
+              
+              // if pointsRefCell has trivial tensor structure, we can resolve this by converting weightsRefCell to also have trivial tensor structure.
+              auto weightsFC = FieldContainerConversion<double>::fromTensorData(weightsRefCell);
+              weightsRefCell = FieldContainerConversion<double>::toTensorData(weightsFC);
+            }
           }
-        }
-        domainBasisCache->setRefCellPointsFC(refCellPoints, cubatureWeightsSubcell, domainBasisCache->cubatureDegree());
+        domainBasisCache->setRefCellPoints(pointsRefCell, weightsRefCell, domainBasisCache->cubatureDegree());
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
         for (auto dofOrdinal : subcellDofOrdinals)
         {
           dofsToSkip.erase(dofOrdinal);
         }
-//        {
-//          // DEBUGGING
-//          const int numPoints = domainBasisCache->getRefCellPointsFC().dimension(0);
-//          Camellia::FieldContainer<Scalar> fxnValues(domainBasisCache->numCells(), numPoints);
-//          fxnToApproximate->values(fxnValues, domainBasisCache);
-//
-//          std::cout << "fxnToApproximate values:\n" << fxnValues << std::endl;
-//        }
          
         Camellia::FieldContainer<Scalar> newBasisCoefficients;
         projectFunctionOntoBasis(newBasisCoefficients, fxnToApproximate, basis, domainBasisCache, ipForProjection, v, dofsToSkip);
@@ -424,8 +454,6 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
           for (auto dofOrdinal : subcellDofOrdinals)
           {
             wholeBasisCoefficients(cellOrdinal,dofOrdinal) = newBasisCoefficients(cellOrdinal,dofOrdinal);
-//            cout << "Assigned dofOrdinal " << dofOrdinal << " " << " coefficient " << newBasisCoefficients(cellOrdinal,dofOrdinal);
-//            cout << " (subcord,d) = (" << subcord << "," << d << ")" << endl;
           }
         }
       }
@@ -709,17 +737,23 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
     allDofs.insert(i);
   }
   
-  BasisPtr continuousBasis;
-  int startingDimensionForProjection; // 0 to start with vertices, e.g.
-  if (Camellia::functionSpaceIsDiscontinuous(parentBasis->functionSpace()))
+  BasisPtr conformingBasis;
+  int startingDimensionForProjection = -1;
+  if (Camellia::functionSpaceIsBroken(parentBasis->functionSpace()))
   {
-    bool spaceTime = subdomainCaches[0]->cellTopologyIsSpaceTime();
-    continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(parentBasis, spaceTime);
+    const bool spaceTime = subdomainCaches[0]->cellTopologyIsSpaceTime();
+    conformingBasis = BasisFactory::basisFactory()->getContinuousBasis(parentBasis, spaceTime);
+    TEUCHOS_TEST_FOR_EXCEPTION(conformingBasis->getCardinality() != parentBasis->getCardinality(), std::logic_error, "continuous basis should have same cardinality as discontinuous");
+    startingDimensionForProjection = domainDim;
+  }
+  else if (Camellia::functionSpaceIsDiscontinuous(parentBasis->functionSpace()))
+  {
+    conformingBasis = parentBasis;
     startingDimensionForProjection = domainDim;
   }
   else
   {
-    continuousBasis = parentBasis;
+    conformingBasis = parentBasis;
     startingDimensionForProjection = 0;
   }
   
@@ -731,7 +765,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
   }
   else
   {
-    dofsForDomain = continuousBasis->dofOrdinalsForSide(sideOrdinal);
+    dofsForDomain = conformingBasis->dofOrdinalsForSide(sideOrdinal);
   }
   
   int numCells = basisCoefficients.dimension(0);
@@ -754,18 +788,18 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
       if (basisDomainDim == domainDim)
       {
         if (d > startingDimensionForProjection)
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcord);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcord);
         else
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcord, 0);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcord, 0);
       }
       else
       {
         // need to map from the subcord on the side to the one the basis sees
         int subcordBasis = CamelliaCellTools::subcellOrdinalMap(basisDomainTopo, domainDim, sideOrdinal, d, subcord);
         if (d > startingDimensionForProjection)
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcordBasis);
         else
-          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis, 0);
+          subcellDofOrdinals = conformingBasis->dofOrdinalsForSubcell(d, subcordBasis, 0);
       }
       
       if (subcellDofOrdinals.size() > 0)

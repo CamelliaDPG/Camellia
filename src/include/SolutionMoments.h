@@ -82,6 +82,8 @@ namespace Camellia
   class SolutionMoments
   {
     using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+    using SerendipityOrdinalMap = typename Intrepid2::Basis<DeviceType,double,double>::OrdinalTypeArray1D;
+    
     const int _maxMomentNumber;
     
     BasisPtr _spatialBasis; // _spatialBasis x extrusionBases = _phaseSpaceBasis.
@@ -89,6 +91,9 @@ namespace Camellia
     BasisPtr _extrudedSpatialBasis; // if there is a "surviving" extrusion dimension, _extrudedSpatialBasis = spatialBasis * extrusionBasis.  Otherwise, it's just spatialBasis.
     std::vector<BasisPtr> _extrusionBases;
     Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> _componentBasisCardinalities; // first entry belongs to spatial basis
+    
+    SerendipityOrdinalMap _serendipityToTensorBasisOrdinal; // indices are serendipity ordinals; values are tensor basis ordinals
+    SerendipityOrdinalMap _tensorToSerendipityOrdinal;      // reverse map; -1 where serendipity deletes (inefficient use of memory here -- consider alternatives?)
     
     using BasisIntegralView = Camellia::DeviceView<double>;
     int _numExtrusionDimensions;

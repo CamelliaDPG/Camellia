@@ -19,6 +19,7 @@
 
 #include "Teuchos_RCP.hpp"
 
+#include "BasisFamily.h"
 #include "CamelliaIntrepidExtendedTypes.h"
 
 namespace Camellia
@@ -40,9 +41,10 @@ class Var   // really Var x Operator
   Camellia::VarType _varType;
   LinearTermPtr _termTraced; // for trace variables, optionally allows identification with fields
   //  map< Camellia::EOperator, VarPtr > _relatedVars; // grad, div, etc. could be cached here
-  bool _definedOnTemporalInterfaces;
+  bool _definedOnTemporalInterfaces; // TODO: consider replacing with "vector<bool> _definedOnExtrusionOrthogonalInterfaces" -- to apply to general tensorial extrusions
   
-  Space _temporalFS;
+  Space _temporalFS; // TODO: consider replacing this with "vector<Space> _extrusionSpaces" -- to apply to general tensorial extrusions
+  BasisFamilyPtr _basisFamily;
 public:
   Var(int ID, int rank, std::string name, Camellia::EOperator op =  Camellia::OP_VALUE,
       Camellia::Space fs = Camellia::UNKNOWN_FS, Camellia::VarType varType = Camellia::UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL),
@@ -104,6 +106,11 @@ public:
   /** \brief Sets the function space to use for the extruded time dimension in space-time meshes.  Valid options are HGRAD, L2, HGRAD_DISC.  UNKNOWN_FS is the default, and indicates that the variable does not support a temporal extrusion.
   */
   Space temporalFunctionSpace() const;
+  
+  BasisFamilyPtr getBasisFamily() const;
+  void setBasisFamily(BasisFamilyPtr basisFamily);
+  
+  BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<int> &p_H1, const int sideOrdinal = -1) const;
   
   template <typename Scalar>
   static VarPtr varForTrialID(int trialID, TBFPtr<Scalar> bf);

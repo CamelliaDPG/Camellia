@@ -7,10 +7,14 @@
 
 #include "SolutionMoments.h"
 
+#include "doubleBasisConstruction.h"
 #include "SolutionMomentFunction.h"
 #include "TensorBasis.h"
 
 #include "CamelliaDebugUtility.h"
+
+#include <Intrepid2_SerendipityBasis.hpp>
+#include <Intrepid2_TensorBasis.hpp>
 
 using namespace Camellia;
 
@@ -122,32 +126,108 @@ _basisReconciliation(true) // true: cache results
   auto trialOrdering = elemType->trialOrderPtr;
   _phaseSpaceBasis = trialOrdering->getBasis(fieldVar->ID());
   
-  // TODO: when we move to using Intrepid2 TensorBasis, update this accordingly
-  
-  // peel off the extrusion bases:
   _extrusionBases = std::vector<BasisPtr>(_numExtrusionDimensions);
-  auto spatialBasis = _phaseSpaceBasis;
-  for (int extrusionOrdinal=_numExtrusionDimensions-1; extrusionOrdinal >= 0; extrusionOrdinal--)
+  
+  // TODO: see if we ever actually use the Camellia TensorBasis here.  If not, delete this. (If so, revise this TODO…)
+  using CamelliaTensorBasis = Camellia::TensorBasis<double, Intrepid::FieldContainer<double> >;
+  CamelliaTensorBasis* tensorBasis = dynamic_cast<CamelliaTensorBasis*>(_phaseSpaceBasis.get());
+  
+  if (tensorBasis != NULL)
   {
-    using TensorBasis = Camellia::TensorBasis<double, Intrepid::FieldContainer<double> >;
-    TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(spatialBasis.get());
-    
-    TEUCHOS_TEST_FOR_EXCEPTION(tensorBasis == NULL, std::invalid_argument, "fieldVar must be discretized with a TensorBasis");
-    
-    _extrusionBases[extrusionOrdinal] = tensorBasis->getTemporalBasis();
-    _componentBasisCardinalities[extrusionOrdinal+1] = _extrusionBases[extrusionOrdinal]->getCardinality();
-    
-    spatialBasis = tensorBasis->getSpatialBasis();
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "I guess we *do* use Camellia's TensorBasis here sometimes");
+//    // peel off the extrusion bases:
+//    auto spatialBasis = _phaseSpaceBasis;
+//    for (int extrusionOrdinal=_numExtrusionDimensions-1; extrusionOrdinal >= 0; extrusionOrdinal--)
+//    {
+//      using TensorBasis = Camellia::TensorBasis<double, Intrepid::FieldContainer<double> >;
+//      TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(spatialBasis.get());
+//
+//      TEUCHOS_TEST_FOR_EXCEPTION(tensorBasis == NULL, std::invalid_argument, "fieldVar must be discretized with a TensorBasis");
+//
+//      _extrusionBases[extrusionOrdinal] = tensorBasis->getTemporalBasis();
+//      _componentBasisCardinalities[extrusionOrdinal+1] = _extrusionBases[extrusionOrdinal]->getCardinality();
+//
+//      spatialBasis = tensorBasis->getSpatialBasis();
+//    }
+//    _spatialBasis = spatialBasis;
   }
-  _spatialBasis = spatialBasis;
+  else
+  {
+    // try Intrepid2 TensorBasis
+    using Intrepid2Basis = Intrepid2::Basis<DeviceType,double,double>;
+    
+    using SerendipityBasis = Intrepid2::SerendipityBasis<Intrepid2Basis>;
+    using TensorBasis = Intrepid2::Basis_TensorBasis<Intrepid2Basis>;
+    
+    SerendipityBasis* serendipityBasis = dynamic_cast<SerendipityBasis*>(_phaseSpaceBasis->intrepid2Basis().get());
+    TensorBasis* tensorBasis;
+    
+    if (serendipityBasis != NULL)
+    {
+      // set tensorBasis
+      auto underlyingBasis = serendipityBasis->getUnderlyingBasis();
+      tensorBasis = dynamic_cast<TensorBasis*>(underlyingBasis.get());
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(tensorBasis == NULL, std::invalid_argument, "Basis underlying SerendipityBasis is not a TensorBasis");
+      
+      // set up maps between serendipity ordinals and underlying tensor ordinals
+      
+      auto ordinalMap = serendipityBasis->ordinalMap();
+      auto reverseOrdinalMap = SerendipityOrdinalMap("_tensorToSerendipityOrdinal",tensorBasis->getCardinality());
+      
+      Kokkos::deep_copy(reverseOrdinalMap, -1);
+      
+      Kokkos::parallel_for("reverse ordinal map", ordinalMap.extent(0),
+      KOKKOS_LAMBDA (const int serendipityOrdinal) {
+        auto tensorOrdinal = ordinalMap(serendipityOrdinal);
+        reverseOrdinalMap(tensorOrdinal) = serendipityOrdinal;
+      });
+      
+      _serendipityToTensorBasisOrdinal = ordinalMap;
+      _tensorToSerendipityOrdinal = reverseOrdinalMap;
+    }
+    else
+    {
+      tensorBasis = dynamic_cast<TensorBasis*>(_phaseSpaceBasis->intrepid2Basis().get());
+    }
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(tensorBasis == NULL, std::invalid_argument, "Basis must be either a SerendipityBasis or a TensorBasis");
+    
+    if (tensorBasis != NULL)
+    {
+      auto basisComponents = tensorBasis->getTensorBasisComponents();
+      
+      int extrusionOffset = basisComponents.size() - _numExtrusionDimensions;
+      // set _spatialBasis
+      {
+        auto spatialBasisIntrepid2 = basisComponents[0];
+        ::Camellia::EFunctionSpace fs = fromIntrepid2FunctionSpace(spatialBasisIntrepid2->getFunctionSpace());
+        
+        for (int i=1; i<extrusionOffset; i++)
+        {
+          auto extrusionIntrepid2 = basisComponents[i];
+          spatialBasisIntrepid2 = Teuchos::rcp( new TensorBasis(spatialBasisIntrepid2, extrusionIntrepid2, spatialBasisIntrepid2->getFunctionSpace()) );
+        }
+        _spatialBasis = Teuchos::rcp(new Intrepid2BasisWrapper<>(spatialBasisIntrepid2, spatialBasisIntrepid2->getDomainDimension(), 0, fs) );
+      }
+      // set _extrusionBases
+      for (int i=extrusionOffset; i<basisComponents.size(); i++)
+      {
+        auto intrepid2Basis = basisComponents[i];
+        ::Camellia::EFunctionSpace fs = fromIntrepid2FunctionSpace(intrepid2Basis->getFunctionSpace());
+        _extrusionBases[i-extrusionOffset] = Teuchos::rcp(new Intrepid2BasisWrapper<>(intrepid2Basis, 1, 0, fs) );
+        _componentBasisCardinalities[i-extrusionOffset+1] = _extrusionBases[i-extrusionOffset]->getCardinality();
+      }
+    }
+  }
+  
   _componentBasisCardinalities[0] = _spatialBasis->getCardinality();
   
   _extrudedSpatialBasis = _spatialBasis;
   if (_survivingExtrusionDimension != -1)
   {
     const int componentCardinality = _extrusionBases[_survivingExtrusionDimension]->getCardinality();
-    
-    _extrudedSpatialBasis = Teuchos::rcp(new TensorBasis<double>(_extrudedSpatialBasis,_extrusionBases[_survivingExtrusionDimension]));
+    _extrudedSpatialBasis = intrepid2TensorBasis(_extrudedSpatialBasis,_extrusionBases[_survivingExtrusionDimension]);
   }
   
   for (int extrusionOrdinal=0; extrusionOrdinal<_numExtrusionDimensions; extrusionOrdinal++)
@@ -422,6 +502,57 @@ void SolutionMoments::update()
   MeshPtr phaseSpaceMesh = _soln->mesh();
   const auto & myPhaseSpaceCells = phaseSpaceMesh->cellIDsInPartition();
   const auto & myPhysicalCells = _configurationSpaceMesh->cellIDsInPartition();
+    
+  using Intrepid2Basis   = Intrepid2::Basis<DeviceType,double,double>;
+  using SerendipityBasis = Intrepid2::SerendipityBasis<Intrepid2Basis>;
+  using OrdinalTypeArray1D = typename SerendipityBasis::OrdinalTypeArray1D;
+  
+  // when bases are serendipity bases, we will also need to reason in terms of the underlying tensor basis:
+  Teuchos::RCP<Intrepid2Basis> extrudedSpatialUnfilteredBasis, phaseSpaceUnfilteredBasis;
+  
+  // 1. Cast to Serendipity basis
+  auto spatialSerendipityBasis    = dynamic_cast<SerendipityBasis*>(_extrudedSpatialBasis->intrepid2Basis().get());
+  auto phaseSpaceSerendipityBasis = dynamic_cast<SerendipityBasis*>(_phaseSpaceBasis->intrepid2Basis().get());
+  
+  OrdinalTypeArray1D spatialSerendipityMap, phaseSpaceSerendipityMap;
+  OrdinalTypeArray1D reverseSpatialMap, reversePhaseMap;
+  
+  // 2. If match, set "unfiltered" to underlying; otherwise set to original
+  // 3. If match, construct a reverse map for the filter that indicates which of the tensor indices are retained in Serendipity
+  if (spatialSerendipityBasis)
+  {
+    extrudedSpatialUnfilteredBasis = spatialSerendipityBasis->getUnderlyingBasis();
+    spatialSerendipityMap          = spatialSerendipityBasis->ordinalMap();
+    reverseSpatialMap = OrdinalTypeArray1D("SolutionMoments reverse spatial map", extrudedSpatialUnfilteredBasis->getCardinality());
+    Kokkos::deep_copy(reverseSpatialMap, -1);
+    Kokkos::parallel_for("SolutionMoments: fill reverse spatial map", spatialSerendipityMap.size(),
+    KOKKOS_LAMBDA (const int serendipityBasisOrdinal) {
+      auto tensorOrdinal = spatialSerendipityMap(serendipityBasisOrdinal);
+      reverseSpatialMap(tensorOrdinal) = serendipityBasisOrdinal;
+    });
+  }
+  else
+  {
+    extrudedSpatialUnfilteredBasis = _extrudedSpatialBasis->intrepid2Basis();
+  }
+  if (phaseSpaceSerendipityBasis)
+  {
+    phaseSpaceUnfilteredBasis = phaseSpaceSerendipityBasis->getUnderlyingBasis();
+    phaseSpaceSerendipityMap  = phaseSpaceSerendipityBasis->ordinalMap();
+    reversePhaseMap = OrdinalTypeArray1D("SolutionMoments reverse phase map", phaseSpaceUnfilteredBasis->getCardinality());
+    Kokkos::deep_copy(reversePhaseMap, -1);
+    Kokkos::parallel_for("SolutionMoments: fill reverse phase map", phaseSpaceSerendipityMap.size(),
+    KOKKOS_LAMBDA (const int serendipityBasisOrdinal) {
+      auto tensorOrdinal = phaseSpaceSerendipityMap(serendipityBasisOrdinal);
+      reversePhaseMap(tensorOrdinal) = serendipityBasisOrdinal;
+    });
+  }
+  else
+  {
+    phaseSpaceUnfilteredBasis = _phaseSpaceBasis->intrepid2Basis();
+  }
+  
+  // 4. In cardinality definitions below, distinguish between full and filtered.
   
   const int numCells = myPhysicalCells.size();
   
@@ -430,14 +561,16 @@ void SolutionMoments::update()
   const int numSurvivingExtrusionDimensions = (_survivingExtrusionDimension >= 0) ? 1 : 0;
   const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, _numExtrusionDimensions - numSurvivingExtrusionDimensions);
   
-  // the "extruded spatial" basis is the spatial basis, times any extrusion basis not integrated away
   int extrudedSpatialBasisCardinality = _extrudedSpatialBasis->getCardinality();
+  
+  // the "extruded spatial" basis is the spatial basis, times any extrusion basis not integrated away
+  int extrudedSpatialUnfilteredBasisCardinality = extrudedSpatialUnfilteredBasis->getCardinality();
   // copy containers to avoid implicit references to this in lambdas below:
   auto componentBasisCardinalities = _componentBasisCardinalities;
   int survivingExtrusionDimension  = _survivingExtrusionDimension;
   
-  const int phaseSpaceBasisCardinality = _phaseSpaceBasis->getCardinality();
-  const int numPhaseBasisFunctionsPerSpatialBasisFunction = phaseSpaceBasisCardinality / extrudedSpatialBasisCardinality;
+  const int phaseSpaceUnfilteredBasisCardinality = phaseSpaceUnfilteredBasis->getCardinality();
+  const int numUnfilteredPhaseBasisFunctionsPerSpatialBasisFunction = phaseSpaceUnfilteredBasisCardinality / extrudedSpatialUnfilteredBasisCardinality;
   
   // make sure _spatialBasisCoefficients is properly allocated
   if (numCells != numCellsPrevious)
@@ -461,8 +594,7 @@ void SolutionMoments::update()
   auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(_soln->mesh()->getTopology()->baseMeshTopology());
   TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopology == NULL, std::invalid_argument, "phase space MeshTopology must be an ExtrudedMeshTopology");
   
-  Camellia::FieldContainer<double> phaseSpaceBasisCoefficientsFC(phaseSpaceBasisCardinality);
-  
+  Camellia::FieldContainer<double> phaseSpaceBasisCoefficientsFC(_phaseSpaceBasis->getCardinality());
   Camellia::FieldContainer<double> coarsePhysicalCellContributionsFC(extrudedSpatialBasisCardinality,numMomentEntries); // just for the current phase space cellID
   
   std::map<IndexType, FieldContainer<double> > activePhysicalCellContributions;
@@ -486,7 +618,7 @@ void SolutionMoments::update()
     
     auto extrusionBasisIntegralsArray = _extrusionBasisIntegrals; // avoiding implicit reference to this in lambda below
     using namespace ::Camellia::TensorIndices;
-    Kokkos::parallel_for("integrate over phase space", extrudedSpatialBasisCardinality,
+    Kokkos::parallel_for("integrate over phase space", extrudedSpatialUnfilteredBasisCardinality,
     KOKKOS_LAMBDA (const int extrudedSpatialBasisOrdinal) {
       Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> phaseFieldOrdinalComponents;
       int remainingExtrudedSpatialBasisOrdinal = extrudedSpatialBasisOrdinal;
@@ -514,7 +646,7 @@ void SolutionMoments::update()
           {
             momentIndex[2] = k;
             double extrusionIntegralValue = 0.0;
-            for (int integratedExtrusionFieldOrdinal = 0; integratedExtrusionFieldOrdinal < numPhaseBasisFunctionsPerSpatialBasisFunction; integratedExtrusionFieldOrdinal++)
+            for (int integratedExtrusionFieldOrdinal = 0; integratedExtrusionFieldOrdinal < numUnfilteredPhaseBasisFunctionsPerSpatialBasisFunction; integratedExtrusionFieldOrdinal++)
             {
               int remainingIntegratedExtrusionFieldOrdinal = integratedExtrusionFieldOrdinal;
               for (int d=0; d<numExtrusionDimensions; d++)
@@ -525,8 +657,21 @@ void SolutionMoments::update()
                 }
               }
               
+              int phaseFieldTensorOrdinal;
+              setTensorOrdinal(phaseFieldTensorOrdinal, phaseFieldOrdinalComponents, componentBasisCardinalities, numExtrusionDimensions+1);
               int phaseFieldOrdinal;
-              setTensorOrdinal(phaseFieldOrdinal, phaseFieldOrdinalComponents, componentBasisCardinalities, numExtrusionDimensions+1);
+              if (reversePhaseMap.size() == 0)
+              {
+                phaseFieldOrdinal = phaseFieldTensorOrdinal;
+              }
+              else
+              {
+                phaseFieldOrdinal = reversePhaseMap(phaseFieldTensorOrdinal);
+              }
+              if (phaseFieldOrdinal < 0)
+              {
+                continue;
+              }
               
               const double &phaseFieldCoefficient = phaseSpaceBasisCoefficients(phaseFieldOrdinal);
               double extrusionComponentProduct = phaseFieldCoefficient;
@@ -564,7 +709,18 @@ void SolutionMoments::update()
             }
             extrusionIntegralValue *= extrusionMeasure;
             
-            coarsePhysicalCellContributions(extrudedSpatialBasisOrdinal,momentIndex1D) = extrusionIntegralValue;
+            if (reverseSpatialMap.size() == 0)
+            {
+              coarsePhysicalCellContributions(extrudedSpatialBasisOrdinal,momentIndex1D) = extrusionIntegralValue;
+            }
+            else
+            {
+              auto filteredSpatialBasisOrdinal = reverseSpatialMap(extrudedSpatialBasisOrdinal);
+              if (filteredSpatialBasisOrdinal >= 0)
+              {
+                coarsePhysicalCellContributions(filteredSpatialBasisOrdinal,momentIndex1D) = extrusionIntegralValue;
+              }
+            }
             momentIndex1D++;
           }
         }

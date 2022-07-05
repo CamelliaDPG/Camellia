@@ -2175,17 +2175,20 @@ namespace
     VarPtr uhat = varFactory->traceVarSpaceTime("uhat");
     VarPtr fhat = varFactory->fluxVarSpaceTime("fhat");
     VarPtr u = varFactory->fieldVarSpaceTime("u");
-    VarPtr sigma = varFactory->fieldVarSpaceTime("sigma", VECTOR_L2);
+    VarPtr sigma1 = varFactory->fieldVarSpaceTime("sigma1", L2);
+    VarPtr sigma2 = varFactory->fieldVarSpaceTime("sigma2", L2);
     
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
     // tau terms:
-    bf->addTerm(sigma, tau);
+    bf->addTerm(sigma1, tau->x());
+    bf->addTerm(sigma2, tau->y());
     bf->addTerm(u, tau->div());
     bf->addTerm(-uhat, tau->dot_normal());
     
     // v terms:
-    bf->addTerm( sigma, v->grad() );
+    bf->addTerm( sigma1, v->dx() );
+    bf->addTerm( sigma2, v->dy() );
     bf->addTerm( fhat, v);
     
     ////////////////////   BUILD MESH   ///////////////////////
@@ -2204,7 +2207,8 @@ namespace
     functionMap[uhat->ID()] = Function::xn(1) * traceFxn;
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
-    functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1));
+    functionMap[sigma1->ID()] = Function::xn(1);
+    functionMap[sigma2->ID()] = Function::yn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
     
     double tol = 1e-14;
@@ -2433,17 +2437,23 @@ namespace
     VarPtr uhat = varFactory->traceVarSpaceTime("uhat");
     VarPtr fhat = varFactory->fluxVarSpaceTime("fhat");
     VarPtr u = varFactory->fieldVarSpaceTime("u");
-    VarPtr sigma = varFactory->fieldVarSpaceTime("sigma", VECTOR_L2);
+    VarPtr sigma1 = varFactory->fieldVarSpaceTime("sigma1", L2);
+    VarPtr sigma2 = varFactory->fieldVarSpaceTime("sigma2", L2);
+    VarPtr sigma3 = varFactory->fieldVarSpaceTime("sigma3", L2);
     
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
     // tau terms:
-    bf->addTerm(sigma, tau);
+    bf->addTerm(sigma1, tau->x());
+    bf->addTerm(sigma2, tau->y());
+    bf->addTerm(sigma3, tau->z());
     bf->addTerm(u, tau->div());
     bf->addTerm(-uhat, tau->dot_normal());
     
     // v terms:
-    bf->addTerm( sigma, v->grad() );
+    bf->addTerm( sigma1, v->dx() );
+    bf->addTerm( sigma2, v->dy() );
+    bf->addTerm( sigma3, v->dz() );
     bf->addTerm( fhat, v);
     
     ////////////////////   BUILD MESH   ///////////////////////
@@ -2462,7 +2472,9 @@ namespace
     functionMap[uhat->ID()] = Function::xn(1) * traceFxn;
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
-    functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1), Function::zn(1));
+    functionMap[sigma1->ID()] = Function::xn(1);
+    functionMap[sigma2->ID()] = Function::yn(1);
+    functionMap[sigma3->ID()] = Function::zn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
     
     double tol = 1e-14;

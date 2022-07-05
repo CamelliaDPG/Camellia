@@ -29,19 +29,36 @@ BasisPtr intrepid2LineHGRAD_DISC(int polyOrder);
 BasisPtr intrepid2LineHVOL(int polyOrder); // polyOrder is the degree of the polynomial space; the H^1 order is one higher than this (contrast BasisFactory)
 
 BasisPtr intrepid2TriHGRAD(int polyOrder);
+BasisPtr intrepid2TriHGRAD_DISC(int polyOrder);
 BasisPtr intrepid2TriHDIV(int polyOrder);
 BasisPtr intrepid2TriHDIV_DISC(int polyOrder);
+BasisPtr intrepid2TriHCURL(int polyOrder);
+BasisPtr intrepid2TriHCURL_DISC(int polyOrder);
+BasisPtr intrepid2TriHVOL(int polyOrder);
 
 BasisPtr intrepid2QuadHGRAD(int polyOrder);
 BasisPtr intrepid2QuadHGRAD_DISC(int polyOrder);
+BasisPtr intrepid2QuadHCURL(int polyOrder);
+BasisPtr intrepid2QuadHCURL_DISC(int polyOrder);
+BasisPtr intrepid2QuadHDIV(int polyOrder);
+BasisPtr intrepid2QuadHDIV_DISC(int polyOrder);
 BasisPtr intrepid2QuadHVOL(int polyOrder);
 
 BasisPtr intrepid2HexHGRAD(int polyOrder);
 BasisPtr intrepid2HexHGRAD_DISC(int polyOrder);
+BasisPtr intrepid2HexHCURL(int polyOrder);
+BasisPtr intrepid2HexHCURL_DISC(int polyOrder);
+BasisPtr intrepid2HexHDIV(int polyOrder);
+BasisPtr intrepid2HexHDIV_DISC(int polyOrder);
 BasisPtr intrepid2HexHVOL(int polyOrder);
 
 BasisPtr intrepid2TetHGRAD(int polyOrder);
 BasisPtr intrepid2TetHGRAD_DISC(int polyOrder);
+BasisPtr intrepid2TetHCURL(int polyOrder);
+BasisPtr intrepid2TetHCURL_DISC(int polyOrder);
+BasisPtr intrepid2TetHDIV(int polyOrder);
+BasisPtr intrepid2TetHDIV_DISC(int polyOrder);
+BasisPtr intrepid2TetHVOL(int polyOrder);
 
 BasisPtr intrepid2HGRAD(const shards::CellTopology &cellTopo, int polyOrder);
 BasisPtr intrepid2HGRADLowestOrder(const shards::CellTopology &cellTopo);

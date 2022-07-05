@@ -168,6 +168,8 @@ VarPtr VarFactory::fieldVar(string name, Space fs, int ID)
 
 VarPtr VarFactory::fieldVarSpaceTime(string name, Space fs, Space temporalFS, int ID)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION((fs == VECTOR_L2) || (fs == VECTOR_HGRAD), std::invalid_argument, "'Vectorized' spatial variables may not be extruded in time; please rewrite in terms of the scalar components");
+  
   if (_trialVars.find(name) != _trialVars.end())
   {
     return _trialVars[name];
@@ -266,6 +268,20 @@ VarPtr VarFactory::fluxVarSpaceOnly(string name, VarPtr termTraced, Space fs, in
 VarPtr VarFactory::fluxVarSpaceOnly(string name, Space fs, int ID)
 {
   return fluxVarSpaceOnly(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
+}
+
+void VarFactory::setBasisFamily(BasisFamilyPtr basisFamily)
+{
+  for (const auto & trialVarEntry: _trialVars)
+  {
+    const auto & trialVar = trialVarEntry.second;
+    trialVar->setBasisFamily(basisFamily);
+  }
+  for (const auto & testVarEntry: _testVars)
+  {
+    const auto & testVar = testVarEntry.second;
+    testVar->setBasisFamily(basisFamily);
+  }
 }
 
 VarPtr VarFactory::traceVar(string name, LinearTermPtr termTraced, Space fs, int ID)
