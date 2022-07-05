@@ -256,7 +256,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
   TEUCHOS_UNIT_TEST( Basis, HGRAD_Triangle_L2_Eigenvalues )
   {
     Space space = HGRAD;
-    for (int k=1; k<10; k++) // poly order k
+    for (int k=1; k<9; k++) // poly order k
     {
       testTriangleBasisL2Eigenvalues(k, space, out, success);
     }
@@ -333,7 +333,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
   {
     Space space = HDIV;
     success = true;
-    for (int k=1; k<10; k++) // poly order k
+    for (int k=1; k<9; k++) // poly order k
     {
       bool newSuccess = true;
       testQuadBasisL2Eigenvalues(k, space, out, newSuccess);

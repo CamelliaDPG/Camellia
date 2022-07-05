@@ -38,6 +38,7 @@ private:
   VlasovPoissonSpaceTimeFormulationChoice _formulationChoice;
   bool _usePeriodicBCs;
   bool _enforceQuasiNeutrality;
+  bool _useSerendipityBasis;
   
   BFPtr _vlasovBF;
   BFPtr _poissonBF;
@@ -135,6 +136,7 @@ public:
                                     const double v0, const double vWidth, const int vElementsCoarse,
                                     const int H1Order, const int delta_k,
                                     const bool usePeriodicBCs, const bool enforceQuasiNeutrality,
+                                    const bool useSerendipityBasis,
                                     const int vlasovTraceEnrichment,
                                     const double firstTimeDivisionSize = 0.0); // firstTimeDivisionSize: set this to a positive value to introduce an extra time division from t=0 to firstTimeDivisionSize.  tFinal will still be the final time.
 

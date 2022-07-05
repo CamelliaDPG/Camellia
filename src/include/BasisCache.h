@@ -285,16 +285,14 @@ public:
   // setRefCellPointsFC overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
   virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell);
-  virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell,
-                                const Camellia::FieldContainer<double> &cubatureWeights,
-                                int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
+  virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubatureWeights, int cubatureDegree = -1);
   const Camellia::FieldContainer<double> &getRefCellPointsFC();
   const Camellia::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
   
   const Intrepid2::TensorPoints<double,DeviceType> getRefCellPoints() const;
   
   void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell);
-  void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell);
+  virtual void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell, int cubatureDegree = -1);
 
   // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
   Camellia::FieldContainer<double> getRefCellPointsForPhysicalPoints(const Camellia::FieldContainer<double> &physicalPoints, int cellIndex=0);

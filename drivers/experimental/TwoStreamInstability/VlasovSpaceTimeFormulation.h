@@ -33,6 +33,7 @@ namespace Camellia
 private:
   int _spaceDim;
   int _velocityDim;
+  bool _useSerendipityBasis; // TODO: use this (in constructor; see VlasovPoissonSpaceTimeFormulation)
   
   BFPtr _vlasovBF;
   int _delta_k;
@@ -86,7 +87,7 @@ private:
   static const int CONFIGURATION_TAG_TMIN    = 0; // initial time
   int _nextConfigurationSpaceTag = CONFIGURATION_TAG_TMIN + 1;
 public:
-  VlasovSpaceTimeFormulation(double q, double m,
+  VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                              MeshTopologyPtr spatialMeshTopology,
                              std::vector<double> temporalVertices,

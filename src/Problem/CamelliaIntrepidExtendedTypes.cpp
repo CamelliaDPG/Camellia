@@ -49,6 +49,21 @@ bool Camellia::functionSpaceIsVectorized(EFunctionSpace fs)
          ||     (FUNCTION_SPACE_TENSOR_HGRAD_DISC == fs);
 }
 
+bool Camellia::functionSpaceIsBroken(Camellia::EFunctionSpace fs)
+{
+  switch (fs)
+  {
+  case FUNCTION_SPACE_HGRAD_DISC:
+  case FUNCTION_SPACE_HCURL_DISC:
+  case FUNCTION_SPACE_HDIV_DISC:
+  case FUNCTION_SPACE_VECTOR_HGRAD_DISC:
+  case FUNCTION_SPACE_TENSOR_HGRAD_DISC:
+    return true;
+  default:
+    return false;
+  }
+}
+
 bool Camellia::functionSpaceIsDiscontinuous(Camellia::EFunctionSpace fs)
 {
   switch (fs)
@@ -170,6 +185,69 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
       }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
+  }
+}
+
+EFunctionSpace Camellia::fromIntrepid2FunctionSpace(const ::Intrepid2::EFunctionSpace &fs)
+{
+  switch (fs)
+  {
+    case Intrepid2::FUNCTION_SPACE_HVOL:         return FUNCTION_SPACE_HVOL;
+    case Intrepid2::FUNCTION_SPACE_HGRAD:        return FUNCTION_SPACE_HGRAD;
+    case Intrepid2::FUNCTION_SPACE_HDIV:         return FUNCTION_SPACE_HDIV;
+    case Intrepid2::FUNCTION_SPACE_HCURL:        return FUNCTION_SPACE_HCURL;
+    case Intrepid2::FUNCTION_SPACE_VECTOR_HGRAD: return FUNCTION_SPACE_VECTOR_HGRAD;
+    case Intrepid2::FUNCTION_SPACE_TENSOR_HGRAD: return FUNCTION_SPACE_TENSOR_HGRAD;
+    case Intrepid2::FUNCTION_SPACE_MAX:          return FUNCTION_SPACE_UNKNOWN;
+  }
+}
+
+::Intrepid2::EFunctionSpace Camellia::toIntrepid2FunctionSpace(const EFunctionSpace &fs)
+{
+  switch (fs)
+  {
+    case FUNCTION_SPACE_HVOL:
+    case FUNCTION_SPACE_VECTOR_HVOL:
+    case FUNCTION_SPACE_TENSOR_HVOL:
+    case FUNCTION_SPACE_HVOL_DISC:
+    case FUNCTION_SPACE_VECTOR_HVOL_DISC:
+    case FUNCTION_SPACE_TENSOR_HVOL_DISC:
+      return Intrepid2::FUNCTION_SPACE_HVOL;
+    case FUNCTION_SPACE_HGRAD:
+    case FUNCTION_SPACE_HGRAD_DISC:
+      return Intrepid2::FUNCTION_SPACE_HGRAD;
+    case FUNCTION_SPACE_HDIV:
+    case FUNCTION_SPACE_HDIV_DISC:
+    case FUNCTION_SPACE_HDIV_FREE:
+      return Intrepid2::FUNCTION_SPACE_HDIV;
+    case FUNCTION_SPACE_HCURL:
+    case FUNCTION_SPACE_HCURL_DISC:
+      return Intrepid2::FUNCTION_SPACE_HCURL;
+    case FUNCTION_SPACE_VECTOR_HGRAD:
+    case FUNCTION_SPACE_VECTOR_HGRAD_DISC:
+      return Intrepid2::FUNCTION_SPACE_VECTOR_HGRAD;
+    case FUNCTION_SPACE_TENSOR_HGRAD:
+    case FUNCTION_SPACE_TENSOR_HGRAD_DISC:
+      return Intrepid2::FUNCTION_SPACE_TENSOR_HGRAD;
+    case FUNCTION_SPACE_UNKNOWN:
+    case FUNCTION_SPACE_REAL_SCALAR: // no corresponding FS in Intrepid2
+      return Intrepid2::FUNCTION_SPACE_MAX;
+  }
+}
+
+int Camellia::getH1Order(int basisDegree, EFunctionSpace fs)
+{
+  switch (fs)
+  {
+    case FUNCTION_SPACE_HVOL:
+    case FUNCTION_SPACE_HVOL_DISC:
+    case FUNCTION_SPACE_TENSOR_HVOL:
+    case FUNCTION_SPACE_TENSOR_HVOL_DISC:
+    case FUNCTION_SPACE_VECTOR_HVOL:
+    case FUNCTION_SPACE_VECTOR_HVOL_DISC:
+      return basisDegree + 1;
+    default:
+      return basisDegree;
   }
 }
 

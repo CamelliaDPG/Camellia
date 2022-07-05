@@ -13,19 +13,30 @@
 #include "Intrepid_HDIV_HEX_In_FEM.hpp"
 
 #include <Intrepid2_HGRAD_LINE_Cn_FEM.hpp>
-#include <Intrepid2_HGRAD_QUAD_Cn_FEM.hpp>
-#include <Intrepid2_HGRAD_TRI_Cn_FEM.hpp>
-#include <Intrepid2_HGRAD_HEX_Cn_FEM.hpp>
-#include <Intrepid2_HGRAD_TET_Cn_FEM.hpp>
-
 #include <Intrepid2_HVOL_LINE_Cn_FEM.hpp>
-#include <Intrepid2_HDIV_TRI_In_FEM.hpp>
-
 #include <Intrepid2_HGRAD_LINE_C1_FEM.hpp>
-#include <Intrepid2_HGRAD_QUAD_C1_FEM.hpp>
-#include <Intrepid2_HGRAD_TRI_C1_FEM.hpp>
-#include <Intrepid2_HGRAD_HEX_C1_FEM.hpp>
+
+#include <Intrepid2_HGRAD_TRI_Cn_FEM.hpp>
+#include <Intrepid2_HDIV_TRI_In_FEM.hpp>
+#include <Intrepid2_HCURL_TRI_In_FEM.hpp>
+#include <Intrepid2_HVOL_TRI_Cn_FEM.hpp>
+
+#include <Intrepid2_HGRAD_TET_Cn_FEM.hpp>
+#include <Intrepid2_HCURL_TET_In_FEM.hpp>
+#include <Intrepid2_HDIV_TET_In_FEM.hpp>
 #include <Intrepid2_HGRAD_TET_C1_FEM.hpp>
+
+#include <Intrepid2_HGRAD_QUAD_Cn_FEM.hpp>
+#include <Intrepid2_HCURL_QUAD_In_FEM.hpp>
+#include <Intrepid2_HDIV_QUAD_In_FEM.hpp>
+#include <Intrepid2_HGRAD_QUAD_C1_FEM.hpp>
+
+#include <Intrepid2_HGRAD_HEX_Cn_FEM.hpp>
+#include <Intrepid2_HCURL_HEX_In_FEM.hpp>
+#include <Intrepid2_HDIV_HEX_In_FEM.hpp>
+#include <Intrepid2_HGRAD_HEX_C1_FEM.hpp>
+
+#include <Intrepid2_TensorBasis.hpp>
 
 #include "TensorBasis.h"
 
@@ -114,13 +125,45 @@ BasisPtr intrepid2TriHGRAD(int polyOrder)
   );
 }
 
+BasisPtr intrepid2TriHGRAD_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HGRAD_DISC;
+  int scalarRank = 0;
+  int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HGRAD_TRI_Cn_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, scalarRank, fs)
+  );
+}
+
+BasisPtr intrepid2TriHCURL(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL;
+  const int vectorRank = 1;
+  const int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_TRI_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                      spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2TriHCURL_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL_DISC;
+  const int vectorRank = 1;
+  const int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_TRI_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
 BasisPtr intrepid2TriHDIV(int polyOrder)
 {
   Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV;
   const int vectorRank = 1;
   const int spaceDim = 2;
   
-  // ultimately, we will be replacing all Intrepid bases with Intrepid2 bases. We start with HDIV_TRI here because there may be bugs in Intrepid's HDIV_TRI implementation.
   return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TRI_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
                       spaceDim, vectorRank, fs)
   );
@@ -132,9 +175,19 @@ BasisPtr intrepid2TriHDIV_DISC(int polyOrder)
   const int vectorRank = 1;
   const int spaceDim = 2;
   
-  // ultimately, we will be replacing all Intrepid bases with Intrepid2 bases. We start with HDIV_TRI here because there may be bugs in Intrepid's HDIV_TRI implementation.
   return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TRI_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
                                                    spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2TriHVOL(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HVOL;
+  const int scalarRank = 0;
+  const int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HVOL_TRI_Cn_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                      spaceDim, scalarRank, fs)
   );
 }
 
@@ -157,6 +210,50 @@ BasisPtr intrepid2QuadHGRAD_DISC(int polyOrder)
   
   return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HGRAD_QUAD_Cn_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
                                                    spaceDim, scalarRank, fs)
+  );
+}
+
+BasisPtr intrepid2QuadHCURL(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL;
+  int vectorRank = 1;
+  int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_QUAD_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2QuadHCURL_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL_DISC;
+  int vectorRank = 1;
+  int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_QUAD_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2QuadHDIV(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV;
+  int vectorRank = 1;
+  int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_QUAD_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2QuadHDIV_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV_DISC;
+  int vectorRank = 1;
+  int spaceDim = 2;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_QUAD_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
   );
 }
 
@@ -194,6 +291,50 @@ BasisPtr intrepid2HexHGRAD_DISC(int polyOrder)
   );
 }
 
+BasisPtr intrepid2HexHCURL(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_HEX_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2HexHCURL_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL_DISC;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_HEX_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2HexHDIV(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_HEX_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2HexHDIV_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV_DISC;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_HEX_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
 BasisPtr intrepid2HexHVOL(int polyOrder)
 {
   // historically, we've used the HGRAD basis from intrepid for HVOL, on the idea that specific HVOL bases were not available in Intrepid.  They are available in Intrepid2, and we should perhaps use these instead.  But for now we stick with the earlier setup, using HGRAD, marked with an HVOL function space.  (Where it gets tricky to use different bases for HVOL and HGRAD is that in some places we "upgrade" from discontinuous to continuous bases; not sure whether we do this with HVOL ever, but we do it for HGRAD_DISC; we'd need to check...)
@@ -222,6 +363,63 @@ BasisPtr intrepid2TetHGRAD(int polyOrder)
 BasisPtr intrepid2TetHGRAD_DISC(int polyOrder)
 {
   Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HGRAD_DISC;
+  int scalarRank = 0;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HGRAD_TET_Cn_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, scalarRank, fs)
+  );
+}
+
+BasisPtr intrepid2TetHCURL(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_TET_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2TetHCURL_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HCURL_DISC;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HCURL_TET_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2TetHDIV(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TET_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2TetHDIV_DISC(int polyOrder)
+{
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV_DISC;
+  int vectorRank = 1;
+  int spaceDim = 3;
+  
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TET_In_FEM<Camellia::DeviceType, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                                   spaceDim, vectorRank, fs)
+  );
+}
+
+BasisPtr intrepid2TetHVOL(int polyOrder)
+{
+  // historically, we've used the HGRAD basis from intrepid for HVOL, on the idea that specific HVOL bases were not available in Intrepid.  They are available in Intrepid2, and we should perhaps use these instead.  But for now we stick with the earlier setup, using HGRAD, marked with an HVOL function space.  (Where it gets tricky to use different bases for HVOL and HGRAD is that in some places we "upgrade" from discontinuous to continuous bases; not sure whether we do this with HVOL ever, but we do it for HGRAD_DISC; we'd need to check...)
+ 
+  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HVOL;
   int scalarRank = 0;
   int spaceDim = 3;
   
@@ -421,33 +619,46 @@ BasisPtr intrepid2HGRADLowestOrder(const unsigned &cellTopoKey)
 
 BasisPtr intrepid2TensorBasis(BasisPtr firstBasis, BasisPtr extrusionBasis)
 {
-  bool rangeDimensionIsSum = true;
-  using TensorBasis = Camellia::TensorBasis<double, Intrepid::FieldContainer<double> >;
-  return Teuchos::rcp( new TensorBasis(firstBasis, extrusionBasis, rangeDimensionIsSum) );
+  auto firstBasis_intrepid2 = firstBasis->intrepid2Basis();
+  auto extrusion_intrepid2  = extrusionBasis->intrepid2Basis();
   
-//  using BasisBase   = Intrepid2::Basis<Camellia::DeviceType,double,double>;
-//  using TensorBasis = Intrepid2::Basis_TensorBasis<BasisBase>;
-//
-//  const int spaceDim = firstBasis->rangeDimension() + extrusionBasis->rangeDimension();
-//  const int rangeRank = firstBasis->rangeRank() + extrusionBasis->rangeRank();
-//
-//  Intrepid2::EFunctionSpace fs_Intrepid2;
-//
-//  auto fsFirst = firstBasis->functionSpace();
-//  auto fsExtrusion = extrusionBasis->functionSpace();
-//  TEUCHOS_TEST_FOR_EXCEPTION((fsFirst != FUNCTION_SPACE_HGRAD) && (fsFirst != FUNCTION_SPACE_HVOL), std::invalid_argument, "intrepid2TensorBasis() only supports HGRAD, HVOL bases right now.");
-//  TEUCHOS_TEST_FOR_EXCEPTION(fsFirst != fsExtrusion, std::invalid_argument, "intrepid2TensorBasis() only supports extrusion bases that match the first basis in terms of function space.");
-//  if (fsFirst == FUNCTION_SPACE_HGRAD)
-//  {
-//    fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HGRAD;
-//  }
-//  else
-//  {
-//    fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HVOL;
-//  }
-//  auto tensorBasis_Intrepid2 = Teuchos::rcp(new SimpleTensorBasis(firstBasis_intrepid2, extrusion_intrepid2, fs_Intrepid2));
-//
-//  return Teuchos::rcp( new Intrepid2BasisWrapper<>(tensorBasis_Intrepid2, spaceDim, rangeRank, fsFirst));
+  TEUCHOS_TEST_FOR_EXCEPTION(firstBasis_intrepid2 == Teuchos::null, std::invalid_argument, "Arguments to intrepid2TensorBasis must define an Intrepid2 basis");
+  TEUCHOS_TEST_FOR_EXCEPTION( extrusion_intrepid2 == Teuchos::null, std::invalid_argument, "Arguments to intrepid2TensorBasis must define an Intrepid2 basis");
+  
+  using BasisBase   = Intrepid2::Basis<Camellia::DeviceType,double,double>;
+  using TensorBasis = Intrepid2::Basis_TensorBasis<BasisBase>;
+  
+  const int spaceDim = firstBasis->rangeDimension() + extrusionBasis->rangeDimension();
+  const int rangeRank = std::max(firstBasis->rangeRank(), extrusionBasis->rangeRank()); // 0 for scalar-valued bases, 1 for vector, etc.
+
+  Intrepid2::EFunctionSpace fs_Intrepid2;
+
+  EFunctionSpace fs_Camellia;
+  auto fsFirst = firstBasis->functionSpace();
+  auto fsExtrusion = extrusionBasis->functionSpace();
+  if ((fsFirst == FUNCTION_SPACE_HGRAD) && (fsExtrusion == FUNCTION_SPACE_HGRAD))
+  {
+    fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HGRAD;
+    fs_Camellia  = FUNCTION_SPACE_HGRAD;
+  }
+  else if ((fsFirst == FUNCTION_SPACE_HVOL) && (fsExtrusion == FUNCTION_SPACE_HVOL))
+  {
+    fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HVOL;
+    fs_Camellia  = FUNCTION_SPACE_HVOL;
+  }
+  else if (firstBasis->domainTopology()->getDimension() == 0)
+  {
+    fs_Intrepid2 = toIntrepid2FunctionSpace(fsExtrusion);
+    fs_Camellia  = fsExtrusion;
+  }
+  else
+  {
+    fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_MAX;
+    fs_Camellia  = EFunctionSpace::FUNCTION_SPACE_UNKNOWN;
+  }
+  auto tensorBasis_Intrepid2 = Teuchos::rcp(new TensorBasis(firstBasis_intrepid2, extrusion_intrepid2, fs_Intrepid2));
+
+  return Teuchos::rcp( new Intrepid2BasisWrapper<>(tensorBasis_Intrepid2, spaceDim, rangeRank, fs_Camellia));
 }
 
 }

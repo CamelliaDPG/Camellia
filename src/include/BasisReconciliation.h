@@ -156,6 +156,7 @@ public:
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements); // which degrees of freedom in the finer basis have empty support on the boundary of the coarser basis's reference element? -- these are the ones for which the constrained weights are determined in computeConstrainedWeights.
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements, unsigned subcdim, unsigned subcord);
 
+  static unsigned minimumSubcellDimension(const int topologyDimension, EFunctionSpace fs); // for continuity enforcement
   static unsigned minimumSubcellDimension(BasisPtr basis); // for continuity enforcement
 
 public:

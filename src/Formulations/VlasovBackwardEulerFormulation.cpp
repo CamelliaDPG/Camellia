@@ -99,7 +99,7 @@ namespace
   };
 }
 
-VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m,
+VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                MeshTopologyPtr spatialMeshTopology,
                                                                double dt,
@@ -109,6 +109,7 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                const int H1Order, const int delta_k)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
+_useSerendipityBasis(useSerendipityBasis),
 _delta_k(delta_k),
 _configurationSpaceFormulation(configurationSpaceFormulation),
 _q(q),
@@ -155,6 +156,17 @@ _m(m)
   TFunctionPtr<double> n = TFunction<double>::normal();
   
   VarFactoryPtr vlasovVF = VarFactory::varFactory();
+  
+  BasisFamilyPtr basisFamily;
+  if (_useSerendipityBasis)
+  {
+    basisFamily = BasisFamily::serendipityBasisFamily();
+  }
+  else
+  {
+    basisFamily = BasisFamily::hierarchicalBasisFamily();
+  }
+  vlasovVF->setBasisFamily(basisFamily);
   
   f = vlasovVF->fieldVar(S_F);
   w = vlasovVF->testVar(S_W, HGRAD); // w lies in HGRAD of phase space
@@ -357,7 +369,7 @@ _m(m)
   PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
 }
 
-VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m,
+VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                MeshTopologyPtr spatialMeshTopology,
                                                                double dt,
@@ -365,18 +377,18 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                std::vector<double> velocitySpaceVertices_y,
                                                                const int H1Order, const int delta_k)
 :
-VlasovBackwardEulerFormulation(q, m, configurationSpaceFormulation, spatialMeshTopology, dt,
+VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
                                velocitySpaceVertices_x, velocitySpaceVertices_y, std::vector<double>(),
                                H1Order, delta_k) {}
 
-VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m,
+VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                MeshTopologyPtr spatialMeshTopology,
                                                                double dt,
                                                                std::vector<double> velocitySpaceVertices_x,
                                                                const int H1Order, const int delta_k)
 :
-VlasovBackwardEulerFormulation(q, m, configurationSpaceFormulation, spatialMeshTopology, dt,
+VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
                                velocitySpaceVertices_x, std::vector<double>(), std::vector<double>(),
                                H1Order, delta_k) {}
 
@@ -877,7 +889,8 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
     vx = v0 + (i * vWidth) / vElements;
     vxVertices.push_back(vx);
   }
-  VlasovBackwardEulerFormulation form(q, m, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+  const bool useSerendipityBasis = true;
+  VlasovBackwardEulerFormulation form(q, m, useSerendipityBasis, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
   auto poissonMesh = poissonConfig->configurationSpaceMesh();
   
   FunctionPtr x  = Function::xn(1);
@@ -963,7 +976,8 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
     const double vx = v0 + (i * vWidth) / vElements;
     vxVertices.push_back(vx);
   }
-  VlasovBackwardEulerFormulation form(q, m, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+  const bool useSerendipityBasis = true;
+  VlasovBackwardEulerFormulation form(q, m, useSerendipityBasis, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
   auto poissonMesh = poissonConfig->configurationSpaceMesh();
 
   FunctionPtr x  = Function::xn(1);

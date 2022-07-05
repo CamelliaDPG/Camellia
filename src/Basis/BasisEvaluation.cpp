@@ -22,6 +22,9 @@
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+#include <Intrepid2_SerendipityBasis.hpp>
+#include <Intrepid2_TensorBasis.hpp>
+
 using namespace Camellia;
 
 void getD2_ij_FromMultiplicities(int &i, int &j, const Teuchos::Array<int> &multiplicities)
@@ -53,14 +56,77 @@ void getD2_ij_FromMultiplicities(int &i, int &j, const Teuchos::Array<int> &mult
 }
 
 //! Intrepid2-style getValues()
-Intrepid2::BasisValues<double,typename BasisEvaluation::ExecSpaceType>
+Intrepid2::BasisValues<double,DeviceType>
 BasisEvaluation::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
-                           const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints)
+                           const Intrepid2::TensorPoints<double,DeviceType> inputPoints)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!inputPoints.isValid(), std::invalid_argument, "inputPoints must be a valid container!");
-  auto outputValues = intrepid2Basis->allocateBasisValues(inputPoints, op);
-  intrepid2Basis->getValues(outputValues, inputPoints, op);
-  return outputValues;
+  
+  bool supportedTensorPoints = true; // will set to false if we fail a check in the block below
+  {
+    using BasisBase        = Intrepid2::Basis<Camellia::DeviceType,double,double>;
+    using TensorBasis      = Intrepid2::Basis_TensorBasis<BasisBase>;
+    using SerendipityBasis = Intrepid2::SerendipityBasis<BasisBase>;
+    
+    auto tensorBasis = dynamic_cast<TensorBasis*>(intrepid2Basis->intrepid2Basis().get());
+    if (tensorBasis == NULL)
+    {
+      auto serendipityBasis = dynamic_cast<SerendipityBasis*>(intrepid2Basis->intrepid2Basis().get());
+      if (serendipityBasis != NULL)
+      {
+        tensorBasis           = dynamic_cast<TensorBasis*>(serendipityBasis->getUnderlyingBasis().get());
+      }
+    }
+    if (tensorBasis != NULL)
+    {
+      const int numBasisComponents = tensorBasis->getTensorBasisComponents().size();
+      if (numBasisComponents > inputPoints.numTensorComponents() && (inputPoints.numTensorComponents() != 1))
+      {
+        supportedTensorPoints = false;
+      }
+    }
+  }
+  
+  if (supportedTensorPoints)
+  {
+    auto outputValues = intrepid2Basis->allocateBasisValues(inputPoints, op);
+    intrepid2Basis->getValues(outputValues, inputPoints, op);
+    return outputValues;
+  }
+  else
+  {
+    using Scalar = double;
+    using Intrepid2::Data;
+    using Intrepid2::VectorData;
+    using Intrepid2::TensorData;
+    using Intrepid2::BasisValues;
+    
+    BasisValues<Scalar,DeviceType> outputValues;
+    
+    const int numPoints = inputPoints.extent_int(0); // (P,D)
+    
+    auto dataView = intrepid2Basis->intrepid2Basis()->allocateOutputView(numPoints, op);
+    
+    auto rawExpandedPoints = inputPoints.allocateAndFillExpandedRawPointView();
+    
+    intrepid2Basis->intrepid2Basis()->getValues(dataView, rawExpandedPoints, op);
+    
+    Data<Scalar,DeviceType> data(dataView);
+    
+    bool useVectorData = (dataView.rank() == 3);
+    
+    if (useVectorData)
+    {
+      VectorData<Scalar,DeviceType> vectorData(data);
+      outputValues = BasisValues<Scalar,DeviceType>(vectorData);
+    }
+    else
+    {
+      TensorData<Scalar,DeviceType> tensorData(data);
+      outputValues = BasisValues<Scalar,DeviceType>(tensorData);
+    }
+    return outputValues;
+  }
 }
 
 FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,

@@ -52,7 +52,8 @@ namespace {
       vx = v0 + (i * vWidth) / vElements;
       vxVertices.push_back(vx);
     }
-    VlasovBackwardEulerFormulation form(q, m, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+    const bool useSerendipity = true;
+    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
     auto poissonMesh = poissonConfig->configurationSpaceMesh();
     
     auto poissonBC = BC::bc();
@@ -432,7 +433,8 @@ namespace {
       vx = v0 + (i * vWidth) / vElements;
       vxVertices.push_back(vx);
     }
-    VlasovBackwardEulerFormulation form(q, m, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+    const bool useSerendipity = true;
+    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
     auto poissonMesh = poissonConfig->configurationSpaceMesh();
     // set a zero BC on Poisson at x0
     auto poissonBC = BC::bc();

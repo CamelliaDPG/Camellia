@@ -71,6 +71,7 @@ namespace
   void testIntegrate(const int numPhysicalDims, const int numExtrusionDims, const bool useSpaceTime,
                      int survivingExtrusionDim, // use -1 for no surviving dims
                      const int fxnPolyOrder,
+                     const bool useSerendipity,
                      FunctionPtr phaseSpaceFxn, FunctionPtr expectedIntegral,
                      const int &iMomentNumber, const int &jMomentNumber, const int &kMomentNumber,
                      bool refine,
@@ -90,6 +91,11 @@ namespace
     VarFactoryPtr vf = VarFactory::varFactory();
     auto f = vf->fieldVar("f");
     auto v = vf->testVar("v", HGRAD);
+    
+    if (useSerendipity)
+    {
+      f->setBasisFamily(BasisFamily::serendipityBasisFamily());
+    }
     
     BFPtr bf = BF::bf(vf);
     
@@ -285,6 +291,7 @@ namespace
   void testIntegrate(const int numPhysicalDims, const int numExtrusionDims, const bool useSpaceTime,
                      int survivingExtrusionDim, // use -1 for no surviving dims
                      const int fxnPolyOrder,
+                     const bool useSerendipity,
                      FunctionPtr phaseSpaceFxn, FunctionPtr expectedIntegral,
                      bool refine,
                      const double tol,
@@ -292,7 +299,8 @@ namespace
   {
     testIntegrate(numPhysicalDims, numExtrusionDims, useSpaceTime,
                   survivingExtrusionDim,
-                  fxnPolyOrder, phaseSpaceFxn, expectedIntegral,
+                  fxnPolyOrder, useSerendipity,
+                  phaseSpaceFxn, expectedIntegral,
                   0,0,0,
                   refine, tol, out, success);
   }
@@ -910,6 +918,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -917,7 +926,26 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1V_Serendipity )
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1V_Refine )
@@ -928,6 +956,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -935,7 +964,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   /*
@@ -951,14 +980,39 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = true;
     const bool refine          = false;
-    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  /*
+   The "1T" here is a temporal dimension.  For space-time Vlasov, we have a space-time physical mesh,
+   which is then further extruded in velocity dimensions.  So the lower-dimensional mesh is also an
+   extruded mesh, so that e.g. "1D1T1V" is a slightly different use case than e.g. 2D1V.
+   */
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1T1V_Serendipity )
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1T1V_Refine )
@@ -969,14 +1023,34 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = true;
     const bool refine          = true;
-    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1T1V_Refine_Serendipity )
+  {
+    MPIWrapper::CommWorld()->Barrier(); // for breakpoint
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = true;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D2V )
@@ -986,14 +1060,33 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
-    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D2V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D2V_Refine )
@@ -1003,14 +1096,33 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
-    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D2V_Refine_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = true;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D3V )
@@ -1020,6 +1132,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1027,7 +1140,25 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D3V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 3;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_2D1V )
@@ -1037,6 +1168,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1044,7 +1176,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_2D2V )
@@ -1054,6 +1186,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1061,7 +1194,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_2D3V )
@@ -1071,6 +1204,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1078,7 +1212,25 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_2D3V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 3;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_3D1V )
@@ -1088,6 +1240,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1095,7 +1248,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_3D2V )
@@ -1105,6 +1258,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 0; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1112,7 +1266,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_3D3V )
@@ -1122,6 +1276,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1129,7 +1284,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1V )
@@ -1139,6 +1294,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1146,7 +1302,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1V_Refine )
@@ -1156,6 +1312,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1163,7 +1320,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V )
@@ -1173,6 +1330,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = true;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1180,7 +1338,25 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 1; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::xn(1);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V_Refine )
@@ -1190,6 +1366,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = true;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1197,7 +1374,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D1V )
@@ -1207,6 +1384,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1219,7 +1397,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D1V_Refine )
@@ -1229,6 +1407,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1241,7 +1420,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xz2_1D1T1V )
@@ -1251,6 +1430,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = true;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1263,7 +1443,30 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
     FunctionPtr f_integral = z_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xz2_1D1T1V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 3; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr z2 = Function::zn(2);
+    FunctionPtr f = x * z2;
+    // integral in z is z^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double z_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double z_min = EXTRUSION_ORIGIN;
+    const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
+    FunctionPtr f_integral = z_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xz2_1D1T1V_Refine )
@@ -1273,6 +1476,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = true;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1285,7 +1489,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
     FunctionPtr f_integral = z_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D2V )
@@ -1295,6 +1499,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1308,7 +1513,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double z_integral = EXTRUSION_EXTENT; // does not vary in z
     FunctionPtr f_integral = y_integral * x * z_integral;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D2V_Refine )
@@ -1318,6 +1523,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1331,7 +1537,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double z_integral = EXTRUSION_EXTENT; // does not vary in z
     FunctionPtr f_integral = y_integral * x * z_integral;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_y2_1D1V )
@@ -1341,6 +1547,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1352,7 +1559,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = Function::constant(y_integral);
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_y2_1D1V_Refine )
@@ -1362,6 +1569,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1373,7 +1581,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = Function::constant(y_integral);
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, IntegrateFirstMoment_Constant_1D1V )
@@ -1383,6 +1591,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1398,7 +1607,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1412,6 +1621,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1427,7 +1637,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1441,6 +1651,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1456,7 +1667,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1470,6 +1681,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1485,7 +1697,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1499,6 +1711,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1514,7 +1727,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1528,6 +1741,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
     const double tol = 1e-15;
     
@@ -1543,7 +1757,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1557,6 +1771,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1572,7 +1787,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1586,6 +1801,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = -1;
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1601,7 +1817,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int jMoment = 0;
     const int kMoment = 0;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder,
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity,
                   f, f_integral,
                   iMoment, jMoment, kMoment,
                   refine,
@@ -1617,6 +1833,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1624,7 +1841,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims-1) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_Constant_1D2V_to_xz_Refine ) // to xz: x,z dimensions survive integration
@@ -1636,6 +1853,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1643,7 +1861,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims-1) * f;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xy2_1D2V_to_xz ) // to xz: x,z dimensions survive integration
@@ -1655,6 +1873,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1667,7 +1886,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xy2_1D2V_to_xz_Refine ) // to xz: x,z dimensions survive integration
@@ -1679,6 +1898,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = 1; // z dimension (final extrusion dim) does not get integrated
     const bool spaceTime       = false;
     const bool refine          = true;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1691,7 +1911,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
     FunctionPtr f_integral = y_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xz2_1D3V_to_xy ) // to xy: (x,v_x) dimensions survive integration
@@ -1703,6 +1923,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int survivingExtrusionDim = 0; // y dimension (first extrusion dim) does not get integrated
     const bool spaceTime       = false;
     const bool refine          = false;
+    const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
     
@@ -1715,7 +1936,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
     FunctionPtr f_integral = z_integral * x;
     
-    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, f, f_integral, refine, tol, out, success);
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
   // TODO: test higher-order moments
@@ -1769,13 +1990,12 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     FieldContainer<double> phaseBasisValues(phaseBasisCardinality, numPhasePoints);
     phaseSpaceBasis->getValues(phaseBasisValues, phaseRefPoints, OP_VALUE);
     
-    BasisPtr remainingPhaseSpaceBasis = phaseSpaceBasis;
+    auto basisComponents = phaseSpaceBasis->intrepid2TensorBasisComponents();
     std::vector<BasisPtr> extrusionBases(numExtrusionDims);
+    int compOffset = basisComponents.size() - numExtrusionDims;
     for (int d=0; d<numExtrusionDims; d++)
     {
-      TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(remainingPhaseSpaceBasis.get());
-      extrusionBases[numExtrusionDims-d-1] = tensorBasis->getTemporalBasis();
-      remainingPhaseSpaceBasis = tensorBasis->getSpatialBasis();
+      extrusionBases[d] = basisComponents[d+compOffset];
     }
     std::vector<int> numExtrusionPoints(numExtrusionDims);
     std::vector<FieldContainer<double>> extrusionPoints(numExtrusionDims);

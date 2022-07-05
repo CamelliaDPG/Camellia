@@ -163,6 +163,9 @@ void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopo
 
     _cubPointsFC.initialize(0.0);
     _cubWeightsFC.initialize(1.0);
+    
+    _cubPoints  = FieldContainerConversion<double>::toTensorPoints(_cubPointsFC);
+    _cubWeights = FieldContainerConversion<double>::toTensorData(_cubWeightsFC);
   }
 
   _cellJacobianIsValid = false;
@@ -547,6 +550,9 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
 
       int cubatureEnrichment = (multiBasis->getDegree() < _maxTrialDegree) ? _maxTrialDegree - multiBasis->getDegree() : 0;
       multiBasis->getCubature(_cubPointsFC, _cubWeightsFC, _maxTestDegree + cubatureEnrichment);
+      
+      _cubPoints  = FieldContainerConversion<double>::toTensorPoints(_cubPointsFC);
+      _cubWeights = FieldContainerConversion<double>::toTensorData(_cubWeightsFC);
 
       numCubPointsSide = _cubPointsFC.dimension(0);
     }
@@ -554,10 +560,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     _cubPointsSideRefCellFC.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
     if (numCubPointsSide > 0)
     {
-      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
-      // TODO: create the TensorPoints _cubPointsSideRefCell directly from _cubPoints
-      // for now, we create it from _cubPointsSideRefCellFC (and lose any tensor product structure)
-      _cubPointsSideRefCell = FieldContainerConversion<double>::toTensorPoints(_cubPointsSideRefCellFC);
+      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell,   _cubPoints,   sideDim, _sideIndex, _cellTopo);
+      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo); // TODO: construct the "FC" containers lazily or not at all
     }
   }
   else
@@ -569,6 +573,9 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
 
     _cubPointsFC.initialize(0.0);
     _cubWeightsFC.initialize(1.0);
+    
+    _cubPoints  = FieldContainerConversion<double>::toTensorPoints(_cubPointsFC);
+    _cubWeights = FieldContainerConversion<double>::toTensorData(_cubWeightsFC);
 
     _cubPointsSideRefCellFC.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
     CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
@@ -849,18 +856,6 @@ void BasisCache::discardPhysicalNodeInfo()
   _knownValuesTransformedWeighted.clear();
   _knownValuesTransformedDottedWithNormal.clear();
   _knownValuesTransformedWeighted.clear();
-
-  // These resizings are a way of forcing exceptions, but otherwise
-  // probably not that useful.  Plus, if we are reusing a BasisCache
-  // it's not infrequently the case that the sizes next time we fill
-  // them will be the same...
-  // resize all the related Camellia::FieldContainers to reclaim their memory
-//  _cellIDs.clear();
-//  _cellJacobian.resize(0);
-//  _cellJacobInv.resize(0);
-//  _cellJacobDetFC.resize(0);
-//  _weightedMeasure.resize(0);
-//  _physCubPoints.resize(0);
   
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -1289,8 +1284,7 @@ void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &poin
   this->setRefCellPointsFC(pointsRefCell, cubWeights);
 }
 
-void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubWeights,
-                                    int cubatureDegree, bool recomputePhysicalMeasures)
+void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubWeights, int cubatureDegree)
 {
   _cubPointsFC = pointsRefCell;
   _cubDegree = cubatureDegree;
@@ -1337,39 +1331,74 @@ void BasisCache::setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> poi
   setRefCellPoints(pointsRefCell, emptyWeights);
 }
 
-void BasisCache::setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell)
+void BasisCache::setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell, int cubatureDegree)
 {
-  _cubPoints = pointsRefCell;
+  _cubPoints  = pointsRefCell;
   _cubWeights = weightsRefCell;
+  _cubDegree  = cubatureDegree;
   const int numPoints = pointsRefCell.extent_int(0);
+  
+  // We copy from the parsimonious Intrepid2 containers to the explicit-storage FieldContainers.
+  // This allows us to make sure that when the FC-based interface is used, points are in sync with what is being specified
+  // in this setRefCellPoints() call in terms of Intrepid2-based containers.  Ideally, we will move everything to Intrepid2-based
+  // containers, and thus be able to avoid the extra storage costs here.  (Failing that, we could compute and store the FC copies
+  // lazily…)
+  
+  auto thisTopo = isSideCache() ? this->cellTopology()->getSide(_sideIndex) : this->cellTopology();
+  bool isNodeTopo = thisTopo->getDimension() == 0;
+  
+  if (pointsRefCell.isValid())
+  {
+    _cubPointsFC  = FieldContainerConversion<double>::fromTensorPoints(pointsRefCell);
+  }
+  else
+  {
+    if (isNodeTopo)
+    {
+      _cubPointsFC = FieldContainer<double>(1,0); // 0D single point
+    }
+    else
+    {
+      _cubPointsFC = FieldContainer<double>();
+    }
+  }
+  if (weightsRefCell.isValid())
+  {
+    _cubWeightsFC = FieldContainerConversion<double>::fromTensorData(weightsRefCell);
+  }
+  else
+  {
+    if (isNodeTopo)
+    {
+      _cubWeightsFC = FieldContainer<double>(1); // single point
+      _cubWeightsFC[0] = 1.0;
+    }
+    else
+    {
+      _cubWeightsFC = FieldContainer<double>();
+    }
+  }
   
   if ( isSideCache() )   // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
   {
     int cellDim = _cellTopo->getDimension(); // will be _spaceDim + 1 for space-time CellTopologies.
     // _cellTopo is the volume cell topology for side basis caches.
     int sideDim = cellDim - 1;
-    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
-  }
-  
-  // the below is mostly copied from setRefCellPointsFC().
-  // it basically allows us to make sure that when the FC-based interface is used, points are in sync with what is being specified
-  // in this setRefCellPoints() call in terms of Intrepid2-based containers.  Ideally, we will move everything to Intrepid2-based
-  // containers, and thus be able to avoid the redundancy here.
-  
-  auto pointsRefCellFC  = FieldContainerConversion<double>::fromTensorPoints(pointsRefCell);
-  auto weightsRefCellFC = FieldContainerConversion<double>::fromTensorData(weightsRefCell);
-  
-  _cubPointsFC = pointsRefCellFC;
-  _cubDegree = -1; // unknown
-
-  if ( isSideCache() )   // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCellFC
-  {
-    int cellDim = _cellTopo->getDimension(); // will be _spaceDim + 1 for space-time CellTopologies.
-    // for side cache, cellDim is the spatial dimension of the volume cache's cellTopology
-    _cubPointsSideRefCellFC.resize(numPoints, cellDim);
-    // _cellTopo is the volume cell topology for side basis caches.
-    int sideDim = cellDim - 1;
-    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
+    if (_cubPoints.isValid())
+    {
+      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+      _cubPointsSideRefCellFC = FieldContainerConversion<double>::fromTensorPoints(_cubPointsSideRefCell);
+    }
+    else
+    {
+      _cubPointsSideRefCell = Intrepid2::TensorPoints<double,DeviceType>();
+      
+      if (isNodeTopo)
+      {
+        _cubPointsSideRefCellFC = FieldContainer<double>(1,1);   // the single point in the side topology maps to a vertex in the line topology
+        _cubPointsSideRefCellFC[0] = (_sideIndex == 0) ? -1 : 1; // note that this bakes in an assumption about the dimensions and ordering of the ref-cell line
+      }
+    }
   }
 
   _knownValues.clear();
@@ -1377,8 +1406,6 @@ void BasisCache::setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> poi
   _knownValuesTransformedFC.clear();
   _knownValuesTransformedWeighted.clear();
   _knownValuesTransformedDottedWithNormal.clear();
-
-  _cubWeightsFC = weightsRefCellFC;
 
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -1505,19 +1532,24 @@ void BasisCache::determinePhysicalPoints()
         cubPointsComponentOrdinal++;
       }
       
+      // when baseTopo is a Node, it will not show up in the points containers.
+      const bool baseTopoIsNode = (baseTopo->getDimension() == 0);
       vector<DynRankView> reconciledCubPointsComponents;
-      if (baseTopoRefPointComponents.size() == 1)
+      if (!baseTopoIsNode)
       {
-        const DynRankView & baseTopoRefPoints = baseTopoRefPointComponents[0];
-        reconciledCubPointsComponents.push_back(baseTopoRefPoints);
-      }
-      else
-      {
-        TensorPoints baseTopoTensorPoints(baseTopoRefPointComponents);
-        DynRankView baseTopoRefPoints("baseTopoRefPoints", baseTopoTensorPoints.extent_int(0), baseTopoTensorPoints.extent_int(1));
-        ::Camellia::deepCopy<2,DynRankView,TensorPoints>(baseTopoRefPoints, baseTopoTensorPoints);
-        
-        reconciledCubPointsComponents.push_back(baseTopoRefPoints);
+        if (baseTopoRefPointComponents.size() == 1)
+        {
+          const DynRankView & baseTopoRefPoints = baseTopoRefPointComponents[0];
+          reconciledCubPointsComponents.push_back(baseTopoRefPoints);
+        }
+        else
+        {
+          TensorPoints baseTopoTensorPoints(baseTopoRefPointComponents);
+          DynRankView baseTopoRefPoints("baseTopoRefPoints", baseTopoTensorPoints.extent_int(0), baseTopoTensorPoints.extent_int(1));
+          ::Camellia::deepCopy<2,DynRankView,TensorPoints>(baseTopoRefPoints, baseTopoTensorPoints);
+          
+          reconciledCubPointsComponents.push_back(baseTopoRefPoints);
+        }
       }
       
       for (int r=cubPointsComponentOrdinal; r<volumeCubPoints.numTensorComponents(); r++)
@@ -1533,7 +1565,7 @@ void BasisCache::determinePhysicalPoints()
       {
         const auto & refPointsComponent = reconciledCubPoints.getTensorComponent(r);
         
-        CellTopoPtr cellTopoComponent = (r == 0) ? _cellTopo->getBaseTopology() : CellTopology::line();
+        CellTopoPtr cellTopoComponent = ((r == 0) && !baseTopoIsNode) ? _cellTopo->getBaseTopology() : CellTopology::line();
         
         TEUCHOS_TEST_FOR_EXCEPTION(refPointsComponent.extent_int(1) != cellTopoComponent->getDimension(), std::invalid_argument, "spatial dimensions for cell topo component and ref points component must match");
         const int numPointsComponent = refPointsComponent.extent_int(0);
@@ -1737,14 +1769,6 @@ void BasisCache::setPhysicalCellNodes(const Camellia::FieldContainer<double> &ph
   }
 
   _cellIDs = cellIDs;
-  // Compute cell Jacobians, their inverses and their determinants
-
-  _cellJacobianIsValid = false;
-  _cellJacobianInverseIsValid = false;
-  _cellJacobianDeterminantIsValid = false;
-  _weightedMeasureIsValid = false;
-  _sideNormalsIsValid = false;
-  _physCubPointsIsValid = false;
 
   if ( ! isSideCache() && createSideCacheToo )
   {

@@ -10,7 +10,9 @@
 
 using namespace Camellia;
 
-ConfigurationSpaceFormulation::ConfigurationSpaceFormulation()
+ConfigurationSpaceFormulation::ConfigurationSpaceFormulation(bool useSerendipityBasis)
+:
+_useSerendipityBasis(useSerendipityBasis)
 {}
 
 void ConfigurationSpaceFormulation::copySolutionToPrevious()
@@ -129,6 +131,11 @@ void ConfigurationSpaceFormulation::solve(const bool updateMoments)
 SolutionPtr ConfigurationSpaceFormulation::solution()
 {
   return _configurationSoln;
+}
+
+bool ConfigurationSpaceFormulation::useSerendipityBasis() const
+{
+  return _useSerendipityBasis;
 }
 
 VarPtr ConfigurationSpaceFormulation::VE_fieldVar()

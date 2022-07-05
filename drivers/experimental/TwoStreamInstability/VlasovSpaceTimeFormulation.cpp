@@ -98,6 +98,7 @@ namespace
 
 
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
+                                                       bool useSerendipityBasis,
                                                        Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                        MeshTopologyPtr spatialMeshTopology,
                                                        std::vector<double> temporalVertices,
@@ -107,6 +108,7 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        const int H1Order, const int delta_k)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
+_useSerendipityBasis(useSerendipityBasis),
 _delta_k(delta_k),
 _configurationSpaceFormulation(configurationSpaceFormulation),
 _q(q),
@@ -154,12 +156,25 @@ _m(m)
   // only-supported-on-spatial-interfaces thing that we need for space-time Poisson.
   VarFactoryPtr vlasovVF = VarFactory::varFactory();
   
+  BasisFamilyPtr basisFamily;
+  if (_useSerendipityBasis)
+  {
+    basisFamily = BasisFamily::serendipityBasisFamily();
+  }
+  else
+  {
+    basisFamily = BasisFamily::hierarchicalBasisFamily();
+  }
+  vlasovVF->setBasisFamily(basisFamily);
+  
   f = vlasovVF->fieldVar(S_F);
   w = vlasovVF->testVar(S_W, HGRAD); // w lies in HGRAD of the whole space-time phase space
   
   t_n_hat = vlasovVF->fluxVar(S_T_N_HAT);
   
   _vlasovBF = BF::bf(vlasovVF);
+  
+  
   
   map<int,int> trialOrderEnhancements;
   trialOrderEnhancements[t_n_hat->ID()] = 1; // +1 for non-conforming, + whatever user requested

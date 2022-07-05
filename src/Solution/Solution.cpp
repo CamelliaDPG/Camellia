@@ -629,7 +629,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
             }
             if (cellBasisCacheSide->cubatureDegree() != cubaturePolyOrder)
             {
-              cellBasisCacheSide->setRefCellPointsFC(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder, false);
+              cellBasisCacheSide->setRefCellPointsFC(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder);
             }
             cellBasisCacheSide->setPhysicalCellNodes(cellBasisCacheVolume->getPhysicalCellNodes(), {cellID}, false);
             
@@ -714,7 +714,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
               BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
               
-              ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
+              ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder);
               
               // now, the "physical" points in ancestral cache are the ones we want
               myRefPoints = ancestralBasisCache->getPhysicalCubaturePointsFC();
@@ -758,7 +758,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
             }
             BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
-            referenceBasisCache->setRefCellPointsFC(myRefPoints,emptyCubWeights,cubaturePolyOrder,false);
+            referenceBasisCache->setRefCellPointsFC(myRefPoints,emptyCubWeights,cubaturePolyOrder);
             std::vector<GlobalIndexType> cellIDs = {0}; // unused
             referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
             // now, the "physical" points are the ones we should use as ref points for the neighbor
@@ -781,7 +781,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               = Teuchos::rcp( new BasisCache(mySideOrdinalInNeighbor, neighborVolumeCache, emptyRefPointsSide, emptyCubWeights, -1));
             }
             BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
-            neighborSideCache->setRefCellPointsFC(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
+            neighborSideCache->setRefCellPointsFC(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder);
             neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
             
             // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...

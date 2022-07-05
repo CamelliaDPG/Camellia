@@ -29,6 +29,14 @@ namespace Camellia
 {
 typedef std::pair<unsigned,unsigned> CellTopologyKey;
 
+struct CellTopologyTensorSubcellInfo
+{
+  unsigned subcellDimension;
+  unsigned subcellOrdinal;
+  unsigned extrusionNodeOrdinal; // if isExtruded is true, then this should be INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL.
+  bool isExtruded; // if true, this is a subcell from the tensorial component, extruded in the final dimension, and has true dimension one higher than subcellDim
+};
+
   static unsigned INVALID_CELLTOPOLOGY_SIDE_ORDINAL = static_cast<unsigned>(-1);
   static unsigned INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL = static_cast<unsigned>(-1);
 class CellTopology
@@ -233,6 +241,10 @@ public:
               For cell topologies of tensorial degree zero, returns Teuchos::null.
    */
   CellTopoPtr getTensorialComponent() const;
+  
+  /** \brief  For cell topologies of positive tensorial degree, returns an object that indicates the way the subcell relates to the tensorial component (the cell topology of dimension one lower, which is extruded in the final dimension).
+   */
+  CellTopologyTensorSubcellInfo getTensorialComponentSubcellInfo(unsigned scdim, unsigned scord) const;
 
   /** \brief  For topologies with positive _tensorialDegree, spatial sides are those belonging to the tensorial components, extruded in the final tensorial direction; in the context of space-time elements, these are the spatial sides.  Temporal sides are those identified with the tensorial components; there will be two such sides for each space-time topology.  For topologies with zero _tensorialDegree, each side is a spatial side.
    *  \param  sideOrdinal [in] Ordinal of the side.

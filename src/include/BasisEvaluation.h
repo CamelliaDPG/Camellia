@@ -33,15 +33,13 @@ namespace Camellia
 class BasisEvaluation
 {
 public:
-  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-  
   static FCPtr getValues(BasisPtr basis, Camellia::EOperator op,
                          const Camellia::FieldContainer<double> &refPoints);
   
   //! Intrepid2-style getValues()
-  static Intrepid2::BasisValues<double,ExecSpaceType> getValues(Intrepid2BasisWrapper<double, Intrepid::FieldContainer<double,0> >* intrepid2Basis,
-                                                                Intrepid2::EOperator op,
-                                                                const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints);
+  static Intrepid2::BasisValues<double,DeviceType> getValues(Intrepid2BasisWrapper<double, Intrepid::FieldContainer<double,0> >* intrepid2Basis,
+                                                             Intrepid2::EOperator op,
+                                                             const Intrepid2::TensorPoints<double,DeviceType> inputPoints);
   
   static FCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op,
                                     const Camellia::FieldContainer<double> &refPoints,

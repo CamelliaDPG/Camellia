@@ -330,6 +330,32 @@ std::string CellTopology::getName() const
   return _name;
 }
 
+CellTopologyTensorSubcellInfo CellTopology::getTensorialComponentSubcellInfo(unsigned scdim, unsigned scord) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_tensorialDegree==0, std::invalid_argument, "getTensorialComponentSubcellInfo() is only valid for _tensorialDegree > 0");
+  
+  CellTopologyTensorSubcellInfo subcellInfo;
+  CellTopoPtr tensorComponentTopo = CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
+  unsigned componentSubcellCount = tensorComponentTopo->getSubcellCount(scdim);
+  // subcells from the two "copies" of tensorComponentTopo come first:
+  if (scord < componentSubcellCount * 2)
+  {
+    subcellInfo.subcellOrdinal       = scord % componentSubcellCount;
+    subcellInfo.subcellDimension     = scdim; // subcell has the same dimension in tensorial component as in parent cell topology
+    subcellInfo.extrusionNodeOrdinal = (scord < componentSubcellCount) ? 0 : 1; // if subcell belongs to the first copy of tensorial component, it's identified with first extrusion node; otherwise, with second.
+    subcellInfo.isExtruded           = false;
+  }
+  else
+  {
+    // otherwise, the subcell is a tensor product of one of the components (scdim-1)-dimensional subcells with the line topology.
+    subcellInfo.subcellOrdinal       = scord - componentSubcellCount * 2;
+    subcellInfo.subcellDimension     = scdim - 1;
+    subcellInfo.extrusionNodeOrdinal = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL; // no extrusion node; we pick up the whole extrusion line
+    subcellInfo.isExtruded           = true;
+  }
+  return subcellInfo;
+}
+
 /** \brief  Side boundary subcell count of this cell topology */
 unsigned CellTopology::getSideCount() const
 {

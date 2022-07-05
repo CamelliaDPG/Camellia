@@ -161,8 +161,7 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTime
     temporalNode(0,0) = getTemporalNodeCoordinateRefSpace();
     Camellia::FieldContainer<double> temporalWeight(1);
     temporalWeight(0) = 1.0;
-    bool recomputePhysicalMeasures = false; // because we'll do so in a moment when we set the physical nodes
-    _temporalCache->setRefCellPointsFC(temporalNode, temporalWeight, temporalCacheVolume->cubatureDegree(), recomputePhysicalMeasures);
+    _temporalCache->setRefCellPointsFC(temporalNode, temporalWeight, temporalCacheVolume->cubatureDegree());
 
     bool createSideCache = true;
     vector<GlobalIndexType> cellIDs; //empty
@@ -389,6 +388,71 @@ void SpaceTimeBasisCache::getReferencePointComponents(const Camellia::FieldConta
   }
 }
 
+void SpaceTimeBasisCache::setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell, int cubatureDegree)
+{
+  this->BasisCache::setRefCellPoints(pointsRefCell, weightsRefCell, cubatureDegree);
+  
+  auto thisTopo = isSideCache() ? this->cellTopology()->getSide(this->getSideIndex()) : this->cellTopology();
+  
+  if (thisTopo->getBaseTopology()->getDimension() == 0)
+  {
+    // special case for Node base topology:
+    std::vector<int> timeComps {0};
+    using Intrepid2::TensorPoints;
+    using Intrepid2::TensorData;
+    TensorPoints<double,DeviceType> temporalPoints(pointsRefCell,  timeComps);
+    TensorData<double,DeviceType> temporalWeights(weightsRefCell,  timeComps);
+    
+    _temporalCache->setRefCellPoints(temporalPoints, temporalWeights);
+    
+    // we want a single-entry cub point, weight.  It's more convenient to initialize this with FCs
+    FieldContainer<double> nodeCubPointsFC(1, 1); // single point for node topology
+    FieldContainer<double> nodeCubWeightsFC(1);
+
+    nodeCubPointsFC.initialize(0.0);
+    nodeCubWeightsFC.initialize(1.0);
+    
+    _spatialCache->setRefCellPointsFC(nodeCubPointsFC, nodeCubWeightsFC, -1);
+  }
+  else
+  {
+    std::vector<int> spaceComps;
+    const bool lastPointComponentIsTemporal = ! isSideCache() || (isSideCache() && this->cellTopology()->sideIsSpatial(this->getSideIndex()));
+    const int numSpatialComponents = lastPointComponentIsTemporal ? pointsRefCell.numTensorComponents() - 1 : pointsRefCell.numTensorComponents();
+    for (int d=0; d<numSpatialComponents; d++)
+    {
+      spaceComps.push_back(0);
+    }
+    
+    using Intrepid2::TensorPoints;
+    using Intrepid2::TensorData;
+    
+    TensorPoints<double,DeviceType>  spatialPoints(pointsRefCell, spaceComps);
+    TensorData<double,DeviceType>  spatialWeights(weightsRefCell, spaceComps);
+    _spatialCache->setRefCellPoints(spatialPoints, spatialWeights);
+    
+    if (lastPointComponentIsTemporal)
+    {
+      std::vector<int> timeComps {numSpatialComponents};
+      
+      TensorPoints<double,DeviceType> temporalPoints(pointsRefCell,  timeComps);
+      TensorData<double,DeviceType> temporalWeights(weightsRefCell,  timeComps);
+      _temporalCache->setRefCellPoints(temporalPoints, temporalWeights);
+    }
+    else
+    {
+      // use empty/invalid containers for temporal points (temporal topology is a node)
+      TensorPoints<double,DeviceType> emptyPoints;
+      TensorData<double, DeviceType>  emptyWeights;
+      
+      _temporalCache->setRefCellPoints(emptyPoints, emptyWeights, -1);
+    }
+      
+    
+    
+  }
+}
+
 void SpaceTimeBasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell)
 {
   Camellia::FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
@@ -406,7 +470,7 @@ void SpaceTimeBasisCache::setRefCellPointsFC(const Camellia::FieldContainer<doub
 
 void SpaceTimeBasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell,
                                            const Camellia::FieldContainer<double> &cubatureWeights,
-                                           int cubatureDegree, bool recomputePhysicalMeasures)
+                                           int cubatureDegree)
 {
   Camellia::FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
 
@@ -415,8 +479,8 @@ void SpaceTimeBasisCache::setRefCellPointsFC(const Camellia::FieldContainer<doub
   if (spaceRefCellPoints.size() == 0)
   {
     // then the cubature weights belong just to the temporal points:
-    _temporalCache->setRefCellPointsFC(timeRefCellPoints, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
-    this->BasisCache::setRefCellPointsFC(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
+    _temporalCache->setRefCellPointsFC(timeRefCellPoints, cubatureWeights, cubatureDegree);
+    this->BasisCache::setRefCellPointsFC(pointsRefCell, cubatureWeights, cubatureDegree);
   }
   else
   {
@@ -461,11 +525,11 @@ void SpaceTimeBasisCache::setRefCellPointsFC(const Camellia::FieldContainer<doub
       }
     }
 
-    _spatialCache->setRefCellPointsFC(spaceRefCellPoints, cubatureWeightsSpace, cubatureDegree, recomputePhysicalMeasures);
-    _temporalCache->setRefCellPointsFC(timeRefCellPoints, cubatureWeightsTime, cubatureDegree, recomputePhysicalMeasures);
+    _spatialCache->setRefCellPointsFC(spaceRefCellPoints, cubatureWeightsSpace, cubatureDegree);
+    _temporalCache->setRefCellPointsFC(timeRefCellPoints, cubatureWeightsTime, cubatureDegree);
   }
 
-  this->BasisCache::setRefCellPointsFC(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
+  this->BasisCache::setRefCellPointsFC(pointsRefCell, cubatureWeights, cubatureDegree);
 }
 
 constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell)
@@ -544,17 +608,51 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
 
   const int FIELD_INDEX = 1, POINT_INDEX = 2;
 
-  // compute tensorial components:
-  TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
-
-  if (tensorBasis == NULL)
-  {
-    cout << "basis must be a subclass of TensorBasis<double>!\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis must be a subclass of TensorBasis<double>!");
-  }
-
-  BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
-  BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+  auto components = basis->intrepid2TensorBasisComponents();
+  TEUCHOS_TEST_FOR_EXCEPTION(components.size() != 2, std::invalid_argument, "Unexpected component count");
+  
+  auto spatialBasis = components[0];
+  auto temporalBasis = components[1];
+  
+//  using BasisBase        = Intrepid2::Basis<Camellia::DeviceType,double,double>;
+//  using TensorBasis      = Intrepid2::Basis_TensorBasis<BasisBase>;
+//
+//  // compute tensorial components:
+//  auto tensorBasis = dynamic_cast<TensorBasis*>(basis->intrepid2Basis().get());
+//
+//  if (tensorBasis == NULL)
+//  {
+//    cout << "basis must be a subclass of TensorBasis<double>!\n";
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis must be a subclass of Intrepid2::TensorBasis!");
+//  }
+//
+//  auto basisComponents = tensorBasis->getTensorBasisComponents();
+//
+//  BasisPtr spatialBasis, temporalBasis;
+//
+//  {
+//    // temporalBasis is the last component
+//    auto temporalBasisIntrepid2 = basisComponents[basisComponents.size() - 1];
+//    Camellia::EFunctionSpace fs = fromIntrepid2FunctionSpace(temporalBasisIntrepid2->getFunctionSpace());
+//    const int scalarRank = 0;
+//    const int oneD = 1;
+//    temporalBasis = Teuchos::rcp( new Intrepid2BasisWrapper<>( temporalBasisIntrepid2, oneD, scalarRank, fs) );
+//
+//    if (basisComponents.size() == 2)
+//    {
+//      auto spatialBasisIntrepid2 = basisComponents[0];
+//      Camellia::EFunctionSpace fs = fromIntrepid2FunctionSpace(spatialBasisIntrepid2->getFunctionSpace());
+//      const int scalarRank = 0;
+//      const int oneD = 1;
+//      spatialBasis = Teuchos::rcp( new Intrepid2BasisWrapper<>( spatialBasisIntrepid2, oneD, scalarRank, fs) );
+//    }
+//    else
+//    {
+//      // I don't think we actually have TensorBasis instances with more than two components that get used with SpaceTimeBasisCache.
+//      // (SpaceTimeBasisCache is effectively deprecated, so I'd rather not invest too much here…)
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Still need to implement support for higher-rank tensor products")
+//    }
+//  }
 
   Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
 
@@ -574,7 +672,9 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
   // _temporalCache is always a volume cache
   temporalValues = _temporalCache->getTransformedValues(temporalBasis, timeOp, false);
   
-  constFCPtr values = getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues,
+  Teuchos::RCP<::Camellia::TensorBasis<double>> camelliaTensorBasis = Teuchos::rcp( new ::Camellia::TensorBasis<double>(spatialBasis, temporalBasis) );
+  
+  constFCPtr values = getTensorBasisValues(camelliaTensorBasis.get(), FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues,
                                            spaceOpForSizing, timeOpForSizing);
   if (_storeTransformedValues)
   {

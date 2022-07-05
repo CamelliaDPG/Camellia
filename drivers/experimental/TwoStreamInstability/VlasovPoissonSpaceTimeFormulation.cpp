@@ -52,6 +52,7 @@ VlasovPoissonSpaceTimeFormulation::VlasovPoissonSpaceTimeFormulation(VlasovPoiss
                                                                      const double v0, const double vWidth, const int vElementsCoarse,
                                                                      const int H1Order, const int delta_k,
                                                                      const bool usePeriodicBCs, const bool enforceQuasiNeutrality,
+                                                                     const bool useSerendipityBasis,
                                                                      const int vlasovTraceEnrichment,
                                                                      const double firstTimeDivisionSize)
 :
@@ -68,6 +69,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
   const int velocityDim = 1;
   _delta_k = delta_k;
   _tn_enrichment = vlasovTraceEnrichment;
+  _useSerendipityBasis = useSerendipityBasis;
   
   _q    = ParameterFunction::parameterFunction(q);
   _eps0 = ParameterFunction::parameterFunction(eps0);
@@ -140,6 +142,19 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     VarPtr v_Poisson   = poissonVF->testVarSpaceTime(S_V_POISSON, HGRAD, HGRAD);   // HGRAD in space, HGRAD in time
     VarPtr tau_Poisson = poissonVF->testVarSpaceTime(S_TAU_POISSON, tauSpace, HGRAD); // HDIV or HGRAD in space, HGRAD in time
     
+    BasisFamilyPtr basisFamily;
+    if (_useSerendipityBasis)
+    {
+      basisFamily = BasisFamily::serendipityBasisFamily();
+    }
+    else
+    {
+      basisFamily = BasisFamily::hierarchicalBasisFamily();
+    }
+    
+    // set Poisson variables' BasisFamily:
+    poissonVF->setBasisFamily(basisFamily);
+    
     _poissonBF = BF::bf(poissonVF);
     
     if (spaceDim==1)
@@ -206,6 +221,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     }
     
     _vlasovBF = BF::bf(vlasovVF);
+    vlasovVF->setBasisFamily(basisFamily);
     
     trialOrderEnhancements.clear();
     testOrderEnhancements.clear();
@@ -882,7 +898,7 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
   const int xElements = 4;
   const int vElements = 4;
   const int tElements = 1;
-  const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
+  const int H1Order = 3; // this gives f, E (which are in L^2) a polynomial order of 2
   const int delta_k = 2;
   const bool usePeriodicBCs = true;
   const bool enforceQuasiNeutrality = true;
@@ -900,6 +916,7 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
   
   for (auto formulationChoice : formulationChoices)
   {
+    const bool useSerendipityBasis = true;
     const int vlasovTraceEnrichment = 0;
     VlasovPoissonSpaceTimeFormulation form(formulationChoice,
                                            q, eps0, m,
@@ -907,6 +924,7 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
                                            t0, tWidth, tElements,
                                            v0, vWidth, vElements,
                                            H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality,
+                                           useSerendipityBasis,
                                            vlasovTraceEnrichment);
     
     FunctionPtr x  = Function::xn(1);
@@ -1014,7 +1032,7 @@ void testVelocityExtrusion1D1T(const int &xMeshWidth, const int &tMeshWidth, con
   double v0     = 0.0;
   double vWidth = 20.0;
   
-  const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
+  const int H1Order = 4; // this gives f, E (which are in L^2) a total "H^1" order of up to 4.  (For Serendipity, need p=4 to get x * y exactly -- maybe we'd do better to use H^1 basis of reduced order than to use the L^2 basis.  Need to check that I have the construction of H(vol) for Serendipity correct…)
   const int delta_k = 2;
   const bool usePeriodicBCs = true;
   const bool enforceQuasiNeutrality = true;
@@ -1027,12 +1045,14 @@ void testVelocityExtrusion1D1T(const int &xMeshWidth, const int &tMeshWidth, con
   for (auto formulationChoice : formulationChoices)
   {
     const int vlasovTraceEnrichment = 0;
+    const bool useSerendipityBasis = true;
     VlasovPoissonSpaceTimeFormulation form(formulationChoice,
                                            q, eps0, m,
                                            x0, xWidth, xMeshWidth,
                                            t0, tWidth, tMeshWidth,
                                            v0, vWidth, vMeshWidth,
                                            H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality,
+                                           useSerendipityBasis,
                                            vlasovTraceEnrichment);
     
     FunctionPtr xt = Function::xn(1) * Function::yn(1);
@@ -1071,14 +1091,18 @@ void testVelocityExtrusion1D1T(const int &xMeshWidth, const int &tMeshWidth, con
     extrusion->updateValues();
     
     FunctionPtr expected = xt;
+    FunctionPtr errPoissonMesh = physicalSoln - xt;
+    double err_l2_configurationMesh = errPoissonMesh->l2norm(poissonMesh);
+    
+    out << "err_l2_configurationMesh: " << err_l2_configurationMesh << std::endl;
     
     FunctionPtr err = FunctionPtr(extrusion) - expected;
     
-  //  double magnitudeActual = extrusion->l2norm(vlasovMesh);
-  //  std::cout << "magnitudeActual = " << magnitudeActual << std::endl;
+    double magnitudeActual = extrusion->l2norm(vlasovMesh);
+    out << "magnitudeActual = " << magnitudeActual << std::endl;
     
     double magnitudeExpected = expected->l2norm(vlasovMesh);
-  //  std::cout << "magnitudeExpected = " << magnitudeExpected << std::endl;
+    out << "magnitudeExpected = " << magnitudeExpected << std::endl;
     double err_l2 = err->l2norm(vlasovMesh);
     
     TEST_COMPARE(err_l2, <, tol * magnitudeExpected);

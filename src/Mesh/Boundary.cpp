@@ -14,6 +14,7 @@
 #include "Boundary.h"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
+#include "doubleBasisConstruction.h"
 #include "Function.h"
 #include "GlobalDofAssignment.h"
 #include "Mesh.h"
@@ -497,15 +498,27 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
           
           sideForImposition = spaceTimeSideOrdinal;
           
-          TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
-          
-          TEUCHOS_TEST_FOR_EXCEPTION(!tensorBasis, std::invalid_argument, "space-time basis must be a subclass of TensorBasis");
-          if (tensorBasis)
+          auto tensorBasisComponents = spaceTimeBasis->intrepid2TensorBasisComponents();
+          // assume temporal basis is the last one
+          if (tensorBasisComponents.size() == 2)
           {
-            spatialBasis = tensorBasis->getSpatialBasis();
-            temporalBasis = tensorBasis->getTemporalBasis();
+            spatialBasis  = tensorBasisComponents[0];
+            temporalBasis = tensorBasisComponents[1];
           }
-        }
+          else if (tensorBasisComponents.size() > 2)
+          {
+            spatialBasis  = tensorBasisComponents[0];
+            for (int i=1; i<tensorBasisComponents.size()-1; i++)
+            {
+              spatialBasis = intrepid2TensorBasis(spatialBasis, tensorBasisComponents[i]);
+            }
+            temporalBasis = tensorBasisComponents[tensorBasisComponents.size()-1];
+          }
+          else
+          {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "space-time basis must have at least two components");
+          }
+                  }
         // upgrade bases to continuous ones of the same cardinality, if they are discontinuous.
         const bool spaceTime = _mesh->tensorTopologyMeansSpaceTime() && (elemType->cellTopoPtr->sideIsSpatial(sideForImposition) || (sideForImposition == VOLUME_INTERIOR_SIDE_ORDINAL));
         BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForImposition);
@@ -529,10 +542,9 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
         else
         {
           int temporalBasisCardinality = temporalBasis->getCardinality();
-          TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
           for (int temporalBasisOrdinal=0; temporalBasisOrdinal<temporalBasisCardinality; temporalBasisOrdinal++)
           {
-            basisDofOrdinals.push_back(tensorBasis->getDofOrdinalFromComponentDofOrdinals({spatialDofOrdinalForVertex, temporalBasisOrdinal}));
+            basisDofOrdinals.push_back(temporalBasisOrdinal * spatialBasis->getCardinality() + spatialDofOrdinalForVertex);
           }
         }
         

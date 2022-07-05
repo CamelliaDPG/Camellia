@@ -53,22 +53,22 @@ TEUCHOS_UNIT_TEST( DofOrderingFactory, SpaceTimeTestsUseHGRADInTime )
   BasisPtr vBasis = testOrdering->getBasis(v->ID());
   BasisPtr tauBasis = testOrdering->getBasis(tau->ID());
 
-  TensorBasis<double>* vTensorBasis = dynamic_cast< TensorBasis<double>* >(vBasis.get());
-  TensorBasis<double>* tauTensorBasis = dynamic_cast< TensorBasis<double>* >(tauBasis.get());
-
-  TEUCHOS_TEST_FOR_EXCEPTION(vTensorBasis == NULL, std::invalid_argument, "vBasis is not a TensorBasis instance");
-  TEUCHOS_TEST_FOR_EXCEPTION(tauTensorBasis == NULL, std::invalid_argument, "tauBasis is not a TensorBasis instance");
-
-  BasisPtr vSpatialBasis = vTensorBasis->getSpatialBasis();
+  auto vBasisComponents   = vBasis->intrepid2TensorBasisComponents();
+  auto tauBasisComponents = tauBasis->intrepid2TensorBasisComponents();
+  
+  TEST_EQUALITY(vBasisComponents.size(), 2);
+  TEST_EQUALITY(tauBasisComponents.size(), 2);
+  
+  BasisPtr vSpatialBasis = vBasisComponents[0];
   TEST_EQUALITY(vSpatialBasis->functionSpace(), efsForSpace(v->space()));
 
-  BasisPtr tauSpatialBasis = tauTensorBasis->getSpatialBasis();
+  BasisPtr tauSpatialBasis = tauBasisComponents[0];
   TEST_EQUALITY(tauSpatialBasis->functionSpace(), efsForSpace(tau->space()));
 
-  BasisPtr vTemporalBasis = vTensorBasis->getTemporalBasis();
+  BasisPtr vTemporalBasis = vBasisComponents[1];
   TEST_EQUALITY(vTemporalBasis->functionSpace(), efsForSpace(HGRAD));
 
-  BasisPtr tauTemporalBasis = tauTensorBasis->getTemporalBasis();
+  BasisPtr tauTemporalBasis = tauBasisComponents[1];
   TEST_EQUALITY(tauTemporalBasis->functionSpace(), efsForSpace(HGRAD));
 }
 
@@ -100,9 +100,7 @@ TEUCHOS_UNIT_TEST( DofOrderingFactory, SpaceTimeTracesTimeBasisCardinality )
     BasisPtr uHatBasis = trialOrdering->getBasis(u_hat->ID(), sideOrdinal);
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
     {
-      TensorBasis<double>* uHatTensorBasis = dynamic_cast< TensorBasis<double>* >(uHatBasis.get());
-      TEUCHOS_TEST_FOR_EXCEPTION(uHatTensorBasis == NULL, std::invalid_argument, "uHatBasis is not a TensorBasis instance");
-      BasisPtr uHatTemporalBasis = uHatTensorBasis->getTemporalBasis();
+      BasisPtr uHatTemporalBasis = uHatBasis->intrepid2TensorBasisComponents()[1];
       TEST_EQUALITY(uHatTemporalBasis->getDegree(), polyOrder[1]);
       TEST_EQUALITY(uHatTemporalBasis->getCardinality(), polyOrder[1]+1);
     }
@@ -143,13 +141,8 @@ TEUCHOS_UNIT_TEST( DofOrderingFactory, SpaceTimeTracesTimeBasisCardinality )
       {
         BasisPtr uHatBasis = trialOrdering->getBasis(u_hat->ID(), sideOrdinal);
         
-        TensorBasis<double>* uHatTensorBasis = dynamic_cast< TensorBasis<double>* >(uHatBasis.get());
-        TEUCHOS_TEST_FOR_EXCEPTION(uHatTensorBasis == NULL, std::invalid_argument, "uHatBasis is not a TensorBasis instance");
-        BasisPtr uHatTemporalBasis = uHatTensorBasis->getTemporalBasis();
-        TEST_EQUALITY(uHatTemporalBasis->getDegree(), H1Order-1);
-        TEST_EQUALITY(uHatTemporalBasis->getCardinality(), H1Order);
-        
-        TEST_EQUALITY(uHatTemporalBasis->functionSpace(), efsForSpace(L2));
+        TEST_EQUALITY(uHatBasis->getDegree(), H1Order-1);
+        TEST_EQUALITY(uHatBasis->functionSpace(), efsForSpace(L2));
       }
       else
       {

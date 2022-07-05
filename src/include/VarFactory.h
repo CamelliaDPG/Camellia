@@ -15,6 +15,7 @@
 #ifndef Camellia_VarFactory_h
 #define Camellia_VarFactory_h
 
+#include "BasisFamily.h"
 #include "Var.h"
 #include "LinearTerm.h"
 
@@ -111,6 +112,9 @@ public:
   VarFactoryPtr trialSubFactory(std::vector< VarPtr > &trialVars) const;
 
   bool isFluxOrTrace(int trialID) const;
+  
+  //! Calls setBasisFamily() for each known Var.  (Note that this means that you should call this *after* creating all the Vars, if you want it to apply to all Vars.)
+  void setBasisFamily(BasisFamilyPtr basisFamily);
   
   static VarFactoryPtr varFactory()
   {

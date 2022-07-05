@@ -72,10 +72,12 @@ public:
   BasisCachePtr getSpatialBasisCache();
   BasisCachePtr getTemporalBasisCache();
 
+  virtual void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell, int cubatureDegree = -1);
+  
   virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell);
   virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell,
                                 const Camellia::FieldContainer<double> &cubatureWeights,
-                                int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
+                                int cubatureDegree = -1);
 
   virtual void setPhysicalCellNodes(const Camellia::FieldContainer<double> &physicalCellNodes,
                                     const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);

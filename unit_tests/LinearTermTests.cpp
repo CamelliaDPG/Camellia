@@ -421,13 +421,12 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
     int vIDTrue = *lt1_true->varIDs().begin();
     int vIDFaux = *lt1_faux->varIDs().begin();
     BasisPtr vBasisTrue = trueTestOrder->getBasis(vIDTrue);
+    auto trueSpatialBasis  = vBasisTrue->intrepid2TensorBasisComponents()[0];
+    auto trueTemporalBasis = vBasisTrue->intrepid2TensorBasisComponents()[1];
 
     // we need to allow the faux basis to compute gradient on the way to OP_DY (aka OP_DT)
     typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
-    TensorBasis* vTensorBasis = dynamic_cast<TensorBasis*>(vBasisTrue.get());
-    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(vTensorBasis->getSpatialBasis(),
-                                            vTensorBasis->getTemporalBasis(),
-                                            true) );
+    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(trueSpatialBasis, trueTemporalBasis, true) );
     BasisPtr vBasisFaux = tensorBasis;
     // set up a DofOrdering for v for both true and faux:
     DofOrderingPtr vOrderFaux = Teuchos::rcp( new DofOrdering(fauxMesh->getElementType(cellID)->cellTopoPtr) );

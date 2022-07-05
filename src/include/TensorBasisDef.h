@@ -504,15 +504,24 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
   {
     if (camelliaOp==OP_GRAD)
     {
-      spatialOperator  = OP_GRAD;
-      temporalOperator = OP_VALUE; // default
-      if (values.rank() == 3)   // F, P, D
+      if (_spatialBasis->domainTopology()->getDimension() > 0)
       {
-        if (_spatialBasis->rangeDimension() + _temporalBasis->rangeDimension() == values.dimension(2))
+        spatialOperator  = OP_GRAD;
+        temporalOperator = OP_VALUE; // default
+        
+        if (values.rank() == 3)   // F, P, D
         {
-          // then we can/should use OP_GRAD for the temporal operator as well
-          temporalOperator = OP_GRAD;
+          if (_spatialBasis->rangeDimension() + _temporalBasis->rangeDimension() == values.dimension(2))
+          {
+            // then we can/should use OP_GRAD for the temporal operator as well
+            temporalOperator = OP_GRAD;
+          }
         }
+      }
+      else
+      {
+        spatialOperator = OP_VALUE;
+        temporalOperator = OP_GRAD;
       }
     }
     else
@@ -532,9 +541,22 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
   bool gradInBoth = (spatialOperatorType==OP_GRAD) && (temporalOperatorType==OP_GRAD);
   // for 1D spatial-only gradient, we expect to have scalar-sized values.
   bool spatialGrad1D = !gradInBoth && (spatialOperatorType==OP_GRAD) && (_spatialBasis->rangeDimension() == 1);
-  if (!spatialGrad1D)
+  bool temporalGrad  = !gradInBoth && (temporalOperatorType==OP_GRAD);
+  if (!spatialGrad1D && !temporalGrad)
   {
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
+  }
+  else if (temporalGrad)
+  {
+    // we can tolerate either (F,P) or (F,P,1) shape
+    if (values.rank() == 3)
+    {
+      this->CHECK_VALUES_ARGUMENTS(values,refPoints,temporalOperatorType);
+    }
+    else
+    {
+      this->CHECK_VALUES_ARGUMENTS(values,refPoints,OP_VALUE);
+    }
   }
   else
   {

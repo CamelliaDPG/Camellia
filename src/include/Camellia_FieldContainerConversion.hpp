@@ -81,6 +81,12 @@ namespace Camellia {
   public:
     static Camellia::FieldContainer<Scalar, 0> fromTensorData(TensorData &tensorData)
     {
+      if (!tensorData.isValid())
+      {
+        // then return an empty FC
+        return Camellia::FieldContainer<Scalar, 0>();
+      }
+      
       // TensorData can be rank 0, 1, 2 or 3
       const int rank = Intrepid2::getFunctorRank(tensorData);
       if (rank == 0)
@@ -123,6 +129,8 @@ namespace Camellia {
     
     static Camellia::FieldContainer<Scalar, 0> fromTensorPoints(const TensorPoints &tensorPoints)
     {
+      TEUCHOS_TEST_FOR_EXCEPTION(!tensorPoints.isValid(), std::invalid_argument, "Invalid TensorPoints container");
+      
       // TensorPoints is always rank 2
       const int rank = 2;
       return fromDeviceContainerWithRank<const TensorPoints,rank>(tensorPoints);
