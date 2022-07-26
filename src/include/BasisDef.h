@@ -116,6 +116,19 @@ void Basis<Scalar,ArrayScalar>::CHECK_VALUES_ARGUMENTS(const ArrayScalar &values
 }
 
 template<class Scalar, class ArrayScalar>
+Teuchos::RCP< ::Camellia::Basis<Scalar, ArrayScalar> >  Basis<Scalar,ArrayScalar>::continuousBasis()
+{
+  if (_continuousBasis != Teuchos::null)
+  {
+    return _continuousBasis;
+  }
+  else
+  {
+    return Teuchos::rcp(this, false);
+  }
+}
+
+template<class Scalar, class ArrayScalar>
 CellTopoPtr Basis<Scalar,ArrayScalar>::domainTopology() const
 {
   return _domainTopology;

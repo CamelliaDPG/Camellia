@@ -69,6 +69,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
   const int velocityDim = 1;
   _delta_k = delta_k;
   _tn_enrichment = vlasovTraceEnrichment;
+  TEUCHOS_TEST_FOR_EXCEPTION(_tn_enrichment != 0, std::invalid_argument, "non-zero vlasovTraceEnrichment no longer supported");
   _useSerendipityBasis = useSerendipityBasis;
   
   _q    = ParameterFunction::parameterFunction(q);
@@ -882,7 +883,7 @@ FunctionPtr VlasovPoissonSpaceTimeFormulation::vx() const
 // below, we set up unit tests against the private classes above
 #include "Teuchos_UnitTestHarness.hpp"
 
-void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStream &out, bool &success)
+void testVelocitySpace1D1TIntegral(const bool &doRefinement, const bool &useSerendipity, Teuchos::FancyOStream &out, bool &success)
 {
   double tol = 1e-15;
   double q      = 1.0;
@@ -916,7 +917,6 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
   
   for (auto formulationChoice : formulationChoices)
   {
-    const bool useSerendipityBasis = true;
     const int vlasovTraceEnrichment = 0;
     VlasovPoissonSpaceTimeFormulation form(formulationChoice,
                                            q, eps0, m,
@@ -924,7 +924,7 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
                                            t0, tWidth, tElements,
                                            v0, vWidth, vElements,
                                            H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality,
-                                           useSerendipityBasis,
+                                           useSerendipity,
                                            vlasovTraceEnrichment);
     
     FunctionPtr x  = Function::xn(1);
@@ -973,13 +973,29 @@ void testVelocitySpace1D1TIntegral(const bool &doRefinement, Teuchos::FancyOStre
 TEUCHOS_UNIT_TEST( SolutionMomentFunctionVlasovPoissonSpaceTimeFormulation, AnalyticIntegralMatches )
 {
   const bool doRefinement = false;
-  testVelocitySpace1D1TIntegral(doRefinement, out, success);
+  const bool useSerendipity = false;
+  testVelocitySpace1D1TIntegral(doRefinement, useSerendipity, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunctionVlasovPoissonSpaceTimeFormulation, AnalyticIntegralMatches_Serendipity )
+{
+  const bool doRefinement = false;
+  const bool useSerendipity = true;
+  testVelocitySpace1D1TIntegral(doRefinement, useSerendipity, out, success);
 }
 
 TEUCHOS_UNIT_TEST( SolutionMomentFunctionVlasovPoissonSpaceTimeFormulation, AnalyticIntegralMatchesWithRefinement )
 {
   const bool doRefinement = true;
-  testVelocitySpace1D1TIntegral(doRefinement, out, success);
+  const bool useSerendipity = false;
+  testVelocitySpace1D1TIntegral(doRefinement, useSerendipity, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunctionVlasovPoissonSpaceTimeFormulation, AnalyticIntegralMatchesWithRefinement_Serendipity )
+{
+  const bool doRefinement = true;
+  const bool useSerendipity = true;
+  testVelocitySpace1D1TIntegral(doRefinement, useSerendipity, out, success);
 }
 
 class SideRestriction : public TFunction<double>

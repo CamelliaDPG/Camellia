@@ -116,6 +116,12 @@ public:
   //! Calls setBasisFamily() for each known Var.  (Note that this means that you should call this *after* creating all the Vars, if you want it to apply to all Vars.)
   void setBasisFamily(BasisFamilyPtr basisFamily);
   
+  //! Calls setBasisFamily() for each known test-space Var.  (Note that this means that you should call this *after* creating all the Vars, if you want it to apply to all Vars.)
+  void setTestBasisFamily(BasisFamilyPtr basisFamily);
+  
+  //! Calls setBasisFamily() for each known trial-space Var.  (Note that this means that you should call this *after* creating all the Vars, if you want it to apply to all Vars.)
+  void setTrialBasisFamily(BasisFamilyPtr basisFamily);
+  
   static VarFactoryPtr varFactory()
   {
     return Teuchos::rcp(new VarFactory);

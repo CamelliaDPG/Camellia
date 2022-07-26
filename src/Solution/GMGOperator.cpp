@@ -1204,8 +1204,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         {
           // This will cause an error in BasisReconciliation; can we find equivalent continuous basis?
           // (necessary when using a non-conforming coarse mesh, though not at present an issue for fields, as here)
-          bool spaceTime = _coarseMesh->tensorTopologyMeansSpaceTime();
-          coarseBasis = BasisFactory::basisFactory()->getContinuousBasis(coarseBasis, spaceTime);
+          coarseBasis = coarseBasis->continuousBasis();
           TEUCHOS_TEST_FOR_EXCEPTION(fineBasis->functionSpace() != coarseBasis->functionSpace(), std::invalid_argument, "Even after getting continuous basis for coarseBasis, fine and coarse function spaces disagree");
         }
         SubBasisReconciliationWeights weights = _br->constrainedWeights(fineBasis, refBranch, coarseBasis, vertexNodePermutation);
@@ -1433,7 +1432,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             {
               // This will cause an error in BasisReconciliation; can we find equivalent continuous basis?
               // (necessary when using a non-conforming coarse mesh, though not at present an issue for fields, as here)
-              coarseBasis = BasisFactory::basisFactory()->getContinuousBasis(coarseBasis,_coarseMesh->tensorTopologyMeansSpaceTime());
+              coarseBasis = coarseBasis->continuousBasis();
               TEUCHOS_TEST_FOR_EXCEPTION(fineBasis->functionSpace() != coarseBasis->functionSpace(), std::invalid_argument, "Even after getting continuous basis for coarseBasis, fine and coarse function spaces disagree");
             }
             SubBasisReconciliationWeights weights = _br->constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);

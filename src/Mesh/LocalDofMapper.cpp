@@ -583,8 +583,7 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
     BasisPtr volumeBasis = _dofOrdering->getBasis(varID);
     if (upgradeToContinuousBasis)
     {
-      bool spaceTime = tensorTopologyMeansSpaceTime && (volumeBasis->domainTopology()->getTensorialDegree() > 0);
-      volumeBasis = BasisFactory::basisFactory()->getContinuousBasis(volumeBasis, spaceTime);
+      volumeBasis = volumeBasis->continuousBasis();
     }
     
     vector<int> dofOrdinalsVector = volumeBasis->dofOrdinalsForSubcell(d, subcord, 0);
@@ -615,8 +614,7 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
       BasisPtr sideBasis = _dofOrdering->getBasis(varID,sideOrdinal);
       if (upgradeToContinuousBasis)
       {
-        bool spaceTime = tensorTopologyMeansSpaceTime && (sideBasis->domainTopology()->getTensorialDegree() > 0);
-        sideBasis = BasisFactory::basisFactory()->getContinuousBasis(sideBasis, spaceTime);
+        sideBasis = sideBasis->continuousBasis();
       }
       
       vector<int> dofOrdinalsVector = sideBasis->dofOrdinalsForSubcell(d, sideSubcellOrdinal, 0);

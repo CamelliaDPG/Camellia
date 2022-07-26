@@ -94,7 +94,7 @@ namespace {
     return lhsAtExactSoln * w;
   }
 
-  VlasovPoissonSpaceTimeFormulation getFormulation(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, const bool enforceQuasiNeutrality, double q, const bool useSerendipity = true)
+  VlasovPoissonSpaceTimeFormulation getFormulation(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, const bool enforceQuasiNeutrality, double q, const bool useSerendipity)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -118,7 +118,7 @@ namespace {
     return form;
   }
 
-  VlasovSpaceTimeFormulation getFormulation1D1T1V(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, double q)
+  VlasovSpaceTimeFormulation getFormulation1D1T1V(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, double q, const bool useSerendipity)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -153,8 +153,7 @@ namespace {
     std::vector<double> velocitySpaceVertices_y; // empty
     std::vector<double> velocitySpaceVertices_z; // empty
     
-    const bool useSerendipityBasis = true;
-    VlasovSpaceTimeFormulation form(q, m, useSerendipityBasis, configForm, spatialMeshTopo,
+    VlasovSpaceTimeFormulation form(q, m, useSerendipity, configForm, spatialMeshTopo,
                                     temporalVertices,
                                     velocitySpaceVertices_x,
                                     velocitySpaceVertices_y,
@@ -211,6 +210,7 @@ namespace {
                               const int H1Order, const int xElements, const int tElements, const int vElements,
                               std::vector<std::vector<GlobalIndexType> > refinementSequence,
                               const bool overrideVlasovBCs,
+                              const bool useSerendipityBasis,
                               const double tol,
                               Teuchos::FancyOStream &out, bool &success,
                               const bool outputViz, const string vizPrefix)
@@ -218,7 +218,14 @@ namespace {
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
     
-    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
+    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, useSerendipityBasis);
+    
+    // check tn order:
+    auto elemType = form.vlasovMesh()->elementTypes()[0]; // all elements have same type
+    VarPtr tn = form.t_n_hat();
+    auto tnBasisSide0 = elemType->trialOrderPtr->getBasis(tn->ID(), 0);
+    int tnDegree = tnBasisSide0->getDegree();
+    TEST_EQUALITY(tnDegree, H1Order); // tn is non-conforming (face continuity only), but should match the H^1 order
     
     form.setUseGeometricMultigrid(true);
     form.setIterativeSolveTolerance(tol / 100.0);
@@ -393,16 +400,17 @@ namespace {
   }
 
   void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
-                                const double q,
-                                const int H1Order, const int xElements, const int tElements, const int vElements,
-                                const bool overrideVlasovBCs,
-                                const double tol,
-                                Teuchos::FancyOStream &out, bool &success,
-                                const bool outputViz=false, const string vizPrefix="")
+                              const double q,
+                              const int H1Order, const int xElements, const int tElements, const int vElements,
+                              const bool overrideVlasovBCs,
+                              const bool useSerendipity,
+                              const double tol,
+                              Teuchos::FancyOStream &out, bool &success,
+                              const bool outputViz=false, const string vizPrefix="")
   {
     std::vector<std::vector<GlobalIndexType> > refinementSequence;
     patchTestVlasovPoisson(f_exact, E_exact, VE_exact,
-                           q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, tol, out, success, outputViz, vizPrefix);
+                           q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
   }
 
 /*
@@ -419,13 +427,14 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
                              const int H1Order, const int xElements, const int tElements, const int vElements,
                              std::vector<std::vector<GlobalIndexType> > refinementSequence,
                              const bool overrideVlasovBCs,
+                             const bool useSerendipity,
                              const double tol,
                              Teuchos::FancyOStream &out, bool &success,
                              const bool outputViz, const string vizPrefix)
 {
   const bool usePeriodicBCs = false;
   
-  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q);
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
   
   form.setUseGeometricMultigrid(true);
   form.setIterativeSolveTolerance(tol / 100.0);
@@ -612,61 +621,45 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
                              const double q,
                              const int H1Order, const int xElements, const int tElements, const int vElements,
                              const bool overrideVlasovBCs,
+                             const bool useSerendipity,
                              const double tol,
                              Teuchos::FancyOStream &out, bool &success,
                              const bool outputViz=false, const string vizPrefix="")
 {
   std::vector<std::vector<GlobalIndexType> > refinementSequence;
   patchTestVlasovPoisson2(f_exact, E_exact, VE_exact,
-                          q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, tol, out, success, outputViz, vizPrefix);
+                          q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
 }
 
-/*  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, MapToPhaseSpaceMesh )
-  {
-    const int xElements = 3;
-    const int tElements = 1;
-    const int vElements = 4;
-    const int H1Order   = 2;
-    const bool usePeriodicBCs = true;
-    const bool enforceQuasiNeutrality = true;
-    
-    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality);
-    
-    auto poissonMeshTopo     = form.poissonMesh()->getTopology();
-    auto vlasovMeshTopo = form.vlasovMesh()->getTopology();
-    
-    auto cellMap = form.spatialCellIDToPhaseSpaceCellIDsMap();
-    
-    double tol = 1e-16; // tolerance for x coordinate comparison
-    for (auto & entry : cellMap)
-    {
-      GlobalIndexType spatialCellID = entry.first;
-      auto & phaseSpaceCells = entry.second;
-      
-      auto spatialVertices = poissonMeshTopo->getCell(spatialCellID)->vertices();
-      double xLeft   = poissonMeshTopo->getVertex(spatialVertices[0])[0];
-      double xRight  = poissonMeshTopo->getVertex(spatialVertices[1])[0];
-      
-      for (auto phaseSpaceCellID : phaseSpaceCells)
-      {
-        auto phaseVertices = vlasovMeshTopo->getCell(phaseSpaceCellID)->vertices();
-        for (auto vertexIndex : phaseVertices)
-        {
-          double x = vlasovMeshTopo->getVertex(vertexIndex)[0];
-          bool matchesLeft  = std::abs(x-xLeft)  < tol;
-          bool matchesRight = std::abs(x-xRight) < tol;
-          if (!matchesLeft && !matchesRight)
-          {
-            out << "FAILURE: phase space cell " << phaseSpaceCellID << " has vertex with x coordinate " << x;
-            out << ", which matches neither " << xLeft << " nor " << xRight << " on spatial cell " << spatialCellID << std::endl;
-            success = false;
-          }
-        }
-      }
-    }
-  }*/
-
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_xv2_E_zero )
+  {
+    const double q    = 0; // 0 charge --> zero electric field
+    
+    const int xElements = 4;
+    const int tElements = 1;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+    const bool usePeriodicBCs = false;
+    const bool enforceQuasiNeutrality = false;
+    
+    const int spaceDim = 1;
+    const bool spaceTimeMesh = true;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr v  = getVx(spaceDim, spaceTimeMesh);
+    FunctionPtr v2 = v * v;
+    FunctionPtr f_exact = x * v2;
+    FunctionPtr E_exact = Function::zero();
+    FunctionPtr VE_exact = Function::zero();
+    
+    const bool overrideVlasovBCs = false;
+    const bool useSerendipity    = false;
+    const double tol = 1e-12;
+    
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_xv2_E_zero_Serendipity )
   {
     const double q    = 0; // 0 charge --> zero electric field
     
@@ -688,9 +681,10 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     FunctionPtr VE_exact = Function::zero();
     
     const bool overrideVlasovBCs = false;
-    const double tol = 1e-13;
+    const bool useSerendipity    = true;
+    const double tol = 1e-11;
     
-    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero )
@@ -700,6 +694,34 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int xElements = 4;
     const int tElements = 1;
     const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+    const bool usePeriodicBCs = false;
+    const bool enforceQuasiNeutrality = false;
+    
+    const int spaceDim = 1;
+    const bool spaceTimeMesh = true;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr v  = getVx(spaceDim, spaceTimeMesh);
+    FunctionPtr v2 = v * v;
+    FunctionPtr f_exact = x * v2;
+    FunctionPtr E_exact = Function::zero();
+    FunctionPtr VE_exact = Function::zero();
+    
+    const bool overrideVlasovBCs = false;
+    const bool useSerendipity    = false;
+    const double tol = 1e-12;
+    
+    patchTestVlasovPoisson2(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero_Serendipity )
+  {
+    const double q    = 0; // 0 charge --> zero electric field
+    
+    const int xElements = 4;
+    const int tElements = 1;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
     const int H1Order   = 5; // quadratic L^2 functions; allows exact representation of analytic solution trace
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
@@ -715,95 +737,11 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     FunctionPtr VE_exact = Function::zero();
     
     const bool overrideVlasovBCs = false;
+    const bool useSerendipity    = true;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson2(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success);
+    patchTestVlasovPoisson2(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
   }
-
-//  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, InflowConditions_Sean_MoreComplicated )
-//  {
-//    const double q    = 0; // 0 charge --> zero electric field
-//    const double eps0 = TEST_EPS0;
-//    const double m    = TEST_M;
-//
-//    FunctionPtr x = Function::xn(1);
-//    FunctionPtr v = Function::yn(1);
-//    const double meshWidth = TEST_XWIDTH;
-//    const double vWidth = TEST_VWIDTH;
-//    FunctionPtr f0 = Function::zero();
-//    const double n0  = 0.0;
-//
-//    const int xElements = 4;
-//    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
-//    const int H1Order   = 4; // cubic L^2 functions; allows exact representation of analytic solution trace
-//    const bool usePeriodicBCs = false;
-//    const bool enforceQuasiNeutrality = true;
-//
-//    auto form = getFormulation(xElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
-//
-//    form.setInitialConditions(f0);
-//
-//    FunctionPtr n = Function::normal();
-//    FunctionPtr sgn = Function::sideParity();
-//
-//    const auto VMAX = TEST_VWIDTH + TEST_V0;
-//    const auto VMIN = TEST_V0;
-//    FunctionPtr tn_left  = 1.0 * v * (    VMAX - v ) * n->x() * sgn;
-//    FunctionPtr tn_right = 2.0 * v * ( TEST_V0 - v ) * n->x() * sgn;
-//
-//    SpatialFilterPtr inflowLeftFilter  = SpatialFilter::matchingX(TEST_X0)               & SpatialFilter::greaterThanY(0.0);
-//    SpatialFilterPtr inflowRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH) & SpatialFilter::lessThanY   (0.0);
-//
-//    SpatialFilterPtr bottomFilter = SpatialFilter::matchingY(TEST_V0);
-//    SpatialFilterPtr topFilter = SpatialFilter::matchingY(TEST_V0 + TEST_VWIDTH);
-//
-//    auto vlasovSoln = form.vlasovSolution();
-//    auto boltzmannBCs  = BC::bc();
-////    boltzmannBCs->addDirichlet(form.t_n_hat(), inflowLeftFilter,  tn_left);
-////    boltzmannBCs->addDirichlet(form.t_n_hat(), inflowRightFilter, tn_right);
-////    boltzmannBCs->addDirichlet(form.t_n_hat(), bottomFilter,      Function::zero());
-////    boltzmannBCs->addDirichlet(form.t_n_hat(), topFilter,         Function::zero());
-//
-//    // DEBUGGING:
-//    boltzmannBCs->addDirichlet(form.t_n_hat(), SpatialFilter::allSpace(), (v - VMIN) * (v - VMAX) * v * n->x() * sgn);
-//
-//    form.setBoltzmannBCs(boltzmannBCs);
-//
-//    auto gaussSoln = form.poissonSolution();
-//    FunctionPtr E_soln = Function::solution(form.E(), gaussSoln);
-//
-//    FunctionPtr E0 = Function::zero();
-//    double E0_avg = E0->integrate(gaussSoln->mesh()) / meshWidth;
-//    E0 = E0 - E0_avg;
-//
-//    double soln_magnitude = E_soln->l2norm(gaussSoln->mesh());
-//    double err_l2 = (E_soln-E0)->l2norm(gaussSoln->mesh());
-//
-//    double tol = 1e-13;
-//    TEST_COMPARE(err_l2, <=, tol * soln_magnitude);
-//
-//    FunctionPtr tn_soln = Function::solution(form.t_n_hat(), vlasovSoln, false);
-//
-//    Teuchos::RCP<HDF5Exporter> boltzmannViz = Teuchos::rcp( new HDF5Exporter (vlasovSoln->mesh(), "BoltzmannInflowConditionsTests1D1V", "."));
-//    boltzmannViz->exportSolution(vlasovSoln, form.t());
-//
-//    form.takeTimeStep();
-//
-////    PhaseSpaceVisualization phaseSpaceViz(vlasovSoln, form.f(), "InflowConditionsTests1D1V", ".");
-////    phaseSpaceViz.exportTimeStep(form.t());
-//
-//    boltzmannViz->exportSolution(vlasovSoln, form.t());
-//
-////    out << "Comparing tn_0 with tn_soln after taking time step.\n";
-////    soln_magnitude = tn_0->l2norm(vlasovSoln->mesh());
-////    err_l2 = (tn_soln-tn_0)->l2norm(vlasovSoln->mesh());
-////    TEST_COMPARE(err_l2, <, tol * soln_magnitude);
-////
-////    out << "Comparing f0 with f_soln after taking time step.\n";
-////    soln_magnitude = f0->l2norm(vlasovSoln->mesh());
-////    err_l2 = (f_soln-f0)->l2norm(vlasovSoln->mesh());
-////    TEST_COMPARE(err_l2, <, tol * soln_magnitude);
-//  }
 
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_zero_E_1 )
   {
@@ -820,9 +758,31 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int H1Order   = 2; // linear L^2 functions (allows exact VE)
     
     const bool overrideVlasovBCs = false;
+    const bool useSerendipity    = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_zero_E_1_Serendipity )
+  {
+    const double q = TEST_Q;
+    
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr f_exact   = Function::constant(0.0);
+    FunctionPtr E_exact = Function::constant(1.0);
+    FunctionPtr V_E_exact = -x;
+    
+    const int xElements = 3;
+    const int tElements = 2;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 2; // linear L^2 functions (allows exact VE)
+    
+    const bool overrideVlasovBCs = false;
+    const bool useSerendipity    = true;
+    const double tol = 1e-12;
+    
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_constant_E_linear )
@@ -847,7 +807,34 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const bool outputViz = false;
     const std::string vizPrefix = "PatchTest_f_constant_E_linear";
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success, outputViz, vizPrefix);
+    const bool useSerendipity    = false;
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_constant_E_linear_Serendipity )
+  {
+    const double q      = TEST_Q;
+    
+    const int spaceDim = 1;
+    const bool spaceTimeMesh = true;
+    auto vx = getVx(spaceDim, spaceTimeMesh);
+    
+    FunctionPtr x       = Function::xn(1);
+    FunctionPtr f_exact = Function::constant(1.0);
+    FunctionPtr E_exact =   (q / TEST_EPS0 * TEST_VWIDTH) * x;
+    FunctionPtr V_E     = - (q / TEST_EPS0 * TEST_VWIDTH) / 2.0 * x * x;
+
+    const int xElements = 3;
+    const int tElements = 1;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of f0 * E0, required for trace solution
+    const double tol = 1e-12;
+    
+    const bool outputViz = false;
+    const std::string vizPrefix = "PatchTest_f_constant_E_linear";
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
+    const bool useSerendipity    = true;
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_linear_E_quadratic )
@@ -871,11 +858,41 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const double tol = 1e-9; // unclear why the tolerance needs to be so loose here; it may have to do with the scaling of tn, which has an extra v factor on some sides…
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
+    const bool useSerendipity    = false;
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, tol, out, success,
-                           outputViz, testPrefix);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol,
+                           out, success, outputViz, testPrefix);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, PatchTest_f_linear_E_quadratic_Serendipity )
+  {
+    const double q      = TEST_Q;
+    const double eps0   = TEST_EPS0;
+    const double m      = TEST_M;
+    
+    FunctionPtr x = Function::xn(1);
+    const double meshWidth = TEST_XWIDTH;
+    const double vWidth = TEST_VWIDTH;
+    FunctionPtr f_exact = x/vWidth - (TEST_X0 + TEST_XWIDTH) / (2.0 * vWidth); // chosen to have zero integral on the phase-space domain
+    
+    FunctionPtr E_exact = (q/eps0) * (x * x / 2.0 - ((TEST_X0 + TEST_XWIDTH) / 2.0) * x);
+    FunctionPtr V_E = -(q/eps0) * (x * x * x / 6.0 - ((TEST_X0 + TEST_XWIDTH) / 4.0) * x * x);
+
+    const int xElements = 3;
+    const int tElements = 1;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
+    const double tol = 1e-9; // unclear why the tolerance needs to be so loose here; it may have to do with the scaling of tn, which has an extra v factor on some sides…
+    
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
+    const bool useSerendipity    = true;
+    
+    const bool outputViz = true;
+    const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol,
+                           out, success, outputViz, testPrefix);
   }
 
 
@@ -1188,8 +1205,9 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
+    const bool useSerendipity = false; // should not affect test in any way
     
-    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
+    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, useSerendipity);
 
     auto vlasovSoln = form.vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1245,8 +1263,9 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
+    const bool useSerendipity = false; // should not affect test in any way
     
-    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
+    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, useSerendipity);
 
     auto vlasovSoln = form.vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1304,8 +1323,9 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
+    const bool useSerendipity = false; // should not affect test in any way
     
-    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
+    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, useSerendipity);
 
     auto vlasovSoln = form.vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1363,8 +1383,9 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
+    const bool useSerendipity = false; // should not affect test in any way
     
-    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
+    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, useSerendipity);
 
     auto vlasovSoln = form.vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1421,8 +1442,9 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool enforceQuasiNeutrality = false;
+    const bool useSerendipity = false; // should not affect test in any way
     
-    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q);
+    auto form = getFormulation(xElements, tElements, vElements, H1Order, usePeriodicBCs, enforceQuasiNeutrality, q, useSerendipity);
 
     auto vlasovSoln = form.vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();

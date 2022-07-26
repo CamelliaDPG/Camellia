@@ -522,7 +522,7 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
         // upgrade bases to continuous ones of the same cardinality, if they are discontinuous.
         const bool spaceTime = _mesh->tensorTopologyMeansSpaceTime() && (elemType->cellTopoPtr->sideIsSpatial(sideForImposition) || (sideForImposition == VOLUME_INTERIOR_SIDE_ORDINAL));
         BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForImposition);
-        basisForImposition = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
+        basisForImposition = basis->continuousBasis();
         
         const bool basisIsConstant = basis->getCardinality() == 1;
         

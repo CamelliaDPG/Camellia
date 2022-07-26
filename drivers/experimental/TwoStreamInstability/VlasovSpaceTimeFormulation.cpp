@@ -165,7 +165,7 @@ _m(m)
   {
     basisFamily = BasisFamily::hierarchicalBasisFamily();
   }
-  vlasovVF->setBasisFamily(basisFamily);
+  vlasovVF->setTrialBasisFamily(basisFamily);
   
   f = vlasovVF->fieldVar(S_F);
   w = vlasovVF->testVar(S_W, HGRAD); // w lies in HGRAD of the whole space-time phase space

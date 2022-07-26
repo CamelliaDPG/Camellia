@@ -8,21 +8,6 @@
 
 #include "BasisFactory.h"
 
-#include "Intrepid_HDIV_QUAD_In_FEM.hpp"
-#include "Intrepid_HCURL_QUAD_In_FEM.hpp"
-
-#include "Intrepid_HGRAD_TRI_Cn_FEM.hpp"
-#include "Intrepid_HCURL_TRI_In_FEM.hpp"
-
-#include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
-
-#include "Intrepid_HDIV_HEX_In_FEM.hpp"
-#include "Intrepid_HCURL_HEX_In_FEM.hpp"
-
-#include "Intrepid_HGRAD_TET_Cn_FEM.hpp"
-#include "Intrepid_HDIV_TET_In_FEM.hpp"
-#include "Intrepid_HCURL_TET_In_FEM.hpp"
-
 #include "doubleBasisConstruction.h"
 
 #include "Basis_HVOL_QUAD_C0_FEM.hpp"
@@ -311,6 +296,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
           }
         break;
       case(Camellia::FUNCTION_SPACE_REAL_SCALAR):
+          // TODO: replace this with an Intrepid2-derived basis.
           basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >()),
                               spaceDim, scalarRank, fs)
                             ) ;
@@ -528,9 +514,7 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
             case Camellia::FUNCTION_SPACE_HDIV_DISC:
               if (! _useLobattoForQuadHDIV)
               {
-                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_QUAD_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
-                                      spaceDim, vectorRank, fs)
-                                    );
+                basis = (fs == FUNCTION_SPACE_HDIV) ? intrepid2QuadHDIV(polyOrder) : intrepid2QuadHDIV_DISC(polyOrder);
               }
               else
               {
@@ -546,10 +530,10 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
             }
             break;
             case Camellia::FUNCTION_SPACE_HCURL:
+                basis = intrepid2QuadHCURL(polyOrder);
+              break;
             case Camellia::FUNCTION_SPACE_HCURL_DISC:
-                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_QUAD_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
-                                    spaceDim, vectorRank, fs)
-                                  );
+                basis = intrepid2QuadHCURL_DISC(polyOrder);
               break;
             case Camellia::FUNCTION_SPACE_HVOL:
                 basis =  intrepid2QuadHVOL(polyOrder-1);
@@ -581,10 +565,6 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
               {
                 basis = intrepid2TriHGRAD_DISC(polyOrder);
               }
-              TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
-                basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
-                                    spaceDim, scalarRank, fs)
-                                  ) ;
               break;
             case Camellia::FUNCTION_SPACE_HDIV:
             case Camellia::FUNCTION_SPACE_HDIV_DISC:
@@ -598,16 +578,13 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
               }
               break;
             case Camellia::FUNCTION_SPACE_HCURL:
+                basis = intrepid2TriHCURL(polyOrder);
+              break;
             case Camellia::FUNCTION_SPACE_HCURL_DISC:
-                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_TRI_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
-                                    spaceDim, vectorRank, fs)
-                                  );
+                basis = intrepid2TriHCURL_DISC(polyOrder);
               break;
             case(Camellia::FUNCTION_SPACE_HVOL):
-              TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 1, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
-                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, ArrayScalar >(polyOrder-1,Intrepid::POINTTYPE_WARPBLEND)),
-                                    spaceDim, scalarRank, fs)
-                                  );
+              basis = intrepid2TriHGRAD_DISC(polyOrder-1); // TODO: check whether we can switch to intrepid2TriHVOL() here (a different basis).
               break;
             default:
               TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
@@ -834,76 +811,6 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   _functionSpaces[basis.get()] = fs;
   _cellTopoKeys[basis.get()] = cellTopoKey;
   return basis;
-}
-
-BasisPtr BasisFactory::getContinuousBasis(BasisPtr basis, bool tensorBasisMeansSpaceTime)
-{
-  TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(basis.get());
-  const bool spaceTime = tensorBasisMeansSpaceTime && (tensorBasis != NULL);
-  
-  BasisPtr spatialBasis, temporalBasis, spaceTimeBasis, basisForImposition;
-  if (!spaceTime)
-  {
-    spatialBasis = basis;
-  }
-  else
-  {
-    spaceTimeBasis = basis;
-    
-    if (tensorBasis)
-    {
-      spatialBasis = tensorBasis->getSpatialBasis();
-      temporalBasis = tensorBasis->getTemporalBasis();
-    }
-  }
-  bool constantSpatialBasis = false;
-  // upgrade bases to continuous ones of the same cardinality, if they are discontinuous.
-  if (spatialBasis->getDegree() == 0)
-  {
-    constantSpatialBasis = true;
-  }
-  else if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
-           (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
-  {
-    spatialBasis = getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
-  }
-  else if (Camellia::functionSpaceIsDiscontinuous(spatialBasis->functionSpace()))
-  {
-    Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((spatialBasis->functionSpace()));
-    spatialBasis = getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), fsContinuous);
-  }
-  if (temporalBasis.get())
-  {
-    if ((temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
-        (temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
-    {
-      temporalBasis = getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
-    }
-    else if (Camellia::functionSpaceIsDiscontinuous(temporalBasis->functionSpace()))
-    {
-      Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((temporalBasis->functionSpace()));
-      temporalBasis = getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), fsContinuous);
-    }
-  }
-  if (spaceTime)
-  {
-    if (constantSpatialBasis)
-    { // then use the original basis for imposition
-      basisForImposition = spaceTimeBasis;
-    }
-    else
-    {
-      vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
-      spaceTimeBasis = getSpaceTimeConformingBasis(spatialBasis->getDegree(), temporalBasis->getDegree(), spaceTimeBasis->domainTopology(),
-                                                   spatialBasis->functionSpace(), temporalBasis->functionSpace());
-      basisForImposition = spaceTimeBasis;
-    }
-  }
-  else
-  {
-    basisForImposition = spatialBasis;
-  }
-  return basisForImposition;
 }
 
 MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases)

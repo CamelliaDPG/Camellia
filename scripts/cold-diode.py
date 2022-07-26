@@ -48,7 +48,7 @@ def printRepoStatus(repoPath):
     else:
         print("Repo is clean")
 
-def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
+def runColdDiode(spaceTime, useSerendipity, adaptive, refinementCount, energyThreshold, bcTol, \
                  xMeshWidth, tMeshWidth, vMeshWidth, numUniformRefinements, \
                  numTimeSteps, timeRamp, sigma, p, dp, v0, vWidth, maxElements):
     buildDir = os.environ.get("CAMELLIA_BUILD_DIR")
@@ -106,6 +106,11 @@ def runColdDiode(spaceTime, adaptive, refinementCount, energyThreshold, bcTol, \
         outputDir += "/fixed_mesh"
     commandArgs.append("--v0=" + v0)
     commandArgs.append("--vWidth=" + vWidth)
+    if spaceTime: # TODO: support useSerendipity for time-marching as well
+      if useSerendipity:
+          commandArgs.append("--useSerendipityBasis")
+      else:
+          commandArgs.append("--useFullTensorBasis")
     xMeshWidthForOutput = int(xMeshWidth) << int(numUniformRefinements)
     if spaceTime:
         if float(timeRamp) > 0:
@@ -173,6 +178,9 @@ if __name__ == '__main__':
     parser.add_option("--spaceTime", action="store_true", dest="spaceTime")
     parser.add_option("--timeMarching", action="store_false", dest="spaceTime")
     
+    parser.add_option("--useSerendipityBasis", action="store_true", dest="useSerendipity")
+    parser.add_option("--useFullTensorBasis", action="store_false", dest="useSerendipity")
+    
     parser.add_option("--adaptive", action="store_true", dest="useAdaptivity")
     parser.add_option("--fixedMesh", action="store_false", dest="useAdaptivity")
     
@@ -206,7 +214,7 @@ if __name__ == '__main__':
         print("Repo is dirty; exiting")
         sys.exit(1)
     
-    runColdDiode(opt.spaceTime, opt.useAdaptivity, opt.numRefinements, opt.energyThreshold, opt.bcTol, \
+    runColdDiode(opt.spaceTime, opt.useSerendipity, opt.useAdaptivity, opt.numRefinements, opt.energyThreshold, opt.bcTol, \
                  opt.xMeshWidth, opt.tMeshWidth, opt.vMeshWidth, opt.numUniformRefinements, \
                  opt.numTimeSteps, opt.timeRamp, opt.sigma, opt.p, opt.dp, opt.v0, opt.vWidth, opt.maxElements)
 

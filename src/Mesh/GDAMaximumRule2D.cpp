@@ -892,8 +892,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID
     BasisPtr basis = elementType(cellID)->trialOrderPtr->getBasis(varID,sideOrdinal);
     if (upgradeToContinuousBasis)
     {
-      bool spaceTime = _mesh->tensorTopologyMeansSpaceTime() && elemType->cellTopoPtr->sideIsSpatial(sideOrdinal);
-      basis = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
+      basis = basis->continuousBasis();
     }
     
     int domainSubcellOrdinal;
