@@ -272,15 +272,25 @@ VarPtr VarFactory::fluxVarSpaceOnly(string name, Space fs, int ID)
 
 void VarFactory::setBasisFamily(BasisFamilyPtr basisFamily)
 {
-  for (const auto & trialVarEntry: _trialVars)
-  {
-    const auto & trialVar = trialVarEntry.second;
-    trialVar->setBasisFamily(basisFamily);
-  }
+  setTrialBasisFamily(basisFamily);
+  setTestBasisFamily(basisFamily);
+}
+
+void VarFactory::setTestBasisFamily(BasisFamilyPtr basisFamily)
+{
   for (const auto & testVarEntry: _testVars)
   {
     const auto & testVar = testVarEntry.second;
     testVar->setBasisFamily(basisFamily);
+  }
+}
+
+void VarFactory::setTrialBasisFamily(BasisFamilyPtr basisFamily)
+{
+  for (const auto & trialVarEntry: _trialVars)
+  {
+    const auto & trialVar = trialVarEntry.second;
+    trialVar->setBasisFamily(basisFamily);
   }
 }
 

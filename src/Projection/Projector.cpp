@@ -323,7 +323,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
   if (Camellia::functionSpaceIsBroken(basis->functionSpace()))
   {
     const bool spaceTime = domainBasisCache->cellTopologyIsSpaceTime();
-    conformingBasis = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
+    conformingBasis = basis->continuousBasis();
     TEUCHOS_TEST_FOR_EXCEPTION(conformingBasis->getCardinality() != basis->getCardinality(), std::logic_error, "continuous basis should have same cardinality as discontinuous");
     startingDimensionForProjection = domainDim;
   }
@@ -741,8 +741,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
   int startingDimensionForProjection = -1;
   if (Camellia::functionSpaceIsBroken(parentBasis->functionSpace()))
   {
-    const bool spaceTime = subdomainCaches[0]->cellTopologyIsSpaceTime();
-    conformingBasis = BasisFactory::basisFactory()->getContinuousBasis(parentBasis, spaceTime);
+    conformingBasis = parentBasis->continuousBasis();
     TEUCHOS_TEST_FOR_EXCEPTION(conformingBasis->getCardinality() != parentBasis->getCardinality(), std::logic_error, "continuous basis should have same cardinality as discontinuous");
     startingDimensionForProjection = domainDim;
   }

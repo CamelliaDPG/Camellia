@@ -89,10 +89,6 @@ public:
   BasisPtr getSpaceTimeConformingBasis( const int polyOrderSpace, const int polyOrderTime,
                                        CellTopoPtr spaceTimeCellTopo, const FSE spatialFS, const FSE temporalFS);
   
-  //! For L^2 bases that wrap an H^1-conforming basis, returns the H^1-conforming basis.
-  //! If spaceTime is true, then the basis must be a tensor basis, and the last tensorial component is treated as the temporal component.
-  BasisPtr getContinuousBasis( BasisPtr basis, bool spaceTime );
-  
   BasisPtr getNodalBasisForCellTopology(CellTopoPtr cellTopo);
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
 

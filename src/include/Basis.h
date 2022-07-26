@@ -42,6 +42,8 @@ template<class Scalar, class ArrayScalar> class Basis
   std::vector< Teuchos::RCP< ::Camellia::Basis<Scalar, ArrayScalar> > > _intrepid2TensorBasisComponents;
 protected:
   Basis();
+  
+  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
 
   int _basisCardinality;
   int _basisDegree;
@@ -129,6 +131,9 @@ public:
   
   virtual std::vector< Teuchos::RCP< ::Camellia::Basis<Scalar, ArrayScalar> > > intrepid2TensorBasisComponents();
   
+  //! returns a (weak) pointer to this if the basis is already continuous.  If it belongs to a broken space, returns an unbroken basis (with the same cardinality and member bases).
+  Teuchos::RCP< ::Camellia::Basis<Scalar, ArrayScalar> > continuousBasis();
+  
   // methods identifying the type of basis:
   virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
   virtual bool isModal() const; // defaults to false (true for the Lobatto bases)
@@ -158,7 +163,6 @@ template<class Scalar, class ArrayScalar> class IntrepidBasisWrapper : public Ba
 {
 private:
   Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > _intrepidBasis;
-  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
 protected:
   void initializeTags() const;
 public:
@@ -184,7 +188,6 @@ template<class Scalar, class ArrayScalar> class Intrepid2BasisWrapper : public B
   using DeviceType = Camellia::DeviceType;
 private:
   Teuchos::RCP< Intrepid2::Basis<DeviceType,Scalar,Scalar> > _intrepid2Basis;
-  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
 protected:
   void initializeTags() const override;
 public:

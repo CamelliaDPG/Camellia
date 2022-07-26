@@ -1977,6 +1977,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("performDebugRefinementSeries", "dontPerformDebugRefinementSeries", &performDebugRefinementSeries);
     cmdp.setOption("runPatchTests", "dontRunPatchTests", &runPatchTests);
     cmdp.setOption("patchTestToRun", &patchTestToRun);
+    cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -2121,7 +2122,7 @@ int main(int argc, char *argv[])
     using FormulationChoice = Camellia::VlasovPoissonSpaceTimeFormulation::VlasovPoissonSpaceTimeFormulationChoice;
     formulationChoice = FormulationChoice::ULTRAWEAK;
     
-    VlasovPoissonSpaceTimeFormulation form(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, vlasovTraceEnrichment, initialTimeDivision);
+    VlasovPoissonSpaceTimeFormulation form(formulationChoice, q, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment, initialTimeDivision);
     
     if (performDebugRefinementSeries)
     {
@@ -2891,6 +2892,14 @@ int main(int argc, char *argv[])
     else
     {
       suffix << "_sigma" << sigma;
+    }
+    if (useSerendipityBasis)
+    {
+      suffix << "_serendipity";
+    }
+    else
+    {
+      suffix << "_fullTensorBasis";
     }
     suffix << "_p" << H1Order;
     suffix << "_dp" << delta_k;

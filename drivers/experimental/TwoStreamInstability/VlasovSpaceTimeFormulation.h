@@ -33,7 +33,7 @@ namespace Camellia
 private:
   int _spaceDim;
   int _velocityDim;
-  bool _useSerendipityBasis; // TODO: use this (in constructor; see VlasovPoissonSpaceTimeFormulation)
+  bool _useSerendipityBasis;
   
   BFPtr _vlasovBF;
   int _delta_k;

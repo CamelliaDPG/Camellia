@@ -22,6 +22,28 @@
 
 using namespace Camellia;
 
+//! Compute (n choose k)
+int choose(const int &n, const int &k)
+{
+  int result = 1;
+  if (n - k < k)
+  {
+    return choose(n, n-k);
+  }
+  else
+  {
+    for (int i=1; i<=k; i++)
+    {
+      result *= (n - k + i);
+    }
+    for (int i=2; i<=k; i++)
+    {
+      result /= i;
+    }
+  }
+  return result;
+}
+
 TEUCHOS_UNIT_TEST( TimeMarchingMatrices, PrintMatrices )
 {
   VarFactoryPtr vf = VarFactory::varFactory();
@@ -61,4 +83,62 @@ TEUCHOS_UNIT_TEST( TimeMarchingMatrices, PrintMatrices )
   cout << "K:\n" << K;
   cout << "M:\n" << M;
   cout << "G:\n" << G;
+}
+
+TEUCHOS_UNIT_TEST( HCURLCounts, Counts )
+{
+  for (int p=1; p<10; p++)
+  {
+    int total = 0;
+    for (int ijk_sum = 2; ijk_sum <= p-1; ijk_sum++)
+    {
+      for (int i=0; i < ijk_sum; i++)
+      {
+        for (int j=0; j < ijk_sum-i; j++)
+        {
+          const int k = ijk_sum - i - j;
+          total++;
+        }
+      }
+    }
+    cout << p << "\t" << total << endl;
+    
+//    const int expectedCardinality = choose(p+1, 3) - 1;
+    // equivalently:
+    const int expectedCardinality = (p > 2) ? (p-1)*p*(p+1)/6 - 1 : 0;
+    
+    TEST_EQUALITY(total, expectedCardinality);
+  }
+}
+
+TEUCHOS_UNIT_TEST( SerendipityCounts, Counts )
+{
+  for (int d=1; d<8; d++)
+  {
+    std::array<int, 8> cardinalities;
+    for (int p=1; p<8; p++)
+    {
+      // closed form for H^1 -- see Juno et al. doi:10.1016/j.jcp.2017.10.009, Eqn. (83).
+      int i_max = std::min(d,p/2);
+      int n = 0;
+      for (int i = 0; i <= i_max; i++)
+      {
+        int d_choose_i = choose(d, i);
+        int p_minus_i_choose_i = choose(p - i, i);
+        int two_to_the_d_minus_i = 1 << (d-i);
+        n += two_to_the_d_minus_i * d_choose_i * p_minus_i_choose_i;
+      }
+      cardinalities[p-1] = n;
+    }
+    std::cout << d << " & ";
+    for (int p=1; p<8; p++)
+    {
+      std::cout << cardinalities[p-1];
+      if (p < 7)
+      {
+        std::cout << " & ";
+      }
+    }
+    std::cout << "\\\\\n";
+  }
 }

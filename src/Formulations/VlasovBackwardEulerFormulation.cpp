@@ -946,7 +946,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunctionVlasovPoissonBackwardEulerFormulation_1
   testVelocitySpace1DIntegral(doRefinement, out, success);
 }
 
-void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::FancyOStream &out, bool &success)
+void testVelocityExtrusion(bool volumeVariable, bool doRefinement, bool useSerendipityBasis, Teuchos::FancyOStream &out, bool &success)
 {
   double tol = 1e-15;
   // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
@@ -976,7 +976,6 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
     const double vx = v0 + (i * vWidth) / vElements;
     vxVertices.push_back(vx);
   }
-  const bool useSerendipityBasis = true;
   VlasovBackwardEulerFormulation form(q, m, useSerendipityBasis, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
   auto poissonMesh = poissonConfig->configurationSpaceMesh();
 
@@ -1029,13 +1028,32 @@ TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonBackwardEulerFormulation_1
 {
   const bool volumeVariable = true;
   const bool doRefinement = false;
-  testVelocityExtrusion(volumeVariable, doRefinement, out, success);
+  const bool useSerendipity = false;
+  testVelocityExtrusion(volumeVariable, doRefinement, useSerendipity, out, success);
+}
+
+TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonBackwardEulerFormulation_1D1V_Serendipity, VolumeExtrusion )
+{
+  const bool volumeVariable = true;
+  const bool doRefinement = false;
+  const bool useSerendipity = true;
+  testVelocityExtrusion(volumeVariable, doRefinement, useSerendipity, out, success);
 }
 
 TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonBackwardEulerFormulation_1D1V, VolumeExtrusionWithRefinement )
 {
   const bool volumeVariable = true;
   const bool doRefinement = true;
-  testVelocityExtrusion(volumeVariable, doRefinement, out, success);
+  const bool useSerendipity = false;
+  testVelocityExtrusion(volumeVariable, doRefinement, useSerendipity, out, success);
 }
+
+TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionVlasovPoissonBackwardEulerFormulation_1D1V_Serendipity, VolumeExtrusionWithRefinement )
+{
+  const bool volumeVariable = true;
+  const bool doRefinement = true;
+  const bool useSerendipity = true;
+  testVelocityExtrusion(volumeVariable, doRefinement, useSerendipity, out, success);
+}
+
 } // end anonymous namespace
