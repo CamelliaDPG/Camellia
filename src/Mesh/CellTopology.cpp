@@ -1118,3 +1118,9 @@ CellTopoPtr CellTopology::tetrahedron()
   static CellTopoPtr tet = cellTopology(shards::getCellTopologyData<shards::Tetrahedron<4> >());
   return tet;
 }
+
+CellTopoPtr CellTopology::wedge()
+{
+  static CellTopoPtr wedge = cellTopology(shards::getCellTopologyData<shards::Wedge<> >());
+  return wedge;
+}

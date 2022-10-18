@@ -142,3 +142,58 @@ TEUCHOS_UNIT_TEST( SerendipityCounts, Counts )
     std::cout << "\\\\\n";
   }
 }
+
+TEUCHOS_UNIT_TEST( WedgeInfo, Print )
+{
+  auto wedge = CellTopology::wedge();
+  vector<double> v0 {0,0,0};
+  vector<double> v1 {1,0,0};
+  vector<double> v2 {0,1,0};
+  vector<double> v3 {0,0,1};
+  vector<double> v4 {1,0,1};
+  vector<double> v5 {0,1,1};
+  vector<vector<double>> vertices {v0,v1,v2,v3,v4,v5};
+  vector<IndexType> element0Vertices {0,1,2,3,4,5};
+  vector<vector<IndexType>> elementVertices { element0Vertices };
+  vector<CellTopoPtr> cellTopos {wedge};
+  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+  
+  MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(meshGeometry) );
+  
+  meshTopo->printAllEntities();
+}
+
+TEUCHOS_UNIT_TEST( SyntheticEmissionData, Print )
+{
+  // output some non-dimensional emission data
+  double u0 = 1.0;
+  double sigma_squared = 0.25;
+  double n = 1.0;
+  auto f_M = MaxwellianFunction::maxwellian(1, 1, {u0}, sigma_squared, n);
+  
+  // non-dimensionalization also applies to temporal range: go from 0 to 1.
+  double t = 0;
+  double t_final = 1.0;
+  double t_ramp  = 0.25; // ramp up to full emission between t = 0 and t = 0.25
+  const int numTimeSteps = 100;
+  double v_min   = -1.0;
+  double v_width = 2.0;
+  const int v_divisions = 100;
+  
+  std::cout << std::setprecision(16);
+  
+  for (int timeStep = 0; timeStep <= numTimeSteps; timeStep++)
+  {
+    t = timeStep / (double) numTimeSteps;
+    const double rampMultiplier = (t < t_ramp) ? t / t_ramp : 1.0;
+    for (int vOrdinal = 0; vOrdinal<=v_divisions; vOrdinal++)
+    {
+      const double x = 0.0; // maxwellian should be independent of x
+      const double v = v_min + (v_width * vOrdinal) / v_divisions;
+      double f    = f_M->evaluate(x, v);
+      double f_em = rampMultiplier * f;
+      
+      std::cout << t << "\t" << v << "\t" << f_em << "\n";
+    }
+  }
+}

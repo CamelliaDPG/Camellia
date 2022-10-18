@@ -280,6 +280,7 @@ public:
 
   static CellTopoPtr triangle();
   static CellTopoPtr tetrahedron();
+  static CellTopoPtr wedge();
 //    static CellTopoPtr pyramid();
 };
 }
