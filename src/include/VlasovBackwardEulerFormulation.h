@@ -79,6 +79,7 @@ private:
   ParameterFunctionPtr _dt;
     
   Teuchos::RCP<SolutionMoments> _solutionMoments;
+  Teuchos::RCP<SolutionMoments> _solutionMomentsPriorTime;
   
   FunctionPtr _fSoln; // Camellia Function defining the solution of distribution f (refers to _vlasovSoln)
   FunctionPtr _fDiff; // fixed-point step in Vlasov field f
@@ -124,7 +125,8 @@ public:
                                  std::vector<double> velocitySpaceVertices_x,
                                  std::vector<double> velocitySpaceVertices_y,
                                  std::vector<double> velocitySpaceVertices_z,
-                                 const int H1Order, const int delta_k);
+                                 const int H1Order, const int delta_k,
+                                 const int maxMomentNumber = 0);
   
   VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -132,14 +134,16 @@ public:
                                  double dt,
                                  std::vector<double> velocitySpaceVertices_x,
                                  std::vector<double> velocitySpaceVertices_y,
-                                 const int H1Order, const int delta_k);
+                                 const int H1Order, const int delta_k,
+                                 const int maxMomentNumber = 0);
   
   VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                  MeshTopologyPtr spatialMeshTopology,
                                  double dt,
                                  std::vector<double> velocitySpaceVertices_x,
-                                 const int H1Order, const int delta_k);
+                                 const int H1Order, const int delta_k,
+                                 const int maxMomentNumber = 0);
 
   //! take time step.
   void takeTimeStep();
@@ -169,6 +173,9 @@ public:
   Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation();
   
   Teuchos::RCP<SolutionMoments> solutionMoments();
+  
+  //! SolutionMoments object for the prior-time solution.  Note that this does not get updated automatically in the course of a solve (it is not used internally).
+  Teuchos::RCP<SolutionMoments> solutionMomentsPriorTime();
       
   SolutionPtr vlasovSolution();
   SolutionPtr configurationSpaceSolution();

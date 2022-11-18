@@ -18,6 +18,8 @@
 
 #include "Camellia.h"
 
+#include "MaxwellianFunction.h"
+
 #include "Teuchos_UnitTestHarness.hpp"
 
 using namespace Camellia;

@@ -1,5 +1,6 @@
 project(experimental_drivers)
 
+add_subdirectory(B-dot)
 add_subdirectory(Heat)
 add_subdirectory(mlc)
 add_subdirectory(NonconformingPoisson)

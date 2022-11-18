@@ -21,11 +21,12 @@ namespace Camellia
 {
 class PhysicalPointCache : public BasisCache
 {
-  Camellia::FieldContainer<double> _physCubPoints;
+  Camellia::FieldContainer<double> _physCubPointsFC;
+  PhysicalTensorPoints _physicalCubaturePoints;
 public:
   PhysicalPointCache(const Camellia::FieldContainer<double> &physCubPoints);
+  const PhysicalTensorPoints & getPhysicalCubaturePoints() override;
   const Camellia::FieldContainer<double> & getPhysicalCubaturePointsFC() override;
-  Camellia::FieldContainer<double> & writablePhysicalCubaturePoints();
   int getSpaceDim() override; // overrides BasisCache::getSpaceDim();
 };
 }

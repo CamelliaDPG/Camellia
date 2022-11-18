@@ -15,17 +15,31 @@ using namespace Camellia;
 
 PhysicalPointCache::PhysicalPointCache(const Camellia::FieldContainer<double> &physCubPoints) : BasisCache()
 {
-  _physCubPoints = physCubPoints;
+  _physCubPointsFC = physCubPoints;
+  
+  // copy the physical points into a single PhysicalTensorPoints component
+  const int numCells     = _physCubPointsFC.dimension(0);
+  const int numPoints    = _physCubPointsFC.dimension(1);
+  const int numCoordDims = _physCubPointsFC.dimension(2);
+  Kokkos::DynRankView<double, DeviceType> physPointsComponent("physical points component",numCells,numPoints,numCoordDims);
+  auto physCubPointsView = _physCubPointsFC.checkoutDeviceView();
+  Kokkos::deep_copy(physPointsComponent, physCubPointsView);
+  vector< Kokkos::DynRankView<double, DeviceType> > physicalTensorPointsComponents {physPointsComponent};
+  _physCubPointsFC.checkinDeviceView(false);
+  _physicalCubaturePoints = PhysicalTensorPoints(physicalTensorPointsComponents);
 }
+
+const PhysicalTensorPoints & PhysicalPointCache::getPhysicalCubaturePoints()
+{
+  return _physicalCubaturePoints;
+}
+
 const Camellia::FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePointsFC()   // overrides super
 {
-  return _physCubPoints;
+  return _physCubPointsFC;
 }
+
 int PhysicalPointCache::getSpaceDim()
 {
-  return _physCubPoints.dimension(2);
-}
-Camellia::FieldContainer<double> & PhysicalPointCache::writablePhysicalCubaturePoints()   // allows overwriting the contents
-{
-  return _physCubPoints;
+  return _physCubPointsFC.dimension(2);
 }

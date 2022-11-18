@@ -133,6 +133,11 @@ SolutionPtr ConfigurationSpaceFormulation::solution()
   return _configurationSoln;
 }
 
+SolutionPtr ConfigurationSpaceFormulation::solutionPriorTime()
+{
+  return _configurationSolnPriorTime;
+}
+
 bool ConfigurationSpaceFormulation::useSerendipityBasis() const
 {
   return _useSerendipityBasis;
