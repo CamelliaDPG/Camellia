@@ -122,6 +122,8 @@ public:
   {
     return {cellTopo->getKey(),deltaP};
   }
+  // gets *some* element type; useful when it's known or expected that the mesh will be of uniform type.  Note that this can fail for distributed meshes, if there are ranks that don't have any cells.  (Does *not* do any MPI communication.)  But this should be safe for any mesh where allowPruning = false.
+  ElementTypePtr getSampleElementType();
   
   DofOrderingFactoryPtr getDofOrderingFactory();
   ElementTypeFactory & getElementTypeFactory();

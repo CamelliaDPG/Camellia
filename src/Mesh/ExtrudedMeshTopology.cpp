@@ -46,8 +46,8 @@ namespace
   {
     const int numExtrusionDims = startCoords.size();
     
-    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDims != extents.size(),             std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
-    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDims != initialSubdivisions.size(), std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
+    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDims != int(extents.size()),             std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
+    TEUCHOS_TEST_FOR_EXCEPTION(numExtrusionDims != int(initialSubdivisions.size()), std::invalid_argument, "startCoords, extents, and initialSubdivisions arguments must all match in length");
     
     using std::vector;
     vector<vector<double>> extrusionVertices(numExtrusionDims);
@@ -190,7 +190,7 @@ namespace
     const int numPhysicalVertices = physicalTopo->getVertexCount();
     vector< vector<double> > physicalCellVertices(numPhysicalVertices, vector<double>(physicalSpaceDim));
     vector<double> startCoords(numExtrusionDims), endCoords(numExtrusionDims);
-    for (int node=0; node<physicalTopo->getVertexCount(); node++)
+    for (int node=0; node<numPhysicalVertices; node++)
     {
       const auto & vertex = this->getVertex(cellVertices[node]);
       for (int d=0; d<physicalSpaceDim; d++)
@@ -328,7 +328,8 @@ namespace
   double ExtrudedMeshTopology::extrusionMeasureForPhaseSpaceCell(const IndexType &phaseSpaceCellID, int extrusionDimensionToExclude) const
   {
     double result = 1.0;
-    for (int extrusionOrdinal=0; extrusionOrdinal < _extrusionMeshTopologies.size(); extrusionOrdinal++)
+    const int numExtrusions = _extrusionMeshTopologies.size();
+    for (int extrusionOrdinal=0; extrusionOrdinal < numExtrusions; extrusionOrdinal++)
     {
       if (extrusionDimensionToExclude != extrusionOrdinal)
       {

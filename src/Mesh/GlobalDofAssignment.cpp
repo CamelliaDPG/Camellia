@@ -697,8 +697,9 @@ ElementTypePtr GlobalDofAssignment::getElementTypeForKey(pair<CellTopologyKey,in
   {
     int deltaP = key.second;
     vector<int> H1Order = getH1OrderForPRefinement(deltaP);
-    vector<int> testDegree(H1Order.size());
-    for (int pComponent=0; pComponent<H1Order.size(); pComponent++)
+    const int numPComponents = H1Order.size();
+    vector<int> testDegree(numPComponents);
+    for (int pComponent=0; pComponent<numPComponents; pComponent++)
     {
       testDegree[pComponent] = H1Order[pComponent] + _testOrderEnhancement;
     }
@@ -737,6 +738,19 @@ int GlobalDofAssignment::getPRefinementDegree(GlobalIndexType cellID)
   {
     return _cellPRefinements[cellID];
   }
+}
+
+ElementTypePtr GlobalDofAssignment::getSampleElementType()
+{
+  if (_elementTypesForCellTopology.size() == 0)
+  {
+    // force determination of some cell, if any is known
+    const auto & activeCellIDs = _mesh->getTopology()->getLocallyKnownActiveCellIndices();
+    if (activeCellIDs.size() == 0) return Teuchos::null;
+    const auto & cellID = *activeCellIDs.begin();
+    return elementType(cellID);
+  }
+  return _elementTypesForCellTopology.begin()->second;
 }
 
 GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID)

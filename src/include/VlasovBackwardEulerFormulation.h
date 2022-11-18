@@ -93,6 +93,8 @@ private:
   std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
   int _maxIters = 10000;
   
+  bool _runQuietly = false;
+  
   Teuchos::RCP<GMGSolver> _gmgSolver;
   
   static const string S_F;       // trial variable - distribution function f
@@ -281,6 +283,9 @@ public:
   
   //! RefinementObserver method.  Will be called when the Vlasov mesh is unrefined.
   void didHUnrefine(const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild);
+  
+  //! If true, will not output details of fixed point iteration to console
+  void setRunQuietly(bool runQuietly);
 };
 
 }

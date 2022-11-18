@@ -190,7 +190,7 @@ _m(m)
 
   map<int,int> testOrderEnhancements;
   
-  const bool allowPruning = true;
+  const bool allowPruning = false; // some day, we might want to have a fully distributed mesh.  But right now, ExtrudedMeshTopology relies on knowing all the phase-space cell IDs.  Would not be too hard to do the appropriate MPI communication, but right now the memory cost of the mesh is not prohibitive.
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
   Epetra_CommPtr comm = MPIWrapper::CommWorld();
   MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, H1Order, delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );
@@ -620,6 +620,11 @@ void VlasovBackwardEulerFormulation::setIterativeSolveTolerances(const std::vect
   _cgTols = cgTols;
 }
 
+void VlasovBackwardEulerFormulation::setRunQuietly(bool runQuietly)
+{
+  _runQuietly = runQuietly;
+}
+
 void VlasovBackwardEulerFormulation::setTimeStep(double dt)
 {
   _dt->setValue(dt);
@@ -683,7 +688,7 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
     _vlasovSolnPrev->setSolution(_vlasovSoln);
     _configurationSpaceFormulation->copySolutionToPrevious();
     
-    if (rank == 0)
+    if ((rank == 0) && !_runQuietly)
     {
       std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << _maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
     }
@@ -715,7 +720,7 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
     
     substepStepSizesVlasov.push_back(fRelDiff);
     
-    if (rank == 0)
+    if ((rank == 0) && !_runQuietly)
     {
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E and/or B: " << configurationSpaceRelativeDiff << std::endl;
