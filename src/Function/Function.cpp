@@ -649,9 +649,9 @@ Scalar TFunction<Scalar>::evaluate(double x)
 {
   Camellia::FieldContainer<Scalar> value(1,1); // (C,P)
   Camellia::FieldContainer<double> physPoint(1,1,1);
+  physPoint(0,0,0) = x;
 
   Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
-  dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
   if (this->rank() != 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires a rank 0 Function.");
@@ -671,9 +671,9 @@ Scalar TFunction<Scalar>::evaluate(double x, double y)
 {
   Camellia::FieldContainer<Scalar> value(1,1);
   Camellia::FieldContainer<double> physPoint(1,1,2);
+  physPoint(0,0,0) = x;
+  physPoint(0,0,1) = y;
   Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
-  dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
-  dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
   
   if (this->rank() != 0)
   {
@@ -694,10 +694,10 @@ Scalar TFunction<Scalar>::evaluate(double x, double y, double z)   // for testin
 {
   Camellia::FieldContainer<Scalar> value(1,1);
   Camellia::FieldContainer<double> physPoint(1,1,3);
+  physPoint(0,0,0) = x;
+  physPoint(0,0,1) = y;
+  physPoint(0,0,2) = z;
   Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
-  dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
-  dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
-  dummyCache->writablePhysicalCubaturePoints()(0,0,2) = z;
   if (this->rank() != 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires a rank 1 Function.");

@@ -263,7 +263,7 @@ public:
   
   Camellia::FieldContainer<double> computeParametricPoints();
 
-  const PhysicalTensorPoints & getPhysicalCubaturePoints();
+  virtual const PhysicalTensorPoints & getPhysicalCubaturePoints();
   
   virtual const Camellia::FieldContainer<double> & getPhysicalCubaturePointsFC();
   const Camellia::FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);

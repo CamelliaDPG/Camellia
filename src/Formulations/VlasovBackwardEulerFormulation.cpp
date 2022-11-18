@@ -106,7 +106,8 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                std::vector<double> velocitySpaceVertices_x,
                                                                std::vector<double> velocitySpaceVertices_y,
                                                                std::vector<double> velocitySpaceVertices_z,
-                                                               const int H1Order, const int delta_k)
+                                                               const int H1Order, const int delta_k,
+                                                               const int maxMomentNumberForDriver)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _useSerendipityBasis(useSerendipityBasis),
@@ -216,8 +217,9 @@ _m(m)
   }
   _vlasovSoln->setBC(vlasovBC);
   
-  const int maxMomentNumber = _configurationSpaceFormulation->maxMomentNumber();
-  _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln, f, _configurationSpaceFormulation->configurationSpaceMesh()) );
+  const int maxMomentNumber = std::max(_configurationSpaceFormulation->maxMomentNumber(), maxMomentNumberForDriver);
+  _solutionMoments          = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln,          f, _configurationSpaceFormulation->configurationSpaceMesh()) );
+  _solutionMomentsPriorTime = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSolnPriorTime, f, _configurationSpaceFormulation->configurationSpaceMesh()) );
   
   _n0 = ParameterFunction::parameterFunction(0); // we'll update this when initial conditions are set, if _enforceQuasiNeutrality is true
   _configurationSpaceFormulation->setMoments(_solutionMoments, _n0);
@@ -375,22 +377,24 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                double dt,
                                                                std::vector<double> velocitySpaceVertices_x,
                                                                std::vector<double> velocitySpaceVertices_y,
-                                                               const int H1Order, const int delta_k)
+                                                               const int H1Order, const int delta_k,
+                                                               const int maxMomentNumberForDriver)
 :
 VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
                                velocitySpaceVertices_x, velocitySpaceVertices_y, std::vector<double>(),
-                               H1Order, delta_k) {}
+                               H1Order, delta_k, maxMomentNumberForDriver) {}
 
 VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                MeshTopologyPtr spatialMeshTopology,
                                                                double dt,
                                                                std::vector<double> velocitySpaceVertices_x,
-                                                               const int H1Order, const int delta_k)
+                                                               const int H1Order, const int delta_k,
+                                                               const int maxMomentNumberForDriver)
 :
 VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
                                velocitySpaceVertices_x, std::vector<double>(), std::vector<double>(),
-                               H1Order, delta_k) {}
+                               H1Order, delta_k, maxMomentNumberForDriver) {}
 
 MeshPtr VlasovBackwardEulerFormulation::vlasovMesh()
 {
@@ -634,6 +638,7 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
 {
   const int rank = MPIWrapper::CommWorld()->MyPID();
   _vlasovSolnPriorTime->setSolution(_vlasovSoln);
+  _configurationSpaceFormulation->copySolutionToPriorTime();
   
 //  {
 //    // DEBUGGING
@@ -737,7 +742,7 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
       configurationViz->exportSolution(_configurationSpaceFormulation->solution(),substepOrdinal+1);
       vlasovViz->exportSolution(vlasovSolution(),substepOrdinal+1);
     }
-  }
+  } // substep loop (fixed point iteration)
   
   _iterationCounts.push_back(substepIterationCounts);
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
@@ -790,6 +795,11 @@ void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(FunctionPtr f
 Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMoments()
 {
   return _solutionMoments;
+}
+
+Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMomentsPriorTime()
+{
+  return _solutionMomentsPriorTime;
 }
 
 // test variables:

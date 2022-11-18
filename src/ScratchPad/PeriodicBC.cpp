@@ -147,12 +147,13 @@ vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, in
   int spaceDim = point.size();
   Camellia::FieldContainer<double> value(1,1,spaceDim); // (C,P,D)
   Camellia::FieldContainer<double> physPoint(1,1,spaceDim);
-
-  Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   for (int d=0; d<spaceDim; d++)
   {
-    dummyCache->writablePhysicalCubaturePoints()(0,0,d) = point[d];
+    physPoint(0,0,d) = point[d];
   }
+
+  Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
+  
   f->values(value,dummyCache);
 
   vector<double> transformedPoint;

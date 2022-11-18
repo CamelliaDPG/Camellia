@@ -75,9 +75,9 @@ void ParametricFunction::value(double t, double &x)
 {
   t = remapForSubCurve(t);
   Camellia::FieldContainer<double> onePoint(1,1,1);
+  onePoint(0,0,0) = t;
   Teuchos::RCP< PhysicalPointCache > onePointCache = Teuchos::rcp( new PhysicalPointCache(onePoint) );
   Camellia::FieldContainer<double> oneValue(1,1);
-  onePointCache->writablePhysicalCubaturePoints()(0,0,0) = t;
   _underlyingFxn->values(oneValue, onePointCache);
   x = oneValue[0];
 }
