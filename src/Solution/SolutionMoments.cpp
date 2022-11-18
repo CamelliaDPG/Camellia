@@ -119,8 +119,7 @@ _basisReconciliation(true) // true: cache results
   // we also assume that all elements have the same topology
   // we also assume that dimensions in which integration is performed are orthogonal extrusions
   
-  const IndexType sampleCellID = 0;
-  auto elemType = _soln->mesh()->getElementType(sampleCellID);
+  auto elemType = _soln->mesh()->globalDofAssignment()->getSampleElementType();
   auto cellTopo = elemType->cellTopoPtr;
   
   auto trialOrdering = elemType->trialOrderPtr;

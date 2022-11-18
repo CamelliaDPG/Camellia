@@ -54,6 +54,7 @@ namespace {
     }
     const bool useSerendipity = true;
     VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+    form.setRunQuietly(true);
     auto poissonMesh = poissonConfig->configurationSpaceMesh();
     
     auto poissonBC = BC::bc();
@@ -134,14 +135,10 @@ namespace {
   TEUCHOS_UNIT_TEST( VlasovBackwardEulerFormulation, InflowConditions )
   {
     const double q    = 0; // 0 charge --> zero electric field
-    const double eps0 = TEST_EPS0;
-    const double m    = TEST_M;
     
     FunctionPtr x = Function::xn(1);
     FunctionPtr v2 = Function::yn(2);
     FunctionPtr v3 = Function::yn(3);
-    const double meshWidth = TEST_XWIDTH;
-    const double vWidth = TEST_VWIDTH;
     FunctionPtr f0 = x * v2;
     
     const int xElements = 4;
@@ -327,6 +324,55 @@ namespace {
 //    TEST_COMPARE(err_l2, <, tol * soln_magnitude);
 //  }
 
+  TEUCHOS_UNIT_TEST( VlasovBackwardEulerFormulation, RefineUniformly )
+  {
+    const double q      = 1.0;
+    const int xElements = 3;
+    const int vElements = 4;
+    const int H1Order   = 1;
+    const bool usePeriodicBCs = false;
+    
+    auto form = getFormulation(xElements, vElements, H1Order, usePeriodicBCs, q);
+    
+    int expectedActiveElementCountVlasov = xElements * vElements;
+    int actualActiveElementCountVlasov   = form.vlasovMesh()->numActiveElements();
+    
+    TEST_EQUALITY(expectedActiveElementCountVlasov, actualActiveElementCountVlasov);
+    
+    int expectedActiveElementCountPoisson = xElements;
+    int actualActiveElementCountPoisson   = form.configurationSpaceMesh()->numActiveElements();
+    
+    TEST_EQUALITY(expectedActiveElementCountPoisson, actualActiveElementCountPoisson);
+    
+    int numUniformRefinements = 1;
+    form.refineUniformly(numUniformRefinements);
+    
+    int vlasovCountMultiplier  = 4;
+    int poissonCountMultiplier = 2;
+    
+    expectedActiveElementCountVlasov  *= vlasovCountMultiplier;
+    expectedActiveElementCountPoisson *= poissonCountMultiplier;
+    
+    actualActiveElementCountVlasov  = form.vlasovMesh()->numActiveElements();
+    actualActiveElementCountPoisson = form.configurationSpaceMesh()->numActiveElements();
+    TEST_EQUALITY(expectedActiveElementCountVlasov, actualActiveElementCountVlasov);
+    TEST_EQUALITY(expectedActiveElementCountPoisson, actualActiveElementCountPoisson);
+    
+    numUniformRefinements = 2;
+    form.refineUniformly(numUniformRefinements);
+    
+    vlasovCountMultiplier  = 4*4;
+    poissonCountMultiplier = 2*2;
+    
+    expectedActiveElementCountVlasov  *= vlasovCountMultiplier;
+    expectedActiveElementCountPoisson *= poissonCountMultiplier;
+    
+    actualActiveElementCountVlasov  = form.vlasovMesh()->numActiveElements();
+    actualActiveElementCountPoisson = form.configurationSpaceMesh()->numActiveElements();
+    TEST_EQUALITY(expectedActiveElementCountVlasov, actualActiveElementCountVlasov);
+    TEST_EQUALITY(expectedActiveElementCountPoisson, actualActiveElementCountPoisson);
+  }
+
   TEUCHOS_UNIT_TEST( VlasovBackwardEulerFormulation, SideSetInflow )
   {
     const double q = 0; // 0 charge --> zero electric field
@@ -365,8 +411,9 @@ namespace {
     }
     
     int expectedSideCount = vElements; // vElements/2 from upper left, vElements/2 from lower right
+    int actualSideCount   = sideIndices.size();
     
-    TEST_EQUALITY(expectedSideCount, sideIndices.size());
+    TEST_EQUALITY(expectedSideCount, actualSideCount);
     
     const int SPACE_COMPONENT_INDEX_ZERO_BASED    = 0;
     const int VELOCITY_COMPONENT_INDEX_ZERO_BASED = 1;
@@ -435,6 +482,7 @@ namespace {
     }
     const bool useSerendipity = true;
     VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+    form.setRunQuietly(true);
     auto poissonMesh = poissonConfig->configurationSpaceMesh();
     // set a zero BC on Poisson at x0
     auto poissonBC = BC::bc();
