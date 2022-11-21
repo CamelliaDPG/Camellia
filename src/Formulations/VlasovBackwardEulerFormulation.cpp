@@ -684,6 +684,8 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
     
     solveNumber++;
   }
+  
+  auto density  = _solutionMoments->solutionMomentFunction(0); // used in viz output
     
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
@@ -739,7 +741,7 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
         
     if (exportViz)
     {
-      configurationViz->exportSolution(_configurationSpaceFormulation->solution(),substepOrdinal+1);
+      configurationViz->exportSolution(_configurationSpaceFormulation->solution(),{density}, {"n_e"},substepOrdinal+1);
       vlasovViz->exportSolution(vlasovSolution(),substepOrdinal+1);
     }
   } // substep loop (fixed point iteration)
