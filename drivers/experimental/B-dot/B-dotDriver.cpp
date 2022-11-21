@@ -841,6 +841,7 @@ int main(int argc, char *argv[])
     int maxDofsForDirectSolve = 20000;
     bool useSerendipityBasis = false;
     bool disableCircuitSolve = false; // a debugging tool
+    double overrideEps0 = -1.; // if set from CLI, will override the computed eps0 value.
     
     std::string resultsFilePrefix = "";
     
@@ -877,6 +878,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("iterativeSolveMaxIters", &iterativeSolveMaxIters);
     cmdp.setOption("iterativeSolveTolerance", &iterativeSolveTolerance);
     cmdp.setOption("maxDofsForDirectSolve", &maxDofsForDirectSolve);
+    cmdp.setOption("overrideEps0", &overrideEps0);
     cmdp.setOption("disableCircuitSolve", "enableCircuitSolve", &disableCircuitSolve);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -932,6 +934,17 @@ int main(int argc, char *argv[])
       
       // eps0 is a weight that enters PoissonFormulation; we use this to scale the problem:
       eps0 = 1.0 / (omega_p * omega_p * timeScaling * timeScaling);
+      
+      if (overrideEps0 != -1.0)
+      {
+        if (rank == 0)
+        {
+          std::cout << "NOTE: overriding eps0 (which was " << eps0 << ") with value " << overrideEps0 << std::endl;
+        }
+        eps0 = overrideEps0;
+      }
+      
+      
       if (rank == 0)
       {
         std::cout << "Characteristic E-field strength E_0: " << EScaling << std::endl;
@@ -1178,8 +1191,6 @@ int main(int argc, char *argv[])
     }
     
     FunctionPtr E_soln = Function::solution(form.configurationSpaceFormulation()->E_fieldVar(0), form.configurationSpaceSolution());
-    FunctionPtr E_squared = E_soln * E_soln;
-    FunctionPtr abs_E_soln = Teuchos::rcp( new AbsFunction(E_soln) );
             
     auto solutionMoments = form.solutionMoments();
     auto density  = solutionMoments->solutionMomentFunction(0);
