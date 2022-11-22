@@ -29,6 +29,9 @@ namespace Camellia
     MeshPtr _phaseMesh;
     MeshTopologyPtr _configurationMeshTopo;
     bool _useSerendipityBasis;
+    
+    bool _exportViz;
+    std::string _vizOutputDir = "/tmp";
   public:
     ConfigurationSpaceFormulation(bool useSerendipityBasis = false);
     
@@ -38,6 +41,8 @@ namespace Camellia
     MeshPtr configurationSpaceMesh();
     
     MeshTopologyPtr configurationSpaceMeshTopology();
+    
+    void setExportViz(bool exportViz, const std::string outputDir = "/tmp");
     
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Poisson", "Gauss" are all possibilities.
     virtual std::string name() const = 0;

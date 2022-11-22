@@ -283,6 +283,7 @@ void VarFactory::setTestBasisFamily(BasisFamilyPtr basisFamily)
     const auto & testVar = testVarEntry.second;
     testVar->setBasisFamily(basisFamily);
   }
+  // TODO: store basisFamily as a default for new test vars
 }
 
 void VarFactory::setTrialBasisFamily(BasisFamilyPtr basisFamily)
@@ -292,6 +293,7 @@ void VarFactory::setTrialBasisFamily(BasisFamilyPtr basisFamily)
     const auto & trialVar = trialVarEntry.second;
     trialVar->setBasisFamily(basisFamily);
   }
+  // TODO: store basisFamily as a default for new trial vars
 }
 
 VarPtr VarFactory::traceVar(string name, LinearTermPtr termTraced, Space fs, int ID)

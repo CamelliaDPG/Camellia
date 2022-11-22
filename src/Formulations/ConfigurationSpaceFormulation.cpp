@@ -109,6 +109,12 @@ void ConfigurationSpaceFormulation::setConfigurationSolutionPriorTime(SolutionPt
   }
 }
 
+void ConfigurationSpaceFormulation::setExportViz(bool exportViz, const std::string outputDir)
+{
+  _exportViz = exportViz;
+  _vizOutputDir = outputDir;
+}
+
 //! should be called prior to first solve: set the solution moments object, and optionally a background density n0 (used when quasi-neutrality is enforced).
 void ConfigurationSpaceFormulation::setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0)
 {
@@ -125,6 +131,20 @@ void ConfigurationSpaceFormulation::solve(const bool updateMoments)
       _fMoments->update();
     }
     _configurationSoln->solve(); // TODO: add support for GMG, etc. (this is just a direct solve: OK for 1D + time, but expensive beyond that)
+    
+    if (_exportViz)
+    {
+      static int solveNumber = 0;
+      std::string prefix = "ConfigSpace_";
+      
+      std::ostringstream configurationSS;
+      configurationSS << prefix << this->name() << solveNumber;
+              
+      Teuchos::RCP<HDF5Exporter> configurationViz = Teuchos::rcp(new HDF5Exporter (_configurationSoln->mesh(), configurationSS.str(), _vizOutputDir) );
+      configurationViz->exportSolution(_configurationSoln,0);
+      
+      solveNumber++;
+    }
   }
 }
 
