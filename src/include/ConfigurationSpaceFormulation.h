@@ -30,7 +30,7 @@ namespace Camellia
     MeshTopologyPtr _configurationMeshTopo;
     bool _useSerendipityBasis;
     
-    bool _exportViz;
+    bool _exportViz = false;
     std::string _vizOutputDir = "/tmp";
   public:
     ConfigurationSpaceFormulation(bool useSerendipityBasis = false);
