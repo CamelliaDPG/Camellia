@@ -2748,6 +2748,8 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
   // (For now, though, we do make the assumption that all refinements are regular (isotropic).)
 
+  // TODO: revise this to make use of ExtrudedMeshTopology.
+  
   int spaceDim = spatialMeshTopology->getDimension();
   int spaceTimeDim = spaceDim + 1;
 

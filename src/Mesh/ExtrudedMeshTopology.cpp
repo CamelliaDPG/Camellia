@@ -346,6 +346,14 @@ namespace
     return _extrusionMeshTopologies.size();
   }
   
+  const std::set<IndexType> & ExtrudedMeshTopology::phaseSpaceCellIDsForExtrusionCell(const int &extrusionOrdinal, const IndexType &componentCellID) const
+  {
+    const int componentNumber = extrusionOrdinal + 1; // physical cell is 0; extrusions start at index 1
+    auto entry = _componentToPhaseMaps[componentNumber].find(componentCellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(entry == _componentToPhaseMaps[componentNumber].end(), std::invalid_argument, "component cellID not found");
+    return entry->second;
+  }
+
   const std::set<IndexType> & ExtrudedMeshTopology::phaseSpaceCellIDsForPhysicalCell(const IndexType &componentCellID) const
   {
     const int componentNumber = 0; // physical cell

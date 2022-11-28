@@ -191,13 +191,30 @@ public:
   }
 };
 
-BasisFamily::BasisFamily(const std::string &name)
+class SingletonBasisFamily : public BasisFamily
+{
+  BasisPtr _basis;
+public:
+  SingletonBasisFamily(BasisPtr basis);
+  
+  using BasisFamily::getBasis;
+  BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1) override
+  {
+    // TODO: consider adding some input checks.  At minimum, the cellTopo should match that of the basis.  I can imagine use cases where the basis does not match the fs or poly order passed in, though.  (E.g. where a variable is always discretized with a constant.)
+    return _basis;
+  }
+};
+
+BasisFamily::BasisFamily(const std::string &name, bool pushFinalizeHookToClearCachedBases)
 :
 _name(name)
 {
-  Kokkos::push_finalize_hook( [=] {
-    _cachedBases.clear();
-  });
+  if (pushFinalizeHookToClearCachedBases)
+  {
+    Kokkos::push_finalize_hook( [=] {
+      _cachedBases.clear();
+    });
+  }
 }
 
 BasisPtr BasisFamily::getBasis(CellTopoPtr cellTopo, EFunctionSpace fs, const int p_H1)
@@ -235,6 +252,12 @@ BasisFamilyPtr BasisFamily::serendipityBasisFamily()
   return basisFamily;
 }
 
+BasisFamilyPtr BasisFamily::singletonBasisFamily(BasisPtr basis)
+{
+  BasisFamilyPtr basisFamily = Teuchos::rcp(new SingletonBasisFamily(basis));
+  return basisFamily;
+}
+
 void BasisFamily::setCachedBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1, BasisPtr basis)
 {
   using Key = std::tuple<CellTopologyKey, std::vector<EFunctionSpace>, std::vector<int> >; // vector<int>: p_H1
@@ -244,9 +267,15 @@ void BasisFamily::setCachedBasis(CellTopoPtr cellTopo, const std::vector<EFuncti
 }
 
 HierarchicalBasisFamily::HierarchicalBasisFamily()
-: BasisFamily("Intrepid2 Hieriarchical")
+: BasisFamily("Intrepid2 Hieriarchical", true) // true because this only ever gets constructed as a static that persists through Kokkos::finalize()
 {}
 
 SerendipityBasisFamily::SerendipityBasisFamily()
-: BasisFamily("Intrepid2 Serendipity")
+: BasisFamily("Intrepid2 Serendipity", true) // true because this only ever gets constructed as a static that persists through Kokkos::finalize()
+{}
+
+SingletonBasisFamily::SingletonBasisFamily(BasisPtr basis)
+:
+_basis(basis),
+BasisFamily("Singleton", false) // false because we don't store this as a static that persists through Kokkos::finalize()
 {}

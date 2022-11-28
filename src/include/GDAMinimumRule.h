@@ -235,6 +235,7 @@ public:
   void rebuildLookups() override;
   
   void setAllowMeshTopologyPruning(bool allowMeshTopologyPruning) override;
+  bool allowMeshTopologyPruning() override;
   
   static void distributeSubcellDofIndices(Epetra_CommPtr Comm,
                                           const map<GlobalIndexType, SubcellDofIndices> &rankLocalCellDofIndices,
