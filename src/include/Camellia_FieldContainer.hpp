@@ -761,6 +761,21 @@ namespace Camellia
       return Kokkos::MDRangePolicy< Kokkos::Rank<rank> >(mdRangeBegin,mdRangeEnd);
     }
     
+    template<int rank>
+    static Kokkos::MDRangePolicy< Kokkos::Rank<rank> > getMDRangePolicy(Kokkos::Array<int,rank> dimSizes) {
+      using array_index_type = typename Kokkos::MDRangePolicy< Kokkos::Rank<rank> >::array_index_type;
+      Kokkos::Array<array_index_type,rank> mdRangeBegin;
+      Kokkos::Array<array_index_type,rank> mdRangeEnd;
+      for (int i=0; i<rank; i++)
+      {
+        // set default values
+        mdRangeBegin[i] = 0;
+        mdRangeEnd[i]   = dimSizes[i];
+      }
+      
+      return Kokkos::MDRangePolicy< Kokkos::Rank<rank> >(mdRangeBegin,mdRangeEnd);
+    }
+    
     static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       return getMDRangePolicy<2>(dv);
     }

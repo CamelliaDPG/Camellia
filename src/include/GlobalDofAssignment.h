@@ -214,6 +214,7 @@ public:
   void unregisterSolution(TSolutionPtr<double> solution);
 
   virtual void setAllowMeshTopologyPruning(bool allowMeshTopologyPruning) = 0;
+  virtual bool allowMeshTopologyPruning() = 0;
   
   void setPartitions(std::vector< std::set<IndexType> > &partitions, bool rebuildLookups=true);
   void setPartitions(Camellia::FieldContainer<GlobalIndexType> &partitions, bool rebuildLookups=true);

@@ -150,6 +150,7 @@ public:
 
   //! GDAMaximumRule2D does not allow MeshTopology pruning; throws an exception if this is set to true.
   void setAllowMeshTopologyPruning(bool allowMeshTopologyPruning);
+  bool allowMeshTopologyPruning(); // returns false
   
   // used in some tests:
   int cellPolyOrder(GlobalIndexType cellID);

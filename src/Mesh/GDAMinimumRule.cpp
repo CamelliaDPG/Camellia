@@ -75,6 +75,11 @@ vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality)
   return ordinals;
 }
 
+bool GDAMinimumRule::allowMeshTopologyPruning()
+{
+  return _allowMeshTopologyPruning;
+}
+
 typedef pair< IndexType, unsigned > CellPair;
 CellPair GDAMinimumRule::cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex)
 {

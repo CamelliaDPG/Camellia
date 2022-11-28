@@ -129,6 +129,11 @@ void GDAMaximumRule2D::addDofPairing(GlobalIndexType cellID1, IndexType dofIndex
   }
 }
 
+bool GDAMaximumRule2D::allowMeshTopologyPruning()
+{
+  return false; // GDAMaximumRule2D does not support MeshTopology pruning
+}
+
 void GDAMaximumRule2D::buildLocalToGlobalMap()
 {
   _localToGlobalMap.clear();

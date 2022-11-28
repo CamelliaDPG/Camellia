@@ -107,6 +107,8 @@ namespace Camellia {
     
     const std::set<IndexType> & phaseSpaceCellIDsForPhysicalCell(const IndexType &componentCellID) const;
     
+    const std::set<IndexType> & phaseSpaceCellIDsForExtrusionCell(const int &extrusionOrdinal, const IndexType &extrusionCellID) const;
+    
     MeshTopologyPtr physicalMeshTopology() const;
     
     IndexType physicalCellIDForPhaseSpaceCellID(const IndexType &phaseSpaceCellID) const;

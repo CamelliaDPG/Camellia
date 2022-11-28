@@ -28,7 +28,7 @@ namespace Camellia
     BasisPtr getCachedBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1);
     void setCachedBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1, BasisPtr basis);
   public:
-    BasisFamily(const std::string &name);
+    BasisFamily(const std::string &name, bool pushFinalizeHookToClearCachedBases);
     
     virtual BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1) = 0;
     BasisPtr getBasis(CellTopoPtr cellTopo, EFunctionSpace fs, const int p_H1);
@@ -38,6 +38,8 @@ namespace Camellia
     static BasisFamilyPtr hierarchicalBasisFamily();
     static BasisFamilyPtr nodalBasisFamily();
     static BasisFamilyPtr serendipityBasisFamily();
+    
+    static BasisFamilyPtr singletonBasisFamily(BasisPtr basis);
   };
   
 } // namespace Camellia
