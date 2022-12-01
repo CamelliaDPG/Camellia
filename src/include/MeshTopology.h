@@ -127,7 +127,7 @@ protected:
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
-  MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo);
+  MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   virtual ~MeshTopology() {}
 
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
@@ -207,6 +207,9 @@ public:
   vector<IndexType> getCellsForSide(IndexType sideEntityIndex) const;
   vector<IndexType> getSidesContainingEntity(unsigned d, IndexType entityIndex) const;
   vector<IndexType> getSidesContainingEntities(unsigned d, const std::vector<IndexType> &entities) const;
+  
+  //! returns any sides that contain *all* of the specified entities (as opposed to getSidesContainingEntities(), which returns sides that contain *any* of the entities, generally a larger set).
+  vector<IndexType> getSidesContainingAllEntities(unsigned d, const std::vector<IndexType> &entities) const;
 
   unsigned getDimension() const;
   IndexType getSubEntityCount(unsigned int d, IndexType entityIndex, unsigned subEntityDim) const;

@@ -165,6 +165,95 @@ public:
   }
 };
 
+void testMapCellIDsAtBoundary(bool usePeriodicBCs, int numSpatialElements,
+                              Teuchos::FancyOStream &out, bool &success)
+{
+  // create a 1D spatial mesh topo:
+  double x0 = 0;
+  double x1 = 1;
+  auto spatialTopo = MeshFactory::intervalMeshTopology(x0, x1, numSpatialElements, usePeriodicBCs);
+  int spaceDim = spatialTopo->getDimension();
+  
+  // create two adjacent time slabs:
+  double t0 = 0, t1 = 0.5, t2 = 1.0;
+  int numTemporalElements = 3;
+  auto firstSlab  = MeshFactory::extrudedMeshTopology(spatialTopo, {t0}, {t1-t0}, {numTemporalElements});
+  auto secondSlab = MeshFactory::extrudedMeshTopology(spatialTopo, {t1}, {t2-t1}, {numTemporalElements});
+  
+  // set a tag for initial time (t1) on the second slab:
+  int INITIAL_TIME_TAG = 0;
+  {
+    SpatialFilterPtr initialTimeFilter = SpatialFilter::matchingComponent(spaceDim, t1); // spaceDim: temporal component coordinate index
+    const int sideDim = spatialTopo->getDimension();
+    auto initialTimeSideSet = secondSlab->createEntitySet();
+    std::vector<IndexType> initialTimeSideIndices = secondSlab->getBoundarySidesThatMatch(initialTimeFilter);
+    for (const auto & initialTimeSideIndex : initialTimeSideIndices)
+    {
+      initialTimeSideSet->addEntity(sideDim, initialTimeSideIndex);
+    }
+    secondSlab->applyTag(DIRICHLET_SET_TAG_NAME, INITIAL_TIME_TAG, initialTimeSideSet);
+  }
+  
+  // we expect the first slab to have cell IDs at the boundary that range from numSpatialElements * (numTemporalElements - 1)
+  // to numSpatialElements * numTemporalElements - 1.
+  // the second slab will have cell IDs that range from 0 to numSpatialElements - 1.
+  
+  map<IndexType,IndexType> cellIDMap; // from second slab to first
+  map<int,int> sideOrdinalMap;
+  MeshTools::mapCellIDsAtBoundary(cellIDMap, sideOrdinalMap, secondSlab, INITIAL_TIME_TAG, firstSlab);
+  
+  // cellIDMap should have one entry for each cell at the boundary:
+  int numMapEntries = cellIDMap.size();
+  TEST_EQUALITY(numSpatialElements, numMapEntries);
+  
+  // sideOrdinalMap should have exactly one entry, mapping from the side ordinal in the second slab, which should be 0,
+  // to the side ordinal in the first slab, which should be 1:
+  int numSideOrdinalMapEntries = sideOrdinalMap.size();
+  int expectedSideOrdinalMapEntries = 1;
+  TEST_EQUALITY(expectedSideOrdinalMapEntries, numSideOrdinalMapEntries);
+  
+  int expectedFromSide = 0;
+  int expectedToSide   = 1;
+  bool fromSideFound = sideOrdinalMap.find(expectedFromSide) != sideOrdinalMap.end();
+  TEST_ASSERT(fromSideFound);
+  if (fromSideFound)
+  {
+    TEST_EQUALITY(expectedToSide, sideOrdinalMap[expectedFromSide]);
+  }
+  
+  for (IndexType expectedFromCellID = 0; expectedFromCellID < numSpatialElements; expectedFromCellID++)
+  {
+    // check that the expected "from" cellID is a key in the map:
+    bool fromCellFound = cellIDMap.find(expectedFromCellID) != cellIDMap.end();
+    TEST_ASSERT(fromCellFound);
+    
+    IndexType expectedToCellID = expectedFromCellID + numSpatialElements * (numTemporalElements - 1);
+    // check that it maps to the "to" cellID we expect:
+    if (fromCellFound)
+    {
+      TEST_EQUALITY(expectedToCellID, cellIDMap[expectedFromCellID]);
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( MeshTools, MapCellIDsAtBoundary )
+{
+  const bool usePeriodicBCs = false;
+  int numSpatialElements    = 10;
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, out, success);
+}
+
+TEUCHOS_UNIT_TEST( MeshTools, MapCellIDsAtBoundaryPeriodic )
+{
+  const bool usePeriodicBCs = true;
+  int numSpatialElements = 10;
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, out, success);
+  
+  // repeat the test, now with just 2 elements (a harder case for periodic, because of vertex identification):
+  numSpatialElements = 2;
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, out, success);
+}
+
 TEUCHOS_UNIT_TEST( MeshTools, MeshSlice_Polynomial )
 {
   // Mesh slicing test with exact polynomial data

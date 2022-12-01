@@ -55,6 +55,14 @@ string SimpleSolutionFunction<Scalar>::displayString()
 template <typename Scalar>
 size_t SimpleSolutionFunction<Scalar>::getCellDataSize(GlobalIndexType cellID)
 {
+  if (_cellIDMap.size() != 0)
+  {
+    // map the cell according to map, and then overwrite cellID (which is non-const/copied by value).
+    auto entryIt = _cellIDMap.find(cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _cellIDMap.end(), std::invalid_argument, "cellID not found in _cellIDMap");
+    cellID = entryIt->second;
+  }
+  
   const int solutionOrdinal = _soln->solutionOrdinal(_solutionComponent,_solutionStage);
   bool warnAboutOffRankImports = true;
   auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, solutionOrdinal);
@@ -84,6 +92,14 @@ int SimpleSolutionFunction<Scalar>::numVectorComponents() const
 template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength)
 {
+  if (_cellIDMap.size() != 0)
+  {
+    // map the cell according to map, and then overwrite cellID (which is non-const/copied by value).
+    auto entryIt = _cellIDMap.find(cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _cellIDMap.end(), std::invalid_argument, "cellID not found in _cellIDMap");
+    cellID = entryIt->second;
+  }
+  
   const int solutionOrdinal = _soln->solutionOrdinal(_solutionComponent,_solutionStage);
   size_t requiredLength = getCellDataSize(cellID);
   TEUCHOS_TEST_FOR_EXCEPTION(requiredLength > bufferLength, std::invalid_argument, "Buffer length too small");
@@ -97,6 +113,14 @@ void SimpleSolutionFunction<Scalar>::packCellData(GlobalIndexType cellID, char* 
 template <typename Scalar>
 size_t SimpleSolutionFunction<Scalar>::unpackCellData(GlobalIndexType cellID, const char* cellData, size_t bufferLength)
 {
+  if (_cellIDMap.size() != 0)
+  {
+    // map the cell according to map, and then overwrite cellID (which is non-const/copied by value).
+    auto entryIt = _cellIDMap.find(cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _cellIDMap.end(), std::invalid_argument, "cellID not found in _cellIDMap");
+    cellID = entryIt->second;
+  }
+  
   const int solutionOrdinal = _soln->solutionOrdinal(_solutionComponent,_solutionStage);
   int numDofs = _soln->mesh()->getElementType(cellID)->trialOrderPtr->totalDofs();
   size_t numBytes = numDofs * sizeof(Scalar);
@@ -112,9 +136,25 @@ template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType> cells)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
+  
+  if (_cellIDMap.size() != 0)
+  {
+    // map the cells according to map, and then overwrite cells container (which is copied by value).
+    std::vector<GlobalIndexType> mappedCells;
+    for (const auto &cellID : cells)
+    {
+      auto entryIt = _cellIDMap.find(cellID);
+      TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _cellIDMap.end(), std::invalid_argument, "cellID not found in _cellIDMap");
+      mappedCells.push_back(entryIt->second);
+    }
+    
+    cells = mappedCells;
+  }
+  
   set<GlobalIndexType> offRankCells;
   const set<GlobalIndexType>* rankLocalCells = &_soln->mesh()->globalDofAssignment()->cellsInPartition(rank);
-  for (int cellOrdinal=0; cellOrdinal < cells.size(); cellOrdinal++)
+  int numCells = cells.size();
+  for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
   {
     if (rankLocalCells->find(cells[cellOrdinal]) == rankLocalCells->end())
     {
@@ -150,6 +190,13 @@ bool SimpleSolutionFunction<Scalar>::isDefined(BasisCachePtr basisCache) const
 }
 
 template <typename Scalar>
+void SimpleSolutionFunction<Scalar>::setCellIDMap(const std::map<GlobalIndexType, GlobalIndexType> &cellIDMap, std::map<int, int> &sideOrdinalMap)
+{
+  _cellIDMap = cellIDMap;
+  _sideOrdinalMap = sideOrdinalMap;
+}
+
+template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("SimpleSolutionFunction values() - host path");
@@ -168,9 +215,27 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
   bool dontWeightForCubature = false;
   if (basisCache->mesh() != Teuchos::null)   // then we assume that the BasisCache is appropriate for solution's mesh...
   {
+    std::vector<GlobalIndexType> cellIDsOverride;
+    int sideOrdinalOverride = -2; // -2 is the default in Solution::solutionValues() (no override)
+    if (_cellIDMap.size() != 0)
+    {
+      const auto &basisCacheCellIDs = basisCache->cellIDs();
+      for (const auto &basisCacheCellID : basisCacheCellIDs)
+      {
+        auto entryIt = _cellIDMap.find(basisCacheCellID);
+        TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _cellIDMap.end(), std::invalid_argument, "cellID not found in _cellIDMap");
+        cellIDsOverride.push_back(entryIt->second);
+      }
+      
+      int basisCacheSideOrdinal = basisCache->getSideIndex();
+      auto sideEntryIt = _sideOrdinalMap.find(basisCacheSideOrdinal);
+      TEUCHOS_TEST_FOR_EXCEPTION(sideEntryIt == _sideOrdinalMap.end(), std::invalid_argument, "side ordinal not found in _sideOrdinalMap");
+      sideOrdinalOverride = sideEntryIt->second;
+    }
+    
     using DeviceView = typename Camellia::FieldContainer<Scalar>::DeviceView;
     DeviceView dvValues = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-    _soln->solutionValues(dvValues, _var->ID(), basisCache, _solutionComponent, _solutionStage, dontWeightForCubature, _var->op());
+    _soln->solutionValues(dvValues, _var->ID(), basisCache, _solutionComponent, _solutionStage, dontWeightForCubature, _var->op(), cellIDsOverride, sideOrdinalOverride);
     values.checkinDeviceView(true);
   }
   else
@@ -246,7 +311,26 @@ void SimpleSolutionFunction<Scalar>::values(DeviceView<Scalar> &values, ValueMod
       // need to place solution values in a separate container prior to combining
       valuesToAssign = basisCache->checkoutScratchStorage<Scalar>(values);
     }
-    _soln->solutionValues(valuesToAssign, _var->ID(), basisCache,  _solutionComponent, _solutionStage, dontWeightForCubature, _var->op());
+    
+    std::vector<GlobalIndexType> cellIDsOverride;
+    int sideOrdinalOverride = -2; // -2 is the default in Solution::solutionValues() (no override)
+    if (_cellIDMap.size() != 0)
+    {
+      const auto &basisCacheCellIDs = basisCache->cellIDs();
+      for (const auto &basisCacheCellID : basisCacheCellIDs)
+      {
+        auto entryIt = _cellIDMap.find(basisCacheCellID);
+        TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _cellIDMap.end(), std::invalid_argument, "cellID not found in _cellIDMap");
+        cellIDsOverride.push_back(entryIt->second);
+      }
+      
+      int basisCacheSideOrdinal = basisCache->getSideIndex();
+      auto sideEntryIt = _sideOrdinalMap.find(basisCacheSideOrdinal);
+      TEUCHOS_TEST_FOR_EXCEPTION(sideEntryIt == _sideOrdinalMap.end(), std::invalid_argument, "side ordinal not found in _sideOrdinalMap");
+      sideOrdinalOverride = sideEntryIt->second;
+    }
+    
+    _soln->solutionValues(valuesToAssign, _var->ID(), basisCache,  _solutionComponent, _solutionStage, dontWeightForCubature, _var->op(), cellIDsOverride, sideOrdinalOverride);
     if (_weightFluxesBySideParity) // makes for non-uniquely-valued Functions.
     {
       if (_var->varType()==FLUX)

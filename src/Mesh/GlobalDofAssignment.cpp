@@ -1215,7 +1215,7 @@ void GlobalDofAssignment::unregisterSolution(TSolutionPtr<double> solution)
       return;
     }
   }
-  cout << "GDAMaximumRule2D::unregisterSolution: Solution not found.\n";
+  cout << "GlobalDofAssignment::unregisterSolution: Solution not found.\n";
 }
 
 // maximumRule2D provides support for legacy (MultiBasis) meshes

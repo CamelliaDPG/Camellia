@@ -930,12 +930,12 @@ void SolutionMoments::update()
     physicalCellIntegrals(momentEntryOrdinal,spatialBasisOrdinal) += value;
   }
   // confirm that we have the expected number of entries
-  if (contributionsToMyPhysicalCells.size() != numCells)
+  if (int(contributionsToMyPhysicalCells.size()) != numCells)
   {
     Camellia::print("locally owned physical cells", myPhysicalCells);
     std::cout << "contributionsToMyPhysicalCells.size() = " << contributionsToMyPhysicalCells.size() << std::endl;
   }
-  TEUCHOS_TEST_FOR_EXCEPTION(contributionsToMyPhysicalCells.size() != numCells, std::invalid_argument, "Received cell count differs from number of locally owned physical cells");
+  TEUCHOS_TEST_FOR_EXCEPTION(int(contributionsToMyPhysicalCells.size()) != numCells, std::invalid_argument, "Received cell count differs from number of locally owned physical cells");
   
   _physicalCellIDs = std::vector<IndexType>(myPhysicalCells.begin(),myPhysicalCells.end());
   

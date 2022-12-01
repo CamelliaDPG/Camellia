@@ -29,6 +29,9 @@ class SimpleSolutionFunction : public TFunction<Scalar>
   SolutionComponent _solutionComponent;
   int _solutionStage;
   std::string _solutionIdentifierExponent; // used in displayString (allows disambiguation of solutions; if non-empty means we'll drop the \overline business)
+  
+  std::map<GlobalIndexType,GlobalIndexType> _cellIDMap;
+  std::map<int,int> _sideOrdinalMap;
 public:
   SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, SolutionComponent solutionComponent=STANDARD_SOLUTION, int solutionStage=0, const std::string &solutionIdentifierExponent="");
   
@@ -61,6 +64,9 @@ public:
   size_t getCellDataSize(GlobalIndexType cellID) override; // size in bytes
   void packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength) override;
   size_t unpackCellData(GlobalIndexType cellID, const char* cellData, size_t bufferLength) override; // returns bytes consumed
+  
+  //! Set a mapping from the cellIDs and side indices as seen in basisCache to those seen in the underlying solution.  (Keys are basisCache IDs/ordinals, values are those in the Solution's mesh.)  Can be used when using a SimpleSolutionFunction as a BC for a different Mesh/Solution at the interface between two meshes.)
+  void setCellIDMap(const std::map<GlobalIndexType,GlobalIndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap);
   
   std::string displayString() override;
   bool boundaryValueOnly() override;
