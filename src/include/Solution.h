@@ -252,7 +252,9 @@ public:
                       bool weightForCubature = false, Camellia::EOperator op = OP_VALUE);
   void solutionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &values, int trialID, BasisCachePtr basisCache,
                       SolutionComponent standardOrInfluence=STANDARD_SOLUTION, int stageOrdinal=0,
-                      bool weightForCubature = false, Camellia::EOperator op = OP_VALUE);
+                      bool weightForCubature = false, Camellia::EOperator op = OP_VALUE,
+                      std::vector<GlobalIndexType> cellIDsOverride = std::vector<GlobalIndexType>(),
+                      const int sideOrdinalOverride = -2);
 
   void solnCoeffsForCellID(Camellia::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_INDEX,
                            int solutionOrdinal=0);

@@ -3124,12 +3124,13 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
 template <typename Scalar>
 void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &values, int trialID, BasisCachePtr basisCache,
                                        SolutionComponent standardOrInfluence, int stageOrdinal,
-                                       bool weightForCubature, Camellia::EOperator op)
+                                       bool weightForCubature, Camellia::EOperator op,
+                                       std::vector<GlobalIndexType> cellIDsOverride, const int sideOrdinalOverride)
 {
   TEUCHOS_FUNC_TIME_MONITOR("Solution::solutionValues");
   const int solutionOrdinal = this->solutionOrdinal(standardOrInfluence, stageOrdinal);
   Kokkos::deep_copy(values,0.0);
-  const vector<GlobalIndexType> & cellIDs = basisCache->cellIDs();
+  const vector<GlobalIndexType> & cellIDs = (cellIDsOverride.size() > 0) ? cellIDsOverride : basisCache->cellIDs();
   int numCells = cellIDs.size();
   TEUCHOS_TEST_FOR_EXCEPTION(numCells != values.extent_int(0), std::invalid_argument, "first dimension of values should == numCells.");
   if (numCells == 0) return;
@@ -3140,7 +3141,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   auto vf = (_bf != Teuchos::null) ? _bf->varFactory() : _mesh->varFactory();
   bool fluxOrTrace = vf->isFluxOrTrace(trialID);
   
-  int sideIndex = basisCache->getSideIndex();
+  const int sideIndex = (sideOrdinalOverride != -2) ? sideOrdinalOverride : basisCache->getSideIndex();
   
   Teuchos::RCP<const Camellia::FieldContainer<double>> solnBasisCoefficientsForCell;
   bool cachedFieldsInvalid = (cellIDs != _cachedCellBasisCoefficientsForFieldsCellIDs) || (solutionOrdinal != _cachedCellBasisCoefficientsForFieldsSolutionOrdinal);

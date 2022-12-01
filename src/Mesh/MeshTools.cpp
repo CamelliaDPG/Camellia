@@ -92,6 +92,72 @@ CellTopoPtr getBottomTopology(MeshTopology* meshTopo, IndexType cellID)
   return cellTopo;
 }
 
+void MeshTools::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap,
+                                         MeshPtr meshFrom, int fromBoundaryTag,
+                                         MeshPtr meshTo)
+{
+  // raw ptrs to MeshTopo's:
+  auto fromTopoRaw = meshFrom->getTopology()->baseMeshTopology();
+  auto toTopoRaw   = meshTo->getTopology()->baseMeshTopology();
+  
+  ConstMeshTopologyPtr fromTopo = Teuchos::rcp(fromTopoRaw, false); // false: weak ptr
+  ConstMeshTopologyPtr   toTopo = Teuchos::rcp(  toTopoRaw, false); // false: weak ptr
+  
+  bool didRefine = false;
+  do // until we don't refine
+  {
+    map<IndexType,IndexType> cellIDMapTemp;
+    map<int,int> sideOrdinalMapTemp;
+    mapCellIDsAtBoundary(cellIDMapTemp, sideOrdinalMapTemp, fromTopo, fromBoundaryTag, toTopo);
+    
+    // expected usage is for the "from" mesh to be a new time slab, everywhere coarser than the "to" mesh.
+    // in this use case, we expect the "to" mesh to require no refinements.  But we do support more general cases.
+    
+    std::set<GlobalIndexType> fromCellsToRefine;
+    std::set<GlobalIndexType>   toCellsToRefine;
+    
+    for (const auto & entry : cellIDMapTemp)
+    {
+      const auto & cellIDFrom = entry.first;
+      const auto & cellIDTo   = entry.second;
+      
+      auto cellFrom = fromTopo->getCell(cellIDFrom);
+      auto cellTo   =   toTopo->getCell(cellIDTo);
+      
+      if (cellFrom->isParent(fromTopo))
+      {
+        if (cellTo->isParent(toTopo))
+        {
+          // if we supported anistropic refinements, this could be allowed.  But for now, this is an error.
+          TEUCHOS_TEST_FOR_EXCEPTION(cellTo->isParent(toTopo), std::invalid_argument, "cellIDMap with one parent cell mapped to another parent cell");
+        }
+        fromCellsToRefine.insert(cellIDFrom);
+      }
+      else if (cellTo->isParent(toTopo))
+      {
+        toCellsToRefine.insert(cellIDTo);
+      }
+    }
+    
+    if (fromCellsToRefine.size() > 0)
+    {
+      meshFrom->hRefine(fromCellsToRefine);
+      didRefine = true;
+    }
+    if (toCellsToRefine.size() > 0)
+    {
+      meshTo->hRefine(toCellsToRefine);
+      didRefine = true;
+    }
+    if (!didRefine)
+    {
+      // we'll exit, so the "temp" maps are the final ones
+      cellIDMap      = cellIDMapTemp;
+      sideOrdinalMap = sideOrdinalMapTemp;
+    }
+  } while (didRefine);
+}
+
 map<IndexType,IndexType> MeshTools::mapActiveCellIndices(MeshTopologyViewPtr meshTopoFrom, MeshTopologyViewPtr meshTopoTo)
 {
   const set<IndexType>* activeCellIndices = &meshTopoFrom->getLocallyKnownActiveCellIndices();
@@ -111,6 +177,118 @@ map<IndexType,IndexType> MeshTools::mapActiveCellIndices(MeshTopologyViewPtr mes
     resultMap[cellIndex] = toIndices[cellOrdinal++];
   }
   return resultMap;
+}
+
+void MeshTools::mapCellIDsAtBoundary(std::map<IndexType,IndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap,
+                                     ConstMeshTopologyPtr meshTopoFrom, int fromBoundaryTag,
+                                     ConstMeshTopologyPtr meshTopoTo)
+{
+  cellIDMap.clear();
+  sideOrdinalMap.clear();
+  
+  auto fromEntitySets = meshTopoFrom->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, fromBoundaryTag);
+  
+  int sideDim = meshTopoTo->getDimension() - 1;
+  
+  using std::set;
+  using std::map;
+  using std::vector;
+  set<IndexType> fromSides;
+  for (auto fromEntitySet : fromEntitySets)
+  {
+    set<IndexType> fromSidesForEntity = fromEntitySet->entitiesOfDimension(sideDim);
+    fromSides.insert(fromSidesForEntity.begin(),fromSidesForEntity.end());
+  }
+  
+  map<IndexType,IndexType> sideMap; // fromSide --> toSide
+  
+  for (auto fromSide : fromSides)
+  {
+    bool foundToMatch = false;
+    while (!foundToMatch)
+    {
+      auto fromVertexIndices = meshTopoFrom->getEntityVertexIndices(sideDim, fromSide);
+      
+      vector<IndexType> toVertexIndices;
+      for (auto fromVertexIndex : fromVertexIndices)
+      {
+        auto & fromVertex = meshTopoFrom->getVertex(fromVertexIndex);
+        IndexType toVertexIndex;
+        meshTopoTo->getVertexIndex(fromVertex, toVertexIndex);
+        toVertexIndices.push_back(toVertexIndex);
+      }
+      
+      auto toSides = meshTopoTo->getSidesContainingAllEntities(0, toVertexIndices);
+      IndexType toSide = -1;
+      // with perodic BCs and two elements in the periodic direction, we can have multiple matches due to vertex identification.
+      // the following selects the true match: the one whose vertex indices match.  It also serves as verification that the matched
+      // sides line up in terms of vertex ordering.
+      for (const auto &toSideMatch : toSides)
+      {
+        auto vertexIndices = meshTopoTo->getEntityVertexIndices(sideDim, toSideMatch);
+        int numVertices = vertexIndices.size();
+        bool matchFailed = false;
+        for (int viOrdinal=0; viOrdinal<numVertices; viOrdinal++)
+        {
+          if (vertexIndices[viOrdinal] != toVertexIndices[viOrdinal])
+          {
+            matchFailed = true;
+            break;
+          }
+        }
+        if (!matchFailed)
+        {
+          toSide = toSideMatch;
+        }
+      }
+      
+      if (toSides.size() > 0)
+      {
+        if (toSide == -1)
+        {
+          Camellia::print("toSides", toSides);
+          meshTopoTo->printAllEntities();
+        }
+        TEUCHOS_TEST_FOR_EXCEPTION(toSide == -1, std::invalid_argument, "No side found that matches the vertices in the same order");
+        
+        sideMap[fromSide] = toSide;
+        foundToMatch = true;
+      }
+      else
+      {
+        // no to side found.  Ascend the geometric hierarchy
+        TEUCHOS_TEST_FOR_EXCEPTION(meshTopoFrom->entityHasParent(sideDim, fromSide), std::invalid_argument, "root-level sides must match; no toSide found for root-level fromSide");
+        fromSide = meshTopoFrom->getEntityParent(sideDim, fromSide);
+      }
+    }
+  }
+  
+  for (const auto &sideMapEntry : sideMap)
+  {
+    const auto & fromSide = sideMapEntry.first;
+    const auto &   toSide = sideMapEntry.second;
+    
+    auto fromCellPair = meshTopoFrom->getFirstCellForSide(fromSide); // (cellID, side ordinal)
+    const IndexType & fromCellID = fromCellPair.first;
+    int fromSideOrdinal = fromCellPair.second;
+    
+    auto toCellPair = meshTopoTo->getFirstCellForSide(toSide); // (cellID, side ordinal)
+    const IndexType & toCellID = toCellPair.first;
+    int toSideOrdinal = toCellPair.second;
+    
+    cellIDMap[fromCellID] = toCellID;
+    
+    if (sideOrdinalMap.find(fromSideOrdinal) == sideOrdinalMap.end())
+    {
+      sideOrdinalMap[fromSideOrdinal] = toSideOrdinal;
+    }
+    else
+    {
+      // we do require that the side ordinal map is the same from one element to the next; this will generally be true for orthogonally-extruded meshes.
+      // (Maybe there are exceptions when you have multiple cell topologies in the base mesh, but this is not our immediate use case.)
+      TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinalMap[fromSideOrdinal] != toSideOrdinal, std::invalid_argument, "Inconsistent side ordinal mapping; not supported");
+    }
+  }
 }
 
 MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
@@ -282,3 +460,12 @@ TFunctionPtr<double> MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<Glo
   return timeSliceFunction;
 }
 
+std::vector<double> MeshTools::verticesFor1DIntervalMesh(const double &x0, const double &xWidth, const int &numElements)
+{
+  std::vector<double> vertices(numElements+1);
+  for (int vOrdinal=0; vOrdinal<=numElements; vOrdinal++)
+  {
+    vertices[vOrdinal] = x0 + double(xWidth * vOrdinal) / numElements;
+  }
+  return vertices;
+}

@@ -17,11 +17,13 @@
 #include "GlobalDofAssignment.h"
 #include "GMGSolver.h"
 #include "MeshFactory.h"
+#include "MeshTools.h"
 #include "MonomialFunctions.h"
 #include "ParameterFunction.h"
 #include "PhysicalSolutionExtrusion.hpp"
 #include "RefinementStrategy.h"
 #include "RHS.h"
+#include "SimpleSolutionFunction.h"
 #include "Solution.h"
 #include "SolutionStage.h"
 #include "TypeDefs.h"
@@ -109,11 +111,19 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _useSerendipityBasis(useSerendipityBasis),
+_H1Order(H1Order),
 _delta_k(delta_k),
 _configurationSpaceFormulation(configurationSpaceFormulation),
 _q(q),
-_m(m)
+_m(m),
+_velocitySpaceVertices_x(velocitySpaceVertices_x),
+_velocitySpaceVertices_y(velocitySpaceVertices_y),
+_velocitySpaceVertices_z(velocitySpaceVertices_z),
+_spatialMeshTopology(spatialMeshTopology)
 {
+  _t0 = temporalVertices[0];
+  _t1 = temporalVertices[temporalVertices.size()-1];
+  
   _configurationSpaceMeshTopology = MeshFactory::extrudedMeshTopology(spatialMeshTopology, {temporalVertices});
   _configurationSpaceFormulation->initializeMesh(_configurationSpaceMeshTopology, H1Order, delta_k);
   
@@ -361,6 +371,8 @@ void VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr c
     _configurationSpaceFormulation->solution()->setBC(BC::bc());
   }
   _configurationSpaceFormulation->solution()->bc()->addDirichlet(configVariable, tag, dirichletValue);
+  
+  _configurationSpaceBCs.push_back(std::make_tuple(tag,configVariable,dirichletValue));
 }
 
 VarPtr VlasovSpaceTimeFormulation::B_configurationSpaceTrace(const int zeroBasedComp)
@@ -448,12 +460,19 @@ int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterP
   }
   _configurationSpaceMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, thisTag, matchingSideSet);
   
+  _configurationSpaceSideSetFilters.push_back(regionToMatch);
+  
   return thisTag;
 }
 
 VarPtr VlasovSpaceTimeFormulation::E_configurationSpaceTrace(const int zeroBasedComp)
 {
   return _configurationSpaceFormulation->E_hat(zeroBasedComp);
+}
+
+bool VlasovSpaceTimeFormulation::enforceQuasiNeutrality() const
+{
+  return _enforceQuasiNeutrality;
 }
 
 void VlasovSpaceTimeFormulation::setExportViz(bool exportViz, const std::string outputDir)
@@ -474,8 +493,105 @@ VarPtr VlasovSpaceTimeFormulation::f_hat()
   return vf->trialVar(S_F_HAT);
 }
 
+int VlasovSpaceTimeFormulation::fixedPointMaxSubsteps() const
+{
+  return _maxSubsteps;
+}
+
+int VlasovSpaceTimeFormulation::fixedPointMinSubsteps() const
+{
+  return _minSubsteps;
+}
+
+double VlasovSpaceTimeFormulation::fixedPointTolerance() const
+{
+  return _fixedPointTolerance;
+}
+
 bool VlasovSpaceTimeFormulation::hasL2Trace() const {
   return true;
+}
+
+int VlasovSpaceTimeFormulation::iterativeSolveMaxIterations() const
+{
+  return _maxIters;
+}
+
+int VlasovSpaceTimeFormulation::iterativeSolveOutputLevel() const
+{
+  return _aztecOutputLevel;
+}
+
+double VlasovSpaceTimeFormulation::iterativeSolveTolerance() const
+{
+  return _cgTol;
+}
+
+std::vector<double> VlasovSpaceTimeFormulation::iterativeSolveTolerances() const
+{
+  return _cgTols;
+}
+
+VlasovSpaceTimeFormulation VlasovSpaceTimeFormulation::nextTimeSlab(double tWidth, int numTemporalElements)
+{
+  auto temporalVertices = MeshTools::verticesFor1DIntervalMesh(_t1, tWidth, numTemporalElements);
+  
+  // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
+  auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(_spatialMeshTopology);
+  
+  VlasovSpaceTimeFormulation nextSlabForm(_q, _m, _useSerendipityBasis, _configurationSpaceFormulation, _spatialMeshTopology, temporalVertices,
+                                          _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z, _H1Order, _delta_k);
+  
+  auto nextSlabVlasovMesh = nextSlabForm.vlasovMesh(); // "from" in cellIDMap
+  auto thisSlabVlasovMesh = this->vlasovMesh();
+  
+  std::map<IndexType,IndexType> cellIDMap;
+  std::map<int,int> sideOrdinalMap;
+  
+  MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
+  
+  VarPtr tn = this->t_n_hat();
+  bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
+  SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
+  auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
+  tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
+  // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
+  FunctionPtr f0 = tnInterfaceFxn;
+  
+  if (_f_inflow != Teuchos::null)
+  {
+    nextSlabForm.setInitialAndInflowConditions(f0, _f_inflow);
+  }
+  else
+  {
+    nextSlabForm.setInitialConditions(f0);
+  }
+  
+  for (auto sideSetTagFilter : _configurationSpaceSideSetFilters)
+  {
+    nextSlabForm.createConfigurationMeshSideSetTag(sideSetTagFilter);
+  }
+  
+  for (auto entry : _configurationSpaceBCs)
+  {
+    int tag           = std::get<0>(entry);
+    VarPtr var        = std::get<1>(entry);
+    FunctionPtr value = std::get<2>(entry);
+    
+    nextSlabForm.addConfigurationSpaceBC(tag, var, value);
+  }
+  
+  // copy my settings:
+  nextSlabForm.setIterativeSolveOutputLevel(_aztecOutputLevel);
+  nextSlabForm.setIterativeSolveTolerance(_cgTol);
+  nextSlabForm.setIterativeSolveTolerances(_cgTols);
+  nextSlabForm.setUseGeometricMultigrid(_useGeometricMultigrid);
+  nextSlabForm.setEnforceQuasiNeutrality(_enforceQuasiNeutrality);
+  nextSlabForm.setIterativeSolveMaxIterations(_maxIters);
+  nextSlabForm.setFixedPointMaxSubsteps(_maxSubsteps);
+  nextSlabForm.setFixedPointMinSubsteps(_minSubsteps);
+  
+  return nextSlabForm;
 }
 
 void VlasovSpaceTimeFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
@@ -628,6 +744,8 @@ void VlasovSpaceTimeFormulation::solve()
 
 void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
 {
+  _f0 = f0;
+  
   auto vlasovBC = BC::bc();
   
   VarPtr t_n = this->t_n_hat();
@@ -661,6 +779,9 @@ void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
 
 void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
 {
+  _f0 = f0;
+  _f_inflow = f_in;
+  
   auto vlasovBC = BC::bc();
   
   VarPtr t_n = this->t_n_hat();
@@ -770,6 +891,11 @@ VarPtr VlasovSpaceTimeFormulation::t_n_hat()
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
   return vf->trialVar(S_T_N_HAT);
+}
+
+bool VlasovSpaceTimeFormulation::useGeometricMultigrid() const
+{
+  return _useGeometricMultigrid;
 }
 
 FunctionPtr VlasovSpaceTimeFormulation::v_i(int compZeroBased) const

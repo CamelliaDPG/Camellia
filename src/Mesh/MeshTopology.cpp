@@ -90,8 +90,9 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
   }
 }
 
-MeshTopology::MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo)
+MeshTopology::MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo, vector<PeriodicBCPtr> periodicBCs)
 {
+  _periodicBCs = periodicBCs;
   // initialize data structures with spaceDim
   // TODO: consider storing spaceDim in meshGeometryInfo
   int mySpaceDim = 0;
@@ -2689,6 +2690,31 @@ vector<IndexType> MeshTopology::getSidesContainingEntities(unsigned d, const vec
     }
   }
   return vector<IndexType>(sidesSet.begin(),sidesSet.end());
+}
+
+vector<IndexType> MeshTopology::getSidesContainingAllEntities(unsigned d, const vector<IndexType> &entities) const
+{
+  if (entities.size() == 0) return vector<IndexType>();
+  vector<IndexType> sidesThatMatchFirst = getSidesContainingEntity(d,entities[0]);
+  
+  set<IndexType> sidesThatMatchSoFar(sidesThatMatchFirst.begin(),sidesThatMatchFirst.end());
+  
+  int numEntities = entities.size();
+  for (int entityOrdinal=1; entityOrdinal<numEntities; entityOrdinal++)
+  {
+    vector<IndexType> sidesThatMatchEntity = getSidesContainingEntity(d,entities[entityOrdinal]);
+    // take the intersection:
+    set<IndexType> newSidesThatMatchSoFar;
+    for (const auto &sideThatMatchesEntity : sidesThatMatchEntity)
+    {
+      if (sidesThatMatchSoFar.find(sideThatMatchesEntity) != sidesThatMatchSoFar.end())
+      {
+        newSidesThatMatchSoFar.insert(sideThatMatchesEntity);
+      }
+    }
+    sidesThatMatchSoFar = newSidesThatMatchSoFar;
+  }
+  return vector<IndexType>(sidesThatMatchSoFar.begin(),sidesThatMatchSoFar.end());
 }
 
 unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal) const

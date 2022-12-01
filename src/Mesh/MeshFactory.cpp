@@ -1093,6 +1093,12 @@ void MeshFactory::quadMeshCellIDs(Camellia::FieldContainer<int> &cellIDs, int ho
   }
 }
 
+MeshTopologyPtr MeshFactory::rootMeshTopologyCopy(MeshTopologyPtr meshTopology)
+{
+  auto rootCells = meshTopology->getRootCellIndicesGlobal();
+  return meshTopology->getGatheredCopy(rootCells);
+}
+
 MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius)
 {
   double meshHeight = yTop - yBottom;

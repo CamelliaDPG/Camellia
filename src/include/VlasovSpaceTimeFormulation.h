@@ -36,6 +36,7 @@ private:
   bool _useSerendipityBasis;
   
   BFPtr _vlasovBF;
+  int _H1Order;
   int _delta_k;
   
   bool _useGeometricMultigrid = false;
@@ -46,6 +47,9 @@ private:
   
   Teuchos::RCP<ConfigurationSpaceFormulation> _configurationSpaceFormulation; // could be Poisson or Maxwell (among others)
   MeshTopologyPtr _configurationSpaceMeshTopology; // space-time mesh, created during VlasovSpaceTimeFormulation construction
+  
+  std::vector<SpatialFilterPtr> _configurationSpaceSideSetFilters; // we append one each time that createConfigurationMeshSideSetTag() is called.
+  std::vector< std::tuple<int,VarPtr,FunctionPtr> > _configurationSpaceBCs; // (tag, var, value): arguments for each call to addConfigurationSpaceBC().
   
   double _q;
   double _m;
@@ -88,6 +92,19 @@ private:
   
   bool _exportViz;
   std::string _vizOutputDir = "/tmp";
+  
+  double _t0; // initial time for this slab
+  double _t1; // final time for this slab
+  
+  // velocity-space vertices passed in at construction:
+  std::vector<double> _velocitySpaceVertices_x;
+  std::vector<double> _velocitySpaceVertices_y;
+  std::vector<double> _velocitySpaceVertices_z;
+  
+  MeshTopologyPtr _spatialMeshTopology; // passed in at construction, potentially refined thereafter
+  
+  FunctionPtr _f0;       // initial condition set by setInflowConditions() or setInitialAndInflowConditions()
+  FunctionPtr _f_inflow; // inflow condition set by setInitialAndInflowConditions()
 public:
   VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -133,6 +150,7 @@ public:
   void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in);
   
   void setEnforceQuasiNeutrality(bool enforceQuasiNeutrality);
+  bool enforceQuasiNeutrality() const;
   
   void setExportViz(bool exportViz, const std::string outputDir = "/tmp");
   
@@ -140,16 +158,19 @@ public:
       \param  fTol   [in]  - the target relative difference in f between one substep and the next, as measured in the L^2 norm.
   */
   void setFixedPointTolerance(const double fTol);
+  double fixedPointTolerance() const;
   
   /** \brief  Set the minimum number of substeps to take for the fixed point iteration.
       \param  minSubsteps   [in]  - the minimum number of substeps to take for the fixed point solve.
   */
   void setFixedPointMinSubsteps(const int minSubsteps);
+  int fixedPointMinSubsteps() const;
   
   /** \brief  Set the maximum number of substeps to take for the fixed point iteration.
       \param  maxSubsteps   [in]  - the maximum number of substeps to take for the fixed point solve.
   */
   void setFixedPointMaxSubsteps(const int maxSubsteps);
+  int fixedPointMaxSubsteps() const;
   
   /** \brief  Set the tolerance for the iterative solve (relevant for geometric multigrid).
       \param  cgTols   [in]  - the tolerance for the conjugate gradient solve in each fixed-point step; used in the stopping criterion for the CG iteration
@@ -159,20 +180,25 @@ public:
       \param  azOutputLevel   [in]  - Corresponds to the Aztec output level (though Belos is doing the output); here, 0 means no output (the default); -1 means final residual + warnings; -2 means summary, final residual, and warnings; and -3 means only print warnings.  Positive number n means print out residual every n steps.
   */
   void setIterativeSolveOutputLevel(int azOutputLevel);
+  int iterativeSolveOutputLevel() const;
   
   /** \brief  Set the tolerance for the iterative solve (relevant for geometric multigrid).
       \param  cgTol   [in]  - the tolerance for the conjugate gradient solve; used in the stopping criterion for the CG iteration
   */
   void setIterativeSolveTolerance(const double cgTol);
+  double iterativeSolveTolerance() const;
   
   void setIterativeSolveTolerances(const std::vector<double> cgTols);
+  std::vector<double> iterativeSolveTolerances() const;
   
   /** \brief  Set the maximum number of iterations for the iterative solve (relevant for geometric multigrid).
       \param  maxIters   [in]  - the maximum number of conjugate gradient iterations to take; will stop if either maxIters are reached, or the relative residual falls below the CG tolerance.
   */
   void setIterativeSolveMaxIterations(const int maxIters);
+  int iterativeSolveMaxIterations() const;
   
   void setUseGeometricMultigrid(bool useGeometricMultigrid);
+  bool useGeometricMultigrid() const;
   
   Teuchos::RCP<GMGSolver> constructGMGSolver();
   
@@ -223,6 +249,9 @@ public:
   int tagVlasovSpatialInflow() const;
   int tagVlasovMaxVelocity(int zeroBasedComp) const;
   int tagVlasovMinVelocity(int zeroBasedComp) const;
+  
+  //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.
+  VlasovSpaceTimeFormulation nextTimeSlab(double tWidth, int numTemporalElements);
   
   /** \brief  Returns a Function representing the specified component of configuration space. */
   FunctionPtr x_i(const int zeroBasedComp) const;

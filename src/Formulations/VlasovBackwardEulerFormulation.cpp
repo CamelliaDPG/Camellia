@@ -517,10 +517,10 @@ int VlasovBackwardEulerFormulation::createConfigurationMeshSideSetTag(SpatialFil
   
   const int sideDim = _spaceDim-1;
   auto matchingSideSet = _configurationSpaceMeshTopology->createEntitySet();
-  std::vector<IndexType> initialTimeSideIndices = _configurationSpaceMeshTopology->getSidesThatMatch(regionToMatch);
-  for (const auto & initialTimeSideIndex : initialTimeSideIndices)
+  std::vector<IndexType> matchingSideIndices = _configurationSpaceMeshTopology->getSidesThatMatch(regionToMatch);
+  for (const auto & matchingSideIndex : matchingSideIndices)
   {
-    matchingSideSet->addEntity(sideDim, initialTimeSideIndex);
+    matchingSideSet->addEntity(sideDim, matchingSideIndex);
   }
   _configurationSpaceMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, thisTag, matchingSideSet);
   

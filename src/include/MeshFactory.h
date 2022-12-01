@@ -133,6 +133,9 @@ public:
 
   static MeshPtr readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
 
+  // returns a newly-constructed MeshTopology that matches the passed-in MeshTopology in its root cells (including cell numbering, but not necessarily vertex or other entity numbering).
+  static MeshTopologyPtr rootMeshTopologyCopy(MeshTopologyPtr meshTopology);
+  
   static MeshPtr spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
                                TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd,
                                Epetra_CommPtr Comm = Teuchos::null);

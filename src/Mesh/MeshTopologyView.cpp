@@ -824,21 +824,31 @@ MeshTopologyPtr MeshTopologyView::getGatheredCopy() const
 {
   MeshGeometryInfo baseMeshGeometry;
   CellDataMigration::getGeometry(this, baseMeshGeometry);
-  int myGeometrySize = CellDataMigration::getGeometryDataSize(baseMeshGeometry);
-  vector<char> myGeometryData(myGeometrySize);
-  char *myWriteLocation = &myGeometryData[0];
-  CellDataMigration::writeGeometryData(baseMeshGeometry, myWriteLocation, myGeometrySize);
-  
-  vector<char> gatheredGeometryData;
-  vector<int> offsets;
-  MPIWrapper::allGatherVariable<char>(*Comm(),gatheredGeometryData,myGeometryData,offsets);
-  
-  MeshGeometryInfo gatheredBaseMeshGeometry;
-  const char* gatheredDataLocation = &gatheredGeometryData[0];
-  CellDataMigration::readGeometryData(gatheredDataLocation, gatheredGeometryData.size(), gatheredBaseMeshGeometry);
-  
-  MeshTopologyPtr gatheredMeshTopo = Teuchos::rcp( new MeshTopology(MPIWrapper::CommSerial(), gatheredBaseMeshGeometry) );
-  return gatheredMeshTopo;
+  auto periodicBCs = this->getPeriodicBCs();
+  if (Comm() != Teuchos::null)
+  {
+    int myGeometrySize = CellDataMigration::getGeometryDataSize(baseMeshGeometry);
+    vector<char> myGeometryData(myGeometrySize);
+    char *myWriteLocation = &myGeometryData[0];
+    CellDataMigration::writeGeometryData(baseMeshGeometry, myWriteLocation, myGeometrySize);
+    
+    vector<char> gatheredGeometryData;
+    vector<int> offsets;
+    MPIWrapper::allGatherVariable<char>(*Comm(),gatheredGeometryData,myGeometryData,offsets);
+    
+    MeshGeometryInfo gatheredBaseMeshGeometry;
+    const char* gatheredDataLocation = &gatheredGeometryData[0];
+    CellDataMigration::readGeometryData(gatheredDataLocation, gatheredGeometryData.size(), gatheredBaseMeshGeometry);
+    
+    MeshTopologyPtr gatheredMeshTopo = Teuchos::rcp( new MeshTopology(MPIWrapper::CommSerial(), gatheredBaseMeshGeometry, periodicBCs) );
+    return gatheredMeshTopo;
+  }
+  else
+  {
+    // no gather necessary; just copy
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(MPIWrapper::CommSerial(), baseMeshGeometry, periodicBCs) );
+    return meshTopo;
+  }
   
 //  // if this is a pure view, we apply that to the gatheredMeshTopo
 //  bool isView = (dynamic_cast<const MeshTopology*>(this) == NULL);

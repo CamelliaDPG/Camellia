@@ -183,6 +183,9 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
   
   poissonSoln->setIP(_poissonBF->graphNorm());
   
+  // nullify _configurationSoln, _configurationSolnPrev: if these are initialized, they refer to a previous mesh, not the poissonMesh we just created
+  _configurationSoln     = Teuchos::null;
+  _configurationSolnPrev = Teuchos::null;
   setConfigurationSolution(poissonSoln);
   setConfigurationSolutionPrevious(poissonSolnPrev);
   
