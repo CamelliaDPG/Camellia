@@ -293,7 +293,8 @@ namespace
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       
       double tol = 1e-13;
-      for (int sideOrdinal=0; sideOrdinal < cellTopo->getSideCount(); sideOrdinal++)
+      const int sideCount = cellTopo->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
       {
         out << "******** SIDE " << sideOrdinal << " ********" << endl;
         BasisPtr basis = trialOrder->getBasis(u_hat->ID(),sideOrdinal);

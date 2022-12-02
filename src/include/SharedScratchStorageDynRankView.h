@@ -45,7 +45,8 @@ namespace Camellia {
     static ScratchStorageDimensions viewDimensions(ViewType &view)
     {
       ScratchStorageDimensions dim(view.rank());
-      for (int i=0; i<view.rank(); i++)
+      const int viewRank = view.rank();
+      for (int i=0; i<viewRank; i++)
       {
         dim[i] = view.extent_int(i);
       }

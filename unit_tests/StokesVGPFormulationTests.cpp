@@ -420,7 +420,8 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, ForcingFunction_2D)
     analyticForcingFunctions.push_back(Function::vectorize(f_x, f_y));
     exactSolutions.push_back({u,p});
     
-    for (int i=0; i<exactSolutions.size(); i++)
+    int numExactSolutions = exactSolutions.size();
+    for (int i=0; i<numExactSolutions; i++)
     {
       auto exactSolution = exactSolutions[i];
       auto f_analytic = analyticForcingFunctions[i];

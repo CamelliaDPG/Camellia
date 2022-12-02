@@ -62,7 +62,8 @@ namespace Camellia {
     
     void addOffsetToDofIndices(GlobalIndexType dofIndexOffset)
     {
-      for (int d=0; d<subcellDofIndices.size(); d++)
+      const int numSubcellDofIndicesEntries = subcellDofIndices.size();
+      for (int d=0; d<numSubcellDofIndicesEntries; d++)
       {
         std::vector<VarIDToDofIndices>* entriesForSubcellOrdinal = &subcellDofIndices[d];
         int scCount = entriesForSubcellOrdinal->size();
@@ -133,7 +134,8 @@ namespace Camellia {
     
     void print(std::ostream &os) const
     {
-      for (int d=0; d<subcellDofIndices.size(); d++)
+      const int numSubcellDofIndicesEntries = subcellDofIndices.size();
+      for (int d=0; d<numSubcellDofIndicesEntries; d++)
       {
         os << "****** dimension " << d << " *******\n";
         int scCount = subcellDofIndices[d].size();
@@ -259,7 +261,8 @@ namespace Camellia {
     int dofIndexCountForVariable(VarPtr var)
     {
       RangeList<GlobalIndexType> dofIndices;
-      for (int d=0; d<subcellDofIndices.size(); d++)
+      const int numSubcellDofIndicesEntries = subcellDofIndices.size();
+      for (int d=0; d<numSubcellDofIndicesEntries; d++)
       {
         std::vector<VarIDToDofIndices>* entriesForSubcellOrdinal = &subcellDofIndices[d];
         int scCount = entriesForSubcellOrdinal->size();

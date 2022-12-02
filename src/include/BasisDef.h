@@ -272,9 +272,9 @@ const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int sub
       TEUCHOS_TEST_FOR_EXCEPTION(dofOrdinal < 0, std::invalid_argument, "dofOrdinal can't be < 0");
     }
     int firstDofOrdinal = -1;
-    if (_tagToOrdinal.size() > subcellDim)
+    if (int(_tagToOrdinal.size()) > subcellDim)
     {
-      if (_tagToOrdinal[subcellDim].size() > subcellIndex)
+      if (int(_tagToOrdinal[subcellDim].size()) > subcellIndex)
       {
         if (_tagToOrdinal[subcellDim][subcellIndex].size() > 0)
         {
@@ -299,7 +299,7 @@ const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int sub
       }
     }
     
-    TEUCHOS_TEST_FOR_EXCEPTION(numDofs != _tagToOrdinal[subcellDim][subcellIndex].size(), std::invalid_argument, "wrong number of dofs in trimmed container");
+    TEUCHOS_TEST_FOR_EXCEPTION(numDofs != int(_tagToOrdinal[subcellDim][subcellIndex].size()), std::invalid_argument, "wrong number of dofs in trimmed container");
   }
   
   return _tagToOrdinal[subcellDim][subcellIndex];
@@ -357,7 +357,7 @@ std::vector<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim
         for (unsigned sc=0; sc<numSubcells; sc++)
         {
           bool matches = true;
-          if (numNodes_ssc != subSubCellTopo->getNodeCount())
+          if (numNodes_ssc != int(subSubCellTopo->getNodeCount()))
           {
             matches = false;
           }
@@ -410,7 +410,7 @@ std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcells(int subcellDim, 
   {
     dofOrdinals = dofOrdinalsForSubcells(subcellDim-1,true);
   }
-  if (this->_tagToOrdinal.size() < subcellDim+1)   // none of dimension subcellDim
+  if (int(this->_tagToOrdinal.size()) < subcellDim+1)   // none of dimension subcellDim
   {
     return dofOrdinals;
   }
@@ -548,7 +548,7 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialC
       {
         vector<int> dofOrdinals;
         // some subclasses don't fill the container for subcells when subcells of a given dimension don't have any dofOrdinals defined...  We'll set it to be an empty vector<int> in that case...
-        if ((d < this->_tagToOrdinal.size()) && (subcOrd < this->_tagToOrdinal[d].size()))
+        if ((d < int(this->_tagToOrdinal.size())) && (subcOrd < int(this->_tagToOrdinal[d].size())))
         {
           int numDofs = this->_tagToOrdinal[d][subcOrd].size();
           for (int dofIndex = 0; dofIndex < numDofs; dofIndex++)

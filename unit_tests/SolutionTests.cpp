@@ -72,7 +72,8 @@ namespace
     if (mesh->cellIDsInPartition().find(cellsToRefine[0]) != mesh->cellIDsInPartition().end())
     {
       CellPtr cellToRefine = mesh->getTopology()->getCell(cellsToRefine[0]);
-      for (int sideOrdinal=0; sideOrdinal<cellToRefine->getSideCount(); sideOrdinal++)
+      const int sideCount = cellToRefine->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
       {
         if (cellToRefine->getNeighbor(sideOrdinal, mesh->getTopology()) != Teuchos::null)
         {
@@ -93,7 +94,8 @@ namespace
       if (mesh->getTopology()->isValidCellIndex(cellsToRefine[0]))
       {
         CellPtr cellToRefine = mesh->getTopology()->getCell(cellsToRefine[0]);
-        for (int sideOrdinal=0; sideOrdinal<cellToRefine->getSideCount(); sideOrdinal++)
+        const int sideCount = cellToRefine->getSideCount();
+        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
         {
           if (cellToRefine->getNeighbor(sideOrdinal, mesh->getTopology()) != Teuchos::null)
           {
@@ -1428,13 +1430,14 @@ namespace
     soln->setSolutionStage(solnStage); // soln will modify the RHS, adding -(1/dt) * u_prev * v term
     
     std::map<int, FunctionPtr> solnValues;
-    for (int i=0; i<solnForStageOrdinal.size(); i++)
+    const int numSolnForStageOrdinalEntries = solnForStageOrdinal.size();
+    for (int i=0; i<numSolnForStageOrdinalEntries; i++)
     {
       solnValues[u->ID()] = Function::constant(solnForStageOrdinal[i]);
       soln->projectOntoMesh(solnValues,i);
     }
-    
-    for (int stageOrdinal=0; stageOrdinal<solnForStageOrdinal.size(); stageOrdinal++)
+
+    for (int stageOrdinal=0; stageOrdinal<numSolnForStageOrdinalEntries; stageOrdinal++)
     {
       out << "Testing stage " << stageOrdinal << std::endl;
       auto u_prev = Function::solution(u, solnWeakPtr, weightFluxesBySideParity, STANDARD_SOLUTION, stageOrdinal);
@@ -1606,16 +1609,16 @@ namespace
     
     double tol = 1e-15;
     
-    set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
+    const set<GlobalIndexType> & cellIDs = mesh->cellIDsInPartition();
     
-    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+    for (const auto &cellID : cellIDs)
     {
-      GlobalIndexType cellID = *cellIDIt;
       DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
       
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      
-      for (int sideOrdinal = 0; sideOrdinal < spaceTimeTopo->getSideCount(); sideOrdinal++)
+
+      const int spaceTimeSideCount = spaceTimeTopo->getSideCount();
+      for (int sideOrdinal = 0; sideOrdinal < spaceTimeSideCount; sideOrdinal++)
       {
         CellTopoPtr sideTopo = spaceTimeTopo->getSide(sideOrdinal);
         BasisPtr sideBasis = trialOrder->getBasis(uhat->ID(), sideOrdinal);

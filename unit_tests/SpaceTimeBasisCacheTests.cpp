@@ -48,9 +48,11 @@ Camellia::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, d
 {
   Camellia::FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(nodes, topo);
-  for (int nodeOrdinal=0; nodeOrdinal<topo->getNodeCount(); nodeOrdinal++)
+  const int nodeCount = topo->getNodeCount();
+  for (int nodeOrdinal=0; nodeOrdinal<nodeCount; nodeOrdinal++)
   {
-    for (int d=0; d<topo->getDimension(); d++)
+    const int topoDim = topo->getDimension();
+    for (int d=0; d<topoDim; d++)
     {
       nodes(nodeOrdinal,d) *= nodeScaling;
       nodes(nodeOrdinal,d) += nodeTranslation;
@@ -196,7 +198,8 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
   double tol = 1e-14;
   TEST_COMPARE_FLOATING_ARRAYS(expectedValues, spaceTimeValues, tol);
 
-  for (int sideOrdinal = 0; sideOrdinal<spaceTimeTopo->getSideCount(); sideOrdinal++)
+  const int spaceTimeSideCount = spaceTimeTopo->getSideCount();
+  for (int sideOrdinal = 0; sideOrdinal<spaceTimeSideCount; sideOrdinal++)
   {
     BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
@@ -278,7 +281,8 @@ void testSpaceTimeSideMeasure(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out,
   double temporalExtent = t1-t0; // 1.0
   double spatialMeasure = spatialBasisCache->getCellMeasures()(0); // measure of the reference-space cell
   vector<double> spatialSideMeasures;
-  for (int sideOrdinal=0; sideOrdinal<spaceTopo->getSideCount(); sideOrdinal++)
+  const int spaceTopoSideCount = spaceTopo->getSideCount();
+  for (int sideOrdinal=0; sideOrdinal<spaceTopoSideCount; sideOrdinal++)
   {
     spatialSideMeasures.push_back(spatialBasisCache->getSideBasisCache(sideOrdinal)->getCellMeasures()(0));
   }
@@ -292,7 +296,8 @@ void testSpaceTimeSideMeasure(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out,
     BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCell(singleCellSpaceTimeMesh, cellIndex);
 
     CellTopoPtr cellTopo = cell->topology();
-    for (int sideOrdinal=0; sideOrdinal<cellTopo->getSideCount(); sideOrdinal++)
+    const int sideCount = cellTopo->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
     {
       double expectedMeasure;
       if (cellTopo->sideIsSpatial(sideOrdinal))

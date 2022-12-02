@@ -110,7 +110,8 @@ namespace Camellia
       else
       {
         _currentRangeOrdinal++;
-        if (_currentRangeOrdinal < _rangeList->_rangeBegins.size())
+        const int rangeBeginsSize = _rangeList->_rangeBegins.size();
+        if (_currentRangeOrdinal < rangeBeginsSize)
         {
           _currentValue = _rangeList->_rangeBegins[_currentRangeOrdinal];
         }

@@ -91,8 +91,8 @@ namespace Camellia {
     :
     numTensorComponents_(tensorComponents.size())
     {
-      int cellExtent = (tensorComponents.size() > 0) ? tensorComponents[0].extent_int(0) : 0;
-      for (int r=0; r<tensorComponents.size(); r++)
+      int numTensorComponents = tensorComponents.size();
+      for (int r=0; r<numTensorComponents; r++)
       {
         tensorComponents_[r] = tensorComponents[r];
       }

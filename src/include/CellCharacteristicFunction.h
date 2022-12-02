@@ -48,7 +48,8 @@ public:
 
     values.initialize(0);
 
-    if (numCells != cellIDs.size())
+    const int cellIDsSize = cellIDs.size();
+    if (numCells != cellIDsSize)
     {
       cout << "ERROR: CellCharacteristicFunction requires cellIDs to be defined in BasisCache\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CellCharacteristicFunction requires cellIDs to be defined in BasisCache");

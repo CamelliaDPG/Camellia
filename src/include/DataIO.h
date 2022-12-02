@@ -25,16 +25,18 @@ public:
   {
     ofstream fout(filePath.c_str());
     // check dimensions:
-    int numCols = tableHeaders.size();
-    int numRows = data[0].size();
+    const int numCols = tableHeaders.size();
+    const int numRows = data[0].size();
 
-    if (numCols != data.size())
+    const int dataSize = data.size();
+    if (numCols != dataSize)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of data must match size of tableHeaders.");
     }
     for (int col=0; col<numCols; col++)
     {
-      if (data[col].size() != numRows)
+      const int dataColSize = data[col].size();
+      if (dataColSize != numRows)
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "all columns must have the same number of rows");
       }

@@ -294,7 +294,6 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
     solution->importSolution();
     
     FunctionPtr solnFxn = Function::solution(spaceTimeTrace, solution);
-    const set<GlobalIndexType>* myCells = &mesh->cellIDsInPartition();
     for (GlobalIndexType cellIDTime0 : childrenTime0)
     {
       CellPtr cellTime0, cellTime1;
