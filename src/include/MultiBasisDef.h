@@ -181,7 +181,8 @@ void MultiBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const
   int numSubRefCells = _subRefNodes.dimension(0);
   //  int numNodesPerCell = _subRefNodes.dimension(1);
   int spaceDim = inputPoints.dimension(1);
-  if (spaceDim != _cellTopo->getDimension() )
+  const int cellDim = _cellTopo->getDimension();
+  if (spaceDim != cellDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _cellTopo->getDimension()");
   }
@@ -529,7 +530,8 @@ template<class Scalar, class ArrayScalar>
 Teuchos::RCP< Basis<Scalar,ArrayScalar> > MultiBasis<Scalar, ArrayScalar>::getLeafBasis(int leafOrdinal) const
 {
   int leafOrdinalOffset = 0;
-  for (int subBasisIndex=0; subBasisIndex < _bases.size(); subBasisIndex++)
+  const int numBases = _bases.size();
+  for (int subBasisIndex=0; subBasisIndex < numBases; subBasisIndex++)
   {
     Teuchos::RCP< Basis<Scalar,ArrayScalar> > subBasis = _bases[subBasisIndex];
     int numLeaves = 1; // 1 if not MultiBasis

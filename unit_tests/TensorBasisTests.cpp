@@ -259,7 +259,7 @@ void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, int
     }
 
     // check that the basisOrdinalMap entries are unique
-    TEST_EQUALITY(basisOrdinalMap.size(), spaceNodeOrdinalCount * timeNodeOrdinalCount);
+    TEST_EQUALITY(int(basisOrdinalMap.size()), spaceNodeOrdinalCount * timeNodeOrdinalCount);
   }
   else // if either timeNodeOrdinalCount = 0 or spaceNodeOrdinalCount = 0, expect no vertex ordinals for tensorBasis
   {
@@ -429,7 +429,8 @@ void testTensorBasisValuesAreTensorProduct(BasisPtr spatialBasis, BasisPtr timeB
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal test error: tensorValue size does not match spaceValue size");
           }
           double tol = 1e-15;
-          for (int i=0; i<spaceValue.size(); i++)
+          int numSpaceValues = spaceValue.size();
+          for (int i=0; i<numSpaceValues; i++)
           {
             double expectedValue = spaceValue[i] * timeValue;
             double actualValue = tensorValue[i];
@@ -546,7 +547,8 @@ TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues )
   BasisPtr timeBasis = getTimeBasis(timePolyOrder);
 
   double tol = 1e-15;
-  for (int i=0; i<spatialBases.size(); i++)
+  int numSpatialBases = spatialBases.size();
+  for (int i=0; i<numSpatialBases; i++)
   {
     BasisPtr spatialBasis = spatialBases[i];
     int spaceDim = spatialBasis->domainTopology()->getDimension();
@@ -670,8 +672,9 @@ TEUCHOS_UNIT_TEST( TensorBasis, ValuesEqualTensorProduct )
 
   int timePolyOrder = 1;
   BasisPtr timeBasis = getTimeBasis(timePolyOrder);
-
-  for (int i=0; i<spatialBases.size(); i++)
+  
+  int numSpatialBases = spatialBases.size();
+  for (int i=0; i<numSpatialBases; i++)
   {
     BasisPtr spatialBasis = spatialBases[i];
     testTensorBasisValuesAreTensorProduct(spatialBasis, timeBasis, out, success);
@@ -686,7 +689,8 @@ TEUCHOS_UNIT_TEST( TensorBasis, BasisFillsContainer )
   int timePolyOrder = 1;
   BasisPtr timeBasis = getTimeBasis(timePolyOrder);
 
-  for (int i=0; i<spatialBases.size(); i++)
+  int numSpatialBases = spatialBases.size();
+  for (int i=0; i<numSpatialBases; i++)
   {
     BasisPtr spatialBasis = spatialBases[i];
     testTensorBasisFillsFieldContainer(spatialBasis, timeBasis, out, success);

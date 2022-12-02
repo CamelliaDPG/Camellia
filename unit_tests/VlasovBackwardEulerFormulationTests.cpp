@@ -397,7 +397,7 @@ namespace {
     const int sideDim       = phaseSpaceDim - 1;
     for (auto sideSet : actualSideSets)
     {
-      auto maxEntityDimension = sideSet->maxEntityDimension();
+      int maxEntityDimension = sideSet->maxEntityDimension();
       TEST_EQUALITY(maxEntityDimension, sideDim);
       
       auto entityIndices = sideSet->entitiesOfDimension(sideDim);
@@ -520,7 +520,6 @@ namespace {
     
     std::vector<double> dtsToTest {1e0, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5};
     
-    int ipOrdinal = 0;
     for (const auto & ipToTest : ipsToTest)
     {
       out << "************************************************************\n";

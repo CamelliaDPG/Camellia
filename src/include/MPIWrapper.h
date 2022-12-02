@@ -284,7 +284,7 @@ public:
     {
       TEUCHOS_TEST_FOR_EXCEPTION(recipients[i-1] >= recipients[i], std::invalid_argument, "recipients list must be in numerical order, and populated with distinct recipients");
     }
-    TEUCHOS_TEST_FOR_EXCEPTION(dataVectors.size() != numRecipients, std::invalid_argument, "dataVectors and recipients list must be the same length");
+    TEUCHOS_TEST_FOR_EXCEPTION(int(dataVectors.size()) != numRecipients, std::invalid_argument, "dataVectors and recipients list must be the same length");
     
     Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*Comm);
     
@@ -384,7 +384,7 @@ public:
 #else
 #endif
     // now, go through offsets to make the sizes in terms of DataType rather than bytes
-    for (int i=0; i<offsets.size(); i++)
+    for (int i=0; i<int(offsets.size()); i++)
     {
       offsets[i] /= sizeof(DataType);
     }

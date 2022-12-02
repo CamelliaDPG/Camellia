@@ -695,7 +695,8 @@ int AdditiveSchwarz<T>::Initialize()
   IFPACK_CHK_ERR(Setup());
 
   string inverseLabel;
-  for (int i=0; i<_Inverses.size(); i++)
+  const int numInverses = _Inverses.size();
+  for (int i=0; i<numInverses; i++)
   {
     Teuchos::RCP<T> Inverse = _Inverses[i];
     Teuchos::RCP<LocalFilter> localizedMatrix = _LocalizedMatrices[i];
@@ -749,7 +750,8 @@ int AdditiveSchwarz<T>::Compute()
   Condest_ = -1.0;
 
   string inverseLabel;
-  for (int i=0; i<_Inverses.size(); i++)
+  const int numInverses = _Inverses.size();
+  for (int i=0; i<numInverses; i++)
   {
     Teuchos::RCP<T> Inverse = _Inverses[i];
     int err = Inverse->Compute();
@@ -1065,7 +1067,8 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
   Epetra_SerialComm SerialComm;
   
   // iterate over the Inverses, extracting appropriate part of OverlappingX and adding results into OverlappingY
-  for (int i=0; i<_Inverses.size(); i++)
+  const int numInverses = _Inverses.size();
+  for (int i=0; i<numInverses; i++)
   {
     Teuchos::RCP<T> Inverse = _Inverses[i];
     Teuchos::RCP<LocalFilter> localFilter = _LocalizedMatrices[i];
@@ -1077,10 +1080,11 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     Epetra_MultiVector localX(localMap, NumVectors);
     Epetra_MultiVector localY(localMap, NumVectors);
     
+    const int subdomainRowsSize = subdomainRows.size();
     // extract the local X values:
     for (int vectorOrdinal=0; vectorOrdinal<NumVectors; vectorOrdinal++)
     {
-      for (int subdomainLID=0; subdomainLID < subdomainRows.size(); subdomainLID++)
+      for (int subdomainLID=0; subdomainLID < subdomainRowsSize; subdomainLID++)
       {
         localX[vectorOrdinal][subdomainLID] = (*OverlappingX)[vectorOrdinal][subdomainRows[subdomainLID]];
       }
@@ -1091,7 +1095,7 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     // extract and sum into Y values:
     for (int vectorOrdinal=0; vectorOrdinal<NumVectors; vectorOrdinal++)
     {
-      for (int subdomainLID=0; subdomainLID < subdomainRows.size(); subdomainLID++)
+      for (int subdomainLID=0; subdomainLID < subdomainRowsSize; subdomainLID++)
       {
         (*OverlappingY)[vectorOrdinal][subdomainRows[subdomainLID]] += localY[vectorOrdinal][subdomainLID];
       }

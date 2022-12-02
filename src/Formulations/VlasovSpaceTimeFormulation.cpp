@@ -190,7 +190,7 @@ _spatialMeshTopology(spatialMeshTopology)
 
   map<int,int> testOrderEnhancements;
   
-  const bool allowPruning = true;
+  const bool allowPruning = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
   Epetra_CommPtr comm = MPIWrapper::CommWorld();
   MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, H1Order, delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );

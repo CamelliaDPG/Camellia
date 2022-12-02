@@ -126,7 +126,8 @@ namespace Camellia {
   void RangeList<IntegerType>::mergeIfPossible(int entryOrdinal)
   {
     // check if we can merge with the next entry
-    if (entryOrdinal+1 < _rangeBegins.size())
+    const int rangeBeginsSize = _rangeBegins.size();
+    if (entryOrdinal+1 < rangeBeginsSize)
     {
       if ((_rangeEnds[entryOrdinal]==_rangeBegins[entryOrdinal+1]) || (_rangeEnds[entryOrdinal]+1 ==_rangeBegins[entryOrdinal+1]))
       {
