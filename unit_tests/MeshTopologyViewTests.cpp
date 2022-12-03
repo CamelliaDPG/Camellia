@@ -329,6 +329,26 @@ namespace
     set<pair<IndexType,unsigned>> cellEntriesView = meshTopoView->getCellsContainingEntity(vertexDim, vertexIndex);
     TEST_ASSERT(cellEntriesView.size() == 1);
   }
+
+  TEUCHOS_UNIT_TEST( MeshTopologyView, GetGatheredCopyOfSerialMeshTopoRoot )
+  {
+    // A test of a simple use case: repeatedly get the root cells of a MeshTopo, and use it to create a root-cell copy
+    double xLeft=0.0, xRight=1.0;
+    int numElements = 2;
+    MeshTopologyPtr meshTopo = MeshFactory::intervalMeshTopology(xLeft, xRight, numElements);
+    TEST_EQUALITY(numElements, meshTopo->cellCount());
+    
+    auto rootCellIDs = meshTopo->getRootCellIndicesGlobal();
+    int numRootCells = rootCellIDs.size();
+    TEST_EQUALITY(numElements, numRootCells);
+    meshTopo = meshTopo->getGatheredCopy(rootCellIDs);
+    
+    TEST_EQUALITY(numElements, meshTopo->cellCount());
+    rootCellIDs = meshTopo->getRootCellIndicesGlobal();
+    numRootCells = rootCellIDs.size();
+    TEST_EQUALITY(numElements, numRootCells);
+    meshTopo = meshTopo->getGatheredCopy(rootCellIDs);
+  }
   
   TEUCHOS_UNIT_TEST( MeshTopologyView, NeighborIsCorrectAnisotropicRefinement_OneLevel_2D )
   {

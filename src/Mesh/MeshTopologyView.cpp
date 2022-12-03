@@ -825,7 +825,8 @@ MeshTopologyPtr MeshTopologyView::getGatheredCopy() const
   MeshGeometryInfo baseMeshGeometry;
   CellDataMigration::getGeometry(this, baseMeshGeometry);
   auto periodicBCs = this->getPeriodicBCs();
-  if (Comm() != Teuchos::null)
+  const bool isDistributed = (Comm() != Teuchos::null) && (Comm()->NumProc() > 1);
+  if (isDistributed)
   {
     int myGeometrySize = CellDataMigration::getGeometryDataSize(baseMeshGeometry);
     vector<char> myGeometryData(myGeometrySize);

@@ -107,7 +107,8 @@ MeshTopology::MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeom
   
   _Comm = Comm;
   _activeCellCount = meshGeometryInfo.globalActiveCellCount;
-  _nextCellIndex = meshGeometryInfo.globalCellCount;
+  _cellCount       = meshGeometryInfo.globalCellCount;
+  _nextCellIndex   = meshGeometryInfo.globalCellCount;
   int rootCellOrdinal = 0;
   for (IndexType rootCellID : meshGeometryInfo.rootCellIDs)
   {
@@ -3846,7 +3847,7 @@ const set<IndexType> &MeshTopology::getRootCellIndicesLocal() const
 
 set<IndexType> MeshTopology::getRootCellIndicesGlobal() const
 {
-  if (Comm() == Teuchos::null)
+  if (! isDistributed())
   {
     // replicated: _rootCells contains the global root cells
     return _rootCells;
