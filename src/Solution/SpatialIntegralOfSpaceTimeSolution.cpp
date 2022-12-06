@@ -154,7 +154,7 @@ SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionP
   const int numSpatialFields    = spatialBasis->getCardinality();
     
   DeviceView<double> spatialCoefficients = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage({numCells,numSpatialSolutions,numSpatialFields},"SpatialIntegralOfSpaceTimeSolution spatialCoefficients"); // (C,N,F)
-  DeviceView<double> solutionIntegrals   = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage({numCells,numSpatialSolutions},"SpatialIntegralOfSpaceTimeSolution solutionIntegrals"); // (C,N)
+  DeviceView<double> solutionIntegrals = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage({numCells,numSpatialSolutions},"SpatialIntegralOfSpaceTimeSolution solutionIntegrals"); // (C,N)
   
   // copy from _soln into spatialCoefficients
   FieldContainer<double> basisCoefficients;
