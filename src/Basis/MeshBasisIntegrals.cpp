@@ -15,6 +15,8 @@ namespace Camellia
   {
     _basis = basis;
     
+    if (cellIDs.size() == 0) return;
+    
     _integralCellIDs = std::vector<GlobalIndexType>(cellIDs.begin(),cellIDs.end());
     
     int cellOrdinal = 0;
@@ -37,9 +39,9 @@ namespace Camellia
     
     // note that the following is not entirely device-optimized; we'd do better to avoid using FieldContainer.
     
-    auto transformedWeightedBasisValues = basisCache->getTransformedWeightedValues(basis, OP_VALUE); // (C,P,F)
+    auto transformedWeightedBasisValues = basisCache->getTransformedWeightedValues(basis, OP_VALUE); // (C,F,P)
     const int numCells  = cellIDs.size();
-    const int numPoints = transformedWeightedBasisValues->dimension(1);
+    const int numPoints = transformedWeightedBasisValues->dimension(2);
     
     auto fxnValues = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage({numCells,numPoints},"MeshBasisIntegrals: fxnValues");
     weight->values(fxnValues, ASSIGN, basisCache);
@@ -57,7 +59,7 @@ namespace Camellia
       double integral = 0;
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
-        const double &weightedBasisValue = transformedWeightedBasisView(cellOrdinal,pointOrdinal,fieldOrdinal);
+        const double &weightedBasisValue = transformedWeightedBasisView(cellOrdinal,fieldOrdinal,pointOrdinal);
         const double &fxnValue           = fxnValues(cellOrdinal,pointOrdinal);
         integral += weightedBasisValue * fxnValue;
       }
