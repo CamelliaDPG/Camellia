@@ -196,8 +196,14 @@ void MeshTools::mapCellIDsAtBoundary(std::map<IndexType,IndexType> &cellIDMap, s
   set<IndexType> fromSides;
   for (auto fromEntitySet : fromEntitySets)
   {
-    set<IndexType> fromSidesForEntity = fromEntitySet->entitiesOfDimension(sideDim);
-    fromSides.insert(fromSidesForEntity.begin(),fromSidesForEntity.end());
+    set<IndexType> fromSidesForEntitySet = fromEntitySet->entitiesOfDimension(sideDim);
+    for (const auto &fromSide : fromSidesForEntitySet)
+    {
+      if (meshTopoFrom->entityIsActive(sideDim, fromSide))
+      {
+        fromSides.insert(fromSide);
+      }
+    }
   }
   
   map<IndexType,IndexType> sideMap; // fromSide --> toSide

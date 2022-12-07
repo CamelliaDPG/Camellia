@@ -48,7 +48,7 @@ private:
   Teuchos::RCP<ConfigurationSpaceFormulation> _configurationSpaceFormulation; // could be Poisson or Maxwell (among others)
   MeshTopologyPtr _configurationSpaceMeshTopology; // space-time mesh, created during VlasovSpaceTimeFormulation construction
   
-  std::vector<SpatialFilterPtr> _configurationSpaceSideSetFilters; // we append one each time that createConfigurationMeshSideSetTag() is called.
+  std::vector<std::pair<SpatialFilterPtr,bool>> _configurationSpaceSideSetFilters; // we append one each time that createConfigurationMeshSideSetTag() is called.
   std::vector< std::tuple<int,VarPtr,FunctionPtr> > _configurationSpaceBCs; // (tag, var, value): arguments for each call to addConfigurationSpaceBC().
   
   double _q;
@@ -90,7 +90,7 @@ private:
   static const int CONFIGURATION_TAG_TMIN    = 0; // initial time
   int _nextConfigurationSpaceTag = CONFIGURATION_TAG_TMIN + 1;
   
-  bool _exportViz;
+  bool _exportViz = false;
   std::string _vizOutputDir = "/tmp";
   
   double _t0; // initial time for this slab
@@ -102,6 +102,7 @@ private:
   std::vector<double> _velocitySpaceVertices_z;
   
   MeshTopologyPtr _spatialMeshTopology; // passed in at construction, potentially refined thereafter
+  int _numUniformRefinements;
   
   FunctionPtr _f0;       // initial condition set by setInflowConditions() or setInitialAndInflowConditions()
   FunctionPtr _f_inflow; // inflow condition set by setInitialAndInflowConditions()
@@ -113,7 +114,8 @@ public:
                              std::vector<double> velocitySpaceVertices_x,
                              std::vector<double> velocitySpaceVertices_y,
                              std::vector<double> velocitySpaceVertices_z,
-                             const int H1Order, const int delta_k);
+                             const int H1Order, const int delta_k,
+                             const int numUniformRefinements);
 
   //! take time step.
   void solve();
@@ -204,11 +206,12 @@ public:
   
   /** \brief  Create a tag for an indicated region of configuration space.
       \param  regionToMatch   [in]  - A SpatialFilterPtr that matches the region where BCs should be enforced.
+      \param restrictToBoundary [in] - If true, the matching sides will be the intersection of the mesh boundary with the specified region; otherwise, it will be intersection of the mesh skeleton with the specified region.
       \return tag for the configuration-space mesh; can be used to set BCs.
    
    Note that the matching is performed immediately; this is not an appropriate method for setting a dynamic region of the mesh (as when the inflow region depends on the solution).  For dynamic mesh regions, SpatialFilter-based BCs are likely better suited than tags.
   */
-  int createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch);
+  int createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch, const bool restrictToBoundary);
   
   /** \brief  Create a tag for an indicated region of configuration space.
    \param  tag   [in]  - A tag representing the region in configuration space where the BC should be enforced.
@@ -251,7 +254,7 @@ public:
   int tagVlasovMinVelocity(int zeroBasedComp) const;
   
   //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.
-  VlasovSpaceTimeFormulation nextTimeSlab(double tWidth, int numTemporalElements);
+  Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements);
   
   /** \brief  Returns a Function representing the specified component of configuration space. */
   FunctionPtr x_i(const int zeroBasedComp) const;

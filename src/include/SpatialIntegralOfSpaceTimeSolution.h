@@ -33,6 +33,7 @@ namespace Camellia
     
     MeshPtr temporalMesh();
     FunctionPtr temporalFunction(); // defined on the temporal mesh
+    SolutionPtr temporalSolution();
     
     void exportViz(std::string parentDir, std::string name);
   };

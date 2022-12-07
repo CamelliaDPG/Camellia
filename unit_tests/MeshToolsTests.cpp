@@ -166,6 +166,7 @@ public:
 };
 
 void testMapCellIDsAtBoundary(bool usePeriodicBCs, int numSpatialElements,
+                              int numUniformRefinements,
                               Teuchos::FancyOStream &out, bool &success)
 {
   // create a 1D spatial mesh topo:
@@ -179,6 +180,18 @@ void testMapCellIDsAtBoundary(bool usePeriodicBCs, int numSpatialElements,
   int numTemporalElements = 3;
   auto firstSlab  = MeshFactory::extrudedMeshTopology(spatialTopo, {t0}, {t1-t0}, {numTemporalElements});
   auto secondSlab = MeshFactory::extrudedMeshTopology(spatialTopo, {t1}, {t2-t1}, {numTemporalElements});
+  
+  int numSpatialElementsTotal = numSpatialElements;
+  for (int i=0; i<numUniformRefinements; i++)
+  {
+    auto activeCellIDsFirstSlab = firstSlab->getActiveCellIndicesGlobal();
+    firstSlab->refineCells(activeCellIDsFirstSlab);
+    
+    auto activeCellIDsSecondSlab = secondSlab->getActiveCellIndicesGlobal();
+    secondSlab->refineCells(activeCellIDsSecondSlab);
+    
+    numSpatialElementsTotal *= 2;
+  }
   
   // set a tag for initial time (t1) on the second slab:
   int INITIAL_TIME_TAG = 0;
@@ -204,7 +217,7 @@ void testMapCellIDsAtBoundary(bool usePeriodicBCs, int numSpatialElements,
   
   // cellIDMap should have one entry for each cell at the boundary:
   int numMapEntries = cellIDMap.size();
-  TEST_EQUALITY(numSpatialElements, numMapEntries);
+  TEST_EQUALITY(numSpatialElementsTotal, numMapEntries);
   
   // sideOrdinalMap should have exactly one entry, mapping from the side ordinal in the second slab, which should be 0,
   // to the side ordinal in the first slab, which should be 1:
@@ -221,17 +234,22 @@ void testMapCellIDsAtBoundary(bool usePeriodicBCs, int numSpatialElements,
     TEST_EQUALITY(expectedToSide, sideOrdinalMap[expectedFromSide]);
   }
   
-  for (IndexType expectedFromCellID = 0; expectedFromCellID < numSpatialElements; expectedFromCellID++)
+  if (numUniformRefinements == 0)
   {
-    // check that the expected "from" cellID is a key in the map:
-    bool fromCellFound = cellIDMap.find(expectedFromCellID) != cellIDMap.end();
-    TEST_ASSERT(fromCellFound);
-    
-    IndexType expectedToCellID = expectedFromCellID + numSpatialElements * (numTemporalElements - 1);
-    // check that it maps to the "to" cellID we expect:
-    if (fromCellFound)
+    // then the expected cell IDs are easy to categorize.
+    // (it would be possible to work out the expected cellIDs for uniform refinements, too, but for now we don't verify at that level of granularity.)
+    for (IndexType expectedFromCellID = 0; expectedFromCellID < numSpatialElements; expectedFromCellID++)
     {
-      TEST_EQUALITY(expectedToCellID, cellIDMap[expectedFromCellID]);
+      // check that the expected "from" cellID is a key in the map:
+      bool fromCellFound = cellIDMap.find(expectedFromCellID) != cellIDMap.end();
+      TEST_ASSERT(fromCellFound);
+      
+      IndexType expectedToCellID = expectedFromCellID + numSpatialElements * (numTemporalElements - 1);
+      // check that it maps to the "to" cellID we expect:
+      if (fromCellFound)
+      {
+        TEST_EQUALITY(expectedToCellID, cellIDMap[expectedFromCellID]);
+      }
     }
   }
 }
@@ -240,18 +258,37 @@ TEUCHOS_UNIT_TEST( MeshTools, MapCellIDsAtBoundary )
 {
   const bool usePeriodicBCs = false;
   int numSpatialElements    = 10;
-  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, out, success);
+  int numUniformRefinements = 0;
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, numUniformRefinements, out, success);
+}
+
+TEUCHOS_UNIT_TEST( MeshTools, MapCellIDsAtBoundaryWithUniformRefinement )
+{
+  const bool usePeriodicBCs = false;
+  int numSpatialElements    = 10;
+  int numUniformRefinements = 2;
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, numUniformRefinements, out, success);
 }
 
 TEUCHOS_UNIT_TEST( MeshTools, MapCellIDsAtBoundaryPeriodic )
 {
   const bool usePeriodicBCs = true;
   int numSpatialElements = 10;
-  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, out, success);
+  int numUniformRefinements = 0;
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, numUniformRefinements, out, success);
   
   // repeat the test, now with just 2 elements (a harder case for periodic, because of vertex identification):
   numSpatialElements = 2;
-  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, out, success);
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, numUniformRefinements, out, success);
+}
+
+TEUCHOS_UNIT_TEST( MeshTools, MapCellIDsAtBoundaryPeriodicWithUniformRefinement )
+{
+  const bool usePeriodicBCs = true;
+  // repeat the test, now with just 2 elements (a harder case for periodic, because of vertex identification):
+  int numSpatialElements = 2;
+  int numUniformRefinements = 2;
+  testMapCellIDsAtBoundary(usePeriodicBCs, numSpatialElements, numUniformRefinements, out, success);
 }
 
 TEUCHOS_UNIT_TEST( MeshTools, MeshSlice_Polynomial )

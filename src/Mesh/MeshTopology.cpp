@@ -102,7 +102,14 @@ MeshTopology::MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeom
     mySpaceDim = CellTopology::cellTopology(sampleCellTopoKey)->getDimension();
   }
   int globalSpaceDim;
-  Comm->MaxAll(&mySpaceDim, &globalSpaceDim, 1);
+  if (Comm != Teuchos::null)
+  {
+    Comm->MaxAll(&mySpaceDim, &globalSpaceDim, 1);
+  }
+  else
+  {
+    globalSpaceDim = mySpaceDim;
+  }
   init(globalSpaceDim);
   
   _Comm = Comm;
@@ -1204,6 +1211,19 @@ EntitySetPtr MeshTopology::createEntitySet()
 Epetra_CommPtr MeshTopology::Comm() const
 {
   return _Comm;
+}
+
+bool MeshTopology::entityIsActive(unsigned d, IndexType entityIndex) const
+{
+  if (_activeCellsForEntities.size() > d)
+  {
+    int entityCount = _activeCellsForEntities[d].size();
+    if (entityCount > entityIndex)
+    {
+      return _activeCellsForEntities[d][entityIndex].size() > 0;
+    }
+  }
+  return false;
 }
 
 CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices) const
@@ -3458,6 +3478,13 @@ int MeshTopology::pruningOrdinal() const
   return _pruningOrdinal;
 }
 
+void MeshTopology::refineCell(IndexType cellIndex)
+{
+  CellPtr cell = _cells[cellIndex];
+  auto refPattern = RefinementPattern::regularRefinementPattern(cell->topology());
+  refineCell(cellIndex, refPattern, _nextCellIndex);
+}
+
 void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex)
 {
   // TODO: worry about the case (currently unsupported in RefinementPattern) of children that do not share topology with the parent.  E.g. quad broken into triangles.  (3D has better examples.)
@@ -3594,6 +3621,14 @@ void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPatte
     //    if (_transformationFunction.get()) {
     //      _transformationFunction->updateCells(childrenWithCurvedEdges);
     //    }
+  }
+}
+
+void MeshTopology::refineCells(const std::vector<IndexType> &cells)
+{
+  for (const auto &cellID : cells)
+  {
+    refineCell(cellID);
   }
 }
 

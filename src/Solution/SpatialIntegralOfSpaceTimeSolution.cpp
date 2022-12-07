@@ -359,3 +359,8 @@ MeshPtr SpatialIntegralOfSpaceTimeSolution::temporalMesh()
 {
   return _temporalMesh;
 }
+
+SolutionPtr SpatialIntegralOfSpaceTimeSolution::temporalSolution()
+{
+  return _temporalSolution;
+}
