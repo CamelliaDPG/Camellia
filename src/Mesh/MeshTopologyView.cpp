@@ -841,13 +841,13 @@ MeshTopologyPtr MeshTopologyView::getGatheredCopy() const
     const char* gatheredDataLocation = &gatheredGeometryData[0];
     CellDataMigration::readGeometryData(gatheredDataLocation, gatheredGeometryData.size(), gatheredBaseMeshGeometry);
     
-    MeshTopologyPtr gatheredMeshTopo = Teuchos::rcp( new MeshTopology(MPIWrapper::CommSerial(), gatheredBaseMeshGeometry, periodicBCs) );
+    MeshTopologyPtr gatheredMeshTopo = Teuchos::rcp( new MeshTopology(Teuchos::null, gatheredBaseMeshGeometry, periodicBCs) );
     return gatheredMeshTopo;
   }
   else
   {
     // no gather necessary; just copy
-    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(MPIWrapper::CommSerial(), baseMeshGeometry, periodicBCs) );
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(Teuchos::null, baseMeshGeometry, periodicBCs) );
     return meshTopo;
   }
   

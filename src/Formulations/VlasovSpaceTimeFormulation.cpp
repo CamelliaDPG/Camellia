@@ -107,7 +107,8 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        std::vector<double> velocitySpaceVertices_x,
                                                        std::vector<double> velocitySpaceVertices_y,
                                                        std::vector<double> velocitySpaceVertices_z,
-                                                       const int H1Order, const int delta_k)
+                                                       const int H1Order, const int delta_k,
+                                                       const int numUniformRefinements)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _useSerendipityBasis(useSerendipityBasis),
@@ -119,7 +120,8 @@ _m(m),
 _velocitySpaceVertices_x(velocitySpaceVertices_x),
 _velocitySpaceVertices_y(velocitySpaceVertices_y),
 _velocitySpaceVertices_z(velocitySpaceVertices_z),
-_spatialMeshTopology(spatialMeshTopology)
+_spatialMeshTopology(spatialMeshTopology),
+_numUniformRefinements(numUniformRefinements)
 {
   _t0 = temporalVertices[0];
   _t1 = temporalVertices[temporalVertices.size()-1];
@@ -212,7 +214,7 @@ _spatialMeshTopology(spatialMeshTopology)
   const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
   
   // SpatialFilter's components are zero-based
-  const int indexOffsetSpaceZeroBased    = indexOffsetSpaceOneBased  - 1;
+//  const int indexOffsetSpaceZeroBased    = indexOffsetSpaceOneBased  - 1;
   const int indexOffsetTimeZeroBased     = indexOffsetTimeOneBased - 1;
   const int indexOffsetVelocityZeroBased = indexOffsetVelocityOneBased - 1;
   
@@ -351,6 +353,13 @@ _spatialMeshTopology(spatialMeshTopology)
   }
   
   PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  
+  for (int uniformRefinementNumber=0; uniformRefinementNumber < _numUniformRefinements; uniformRefinementNumber++)
+  {
+    const auto & activeCells  = _vlasovSoln->mesh()->getActiveCellIDsGlobal();
+    _vlasovSoln->mesh()->hRefine(activeCells);
+    // (the configuration-space mesh will automatically be refined when the Vlasov mesh is, by virtue of the registerForUpdates() call above)
+  }
 }
 
 MeshPtr VlasovSpaceTimeFormulation::vlasovMesh()
@@ -447,20 +456,21 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
-int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch)
+int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch, const bool restrictToBoundary)
 {
   const int thisTag = _nextConfigurationSpaceTag++;
   
   const int sideDim = _spaceDim; // space-time configuration-space mesh has dimension _spaceDim + 1; sides have dimension _spaceDim
   auto matchingSideSet = _configurationSpaceMeshTopology->createEntitySet();
-  std::vector<IndexType> initialTimeSideIndices = _configurationSpaceMeshTopology->getBoundarySidesThatMatch(regionToMatch);
-  for (const auto & initialTimeSideIndex : initialTimeSideIndices)
+  std::vector<IndexType> matchingSideIndices = restrictToBoundary ? _configurationSpaceMeshTopology->getBoundarySidesThatMatch(regionToMatch)
+                                                                  : _configurationSpaceMeshTopology->getSidesThatMatch        (regionToMatch);
+  for (const auto & matchingSideIndex : matchingSideIndices)
   {
-    matchingSideSet->addEntity(sideDim, initialTimeSideIndex);
+    matchingSideSet->addEntity(sideDim, matchingSideIndex);
   }
   _configurationSpaceMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, thisTag, matchingSideSet);
   
-  _configurationSpaceSideSetFilters.push_back(regionToMatch);
+  _configurationSpaceSideSetFilters.push_back({regionToMatch,restrictToBoundary});
   
   return thisTag;
 }
@@ -532,17 +542,18 @@ std::vector<double> VlasovSpaceTimeFormulation::iterativeSolveTolerances() const
   return _cgTols;
 }
 
-VlasovSpaceTimeFormulation VlasovSpaceTimeFormulation::nextTimeSlab(double tWidth, int numTemporalElements)
+Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSlab(double tWidth, int numTemporalElements)
 {
   auto temporalVertices = MeshTools::verticesFor1DIntervalMesh(_t1, tWidth, numTemporalElements);
   
   // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
   auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(_spatialMeshTopology);
   
-  VlasovSpaceTimeFormulation nextSlabForm(_q, _m, _useSerendipityBasis, _configurationSpaceFormulation, _spatialMeshTopology, temporalVertices,
-                                          _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z, _H1Order, _delta_k);
+  auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _useSerendipityBasis, _configurationSpaceFormulation, rootSpatialMeshTopology,
+                                                                  temporalVertices, _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z,
+                                                                  _H1Order, _delta_k, _numUniformRefinements));
   
-  auto nextSlabVlasovMesh = nextSlabForm.vlasovMesh(); // "from" in cellIDMap
+  auto nextSlabVlasovMesh = nextSlabForm->vlasovMesh(); // "from" in cellIDMap
   auto thisSlabVlasovMesh = this->vlasovMesh();
   
   std::map<IndexType,IndexType> cellIDMap;
@@ -560,16 +571,16 @@ VlasovSpaceTimeFormulation VlasovSpaceTimeFormulation::nextTimeSlab(double tWidt
   
   if (_f_inflow != Teuchos::null)
   {
-    nextSlabForm.setInitialAndInflowConditions(f0, _f_inflow);
+    nextSlabForm->setInitialAndInflowConditions(f0, _f_inflow);
   }
   else
   {
-    nextSlabForm.setInitialConditions(f0);
+    nextSlabForm->setInitialConditions(f0);
   }
   
   for (auto sideSetTagFilter : _configurationSpaceSideSetFilters)
   {
-    nextSlabForm.createConfigurationMeshSideSetTag(sideSetTagFilter);
+    nextSlabForm->createConfigurationMeshSideSetTag(sideSetTagFilter.first,sideSetTagFilter.second);
   }
   
   for (auto entry : _configurationSpaceBCs)
@@ -578,18 +589,43 @@ VlasovSpaceTimeFormulation VlasovSpaceTimeFormulation::nextTimeSlab(double tWidt
     VarPtr var        = std::get<1>(entry);
     FunctionPtr value = std::get<2>(entry);
     
-    nextSlabForm.addConfigurationSpaceBC(tag, var, value);
+    nextSlabForm->addConfigurationSpaceBC(tag, var, value);
   }
   
   // copy my settings:
-  nextSlabForm.setIterativeSolveOutputLevel(_aztecOutputLevel);
-  nextSlabForm.setIterativeSolveTolerance(_cgTol);
-  nextSlabForm.setIterativeSolveTolerances(_cgTols);
-  nextSlabForm.setUseGeometricMultigrid(_useGeometricMultigrid);
-  nextSlabForm.setEnforceQuasiNeutrality(_enforceQuasiNeutrality);
-  nextSlabForm.setIterativeSolveMaxIterations(_maxIters);
-  nextSlabForm.setFixedPointMaxSubsteps(_maxSubsteps);
-  nextSlabForm.setFixedPointMinSubsteps(_minSubsteps);
+  nextSlabForm->setIterativeSolveOutputLevel(_aztecOutputLevel);
+  nextSlabForm->setIterativeSolveTolerance(_cgTol);
+  nextSlabForm->setIterativeSolveTolerances(_cgTols);
+  nextSlabForm->setUseGeometricMultigrid(_useGeometricMultigrid);
+  nextSlabForm->setEnforceQuasiNeutrality(_enforceQuasiNeutrality);
+  nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
+  nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
+  nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
+  
+  // import solution data so that it's available for BC setting
+  std::set<GlobalIndexType> currentCellIDsForRank;
+  const auto &myNextCellIDs = nextSlabVlasovMesh->cellIDsInPartition();
+  for (const auto &myNextCellID : myNextCellIDs)
+  {
+    auto mapEntry = cellIDMap.find(myNextCellID); // all rank-local cells which lie on the final-time boundary should have an entry
+    if (mapEntry != cellIDMap.end())
+    {
+      currentCellIDsForRank.insert(mapEntry->second);
+    }
+  }
+  _vlasovSoln->importSolutionForOffRankCells(currentCellIDsForRank);
+  
+  /*
+   Note: the above will work if there is not cell migration or refinement after we return nextSlabForm.
+         If nextSlabForm gets refined, then a new pass of hRefineToMatchAtBoundary() will be needed, along
+         with the above import.  Probably the right solution going forward will be to separate out this
+         functionality into a new helper method, and call it both from here and upon mesh refinement;
+         doing the latter transparently will require that the next slab has a reference to the previous.
+         So that we don't require all slabs to stay in memory, we'll want to nullify this reference during
+         nextTimeSlab().  (Also need to nullify the BC for the current slab, for the same reason: it refers
+         to the previous slab's solution, which has a BC for the previous one, etc.  So we have a linked
+         list of Solution objects; need to break those links to free up the memory.)
+   */
   
   return nextSlabForm;
 }

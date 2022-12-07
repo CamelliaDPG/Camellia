@@ -75,6 +75,7 @@ namespace {
     double vWidth = TEST_VWIDTH;
     
     const int delta_k = 2;
+    const int numUniformRefinements = 0;
     
     Teuchos::RCP<ConfigurationSpaceFormulationPoisson> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q, eps0, SPACE_TIME) );
     
@@ -102,7 +103,8 @@ namespace {
                                     velocitySpaceVertices_x,
                                     velocitySpaceVertices_y,
                                     velocitySpaceVertices_z,
-                                    H1Order, delta_k);
+                                    H1Order, delta_k,
+                                    numUniformRefinements);
     
     
     return form;
@@ -207,7 +209,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
   SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
   
-  auto xLeftRightTag = form.createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter);
+  const bool restrictSideSetsToBoundary = !usePeriodicBCs; // for periodic BCs, the config mesh region will *not* be on a mesh boundary
+  auto xLeftRightTag = form.createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, restrictSideSetsToBoundary);
   auto VE_traceVar = form.VE_configurationSpaceTrace();
   form.addConfigurationSpaceBC(xLeftRightTag, VE_traceVar, VE_exact);
   
@@ -435,18 +438,18 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     auto nextSlab = form.nextTimeSlab(TEST_TWIDTH, tElements);
     
     int numElementsExpected = xElements * tElements * vElements;
-    int numElementsActual   = nextSlab.vlasovMesh()->numActiveElements();
+    int numElementsActual   = nextSlab->vlasovMesh()->numActiveElements();
     TEST_EQUALITY(numElementsExpected, numElementsActual);
     
-    TEST_EQUALITY(useGeometricMultigrid,  nextSlab.useGeometricMultigrid());
-    TEST_EQUALITY(cgTol,                  nextSlab.iterativeSolveTolerance());
-    TEST_EQUALITY(maxSubsteps,            nextSlab.fixedPointMaxSubsteps());
-    TEST_EQUALITY(minSubsteps,            nextSlab.fixedPointMinSubsteps());
-    TEST_EQUALITY(enforceQuasiNeutrality, nextSlab.enforceQuasiNeutrality());
-    TEST_EQUALITY(azOutputLevel,          nextSlab.iterativeSolveOutputLevel());
-    TEST_EQUALITY(maxIters,               nextSlab.iterativeSolveMaxIterations());
+    TEST_EQUALITY(useGeometricMultigrid,  nextSlab->useGeometricMultigrid());
+    TEST_EQUALITY(cgTol,                  nextSlab->iterativeSolveTolerance());
+    TEST_EQUALITY(maxSubsteps,            nextSlab->fixedPointMaxSubsteps());
+    TEST_EQUALITY(minSubsteps,            nextSlab->fixedPointMinSubsteps());
+    TEST_EQUALITY(enforceQuasiNeutrality, nextSlab->enforceQuasiNeutrality());
+    TEST_EQUALITY(azOutputLevel,          nextSlab->iterativeSolveOutputLevel());
+    TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());
     
-    auto nextSlabCGTols = nextSlab.iterativeSolveTolerances();
+    auto nextSlabCGTols = nextSlab->iterativeSolveTolerances();
     TEST_EQUALITY(cgTols.size(), nextSlabCGTols.size());
     if (cgTols.size() == nextSlabCGTols.size())
     {
@@ -508,7 +511,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
     SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
     
-    auto xLeftTag = form.createConfigurationMeshSideSetTag(xLeftFilter);
+    const bool restrictSideSetsToBoundary = !usePeriodicBCs; // for periodic BCs, the config mesh region will *not* be on a mesh boundary
+    auto xLeftTag = form.createConfigurationMeshSideSetTag(xLeftFilter, restrictSideSetsToBoundary);
     auto VE_traceVar = form.VE_configurationSpaceTrace();
     form.addConfigurationSpaceBC(xLeftTag, VE_traceVar, VE_exact);
     
@@ -646,9 +650,9 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     out << "Continuing on to next time slab.\n";
     auto nextSlab = form.nextTimeSlab(TEST_TWIDTH, tElements);
     
-    nextSlab.solve();
+    nextSlab->solve();
     
-    FunctionPtr f_soln_nextSlab = Function::solution(nextSlab.f(), nextSlab.vlasovSolution());
+    FunctionPtr f_soln_nextSlab = Function::solution(nextSlab->f(), nextSlab->vlasovSolution());
     soln_magnitude = f_exact->l2norm(vlasovSoln->mesh());
     f_err_l2 = (f_soln_nextSlab-f_exact)->l2norm(vlasovSoln->mesh());
     TEST_COMPARE(f_err_l2, <=, relTol_f * soln_magnitude);

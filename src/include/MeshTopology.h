@@ -157,6 +157,9 @@ public:
   //! This method only gets within a factor of 2 or so, but can give rough estimates
   void printApproximateMemoryReport() const;
 
+  //! returns true if there is an active cell containing the specified entity.
+  bool entityIsActive(unsigned d, IndexType entityIndex) const;
+  
   bool entityHasParent(unsigned d, IndexType entityIndex) const;
   bool entityHasGeneralizedParent(unsigned d, IndexType entityIndex) const;
   bool entityHasChildren(unsigned d, IndexType entityIndex) const;
@@ -226,6 +229,8 @@ public:
   bool isValidCellIndex(IndexType cellIndex) const;
   
   virtual Camellia::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
+  virtual void refineCells(const std::vector<IndexType> &cells);
+  virtual void refineCell(IndexType cellIndex);
   virtual void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex);
   
   // ! Unrefine so that the specified cellIndex is an active cell (i.e., discard the cell's children)

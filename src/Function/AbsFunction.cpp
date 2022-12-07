@@ -18,6 +18,11 @@ AbsFunction::AbsFunction(TFunctionPtr<double> f) : TFunction<double>("AbsFunctio
   _f = f;
 }
 
+FunctionPtr AbsFunction::abs(TFunctionPtr<double> f)
+{
+  return Teuchos::rcp(new AbsFunction(f));
+}
+
 bool AbsFunction::boundaryValueOnly()
 {
   // if f is BVO, then so is the abs...

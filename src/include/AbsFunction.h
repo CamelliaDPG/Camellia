@@ -30,6 +30,8 @@ namespace Camellia
     string displayString() override;
     
     std::vector< TFunctionPtr<double> > memberFunctions() override;
+    
+    static FunctionPtr abs(TFunctionPtr<double> f);
   };
 }
 
