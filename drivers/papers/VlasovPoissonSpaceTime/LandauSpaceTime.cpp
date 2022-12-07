@@ -222,6 +222,7 @@ vector<pair<double,double>> evaluateTemporalSolutionFunction(SolutionPtr tempora
         // then go to the next point
         t_firstOrdinal = (t_left - t0 + dt + tol) / dt; // in allPoints
       }
+      if (t_firstOrdinal >= numPoints) continue; // can't have any matches in this cell, then
       TEUCHOS_TEST_FOR_EXCEPTION(allPoints[t_firstOrdinal] + tol < t_left, std::logic_error, "logic error determining t_firstOrdinal");
 
       vector<double> points;
