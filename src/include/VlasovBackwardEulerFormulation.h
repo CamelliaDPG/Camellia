@@ -41,6 +41,7 @@ private:
   BFPtr _vlasovBF;
   int _delta_k;
   
+  bool _verboseSolve = false;
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
   
@@ -114,6 +115,8 @@ private:
   
   std::vector< std::vector<int> > _iterationCounts; // outer vector index: solve number; inner: substep number.
   
+  std::vector< int > _substepCounts;   // number of substeps for each call to takeTimeStep()
+  
   std::vector< std::vector<double> > _fixedPointL2StepSizesVlasov; // outer vector index: solve number; inner: substep number.
   
   int _nextConfigurationSpaceTag = 0;
@@ -145,8 +148,17 @@ public:
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0);
 
+  //! load from checkpoint
+  void loadFromCheckpoint(const std::string &restartDir);
+  
+  //! save checkpoint
+  void saveCheckpoint(const std::string &checkpointDir);
+  
   //! take time step.
   void takeTimeStep();
+  
+  //! current time.
+  double t() const;
   
   //! solve for the configuration-space solution, based on current Vlasov solution.
   void configurationSpaceSolve();
@@ -181,6 +193,10 @@ public:
   SolutionPtr configurationSpaceSolution();
     
   bool hasL2Trace() const;
+  
+  int maxSubstepsTaken() const;
+  int minSubstepsTaken() const;
+  double averageSubstepsTaken() const;
   
   //! Set the initial conditions without setting inflow conditions (relevant for the periodic case).  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
   void setInitialConditions(FunctionPtr f0);
@@ -227,8 +243,10 @@ public:
   void setIterativeSolveMaxIterations(const int maxIters);
   
   const std::vector< std::vector<int> > & iterationCounts() const;
-  
+    
   void setUseGeometricMultigrid(bool useGeometricMultigrid);
+  
+  void setVerboseSolve(const bool &verboseSolve);
   
   Teuchos::RCP<GMGSolver> constructGMGSolver();
   

@@ -121,7 +121,7 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_Com
     hdf5.Read("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsSize, &trialOrderEnhancementsVec[0]);
   }
 
-  if (trialOrderEnhancementsSize > 0)
+  if (testOrderEnhancementsSize > 0)
   {
     hdf5.Read("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsSize, &testOrderEnhancementsVec[0]);
   }

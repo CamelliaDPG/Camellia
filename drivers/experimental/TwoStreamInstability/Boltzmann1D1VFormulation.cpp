@@ -470,12 +470,7 @@ _enforceQuasiNeutrality(enforceQuasiNeutrality)
     {
       extrudedMeshTopology->refineCell(activeQuadCellIndex, refPattern, extrudedMeshTopology->nextCellID());
     }
-    const auto & activeIntervalCells = intervalMeshTopology->getActiveCellIndicesGlobal();
-    auto lineRefPattern = RefinementPattern::regularRefinementPatternLine();
-    for (const auto & activeIntervalCellIndex : activeIntervalCells)
-    {
-      intervalMeshTopology->refineCell(activeIntervalCellIndex, lineRefPattern, intervalMeshTopology->nextCellID());
-    }
+    // (extrudedMeshTopology will modify intervalMeshTopology upon refinement -- during the above, intervalMeshTopology will also be uniformly refined)
   }
   
   const bool implicit  = usesImplicitSolve();
@@ -1118,6 +1113,11 @@ void Boltzmann1D1VFormulation::setUseGeometricMultigrid(bool useGeometricMultigr
   _useGeometricMultigrid = useGeometricMultigrid;
 }
 
+void Boltzmann1D1VFormulation::setVerboseSolve(bool verbose)
+{
+  _verboseSolve = verbose;
+}
+
 double Boltzmann1D1VFormulation::t() const
 {
   return _t;
@@ -1157,7 +1157,7 @@ void Boltzmann1D1VFormulation::takeTimeStep()
   }
   
   Teuchos::RCP<HDF5Exporter> vlasovViz, configurationViz;
-  const bool exportViz = true; // for debugging of fixed-point iteration, set to true.  TODO: make this subject to external control.
+  const bool exportViz = false; // for debugging of fixed-point iteration, set to true.  TODO: make this subject to external control.
   
   if (exportViz)
   {
@@ -1190,7 +1190,7 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     _boltzmannSolnPrevSubstep->setSolution(_boltzmannSoln);
     _gaussSolnPrevSubstep->setSolution(_gaussSoln);
     
-    if ((rank == 0) && (maxSubsteps > 1))
+    if ((rank == 0) && (maxSubsteps > 1) && _verboseSolve)
     {
       std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
     }
@@ -1236,7 +1236,7 @@ void Boltzmann1D1VFormulation::takeTimeStep()
       vlasovViz->exportSolution(boltzmannSolution(),substepOrdinal+1);
     }
     
-    if ((rank == 0) && (maxSubsteps > 1))
+    if ((rank == 0) && (maxSubsteps > 1) && _verboseSolve)
     {
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E: " << ERelDiff << std::endl << std::endl;

@@ -65,9 +65,50 @@ double ConfigurationSpaceFormulation::l2NormOfSolutionUpdate()
   return 0; // default implementation
 }
 
+void ConfigurationSpaceFormulation::loadFromCheckpoint(const std::string &checkpointDir)
+{
+  // for now, we require that the mesh agrees (i.e., refinements are replayed externally -- they aren't loaded from disk here; we haven't added ExtrudedMeshTopology to the Solution::load() infrastructure)
+  // TODO: add some sort of sanity check on the mesh vs. loaded solution (cell numbers are present in mesh, say)
+  
+  std::string configName = this->name();
+  std::string solnPath = checkpointDir + "/" + configName + ".soln";
+  _configurationSoln->loadFromHDF5(solnPath);
+  
+  if (_configurationSolnPrev != Teuchos::null)
+  {
+    std::string solnPrevPath = checkpointDir + "/" + configName + "Prev.soln";
+    _configurationSolnPrev->loadFromHDF5(solnPrevPath);
+  }
+  
+  if (_configurationSolnPriorTime != Teuchos::null)
+  {
+    std::string solnPriorTimePath = checkpointDir + "/" + configName + "PriorTime.soln";
+    _configurationSolnPriorTime->loadFromHDF5(solnPriorTimePath);
+  }
+}
+
 Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulation::poissonFormulation(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType)
 {
   return Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q,eps0,timeDiscretizationType));
+}
+
+void ConfigurationSpaceFormulation::saveCheckpoint(const std::string &checkpointDir)
+{
+  std::string configName = this->name();
+  std::string solnPrefix = checkpointDir + "/" + configName;
+  _configurationSoln->save(solnPrefix);
+  
+  if (_configurationSolnPrev != Teuchos::null)
+  {
+    std::string solnPrevPrefix = checkpointDir + "/" + configName + "Prev";
+    _configurationSolnPrev->save(solnPrevPrefix);
+  }
+  
+  if (_configurationSolnPriorTime != Teuchos::null)
+  {
+    std::string solnPriorTimePrefix = checkpointDir + "/" + configName + "PriorTime";
+    _configurationSolnPriorTime->save(solnPriorTimePrefix);
+  }
 }
 
 void ConfigurationSpaceFormulation::setConfigurationSolution(SolutionPtr configurationSolution)

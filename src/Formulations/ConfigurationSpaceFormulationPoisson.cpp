@@ -45,7 +45,6 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
   TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim > 3, std::invalid_argument, "Invalid spaceDim");
   
   Space tauSpace    = (_spaceDim > 1) ? HDIV : HGRAD;
-  Space E_hat_space = L2; // non-conforming
   Space ESpace      = L2;
 
   // fields

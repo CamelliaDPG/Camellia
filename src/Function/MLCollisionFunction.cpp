@@ -40,7 +40,11 @@ TFunction<double>("MLCollisionFunction", 0)
 
 std::vector<double> MLCollisionFunction::computeMomentScaling(const int maxMomentNumber) const
 {
+#ifdef HAVE_MLC
   const auto mass = _loadedModel->getMass();
+#else
+  const double mass = 0.0;
+#endif
   
   const int numDims = 3; // vx, vy, vz
   const unsigned numTotalMoments = MomentIndices::getNumMomentEntries(maxMomentNumber+1, numDims);
@@ -67,6 +71,7 @@ std::vector<double> MLCollisionFunction::computeMomentScaling(const int maxMomen
 void MLCollisionFunction::contributeBGKResponse(DeviceView<double> responseView, DeviceView<double> fValues, DeviceView<double> valuesAllMoments, DeviceView<double> tauView,
                                                 DeviceView<double> points_vx, DeviceView<double> points_vy, DeviceView<double> points_vz) const
 {
+#ifdef HAVE_MLC
   const int numCells       = responseView.extent_int(0);
   const int numPhasePoints = responseView.extent_int(1);
   
@@ -190,6 +195,7 @@ void MLCollisionFunction::contributeBGKResponse(DeviceView<double> responseView,
 //      }
 //    }
   }
+#endif
 }
 
 void MLCollisionFunction::contributeDifferentialResponseFromBGK(DeviceView<double> responseView, DeviceView<double> g0View,
@@ -402,6 +408,7 @@ void MLCollisionFunction::convertMomentsForMLCInput(const DeviceView<double> &va
 
 void MLCollisionFunction::ensureModelLoaded(const int &numCells, const int &numConfigurationPoints)
 {
+#ifdef HAVE_MLC
   using namespace mlc;
   
   // Create the mlc model:
@@ -416,6 +423,7 @@ void MLCollisionFunction::ensureModelLoaded(const int &numCells, const int &numC
     std::cout << "boltzmann constant = " << _loadedModel->getBoltzmannConstant() << std::endl;
     std::cout << "mass = " << _loadedModel->getMass() << std::endl;
   }
+#endif
 }
 
 #ifdef HAVE_MLC

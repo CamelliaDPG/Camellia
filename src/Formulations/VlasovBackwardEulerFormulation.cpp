@@ -26,6 +26,8 @@
 #include "SolutionStage.h"
 #include "TypeDefs.h"
 
+#include <sys/stat.h> // for mkdir, stat()
+
 #include "CamelliaDataHelpers.h"
 
 using namespace Camellia;
@@ -229,7 +231,7 @@ _m(m)
   const int indexOffsetVelocityOneBased = _spaceDim + 1;
   
   // SpatialFilter's components are zero-based
-  const int indexOffsetSpaceZeroBased    = indexOffsetSpaceOneBased  - 1;
+//  const int indexOffsetSpaceZeroBased    = indexOffsetSpaceOneBased  - 1; // unused
   const int indexOffsetVelocityZeroBased = indexOffsetVelocityOneBased - 1;
   
   // The below assumes that _spaceDim <= _velocityDim; enforce that here:
@@ -563,6 +565,72 @@ const std::vector< std::vector<int> > & VlasovBackwardEulerFormulation::iteratio
   return _iterationCounts;
 }
 
+void VlasovBackwardEulerFormulation::loadFromCheckpoint(const std::string &checkpointDir)
+{
+  // for now, we require that the mesh agrees (i.e., refinements are replayed externally -- they aren't loaded from disk here; we haven't added ExtrudedMeshTopology to the Solution::load() infrastructure)
+  // TODO: add some sort of sanity check on the mesh vs. loaded solution (cell numbers are present in mesh, say)
+  
+  std::string vlasovSolnPath = checkpointDir + "/vlasov.soln";
+  _vlasovSoln->loadFromHDF5(vlasovSolnPath);
+  
+  std::string vlasovSolnPriorTimePath = checkpointDir + "/vlasovPriorTime.soln";
+  _vlasovSolnPriorTime->loadFromHDF5(vlasovSolnPriorTimePath);
+  
+  std::string vlasovSolnPrevPath = checkpointDir + "/vlasovPrev.soln";
+  _vlasovSolnPrev->loadFromHDF5(vlasovSolnPrevPath);
+  
+  {
+    // load t:
+    std::string timeFile = checkpointDir + "/time.txt";
+    std::ifstream timeFileStream(timeFile, std::ios::in);
+    
+    timeFileStream >> _t;
+    
+    timeFileStream.close();
+  }
+}
+
+int VlasovBackwardEulerFormulation::maxSubstepsTaken() const
+{
+  int maxSubstepsTaken = 0;
+  for (auto numSubsteps : _substepCounts)
+  {
+    maxSubstepsTaken = std::max(numSubsteps, maxSubstepsTaken);
+  }
+  return maxSubstepsTaken;
+}
+
+int  VlasovBackwardEulerFormulation::minSubstepsTaken() const
+{
+  if (_substepCounts.size() == 0)
+  {
+    return 0;
+  }
+  int minSubstepsTaken = _maxSubsteps;
+  for (auto numSubsteps : _substepCounts)
+  {
+    minSubstepsTaken = std::min(numSubsteps, minSubstepsTaken);
+  }
+  return minSubstepsTaken;
+}
+
+double VlasovBackwardEulerFormulation::averageSubstepsTaken() const
+{
+  double totalSubsteps = 0;
+  for (auto numSubsteps : _substepCounts)
+  {
+    totalSubsteps += numSubsteps;
+  }
+  if (_substepCounts.size() > 0)
+  {
+    return totalSubsteps / _substepCounts.size();
+  }
+  else
+  {
+    return 0;
+  }
+}
+
 void VlasovBackwardEulerFormulation::refineUniformly(const int numRefinements)
 {
   auto configMesh = configurationSpaceMesh();
@@ -582,6 +650,52 @@ void VlasovBackwardEulerFormulation::refineUniformly(const int numRefinements)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(configMesh->numActiveElements() != configActiveCellCount * countMultiplier, std::invalid_argument, "Vlasov refinement should induce configuration-space refinements.");
   }
+}
+
+void VlasovBackwardEulerFormulation::saveCheckpoint(const std::string &checkpointDir)
+{
+  const int rank = MPIWrapper::CommWorld()->MyPID();
+  if (rank == 0)
+  {
+    // ensure directory exists
+    bool dirExists = false;
+    {
+      struct stat info;
+      bool statResult = stat( checkpointDir.c_str(), &info );
+      if( statResult != 0)
+        dirExists = false;
+      else if(info.st_mode & S_IFDIR)
+        dirExists = true;
+      else
+        dirExists = false;
+    }
+    if (!dirExists)
+    {
+      int success = mkdir(checkpointDir.c_str(), S_IRWXU | S_IRWXG);
+      TEUCHOS_TEST_FOR_EXCEPTION(success != 0, std::invalid_argument, "Could not create checkpoint directory");
+    }
+  }
+  
+  std::string vlasovSolnPrefix = checkpointDir + "/vlasov";
+  _vlasovSoln->save(vlasovSolnPrefix);
+  
+  std::string vlasovSolnPriorTimePrefix = checkpointDir + "/vlasovPriorTime";
+  _vlasovSolnPriorTime->save(vlasovSolnPriorTimePrefix);
+  
+  std::string vlasovSolnPrevPrefix = checkpointDir + "/vlasovPrev";
+  _vlasovSolnPrev->save(vlasovSolnPrevPrefix);
+  
+  {
+    // save t:
+    std::string timeFile = checkpointDir + "/time.txt";
+    std::ofstream timeFileStream(timeFile, std::ios::out);
+    
+    timeFileStream << setprecision(15) << _t;
+    
+    timeFileStream.close();
+  }
+  
+  _configurationSpaceFormulation->saveCheckpoint(checkpointDir);
 }
 
 void VlasovBackwardEulerFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
@@ -662,7 +776,7 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
   }
   
   Teuchos::RCP<HDF5Exporter> vlasovViz, configurationViz;
-  const bool exportViz = true; // for debugging of fixed-point iteration, set to true.  TODO: make this subject to external control.
+  const bool exportViz = false; // for debugging of fixed-point iteration, set to true.  TODO: make this subject to external control.
   
   if (exportViz)
   {
@@ -690,6 +804,7 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  int numSubstepsTaken = _maxSubsteps;
   for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
   {
     _vlasovSolnPrev->setSolution(_vlasovSoln);
@@ -715,7 +830,6 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
       substepIterationCounts[substepOrdinal] = _gmgSolver->iterationCount();
     }
     configurationSpaceSolve();
-    
     // Compute difference between current and previous substep solutions.  For substepOrdinal == 0, this is the difference with prior time step.
     
     auto vlasovMesh  = _vlasovSoln->mesh();
@@ -735,10 +849,28 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
     
     if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1))
     {
-      // tolerance reached, min substeps taken
-      break;
+      // Compute difference between current and previous substep solutions.  For substepOrdinal == 0, this is the difference with prior time step.
+      auto vlasovMesh  = _vlasovSoln->mesh();
+      const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
+      const double f_L2 = _fSoln->l2norm(vlasovMesh);
+      const double fRelDiff = fDiff_L2 / f_L2;
+      
+      const double configurationSpaceRelativeDiff = _configurationSpaceFormulation->l2NormOfSolutionUpdate();
+      
+      substepStepSizesVlasov.push_back(fRelDiff);
+      
+      if ((rank == 0) && _verboseSolve)
+      {
+        std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
+        std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E and/or B: " << configurationSpaceRelativeDiff << std::endl;
+      }
+      
+      if (fRelDiff < _fixedPointTolerance)
+      {
+        numSubstepsTaken = substepOrdinal + 1;
+        break;
+      }
     }
-        
     if (exportViz)
     {
       configurationViz->exportSolution(_configurationSpaceFormulation->solution(),{density}, {"n_e"},substepOrdinal+1);
@@ -746,8 +878,11 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
     }
   } // substep loop (fixed point iteration)
   
+  _substepCounts.push_back(numSubstepsTaken);
   _iterationCounts.push_back(substepIterationCounts);
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
+  
+  _t += _dt->getConstantValue();
 }
 
 void VlasovBackwardEulerFormulation::setInitialConditions(FunctionPtr f0)
@@ -816,6 +951,11 @@ void VlasovBackwardEulerFormulation::setUseGeometricMultigrid(bool useGeometricM
   _useGeometricMultigrid = useGeometricMultigrid;
 }
 
+void VlasovBackwardEulerFormulation::setVerboseSolve(const bool &verboseSolve)
+{
+  _verboseSolve = verboseSolve;
+}
+
 int VlasovBackwardEulerFormulation::tagVlasovSpatialInflow() const
 {
   return VLASOV_TAG_SPATIAL_INFLOW;
@@ -843,6 +983,11 @@ int VlasovBackwardEulerFormulation::tagVlasovMinVelocity(int zeroBasedComp) cons
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "zeroBasedComp must be 0, 1, 2")
   }
+}
+
+double VlasovBackwardEulerFormulation::t() const
+{
+  return _t;
 }
 
 VarPtr VlasovBackwardEulerFormulation::t_n_hat()
@@ -889,7 +1034,6 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 2;
   const bool usePeriodicBCs = true;
-  const bool enforceQuasiNeutrality = true;
   
   set<GlobalIndexType> vlasovCellsToRefine;
   if (doRefinement)
@@ -982,7 +1126,6 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, bool useSeren
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 2;
   const bool usePeriodicBCs = true;
-  const bool enforceQuasiNeutrality = true;
   
   auto poissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
   
