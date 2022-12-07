@@ -115,6 +115,12 @@ namespace Camellia
     
     bool useSerendipityBasis() const;
     
+    //! load from checkpoint
+    virtual void loadFromCheckpoint(const std::string &restartDir);
+    
+    //! save checkpoint
+    virtual void saveCheckpoint(const std::string &checkpointDir);
+    
     static Teuchos::RCP<ConfigurationSpaceFormulation> poissonFormulation(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType);
   };
 }

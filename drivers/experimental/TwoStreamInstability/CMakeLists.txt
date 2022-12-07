@@ -1,5 +1,16 @@
 project(TwoStreamInstability)
 
+MESSAGE("Adding executables for OLD-LandauDamping.")
+add_executable( OLD-LandauDamping "LandauDamping.cpp" 
+                Boltzmann1D1VFormulation.cpp Boltzmann1D1VFormulation.h
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h
+                VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
+                PhasePhysicalMeshMap.cpp PhasePhysicalMeshMap.h )
+
+target_link_libraries(OLD-LandauDamping 
+  Camellia
+)
+
 MESSAGE("Adding executables for TwoStreamInstability.")
 add_executable( TwoStreamInstability "TwoStreamInstability.cpp" 
                 Boltzmann1D1VFormulation.cpp Boltzmann1D1VFormulation.h

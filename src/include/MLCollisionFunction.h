@@ -64,12 +64,14 @@ namespace Camellia
     //! Determines and returns a flat array of scalings to go from internal Camellia (non-dimensionalized) moments to the dimensional moments used by MLC.  Moments are indexed as a flat array, with tetrahedral ordering, as in Camellia's MomentIndices and MLC's (standard) moment indexer.
     std::vector<double> computeMomentScaling(const int maxMomentNumber) const;
     
+#ifdef HAVE_MLC
     //! get the collisional response values from the MLC model; this is a thin wrapper around the call of the same name in MLC.  Note that all the arrays must be correctly sized according to the size given at the time the MLC model was loaded.
     void generateCollisionalResponse(const mlc::Array &ml_input_conservedMoments,
                                      mlc::Array &ml_output_tau, mlc::Array &ml_output_g0, mlc::Array &ml_output_ux, mlc::Array &ml_output_uy, mlc::Array &ml_output_uz, mlc::Array &ml_output_sigma, mlc::Array &ml_output_G) const;
     
     //! convert the moments computed by Camellia::SolutionMoments to a format suitable for passing to generateCollisionalResponse().
     void convertMomentsForMLCInput(const DeviceView<double> &camelliaMoments, mlc::Array &mlc_input_conservedMoments);
+#endif
     
     void contributeBGKResponse(DeviceView<double> responseView, DeviceView<double> f, DeviceView<double> valuesAllMoments, DeviceView<double> tau, DeviceView<double> physPoints_vx, DeviceView<double> physPoints_vy, DeviceView<double> physPoints_vz) const;
     
