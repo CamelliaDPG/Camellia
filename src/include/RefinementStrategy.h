@@ -71,6 +71,7 @@ public:
   
   //! Set the energy threshold (relative to maximum element error) to use for refinements
   void setRelativeErrorThreshold(double value);
+  double relativeErrorThreshold() const;
   void setEnforceOneIrregularity(bool value);
 
   //! Set a maximum number of active elements; used in refineAndUnrefine.  Enough unrefinements will be performed to reduce the number of active elements to the specified count.

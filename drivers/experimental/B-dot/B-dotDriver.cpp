@@ -9,6 +9,7 @@
 #include "ConfigurationSpaceFormulation.h"
 #include "ErrorIndicator.h"
 #include "ExpFunction.h"
+#include "FixedCountRefinementStrategy.h"
 #include "GlobalDofAssignment.h"
 #include "HDF5Exporter.h"
 #include "Projector.h"
@@ -545,50 +546,63 @@ RefinementStrategyPtr constructRefStrategy(VlasovBackwardEulerFormulation &form,
   return refStrategy;
 }
 
-void performRefinements(double & lastRefinementMaxElementError, VlasovBackwardEulerFormulation &form, RefinementStrategyPtr refStrategy, bool gateRefinements, double refinementThreshold, int maxElements)
+void performRefinements(double & lastRefinementMaxElementError, VlasovBackwardEulerFormulation &form, RefinementStrategyPtr refStrategy, RefinementStrategyPtr unrefinementStrategy,
+                        int maxElements)
 {
   if (refStrategy == Teuchos::null) return;
-  bool shouldRefine;
-  if (gateRefinements)
-  {
-    // we compute error indicator first; if no refinement-eligible element has error greater than what would have been refined last time, then we don't do a refinement step now.
-    
-    auto localCellsToExclude = refStrategy->localCellsIneligibleForRefinement();
-    
-    ErrorIndicatorPtr errorIndicator = refStrategy->errorIndicator();
-    errorIndicator->measureError();
-    const double maxError = errorIndicator->maxError(localCellsToExclude);
-    
-    shouldRefine = maxError > refinementThreshold * lastRefinementMaxElementError;
-    
-    if (shouldRefine)
-    {
-      lastRefinementMaxElementError = maxError;
-    }
-    else
-    {
-      // let's still record the measured error in RefinementStrategy's records
-      const double totalEnergyError = errorIndicator->totalError();
-      const int numElements = form.vlasovMesh()->numActiveElements();
-      const int numDofs     = form.vlasovMesh()->numGlobalDofs();
-      refStrategy->recordResults(numElements, numDofs, totalEnergyError);
-    }
-  }
-  else
-  {
-    shouldRefine = true;
-  }
   
-  if (shouldRefine)
+  const bool doUnrefinements = (maxElements < std::numeric_limits<int>::max());
+  if (doUnrefinements)
   {
     // for now, print refinement info to console on rank 0.
     const bool printToConsole = form.vlasovMesh()->Comm()->MyPID() == 0;
-    const bool doUnrefinements = (maxElements < std::numeric_limits<int>::max());
-    refStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
-    
-    // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
-    form.configurationSpaceMesh()->repartitionAndRebuild();
+    unrefinementStrategy->setRelativeErrorThreshold(1.1); // ensure that we only do unrefinements
+    int maxUnrefinementSteps = 15; // In case we end up unable to unrefine to maxElements for some reason, cap the number of unrefinements
+    int numUnrefinementStepsTaken = 0;
+    int unrefinementTarget = maxElements * .90;
+    unrefinementStrategy->setMaxElements(unrefinementTarget);
+    while ((form.vlasovMesh()->numActiveElements() > unrefinementTarget) && (numUnrefinementStepsTaken < maxUnrefinementSteps))
+    {
+      // update solution to ensure that the errors measured are up to date post-refinement
+      if (form.gmgSolver() != Teuchos::null)
+      {
+        form.vlasovSolution()->solve(form.gmgSolver());
+      }
+      else
+      {
+        form.vlasovSolution()->solve();
+      }
+      unrefinementStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
+      form.reconstructGMGSolver();
+      numUnrefinementStepsTaken++;
+    }
+        
+    if (numUnrefinementStepsTaken > 0)
+    {
+      // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+      form.configurationSpaceMesh()->repartitionAndRebuild();
+      
+      // update solution to ensure that the errors measured are up to date post-refinement
+      if (form.gmgSolver() != Teuchos::null)
+      {
+        form.vlasovSolution()->solve(form.gmgSolver());
+      }
+      else
+      {
+        form.vlasovSolution()->solve();
+      }
+    }
   }
+  
+  // for now, print refinement info to console on rank 0.
+  const bool printToConsole = form.vlasovMesh()->Comm()->MyPID() == 0;
+  refStrategy->refineAndUnrefine(false, printToConsole); // false: don't unrefine
+  
+  // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+  form.configurationSpaceMesh()->repartitionAndRebuild();
+  
+  // also reconstruct GMG solver, if one is in use:
+  form.reconstructGMGSolver();
 }
 
 //! Sets a homogeneous BC at the x0 point, and parameter-based BC at the x1 point.  Returns a pointer to the parameter function; the caller may then set it to an appropriate value before (any/each) Poisson solve.
@@ -781,6 +795,31 @@ double inflowErrorOnBoundary(VlasovBackwardEulerFormulation &form, FunctionPtr f
   return relErr;
 }
 
+void setUseGMG(VlasovBackwardEulerFormulation &form, int maxDofsForDirectSolve, bool &previousSolveUsedGeometricMultigrid, bool &previousSolveUsedDirect, bool logChangeToConsole)
+{
+  auto numVlasovDofs = form.vlasovSolution()->mesh()->numGlobalDofs();
+  if (numVlasovDofs > maxDofsForDirectSolve)
+  {
+    if (logChangeToConsole && (!previousSolveUsedGeometricMultigrid))
+    {
+      std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
+    }
+    form.setUseGeometricMultigrid(true);
+    previousSolveUsedGeometricMultigrid = true;
+    previousSolveUsedDirect = false;
+  }
+  else
+  {
+    if (logChangeToConsole && (previousSolveUsedGeometricMultigrid))
+    {
+      std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+    }
+    form.setUseGeometricMultigrid(false);
+    previousSolveUsedGeometricMultigrid = false;
+    previousSolveUsedDirect = true;
+  }
+}
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
@@ -814,9 +853,7 @@ int main(int argc, char *argv[])
     bool enforceQuasiNeutrality = false;
     
     bool useAdaptivity = false;
-    double refinementThreshold = 0.80; // refine elements with at least 80% of the maximum per-element error
     int maxElements = 64 * 64; // do unrefinements to keep total mesh size smaller than this
-    bool gateRefinements = true;
     
     int xElements = 16;
     int vElements = 20;
@@ -865,12 +902,10 @@ int main(int argc, char *argv[])
     cmdp.setOption("maxSubsteps", &maxSubsteps);
     cmdp.setOption("fixedPointTol", &fixedPointTol);
     cmdp.setOption("viz", "noViz", &saveViz);
-    cmdp.setOption("gateRefinements", "dontGateRefinements", &gateRefinements);
     cmdp.setOption("numTimeSteps", &numTimeSteps);
     cmdp.setOption("outputFrequency", &outputFrequency);
     cmdp.setOption("outputDir", &outputDir);
     cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
-    cmdp.setOption("refinementThreshold", &refinementThreshold);
     cmdp.setOption("useEnergyForUnrefinements", "useL2ProjectionForUnrefinements", &useEnergyForUnrefinements);
     cmdp.setOption("solutionOutputFrequency", &solutionOutputFrequency);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
@@ -1046,7 +1081,17 @@ int main(int argc, char *argv[])
     
     FunctionPtr f_in = FunctionPtr(timeRampFunction) * FunctionPtr(vDistributionFunction); // note that we need to update timeRampFunction with the current time in each time step
         
-    RefinementStrategyPtr formRefStrategy;
+    ErrorIndicatorPtr unrefinementErrorIndicator;
+    if (!useEnergyForUnrefinements)
+    {
+      unrefinementErrorIndicator = ErrorIndicator::unrefinementProjectionErrorIndicator(form.vlasovSolution(), form.f());
+    }
+    double refinementThreshold = 1.1; // > 1 ==> no refinements will take place
+    RefinementStrategyPtr unrefinementStrategy = constructRefStrategy(form, refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator);
+    
+    ErrorIndicatorPtr errorIndicator = ErrorIndicator::energyErrorIndicator(form.vlasovSolution());
+    const int numElementsToRefine = std::max(int(.05 / 3. * maxElements), 1);
+    auto fixedCountRefStrategy = Teuchos::rcp( new FixedCountRefinementStrategy(errorIndicator, numElementsToRefine) );
     
     form.setFixedPointMaxSubsteps(maxSubsteps);
     form.setFixedPointMinSubsteps(minSubsteps);
@@ -1075,7 +1120,7 @@ int main(int argc, char *argv[])
     std::ostringstream suffix;
     if (useAdaptivity)
     {
-      suffix << "_AMR_threshold" << refinementThreshold;
+      suffix << "_budget" << maxElements;
     }
     suffix << "_dt" << dt_max;
     suffix << "_H1Order" << H1Order;
@@ -1204,27 +1249,7 @@ int main(int argc, char *argv[])
     
     for (int timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
     {
-      auto numVlasovDofs = form.vlasovSolution()->mesh()->numGlobalDofs();
-      if (numVlasovDofs > maxDofsForDirectSolve)
-      {
-        if ((rank == 0) && (!previousSolveUsedGeometricMultigrid))
-        {
-          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
-        }
-        form.setUseGeometricMultigrid(true);
-        previousSolveUsedGeometricMultigrid = true;
-        previousSolveUsedDirect = false;
-      }
-      else
-      {
-        if ((rank == 0) && (previousSolveUsedGeometricMultigrid))
-        {
-          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
-        }
-        form.setUseGeometricMultigrid(false);
-        previousSolveUsedGeometricMultigrid = false;
-        previousSolveUsedDirect = true;
-      }
+      setUseGMG(form, maxDofsForDirectSolve, previousSolveUsedGeometricMultigrid, previousSolveUsedDirect, rank == 0);
       
       {
         const double amplitude = timeRampFunction->interpolatedPointValue(t);
@@ -1234,7 +1259,46 @@ int main(int argc, char *argv[])
         }
       }
       
-      form.takeTimeStep();
+      form.startTimeStep();
+      
+      if (useAdaptivity)
+      {
+        int maxRefinementSteps = 1; // just do 1 pass on every time step after the first
+        int minElements = 0;   // don't gate on the element count except for the first time step
+        if (timeStepNumber == 1)
+        {
+          maxRefinementSteps = 15; // a somewhat arbitary number; aim for this to be enough to reach minElements
+          minElements = maxElements * .90; // in first time step, refine until we get within 10% of the maximum
+          if (rank == 0)
+          {
+            std::cout << "\n\nAdapting initial mesh to meet budget of " << maxElements << " elements.\n";
+          }
+        }
+        for (int refNumber=0; refNumber<maxRefinementSteps; refNumber++)
+        {
+          auto gmgSolver = form.gmgSolver();
+          if (gmgSolver != Teuchos::null)
+          {
+            form.vlasovSolution()->solve(gmgSolver);
+          }
+          else
+          {
+            form.vlasovSolution()->solve();
+          }
+          form.configurationSpaceSolve();
+                    
+          performRefinements(lastRefinementMaxElementError, form, fixedCountRefStrategy, unrefinementStrategy, maxElements);
+          
+          setUseGMG(form, maxDofsForDirectSolve, previousSolveUsedGeometricMultigrid, previousSolveUsedDirect, rank == 0);
+          
+          if (form.vlasovMesh()->numActiveElements() >= minElements)
+          {
+            break;
+          }
+        }
+      }
+      form.finishTimeStep();
+      
       t += dt;
       
       {
@@ -1248,8 +1312,10 @@ int main(int argc, char *argv[])
       
       timeRampFunction->setCurrentCoord(t);
       
-      moments_k->update();
       moments_kp1->update();
+      if (rank == 0) std::cout << "moments_kp1 updated.\n";
+      moments_k->update();
+      if (rank == 0) std::cout << "moments_k   updated.\n";
       
       if (!disableCircuitSolve)
       {
@@ -1260,16 +1326,10 @@ int main(int argc, char *argv[])
         circuitSolver.setIem( getSolutionFunctionValue(configMesh, I_kp1, x1) );
         
         V_k = circuitSolver.voltage();
-        if (rank == 0)
-        {
-          std::cout << "V_k = " << V_k << std::endl;
-        }
         voltageParameter->setValue(V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
       }
       
-      performRefinements(lastRefinementMaxElementError, form, formRefStrategy, gateRefinements, refinementThreshold, maxElements);
-      
-      const double energyError = (formRefStrategy != Teuchos::null) ? formRefStrategy->getEnergyError(formRefStrategy()->getNumRefinements() - 1) : -1;
+      const double energyError = (fixedCountRefStrategy != Teuchos::null) ? fixedCountRefStrategy->getEnergyError(fixedCountRefStrategy->getNumRefinements() - 1) : -1;
       
       if ((timeStepNumber % outputFrequency == 0) || (timeStepNumber == numTimeSteps))
       {

@@ -27,10 +27,12 @@ namespace Camellia
 class FixedCountRefinementStrategy : public TRefinementStrategy<double>
 {
 protected:
-  const int _targetRefinementCount;
+  int _targetRefinementCount;
 public:
   FixedCountRefinementStrategy( ErrorIndicatorPtr errorIndicator, int numElementsToRefine, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
 
+  void setTargetRefinementCount(const int targetRefinementCount);
+  
   virtual void refineAndUnrefine(bool unrefine, bool printToConsole) override;
 };
 
