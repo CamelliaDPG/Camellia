@@ -574,59 +574,78 @@ int main(int argc, char *argv[])
         fourierViz->setMesh(fourierIntegral.temporalMesh());
       }
       // first Fourier mode of the electric field:
-      FunctionPtr E1 = fourierIntegral.temporalFunction();
+      FunctionPtr E1 = (2.0 / xWidth) * fourierIntegral.temporalFunction();
       // what we are most interested in plotting is ln |E1|:
       FunctionPtr abs_E1 = AbsFunction::abs(E1);
       FunctionPtr ln_abs_E1 = Teuchos::rcp (new Ln<double>(abs_E1) );
       fourierViz->exportFunction({E1, ln_abs_E1}, {"E1","ln(|E1|)"}, slabNumber); // TODO: revise the Fourier output to time/slab independent… (GnuPlotUtil??)
       
       double dt_fourier = 0.01; // granularity for plots, etc.
-      double endAdjustment = (slabNumber == numTimeSlabs - 1) ? 0 : -dt_fourier; // each slab "owns" its start time; only the final slab "owns" its end time
-      auto fourierValues = evaluateTemporalSolutionFunction(fourierIntegral.temporalSolution(), ln_abs_E1, slabStartTime, slabEndTime + endAdjustment, dt_fourier);
-      
-      if (rank == 0)
+      // output time values that are an even multiple of dt
+      double t0 = int(slabStartTime / dt_fourier) * dt_fourier;
+      if (t0 < slabStartTime)
       {
-        const bool append = (slabNumber > 0);
-        exportFourierValues(EFieldMode1File, append, fourierValues);
+        t0 += dt_fourier;
       }
-      
-      auto slabFourierPeakValues = getPeakValues(previousFourierValue, t_previous, logEFieldSineModeIsIncreasing, fourierValues);
-      const int previousPeakCount = fourierPeakValues.size();
-      fourierPeakValues.insert(fourierPeakValues.end(), slabFourierPeakValues.begin(), slabFourierPeakValues.end());
-      
-      const int numNewPeaks = slabFourierPeakValues.size();
-      if (rank == 0)
+      double t1 = int(slabEndTime / dt_fourier) * dt_fourier;
+      if (std::abs(t1 - slabEndTime) < 1e-10)
       {
-        // this reporting is designed to match the console output of our time-marching Landau driver:
-        for (int newPeakOrdinal = 0; newPeakOrdinal < numNewPeaks; newPeakOrdinal++)
+        // if the final output time would match the end of the slab, cheat back by dt_fourier, unless it's the final slab
+        // (each slab "owns" its start time; only the final slab "owns" its end time)
+        if (slabNumber != numTimeSlabs - 1)
         {
-          const auto &t     = slabFourierPeakValues[newPeakOrdinal].first;
-          const auto &value = slabFourierPeakValues[newPeakOrdinal].second;
-          std::cout << "local maximum of logarithm of dominant E-field mode at t=" << t << ": " << value;
-          
-          const int peakOrdinal = newPeakOrdinal + previousPeakCount;
-          if (peakOrdinal > 0)
-          {
-            // then report the local rate:
-            const auto &t_prev     = fourierPeakValues[peakOrdinal-1].first;
-            const auto &value_prev = fourierPeakValues[peakOrdinal-1].second;
-            double rate = (value - value_prev) / (t - t_prev);
-            std::cout << " (rate: " << rate << ")";
-          }
-          std::cout << std::endl;
+          t1 -= dt_fourier;
+        }
+      }
+
+      if (t0 <= t1)
+      {
+        auto fourierValues = evaluateTemporalSolutionFunction(fourierIntegral.temporalSolution(), ln_abs_E1, t0, t1, dt_fourier);
+        
+        if (rank == 0)
+        {
+          const bool append = (slabNumber > 0);
+          exportFourierValues(EFieldMode1File, append, fourierValues);
         }
         
-        // if the new peaks have taken us past the seventh, compute an overall rate by computing slope from third to seventh peak
-        if ((previousPeakCount < 7) && (slabFourierPeakValues.size() >= 7))
+        auto slabFourierPeakValues = getPeakValues(previousFourierValue, t_previous, logEFieldSineModeIsIncreasing, fourierValues);
+        const int previousPeakCount = fourierPeakValues.size();
+        fourierPeakValues.insert(fourierPeakValues.end(), slabFourierPeakValues.begin(), slabFourierPeakValues.end());
+        
+        const int numNewPeaks = slabFourierPeakValues.size();
+        if (rank == 0)
         {
-          const double thirdPeak   = fourierPeakValues[2].second;
-          const double seventhPeak = fourierPeakValues[6].second;
+          // this reporting is designed to match the console output of our time-marching Landau driver:
+          for (int newPeakOrdinal = 0; newPeakOrdinal < numNewPeaks; newPeakOrdinal++)
+          {
+            const auto &t     = slabFourierPeakValues[newPeakOrdinal].first;
+            const auto &value = slabFourierPeakValues[newPeakOrdinal].second;
+            std::cout << "local maximum of logarithm of dominant E-field mode at t=" << t << ": " << value;
+            
+            const int peakOrdinal = newPeakOrdinal + previousPeakCount;
+            if (peakOrdinal > 0)
+            {
+              // then report the local rate:
+              const auto &t_prev     = fourierPeakValues[peakOrdinal-1].first;
+              const auto &value_prev = fourierPeakValues[peakOrdinal-1].second;
+              double rate = (value - value_prev) / (t - t_prev);
+              std::cout << " (rate: " << rate << ")";
+            }
+            std::cout << std::endl;
+          }
           
-          const double third_t   = fourierPeakValues[2].first;
-          const double seventh_t = fourierPeakValues[6].first;
-          
-          const double mode1DecayRate = (seventhPeak - thirdPeak) / (seventh_t - third_t);
-          std::cout << "Overall decay rate: " << mode1DecayRate << std::endl;
+          // if the new peaks have taken us past the seventh, compute an overall rate by computing slope from third to seventh peak
+          if ((previousPeakCount < 7) && (slabFourierPeakValues.size() >= 7))
+          {
+            const double thirdPeak   = fourierPeakValues[2].second;
+            const double seventhPeak = fourierPeakValues[6].second;
+            
+            const double third_t   = fourierPeakValues[2].first;
+            const double seventh_t = fourierPeakValues[6].first;
+            
+            const double mode1DecayRate = (seventhPeak - thirdPeak) / (seventh_t - third_t);
+            std::cout << "Overall decay rate: " << mode1DecayRate << std::endl;
+          }
         }
       }
       
