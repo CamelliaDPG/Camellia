@@ -41,7 +41,6 @@ private:
   BFPtr _vlasovBF;
   int _delta_k;
   
-  bool _verboseSolve = false;
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
   
@@ -154,9 +153,15 @@ public:
   //! save checkpoint
   void saveCheckpoint(const std::string &checkpointDir);
   
-  //! take time step.
+  //! take time step.  For externally-driven adaptive solves, one can instead call startTimeStep(); perform refinements on the initial-substep solver, and then call finishTimeStep() to do the fixed-point iteration.  (This is just one of many possible approaches.)
   void takeTimeStep();
   
+  //! copy the current-time solution(s) to previous-time solution, starting a new time step.  Called from takeTimeStep().
+  void startTimeStep();
+  
+  //! Perform a fixed-point iteration according to fixed-point parameters (tolerance, max and min substep counts).  Called from takeTimeStep().
+  void finishTimeStep();
+
   //! current time.
   double t() const;
   
@@ -246,9 +251,14 @@ public:
     
   void setUseGeometricMultigrid(bool useGeometricMultigrid);
   
-  void setVerboseSolve(const bool &verboseSolve);
-  
+  //! Constructs a GMG solver for the current Vlasov mesh.  Does not update the internal _gmgSolver member; for that, see reconstructGMGSolver().
   Teuchos::RCP<GMGSolver> constructGMGSolver();
+  
+  //! If useGeometricMultigrid is true, sets internal _gmgSolver to the result of constructGMGSolver(), overwriting any previously set _gmgSolver.  Appropriate to call after performing adaptive refinements on the Vlasov mesh.
+  void reconstructGMGSolver();
+  
+  //! Returns the member GMG solver; may be null if it has not yet been constructed, or if useGeometricMultigrid is false.
+  Teuchos::RCP<GMGSolver> gmgSolver();
   
   /** \brief  Create a tag for an indicated region of configuration space.
       \param  regionToMatch   [in]  - A SpatialFilterPtr that matches the region where BCs should be enforced.

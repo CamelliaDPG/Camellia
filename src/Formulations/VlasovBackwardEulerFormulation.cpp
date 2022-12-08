@@ -310,6 +310,7 @@ _m(m)
   _vlasovSoln->setRHS(vlasovRHS);
     
   vlasovMesh->registerSolution(_vlasovSoln);
+  vlasovMesh->registerSolution(_vlasovSolnPriorTime);
     
   IPPtr vlasovTestNorm = _vlasovBF->graphNorm();
   _vlasovSoln->setIP(vlasovTestNorm);
@@ -556,6 +557,116 @@ VarPtr VlasovBackwardEulerFormulation::f_hat()
   return vf->trialVar(S_F_HAT);
 }
 
+void VlasovBackwardEulerFormulation::finishTimeStep()
+{
+  const int rank = MPIWrapper::CommWorld()->MyPID();
+  
+  Teuchos::RCP<GMGSolver> gmgSolver;
+  
+  std::vector<int>    substepIterationCounts(_maxSubsteps);
+  std::vector<double> substepStepSizesVlasov;
+  
+  if (_useGeometricMultigrid && (_gmgSolver == Teuchos::null))
+  {
+    reconstructGMGSolver();
+  }
+  
+  Teuchos::RCP<HDF5Exporter> vlasovViz, configurationViz;
+  const bool exportViz = false; // for debugging of fixed-point iteration, set to true.  TODO: make this subject to external control.
+  
+  if (exportViz)
+  {
+    static int solveNumber = 0;
+    std::string prefix = "VlasovBackwardEulerFormulation_";
+    std::ostringstream vlasovSS;
+    vlasovSS << prefix << "Vlasov" << solveNumber;
+    
+    std::ostringstream configurationSS;
+    configurationSS << prefix << _configurationSpaceFormulation->name() << solveNumber;
+      
+    const std::string directoryPath = "/tmp";
+    
+    vlasovViz = Teuchos::rcp(new HDF5Exporter(this->vlasovMesh(), vlasovSS.str(), directoryPath));
+    configurationViz = Teuchos::rcp(new HDF5Exporter (_configurationSpaceFormulation->configurationSpaceMesh(), configurationSS.str(), directoryPath) );
+    
+    configurationViz->exportSolution(_configurationSpaceFormulation->solution(),0);
+    vlasovViz->exportSolution(vlasovSolution(),0);
+    
+    solveNumber++;
+  }
+  
+  auto density  = _solutionMoments->solutionMomentFunction(0); // used in viz output
+    
+  // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
+  // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
+  _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  int numSubstepsTaken = _maxSubsteps;
+  for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
+  {
+    _vlasovSolnPrev->setSolution(_vlasovSoln);
+    _configurationSpaceFormulation->copySolutionToPrevious();
+    
+    if ((rank == 0) && !_runQuietly)
+    {
+      std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << _maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
+    }
+    // solve for f:
+    if (_gmgSolver == Teuchos::null)
+    {
+      _vlasovSoln->solve();
+      substepIterationCounts[substepOrdinal] = -1; // -1 to indicate not an iterative solver
+    }
+    else
+    {
+      if (_cgTols.size() > 0) // then we should have one per substep
+      {
+        _gmgSolver->setTolerance(_cgTols[substepOrdinal]);
+      }
+      _vlasovSoln->solve(_gmgSolver);
+      substepIterationCounts[substepOrdinal] = _gmgSolver->iterationCount();
+    }
+    configurationSpaceSolve();
+    // Compute difference between current and previous substep solutions.  For substepOrdinal == 0, this is the difference with prior time step.
+    
+    auto vlasovMesh  = _vlasovSoln->mesh();
+    const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
+    const double f_L2 = _fSoln->l2norm(vlasovMesh);
+    const double fRelDiff = fDiff_L2 / f_L2;
+    
+    const double configurationSpaceRelativeDiff = _configurationSpaceFormulation->l2NormOfSolutionUpdate();
+    
+    substepStepSizesVlasov.push_back(fRelDiff);
+    
+    if ((rank == 0) && !_runQuietly)
+    {
+      std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
+      std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E and/or B: " << configurationSpaceRelativeDiff << std::endl;
+    }
+    
+    if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1))
+    {
+      // tolerance reached, min substeps taken
+      break;
+    }
+    if (exportViz)
+    {
+      configurationViz->exportSolution(_configurationSpaceFormulation->solution(),{density}, {"n_e"},substepOrdinal+1);
+      vlasovViz->exportSolution(vlasovSolution(),substepOrdinal+1);
+    }
+  } // substep loop (fixed point iteration)
+  
+  _substepCounts.push_back(numSubstepsTaken);
+  _iterationCounts.push_back(substepIterationCounts);
+  _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
+  
+  _t += _dt->getConstantValue();
+}
+
+Teuchos::RCP<GMGSolver> VlasovBackwardEulerFormulation::gmgSolver()
+{
+  return _gmgSolver;
+}
+
 bool VlasovBackwardEulerFormulation::hasL2Trace() const {
   return true;
 }
@@ -649,6 +760,14 @@ void VlasovBackwardEulerFormulation::refineUniformly(const int numRefinements)
   if (configMesh->getDimension() == 1)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(configMesh->numActiveElements() != configActiveCellCount * countMultiplier, std::invalid_argument, "Vlasov refinement should induce configuration-space refinements.");
+  }
+}
+
+void VlasovBackwardEulerFormulation::reconstructGMGSolver()
+{
+  if (_useGeometricMultigrid)
+  {
+    _gmgSolver = constructGMGSolver();
   }
 }
 
@@ -748,141 +867,16 @@ void VlasovBackwardEulerFormulation::setTimeStep(double dt)
   _dt->setValue(dt);
 }
 
-void VlasovBackwardEulerFormulation::takeTimeStep()
+void VlasovBackwardEulerFormulation::startTimeStep()
 {
-  const int rank = MPIWrapper::CommWorld()->MyPID();
   _vlasovSolnPriorTime->setSolution(_vlasovSoln);
   _configurationSpaceFormulation->copySolutionToPriorTime();
-  
-//  {
-//    // DEBUGGING
-//    std::cout << "Vlasov BF: " << _vlasovSoln->bf()->displayString() << std::endl;
-//    std::cout << "Poisson BF: " << _configurationSpaceFormulation->solution()->bf()->displayString() << std::endl;
-//    
-//    _vlasovSoln->setWriteMatrixToFile(true, "/tmp/A_vlasov.dat");
-//    _vlasovSoln->setWriteRHSToMatrixMarketFile(true, "/tmp/b_vlasov.dat");
-//    _configurationSpaceFormulation->solution()->setWriteMatrixToFile(true, "/tmp/A_poisson.dat");
-//    _configurationSpaceFormulation->solution()->setWriteRHSToMatrixMarketFile(true, "/tmp/b_poisson.dat");
-//  }
-  
-  Teuchos::RCP<GMGSolver> gmgSolver;
-  
-  std::vector<int>    substepIterationCounts(_maxSubsteps);
-  std::vector<double> substepStepSizesVlasov;
-  
-  if (_useGeometricMultigrid && (_gmgSolver == Teuchos::null))
-  {
-    _gmgSolver = constructGMGSolver();
-  }
-  
-  Teuchos::RCP<HDF5Exporter> vlasovViz, configurationViz;
-  const bool exportViz = false; // for debugging of fixed-point iteration, set to true.  TODO: make this subject to external control.
-  
-  if (exportViz)
-  {
-    static int solveNumber = 0;
-    std::string prefix = "VlasovBackwardEulerFormulation_";
-    std::ostringstream vlasovSS;
-    vlasovSS << prefix << "Vlasov" << solveNumber;
-    
-    std::ostringstream configurationSS;
-    configurationSS << prefix << _configurationSpaceFormulation->name() << solveNumber;
-      
-    const std::string directoryPath = "/tmp";
-    
-    vlasovViz = Teuchos::rcp(new HDF5Exporter(this->vlasovMesh(), vlasovSS.str(), directoryPath));
-    configurationViz = Teuchos::rcp(new HDF5Exporter (_configurationSpaceFormulation->configurationSpaceMesh(), configurationSS.str(), directoryPath) );
-    
-    configurationViz->exportSolution(_configurationSpaceFormulation->solution(),0);
-    vlasovViz->exportSolution(vlasovSolution(),0);
-    
-    solveNumber++;
-  }
-  
-  auto density  = _solutionMoments->solutionMomentFunction(0); // used in viz output
-    
-  // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
-  // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
-  _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
-  int numSubstepsTaken = _maxSubsteps;
-  for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
-  {
-    _vlasovSolnPrev->setSolution(_vlasovSoln);
-    _configurationSpaceFormulation->copySolutionToPrevious();
-    
-    if ((rank == 0) && !_runQuietly)
-    {
-      std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << _maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
-    }
-    // solve for f:
-    if (_gmgSolver == Teuchos::null)
-    {
-      _vlasovSoln->solve();
-      substepIterationCounts[substepOrdinal] = -1; // -1 to indicate not an iterative solver
-    }
-    else
-    {
-      if (_cgTols.size() > 0) // then we should have one per substep
-      {
-        _gmgSolver->setTolerance(_cgTols[substepOrdinal]);
-      }
-      _vlasovSoln->solve(_gmgSolver);
-      substepIterationCounts[substepOrdinal] = _gmgSolver->iterationCount();
-    }
-    configurationSpaceSolve();
-    // Compute difference between current and previous substep solutions.  For substepOrdinal == 0, this is the difference with prior time step.
-    
-    auto vlasovMesh  = _vlasovSoln->mesh();
-    const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
-    const double f_L2 = _fSoln->l2norm(vlasovMesh);
-    const double fRelDiff = fDiff_L2 / f_L2;
-    
-    const double configurationSpaceRelativeDiff = _configurationSpaceFormulation->l2NormOfSolutionUpdate();
-    
-    substepStepSizesVlasov.push_back(fRelDiff);
-    
-    if ((rank == 0) && !_runQuietly)
-    {
-      std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
-      std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E and/or B: " << configurationSpaceRelativeDiff << std::endl;
-    }
-    
-    if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1))
-    {
-      // Compute difference between current and previous substep solutions.  For substepOrdinal == 0, this is the difference with prior time step.
-      auto vlasovMesh  = _vlasovSoln->mesh();
-      const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
-      const double f_L2 = _fSoln->l2norm(vlasovMesh);
-      const double fRelDiff = fDiff_L2 / f_L2;
-      
-      const double configurationSpaceRelativeDiff = _configurationSpaceFormulation->l2NormOfSolutionUpdate();
-      
-      substepStepSizesVlasov.push_back(fRelDiff);
-      
-      if ((rank == 0) && _verboseSolve)
-      {
-        std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
-        std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E and/or B: " << configurationSpaceRelativeDiff << std::endl;
-      }
-      
-      if (fRelDiff < _fixedPointTolerance)
-      {
-        numSubstepsTaken = substepOrdinal + 1;
-        break;
-      }
-    }
-    if (exportViz)
-    {
-      configurationViz->exportSolution(_configurationSpaceFormulation->solution(),{density}, {"n_e"},substepOrdinal+1);
-      vlasovViz->exportSolution(vlasovSolution(),substepOrdinal+1);
-    }
-  } // substep loop (fixed point iteration)
-  
-  _substepCounts.push_back(numSubstepsTaken);
-  _iterationCounts.push_back(substepIterationCounts);
-  _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
-  
-  _t += _dt->getConstantValue();
+}
+
+void VlasovBackwardEulerFormulation::takeTimeStep()
+{
+  startTimeStep();
+  finishTimeStep();
 }
 
 void VlasovBackwardEulerFormulation::setInitialConditions(FunctionPtr f0)
@@ -949,11 +943,6 @@ VarPtr VlasovBackwardEulerFormulation::w()
 void VlasovBackwardEulerFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
 {
   _useGeometricMultigrid = useGeometricMultigrid;
-}
-
-void VlasovBackwardEulerFormulation::setVerboseSolve(const bool &verboseSolve)
-{
-  _verboseSolve = verboseSolve;
 }
 
 int VlasovBackwardEulerFormulation::tagVlasovSpatialInflow() const

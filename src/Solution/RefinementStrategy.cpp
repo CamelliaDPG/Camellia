@@ -470,6 +470,12 @@ std::set<GlobalIndexType> TRefinementStrategy<Scalar>::localCellsIneligibleForRe
 }
 
 template <typename Scalar>
+double TRefinementStrategy<Scalar>::relativeErrorThreshold() const
+{
+  return _relativeErrorThreshold;
+}
+
+template <typename Scalar>
 void TRefinementStrategy<Scalar>::setMaxElements(int maxElementCount)
 {
   _maxElementCount = maxElementCount;
