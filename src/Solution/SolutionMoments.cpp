@@ -456,7 +456,7 @@ FunctionPtr SolutionMoments::solutionMomentFunction(const int &xMoment)
   
   TEUCHOS_TEST_FOR_EXCEPTION(numDims != 1, std::invalid_argument, "single-argument moment index is only allowed for 1V");
   
-  const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, numDims);
+//  const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, numDims);
   const int momentEntryIndex = MomentIndices::getMomentIndex(xMoment, _maxMomentNumber+1);
   
   return Teuchos::rcp(new SolutionMomentFunction(*this, momentEntryIndex) );
@@ -473,7 +473,7 @@ FunctionPtr SolutionMoments::solutionMomentFunction(const int &xMoment, const in
   
   TEUCHOS_TEST_FOR_EXCEPTION(numDims != 2, std::invalid_argument, "two-argument moment index is only allowed for 2V");
   
-  const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, numDims);
+//  const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, numDims);
   const int momentEntryIndex = MomentIndices::getMomentIndex(xMoment, yMoment, _maxMomentNumber+1);
   
   return Teuchos::rcp(new SolutionMomentFunction(*this, momentEntryIndex) );
@@ -489,7 +489,7 @@ FunctionPtr SolutionMoments::solutionMomentFunction(const int &xMoment, const in
   
   TEUCHOS_TEST_FOR_EXCEPTION(numDims != 3, std::invalid_argument, "three-argument moment index is only allowed for 3V");
   
-  const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, numDims);
+//  const int numMomentEntries = MomentIndices::getNumMomentEntries(_maxMomentNumber+1, numDims);
   const int momentEntryIndex = MomentIndices::getMomentIndex(xMoment, yMoment, zMoment, _maxMomentNumber+1);
   
   return Teuchos::rcp(new SolutionMomentFunction(*this, momentEntryIndex) );

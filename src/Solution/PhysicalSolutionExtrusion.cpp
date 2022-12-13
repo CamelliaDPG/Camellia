@@ -66,7 +66,7 @@ void PhysicalSolutionExtrusion::updateValues()
         auto parentCellID = descendant->getParent()->cellIndex();
         
         int descendantLevel = descendant->level();
-        if (descendantLevel >= parentCellsForLevel.size())
+        if (descendantLevel >= int(parentCellsForLevel.size()))
         {
           parentCellsForLevel.resize(descendantLevel);
         }

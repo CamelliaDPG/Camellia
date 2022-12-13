@@ -425,6 +425,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     bool enforceQuasiNeutrality = true;
     int azOutputLevel = 5;
     int maxIters = 1000;
+    bool exportViz = true;
+    std::string vizDir = "/some/random/dir";
     
     form.setUseGeometricMultigrid(useGeometricMultigrid);
     form.setIterativeSolveTolerance(cgTol);
@@ -434,6 +436,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     form.setIterativeSolveOutputLevel(azOutputLevel);
     form.setIterativeSolveMaxIterations(maxIters);
+    form.setExportViz(exportViz, vizDir);
     
     auto nextSlab = form.nextTimeSlab(TEST_TWIDTH, tElements);
     
@@ -448,6 +451,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     TEST_EQUALITY(enforceQuasiNeutrality, nextSlab->enforceQuasiNeutrality());
     TEST_EQUALITY(azOutputLevel,          nextSlab->iterativeSolveOutputLevel());
     TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());
+    TEST_EQUALITY(exportViz,              nextSlab->exportViz());
+    TEST_EQUALITY(vizDir,                 nextSlab->vizOutputDir());
     
     auto nextSlabCGTols = nextSlab->iterativeSolveTolerances();
     TEST_EQUALITY(cgTols.size(), nextSlabCGTols.size());

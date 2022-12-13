@@ -361,6 +361,7 @@ int main(int argc, char *argv[])
     int H1Order = 4; // this gives f, E (which are in L^2) a polynomial order of 3
     std::string problemChoiceString = "landau";
     bool saveViz = true;
+    bool exportDebugViz = false; // if set to true, will output separate viz file for each substep solve (to /tmp)
     std::string outputDir = "/tmp";
     int iterativeSolveOutputLevel = 100; // output every one hundred CG iterations
     double iterativeSolveTolerance = 1e-9;
@@ -393,6 +394,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("numTimeSlabs", &numTimeSlabs);
     cmdp.setOption("fixedPointTol", &fixedPointTol);
     cmdp.setOption("viz", "noViz", &saveViz);
+    cmdp.setOption("exportDebugViz", "noDebugViz", &exportDebugViz);
     cmdp.setOption("outputDir", &outputDir);
     cmdp.setOption("iterativeSolveOutputLevel", &iterativeSolveOutputLevel);
     cmdp.setOption("iterativeSolveMaxIters", &iterativeSolveMaxIters);
@@ -411,6 +413,8 @@ int main(int argc, char *argv[])
     bool usePeriodicBCs = true;
     
     auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, usePeriodicBCs, useSerendipityBasis, numUniformRefinements);
+    
+    form->setExportViz(exportDebugViz);
     
     FunctionPtr cellIDFunction = Teuchos::rcp(new CellIDFunction);
     
