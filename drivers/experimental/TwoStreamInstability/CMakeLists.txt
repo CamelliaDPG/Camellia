@@ -55,10 +55,10 @@ add_executable( BoltzmannTests BoltzmannTests.cpp
                 PhasePhysicalMeshMap1D1VTests.cpp
                 Boltzmann1D3VFormulation.cpp Boltzmann1D3VFormulation.h
                 VlasovPoissonSpaceTimeFormulation.cpp VlasovPoissonSpaceTimeFormulation.h
-                VlasovSpaceTimeFormulation.cpp VlasovSpaceTimeFormulation.h
+                BoltzmannTests_VlasovSpaceTimeFormulation.cpp BoltzmannTests_VlasovSpaceTimeFormulation.h
                 Boltzmann1D3VFormulationTests.cpp
                 PhasePhysicalMeshMap1D3VTests.cpp
-                VlasovSpaceTimeFormulationTests.cpp
+                BoltzmannTests_VlasovSpaceTimeFormulationTests.cpp
 )
 
 target_link_libraries(BoltzmannTests 

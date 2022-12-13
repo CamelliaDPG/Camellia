@@ -2,14 +2,14 @@
 // © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
 //
-//  VlasovSpaceTimeFormulation.cpp
+//  BoltzmannTests_VlasovSpaceTimeFormulation.cpp
 //  Camellia
 //
 //  Created by Nate Roberts on 1/11/22.
 //
 //
 
-#include "VlasovSpaceTimeFormulation.h"
+#include "BoltzmannTests_VlasovSpaceTimeFormulation.h"
 #include "CamelliaMemoryTools.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
@@ -30,12 +30,12 @@
 
 using namespace Camellia;
 
-const string VlasovSpaceTimeFormulation::S_F = "f";
+const string BoltzmannTests_VlasovSpaceTimeFormulation::S_F = "f";
 
-const string VlasovSpaceTimeFormulation::S_F_HAT = "\\widehat{f}";
-const string VlasovSpaceTimeFormulation::S_T_N_HAT = "\\widehat{t}_n";
+const string BoltzmannTests_VlasovSpaceTimeFormulation::S_F_HAT = "\\widehat{f}";
+const string BoltzmannTests_VlasovSpaceTimeFormulation::S_T_N_HAT = "\\widehat{t}_n";
 
-const string VlasovSpaceTimeFormulation::S_W = "w";
+const string BoltzmannTests_VlasovSpaceTimeFormulation::S_W = "w";
 
 namespace
 {
@@ -97,7 +97,7 @@ namespace
 }
 
 
-VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
+BoltzmannTests_VlasovSpaceTimeFormulation::BoltzmannTests_VlasovSpaceTimeFormulation(double q, double m,
                                                        bool useSerendipityBasis,
                                                        Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                        MeshTopologyPtr spatialMeshTopology,
@@ -344,17 +344,17 @@ _m(m)
   PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
 }
 
-MeshPtr VlasovSpaceTimeFormulation::vlasovMesh()
+MeshPtr BoltzmannTests_VlasovSpaceTimeFormulation::vlasovMesh()
 {
   return _vlasovSoln->mesh();
 }
 
-SolutionPtr VlasovSpaceTimeFormulation::vlasovSolution()
+SolutionPtr BoltzmannTests_VlasovSpaceTimeFormulation::vlasovSolution()
 {
   return _vlasovSoln;
 }
 
-void VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr configVariable, FunctionPtr dirichletValue)
+void BoltzmannTests_VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr configVariable, FunctionPtr dirichletValue)
 {
   if (_configurationSpaceFormulation->solution()->bc() == Teuchos::null)
   {
@@ -364,37 +364,37 @@ void VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr c
   _configurationSpaceFormulation->solution()->bc()->addDirichlet(configVariable, tag, dirichletValue);
 }
 
-VarPtr VlasovSpaceTimeFormulation::B_configurationSpaceTrace(const int zeroBasedComp)
+VarPtr BoltzmannTests_VlasovSpaceTimeFormulation::B_configurationSpaceTrace(const int zeroBasedComp)
 {
   return _configurationSpaceFormulation->B_hat(zeroBasedComp);
 }
 
-void VlasovSpaceTimeFormulation::clearConfigurationSpaceBCs()
+void BoltzmannTests_VlasovSpaceTimeFormulation::clearConfigurationSpaceBCs()
 {
   _configurationSpaceFormulation->solution()->setBC(BC::bc());
 }
 
-void VlasovSpaceTimeFormulation::clearSolution()
+void BoltzmannTests_VlasovSpaceTimeFormulation::clearSolution()
 {
   _vlasovSoln->clear();
 }
 
-Teuchos::RCP<ConfigurationSpaceFormulation> VlasovSpaceTimeFormulation::configurationSpaceFormulation()
+Teuchos::RCP<ConfigurationSpaceFormulation> BoltzmannTests_VlasovSpaceTimeFormulation::configurationSpaceFormulation()
 {
   return _configurationSpaceFormulation;
 }
 
-MeshPtr VlasovSpaceTimeFormulation::configurationSpaceMesh()
+MeshPtr BoltzmannTests_VlasovSpaceTimeFormulation::configurationSpaceMesh()
 {
   return _configurationSpaceFormulation->configurationSpaceMesh();
 }
 
-SolutionPtr VlasovSpaceTimeFormulation::configurationSpaceSolution()
+SolutionPtr BoltzmannTests_VlasovSpaceTimeFormulation::configurationSpaceSolution()
 {
   return _configurationSpaceFormulation->solution();
 }
 
-Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
+Teuchos::RCP<GMGSolver> BoltzmannTests_VlasovSpaceTimeFormulation::constructGMGSolver()
 {
 //    {
 //      double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
@@ -436,7 +436,7 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
-int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch)
+int BoltzmannTests_VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch)
 {
   const int thisTag = _nextConfigurationSpaceTag++;
   
@@ -452,68 +452,68 @@ int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterP
   return thisTag;
 }
 
-VarPtr VlasovSpaceTimeFormulation::E_configurationSpaceTrace(const int zeroBasedComp)
+VarPtr BoltzmannTests_VlasovSpaceTimeFormulation::E_configurationSpaceTrace(const int zeroBasedComp)
 {
   return _configurationSpaceFormulation->E_hat(zeroBasedComp);
 }
 
-VarPtr VlasovSpaceTimeFormulation::f()
+VarPtr BoltzmannTests_VlasovSpaceTimeFormulation::f()
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
   return vf->trialVar(S_F);
 }
 
-VarPtr VlasovSpaceTimeFormulation::f_hat()
+VarPtr BoltzmannTests_VlasovSpaceTimeFormulation::f_hat()
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
   return vf->trialVar(S_F_HAT);
 }
 
-bool VlasovSpaceTimeFormulation::hasL2Trace() const {
+bool BoltzmannTests_VlasovSpaceTimeFormulation::hasL2Trace() const {
   return true;
 }
 
-void VlasovSpaceTimeFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
 {
   _enforceQuasiNeutrality = enforceQuasiNeutrality;
 }
 
-void VlasovSpaceTimeFormulation::setFixedPointMaxSubsteps(const int maxSubsteps)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setFixedPointMaxSubsteps(const int maxSubsteps)
 {
   _maxSubsteps = maxSubsteps;
 }
 
-void VlasovSpaceTimeFormulation::setFixedPointMinSubsteps(const int minSubsteps)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setFixedPointMinSubsteps(const int minSubsteps)
 {
   _minSubsteps = minSubsteps;
 }
 
-void VlasovSpaceTimeFormulation::setFixedPointTolerance(const double fTol)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setFixedPointTolerance(const double fTol)
 {
   _fixedPointTolerance = fTol;
 }
 
-void VlasovSpaceTimeFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
 {
   _aztecOutputLevel = azOutputLevel;
 }
 
-void VlasovSpaceTimeFormulation::setIterativeSolveMaxIterations(const int maxIters)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setIterativeSolveMaxIterations(const int maxIters)
 {
   _maxIters = maxIters;
 }
 
-void VlasovSpaceTimeFormulation::setIterativeSolveTolerance(const double cgTol)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setIterativeSolveTolerance(const double cgTol)
 {
   _cgTol = cgTol;
 }
 
-void VlasovSpaceTimeFormulation::setIterativeSolveTolerances(const std::vector<double> cgTols)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setIterativeSolveTolerances(const std::vector<double> cgTols)
 {
   _cgTols = cgTols;
 }
 
-void VlasovSpaceTimeFormulation::solve()
+void BoltzmannTests_VlasovSpaceTimeFormulation::solve()
 {
   const int rank = MPIWrapper::CommWorld()->MyPID();
   
@@ -528,7 +528,7 @@ void VlasovSpaceTimeFormulation::solve()
   if (exportViz)
   {
     static int solveNumber = 0;
-    std::string prefix = "VlasovSpaceTimeFormulation_";
+    std::string prefix = "BoltzmannTests_VlasovSpaceTimeFormulation_";
     std::ostringstream vlasovSS;
     vlasovSS << prefix << "Vlasov" << solveNumber;
     
@@ -622,7 +622,7 @@ void VlasovSpaceTimeFormulation::solve()
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
 }
 
-void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
 {
   auto vlasovBC = BC::bc();
   
@@ -655,7 +655,7 @@ void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
   _n0->setValue(n0);
 }
 
-void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
 {
   auto vlasovBC = BC::bc();
   
@@ -700,45 +700,45 @@ void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, F
   _n0->setValue(n0);
 }
 
-Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments()
+Teuchos::RCP<SolutionMoments> BoltzmannTests_VlasovSpaceTimeFormulation::solutionMoments()
 {
   return _solutionMoments;
 }
 
 // test variables:
-VarPtr VlasovSpaceTimeFormulation::w()
+VarPtr BoltzmannTests_VlasovSpaceTimeFormulation::w()
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
   return vf->testVar(S_W, HGRAD);
 }
 
-void VlasovSpaceTimeFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
+void BoltzmannTests_VlasovSpaceTimeFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
 {
   _useGeometricMultigrid = useGeometricMultigrid;
 }
 
-FunctionPtr VlasovSpaceTimeFormulation::t() const
+FunctionPtr BoltzmannTests_VlasovSpaceTimeFormulation::t() const
 {
   int tCompZeroBased = _spaceDim;
   return MonomialFunction::xi_n(tCompZeroBased, 1);
 }
 
-int VlasovSpaceTimeFormulation::tagConfigurationInitialTime() const
+int BoltzmannTests_VlasovSpaceTimeFormulation::tagConfigurationInitialTime() const
 {
   return CONFIGURATION_TAG_TMIN;
 }
 
-int VlasovSpaceTimeFormulation::tagVlasovInitialTime() const
+int BoltzmannTests_VlasovSpaceTimeFormulation::tagVlasovInitialTime() const
 {
   return VLASOV_TAG_TMIN;
 }
 
-int VlasovSpaceTimeFormulation::tagVlasovSpatialInflow() const
+int BoltzmannTests_VlasovSpaceTimeFormulation::tagVlasovSpatialInflow() const
 {
   return VLASOV_TAG_SPATIAL_INFLOW;
 }
 
-int VlasovSpaceTimeFormulation::tagVlasovMaxVelocity(int zeroBasedComp) const
+int BoltzmannTests_VlasovSpaceTimeFormulation::tagVlasovMaxVelocity(int zeroBasedComp) const
 {
   switch (zeroBasedComp)
   {
@@ -750,7 +750,7 @@ int VlasovSpaceTimeFormulation::tagVlasovMaxVelocity(int zeroBasedComp) const
   }
 }
 
-int VlasovSpaceTimeFormulation::tagVlasovMinVelocity(int zeroBasedComp) const
+int BoltzmannTests_VlasovSpaceTimeFormulation::tagVlasovMinVelocity(int zeroBasedComp) const
 {
   switch (zeroBasedComp)
   {
@@ -762,24 +762,24 @@ int VlasovSpaceTimeFormulation::tagVlasovMinVelocity(int zeroBasedComp) const
   }
 }
 
-VarPtr VlasovSpaceTimeFormulation::t_n_hat()
+VarPtr BoltzmannTests_VlasovSpaceTimeFormulation::t_n_hat()
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
   return vf->trialVar(S_T_N_HAT);
 }
 
-FunctionPtr VlasovSpaceTimeFormulation::v_i(int compZeroBased) const
+FunctionPtr BoltzmannTests_VlasovSpaceTimeFormulation::v_i(int compZeroBased) const
 {
   int vx_component_zero_based = _spaceDim + 1; // plus 1 for temporal dimension
   return MonomialFunction::xi_n(vx_component_zero_based + compZeroBased, 1);
 }
 
-VarPtr VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()
+VarPtr BoltzmannTests_VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()
 {
   return _configurationSpaceFormulation->VE_hat();
 }
 
-FunctionPtr VlasovSpaceTimeFormulation::x_i(const int zeroBasedComp) const
+FunctionPtr BoltzmannTests_VlasovSpaceTimeFormulation::x_i(const int zeroBasedComp) const
 {
   return MonomialFunction::xi_n(zeroBasedComp, 1);
 }
