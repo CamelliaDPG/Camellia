@@ -253,7 +253,14 @@ _numUniformRefinements(numUniformRefinements)
   
   for (int i=0; i<_velocityDim; i++)
   {
-    grad_v_weight[i] = E[i] + v_cross_B[i];
+    grad_v_weight[i] = (-q/m) * (E[i] + v_cross_B[i]);
+  }
+  
+  for (int i=0; i<_velocityDim; i++)
+  {
+    // grad v of f
+    _vlasovBF->addTerm(grad_v_weight[i] * f, w->di(indexOffsetVelocityOneBased + i));
+//    _vlasovBF->addTerm(-(q/m)*_E_extruded*f, w->di(VELOCITY_INDEX)); // dv
   }
   
   _vlasovBF->addTerm(t_n_hat, w);
@@ -485,10 +492,9 @@ bool VlasovSpaceTimeFormulation::enforceQuasiNeutrality() const
   return _enforceQuasiNeutrality;
 }
 
-void VlasovSpaceTimeFormulation::setExportViz(bool exportViz, const std::string outputDir)
+bool VlasovSpaceTimeFormulation::exportViz() const
 {
-  _exportViz = exportViz;
-  _vizOutputDir = outputDir;
+  return _exportViz;
 }
 
 VarPtr VlasovSpaceTimeFormulation::f()
@@ -601,6 +607,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
+  nextSlabForm->setExportViz(_exportViz,_vizOutputDir);
   
   // import solution data so that it's available for BC setting
   std::set<GlobalIndexType> currentCellIDsForRank;
@@ -633,6 +640,12 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
 void VlasovSpaceTimeFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
 {
   _enforceQuasiNeutrality = enforceQuasiNeutrality;
+}
+
+void VlasovSpaceTimeFormulation::setExportViz(bool exportViz, const std::string outputDir)
+{
+  _exportViz = exportViz;
+  _vizOutputDir = outputDir;
 }
 
 void VlasovSpaceTimeFormulation::setFixedPointMaxSubsteps(const int maxSubsteps)
@@ -697,7 +710,7 @@ void VlasovSpaceTimeFormulation::solve()
     configurationViz = Teuchos::rcp(new HDF5Exporter (_configurationSpaceFormulation->configurationSpaceMesh(), configurationSS.str(), directoryPath) );
     solveNumber++;
   }
-    
+  
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
@@ -741,9 +754,9 @@ void VlasovSpaceTimeFormulation::solve()
       _n0->setValue(n0);
     }
     _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
+    _configurationSpaceFormulation->updateConfigurationSpaceFunctions(); // update/MPI-communicate (Poisson/Maxwell) values to make available for phase-space solution
     
     // Copy vlasov, Poisson solution to Prev solutions.  For substepOrdinal > 0, measure difference between the two solutions first.
-    
     if (substepOrdinal > 0)
     {
       auto vlasovMesh  = _vlasovSoln->mesh();
@@ -943,6 +956,11 @@ FunctionPtr VlasovSpaceTimeFormulation::v_i(int compZeroBased) const
 VarPtr VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()
 {
   return _configurationSpaceFormulation->VE_hat();
+}
+
+std::string VlasovSpaceTimeFormulation::vizOutputDir() const
+{
+  return _vizOutputDir;
 }
 
 FunctionPtr VlasovSpaceTimeFormulation::x_i(const int zeroBasedComp) const

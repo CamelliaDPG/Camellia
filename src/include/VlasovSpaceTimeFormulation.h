@@ -155,6 +155,8 @@ public:
   bool enforceQuasiNeutrality() const;
   
   void setExportViz(bool exportViz, const std::string outputDir = "/tmp");
+  bool exportViz() const;
+  std::string vizOutputDir() const;
   
   /** \brief  Set the tolerance for the fixed point iteration.
       \param  fTol   [in]  - the target relative difference in f between one substep and the next, as measured in the L^2 norm.
