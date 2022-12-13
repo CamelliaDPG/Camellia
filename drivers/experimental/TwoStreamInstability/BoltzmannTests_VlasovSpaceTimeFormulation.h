@@ -5,15 +5,15 @@
 // @HEADER
 
 //
-//  VlasovSpaceTimeFormulation.h
+//  BoltzmannTests_VlasovSpaceTimeFormulation.h
 //  Camellia
 //
 //  Created by Nate Roberts on January 11, 2022.
 //
 //
 
-#ifndef Camellia_VlasovSpaceTimeFormulation_h
-#define Camellia_VlasovSpaceTimeFormulation_h
+#ifndef Camellia_BoltzmannTests_VlasovSpaceTimeFormulation_h
+#define Camellia_BoltzmannTests_VlasovSpaceTimeFormulation_h
 
 #include "TypeDefs.h"
 
@@ -28,7 +28,7 @@
 namespace Camellia
 {
 
-  class VlasovSpaceTimeFormulation
+  class BoltzmannTests_VlasovSpaceTimeFormulation
 {
 private:
   int _spaceDim;
@@ -45,7 +45,7 @@ private:
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
   
   Teuchos::RCP<ConfigurationSpaceFormulation> _configurationSpaceFormulation; // could be Poisson or Maxwell (among others)
-  MeshTopologyPtr _configurationSpaceMeshTopology; // space-time mesh, created during VlasovSpaceTimeFormulation construction
+  MeshTopologyPtr _configurationSpaceMeshTopology; // space-time mesh, created during BoltzmannTests_VlasovSpaceTimeFormulation construction
   
   double _q;
   double _m;
@@ -87,14 +87,14 @@ private:
   static const int CONFIGURATION_TAG_TMIN    = 0; // initial time
   int _nextConfigurationSpaceTag = CONFIGURATION_TAG_TMIN + 1;
 public:
-  VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
-                             Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
-                             MeshTopologyPtr spatialMeshTopology,
-                             std::vector<double> temporalVertices,
-                             std::vector<double> velocitySpaceVertices_x,
-                             std::vector<double> velocitySpaceVertices_y,
-                             std::vector<double> velocitySpaceVertices_z,
-                             const int H1Order, const int delta_k);
+  BoltzmannTests_VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
+                                            Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                            MeshTopologyPtr spatialMeshTopology,
+                                            std::vector<double> temporalVertices,
+                                            std::vector<double> velocitySpaceVertices_x,
+                                            std::vector<double> velocitySpaceVertices_y,
+                                            std::vector<double> velocitySpaceVertices_z,
+                                            const int H1Order, const int delta_k);
 
   //! take time step.
   void solve();

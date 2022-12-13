@@ -9,7 +9,7 @@
 
 #include "VlasovPoissonSpaceTimeFormulation.h"
 
-#include "VlasovSpaceTimeFormulation.h"
+#include "BoltzmannTests_VlasovSpaceTimeFormulation.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
 
 #include "BF.h"
@@ -66,7 +66,7 @@ namespace {
     return lhsAtExactSoln * w;
   }
 
-  LinearTermPtr vlasovRHSForExactSoln(VlasovSpaceTimeFormulation form, FunctionPtr f_exact, FunctionPtr E_exact, const double q)
+  LinearTermPtr vlasovRHSForExactSoln(BoltzmannTests_VlasovSpaceTimeFormulation form, FunctionPtr f_exact, FunctionPtr E_exact, const double q)
   {
     // want an RHS so that f_exact is the exact solution
     auto w = form.w(); // test function for Vlasov RHS
@@ -118,7 +118,7 @@ namespace {
     return form;
   }
 
-  VlasovSpaceTimeFormulation getFormulation1D1T1V(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, double q, const bool useSerendipity)
+  BoltzmannTests_VlasovSpaceTimeFormulation getFormulation1D1T1V(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, double q, const bool useSerendipity)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -153,7 +153,7 @@ namespace {
     std::vector<double> velocitySpaceVertices_y; // empty
     std::vector<double> velocitySpaceVertices_z; // empty
     
-    VlasovSpaceTimeFormulation form(q, m, useSerendipity, configForm, spatialMeshTopo,
+    BoltzmannTests_VlasovSpaceTimeFormulation form(q, m, useSerendipity, configForm, spatialMeshTopo,
                                     temporalVertices,
                                     velocitySpaceVertices_x,
                                     velocitySpaceVertices_y,
@@ -414,7 +414,7 @@ namespace {
   }
 
 /*
- patchTestVlasovPoisson2() tests VlasovSpaceTimeFormulation with a Poisson ConfigurationSpaceFormulation; the ultimate
+ patchTestVlasovPoisson2() tests BoltzmannTests_VlasovSpaceTimeFormulation with a Poisson ConfigurationSpaceFormulation; the ultimate
  goal is for this combination to replace VlasovPoissonSpaceTimeFormulation, which is what patchTestVlasovPoisson() tests.
  
  Therefore, patchTestVlasovPoisson2() should replace patchTestVlasovPoisson() once VlasovPoissonSpaceTimeFormulation
@@ -687,7 +687,7 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero )
+  TEUCHOS_UNIT_TEST( BoltzmannTests_VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero )
   {
     const double q    = 0; // 0 charge --> zero electric field
     
@@ -715,7 +715,7 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
     patchTestVlasovPoisson2(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero_Serendipity )
+  TEUCHOS_UNIT_TEST( BoltzmannTests_VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero_Serendipity )
   {
     const double q    = 0; // 0 charge --> zero electric field
     
@@ -944,7 +944,7 @@ void patchTestVlasovPoisson2(FunctionPtr f_exact, FunctionPtr E_exact, FunctionP
 //    }
 //  }
 
-  TEUCHOS_UNIT_TEST( VlasovPoissonSpaceTimeFormulation, SerendipityIsNestedWithinTensor )
+  TEUCHOS_UNIT_TEST( BoltzmannTests_VlasovSpaceTimeFormulation, SerendipityIsNestedWithinTensor )
   {
     // create Vlasov formulation (H^1 order 3), with Serendipity and without.
     

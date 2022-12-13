@@ -188,7 +188,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
   
   form.setUseGeometricMultigrid(true);
-  form.setIterativeSolveTolerance(tol / 100.0);
+  form.setIterativeSolveTolerance(1e-15);
 //    form.setIterativeSolveOutputLevel(10);
   form.setFixedPointMaxSubsteps(5);
   form.setFixedPointMinSubsteps(5);
@@ -261,11 +261,24 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   // to do the "pure" Poisson solve, we do need to have an f solution defined, since that enters the RHS
   std::map<int, FunctionPtr> initialGuess_Vlasov; // project the exact field solution onto the mesh
   initialGuess_Vlasov[form.f()->ID()] = f_exact;
-//  {
-//    // DEBUGGING: do we move from correct solution if we start there?
-//    out << "NOTE: projecting exact tn_hat onto solution -- for iterative solver, this is cheating.\n";
-//    initialGuess_Vlasov[form.t_n_hat()->ID()] = tn_0;
-//  }
+  initialGuess_Vlasov[form.t_n_hat()->ID()] = tn_0;
+  vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
+  
+  // check that tn_0 can be represented on the mesh, at least to within tol
+  FunctionPtr tn_soln = Function::solution(form.t_n_hat(), vlasovSoln, false);
+  FunctionPtr tn_err = tn_0 - tn_soln;
+  double tn_projection_err = tn_err->l2norm(vlasovSoln->mesh());
+  double tn_soln_magnitude = tn_soln->l2norm(vlasovSoln->mesh());
+  out << "tn_soln_magnitude = " << tn_soln_magnitude << std::endl;
+  TEST_COMPARE(tn_projection_err, <=, tol * tn_soln_magnitude);
+  
+  // now, project again, this time with a zero t_n
+  //  {
+  //    // DEBUGGING: do we move from correct solution if we start there?
+  //    out << "NOTE: projecting exact tn_hat onto solution -- for iterative solver, this is cheating.\n";
+  //    initialGuess_Vlasov[form.t_n_hat()->ID()] = tn_0;
+  //  }
+  initialGuess_Vlasov[form.t_n_hat()->ID()] = Function::zero();
   vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
 
 //  form.setExportViz(true); // DEBUGGING
@@ -324,15 +337,9 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   TEST_COMPARE(VE_err_l2, <=, tol * VE_soln_magnitude);
 
   out << "Comparing tn_0 with t_n_soln after Vlasov-Poisson solve.\n";
-  
-  FunctionPtr tn_soln = Function::solution(form.t_n_hat(), vlasovSoln, false);
-  double tn_soln_magnitude = tn_soln->l2norm(vlasovSoln->mesh());
-  out << "soln_magnitude = " << tn_soln_magnitude << std::endl;
 
   const int time_comp_zero_based = form.configurationSpaceMesh()->getDimension() - 1; // time is last dimension of Poisson mesh
   SpatialFilterPtr initialTimeFilter = SpatialFilter::matchingComponent(time_comp_zero_based, TEST_T0);
-
-  FunctionPtr tn_err = tn_0 - tn_soln;
 
   double tn_err_overall = tn_err->l2norm(vlasovSoln->mesh());
   TEST_COMPARE(tn_err_overall, <=, tol * tn_soln_magnitude);
@@ -498,7 +505,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
     
     form.setUseGeometricMultigrid(true);
-    form.setIterativeSolveTolerance(1e-6 / 100.0);
+    form.setIterativeSolveTolerance(1e-8);
     form.setFixedPointMaxSubsteps(1);
     form.setFixedPointMinSubsteps(1);
     
@@ -759,16 +766,6 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear )
   {
-    bool disableTest = true;
-    if (disableTest)
-    {
-      std::cout << "\n\n******************************************* WARNING: Test Disabled ********************************************\n";
-      std::cout << "* This test is disabled because of failures; it should be investigated, fixed, and re-enabled.  See Issue #135. *\n";
-      std::cout << "***************************************************************************************************************\n\n";
-      
-      return;
-    }
-    
     const double q      = TEST_Q;
     
     const int spaceDim = 1;
@@ -795,16 +792,6 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear_Serendipity )
   {
-    bool disableTest = true;
-    if (disableTest)
-    {
-      std::cout << "\n\n******************************************* WARNING: Test Disabled ********************************************\n";
-      std::cout << "* This test is disabled because of failures; it should be investigated, fixed, and re-enabled.  See Issue #135. *\n";
-      std::cout << "***************************************************************************************************************\n\n";
-      
-      return;
-    }
-    
     const double q      = TEST_Q;
     
     const int spaceDim = 1;
@@ -831,16 +818,6 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic )
   {
-    bool disableTest = true;
-    if (disableTest)
-    {
-      std::cout << "\n\n******************************************* WARNING: Test Disabled ********************************************\n";
-      std::cout << "* This test is disabled because of failures; it should be investigated, fixed, and re-enabled.  See Issue #136. *\n";
-      std::cout << "***************************************************************************************************************\n\n";
-      
-      return;
-    }
-    
     const double q      = TEST_Q;
     const double eps0   = TEST_EPS0;
     
@@ -855,7 +832,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int tElements = 1;
     const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
     const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
-    const double tol = 1e-9; // unclear why the tolerance needs to be so loose here; it may have to do with the scaling of tn, which has an extra v factor on some sides…
+    const double tol = 1e-12;
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const bool useSerendipity    = false;
@@ -868,16 +845,6 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic_Serendipity )
   {
-    bool disableTest = true;
-    if (disableTest)
-    {
-      std::cout << "\n\n******************************************* WARNING: Test Disabled ********************************************\n";
-      std::cout << "* This test is disabled because of failures; it should be investigated, fixed, and re-enabled.  See Issue #136. *\n";
-      std::cout << "***************************************************************************************************************\n\n";
-      
-      return;
-    }
-    
     const double q      = TEST_Q;
     const double eps0   = TEST_EPS0;
     
@@ -892,7 +859,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int tElements = 1;
     const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
     const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
-    const double tol = 1e-9; // unclear why the tolerance needs to be so loose here; it may have to do with the scaling of tn, which has an extra v factor on some sides…
+    const double tol = 1e-12;
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const bool useSerendipity    = true;
