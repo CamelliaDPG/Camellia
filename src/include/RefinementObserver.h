@@ -54,6 +54,8 @@ public:
   }
   
   virtual void didRepartition(MeshTopologyPtr meshTopo) {}
+  
+  virtual void meshDestructorCalled() {}
 };
 }
 

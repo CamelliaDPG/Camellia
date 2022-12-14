@@ -280,6 +280,11 @@ Mesh::Mesh(MeshPtr mesh, GlobalIndexType cellID, Epetra_CommPtr Comm) : DofInter
 Mesh::~Mesh()
 {
   _meshTopology->setGlobalDofAssignment(NULL);
+  
+  for (auto observer : _registeredObservers)
+  {
+    observer->meshDestructorCalled();
+  }
 }
 
 GlobalIndexType Mesh::activeCellOffset()

@@ -905,7 +905,9 @@ namespace Camellia {
     Camellia::FieldContainer<double> ATb(M,L);
     multiply(ATb, A_T, b);
     
-    return solveSystemMultipleRHS(x, ATA, ATb, false);
+    const bool useATATranspose = true; // use ATA transpose (avoids some data movement; ATA is symmetric)
+    const bool allowOverwriteOfATA = true; // local matrix, discarded after this
+    return solveSystemUsingQR(x, ATA, ATb, useATATranspose, allowOverwriteOfATA);
   }
   
   int SerialDenseWrapper::solveSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A,
