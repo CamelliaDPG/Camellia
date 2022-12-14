@@ -629,10 +629,15 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
          functionality into a new helper method, and call it both from here and upon mesh refinement;
          doing the latter transparently will require that the next slab has a reference to the previous.
          So that we don't require all slabs to stay in memory, we'll want to nullify this reference during
-         nextTimeSlab().  (Also need to nullify the BC for the current slab, for the same reason: it refers
-         to the previous slab's solution, which has a BC for the previous one, etc.  So we have a linked
-         list of Solution objects; need to break those links to free up the memory.)
+         nextTimeSlab().  (Also need to nullify the BC for the current slab -- as we do below -- for the
+         same reason: it refers to the previous slab's solution, which has a BC for the previous one, etc.
+         So we have a linked list of Solution objects; need to break those links to free up the memory.)
    */
+  // nullify the BC for current slab; if it's not the first slab, it will have reference to a prior slab's solution,
+  // and on back to the first slab, unless we nullify.  We could also call setInitialConditions(Function::zero()) or
+  // something like that, but setting to null has the advantage that we'll fail fast if the user tries to do a solve
+  // on the current slab after calling nextTimeSlab() -- it will crash with a null pointer exception.
+  _vlasovSoln->setBC(Teuchos::null);
   
   return nextSlabForm;
 }
