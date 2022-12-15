@@ -24,9 +24,6 @@ namespace Camellia
     MeshPtr     _temporalMesh;
     SolutionPtr _temporalSolution; // defined on the temporal mesh
     FunctionPtr _temporalFunction; // defined with reference to _temporalSolution
-    
-    SolutionPtr _soln; // space-time solution
-    VarPtr _fieldVar;
   public:
     //! spatialWeight: a function to integrate against (e.g., could be sin (x/2) for a Fourier mode computation).  quadratureEnrichment: how much higher-order to go for quadrature to account for integrating against spatialWeight.
     SpatialIntegralOfSpaceTimeSolution(SolutionPtr spaceTimeSoln, VarPtr fieldVar, FunctionPtr spatialWeight, int quadratureEnrichment);

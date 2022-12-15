@@ -28,11 +28,8 @@
 using namespace Camellia;
 
 SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionPtr spaceTimeSoln, VarPtr fieldVar, FunctionPtr spatialWeight, int quadratureEnrichment)
-{
-  _soln = spaceTimeSoln;
-  _fieldVar = fieldVar;
-  
-  auto elemType = _soln->mesh()->globalDofAssignment()->getSampleElementType();
+{  
+  auto elemType = spaceTimeSoln->mesh()->globalDofAssignment()->getSampleElementType();
   auto cellTopo = elemType->cellTopoPtr;
   
   auto trialOrdering  = elemType->trialOrderPtr;
@@ -115,7 +112,7 @@ SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionP
   _temporalFunction = Function::solution(u_temporal, _temporalSolution);
   _temporalMesh     = mesh_temporal;
   
-  auto &cellIDs_spaceTime = _soln->mesh()->cellIDsInPartition();
+  auto &cellIDs_spaceTime = spaceTimeSoln->mesh()->cellIDsInPartition();
   
   std::vector<GlobalIndexType>  cellIDs_spatial_ordered; //  spatial cellIDs in the order they occur in the phase-space mesh (in general, contains duplicates).
   std::vector<GlobalIndexType> cellIDs_temporal_ordered; // temporal cellIDs in the order they occur in the phase-space mesh (in general, contains duplicates).
@@ -156,12 +153,12 @@ SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionP
   DeviceView<double> spatialCoefficients = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage({numCells,numSpatialSolutions,numSpatialFields},"SpatialIntegralOfSpaceTimeSolution spatialCoefficients"); // (C,N,F)
   DeviceView<double> solutionIntegrals = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage({numCells,numSpatialSolutions},"SpatialIntegralOfSpaceTimeSolution solutionIntegrals"); // (C,N)
   
-  // copy from _soln into spatialCoefficients
+  // copy from spaceTimeSoln into spatialCoefficients
   FieldContainer<double> basisCoefficients;
   int spaceTimeCellOrdinal = 0;
   for (const auto & cellID_spaceTime : cellIDs_spaceTime)
   {
-    _soln->getBasisCoefficientsForCell(basisCoefficients, fieldVar->ID(), cellID_spaceTime, STANDARD_SOLUTION, 0);
+    spaceTimeSoln->getBasisCoefficientsForCell(basisCoefficients, fieldVar->ID(), cellID_spaceTime, STANDARD_SOLUTION, 0);
     auto basisCoefficientsDeviceView = basisCoefficients.checkoutDeviceView();
     
     auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy<2>({numSpatialSolutions,numSpatialFields});
