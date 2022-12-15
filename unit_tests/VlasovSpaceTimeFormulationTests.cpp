@@ -544,7 +544,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     form->setInitialAndInflowConditions(f_exact, f_exact);
     
     bool useGeometricMultigrid = true;
-    bool cgTol = 1e-6 / 100.0;
+    double cgTol = 1e-6 / 100.0;
+    double fixedPointTol = 3e-8;
     int maxSubsteps = 3;
     int minSubsteps = 1;
     
@@ -561,6 +562,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     form->setIterativeSolveTolerances(cgTols);
     form->setFixedPointMaxSubsteps(maxSubsteps);
     form->setFixedPointMinSubsteps(minSubsteps);
+    form->setFixedPointTolerance(fixedPointTol);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     form->setIterativeSolveOutputLevel(azOutputLevel);
     form->setIterativeSolveMaxIterations(maxIters);
@@ -576,6 +578,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     TEST_EQUALITY(cgTol,                  nextSlab->iterativeSolveTolerance());
     TEST_EQUALITY(maxSubsteps,            nextSlab->fixedPointMaxSubsteps());
     TEST_EQUALITY(minSubsteps,            nextSlab->fixedPointMinSubsteps());
+    TEST_EQUALITY(fixedPointTol,          nextSlab->fixedPointTolerance());
     TEST_EQUALITY(enforceQuasiNeutrality, nextSlab->enforceQuasiNeutrality());
     TEST_EQUALITY(azOutputLevel,          nextSlab->iterativeSolveOutputLevel());
     TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());

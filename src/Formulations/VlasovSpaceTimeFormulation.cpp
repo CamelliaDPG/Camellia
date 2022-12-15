@@ -688,6 +688,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
+  nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);
   nextSlabForm->setExportViz(_exportViz,_vizOutputDir);
   nextSlabForm->setMaxMomentForConservationDiagnostics(_maxMomentForConservationDiagnostics);
   
