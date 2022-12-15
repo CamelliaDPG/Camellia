@@ -4384,9 +4384,15 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
     VarPtr trialVar = vf->trial(trialID);
     TFunctionPtr<Scalar> function = functionIt->second;
 
-    bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree);
     ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
+    
+    // we want to integrate trial vs. trial.  In the usual case, this means we can reduce quadrature degree.
+    // in the unusual case that e.g. there are no test functions defined, we might need to enrich relative to the standard trial-vs.-test BasisCache
+    int trialDegree = elemTypePtr->trialOrderPtr->maxBasisDegree();
+    int testDegree  = elemTypePtr->testOrderPtr->maxBasisDegree();
+    int trialEnrichmentRequired = trialDegree * 2 - testDegree; // may be negative
+    bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree + trialEnrichmentRequired);
 
     if (fluxOrTrace)
     {

@@ -22,6 +22,7 @@
 #include "GMGSolver.h"
 #include "PoissonFormulation.h"
 #include "SolutionMomentFunction.h"
+#include "SpatialIntegralOfSpaceTimeSolution.h"
 #include "TensorUtilities.h"
 #include "VarFactory.h"
 
@@ -106,6 +107,23 @@ private:
   
   FunctionPtr _f0;       // initial condition set by setInflowConditions() or setInitialAndInflowConditions()
   FunctionPtr _f_inflow; // inflow condition set by setInitialAndInflowConditions()
+  
+  int _maxMomentForConservationDiagnostics = -1; // 0 for mass, 1 for mass + momentum, 2 for mass + momentum + energy
+  std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >                _massIntegrals;     // one per slab in the solution history
+  std::vector< std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > > _momentumIntegrals; // outer index: spatial dimension (0 for x, 1 for y, 2 for z); inner: slab index
+  std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >                _energyIntegrals;   // one per slab in solution history
+  
+  std::vector< double > _slabTemporalCoordinates; // for slab slabOrdinal, start time is at index slabOrdinal, end time at (slabOrdinal+1)
+  
+  FunctionPtr _density;
+  std::vector<FunctionPtr> _momentum; // matches _spaceDim in number of components
+  FunctionPtr _energy; // sum of the xx, yy, zz moments (in 3D)
+  
+  std::vector< std::pair<double,double> > timeSeriesForSpatialIntegral(Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> integral,
+                                                                       const double &t0, const double &dt, const int &numValues) const;
+  
+  std::vector< std::pair<double,double> > timeSeriesForSlabSpatialIntegrals(const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > &integrals,
+                                                                            const double &t0, const double &dt, const int &numValues) const;
 public:
   VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -228,6 +246,9 @@ public:
   */
   void clearConfigurationSpaceBCs();
   
+  //! Computes (or recomputes) the conservation diagnostics.  Typically, this is called during solve().  Only computes up to the maximum moment for conservation diagnostics (which defaults to -1).
+  void computeConservationDiagnostics(bool updateSolutionMoments);
+  
   /** \brief  A VarPtr for the B trace variable component specified, valid on the configuration-space mesh.
    \param  zeroBasedComp   [in]  - The component of B that is being requested; use 0 for B_x, 1 for B_y, and 2 for B_z.
    \return VarPtr for the specified B component; Teuchos::null if the ConfigurationSpaceFormulation does not include the specified component of B as a variable.
@@ -257,6 +278,36 @@ public:
   
   //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.
   Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements);
+  
+  //! sets the maximum moment for which conservation diagnostics should be recorded.  Can be -1 (for no diagnostics), 0 (for mass), 1 (mass + momentum), or 2 (mass, momentum, and energy).
+  void setMaxMomentForConservationDiagnostics(const int maxMomentForConservationDiagnostics);
+  
+  //! Returns the maximum moment for which conservation diagnostics should be recorded.  Can be -1 (for no diagnostics), 0 (for mass), 1 (mass + momentum), or 2 (mass, momentum, and energy).
+  int maxMomentForConservationDiagnostics() const;
+  
+  //! Returns a time series for mass as recorded by conservation diagnostics.
+  std::vector< std::pair<double,double> > totalMassTimeSeries(const double t0, const double dt, const int numValues) const;
+  
+  //! Returns a time series for x momentum as recorded by conservation diagnostics.
+  std::vector< std::pair<double,double> > totalXMomentumTimeSeries(const double t0, const double dt, const int numValues) const;
+  
+  //! Returns a time series for y momentum as recorded by conservation diagnostics.  (Requires spaceDim > 1.)
+  std::vector< std::pair<double,double> > totalYMomentumTimeSeries(const double t0, const double dt, const int numValues) const;
+  
+  //! Returns a time series for Z momentum as recorded by conservation diagnostics.  (Requires spaceDim = 3.)
+  std::vector< std::pair<double,double> > totalZMomentumTimeSeries(const double t0, const double dt, const int numValues) const;
+  
+  //! Returns a time series for total energy as recorded by conservation diagnostics.
+  std::vector< std::pair<double,double> > totalEnergyTimeSeries(const double t0, const double dt, const int numValues) const;
+  
+  //! sets previous slab data for temporal divisions and conservation diagnostics.  Called during nextTimeSlab().
+  void setSlabHistory(const std::vector<double>                                                          &slabTemporalCoordinates,
+                      const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &massIntegrals,
+                      const std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >> &momentumIntegrals,
+                      const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &energyIntegrals );
+  
+  //! returns the ordinal of this slab.  0 for first, 1 for second, etc.
+  int slabOrdinal() const;
   
   /** \brief  Returns a Function representing the specified component of configuration space. */
   FunctionPtr x_i(const int zeroBasedComp) const;

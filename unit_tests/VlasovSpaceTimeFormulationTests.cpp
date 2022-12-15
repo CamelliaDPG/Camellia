@@ -413,6 +413,105 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
                          q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
 }
 
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, ConservationDiagnostics )
+  {
+    FunctionPtr  f_exact;
+    {
+      FunctionPtr t = MonomialFunction::xi_n(1, 1); // first argument is the coordinate dimension (corresponds to time); second is the power.
+      f_exact = t;
+    }
+    
+    const double q = 1.;
+    
+    const int xElements = 2;
+    const int tElements = 1;
+    const int vElements = 4;
+    const int H1Order   = 3;
+    
+    const bool useSerendipity    = false;
+    
+    const bool usePeriodicBCs = true;
+    
+    auto initialSlab = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+   
+    auto initialVlasovSoln = initialSlab->vlasovSolution();
+    
+    map<int, FunctionPtr> projectionMap;
+    projectionMap[initialSlab->f()->ID()] = f_exact;
+    
+    initialSlab->setMaxMomentForConservationDiagnostics(2);
+    
+    int numTemporalPointsPerSlab = 11;
+    double dt = TEST_TWIDTH / (numTemporalPointsPerSlab - 1);
+    
+    int numTimeSlabs = 3;
+    vector<pair<double,double>> expectedMassSeries(numTemporalPointsPerSlab);
+    vector<pair<double,double>> expectedMomentumSeries(numTemporalPointsPerSlab);
+    vector<pair<double,double>> expectedEnergySeries(numTemporalPointsPerSlab);
+    double meshMeasure         = TEST_VWIDTH * TEST_XWIDTH; // measure in dimensions excluding time
+    double vMin                = TEST_V0;
+    double vMax                = TEST_V0 + TEST_VWIDTH;
+    double meshMomentumMeasure = TEST_XWIDTH * (vMax * vMax - vMin * vMin) / 2.0; // integral of v over x,v dimensions
+    double meshEnergyMeasure   = TEST_XWIDTH * (vMax * vMax * vMax - vMin * vMin * vMin) / 3.0; // integral of v^2 over x,v dimensions
+    
+    double slabStart = TEST_T0;
+    auto currentSlab = initialSlab;
+    for (int slabNumber=0; slabNumber<numTimeSlabs; slabNumber++)
+    {
+      auto vlasovSoln = currentSlab->vlasovSolution();
+      vlasovSoln->projectOntoMesh(projectionMap);
+      currentSlab->computeConservationDiagnostics(true); // true: do update solution moments; they haven't been computed yet
+      
+      double t = slabStart;
+      for (int i=0; i<numTemporalPointsPerSlab; i++)
+      {
+        double massIntegralValue = meshMeasure * t;
+        expectedMassSeries[i] = {t,massIntegralValue};
+        double momentumIntegralValue = meshMomentumMeasure * t;
+        expectedMomentumSeries[i] = {t,momentumIntegralValue};
+        double energyIntegralValue = meshEnergyMeasure * t;
+        expectedEnergySeries[i] = {t, energyIntegralValue};
+        t += dt;
+      }
+      auto actualMassSeries = currentSlab->totalMassTimeSeries(slabStart, dt, numTemporalPointsPerSlab);
+      TEST_EQUALITY(expectedMassSeries.size(), actualMassSeries.size());
+      auto actualMomentumSeries = currentSlab->totalXMomentumTimeSeries(slabStart, dt, numTemporalPointsPerSlab);
+      TEST_EQUALITY(expectedMomentumSeries.size(), actualMomentumSeries.size());
+      auto actualEnergySeries = currentSlab->totalEnergyTimeSeries(slabStart, dt, numTemporalPointsPerSlab);
+      
+      auto compareSeries = [&] (const vector<pair<double,double>> &expected,
+                                const vector<pair<double,double>> &actual) -> void
+      {
+        const double absTol = 1e-11;
+        const double relTol = 1e-13;
+        for (int i=0; i<numTemporalPointsPerSlab; i++)
+        {
+          const double t_expected = expected[i].first;
+          const double t_actual   = actual[i].first;
+          const double integral_expected = expected[i].second;
+          const double integral_actual   = actual[i].second;
+          
+          TEST_FLOATING_EQUALITY(t_expected, t_actual, relTol);
+          if (integral_expected < absTol)
+          {
+            TEST_COMPARE(std::abs(integral_expected-integral_actual), <, absTol);
+          }
+          else
+          {
+            TEST_FLOATING_EQUALITY(integral_expected, integral_actual, relTol);
+          }
+        }
+      };
+      
+      compareSeries(expectedMassSeries,     actualMassSeries);
+      compareSeries(expectedMomentumSeries, actualMomentumSeries);
+      compareSeries(expectedEnergySeries,   actualEnergySeries);
+      
+      currentSlab = currentSlab->nextTimeSlab(TEST_TWIDTH, tElements);
+      slabStart += TEST_TWIDTH;
+    }
+  }
+
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, NextTimeSlab )
   {
     // sets up a formulation like the PoissonTwoStreamSteadyState test below, but does not solve.  Checks that the new slab

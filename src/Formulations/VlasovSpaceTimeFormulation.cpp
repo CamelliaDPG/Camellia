@@ -126,6 +126,8 @@ _numUniformRefinements(numUniformRefinements)
   _t0 = temporalVertices[0];
   _t1 = temporalVertices[temporalVertices.size()-1];
   
+  _slabTemporalCoordinates = {_t0, _t1}; // will be overwritten by setSlabHistory(), if that's called (i.e., if this is not the initial slab).
+  
   _configurationSpaceMeshTopology = MeshFactory::extrudedMeshTopology(spatialMeshTopology, {temporalVertices});
   _configurationSpaceFormulation->initializeMesh(_configurationSpaceMeshTopology, H1Order, delta_k);
   
@@ -406,6 +408,80 @@ void VlasovSpaceTimeFormulation::clearSolution()
   _vlasovSoln->clear();
 }
 
+void VlasovSpaceTimeFormulation::computeConservationDiagnostics(bool updateSolutionMoments)
+{
+  if (updateSolutionMoments)
+  {
+    _solutionMoments->update();
+  }
+  
+  // record conservation diagnostics
+  int slabNumber = this->slabOrdinal();
+  
+  // ensure that our containers are big enough:
+  _massIntegrals.resize(slabNumber+1, Teuchos::null);
+  _momentumIntegrals.resize(_spaceDim);
+  for (int d=0; d<_spaceDim; d++)
+  {
+    _momentumIntegrals[d].resize(slabNumber+1, Teuchos::null);
+  }
+  _energyIntegrals.resize(slabNumber+1, Teuchos::null);
+  
+  if (_maxMomentForConservationDiagnostics >= 0)
+  {
+    // create Solution object
+    VarFactoryPtr varFactory = VarFactory::varFactory();
+    
+    VarPtr massVar;
+    std::vector<VarPtr> momentumVar(_spaceDim);
+    VarPtr energyVar;
+    
+    std::map<int, FunctionPtr> projectionMap;
+    if (_density != Teuchos::null)
+    {
+      massVar = varFactory->fieldVar("mass");
+      projectionMap[massVar->ID()] = _density;
+    }
+    for (int d=0; d<_spaceDim; d++)
+    {
+      if (_momentum[d] != Teuchos::null)
+      {
+        momentumVar[d] = varFactory->fieldVar("momentum" + std::to_string(d));
+        projectionMap[momentumVar[d]->ID()] = _momentum[d];
+      }
+    }
+    if (_energy != Teuchos::null)
+    {
+      energyVar = varFactory->fieldVar("energy");
+      projectionMap[energyVar->ID()] = _energy;
+    }
+    
+    auto H1Order = _configurationSpaceFormulation->configurationSpaceMesh()->globalDofAssignment()->getInitialH1Order();
+    auto delta_k = 0; // since we're not solving, no enrichment required.  (Also, we don't have any test variables.)
+    MeshPtr conservationDiagnosticsMesh = Teuchos::rcp(new Mesh(_configurationSpaceMeshTopology, varFactory, H1Order, delta_k) );
+    
+    SolutionPtr diagnosticSolution = Solution::solution(conservationDiagnosticsMesh);
+    diagnosticSolution->projectOntoMesh(projectionMap);
+            
+    FunctionPtr one = Function::constant(1.0);
+    const int quadratureEnrichment = 0;
+    _massIntegrals[slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, massVar, one, quadratureEnrichment) );
+    
+    if (_maxMomentForConservationDiagnostics >= 1)
+    {
+      for (int d=0; d<_spaceDim; d++)
+      {
+        _momentumIntegrals[d][slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, momentumVar[d], one, quadratureEnrichment) );
+      }
+    }
+    
+    if (_maxMomentForConservationDiagnostics >= 2)
+    {
+      _energyIntegrals[slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, energyVar, one, quadratureEnrichment) );
+    }
+  }
+}
+
 Teuchos::RCP<ConfigurationSpaceFormulation> VlasovSpaceTimeFormulation::configurationSpaceFormulation()
 {
   return _configurationSpaceFormulation;
@@ -548,6 +624,11 @@ std::vector<double> VlasovSpaceTimeFormulation::iterativeSolveTolerances() const
   return _cgTols;
 }
 
+int VlasovSpaceTimeFormulation::maxMomentForConservationDiagnostics() const
+{
+  return _maxMomentForConservationDiagnostics;
+}
+
 Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSlab(double tWidth, int numTemporalElements)
 {
   auto temporalVertices = MeshTools::verticesFor1DIntervalMesh(_t1, tWidth, numTemporalElements);
@@ -608,6 +689,10 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
   nextSlabForm->setExportViz(_exportViz,_vizOutputDir);
+  nextSlabForm->setMaxMomentForConservationDiagnostics(_maxMomentForConservationDiagnostics);
+  
+  // copy slab/diagnostic history:
+  nextSlabForm->setSlabHistory(_slabTemporalCoordinates, _massIntegrals, _momentumIntegrals, _energyIntegrals);
   
   // import solution data so that it's available for BC setting
   std::set<GlobalIndexType> currentCellIDsForRank;
@@ -794,6 +879,8 @@ void VlasovSpaceTimeFormulation::solve()
   
   _iterationCounts.push_back(substepIterationCounts);
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
+  
+  computeConservationDiagnostics(false); // false: don't update solutionMoments; it was just updated above
 }
 
 void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
@@ -879,9 +966,81 @@ void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, F
   _n0->setValue(n0);
 }
 
+void VlasovSpaceTimeFormulation::setMaxMomentForConservationDiagnostics(const int maxMomentForConservationDiagnostics)
+{
+  _maxMomentForConservationDiagnostics = maxMomentForConservationDiagnostics;
+  
+  if (_solutionMoments->maxMomentNumber() < maxMomentForConservationDiagnostics)
+  {
+    // need to re-create _solutionMoments
+    _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentForConservationDiagnostics, _vlasovSoln, f(), _configurationSpaceFormulation->configurationSpaceMesh()) );
+    _configurationSpaceFormulation->setMoments(_solutionMoments,_n0);
+  }
+  
+  _momentum.resize(_spaceDim);
+  
+  if (_spaceDim == 1)
+  {
+    _density     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments->solutionMomentFunction(0) : Teuchos::null;
+    _momentum[0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(1) : Teuchos::null;
+    _energy      = (maxMomentForConservationDiagnostics >= 2) ? _solutionMoments->solutionMomentFunction(2) : Teuchos::null;
+  }
+  else if (_spaceDim == 2)
+  {
+    _density     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments->solutionMomentFunction(0,0) : Teuchos::null;
+    _momentum[0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(1,0) : Teuchos::null;
+    _momentum[1] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(0,1) : Teuchos::null;
+    if (maxMomentForConservationDiagnostics < 2)
+    {
+      _energy = Teuchos::null;
+    }
+    else
+    {
+      _energy = _solutionMoments->solutionMomentFunction(2,0) + _solutionMoments->solutionMomentFunction(0,2);
+    }
+  }
+  else if (_spaceDim == 3)
+  {
+    _density     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments->solutionMomentFunction(0,0,0) : Teuchos::null;
+    _momentum[0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(1,0,0) : Teuchos::null;
+    _momentum[1] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(0,1,0) : Teuchos::null;
+    _momentum[2] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(0,0,1) : Teuchos::null;
+    if (maxMomentForConservationDiagnostics < 2)
+    {
+      _energy = Teuchos::null;
+    }
+    else
+    {
+      _energy = _solutionMoments->solutionMomentFunction(2,0,0) + _solutionMoments->solutionMomentFunction(0,2,0) + _solutionMoments->solutionMomentFunction(0,0,2);
+    }
+  }
+}
+
 Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments()
 {
   return _solutionMoments;
+}
+
+void VlasovSpaceTimeFormulation::setSlabHistory(const std::vector<double> &slabTemporalCoordinates,
+                                                const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &massIntegrals,
+                                                const std::vector<std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>>> &momentumIntegrals,
+                                                const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &energyIntegrals)
+{
+  _slabTemporalCoordinates = slabTemporalCoordinates;
+  _massIntegrals = massIntegrals;
+  _momentumIntegrals = momentumIntegrals;
+  _energyIntegrals = energyIntegrals;
+  
+  // last listed temporal coordinate should match our start coordinate
+  double tol = 1e-14;
+  double t0Diff = std::abs(_slabTemporalCoordinates[_slabTemporalCoordinates.size()-1] - _t0);
+  TEUCHOS_TEST_FOR_EXCEPTION(t0Diff > tol, std::invalid_argument, "slabTemporalCoordinates: final entry must match this slab's start time");
+  _slabTemporalCoordinates.push_back(_t1);
+}
+
+int VlasovSpaceTimeFormulation::slabOrdinal() const
+{
+  return _slabTemporalCoordinates.size() - 2;
 }
 
 // test variables:
@@ -941,10 +1100,186 @@ int VlasovSpaceTimeFormulation::tagVlasovMinVelocity(int zeroBasedComp) const
   }
 }
 
+vector<pair<double,double>> VlasovSpaceTimeFormulation::timeSeriesForSpatialIntegral(Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> integral,
+                                                                                     const double &t0, const double &dt, const int &numValues) const
+{
+  auto temporalSolution         = integral->temporalSolution();
+  auto temporalSolutionFunction = integral->temporalFunction();
+  auto mesh = temporalSolution->mesh();
+  auto activeCells = mesh->getTopology()->getLocallyKnownActiveCellIndices(); // we assume mesh geometry is not distributed
+  temporalSolution->importSolutionForOffRankCells(activeCells);
+  
+  // confirm that the mesh geometry is not distributed:
+  const int numActiveCells = activeCells.size();
+  TEUCHOS_TEST_FOR_EXCEPTION(mesh->numActiveElements() != numActiveCells, std::invalid_argument, "Error: not all active cell indices are locally known");
+  
+  const double tol = 1e-10;
+  
+  std::map<IndexType, vector<double> > pointsForCell;
+  
+  const double t1 = t0 + dt * (numValues - 1);
+  
+  vector<double> allPoints;
+  {
+    double t = t0;
+    int t_ordinal = 0;
+    while (t <= t1 + tol)
+    {
+      allPoints.push_back(t);
+      t_ordinal++;
+      t = t0 + t_ordinal * dt;
+    }
+  }
+  const int numPoints = allPoints.size();
+  
+  vector<pair<double,double>> fxnValues(numPoints);
+  if (numPoints == 0) return fxnValues;
+
+  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(CellTopology::line(), 1);
+  basisCache->setMesh(mesh);
+
+  auto meshTopo = mesh->getTopology();
+  
+  FieldContainer<double> vertices(2,1); // (N,D)
+  for (const auto &cellID : activeCells)
+  {
+    meshTopo->verticesForCell(vertices, cellID);
+    double t_left  = vertices(0,0);
+    double t_right = vertices(1,0);
+    if (t_right != t1)
+    {
+      // rightmost cell owns its final point; intermediate cells do not
+      t_right -= tol * 2;
+    }
+
+    // determine the first matching point that intersects the cell (if any)
+    int t_firstOrdinal = (t_left - t0 + tol) / dt; // in allPoints
+    if (allPoints[t_firstOrdinal] + tol < t_left)
+    {
+      // then go to the next point
+      t_firstOrdinal = (t_left - t0 + dt + tol) / dt; // in allPoints
+    }
+    if (t_firstOrdinal >= numPoints) continue; // can't have any matches in this cell, then
+    TEUCHOS_TEST_FOR_EXCEPTION(allPoints[t_firstOrdinal] + tol < t_left, std::logic_error, "logic error determining t_firstOrdinal");
+
+    vector<double> points;
+
+    double t = dt * t_firstOrdinal + t0;
+    while (t < t_right + tol)
+    {
+      points.push_back(t);
+      t += dt;
+    }
+    pointsForCell[cellID] = points;
+
+    double refCellScaling = 2.0 / (t_right - t_left);
+    int numPointsForCell = points.size();
+    
+    if (numPointsForCell == 0) continue;
+    
+    FieldContainer<double> refCellPoints(numPointsForCell,1);
+    for (int pointOrdinal=0; pointOrdinal<numPointsForCell; pointOrdinal++)
+    {
+      const auto &point = points[pointOrdinal];
+      double refPoint = (point - t_left) * refCellScaling - 1.0; // -1.0 is the image of t_left on the reference cell
+      refCellPoints(pointOrdinal,0) = refPoint;
+    }
+
+    FieldContainer<double> cellFxnValues(1,numPointsForCell);
+    auto physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+
+    basisCache->setRefCellPointsFC(refCellPoints);
+    basisCache->setPhysicalCellNodes(physicalCellNodes, {cellID}, false);
+    temporalSolutionFunction->values(cellFxnValues, basisCache);
+
+    for (int pointOrdinal=0; pointOrdinal<numPointsForCell; pointOrdinal++)
+    {
+      fxnValues[t_firstOrdinal + pointOrdinal] = {points[pointOrdinal],cellFxnValues(0,pointOrdinal)};
+    }
+  }
+  return fxnValues;
+}
+
+vector<pair<double,double>> VlasovSpaceTimeFormulation::timeSeriesForSlabSpatialIntegrals(const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &integrals,
+                                                                                          const double &t0, const double &dt, const int &numValues) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(integrals.size() != _slabTemporalCoordinates.size() - 1, std::invalid_argument, "integrals container is not the expected size.  computeConservationDiagnostics() may not have been called.");
+  vector<pair<double,double>> allValues;
+  const int numSlabs = _slabTemporalCoordinates.size() - 1;
+  double t = t0;
+  double tol = 1e-14;
+  
+  for (int slabNumber=0; slabNumber<numSlabs; slabNumber++)
+  {
+    double slabStart = _slabTemporalCoordinates[slabNumber];
+    double slabEnd   = _slabTemporalCoordinates[slabNumber+1];
+    double slabWidth = slabEnd - slabStart;
+    
+    double initialTimeOffset = t - slabStart;
+    TEUCHOS_TEST_FOR_EXCEPTION(initialTimeOffset < -tol, std::invalid_argument, "Start time is prior to slab start");
+//    while (initialTimeOffset < -tol) // t is before slab start (should only happen for initial slab, and then only if called with a t0 prior to start time)
+//    {
+//      // pad with zeros for unknown values prior to slab start
+//      allValues.push_back({t,0});
+//      t += dt;
+//      initialTimeOffset = t - slabStart;
+//    }
+    if (initialTimeOffset >= slabWidth) continue; // we're into the next slab, at least
+    
+    int slabNumValues;
+    if (slabNumber < numSlabs - 1)
+    {
+      slabNumValues = (slabWidth - initialTimeOffset) / dt;
+    }
+    else
+    {
+      slabNumValues = numValues - allValues.size();
+    }
+    
+    auto slabValues = timeSeriesForSpatialIntegral(integrals[slabNumber], t, dt, slabNumValues);
+    
+    allValues.insert(allValues.end(), slabValues.begin(), slabValues.end());
+    t += slabNumValues * dt;
+  }
+  return allValues;
+}
+
 VarPtr VlasovSpaceTimeFormulation::t_n_hat()
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
   return vf->trialVar(S_T_N_HAT);
+}
+
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalEnergyTimeSeries(const double t0, const double dt, const int numValues) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 2, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set to 2 to enable totalEnergyTimeSeries()");
+  return timeSeriesForSlabSpatialIntegrals(_energyIntegrals, t0, dt, numValues);
+}
+
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalMassTimeSeries(const double t0, const double dt, const int numValues) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 0, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 0 to enable totalMassTimeSeries()");
+  return timeSeriesForSlabSpatialIntegrals(_massIntegrals, t0, dt, numValues);
+}
+
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalXMomentumTimeSeries(const double t0, const double dt, const int numValues) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 1, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 1 to enable totalXMomentumTimeSeries()");
+  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[0], t0, dt, numValues);
+}
+
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalYMomentumTimeSeries(const double t0, const double dt, const int numValues) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim < 2, std::invalid_argument, "spatial dimension must be >= 2 for totalYMomentumTimeSeries()");
+  TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 1, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 1 to enable totalYMomentumTimeSeries()");
+  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[1], t0, dt, numValues);
+}
+
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalZMomentumTimeSeries(const double t0, const double dt, const int numValues) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim < 3, std::invalid_argument, "spatial dimension must be 3 for totalZMomentumTimeSeries()");
+  TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 1, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 1 to enable totalZMomentumTimeSeries()");
+  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[2], t0, dt, numValues);
 }
 
 bool VlasovSpaceTimeFormulation::useGeometricMultigrid() const

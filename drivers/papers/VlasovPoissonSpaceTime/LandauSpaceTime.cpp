@@ -300,6 +300,32 @@ void exportFourierValues(const string &EFieldMode1File, bool append, vector<pair
   EFieldMode1FileStream.close();
 }
 
+//! should only call on rank 0
+void exportTimeSeriesValues(const string &timeSeriesFile, bool append, vector<pair<double,double>> &t_value_pairs, const std::string &valueHeader)
+{
+  std::ofstream timeSeriesFileStream;
+  
+  if (append)
+  {
+    timeSeriesFileStream.open(timeSeriesFile, std::ios_base::app);
+  }
+  else
+  {
+    timeSeriesFileStream.open(timeSeriesFile, std::ios::out);
+    timeSeriesFileStream << "t\t" << valueHeader << "\n";
+  }
+  timeSeriesFileStream << setprecision(15);
+
+  for (const auto & t_value : t_value_pairs)
+  {
+    const auto &t     = t_value.first;
+    const auto &value = t_value.second;
+    timeSeriesFileStream << t     << "\t";
+    timeSeriesFileStream << value << "\n";
+  }
+  timeSeriesFileStream.close();
+}
+
 vector<pair<double,double>> getPeakValues(double &previousFourierValue, double &previousTime, bool &fourierValueIsIncreasing, const vector<pair<double,double>> &fourierValues)
 {
   vector<pair<double,double>> peakValues;
@@ -429,6 +455,8 @@ int main(int argc, char *argv[])
     form->setIterativeSolveTolerances(cgTols);
     form->setIterativeSolveMaxIterations(iterativeSolveMaxIters);
     
+    form->setMaxMomentForConservationDiagnostics(2); // mass, momentum, and energy
+    
     // compute mesh widths after uniform refinements:
     int xElementsTotal = xElements;
     int tElementsTotal = tElements;
@@ -488,31 +516,39 @@ int main(int argc, char *argv[])
       poissonViz = Teuchos::rcp(new HDF5Exporter (form->configurationSpaceMesh(), poissonSS.str(), directoryPath) );
     }
     
+    auto fullFileName = [&] (const std::string &simpleName) -> string
+    {
+      std::ostringstream fileNameStream;
+      fileNameStream << outputDir << "/";
+      fileNameStream << simpleName << "_" << problemPrefix << suffix.str();
+      
+      fileNameStream << "_" << numTimeSlabs << "_timeSlabs";
+      fileNameStream << ".dat";
+      return fileNameStream.str();
+    };
+    
     if (EFieldMode1File == "")
     {
-      std::ostringstream EFieldMode1FileStream;
-      EFieldMode1FileStream << outputDir << "/";
-      EFieldMode1FileStream << "EFieldMode1_" << problemPrefix << suffix.str();
-      
-      EFieldMode1FileStream << "_" << numTimeSlabs << "_timeSlabs";
-      EFieldMode1FileStream << ".dat";
-      EFieldMode1File = EFieldMode1FileStream.str();
+      EFieldMode1File = fullFileName("EFieldMode1");
     }
     
     if (EFieldMode1DecayRateFile == "")
     {
-      std::ostringstream EFieldMode1DecayRateFileStream;
-      EFieldMode1DecayRateFileStream << outputDir << "/";
-      EFieldMode1DecayRateFileStream << "EFieldMode1DecayRate_" << problemPrefix << "_" << suffix.str();
-      
-      EFieldMode1DecayRateFileStream << "_" << numTimeSlabs << "_timeSlabs";
-      EFieldMode1DecayRateFileStream << ".dat";
-      EFieldMode1DecayRateFile = EFieldMode1DecayRateFileStream.str();
+      EFieldMode1DecayRateFile = fullFileName("EFieldMode1DecayRate");
     }
+    
+    string totalMassFile     = fullFileName("totalMass");
+    string totalMomentumFile = fullFileName("totalMomentum");
+    string totalEnergyFile   = fullFileName("totalEnergy");
     
     form->setFixedPointTolerance(fixedPointTol);
     form->setFixedPointMinSubsteps(minSubsteps);
     form->setFixedPointMaxSubsteps(maxSubsteps);
+    
+    double initialMass, initialMomentum, initialEnergy;
+    
+    double maxMassLoss = 0, maxMomentumLoss = 0, maxEnergyLoss = 0;
+    double maxMassLoss_t = 0, maxMomentumLoss_t = 0, maxEnergyLoss_t = 0;
     
     // define the weight function we'll need for the first Fourier mode
     FunctionPtr sinFxnFirstFourier;
@@ -584,32 +620,84 @@ int main(int argc, char *argv[])
       FunctionPtr ln_abs_E1 = Teuchos::rcp (new Ln<double>(abs_E1) );
       fourierViz->exportFunction({E1, ln_abs_E1}, {"E1","ln(|E1|)"}, slabNumber); // TODO: revise the Fourier output to time/slab independent… (GnuPlotUtil??)
       
-      double dt_fourier = 0.01; // granularity for plots, etc.
+      double dt_export = 0.01; // granularity for plots, etc.
       // output time values that are an even multiple of dt
-      double t0 = int(slabStartTime / dt_fourier) * dt_fourier;
+      double t0 = int(slabStartTime / dt_export) * dt_export;
       if (t0 < slabStartTime)
       {
-        t0 += dt_fourier;
+        t0 += dt_export;
       }
-      double t1 = int(slabEndTime / dt_fourier) * dt_fourier;
+      double t1 = int(slabEndTime / dt_export) * dt_export;
       if (std::abs(t1 - slabEndTime) < 1e-10)
       {
         // if the final output time would match the end of the slab, cheat back by dt_fourier, unless it's the final slab
         // (each slab "owns" its start time; only the final slab "owns" its end time)
         if (slabNumber != numTimeSlabs - 1)
         {
-          t1 -= dt_fourier;
+          t1 -= dt_export;
         }
       }
 
       if (t0 <= t1)
       {
-        auto fourierValues = evaluateTemporalSolutionFunction(fourierIntegral.temporalSolution(), ln_abs_E1, t0, t1, dt_fourier);
+        auto fourierValues = evaluateTemporalSolutionFunction(fourierIntegral.temporalSolution(), ln_abs_E1, t0, t1, dt_export);
+        int numTemporalValues = (t1 - t0 + 1e-10) / dt_export + 1;
+        auto totalMassValues     = form->totalMassTimeSeries     (t0, dt_export, numTemporalValues);
+        auto totalMomentumValues = form->totalXMomentumTimeSeries(t0, dt_export, numTemporalValues);
+        auto totalEnergyValues   = form->totalEnergyTimeSeries   (t0, dt_export, numTemporalValues);
+        
+        if (slabNumber == 0)
+        {
+          initialMass     = totalMassValues[0].second;
+          initialMomentum = totalMomentumValues[0].second;
+          initialEnergy   = totalEnergyValues[0].second;
+          
+          if (rank == 0)
+          {
+            std::cout << "Total Mass at t=0:     " << initialMass     << std::endl;
+            std::cout << "Total Momentum at t=0: " << initialMomentum << std::endl;
+            std::cout << "Total Energy at t=0:   " << initialEnergy   << std::endl;
+          }
+        }
+        for (auto entry : totalMassValues)
+        {
+          const double massLoss = initialMass - entry.second;
+          if (std::abs(massLoss) > std::abs(maxMassLoss) )
+          {
+            maxMassLoss   = massLoss;
+            maxMassLoss_t = entry.first;
+          }
+        }
+        for (auto entry : totalMomentumValues)
+        {
+          const double momentumLoss = initialMomentum - entry.second;
+          if (std::abs(momentumLoss) > std::abs(maxMomentumLoss) )
+          {
+            maxMomentumLoss   = momentumLoss;
+            maxMomentumLoss_t = entry.first;
+          }
+        }
+        for (auto entry : totalEnergyValues)
+        {
+          const double energyLoss = initialEnergy - entry.second;
+          if (std::abs(energyLoss) > std::abs(maxEnergyLoss) )
+          {
+            maxEnergyLoss   = energyLoss;
+            maxEnergyLoss_t = entry.first;
+          }
+        }
         
         if (rank == 0)
         {
           const bool append = (slabNumber > 0);
-          exportFourierValues(EFieldMode1File, append, fourierValues);
+          exportTimeSeriesValues(EFieldMode1File,   append, fourierValues,       "ln(|E1|)");
+          exportTimeSeriesValues(totalMassFile,     append, totalMassValues,     "mass");
+          exportTimeSeriesValues(totalMomentumFile, append, totalMomentumValues, "momentum");
+          exportTimeSeriesValues(totalEnergyFile,   append, totalEnergyValues,   "energy");
+          
+          std::cout << "max mass loss thus far is at time " << maxMassLoss_t << ": " << maxMassLoss << std::endl;
+          std::cout << "max momentum loss thus far is at time " << maxMomentumLoss_t << ": " << maxMomentumLoss << std::endl;
+          std::cout << "max energy loss thus far is at time " << maxEnergyLoss_t << ": " << maxEnergyLoss << std::endl;
         }
         
         auto slabFourierPeakValues = getPeakValues(previousFourierValue, t_previous, logEFieldSineModeIsIncreasing, fourierValues);
