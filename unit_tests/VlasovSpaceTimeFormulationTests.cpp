@@ -7,6 +7,7 @@
 //
 //
 
+#include "MimeticVlasovSpaceTimeFormulation.h"
 #include "VlasovSpaceTimeFormulation.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
 
@@ -63,7 +64,9 @@ namespace {
     return lhsAtExactSoln * w;
   }
 
-  Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const int xElements, const int tElements, const int vElements, const int H1Order, const bool usePeriodicBCs, double q, const bool useSerendipity)
+  Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const int xElements, const int tElements, const int vElements,
+                                                                const int H1Order, const bool usePeriodicBCs, double q,
+                                                                const bool useSerendipity, const bool useMimeticDPG)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -98,14 +101,27 @@ namespace {
     std::vector<double> velocitySpaceVertices_y; // empty
     std::vector<double> velocitySpaceVertices_z; // empty
     
-    auto form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
-                                                            temporalVertices,
-                                                            velocitySpaceVertices_x,
-                                                            velocitySpaceVertices_y,
-                                                            velocitySpaceVertices_z,
-                                                            H1Order, delta_k,
-                                                            numUniformRefinements) );
-    
+    Teuchos::RCP<VlasovSpaceTimeFormulation> form;
+    if (!useMimeticDPG)
+    {
+      form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+                                                         temporalVertices,
+                                                         velocitySpaceVertices_x,
+                                                         velocitySpaceVertices_y,
+                                                         velocitySpaceVertices_z,
+                                                         H1Order, delta_k,
+                                                         numUniformRefinements) );
+    }
+    else
+    {
+      form = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+                                                                temporalVertices,
+                                                                velocitySpaceVertices_x,
+                                                                velocitySpaceVertices_y,
+                                                                velocitySpaceVertices_z,
+                                                                H1Order, delta_k,
+                                                                numUniformRefinements) );
+    }
     return form;
   }
 
@@ -200,13 +216,14 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
                             std::vector<std::vector<GlobalIndexType> > refinementSequence,
                             const bool overrideVlasovBCs,
                             const bool useSerendipity,
+                            const bool useMimeticDPG,
                             const double tol,
                             Teuchos::FancyOStream &out, bool &success,
                             const bool outputViz, const string vizPrefix)
 {
   const bool usePeriodicBCs = false;
   
-  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
   
   form->setUseGeometricMultigrid(true);
   form->setIterativeSolveTolerance(1e-15);
@@ -404,13 +421,17 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
                             const int H1Order, const int xElements, const int tElements, const int vElements,
                             const bool overrideVlasovBCs,
                             const bool useSerendipity,
+                            const bool useMimeticDPG,
                             const double tol,
                             Teuchos::FancyOStream &out, bool &success,
                             const bool outputViz=false, const string vizPrefix="")
 {
   std::vector<std::vector<GlobalIndexType> > refinementSequence;
   patchTestVlasovPoisson(f_exact, E_exact, VE_exact,
-                         q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
+                         q, H1Order, xElements, tElements, vElements, refinementSequence,
+                         overrideVlasovBCs, useSerendipity, useMimeticDPG,
+                         tol, out, success,
+                         outputViz, vizPrefix);
 }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, ConservationDiagnostics )
@@ -429,10 +450,11 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int H1Order   = 3;
     
     const bool useSerendipity    = false;
+    const bool useMimeticDPG     = false;
     
     const bool usePeriodicBCs = true;
     
-    auto initialSlab = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+    auto initialSlab = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
    
     auto initialVlasovSoln = initialSlab->vlasovSolution();
     
@@ -512,141 +534,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     }
   }
 
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, NextTimeSlab )
-  {
-    // sets up a formulation like the PoissonTwoStreamSteadyState test below, but does not solve.  Checks that the new slab
-    // is created, and has the right number of elements, and that it copies settings (intended to include all the settings
-    // we want to be be copied).
-    double n0 = 1.;
-    double sigma = 1;
-    double u0 = 3.0;
-    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, 0.5 * n0) );
-    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1T1V(-u0, sigma, 0.5 * n0) );
-    FunctionPtr f0           = fM_u0 + fM_minus_u0;
-    
-    const double q = 1.;
-    
-    const int xElements = 2;
-    const int tElements = 1;
-    const int vElements = 8; // we need a somewhat fine mesh in v to get relatively good resolution
-    const int H1Order   = 4;
-    
-    const bool useSerendipity    = false;
-    
-    FunctionPtr  f_exact = f0;
-    FunctionPtr VE_exact = Function::zero();
-    FunctionPtr  E_exact = Function::zero();
-        
-    const bool usePeriodicBCs = true;
-    
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
-   
-    form->setInitialAndInflowConditions(f_exact, f_exact);
-    
-    bool useGeometricMultigrid = true;
-    double cgTol = 1e-6 / 100.0;
-    double fixedPointTol = 3e-8;
-    int maxSubsteps = 3;
-    int minSubsteps = 1;
-    
-    std::vector<double> cgTols {1,2,3};
-    
-    bool enforceQuasiNeutrality = true;
-    int azOutputLevel = 5;
-    int maxIters = 1000;
-    bool exportViz = true;
-    std::string vizDir = "/some/random/dir";
-    
-    form->setUseGeometricMultigrid(useGeometricMultigrid);
-    form->setIterativeSolveTolerance(cgTol);
-    form->setIterativeSolveTolerances(cgTols);
-    form->setFixedPointMaxSubsteps(maxSubsteps);
-    form->setFixedPointMinSubsteps(minSubsteps);
-    form->setFixedPointTolerance(fixedPointTol);
-    form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-    form->setIterativeSolveOutputLevel(azOutputLevel);
-    form->setIterativeSolveMaxIterations(maxIters);
-    form->setExportViz(exportViz, vizDir);
-    
-    auto nextSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
-    
-    int numElementsExpected = xElements * tElements * vElements;
-    int numElementsActual   = nextSlab->vlasovMesh()->numActiveElements();
-    TEST_EQUALITY(numElementsExpected, numElementsActual);
-    
-    TEST_EQUALITY(useGeometricMultigrid,  nextSlab->useGeometricMultigrid());
-    TEST_EQUALITY(cgTol,                  nextSlab->iterativeSolveTolerance());
-    TEST_EQUALITY(maxSubsteps,            nextSlab->fixedPointMaxSubsteps());
-    TEST_EQUALITY(minSubsteps,            nextSlab->fixedPointMinSubsteps());
-    TEST_EQUALITY(fixedPointTol,          nextSlab->fixedPointTolerance());
-    TEST_EQUALITY(enforceQuasiNeutrality, nextSlab->enforceQuasiNeutrality());
-    TEST_EQUALITY(azOutputLevel,          nextSlab->iterativeSolveOutputLevel());
-    TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());
-    TEST_EQUALITY(exportViz,              nextSlab->exportViz());
-    TEST_EQUALITY(vizDir,                 nextSlab->vizOutputDir());
-    
-    auto nextSlabCGTols = nextSlab->iterativeSolveTolerances();
-    TEST_EQUALITY(cgTols.size(), nextSlabCGTols.size());
-    if (cgTols.size() == nextSlabCGTols.size())
-    {
-      for (int i=0; i<int(cgTols.size()); i++)
-      {
-        TEST_EQUALITY(cgTols[i], nextSlabCGTols[i]);
-      }
-    }
-  }
-
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, MultiSlabSequenceAllowsInitialMeshToBeDestroyed )
-  {
-    // sets up a formulation like the PoissonTwoStreamSteadyState test below, and then creates two subsequent slabs,
-    // nullifying the first.  Checks that the mesh belonging to the first has its destructor called.
-    double n0 = 1.;
-    double sigma = 1;
-    double u0 = 3.0;
-    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, 0.5 * n0) );
-    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1T1V(-u0, sigma, 0.5 * n0) );
-    FunctionPtr f0           = fM_u0 + fM_minus_u0;
-    
-    const double q = 1.;
-    
-    const int xElements = 2;
-    const int tElements = 1;
-    const int vElements = 8; // we need a somewhat fine mesh in v to get relatively good resolution
-    const int H1Order   = 4;
-    
-    const bool useSerendipity    = false;
-    
-    FunctionPtr  f_exact = f0;
-    FunctionPtr VE_exact = Function::zero();
-    FunctionPtr  E_exact = Function::zero();
-        
-    const bool usePeriodicBCs = true;
-    
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
-   
-    form->setInitialAndInflowConditions(f_exact, f_exact);
-    
-    MeshDestructorObserver dtorObserver(form->vlasovMesh());
-    
-    TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
-    
-    auto secondSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
-    auto thirdSlab  = secondSlab->nextTimeSlab(TEST_TWIDTH, tElements);
-    
-    // still should not have been destroyed; we still have a reference, both through form and secondSlab:
-    TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
-    
-    form = Teuchos::null;
-    
-    // still should not have been destroyed; we still have a reference, through secondSlab:
-    TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
-    
-    secondSlab = Teuchos::null;
-    // now it should have been destroyed:
-    TEST_EQUALITY(true, dtorObserver.meshDestructorHasBeenCalled());
-  }
-
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonTwoStreamSteadyState )
+  void testPoissonTwoStreamSteadyState(const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success)
   {
     // like the two-stream instability problem, but no perturbation.  Should stay fixed.
     double n0 = 1.;
@@ -676,7 +564,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool usePeriodicBCs = true;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
     
     form->setUseGeometricMultigrid(true);
     form->setIterativeSolveTolerance(1e-8);
@@ -701,18 +589,6 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     auto xLeftTag = form->createConfigurationMeshSideSetTag(xLeftFilter, restrictSideSetsToBoundary);
     auto VE_traceVar = form->VE_configurationSpaceTrace();
     form->addConfigurationSpaceBC(xLeftTag, VE_traceVar, VE_exact);
-    
-//    auto cellTopo = CellTopology::cellTopology(CellTopology::line(), 2);
-//    auto vlasovMesh  = vlasovSoln->mesh();
-//    auto poissonMesh = poissonSoln->mesh();
-//    for (const auto &cellsToRefine : refinementSequence)
-//    {
-//      auto refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
-//      vlasovMesh->hRefine(cellsToRefine, refPattern, false); // false: don't rebuild yet (wait for 1-irregularity enforcement)
-//      vlasovMesh->enforceOneIrregularity(true);
-//
-//      poissonMesh->repartitionAndRebuild();
-//    }
     
     const double m    = TEST_M;
     
@@ -844,6 +720,148 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     TEST_COMPARE(f_err_l2, <=, relTol_f * soln_magnitude);
   }
 
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, NextTimeSlab )
+  {
+    // sets up a formulation like the PoissonTwoStreamSteadyState test below, but does not solve.  Checks that the new slab
+    // is created, and has the right number of elements, and that it copies settings (intended to include all the settings
+    // we want to be be copied).
+    double n0 = 1.;
+    double sigma = 1;
+    double u0 = 3.0;
+    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, 0.5 * n0) );
+    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1T1V(-u0, sigma, 0.5 * n0) );
+    FunctionPtr f0           = fM_u0 + fM_minus_u0;
+    
+    const double q = 1.;
+    
+    const int xElements = 2;
+    const int tElements = 1;
+    const int vElements = 8; // we need a somewhat fine mesh in v to get relatively good resolution
+    const int H1Order   = 4;
+    
+    const bool useSerendipity = false;
+    const bool useMimeticDPG  = false;
+    
+    FunctionPtr  f_exact = f0;
+    FunctionPtr VE_exact = Function::zero();
+    FunctionPtr  E_exact = Function::zero();
+        
+    const bool usePeriodicBCs = true;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+   
+    form->setInitialAndInflowConditions(f_exact, f_exact);
+    
+    bool useGeometricMultigrid = true;
+    double cgTol = 1e-6 / 100.0;
+    double fixedPointTol = 3e-8;
+    int maxSubsteps = 3;
+    int minSubsteps = 1;
+    
+    std::vector<double> cgTols {1,2,3};
+    
+    bool enforceQuasiNeutrality = true;
+    int azOutputLevel = 5;
+    int maxIters = 1000;
+    bool exportViz = true;
+    std::string vizDir = "/some/random/dir";
+    
+    form->setUseGeometricMultigrid(useGeometricMultigrid);
+    form->setIterativeSolveTolerance(cgTol);
+    form->setIterativeSolveTolerances(cgTols);
+    form->setFixedPointMaxSubsteps(maxSubsteps);
+    form->setFixedPointMinSubsteps(minSubsteps);
+    form->setFixedPointTolerance(fixedPointTol);
+    form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
+    form->setIterativeSolveOutputLevel(azOutputLevel);
+    form->setIterativeSolveMaxIterations(maxIters);
+    form->setExportViz(exportViz, vizDir);
+    
+    auto nextSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
+    
+    int numElementsExpected = xElements * tElements * vElements;
+    int numElementsActual   = nextSlab->vlasovMesh()->numActiveElements();
+    TEST_EQUALITY(numElementsExpected, numElementsActual);
+    
+    TEST_EQUALITY(useGeometricMultigrid,  nextSlab->useGeometricMultigrid());
+    TEST_EQUALITY(cgTol,                  nextSlab->iterativeSolveTolerance());
+    TEST_EQUALITY(maxSubsteps,            nextSlab->fixedPointMaxSubsteps());
+    TEST_EQUALITY(minSubsteps,            nextSlab->fixedPointMinSubsteps());
+    TEST_EQUALITY(fixedPointTol,          nextSlab->fixedPointTolerance());
+    TEST_EQUALITY(enforceQuasiNeutrality, nextSlab->enforceQuasiNeutrality());
+    TEST_EQUALITY(azOutputLevel,          nextSlab->iterativeSolveOutputLevel());
+    TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());
+    TEST_EQUALITY(exportViz,              nextSlab->exportViz());
+    TEST_EQUALITY(vizDir,                 nextSlab->vizOutputDir());
+    
+    auto nextSlabCGTols = nextSlab->iterativeSolveTolerances();
+    TEST_EQUALITY(cgTols.size(), nextSlabCGTols.size());
+    if (cgTols.size() == nextSlabCGTols.size())
+    {
+      for (int i=0; i<int(cgTols.size()); i++)
+      {
+        TEST_EQUALITY(cgTols[i], nextSlabCGTols[i]);
+      }
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, MultiSlabSequenceAllowsInitialMeshToBeDestroyed )
+  {
+    // sets up a formulation like the PoissonTwoStreamSteadyState test below, and then creates two subsequent slabs,
+    // nullifying the first.  Checks that the mesh belonging to the first has its destructor called.
+    double n0 = 1.;
+    double sigma = 1;
+    double u0 = 3.0;
+    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, 0.5 * n0) );
+    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1T1V(-u0, sigma, 0.5 * n0) );
+    FunctionPtr f0           = fM_u0 + fM_minus_u0;
+    
+    const double q = 1.;
+    
+    const int xElements = 2;
+    const int tElements = 1;
+    const int vElements = 8; // we need a somewhat fine mesh in v to get relatively good resolution
+    const int H1Order   = 4;
+    
+    const bool useSerendipity = false;
+    const bool useMimeticDPG  = false;
+    
+    FunctionPtr  f_exact = f0;
+    FunctionPtr VE_exact = Function::zero();
+    FunctionPtr  E_exact = Function::zero();
+        
+    const bool usePeriodicBCs = true;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+   
+    form->setInitialAndInflowConditions(f_exact, f_exact);
+    
+    MeshDestructorObserver dtorObserver(form->vlasovMesh());
+    
+    TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
+    
+    auto secondSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
+    auto thirdSlab  = secondSlab->nextTimeSlab(TEST_TWIDTH, tElements);
+    
+    // still should not have been destroyed; we still have a reference, both through form and secondSlab:
+    TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
+    
+    form = Teuchos::null;
+    
+    // still should not have been destroyed; we still have a reference, through secondSlab:
+    TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
+    
+    secondSlab = Teuchos::null;
+    // now it should have been destroyed:
+    TEST_EQUALITY(true, dtorObserver.meshDestructorHasBeenCalled());
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonTwoStreamSteadyState )
+  {
+    const bool useMimeticDPG = false;
+    testPoissonTwoStreamSteadyState(useMimeticDPG, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero )
   {
     const double q    = 0; // 0 charge --> zero electric field
@@ -865,9 +883,10 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool overrideVlasovBCs = false;
     const bool useSerendipity    = false;
+    const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero_Serendipity )
@@ -891,9 +910,10 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool overrideVlasovBCs = false;
     const bool useSerendipity    = true;
+    const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_zero_E_1 )
@@ -912,9 +932,10 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool overrideVlasovBCs = false;
     const bool useSerendipity    = false;
+    const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_zero_E_1_Serendipity )
@@ -933,9 +954,10 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool overrideVlasovBCs = false;
     const bool useSerendipity    = true;
+    const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear )
@@ -961,7 +983,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const std::string vizPrefix = "PatchTest_f_constant_E_linear";
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const bool useSerendipity    = false;
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
+    const bool useMimeticDPG     = false;
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear_Serendipity )
@@ -987,7 +1010,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const std::string vizPrefix = "PatchTest_f_constant_E_linear";
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const bool useSerendipity    = true;
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol, out, success, outputViz, vizPrefix);
+    const bool useMimeticDPG     = false;
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic )
@@ -1010,10 +1034,11 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const bool useSerendipity    = false;
+    const bool useMimeticDPG     = false;
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol,
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 
@@ -1037,10 +1062,11 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const bool useSerendipity    = true;
+    const bool useMimeticDPG     = false;
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, tol,
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 
@@ -1065,11 +1091,12 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int vElements = 1;
     const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
     const bool usePeriodicBCs = false;
+    const bool useMimeticDPG  = false;
     
     const double tol = 1e-13;
     
-    auto serendipityForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, true);  // true: use Serendipity
-    auto fullTensorForm  = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, false); // false: don't use Serendipity
+    auto serendipityForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, true,  useMimeticDPG);  // true: use Serendipity
+    auto fullTensorForm  = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, false, useMimeticDPG); // false: don't use Serendipity
     
     auto serendipityIP = serendipityForm->vlasovSolution()->ip();
     auto fullTensorIP  = fullTensorForm->vlasovSolution()->ip();
@@ -1311,8 +1338,9 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool useSerendipity = false; // should not affect test in any way
+    const bool useMimeticDPG     = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1369,8 +1397,9 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool useSerendipity = false; // should not affect test in any way
+    const bool useMimeticDPG     = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1434,8 +1463,9 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool useSerendipity = false; // should not affect test in any way
+    const bool useMimeticDPG  = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1492,8 +1522,9 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
     const bool useSerendipity = false; // should not affect test in any way
+    const bool useMimeticDPG  = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1539,4 +1570,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
       }
     }
   }
+
+// include tests against MimeticVlasovSpaceTimeFormulation in this compilation block:
+#include "MimeticVlasovSpaceTimeFormulationTests.hpp"
 } // end anonymous namespace

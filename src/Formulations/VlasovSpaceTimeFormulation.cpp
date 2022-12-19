@@ -152,15 +152,6 @@ _numUniformRefinements(numUniformRefinements)
   
   _spaceDim = spatialMeshTopology->getDimension();
   _velocityDim = velocitySpaceVertices.size();
-  
-  // fields
-  VarPtr f; // Vlasov
-  
-  // traces
-  VarPtr t_n_hat; // t_n_hat: L^2 (non-conforming) trace
-
-  // tests
-  VarPtr w;   // Vlasov test function
 
   TFunctionPtr<double> parity = TFunction<double>::sideParity();
   TFunctionPtr<double> n = TFunction<double>::normal();
@@ -168,26 +159,17 @@ _numUniformRefinements(numUniformRefinements)
   // Vlasov equation/mesh will not "know" about "space-time" as such -- no variables will be marked as space-time.
   // We can do this because the flux variable (t_n_hat) is defined on every interface, so we don't need the weird
   // only-supported-on-spatial-interfaces thing that we need for space-time Poisson.
-  VarFactoryPtr vlasovVF = VarFactory::varFactory();
-  
-  BasisFamilyPtr basisFamily;
-  if (_useSerendipityBasis)
-  {
-    basisFamily = BasisFamily::serendipityBasisFamily();
-  }
-  else
-  {
-    basisFamily = BasisFamily::hierarchicalBasisFamily();
-  }
-  
-  f = vlasovVF->fieldVar(S_F);
-  w = vlasovVF->testVar(S_W, HGRAD); // w lies in HGRAD of the whole space-time phase space
-  
-  t_n_hat = vlasovVF->fluxVar(S_T_N_HAT);
-  
-  vlasovVF->setTrialBasisFamily(basisFamily);
-  vlasovVF->setTestBasisFamily(basisFamily);
+  VarFactoryPtr vlasovVF = constructVlasovVarFactory();
   _vlasovBF = BF::bf(vlasovVF);
+  
+  // fields
+  VarPtr f = this->f(); // Vlasov
+  
+  // traces
+  VarPtr t_n_hat = this->t_n_hat(); // t_n_hat: L^2 (non-conforming) trace
+
+  // tests
+  VarPtr w = this->w();   // Vlasov test function
   
   map<int,int> trialOrderEnhancements;
   trialOrderEnhancements[t_n_hat->ID()] = 1; // +1 for non-conforming, + whatever user requested
@@ -211,61 +193,49 @@ _numUniformRefinements(numUniformRefinements)
   _configurationSpaceFormulation->setMoments(_solutionMoments,_n0);
   
   // the di() methods are 1-based:
-  const int indexOffsetSpaceOneBased    = 1;
   const int indexOffsetTimeOneBased     = 1 + _spaceDim;
   const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
   
   // SpatialFilter's components are zero-based
-//  const int indexOffsetSpaceZeroBased    = indexOffsetSpaceOneBased  - 1;
   const int indexOffsetTimeZeroBased     = indexOffsetTimeOneBased - 1;
   const int indexOffsetVelocityZeroBased = indexOffsetVelocityOneBased - 1;
   
-  // The below assumes that _spaceDim <= _velocityDim; enforce that here:
-  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim > _velocityDim, std::invalid_argument, "_velocityDim must be at least as large as _spaceDim");
-  std::vector<FunctionPtr> v;
-  for (int i=0; i<_velocityDim; i++)
+  // initialize acceleration term, _a
   {
-    v.push_back(this->v_i(i));
-  }
-  for (int i=0; i<_spaceDim; i++)
-  {
-    _vlasovBF->addTerm( -v[i] * f, w->di(indexOffsetSpaceOneBased + i));  // dx_i
-  }
-  _vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
-  std::vector<FunctionPtr> grad_v_weight(_velocityDim); // the thing that gets dotted with grad_v of f (in the strong form)
-  
-  std::vector<FunctionPtr> E(3,Function::zero());
-  std::vector<FunctionPtr> B(3,Function::zero());
-  
-  for (int i=0; i<_velocityDim; i++)
-  {
-    E[i] = _configurationSpaceFormulation->E_i(i);
-    B[i] = _configurationSpaceFormulation->B_i(i);
-  }
-  
-  // we only include the v_cross_B term for 3V case
-  // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
-  std::vector<FunctionPtr> v_cross_B(3,Function::zero());
-  if (_velocityDim == 3)
-  {
-    v_cross_B[0] = v[1] * B[2] - v[2] * B[1];
-    v_cross_B[1] = v[2] * B[0] - v[0] * B[2];
-    v_cross_B[2] = v[0] * B[1] - v[1] * B[0];
-  }
-  
-  for (int i=0; i<_velocityDim; i++)
-  {
-    grad_v_weight[i] = (-q/m) * (E[i] + v_cross_B[i]);
+    int velocityDim = this->velocityDim();
+    std::vector<FunctionPtr> v(velocityDim);
+    for (int i=0; i<velocityDim; i++)
+    {
+      v.push_back(this->v_i(i));
+    }
+    _a = std::vector<FunctionPtr>(velocityDim); // this gets dotted with grad_v of f (in the strong form)
+    
+    std::vector<FunctionPtr> E(3,Function::zero());
+    std::vector<FunctionPtr> B(3,Function::zero());
+    
+    for (int i=0; i<velocityDim; i++)
+    {
+      E[i] = configurationSpaceFormulation->E_i(i);
+      B[i] = configurationSpaceFormulation->B_i(i);
+    }
+    
+    // we only include the v_cross_B term for 3V case
+    // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
+    std::vector<FunctionPtr> v_cross_B(3,Function::zero());
+    if (velocityDim == 3)
+    {
+      v_cross_B[0] = v[1] * B[2] - v[2] * B[1];
+      v_cross_B[1] = v[2] * B[0] - v[0] * B[2];
+      v_cross_B[2] = v[0] * B[1] - v[1] * B[0];
+    }
+    
+    for (int i=0; i<velocityDim; i++)
+    {
+      _a[i] = (-q/m) * (E[i] + v_cross_B[i]);
+    }
   }
   
-  for (int i=0; i<_velocityDim; i++)
-  {
-    // grad v of f
-    _vlasovBF->addTerm(grad_v_weight[i] * f, w->di(indexOffsetVelocityOneBased + i));
-//    _vlasovBF->addTerm(-(q/m)*_E_extruded*f, w->di(VELOCITY_INDEX)); // dv
-  }
-  
-  _vlasovBF->addTerm(t_n_hat, w);
+  initializeVlasovBilinearForm(_vlasovBF);
 
   auto vlasovSolnWeakPtr     = Teuchos::rcp(_vlasovSoln.get(),     false);
   auto vlasovSolnPrevWeakPtr = Teuchos::rcp(_vlasovSolnPrev.get(), false);
@@ -280,7 +250,7 @@ _numUniformRefinements(numUniformRefinements)
     
   vlasovMesh->registerSolution(_vlasovSoln);
     
-  IPPtr vlasovTestNorm = _vlasovBF->graphNorm();
+  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct();
   _vlasovSoln->setIP(vlasovTestNorm);
   
   SpatialFilterPtr inflowFilter = Teuchos::rcp(new SpatialFilterSpatialInflow(_spaceDim,indexOffsetVelocityZeroBased) );
@@ -379,6 +349,11 @@ MeshPtr VlasovSpaceTimeFormulation::vlasovMesh()
 SolutionPtr VlasovSpaceTimeFormulation::vlasovSolution()
 {
   return _vlasovSoln;
+}
+
+vector<FunctionPtr> VlasovSpaceTimeFormulation::a()
+{
+  return _a;
 }
 
 void VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr configVariable, FunctionPtr dirichletValue)
@@ -539,6 +514,78 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
+void VlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlasovBF)
+{
+  VarPtr f = this->f();
+  VarPtr w = this->w();
+  VarPtr t_n_hat = this->t_n_hat();
+  
+  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation = this->configurationSpaceFormulation();
+  
+  const int spaceDim = this->spaceDim();
+  const int velocityDim = this->velocityDim();
+  
+  // the di() methods are 1-based:
+  const int indexOffsetSpaceOneBased    = 1;
+  const int indexOffsetTimeOneBased     = 1 + spaceDim;
+  const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
+    
+  // The below assumes that spaceDim <= velocityDim; enforce that here:
+  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > velocityDim, std::invalid_argument, "velocityDim must be at least as large as spaceDim");
+  std::vector<FunctionPtr> v;
+  for (int i=0; i<velocityDim; i++)
+  {
+    v.push_back(this->v_i(i));
+  }
+  for (int i=0; i<spaceDim; i++)
+  {
+    vlasovBF->addTerm( -v[i] * f, w->di(indexOffsetSpaceOneBased + i));  // dx_i
+  }
+  vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
+  
+  auto a = this->a(); // acceleration term
+  for (int i=0; i<velocityDim; i++)
+  {
+    // grad v of f
+    vlasovBF->addTerm(a[i] * f, w->di(indexOffsetVelocityOneBased + i));
+  }
+  
+  vlasovBF->addTerm(t_n_hat, w);
+}
+
+IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct()
+{
+  auto vlasovBF = this->vlasovSolution()->bf();
+  return vlasovBF->graphNorm();
+}
+
+VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
+{
+  // Vlasov equation/mesh will not "know" about "space-time" as such -- no variables will be marked as space-time.
+  // We can do this because the flux variable (t_n_hat) is defined on every interface, so we don't need the weird
+  // only-supported-on-spatial-interfaces thing that we need for space-time Poisson.
+  VarFactoryPtr vlasovVF = VarFactory::varFactory();
+  
+  BasisFamilyPtr basisFamily;
+  if (_useSerendipityBasis)
+  {
+    basisFamily = BasisFamily::serendipityBasisFamily();
+  }
+  else
+  {
+    basisFamily = BasisFamily::hierarchicalBasisFamily();
+  }
+  
+  VarPtr f = vlasovVF->fieldVar(S_F);            // distribution function (field variable)
+  VarPtr w = vlasovVF->testVar(S_W, HGRAD);      // test function w; lies in HGRAD of the whole space-time phase space
+  VarPtr t_n_hat = vlasovVF->fluxVar(S_T_N_HAT); // t_n_hat: L^2 (non-conforming) trace
+  
+  vlasovVF->setTrialBasisFamily(basisFamily);
+  vlasovVF->setTestBasisFamily(basisFamily);
+  
+  return vlasovVF;
+}
+
 int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch, const bool restrictToBoundary)
 {
   const int thisTag = _nextConfigurationSpaceTag++;
@@ -622,6 +669,11 @@ double VlasovSpaceTimeFormulation::iterativeSolveTolerance() const
 std::vector<double> VlasovSpaceTimeFormulation::iterativeSolveTolerances() const
 {
   return _cgTols;
+}
+
+double VlasovSpaceTimeFormulation::m() const
+{
+  return _m;
 }
 
 int VlasovSpaceTimeFormulation::maxMomentForConservationDiagnostics() const
@@ -726,6 +778,11 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   _vlasovSoln->setBC(Teuchos::null);
   
   return nextSlabForm;
+}
+
+double VlasovSpaceTimeFormulation::q() const
+{
+  return _q;
 }
 
 void VlasovSpaceTimeFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
@@ -1022,6 +1079,11 @@ Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments()
   return _solutionMoments;
 }
 
+int VlasovSpaceTimeFormulation::spaceDim() const
+{
+  return _spaceDim;
+}
+
 void VlasovSpaceTimeFormulation::setSlabHistory(const std::vector<double> &slabTemporalCoordinates,
                                                 const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &massIntegrals,
                                                 const std::vector<std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>>> &momentumIntegrals,
@@ -1247,7 +1309,7 @@ vector<pair<double,double>> VlasovSpaceTimeFormulation::timeSeriesForSlabSpatial
 
 VarPtr VlasovSpaceTimeFormulation::t_n_hat()
 {
-  VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
+  VarFactoryPtr vf = _vlasovBF->varFactory();
   return vf->trialVar(S_T_N_HAT);
 }
 
@@ -1288,6 +1350,11 @@ bool VlasovSpaceTimeFormulation::useGeometricMultigrid() const
   return _useGeometricMultigrid;
 }
 
+bool VlasovSpaceTimeFormulation::useSerendipityBasis() const
+{
+  return _useSerendipityBasis;
+}
+
 FunctionPtr VlasovSpaceTimeFormulation::v_i(int compZeroBased) const
 {
   int vx_component_zero_based = _spaceDim + 1; // plus 1 for temporal dimension
@@ -1299,9 +1366,19 @@ VarPtr VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()
   return _configurationSpaceFormulation->VE_hat();
 }
 
+int VlasovSpaceTimeFormulation::velocityDim() const
+{
+  return _velocityDim;
+}
+
 std::string VlasovSpaceTimeFormulation::vizOutputDir() const
 {
   return _vizOutputDir;
+}
+
+BFPtr VlasovSpaceTimeFormulation::vlasovBF()
+{
+  return _vlasovBF;
 }
 
 FunctionPtr VlasovSpaceTimeFormulation::x_i(const int zeroBasedComp) const

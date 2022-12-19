@@ -31,6 +31,12 @@ namespace Camellia
 
   class VlasovSpaceTimeFormulation
 {
+public:
+  // strings naming variables:
+  static const string S_F;       // trial variable - distribution function f
+  static const string S_F_HAT;   // trace variable
+  static const string S_T_N_HAT; // trace variable
+  static const string S_W;       // test variable
 private:
   int _spaceDim;
   int _velocityDim;
@@ -69,11 +75,6 @@ private:
   double _cgTol = 1e-6;
   std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
   int _maxIters = 10000;
-  
-  static const string S_F;       // trial variable - distribution function f
-  static const string S_F_HAT;   // trace variable
-  static const string S_T_N_HAT; // trace variable
-  static const string S_W;       // test variable
   
   // tags for BCs:
   static const int VLASOV_TAG_SPATIAL_INFLOW = 0; // region where (v \cdot n_x) < 0
@@ -115,6 +116,8 @@ private:
   
   std::vector< double > _slabTemporalCoordinates; // for slab slabOrdinal, start time is at index slabOrdinal, end time at (slabOrdinal+1)
   
+  vector<FunctionPtr> _a; // acceleration term. Set during construction as a function of configuration-space solution.
+  
   FunctionPtr _density;
   std::vector<FunctionPtr> _momentum; // matches _spaceDim in number of components
   FunctionPtr _energy; // sum of the xx, yy, zz moments (in 3D)
@@ -141,6 +144,15 @@ public:
   //! clear previously computed solution
   void clearSolution();
   
+  //! called during initialization of Vlasov Solution objects.  Subclasses must define a distribution field variable (f) with name VlasovSpaceTimeFormulation::S_F, a trace variable (t_n) with name VlasovSpaceTimeFormulation::S_T_N_HAT.  The former is used for moment computations, conservation diagnostics, and convergence criteria for the fixed-point iteration; the latter is used for boundary condition imposition.
+  virtual VarFactoryPtr constructVlasovVarFactory();
+  
+  //! called from constructor, after Vlasov Solution and Mesh objects are constructed from the passed-in BF object.  Subclasses should fill this appropriately by calling addTerm().
+  virtual void initializeVlasovBilinearForm(BFPtr emptyVlasovBF);
+  
+  //! called from constructor, after Vlasov BF object is initialized.
+  virtual IPPtr constructVlasovInnerProduct();
+  
   // field variables:
   VarPtr f();  // Vlasov
   
@@ -150,6 +162,12 @@ public:
   
   // test variables:
   VarPtr w();   // Vlasov
+  
+  //! Returns the BF object corresponding to the Vlasov bilinear form.
+  BFPtr vlasovBF();
+  
+  //! Returns the acceleration term, defined on the configuration space mesh, as an array of length velocityDim().
+  vector<FunctionPtr> a();
   
   MeshPtr vlasovMesh();
   MeshPtr configurationSpaceMesh();
@@ -266,6 +284,12 @@ public:
   */
   VarPtr VE_configurationSpaceTrace();
   
+  //! Returns the spatial dimension of the mesh.
+  int spaceDim() const;
+  
+  //! Returns the number of velocity dimensions in the mesh.
+  int velocityDim() const;
+  
   /** \brief  Returns a tag matching the initial time side set on the configuration-space mesh.
         The initial-time side set is created during construction.  See createConfigurationMeshSideSetTag() for specification of arbitrary regions of the configuration-space mesh boundary.
   */
@@ -309,11 +333,20 @@ public:
   //! returns the ordinal of this slab.  0 for first, 1 for second, etc.
   int slabOrdinal() const;
   
+  //! Returns the m value passed in at construction.
+  double m() const;
+  
+  //! Returns the q value passed in at construction.
+  double q() const;
+  
   /** \brief  Returns a Function representing the specified component of configuration space. */
   FunctionPtr x_i(const int zeroBasedComp) const;
   
   /** \brief  Returns a Function representing the time coordinate. */
   FunctionPtr t() const;
+  
+  /** \brief Returns true if useSerendipityBasis was passed in at construction (in which case the Serendipity basis family is used for trial and test spaces).  */
+  bool useSerendipityBasis() const;
   
   /** \brief  Returns a Function representing the specified velocity-space coordinate. */
   FunctionPtr v_i(const int zeroBasedComp) const;
