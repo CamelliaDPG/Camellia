@@ -3,6 +3,7 @@
 //
 
 #include "MaxwellianFunction.h"
+#include "MonomialFunctions.h"
 
 #include "BasisCache.h"
 
@@ -15,11 +16,18 @@ _numVelocityDims(numVelocityDims),
 _sigmaSquared(sigmaSquared),
 _n(n)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(u.size() != numVelocityDims, std::invalid_argument, "u's length must match numVelocityDims");
+  TEUCHOS_TEST_FOR_EXCEPTION(int(u.size()) != numVelocityDims, std::invalid_argument, "u's length must match numVelocityDims");
   for (int d=0; d<numVelocityDims; d++)
   {
     _u[d] = u[d];
   }
+  
+  int variationDimensions = 0;
+  for (int vd=0; vd<numVelocityDims; vd++)
+  {
+    variationDimensions |= (VARIES_IN_DIMENSION_0 << firstVelocityDimensionZeroBased + vd);
+  }
+  setVariationDimensions(variationDimensions);
 }
 
 FunctionPtr MaxwellianFunction::maxwellian(const int firstVelocityDimensionZeroBased, const int numVelocityDims, std::vector<double> u, double sigmaSquared, double n)
@@ -78,5 +86,26 @@ void MaxwellianFunction::values(typename FieldContainer<double>::DeviceView &val
     assignValues<double>(values, modType, valuesToAssign);
     // we checked out scratch storage for valuesToAssign; check back in
     basisCache->checkinScratchStorage<double>(valuesToAssign);
+  }
+}
+
+TFunctionPtr<double> MaxwellianFunction::di(int i)
+{
+  if ((i < _firstVelocityDimension + 1) || (i > _firstVelocityDimension + _numVelocityDims))
+  {
+    return Function::zero();
+  }
+  else
+  {
+    const int d = i - 1 - _firstVelocityDimension; // zero-based index into velocity dimensions (d==0 corresponds to v_x)
+    auto v_d = MonomialFunction::xi_n(d, 1); // v_d^1
+    std::vector<double> u(_numVelocityDims);
+    for (int i=0; i<_numVelocityDims; i++)
+    {
+      u[i] = _u[i];
+    }
+    FunctionPtr f_M = Teuchos::rcp(new MaxwellianFunction(_firstVelocityDimension, _numVelocityDims, u, _sigmaSquared, _n) );
+    
+    return (u[d] - v_d) / _sigmaSquared * f_M;
   }
 }

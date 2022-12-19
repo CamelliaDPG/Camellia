@@ -34,6 +34,9 @@ namespace Camellia
     using TFunction<double>::values;
     void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
     
+    //! derivative of this function in the one-based i dimension.  Will be zero for dimensions below (_firstVelocityDimension + 1), and non-zero for dimensions (_firstVelocityDimension + 1) through (_firstVelocityDimension + _numVelocityDims).
+    TFunctionPtr<double> di(int i) override;
+    
     static FunctionPtr maxwellian(const int firstVelocityDimensionZeroBased, const int numVelocityDims, std::vector<double> u, double sigmaSquared, double n);
     
     static inline double momentNormalized1D(const double ux, const double sigmaSquared, const int momentNumber)
