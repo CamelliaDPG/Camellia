@@ -54,8 +54,11 @@ VlasovSpaceTimeFormulation(q, m, useSerendipityBasis, configurationSpaceFormulat
                            velocitySpaceVertices_y,
                            velocitySpaceVertices_z,
                            H1Order, delta_k,
-                           numUniformRefinements)
-{}
+                           numUniformRefinements,
+                           true) // true: defer initialization; we call it below.
+{
+  this->initialize();
+}
 
 IPPtr MimeticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
 {

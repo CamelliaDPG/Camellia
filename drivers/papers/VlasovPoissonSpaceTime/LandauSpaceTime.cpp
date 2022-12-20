@@ -11,11 +11,12 @@
 #include "ConfigurationSpaceFormulationPoisson.h"
 #include "EnergyErrorFunction.h"
 #include "ErrorIndicator.h"
-#include "ERKTableau.h"
 #include "ExpFunction.h"
 #include "GDAMinimumRule.h"
 #include "GlobalDofAssignment.h"
 #include "HDF5Exporter.h"
+#include "MaxwellianFunction.h"
+#include "MimeticVlasovSpaceTimeFormulation.h"
 #include "MonomialFunctions.h"
 #include "PhysicalSolutionExtrusion.hpp"
 #include "Projector.h"
@@ -34,73 +35,6 @@ using namespace Camellia;
 using std::vector;
 using std::pair;
 using std::string;
-
-class Maxwellian1T1V : public TFunction<double>
-{
-  double _u;
-  double _sigma;
-  double _n;
-public:
-  Maxwellian1T1V(double u, double sigma, double n)
-  :
-  _u(u),
-  _sigma(sigma),
-  _n(n)
-  {}
-  
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
-  {
-    auto & phaseSpacePoints = basisCache->getPhysicalCubaturePointsFC();
-    const int numCells  = phaseSpacePoints.dimension(0);
-    const int numPoints = phaseSpacePoints.dimension(1);
-    
-    const double weight = _n / (sqrt(2. * M_PI) * _sigma);
-//    std::cout << "weight: " << weight << std::endl;
-    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-    {
-      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-      {
-        const double vx = phaseSpacePoints(cellOrdinal,pointOrdinal,2); // vx is the third dimension for 1D1T1V
-        const double exponent = - 0.5 * (vx - _u) * (vx - _u) / (_sigma * _sigma);
-        values(cellOrdinal,pointOrdinal) = weight * std::exp(exponent);
-      }
-    }
-  }
-  
-  TFunctionPtr<double> dx() override
-  {
-    return Function::zero();
-  }
-  
-  TFunctionPtr<double> dy() override
-  {
-    return Function::zero();
-  }
-  
-  TFunctionPtr<double> dz() override
-  {
-    auto vx = MonomialFunction::xi_n(2, 1);
-    FunctionPtr f_M = Teuchos::rcp( new Maxwellian1T1V(_u,_sigma,_n));
-    return (_u - vx) / (_sigma * _sigma) * f_M;
-  }
-  
-  TFunctionPtr<double> dt() override
-  {
-    return Function::zero();
-  }
-  
-  TFunctionPtr<double> di(int i) override
-  {
-    if (i == 3) // 1-based
-    {
-      return dz();
-    }
-    else
-    {
-      return Function::zero();
-    }
-  }
-};
 
 class CellIDFunction : public Function
 {
@@ -130,6 +64,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const double x0, c
                                                               const int xElements, const int tElements, const int vElements,
                                                               double q, double eps0, double m,
                                                               const int H1Order, const bool usePeriodicBCs, const bool useSerendipity,
+                                                              const bool useMimeticDPG,
                                                               const int numUniformRefinements)
 {
   const int delta_k = 2;
@@ -155,13 +90,28 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const double x0, c
   std::vector<double> velocitySpaceVertices_y; // empty
   std::vector<double> velocitySpaceVertices_z; // empty
   
-  auto form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
-                                                          temporalVertices,
-                                                          velocitySpaceVertices_x,
-                                                          velocitySpaceVertices_y,
-                                                          velocitySpaceVertices_z,
-                                                          H1Order, delta_k,
-                                                          numUniformRefinements));
+  Teuchos::RCP<VlasovSpaceTimeFormulation> form;
+  
+  if (!useMimeticDPG)
+  {
+    form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+                                                       temporalVertices,
+                                                       velocitySpaceVertices_x,
+                                                       velocitySpaceVertices_y,
+                                                       velocitySpaceVertices_z,
+                                                       H1Order, delta_k,
+                                                       numUniformRefinements));
+  }
+  else
+  {
+    form = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+                                                              temporalVertices,
+                                                              velocitySpaceVertices_x,
+                                                              velocitySpaceVertices_y,
+                                                              velocitySpaceVertices_z,
+                                                              H1Order, delta_k,
+                                                              numUniformRefinements));
+  }
   return form;
 }
 
@@ -379,6 +329,7 @@ int main(int argc, char *argv[])
     double vWidth =  9.0;
     
     bool useSerendipityBasis = false;
+    bool useMimeticDPG = false; // otherwise, will use standard DPG (the default)
     
     int xElements = 5;
     int vElements = 4;
@@ -426,6 +377,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("iterativeSolveMaxIters", &iterativeSolveMaxIters);
     cmdp.setOption("iterativeSolveTolerance", &iterativeSolveTolerance);
     cmdp.setOption("maxDofsForDirectSolve", &maxDofsForDirectSolve);
+    cmdp.setOption("useMimeticDPG", "useStandardDPG", &useMimeticDPG);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -438,7 +390,8 @@ int main(int argc, char *argv[])
     
     bool usePeriodicBCs = true;
     
-    auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, usePeriodicBCs, useSerendipityBasis, numUniformRefinements);
+    auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, usePeriodicBCs,
+                                     useSerendipityBasis, useMimeticDPG, numUniformRefinements);
     
     form->setExportViz(exportDebugViz);
     
@@ -475,7 +428,9 @@ int main(int argc, char *argv[])
     FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
     
     {
-      FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, n0) );
+      const int firstVelocityDimensionZeroBased = 2; // 1D1T1V
+      const int numVelocityDims                 = 1;
+      FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimensionZeroBased, numVelocityDims, {u0}, sigma * sigma, n0);
       f0                       = fM_u0 * (1. + gamma * cos_kx);
     }
     form->setInitialConditions(f0);
@@ -491,6 +446,10 @@ int main(int argc, char *argv[])
     if (useSerendipityBasis)
     {
       suffix << "_serendipity";
+    }
+    if (useMimeticDPG)
+    {
+      suffix << "_mimeticDPG";
     }
     suffix << "_p" << H1Order;
     suffix << "_dp" << delta_k;

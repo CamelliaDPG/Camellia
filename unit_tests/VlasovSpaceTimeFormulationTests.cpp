@@ -12,6 +12,7 @@
 #include "ConfigurationSpaceFormulationPoisson.h"
 
 #include "BF.h"
+#include "MaxwellianFunction.h"
 #include "MonomialFunctions.h"
 #include "PhaseSpaceVisualization.h"
 #include "RHS.h"
@@ -144,61 +145,6 @@ namespace {
     bool meshDestructorHasBeenCalled()
     {
       return _meshDestructorCalled;
-    }
-  };
-
-  class Maxwellian1T1V : public TFunction<double>
-  {
-    double _u;
-    double _sigma;
-    double _n;
-  public:
-    Maxwellian1T1V(double u, double sigma, double n)
-    :
-    _u(u),
-    _sigma(sigma),
-    _n(n)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(sigma <= 0.0, std::invalid_argument, "sigma must be positive");
-    }
-    
-    using TFunction<double>::values;
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
-    {
-      auto & phaseSpacePoints = basisCache->getPhysicalCubaturePointsFC();
-      const int numCells  = phaseSpacePoints.dimension(0);
-      const int numPoints = phaseSpacePoints.dimension(1);
-      
-      const double weight = _n / (sqrt(2. * M_PI) * _sigma);
-      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-      {
-        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-        {
-          const double vx = phaseSpacePoints(cellOrdinal,pointOrdinal,2); // vx is the third dimension for 1D1T1V
-          const double exponent = - 0.5 * (vx - _u) * (vx - _u) / (_sigma * _sigma);
-          values(cellOrdinal,pointOrdinal) = weight * std::exp(exponent);
-        }
-      }
-    }
-    
-    TFunctionPtr<double> di(int i) override // 1 for dx(), 2 for dt(), 3 for dv()
-    {
-      if (i==1) // dx
-      {
-        return Function::zero();
-      }
-      else if (i==2) // dt
-      {
-        return Function::zero();
-      }
-      else // dv
-      {
-        const int vx_component_zero_based = 2;
-        FunctionPtr v = MonomialFunction::xi_n(vx_component_zero_based, 1);
-        FunctionPtr weight = - 1. / ( _sigma * _sigma) * (_u - v);
-        FunctionPtr maxwellian = Teuchos::rcp( new Maxwellian1T1V(_u,_sigma,_n) );
-        return weight * maxwellian;
-      }
     }
   };
 
@@ -534,14 +480,19 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     }
   }
 
-  void testPoissonTwoStreamSteadyState(const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success)
+  void testPoissonTwoStreamSteadyState(const double tolRelativeToProjectionError,
+                                       const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success)
   {
     // like the two-stream instability problem, but no perturbation.  Should stay fixed.
     double n0 = 1.;
     double sigma = 1;
     double u0 = 3.0;
-    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, 0.5 * n0) );
-    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1T1V(-u0, sigma, 0.5 * n0) );
+    
+    // 1D1T1V
+    const int firstVelocityDimension = 2; // zero-based
+    const int numVelocityDimensions  = 1;
+    FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, { u0}, sigma * sigma, 0.5 * n0);
+    FunctionPtr fM_minus_u0  = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, {-u0}, sigma * sigma, 0.5 * n0);
     FunctionPtr f0           = fM_u0 + fM_minus_u0;
     
     const double q = 1.;
@@ -552,7 +503,6 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int H1Order   = 4;
     
     const bool useSerendipity    = false;
-    const double tolRelativeToProjectionError = 1.1; // we allow 10% error relative to the best approximation for f, tn
     const double absTolPoisson = 1e-4; // Poisson solutions should be 0, so we use an absolute tol for these
     
     FunctionPtr  f_exact = f0;
@@ -605,7 +555,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     double f_proj_err_l2 = (f_soln-f_exact)->l2norm(vlasovSoln->mesh());
     out << "f_proj_err_l2: " << f_proj_err_l2 / f_magnitude << std::endl;
     
-    double relTol_f = f_proj_err_l2 / f_magnitude * tolRelativeToProjectionError;
+    double relTol_f = f_proj_err_l2 / f_magnitude * (1. + tolRelativeToProjectionError);
     
 //    form->setExportViz(true); // DEBUGGING
 //    form->configurationSpaceFormulation()->setExportViz(true); // DEBUGGING
@@ -728,8 +678,12 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     double n0 = 1.;
     double sigma = 1;
     double u0 = 3.0;
-    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, 0.5 * n0) );
-    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1T1V(-u0, sigma, 0.5 * n0) );
+    
+    // 1D1T1V
+    const int firstVelocityDimension = 2; // zero-based
+    const int numVelocityDimensions  = 1;
+    FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, { u0}, sigma * sigma, 0.5 * n0);
+    FunctionPtr fM_minus_u0  = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, {-u0}, sigma * sigma, 0.5 * n0);
     FunctionPtr f0           = fM_u0 + fM_minus_u0;
     
     const double q = 1.;
@@ -812,8 +766,12 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     double n0 = 1.;
     double sigma = 1;
     double u0 = 3.0;
-    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, 0.5 * n0) );
-    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1T1V(-u0, sigma, 0.5 * n0) );
+    
+    // 1D1T1V
+    const int firstVelocityDimension = 2; // zero-based
+    const int numVelocityDimensions  = 1;
+    FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, { u0}, sigma * sigma, 0.5 * n0);
+    FunctionPtr fM_minus_u0  = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, {-u0}, sigma * sigma, 0.5 * n0);
     FunctionPtr f0           = fM_u0 + fM_minus_u0;
     
     const double q = 1.;
@@ -858,8 +816,9 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonTwoStreamSteadyState )
   {
+    const double tolRelativeToProjectionError = 0.1; // we allow 10% error relative to the best approximation for f, tn
     const bool useMimeticDPG = false;
-    testPoissonTwoStreamSteadyState(useMimeticDPG, out, success);
+    testPoissonTwoStreamSteadyState(tolRelativeToProjectionError, useMimeticDPG, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero )

@@ -8,15 +8,50 @@
 //  Tests to be included in MimeticVlasovSpaceTimeFormulationTests.cpp, within its anonymous namespace, after the definition of various
 //  patch-testing methods, so that we can use much the same tests for both.
 
+TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, MimeticVariablesDefined )
+{
+  const double q    = 0; // 0 charge --> zero electric field
+  
+  const int xElements = 1;
+  const int tElements = 1;
+  const int vElements = 1;
+  const int H1Order   = 1; // quadratic L^2 functions; allows exact representation of analytic solution trace
+  
+  const bool usePeriodicBCs    = false;
+  const bool useSerendipity    = false;
+  const bool useMimeticDPG     = true;
+  
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+  
+  const std::string & g_a_name = MimeticVlasovSpaceTimeFormulation::S_GA[0];
+  const std::string & g_v_name = MimeticVlasovSpaceTimeFormulation::S_GV[0];
+  const std::string & g_c_name = MimeticVlasovSpaceTimeFormulation::S_GC;
+  
+  auto vlasovVF = form->vlasovSolution()->bf()->varFactory();
+  
+  vector<string> mimeticVarNames {g_a_name, g_c_name, g_v_name};
+  
+  for (const auto & name : mimeticVarNames)
+  {
+    auto var = vlasovVF->trialVar( name );
+    if (var == Teuchos::null)
+    {
+      out << "FAILURE: expected variable " << name << " to be defined, but it was not found.\n";
+      success = false;
+    }
+  }
+}
+
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonTwoStreamSteadyState )
 {
+  const double tolRelativeToProjectionError = 0.50; // we allow actual error to be up to 150% of the best approximation error for f, tn
   const bool useMimeticDPG = true;
-  testPoissonTwoStreamSteadyState(useMimeticDPG, out, success);
+  testPoissonTwoStreamSteadyState(tolRelativeToProjectionError, useMimeticDPG, out, success);
 }
 
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero )
 {
-  const double q    = 0; // 0 charge --> zero electric field
+  const double q = 0; // 0 charge --> zero electric field
   
   const int xElements = 4;
   const int tElements = 1;
