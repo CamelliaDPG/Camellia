@@ -56,7 +56,7 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_z
   const int xElements = 4;
   const int tElements = 1;
   const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
-  const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+  const int H1Order   = 4; // cubic L^2 functions; allows exact representation of analytic solution trace (g_v = x * v^3)
   
   const int spaceDim = 1;
   const bool spaceTimeMesh = true;
@@ -83,7 +83,7 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_z
   const int xElements = 4;
   const int tElements = 1;
   const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
-  const int H1Order   = 5; // quadratic L^2 functions; allows exact representation of analytic solution trace
+  const int H1Order   = 6; // cubic L^2 functions; allows exact representation of analytic solution trace (g_v = x * v^3)
   
   const int spaceDim = 1;
   const bool spaceTimeMesh = true;

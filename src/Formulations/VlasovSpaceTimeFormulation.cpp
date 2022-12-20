@@ -514,7 +514,7 @@ void VlasovSpaceTimeFormulation::initialize()
     
     for (int i=0; i<velocityDim; i++)
     {
-      _a[i] = (-_q/_m) * (E[i] + v_cross_B[i]);
+      _a[i] = (_q/_m) * (E[i] + v_cross_B[i]);
     }
   }
   
@@ -657,7 +657,7 @@ void VlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlasovBF)
   for (int i=0; i<velocityDim; i++)
   {
     // grad v of f
-    vlasovBF->addTerm(a[i] * f, w->di(indexOffsetVelocityOneBased + i));
+    vlasovBF->addTerm(-a[i] * f, w->di(indexOffsetVelocityOneBased + i));
   }
   
   vlasovBF->addTerm(t_n_hat, w);
