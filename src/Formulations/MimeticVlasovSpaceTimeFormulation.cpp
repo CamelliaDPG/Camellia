@@ -11,6 +11,8 @@
 
 #include "MimeticVlasovSpaceTimeFormulation.h"
 
+#include "MeshTools.h"
+
 using namespace Camellia;
 using std::vector;
 using std::string;
@@ -263,6 +265,22 @@ void MimeticVlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlaso
   
   // w_c equation:
   vlasovBF->addTerm(g_c, w_c);
+}
+
+Teuchos::RCP<VlasovSpaceTimeFormulation> MimeticVlasovSpaceTimeFormulation::nextTimeSlab(double tWidth, int numTemporalElements)
+{
+  auto temporalVertices = MeshTools::verticesFor1DIntervalMesh(t1(), tWidth, numTemporalElements);
+  
+  // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
+  auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(spatialMeshTopology());
+  
+  auto nextSlabForm = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q(), m(), useSerendipityBasis(), configurationSpaceFormulation(), rootSpatialMeshTopology,
+                                                                         temporalVertices, velocitySpaceVertices_x(), velocitySpaceVertices_y(), velocitySpaceVertices_z(),
+                                                                         H1Order(), delta_k(), numUniformRefinements()));
+  
+  configureNextSlab(nextSlabForm);
+  
+  return nextSlabForm;
 }
 
 VarPtr MimeticVlasovSpaceTimeFormulation::w_a(const int zeroBasedSpatialComponent)

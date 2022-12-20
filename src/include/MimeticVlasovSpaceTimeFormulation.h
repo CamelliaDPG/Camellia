@@ -64,6 +64,9 @@ public:
   //! called from constructor, after Vlasov BF object is initialized.
   IPPtr constructVlasovInnerProduct() override;
   
+  //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.  Subclasses should override.
+  Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements) override;
+  
   // field variables:
   VarPtr g_a(const int zeroBasedSpatialComponent);
   VarPtr g_v(const int zeroBasedVelocityComponent);

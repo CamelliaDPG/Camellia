@@ -133,6 +133,9 @@ private:
 protected:
   //! Called during construction, by the most specialized subclass (allowing the most specialized of overridden methods to be invoked).
   void initialize();
+  
+  //! Copies all settings to the next slab, sets up Vlasov boundary conditions in terms of the current slab, and nullifies Vlasov BCs for current slab.  Used during nextTimeSlab().
+  void configureNextSlab(Teuchos::RCP<VlasovSpaceTimeFormulation> otherForm);
 public:
   VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -178,6 +181,11 @@ public:
   
   MeshPtr vlasovMesh();
   MeshPtr configurationSpaceMesh();
+  
+  int H1Order() const;
+  int delta_k() const;
+  MeshTopologyPtr spatialMeshTopology();
+  int numUniformRefinements() const;
   
   Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation();
   
@@ -307,8 +315,8 @@ public:
   int tagVlasovMaxVelocity(int zeroBasedComp) const;
   int tagVlasovMinVelocity(int zeroBasedComp) const;
   
-  //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.
-  Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements);
+  //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.  Subclasses should override.
+  virtual Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements);
   
   //! sets the maximum moment for which conservation diagnostics should be recorded.  Can be -1 (for no diagnostics), 0 (for mass), 1 (mass + momentum), or 2 (mass, momentum, and energy).
   void setMaxMomentForConservationDiagnostics(const int maxMomentForConservationDiagnostics);
@@ -351,6 +359,21 @@ public:
   
   /** \brief  Returns a Function representing the time coordinate. */
   FunctionPtr t() const;
+  
+  // Returns the starting time for the current time slab.
+  double t0() const;
+  
+  // Returns the ending time for the current time slab.
+  double t1() const;
+  
+  //! v_x-dimension velocity space vertices passed in at construction
+  std::vector<double> velocitySpaceVertices_x() const;
+  
+  //! v_y-dimension velocity space vertices passed in at construction
+  std::vector<double> velocitySpaceVertices_y() const;
+  
+  //! v_z-dimension velocity space vertices passed in at construction
+  std::vector<double> velocitySpaceVertices_z() const;
   
   /** \brief Returns true if useSerendipityBasis was passed in at construction (in which case the Serendipity basis family is used for trial and test spaces).  */
   bool useSerendipityBasis() const;
