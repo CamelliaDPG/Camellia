@@ -175,7 +175,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   form->setIterativeSolveTolerance(1e-15);
 //    form->setIterativeSolveOutputLevel(10);
   form->setFixedPointMaxSubsteps(5);
-  form->setFixedPointMinSubsteps(5);
+  form->setFixedPointMinSubsteps(2);
   
   FunctionPtr vx = form->v_i(0);
 
