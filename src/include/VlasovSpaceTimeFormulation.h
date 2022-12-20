@@ -98,6 +98,8 @@ private:
   double _t0; // initial time for this slab
   double _t1; // final time for this slab
   
+  std::vector<double> _temporalVertices; // the vertices passed in at construction
+  
   // velocity-space vertices passed in at construction:
   std::vector<double> _velocitySpaceVertices_x;
   std::vector<double> _velocitySpaceVertices_y;
@@ -127,6 +129,10 @@ private:
   
   std::vector< std::pair<double,double> > timeSeriesForSlabSpatialIntegrals(const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > &integrals,
                                                                             const double &t0, const double &dt, const int &numValues) const;
+  bool _initialized = false;
+protected:
+  //! Called during construction, by the most specialized subclass (allowing the most specialized of overridden methods to be invoked).
+  void initialize();
 public:
   VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -136,7 +142,8 @@ public:
                              std::vector<double> velocitySpaceVertices_y,
                              std::vector<double> velocitySpaceVertices_z,
                              const int H1Order, const int delta_k,
-                             const int numUniformRefinements);
+                             const int numUniformRefinements,
+                             const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
 
   //! take time step.
   void solve();

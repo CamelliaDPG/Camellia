@@ -108,7 +108,8 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        std::vector<double> velocitySpaceVertices_y,
                                                        std::vector<double> velocitySpaceVertices_z,
                                                        const int H1Order, const int delta_k,
-                                                       const int numUniformRefinements)
+                                                       const int numUniformRefinements,
+                                                       const bool deferInitialization)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _useSerendipityBasis(useSerendipityBasis),
@@ -117,227 +118,16 @@ _delta_k(delta_k),
 _configurationSpaceFormulation(configurationSpaceFormulation),
 _q(q),
 _m(m),
+_temporalVertices(temporalVertices),
 _velocitySpaceVertices_x(velocitySpaceVertices_x),
 _velocitySpaceVertices_y(velocitySpaceVertices_y),
 _velocitySpaceVertices_z(velocitySpaceVertices_z),
 _spatialMeshTopology(spatialMeshTopology),
 _numUniformRefinements(numUniformRefinements)
 {
-  _t0 = temporalVertices[0];
-  _t1 = temporalVertices[temporalVertices.size()-1];
-  
-  _slabTemporalCoordinates = {_t0, _t1}; // will be overwritten by setSlabHistory(), if that's called (i.e., if this is not the initial slab).
-  
-  _configurationSpaceMeshTopology = MeshFactory::extrudedMeshTopology(spatialMeshTopology, {temporalVertices});
-  _configurationSpaceFormulation->initializeMesh(_configurationSpaceMeshTopology, H1Order, delta_k);
-  
-  std::vector<std::vector<double> > velocitySpaceVertices;
-  
-  TEUCHOS_TEST_FOR_EXCEPTION(velocitySpaceVertices_x.size() == 0, std::invalid_argument, "velocitySpaceVertices_x may not be empty");
-  velocitySpaceVertices.push_back(velocitySpaceVertices_x);
-  if (velocitySpaceVertices_y.size() > 0)
+  if (!deferInitialization)
   {
-    velocitySpaceVertices.push_back(velocitySpaceVertices_y);
-    if (velocitySpaceVertices_z.size() > 0)
-    {
-      velocitySpaceVertices.push_back(velocitySpaceVertices_z);
-    }
-  }
-  else
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(velocitySpaceVertices_y.size() > 0, std::invalid_argument, "if velocitySpaceVertices_y is empty, then velocitySpaceVertices_z must also be empty");
-  }
-  
-  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(_configurationSpaceMeshTopology, velocitySpaceVertices);
-  
-  _spaceDim = spatialMeshTopology->getDimension();
-  _velocityDim = velocitySpaceVertices.size();
-
-  TFunctionPtr<double> parity = TFunction<double>::sideParity();
-  TFunctionPtr<double> n = TFunction<double>::normal();
-  
-  // Vlasov equation/mesh will not "know" about "space-time" as such -- no variables will be marked as space-time.
-  // We can do this because the flux variable (t_n_hat) is defined on every interface, so we don't need the weird
-  // only-supported-on-spatial-interfaces thing that we need for space-time Poisson.
-  VarFactoryPtr vlasovVF = constructVlasovVarFactory();
-  _vlasovBF = BF::bf(vlasovVF);
-  
-  // fields
-  VarPtr f = this->f(); // Vlasov
-  
-  // traces
-  VarPtr t_n_hat = this->t_n_hat(); // t_n_hat: L^2 (non-conforming) trace
-
-  // tests
-  VarPtr w = this->w();   // Vlasov test function
-  
-  map<int,int> trialOrderEnhancements;
-  trialOrderEnhancements[t_n_hat->ID()] = 1; // +1 for non-conforming, + whatever user requested
-
-  map<int,int> testOrderEnhancements;
-  
-  const bool allowPruning = false;
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
-  Epetra_CommPtr comm = MPIWrapper::CommWorld();
-  MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, H1Order, delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );
-  
-  auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
-  
-  _vlasovSoln     = Solution::solution(_vlasovBF,vlasovMesh);
-  _vlasovSolnPrev = Solution::solution(_vlasovBF,vlasovMesh); // will copy out after fixed-point solve
-  
-  const int maxMomentNumber = _configurationSpaceFormulation->maxMomentNumber();
-  _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln, f, _configurationSpaceFormulation->configurationSpaceMesh()) );
-  
-  _n0 = ParameterFunction::parameterFunction(0); // we'll update this when initial conditions are set, if _enforceQuasiNeutrality is true
-  _configurationSpaceFormulation->setMoments(_solutionMoments,_n0);
-  
-  // the di() methods are 1-based:
-  const int indexOffsetTimeOneBased     = 1 + _spaceDim;
-  const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
-  
-  // SpatialFilter's components are zero-based
-  const int indexOffsetTimeZeroBased     = indexOffsetTimeOneBased - 1;
-  const int indexOffsetVelocityZeroBased = indexOffsetVelocityOneBased - 1;
-  
-  // initialize acceleration term, _a
-  {
-    int velocityDim = this->velocityDim();
-    std::vector<FunctionPtr> v(velocityDim);
-    for (int i=0; i<velocityDim; i++)
-    {
-      v.push_back(this->v_i(i));
-    }
-    _a = std::vector<FunctionPtr>(velocityDim); // this gets dotted with grad_v of f (in the strong form)
-    
-    std::vector<FunctionPtr> E(3,Function::zero());
-    std::vector<FunctionPtr> B(3,Function::zero());
-    
-    for (int i=0; i<velocityDim; i++)
-    {
-      E[i] = configurationSpaceFormulation->E_i(i);
-      B[i] = configurationSpaceFormulation->B_i(i);
-    }
-    
-    // we only include the v_cross_B term for 3V case
-    // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
-    std::vector<FunctionPtr> v_cross_B(3,Function::zero());
-    if (velocityDim == 3)
-    {
-      v_cross_B[0] = v[1] * B[2] - v[2] * B[1];
-      v_cross_B[1] = v[2] * B[0] - v[0] * B[2];
-      v_cross_B[2] = v[0] * B[1] - v[1] * B[0];
-    }
-    
-    for (int i=0; i<velocityDim; i++)
-    {
-      _a[i] = (-q/m) * (E[i] + v_cross_B[i]);
-    }
-  }
-  
-  initializeVlasovBilinearForm(_vlasovBF);
-
-  auto vlasovSolnWeakPtr     = Teuchos::rcp(_vlasovSoln.get(),     false);
-  auto vlasovSolnPrevWeakPtr = Teuchos::rcp(_vlasovSolnPrev.get(), false);
-  
-  _fSoln     = Function::solution(f, vlasovSolnWeakPtr);
-  FunctionPtr f_solnPrev = Function::solution(f, vlasovSolnPrevWeakPtr);
-  
-  _fDiff = _fSoln - f_solnPrev;
-    
-  auto vlasovRHS = RHS::rhs();
-  _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
-    
-  vlasovMesh->registerSolution(_vlasovSoln);
-    
-  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct();
-  _vlasovSoln->setIP(vlasovTestNorm);
-  
-  SpatialFilterPtr inflowFilter = Teuchos::rcp(new SpatialFilterSpatialInflow(_spaceDim,indexOffsetVelocityZeroBased) );
-  
-  double t0 = temporalVertices[0];
-  SpatialFilterPtr initialTimeFilter = SpatialFilter::matchingComponent(indexOffsetTimeZeroBased, t0);
-  
-  std::vector<double> v0,vMax;
-  
-  std::vector<SpatialFilterPtr> minVelocityFilters, maxVelocityFilters;
-  for (int i=0; i<_velocityDim; i++)
-  {
-    auto & dimVertices = velocitySpaceVertices[i];
-    const int numVertices = dimVertices.size();
-    v0.push_back(dimVertices[0]);
-    vMax.push_back(dimVertices[numVertices-1]);
-    
-    SpatialFilterPtr minVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + i, v0[i]  );
-    SpatialFilterPtr maxVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + i, vMax[i]);
-    
-    minVelocityFilters.push_back(minVelocityFilter);
-    maxVelocityFilters.push_back(maxVelocityFilter);
-  }
-  
-  std::vector<int> minVelocityTags {VLASOV_TAG_VXMIN, VLASOV_TAG_VYMIN, VLASOV_TAG_VZMIN};
-  std::vector<int> maxVelocityTags {VLASOV_TAG_VXMAX, VLASOV_TAG_VYMAX, VLASOV_TAG_VZMAX};
-  
-  // create entity sets for BCs:
-  {
-    // Vlasov side sets
-    
-    // initial conditions
-    const int sideDim = _spaceDim + _velocityDim; // phase space, space-time: sides have dimension of (fixed-time) phase space
-    auto initialTimeSideSet = extrudedMeshTopology->createEntitySet();
-    std::vector<IndexType> initialTimeSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(initialTimeFilter);
-    for (const auto & initialTimeSideIndex : initialTimeSideIndices)
-    {
-      initialTimeSideSet->addEntity(sideDim, initialTimeSideIndex);
-    }
-    extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_TMIN, initialTimeSideSet);
-    
-    // inflow conditions
-    auto inflowSideSet = extrudedMeshTopology->createEntitySet();
-    std::vector<IndexType> inflowSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(inflowFilter, vlasovMesh);
-    for (const auto & inflowSideIndex : inflowSideIndices)
-    {
-      inflowSideSet->addEntity(sideDim, inflowSideIndex);
-    }
-    extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_SPATIAL_INFLOW, inflowSideSet);
-
-    for (int i=0; i<_velocityDim; i++)
-    {
-      auto minSideSet = extrudedMeshTopology->createEntitySet();
-      std::vector<IndexType> minSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(minVelocityFilters[i]);
-      for (const auto & minSideIndex : minSideIndices)
-      {
-        minSideSet->addEntity(sideDim, minSideIndex);
-      }
-      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, minVelocityTags[i], minSideSet);
-      auto maxSideSet = extrudedMeshTopology->createEntitySet();
-      std::vector<IndexType> maxSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(maxVelocityFilters[i]);
-      for (const auto & maxSideIndex : maxSideIndices)
-      {
-        maxSideSet->addEntity(sideDim, maxSideIndex);
-      }
-      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, maxVelocityTags[i], maxSideSet);
-    }
-  }
-  // create initial-time tag for configuration-space mesh
-  {
-    const int sideDim = _spaceDim; // space-time configuration-space mesh has dimension _spaceDim + 1; sides have dimension _spaceDim
-    auto initialTimeSideSet = _configurationSpaceMeshTopology->createEntitySet();
-    std::vector<IndexType> initialTimeSideIndices = _configurationSpaceMeshTopology->getBoundarySidesThatMatch(initialTimeFilter);
-    for (const auto & initialTimeSideIndex : initialTimeSideIndices)
-    {
-      initialTimeSideSet->addEntity(sideDim, initialTimeSideIndex);
-    }
-    _configurationSpaceMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, CONFIGURATION_TAG_TMIN, initialTimeSideSet);
-  }
-  
-  PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
-  
-  for (int uniformRefinementNumber=0; uniformRefinementNumber < _numUniformRefinements; uniformRefinementNumber++)
-  {
-    const auto & activeCells  = _vlasovSoln->mesh()->getActiveCellIDsGlobal();
-    _vlasovSoln->mesh()->hRefine(activeCells);
-    // (the configuration-space mesh will automatically be refined when the Vlasov mesh is, by virtue of the registerForUpdates() call above)
+    initialize();
   }
 }
 
@@ -514,45 +304,6 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
-void VlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlasovBF)
-{
-  VarPtr f = this->f();
-  VarPtr w = this->w();
-  VarPtr t_n_hat = this->t_n_hat();
-  
-  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation = this->configurationSpaceFormulation();
-  
-  const int spaceDim = this->spaceDim();
-  const int velocityDim = this->velocityDim();
-  
-  // the di() methods are 1-based:
-  const int indexOffsetSpaceOneBased    = 1;
-  const int indexOffsetTimeOneBased     = 1 + spaceDim;
-  const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
-    
-  // The below assumes that spaceDim <= velocityDim; enforce that here:
-  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > velocityDim, std::invalid_argument, "velocityDim must be at least as large as spaceDim");
-  std::vector<FunctionPtr> v;
-  for (int i=0; i<velocityDim; i++)
-  {
-    v.push_back(this->v_i(i));
-  }
-  for (int i=0; i<spaceDim; i++)
-  {
-    vlasovBF->addTerm( -v[i] * f, w->di(indexOffsetSpaceOneBased + i));  // dx_i
-  }
-  vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
-  
-  auto a = this->a(); // acceleration term
-  for (int i=0; i<velocityDim; i++)
-  {
-    // grad v of f
-    vlasovBF->addTerm(a[i] * f, w->di(indexOffsetVelocityOneBased + i));
-  }
-  
-  vlasovBF->addTerm(t_n_hat, w);
-}
-
 IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct()
 {
   auto vlasovBF = this->vlasovSolution()->bf();
@@ -649,6 +400,267 @@ double VlasovSpaceTimeFormulation::fixedPointTolerance() const
 
 bool VlasovSpaceTimeFormulation::hasL2Trace() const {
   return true;
+}
+
+void VlasovSpaceTimeFormulation::initialize()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_initialized, std::invalid_argument, "initialize() should only be called once, during construction");
+  
+  _t0 = _temporalVertices[0];
+  _t1 = _temporalVertices[_temporalVertices.size()-1];
+  
+  _slabTemporalCoordinates = {_t0, _t1}; // will be overwritten by setSlabHistory(), if that's called (i.e., if this is not the initial slab).
+  
+  _configurationSpaceMeshTopology = MeshFactory::extrudedMeshTopology(_spatialMeshTopology, {_temporalVertices});
+  _configurationSpaceFormulation->initializeMesh(_configurationSpaceMeshTopology, _H1Order, _delta_k);
+  
+  std::vector<std::vector<double> > velocitySpaceVertices;
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(_velocitySpaceVertices_x.size() == 0, std::invalid_argument, "velocitySpaceVertices_x may not be empty");
+  velocitySpaceVertices.push_back(_velocitySpaceVertices_x);
+  if (_velocitySpaceVertices_y.size() > 0)
+  {
+    velocitySpaceVertices.push_back(_velocitySpaceVertices_y);
+    if (_velocitySpaceVertices_z.size() > 0)
+    {
+      velocitySpaceVertices.push_back(_velocitySpaceVertices_z);
+    }
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_velocitySpaceVertices_y.size() > 0, std::invalid_argument, "if velocitySpaceVertices_y is empty, then velocitySpaceVertices_z must also be empty");
+  }
+  
+  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(_configurationSpaceMeshTopology, velocitySpaceVertices);
+  
+  _spaceDim = _spatialMeshTopology->getDimension();
+  _velocityDim = velocitySpaceVertices.size();
+
+  TFunctionPtr<double> parity = TFunction<double>::sideParity();
+  TFunctionPtr<double> n = TFunction<double>::normal();
+  
+  // Vlasov equation/mesh will not "know" about "space-time" as such -- no variables will be marked as space-time.
+  // We can do this because the flux variable (t_n_hat) is defined on every interface, so we don't need the weird
+  // only-supported-on-spatial-interfaces thing that we need for space-time Poisson.
+  VarFactoryPtr vlasovVF = constructVlasovVarFactory();
+  _vlasovBF = BF::bf(vlasovVF);
+  
+  // fields
+  VarPtr f = this->f(); // Vlasov
+  
+  // traces
+  VarPtr t_n_hat = this->t_n_hat(); // t_n_hat: L^2 (non-conforming) trace
+
+  // tests
+  VarPtr w = this->w();   // Vlasov test function
+  
+  map<int,int> trialOrderEnhancements;
+  trialOrderEnhancements[t_n_hat->ID()] = 1; // +1 for non-conforming, + whatever user requested
+
+  map<int,int> testOrderEnhancements;
+  
+  const bool allowPruning = false;
+  MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
+  Epetra_CommPtr comm = MPIWrapper::CommWorld();
+  MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );
+  
+  auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
+  
+  _vlasovSoln     = Solution::solution(_vlasovBF,vlasovMesh);
+  _vlasovSolnPrev = Solution::solution(_vlasovBF,vlasovMesh); // will copy out after fixed-point solve
+  
+  const int maxMomentNumber = _configurationSpaceFormulation->maxMomentNumber();
+  _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln, f, _configurationSpaceFormulation->configurationSpaceMesh()) );
+  
+  _n0 = ParameterFunction::parameterFunction(0); // we'll update this when initial conditions are set, if _enforceQuasiNeutrality is true
+  _configurationSpaceFormulation->setMoments(_solutionMoments,_n0);
+  
+  // the di() methods are 1-based:
+  const int indexOffsetTimeOneBased     = 1 + _spaceDim;
+  const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
+  
+  // SpatialFilter's components are zero-based
+  const int indexOffsetTimeZeroBased     = indexOffsetTimeOneBased - 1;
+  const int indexOffsetVelocityZeroBased = indexOffsetVelocityOneBased - 1;
+  
+  // initialize acceleration term, _a
+  {
+    int velocityDim = this->velocityDim();
+    std::vector<FunctionPtr> v(velocityDim);
+    for (int i=0; i<velocityDim; i++)
+    {
+      v.push_back(this->v_i(i));
+    }
+    _a = std::vector<FunctionPtr>(velocityDim); // this gets dotted with grad_v of f (in the strong form)
+    
+    std::vector<FunctionPtr> E(3,Function::zero());
+    std::vector<FunctionPtr> B(3,Function::zero());
+    
+    for (int i=0; i<velocityDim; i++)
+    {
+      E[i] = _configurationSpaceFormulation->E_i(i);
+      B[i] = _configurationSpaceFormulation->B_i(i);
+    }
+    
+    // we only include the v_cross_B term for 3V case
+    // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
+    std::vector<FunctionPtr> v_cross_B(3,Function::zero());
+    if (velocityDim == 3)
+    {
+      v_cross_B[0] = v[1] * B[2] - v[2] * B[1];
+      v_cross_B[1] = v[2] * B[0] - v[0] * B[2];
+      v_cross_B[2] = v[0] * B[1] - v[1] * B[0];
+    }
+    
+    for (int i=0; i<velocityDim; i++)
+    {
+      _a[i] = (-_q/_m) * (E[i] + v_cross_B[i]);
+    }
+  }
+  
+  initializeVlasovBilinearForm(_vlasovBF);
+
+  auto vlasovSolnWeakPtr     = Teuchos::rcp(_vlasovSoln.get(),     false);
+  auto vlasovSolnPrevWeakPtr = Teuchos::rcp(_vlasovSolnPrev.get(), false);
+  
+  _fSoln     = Function::solution(f, vlasovSolnWeakPtr);
+  FunctionPtr f_solnPrev = Function::solution(f, vlasovSolnPrevWeakPtr);
+  
+  _fDiff = _fSoln - f_solnPrev;
+    
+  auto vlasovRHS = RHS::rhs();
+  _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
+    
+  vlasovMesh->registerSolution(_vlasovSoln);
+    
+  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct();
+  _vlasovSoln->setIP(vlasovTestNorm);
+  
+  SpatialFilterPtr inflowFilter = Teuchos::rcp(new SpatialFilterSpatialInflow(_spaceDim,indexOffsetVelocityZeroBased) );
+  
+  SpatialFilterPtr initialTimeFilter = SpatialFilter::matchingComponent(indexOffsetTimeZeroBased, _t0);
+  
+  std::vector<double> v0,vMax;
+  
+  std::vector<SpatialFilterPtr> minVelocityFilters, maxVelocityFilters;
+  for (int i=0; i<_velocityDim; i++)
+  {
+    auto & dimVertices = velocitySpaceVertices[i];
+    const int numVertices = dimVertices.size();
+    v0.push_back(dimVertices[0]);
+    vMax.push_back(dimVertices[numVertices-1]);
+    
+    SpatialFilterPtr minVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + i, v0[i]  );
+    SpatialFilterPtr maxVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + i, vMax[i]);
+    
+    minVelocityFilters.push_back(minVelocityFilter);
+    maxVelocityFilters.push_back(maxVelocityFilter);
+  }
+  
+  std::vector<int> minVelocityTags {VLASOV_TAG_VXMIN, VLASOV_TAG_VYMIN, VLASOV_TAG_VZMIN};
+  std::vector<int> maxVelocityTags {VLASOV_TAG_VXMAX, VLASOV_TAG_VYMAX, VLASOV_TAG_VZMAX};
+  
+  // create entity sets for BCs:
+  {
+    // Vlasov side sets
+    
+    // initial conditions
+    const int sideDim = _spaceDim + _velocityDim; // phase space, space-time: sides have dimension of (fixed-time) phase space
+    auto initialTimeSideSet = extrudedMeshTopology->createEntitySet();
+    std::vector<IndexType> initialTimeSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(initialTimeFilter);
+    for (const auto & initialTimeSideIndex : initialTimeSideIndices)
+    {
+      initialTimeSideSet->addEntity(sideDim, initialTimeSideIndex);
+    }
+    extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_TMIN, initialTimeSideSet);
+    
+    // inflow conditions
+    auto inflowSideSet = extrudedMeshTopology->createEntitySet();
+    std::vector<IndexType> inflowSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(inflowFilter, vlasovMesh);
+    for (const auto & inflowSideIndex : inflowSideIndices)
+    {
+      inflowSideSet->addEntity(sideDim, inflowSideIndex);
+    }
+    extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_SPATIAL_INFLOW, inflowSideSet);
+
+    for (int i=0; i<_velocityDim; i++)
+    {
+      auto minSideSet = extrudedMeshTopology->createEntitySet();
+      std::vector<IndexType> minSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(minVelocityFilters[i]);
+      for (const auto & minSideIndex : minSideIndices)
+      {
+        minSideSet->addEntity(sideDim, minSideIndex);
+      }
+      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, minVelocityTags[i], minSideSet);
+      auto maxSideSet = extrudedMeshTopology->createEntitySet();
+      std::vector<IndexType> maxSideIndices = extrudedMeshTopology->getBoundarySidesThatMatch(maxVelocityFilters[i]);
+      for (const auto & maxSideIndex : maxSideIndices)
+      {
+        maxSideSet->addEntity(sideDim, maxSideIndex);
+      }
+      extrudedMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, maxVelocityTags[i], maxSideSet);
+    }
+  }
+  // create initial-time tag for configuration-space mesh
+  {
+    const int sideDim = _spaceDim; // space-time configuration-space mesh has dimension _spaceDim + 1; sides have dimension _spaceDim
+    auto initialTimeSideSet = _configurationSpaceMeshTopology->createEntitySet();
+    std::vector<IndexType> initialTimeSideIndices = _configurationSpaceMeshTopology->getBoundarySidesThatMatch(initialTimeFilter);
+    for (const auto & initialTimeSideIndex : initialTimeSideIndices)
+    {
+      initialTimeSideSet->addEntity(sideDim, initialTimeSideIndex);
+    }
+    _configurationSpaceMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, CONFIGURATION_TAG_TMIN, initialTimeSideSet);
+  }
+  
+  PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  
+  for (int uniformRefinementNumber=0; uniformRefinementNumber < _numUniformRefinements; uniformRefinementNumber++)
+  {
+    const auto & activeCells  = _vlasovSoln->mesh()->getActiveCellIDsGlobal();
+    _vlasovSoln->mesh()->hRefine(activeCells);
+    // (the configuration-space mesh will automatically be refined when the Vlasov mesh is, by virtue of the registerForUpdates() call above)
+  }
+  _initialized = true;
+}
+
+void VlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlasovBF)
+{
+  VarPtr f = this->f();
+  VarPtr w = this->w();
+  VarPtr t_n_hat = this->t_n_hat();
+  
+  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation = this->configurationSpaceFormulation();
+  
+  const int spaceDim = this->spaceDim();
+  const int velocityDim = this->velocityDim();
+  
+  // the di() methods are 1-based:
+  const int indexOffsetSpaceOneBased    = 1;
+  const int indexOffsetTimeOneBased     = 1 + spaceDim;
+  const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
+    
+  // The below assumes that spaceDim <= velocityDim; enforce that here:
+  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > velocityDim, std::invalid_argument, "velocityDim must be at least as large as spaceDim");
+  std::vector<FunctionPtr> v;
+  for (int i=0; i<velocityDim; i++)
+  {
+    v.push_back(this->v_i(i));
+  }
+  for (int i=0; i<spaceDim; i++)
+  {
+    vlasovBF->addTerm( -v[i] * f, w->di(indexOffsetSpaceOneBased + i));  // dx_i
+  }
+  vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
+  
+  auto a = this->a(); // acceleration term
+  for (int i=0; i<velocityDim; i++)
+  {
+    // grad v of f
+    vlasovBF->addTerm(a[i] * f, w->di(indexOffsetVelocityOneBased + i));
+  }
+  
+  vlasovBF->addTerm(t_n_hat, w);
 }
 
 int VlasovSpaceTimeFormulation::iterativeSolveMaxIterations() const
