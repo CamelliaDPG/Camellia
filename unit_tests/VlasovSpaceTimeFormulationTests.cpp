@@ -480,6 +480,103 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     }
   }
 
+  void testNextTimeSlab(const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success)
+  {
+    // sets up a formulation like the PoissonTwoStreamSteadyState test below, but does not solve.  Checks that the new slab
+    // is created, and has the right number of elements, and that it copies settings (intended to include all the settings
+    // we want to be be copied).
+    double n0 = 1.;
+    double sigma = 1;
+    double u0 = 3.0;
+    
+    // 1D1T1V
+    const int firstVelocityDimension = 2; // zero-based
+    const int numVelocityDimensions  = 1;
+    FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, { u0}, sigma * sigma, 0.5 * n0);
+    FunctionPtr fM_minus_u0  = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, {-u0}, sigma * sigma, 0.5 * n0);
+    FunctionPtr f0           = fM_u0 + fM_minus_u0;
+    
+    const double q = 1.;
+    
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vElements = 2;
+    const int H1Order   = 2;
+    
+    const bool useSerendipity = false;
+    
+    FunctionPtr  f_exact = f0;
+    FunctionPtr VE_exact = Function::zero();
+    FunctionPtr  E_exact = Function::zero();
+        
+    const bool usePeriodicBCs = true;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+   
+    form->setInitialAndInflowConditions(f_exact, f_exact);
+    
+    bool useGeometricMultigrid = true;
+    double cgTol = 1e-6 / 100.0;
+    double fixedPointTol = 3e-8;
+    int maxSubsteps = 3;
+    int minSubsteps = 1;
+    
+    std::vector<double> cgTols {1,2,3};
+    
+    bool enforceQuasiNeutrality = true;
+    int azOutputLevel = 5;
+    int maxIters = 1000;
+    bool exportViz = true;
+    std::string vizDir = "/some/random/dir";
+    
+    form->setUseGeometricMultigrid(useGeometricMultigrid);
+    form->setIterativeSolveTolerance(cgTol);
+    form->setIterativeSolveTolerances(cgTols);
+    form->setFixedPointMaxSubsteps(maxSubsteps);
+    form->setFixedPointMinSubsteps(minSubsteps);
+    form->setFixedPointTolerance(fixedPointTol);
+    form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
+    form->setIterativeSolveOutputLevel(azOutputLevel);
+    form->setIterativeSolveMaxIterations(maxIters);
+    form->setExportViz(exportViz, vizDir);
+    
+    auto trialVars = form->vlasovBF()->varFactory()->trialVars();
+    auto testVars  = form->vlasovBF()->varFactory()->testVars();
+    
+    auto nextSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
+    
+    int numElementsExpected = xElements * tElements * vElements;
+    int numElementsActual   = nextSlab->vlasovMesh()->numActiveElements();
+    TEST_EQUALITY(numElementsExpected, numElementsActual);
+    
+    TEST_EQUALITY(useGeometricMultigrid,  nextSlab->useGeometricMultigrid());
+    TEST_EQUALITY(cgTol,                  nextSlab->iterativeSolveTolerance());
+    TEST_EQUALITY(maxSubsteps,            nextSlab->fixedPointMaxSubsteps());
+    TEST_EQUALITY(minSubsteps,            nextSlab->fixedPointMinSubsteps());
+    TEST_EQUALITY(fixedPointTol,          nextSlab->fixedPointTolerance());
+    TEST_EQUALITY(enforceQuasiNeutrality, nextSlab->enforceQuasiNeutrality());
+    TEST_EQUALITY(azOutputLevel,          nextSlab->iterativeSolveOutputLevel());
+    TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());
+    TEST_EQUALITY(exportViz,              nextSlab->exportViz());
+    TEST_EQUALITY(vizDir,                 nextSlab->vizOutputDir());
+    
+    auto nextSlabCGTols = nextSlab->iterativeSolveTolerances();
+    TEST_EQUALITY(cgTols.size(), nextSlabCGTols.size());
+    if (cgTols.size() == nextSlabCGTols.size())
+    {
+      for (int i=0; i<int(cgTols.size()); i++)
+      {
+        TEST_EQUALITY(cgTols[i], nextSlabCGTols[i]);
+      }
+    }
+    
+    auto nextTrialVars = nextSlab->vlasovBF()->varFactory()->trialVars();
+    auto nextTestVars  = nextSlab->vlasovBF()->varFactory()->testVars();
+    
+    TEST_EQUALITY(trialVars.size(), nextTrialVars.size());
+    TEST_EQUALITY( testVars.size(), nextTestVars.size());
+  }
+
   void testPoissonTwoStreamSteadyState(const double tolRelativeToProjectionError,
                                        const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success)
   {
@@ -672,91 +769,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, NextTimeSlab )
   {
-    // sets up a formulation like the PoissonTwoStreamSteadyState test below, but does not solve.  Checks that the new slab
-    // is created, and has the right number of elements, and that it copies settings (intended to include all the settings
-    // we want to be be copied).
-    double n0 = 1.;
-    double sigma = 1;
-    double u0 = 3.0;
-    
-    // 1D1T1V
-    const int firstVelocityDimension = 2; // zero-based
-    const int numVelocityDimensions  = 1;
-    FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, { u0}, sigma * sigma, 0.5 * n0);
-    FunctionPtr fM_minus_u0  = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, {-u0}, sigma * sigma, 0.5 * n0);
-    FunctionPtr f0           = fM_u0 + fM_minus_u0;
-    
-    const double q = 1.;
-    
-    const int xElements = 2;
-    const int tElements = 1;
-    const int vElements = 8; // we need a somewhat fine mesh in v to get relatively good resolution
-    const int H1Order   = 4;
-    
-    const bool useSerendipity = false;
-    const bool useMimeticDPG  = false;
-    
-    FunctionPtr  f_exact = f0;
-    FunctionPtr VE_exact = Function::zero();
-    FunctionPtr  E_exact = Function::zero();
-        
-    const bool usePeriodicBCs = true;
-    
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
-   
-    form->setInitialAndInflowConditions(f_exact, f_exact);
-    
-    bool useGeometricMultigrid = true;
-    double cgTol = 1e-6 / 100.0;
-    double fixedPointTol = 3e-8;
-    int maxSubsteps = 3;
-    int minSubsteps = 1;
-    
-    std::vector<double> cgTols {1,2,3};
-    
-    bool enforceQuasiNeutrality = true;
-    int azOutputLevel = 5;
-    int maxIters = 1000;
-    bool exportViz = true;
-    std::string vizDir = "/some/random/dir";
-    
-    form->setUseGeometricMultigrid(useGeometricMultigrid);
-    form->setIterativeSolveTolerance(cgTol);
-    form->setIterativeSolveTolerances(cgTols);
-    form->setFixedPointMaxSubsteps(maxSubsteps);
-    form->setFixedPointMinSubsteps(minSubsteps);
-    form->setFixedPointTolerance(fixedPointTol);
-    form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-    form->setIterativeSolveOutputLevel(azOutputLevel);
-    form->setIterativeSolveMaxIterations(maxIters);
-    form->setExportViz(exportViz, vizDir);
-    
-    auto nextSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
-    
-    int numElementsExpected = xElements * tElements * vElements;
-    int numElementsActual   = nextSlab->vlasovMesh()->numActiveElements();
-    TEST_EQUALITY(numElementsExpected, numElementsActual);
-    
-    TEST_EQUALITY(useGeometricMultigrid,  nextSlab->useGeometricMultigrid());
-    TEST_EQUALITY(cgTol,                  nextSlab->iterativeSolveTolerance());
-    TEST_EQUALITY(maxSubsteps,            nextSlab->fixedPointMaxSubsteps());
-    TEST_EQUALITY(minSubsteps,            nextSlab->fixedPointMinSubsteps());
-    TEST_EQUALITY(fixedPointTol,          nextSlab->fixedPointTolerance());
-    TEST_EQUALITY(enforceQuasiNeutrality, nextSlab->enforceQuasiNeutrality());
-    TEST_EQUALITY(azOutputLevel,          nextSlab->iterativeSolveOutputLevel());
-    TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());
-    TEST_EQUALITY(exportViz,              nextSlab->exportViz());
-    TEST_EQUALITY(vizDir,                 nextSlab->vizOutputDir());
-    
-    auto nextSlabCGTols = nextSlab->iterativeSolveTolerances();
-    TEST_EQUALITY(cgTols.size(), nextSlabCGTols.size());
-    if (cgTols.size() == nextSlabCGTols.size())
-    {
-      for (int i=0; i<int(cgTols.size()); i++)
-      {
-        TEST_EQUALITY(cgTols[i], nextSlabCGTols[i]);
-      }
-    }
+    bool useMimeticDPG = false;
+    testNextTimeSlab(useMimeticDPG, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, MultiSlabSequenceAllowsInitialMeshToBeDestroyed )

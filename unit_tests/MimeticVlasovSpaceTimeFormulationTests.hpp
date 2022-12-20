@@ -42,6 +42,12 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, MimeticVariablesDefined )
   }
 }
 
+TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, NextTimeSlab )
+{
+  bool useMimeticDPG = true;
+  testNextTimeSlab(useMimeticDPG, out, success);
+}
+
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonTwoStreamSteadyState )
 {
   const double tolRelativeToProjectionError = 0.50; // we allow actual error to be up to 150% of the best approximation error for f, tn

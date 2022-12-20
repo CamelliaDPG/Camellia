@@ -337,6 +337,94 @@ VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
   return vlasovVF;
 }
 
+void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeFormulation> nextSlabForm)
+{
+  auto nextSlabVlasovMesh = nextSlabForm->vlasovMesh(); // "from" in cellIDMap
+  auto thisSlabVlasovMesh = this->vlasovMesh();
+  
+  std::map<IndexType,IndexType> cellIDMap;
+  std::map<int,int> sideOrdinalMap;
+  
+  MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
+  
+  VarPtr tn = this->t_n_hat();
+  bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
+  SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
+  auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
+  tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
+  // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
+  FunctionPtr f0 = tnInterfaceFxn;
+  
+  if (_f_inflow != Teuchos::null)
+  {
+    nextSlabForm->setInitialAndInflowConditions(f0, _f_inflow);
+  }
+  else
+  {
+    nextSlabForm->setInitialConditions(f0);
+  }
+  
+  for (auto sideSetTagFilter : _configurationSpaceSideSetFilters)
+  {
+    nextSlabForm->createConfigurationMeshSideSetTag(sideSetTagFilter.first,sideSetTagFilter.second);
+  }
+  
+  for (auto entry : _configurationSpaceBCs)
+  {
+    int tag           = std::get<0>(entry);
+    VarPtr var        = std::get<1>(entry);
+    FunctionPtr value = std::get<2>(entry);
+    
+    nextSlabForm->addConfigurationSpaceBC(tag, var, value);
+  }
+  
+  // copy my settings:
+  nextSlabForm->setIterativeSolveOutputLevel(_aztecOutputLevel);
+  nextSlabForm->setIterativeSolveTolerance(_cgTol);
+  nextSlabForm->setIterativeSolveTolerances(_cgTols);
+  nextSlabForm->setUseGeometricMultigrid(_useGeometricMultigrid);
+  nextSlabForm->setEnforceQuasiNeutrality(_enforceQuasiNeutrality);
+  nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
+  nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
+  nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
+  nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);
+  nextSlabForm->setExportViz(_exportViz,_vizOutputDir);
+  nextSlabForm->setMaxMomentForConservationDiagnostics(_maxMomentForConservationDiagnostics);
+  
+  // copy slab/diagnostic history:
+  nextSlabForm->setSlabHistory(_slabTemporalCoordinates, _massIntegrals, _momentumIntegrals, _energyIntegrals);
+  
+  // import solution data so that it's available for BC setting
+  std::set<GlobalIndexType> currentCellIDsForRank;
+  const auto &myNextCellIDs = nextSlabVlasovMesh->cellIDsInPartition();
+  for (const auto &myNextCellID : myNextCellIDs)
+  {
+    auto mapEntry = cellIDMap.find(myNextCellID); // all rank-local cells which lie on the final-time boundary should have an entry
+    if (mapEntry != cellIDMap.end())
+    {
+      currentCellIDsForRank.insert(mapEntry->second);
+    }
+  }
+  _vlasovSoln->importSolutionForOffRankCells(currentCellIDsForRank);
+  
+  /*
+   Note: the above will work if there is not cell migration or refinement after we return nextSlabForm.
+         If nextSlabForm gets refined, then a new pass of hRefineToMatchAtBoundary() will be needed, along
+         with the above import.  Probably the right solution going forward will be to separate out this
+         functionality into a new helper method, and call it both from here and upon mesh refinement;
+         doing the latter transparently will require that the next slab has a reference to the previous.
+         So that we don't require all slabs to stay in memory, we'll want to nullify this reference during
+         nextTimeSlab().  (Also need to nullify the BC for the current slab -- as we do below -- for the
+         same reason: it refers to the previous slab's solution, which has a BC for the previous one, etc.
+         So we have a linked list of Solution objects; need to break those links to free up the memory.)
+   */
+  // nullify the BC for current slab; if it's not the first slab, it will have reference to a prior slab's solution,
+  // and on back to the first slab, unless we nullify.  We could also call setInitialConditions(Function::zero()) or
+  // something like that, but setting to null has the advantage that we'll fail fast if the user tries to do a solve
+  // on the current slab after calling nextTimeSlab() -- it will crash with a null pointer exception.
+  _vlasovSoln->setBC(Teuchos::null);
+}
+
 int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterPtr regionToMatch, const bool restrictToBoundary)
 {
   const int thisTag = _nextConfigurationSpaceTag++;
@@ -354,6 +442,11 @@ int VlasovSpaceTimeFormulation::createConfigurationMeshSideSetTag(SpatialFilterP
   _configurationSpaceSideSetFilters.push_back({regionToMatch,restrictToBoundary});
   
   return thisTag;
+}
+
+int VlasovSpaceTimeFormulation::delta_k() const
+{
+  return _delta_k;
 }
 
 VarPtr VlasovSpaceTimeFormulation::E_configurationSpaceTrace(const int zeroBasedComp)
@@ -400,6 +493,11 @@ double VlasovSpaceTimeFormulation::fixedPointTolerance() const
 
 bool VlasovSpaceTimeFormulation::hasL2Trace() const {
   return true;
+}
+
+int VlasovSpaceTimeFormulation::H1Order() const
+{
+  return _H1Order;
 }
 
 void VlasovSpaceTimeFormulation::initialize()
@@ -704,92 +802,14 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
                                                                   temporalVertices, _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z,
                                                                   _H1Order, _delta_k, _numUniformRefinements));
   
-  auto nextSlabVlasovMesh = nextSlabForm->vlasovMesh(); // "from" in cellIDMap
-  auto thisSlabVlasovMesh = this->vlasovMesh();
-  
-  std::map<IndexType,IndexType> cellIDMap;
-  std::map<int,int> sideOrdinalMap;
-  
-  MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
-  
-  VarPtr tn = this->t_n_hat();
-  bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
-  SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
-  auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
-  tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
-  // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
-  FunctionPtr f0 = tnInterfaceFxn;
-  
-  if (_f_inflow != Teuchos::null)
-  {
-    nextSlabForm->setInitialAndInflowConditions(f0, _f_inflow);
-  }
-  else
-  {
-    nextSlabForm->setInitialConditions(f0);
-  }
-  
-  for (auto sideSetTagFilter : _configurationSpaceSideSetFilters)
-  {
-    nextSlabForm->createConfigurationMeshSideSetTag(sideSetTagFilter.first,sideSetTagFilter.second);
-  }
-  
-  for (auto entry : _configurationSpaceBCs)
-  {
-    int tag           = std::get<0>(entry);
-    VarPtr var        = std::get<1>(entry);
-    FunctionPtr value = std::get<2>(entry);
-    
-    nextSlabForm->addConfigurationSpaceBC(tag, var, value);
-  }
-  
-  // copy my settings:
-  nextSlabForm->setIterativeSolveOutputLevel(_aztecOutputLevel);
-  nextSlabForm->setIterativeSolveTolerance(_cgTol);
-  nextSlabForm->setIterativeSolveTolerances(_cgTols);
-  nextSlabForm->setUseGeometricMultigrid(_useGeometricMultigrid);
-  nextSlabForm->setEnforceQuasiNeutrality(_enforceQuasiNeutrality);
-  nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
-  nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
-  nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
-  nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);
-  nextSlabForm->setExportViz(_exportViz,_vizOutputDir);
-  nextSlabForm->setMaxMomentForConservationDiagnostics(_maxMomentForConservationDiagnostics);
-  
-  // copy slab/diagnostic history:
-  nextSlabForm->setSlabHistory(_slabTemporalCoordinates, _massIntegrals, _momentumIntegrals, _energyIntegrals);
-  
-  // import solution data so that it's available for BC setting
-  std::set<GlobalIndexType> currentCellIDsForRank;
-  const auto &myNextCellIDs = nextSlabVlasovMesh->cellIDsInPartition();
-  for (const auto &myNextCellID : myNextCellIDs)
-  {
-    auto mapEntry = cellIDMap.find(myNextCellID); // all rank-local cells which lie on the final-time boundary should have an entry
-    if (mapEntry != cellIDMap.end())
-    {
-      currentCellIDsForRank.insert(mapEntry->second);
-    }
-  }
-  _vlasovSoln->importSolutionForOffRankCells(currentCellIDsForRank);
-  
-  /*
-   Note: the above will work if there is not cell migration or refinement after we return nextSlabForm.
-         If nextSlabForm gets refined, then a new pass of hRefineToMatchAtBoundary() will be needed, along
-         with the above import.  Probably the right solution going forward will be to separate out this
-         functionality into a new helper method, and call it both from here and upon mesh refinement;
-         doing the latter transparently will require that the next slab has a reference to the previous.
-         So that we don't require all slabs to stay in memory, we'll want to nullify this reference during
-         nextTimeSlab().  (Also need to nullify the BC for the current slab -- as we do below -- for the
-         same reason: it refers to the previous slab's solution, which has a BC for the previous one, etc.
-         So we have a linked list of Solution objects; need to break those links to free up the memory.)
-   */
-  // nullify the BC for current slab; if it's not the first slab, it will have reference to a prior slab's solution,
-  // and on back to the first slab, unless we nullify.  We could also call setInitialConditions(Function::zero()) or
-  // something like that, but setting to null has the advantage that we'll fail fast if the user tries to do a solve
-  // on the current slab after calling nextTimeSlab() -- it will crash with a null pointer exception.
-  _vlasovSoln->setBC(Teuchos::null);
+  configureNextSlab(nextSlabForm);
   
   return nextSlabForm;
+}
+
+int VlasovSpaceTimeFormulation::numUniformRefinements() const
+{
+  return _numUniformRefinements;
 }
 
 double VlasovSpaceTimeFormulation::q() const
@@ -1130,10 +1150,25 @@ void VlasovSpaceTimeFormulation::setUseGeometricMultigrid(bool useGeometricMulti
   _useGeometricMultigrid = useGeometricMultigrid;
 }
 
+MeshTopologyPtr VlasovSpaceTimeFormulation::spatialMeshTopology()
+{
+  return _spatialMeshTopology;
+}
+
 FunctionPtr VlasovSpaceTimeFormulation::t() const
 {
   int tCompZeroBased = _spaceDim;
   return MonomialFunction::xi_n(tCompZeroBased, 1);
+}
+
+double VlasovSpaceTimeFormulation::t0() const
+{
+  return _t0;
+}
+
+double VlasovSpaceTimeFormulation::t1() const
+{
+  return _t1;
 }
 
 int VlasovSpaceTimeFormulation::tagConfigurationInitialTime() const
@@ -1381,6 +1416,21 @@ VarPtr VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()
 int VlasovSpaceTimeFormulation::velocityDim() const
 {
   return _velocityDim;
+}
+
+vector<double> VlasovSpaceTimeFormulation::velocitySpaceVertices_x() const
+{
+  return _velocitySpaceVertices_x;
+}
+
+vector<double> VlasovSpaceTimeFormulation::velocitySpaceVertices_y() const
+{
+  return _velocitySpaceVertices_y;
+}
+
+vector<double> VlasovSpaceTimeFormulation::velocitySpaceVertices_z() const
+{
+  return _velocitySpaceVertices_z;
 }
 
 std::string VlasovSpaceTimeFormulation::vizOutputDir() const
