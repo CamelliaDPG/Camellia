@@ -163,11 +163,22 @@ VarFactoryPtr MimeticVlasovSpaceTimeFormulation::constructVlasovVarFactory()
   }
 
   // g_c, w_c:
-  vlasovVF->fieldVar(S_GC);
-  vlasovVF->testVar(S_WC, L2);
+  auto g_c = vlasovVF->fieldVar(S_GC);
+  auto w_c = vlasovVF->testVar(S_WC, L2);
   
   vlasovVF->setTrialBasisFamily(basisFamily);
   vlasovVF->setTestBasisFamily(basisFamily);
+  
+  // force g_c to be a constant:
+  // sample a spatial element topology:
+  CellTopoPtr spatialTopo = this->spatialMeshTopology()->getCell(0)->topology();
+  CellTopoPtr cellTopo    = CellTopology::cellTopology(spatialTopo, this->velocityDim() + 1);
+  
+  BasisPtr constantBasis   = BasisFactory::basisFactory()->getConformingBasis(1, cellTopo, EFunctionSpace::FUNCTION_SPACE_HVOL);
+  auto constantBasisFamily = BasisFamily::singletonBasisFamily(constantBasis);
+  
+  g_c->setBasisFamily(constantBasisFamily);
+  w_c->setBasisFamily(constantBasisFamily);
   
   return vlasovVF;
 }
