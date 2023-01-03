@@ -106,7 +106,7 @@ void TBC<Scalar>::addSinglePointBC( int fieldID, Scalar value, MeshPtr mesh, Glo
   this->addSpatialPointBC(fieldID,value,vertex);
 }
 
-// ! Adds point constraint at the specified spatial point (which must correspond to a vertex in the mesh).  Deprecated; use addSpatialPointBC instead (even for pure-spatial meshes).  For space-time meshes, indicates that the value should be imposed at every temporal degree of freedom corresponding to the spatial point.
+// ! Adds point constraint at the specified spatial point (which must correspond to a vertex in the mesh).  For space-time meshes, indicates that the value should be imposed at every temporal degree of freedom corresponding to the spatial point.
 template <typename Scalar>
 void TBC<Scalar>::addSpatialPointBC(int fieldID, Scalar value, vector<double> spatialPoint)
 {
