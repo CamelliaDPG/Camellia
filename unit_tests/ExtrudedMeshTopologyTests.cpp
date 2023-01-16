@@ -12,6 +12,10 @@
 
 #include "ExtrudedMeshTopology.h"
 #include "MeshFactory.h"
+#include "MeshTestUtility.h"
+#include "PoissonFormulation.h"
+
+#include "Epetra_Import.h"
 
 using namespace Camellia;
 
@@ -83,15 +87,36 @@ namespace
   {
     using std::vector;
     vector<double> physicalDims(numPhysicalDims,1.0);
-    vector<int> physicalElementCounts(numPhysicalDims,2);
+    vector<int> physicalElementCounts(numPhysicalDims,physicalMeshWidth);
     auto physicalMeshTopo = MeshFactory::rectilinearMeshTopology(physicalDims, physicalElementCounts);
     
     vector<double> extrusionStartCoords(numExtrusionDims, -1.0);
     vector<double> extrusionExtents(numExtrusionDims, 2.0);
-    vector<int> extrusionElementCounts(numExtrusionDims,2);
+    vector<int> extrusionElementCounts(numExtrusionDims,extrusionMeshWidth);
     
     auto extrudedMeshTopology = Teuchos::rcp(new ExtrudedMeshTopology(physicalMeshTopo,extrusionStartCoords,extrusionExtents,extrusionElementCounts));
     return extrudedMeshTopology;
+  }
+
+  Teuchos::RCP<MeshTopology> makeTestMeshTopologyNonExtruded(  int numPhysicalDims, int numExtrusionDims,
+                                                             const int physicalMeshWidth=2, const int extrusionMeshWidth=2)
+  {
+    using std::vector;
+    vector<double> startCoords(numPhysicalDims, 0.0);
+    vector<double> dims(numPhysicalDims,1.0);
+    
+    vector<int> elementCounts(numPhysicalDims,physicalMeshWidth);
+    
+    for (int d=0; d<numExtrusionDims; d++)
+    {
+      startCoords.push_back(-1.);
+      dims.push_back(2.0);
+      elementCounts.push_back(extrusionMeshWidth);
+    }
+    
+    auto meshTopo = MeshFactory::rectilinearMeshTopology(dims, elementCounts, startCoords);
+    
+    return meshTopo;
   }
   
   void testComponentMap(const int numPhysicalDims, const int numExtrusionDims, Teuchos::FancyOStream &out, bool &success)
@@ -144,6 +169,174 @@ namespace
     }
   }
 
+  void testH1FieldPoisson(const int numPhysicalDims, const int numExtrusionDims, Teuchos::FancyOStream &out, bool &success)
+  {
+    // Inspired by some weird results when we experimentally try to switch Vlasov
+    // field (f) from L^2 to H^1, want to check that solutions are consistent
+    // when using extruded versus standard meshes.  Start with a 2D (1D extruded)
+    // MeshTopology; use primal Poisson formulation as a simple example to test.
+    
+    const int physicalMeshWidth = 2;
+    const int extrudedMeshWidth = 3;
+    
+    auto extrudedMeshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, physicalMeshWidth, extrudedMeshWidth);
+    auto standardMeshTopo = makeTestMeshTopologyNonExtruded(numPhysicalDims, numExtrusionDims, physicalMeshWidth, extrudedMeshWidth);
+    
+    const int totalDim = numPhysicalDims + numExtrusionDims;
+    
+    PoissonFormulation primalForm(totalDim, true, Camellia::PoissonFormulation::PRIMAL);
+    
+    auto poissonBF = primalForm.bf();
+   
+    const int delta_k = totalDim;
+    std::vector<int> H1Order(totalDim,1);
+    auto extrudedMesh = MeshFactory::minRuleMesh(extrudedMeshTopo, poissonBF, H1Order, delta_k);
+    auto standardMesh = MeshFactory::minRuleMesh(standardMeshTopo, poissonBF, H1Order, delta_k);
+    
+    // exact solution: for now, we just use a linear u
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    
+    FunctionPtr u_exact = (totalDim == 2) ? -x + y : -x + y + 2. * z;
+
+    // rhs = f * v, where f = \Delta u
+    RHSPtr rhs = RHS::rhs();
+    FunctionPtr f = u_exact->dx()->dx() + u_exact->dy()->dy() + u_exact->dz()->dz();
+    rhs->addTerm(f * primalForm.v());
+    
+    VarPtr v = primalForm.v();
+    IPPtr ip = IP::ip();
+    ip->addTerm(v->grad());
+    ip->addTerm(v);
+    
+    VarPtr u = primalForm.u();
+    BCPtr bc = BC::bc();
+    SpatialFilterPtr boundary = SpatialFilter::allSpace();
+    bc->addDirichlet(u, boundary, u_exact);
+    
+    SolutionPtr solnExtruded = Solution::solution(primalForm.bf(), extrudedMesh, bc, rhs, ip);
+    SolutionPtr solnStandard = Solution::solution(primalForm.bf(), standardMesh, bc, rhs, ip);
+    
+    map<int, FunctionPtr> u_exact_map;
+    u_exact_map[u->ID()] = u_exact;
+    solnExtruded->projectOntoMesh(u_exact_map);
+    solnStandard->projectOntoMesh(u_exact_map);
+    
+    FunctionPtr u_soln_extruded = Function::solution(u, solnExtruded);
+    FunctionPtr u_soln_standard = Function::solution(u, solnStandard);
+    FunctionPtr u_err_extruded = u_soln_extruded - u_exact;
+    FunctionPtr u_err_standard = u_soln_standard - u_exact;
+    
+    double tol = 1e-12;
+    double u_err_extruded_l2 = u_err_extruded->l2norm(extrudedMesh);
+    double u_err_standard_l2 = u_err_standard->l2norm(standardMesh);
+    
+    if (u_err_extruded_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for extruded ";
+      cout << totalDim << "D mesh and exactly recoverable solution, u error after projection is " << u_err_extruded_l2 << endl;
+    }
+    if (u_err_standard_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for standard ";
+      cout << totalDim << "D mesh and exactly recoverable solution, u error after projection is " << u_err_standard_l2 << endl;
+    }
+    
+    solnExtruded->clear();
+    solnStandard->clear();
+    
+    SolverPtr solver = Solver::getSolver(Solver::KLU, false);
+    solnExtruded->solve(solver);
+    solnStandard->solve(solver);
+    
+    {
+      // check neighbor agreement for standard
+      Epetra_MultiVector *lhsVector = solnStandard->getGlobalCoefficients();
+      Epetra_SerialComm Comm;
+      Epetra_Map partMap = solnStandard->getPartitionMap();
+
+      // Import solution onto current processor
+      GlobalIndexTypeToCast numNodesGlobal = standardMesh->numGlobalDofs();
+      GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+      Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+      Epetra_Import  solnImporter(solnMap, partMap);
+      Epetra_Vector  solnCoeff(solnMap);
+      solnCoeff.Import(*lhsVector, solnImporter, Insert);
+
+      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(standardMesh, solnCoeff))
+      {
+        cout << "GDAMinimumRuleTests failure: for standard 2D Poisson mesh (after solve), neighboring bases do not agree on sides." << endl;
+        success = false;
+      }
+    }
+    {
+      // check neighbor agreement for extruded
+      Epetra_MultiVector *lhsVector = solnExtruded->getGlobalCoefficients();
+      Epetra_SerialComm Comm;
+      Epetra_Map partMap = solnExtruded->getPartitionMap();
+
+      // Import solution onto current processor
+      GlobalIndexTypeToCast numNodesGlobal = extrudedMesh->numGlobalDofs();
+      GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+      Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+      Epetra_Import  solnImporter(solnMap, partMap);
+      Epetra_Vector  solnCoeff(solnMap);
+      solnCoeff.Import(*lhsVector, solnImporter, Insert);
+
+      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(extrudedMesh, solnCoeff))
+      {
+        cout << "GDAMinimumRuleTests failure: for extruded 2D Poisson mesh (after solve), neighboring bases do not agree on sides." << endl;
+        success = false;
+      }
+    }
+
+    u_err_extruded_l2 = u_err_extruded->l2norm(extrudedMesh);
+    u_err_standard_l2 = u_err_standard->l2norm(standardMesh);
+    
+    if (u_err_extruded_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for extruded ";
+      cout << totalDim << "D mesh and exactly recoverable solution, u error is " << u_err_extruded_l2 << endl;
+    }
+    if (u_err_standard_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for standard ";
+      cout << totalDim << "D mesh and exactly recoverable solution, u error is " << u_err_standard_l2 << endl;
+    }
+    
+    // check flux
+    TFunctionPtr<double> parity = TFunction<double>::sideParity();
+    TFunctionPtr<double> n = TFunction<double>::normal();
+    FunctionPtr sigma_n_exact = u_exact->grad() * (n * parity);
+    
+    FunctionPtr sigma_n_soln_extruded = Function::solution(primalForm.sigma_n_hat(), solnExtruded, false);
+    FunctionPtr sigma_n_soln_standard = Function::solution(primalForm.sigma_n_hat(), solnStandard, false);
+    FunctionPtr sigma_n_err_extruded = sigma_n_soln_extruded - sigma_n_exact;
+    FunctionPtr sigma_n_err_standard = sigma_n_soln_standard - sigma_n_exact;
+    
+    double sigma_n_err_extruded_l2 = sigma_n_err_extruded->l2norm(extrudedMesh);
+    double sigma_n_err_standard_l2 = sigma_n_err_standard->l2norm(standardMesh);
+    
+    if (sigma_n_err_extruded_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for extruded ";
+      cout << totalDim << "D mesh and exactly recoverable solution, sigma_n error is " << sigma_n_err_extruded_l2 << endl;
+    }
+    if (sigma_n_err_standard_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for standard ";
+      cout << totalDim << "D mesh and exactly recoverable solution, sigma_n error is " << sigma_n_err_standard_l2 << endl;
+    }
+  
+  }
+
   TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, CellVertexIndicesPeriodic_1D3V )
   {
     const int numExtrusionDims = 3;
@@ -172,7 +365,7 @@ namespace
       auto cellTopo = cell->topology();
       
       const int vertexDim = 0;
-      unsigned vertexCount = cellTopo->getSubcellCount(vertexDim);
+      int vertexCount = cellTopo->getSubcellCount(vertexDim);
       for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
       {
         IndexType entityIndex = cell->entityIndex(vertexDim, vertexOrdinal);
@@ -228,6 +421,32 @@ namespace
     testComponentMap(numPhysicalDims, numExtrusionDims, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, H1Fields_1D1V )
+  {
+    // Inspired by some weird results when we experimentally try to switch Vlasov
+    // field (f) from L^2 to H^1, want to check that solutions are consistent
+    // when using extruded versus standard meshes.  Start with a 2D (1D extruded)
+    // MeshTopology; use primal Poisson formulation as a simple example to test.
+    
+    const int numPhysicalDims = 1;
+    const int numExtrusionDims = 1;
+    
+    testH1FieldPoisson(numPhysicalDims, numExtrusionDims, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, H1Fields_1D2V )
+  {
+    // Inspired by some weird results when we experimentally try to switch Vlasov
+    // field (f) from L^2 to H^1, want to check that solutions are consistent
+    // when using extruded versus standard meshes.  Start with a 2D (1D extruded)
+    // MeshTopology; use primal Poisson formulation as a simple example to test.
+    
+    const int numPhysicalDims = 1;
+    const int numExtrusionDims = 2;
+    
+    testH1FieldPoisson(numPhysicalDims, numExtrusionDims, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, Unrefine )
   {
     // this test reproduces conditions that led to extra cells being incorrectly added to MeshToologyView::_rootCells (before we fixed the bug).
@@ -255,7 +474,9 @@ namespace
     
     extrudedMeshTopo->unrefineCell(firstChildCellID, refPattern);
     
-    TEST_EQUALITY(rootCellCount, extrudedMeshTopo->getRootCellIndicesGlobal().size());
+    // root cell count should not have changed:
+    const int latestRootCellCount = extrudedMeshTopo->getRootCellIndicesGlobal().size();
+    TEST_EQUALITY(rootCellCount, latestRootCellCount);
   }
 
   TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, VertexOrdering_1D1V )
