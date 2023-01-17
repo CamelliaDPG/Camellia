@@ -42,7 +42,7 @@ public:
   
   using TFunction<Scalar>::values;
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-  static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, SolutionComponent solutionComponent, int stageNumber);
+  static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, SolutionComponent solutionComponent, int stageNumber, bool weightFluxesByParity = true);
   string displayString();
   
   void importCellData(std::vector<GlobalIndexType> cellIDs);

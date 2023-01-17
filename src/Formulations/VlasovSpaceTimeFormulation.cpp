@@ -19,8 +19,10 @@
 #include "MeshFactory.h"
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
+#include "MPIGlobalMinMax.h"
 #include "ParameterFunction.h"
 #include "PhysicalSolutionExtrusion.hpp"
+#include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "RHS.h"
 #include "SimpleSolutionFunction.h"
@@ -245,6 +247,10 @@ void VlasovSpaceTimeFormulation::computeConservationDiagnostics(bool updateSolut
       _energyIntegrals[slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, energyVar, one, quadratureEnrichment) );
     }
   }
+  
+  // element-wise integrals ("local conservation", as opposed to temporally pointwise conservation)
+  recordElementwiseConservationDiagnostics(_elementwiseMassIntegrals, slabOrdinal(), testForMassConservation());
+  // TODO: add records for momentum, energy
 }
 
 Teuchos::RCP<ConfigurationSpaceFormulation> VlasovSpaceTimeFormulation::configurationSpaceFormulation()
@@ -392,7 +398,8 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   nextSlabForm->setMaxMomentForConservationDiagnostics(_maxMomentForConservationDiagnostics);
   
   // copy slab/diagnostic history:
-  nextSlabForm->setSlabHistory(_slabTemporalCoordinates, _massIntegrals, _momentumIntegrals, _energyIntegrals);
+  nextSlabForm->setSlabHistory(_slabTemporalCoordinates, _massIntegrals, _momentumIntegrals, _energyIntegrals,
+                               _elementwiseMassIntegrals, _elementwiseMomentumIntegrals, _elementwiseEnergyIntegrals);
   
   // import solution data so that it's available for BC setting
   std::set<GlobalIndexType> currentCellIDsForRank;
@@ -781,6 +788,31 @@ std::vector<double> VlasovSpaceTimeFormulation::iterativeSolveTolerances() const
   return _cgTols;
 }
 
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localMassConservationDiagnostics(int slabOrdinal)
+{
+  return _elementwiseMassIntegrals[slabOrdinal];
+}
+
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localXMomentumConservationDiagnostics(int slabOrdinal)
+{
+  return _elementwiseMomentumIntegrals[0][slabOrdinal];
+}
+
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localYMomentumConservationDiagnostics(int slabOrdinal)
+{
+  return _elementwiseMomentumIntegrals[1][slabOrdinal];
+}
+
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localZMomentumConservationDiagnostics(int slabOrdinal)
+{
+  return _elementwiseMomentumIntegrals[2][slabOrdinal];
+}
+
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localEnergyConservationDiagnostics(int slabOrdinal)
+{
+  return _elementwiseEnergyIntegrals[slabOrdinal];
+}
+
 double VlasovSpaceTimeFormulation::m() const
 {
   return _m;
@@ -812,9 +844,97 @@ int VlasovSpaceTimeFormulation::numUniformRefinements() const
   return _numUniformRefinements;
 }
 
+void VlasovSpaceTimeFormulation::printLocalConservationReportForSlab(int slabOrdinal)
+{
+  auto & massIntegral = _elementwiseMassIntegrals[slabOrdinal];
+  std::cout << "max mass conservation failure occured in element " << massIntegral.elementWithMaxConservationFailure << ": " << massIntegral.maxElementConservationFailure << std::endl;
+}
+
 double VlasovSpaceTimeFormulation::q() const
 {
   return _q;
+}
+
+void VlasovSpaceTimeFormulation::recordElementwiseConservationDiagnostics(std::vector< ElementwiseConservationDiagnostics > &diagnosticHistory, int slabOrdinal, const std::map<int,FunctionPtr> &testFunction)
+{
+  auto trialFunctional = _vlasovBF->trialFunctional(testFunction); // the BF evaluated at the test function
+  
+//  { // DEBUGGING
+//    if (MPIWrapper::CommWorld()->MyPID() == 0)
+//    {
+//      std::cout << "Conservation diagnostic: " << trialFunctional->displayString() << std::endl;
+//    }
+//  }
+  
+  map<int,VarPtr> trialVarMap = _vlasovBF->varFactory()->trialVars();
+  
+  vector<VarPtr> trialVars;
+  for (auto entry : trialVarMap)
+  {
+    trialVars.push_back(entry.second);
+  }
+  
+  // because BF::trialFunctional already weights by parity, we should not weight by it again here:
+  bool weightFluxesByParity = false;
+  auto solnMap = PreviousSolutionFunction<double>::functionMap(trialVars, _vlasovSoln, STANDARD_SOLUTION, 0, weightFluxesByParity);
+  
+  FunctionPtr conservationIntegrandVolume   = trialFunctional->evaluate(solnMap, false);
+  FunctionPtr conservationIntegrandSkeleton = trialFunctional->evaluate(solnMap, true);
+  
+  const auto &myCellIDs = _vlasovSoln->mesh()->cellIDsInPartition();
+  
+  ElementwiseConservationDiagnostics diagnostics;
+  
+  double myMaxFailure = 0.0;
+  IndexType myCellIDWithMax = -1;
+  double localSum = 0.0;
+  double localAbsSum = 0.0;
+  
+  for (const auto &cellID : myCellIDs)
+  {
+    const double valueVolume   = conservationIntegrandVolume->integrate(cellID, _vlasovSoln->mesh());
+    const double valueSkeleton = conservationIntegrandSkeleton->integrate(cellID, _vlasovSoln->mesh());
+    const double value         = valueVolume + valueSkeleton;
+    const double absValue = std::abs(value);
+    
+    if (absValue > myMaxFailure)
+    {
+      myMaxFailure = absValue;
+      myCellIDWithMax = cellID;
+    }
+    
+    localSum    += value;
+    localAbsSum += absValue;
+  }
+  
+  double globalSum    = MPIWrapper::sum(localSum);
+  double globalAbsSum = MPIWrapper::sum(localAbsSum);
+  
+  std::map<GlobalIndexType, double> localMaximum;
+  localMaximum[myCellIDWithMax] = myMaxFailure;
+  
+  const int numEntries = 1;
+  const int maxGatherCount = MPIWrapper::CommWorld()->NumProc();
+  
+  auto actualGreatestEntries = MPIGlobalMinMax::globalMaximums(MPIWrapper::CommWorld(), localMaximum, numEntries, maxGatherCount);
+  
+  IndexType globalMaxFailureCellID = actualGreatestEntries.begin()->first;
+  double globalMaxFailure = actualGreatestEntries.begin()->second;
+  
+  diagnostics.elementWithMaxConservationFailure = globalMaxFailureCellID;
+  diagnostics.maxElementConservationFailure = globalMaxFailure;
+  
+  diagnostics.netGlobalConservationFailure = globalSum;
+  diagnostics.sumOfAbsoluteConservationFailures = globalAbsSum;
+  
+  if (int(diagnosticHistory.size()) <= slabOrdinal)
+  {
+    diagnosticHistory.push_back(diagnostics);
+  }
+  else
+  {
+    diagnosticHistory[slabOrdinal] = diagnostics;
+  }
 }
 
 void VlasovSpaceTimeFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
@@ -1119,12 +1239,19 @@ int VlasovSpaceTimeFormulation::spaceDim() const
 void VlasovSpaceTimeFormulation::setSlabHistory(const std::vector<double> &slabTemporalCoordinates,
                                                 const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &massIntegrals,
                                                 const std::vector<std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>>> &momentumIntegrals,
-                                                const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &energyIntegrals)
+                                                const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &energyIntegrals,
+                                                const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseMassIntegrals,
+                                                const std::vector< std::vector< ElementwiseConservationDiagnostics > >             &elementwiseMomentumIntegrals,
+                                                const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals)
 {
   _slabTemporalCoordinates = slabTemporalCoordinates;
   _massIntegrals = massIntegrals;
   _momentumIntegrals = momentumIntegrals;
   _energyIntegrals = energyIntegrals;
+  
+  _elementwiseMassIntegrals     = elementwiseMassIntegrals;
+  _elementwiseMomentumIntegrals = elementwiseMomentumIntegrals;
+  _elementwiseEnergyIntegrals   = elementwiseEnergyIntegrals;
   
   // last listed temporal coordinate should match our start coordinate
   double tol = 1e-14;
@@ -1208,6 +1335,35 @@ int VlasovSpaceTimeFormulation::tagVlasovMinVelocity(int zeroBasedComp) const
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "zeroBasedComp must be 0, 1, 2")
   }
+}
+
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForMassConservation()
+{
+  VarPtr w = this->w();
+  map<int,FunctionPtr> testFunction;
+  testFunction[w->ID()] = Function::constant(1.0);
+  
+  return testFunction;
+}
+
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForEnergyConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForXMomentumConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForYMomentumConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForZMomentumConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
 vector<pair<double,double>> VlasovSpaceTimeFormulation::timeSeriesForSpatialIntegral(Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> integral,

@@ -76,6 +76,13 @@ public:
   VarPtr w_a(const int zeroBasedSpatialComponent);
   VarPtr w_v(const int zeroBasedVelocityComponent);
   VarPtr w_c();
+  
+  // local conservation diagnostics
+  virtual std::map<int,FunctionPtr> testForMassConservation() override;
+  virtual std::map<int,FunctionPtr> testForXMomentumConservation() override;
+  virtual std::map<int,FunctionPtr> testForYMomentumConservation() override;
+  virtual std::map<int,FunctionPtr> testForZMomentumConservation() override;
+  virtual std::map<int,FunctionPtr> testForEnergyConservation() override;
 };
 
 }
