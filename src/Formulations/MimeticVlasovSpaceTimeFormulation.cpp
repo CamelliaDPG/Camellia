@@ -294,6 +294,37 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> MimeticVlasovSpaceTimeFormulation::next
   return nextSlabForm;
 }
 
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForMassConservation()
+{
+  VarPtr w   = this->w();
+  VarPtr w_c = this->w_c();
+  map<int,FunctionPtr> testFunction;
+  testFunction[w->ID()  ] = Function::constant(1.0);
+  testFunction[w_c->ID()] = Function::constant(1.0);
+  
+  return testFunction;
+}
+
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForEnergyConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForXMomentumConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForYMomentumConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForZMomentumConservation()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
 VarPtr MimeticVlasovSpaceTimeFormulation::w_a(const int zeroBasedSpatialComponent)
 {
   VarFactoryPtr vf = vlasovBF()->varFactory();

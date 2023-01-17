@@ -773,6 +773,49 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     testNextTimeSlab(useMimeticDPG, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LocalConservationDiagnostics )
+  {
+    const int xElements = 5;
+    const int tElements = 1;
+    const int vElements = 4;
+    const int H1Order   = 3;
+    
+    const bool usePeriodicBCs = true;
+    const double q = 1.0;
+    const double m = 1.0;
+    const bool useSerendipity = false;
+    const bool useMimeticDPG  = false;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    
+    auto vx = form->v_i(0);
+    // note that E_exact and f_exact are *not* compatible solutions; E is not a solution to Poisson loaded with the zeroth moment of f.
+    // we are just exercising the local (mass) conservation computation right now.
+    FunctionPtr E_exact = Function::constant(1.0);
+    FunctionPtr f_exact = Function::constant(1.0);
+    
+    FunctionPtr sgn = Function::sideParity();
+    FunctionPtr n   = Function::normal();
+    FunctionPtr tn_0 = f_exact * (vx * n->x() + n->y() + (q/m) * E_exact * n->z()) * sgn;
+    
+    std::map<int, FunctionPtr> solnMap; // project our synthetic (f,tn) solution onto the mesh
+    solnMap[form->f()->ID()] = f_exact;
+    solnMap[form->t_n_hat()->ID()] = tn_0;
+    form->vlasovSolution()->projectOntoMesh(solnMap);
+    
+    form->computeConservationDiagnostics(false);
+    
+    auto & localMassConservationDiagnostic = form->localMassConservationDiagnostics(0);
+    
+    const double maxElementwiseFailure = localMassConservationDiagnostic.maxElementConservationFailure;
+    const double netFailure            = std::abs(localMassConservationDiagnostic.netGlobalConservationFailure);
+    
+    // we expect the failures to be pretty small: exactly representable function with exact net flux of 0
+    double tol = 1e-14;
+    TEST_COMPARE(maxElementwiseFailure, <, tol);
+    TEST_COMPARE(netFailure, <, tol);
+  }
+
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, MultiSlabSequenceAllowsInitialMeshToBeDestroyed )
   {
     // sets up a formulation like the PoissonTwoStreamSteadyState test below, and then creates two subsequent slabs,

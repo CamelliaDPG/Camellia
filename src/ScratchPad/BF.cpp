@@ -1697,7 +1697,7 @@ namespace Camellia
   TLinearTermPtr<Scalar> TBF<Scalar>::trialFunctional(const std::map<int,FunctionPtr> &testMap)
   {
     TLinearTermPtr<Scalar> functional = Teuchos::rcp(new LinearTerm());
-    bool weightFluxesByParity = true; // trying something...
+    bool weightFluxesByParity = true; // this makes the fluxes have their "true" value (reversing sign depending on the normal)
     FunctionPtr parity = Function::sideParity();
     for (auto bilinearTerm : _terms)
     {

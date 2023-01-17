@@ -393,9 +393,36 @@ int main(int argc, char *argv[])
     auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, usePeriodicBCs,
                                      useSerendipityBasis, useMimeticDPG, numUniformRefinements);
     
+    auto traceVar     = form->t_n_hat();
+    auto traceSolnFxn = Function::solution(traceVar, form->vlasovSolution(), true);
+    
+    std::vector<std::string> otherFunctionNames;
+    std::vector<FunctionPtr> otherFunctions;
+    
+    if (useMimeticDPG)
+    {
+      std::map<int, FunctionPtr> gcEqualsOne;
+      MimeticVlasovSpaceTimeFormulation* mimeticForm = dynamic_cast<MimeticVlasovSpaceTimeFormulation*>(form.get());
+      gcEqualsOne[mimeticForm->g_c()->ID()] = Function::constant(1.0);
+      LinearTermPtr bfAtPsiEqualsOne = mimeticForm->vlasovSolution()->bf()->testFunctional(gcEqualsOne);
+      
+      auto repOfBFAtGcEqualsOne = RieszRep::rieszRep(mimeticForm->vlasovMesh(), mimeticForm->vlasovSolution()->ip(), bfAtPsiEqualsOne);
+      otherFunctionNames.push_back("1_w(w)");
+      otherFunctions.push_back(RieszRep::repFunction(mimeticForm->w(), repOfBFAtGcEqualsOne));
+      otherFunctionNames.push_back("1_w(w_v)");
+      otherFunctions.push_back(RieszRep::repFunction(mimeticForm->w_v(0), repOfBFAtGcEqualsOne));
+      otherFunctionNames.push_back("1_w(w_a)");
+      otherFunctions.push_back(RieszRep::repFunction(mimeticForm->w_a(0), repOfBFAtGcEqualsOne));
+      otherFunctionNames.push_back("1_w(w_c)");
+      otherFunctions.push_back(RieszRep::repFunction(mimeticForm->w_c(), repOfBFAtGcEqualsOne));
+    }
+    
     form->setExportViz(exportDebugViz);
     
     FunctionPtr cellIDFunction = Teuchos::rcp(new CellIDFunction);
+    
+    otherFunctions.push_back(cellIDFunction);
+    otherFunctionNames.push_back({"cell ID (Vlasov)"});
     
     form->setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
     std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
@@ -646,6 +673,8 @@ int main(int argc, char *argv[])
           }
         }
         
+        auto totalNetFlux = traceSolnFxn->integrate(form->vlasovMesh());
+        
         if (rank == 0)
         {
           const bool append = (slabNumber > 0);
@@ -654,6 +683,9 @@ int main(int argc, char *argv[])
           exportTimeSeriesValues(totalMomentumFile, append, totalMomentumValues, "momentum");
           exportTimeSeriesValues(totalEnergyFile,   append, totalEnergyValues,   "energy");
           
+          form->printLocalConservationReportForSlab(slabNumber);
+          
+          std::cout << "total net mass flux (integral of trace variable) is " << totalNetFlux << std::endl;
           std::cout << "max mass loss thus far is at time " << maxMassLoss_t << ": " << maxMassLoss << std::endl;
           std::cout << "max momentum loss thus far is at time " << maxMomentumLoss_t << ": " << maxMomentumLoss << std::endl;
           std::cout << "max energy loss thus far is at time " << maxEnergyLoss_t << ": " << maxEnergyLoss << std::endl;
@@ -720,7 +752,7 @@ int main(int argc, char *argv[])
       if (saveViz)
       {
         poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, slabNumber);
-        vlasovViz->exportSolution(form->vlasovSolution(), {cellIDFunction}, {"cell ID (Vlasov)"}, slabNumber);
+        vlasovViz->exportSolution(form->vlasovSolution(), otherFunctions, otherFunctionNames, slabNumber);
       }
       
       if (slabNumber + 1 < numTimeSlabs)

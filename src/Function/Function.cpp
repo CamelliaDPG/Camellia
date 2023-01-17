@@ -477,10 +477,13 @@ TFunctionPtr<Scalar> TFunction<Scalar>::op(TFunctionPtr<Scalar> f, Camellia::EOp
   case Camellia::OP_VALUE:
       return f;
     case Camellia::OP_DX:
+    case Camellia::OP_DI1:
       return f->dx();
     case Camellia::OP_DY:
+    case Camellia::OP_DI2:
       return f->dy();
     case Camellia::OP_DZ:
+    case Camellia::OP_DI3:
       return f->dz();
     case Camellia::OP_DXDX:
       return f->dx()->dx();
@@ -1614,10 +1617,15 @@ void TFunction<Scalar>::integrate(Camellia::FieldContainer<Scalar> &cellIntegral
       Camellia::FieldContainer<double> *weightedMeasures = &sideCache->getWeightedMeasures();
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
       {
+        double sideContributionForCell = 0.0;
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
         {
-          cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
+          sideContributionForCell += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
         }
+        cellIntegrals(cellIndex) += sideContributionForCell;
+        
+//        int cellID = basisCache->cellIDs()[cellIndex];
+//        std::cout << "On cell ID " << cellID << ", side " << sideOrdinal << " contribution: " << sideContributionForCell << std::endl;
       }
     }
   }

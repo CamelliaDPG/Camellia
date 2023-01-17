@@ -111,10 +111,26 @@ private:
   FunctionPtr _f0;       // initial condition set by setInflowConditions() or setInitialAndInflowConditions()
   FunctionPtr _f_inflow; // inflow condition set by setInitialAndInflowConditions()
   
+  // mass, momentum, energy conservation as functions of time:
   int _maxMomentForConservationDiagnostics = -1; // 0 for mass, 1 for mass + momentum, 2 for mass + momentum + energy
   std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >                _massIntegrals;     // one per slab in the solution history
   std::vector< std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > > _momentumIntegrals; // outer index: spatial dimension (0 for x, 1 for y, 2 for z); inner: slab index
   std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >                _energyIntegrals;   // one per slab in solution history
+public:
+  // mass, momentum, energy conservation distributionally, as integrals over space-time elements:
+  struct ElementwiseConservationDiagnostics
+  {
+    double maxElementConservationFailure;
+    IndexType elementWithMaxConservationFailure;
+    double netGlobalConservationFailure;
+    double sumOfAbsoluteConservationFailures;
+  };
+private:
+  std::vector< ElementwiseConservationDiagnostics >                _elementwiseMassIntegrals;     // one per slab in the solution history
+  std::vector< std::vector< ElementwiseConservationDiagnostics > > _elementwiseMomentumIntegrals; // outer index: spatial dimension (0 for x, 1 for y, 2 for z); inner: slab index
+  std::vector< ElementwiseConservationDiagnostics >                _elementwiseEnergyIntegrals;   // one per slab in solution history
+  
+  void recordElementwiseConservationDiagnostics(std::vector< ElementwiseConservationDiagnostics > &diagnosticHistory, int slabOrdinal, const std::map<int,FunctionPtr> &testFunction);
   
   std::vector< double > _slabTemporalCoordinates; // for slab slabOrdinal, start time is at index slabOrdinal, end time at (slabOrdinal+1)
   
@@ -136,6 +152,12 @@ protected:
   
   //! Copies all settings to the next slab, sets up Vlasov boundary conditions in terms of the current slab, and nullifies Vlasov BCs for current slab.  Used during nextTimeSlab().
   void configureNextSlab(Teuchos::RCP<VlasovSpaceTimeFormulation> otherForm);
+  
+  virtual std::map<int,FunctionPtr> testForMassConservation();
+  virtual std::map<int,FunctionPtr> testForXMomentumConservation();
+  virtual std::map<int,FunctionPtr> testForYMomentumConservation();
+  virtual std::map<int,FunctionPtr> testForZMomentumConservation();
+  virtual std::map<int,FunctionPtr> testForEnergyConservation();
 public:
   VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -282,6 +304,14 @@ public:
   //! Computes (or recomputes) the conservation diagnostics.  Typically, this is called during solve().  Only computes up to the maximum moment for conservation diagnostics (which defaults to -1).
   void computeConservationDiagnostics(bool updateSolutionMoments);
   
+  const ElementwiseConservationDiagnostics & localMassConservationDiagnostics(int slabOrdinal);
+  const ElementwiseConservationDiagnostics & localXMomentumConservationDiagnostics(int slabOrdinal);
+  const ElementwiseConservationDiagnostics & localYMomentumConservationDiagnostics(int slabOrdinal);
+  const ElementwiseConservationDiagnostics & localZMomentumConservationDiagnostics(int slabOrdinal);
+  const ElementwiseConservationDiagnostics & localEnergyConservationDiagnostics(int slabOrdinal);
+  
+  void printLocalConservationReportForSlab(int slabOrdinal);
+  
   /** \brief  A VarPtr for the B trace variable component specified, valid on the configuration-space mesh.
    \param  zeroBasedComp   [in]  - The component of B that is being requested; use 0 for B_x, 1 for B_y, and 2 for B_z.
    \return VarPtr for the specified B component; Teuchos::null if the ConfigurationSpaceFormulation does not include the specified component of B as a variable.
@@ -343,7 +373,11 @@ public:
   void setSlabHistory(const std::vector<double>                                                          &slabTemporalCoordinates,
                       const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &massIntegrals,
                       const std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >> &momentumIntegrals,
-                      const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &energyIntegrals );
+                      const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &energyIntegrals,
+                      const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseMassIntegrals,
+                      const std::vector< std::vector< ElementwiseConservationDiagnostics > >             &elementwiseMomentumIntegrals,
+                      const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals
+                      );
   
   //! returns the ordinal of this slab.  0 for first, 1 for second, etc.
   int slabOrdinal() const;
