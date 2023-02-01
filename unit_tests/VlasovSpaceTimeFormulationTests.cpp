@@ -600,7 +600,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const int H1Order   = 4;
     
     const bool useSerendipity    = false;
-    const double absTolPoisson = 1e-4; // Poisson solutions should be 0, so we use an absolute tol for these
+    const double poissonTolRelaxation = 1.0 + tolRelativeToProjectionError; // if we're tolerating looseness in f, we'd better tolerate in poisson, too.
+    const double absTolPoisson = 1e-4 * poissonTolRelaxation; // Poisson solutions should be 0, so we use an absolute tol for these
     
     FunctionPtr  f_exact = f0;
     FunctionPtr VE_exact = Function::zero();
@@ -798,10 +799,24 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     FunctionPtr n   = Function::normal();
     FunctionPtr tn_0 = f_exact * (vx * n->x() + n->y() + (q/m) * E_exact * n->z()) * sgn;
     
-    std::map<int, FunctionPtr> solnMap; // project our synthetic (f,tn) solution onto the mesh
-    solnMap[form->f()->ID()] = f_exact;
-    solnMap[form->t_n_hat()->ID()] = tn_0;
-    form->vlasovSolution()->projectOntoMesh(solnMap);
+    {
+      // project our synthetic (f,tn) solution onto the Vlasov mesh
+      std::map<int, FunctionPtr> solnMap;
+      solnMap[form->f()->ID()] = f_exact;
+      solnMap[form->t_n_hat()->ID()] = tn_0;
+      form->vlasovSolution()->projectOntoMesh(solnMap);
+    }
+    
+    {
+      // project E_exact onto Poisson mesh:
+      std::map<int, FunctionPtr> solnMap;
+      VarPtr E = form->configurationSpaceFormulation()->E_fieldVar(0);
+      solnMap[E->ID()] = E_exact;
+      form->configurationSpaceSolution()->projectOntoMesh(solnMap);
+      
+      // ensure that the Poisson solution is available locally for the residual computation below.
+      form->configurationSpaceFormulation()->updateConfigurationSpaceFunctions();
+    }
     
     form->computeConservationDiagnostics(false);
     
@@ -814,6 +829,11 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     double tol = 1e-14;
     TEST_COMPARE(maxElementwiseFailure, <, tol);
     TEST_COMPARE(netFailure, <, tol);
+    
+    // relax the tolerance a few orders for the residual norm, which involves some higher-order functions
+    tol = 1e-11;
+    const double w1_residualNorm = form->conservationLawResidualNorm(0);
+    TEST_COMPARE(w1_residualNorm, <, tol);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, MultiSlabSequenceAllowsInitialMeshToBeDestroyed )

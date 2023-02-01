@@ -1656,7 +1656,8 @@ namespace Camellia
   
   template <typename Scalar>
   TLinearTermPtr<Scalar> TBF<Scalar>::testFunctional(TSolutionPtr<Scalar> trialSolution, bool excludeBoundaryTerms,
-                                                     SolutionComponent solutionComponent, int solutionStage)
+                                                     SolutionComponent solutionComponent, int solutionStage,
+                                                     std::set<int> testIDsToExclude)
   {
     TLinearTermPtr<Scalar> functional = Teuchos::rcp(new LinearTerm());
     auto trialVarMap = _varFactory->trialVars();
@@ -1670,17 +1671,26 @@ namespace Camellia
     {
       TLinearTermPtr<Scalar> trialTerm = bt.first;
       TLinearTermPtr<Scalar> testTerm  = bt.second;
-      TFunctionPtr<Scalar> trialValue = trialTerm->evaluate(solnMap);
-      if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) )
+      for (const auto & summand : testTerm->summands())
       {
-        functional = functional + trialValue * testTerm;
+        const FunctionPtr & testWeight = summand.first;
+        const VarPtr      & testVar    = summand.second;
+        int testID = testVar->ID();
+        if (testIDsToExclude.find(testID) == testIDsToExclude.end())
+        {
+          TFunctionPtr<Scalar> trialValue = trialTerm->evaluate(solnMap);
+          if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) )
+          {
+            functional = functional + trialValue * testWeight * testVar;
+          }
+        }
       }
     }
     return functional;
   }
   
   template <typename Scalar>
-  TLinearTermPtr<Scalar> TBF<Scalar>::testFunctional(const std::map<int,FunctionPtr> &solnMap)
+  TLinearTermPtr<Scalar> TBF<Scalar>::testFunctional(const std::map<int,FunctionPtr> &solnMap, std::set<int> testIDsToExclude)
   {
     TLinearTermPtr<Scalar> functional = Teuchos::rcp(new LinearTerm());
     for (auto bilinearTerm : _terms)
@@ -1688,7 +1698,16 @@ namespace Camellia
       TLinearTermPtr<Scalar> trialTerm = bilinearTerm.first;
       TLinearTermPtr<Scalar> testTerm = bilinearTerm.second;
       TFunctionPtr<Scalar> trialValue = trialTerm->evaluate(solnMap);
-      functional = functional + trialValue * testTerm;
+      for (const auto & summand : testTerm->summands())
+      {
+        const FunctionPtr & testWeight = summand.first;
+        const VarPtr      & testVar    = summand.second;
+        int testID = testVar->ID();
+        if (testIDsToExclude.find(testID) == testIDsToExclude.end())
+        {
+          functional = functional + trialValue * testWeight * testVar;
+        }
+      }
     }
     return functional;
   }

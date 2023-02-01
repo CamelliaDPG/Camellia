@@ -251,6 +251,29 @@ void VlasovSpaceTimeFormulation::computeConservationDiagnostics(bool updateSolut
   // element-wise integrals ("local conservation", as opposed to temporally pointwise conservation)
   recordElementwiseConservationDiagnostics(_elementwiseMassIntegrals, slabOrdinal(), testForMassConservation());
   // TODO: add records for momentum, energy
+  
+  // global measurement of the residual of the w (aka w1, in context of mimetic) equation:
+  auto w1 = this->w();
+  // want to exclude all test IDs other than w1
+  std::vector<int> testIDs = this->vlasovBF()->varFactory()->testIDs();
+  std::set<int> otherTestIDs(testIDs.begin(),testIDs.end());
+  otherTestIDs.erase(w1->ID());
+  
+  auto residual_w1 = _vlasovBF->testFunctional(_vlasovSoln,false,SolutionComponent::STANDARD_SOLUTION,0,otherTestIDs);
+  
+//  std::cout << "residual_w1:\n" << residual_w1->displayString() << std::endl;
+  auto ip_l2 = _vlasovSoln->bf()->l2Norm();
+  auto rieszRep_residual = RieszRep::rieszRep(_vlasovSoln->mesh(), ip_l2, residual_w1);
+  const double norm = rieszRep_residual->getNorm();
+  
+  if (int(_w1ResidualNorm.size()) > slabNumber)
+  {
+    _w1ResidualNorm[slabNumber] = norm;
+  }
+  else
+  {
+    _w1ResidualNorm.push_back(norm);
+  }
 }
 
 Teuchos::RCP<ConfigurationSpaceFormulation> VlasovSpaceTimeFormulation::configurationSpaceFormulation()
@@ -266,6 +289,11 @@ MeshPtr VlasovSpaceTimeFormulation::configurationSpaceMesh()
 SolutionPtr VlasovSpaceTimeFormulation::configurationSpaceSolution()
 {
   return _configurationSpaceFormulation->solution();
+}
+
+const double &VlasovSpaceTimeFormulation::conservationLawResidualNorm(int slabOrdinal)
+{
+  return _w1ResidualNorm[slabOrdinal];
 }
 
 Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
@@ -399,7 +427,8 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   
   // copy slab/diagnostic history:
   nextSlabForm->setSlabHistory(_slabTemporalCoordinates, _massIntegrals, _momentumIntegrals, _energyIntegrals,
-                               _elementwiseMassIntegrals, _elementwiseMomentumIntegrals, _elementwiseEnergyIntegrals);
+                               _elementwiseMassIntegrals, _elementwiseMomentumIntegrals, _elementwiseEnergyIntegrals,
+                               _w1ResidualNorm);
   
   // import solution data so that it's available for BC setting
   std::set<GlobalIndexType> currentCellIDsForRank;
@@ -559,15 +588,10 @@ void VlasovSpaceTimeFormulation::initialize()
   // tests
   VarPtr w = this->w();   // Vlasov test function
   
-  map<int,int> trialOrderEnhancements;
-  trialOrderEnhancements[t_n_hat->ID()] = 1; // +1 for non-conforming, + whatever user requested
-
-  map<int,int> testOrderEnhancements;
-  
   const bool allowPruning = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
   Epetra_CommPtr comm = MPIWrapper::CommWorld();
-  MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );
+  MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements(), testOrderEnhancements(), partitionPolicy, comm, allowPruning) );
   
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
   
@@ -848,6 +872,9 @@ void VlasovSpaceTimeFormulation::printLocalConservationReportForSlab(int slabOrd
 {
   auto & massIntegral = _elementwiseMassIntegrals[slabOrdinal];
   std::cout << "max mass conservation failure occured in element " << massIntegral.elementWithMaxConservationFailure << ": " << massIntegral.maxElementConservationFailure << std::endl;
+  
+  auto & residualNorm = conservationLawResidualNorm(slabOrdinal);
+  std::cout << "enriched L^2-dual norm of the conservation law residual: " << residualNorm << std::endl;
 }
 
 double VlasovSpaceTimeFormulation::q() const
@@ -1242,7 +1269,8 @@ void VlasovSpaceTimeFormulation::setSlabHistory(const std::vector<double> &slabT
                                                 const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &energyIntegrals,
                                                 const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseMassIntegrals,
                                                 const std::vector< std::vector< ElementwiseConservationDiagnostics > >             &elementwiseMomentumIntegrals,
-                                                const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals)
+                                                const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals,
+                                                const std::vector< double>                                                         &w1ResidualNorms)
 {
   _slabTemporalCoordinates = slabTemporalCoordinates;
   _massIntegrals = massIntegrals;
@@ -1364,6 +1392,19 @@ map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForYMomentumConservation()
 map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForZMomentumConservation()
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
+}
+
+map<int,int> VlasovSpaceTimeFormulation::testOrderEnhancements()
+{
+  map<int,int> orderEnhancements;
+  return orderEnhancements;
+}
+
+map<int,int> VlasovSpaceTimeFormulation::trialOrderEnhancements()
+{
+  map<int,int> orderEnhancements;
+  orderEnhancements[t_n_hat()->ID()] = 1; // +1 for non-conforming
+  return orderEnhancements;
 }
 
 vector<pair<double,double>> VlasovSpaceTimeFormulation::timeSeriesForSpatialIntegral(Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> integral,

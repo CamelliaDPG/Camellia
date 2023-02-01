@@ -56,6 +56,22 @@ void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, Va
   SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(dv);
 }
 
+void AbsFunction::values(Intrepid2::Data<double, Camellia::DeviceType> data, BasisCachePtr basisCache)
+{
+  _f->values(data, basisCache);
+  
+  Kokkos::fence();
+  
+  auto absOp = KOKKOS_LAMBDA(const double &a) -> double
+  {
+#ifndef KOKKOS_ENABLE_CUDA
+    using std::fabs;
+#endif
+    return fabs(a);
+  };
+  data.applyOperator(absOp);
+}
+
 TFunctionPtr<double> AbsFunction::dx()
 {
   // undefined

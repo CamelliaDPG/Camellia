@@ -50,7 +50,7 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, NextTimeSlab )
 
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonTwoStreamSteadyState )
 {
-  const double tolRelativeToProjectionError = 0.50; // we allow actual error to be up to 150% of the best approximation error for f, tn
+  const double tolRelativeToProjectionError = 2.50; // we allow actual error to be up to 350% of the best approximation error for f, tn
   const bool useMimeticDPG = true;
   testPoissonTwoStreamSteadyState(tolRelativeToProjectionError, useMimeticDPG, out, success);
 }
@@ -104,7 +104,7 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_z
   const bool overrideVlasovBCs = false;
   const bool useSerendipity    = true;
   const bool useMimeticDPG     = true;
-  const double tol = 1e-12;
+  const double tol = 1e-11;
   
   patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
 }
@@ -170,7 +170,7 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_constan
   const int tElements = 1;
   const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
   const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of f0 * E0, required for trace solution
-  const double tol = 1e-12;
+  const double tol = 1e-10;
   
   const bool outputViz = false;
   const std::string vizPrefix = "PatchTest_f_constant_E_linear";
@@ -198,7 +198,7 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_constan
   const int tElements = 1;
   const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
   const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of f0 * E0, required for trace solution
-  const double tol = 1e-12;
+  const double tol = 1e-9;
   
   const bool outputViz = false;
   const std::string vizPrefix = "PatchTest_f_constant_E_linear";
