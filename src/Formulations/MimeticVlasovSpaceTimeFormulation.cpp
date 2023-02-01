@@ -11,6 +11,7 @@
 
 #include "MimeticVlasovSpaceTimeFormulation.h"
 
+#include "AbsFunction.h"
 #include "MeshTools.h"
 
 using namespace Camellia;
@@ -21,6 +22,7 @@ const string MimeticVlasovSpaceTimeFormulation::S_GA_X  = "g_a_x";
 const string MimeticVlasovSpaceTimeFormulation::S_GA_Y  = "g_a_y";
 const string MimeticVlasovSpaceTimeFormulation::S_GA_Z  = "g_a_z";
 const string MimeticVlasovSpaceTimeFormulation::S_GC    = "g_c";
+const string MimeticVlasovSpaceTimeFormulation::S_GT    = "g_t";
 const string MimeticVlasovSpaceTimeFormulation::S_GV_VX = "g_v_x";
 const string MimeticVlasovSpaceTimeFormulation::S_GV_VY = "g_v_y";
 const string MimeticVlasovSpaceTimeFormulation::S_GV_VZ = "g_v_z";
@@ -29,6 +31,7 @@ const string MimeticVlasovSpaceTimeFormulation::S_WA_X  = "w_a_x";
 const string MimeticVlasovSpaceTimeFormulation::S_WA_Y  = "w_a_y";
 const string MimeticVlasovSpaceTimeFormulation::S_WA_Z  = "w_a_z";
 const string MimeticVlasovSpaceTimeFormulation::S_WC    = "w_c";
+const string MimeticVlasovSpaceTimeFormulation::S_WT    = "w_t";
 const string MimeticVlasovSpaceTimeFormulation::S_WV_VX = "w_v_x";
 const string MimeticVlasovSpaceTimeFormulation::S_WV_VY = "w_v_y";
 const string MimeticVlasovSpaceTimeFormulation::S_WV_VZ = "w_v_z";
@@ -77,6 +80,7 @@ IPPtr MimeticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
   vector<VarPtr> w_a(velocityDim);
   vector<VarPtr> w_v(spaceDim);
   VarPtr w_c = this->w_c();
+  VarPtr w_t = this->w_t();
   
   for (int vd=0; vd<velocityDim; vd++)
   {
@@ -95,35 +99,53 @@ IPPtr MimeticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
   LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
   for (int d=0; d<spaceDim; d++)
   {
-    auto  v_d = v_i(d);
-    f_term = f_term - v_d * w_v[d]; // - v \cdot w_v
+    auto  v_d    = v_i(d);
+    auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
+    f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
   }
   for (int vd=0; vd<velocityDim; vd++)
   {
-    f_term = f_term - a[vd] * w_a[vd];
+    auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
+    f_term = f_term - a[vd] * dw_dv_vd;
   }
   ip->addTerm(f_term);
   
-  LinearTermPtr gv_term;
+  LinearTermPtr new_f_term = 1.0 * w_t;
   for (int d=0; d<spaceDim; d++)
   {
-    gv_term = gv_term + w_v[d] - w->di(indexOffsetSpaceOneBased + d); // - grad_x w + w_v
+    auto  v_d    = v_i(d);
+    new_f_term = new_f_term + v_d * w_v[d]; // - v \cdot w_v
   }
-  ip->addTerm(gv_term);
-  
-  LinearTermPtr ga_term;
   for (int vd=0; vd<velocityDim; vd++)
   {
-    ga_term = ga_term + w_a[vd] - w->di(indexOffsetVelocityOneBased + vd); // - grad_v w + w_a
+    new_f_term = new_f_term + a[vd] * w_a[vd];
   }
-  ip->addTerm(ga_term);
+  ip->addTerm(new_f_term);
   
-  LinearTermPtr gc_term = -w + w_c;
-  ip->addTerm(gc_term);
+  // use L^2 term for w_v:
+  for (int d=0; d<spaceDim; d++)
+  {
+    ip->addTerm(w_v[d]);
+  }
   
-  LinearTermPtr stabilization_term = 1.0 * w_c;
+  // use L^2 term for w_a:
+  for (int vd=0; vd<velocityDim; vd++)
+  {
+    ip->addTerm(w_a[vd]);
+  }
+  
+  // use L^2 term for w_c:
+  ip->addTerm(w_c);
+  
+  // use L^2 term for w_t:
+  ip->addTerm(w_t);
+  
+  LinearTermPtr stabilization_term = 1.0 * w;
   ip->addTerm(stabilization_term);
 
+//  std::cout << "test inner product:\n";
+//  std::cout << ip->displayString() << std::endl;
+  
   return ip;
 }
 
@@ -149,36 +171,63 @@ VarFactoryPtr MimeticVlasovSpaceTimeFormulation::constructVlasovVarFactory()
   const int velocityDim = this->velocityDim();
   
   // g_a, w_a:
+  vector<VarPtr> g_a(spaceDim), w_a(spaceDim);
   for (int vd=0; vd<velocityDim; vd++)
   {
-    vlasovVF->fieldVar(S_GA[vd]);
-    vlasovVF->testVar(S_WA[vd], L2);
+    g_a[vd] = vlasovVF->fieldVar(S_GA[vd]);
+    w_a[vd] = vlasovVF->testVar(S_WA[vd], L2);
   }
   
   // g_v, w_v:
+  vector<VarPtr> g_v(spaceDim), w_v(spaceDim);
   for (int d=0; d<spaceDim; d++)
   {
-    vlasovVF->fieldVar(S_GV[d]);
-    vlasovVF->testVar(S_WV[d], L2);
+    g_v[d] = vlasovVF->fieldVar(S_GV[d]);
+    w_v[d] = vlasovVF->testVar(S_WV[d], L2);
   }
 
+  // g_t, w_t:
+  auto g_t = vlasovVF->fieldVar(S_GT);
+  auto w_t = vlasovVF->testVar(S_WT, L2);
+
   // g_c, w_c:
-  auto g_c = vlasovVF->fieldVar(S_GC);
-  auto w_c = vlasovVF->testVar(S_WC, L2);
+  auto g_c = vlasovVF->fieldVar(S_GC, L2);
+  auto w_c = vlasovVF->testVar(S_WC, HGRAD_DISC);
   
   vlasovVF->setTrialBasisFamily(basisFamily);
   vlasovVF->setTestBasisFamily(basisFamily);
   
-  // force g_c to be a constant:
   // sample a spatial element topology:
   CellTopoPtr spatialTopo = this->spatialMeshTopology()->getCell(0)->topology();
   CellTopoPtr cellTopo    = CellTopology::cellTopology(spatialTopo, this->velocityDim() + 1);
   
-  BasisPtr constantBasis   = BasisFactory::basisFactory()->getConformingBasis(1, cellTopo, EFunctionSpace::FUNCTION_SPACE_HVOL);
-  auto constantBasisFamily = BasisFamily::singletonBasisFamily(constantBasis);
-  
-  g_c->setBasisFamily(constantBasisFamily);
-  w_c->setBasisFamily(constantBasisFamily);
+  {
+    // likely this logic will need to be revised once we're actually running with velocityDim > 1.
+    int p = this->H1Order();
+    
+    auto L2 = FUNCTION_SPACE_HVOL;
+    // w_t, g_t get H1 * L2 * H1
+    std::vector<EFunctionSpace> fs {L2, L2, L2}; // need the basis to be isotropic in FS because otherwise the pullback computation throws an exception (the function space gets labeled as UNKNOWN, so it doesn't know how to pull it back).  Presumably this will be resolved once we actually convert all the basis evaluation logic to use the newer Intrepid2 sum-factorization-friendly approach.
+    auto basis_t = basisFamily->getBasis(cellTopo, fs, {p+1,p,p+1});
+    auto basisFamily_t = BasisFamily::singletonBasisFamily(basis_t);
+    
+    w_t->setBasisFamily(basisFamily_t);
+    g_t->setBasisFamily(basisFamily_t);
+    
+    // w_a, g_a get H1 * H1 * L2
+    auto basis_a = basisFamily->getBasis(cellTopo, fs, {p+1,p+1,p});
+    auto basisFamily_a = BasisFamily::singletonBasisFamily(basis_a);
+    
+    w_a[0]->setBasisFamily(basisFamily_a);
+    g_a[0]->setBasisFamily(basisFamily_a);
+    
+    // w_v, g_v get L2 * H1 * H1
+    auto basis_v = basisFamily->getBasis(cellTopo, fs, {p,p+1,p+1});
+    auto basisFamily_v = BasisFamily::singletonBasisFamily(basis_v);
+    
+    w_v[0]->setBasisFamily(basisFamily_v);
+    g_v[0]->setBasisFamily(basisFamily_v);
+  }
   
   return vlasovVF;
 }
@@ -193,6 +242,12 @@ VarPtr MimeticVlasovSpaceTimeFormulation::g_c()
 {
   VarFactoryPtr vf = vlasovBF()->varFactory();
   return vf->trialVar(S_GC);
+}
+
+VarPtr MimeticVlasovSpaceTimeFormulation::g_t()
+{
+  VarFactoryPtr vf = vlasovBF()->varFactory();
+  return vf->trialVar(S_GT);
 }
 
 VarPtr MimeticVlasovSpaceTimeFormulation::g_v(const int zeroBasedVelocityComponent)
@@ -214,12 +269,14 @@ void MimeticVlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlaso
   vector<VarPtr> g_a(velocityDim);
   vector<VarPtr> g_v(spaceDim);
   VarPtr g_c = this->g_c();
+  VarPtr g_t = this->g_t();
   
   // tests
   VarPtr w = this->w();
   vector<VarPtr> w_a(velocityDim);
   vector<VarPtr> w_v(spaceDim);
   VarPtr w_c = this->w_c();
+  VarPtr w_t = this->w_t();
   
   for (int vd=0; vd<velocityDim; vd++)
   {
@@ -250,7 +307,7 @@ void MimeticVlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlaso
 
   // w equation:
   vlasovBF->addTerm(t_n_hat, w);
-  vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
+  vlasovBF->addTerm( -g_t, w->di(indexOffsetTimeOneBased)); // dt
   for (int d=0; d<spaceDim; d++)
   {
     vlasovBF->addTerm( -g_v[d], w->di(indexOffsetSpaceOneBased + d));  // dx_d
@@ -276,6 +333,9 @@ void MimeticVlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlaso
   
   // w_c equation:
   vlasovBF->addTerm(g_c, w_c);
+  
+  // w_t equation:
+  vlasovBF->addTerm(g_t - f, w_t);
 }
 
 Teuchos::RCP<VlasovSpaceTimeFormulation> MimeticVlasovSpaceTimeFormulation::nextTimeSlab(double tWidth, int numTemporalElements)
@@ -325,6 +385,30 @@ map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForZMomentumConserva
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
+map<int,int> MimeticVlasovSpaceTimeFormulation::testOrderEnhancements()
+{
+  map<int,int> orderEnhancements;
+  // for all test IDs other than w1, we don't enrich
+  auto w1 = this->w();
+  // want to exclude all test IDs other than w1
+  std::vector<int> testIDs = this->vlasovBF()->varFactory()->testIDs();
+  std::set<int> otherTestIDs(testIDs.begin(),testIDs.end());
+  otherTestIDs.erase(w1->ID());
+  for (auto otherTestID : otherTestIDs)
+  {
+    orderEnhancements[otherTestID] = -delta_k(); // match the order of the trial space
+  }
+  return orderEnhancements;
+}
+
+map<int,int> MimeticVlasovSpaceTimeFormulation::trialOrderEnhancements()
+{
+  map<int,int> orderEnhancements;
+  orderEnhancements[t_n_hat()->ID()] = 1; // +1 for non-conforming
+  orderEnhancements[g_c()->ID()]     = 1; // H^1 order
+  return orderEnhancements;
+}
+
 VarPtr MimeticVlasovSpaceTimeFormulation::w_a(const int zeroBasedSpatialComponent)
 {
   VarFactoryPtr vf = vlasovBF()->varFactory();
@@ -335,6 +419,12 @@ VarPtr MimeticVlasovSpaceTimeFormulation::w_c()
 {
   VarFactoryPtr vf = vlasovBF()->varFactory();
   return vf->testVar(S_WC);
+}
+
+VarPtr MimeticVlasovSpaceTimeFormulation::w_t()
+{
+  VarFactoryPtr vf = vlasovBF()->varFactory();
+  return vf->testVar(S_WT);
 }
 
 VarPtr MimeticVlasovSpaceTimeFormulation::w_v(const int zeroBasedVelocityComponent)

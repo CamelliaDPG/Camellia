@@ -126,6 +126,7 @@ public:
     double sumOfAbsoluteConservationFailures;
   };
 private:
+  std::vector< double >                                            _w1ResidualNorm;               // one per slab in the solution history
   std::vector< ElementwiseConservationDiagnostics >                _elementwiseMassIntegrals;     // one per slab in the solution history
   std::vector< std::vector< ElementwiseConservationDiagnostics > > _elementwiseMomentumIntegrals; // outer index: spatial dimension (0 for x, 1 for y, 2 for z); inner: slab index
   std::vector< ElementwiseConservationDiagnostics >                _elementwiseEnergyIntegrals;   // one per slab in solution history
@@ -152,6 +153,9 @@ protected:
   
   //! Copies all settings to the next slab, sets up Vlasov boundary conditions in terms of the current slab, and nullifies Vlasov BCs for current slab.  Used during nextTimeSlab().
   void configureNextSlab(Teuchos::RCP<VlasovSpaceTimeFormulation> otherForm);
+  
+  virtual map<int,int> testOrderEnhancements();
+  virtual map<int,int> trialOrderEnhancements();
   
   virtual std::map<int,FunctionPtr> testForMassConservation();
   virtual std::map<int,FunctionPtr> testForXMomentumConservation();
@@ -310,6 +314,8 @@ public:
   const ElementwiseConservationDiagnostics & localZMomentumConservationDiagnostics(int slabOrdinal);
   const ElementwiseConservationDiagnostics & localEnergyConservationDiagnostics(int slabOrdinal);
   
+  const double &conservationLawResidualNorm(int slabOrdinal);
+  
   void printLocalConservationReportForSlab(int slabOrdinal);
   
   /** \brief  A VarPtr for the B trace variable component specified, valid on the configuration-space mesh.
@@ -376,7 +382,8 @@ public:
                       const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &energyIntegrals,
                       const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseMassIntegrals,
                       const std::vector< std::vector< ElementwiseConservationDiagnostics > >             &elementwiseMomentumIntegrals,
-                      const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals
+                      const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals,
+                      const std::vector< double>                                                         &w1ResidualNorms
                       );
   
   //! returns the ordinal of this slab.  0 for first, 1 for second, etc.

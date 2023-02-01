@@ -63,12 +63,11 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const double x0, c
                                                               const double v0, const double vWidth,
                                                               const int xElements, const int tElements, const int vElements,
                                                               double q, double eps0, double m,
-                                                              const int H1Order, const bool usePeriodicBCs, const bool useSerendipity,
+                                                              const int H1Order, const int delta_k,
+                                                              const bool usePeriodicBCs, const bool useSerendipity,
                                                               const bool useMimeticDPG,
                                                               const int numUniformRefinements)
 {
-  const int delta_k = 2;
-  
   Teuchos::RCP<ConfigurationSpaceFormulationPoisson> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q, eps0, SPACE_TIME) );
   
   MeshTopologyPtr spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements, usePeriodicBCs);
@@ -390,8 +389,17 @@ int main(int argc, char *argv[])
     
     bool usePeriodicBCs = true;
     
-    auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, usePeriodicBCs,
+    auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, delta_k, usePeriodicBCs,
                                      useSerendipityBasis, useMimeticDPG, numUniformRefinements);
+    
+    auto sampleElementType = form->vlasovMesh()->globalDofAssignment()->getSampleElementType();
+    if (rank == 0)
+    {
+      std::cout  << "trial ordering:\n";
+      sampleElementType->trialOrderPtr->print(std::cout);
+      std::cout  << "test ordering:\n";
+      sampleElementType->testOrderPtr->print(std::cout);
+    }
     
     auto traceVar     = form->t_n_hat();
     auto traceSolnFxn = Function::solution(traceVar, form->vlasovSolution(), true);
