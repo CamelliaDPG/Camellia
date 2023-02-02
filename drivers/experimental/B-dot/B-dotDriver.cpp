@@ -1329,7 +1329,11 @@ int main(int argc, char *argv[])
         voltageParameter->setValue(V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
       }
       
-      const double energyError = (fixedCountRefStrategy != Teuchos::null) ? fixedCountRefStrategy->getEnergyError(fixedCountRefStrategy->getNumRefinements() - 1) : -1;
+      double energyError = -1.;
+      if ((fixedCountRefStrategy != Teuchos::null) && (fixedCountRefStrategy->getNumRefinements() > 0))
+      {
+        energyError = fixedCountRefStrategy->getEnergyError(fixedCountRefStrategy->getNumRefinements() - 1);
+      }
       
       if ((timeStepNumber % outputFrequency == 0) || (timeStepNumber == numTimeSteps))
       {
