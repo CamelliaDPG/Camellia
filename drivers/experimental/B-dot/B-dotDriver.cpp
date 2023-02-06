@@ -864,7 +864,7 @@ int main(int argc, char *argv[])
     int minSubsteps = 5;  // for fixed-point iteration.
     int maxSubsteps = 15; // for fixed-point iteration.
     double fixedPointTol = 1e-8;
-    int numTimeSteps = 500;
+    int numTimeSteps = 80;
     int outputFrequency = 1; // number of time steps to take before outputting viz.
     const ProblemChoice problemChoice = B_DOT;
     int maximumRefinementLevel = std::numeric_limits<int>::max(); // default to no maximum refinement level
