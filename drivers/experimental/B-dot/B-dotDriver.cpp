@@ -971,6 +971,8 @@ int main(int argc, char *argv[])
       const double surfacePhotons = sourcePhotons / 4 * std::log(1. + r_e * r_e / (r_f * r_f));
       n0 = surfacePhotons * quantumEfficiency;
       
+      currentScaling = n0 * e / timeScaling; // TODO: confirm this scaling is correct
+      
       const double omega_p = q0 * sqrt( n0 / (m0 * permittivity));
 //      std::cout << "omega_p = sqrt(n0) * " << q0 * sqrt( 1.0 / (m0 * permittivity)) << std::endl;
       
