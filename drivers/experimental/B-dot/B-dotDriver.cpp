@@ -881,6 +881,8 @@ int main(int argc, char *argv[])
     double overrideEps0 = -1.; // if set from CLI, will override the computed eps0 value.
     double quantumEfficiency = 0.01; // value is between 0.01 and 0.05; still need to find out the correct value from the experiment.
     
+    double physicalGapWidth = .01; // for now, use a 10 [mm] = 0.01 [m] gap.  Likely due to other errors (currentScaling?), right now we are not able to run to completion with a 1 [mm] gap.  (For even small time steps, we end up with E and V in the circuit solve (the RHS of gap) changing sign in every time step, and growing in magnitude; after ~25 steps, we devolve into numerical noise because the E field has overwhelmed the flow.  But when we run with the 10 [mm] gap, the circuit solve behaves more reasonably, with values in one time step close to the values in the next.)
+    
     std::string resultsFilePrefix = "";
     
     std::string resultsFile = "";
@@ -917,6 +919,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("maxDofsForDirectSolve", &maxDofsForDirectSolve);
     cmdp.setOption("overrideEps0", &overrideEps0);
     cmdp.setOption("quantumEfficiency", &quantumEfficiency);
+    cmdp.setOption("physicalGapWidth", &physicalGapWidth);
     cmdp.setOption("disableCircuitSolve", "enableCircuitSolve", &disableCircuitSolve);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -926,8 +929,6 @@ int main(int argc, char *argv[])
   #endif
       return -1;
     }
-    
-    const double physicalGapWidth = .01; // for now, use a 10 [mm] = 0.01 [m] gap.  Likely due to other errors (currentScaling?), right now we are not able to run to completion with a 1 [mm] gap.  (For even small time steps, we end up with E and V in the circuit solve (the RHS of gap) changing sign in every time step, and growing in magnitude; after ~25 steps, we devolve into numerical noise because the E field has overwhelmed the flow.  But when we run with the 10 [mm] gap, the circuit solve behaves more reasonably, with values in one time step close to the values in the next.)
     
     double velocityScaling = 114012000.0; // consider: change to c
     // scale so that our domain width is 1.0
@@ -1128,6 +1129,7 @@ int main(int argc, char *argv[])
     suffix << "_H1Order" << H1Order;
     suffix << "_delta_k" << delta_k;
     suffix << "_qeff" << quantumEfficiency;
+    suffix << "_gap" << physicalGapWidth;
 
     // adjust x and v element counts according to the number of uniform refinements requested.
     xElements <<= numUniformRefinements;
