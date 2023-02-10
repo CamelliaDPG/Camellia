@@ -927,13 +927,17 @@ int main(int argc, char *argv[])
       return -1;
     }
     
+    const double physicalGapWidth = .01; // for now, use a 10 [mm] = 0.01 [m] gap.  Likely due to other errors (currentScaling?), right now we are not able to run to completion with a 1 [mm] gap.  (For even small time steps, we end up with E and V in the circuit solve (the RHS of gap) changing sign in every time step, and growing in magnitude; after ~25 steps, we devolve into numerical noise because the E field has overwhelmed the flow.  But when we run with the 10 [mm] gap, the circuit solve behaves more reasonably, with values in one time step close to the values in the next.)
+    
     double velocityScaling = 114012000.0; // consider: change to c
     // scale so that our domain width is 1.0
-    double spatialScaling  = .01;
-    double timeScaling     = spatialScaling / velocityScaling; // 8.77e-11
+    double spatialScaling  = physicalGapWidth;
+    double timeScaling     = spatialScaling / velocityScaling; // 8.77e-12
     
-    // just for reference (and console output)
-    const double finalTime = 7.15e-09 / timeScaling; // ~ 81.5
+    // finalTime is used in scaling the time ramp function's input time (the rescaled, shifted data file goes from time 0 to time 1;
+    // it omits the first 1.5e-9 [s] of data, which is all 0's; so instead of going for 8.65e-9 [s] it goes for 7.15e-9 [s] in physical
+    // units).
+    const double finalTime = 7.15e-09 / timeScaling; // ~ 815
     
     double EScaling        = 1.;
     double n0              = 1.;
@@ -951,7 +955,7 @@ int main(int argc, char *argv[])
       EScaling         = m0 * velocityScaling / (q0 * timeScaling);
       potentialScaling = EScaling * spatialScaling;
       
-      xWidth = 0.010 / spatialScaling; // 10 [mm] = .01 [m] gap
+      xWidth = physicalGapWidth / spatialScaling; // 1 [mm] = .001 [m] gap
       
       const double permittivity = 8.85418782e-12; // permittivity of free space
       
@@ -986,6 +990,8 @@ int main(int argc, char *argv[])
       if (rank == 0)
       {
         std::cout << "Characteristic E-field strength E_0: " << EScaling << std::endl;
+        std::cout << "physical gap width:                  " << physicalGapWidth << std::endl;
+        std::cout << "quantum efficiency:                  " << quantumEfficiency << std::endl;
         std::cout << "spatial scaling:                     " << spatialScaling << std::endl;
         std::cout << "temporal scaling:                    " << timeScaling << std::endl;
         std::cout << "scaled final time:                   " << finalTime << std::endl;
@@ -1119,7 +1125,7 @@ int main(int argc, char *argv[])
     suffix << "_dt" << dt_max;
     suffix << "_H1Order" << H1Order;
     suffix << "_delta_k" << delta_k;
-    suffix << "_eps0" << eps0;
+    suffix << "_qeff" << quantumEfficiency;
 
     // adjust x and v element counts according to the number of uniform refinements requested.
     xElements <<= numUniformRefinements;
@@ -1240,7 +1246,7 @@ int main(int argc, char *argv[])
     }
     
     double t = 0.0;
-    timeRampFunction->setCurrentCoord(t);
+    timeRampFunction->setCurrentCoord(t / finalTime); // time ramp table goes from t=0 to t=1
     if (saveViz)
     {
       const int num1DPointsPoisson = 10; // default is 4
@@ -1268,7 +1274,7 @@ int main(int argc, char *argv[])
       setUseGMG(form, maxDofsForDirectSolve, previousSolveUsedGeometricMultigrid, previousSolveUsedDirect, rank == 0);
       
       {
-        const double amplitude = timeRampFunction->interpolatedPointValue(t);
+        const double amplitude = timeRampFunction->interpolatedPointValue(t / finalTime); // time ramp table goes from t=0 to t=1
         if (rank == 0)
         {
           std::cout << "for time " << t << ", amplitude of f_em is " << amplitude << std::endl;
@@ -1326,7 +1332,7 @@ int main(int argc, char *argv[])
         }
       }
       
-      timeRampFunction->setCurrentCoord(t);
+      timeRampFunction->setCurrentCoord(t / finalTime); // time ramp table goes from t=0 to t=1
       
       moments_kp1->update();
       if (rank == 0) std::cout << "moments_kp1 updated.\n";
