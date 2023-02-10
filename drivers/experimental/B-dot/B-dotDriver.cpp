@@ -879,12 +879,14 @@ int main(int argc, char *argv[])
     bool useSerendipityBasis = false;
     bool disableCircuitSolve = false; // a debugging tool
     double overrideEps0 = -1.; // if set from CLI, will override the computed eps0 value.
+    double quantumEfficiency = 0.01; // value is between 0.01 and 0.05; still need to find out the correct value from the experiment.
     
     std::string resultsFilePrefix = "";
     
     std::string resultsFile = "";
     std::string inflowVelocityDistributionFile = "/Users/nvrober/fluid-kinetic/data/bdot/rescaled/v-f.dat";   // tab-delimited, columns: velocity, f
     std::string inflowTemporalDistributionFile = "/Users/nvrober/fluid-kinetic/data/bdot/rescaled/t-amp.dat"; // tab-delimited, columns: time, amplitude
+    std::string circuitResultsFile = ""; // file with voltage, electric field, current for each time step
     
     cmdp.setOption("resultsFile", &resultsFile);
     cmdp.setOption("xElements", &xElements);
@@ -914,6 +916,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("iterativeSolveTolerance", &iterativeSolveTolerance);
     cmdp.setOption("maxDofsForDirectSolve", &maxDofsForDirectSolve);
     cmdp.setOption("overrideEps0", &overrideEps0);
+    cmdp.setOption("quantumEfficiency", &quantumEfficiency);
     cmdp.setOption("disableCircuitSolve", "enableCircuitSolve", &disableCircuitSolve);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -924,7 +927,7 @@ int main(int argc, char *argv[])
       return -1;
     }
     
-    double velocityScaling = 114012000.0;
+    double velocityScaling = 114012000.0; // consider: change to c
     // scale so that our domain width is 1.0
     double spatialScaling  = .01;
     double timeScaling     = spatialScaling / velocityScaling; // 8.77e-11
@@ -932,12 +935,10 @@ int main(int argc, char *argv[])
     // just for reference (and console output)
     const double finalTime = 7.15e-09 / timeScaling; // ~ 81.5
     
-    // alternative scaling (previously used): scale so that final time is 1.0
-//    double timeScaling     = 7.15e-09;
-//    double spatialScaling  = velocityScaling * timeScaling; // [m]
     double EScaling        = 1.;
-    double nScaling         = 1.;
+    double n0              = 1.;
     double potentialScaling = 1.;
+    double currentScaling   = 1.;
     
     // determine scalings
     {
@@ -958,14 +959,16 @@ int main(int argc, char *argv[])
 //      const double J  = ??; // current density [A/m^2]
 //      nScaling        = J / (e * velocityScaling); // number density of plasma
       
-      const double totalPhotons = 2.0299157e+19;
+      const double sourcePhotons = 2.0299157e+19;
       // f at inflow is given in terms of an amplitude scaled so that the integral over the whole time domain (in physical units) is 1.
       // (this is therefore scaled by 1/timeScaling)
       const double r_e = .02;  // emission radius (2cm)
       const double r_f = .3262; // fielding distance (326.2 mm)
-      nScaling = totalPhotons * r_e * r_e / (4.0 * r_f * r_f) / timeScaling;  // TODO: check whether we have set this appropriately
+      const double surfacePhotons = sourcePhotons / 4 * std::log(1. + r_e * r_e / (r_f * r_f));
+      n0 = surfacePhotons * quantumEfficiency;
       
-      const double omega_p = sqrt( q0 * q0 * nScaling / (m0 * permittivity));
+      const double omega_p = q0 * sqrt( n0 / (m0 * permittivity));
+//      std::cout << "omega_p = sqrt(n0) * " << q0 * sqrt( 1.0 / (m0 * permittivity)) << std::endl;
       
       // eps0 is a weight that enters PoissonFormulation; we use this to scale the problem:
       eps0 = 1.0 / (omega_p * omega_p * timeScaling * timeScaling);
@@ -987,7 +990,8 @@ int main(int argc, char *argv[])
         std::cout << "temporal scaling:                    " << timeScaling << std::endl;
         std::cout << "scaled final time:                   " << finalTime << std::endl;
         std::cout << "domain width:                        " << xWidth << std::endl;
-        std::cout << "number density scaling:              " << nScaling << std::endl;
+        std::cout << "n0:                                  " << n0 << std::endl;
+        std::cout << "current scaling:                     " << currentScaling << std::endl;
         std::cout << "eps0:                                " << eps0 << std::endl;
       }
       enforceQuasiNeutrality = false;
@@ -1029,22 +1033,12 @@ int main(int argc, char *argv[])
     form.refineUniformly(numUniformRefinements);
     form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     
-//    {
-//      if (rank == 0)
-//      {
-//        std::cout << "As an experiment, setting Vlasov solve to use the naive norm rather than graph norm.\n";
-//      }
-//      auto bf = form.vlasovMesh()->bilinearForm();
-//      auto naiveNorm = bf->naiveNorm(2);
-//      form.vlasovSolution()->setIP(naiveNorm);
-//    }
-    
     auto voltageParameter = setPoissonBC(form, x0 + xWidth, x0);
     
     auto moments_k   = form.solutionMomentsPriorTime(); // we need to call update() on this after each time step
     auto moments_kp1 = form.solutionMoments();
     
-    BackwardEulerCircuitSolver circuitSolver(R,L,C,dt,(rank==0)); // print to console on rank 0
+    BackwardEulerCircuitSolver circuitSolver(R,L,C,dt*timeScaling,(rank==0)); // print to console on rank 0
     
     FunctionPtr I_drive_kp1; // set up below
     ParameterFunctionPtr I_drive_kp1_at_x1 = ParameterFunction::parameterFunction(0.0);
@@ -1059,8 +1053,8 @@ int main(int argc, char *argv[])
       bool weightFluxesBySideParity = false;
       E_k   = Function::solution(E, poissonConfig->solutionPriorTime(), weightFluxesBySideParity) * EScaling;
       E_kp1 = Function::solution(E, poissonConfig->solution(),          weightFluxesBySideParity) * EScaling;
-      I_k   = moments_k->solutionMomentFunction(1) * potentialScaling;
-      I_kp1 = moments_kp1->solutionMomentFunction(1) * potentialScaling;
+      I_k   = moments_k->solutionMomentFunction(1) * currentScaling;
+      I_kp1 = moments_kp1->solutionMomentFunction(1) * currentScaling;
     }
     
     // prior-time voltage: start at 0.
@@ -1125,6 +1119,7 @@ int main(int argc, char *argv[])
     suffix << "_dt" << dt_max;
     suffix << "_H1Order" << H1Order;
     suffix << "_delta_k" << delta_k;
+    suffix << "_eps0" << eps0;
 
     // adjust x and v element counts according to the number of uniform refinements requested.
     xElements <<= numUniformRefinements;
@@ -1160,6 +1155,24 @@ int main(int argc, char *argv[])
       resultsFileStream << "_" << numTimeSteps << "_timeSteps";
       resultsFileStream << ".dat";
       resultsFile = resultsFileStream.str();
+    }
+    
+    if (circuitResultsFile == "")
+    {
+      std::ostringstream circuitResultsFileNameStream;
+      circuitResultsFileNameStream << outputDir << "/";
+      if (resultsFilePrefix == "")
+      {
+        circuitResultsFileNameStream << "circuit_" << problemPrefix << "_" << suffix.str();
+      }
+      else
+      {
+        circuitResultsFileNameStream << resultsFilePrefix;
+      }
+      
+      circuitResultsFileNameStream << "_" << numTimeSteps << "_timeSteps";
+      circuitResultsFileNameStream << ".dat";
+      circuitResultsFile = circuitResultsFileNameStream.str();
     }
     
     auto getSpatialMeshFilePath = [&]() {
@@ -1247,6 +1260,9 @@ int main(int argc, char *argv[])
     
     double lastRefinementMaxElementError = 0.0;
     
+    std::ofstream circuitResultsFileStream(circuitResultsFile, std::ios::out);
+    circuitResultsFileStream << "t\tV\tE\tI\n"; // time, voltage, E-field, current
+    
     for (int timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
     {
       setUseGMG(form, maxDofsForDirectSolve, previousSolveUsedGeometricMultigrid, previousSolveUsedDirect, rank == 0);
@@ -1319,14 +1335,27 @@ int main(int argc, char *argv[])
       
       if (!disableCircuitSolve)
       {
-        circuitSolver.setEk  (getSolutionFunctionValue(configMesh, E_k,   x1));
-        circuitSolver.setEkp1(getSolutionFunctionValue(configMesh, E_kp1, x1));
-        circuitSolver.setIk(  getSolutionFunctionValue(configMesh, I_k,   x1));
-        circuitSolver.setVk( V_k );
-        circuitSolver.setIem( getSolutionFunctionValue(configMesh, I_kp1, x1) );
+        const double Ek_value   = getSolutionFunctionValue(configMesh, E_k,   x1);
+        const double Ekp1_value = getSolutionFunctionValue(configMesh, E_kp1, x1);
+        const double Ik_value   = getSolutionFunctionValue(configMesh, I_k,   x1);
+        const double Ikp1_value = getSolutionFunctionValue(configMesh, I_kp1, x1);
+        
+        circuitSolver.setEk  ( Ek_value   );
+        circuitSolver.setEkp1( Ekp1_value );
+        circuitSolver.setIk  ( Ik_value   );
+        circuitSolver.setVk  ( V_k        );
+        circuitSolver.setIem ( Ikp1_value );
         
         V_k = circuitSolver.voltage();
         voltageParameter->setValue(V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
+        
+        // record the k+1 values (V_k is actually V_kp1 now)
+        // time, voltage, E-field, current -- note the circuit solver uses physical units
+        circuitResultsFileStream << t * timeScaling << "\t";
+        circuitResultsFileStream << V_k << "\t";
+        circuitResultsFileStream << Ekp1_value << "\t";
+        circuitResultsFileStream << Ikp1_value << "\n";
+        circuitResultsFileStream.flush();
       }
       
       double energyError = -1.;
@@ -1348,6 +1377,8 @@ int main(int argc, char *argv[])
         reportTimeStepComplete(timeStepNumber,energyError);
       }
     } // end time step loop
+    
+    circuitResultsFileStream.close();
     
     FunctionPtr potential = Function::solution(form.configurationSpaceFormulation()->VE_fieldVar(), form.configurationSpaceSolution());
         
@@ -1427,7 +1458,7 @@ int main(int argc, char *argv[])
           const auto pointWeight = pointEntry.second * spatialScaling;
           const auto E           = E_values[pointEntry.first]         * EScaling;
           const auto potential   = potential_values[pointEntry.first] * potentialScaling;
-          const auto ne          = ne_values[pointEntry.first]        * nScaling;
+          const auto ne          = ne_values[pointEntry.first]        * n0; // TODO: determine if this scaling is correct; we probably need to divide by spatialScaling^3.
           const auto velocity    = velocity_values[pointEntry.first]  * velocityScaling;
           
           resultsFileStream << x           << "\t";
