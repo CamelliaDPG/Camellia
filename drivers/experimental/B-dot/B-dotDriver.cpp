@@ -870,7 +870,7 @@ int main(int argc, char *argv[])
     int maximumRefinementLevel = std::numeric_limits<int>::max(); // default to no maximum refinement level
     bool useEnergyForUnrefinements = false;
     bool saveViz = true;
-    std::string outputDir = "/tmp";
+    std::string outputDir = "/private/viz";
     int solutionOutputFrequency = 1;
     int iterativeSolveOutputLevel = 100; // output every one hundred CG iterations
     double iterativeSolveTolerance = 1e-9;
@@ -880,6 +880,7 @@ int main(int argc, char *argv[])
     bool disableCircuitSolve = false; // a debugging tool
     double overrideEps0 = -1.; // if set from CLI, will override the computed eps0 value.
     double quantumEfficiency = 0.01; // value is between 0.01 and 0.05; still need to find out the correct value from the experiment.
+    double scalingFactorForInflow = 1.0; // for debugging experiments
     
     double physicalGapWidth = .01; // for now, use a 10 [mm] = 0.01 [m] gap.  Likely due to other errors (currentScaling?), right now we are not able to run to completion with a 1 [mm] gap.  (For even small time steps, we end up with E and V in the circuit solve (the RHS of gap) changing sign in every time step, and growing in magnitude; after ~25 steps, we devolve into numerical noise because the E field has overwhelmed the flow.  But when we run with the 10 [mm] gap, the circuit solve behaves more reasonably, with values in one time step close to the values in the next.)
     
@@ -921,6 +922,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("quantumEfficiency", &quantumEfficiency);
     cmdp.setOption("physicalGapWidth", &physicalGapWidth);
     cmdp.setOption("disableCircuitSolve", "enableCircuitSolve", &disableCircuitSolve);
+    cmdp.setOption("scalingFactorForInflow", &scalingFactorForInflow);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -1082,7 +1084,7 @@ int main(int argc, char *argv[])
       std::cout << "vDistributionIntegral = " << vDistributionIntegral << std::endl;
     }
     
-    FunctionPtr f_in = FunctionPtr(timeRampFunction) * FunctionPtr(vDistributionFunction); // note that we need to update timeRampFunction with the current time in each time step
+    FunctionPtr f_in = scalingFactorForInflow * FunctionPtr(timeRampFunction) * FunctionPtr(vDistributionFunction); // note that we need to update timeRampFunction with the current time in each time step
         
     ErrorIndicatorPtr unrefinementErrorIndicator;
     if (!useEnergyForUnrefinements)
@@ -1130,6 +1132,11 @@ int main(int argc, char *argv[])
     suffix << "_delta_k" << delta_k;
     suffix << "_qeff" << quantumEfficiency;
     suffix << "_gap" << physicalGapWidth;
+    
+    if (scalingFactorForInflow != 1.0)
+    {
+      suffix << "_scaled" << scalingFactorForInflow;
+    }
 
     // adjust x and v element counts according to the number of uniform refinements requested.
     xElements <<= numUniformRefinements;
