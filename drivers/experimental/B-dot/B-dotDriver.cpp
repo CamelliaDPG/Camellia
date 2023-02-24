@@ -626,31 +626,36 @@ ParameterFunctionPtr setPoissonBC(VlasovBackwardEulerFormulation &form, const do
 class BackwardEulerCircuitSolver {
   double _dt;
   double _R, _L, _C;
-  double _Ek, _Ekp1;
+  double _A; // area
+  double _Ekl, _Ekp1l; // left values for E^k, E^{k+1}
+  double _Ekr, _Ekp1r; // right values for E^k, E^{k+1}
   double _Ik;
   double _Iem;
   double _Vk;
   bool   _printToConsole;
 public:
-  BackwardEulerCircuitSolver(double R, double L, double C, double dt, bool printToConsole)
+  BackwardEulerCircuitSolver(double R, double L, double C, double dt, double A, bool printToConsole)
   :
   _dt(dt),
   _R(R),
   _L(L),
   _C(C),
+  _A(A),
   _printToConsole(printToConsole)
   {}
   
-  //! set prior-time electric field value
-  void setEk(double value)
+  //! set prior-time electric field values
+  void setEk(double valueLeft, double valueRight)
   {
-    _Ek = value;
+    _Ekl = valueLeft;
+    _Ekr = valueRight;
   }
 
-  //! set current-time electric field value
-  void setEkp1(double value)
+  //! set current-time electric field values
+  void setEkp1(double valueLeft, double valueRight)
   {
-    _Ekp1 = value;
+    _Ekp1l = valueLeft;
+    _Ekp1r = valueRight;
   }
   
   //! set prior-time current value
@@ -685,20 +690,22 @@ public:
     
     const double permittivity = 8.85418782e-12; // permittivity of free space
     
-    const double dE_dt       = (_Ekp1 - _Ek) / _dt;
-    const double I_drive     = _Iem + permittivity * dE_dt;
+    const double dE_dt       = (_Ekp1r - _Ekr) / _dt - (_Ekp1l - _Ekl) / _dt;
+    const double I_drive     = _Iem + _A * permittivity * dE_dt;
     const double numerator   = _C * _L * _Vk - _dt * _Ik + _dt * I_drive;
     const double denominator = _C * _L + _R * _C * _dt + _dt * _dt / _L;
     
     if (_printToConsole)
     {
       std::cout << "Circuit solve, inputs:\n";
-      std::cout << "E_{k+1}                = " << _Ekp1 << std::endl;
-      std::cout << "E_{k}                  = " << _Ek   << std::endl;
-      std::cout << "permittivity * dE_dt   = " << permittivity * dE_dt << std::endl;
-      std::cout << "I_{em}                 = " << _Iem  << std::endl;
-      std::cout << "I_k                    = " << _Ik   << std::endl;
-      std::cout << "V_k                    = " << _Vk   << std::endl;
+      std::cout << "E_{k+1}_l                = " << _Ekp1l << std::endl;
+      std::cout << "E_{k}_l                  = " << _Ekl   << std::endl;
+      std::cout << "E_{k+1}_r                = " << _Ekp1r << std::endl;
+      std::cout << "E_{k}_r                  = " << _Ekr   << std::endl;
+      std::cout << "A * permittivity * dE_dt = " << _A * permittivity * dE_dt << std::endl;
+      std::cout << "I_{em}                   = " << _Iem  << std::endl;
+      std::cout << "I_k                      = " << _Ik   << std::endl;
+      std::cout << "V_k                      = " << _Vk   << std::endl;
       
       std::cout << "Solution: V_{k+1} = " << numerator / denominator << std::endl;
     }
@@ -949,6 +956,8 @@ int main(int argc, char *argv[])
     double potentialScaling = 1.;
     double currentScaling   = 1.;
     
+    double A;
+    
     // determine scalings
     {
       const double e   = 1.602176634e-19; // electron's electric charge in Coulombs
@@ -973,6 +982,8 @@ int main(int argc, char *argv[])
       // (this is therefore scaled by 1/timeScaling)
       const double r_e = .02;  // emission radius (2cm)
       const double r_f = .3262; // fielding distance (326.2 mm)
+      
+      A = M_PI * r_e * r_e; // area at emission surface
       const double surfacePhotons = sourcePhotons / 4 * std::log(1. + r_e * r_e / (r_f * r_f));
       n0 = surfacePhotons * quantumEfficiency;
       
@@ -1051,7 +1062,7 @@ int main(int argc, char *argv[])
     auto moments_k   = form.solutionMomentsPriorTime(); // we need to call update() on this after each time step
     auto moments_kp1 = form.solutionMoments();
     
-    BackwardEulerCircuitSolver circuitSolver(R,L,C,dt*timeScaling,(rank==0)); // print to console on rank 0
+    BackwardEulerCircuitSolver circuitSolver(R,L,C,dt*timeScaling,A,(rank==0)); // print to console on rank 0
     
     FunctionPtr I_drive_kp1; // set up below
     ParameterFunctionPtr I_drive_kp1_at_x1 = ParameterFunction::parameterFunction(0.0);
@@ -1354,13 +1365,15 @@ int main(int argc, char *argv[])
       
       if (!disableCircuitSolve)
       {
-        const double Ek_value   = getSolutionFunctionValue(configMesh, E_k,   x1);
-        const double Ekp1_value = getSolutionFunctionValue(configMesh, E_kp1, x1);
-        const double Ik_value   = getSolutionFunctionValue(configMesh, I_k,   x1);
-        const double Ikp1_value = getSolutionFunctionValue(configMesh, I_kp1, x1);
+        const double Ek_value_l   = getSolutionFunctionValue(configMesh, E_k,   x0);
+        const double Ekp1_value_l = getSolutionFunctionValue(configMesh, E_kp1, x0);
+        const double Ek_value_r   = getSolutionFunctionValue(configMesh, E_k,   x1);
+        const double Ekp1_value_r = getSolutionFunctionValue(configMesh, E_kp1, x1);
+        const double Ik_value     = getSolutionFunctionValue(configMesh, I_k,   x1);
+        const double Ikp1_value   = getSolutionFunctionValue(configMesh, I_kp1, x1);
         
-        circuitSolver.setEk  ( Ek_value   );
-        circuitSolver.setEkp1( Ekp1_value );
+        circuitSolver.setEk  ( Ek_value_l,   Ek_value_r   );
+        circuitSolver.setEkp1( Ekp1_value_l, Ekp1_value_r );
         circuitSolver.setIk  ( Ik_value   );
         circuitSolver.setVk  ( V_k        );
         circuitSolver.setIem ( Ikp1_value );
@@ -1372,7 +1385,7 @@ int main(int argc, char *argv[])
         // time, voltage, E-field, current -- note the circuit solver uses physical units
         circuitResultsFileStream << t * timeScaling << "\t";
         circuitResultsFileStream << V_k << "\t";
-        circuitResultsFileStream << Ekp1_value << "\t";
+        circuitResultsFileStream << Ekp1_value_r << "\t";
         circuitResultsFileStream << Ikp1_value << "\n";
         circuitResultsFileStream.flush();
       }
