@@ -683,20 +683,22 @@ public:
     // - I_em is the emitted current -- the one computed as a moment of f
     // - dE/dt is the time derivative of the electric field, which we approximate by (E^{k+1} - E^k) / dt
     
+    const double permittivity = 8.85418782e-12; // permittivity of free space
+    
     const double dE_dt       = (_Ekp1 - _Ek) / _dt;
-    const double I_drive     = _Iem + dE_dt;
+    const double I_drive     = _Iem + permittivity * dE_dt;
     const double numerator   = _C * _L * _Vk - _dt * _Ik + _dt * I_drive;
-    const double denominator = _C * _L + _R * _C * _dt + _dt * _dt;
+    const double denominator = _C * _L + _R * _C * _dt + _dt * _dt / _L;
     
     if (_printToConsole)
     {
       std::cout << "Circuit solve, inputs:\n";
-      std::cout << "E_{k+1} = " << _Ekp1 << std::endl;
-      std::cout << "E_{k}   = " << _Ek   << std::endl;
-      std::cout << "dE_dt   = " << dE_dt << std::endl;
-      std::cout << "I_{em}  = " << _Iem  << std::endl;
-      std::cout << "I_k     = " << _Ik   << std::endl;
-      std::cout << "V_k     = " << _Vk   << std::endl;
+      std::cout << "E_{k+1}                = " << _Ekp1 << std::endl;
+      std::cout << "E_{k}                  = " << _Ek   << std::endl;
+      std::cout << "permittivity * dE_dt   = " << permittivity * dE_dt << std::endl;
+      std::cout << "I_{em}                 = " << _Iem  << std::endl;
+      std::cout << "I_k                    = " << _Ik   << std::endl;
+      std::cout << "V_k                    = " << _Vk   << std::endl;
       
       std::cout << "Solution: V_{k+1} = " << numerator / denominator << std::endl;
     }
@@ -840,9 +842,9 @@ int main(int argc, char *argv[])
     double x0     =  0.0;
     double xWidth =  1.0; // non-dimensionalized in some appropriate way
     
-    double R = 0.8;  // Omega
-    double L = 6.88; // nH
-    double C = 24.0; // pF
+    double R = 0.8;      // Omega
+    double L = 6.88e-9;  // 6.88 nH
+    double C = 24.0e-12; // pF
     
     // v can range from 0 to 1; we pad the domain to extend from -0.5 to 1.5.
     const double DEFAULT_V0     = -0.50;
