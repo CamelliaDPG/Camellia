@@ -693,7 +693,7 @@ public:
     const double dE_dt       = (_Ekp1r - _Ekr) / _dt - (_Ekp1l - _Ekl) / _dt;
     const double I_drive     = _Iem + _A * permittivity * dE_dt;
     const double numerator   = _C * _L * _Vk - _dt * _Ik + _dt * I_drive;
-    const double denominator = _C * _L + _R * _C * _dt + _dt * _dt / _L;
+    const double denominator = _C + (_R * _C / _L) * _dt + _dt * _dt / _L;
     
     if (_printToConsole)
     {
@@ -851,7 +851,7 @@ int main(int argc, char *argv[])
     
     double R = 0.8;      // Omega
     double L = 6.88e-9;  // 6.88 nH
-    double C = 24.0e-12; // pF
+    double C = 24.0e-12; // 24 pF
     
     // v can range from 0 to 1; we pad the domain to extend from -0.5 to 1.5.
     const double DEFAULT_V0     = -0.50;
