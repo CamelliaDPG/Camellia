@@ -692,7 +692,7 @@ public:
     
     const double dE_dt       = (_Ekp1r - _Ekr) / _dt - (_Ekp1l - _Ekl) / _dt;
     const double I_drive     = _Iem + _A * permittivity * dE_dt;
-    const double numerator   = _C * _L * _Vk - _dt * _Ik + _dt * I_drive;
+    const double numerator   = _C * _Vk - _dt * _Ik + _dt * I_drive;
     const double denominator = _C + (_R * _C / _L) * _dt + _dt * _dt / _L;
     
     if (_printToConsole)
