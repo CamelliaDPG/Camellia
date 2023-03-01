@@ -712,6 +712,21 @@ public:
     
     return numerator / denominator;
   }
+  
+  double current()
+  {
+    // returns I_{k+1}, computed in terms of voltage
+    
+    // turn off console printing when accessing the voltage to compute current
+    bool savePrintToConsole = _printToConsole;
+    _printToConsole = false;
+    double Vkp1 = voltage();
+    _printToConsole = savePrintToConsole;
+    
+    const double Ikp1 = Vkp1 * _dt / _L + _Ik;
+    
+    return Ikp1;
+  }
 };
 
 //! MPI-collective method for 1D meshes.  Evaluates f_soln on whatever rank owns the point x, and communicates the result to every rank.  Returns the value.
@@ -1068,7 +1083,8 @@ int main(int argc, char *argv[])
     ParameterFunctionPtr I_drive_kp1_at_x1 = ParameterFunction::parameterFunction(0.0);
     
     FunctionPtr E_k, E_kp1;
-    FunctionPtr I_k, I_kp1;
+    FunctionPtr I_em;
+    double I_k = 0;
     
     // voltageParameter is a "ParameterFunction" -- we need fill it in with an appropriate value
     {
@@ -1077,8 +1093,7 @@ int main(int argc, char *argv[])
       bool weightFluxesBySideParity = false;
       E_k   = Function::solution(E, poissonConfig->solutionPriorTime(), weightFluxesBySideParity) * EScaling;
       E_kp1 = Function::solution(E, poissonConfig->solution(),          weightFluxesBySideParity) * EScaling;
-      I_k   = moments_k->solutionMomentFunction(1) * currentScaling;
-      I_kp1 = moments_kp1->solutionMomentFunction(1) * currentScaling;
+      I_em  = moments_kp1->solutionMomentFunction(1) * currentScaling;
     }
     
     // prior-time voltage: start at 0.
@@ -1369,24 +1384,25 @@ int main(int argc, char *argv[])
         const double Ekp1_value_l = getSolutionFunctionValue(configMesh, E_kp1, x0);
         const double Ek_value_r   = getSolutionFunctionValue(configMesh, E_k,   x1);
         const double Ekp1_value_r = getSolutionFunctionValue(configMesh, E_kp1, x1);
-        const double Ik_value     = getSolutionFunctionValue(configMesh, I_k,   x1);
-        const double Ikp1_value   = getSolutionFunctionValue(configMesh, I_kp1, x1);
+        const double Iem_value    = getSolutionFunctionValue(configMesh, I_em,  x1);
         
         circuitSolver.setEk  ( Ek_value_l,   Ek_value_r   );
         circuitSolver.setEkp1( Ekp1_value_l, Ekp1_value_r );
-        circuitSolver.setIk  ( Ik_value   );
-        circuitSolver.setVk  ( V_k        );
-        circuitSolver.setIem ( Ikp1_value );
+        circuitSolver.setIk  ( I_k       );
+        circuitSolver.setVk  ( V_k       );
+        circuitSolver.setIem ( Iem_value );
         
         V_k = circuitSolver.voltage();
         voltageParameter->setValue(V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
         
-        // record the k+1 values (V_k is actually V_kp1 now)
+        I_k = circuitSolver.current();
+        
+        // record the k+1 values (V_k is actually V_kp1 now; I_k is I_kp1)
         // time, voltage, E-field, current -- note the circuit solver uses physical units
         circuitResultsFileStream << t * timeScaling << "\t";
         circuitResultsFileStream << V_k << "\t";
         circuitResultsFileStream << Ekp1_value_r << "\t";
-        circuitResultsFileStream << Ikp1_value << "\n";
+        circuitResultsFileStream << I_k << "\n";
         circuitResultsFileStream.flush();
       }
       
