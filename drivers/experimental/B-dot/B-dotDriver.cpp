@@ -70,7 +70,8 @@ public:
                           const vector< double > &functionValues,
                           int dimensionOfVariation)
   :
-  _dimensionOfVariation(dimensionOfVariation)
+  _dimensionOfVariation(dimensionOfVariation),
+  TFunction<double>("PointwiseDataFunction1D")
   {
     TEUCHOS_TEST_FOR_EXCEPTION(coords1D.size() != functionValues.size(), std::invalid_argument, "coords length must match values length");
     const int numPoints = coords1D.size();
@@ -309,7 +310,8 @@ public:
   :
   _numPointDimensions(1), // 1V is our present use case
   _dataTable(dataTable),
-  _dimensionsToDrop(set<int>{0}) // drop the x dimension
+  _dimensionsToDrop(set<int>{0}), // drop the x dimension
+  TFunction<double>("PointwiseDataFunction1D")
   {
     // extract unique times and points:
     set<double> times;
@@ -690,8 +692,8 @@ public:
     
     const double permittivity = 8.85418782e-12; // permittivity of free space
     
-    const double dE_dt       = (_Ekp1r - _Ekr) / _dt - (_Ekp1l - _Ekl) / _dt;
-    const double I_drive     = _Iem + _A * permittivity * dE_dt;
+    const double dE_dt       = (_Ekp1r - _Ekr) / _dt;
+    const double I_drive     = _Iem - _A * permittivity * dE_dt;
     const double numerator   = _C * _Vk - _dt * _Ik + _dt * I_drive;
     const double denominator = _C + (_R * _C / _L) * _dt + _dt * _dt / _L;
     
@@ -1022,16 +1024,16 @@ int main(int argc, char *argv[])
       
       if (rank == 0)
       {
-        std::cout << "Characteristic E-field strength E_0: " << EScaling << std::endl;
-        std::cout << "physical gap width:                  " << physicalGapWidth << std::endl;
-        std::cout << "quantum efficiency:                  " << quantumEfficiency << std::endl;
-        std::cout << "spatial scaling:                     " << spatialScaling << std::endl;
-        std::cout << "temporal scaling:                    " << timeScaling << std::endl;
-        std::cout << "scaled final time:                   " << finalTime << std::endl;
-        std::cout << "domain width:                        " << xWidth << std::endl;
-        std::cout << "n0:                                  " << n0 << std::endl;
-        std::cout << "current scaling:                     " << currentScaling << std::endl;
-        std::cout << "eps0:                                " << eps0 << std::endl;
+        std::cout << "E-field scaling:     " << EScaling << std::endl;
+        std::cout << "physical gap width:  " << physicalGapWidth << std::endl;
+        std::cout << "quantum efficiency:  " << quantumEfficiency << std::endl;
+        std::cout << "spatial scaling:     " << spatialScaling << std::endl;
+        std::cout << "temporal scaling:    " << timeScaling << std::endl;
+        std::cout << "scaled final time:   " << finalTime << std::endl;
+        std::cout << "domain width:        " << xWidth << std::endl;
+        std::cout << "n0:                  " << n0 << std::endl;
+        std::cout << "current scaling:     " << currentScaling << std::endl;
+        std::cout << "eps0:                " << eps0 << std::endl;
       }
       enforceQuasiNeutrality = false;
     }
@@ -1072,7 +1074,7 @@ int main(int argc, char *argv[])
     form.refineUniformly(numUniformRefinements);
     form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     
-    auto voltageParameter = setPoissonBC(form, x0 + xWidth, x0);
+    auto voltageParameter = setPoissonBC(form, x0, x1);
     
     auto moments_k   = form.solutionMomentsPriorTime(); // we need to call update() on this after each time step
     auto moments_kp1 = form.solutionMoments();
@@ -1306,8 +1308,14 @@ int main(int argc, char *argv[])
     double lastRefinementMaxElementError = 0.0;
     
     std::ofstream circuitResultsFileStream(circuitResultsFile, std::ios::out);
-    circuitResultsFileStream << "t\tV\tE\tI\n"; // time, voltage, E-field, current
+    circuitResultsFileStream << "t\tV\tE\tI\tI_em(x1)\tI_disp(x1)\tI_tot(x1)\tI_em(x0)\tI_disp(x0)\tI_tot(x0)\n"; // time, voltage, E-field, current, I emission at x1, displacement current at x1, total current at x1, I emission at x0, displacement current at x0, total current at x0
     
+    /*
+     circuitResultsFileStream << Iem_value << "\t";
+     circuitResultsFileStream << -A * permittivity * (Ekp1_value_r - Ek_value_r) / dt << "\t";
+     circuitResultsFileStream << I_total_0 << "\t";
+     circuitResultsFileStream << I_total_1 << "\n";
+     */
     for (int timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
     {
       setUseGMG(form, maxDofsForDirectSolve, previousSolveUsedGeometricMultigrid, previousSolveUsedDirect, rank == 0);
@@ -1385,6 +1393,7 @@ int main(int argc, char *argv[])
         const double Ek_value_r   = getSolutionFunctionValue(configMesh, E_k,   x1);
         const double Ekp1_value_r = getSolutionFunctionValue(configMesh, E_kp1, x1);
         const double Iem_value    = getSolutionFunctionValue(configMesh, I_em,  x1);
+        const double Iem_value_0  = getSolutionFunctionValue(configMesh, I_em,  x0);
         
         circuitSolver.setEk  ( Ek_value_l,   Ek_value_r   );
         circuitSolver.setEkp1( Ekp1_value_l, Ekp1_value_r );
@@ -1393,16 +1402,27 @@ int main(int argc, char *argv[])
         circuitSolver.setIem ( Iem_value );
         
         V_k = circuitSolver.voltage();
-        voltageParameter->setValue(V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
+        voltageParameter->setValue(-V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
         
         I_k = circuitSolver.current();
         
         // record the k+1 values (V_k is actually V_kp1 now; I_k is I_kp1)
         // time, voltage, E-field, current -- note the circuit solver uses physical units
+        
+        const double permittivity = 8.85418782e-12; // permittivity of free space
+        const double I_total_1 = Iem_value   - A * permittivity * (Ekp1_value_r - Ek_value_r) / dt;
+        const double I_total_0 = Iem_value_0 - A * permittivity * (Ekp1_value_l - Ek_value_l) / dt;
+        
         circuitResultsFileStream << t * timeScaling << "\t";
         circuitResultsFileStream << V_k << "\t";
         circuitResultsFileStream << Ekp1_value_r << "\t";
-        circuitResultsFileStream << I_k << "\n";
+        circuitResultsFileStream << I_k << "\t";
+        circuitResultsFileStream << Iem_value << "\t";
+        circuitResultsFileStream << -A * permittivity * (Ekp1_value_r - Ek_value_r) / dt << "\t";
+        circuitResultsFileStream << I_total_1 << "\t";
+        circuitResultsFileStream << Iem_value_0 << "\t";
+        circuitResultsFileStream << -A * permittivity * (Ekp1_value_l - Ek_value_l) / dt << "\t";
+        circuitResultsFileStream << I_total_0 << "\n";
         circuitResultsFileStream.flush();
       }
       
