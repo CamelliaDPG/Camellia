@@ -352,7 +352,7 @@ int main(int argc, char *argv[])
     VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
     form.refineUniformly(numUniformRefinements);
     form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-    form.setVerboseSolve(false); // set to TRUE for debugging
+    form.setRunQuietly(true);
     auto numPoissonElements = form.configurationSpaceMesh()->numActiveElements();
     auto numPoissonDofs     = form.configurationSpaceMesh()->numGlobalDofs();
     auto numVlasovElements  = form.vlasovMesh()->numActiveElements();
