@@ -1,0 +1,11 @@
+export Trilinos_DIR=~/Trilinos
+module --force purge
+source $Trilinos_DIR/cmake/std/atdm/load-env.sh clang-opt
+module load sems-python
+module load sems-py-pip
+module load sems-ninja
+export CAMELLIA_SRC_DIR=~/camellia
+export CAMELLIA_BUILD_DIR=~/camellia/build/clang-opt
+export CAMELLIA_OUTPUT_DIR=~/papers/VlasovPoissonBackwardEuler
+export MPIRUN_COMMAND=mpirun
+export MPIRUN_NUM_PROCS=50

@@ -646,6 +646,7 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1))
     {
       // tolerance reached, min substeps taken
+      numSubstepsTaken = substepOrdinal+1;
       break;
     }
     if (exportViz)
