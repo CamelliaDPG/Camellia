@@ -238,7 +238,6 @@ int main(int argc, char *argv[])
     
     bool enforceQuasiNeutrality = false;
     
-    bool useAdaptivity = false;
     bool pureAdvection = false;
 
     int xElements = 8;
@@ -253,15 +252,12 @@ int main(int argc, char *argv[])
     int numTimeSteps = 500;
     int outputFrequency = 10; // number of time steps to take before outputting viz.
     bool useL2Trace = true;
-    int maximumRefinementLevel = std::numeric_limits<int>::max(); // default to no maximum refinement level
-    bool useEnergyForUnrefinements = false;
     bool saveViz = true;
     std::string outputDir = "/tmp";
     int iterativeSolveOutputLevel = 100; // output every one hundred CG iterations
     double iterativeSolveTolerance = 1e-9;
     double iterativeSolveMaxIters  = 10000;
     int maxDofsForDirectSolve = 20000;
-    int fixedCountRefinementTarget = -1; // set to positive number to used fixed-count ref strategy instead of greedy strategy
     int checkpointFrequency = -1; // default to matching outputFrequency
     bool useSerendipity = false;
     double A_override = -1.; // use default values for gamma if not set
@@ -295,7 +291,6 @@ int main(int argc, char *argv[])
     cmdp.setOption("numTimeSteps", &numTimeSteps);
     cmdp.setOption("outputFrequency", &outputFrequency);
     cmdp.setOption("outputDir", &outputDir);
-    cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
     cmdp.setOption("useSerendipity", "useTensorProductBasis", &useSerendipity);
     cmdp.setOption("iterativeSolveOutputLevel", &iterativeSolveOutputLevel);
     cmdp.setOption("iterativeSolveMaxIters", &iterativeSolveMaxIters);
@@ -383,17 +378,6 @@ int main(int argc, char *argv[])
     FunctionPtr fM     = Teuchos::rcp(new Maxwellian1V( u0, n0, sigma) );
     FunctionPtr f0     = (1. + gamma * cos_kx) * fM;
     FunctionPtr df0    = f0 - fM;
-    
-    double fM_at_0_0  = fM->evaluate(0,0);
-    double f0_at_0_0  = f0->evaluate(0,0);
-    double df0_at_0_0 = df0->evaluate(0,0);
-  
-    if (rank == 0)
-    {
-      std::cout << " fM(0,0) = " <<  fM_at_0_0 << std::endl;
-      std::cout << " f0(0,0) = " <<  f0_at_0_0 << std::endl;
-      std::cout << "df0(0,0) = " << df0_at_0_0 << std::endl;
-    }
     
     std::vector<std::pair<double,double> > t_ln_E1_pairs;
     std::vector<std::pair<double,double> > t_ln_E1Peak_pairs;
@@ -565,13 +549,6 @@ int main(int argc, char *argv[])
     refReportFileStream << "Vlasov Elements\tVlasov Dofs\tPoisson Elements\tPoisson Dofs\tBC err\tEnergy Error\n";
     refReportFileStream.close();
     
-    auto writeTimeStepReport = [&](const int numElementsVlasov, const int numDofsVlasov, const int numElementsPoisson, const int numDofsPoisson, const double bcErr, const double energyError) {
-      auto refReportFilePath = getTimeStepReportFilePath();
-      std::ofstream refReportFileStream(refReportFilePath, std::ios_base::app);
-      refReportFileStream << numElementsVlasov << "\t" << numDofsVlasov << "\t" << numElementsPoisson << "\t" << numDofsPoisson << "\t" << bcErr << "\t" << energyError << std::endl;
-      refReportFileStream.close();
-    };
-    
     const std::string directoryPath = outputDir;
     
     if (resultsFile == "")
@@ -652,10 +629,6 @@ int main(int argc, char *argv[])
     auto getLogMaxNetDensity = [&]() -> double
     {
       {
-        // the di() methods are 1-based:
-        static const int SPATIAL_INDEX  = 1;
-        static const int VELOCITY_INDEX = 1;
-                
         auto allActivePhysicalCells = form.configurationSpaceMesh()->getActiveCellIDsGlobal();
         
         form.configurationSpaceSolution()->importSolutionForOffRankCells(allActivePhysicalCells);
@@ -694,7 +667,7 @@ int main(int argc, char *argv[])
           const int numCells = physicalQuadraturePoints.dimension(0);
           
           double maxNetDensity = std::numeric_limits<double>::lowest();
-          for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+          for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
           {
             for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
             {
@@ -886,14 +859,6 @@ int main(int argc, char *argv[])
       // ultimately, we want E-field, velocity, and some other things
       // to begin with, let's output the E-field values computed at quadrature points at final time
             
-      // the di() methods are 1-based:
-      static const int SPATIAL_INDEX  = 1;
-      static const int VELOCITY_INDEX = 1;
-      
-      // SpatialFilter's components are zero-based
-      static const int SPATIAL_INDEX_ZERO_BASED  = SPATIAL_INDEX  - 1;
-      static const int VELOCITY_INDEX_ZERO_BASED = VELOCITY_INDEX - 1;
-      
       auto allActivePhysicalCells = form.configurationSpaceMesh()->getActiveCellIDsGlobal();
       
       form.configurationSpaceSolution()->importSolutionForOffRankCells(allActivePhysicalCells);
@@ -935,10 +900,10 @@ int main(int argc, char *argv[])
         
         const FieldContainer<double> & physicalQuadraturePoints = basisCache->getPhysicalCubaturePointsFC();
         
-        const int numCells         = physicalQuadraturePoints.dimension(0);
+        const int numCells = physicalQuadraturePoints.dimension(0);
         
         double maxDensity = std::numeric_limits<double>::lowest();
-        for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
         {
           const double cellWidth = physicalCellNodes(cellOrdinal,1,0) - physicalCellNodes(cellOrdinal,0,0);
           for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
@@ -984,7 +949,7 @@ int main(int argc, char *argv[])
         std::ofstream spatialMeshFileStream(spatialMeshFile, std::ios::out);
         // let's collect the spatial nodes and sort them
         std::set<double> spatialNodes;
-        for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
         {
           spatialNodes.insert(physicalCellNodes(cellOrdinal,0,0)); // (min x, min t)
           spatialNodes.insert(physicalCellNodes(cellOrdinal,1,0)); // (max x, min t)
