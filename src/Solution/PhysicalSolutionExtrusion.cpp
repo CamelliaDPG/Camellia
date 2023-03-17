@@ -145,7 +145,6 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   }
   
   TEUCHOS_TEST_FOR_EXCEPTION(numPhysicalPoints != numPhysicalPointsInValues, std::invalid_argument, "numPhysicalPoints should match the product of the extents in the first dimensions of values");
-  const int numVelocityPoints = numPoints / numPhysicalPoints;
   
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 1 + numPhaseDimensions, std::invalid_argument, "Expect values to have shape (C,P0,P1,…,Pn) for n = # phase dimensions - 1");
   int extrusionExtentCount = 1;
@@ -168,8 +167,6 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   
   const bool isSideCache = (basisCache->getSideIndex() != -1);
   TEUCHOS_TEST_FOR_EXCEPTION(isSideCache, std::invalid_argument, "PhaseSpaceExtrusion doesn't support evaluation on sides");
-
-  int physicalSpaceSideOrdinal = -1;
   
   auto extrudedMeshTopology = dynamic_cast<ExtrudedMeshTopology*>(_phaseMesh->getTopology().get());
   TEUCHOS_TEST_FOR_EXCEPTION(extrudedMeshTopology == NULL, std::invalid_argument, "phase-space mesh must use an ExtrudedMeshTopology");
@@ -177,59 +174,60 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   auto physicalMeshTopology = physicalMesh->getTopology();
   
   const vector<GlobalIndexType> & phaseSpaceCellIDs = basisCache->cellIDs();
+  const int numCells = phaseSpaceCellIDs.size();
   
-  for (int phaseSpaceCellOrdinal = 0; phaseSpaceCellOrdinal < phaseSpaceCellIDs.size(); phaseSpaceCellOrdinal++)
+  if (numCells == 0) return;
+  
+  vector<GlobalIndexType> physicalCellIDs(numCells);
+  
+  for (int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++)
   {
-    const auto & phaseSpaceCellID = phaseSpaceCellIDs[phaseSpaceCellOrdinal];
-    
-    // rule is that phase space mesh is nowhere finer than physical mesh: we can "cover" the phase space cell's physical dimensions with active physical cells.  And there is a unique (possibly refined) physical cell that corresponds exactly to the physical component of the phase-space cell.
-    GlobalIndexType physicalCellID = extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID);
-    
-    CellPtr physicalCell = physicalMeshTopology->getCell(physicalCellID);
-    
-    const int cubatureDegree = basisCache->cubatureDegree();
-
-    FieldContainer<double> physicalCellNodes = physicalMesh->physicalCellNodesForCell(physicalCellID);
-    BasisCachePtr physicalBasisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, physicalCell->topology(), physicalRefPoints) );
-    physicalBasisCache->setMesh(physicalMesh);
-    physicalBasisCache->setCellIDs({physicalCellID});
-    
-    auto g_dataValues = _physicalSolnFxn->checkoutValuesData(physicalBasisCache);
-    
-    _physicalSolnFxn->values(g_dataValues, physicalBasisCache);
-    
-    // copy g_dataValues into values
-    using ExecutionSpace = Camellia::DeviceExecutionSpace;
-    if ((numPhysicalPointComponents == 1) && (numVelocityDimensions == 1))
-    {
-      // 1D1V case
-      auto policy = Kokkos::RangePolicy<ExecutionSpace>(0,physicalPointCounts[0]);
-      
-      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
-      KOKKOS_LAMBDA (const int &x0)
-      {
-        values.getWritableEntry(phaseSpaceCellOrdinal,x0,0) = g_dataValues(0,x0);
-      });
-    }
-    else if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
-    {
-      // 2D1V or 1D1T1V case (space-time 1D1V)
-      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{physicalPointCounts[0],physicalPointCounts[1]});
-      
-      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
-      KOKKOS_LAMBDA (const int &x0, const int &x1)
-      {
-        values.getWritableEntry(phaseSpaceCellOrdinal,x0,x1,0) = g_dataValues(0,x0,x1);
-      });
-    }
-    else
-    {
-      // TODO: add support for other physical/velocity component counts
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported physical/velocity component count");
-    }
-    
-    _physicalSolnFxn->checkinValuesData(g_dataValues);
+    physicalCellIDs[cellOrdinal] = extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellIDs[cellOrdinal]);
   }
+  
+  // get the cell topo from a sample cell (these will all be the same, since phase-space cell topo is the same, by virtue of having a single BasisCache).
+  auto physicalCellTopo = physicalMeshTopology->getCell(physicalCellIDs[0])->topology();
+  
+  FieldContainer<double> physicalCellNodes = physicalMesh->physicalCellNodes(physicalCellIDs);
+  BasisCachePtr physicalBasisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, physicalCellTopo, physicalRefPoints) );
+  physicalBasisCache->setMesh(physicalMesh);
+  physicalBasisCache->setCellIDs(physicalCellIDs);
+    
+  auto g_dataValues = _physicalSolnFxn->checkoutValuesData(physicalBasisCache);
+    
+  _physicalSolnFxn->values(g_dataValues, physicalBasisCache);
+    
+  // copy g_dataValues into values
+  using ExecutionSpace = Camellia::DeviceExecutionSpace;
+  if ((numPhysicalPointComponents == 1) && (numVelocityDimensions == 1))
+  {
+    // 1D1V case
+    auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{numCells,physicalPointCounts[0]});
+    
+    Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+    KOKKOS_LAMBDA (const int &cellOrdinal, const int &x0)
+    {
+      values.getWritableEntry(cellOrdinal,x0,0) = g_dataValues(cellOrdinal,x0);
+    });
+  }
+  else if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
+  {
+    // 2D1V or 1D1T1V case (space-time 1D1V)
+    auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,physicalPointCounts[0],physicalPointCounts[1]});
+    
+    Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+    KOKKOS_LAMBDA (const int &cellOrdinal, const int &x0, const int &x1)
+    {
+      values.getWritableEntry(cellOrdinal,x0,x1,0) = g_dataValues(cellOrdinal,x0,x1);
+    });
+  }
+  else
+  {
+    // TODO: add support for other physical/velocity component counts
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported physical/velocity component count");
+  }
+  
+  _physicalSolnFxn->checkinValuesData(g_dataValues);
 }
 
 bool PhysicalSolutionExtrusion::boundaryValueOnly()
