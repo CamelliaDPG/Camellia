@@ -140,7 +140,7 @@ public:
 
   Scalar integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
-  Scalar integrate(BasisCachePtr basisCache);
+  Scalar integrate(BasisCachePtr basisCache, bool divideByTwoForInteriorSides = false);
   void integrate(Camellia::FieldContainer<Scalar> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
 
   // integrate over only one cell

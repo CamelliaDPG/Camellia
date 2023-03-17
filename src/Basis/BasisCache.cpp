@@ -2083,14 +2083,80 @@ BasisCachePtr BasisCache::basisCacheForCellTopology(CellTopoPtr cellTopo, int cu
 BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest, int cubatureDegreeEnrichment)   // for cells on the local MPI node
 {
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
-  bool createSideCache = true;
-  vector<GlobalIndexType> cellIDs = mesh->cellIDsOfType(elemType);
-  if (cellIDs.size() > 0)
+  
+  if (mesh->tensorTopologyMeansSpaceTime() && (elemType->cellTopoPtr->getTensorialDegree() > 0))
   {
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCache);
-  }
+    vector<GlobalIndexType> cellIDs = mesh->cellIDsOfType(elemType);
+    Camellia::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(elemType);
+    
+    CellTopoPtr spaceTimeTopo = elemType->cellTopoPtr;
+    // check that the physical nodes are in fact in a tensor product structure:
+    CellTopoPtr spaceTopo = elemType->cellTopoPtr->getTensorialComponent();
+    CellTopoPtr timeTopo = CellTopology::line();
+    Camellia::FieldContainer<double> physicalCellNodesSpace(1, spaceTopo->getNodeCount(), spaceTopo->getDimension());
+    Camellia::FieldContainer<double> physicalCellNodesTime(1, timeTopo->getNodeCount(), timeTopo->getDimension());
+    vector<unsigned> componentNodes(2);
+    for (int spaceNodeOrdinal=0; spaceNodeOrdinal<spaceTopo->getNodeCount(); spaceNodeOrdinal++)
+    {
+      componentNodes[0] = spaceNodeOrdinal;
+      componentNodes[1] = 0; // fix the 0 node ordinal in time
+      int spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+      for (int d=0; d<spaceTopo->getDimension(); d++)
+      {
+        physicalCellNodesSpace(0,spaceNodeOrdinal,d) = physicalCellNodes(0,spaceTimeNodeOrdinal,d);
+      }
+      // check that the time 1 node matches the time 0 node
+      componentNodes[1] = 1;
+      double tol = 1e-15;
+      spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+      for (int d=0; d<spaceTopo->getDimension(); d++)
+      {
+        double diff = abs(physicalCellNodesSpace(0,spaceNodeOrdinal,d) -physicalCellNodes(0,spaceTimeNodeOrdinal,d));
+        if (diff > tol)
+        {
+          cout << "physical cell nodes are not in a tensor product structure; this is not supported.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-tensor product space time mesh");
+        }
+      }
+    }
+    for (int timeNodeOrdinal=0; timeNodeOrdinal<timeTopo->getNodeCount(); timeNodeOrdinal++)
+    {
+      componentNodes[0] = 0;
+      componentNodes[1] = timeNodeOrdinal;
+      int spaceDim = spaceTopo->getDimension();
+      int spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+      physicalCellNodesTime(0,timeNodeOrdinal,0) = physicalCellNodes(0,spaceTimeNodeOrdinal,spaceDim);
 
-  return basisCache;
+      for (int spaceNodeOrdinal=1; spaceNodeOrdinal<spaceTopo->getNodeCount(); spaceNodeOrdinal++)
+      {
+        // check that the other nodes match
+        componentNodes[0] = spaceNodeOrdinal;
+        double tol = 1e-15;
+        spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+        double diff = abs(physicalCellNodesTime(0,timeNodeOrdinal,0) - physicalCellNodes(0,spaceTimeNodeOrdinal,spaceDim));
+        if (diff > tol)
+        {
+          cout << physicalCellNodes;
+          cout << "physical cell nodes are not in a tensor product structure; this is not supported.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-tensor product space time mesh");
+        }
+      }
+    }
+    BasisCachePtr basisCache = Teuchos::rcp( new SpaceTimeBasisCache(mesh, elemType, physicalCellNodesSpace,
+                               physicalCellNodesTime, physicalCellNodes, cellIDs,
+                               testVsTest, cubatureDegreeEnrichment) );
+    return basisCache;
+  }
+  else
+  {
+    bool createSideCache = true;
+    vector<GlobalIndexType> cellIDs = mesh->cellIDsOfType(elemType);
+    if (cellIDs.size() > 0)
+    {
+      basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCache);
+    }
+    return basisCache;
+  }
 }
 
 BasisCachePtr BasisCache::basisCacheForReferenceCell(shards::CellTopology &shardsTopo, int cubatureDegree, bool createSideCacheToo)

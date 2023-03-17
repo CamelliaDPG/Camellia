@@ -1171,15 +1171,36 @@ void TFunction<Scalar>::addToValues(Camellia::FieldContainer<Scalar> &valuesToAd
 }
 
 template <typename Scalar>
-Scalar  TFunction<Scalar>::integrate(BasisCachePtr basisCache)
+Scalar  TFunction<Scalar>::integrate(BasisCachePtr basisCache, bool divideByTwoForInteriorSides)
 {
   int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
   Camellia::FieldContainer<Scalar> cellIntegrals(numCells);
   this->integrate(cellIntegrals, basisCache);
   Scalar sum = 0;
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  vector<bool> cellHasInteriorSide;
+  if (divideByTwoForInteriorSides)
   {
-    sum += cellIntegrals[cellIndex];
+    // divideByTwoForInteriorSides=true only supported for side basisCache with a mesh, cellIDs defined
+    TEUCHOS_TEST_FOR_EXCEPTION(!basisCache->isSideCache(), std::invalid_argument, "divideByTwoForInteriorSides=true only supported for side basisCache");
+    MeshTopologyViewPtr meshTopoView = basisCache->mesh()->getTopology();
+    const auto & cellIDs = basisCache->cellIDs();
+    const int sideOrdinal = basisCache->getSideIndex();
+    
+    for (auto & cellID : cellIDs)
+    {
+      bool isInterior = !meshTopoView->getCell(cellID)->isBoundary(sideOrdinal);
+      cellHasInteriorSide.push_back(isInterior);
+    }
+  }
+
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  {
+    bool weight = 1.0;
+    if (divideByTwoForInteriorSides && cellHasInteriorSide[cellOrdinal])
+    {
+      weight = 0.5;
+    }
+    sum += cellIntegrals[cellOrdinal] * weight;
   }
   return sum;
 }
@@ -2426,28 +2447,26 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
 template <typename Scalar>
 Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache, bool spatialSidesOnly)
 {
+  int rank = mesh->Comm()->MyPID();
+  vector< ElementTypePtr > elementTypes = mesh->elementTypes(rank);
+  
   Scalar integral = 0;
-  MeshTopologyViewPtr meshTopoView = mesh->getTopology();
-
-  set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
-  for (GlobalIndexType cellID : cellIDs)
+  
+  for (ElementTypePtr elemType : elementTypes)
   {
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
+    int numCellsForElemType = mesh->cellIDsOfType(elemType).size();
+    if (numCellsForElemType == 0) continue;
+
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType, testVsTest, cubatureDegreeEnrichment);
+  
     if ( this->boundaryValueOnly() )
     {
-      ElementTypePtr elemType = mesh->getElementType(cellID);
       int numSides = elemType->cellTopoPtr->getSideCount();
 
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
       {
         if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(sideOrdinal)) continue; // skip non-spatial sides if spatialSidesOnly is true
         Scalar sideIntegral = this->integrate(basisCache->getSideBasisCache(sideOrdinal));
-        // this will hit each interior side twice; therefore we divide by two if the side is interior
-        auto neighborCell = meshTopoView->getCell(cellID)->getNeighbor(sideOrdinal, meshTopoView);
-        if (neighborCell != Teuchos::null) // interior side, then
-        {
-          sideIntegral /= 2.0;
-        }
         integral += sideIntegral;
       }
     }

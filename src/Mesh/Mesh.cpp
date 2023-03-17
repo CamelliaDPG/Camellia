@@ -1257,23 +1257,8 @@ Camellia::FieldContainer<double> Mesh::physicalCellNodes( vector<GlobalIndexType
 
 Camellia::FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID )
 {
-  CellPtr cell = _meshTopology->getCell(cellID);
-  int vertexCount = cell->topology()->getVertexCount();
-  int spaceDim = _meshTopology->getDimension();
-  int numCells = 1;
-  Camellia::FieldContainer<double> physicalCellNodes(numCells,vertexCount,spaceDim);
-
-  Camellia::FieldContainer<double> cellVertices(vertexCount,spaceDim);
-  vector<IndexType> vertexIndices = _meshTopology->getCell(cellID)->vertices();
-  for (int vertex=0; vertex<vertexCount; vertex++)
-  {
-    IndexType vertexIndex = vertexIndices[vertex];
-    for (int i=0; i<spaceDim; i++)
-    {
-      physicalCellNodes(0,vertex,i) = _meshTopology->getVertex(vertexIndex)[i];
-    }
-  }
-  return physicalCellNodes;
+  const bool includeCellDimension = true;
+  return _meshTopology->physicalCellNodesForCell(cellID, includeCellDimension);
 }
 
 Camellia::FieldContainer<double> Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr )
