@@ -693,7 +693,7 @@ public:
     const double permittivity = 8.85418782e-12; // permittivity of free space
     
     const double dE_dt       = (_Ekp1r - _Ekr) / _dt;
-    const double I_drive     = _Iem - _A * permittivity * dE_dt;
+    const double I_drive     = _Iem + permittivity * dE_dt;
     const double numerator   = _C * _Vk - _dt * _Ik + _dt * I_drive;
     const double denominator = _C + (_R * _C / _L) * _dt + _dt * _dt / _L;
     
@@ -704,7 +704,7 @@ public:
       std::cout << "E_{k}_l                  = " << _Ekl   << std::endl;
       std::cout << "E_{k+1}_r                = " << _Ekp1r << std::endl;
       std::cout << "E_{k}_r                  = " << _Ekr   << std::endl;
-      std::cout << "A * permittivity * dE_dt = " << _A * permittivity * dE_dt << std::endl;
+      std::cout << "permittivity * dE_dt     = " << permittivity * dE_dt << std::endl;
       std::cout << "I_{em}                   = " << _Iem  << std::endl;
       std::cout << "I_k                      = " << _Ik   << std::endl;
       std::cout << "V_k                      = " << _Vk   << std::endl;
@@ -1088,14 +1088,21 @@ int main(int argc, char *argv[])
     FunctionPtr I_em;
     double I_k = 0;
     
+    FunctionPtr E_k_star, E_kp1_star;
+    FunctionPtr I_em_star;
+    
     // voltageParameter is a "ParameterFunction" -- we need fill it in with an appropriate value
     {
-      VarPtr E = poissonConfig->E_hat(0); // 0: x component
+      VarPtr E = poissonConfig->E_fieldVar(0); // 0: x component
       
       bool weightFluxesBySideParity = false;
       E_k   = Function::solution(E, poissonConfig->solutionPriorTime(), weightFluxesBySideParity) * EScaling;
       E_kp1 = Function::solution(E, poissonConfig->solution(),          weightFluxesBySideParity) * EScaling;
-      I_em  = moments_kp1->solutionMomentFunction(1) * currentScaling;
+      I_em  = moments_kp1->solutionMomentFunction(1) * q * currentScaling;
+      
+      E_k_star   = Function::solution(E, poissonConfig->solutionPriorTime(), weightFluxesBySideParity);
+      E_kp1_star = Function::solution(E, poissonConfig->solution(),          weightFluxesBySideParity);
+      I_em_star  = moments_kp1->solutionMomentFunction(1) * q;
     }
     
     // prior-time voltage: start at 0.
@@ -1308,7 +1315,7 @@ int main(int argc, char *argv[])
     double lastRefinementMaxElementError = 0.0;
     
     std::ofstream circuitResultsFileStream(circuitResultsFile, std::ios::out);
-    circuitResultsFileStream << "t\tV\tE\tI\tI_em(x1)\tI_disp(x1)\tI_tot(x1)\tI_em(x0)\tI_disp(x0)\tI_tot(x0)\n"; // time, voltage, E-field, current, I emission at x1, displacement current at x1, total current at x1, I emission at x0, displacement current at x0, total current at x0
+    circuitResultsFileStream << "t\tV\tE\tI\tJ_em(x1)\tJ_disp(x1)\tJ_tot(x1)\tJ_em(x0)\tJ_disp(x0)\tJ_tot(x0)\n"; // time, voltage, E-field, current, I emission at x1, displacement current at x1, total current at x1, I emission at x0, displacement current at x0, total current at x0
     
     /*
      circuitResultsFileStream << Iem_value << "\t";
@@ -1395,6 +1402,32 @@ int main(int argc, char *argv[])
         const double Iem_value    = getSolutionFunctionValue(configMesh, I_em,  x1);
         const double Iem_value_0  = getSolutionFunctionValue(configMesh, I_em,  x0);
         
+        const double Ek_value_l_star   = getSolutionFunctionValue(configMesh, E_k_star,   x0);
+        const double Ekp1_value_l_star = getSolutionFunctionValue(configMesh, E_kp1_star, x0);
+        const double Ek_value_r_star   = getSolutionFunctionValue(configMesh, E_k_star,   x1);
+        const double Ekp1_value_r_star = getSolutionFunctionValue(configMesh, E_kp1_star, x1);
+        const double Iem_value_star    = getSolutionFunctionValue(configMesh, I_em_star,  x1);
+        const double Iem_value_0_star  = getSolutionFunctionValue(configMesh, I_em_star,  x0);
+        
+        // compute at two points in the middle, m1 and m2:
+        const double m0 = x0 + 1.0 * (x1-x0) / 3.0;
+        const double m1 = x0 + 2.0 * (x1-x0) / 3.0;
+        const double Ek_value_m0_star   = getSolutionFunctionValue(configMesh, E_k_star,   m0);
+        const double Ekp1_value_m0_star = getSolutionFunctionValue(configMesh, E_kp1_star, m0);
+        const double Ek_value_m1_star   = getSolutionFunctionValue(configMesh, E_k_star,   m1);
+        const double Ekp1_value_m1_star = getSolutionFunctionValue(configMesh, E_kp1_star, m1);
+        const double Iem_value_m0_star  = getSolutionFunctionValue(configMesh, I_em_star,  m0);
+        const double Iem_value_m1_star  = getSolutionFunctionValue(configMesh, I_em_star,  m1);
+        
+        const double J_total_l  = Iem_value_0_star  + eps0 * (Ekp1_value_l_star  - Ek_value_l_star)  / dt;
+        const double J_total_m0 = Iem_value_m0_star + eps0 * (Ekp1_value_m0_star - Ek_value_m0_star) / dt;
+        const double J_total_m1 = Iem_value_m1_star + eps0 * (Ekp1_value_m1_star - Ek_value_m1_star) / dt;
+        const double J_total_r  = Iem_value_star    + eps0 * (Ekp1_value_r_star  - Ek_value_r_star)  / dt;
+        std::cout << "Non-dimensional total current (x0): " << J_total_l  << std::endl;
+        std::cout << "Non-dimensional total current (m0): " << J_total_m0 << std::endl;
+        std::cout << "Non-dimensional total current (m1): " << J_total_m1 << std::endl;
+        std::cout << "Non-dimensional total current (x1): " << J_total_r  << std::endl;
+        
         circuitSolver.setEk  ( Ek_value_l,   Ek_value_r   );
         circuitSolver.setEkp1( Ekp1_value_l, Ekp1_value_r );
         circuitSolver.setIk  ( I_k       );
@@ -1410,18 +1443,21 @@ int main(int argc, char *argv[])
         // time, voltage, E-field, current -- note the circuit solver uses physical units
         
         const double permittivity = 8.85418782e-12; // permittivity of free space
-        const double I_total_1 = Iem_value   - A * permittivity * (Ekp1_value_r - Ek_value_r) / dt;
-        const double I_total_0 = Iem_value_0 - A * permittivity * (Ekp1_value_l - Ek_value_l) / dt;
+        const double I_total_1 = Iem_value   + permittivity * (Ekp1_value_r - Ek_value_r) / dt;
+        const double I_total_0 = Iem_value_0 + permittivity * (Ekp1_value_l - Ek_value_l) / dt;
+        
+        std::cout << "Physical total current density (x0): " << I_total_0 << std::endl;
+        std::cout << "Physical total current density (x1): " << I_total_1 << std::endl;
         
         circuitResultsFileStream << t * timeScaling << "\t";
         circuitResultsFileStream << V_k << "\t";
         circuitResultsFileStream << Ekp1_value_r << "\t";
         circuitResultsFileStream << I_k << "\t";
         circuitResultsFileStream << Iem_value << "\t";
-        circuitResultsFileStream << -A * permittivity * (Ekp1_value_r - Ek_value_r) / dt << "\t";
+        circuitResultsFileStream << permittivity * (Ekp1_value_r - Ek_value_r) / dt << "\t";
         circuitResultsFileStream << I_total_1 << "\t";
         circuitResultsFileStream << Iem_value_0 << "\t";
-        circuitResultsFileStream << -A * permittivity * (Ekp1_value_l - Ek_value_l) / dt << "\t";
+        circuitResultsFileStream << permittivity * (Ekp1_value_l - Ek_value_l) / dt << "\t";
         circuitResultsFileStream << I_total_0 << "\n";
         circuitResultsFileStream.flush();
       }
