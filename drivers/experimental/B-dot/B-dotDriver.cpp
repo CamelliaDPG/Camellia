@@ -1423,10 +1423,14 @@ int main(int argc, char *argv[])
         const double J_total_m0 = Iem_value_m0_star + eps0 * (Ekp1_value_m0_star - Ek_value_m0_star) / dt;
         const double J_total_m1 = Iem_value_m1_star + eps0 * (Ekp1_value_m1_star - Ek_value_m1_star) / dt;
         const double J_total_r  = Iem_value_star    + eps0 * (Ekp1_value_r_star  - Ek_value_r_star)  / dt;
-        std::cout << "Non-dimensional total current (x0): " << J_total_l  << std::endl;
-        std::cout << "Non-dimensional total current (m0): " << J_total_m0 << std::endl;
-        std::cout << "Non-dimensional total current (m1): " << J_total_m1 << std::endl;
-        std::cout << "Non-dimensional total current (x1): " << J_total_r  << std::endl;
+        
+        if (rank == 0)
+        {
+          std::cout << "Non-dimensional total current (x0): " << J_total_l  << std::endl;
+          std::cout << "Non-dimensional total current (m0): " << J_total_m0 << std::endl;
+          std::cout << "Non-dimensional total current (m1): " << J_total_m1 << std::endl;
+          std::cout << "Non-dimensional total current (x1): " << J_total_r  << std::endl;
+        }
         
         circuitSolver.setEk  ( Ek_value_l,   Ek_value_r   );
         circuitSolver.setEkp1( Ekp1_value_l, Ekp1_value_r );
@@ -1443,21 +1447,24 @@ int main(int argc, char *argv[])
         // time, voltage, E-field, current -- note the circuit solver uses physical units
         
         const double permittivity = 8.85418782e-12; // permittivity of free space
-        const double I_total_1 = Iem_value   + permittivity * (Ekp1_value_r - Ek_value_r) / dt;
-        const double I_total_0 = Iem_value_0 + permittivity * (Ekp1_value_l - Ek_value_l) / dt;
+        const double I_total_1 = Iem_value   + permittivity * (Ekp1_value_r - Ek_value_r) / (dt * timeScaling);
+        const double I_total_0 = Iem_value_0 + permittivity * (Ekp1_value_l - Ek_value_l) / (dt * timeScaling);
         
-        std::cout << "Physical total current density (x0): " << I_total_0 << std::endl;
-        std::cout << "Physical total current density (x1): " << I_total_1 << std::endl;
+        if (rank == 0)
+        {
+          std::cout << "Physical total current density (x0): " << I_total_0 << std::endl;
+          std::cout << "Physical total current density (x1): " << I_total_1 << std::endl;
+        }
         
         circuitResultsFileStream << t * timeScaling << "\t";
         circuitResultsFileStream << V_k << "\t";
         circuitResultsFileStream << Ekp1_value_r << "\t";
         circuitResultsFileStream << I_k << "\t";
         circuitResultsFileStream << Iem_value << "\t";
-        circuitResultsFileStream << permittivity * (Ekp1_value_r - Ek_value_r) / dt << "\t";
+        circuitResultsFileStream << permittivity * (Ekp1_value_r - Ek_value_r) / (dt * timeScaling) << "\t";
         circuitResultsFileStream << I_total_1 << "\t";
         circuitResultsFileStream << Iem_value_0 << "\t";
-        circuitResultsFileStream << permittivity * (Ekp1_value_l - Ek_value_l) / dt << "\t";
+        circuitResultsFileStream << permittivity * (Ekp1_value_l - Ek_value_l) / (dt * timeScaling) << "\t";
         circuitResultsFileStream << I_total_0 << "\n";
         circuitResultsFileStream.flush();
       }
