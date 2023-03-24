@@ -693,7 +693,7 @@ public:
     const double permittivity = 8.85418782e-12; // permittivity of free space
     
     const double dE_dt       = (_Ekp1r - _Ekr) / _dt;
-    const double I_drive     = _Iem + permittivity * dE_dt;
+    const double I_drive     = _A * (_Iem + permittivity * dE_dt);
     const double numerator   = _C * _Vk - _dt * _Ik + _dt * I_drive;
     const double denominator = _C + (_R * _C / _L) * _dt + _dt * _dt / _L;
     
@@ -870,6 +870,9 @@ int main(int argc, char *argv[])
     double L = 6.88e-9;  // 6.88 nH
     double C = 24.0e-12; // 24 pF
     
+    const double permittivity = 8.85418782e-12; // permittivity of free space
+
+    
     // v can range from 0 to 1; we pad the domain to extend from -0.5 to 1.5.
     const double DEFAULT_V0     = -0.50;
     const double DEFAULT_VWIDTH =  2.00;
@@ -987,9 +990,7 @@ int main(int argc, char *argv[])
       potentialScaling = EScaling * spatialScaling;
       
       xWidth = physicalGapWidth / spatialScaling; // 1 [mm] = .001 [m] gap
-      
-      const double permittivity = 8.85418782e-12; // permittivity of free space
-      
+            
       // (the J-based determination is what we did in cold diode problem)
 //      const double J  = ??; // current density [A/m^2]
 //      nScaling        = J / (e * velocityScaling); // number density of plasma
@@ -1003,8 +1004,6 @@ int main(int argc, char *argv[])
       A = M_PI * r_e * r_e; // area at emission surface
       const double surfacePhotons = sourcePhotons / 4 * std::log(1. + r_e * r_e / (r_f * r_f));
       n0 = surfacePhotons * quantumEfficiency;
-      
-      currentScaling = n0 * e / timeScaling; // TODO: confirm this scaling is correct
       
       const double omega_p = q0 * sqrt( n0 / (m0 * permittivity));
 //      std::cout << "omega_p = sqrt(n0) * " << q0 * sqrt( 1.0 / (m0 * permittivity)) << std::endl;
@@ -1021,6 +1020,13 @@ int main(int argc, char *argv[])
         eps0 = overrideEps0;
       }
       
+      // we know that total current (density) is Iem + eps0 * dE / dt
+      // we have a scaling for eps0: it's our eps0 divided by the physical permittivity of free space
+      // we also have a scaling for E: EScaling
+      // and for t: timeScaling
+      // so the currentScaling should be (permittivity / eps0) * EScaling / timeScaling
+      
+      currentScaling = (permittivity / eps0) * EScaling / timeScaling;
       
       if (rank == 0)
       {
@@ -1446,7 +1452,6 @@ int main(int argc, char *argv[])
         // record the k+1 values (V_k is actually V_kp1 now; I_k is I_kp1)
         // time, voltage, E-field, current -- note the circuit solver uses physical units
         
-        const double permittivity = 8.85418782e-12; // permittivity of free space
         const double I_total_1 = Iem_value   + permittivity * (Ekp1_value_r - Ek_value_r) / (dt * timeScaling);
         const double I_total_0 = Iem_value_0 + permittivity * (Ekp1_value_l - Ek_value_l) / (dt * timeScaling);
         
