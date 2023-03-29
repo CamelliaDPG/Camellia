@@ -344,7 +344,7 @@ void interpolateToFineSolution(VarPtr var, SolutionPtr coarseSolution, SolutionP
     const SubBasisReconciliationWeights & weights = br.constrainedWeights(fineBasis, fineCellRefBranchToAncestor, coarseBasis, 0);
     
     // it should be the case that weights has entries for each coarse coefficient
-    TEUCHOS_TEST_FOR_EXCEPTION(weights.coarseOrdinals.size() != coarseBasisCardinality, std::invalid_argument, "invalid coarseOrdinals set");
+    TEUCHOS_TEST_FOR_EXCEPTION(int(weights.coarseOrdinals.size()) != coarseBasisCardinality, std::invalid_argument, "invalid coarseOrdinals set");
     
     fineBasisCoefficients.resize(fineBasis->getCardinality()); // 1: cell dimension (projection below could happen for multiple cells; we're doing just one.)
     fineBasisCoefficients.initialize(0.0);
@@ -354,7 +354,7 @@ void interpolateToFineSolution(VarPtr var, SolutionPtr coarseSolution, SolutionP
     {
       const double & coarseCoefficient = coarseBasisCoefficients(coarseDofOrdinal);
       auto fineIter = fineDofOrdinals.begin();
-      for (int i=0; i<fineDofOrdinals.size(); i++)
+      for (int i=0; i<int(fineDofOrdinals.size()); i++)
       {
         int fineDofOrdinal = *fineIter++;
         fineBasisCoefficients(fineDofOrdinal) += coarseCoefficient * weights.weights(i,coarseDofOrdinal);
@@ -362,7 +362,7 @@ void interpolateToFineSolution(VarPtr var, SolutionPtr coarseSolution, SolutionP
     }
     
     auto fineCellAllCoefficients = fineSolution->allCoefficientsForCellID(fineCellID);
-    for (auto dofOrdinal=0; dofOrdinal<fineDofIndices.size(); dofOrdinal++)
+    for (auto dofOrdinal=0; dofOrdinal<int(fineDofIndices.size()); dofOrdinal++)
     {
       const auto & dofIndex = fineDofIndices[dofOrdinal];
       fineCellAllCoefficients(dofIndex) = fineBasisCoefficients(0,dofOrdinal);
@@ -439,7 +439,7 @@ std::map<GlobalIndexType, std::vector<double> > readOverkillSolutionCoefficients
     GlobalIndexType cellCount;
     solnFileStream.read((char*) &cellCount, sizeof(cellCount));
     
-    TEUCHOS_TEST_FOR_EXCEPTION(cellCount != allActiveCellIDs.size(), std::invalid_argument, "Invalid cell count");
+    TEUCHOS_TEST_FOR_EXCEPTION(cellCount != int(allActiveCellIDs.size()), std::invalid_argument, "Invalid cell count");
     
     for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
     {
@@ -453,7 +453,7 @@ std::map<GlobalIndexType, std::vector<double> > readOverkillSolutionCoefficients
       int dofCount;
       solnFileStream.read((char*) &dofCount, sizeof(dofCount));
       
-      TEUCHOS_TEST_FOR_EXCEPTION(dofCount != dofIndices.size(), std::invalid_argument, "Invalid dof count");
+      TEUCHOS_TEST_FOR_EXCEPTION(dofCount != int(dofIndices.size()), std::invalid_argument, "Invalid dof count");
       
       std::vector<double> coefficients(dofCount);
       
@@ -476,7 +476,7 @@ std::map<GlobalIndexType, std::vector<double> > readOverkillSolutionCoefficients
   {
     int dofCount = fineForm.vlasovMesh()->getElementType(cellID)->trialOrderPtr->getBasisCardinality(f->ID(), VOLUME_INTERIOR_SIDE_INDEX);
     
-    TEUCHOS_TEST_FOR_EXCEPTION(dofCount + offset > receivedPackedSolution.size(), std::invalid_argument, "out of bounds");
+    TEUCHOS_TEST_FOR_EXCEPTION(dofCount + offset > int(receivedPackedSolution.size()), std::invalid_argument, "out of bounds");
     
     std::vector<double> coefficients(receivedPackedSolution.begin() + offset, receivedPackedSolution.begin() + offset + dofCount);
     
@@ -670,7 +670,7 @@ double overkillSolutionErrorL2Norm(VarPtr fieldVar, SolutionPtr interpolatedSolu
         TEUCHOS_TEST_FOR_EXCEPTION(overkillEntry == localOverkillSolution.end(), std::invalid_argument, "entry for overkill solution not found");
         
         const auto &overkillSoln    = overkillEntry->second;
-        TEUCHOS_TEST_FOR_EXCEPTION(overkillSoln.size() != dofCount, std::invalid_argument, "overkill solution sized incorrectly");
+        TEUCHOS_TEST_FOR_EXCEPTION(int(overkillSoln.size()) != dofCount, std::invalid_argument, "overkill solution sized incorrectly");
         
         for (int dofOrdinal=0; dofOrdinal<dofCount; dofOrdinal++)
         {
@@ -683,7 +683,7 @@ double overkillSolutionErrorL2Norm(VarPtr fieldVar, SolutionPtr interpolatedSolu
         TEUCHOS_TEST_FOR_EXCEPTION(overkillEntry == localOverkillSolution.end(), std::invalid_argument, "entry for overkill solution not found");
         
         const auto &overkillSoln    = overkillEntry->second;
-        TEUCHOS_TEST_FOR_EXCEPTION(overkillSoln.size() != dofCount, std::invalid_argument, "overkill solution sized incorrectly");
+        TEUCHOS_TEST_FOR_EXCEPTION(int(overkillSoln.size()) != dofCount, std::invalid_argument, "overkill solution sized incorrectly");
         
         for (int dofOrdinal=0; dofOrdinal<dofCount; dofOrdinal++)
         {
@@ -1265,6 +1265,8 @@ int main(int argc, char *argv[])
     
     mpiSession.barrier();
     
+    const bool useSerendipity = false; // this driver does not support the use of Serendipity bases
+    
     double k_x    = 0.2; // wavelength
     double u0     = 3.0; // initial drift velocity
     double gamma  = 1e-3; // initial perturbation
@@ -1277,8 +1279,6 @@ int main(int argc, char *argv[])
     double x0     =  0.0;
     double xWidth =  2 * M_PI / k_x;
     
-    const double DEFAULT_V0     = 0.50;
-    const double DEFAULT_VWIDTH = 1.00;
     double v0     = std::numeric_limits<double>::infinity();
     double vWidth = std::numeric_limits<double>::infinity();
     
@@ -1387,7 +1387,6 @@ int main(int argc, char *argv[])
     
     // for cold diode, we non-dimensionalize; we modify the below accordingly so that we can output dimensional values to results file.
     double velocityScaling = 1.;
-    double timeScaling     = 1.;
     double spatialScaling  = 1.;
     double EScaling        = 1.;
     double nScaling         = 1.;
@@ -1420,7 +1419,7 @@ int main(int argc, char *argv[])
     }
     
     double dt = dt_max;
-    VlasovBackwardEulerFormulation form(q, eps0, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
 //    poissonConfig->configurationSpaceMesh()->bilinearForm()->printTrialTestInteractions();
     form.refineUniformly(numUniformRefinements);
     form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
@@ -1459,7 +1458,7 @@ int main(int argc, char *argv[])
     if (convertOverkillSolutionFiles)
     {
       auto finePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
-      VlasovBackwardEulerFormulation fineForm(q, eps0, finePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+      VlasovBackwardEulerFormulation fineForm(q, m, useSerendipity, finePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
       fineForm.refineUniformly(numUniformRefinements + overkillRefinementLevel);
       fineForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
       setPoissonBC(fineForm, x0);
@@ -1471,9 +1470,9 @@ int main(int argc, char *argv[])
       auto     finePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
       auto adaptivePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
       auto   modestPoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
-      VlasovBackwardEulerFormulation     fineForm(q, eps0,     finePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
-      VlasovBackwardEulerFormulation adaptiveForm(q, eps0, adaptivePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
-      VlasovBackwardEulerFormulation   modestForm(q, eps0,   modestPoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+      VlasovBackwardEulerFormulation     fineForm(q, m, useSerendipity,     finePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+      VlasovBackwardEulerFormulation adaptiveForm(q, m, useSerendipity, adaptivePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+      VlasovBackwardEulerFormulation   modestForm(q, m, useSerendipity,   modestPoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
       
       fineForm.refineUniformly(numUniformRefinements + overkillRefinementLevel);
       fineForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
@@ -1910,14 +1909,6 @@ int main(int argc, char *argv[])
       // ultimately, we want E-field, velocity, and some other things
       // to begin with, let's output the E-field values computed at quadrature points at final time
             
-      // the di() methods are 1-based:
-      static const int SPATIAL_INDEX  = 1;
-      static const int VELOCITY_INDEX = 1;
-      
-      // SpatialFilter's components are zero-based
-      static const int SPATIAL_INDEX_ZERO_BASED  = SPATIAL_INDEX  - 1;
-      static const int VELOCITY_INDEX_ZERO_BASED = VELOCITY_INDEX - 1;
-      
       auto allActivePhysicalCells = form.configurationSpaceMesh()->getActiveCellIDsGlobal();
       
       form.configurationSpaceSolution()->importSolutionForOffRankCells(allActivePhysicalCells);
@@ -1961,7 +1952,7 @@ int main(int argc, char *argv[])
         
         const int numCells         = physicalQuadraturePoints.dimension(0);
         
-        for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
         {
           const double cellWidth = physicalCellNodes(cellOrdinal,1,0) - physicalCellNodes(cellOrdinal,0,0);
           for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
@@ -2005,7 +1996,7 @@ int main(int argc, char *argv[])
         std::ofstream spatialMeshFileStream(spatialMeshFile, std::ios::out);
         // let's collect the spatial nodes and sort them
         std::set<double> spatialNodes;
-        for (int cellOrdinal=0; cellOrdinal<physicalCellIDsVector.size(); cellOrdinal++)
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
         {
           spatialNodes.insert(physicalCellNodes(cellOrdinal,0,0)); // (min x, min t)
           spatialNodes.insert(physicalCellNodes(cellOrdinal,1,0)); // (max x, min t)
