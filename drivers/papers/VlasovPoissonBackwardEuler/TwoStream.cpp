@@ -779,6 +779,8 @@ void runAdaptiveComparisonExperiment(VlasovBackwardEulerFormulation &adaptiveFor
     fineForm.setFixedPointMaxSubsteps(maxSubsteps);
     fineForm.setFixedPointTolerance(1e-6);
     
+    fineForm.setUseGeometricMultigrid(true);
+    
     auto f = fineForm.f();
     int timeStepNumber = 0;
     int solutionNumber = 0;
@@ -1126,6 +1128,9 @@ void runAdaptiveComparisonExperiment(VlasovBackwardEulerFormulation &adaptiveFor
   Epetra_Map timeMap(numProcs,indexBase,*comm);
     
   double lastRefinementMaxElementError = 0.0;
+  
+  adaptiveForm.setUseGeometricMultigrid(true);
+  modestForm.setUseGeometricMultigrid(true);
   
   for (timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
   {
@@ -1491,6 +1496,18 @@ int main(int argc, char *argv[])
       modestForm.refineUniformly(numUniformRefinements + uniformMeshRefinementLevel);
       modestForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
       setPoissonBC(modestForm, x0);
+      
+      fineForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+      fineForm.setIterativeSolveOutputLevel(0); // run quietly
+      fineForm.setIterativeSolveTolerance(iterativeSolveTolerance);
+      
+      modestForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+      modestForm.setIterativeSolveOutputLevel(0); // run quietly
+      modestForm.setIterativeSolveTolerance(iterativeSolveTolerance);
+      
+      adaptiveForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+      adaptiveForm.setIterativeSolveOutputLevel(0); // run quietly
+      adaptiveForm.setIterativeSolveTolerance(iterativeSolveTolerance);
       
       const int maxAdaptiveMeshElements = modestForm.vlasovMesh()->numActiveElements();
       
