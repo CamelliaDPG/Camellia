@@ -1458,7 +1458,8 @@ int main(int argc, char *argv[])
     if (convertOverkillSolutionFiles)
     {
       auto finePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
-      VlasovBackwardEulerFormulation fineForm(q, m, useSerendipity, finePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+      auto fineSpatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
+      VlasovBackwardEulerFormulation fineForm(q, m, useSerendipity, finePoissonConfig, fineSpatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
       fineForm.refineUniformly(numUniformRefinements + overkillRefinementLevel);
       fineForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
       setPoissonBC(fineForm, x0);
@@ -1470,9 +1471,14 @@ int main(int argc, char *argv[])
       auto     finePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
       auto adaptivePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
       auto   modestPoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
-      VlasovBackwardEulerFormulation     fineForm(q, m, useSerendipity,     finePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
-      VlasovBackwardEulerFormulation adaptiveForm(q, m, useSerendipity, adaptivePoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
-      VlasovBackwardEulerFormulation   modestForm(q, m, useSerendipity,   modestPoissonConfig, spatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+      
+      // although these MeshTopo's begin identical, they get modified during uniform refinements; we want a distinct one for each formulation instance.
+      auto fineSpatialMeshTopo     = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
+      auto adaptiveSpatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
+      auto modestSpatialMeshTopo   = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
+      VlasovBackwardEulerFormulation     fineForm(q, m, useSerendipity,     finePoissonConfig, fineSpatialMeshTopo,     dt, vxVertices, overkillH1Order, delta_k);
+      VlasovBackwardEulerFormulation adaptiveForm(q, m, useSerendipity, adaptivePoissonConfig, adaptiveSpatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+      VlasovBackwardEulerFormulation   modestForm(q, m, useSerendipity,   modestPoissonConfig, modestSpatialMeshTopo,   dt, vxVertices, overkillH1Order, delta_k);
       
       fineForm.refineUniformly(numUniformRefinements + overkillRefinementLevel);
       fineForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
