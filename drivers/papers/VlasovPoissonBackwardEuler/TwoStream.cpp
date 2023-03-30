@@ -1324,7 +1324,7 @@ int main(int argc, char *argv[])
     int overkillTimeStepsBetweenComparisons = 1;
     int solutionComparisonFrequency = 1;
     int iterativeSolveOutputLevel = 100; // output every one hundred CG iterations
-    double iterativeSolveTolerance = 1e-9;
+    double iterativeSolveTolerance = 1e-8;
     double iterativeSolveMaxIters  = 10000;
     int maxDofsForDirectSolve = 20000;
     int fixedCountRefinementTarget = -1; // set to positive number to used fixed-count ref strategy instead of greedy strategy
