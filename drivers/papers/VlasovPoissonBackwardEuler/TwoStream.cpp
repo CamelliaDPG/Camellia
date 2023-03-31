@@ -1424,26 +1424,6 @@ int main(int argc, char *argv[])
     }
     
     double dt = dt_max;
-    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
-//    poissonConfig->configurationSpaceMesh()->bilinearForm()->printTrialTestInteractions();
-    form.refineUniformly(numUniformRefinements);
-    form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-    setPoissonBC(form, x0);
-    
-    RefinementStrategyPtr formRefStrategy;
-    
-    form.setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
-    form.setIterativeSolveTolerance(iterativeSolveTolerance);
-    std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
-    if (maxSubsteps > 3)
-    {
-      // use looser tolerances for the first couple steps
-      cgTols[0] = iterativeSolveTolerance * 100.0;
-      cgTols[1] = iterativeSolveTolerance * 10.0;
-      form.setIterativeSolveTolerances(cgTols);
-    }
-    form.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
-    form.setFixedPointTolerance(fixedPointTol);
     
     FunctionPtr f0;
     FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
@@ -1473,57 +1453,80 @@ int main(int argc, char *argv[])
     }
     else if (runOverkillVersusAdaptiveComparison)
     {
-      auto     finePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
-      auto adaptivePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
-      auto   modestPoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
-      
-      // although these MeshTopo's begin identical, they get modified during uniform refinements; we want a distinct one for each formulation instance.
-      auto fineSpatialMeshTopo     = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
-      auto adaptiveSpatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
-      auto modestSpatialMeshTopo   = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
-      VlasovBackwardEulerFormulation     fineForm(q, m, useSerendipity,     finePoissonConfig, fineSpatialMeshTopo,     dt, vxVertices, overkillH1Order, delta_k);
-      VlasovBackwardEulerFormulation adaptiveForm(q, m, useSerendipity, adaptivePoissonConfig, adaptiveSpatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
-      VlasovBackwardEulerFormulation   modestForm(q, m, useSerendipity,   modestPoissonConfig, modestSpatialMeshTopo,   dt, vxVertices, overkillH1Order, delta_k);
-      
-      fineForm.refineUniformly(numUniformRefinements + overkillRefinementLevel);
-      fineForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-      setPoissonBC(fineForm, x0);
-      
-      adaptiveForm.refineUniformly(numUniformRefinements);
-      adaptiveForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-      setPoissonBC(adaptiveForm, x0);
-      
-      modestForm.refineUniformly(numUniformRefinements + uniformMeshRefinementLevel);
-      modestForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-      setPoissonBC(modestForm, x0);
-      
-      fineForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
-      fineForm.setIterativeSolveOutputLevel(0); // run quietly
-      fineForm.setIterativeSolveTolerance(iterativeSolveTolerance);
-      
-      modestForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
-      modestForm.setIterativeSolveOutputLevel(0); // run quietly
-      modestForm.setIterativeSolveTolerance(iterativeSolveTolerance);
-      
-      adaptiveForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
-      adaptiveForm.setIterativeSolveOutputLevel(0); // run quietly
-      adaptiveForm.setIterativeSolveTolerance(iterativeSolveTolerance);
-      
-      const int maxAdaptiveMeshElements = modestForm.vlasovMesh()->numActiveElements();
-      
-      if (overkillSolutionDir == "")
+      // block off variables so that everything gets destructed before the finalize() call at the end.
       {
-        std::cout << "overkillSolutionDir must be specified!\n";
-        exit(1);
+        auto     finePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
+        auto adaptivePoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
+        auto   modestPoissonConfig = ConfigurationSpaceFormulation::poissonFormulation(q, eps0, TIME_MARCHING);
+        
+        // although these MeshTopo's begin identical, they get modified during uniform refinements; we want a distinct one for each formulation instance.
+        auto fineSpatialMeshTopo     = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
+        auto adaptiveSpatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
+        auto modestSpatialMeshTopo   = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, xElements, usePeriodicBCs);
+        VlasovBackwardEulerFormulation     fineForm(q, m, useSerendipity,     finePoissonConfig, fineSpatialMeshTopo,     dt, vxVertices, overkillH1Order, delta_k);
+        VlasovBackwardEulerFormulation adaptiveForm(q, m, useSerendipity, adaptivePoissonConfig, adaptiveSpatialMeshTopo, dt, vxVertices, overkillH1Order, delta_k);
+        VlasovBackwardEulerFormulation   modestForm(q, m, useSerendipity,   modestPoissonConfig, modestSpatialMeshTopo,   dt, vxVertices, overkillH1Order, delta_k);
+        
+        fineForm.refineUniformly(numUniformRefinements + overkillRefinementLevel);
+        fineForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
+        setPoissonBC(fineForm, x0);
+        
+        adaptiveForm.refineUniformly(numUniformRefinements);
+        adaptiveForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
+        setPoissonBC(adaptiveForm, x0);
+        
+        modestForm.refineUniformly(numUniformRefinements + uniformMeshRefinementLevel);
+        modestForm.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
+        setPoissonBC(modestForm, x0);
+        
+        fineForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+        fineForm.setIterativeSolveOutputLevel(0); // run quietly
+        fineForm.setIterativeSolveTolerance(iterativeSolveTolerance);
+        
+        modestForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+        modestForm.setIterativeSolveOutputLevel(0); // run quietly
+        modestForm.setIterativeSolveTolerance(iterativeSolveTolerance);
+        
+        adaptiveForm.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+        adaptiveForm.setIterativeSolveOutputLevel(0); // run quietly
+        adaptiveForm.setIterativeSolveTolerance(iterativeSolveTolerance);
+        
+        const int maxAdaptiveMeshElements = modestForm.vlasovMesh()->numActiveElements();
+        
+        if (overkillSolutionDir == "")
+        {
+          std::cout << "overkillSolutionDir must be specified!\n";
+          exit(1);
+        }
+        
+        runAdaptiveComparisonExperiment(adaptiveForm, fineForm, modestForm, refinementThreshold, gateRefinements, maxAdaptiveMeshElements, numUniformRefinements+overkillRefinementLevel, f0, numTimeSteps, dt, outputDir, saveOverkillSolutionAndQuit, overkillSolutionDir, saveViz, useEnergyForUnrefinements, solutionOutputFrequency, solutionComparisonFrequency, overkillTimeStepsBetweenComparisons );
       }
-      
-      runAdaptiveComparisonExperiment(adaptiveForm, fineForm, modestForm, refinementThreshold, gateRefinements, maxAdaptiveMeshElements, numUniformRefinements+overkillRefinementLevel, f0, numTimeSteps, dt, outputDir, saveOverkillSolutionAndQuit, overkillSolutionDir, saveViz, useEnergyForUnrefinements, solutionOutputFrequency, solutionComparisonFrequency, overkillTimeStepsBetweenComparisons );
-      
       const bool printAllocationReport = true;
       Camellia::finalize(printAllocationReport);
       
       return 0; // exit
     }
+    
+    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+//    poissonConfig->configurationSpaceMesh()->bilinearForm()->printTrialTestInteractions();
+    form.refineUniformly(numUniformRefinements);
+    form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
+    setPoissonBC(form, x0);
+    
+    RefinementStrategyPtr formRefStrategy;
+    
+    form.setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
+    form.setIterativeSolveTolerance(iterativeSolveTolerance);
+    std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
+    if (maxSubsteps > 3)
+    {
+      // use looser tolerances for the first couple steps
+      cgTols[0] = iterativeSolveTolerance * 100.0;
+      cgTols[1] = iterativeSolveTolerance * 10.0;
+      form.setIterativeSolveTolerances(cgTols);
+    }
+    form.setIterativeSolveMaxIterations(iterativeSolveMaxIters);
+    form.setFixedPointTolerance(fixedPointTol);
     
     using std::vector;
     using std::pair;
