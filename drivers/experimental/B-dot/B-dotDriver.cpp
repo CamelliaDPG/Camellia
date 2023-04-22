@@ -147,13 +147,17 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: matching bin not found for point");
   }
   
+  double interpolatedPointValue()
+  {
+    return interpolatedPointValue(_currentCoord);
+  }
+  
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
   {
     const int numCells  = values.dimension(0);
     const int numPoints = values.dimension(1);
     
     auto physicalPointsFC = basisCache->getPhysicalCubaturePointsFC(); // (C,P,D)
-    const int spaceDim = physicalPointsFC.dimension(2);
     
     if (_dimensionOfVariation < 0)
     {
@@ -336,7 +340,7 @@ public:
     int pointOrdinal = 0;
     for (const auto &point : points)
     {
-      for (int d=0; d<point.size(); d++)
+      for (int d=0; d<int(point.size()); d++)
       {
         _points(pointOrdinal,d) = point[d];
       }
@@ -1119,8 +1123,10 @@ int main(int argc, char *argv[])
     auto timeRampTable      = PointwiseDataFunction1D::readFile(inflowTemporalDistributionFile);
     auto vDistributionTable = PointwiseDataFunction1D::readFile(inflowVelocityDistributionFile);
     
+    // 4-21-23: revised the input file for timeRampTable to have physical current values.  The time values are still scaled from 0 to 1.
+    
     Teuchos::RCP<PointwiseDataFunction1D> timeRampFunction      = Teuchos::rcp( new PointwiseDataFunction1D(timeRampTable.first, timeRampTable.second, -1) );          // -1: not a mesh coordinate
-    Teuchos::RCP<PointwiseDataFunction1D> vDistributionFunction = Teuchos::rcp( new PointwiseDataFunction1D(vDistributionTable.first, vDistributionTable.second, 1) ); //  1: the second coordinate dimension ("y")
+    FunctionPtr vDistributionFunction = Teuchos::rcp( new PointwiseDataFunction1D(vDistributionTable.first, vDistributionTable.second, 1) ); //  1: the second coordinate dimension ("y")
     
     const double vDistributionIntegral = vDistributionFunction->integrate(form.vlasovMesh()) / xWidth;
     if (rank == 0)
@@ -1128,7 +1134,19 @@ int main(int argc, char *argv[])
       std::cout << "vDistributionIntegral = " << vDistributionIntegral << std::endl;
     }
     
-    FunctionPtr f_in = scalingFactorForInflow * FunctionPtr(timeRampFunction) * FunctionPtr(vDistributionFunction); // note that we need to update timeRampFunction with the current time in each time step
+    FunctionPtr v = form.v_i(0);
+    const double vDistributionFirstMoment = (vDistributionFunction * v)->integrate(form.vlasovMesh()) / xWidth;
+    if (rank == 0)
+    {
+      std::cout << "vDistributionFirstMoment = " << vDistributionFirstMoment << std::endl;
+    }
+    
+    // timeRampFunction is in amps.  We need to:
+    // - multiply by 1/currentScaling to get to nondimensional current
+    // - multiply by 1/A to get to nondimensional current density
+    // - multiply by 1/vDistributionFirstMoment to get something whose first moment is current density
+        
+    FunctionPtr f_in = scalingFactorForInflow * (FunctionPtr(timeRampFunction) / (A * currentScaling) * FunctionPtr(vDistributionFunction) / vDistributionFirstMoment); // note that we need to update timeRampFunction with the current time in each time step
         
     ErrorIndicatorPtr unrefinementErrorIndicator;
     if (!useEnergyForUnrefinements)
@@ -1334,14 +1352,6 @@ int main(int argc, char *argv[])
     {
       setUseGMG(form, maxDofsForDirectSolve, previousSolveUsedGeometricMultigrid, previousSolveUsedDirect, rank == 0);
       
-      {
-        const double amplitude = timeRampFunction->interpolatedPointValue(t / finalTime); // time ramp table goes from t=0 to t=1
-        if (rank == 0)
-        {
-          std::cout << "for time " << t << ", amplitude of f_em is " << amplitude << std::endl;
-        }
-      }
-      
       form.startTimeStep();
       
       if (useAdaptivity)
@@ -1461,16 +1471,24 @@ int main(int argc, char *argv[])
           std::cout << "Physical total current density (x0): " << J_total_0 << std::endl;
           std::cout << "Physical total current density (x1): " << J_total_1 << std::endl;
         }
+        {
+          const double amplitude = timeRampFunction->interpolatedPointValue((t-dt)/finalTime); // Jem_value_0 was computed for time step k; the circuit solve has just computed inputs for step (k+1).
+          if (rank == 0)
+          {
+            std::cout << "for time " << t-dt << ", physical current at inflow is " << amplitude << " [A]" << std::endl;
+            std::cout << "I_em at inflow is " << Jem_value_0 * A << " [A]" << std::endl;
+          }
+        }
         
         circuitResultsFileStream << t * timeScaling << "\t";
         circuitResultsFileStream << V_k << "\t";
         circuitResultsFileStream << Ekp1_value_r << "\t";
         circuitResultsFileStream << I_k << "\t";
         circuitResultsFileStream << Jem_value * A << "\t";
-        circuitResultsFileStream << permittivity * (Ekp1_value_r - Ek_value_r) / (dt * timeScaling) << "\t";
-        circuitResultsFileStream << J_total_1 << "\t";
+        circuitResultsFileStream << A * permittivity * (Ekp1_value_r - Ek_value_r) / (dt * timeScaling) << "\t";
+        circuitResultsFileStream << J_total_1 * A << "\t";
         circuitResultsFileStream << Jem_value_0 * A << "\t";
-        circuitResultsFileStream << permittivity * (Ekp1_value_l - Ek_value_l) / (dt * timeScaling) << "\t";
+        circuitResultsFileStream << A * permittivity * (Ekp1_value_l - Ek_value_l) / (dt * timeScaling) << "\t";
         circuitResultsFileStream << J_total_0 << "\n";
         circuitResultsFileStream.flush();
       }
