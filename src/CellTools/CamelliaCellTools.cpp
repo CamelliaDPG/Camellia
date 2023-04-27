@@ -14,11 +14,14 @@
 #include "Camellia_FieldContainerConversion.hpp"
 
 #include "BasisCache.h"
-#include "CellTopology.h"
 #include "BasisFactory.h"
+#include "CellTopology.h"
+#include "doubleBasisConstruction.h"
 #include "MeshTransformationFunction.h"
 #include "SerialDenseWrapper.h"
 #include "TensorBasis.h"
+
+#include <Intrepid2_CellTools.hpp>
 
 using namespace Camellia;
 
@@ -247,7 +250,7 @@ string CamelliaCellTools::entityTypeString(unsigned entityDimension)   // vertex
 
 void CamelliaCellTools::getReferenceSideNormal(Camellia::FieldContainer<double> &refSideNormal, int sideOrdinal, CellTopoPtr parentCell)
 {
-  if ((sideOrdinal < 0) || (sideOrdinal >= parentCell->getSideCount()))
+  if ((sideOrdinal < 0) || (sideOrdinal >= int(parentCell->getSideCount())))
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal out of bounds");
   }
@@ -423,7 +426,7 @@ void CamelliaCellTools::refCellNodesForTopology(Camellia::FieldContainer<double>
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=vertex count, D=space dim.");
   }
-  if (cellNodes.dimension(1) != cellTopo.getDimension())
+  if (cellNodes.dimension(1) != int(cellTopo.getDimension()))
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=vertex count, D=space dim.");
   }
@@ -441,8 +444,8 @@ void CamelliaCellTools::refCellNodesForTopology(Camellia::FieldContainer<double>
   if ( permutation != 0 )
   {
     Camellia::FieldContainer<double> cellNodesCopy = cellNodes;
-    unsigned nodeCount = cellNodes.dimension(0);
-    unsigned spaceDim = cellNodes.dimension(1);
+    int nodeCount = cellNodes.dimension(0);
+    int spaceDim = cellNodes.dimension(1);
     for (int n = 0; n<nodeCount; n++)
     {
       int n_permuted = cellTopo.getNodePermutation(permutation, n);
@@ -456,11 +459,13 @@ void CamelliaCellTools::refCellNodesForTopology(Camellia::FieldContainer<double>
 
 void CamelliaCellTools::refCellNodesForTopology(Camellia::FieldContainer<double> &cellNodes, CellTopoPtr cellTopo, unsigned permutation)
 {
-  if ((cellNodes.dimension(0) != cellTopo->getNodeCount()) && (cellTopo->getDimension() != 0) )   // shards and Camellia disagree on the node count for points (0 vs. 1), so we accept either as dimensions for cellNodes, which is a size 0 container in any case...
+  int nodeCount = cellTopo->getNodeCount();
+  int cellDim   = cellTopo->getDimension();
+  if ((cellNodes.dimension(0) != nodeCount) && (cellDim != 0) )   // shards and Camellia disagree on the node count for points (0 vs. 1), so we accept either as dimensions for cellNodes, which is a size 0 container in any case...
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=node count, D=space dim.");
   }
-  if (cellNodes.dimension(1) != cellTopo->getDimension())
+  if (cellNodes.dimension(1) != cellDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=node count, D=space dim.");
   }
@@ -483,7 +488,8 @@ void CamelliaCellTools::refCellNodesForTopology(Camellia::FieldContainer<double>
   shards::CellTopology shardsLine(shards::getCellTopologyData<shards::Line<2> >() );
   refCellNodesForTopology(lineNodes, shardsLine);
 
-  for (int degreeOrdinal=0; degreeOrdinal<cellTopo->getTensorialDegree(); degreeOrdinal++)
+  int tensorialDegree = cellTopo->getTensorialDegree();
+  for (int degreeOrdinal=0; degreeOrdinal<tensorialDegree; degreeOrdinal++)
   {
     tensorComponentNodes.push_back(lineNodes);
   }
@@ -495,8 +501,8 @@ void CamelliaCellTools::refCellNodesForTopology(Camellia::FieldContainer<double>
   if ( permutation != 0 )
   {
     Camellia::FieldContainer<double> cellNodesCopy = cellNodes;
-    unsigned nodeCount = cellNodes.dimension(0);
-    unsigned spaceDim = cellNodes.dimension(1);
+    int nodeCount = cellNodes.dimension(0);
+    int spaceDim = cellNodes.dimension(1);
     for (int n = 0; n<nodeCount; n++)
     {
       int n_permuted = cellTopo->getNodePermutation(permutation, n);
@@ -525,6 +531,117 @@ void CamelliaCellTools::refCellNodesForTopology(std::vector< vector<double> > &c
   }
 }
 
+void CamelliaCellTools::mapToPhysicalFrame(PhysicalTensorPoints &physPoints,
+                                           Intrepid2::TensorPoints<double, DeviceType> &refPoints,
+                                           const Camellia::FieldContainer<double> &cellWorkset, CellTopoPtr cellTopo)
+{
+  // transform in each tensorial component separately
+  // in principle, we could support cases where the tensorial components in cubPoints didn't exactly match up with those in cellTopo,
+  // but that is not our immediate use case:
+  
+  using TensorPoints = Intrepid2::TensorPoints<double, DeviceType>;
+  using DynRankView = Kokkos::DynRankView<double, DeviceType>;
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getDimension() != refPoints.extent(1), std::invalid_argument, "cellTopo's tensorial component count must agree in total dimension");
+  
+  const int numCells = cellWorkset.dimension(0);
+  
+  int coordinateDimsSoFar = 0;
+  int componentNodeSpan = 1; // ordinal distance between adjacent nodes in the current component; 1 for base cell topo, baseCellTopoNodeCount for first extrusion component, baseCellTopoNodeCount * 2 for next, etc.
+  
+  // base CellTopo may consume multiple constituent cubPoints: hexTopo takes 3 1D cubPoints, e.g.  (tensorial extrusions are all 1D, by contrast)
+  // so we treat the base CellTopo separately:
+  CellTopoPtr baseTopo = cellTopo->getBaseTopology();
+  
+  int cubPointsComponentOrdinal = 0;
+  vector< DynRankView > baseTopoRefPointComponents;
+  int numDimsSoFar = 0;
+  while (numDimsSoFar < int(baseTopo->getDimension()))
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(cubPointsComponentOrdinal >= refPoints.numTensorComponents(), std::invalid_argument, "out of bounds in cubPoints tensor component ordinal");
+    DynRankView cubPointsComponent = refPoints.getTensorComponent(cubPointsComponentOrdinal);
+    baseTopoRefPointComponents.push_back(cubPointsComponent);
+    
+    numDimsSoFar += cubPointsComponent.extent_int(1); // (P,D)
+    cubPointsComponentOrdinal++;
+  }
+  
+  // when baseTopo is a Node, it will not show up in the points containers.
+  const bool baseTopoIsNode = (baseTopo->getDimension() == 0);
+  vector< DynRankView > reconciledCubPointsComponents;
+  if (!baseTopoIsNode)
+  {
+    if (baseTopoRefPointComponents.size() == 1)
+    {
+      const DeviceView<double> & baseTopoRefPoints = baseTopoRefPointComponents[0];
+      reconciledCubPointsComponents.push_back(baseTopoRefPoints);
+    }
+    else
+    {
+      TensorPoints baseTopoTensorPoints(baseTopoRefPointComponents);
+      DeviceView<double> baseTopoRefPoints("baseTopoRefPoints", baseTopoTensorPoints.extent_int(0), baseTopoTensorPoints.extent_int(1));
+      ::Camellia::deepCopy<2,DeviceView<double>,TensorPoints>(baseTopoRefPoints, baseTopoTensorPoints);
+      
+      reconciledCubPointsComponents.push_back(baseTopoRefPoints);
+    }
+  }
+  
+  for (int r=cubPointsComponentOrdinal; r<refPoints.numTensorComponents(); r++)
+  {
+    reconciledCubPointsComponents.push_back(refPoints.getTensorComponent(r));
+  }
+  
+  TensorPoints reconciledCubPoints(reconciledCubPointsComponents);
+  
+  vector< DynRankView > physicalTensorPointsComponents;
+
+  for (int r=0; r<reconciledCubPoints.numTensorComponents(); r++)
+  {
+    const auto & refPointsComponent = reconciledCubPoints.getTensorComponent(r);
+    
+    CellTopoPtr cellTopoComponent = ((r == 0) && !baseTopoIsNode) ? cellTopo->getBaseTopology() : CellTopology::line();
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(refPointsComponent.extent(1) != cellTopoComponent->getDimension(), std::invalid_argument, "spatial dimensions for cell topo component and ref points component must match");
+    const int numPointsComponent = refPointsComponent.extent_int(0);
+    const int spaceDimComponent  = refPointsComponent.extent_int(1);
+    
+    DeviceView<double> physPointsComponent("physical points component",numCells,numPointsComponent,spaceDimComponent);
+    DeviceView<double> physPointsNodes("physical component nodes",numCells,cellTopoComponent->getNodeCount(),spaceDimComponent);
+    
+    auto physPointsNodesHost = Kokkos::create_mirror(physPointsNodes);
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      int compositeNodeOrdinal = 0;
+      for (int componentNode=0; componentNode<int(cellTopoComponent->getNodeCount()); componentNode++)
+      {
+        for (int d=0; d<spaceDimComponent; d++)
+        {
+          physPointsNodesHost(cellOrdinal,componentNode,d) = cellWorkset(cellOrdinal,compositeNodeOrdinal,d+coordinateDimsSoFar);
+        }
+        compositeNodeOrdinal += componentNodeSpan;
+      }
+    }
+    Kokkos::deep_copy(physPointsNodes,physPointsNodesHost);
+    
+    if (spaceDimComponent > 0)
+    {
+      BasisPtr lowestOrderBasis = intrepid2HGRADLowestOrder(cellTopoComponent->getShardsTopology());
+      Intrepid2::CellTools<DeviceType>::mapToPhysicalFrame(physPointsComponent, refPointsComponent, physPointsNodes, lowestOrderBasis->intrepid2Basis());
+    }
+    else
+    {
+      // if spaceDimComponent == 0, the component is just a node and we can skip the ref-to-physical mapping…
+    }
+    
+    physicalTensorPointsComponents.push_back(physPointsComponent);
+    
+    componentNodeSpan *= cellTopoComponent->getNodeCount();
+    coordinateDimsSoFar += cellTopoComponent->getDimension();
+  }
+  physPoints = PhysicalTensorPoints(physicalTensorPointsComponents);
+}
+
 void CamelliaCellTools::mapToPhysicalFrame(Camellia::FieldContainer<double> &physPoints, const Camellia::FieldContainer<double> &refPoints, const Camellia::FieldContainer<double> &cellWorkset,
     CellTopoPtr cellTopo, const int & whichCell)
 {
@@ -532,14 +649,14 @@ void CamelliaCellTools::mapToPhysicalFrame(Camellia::FieldContainer<double> &phy
 
   int basisCardinality = nodalBasis->getCardinality();
   int numCells = cellWorkset.dimension(0);
-  int numNodes = cellWorkset.dimension(1);
+  int numNodes = cellTopo->getNodeCount();
   int numPoints = (refPoints.rank() == 2) ? refPoints.dimension(0) : refPoints.dimension(1);
 
-  if (numNodes != cellTopo->getNodeCount())
+  if (numNodes != cellWorkset.dimension(1))
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Second dimension of cellWorkset does not match cellTopo->getNodeCount()!");
   }
-  if (cellTopo->getNodeCount() != nodalBasis->getCardinality())
+  if (numNodes != nodalBasis->getCardinality())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: cellTopo node count does not match nodalBasis->getCardinality()!");
   }
@@ -880,12 +997,13 @@ void CamelliaCellTools::permutedReferenceCellPoints(const shards::CellTopology &
 void CamelliaCellTools::permutedReferenceCellPoints(CellTopoPtr cellTopo, unsigned int permutation,
     const Camellia::FieldContainer<double> &refPoints, Camellia::FieldContainer<double> &permutedPoints)
 {
-  if (cellTopo->getDimension()==0)
+  int cellDim = cellTopo->getDimension();
+  if (cellDim == 0)
   {
     permutedPoints = refPoints;
     return;
   }
-  TEUCHOS_TEST_FOR_EXCEPTION(refPoints.dimension(1) != cellTopo->getDimension(), std::invalid_argument, "refPoints must have shape (P,D), where D = cellTopo->getDimension()");
+  TEUCHOS_TEST_FOR_EXCEPTION(refPoints.dimension(1) != cellDim, std::invalid_argument, "refPoints must have shape (P,D), where D = cellTopo->getDimension()");
   Camellia::FieldContainer<double> permutedNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(permutedNodes, cellTopo, permutation);
 
@@ -1050,7 +1168,7 @@ const Camellia::FieldContainer<double>& CamelliaCellTools::getSubcellParametriza
   // Arrays are sized and filled only when parametrization of a particular subcell is requested
   // by setSubcellParametrization.
 
-  if (subcellMapsForDimension.size() < subcellDim + 1) subcellMapsForDimension.resize(subcellDim + 1);
+  if (int(subcellMapsForDimension.size()) < subcellDim + 1) subcellMapsForDimension.resize(subcellDim + 1);
 
   if (subcellMapsForDimension[subcellDim].find(parentCell->getKey()) == subcellMapsForDimension[subcellDim].end())
   {
@@ -1580,7 +1698,7 @@ void CamelliaCellTools::mapToReferenceFrame(      Camellia::FieldContainer<doubl
   int nodeCount = cellTopo->getNodeCount();
   for (int node=0; node < nodeCount; node++)
   {
-    for (int d=0; d<cellTopo->getDimension(); d++)
+    for (int d=0; d<spaceDim; d++)
     {
       cellCenter(d) += refCellNodes(node,d) / nodeCount;
     }
@@ -1615,9 +1733,10 @@ void CamelliaCellTools::mapToReferenceSubcell(Camellia::FieldContainer<double>  
                                               const int                     subcellOrd,
                                               CellTopoPtr                   parentCell)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(subcellDim > parentCell->getDimension(), std::invalid_argument,
+  int parentDim = parentCell->getDimension();
+  TEUCHOS_TEST_FOR_EXCEPTION(subcellDim > parentDim, std::invalid_argument,
                              "subcellDim cannot exceed parentCell dimension.");
-  if (parentCell->getDimension() == 0)
+  if (parentDim == 0)
   {
     refSubcellPoints = paramPoints; // likely a (1,1)-sized container with a zero in it, but whatever it is, we copy it
     return;
@@ -1630,7 +1749,6 @@ void CamelliaCellTools::mapToReferenceSubcell(Camellia::FieldContainer<double>  
   TEUCHOS_TEST_FOR_EXCEPTION(subcellOrd >= subcellMap.dimension(0), std::invalid_argument, "subcellOrd is out of bounds");
 
   int numPoints = paramPoints.dimension(0);
-  int parentDim = parentCell->getDimension();
   // Apply the parametrization map to every point in parameter domain
   for(int pt = 0; pt < numPoints; pt++)
   {
@@ -1745,7 +1863,8 @@ void CamelliaCellTools::mapToReferenceSubcell(Intrepid2::TensorPoints<double,Cam
     {
       // otherwise, subcell is itself extruded in the final dimension; we want paramPoints, but without its final component, for the recursive call
       std::vector< PointComponentView > paramPointComponents(paramPoints.numTensorComponents() - 1);
-      for (int r=0; r<paramPointComponents.size(); r++)
+      int numParamPointComponents = paramPointComponents.size();
+      for (int r=0; r<numParamPointComponents; r++)
       {
         paramPointComponents[r] = paramPoints.getTensorComponent(r);
       }
