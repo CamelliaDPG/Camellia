@@ -282,11 +282,10 @@ public:
                                  CellTopoPtr                            cellTopo,
                                  const int                    &         whichCell = -1);
   
-  // ! calls Intrepid's CellTools<double> when cellTopo is a non-tensorial topology
-  static void mapToPhysicalFrame(PhysicalTensorPoints                       &physPoints,
-                                 Intrepid2::TensorPoints<double,DeviceType> &refPoints,
-                                 const Camellia::FieldContainer<double>     &cellWorkset,
-                                 CellTopoPtr                                cellTopo);
+  static void mapToPhysicalFrame(PhysicalTensorPoints                             &physPoints,
+                                 const Intrepid2::TensorPoints<double,DeviceType> &refPoints,
+                                 const Camellia::FieldContainer<double>           &cellWorkset,
+                                 CellTopoPtr                                      cellTopo);
 
   // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
   static void mapToReferenceFrame(Camellia::FieldContainer<double>       &refPoints,

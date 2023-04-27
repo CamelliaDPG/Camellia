@@ -532,7 +532,7 @@ void CamelliaCellTools::refCellNodesForTopology(std::vector< vector<double> > &c
 }
 
 void CamelliaCellTools::mapToPhysicalFrame(PhysicalTensorPoints &physPoints,
-                                           Intrepid2::TensorPoints<double, DeviceType> &refPoints,
+                                           const Intrepid2::TensorPoints<double, DeviceType> &refPoints,
                                            const Camellia::FieldContainer<double> &cellWorkset, CellTopoPtr cellTopo)
 {
   // transform in each tensorial component separately
