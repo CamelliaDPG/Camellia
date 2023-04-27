@@ -145,49 +145,49 @@ namespace Camellia {
       case 1:
       {
         AssignValuesFunctor<Scalar,modType,1> functor(toValues, fromValues);
-        Kokkos::parallel_for( toValues.extent(0), functor, "AssignValuesFunctor");
+        Kokkos::parallel_for("AssignValuesFunctor", toValues.extent(0), functor);
       }
         break;
       case 2:
       {
         auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy2(toValues);
         AssignValuesFunctor<Scalar,modType,2> functor(toValues, fromValues);
-        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+        Kokkos::parallel_for("AssignValuesFunctor", rangePolicy, functor);
       }
         break;
       case 3:
       {
         auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy3(toValues);
         AssignValuesFunctor<Scalar,modType,3> functor(toValues, fromValues);
-        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+        Kokkos::parallel_for("AssignValuesFunctor", rangePolicy, functor);
       }
         break;
       case 4:
       {
         auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy4(toValues);
         AssignValuesFunctor<Scalar,modType,4> functor(toValues, fromValues);
-        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+        Kokkos::parallel_for("AssignValuesFunctor", rangePolicy, functor);
       }
         break;
       case 5:
       {
         auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy5(toValues);
         AssignValuesFunctor<Scalar,modType,5> functor(toValues, fromValues);
-        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+        Kokkos::parallel_for("AssignValuesFunctor", rangePolicy, functor);
       }
         break;
       case 6:
       {
         auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy6(toValues);
         AssignValuesFunctor<Scalar,modType,6> functor(toValues, fromValues);
-        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+        Kokkos::parallel_for( "AssignValuesFunctor", rangePolicy, functor);
       }
         break;
       case 7:
       {
         auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy6(toValues); // range policy only goes up to rank 6
         AssignValuesFunctor<Scalar,modType,7> functor(toValues, fromValues);
-        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+        Kokkos::parallel_for( "AssignValuesFunctor", rangePolicy, functor);
       }
         break;
       default:
