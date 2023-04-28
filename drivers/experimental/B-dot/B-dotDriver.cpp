@@ -614,7 +614,7 @@ void performRefinements(double & lastRefinementMaxElementError, VlasovBackwardEu
 //! Sets a homogeneous BC at the x0 point, and parameter-based BC at the x1 point.  Returns a pointer to the parameter function; the caller may then set it to an appropriate value before (any/each) Poisson solve.
 ParameterFunctionPtr setPoissonBC(VlasovBackwardEulerFormulation &form, const double &x0, const double &x1)
 {
-  // we have periodic BCs; we just need to pin the potential at a point -- we choose the x0 (left) point.
+  // we have periodic BCs; we just need to pin the potential at a point -- we choose the x1 (right) point.
   const int poissonTagLeft  = form.createConfigurationMeshSideSetTag(SpatialFilter::matchingX(x0));
   const int poissonTagRight = form.createConfigurationMeshSideSetTag(SpatialFilter::matchingX(x1));
   
@@ -1456,7 +1456,7 @@ int main(int argc, char *argv[])
         circuitSolver.setIem ( Jem_value * A );
         
         V_k = circuitSolver.voltage();
-        voltageParameter->setValue(-V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
+        voltageParameter->setValue(V_k / potentialScaling); // sets the BC for the next time step; divide by the reference-to-physical scaling to get a non-dimensional value.
         
         I_k = circuitSolver.current();
         
