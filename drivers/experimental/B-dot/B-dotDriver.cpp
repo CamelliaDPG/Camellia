@@ -1340,7 +1340,7 @@ int main(int argc, char *argv[])
     double lastRefinementMaxElementError = 0.0;
     
     std::ofstream circuitResultsFileStream(circuitResultsFile, std::ios::out);
-    circuitResultsFileStream << "t\tV\tE\tI\tJ_em(x1)\tJ_disp(x1)\tJ_tot(x1)\tJ_em(x0)\tJ_disp(x0)\tJ_tot(x0)\n"; // time, voltage, E-field, current, I emission at x1, displacement current at x1, total current at x1, I emission at x0, displacement current at x0, total current at x0
+    circuitResultsFileStream << "t\tV\tE\tI\tI_em(x1)\tI_disp(x1)\tI_tot(x1)\tI_em(x0)\tI_disp(x0)\tI_tot(x0)\n"; // time, voltage, E-field, current, I emission at x1, displacement current at x1, total current at x1, I emission at x0, displacement current at x0, total current at x0
     
     /*
      circuitResultsFileStream << Iem_value << "\t";
@@ -1489,7 +1489,7 @@ int main(int argc, char *argv[])
         circuitResultsFileStream << J_total_1 * A << "\t";
         circuitResultsFileStream << Jem_value_0 * A << "\t";
         circuitResultsFileStream << A * permittivity * (Ekp1_value_l - Ek_value_l) / (dt * timeScaling) << "\t";
-        circuitResultsFileStream << J_total_0 << "\n";
+        circuitResultsFileStream << J_total_0 * A << "\n";
         circuitResultsFileStream.flush();
       }
       
