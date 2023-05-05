@@ -956,6 +956,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("physicalGapWidth", &physicalGapWidth);
     cmdp.setOption("disableCircuitSolve", "enableCircuitSolve", &disableCircuitSolve);
     cmdp.setOption("scalingFactorForInflow", &scalingFactorForInflow);
+    cmdp.setOption("R", &R);
+    cmdp.setOption("L", &L);
+    cmdp.setOption("C", &C);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
