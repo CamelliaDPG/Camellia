@@ -1160,8 +1160,11 @@ int main(int argc, char *argv[])
     RefinementStrategyPtr unrefinementStrategy = constructRefStrategy(form, refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator);
     
     ErrorIndicatorPtr errorIndicator = ErrorIndicator::energyErrorIndicator(form.vlasovSolution());
-    const int numElementsToRefine = std::max(int(.05 / 3. * maxElements), 1);
-    auto fixedCountRefStrategy = Teuchos::rcp( new FixedCountRefinementStrategy(errorIndicator, numElementsToRefine) );
+    const int numElementsToRefine = std::max(int(.005 / 3. * maxElements), 1);
+    const double min_h = 0.01;
+    const double max_p = H1Order; // at the moment, we don't refine in p
+    auto fixedCountRefStrategy = Teuchos::rcp( new FixedCountRefinementStrategy(errorIndicator, numElementsToRefine, min_h,
+                                                                                max_p) );
     
     form.setFixedPointMaxSubsteps(maxSubsteps);
     form.setFixedPointMinSubsteps(minSubsteps);
@@ -1197,6 +1200,9 @@ int main(int argc, char *argv[])
     suffix << "_delta_k" << delta_k;
     suffix << "_qeff" << quantumEfficiency;
     suffix << "_gap" << physicalGapWidth;
+    suffix << "_L"   << L * 1e9;  // in nH
+    suffix << "_R"   << R;
+    suffix << "_C"   << C * 1e12; // in pF
     
     if (scalingFactorForInflow != 1.0)
     {

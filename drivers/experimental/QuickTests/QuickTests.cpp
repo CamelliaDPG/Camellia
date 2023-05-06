@@ -20,6 +20,11 @@
 
 #include "MaxwellianFunction.h"
 
+#include "ActivationFunction.hpp"
+#include "GNN.hpp"
+#include "MeshPhysicalQuadrature.hpp"
+#include "NNOptimizer.hpp"
+
 #include "Teuchos_UnitTestHarness.hpp"
 
 using namespace Camellia;
@@ -44,6 +49,99 @@ int choose(const int &n, const int &k)
     }
   }
   return result;
+}
+
+TEUCHOS_UNIT_TEST( GNN, AinsworthExample1 )
+{
+  // function fitting example: first four terms of Fourier series for square wave
+  FunctionPtr f;
+  {
+    FunctionPtr sin_x     = Teuchos::rcp(new Sin_ax(1.0));
+    FunctionPtr sin_3pi_x = Teuchos::rcp(new Sin_ax(3.0 * M_PI));
+    FunctionPtr sin_5pi_x = Teuchos::rcp(new Sin_ax(5.0 * M_PI));
+    FunctionPtr sin_7pi_x = Teuchos::rcp(new Sin_ax(7.0 * M_PI));
+    f = sin_x + sin_3pi_x / 3.0 + sin_5pi_x / 5.0 + sin_7pi_x / 7.0;
+  }
+  const int spaceDim = 1;
+  
+  VarFactoryPtr vf = VarFactory::varFactory();
+  auto u = vf->testVar("u", HGRAD);
+  
+  RHSPtr rhs = RHS::rhs();
+  rhs->addTerm(f * u);
+  
+  IPPtr ip = IP::ip();
+  ip->addTerm(u); // (u,v)_L^2
+  
+  MeshTopologyPtr meshTopo = MeshFactory::intervalMeshTopology(0.0, 1.0, 20); // 20 elements in initial mesh
+  
+  auto quadrature = Teuchos::rcp( new MeshPhysicalQuadrature(meshTopo) );
+  
+  double quadratureRelTol = 1e-6;
+  double quadratureAbsTol = 1e-14;
+  
+  auto gnn = Teuchos::rcp(new GNN(spaceDim, ip, rhs, {u}));
+  
+  // let's try the one with a fixed width of n_i = 100
+  int numGalerkinIterations = 6;
+  for (int i=0; i<numGalerkinIterations; i++)
+  {
+    const int width = 100;
+    const double tol = 1e-6;
+    const double alpha = 0.01; // learning rate for this problem is not specified by Ainsworth and Dong
+    
+    const double beta_i = 1. + 3 * (i-1);
+    auto sigma = ActivationFunction::tanhFunction(beta_i);
+    
+    DeviceView<double> W = Allocation<double>::allocateDeviceView({width,spaceDim}, "W");
+    DeviceView<double> b = Allocation<double>::allocateDeviceView({width}, "b");
+    
+    auto WHost = Kokkos::create_mirror_view(W);
+    auto bHost = Kokkos::create_mirror_view(b);
+    for (int j=0; j<width; j++)
+    {
+      WHost(j,0) = 1.0;
+      bHost(j)   = -j * (1.0 / width);
+    }
+    
+    Kokkos::deep_copy(W,WHost);
+    Kokkos::deep_copy(b,bHost);
+    
+    auto slnn = Teuchos::rcp( new SingleLayerNN(spaceDim, sigma, W, b));
+    
+    auto optimizer = NNOptimizer::gradientDescent(gnn, slnn, alpha); // TODO: switch to adam, once we've implemented
+    
+    int maxEpochsPerOptimizeCall = 1;
+    int maxEpochs = 1000;
+    for (int j=0; j<maxEpochs; j++)
+    {
+      optimizer->optimize(tol, maxEpochsPerOptimizeCall, quadrature, quadratureRelTol, quadratureAbsTol);
+      
+      double loss = optimizer->loss();
+      
+      cout << "epoch " << j << ", loss: " << loss << std::endl;
+      
+      if (loss < tol)
+        break;
+    }
+    gnn->augmentBasis(slnn);
+    gnn->solve(quadrature, quadratureRelTol, quadratureAbsTol);
+    
+    auto u_soln = gnn->solutionFunction(u);
+    auto errFxn = u_soln - f;
+    
+    double err_l2_squared = quadrature->adaptivelyIntegrateOverVolume(errFxn * errFxn, quadratureRelTol, quadratureAbsTol);
+    double err_l2 = sqrt(err_l2_squared);
+    cout << "Galerkin iteration i, L^2 error: " << err_l2 << std::endl;
+  }
+  
+}
+
+TEUCHOS_UNIT_TEST( Hexahedron, PrintSides )
+{
+  auto meshTopo = MeshFactory::rectilinearMeshTopology({1,1,1}, {1,1,1});
+  
+  meshTopo->printAllEntities();
 }
 
 TEUCHOS_UNIT_TEST( TimeMarchingMatrices, PrintMatrices )
