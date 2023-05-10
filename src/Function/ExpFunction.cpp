@@ -296,7 +296,7 @@ TFunctionPtr<Scalar> Ln<Scalar>::dy()
 template<class Scalar>
 TFunctionPtr<Scalar> Ln<Scalar>::dz()
 {
-  return _argument->dy() / _argument;
+  return _argument->dz() / _argument;
 }
 
 template<class Scalar>
@@ -313,6 +313,142 @@ std::vector< TFunctionPtr<Scalar> > Ln<Scalar>::memberFunctions()
   return {{_argument}};
 }
 
+template<class Scalar>
+Tanh<Scalar>::Tanh(TFunctionPtr<Scalar> f)
+:
+TFunction<Scalar>("Tanh"),
+_f(f)
+{}
+
+template<class Scalar>
+void Tanh<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("Tanh values()");
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+  auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
+  _f->values(dv, ASSIGN, basisCache);
+  Kokkos::fence();
+  const int dim0 = values.extent_int(0);
+  const int dim1 = values.extent_int(1);
+  Kokkos::parallel_for("Tanh_values", dim0, KOKKOS_LAMBDA (const int i0) {
+    for (int i1 = 0; i1 < dim1; i1++) {
+      assignValue(values(i0,i1), modType, tanh(dv(i0,i1)));
+//      std::cout << "Tanh arguments(" << i0 << "," << i1 << ") = " << dv(i0,i1) << std::endl;
+//      std::cout << "Tanh values(" << i0 << "," << i1 << ") = " << values(i0,i1) << std::endl;
+    }
+  });
+  basisCache->checkinScratchStorage<Scalar>(dv);
+}
+
+/*
+ d/dx (Tanh(f)) = d/dx(f) * sech^2(f)
+ */
+
+template<class Scalar>
+TFunctionPtr<Scalar> Tanh<Scalar>::dx()
+{
+  TFunctionPtr<Scalar> sech2 = Teuchos::rcp( new Sech2<Scalar>(_f));
+  return _f->dx() * sech2;
+}
+
+template<class Scalar>
+TFunctionPtr<Scalar> Tanh<Scalar>::dy()
+{
+  TFunctionPtr<Scalar> sech2 = Teuchos::rcp( new Sech2<Scalar>(_f));
+  return _f->dy() * sech2;
+}
+
+template<class Scalar>
+TFunctionPtr<Scalar> Tanh<Scalar>::dz()
+{
+  TFunctionPtr<Scalar> sech2 = Teuchos::rcp( new Sech2<Scalar>(_f));
+  return _f->dz() * sech2;
+}
+
+template<class Scalar>
+std::string Tanh<Scalar>::displayString()
+{
+  std::ostringstream str;
+  str << "{\\rm tanh} (" << _f->displayString() << ")";
+  return str.str();
+}
+
+template<class Scalar>
+std::vector< TFunctionPtr<Scalar> > Tanh<Scalar>::memberFunctions()
+{
+  return {{_f}};
+}
+
+template<class Scalar>
+Sech2<Scalar>::Sech2(TFunctionPtr<Scalar> f)
+:
+TFunction<Scalar>("Sech2"),
+_f(f)
+{}
+
+template<class Scalar>
+void Sech2<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("Sech2 values()");
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+  auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
+  _f->values(dv, ASSIGN, basisCache);
+  Kokkos::fence();
+  const int dim0 = values.extent_int(0);
+  const int dim1 = values.extent_int(1);
+  Kokkos::parallel_for("Sech2_values", dim0, KOKKOS_LAMBDA (const int i0) {
+    for (int i1 = 0; i1 < dim1; i1++) {
+      const auto sech_f = 1.0 / cosh(dv(i0,i1));
+      assignValue(values(i0,i1), modType, sech_f * sech_f);
+    }
+  });
+  basisCache->checkinScratchStorage<Scalar>(dv);
+}
+
+/*
+ d/dx (sech^2(f)) = -2 * d/dx(f) * tanh(f) * sech^2(f)
+ */
+
+template<class Scalar>
+TFunctionPtr<Scalar> Sech2<Scalar>::dx()
+{
+  TFunctionPtr<Scalar> tanh  = Teuchos::rcp( new Tanh<Scalar>(_f));
+  TFunctionPtr<Scalar> sech2 = Teuchos::rcp( new Sech2<Scalar>(_f));
+  return -2 * _f->dx() * tanh * sech2;
+}
+
+template<class Scalar>
+TFunctionPtr<Scalar> Sech2<Scalar>::dy()
+{
+  TFunctionPtr<Scalar> tanh  = Teuchos::rcp( new Tanh<Scalar>(_f));
+  TFunctionPtr<Scalar> sech2 = Teuchos::rcp( new Sech2<Scalar>(_f));
+  return -2 * _f->dy() * tanh * sech2;
+}
+
+template<class Scalar>
+TFunctionPtr<Scalar> Sech2<Scalar>::dz()
+{
+  TFunctionPtr<Scalar> tanh  = Teuchos::rcp( new Tanh<Scalar>(_f));
+  TFunctionPtr<Scalar> sech2 = Teuchos::rcp( new Sech2<Scalar>(_f));
+  return -2 * _f->dz() * tanh * sech2;
+}
+
+template<class Scalar>
+std::string Sech2<Scalar>::displayString()
+{
+  std::ostringstream str;
+  str << "{\\rm sech}^2 (" << _f->displayString() << ")";
+  return str.str();
+}
+
+template<class Scalar>
+std::vector< TFunctionPtr<Scalar> > Sech2<Scalar>::memberFunctions()
+{
+  return {{_f}};
+}
+
 // explicitly instantiate Exp<double>, Ln<double> classes:
 template class Camellia::Exp<double>;
 template class Camellia::Ln<double>;
+template class Camellia::Tanh<double>;
+template class Camellia::Sech2<double>;

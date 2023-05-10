@@ -62,6 +62,46 @@ namespace Camellia
     std::string displayString() override;
   };
   
+//! tanh(f), for function f
+template<class Scalar>
+class Tanh : public TFunction<Scalar>
+{
+  TFunctionPtr<Scalar> _f;
+public:
+  Tanh(TFunctionPtr<Scalar> f);
+  
+  using TFunction<Scalar>::values;
+  void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
+  TFunctionPtr<Scalar> dx() override;
+  TFunctionPtr<Scalar> dy() override;
+  TFunctionPtr<Scalar> dz() override;
+  
+  std::vector< TFunctionPtr<Scalar> > memberFunctions() override;
+  
+  std::string displayString() override;
+};
+
+//! sech^2(f), for function f
+template<class Scalar>
+class Sech2 : public TFunction<Scalar>
+{
+  TFunctionPtr<Scalar> _f;
+public:
+  Sech2(TFunctionPtr<Scalar> argument);
+  
+  using TFunction<Scalar>::values;
+  void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
+  TFunctionPtr<Scalar> dx() override;
+  TFunctionPtr<Scalar> dy() override;
+  TFunctionPtr<Scalar> dz() override;
+  
+  std::vector< TFunctionPtr<Scalar> > memberFunctions() override;
+  
+  std::string displayString() override;
+};
+
 class Exp_x : public SimpleFunction<double>
 {
 public:
