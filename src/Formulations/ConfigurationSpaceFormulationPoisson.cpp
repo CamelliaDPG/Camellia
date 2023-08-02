@@ -26,7 +26,14 @@ const string ConfigurationSpaceFormulationPoisson::S_VE_HAT = "\\widehat{V}_E";
 const string ConfigurationSpaceFormulationPoisson::S_V_POISSON = "v_{\\rm Poisson}";
 const string ConfigurationSpaceFormulationPoisson::S_TAU_POISSON = "\\tau_{\\rm Poisson}";
 
-ConfigurationSpaceFormulationPoisson::ConfigurationSpaceFormulationPoisson(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType)
+ConfigurationSpaceFormulationPoisson::ConfigurationSpaceFormulationPoisson(const double &q, const double &eps0,
+                                                                           const TimeDiscretizationType &timeDiscretizationType)
+:
+ConfigurationSpaceFormulationPoisson(std::vector<double>{q}, eps0, timeDiscretizationType)
+{}
+
+ConfigurationSpaceFormulationPoisson::ConfigurationSpaceFormulationPoisson(const std::vector<double> &q, const double &eps0,
+                                                                           const TimeDiscretizationType &timeDiscretizationType)
 :
 ConfigurationSpaceFormulation(),
 _q(q),
@@ -141,6 +148,17 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
     v_Poisson   = poissonVF->testVar(S_V_POISSON, HGRAD);   // HGRAD in space
     tau_Poisson = poissonVF->testVar(S_TAU_POISSON, tauSpace); // HDIV or HGRAD in space
   }
+  BasisFamilyPtr basisFamily;
+  if (_useSerendipityBasis)
+  {
+    basisFamily = BasisFamily::serendipityBasisFamily();
+  }
+  else
+  {
+    basisFamily = BasisFamily::hierarchicalBasisFamily();
+  }
+  poissonVF->setBasisFamily(basisFamily);
+  
   _poissonBF = BF::bf(poissonVF);
   
   if (_spaceDim==1)
@@ -237,6 +255,11 @@ FunctionPtr ConfigurationSpaceFormulationPoisson::B_i(int zeroBasedComp)
   return Function::zero();
 }
 
+FunctionPtr ConfigurationSpaceFormulationPoisson::B_i_priorTime(int zeroBasedComp)
+{
+  return Function::zero();
+}
+
 VarPtr ConfigurationSpaceFormulationPoisson::E_fieldVar(int zeroBasedComp)
 {
   VarFactoryPtr vf = _poissonBF->varFactory();
@@ -283,6 +306,18 @@ FunctionPtr ConfigurationSpaceFormulationPoisson::E_i(int zeroBasedComp)
   }
 }
 
+FunctionPtr ConfigurationSpaceFormulationPoisson::E_i_priorTime(int zeroBasedComp)
+{
+  if (zeroBasedComp < _spaceDim)
+  {
+    return _E_priorTime_extruded[zeroBasedComp];
+  }
+  else
+  {
+    return Function::zero();
+  }
+}
+
 double ConfigurationSpaceFormulationPoisson::l2NormOfSolutionUpdate()
 {
   const double E_L2 = _ESoln->l2norm(_configurationSoln->mesh());
@@ -295,18 +330,34 @@ int ConfigurationSpaceFormulationPoisson::maxMomentNumber()
   return 0;
 }
 
-void ConfigurationSpaceFormulationPoisson::setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0)
+void ConfigurationSpaceFormulationPoisson::setMoments(std::vector< Teuchos::RCP<SolutionMoments> > fMoments, FunctionPtr n0)
 {
   this->ConfigurationSpaceFormulation::setMoments(fMoments, n0);
-  FunctionPtr velocityIntegral = _fMoments->solutionMomentFunction(0);
   
-  auto vlasovMesh = fMoments->phaseSpaceMesh();
+  int numSpecies = _q.size();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSpecies != int(fMoments.size()), std::invalid_argument, "The number of moments objects provided to setMoments() should match the number of q values at construction of ConfigurationSpaceFormulationMaxwell");
+    
+  auto vlasovMesh = fMoments[0]->phaseSpaceMesh();
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
+  
+  // initialize RHS
+  auto rhs = RHS::rhs();
+  auto v_Poisson  = this->v(); // test function (maybe not the best name!)
+  
+  FunctionPtr rho = Function::zero();
+  
+  for (int i=0; i<numSpecies; i++)
+  {
+    auto moments_i = _fMoments[i];
+    const double & q_i = _q[i];
+  
+    FunctionPtr velocityIntegral = moments_i->solutionMomentFunction(0);
+    rho = rho + q_i / _eps0 * (velocityIntegral - n0);
+  }
   
   // set RHS
   auto poissonRHS = RHS::rhs();
-  auto v_Poisson  = this->v();
-  poissonRHS->addTerm( _q / _eps0 * (velocityIntegral - n0) * v_Poisson);
+  poissonRHS->addTerm( rho * v_Poisson);
   _configurationSoln->setRHS(poissonRHS);
   
   // define extrusion of E to the phase-space mesh
@@ -314,6 +365,16 @@ void ConfigurationSpaceFormulationPoisson::setMoments(Teuchos::RCP<SolutionMomen
   for (int i=0; i<_spaceDim; i++)
   {
     _E_extruded[i] = Teuchos::rcp( new PhysicalSolutionExtrusion(_configurationSoln, this->E_fieldVar(i), vlasovMeshWeakPtr) );
+  }
+  
+  if (_configurationSolnPriorTime != Teuchos::null)
+  {
+    // define extrusion of prior-time E to the phase-space mesh
+    _E_priorTime_extruded = std::vector<FunctionPtr>(_spaceDim);
+    for (int i=0; i<_spaceDim; i++)
+    {
+      _E_priorTime_extruded[i] = Teuchos::rcp( new PhysicalSolutionExtrusion(_configurationSolnPriorTime, this->E_fieldVar(i), vlasovMeshWeakPtr) );
+    }
   }
 }
 

@@ -287,9 +287,10 @@ public:
   virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell);
   virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubatureWeights, int cubatureDegree = -1);
   const Camellia::FieldContainer<double> &getRefCellPointsFC();
-  const Camellia::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
+  const Camellia::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinatesFC();
   
   const Intrepid2::TensorPoints<double,DeviceType> getRefCellPoints() const;
+  const Intrepid2::TensorPoints<double,DeviceType> getSideRefCellPointsInVolumeCoordinates();
   
   void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell);
   virtual void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell, int cubatureDegree = -1);

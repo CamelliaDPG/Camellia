@@ -35,6 +35,12 @@ namespace Camellia
     //! returns the specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
     virtual FunctionPtr E_i(int zeroBasedComp) override;
     
+    //! returns the specified component of the magnetic field at prior time, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for B_x, 1 for B_y, 2 for B_z.
+    virtual FunctionPtr B_i_priorTime(int zeroBasedComp) override;
+    
+    //! returns the specified component of the electric field at prior timeas a Function, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
+    virtual FunctionPtr E_i_priorTime(int zeroBasedComp) override;
+    
     //! maximum moment number (starting from 0 for the unweighted integral over velocity space) required by the ConfigurationSpaceFormulation.
     virtual int maxMomentNumber() override;
     

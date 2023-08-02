@@ -30,7 +30,7 @@ namespace {
   const double TEST_EPS0   = 1e-4;
 
   VlasovBackwardEulerFormulation getFormulation(const int xElements, const int vElements, const int H1Order, const bool usePeriodicBCs, double q = TEST_Q,
-                                                bool homogeneousPotentialBCs = true)
+                                                bool homogeneousPotentialBCs = true, bool useCrankNicolson = false)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -52,8 +52,10 @@ namespace {
       vx = v0 + (i * vWidth) / vElements;
       vxVertices.push_back(vx);
     }
-    const bool useSerendipity = true;
-    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+    const bool useSerendipity = false;
+    const int maxMomentNumber = 0;
+    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k, maxMomentNumber,
+                                        useCrankNicolson);
     form.setRunQuietly(true);
     auto poissonMesh = poissonConfig->configurationSpaceMesh();
     
@@ -132,7 +134,7 @@ namespace {
     }
   };
 
-  TEUCHOS_UNIT_TEST( VlasovBackwardEulerFormulation, InflowConditions )
+  void testInflowConditionsSteadyState(const bool useCrankNicolson, Teuchos::FancyOStream &out, bool &success)
   {
     const double q    = 0; // 0 charge --> zero electric field
     
@@ -146,8 +148,9 @@ namespace {
     const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
     
     const bool usePeriodicBCs = false;
+    const bool useHomogeneousPotentialBCs = true;
 
-    auto form = getFormulation(xElements, vElements, H1Order, usePeriodicBCs, q);
+    auto form = getFormulation(xElements, vElements, H1Order, usePeriodicBCs, q, useHomogeneousPotentialBCs, useCrankNicolson);
     
     auto vlasovSoln = form.vlasovSolution();
     
@@ -156,6 +159,10 @@ namespace {
     vlasovSoln->rhs()->addTerm(w * v3); // this is the result of evaluating the LHS at f0
     
     form.setInitialAndInflowConditions(f0, f0);
+    
+//    std::cout << "Vlasov BF:\n" << vlasovSoln->bf()->displayString() << std::endl;
+//    std::cout << "Vlasov RHS:\n" << vlasovSoln->rhs()->linearTerm()->displayString() << std::endl;
+//    std::cout << "Vlasov IP:\n" << vlasovSoln->ip()->displayString() << std::endl;
         
     const int X_COMP = 0; // zero-based comp for E_fieldVar() call below
     auto poissonSoln = form.configurationSpaceSolution();
@@ -204,24 +211,41 @@ namespace {
     }
     
     poissonSoln->setBC(poissonBC);
-//    Teuchos::RCP<HDF5Exporter> vlasovViz = Teuchos::rcp( new HDF5Exporter (vlasovSoln->mesh(), "BoltzmannInflowConditionsTests1D1V_Stationary", "."));
-//    vlasovViz->exportSolution(vlasovSoln, form.t());
+//    Teuchos::RCP<HDF5Exporter> vlasovViz = Teuchos::rcp( new HDF5Exporter (vlasovSoln->mesh(), "VlasovTests1D1V_Stationary", "."));
+//    vlasovViz->exportSolution(vlasovSoln, 0);
     
     FunctionPtr f_soln = Function::solution(form.f(), vlasovSoln);
     out << "Comparing f0 with f_soln after setting initial conditions.\n";
     double soln_magnitude = f0->l2norm(vlasovSoln->mesh());
     err_l2 = (f_soln-f0)->l2norm(vlasovSoln->mesh());
     TEST_COMPARE(err_l2, <, tol * soln_magnitude);
+
+//    Teuchos::RCP<HDF5Exporter> vlasovViz = Teuchos::rcp( new HDF5Exporter (vlasovSoln->mesh(), "VlasovBackwardEulerFormulation_InflowConditions", "/tmp"));
+//    vlasovViz->exportSolution(vlasovSoln, form.t());
+    
+    // TODO: add a check of tn_0 for the Crank-Nicolson case (for which it should be projected when initial conditions are set)
     
     form.takeTimeStep();
-  
-//    vlasovViz->exportSolution(vlasovSoln, form.t());
+//    vlasovViz->exportSolution(vlasovSoln, 0.1);
     
     out << "Comparing f0 with f_soln after taking time step.\n";
     soln_magnitude = f0->l2norm(vlasovSoln->mesh());
     err_l2 = (f_soln-f0)->l2norm(vlasovSoln->mesh());
     TEST_COMPARE(err_l2, <, tol * soln_magnitude);
   }
+
+  TEUCHOS_UNIT_TEST( VlasovBackwardEulerFormulation, InflowConditionsBE )
+  {
+    const bool useCrankNicolson = false; // use backward euler
+    testInflowConditionsSteadyState(useCrankNicolson, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovBackwardEulerFormulation, InflowConditionsCN )
+  {
+    const bool useCrankNicolson = true;
+    testInflowConditionsSteadyState(useCrankNicolson, out, success);
+  }
+
 
 // Disabling this test for now.  It is based on what appears to be a pretty fragile test in Boltzmann1D1VFormulationTests, where it
 // tested an explicit time step (which we don't support in VlasovBackwardEulerFormulation).  Switching the original to implicit causes

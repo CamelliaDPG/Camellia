@@ -22,13 +22,17 @@ namespace Camellia
   class ConfigurationSpaceFormulation
   {
   protected:
-    Teuchos::RCP<SolutionMoments> _fMoments;
+    std::vector< Teuchos::RCP<SolutionMoments> > _fMoments;
     SolutionPtr _configurationSoln;
     SolutionPtr _configurationSolnPrev;      // previously-computed solution.  Can be used to check convergence of fixed-point iteration, etc.
     SolutionPtr _configurationSolnPriorTime; // prior-time solution; null for space-time configurations.
     MeshPtr _phaseMesh;
     MeshTopologyPtr _configurationMeshTopo;
     bool _useSerendipityBasis;
+    
+    int _spaceDim    = -1; // should be set during Vlasov construction
+    int _velocityDim = -1;
+    std::vector<FunctionPtr> _extraAcceleration;
     
     bool _exportViz = false;
     std::string _vizOutputDir = "/tmp";
@@ -56,8 +60,8 @@ namespace Camellia
     //! should be called by subclass during initialization: specify the solution object which will be used to store the prior-time solution (used in RHS for time-marching).
     void setConfigurationSolutionPriorTime(SolutionPtr configurationSolutionPriorTime);
     
-    //! should be called prior to first solve: set the solution moments object, as well as an initial density which is set if quasi-neutrality is being enforced.  Overriding subclasses should call the base class's method.
-    virtual void setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0);
+    //! should be called prior to first solve: set the solution moments object, as well as a background density which is set if quasi-neutrality is being enforced.  Overriding subclasses should call the base class's method.
+    virtual void setMoments(std::vector< Teuchos::RCP<SolutionMoments> > fMoments, FunctionPtr n0);
     
     //! When updateMoments is true, will call fMoments->update() prior to solve.
     void solve(const bool updateMoments);
@@ -73,6 +77,18 @@ namespace Camellia
     
     //! returns the specified component of the electric field as a Function, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
     virtual FunctionPtr E_i(int zeroBasedComp) = 0;
+    
+    //! Sets an extra acceleration term to be added to E + v x B; defaults to 0.
+    virtual std::vector<FunctionPtr> extraAcceleration();
+    
+    //! Sets an extra acceleration term added to E + v x B; defaults to 0.  May be used in context of 1D Poisson to introduce a magnetic field term.  Must be called *prior* to Vlasov formulation construction.
+    virtual void setExtraAcceleration(std::vector<FunctionPtr> extraAcceleration);
+
+    //! returns the specified component of the magnetic field at prior time, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for B_x, 1 for B_y, 2 for B_z.
+    virtual FunctionPtr B_i_priorTime(int zeroBasedComp) = 0;
+    
+    //! returns the specified component of the electric field at prior timeas a Function, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
+    virtual FunctionPtr E_i_priorTime(int zeroBasedComp) = 0;
 
     //! returns the field variable corresponding  to specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
     virtual VarPtr B_fieldVar(int zeroBasedComp);
@@ -98,6 +114,9 @@ namespace Camellia
     //! maximum moment number (starting from 0 for the unweighted integral over velocity space) required by the ConfigurationSpaceFormulation.
     virtual int maxMomentNumber() = 0;
     
+    //! called by Vlasov constructor: sets space and velocity dimensions
+    void setDimensions(int spaceDim, int velocityDim);
+    
     //! The configuration-space solution.
     SolutionPtr solution();
     
@@ -122,6 +141,7 @@ namespace Camellia
     virtual void saveCheckpoint(const std::string &checkpointDir);
     
     static Teuchos::RCP<ConfigurationSpaceFormulation> poissonFormulation(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType);
+    static Teuchos::RCP<ConfigurationSpaceFormulation> poissonFormulation(std::vector<double> q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType);
   };
 }
 

@@ -1268,12 +1268,22 @@ Camellia::FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(c
   return refCellPoints;
 }
 
-const Camellia::FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinates()
+const Intrepid2::TensorPoints<double,DeviceType> BasisCache::getSideRefCellPointsInVolumeCoordinates()
 {
   if (! isSideCache())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
                                "getSideRefCellPointsInVolumeCoordinates() only supported for side caches.");
+  }
+  return _cubPointsSideRefCell;
+}
+
+const Camellia::FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinatesFC()
+{
+  if (! isSideCache())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                               "getSideRefCellPointsInVolumeCoordinatesFC() only supported for side caches.");
   }
   return _cubPointsSideRefCellFC;
 }

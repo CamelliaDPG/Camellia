@@ -43,6 +43,7 @@ private:
   
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
+  bool _crankNicolson = false;
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev;      // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
@@ -53,8 +54,11 @@ private:
   
   double _t = 0; // current time
   
-  double _q;
-  double _m;
+  int _numSpecies;
+  std::vector<double> _q; // index is species ordinal
+  std::vector<double> _m;
+  std::vector<std::string> _speciesLabels;
+  std::vector<std::string> _f_names, _w_names, _f_hat_names, _tn_hat_names;
   
   ParameterFunctionPtr _n0; // if quasi-neutrality is enforced, this is set when initial conditions are set, as the integral of f0 over the whole of phase space, divided by the measure of the configuration-space mesh.
   
@@ -77,13 +81,13 @@ private:
   
   // set by user:
   ParameterFunctionPtr _dt;
-    
-  Teuchos::RCP<SolutionMoments> _solutionMoments;
-  Teuchos::RCP<SolutionMoments> _solutionMomentsPriorTime;
   
-  FunctionPtr _fSoln; // Camellia Function defining the solution of distribution f (refers to _vlasovSoln)
-  FunctionPtr _fDiff; // fixed-point step in Vlasov field f
-  FunctionPtr _fSolnPrev; // distribution f at previous time step
+  std::vector<Teuchos::RCP<SolutionMoments>> _solutionMoments; // one moments object per species
+  std::vector<Teuchos::RCP<SolutionMoments>> _solutionMomentsPriorTime;
+  
+  std::vector<FunctionPtr> _fSoln; // Camellia Function defining the solution of distribution f_i (refers to _vlasovSoln)
+  std::vector<FunctionPtr> _fDiff; // fixed-point step in Vlasov field f
+  std::vector<FunctionPtr> _fSolnPrev; // distribution f at previous time step
 
   int _minSubsteps = 3;  // minimum number of fixed-point iterations to run (alternating vlasov, configuration-space solves)
   int _maxSubsteps = 15; // maximum number of fixed-point iterations to run
@@ -128,7 +132,8 @@ public:
                                  std::vector<double> velocitySpaceVertices_y,
                                  std::vector<double> velocitySpaceVertices_z,
                                  const int H1Order, const int delta_k,
-                                 const int maxMomentNumber = 0);
+                                 const int maxMomentNumber = 0,
+                                 const bool useCrankNicolson = false);
   
   VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -137,7 +142,8 @@ public:
                                  std::vector<double> velocitySpaceVertices_x,
                                  std::vector<double> velocitySpaceVertices_y,
                                  const int H1Order, const int delta_k,
-                                 const int maxMomentNumber = 0);
+                                 const int maxMomentNumber = 0,
+                                 const bool useCrankNicolson = false);
   
   VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -145,7 +151,41 @@ public:
                                  double dt,
                                  std::vector<double> velocitySpaceVertices_x,
                                  const int H1Order, const int delta_k,
-                                 const int maxMomentNumber = 0);
+                                 const int maxMomentNumber = 0,
+                                 const bool useCrankNicolson = false);
+  
+  VlasovBackwardEulerFormulation(std::vector<double> q, std::vector<double> m, std::vector<std::string> speciesLabels,
+                                 bool useSerendipityBasis,
+                                 Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                 MeshTopologyPtr spatialMeshTopology,
+                                 double dt,
+                                 std::vector<double> velocitySpaceVertices_x,
+                                 std::vector<double> velocitySpaceVertices_y,
+                                 std::vector<double> velocitySpaceVertices_z,
+                                 const int H1Order, const int delta_k,
+                                 const int maxMomentNumber = 0,
+                                 const bool useCrankNicolson = false);
+  
+  VlasovBackwardEulerFormulation(std::vector<double> q, std::vector<double> m, std::vector<std::string> speciesLabels,
+                                 bool useSerendipityBasis,
+                                 Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                 MeshTopologyPtr spatialMeshTopology,
+                                 double dt,
+                                 std::vector<double> velocitySpaceVertices_x,
+                                 std::vector<double> velocitySpaceVertices_y,
+                                 const int H1Order, const int delta_k,
+                                 const int maxMomentNumber = 0,
+                                 const bool useCrankNicolson = false);
+  
+  VlasovBackwardEulerFormulation(std::vector<double> q, std::vector<double> m, std::vector<std::string> speciesLabels,
+                                 bool useSerendipityBasis,
+                                 Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                 MeshTopologyPtr spatialMeshTopology,
+                                 double dt,
+                                 std::vector<double> velocitySpaceVertices_x,
+                                 const int H1Order, const int delta_k,
+                                 const int maxMomentNumber = 0,
+                                 const bool useCrankNicolson = false);
 
   //! load from checkpoint
   void loadFromCheckpoint(const std::string &restartDir);
@@ -175,24 +215,24 @@ public:
   void clearSolution();
   
   // field variables:
-  VarPtr f();
+  VarPtr f(int speciesOrdinal=0);
   
   // traces:
-  VarPtr f_hat();
-  VarPtr t_n_hat();
+  VarPtr f_hat(int speciesOrdinal=0);
+  VarPtr t_n_hat(int speciesOrdinal=0);
   
   // test variables:
-  VarPtr w();
+  VarPtr w(int speciesOrdinal=0);
   
   MeshPtr vlasovMesh();
   MeshPtr configurationSpaceMesh();
   
   Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation();
   
-  Teuchos::RCP<SolutionMoments> solutionMoments();
+  Teuchos::RCP<SolutionMoments> solutionMoments(int i=0);
   
   //! SolutionMoments object for the prior-time solution.  Note that this does not get updated automatically in the course of a solve (it is not used internally).
-  Teuchos::RCP<SolutionMoments> solutionMomentsPriorTime();
+  Teuchos::RCP<SolutionMoments> solutionMomentsPriorTime(int i=0);
       
   SolutionPtr vlasovSolution();
   SolutionPtr configurationSpaceSolution();
@@ -208,6 +248,12 @@ public:
   
   //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
   void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in);
+  
+  //! Set the initial conditions without setting inflow conditions (relevant for the periodic case): multi-species version.  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
+  void setInitialConditions(std::vector<FunctionPtr> f0);
+  
+  //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case): multi-species version.  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
+  void setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in);
   
   void setEnforceQuasiNeutrality(bool enforceQuasiNeutrality);
   

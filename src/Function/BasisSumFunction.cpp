@@ -98,7 +98,7 @@ TFunction<double>("BasisSumFunction", BasisFactory::basisFactory()->getBasisRank
 //        }
 //      }
 //      bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
-//      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPointsFC() : basisCache->getSideRefCellPointsInVolumeCoordinates();
+//      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPointsFC() : basisCache->getSideRefCellPointsInVolumeCoordinatesFC();
 //      Camellia::FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
 //      CamelliaCellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
 //      refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension
@@ -239,7 +239,7 @@ void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType 
       oneCellRelativeReferenceNodes.checkinDeviceView(true);
       
       bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
-      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPointsFC() : basisCache->getSideRefCellPointsInVolumeCoordinates();
+      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPointsFC() : basisCache->getSideRefCellPointsInVolumeCoordinatesFC();
       Camellia::FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
       CamelliaCellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
       refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension

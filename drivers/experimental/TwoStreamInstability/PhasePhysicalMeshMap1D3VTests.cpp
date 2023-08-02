@@ -201,7 +201,7 @@ namespace
             out << "physical cubature points:\n" << physicalPhysCubPoints;
             
             out << "phase space reference points:\n" << basisCache->getRefCellPointsFC();
-            out << "phase space reference points in volume:\n" << basisCache->getSideRefCellPointsInVolumeCoordinates();
+            out << "phase space reference points in volume:\n" << basisCache->getSideRefCellPointsInVolumeCoordinatesFC();
             out << "physical ref points:\n" << physicalBasisCache->getRefCellPointsFC();
 
           }

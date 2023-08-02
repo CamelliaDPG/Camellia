@@ -103,7 +103,8 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   
   const auto &tensorPoints = basisCache->getPhysicalCubaturePoints();
   
-  const auto &phaseRefPoints = basisCache->getRefCellPoints(); // TODO: figure out whether we actually need the physical points (tensorPoints above), or whether we can just use tensorRefPoints everywhere instead…
+  const bool isSideCache = (basisCache->getSideIndex() != -1);
+  const auto &phaseRefPoints = isSideCache ? basisCache->getSideRefCellPointsInVolumeCoordinates() : basisCache->getRefCellPoints(); // TODO: figure out whether we actually need the physical points (tensorPoints above), or whether we can just use tensorRefPoints everywhere instead…
   
   const int numPhysicalPointComponents = phaseRefPoints.numTensorComponents() - numVelocityDimensions;
   
@@ -121,9 +122,7 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   const bool velocityPointsAreFullTensorProduct = tensorPoints.numTensorComponents() >= numVelocityDimensions + 1;
   
   TEUCHOS_TEST_FOR_EXCEPTION(!velocityPointsAreFullTensorProduct, std::invalid_argument, "Unsupported point structure; we require fully tensor-product physical points in the extrusion dimensions");
-  
-  const int numPoints = tensorPoints.extent_int(1);
-  
+    
   std::vector<int> physicalPointCounts(tensorPoints.numTensorComponents() - numVelocityDimensions);
   
   int numPhysicalPoints = 1;
@@ -165,8 +164,6 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   // It is also worth noting that creating basisCache_1D below is an inefficiency: those basis values won't
   // be reused beyond the body of this method…
   
-  const bool isSideCache = (basisCache->getSideIndex() != -1);
-  TEUCHOS_TEST_FOR_EXCEPTION(isSideCache, std::invalid_argument, "PhaseSpaceExtrusion doesn't support evaluation on sides");
   
   auto extrudedMeshTopology = dynamic_cast<ExtrudedMeshTopology*>(_phaseMesh->getTopology().get());
   TEUCHOS_TEST_FOR_EXCEPTION(extrudedMeshTopology == NULL, std::invalid_argument, "phase-space mesh must use an ExtrudedMeshTopology");
