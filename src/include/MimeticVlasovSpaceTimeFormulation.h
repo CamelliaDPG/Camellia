@@ -85,11 +85,11 @@ public:
   VarPtr w_t();
   
   // local conservation diagnostics
-  virtual std::map<int,FunctionPtr> testForMassConservation() override;
-  virtual std::map<int,FunctionPtr> testForXMomentumConservation() override;
-  virtual std::map<int,FunctionPtr> testForYMomentumConservation() override;
-  virtual std::map<int,FunctionPtr> testForZMomentumConservation() override;
-  virtual std::map<int,FunctionPtr> testForEnergyConservation() override;
+  virtual std::map<int,FunctionPtr> testForMassConservation(int i) override;
+  virtual std::map<int,FunctionPtr> testForXMomentumConservation(int i) override;
+  virtual std::map<int,FunctionPtr> testForYMomentumConservation(int i) override;
+  virtual std::map<int,FunctionPtr> testForZMomentumConservation(int i) override;
+  virtual std::map<int,FunctionPtr> testForEnergyConservation(int i) override;
 };
 
 }

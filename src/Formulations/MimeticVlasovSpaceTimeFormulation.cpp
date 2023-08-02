@@ -76,7 +76,7 @@ IPPtr MimeticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
   const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
   
   // tests
-  VarPtr w = this->w();
+  VarPtr w = this->w(0); // 0: first species (the only one we have)
   vector<VarPtr> w_a(velocityDim);
   vector<VarPtr> w_v(spaceDim);
   VarPtr w_c = this->w_c();
@@ -262,17 +262,17 @@ void MimeticVlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlaso
   const int velocityDim = this->velocityDim();
   
   // trace
-  VarPtr t_n_hat = this->t_n_hat();
+  VarPtr t_n_hat = this->t_n_hat(0); // 0: first species (the only one we have)
   
   // fields
-  VarPtr f = this->f();
+  VarPtr f = this->f(0); // 0: first species (the only one we have)
   vector<VarPtr> g_a(velocityDim);
   vector<VarPtr> g_v(spaceDim);
   VarPtr g_c = this->g_c();
   VarPtr g_t = this->g_t();
   
   // tests
-  VarPtr w = this->w();
+  VarPtr w = this->w(0); // 0: first species (the only one we have)
   vector<VarPtr> w_a(velocityDim);
   vector<VarPtr> w_v(spaceDim);
   VarPtr w_c = this->w_c();
@@ -354,9 +354,10 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> MimeticVlasovSpaceTimeFormulation::next
   return nextSlabForm;
 }
 
-map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForMassConservation()
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForMassConservation(int i)
 {
-  VarPtr w   = this->w();
+  TEUCHOS_TEST_FOR_EXCEPTION(i != 0, std::invalid_argument, "MimeticVlasovSpaceTimeFormulation only supports a single species");
+  VarPtr w   = this->w(i);
   VarPtr w_c = this->w_c();
   map<int,FunctionPtr> testFunction;
   testFunction[w->ID()  ] = Function::constant(1.0);
@@ -365,22 +366,22 @@ map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForMassConservation(
   return testFunction;
 }
 
-map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForEnergyConservation()
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForEnergyConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
-map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForXMomentumConservation()
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForXMomentumConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
-map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForYMomentumConservation()
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForYMomentumConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
-map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForZMomentumConservation()
+map<int,FunctionPtr> MimeticVlasovSpaceTimeFormulation::testForZMomentumConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
@@ -389,7 +390,7 @@ map<int,int> MimeticVlasovSpaceTimeFormulation::testOrderEnhancements()
 {
   map<int,int> orderEnhancements;
   // for all test IDs other than w1, we don't enrich
-  auto w1 = this->w();
+  auto w1 = this->w(0); // 0: first species (the only one we have)
   // want to exclude all test IDs other than w1
   std::vector<int> testIDs = this->vlasovBF()->varFactory()->testIDs();
   std::set<int> otherTestIDs(testIDs.begin(),testIDs.end());
@@ -404,8 +405,8 @@ map<int,int> MimeticVlasovSpaceTimeFormulation::testOrderEnhancements()
 map<int,int> MimeticVlasovSpaceTimeFormulation::trialOrderEnhancements()
 {
   map<int,int> orderEnhancements;
-  orderEnhancements[t_n_hat()->ID()] = 1; // +1 for non-conforming
-  orderEnhancements[g_c()->ID()]     = 1; // H^1 order
+  orderEnhancements[t_n_hat(0)->ID()] = 1; // +1 for non-conforming; 0: first species (the only one we have)
+  orderEnhancements[g_c()->ID()]      = 1; // H^1 order
   return orderEnhancements;
 }
 

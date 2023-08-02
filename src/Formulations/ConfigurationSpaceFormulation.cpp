@@ -60,6 +60,15 @@ VarPtr ConfigurationSpaceFormulation::En_hat()
   return Teuchos::null;
 }
 
+std::vector<FunctionPtr> ConfigurationSpaceFormulation::extraAcceleration()
+{
+  if (int(_extraAcceleration.size()) < _velocityDim)
+  {
+    _extraAcceleration.resize(_velocityDim, Function::zero());
+  }
+  return _extraAcceleration;
+}
+
 double ConfigurationSpaceFormulation::l2NormOfSolutionUpdate()
 {
   return 0; // default implementation
@@ -88,6 +97,11 @@ void ConfigurationSpaceFormulation::loadFromCheckpoint(const std::string &checkp
 }
 
 Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulation::poissonFormulation(const double &q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType)
+{
+  return Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q,eps0,timeDiscretizationType));
+}
+
+Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulation::poissonFormulation(std::vector<double> q, const double &eps0, const TimeDiscretizationType &timeDiscretizationType)
 {
   return Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q,eps0,timeDiscretizationType));
 }
@@ -150,6 +164,17 @@ void ConfigurationSpaceFormulation::setConfigurationSolutionPriorTime(SolutionPt
   }
 }
 
+void ConfigurationSpaceFormulation::setDimensions(int spaceDim, int velocityDim)
+{
+  _spaceDim    = spaceDim;
+  _velocityDim = velocityDim;
+}
+
+void ConfigurationSpaceFormulation::setExtraAcceleration(std::vector<FunctionPtr> extraAcceleration)
+{
+  _extraAcceleration = extraAcceleration;
+}
+
 void ConfigurationSpaceFormulation::setExportViz(bool exportViz, const std::string outputDir)
 {
   _exportViz = exportViz;
@@ -157,7 +182,7 @@ void ConfigurationSpaceFormulation::setExportViz(bool exportViz, const std::stri
 }
 
 //! should be called prior to first solve: set the solution moments object, and optionally a background density n0 (used when quasi-neutrality is enforced).
-void ConfigurationSpaceFormulation::setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0)
+void ConfigurationSpaceFormulation::setMoments(std::vector< Teuchos::RCP<SolutionMoments> > fMoments, FunctionPtr n0)
 {
   _fMoments = fMoments;
 }
@@ -169,7 +194,10 @@ void ConfigurationSpaceFormulation::solve(const bool updateMoments)
   {
     if (updateMoments)
     {
-      _fMoments->update();
+      for (const auto &moments_i : _fMoments)
+      {
+        moments_i->update();
+      }
     }
     _configurationSoln->solve(); // TODO: add support for GMG, etc. (this is just a direct solve: OK for 1D + time, but expensive beyond that)
     

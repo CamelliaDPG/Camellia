@@ -34,6 +34,9 @@
 
 using namespace Camellia;
 
+using std::string;
+using std::vector;
+
 const string VlasovSpaceTimeFormulation::S_F = "f";
 
 const string VlasovSpaceTimeFormulation::S_F_HAT = "\\widehat{f}";
@@ -100,8 +103,32 @@ namespace
   };
 }
 
-
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
+                                                       bool useSerendipityBasis,
+                                                       Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                                       MeshTopologyPtr spatialMeshTopology,
+                                                       std::vector<double> temporalVertices,
+                                                       std::vector<double> velocitySpaceVertices_x,
+                                                       std::vector<double> velocitySpaceVertices_y,
+                                                       std::vector<double> velocitySpaceVertices_z,
+                                                       const int H1Order, const int delta_k,
+                                                       const int numUniformRefinements,
+                                                       const bool deferInitialization)
+:
+VlasovSpaceTimeFormulation(vector<double>{q}, vector<double>{m}, vector<string>{""},
+                           useSerendipityBasis,
+                           configurationSpaceFormulation,
+                           spatialMeshTopology,
+                           temporalVertices,
+                           velocitySpaceVertices_x,
+                           velocitySpaceVertices_y,
+                           velocitySpaceVertices_z,
+                           H1Order, delta_k,
+                           numUniformRefinements,
+                           deferInitialization)
+{}
+
+VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(std::vector<double> q, std::vector<double> m, vector<string> speciesLabels,
                                                        bool useSerendipityBasis,
                                                        Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                        MeshTopologyPtr spatialMeshTopology,
@@ -118,8 +145,10 @@ _useSerendipityBasis(useSerendipityBasis),
 _H1Order(H1Order),
 _delta_k(delta_k),
 _configurationSpaceFormulation(configurationSpaceFormulation),
+_numSpecies(q.size()),
 _q(q),
 _m(m),
+_speciesLabels(speciesLabels),
 _temporalVertices(temporalVertices),
 _velocitySpaceVertices_x(velocitySpaceVertices_x),
 _velocitySpaceVertices_y(velocitySpaceVertices_y),
@@ -127,6 +156,40 @@ _velocitySpaceVertices_z(velocitySpaceVertices_z),
 _spatialMeshTopology(spatialMeshTopology),
 _numUniformRefinements(numUniformRefinements)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(_q.size() != _m.size(), std::invalid_argument, "q and m arguments must agree in length");
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies == 0, std::invalid_argument, "Must have at least one species");
+  
+  if (_speciesLabels.size() == 0)
+  {
+    if (_numSpecies == 1)
+    {
+      _speciesLabels = {""}; // no suffix for single-species
+    }
+    else
+    {
+      for (int i=1; i<=_numSpecies; i++)
+      {
+        _speciesLabels.push_back(std::to_string(i));
+      }
+    }
+  }
+  _density.resize(_numSpecies);
+  _momentum.resize(_numSpecies);
+  _energy.resize(_numSpecies);
+  
+  _f_names.resize(_numSpecies);
+  _w_names.resize(_numSpecies);
+  _tn_hat_names.resize(_numSpecies,"");
+  _f_hat_names.resize(_numSpecies, "");
+  
+  for (int i=0; i<_numSpecies; i++)
+  {
+    std::string suffix = (_speciesLabels[i].length() > 0) ? "_" + _speciesLabels[i] : "";
+    _f_names[i]      = S_F + suffix;
+    _w_names[i]      = S_W + suffix;
+    _tn_hat_names[i] = S_T_N_HAT + suffix;
+  }
+  
   if (!deferInitialization)
   {
     initialize();
@@ -143,9 +206,15 @@ SolutionPtr VlasovSpaceTimeFormulation::vlasovSolution()
   return _vlasovSoln;
 }
 
-vector<FunctionPtr> VlasovSpaceTimeFormulation::a()
+vector<FunctionPtr> VlasovSpaceTimeFormulation::a(int i)
 {
-  return _a;
+  // returns the acceleration term for species i
+  vector<FunctionPtr> a_i(_a.size());
+  for (unsigned vd=0; vd<_a.size(); vd++)
+  {
+    a_i[vd] = (_q[i] / _m[i]) * _a[vd];
+  }
+  return a_i;
 }
 
 void VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr configVariable, FunctionPtr dirichletValue)
@@ -179,48 +248,61 @@ void VlasovSpaceTimeFormulation::computeConservationDiagnostics(bool updateSolut
 {
   if (updateSolutionMoments)
   {
-    _solutionMoments->update();
+    for (auto & solnMoments : _solutionMoments)
+    {
+      solnMoments->update();
+    }
   }
   
   // record conservation diagnostics
   int slabNumber = this->slabOrdinal();
   
   // ensure that our containers are big enough:
-  _massIntegrals.resize(slabNumber+1, Teuchos::null);
-  _momentumIntegrals.resize(_spaceDim);
-  for (int d=0; d<_spaceDim; d++)
+  _massIntegrals.resize(_numSpecies);
+  _momentumIntegrals.resize(_numSpecies);
+  _energyIntegrals.resize(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
   {
-    _momentumIntegrals[d].resize(slabNumber+1, Teuchos::null);
+    _massIntegrals[i].resize(slabNumber+1, Teuchos::null);
+    _momentumIntegrals[i].resize(_spaceDim);
+    for (int d=0; d<_spaceDim; d++)
+    {
+      _momentumIntegrals[i][d].resize(slabNumber+1, Teuchos::null);
+    }
+    _energyIntegrals[i].resize(slabNumber+1, Teuchos::null);
   }
-  _energyIntegrals.resize(slabNumber+1, Teuchos::null);
   
   if (_maxMomentForConservationDiagnostics >= 0)
   {
     // create Solution object
     VarFactoryPtr varFactory = VarFactory::varFactory();
     
-    VarPtr massVar;
-    std::vector<VarPtr> momentumVar(_spaceDim);
-    VarPtr energyVar;
+    vector<VarPtr> massVar(_numSpecies);
+    vector<vector<VarPtr>> momentumVar(_numSpecies, vector<VarPtr>(_spaceDim));
+    vector<VarPtr> energyVar(_numSpecies);
     
     std::map<int, FunctionPtr> projectionMap;
-    if (_density != Teuchos::null)
+    for (int i=0; i<_numSpecies; i++)
     {
-      massVar = varFactory->fieldVar("mass");
-      projectionMap[massVar->ID()] = _density;
-    }
-    for (int d=0; d<_spaceDim; d++)
-    {
-      if (_momentum[d] != Teuchos::null)
+      std::string suffix = (_speciesLabels[i].length() > 0) ? "_" + _speciesLabels[i] : "";
+      if (_density[i] != Teuchos::null)
       {
-        momentumVar[d] = varFactory->fieldVar("momentum" + std::to_string(d));
-        projectionMap[momentumVar[d]->ID()] = _momentum[d];
+        massVar[i] = varFactory->fieldVar("mass" + suffix);
+        projectionMap[massVar[i]->ID()] = _density[i];
       }
-    }
-    if (_energy != Teuchos::null)
-    {
-      energyVar = varFactory->fieldVar("energy");
-      projectionMap[energyVar->ID()] = _energy;
+      for (int d=0; d<_spaceDim; d++)
+      {
+        if (_momentum[i][d] != Teuchos::null)
+        {
+          momentumVar[i][d] = varFactory->fieldVar("momentum" + suffix + std::to_string(d));
+          projectionMap[momentumVar[i][d]->ID()] = _momentum[i][d];
+        }
+      }
+      if (_energy[i] != Teuchos::null)
+      {
+        energyVar[i] = varFactory->fieldVar("energy" + suffix);
+        projectionMap[energyVar[i]->ID()] = _energy[i];
+      }
     }
     
     auto H1Order = _configurationSpaceFormulation->configurationSpaceMesh()->globalDofAssignment()->getInitialH1Order();
@@ -232,47 +314,58 @@ void VlasovSpaceTimeFormulation::computeConservationDiagnostics(bool updateSolut
             
     FunctionPtr one = Function::constant(1.0);
     const int quadratureEnrichment = 0;
-    _massIntegrals[slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, massVar, one, quadratureEnrichment) );
-    
-    if (_maxMomentForConservationDiagnostics >= 1)
+    for (int i=0; i<_numSpecies; i++)
     {
-      for (int d=0; d<_spaceDim; d++)
+      _massIntegrals[i][slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, massVar[i], one, quadratureEnrichment) );
+      
+      if (_maxMomentForConservationDiagnostics >= 1)
       {
-        _momentumIntegrals[d][slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, momentumVar[d], one, quadratureEnrichment) );
+        for (int d=0; d<_spaceDim; d++)
+        {
+          _momentumIntegrals[i][d][slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, momentumVar[i][d], one, quadratureEnrichment) );
+        }
       }
-    }
-    
-    if (_maxMomentForConservationDiagnostics >= 2)
-    {
-      _energyIntegrals[slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, energyVar, one, quadratureEnrichment) );
+      
+      if (_maxMomentForConservationDiagnostics >= 2)
+      {
+        _energyIntegrals[i][slabNumber] = Teuchos::rcp( new SpatialIntegralOfSpaceTimeSolution(diagnosticSolution, energyVar[i], one, quadratureEnrichment) );
+      }
     }
   }
   
   // element-wise integrals ("local conservation", as opposed to temporally pointwise conservation)
-  recordElementwiseConservationDiagnostics(_elementwiseMassIntegrals, slabOrdinal(), testForMassConservation());
-  // TODO: add records for momentum, energy
+  _elementwiseMassIntegrals.resize(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    recordElementwiseConservationDiagnostics(i, _elementwiseMassIntegrals[i], slabOrdinal(), testForMassConservation(i));
+    // TODO: add records for momentum, energy
+  }
   
   // global measurement of the residual of the w (aka w1, in context of mimetic) equation:
-  auto w1 = this->w();
-  // want to exclude all test IDs other than w1
-  std::vector<int> testIDs = this->vlasovBF()->varFactory()->testIDs();
-  std::set<int> otherTestIDs(testIDs.begin(),testIDs.end());
-  otherTestIDs.erase(w1->ID());
-  
-  auto residual_w1 = _vlasovBF->testFunctional(_vlasovSoln,false,SolutionComponent::STANDARD_SOLUTION,0,otherTestIDs);
-  
-//  std::cout << "residual_w1:\n" << residual_w1->displayString() << std::endl;
-  auto ip_l2 = _vlasovSoln->bf()->l2Norm();
-  auto rieszRep_residual = RieszRep::rieszRep(_vlasovSoln->mesh(), ip_l2, residual_w1);
-  const double norm = rieszRep_residual->getNorm();
-  
-  if (int(_w1ResidualNorm.size()) > slabNumber)
+  _w1ResidualNorm.resize(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
   {
-    _w1ResidualNorm[slabNumber] = norm;
-  }
-  else
-  {
-    _w1ResidualNorm.push_back(norm);
+    auto w1 = this->w(i);
+    // want to exclude all test IDs other than w1
+    std::vector<int> testIDs = this->vlasovBF()->varFactory()->testIDs();
+    std::set<int> otherTestIDs(testIDs.begin(),testIDs.end());
+    otherTestIDs.erase(w1->ID());
+    
+    auto residual_w1 = _vlasovBF->testFunctional(_vlasovSoln,false,SolutionComponent::STANDARD_SOLUTION,0,otherTestIDs);
+    
+  //  std::cout << "residual_w1:\n" << residual_w1->displayString() << std::endl;
+    auto ip_l2 = _vlasovSoln->bf()->l2Norm();
+    auto rieszRep_residual = RieszRep::rieszRep(_vlasovSoln->mesh(), ip_l2, residual_w1);
+    const double norm = rieszRep_residual->getNorm();
+    
+    if (int(_w1ResidualNorm[i].size()) > slabNumber)
+    {
+      _w1ResidualNorm[i][slabNumber] = norm;
+    }
+    else
+    {
+      _w1ResidualNorm[i].push_back(norm);
+    }
   }
 }
 
@@ -291,9 +384,9 @@ SolutionPtr VlasovSpaceTimeFormulation::configurationSpaceSolution()
   return _configurationSpaceFormulation->solution();
 }
 
-const double &VlasovSpaceTimeFormulation::conservationLawResidualNorm(int slabOrdinal)
+const double &VlasovSpaceTimeFormulation::conservationLawResidualNorm(int slabOrdinal, int speciesOrdinal)
 {
-  return _w1ResidualNorm[slabOrdinal];
+  return _w1ResidualNorm[speciesOrdinal][slabOrdinal];
 }
 
 Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
@@ -361,9 +454,12 @@ VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
     basisFamily = BasisFamily::hierarchicalBasisFamily();
   }
   
-  VarPtr f = vlasovVF->fieldVar(S_F);            // distribution function (field variable)
-  VarPtr w = vlasovVF->testVar(S_W, HGRAD);      // test function w; lies in HGRAD of the whole space-time phase space
-  VarPtr t_n_hat = vlasovVF->fluxVar(S_T_N_HAT); // t_n_hat: L^2 (non-conforming) trace
+  for (int i=0; i<_numSpecies; i++)
+  {
+    VarPtr f_i = vlasovVF->fieldVar(_f_names[i]);            // distribution function (field variable)
+    VarPtr w_i = vlasovVF->testVar(_w_names[i], HGRAD);      // test function w; lies in HGRAD of the whole space-time phase space
+    VarPtr t_n_hat_i = vlasovVF->fluxVar(_tn_hat_names[i]); // t_n_hat: L^2 (non-conforming) trace
+  }
   
   vlasovVF->setTrialBasisFamily(basisFamily);
   vlasovVF->setTestBasisFamily(basisFamily);
@@ -381,15 +477,19 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   
   MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
   
-  VarPtr tn = this->t_n_hat();
-  bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
-  SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
-  auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
-  tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
-  // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
-  FunctionPtr f0 = tnInterfaceFxn;
+  std::vector<FunctionPtr> f0(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    VarPtr tn = this->t_n_hat(i);
+    bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
+    SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
+    auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
+    tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
+    // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
+    f0[i] = tnInterfaceFxn;
+  }
   
-  if (_f_inflow != Teuchos::null)
+  if (_f_inflow.size() != 0)
   {
     nextSlabForm->setInitialAndInflowConditions(f0, _f_inflow);
   }
@@ -500,16 +600,16 @@ bool VlasovSpaceTimeFormulation::exportViz() const
   return _exportViz;
 }
 
-VarPtr VlasovSpaceTimeFormulation::f()
+VarPtr VlasovSpaceTimeFormulation::f(int i)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->trialVar(S_F);
+  return vf->trialVar(_f_names[i]);
 }
 
-VarPtr VlasovSpaceTimeFormulation::f_hat()
+VarPtr VlasovSpaceTimeFormulation::f_hat(int i)
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
-  return vf->trialVar(S_F_HAT);
+  return vf->trialVar(_f_hat_names[i]);
 }
 
 int VlasovSpaceTimeFormulation::fixedPointMaxSubsteps() const
@@ -569,6 +669,8 @@ void VlasovSpaceTimeFormulation::initialize()
   
   _spaceDim = _spatialMeshTopology->getDimension();
   _velocityDim = velocitySpaceVertices.size();
+  
+  _configurationSpaceFormulation->setDimensions(_spaceDim, _velocityDim);
 
   TFunctionPtr<double> parity = TFunction<double>::sideParity();
   TFunctionPtr<double> n = TFunction<double>::normal();
@@ -580,13 +682,29 @@ void VlasovSpaceTimeFormulation::initialize()
   _vlasovBF = BF::bf(vlasovVF);
   
   // fields
-  VarPtr f = this->f(); // Vlasov
+  std::vector<VarPtr> f(_numSpecies); // Vlasov distributions
   
   // traces
-  VarPtr t_n_hat = this->t_n_hat(); // t_n_hat: L^2 (non-conforming) trace
+  std::vector<VarPtr> t_n_hat(_numSpecies); // t_n_hat: L^2 (non-conforming) trace
+  std::vector<VarPtr> f_hat(_numSpecies);   // f_hat:   conforming trace (unused in present implementation -- see l2Trace flag below)
 
   // tests
-  VarPtr w = this->w();   // Vlasov test function
+  std::vector<VarPtr> w(_numSpecies);   // Vlasov test functions
+  
+  for (int i=0; i<_numSpecies; i++)
+  {
+    std::string suffix = (_speciesLabels[i].length() > 0) ? "_" + _speciesLabels[i] : "";
+    VarPtr f_i = vlasovVF->fieldVar(S_F + suffix);
+    VarPtr w_i = vlasovVF->testVar(S_W + suffix, HGRAD); // w lies in HGRAD of phase space
+    
+    VarPtr t_n_hat_i = vlasovVF->fluxVar(S_T_N_HAT + suffix);
+    
+    f[i]       = f_i;
+    w[i]       = w_i;
+    t_n_hat[i] = t_n_hat_i;
+  }
+  
+  _vlasovBF = BF::bf(vlasovVF);
   
   const bool allowPruning = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
@@ -599,7 +717,11 @@ void VlasovSpaceTimeFormulation::initialize()
   _vlasovSolnPrev = Solution::solution(_vlasovBF,vlasovMesh); // will copy out after fixed-point solve
   
   const int maxMomentNumber = _configurationSpaceFormulation->maxMomentNumber();
-  _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln, f, _configurationSpaceFormulation->configurationSpaceMesh()) );
+  _solutionMoments.resize(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    _solutionMoments[i] = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln, f[i], _configurationSpaceFormulation->configurationSpaceMesh()) );
+  }
   
   _n0 = ParameterFunction::parameterFunction(0); // we'll update this when initial conditions are set, if _enforceQuasiNeutrality is true
   _configurationSpaceFormulation->setMoments(_solutionMoments,_n0);
@@ -641,9 +763,10 @@ void VlasovSpaceTimeFormulation::initialize()
       v_cross_B[2] = v[0] * B[1] - v[1] * B[0];
     }
     
+    auto extraAcceleration = _configurationSpaceFormulation->extraAcceleration();
     for (int i=0; i<velocityDim; i++)
     {
-      _a[i] = (_q/_m) * (E[i] + v_cross_B[i]);
+      _a[i] = E[i] + v_cross_B[i] + extraAcceleration[i]; // q/m weight is applied based on the species within the a() implementation.
     }
   }
   
@@ -652,10 +775,17 @@ void VlasovSpaceTimeFormulation::initialize()
   auto vlasovSolnWeakPtr     = Teuchos::rcp(_vlasovSoln.get(),     false);
   auto vlasovSolnPrevWeakPtr = Teuchos::rcp(_vlasovSolnPrev.get(), false);
   
-  _fSoln     = Function::solution(f, vlasovSolnWeakPtr);
-  FunctionPtr f_solnPrev = Function::solution(f, vlasovSolnPrevWeakPtr);
+  _fSoln.resize(_numSpecies);
+  _fDiff.resize(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    _fSoln[i]     = Function::solution(f[i], vlasovSolnWeakPtr);
+    FunctionPtr f_solnPrev = Function::solution(f[i], vlasovSolnPrevWeakPtr);
+    
+    _fDiff[i] = _fSoln[i] - f_solnPrev;
+  }
   
-  _fDiff = _fSoln - f_solnPrev;
+  
     
   auto vlasovRHS = RHS::rhs();
   _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
@@ -755,10 +885,6 @@ void VlasovSpaceTimeFormulation::initialize()
 
 void VlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlasovBF)
 {
-  VarPtr f = this->f();
-  VarPtr w = this->w();
-  VarPtr t_n_hat = this->t_n_hat();
-  
   Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation = this->configurationSpaceFormulation();
   
   const int spaceDim = this->spaceDim();
@@ -772,24 +898,32 @@ void VlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlasovBF)
   // The below assumes that spaceDim <= velocityDim; enforce that here:
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > velocityDim, std::invalid_argument, "velocityDim must be at least as large as spaceDim");
   std::vector<FunctionPtr> v;
-  for (int i=0; i<velocityDim; i++)
+  for (int vd=0; vd<velocityDim; vd++)
   {
-    v.push_back(this->v_i(i));
-  }
-  for (int i=0; i<spaceDim; i++)
-  {
-    vlasovBF->addTerm( -v[i] * f, w->di(indexOffsetSpaceOneBased + i));  // dx_i
-  }
-  vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
-  
-  auto a = this->a(); // acceleration term
-  for (int i=0; i<velocityDim; i++)
-  {
-    // grad v of f
-    vlasovBF->addTerm(-a[i] * f, w->di(indexOffsetVelocityOneBased + i));
+    v.push_back(this->v_i(vd));
   }
   
-  vlasovBF->addTerm(t_n_hat, w);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    VarPtr f = this->f(i);
+    VarPtr w = this->w(i);
+    VarPtr t_n_hat = this->t_n_hat(i);
+    
+    for (int d=0; d<spaceDim; d++)
+    {
+      vlasovBF->addTerm( -v[d] * f, w->di(indexOffsetSpaceOneBased + d));  // dx_d
+    }
+    vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
+    
+    auto a = this->a(); // acceleration term
+    for (int vd=0; vd<velocityDim; vd++)
+    {
+      // grad v of f
+      vlasovBF->addTerm(-a[vd] * f, w->di(indexOffsetVelocityOneBased + vd));
+    }
+    
+    vlasovBF->addTerm(t_n_hat, w);
+  }
 }
 
 int VlasovSpaceTimeFormulation::iterativeSolveMaxIterations() const
@@ -812,34 +946,34 @@ std::vector<double> VlasovSpaceTimeFormulation::iterativeSolveTolerances() const
   return _cgTols;
 }
 
-const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localMassConservationDiagnostics(int slabOrdinal)
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localMassConservationDiagnostics(int slabOrdinal, int speciesOrdinal)
 {
-  return _elementwiseMassIntegrals[slabOrdinal];
+  return _elementwiseMassIntegrals[speciesOrdinal][slabOrdinal];
 }
 
-const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localXMomentumConservationDiagnostics(int slabOrdinal)
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localXMomentumConservationDiagnostics(int slabOrdinal, int speciesOrdinal)
 {
-  return _elementwiseMomentumIntegrals[0][slabOrdinal];
+  return _elementwiseMomentumIntegrals[speciesOrdinal][0][slabOrdinal];
 }
 
-const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localYMomentumConservationDiagnostics(int slabOrdinal)
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localYMomentumConservationDiagnostics(int slabOrdinal, int speciesOrdinal)
 {
-  return _elementwiseMomentumIntegrals[1][slabOrdinal];
+  return _elementwiseMomentumIntegrals[speciesOrdinal][1][slabOrdinal];
 }
 
-const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localZMomentumConservationDiagnostics(int slabOrdinal)
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localZMomentumConservationDiagnostics(int slabOrdinal, int speciesOrdinal)
 {
-  return _elementwiseMomentumIntegrals[2][slabOrdinal];
+  return _elementwiseMomentumIntegrals[speciesOrdinal][2][slabOrdinal];
 }
 
-const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localEnergyConservationDiagnostics(int slabOrdinal)
+const VlasovSpaceTimeFormulation::ElementwiseConservationDiagnostics & VlasovSpaceTimeFormulation::localEnergyConservationDiagnostics(int slabOrdinal, int speciesOrdinal)
 {
-  return _elementwiseEnergyIntegrals[slabOrdinal];
+  return _elementwiseEnergyIntegrals[speciesOrdinal][slabOrdinal];
 }
 
-double VlasovSpaceTimeFormulation::m() const
+double VlasovSpaceTimeFormulation::m(int i) const
 {
-  return _m;
+  return _m[i];
 }
 
 int VlasovSpaceTimeFormulation::maxMomentForConservationDiagnostics() const
@@ -854,7 +988,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
   auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(_spatialMeshTopology);
   
-  auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _useSerendipityBasis, _configurationSpaceFormulation, rootSpatialMeshTopology,
+  auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _speciesLabels, _useSerendipityBasis, _configurationSpaceFormulation, rootSpatialMeshTopology,
                                                                   temporalVertices, _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z,
                                                                   _H1Order, _delta_k, _numUniformRefinements));
   
@@ -870,19 +1004,23 @@ int VlasovSpaceTimeFormulation::numUniformRefinements() const
 
 void VlasovSpaceTimeFormulation::printLocalConservationReportForSlab(int slabOrdinal)
 {
-  auto & massIntegral = _elementwiseMassIntegrals[slabOrdinal];
-  std::cout << "max mass conservation failure occured in element " << massIntegral.elementWithMaxConservationFailure << ": " << massIntegral.maxElementConservationFailure << std::endl;
-  
-  auto & residualNorm = conservationLawResidualNorm(slabOrdinal);
-  std::cout << "enriched L^2-dual norm of the conservation law residual: " << residualNorm << std::endl;
+  for (int i=0; i<_numSpecies; i++)
+  {
+    std::string prefix = (_speciesLabels[i].size() == 0) ? "" : "species " + _speciesLabels[i] + ": ";
+    auto & massIntegral = _elementwiseMassIntegrals[i][slabOrdinal];
+    std::cout << prefix << "max mass conservation failure occured in element " << massIntegral.elementWithMaxConservationFailure << ": " << massIntegral.maxElementConservationFailure << std::endl;
+    
+    auto & residualNorm = conservationLawResidualNorm(slabOrdinal);
+    std::cout << prefix << "enriched L^2-dual norm of the conservation law residual: " << residualNorm << std::endl;
+  }
 }
 
-double VlasovSpaceTimeFormulation::q() const
+double VlasovSpaceTimeFormulation::q(int i) const
 {
-  return _q;
+  return _q[i];
 }
 
-void VlasovSpaceTimeFormulation::recordElementwiseConservationDiagnostics(std::vector< ElementwiseConservationDiagnostics > &diagnosticHistory, int slabOrdinal, const std::map<int,FunctionPtr> &testFunction)
+void VlasovSpaceTimeFormulation::recordElementwiseConservationDiagnostics(int speciesOrdinal, std::vector< ElementwiseConservationDiagnostics > &diagnosticHistory, int slabOrdinal, const std::map<int,FunctionPtr> &testFunction)
 {
   auto trialFunctional = _vlasovBF->trialFunctional(testFunction); // the BF evaluated at the test function
   
@@ -1063,12 +1201,16 @@ void VlasovSpaceTimeFormulation::solve()
       _vlasovSoln->solve(gmgSolver);
       substepIterationCounts[substepOrdinal] = gmgSolver->iterationCount();
     }
-    _solutionMoments->update();
+    for (auto & solnMoments : _solutionMoments)
+    {
+      solnMoments->update();
+    }
     {
       double n0;
       if (_enforceQuasiNeutrality)
       {
-        FunctionPtr zeroMoment   = _solutionMoments->solutionMomentFunction(0);
+        // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
+        FunctionPtr zeroMoment   = _solutionMoments[0]->solutionMomentFunction(0);
         auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
         const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
         const double f_integral  = zeroMoment->integrate(configurationMesh);
@@ -1087,8 +1229,16 @@ void VlasovSpaceTimeFormulation::solve()
     if (substepOrdinal > 0)
     {
       auto vlasovMesh  = _vlasovSoln->mesh();
-      const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
-      const double f_L2 = _fSoln->l2norm(vlasovMesh);
+      double fDiff_L2_squared = 0, f_L2_squared = 0;
+      for (int i=0; i<_numSpecies; i++)
+      {
+        double fDiff_L2_i = _fDiff[i]->l2norm(vlasovMesh);
+        double f_L2_i     = _fSoln[i]->l2norm(vlasovMesh);
+        fDiff_L2_squared += fDiff_L2_i * fDiff_L2_i;
+        f_L2_squared     += f_L2_i * f_L2_i;
+      }
+      const double fDiff_L2 = sqrt(fDiff_L2_squared);
+      const double f_L2 = sqrt(f_L2_squared);
       const double fRelDiff = fDiff_L2 / f_L2;
       
       substepStepSizesVlasov.push_back(fRelDiff);
@@ -1122,30 +1272,41 @@ void VlasovSpaceTimeFormulation::solve()
 
 void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "For multi-species formulations, must call the multi-species setInitialConditions");
+  this->setInitialConditions(vector<FunctionPtr>{f0});
+}
+
+void VlasovSpaceTimeFormulation::setInitialConditions(vector<FunctionPtr> f0)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies != int(f0.size()), std::invalid_argument, "number of f0 components must match the number of species in the formulation");
+  
   _f0 = f0;
   
   auto vlasovBC = BC::bc();
   
-  VarPtr t_n = this->t_n_hat();
-  for (int vd=0; vd<_velocityDim; vd++)
+  for (int i=0; i<_numSpecies; i++)
   {
-    int tagMin = this->tagVlasovMinVelocity(vd);
-    int tagMax = this->tagVlasovMaxVelocity(vd);
-    vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
-    vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    VarPtr t_n = this->t_n_hat(i);
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      const int tagMin = this->tagVlasovMinVelocity(vd);
+      const int tagMax = this->tagVlasovMaxVelocity(vd);
+      vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
+      vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    }
+    int tagInitialTime = this->tagVlasovInitialTime();
+    vlasovBC->addDirichlet(t_n, tagInitialTime, -f0[i]); // minus sign thanks to outward normal on temporal interface
   }
-  
-  int tagInitialTime = this->tagVlasovInitialTime();
-  vlasovBC->addDirichlet(t_n, tagInitialTime, -f0); // minus sign thanks to outward normal on temporal interface
   
   _vlasovSoln->setBC(vlasovBC);
   
   double n0;
   if (_enforceQuasiNeutrality)
   {
+    TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "For multi-species formulations, enforceQuasiNeutrality=true is not supported");
     auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
     const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
-    const double f_integral  = f0->integrate(_vlasovSoln->mesh());
+    const double f_integral  = f0[0]->integrate(_vlasovSoln->mesh());
     n0 = f_integral / meshMeasure;
   }
   else
@@ -1157,22 +1318,31 @@ void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
 
 void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "For multi-species formulations, must call the multi-species setInitialConditions");
+  this->setInitialAndInflowConditions(vector<FunctionPtr>{f0}, vector<FunctionPtr>{f_in});
+}
+
+void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(vector<FunctionPtr> f0, vector<FunctionPtr> f_in)
+{
   _f0 = f0;
   _f_inflow = f_in;
   
   auto vlasovBC = BC::bc();
   
-  VarPtr t_n = this->t_n_hat();
-  for (int vd=0; vd<_velocityDim; vd++)
+  for (int i=0; i<_numSpecies; i++)
   {
-    const int tagMin = this->tagVlasovMinVelocity(vd);
-    const int tagMax = this->tagVlasovMaxVelocity(vd);
-    vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
-    vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    VarPtr t_n = this->t_n_hat(i);
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      const int tagMin = this->tagVlasovMinVelocity(vd);
+      const int tagMax = this->tagVlasovMaxVelocity(vd);
+      vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
+      vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    }
+    
+    const int tagInitialTime = this->tagVlasovInitialTime();
+    vlasovBC->addDirichlet(t_n, tagInitialTime, -f0[i]); // minus sign thanks to outward normal on temporal interface
   }
-  
-  const int tagInitialTime = this->tagVlasovInitialTime();
-  vlasovBC->addDirichlet(t_n, tagInitialTime, -f0); // minus sign thanks to outward normal on temporal interface
   
   FunctionPtr n = Function::normal();
   FunctionPtr v_dot_nx = Function::zero();
@@ -1184,16 +1354,22 @@ void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, F
   }
   
   const int tagSpatialInflow = this->tagVlasovSpatialInflow();
-  vlasovBC->addDirichlet(t_n, tagSpatialInflow, v_dot_nx * f_in);
+  
+  for (int i=0; i<_numSpecies; i++)
+  {
+    VarPtr t_n = this->t_n_hat(i);
+    vlasovBC->addDirichlet(t_n, tagSpatialInflow, v_dot_nx * f_in[i]);
+  }
 
   _vlasovSoln->setBC(vlasovBC);
   
   double n0;
   if (_enforceQuasiNeutrality)
   {
+    TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "For multi-species formulations, enforceQuasiNeutrality=true is not supported");
     auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
     const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
-    const double f_integral  = f0->integrate(_vlasovSoln->mesh());
+    const double f_integral  = f0[0]->integrate(_vlasovSoln->mesh());
     n0 = f_integral / meshMeasure;
   }
   else
@@ -1207,55 +1383,65 @@ void VlasovSpaceTimeFormulation::setMaxMomentForConservationDiagnostics(const in
 {
   _maxMomentForConservationDiagnostics = maxMomentForConservationDiagnostics;
   
-  if (_solutionMoments->maxMomentNumber() < maxMomentForConservationDiagnostics)
+  bool didReconstructSolutionMoments = false;
+  for (int i=0; i<_numSpecies; i++)
   {
-    // need to re-create _solutionMoments
-    _solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentForConservationDiagnostics, _vlasovSoln, f(), _configurationSpaceFormulation->configurationSpaceMesh()) );
+    if (_solutionMoments[i]->maxMomentNumber() < maxMomentForConservationDiagnostics)
+    {
+      // need to re-create _solutionMoments
+      _solutionMoments[i] = Teuchos::rcp( new SolutionMoments(maxMomentForConservationDiagnostics, _vlasovSoln, f(i), _configurationSpaceFormulation->configurationSpaceMesh()) );
+      didReconstructSolutionMoments = true;
+    }
+  }
+  if (didReconstructSolutionMoments)
+  {
     _configurationSpaceFormulation->setMoments(_solutionMoments,_n0);
   }
   
-  _momentum.resize(_spaceDim);
-  
-  if (_spaceDim == 1)
+  for (int i=0; i<_numSpecies; i++)
   {
-    _density     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments->solutionMomentFunction(0) : Teuchos::null;
-    _momentum[0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(1) : Teuchos::null;
-    _energy      = (maxMomentForConservationDiagnostics >= 2) ? _solutionMoments->solutionMomentFunction(2) : Teuchos::null;
-  }
-  else if (_spaceDim == 2)
-  {
-    _density     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments->solutionMomentFunction(0,0) : Teuchos::null;
-    _momentum[0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(1,0) : Teuchos::null;
-    _momentum[1] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(0,1) : Teuchos::null;
-    if (maxMomentForConservationDiagnostics < 2)
+    _momentum[i].resize(_spaceDim);
+    if (_spaceDim == 1)
     {
-      _energy = Teuchos::null;
+      _density[i]     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments[i]->solutionMomentFunction(0) : Teuchos::null;
+      _momentum[i][0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments[i]->solutionMomentFunction(1) : Teuchos::null;
+      _energy[i]      = (maxMomentForConservationDiagnostics >= 2) ? _solutionMoments[i]->solutionMomentFunction(2) : Teuchos::null;
     }
-    else
+    else if (_spaceDim == 2)
     {
-      _energy = _solutionMoments->solutionMomentFunction(2,0) + _solutionMoments->solutionMomentFunction(0,2);
+      _density[i]     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments[i]->solutionMomentFunction(0,0) : Teuchos::null;
+      _momentum[i][0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments[i]->solutionMomentFunction(1,0) : Teuchos::null;
+      _momentum[i][1] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments[i]->solutionMomentFunction(0,1) : Teuchos::null;
+      if (maxMomentForConservationDiagnostics < 2)
+      {
+        _energy[i] = Teuchos::null;
+      }
+      else
+      {
+        _energy[i] = _solutionMoments[i]->solutionMomentFunction(2,0) + _solutionMoments[i]->solutionMomentFunction(0,2);
+      }
     }
-  }
-  else if (_spaceDim == 3)
-  {
-    _density     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments->solutionMomentFunction(0,0,0) : Teuchos::null;
-    _momentum[0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(1,0,0) : Teuchos::null;
-    _momentum[1] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(0,1,0) : Teuchos::null;
-    _momentum[2] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments->solutionMomentFunction(0,0,1) : Teuchos::null;
-    if (maxMomentForConservationDiagnostics < 2)
+    else if (_spaceDim == 3)
     {
-      _energy = Teuchos::null;
-    }
-    else
-    {
-      _energy = _solutionMoments->solutionMomentFunction(2,0,0) + _solutionMoments->solutionMomentFunction(0,2,0) + _solutionMoments->solutionMomentFunction(0,0,2);
+      _density[i]     = (maxMomentForConservationDiagnostics >= 0) ? _solutionMoments[i]->solutionMomentFunction(0,0,0) : Teuchos::null;
+      _momentum[i][0] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments[i]->solutionMomentFunction(1,0,0) : Teuchos::null;
+      _momentum[i][1] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments[i]->solutionMomentFunction(0,1,0) : Teuchos::null;
+      _momentum[i][2] = (maxMomentForConservationDiagnostics >= 1) ? _solutionMoments[i]->solutionMomentFunction(0,0,1) : Teuchos::null;
+      if (maxMomentForConservationDiagnostics < 2)
+      {
+        _energy[i] = Teuchos::null;
+      }
+      else
+      {
+        _energy[i] = _solutionMoments[i]->solutionMomentFunction(2,0,0) + _solutionMoments[i]->solutionMomentFunction(0,2,0) + _solutionMoments[i]->solutionMomentFunction(0,0,2);
+      }
     }
   }
 }
 
-Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments()
+Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments(int i)
 {
-  return _solutionMoments;
+  return _solutionMoments[i];
 }
 
 int VlasovSpaceTimeFormulation::spaceDim() const
@@ -1263,14 +1449,14 @@ int VlasovSpaceTimeFormulation::spaceDim() const
   return _spaceDim;
 }
 
-void VlasovSpaceTimeFormulation::setSlabHistory(const std::vector<double> &slabTemporalCoordinates,
-                                                const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &massIntegrals,
-                                                const std::vector<std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>>> &momentumIntegrals,
-                                                const std::vector<Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution>> &energyIntegrals,
-                                                const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseMassIntegrals,
-                                                const std::vector< std::vector< ElementwiseConservationDiagnostics > >             &elementwiseMomentumIntegrals,
-                                                const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals,
-                                                const std::vector< double>                                                         &w1ResidualNorms)
+void VlasovSpaceTimeFormulation::setSlabHistory(const std::vector<double>                                                                       &slabTemporalCoordinates,
+                                                const std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > >             &massIntegrals,
+                                                const std::vector<std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >>> &momentumIntegrals,
+                                                const std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > >             &energyIntegrals,
+                                                const std::vector<std::vector< ElementwiseConservationDiagnostics > >                           &elementwiseMassIntegrals,
+                                                const std::vector<std::vector< std::vector< ElementwiseConservationDiagnostics > > >            &elementwiseMomentumIntegrals,
+                                                const std::vector<std::vector< ElementwiseConservationDiagnostics > >                           &elementwiseEnergyIntegrals,
+                                                const std::vector<std::vector< double> >                                                        &w1ResidualNorms)
 {
   _slabTemporalCoordinates = slabTemporalCoordinates;
   _massIntegrals = massIntegrals;
@@ -1294,10 +1480,10 @@ int VlasovSpaceTimeFormulation::slabOrdinal() const
 }
 
 // test variables:
-VarPtr VlasovSpaceTimeFormulation::w()
+VarPtr VlasovSpaceTimeFormulation::w(int i)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->testVar(S_W, HGRAD);
+  return vf->testVar(_w_names[i], HGRAD);
 }
 
 void VlasovSpaceTimeFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
@@ -1365,31 +1551,31 @@ int VlasovSpaceTimeFormulation::tagVlasovMinVelocity(int zeroBasedComp) const
   }
 }
 
-map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForMassConservation()
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForMassConservation(int i)
 {
-  VarPtr w = this->w();
+  VarPtr w = this->w(i);
   map<int,FunctionPtr> testFunction;
   testFunction[w->ID()] = Function::constant(1.0);
   
   return testFunction;
 }
 
-map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForEnergyConservation()
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForEnergyConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
-map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForXMomentumConservation()
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForXMomentumConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
-map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForYMomentumConservation()
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForYMomentumConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
-map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForZMomentumConservation()
+map<int,FunctionPtr> VlasovSpaceTimeFormulation::testForZMomentumConservation(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
@@ -1403,7 +1589,10 @@ map<int,int> VlasovSpaceTimeFormulation::testOrderEnhancements()
 map<int,int> VlasovSpaceTimeFormulation::trialOrderEnhancements()
 {
   map<int,int> orderEnhancements;
-  orderEnhancements[t_n_hat()->ID()] = 1; // +1 for non-conforming
+  for (int i=0; i<_numSpecies; i++)
+  {
+    orderEnhancements[t_n_hat(i)->ID()] = 1; // +1 for non-conforming
+  }
   return orderEnhancements;
 }
 
@@ -1551,42 +1740,42 @@ vector<pair<double,double>> VlasovSpaceTimeFormulation::timeSeriesForSlabSpatial
   return allValues;
 }
 
-VarPtr VlasovSpaceTimeFormulation::t_n_hat()
+VarPtr VlasovSpaceTimeFormulation::t_n_hat(int i)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->trialVar(S_T_N_HAT);
+  return vf->trialVar(_tn_hat_names[i]);
 }
 
-vector< pair<double,double> > VlasovSpaceTimeFormulation::totalEnergyTimeSeries(const double t0, const double dt, const int numValues) const
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalEnergyTimeSeries(const double t0, const double dt, const int numValues, const int speciesOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 2, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set to 2 to enable totalEnergyTimeSeries()");
-  return timeSeriesForSlabSpatialIntegrals(_energyIntegrals, t0, dt, numValues);
+  return timeSeriesForSlabSpatialIntegrals(_energyIntegrals[speciesOrdinal], t0, dt, numValues);
 }
 
-vector< pair<double,double> > VlasovSpaceTimeFormulation::totalMassTimeSeries(const double t0, const double dt, const int numValues) const
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalMassTimeSeries(const double t0, const double dt, const int numValues, const int speciesOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 0, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 0 to enable totalMassTimeSeries()");
-  return timeSeriesForSlabSpatialIntegrals(_massIntegrals, t0, dt, numValues);
+  return timeSeriesForSlabSpatialIntegrals(_massIntegrals[speciesOrdinal], t0, dt, numValues);
 }
 
-vector< pair<double,double> > VlasovSpaceTimeFormulation::totalXMomentumTimeSeries(const double t0, const double dt, const int numValues) const
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalXMomentumTimeSeries(const double t0, const double dt, const int numValues, const int speciesOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 1, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 1 to enable totalXMomentumTimeSeries()");
-  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[0], t0, dt, numValues);
+  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[speciesOrdinal][0], t0, dt, numValues);
 }
 
-vector< pair<double,double> > VlasovSpaceTimeFormulation::totalYMomentumTimeSeries(const double t0, const double dt, const int numValues) const
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalYMomentumTimeSeries(const double t0, const double dt, const int numValues, const int speciesOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim < 2, std::invalid_argument, "spatial dimension must be >= 2 for totalYMomentumTimeSeries()");
   TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 1, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 1 to enable totalYMomentumTimeSeries()");
-  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[1], t0, dt, numValues);
+  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[speciesOrdinal][1], t0, dt, numValues);
 }
 
-vector< pair<double,double> > VlasovSpaceTimeFormulation::totalZMomentumTimeSeries(const double t0, const double dt, const int numValues) const
+vector< pair<double,double> > VlasovSpaceTimeFormulation::totalZMomentumTimeSeries(const double t0, const double dt, const int numValues, const int speciesOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim < 3, std::invalid_argument, "spatial dimension must be 3 for totalZMomentumTimeSeries()");
   TEUCHOS_TEST_FOR_EXCEPTION(_maxMomentForConservationDiagnostics < 1, std::invalid_argument, "maxMomentForConservationDiagnostics must have been set >= 1 to enable totalZMomentumTimeSeries()");
-  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[2], t0, dt, numValues);
+  return timeSeriesForSlabSpatialIntegrals(_momentumIntegrals[speciesOrdinal][2], t0, dt, numValues);
 }
 
 bool VlasovSpaceTimeFormulation::useGeometricMultigrid() const

@@ -34,6 +34,16 @@ FunctionPtr ConfigurationSpaceFormulationTrivial::E_i(int zeroBasedComp)
   return Function::zero();
 }
 
+FunctionPtr ConfigurationSpaceFormulationTrivial::B_i_priorTime(int zeroBasedComp)
+{
+  return Function::zero();
+}
+
+FunctionPtr ConfigurationSpaceFormulationTrivial::E_i_priorTime(int zeroBasedComp)
+{
+  return Function::zero();
+}
+
 //! maximum moment number (starting from 0 for the unweighted integral over velocity space) required by the ConfigurationSpaceFormulation.
 int ConfigurationSpaceFormulationTrivial::maxMomentNumber()
 {

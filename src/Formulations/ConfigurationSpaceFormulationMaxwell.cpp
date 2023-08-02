@@ -41,12 +41,17 @@ const string ConfigurationSpaceFormulationMaxwell::S_TAU2Y = "\\tau_{2y}";
 const string ConfigurationSpaceFormulationMaxwell::S_TAU2Z = "\\tau_{2z}";
 const string ConfigurationSpaceFormulationMaxwell::S_TAU3X = "\\tau_{3x}";
 
-ConfigurationSpaceFormulationMaxwell::ConfigurationSpaceFormulationMaxwell(const double q, const double eps0, const double mu0)
+ConfigurationSpaceFormulationMaxwell::ConfigurationSpaceFormulationMaxwell(const std::vector<double> &q, const double eps0, const double mu0)
 :
 ConfigurationSpaceFormulation(),
 _q(q),
 _eps0(eps0),
 _mu0(mu0)
+{}
+
+ConfigurationSpaceFormulationMaxwell::ConfigurationSpaceFormulationMaxwell(const double &q, const double eps0, const double mu0)
+:
+ConfigurationSpaceFormulationMaxwell(std::vector<double>{q},eps0,mu0)
 {}
 
 void ConfigurationSpaceFormulationMaxwell::initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k)
@@ -313,59 +318,84 @@ FunctionPtr ConfigurationSpaceFormulationMaxwell::E_i(int zeroBasedComp)
   }
 }
 
+FunctionPtr ConfigurationSpaceFormulationMaxwell::E_i_priorTime(int zeroBasedComp)
+{
+  if (zeroBasedComp < _spaceDim)
+  {
+    return _E_priorTime_extruded[zeroBasedComp];
+  }
+  else
+  {
+    return Function::zero();
+  }
+}
+
 //! maximum moment number (starting from 0 for the unweighted integral over velocity space) required by the ConfigurationSpaceFormulation.
 int ConfigurationSpaceFormulationMaxwell::maxMomentNumber()
 {
   return 0;
 }
 
-void ConfigurationSpaceFormulationMaxwell::setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0)
+void ConfigurationSpaceFormulationMaxwell::setMoments(std::vector< Teuchos::RCP<SolutionMoments> > fMoments, FunctionPtr n0)
 {
   this->ConfigurationSpaceFormulation::setMoments(fMoments,n0);
   FunctionPtr velocityIntegral;
   FunctionPtr firstMoment_x, firstMoment_y, firstMoment_z;
-  int numVelocityDims = fMoments->numVelocityDims();
-  switch (numVelocityDims)
-  {
-    case 1:
-    {
-      velocityIntegral = _fMoments->solutionMomentFunction(0);
-      firstMoment_x    = _fMoments->solutionMomentFunction(1);
-      firstMoment_y    = Function::zero();
-      firstMoment_z    = Function::zero();
-    }
-      break;
-    case 2:
-    {
-      velocityIntegral = _fMoments->solutionMomentFunction(0,0);
-      firstMoment_x    = _fMoments->solutionMomentFunction(1,0);
-      firstMoment_y    = _fMoments->solutionMomentFunction(0,1);
-      firstMoment_z    = Function::zero();
-    }
-      break;
-    case 3:
-    {
-      velocityIntegral = _fMoments->solutionMomentFunction(0,0,0);
-      firstMoment_x    = _fMoments->solutionMomentFunction(1,0,0);
-      firstMoment_y    = _fMoments->solutionMomentFunction(0,1,0);
-      firstMoment_z    = _fMoments->solutionMomentFunction(0,0,1);
-    }
-      break;
-    default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of velocity dims");
-  }
+  int numSpecies = _q.size();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSpecies != int(fMoments.size()), std::invalid_argument, "The number of moments objects provided to setMoments() should match the number of q values at construction of ConfigurationSpaceFormulationMaxwell");
   
-  FunctionPtr rho = _q / _eps0 * (velocityIntegral - n0);
-  FunctionPtr Jx  = _q * firstMoment_x;
-  FunctionPtr Jy  = _q * firstMoment_y;
-  FunctionPtr Jz  = _q * firstMoment_z;
-  
-  auto vlasovMesh = fMoments->phaseSpaceMesh();
+  auto vlasovMesh = fMoments[0]->phaseSpaceMesh();
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
   
-  // set RHS
+  // initialize RHS
   auto rhs = RHS::rhs();
   auto w1  = this->w1();
+  
+  FunctionPtr rho = Function::zero();
+  FunctionPtr Jx  = Function::zero();
+  FunctionPtr Jy  = Function::zero();
+  FunctionPtr Jz  = Function::zero();
+  
+  for (int i=0; i<numSpecies; i++)
+  {
+    auto moments_i = _fMoments[i];
+    int numVelocityDims = moments_i->numVelocityDims();
+    const double & q_i = _q[i];
+    switch (numVelocityDims)
+    {
+      case 1:
+      {
+        velocityIntegral = moments_i->solutionMomentFunction(0);
+        firstMoment_x    = moments_i->solutionMomentFunction(1);
+        firstMoment_y    = Function::zero();
+        firstMoment_z    = Function::zero();
+      }
+        break;
+      case 2:
+      {
+        velocityIntegral = moments_i->solutionMomentFunction(0,0);
+        firstMoment_x    = moments_i->solutionMomentFunction(1,0);
+        firstMoment_y    = moments_i->solutionMomentFunction(0,1);
+        firstMoment_z    = Function::zero();
+      }
+        break;
+      case 3:
+      {
+        velocityIntegral = moments_i->solutionMomentFunction(0,0,0);
+        firstMoment_x    = moments_i->solutionMomentFunction(1,0,0);
+        firstMoment_y    = moments_i->solutionMomentFunction(0,1,0);
+        firstMoment_z    = moments_i->solutionMomentFunction(0,0,1);
+      }
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of velocity dims");
+    }
+    rho = rho + q_i / _eps0 * (velocityIntegral - n0);
+    Jx  = Jx  + q_i * firstMoment_x;
+    Jy  = Jy  + q_i * firstMoment_y;
+    Jz  = Jz  + q_i * firstMoment_z;
+  }
+  
   rhs->addTerm( rho * w1);
   
   // TODO: think about how we should handle the 2D case; probably there's an exception thrown due to tau2->z()…
@@ -381,6 +411,7 @@ void ConfigurationSpaceFormulationMaxwell::setMoments(Teuchos::RCP<SolutionMomen
   
   // define extrusion of E, B to the phase-space mesh
   _E_extruded = std::vector<FunctionPtr>(_spaceDim);
+  _B_extruded = std::vector<FunctionPtr>(_spaceDim);
   for (int i=0; i<_spaceDim; i++)
   {
     _E_extruded[i] = Teuchos::rcp( new PhysicalSolutionExtrusion(_configurationSoln, this->E_fieldVar(i), vlasovMeshWeakPtr) );
@@ -389,6 +420,23 @@ void ConfigurationSpaceFormulationMaxwell::setMoments(Teuchos::RCP<SolutionMomen
       _B_extruded[i] = Teuchos::rcp( new PhysicalSolutionExtrusion(_configurationSoln, this->B_fieldVar(i), vlasovMeshWeakPtr) );
     else
       _B_extruded[0] = Function::zero();
+  }
+  
+  if (_configurationSolnPriorTime != Teuchos::null)
+  {
+    // define extrusion of prior-time E, B to the phase-space mesh
+    _E_priorTime_extruded = std::vector<FunctionPtr>(_spaceDim);
+    _B_priorTime_extruded = std::vector<FunctionPtr>(_spaceDim);
+    
+    for (int i=0; i<_spaceDim; i++)
+    {
+      _E_priorTime_extruded[i] = Teuchos::rcp( new PhysicalSolutionExtrusion(_configurationSolnPriorTime, this->E_fieldVar(i), vlasovMeshWeakPtr) );
+      const bool Bx_in_1D = (_spaceDim == 1) && (i == 0);
+      if (!Bx_in_1D)
+        _B_priorTime_extruded[i] = Teuchos::rcp( new PhysicalSolutionExtrusion(_configurationSolnPriorTime, this->B_fieldVar(i), vlasovMeshWeakPtr) );
+      else
+        _B_priorTime_extruded[0] = Function::zero();
+    }
   }
 }
 

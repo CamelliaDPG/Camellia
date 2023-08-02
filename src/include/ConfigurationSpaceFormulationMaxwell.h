@@ -21,7 +21,7 @@ namespace Camellia
 :
   public ConfigurationSpaceFormulation
   {
-    double _q;
+    std::vector<double> _q;
     double _eps0; // permittivity
     double _mu0;  // permeability
     int _spaceDim;
@@ -33,6 +33,8 @@ namespace Camellia
     
     std::vector<FunctionPtr> _B_extruded;
     std::vector<FunctionPtr> _E_extruded;
+    std::vector<FunctionPtr> _B_priorTime_extruded;
+    std::vector<FunctionPtr> _E_priorTime_extruded;
   public:
     // strings for variables:
     static const string S_EX;     // trial variable - electric field E_x
@@ -61,11 +63,14 @@ namespace Camellia
     static const string S_TAU2Z;  // scalar test variable tau_{2z} -- used in 1D formulation
     static const string S_TAU3X;  // scalar test variable tau_{2x} -- used in 1D formulation
   public:
-    ConfigurationSpaceFormulationMaxwell(const double q, const double eps0, const double mu0);
+    //! one entry in q per species
+    ConfigurationSpaceFormulationMaxwell(const std::vector<double> &q, const double eps0, const double mu0);
+    
+    ConfigurationSpaceFormulationMaxwell(const double &q, const double eps0, const double mu0);
 
     void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) override;
     
-    virtual void setMoments(Teuchos::RCP<SolutionMoments> fMoments, FunctionPtr n0) override;
+    virtual void setMoments(std::vector< Teuchos::RCP<SolutionMoments> > fMoments, FunctionPtr n0) override;
     
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Maxwell", "Gauss" are all possibilities.
     virtual std::string name() const override;
@@ -75,6 +80,12 @@ namespace Camellia
     
     //! returns the specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
     virtual FunctionPtr E_i(int zeroBasedComp) override;
+    
+    //! returns the specified component of the magnetic field at prior time, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for B_x, 1 for B_y, 2 for B_z.
+    virtual FunctionPtr B_i_priorTime(int zeroBasedComp) override;
+    
+    //! returns the specified component of the electric field at prior timeas a Function, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
+    virtual FunctionPtr E_i_priorTime(int zeroBasedComp) override;
     
     //! maximum moment number (starting from 0 for the unweighted integral over velocity space) required by the ConfigurationSpaceFormulation.
     virtual int maxMomentNumber() override;

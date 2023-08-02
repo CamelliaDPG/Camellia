@@ -463,8 +463,8 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
   Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePointsFC();
   Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePointsFC();
 
-  Camellia::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
-  Camellia::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  Camellia::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinatesFC();
+  Camellia::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinatesFC();
 
   // finePoints and coarsePoints should match
   double tol = 1e-14;
@@ -561,8 +561,8 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, Camell
   Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePointsFC();
   Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePointsFC();
 
-  Camellia::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
-  Camellia::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  Camellia::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinatesFC();
+  Camellia::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinatesFC();
 
   // finePoints and coarsePoints should match
   double tol = 1e-14;

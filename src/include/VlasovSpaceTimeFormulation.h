@@ -58,14 +58,17 @@ private:
   std::vector<std::pair<SpatialFilterPtr,bool>> _configurationSpaceSideSetFilters; // we append one each time that createConfigurationMeshSideSetTag() is called.
   std::vector< std::tuple<int,VarPtr,FunctionPtr> > _configurationSpaceBCs; // (tag, var, value): arguments for each call to addConfigurationSpaceBC().
   
-  double _q;
-  double _m;
+  int _numSpecies;
+  std::vector<double> _q;
+  std::vector<double> _m;
+  std::vector<std::string> _speciesLabels;
+  std::vector<std::string> _f_names, _w_names, _tn_hat_names, _f_hat_names;
     
-  Teuchos::RCP<SolutionMoments> _solutionMoments;
-  ParameterFunctionPtr _n0; // if quasi-neutrality is enforced, this is set when initial conditions are set, as the integral of f0 over the whole of phase space, divided by the measure of the configuration-space mesh.
+  std::vector< Teuchos::RCP<SolutionMoments> > _solutionMoments;
+  ParameterFunctionPtr _n0; // if quasi-neutrality is enforced, this is set when initial conditions are set, as the integral of f0 over the whole of phase space, divided by the measure of the configuration-space mesh.  Quasi-neutrality is not supported for multi-species formulations (to support it, we'd need to change the definition of _n0 to be a charge-weighted weighted sum of f_i, and reflect that change in the configuration-space formulations as well).
   
-  FunctionPtr _fSoln; // Camellia Function defining the solution of distribution f (refers to _vlasovSoln)
-  FunctionPtr _fDiff; // fixed-point step in Vlasov field f
+  std::vector<FunctionPtr> _fSoln; // Camellia Function defining the solution of distribution f (refers to _vlasovSoln)
+  std::vector<FunctionPtr> _fDiff; // fixed-point step in Vlasov field f
 
   int _minSubsteps = 3;  // minimum number of fixed-point iterations to run (alternating vlasov, configuration-space solves)
   int _maxSubsteps = 15; // maximum number of fixed-point iterations to run
@@ -108,14 +111,14 @@ private:
   MeshTopologyPtr _spatialMeshTopology; // passed in at construction, potentially refined thereafter
   int _numUniformRefinements;
   
-  FunctionPtr _f0;       // initial condition set by setInflowConditions() or setInitialAndInflowConditions()
-  FunctionPtr _f_inflow; // inflow condition set by setInitialAndInflowConditions()
+  std::vector<FunctionPtr> _f0;       // initial condition set by setInflowConditions() or setInitialAndInflowConditions()
+  std::vector<FunctionPtr> _f_inflow; // inflow condition set by setInitialAndInflowConditions()
   
   // mass, momentum, energy conservation as functions of time:
   int _maxMomentForConservationDiagnostics = -1; // 0 for mass, 1 for mass + momentum, 2 for mass + momentum + energy
-  std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >                _massIntegrals;     // one per slab in the solution history
-  std::vector< std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > > _momentumIntegrals; // outer index: spatial dimension (0 for x, 1 for y, 2 for z); inner: slab index
-  std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >                _energyIntegrals;   // one per slab in solution history
+  std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > >                _massIntegrals;     // one per slab in the solution history
+  std::vector<std::vector< std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > > > _momentumIntegrals; // outer index: spatial dimension (0 for x, 1 for y, 2 for z); inner: slab index
+  std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > >                _energyIntegrals;   // one per slab in solution history
 public:
   // mass, momentum, energy conservation distributionally, as integrals over space-time elements:
   struct ElementwiseConservationDiagnostics
@@ -126,20 +129,21 @@ public:
     double sumOfAbsoluteConservationFailures;
   };
 private:
-  std::vector< double >                                            _w1ResidualNorm;               // one per slab in the solution history
-  std::vector< ElementwiseConservationDiagnostics >                _elementwiseMassIntegrals;     // one per slab in the solution history
-  std::vector< std::vector< ElementwiseConservationDiagnostics > > _elementwiseMomentumIntegrals; // outer index: spatial dimension (0 for x, 1 for y, 2 for z); inner: slab index
-  std::vector< ElementwiseConservationDiagnostics >                _elementwiseEnergyIntegrals;   // one per slab in solution history
+  // outer index for all these is species number
+  std::vector<std::vector< double > >                                            _w1ResidualNorm;               // one per slab in the solution history
+  std::vector<std::vector< ElementwiseConservationDiagnostics > >                _elementwiseMassIntegrals;     // one per slab in the solution history
+  std::vector<std::vector< std::vector< ElementwiseConservationDiagnostics > > > _elementwiseMomentumIntegrals; // second index: spatial dimension (0 for x, 1 for y, 2 for z); third: slab index
+  std::vector<std::vector< ElementwiseConservationDiagnostics > >                _elementwiseEnergyIntegrals;   // one per slab in solution history
   
-  void recordElementwiseConservationDiagnostics(std::vector< ElementwiseConservationDiagnostics > &diagnosticHistory, int slabOrdinal, const std::map<int,FunctionPtr> &testFunction);
+  void recordElementwiseConservationDiagnostics(int speciesOrdinal, std::vector< ElementwiseConservationDiagnostics > &diagnosticHistory, int slabOrdinal, const std::map<int,FunctionPtr> &testFunction);
   
   std::vector< double > _slabTemporalCoordinates; // for slab slabOrdinal, start time is at index slabOrdinal, end time at (slabOrdinal+1)
   
   vector<FunctionPtr> _a; // acceleration term. Set during construction as a function of configuration-space solution.
   
-  FunctionPtr _density;
-  std::vector<FunctionPtr> _momentum; // matches _spaceDim in number of components
-  FunctionPtr _energy; // sum of the xx, yy, zz moments (in 3D)
+  std::vector<FunctionPtr> _density;
+  std::vector<std::vector<FunctionPtr>> _momentum; // matches _spaceDim in number of components
+  std::vector<FunctionPtr> _energy; // sum of the xx, yy, zz moments (in 3D)
   
   std::vector< std::pair<double,double> > timeSeriesForSpatialIntegral(Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> integral,
                                                                        const double &t0, const double &dt, const int &numValues) const;
@@ -157,12 +161,23 @@ protected:
   virtual map<int,int> testOrderEnhancements();
   virtual map<int,int> trialOrderEnhancements();
   
-  virtual std::map<int,FunctionPtr> testForMassConservation();
-  virtual std::map<int,FunctionPtr> testForXMomentumConservation();
-  virtual std::map<int,FunctionPtr> testForYMomentumConservation();
-  virtual std::map<int,FunctionPtr> testForZMomentumConservation();
-  virtual std::map<int,FunctionPtr> testForEnergyConservation();
+  virtual std::map<int,FunctionPtr> testForMassConservation(int i);
+  virtual std::map<int,FunctionPtr> testForXMomentumConservation(int i);
+  virtual std::map<int,FunctionPtr> testForYMomentumConservation(int i);
+  virtual std::map<int,FunctionPtr> testForZMomentumConservation(int i);
+  virtual std::map<int,FunctionPtr> testForEnergyConservation(int i);
 public:
+  VlasovSpaceTimeFormulation(std::vector<double> q, std::vector<double> m, vector<string> speciesLabels, bool useSerendipityBasis,
+                             Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                             MeshTopologyPtr spatialMeshTopology,
+                             std::vector<double> temporalVertices,
+                             std::vector<double> velocitySpaceVertices_x,
+                             std::vector<double> velocitySpaceVertices_y,
+                             std::vector<double> velocitySpaceVertices_z,
+                             const int H1Order, const int delta_k,
+                             const int numUniformRefinements,
+                             const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
+  
   VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                              MeshTopologyPtr spatialMeshTopology,
@@ -190,20 +205,20 @@ public:
   virtual IPPtr constructVlasovInnerProduct();
   
   // field variables:
-  VarPtr f();  // Vlasov
+  VarPtr f(int i=0);  // Vlasov distribution (species i)
   
   // traces:
-  VarPtr f_hat(); // Vlasov
-  VarPtr t_n_hat(); // Vlasov
+  VarPtr f_hat(int i=0); // Vlasov conforming trace (species i)
+  VarPtr t_n_hat(int i=0); // Vlasov non-conforming trace (species i)
   
   // test variables:
-  VarPtr w();   // Vlasov
+  VarPtr w(int i=0);   // Vlasov test variable (species i)
   
   //! Returns the BF object corresponding to the Vlasov bilinear form.
   BFPtr vlasovBF();
   
   //! Returns the acceleration term, defined on the configuration space mesh, as an array of length velocityDim().
-  vector<FunctionPtr> a();
+  vector<FunctionPtr> a(int speciesOrdinal=0);
   
   MeshPtr vlasovMesh();
   MeshPtr configurationSpaceMesh();
@@ -215,17 +230,23 @@ public:
   
   Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation();
   
-  Teuchos::RCP<SolutionMoments> solutionMoments();
+  Teuchos::RCP<SolutionMoments> solutionMoments(int i=0);
       
   SolutionPtr vlasovSolution();
   SolutionPtr configurationSpaceSolution();
     
   bool hasL2Trace() const;
   
-  //! Set the initial conditions without setting inflow conditions (relevant for the periodic case).
+  //! Set the initial conditions for each species without setting inflow conditions (relevant for the periodic case).
+  void setInitialConditions(std::vector<FunctionPtr> f0);
+  
+  //! Set the initial conditions without setting inflow conditions (relevant for the periodic case).  Single-species variant; calls the multi-species variant.
   void setInitialConditions(FunctionPtr f0);
   
   //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).
+  void setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in);
+  
+  //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).  Single-species variant; calls the multi-species variant.
   void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in);
   
   void setEnforceQuasiNeutrality(bool enforceQuasiNeutrality);
@@ -308,13 +329,13 @@ public:
   //! Computes (or recomputes) the conservation diagnostics.  Typically, this is called during solve().  Only computes up to the maximum moment for conservation diagnostics (which defaults to -1).
   void computeConservationDiagnostics(bool updateSolutionMoments);
   
-  const ElementwiseConservationDiagnostics & localMassConservationDiagnostics(int slabOrdinal);
-  const ElementwiseConservationDiagnostics & localXMomentumConservationDiagnostics(int slabOrdinal);
-  const ElementwiseConservationDiagnostics & localYMomentumConservationDiagnostics(int slabOrdinal);
-  const ElementwiseConservationDiagnostics & localZMomentumConservationDiagnostics(int slabOrdinal);
-  const ElementwiseConservationDiagnostics & localEnergyConservationDiagnostics(int slabOrdinal);
+  const ElementwiseConservationDiagnostics & localMassConservationDiagnostics(int slabOrdinal, int speciesOrdinal = 0);
+  const ElementwiseConservationDiagnostics & localXMomentumConservationDiagnostics(int slabOrdinal, int speciesOrdinal = 0);
+  const ElementwiseConservationDiagnostics & localYMomentumConservationDiagnostics(int slabOrdinal, int speciesOrdinal = 0);
+  const ElementwiseConservationDiagnostics & localZMomentumConservationDiagnostics(int slabOrdinal, int speciesOrdinal = 0);
+  const ElementwiseConservationDiagnostics & localEnergyConservationDiagnostics(int slabOrdinal, int speciesOrdinal = 0);
   
-  const double &conservationLawResidualNorm(int slabOrdinal);
+  const double &conservationLawResidualNorm(int slabOrdinal, int speciesOrdinal = 0);
   
   void printLocalConservationReportForSlab(int slabOrdinal);
   
@@ -361,39 +382,39 @@ public:
   int maxMomentForConservationDiagnostics() const;
   
   //! Returns a time series for mass as recorded by conservation diagnostics.
-  std::vector< std::pair<double,double> > totalMassTimeSeries(const double t0, const double dt, const int numValues) const;
+  std::vector< std::pair<double,double> > totalMassTimeSeries(const double t0, const double dt, const int numValues, int speciesOrdinal = 0) const;
   
   //! Returns a time series for x momentum as recorded by conservation diagnostics.
-  std::vector< std::pair<double,double> > totalXMomentumTimeSeries(const double t0, const double dt, const int numValues) const;
+  std::vector< std::pair<double,double> > totalXMomentumTimeSeries(const double t0, const double dt, const int numValues, int speciesOrdinal = 0) const;
   
   //! Returns a time series for y momentum as recorded by conservation diagnostics.  (Requires spaceDim > 1.)
-  std::vector< std::pair<double,double> > totalYMomentumTimeSeries(const double t0, const double dt, const int numValues) const;
+  std::vector< std::pair<double,double> > totalYMomentumTimeSeries(const double t0, const double dt, const int numValues, int speciesOrdinal = 0) const;
   
   //! Returns a time series for Z momentum as recorded by conservation diagnostics.  (Requires spaceDim = 3.)
-  std::vector< std::pair<double,double> > totalZMomentumTimeSeries(const double t0, const double dt, const int numValues) const;
+  std::vector< std::pair<double,double> > totalZMomentumTimeSeries(const double t0, const double dt, const int numValues, int speciesOrdinal = 0) const;
   
   //! Returns a time series for total energy as recorded by conservation diagnostics.
-  std::vector< std::pair<double,double> > totalEnergyTimeSeries(const double t0, const double dt, const int numValues) const;
+  std::vector< std::pair<double,double> > totalEnergyTimeSeries(const double t0, const double dt, const int numValues, int speciesOrdinal = 0) const;
   
   //! sets previous slab data for temporal divisions and conservation diagnostics.  Called during nextTimeSlab().
-  void setSlabHistory(const std::vector<double>                                                          &slabTemporalCoordinates,
-                      const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &massIntegrals,
-                      const std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >> &momentumIntegrals,
-                      const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >              &energyIntegrals,
-                      const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseMassIntegrals,
-                      const std::vector< std::vector< ElementwiseConservationDiagnostics > >             &elementwiseMomentumIntegrals,
-                      const std::vector< ElementwiseConservationDiagnostics >                            &elementwiseEnergyIntegrals,
-                      const std::vector< double>                                                         &w1ResidualNorms
+  void setSlabHistory(const std::vector<double>                                                                       &slabTemporalCoordinates,
+                      const std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > >             &massIntegrals,
+                      const std::vector<std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> >>> &momentumIntegrals,
+                      const std::vector<std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > >             &energyIntegrals,
+                      const std::vector<std::vector< ElementwiseConservationDiagnostics > >                           &elementwiseMassIntegrals,
+                      const std::vector<std::vector< std::vector< ElementwiseConservationDiagnostics > > >            &elementwiseMomentumIntegrals,
+                      const std::vector<std::vector< ElementwiseConservationDiagnostics > >                           &elementwiseEnergyIntegrals,
+                      const std::vector<std::vector< double> >                                                        &w1ResidualNorms
                       );
   
   //! returns the ordinal of this slab.  0 for first, 1 for second, etc.
   int slabOrdinal() const;
   
   //! Returns the m value passed in at construction.
-  double m() const;
+  double m(int i=0) const;
   
   //! Returns the q value passed in at construction.
-  double q() const;
+  double q(int i=0) const;
   
   /** \brief  Returns a Function representing the specified component of configuration space. */
   FunctionPtr x_i(const int zeroBasedComp) const;

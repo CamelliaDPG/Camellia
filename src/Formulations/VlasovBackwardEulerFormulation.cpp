@@ -32,6 +32,9 @@
 
 using namespace Camellia;
 
+using std::string;
+using std::vector;
+
 const string VlasovBackwardEulerFormulation::S_F = "f";
 
 const string VlasovBackwardEulerFormulation::S_F_HAT = "\\widehat{f}";
@@ -109,15 +112,96 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                std::vector<double> velocitySpaceVertices_y,
                                                                std::vector<double> velocitySpaceVertices_z,
                                                                const int H1Order, const int delta_k,
-                                                               const int maxMomentNumberForDriver)
+                                                               const int maxMomentNumberForDriver,
+                                                               const bool useCrankNicolson)
+:
+VlasovBackwardEulerFormulation({q},{m},{""},useSerendipityBasis,configurationSpaceFormulation,spatialMeshTopology,
+                               dt, velocitySpaceVertices_x, velocitySpaceVertices_y, velocitySpaceVertices_z,
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson)
+{}
+
+VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
+                                                               Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                                               MeshTopologyPtr spatialMeshTopology,
+                                                               double dt,
+                                                               std::vector<double> velocitySpaceVertices_x,
+                                                               std::vector<double> velocitySpaceVertices_y,
+                                                               const int H1Order, const int delta_k,
+                                                               const int maxMomentNumberForDriver,
+                                                               const bool useCrankNicolson)
+:
+VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
+                               velocitySpaceVertices_x, velocitySpaceVertices_y, std::vector<double>(),
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson) {}
+
+VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
+                                                               Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                                               MeshTopologyPtr spatialMeshTopology,
+                                                               double dt,
+                                                               std::vector<double> velocitySpaceVertices_x,
+                                                               const int H1Order, const int delta_k,
+                                                               const int maxMomentNumberForDriver,
+                                                               const bool useCrankNicolson)
+:
+VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
+                               velocitySpaceVertices_x, std::vector<double>(), std::vector<double>(),
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson) {}
+
+VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(vector<double> q, vector<double> m, vector<string> speciesLabels,
+                                                               bool useSerendipityBasis,
+                                                               Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                                               MeshTopologyPtr spatialMeshTopology,
+                                                               double dt,
+                                                               std::vector<double> velocitySpaceVertices_x,
+                                                               const int H1Order, const int delta_k,
+                                                               const int maxMomentNumberForDriver,
+                                                               const bool useCrankNicolson)
+:
+VlasovBackwardEulerFormulation(q, m, speciesLabels, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
+                               velocitySpaceVertices_x, std::vector<double>(), std::vector<double>(),
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson) {}
+
+VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(vector<double> q, vector<double> m, vector<string> speciesLabels,
+                                                               bool useSerendipityBasis,
+                                                               Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+                                                               MeshTopologyPtr spatialMeshTopology,
+                                                               double dt,
+                                                               vector<double> velocitySpaceVertices_x,
+                                                               vector<double> velocitySpaceVertices_y,
+                                                               vector<double> velocitySpaceVertices_z,
+                                                               const int H1Order, const int delta_k,
+                                                               const int maxMomentNumberForDriver,
+                                                               const bool useCrankNicolson)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _useSerendipityBasis(useSerendipityBasis),
 _delta_k(delta_k),
+_crankNicolson(useCrankNicolson),
 _configurationSpaceFormulation(configurationSpaceFormulation),
+_numSpecies(q.size()),
 _q(q),
-_m(m)
+_m(m),
+_speciesLabels(speciesLabels)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(_q.size() != _m.size(), std::invalid_argument, "q and m arguments must agree in length");
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies == 0, std::invalid_argument, "Must have at least one species");
+  
+  if (speciesLabels.size() == 0)
+  {
+    if (_numSpecies == 1)
+    {
+      speciesLabels = {""}; // no suffix for single-species
+    }
+    else
+    {
+      for (int i=1; i<=_numSpecies; i++)
+      {
+        speciesLabels.push_back(std::to_string(i));
+      }
+    }
+  }
+  
   _configurationSpaceMeshTopology = spatialMeshTopology;
   _configurationSpaceFormulation->initializeMesh(_configurationSpaceMeshTopology, H1Order, delta_k);
   
@@ -144,21 +228,46 @@ _m(m)
   
   _spaceDim = spatialMeshTopology->getDimension();
   _velocityDim = velocitySpaceVertices.size();
+  _configurationSpaceFormulation->setDimensions(_spaceDim, _velocityDim);
   
   // fields
-  VarPtr f; // Vlasov
+  std::vector<VarPtr> f(_numSpecies); // Vlasov distributions
   
   // traces
-  VarPtr t_n_hat; // t_n_hat: L^2 (non-conforming) trace
-  VarPtr f_hat;   // f_hat:   conforming trace (unused in present implementation -- see l2Trace flag below)
+  std::vector<VarPtr> t_n_hat(_numSpecies); // t_n_hat: L^2 (non-conforming) trace
+  std::vector<VarPtr> f_hat(_numSpecies);   // f_hat:   conforming trace (unused in present implementation -- see l2Trace flag below)
 
   // tests
-  VarPtr w;   // Vlasov test function
+  std::vector<VarPtr> w(_numSpecies);   // Vlasov test function
 
   TFunctionPtr<double> parity = TFunction<double>::sideParity();
   TFunctionPtr<double> n = TFunction<double>::normal();
   
   VarFactoryPtr vlasovVF = VarFactory::varFactory();
+  
+  map<int,int> trialOrderEnhancements;
+  _f_names.resize(_numSpecies);
+  _w_names.resize(_numSpecies);
+  _f_hat_names.resize(_numSpecies,"");
+  _tn_hat_names.resize(_numSpecies,"");
+  for (int i=0; i<_numSpecies; i++)
+  {
+    std::string suffix = (speciesLabels[i].length() > 0) ? "_" + speciesLabels[i] : "";
+    _f_names[i]      = S_F + suffix;
+    _w_names[i]      = S_W + suffix;
+    _tn_hat_names[i] = S_T_N_HAT + suffix;
+    _f_hat_names[i]  = S_F_HAT + suffix;
+    
+    VarPtr f_i = vlasovVF->fieldVar(_f_names[i]);
+    VarPtr w_i = vlasovVF->testVar(_w_names[i], HGRAD); // w lies in HGRAD of phase space
+    
+    VarPtr t_n_hat_i = vlasovVF->fluxVar(_tn_hat_names[i]);
+    trialOrderEnhancements[t_n_hat_i->ID()] = 1; // +1 for non-conforming
+    
+    f[i]       = f_i;
+    w[i]       = w_i;
+    t_n_hat[i] = t_n_hat_i;
+  }
   
   BasisFamilyPtr basisFamily;
   if (_useSerendipityBasis)
@@ -170,27 +279,8 @@ _m(m)
     basisFamily = BasisFamily::hierarchicalBasisFamily();
   }
   vlasovVF->setBasisFamily(basisFamily);
-  
-  f = vlasovVF->fieldVar(S_F);
-  w = vlasovVF->testVar(S_W, HGRAD); // w lies in HGRAD of phase space
-  
-  t_n_hat = vlasovVF->fluxVar(S_T_N_HAT);
-  
-  const bool l2Trace = true;
-  if (l2Trace)
-  {
-    t_n_hat = vlasovVF->fluxVar(S_T_N_HAT);
-  }
-  else
-  {
-    f_hat = vlasovVF->traceVar(S_F_HAT);
-  }
-  
   _vlasovBF = BF::bf(vlasovVF);
   
-  map<int,int> trialOrderEnhancements;
-  trialOrderEnhancements[t_n_hat->ID()] = 1; // +1 for non-conforming, + whatever user requested
-
   map<int,int> testOrderEnhancements;
   
   const bool allowPruning = false; // some day, we might want to have a fully distributed mesh.  But right now, ExtrudedMeshTopology relies on knowing all the phase-space cell IDs.  Would not be too hard to do the appropriate MPI communication, but right now the memory cost of the mesh is not prohibitive.
@@ -209,19 +299,27 @@ _m(m)
   
   // default BCs for Vlasov set zero at velocity extrema; suitable when you have periodic BCs in config space
   auto vlasovBC = BC::bc();
-  VarPtr t_n = this->t_n_hat();
-  for (int vd=0; vd<_velocityDim; vd++)
+  for (int i=0; i<_numSpecies; i++)
   {
-    const int tagMin = this->tagVlasovMinVelocity(vd);
-    const int tagMax = this->tagVlasovMaxVelocity(vd);
-    vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
-    vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    VarPtr t_n = this->t_n_hat(i);
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      const int tagMin = this->tagVlasovMinVelocity(vd);
+      const int tagMax = this->tagVlasovMaxVelocity(vd);
+      vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
+      vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    }
   }
   _vlasovSoln->setBC(vlasovBC);
   
   const int maxMomentNumber = std::max(_configurationSpaceFormulation->maxMomentNumber(), maxMomentNumberForDriver);
-  _solutionMoments          = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln,          f, _configurationSpaceFormulation->configurationSpaceMesh()) );
-  _solutionMomentsPriorTime = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSolnPriorTime, f, _configurationSpaceFormulation->configurationSpaceMesh()) );
+  _solutionMoments.resize(_numSpecies);
+  _solutionMomentsPriorTime.resize(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    _solutionMoments[i]          = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSoln,          f[i], _configurationSpaceFormulation->configurationSpaceMesh()) );
+    _solutionMomentsPriorTime[i] = Teuchos::rcp( new SolutionMoments(maxMomentNumber, _vlasovSolnPriorTime, f[i], _configurationSpaceFormulation->configurationSpaceMesh()) );
+  }
   
   _n0 = ParameterFunction::parameterFunction(0); // we'll update this when initial conditions are set, if _enforceQuasiNeutrality is true
   _configurationSpaceFormulation->setMoments(_solutionMoments, _n0);
@@ -242,22 +340,34 @@ _m(m)
     v.push_back(this->v_i(i));
   }
   
-  _vlasovBF->addTerm(f / _dt, w);
+  // revision 6-8-23: move weights on f[i] onto w[i], so that we get something like b(f[i], g(w[i])), where g incorporates diff ops and weights
+  std::vector<LinearTermPtr> w_against_f_i(_numSpecies);
   
-  if (l2Trace)
+  // theta for time-stepping rule: 1.0 for backward Euler; 0.5 for Crank-Nicolson
+  const double theta = _crankNicolson ? 0.5 : 1.0;
+  
+  const bool l2Trace = true;
+  for (int i=0; i<_numSpecies; i++)
   {
-    _vlasovBF->addTerm(t_n_hat, w);
+    w_against_f_i[i] = w[i] / _dt;
+//    _vlasovBF->addTerm(f[i] / _dt, w[i]);
+    
+    if (l2Trace)
+    {
+      _vlasovBF->addTerm(theta * t_n_hat[i], w[i]);
+    }
+    else
+    {
+      // TODO: add support for conforming traces
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Conforming traces not yet supported.");
+    }
+    
+    for (int d=0; d<_spaceDim; d++)
+    {
+      w_against_f_i[i] = w_against_f_i[i] - theta * v[d] * w[i]->di(indexOffsetSpaceOneBased + d); // dx_d
+    }
   }
-  else
-  {
-    // TODO: add support for conforming traces
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Conforming traces not yet supported.");
-  }
-
-  for (int i=0; i<_spaceDim; i++)
-  {
-    _vlasovBF->addTerm( -v[i] * f, w->di(indexOffsetSpaceOneBased + i));  // dx_i
-  }
+  
   std::vector<FunctionPtr> grad_v_weight(_velocityDim); // the thing that gets dotted with grad_v of f (in the strong form)
   
   std::vector<FunctionPtr> E(3,Function::zero());
@@ -279,34 +389,105 @@ _m(m)
     v_cross_B[2] = v[0] * B[1] - v[1] * B[0];
   }
   
+  auto extraAcceleration = _configurationSpaceFormulation->extraAcceleration();
   for (int i=0; i<_velocityDim; i++)
   {
-    grad_v_weight[i] = E[i] + v_cross_B[i];
+    grad_v_weight[i] = E[i] + v_cross_B[i] + extraAcceleration[i];
   }
   
-  for (int i=0; i<_velocityDim; i++)
+  for (int i=0; i<_numSpecies; i++)
   {
-    auto weight = grad_v_weight[i];
-    _vlasovBF->addTerm(-(q/m) * weight * f, w->di(indexOffsetVelocityOneBased + i)); // d/dvi
+    for (int d=0; d<_velocityDim; d++)
+    {
+      auto weight = grad_v_weight[d];
+      w_against_f_i[i] = w_against_f_i[i] - theta * (q[i]/m[i]) * weight * w[i]->di(indexOffsetVelocityOneBased + d); // d/dv_d
+//      _vlasovBF->addTerm(-(q[i]/m[i]) * weight * f[i], w[i]->di(indexOffsetVelocityOneBased + d)); // d/dv_d
+    }
+  }
+  // now add in the f terms:
+  for (int i=0; i<_numSpecies; i++)
+  {
+    _vlasovBF->addTerm(f[i], w_against_f_i[i]);
   }
 
   auto vlasovSolnWeakPtr          = Teuchos::rcp(_vlasovSoln.get(),          false);
   auto vlasovSolnPriorTimeWeakPtr = Teuchos::rcp(_vlasovSolnPriorTime.get(), false);
   auto vlasovSolnPrevWeakPtr      = Teuchos::rcp(_vlasovSolnPrev.get(),      false);
   
-  _fSoln     = Function::solution(f, vlasovSolnWeakPtr);
-  FunctionPtr f_solnPrev = Function::solution(f, vlasovSolnPrevWeakPtr);
-  
-  _fDiff = _fSoln - f_solnPrev;
-    
   auto vlasovRHS = RHS::rhs();
-  const bool weightFluxesBySideParity = true;
-  const SolutionComponent solnComponent = STANDARD_SOLUTION;
-  const int stageOrdinal = 0; // would be -1 if we had an ERKTableau
-  auto f_previous = Function::solution(f, vlasovSolnPriorTimeWeakPtr, weightFluxesBySideParity,
-                                       solnComponent, stageOrdinal, std::string("k"));
+  _fSoln.resize(_numSpecies);
+  _fDiff.resize(_numSpecies);
   
-  vlasovRHS->addTerm(f_previous / FunctionPtr(_dt) * w);
+  std::vector<FunctionPtr> grad_v_weight_priorTime(_velocityDim); // the thing that gets dotted with grad_v of f (in the strong form)
+  
+  if (theta != 1.0)
+  {
+    std::vector<FunctionPtr> E_priorTime(3,Function::zero());
+    std::vector<FunctionPtr> B_priorTime(3,Function::zero());
+    
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      E_priorTime[vd] = _configurationSpaceFormulation->E_i_priorTime(vd);
+      B_priorTime[vd] = _configurationSpaceFormulation->B_i_priorTime(vd);
+    }
+    
+    // we only include the v_cross_B term for 3V case
+    // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
+    std::vector<FunctionPtr> v_cross_B_priorTime(3,Function::zero());
+    if (_velocityDim == 3)
+    {
+      v_cross_B_priorTime[0] = v[1] * B_priorTime[2] - v[2] * B_priorTime[1];
+      v_cross_B_priorTime[1] = v[2] * B_priorTime[0] - v[0] * B_priorTime[2];
+      v_cross_B_priorTime[2] = v[0] * B_priorTime[1] - v[1] * B_priorTime[0];
+    }
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      grad_v_weight_priorTime[vd] = E_priorTime[vd] + v_cross_B_priorTime[vd];
+    }
+  }
+    
+  for (int i=0; i<_numSpecies; i++)
+  {
+    _fSoln[i]     = Function::solution(f[i], vlasovSolnWeakPtr);
+    FunctionPtr f_solnPrev = Function::solution(f[i], vlasovSolnPrevWeakPtr);
+    
+    _fDiff[i] = _fSoln[i] - f_solnPrev;
+    
+    const bool weightFluxesBySideParity = true;
+    const SolutionComponent solnComponent = STANDARD_SOLUTION;
+    const int stageOrdinal = 0; // would be -1 if we had an ERKTableau
+    auto f_previous = Function::solution(f[i], vlasovSolnPriorTimeWeakPtr, weightFluxesBySideParity,
+                                         solnComponent, stageOrdinal, std::string("k"));
+    
+    vlasovRHS->addTerm(f_previous / FunctionPtr(_dt) * w[i]);
+  
+    if (theta != 1.0)
+    {
+      if (l2Trace)
+      {
+        auto t_n_hat_previous_i = Function::solution(t_n_hat[i], vlasovSolnPriorTimeWeakPtr, weightFluxesBySideParity,
+                                                     solnComponent, stageOrdinal, std::string("k"));
+        vlasovRHS->addTerm(-(1-theta) * t_n_hat_previous_i * w[i]);
+      }
+      else
+      {
+        // TODO: add support for conforming traces
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Conforming traces not yet supported.");
+      }
+      
+      for (int d=0; d<_spaceDim; d++)
+      {
+        vlasovRHS->addTerm( (1-theta) * v[d] * f_previous * w[i]->di(indexOffsetSpaceOneBased + d));  // dx_d
+      }
+      
+      for (int vd=0; vd<_velocityDim; vd++)
+      {
+        auto weight = grad_v_weight_priorTime[vd];
+        vlasovRHS->addTerm( (1-theta) * (q[i]/m[i]) * weight * f_previous * w[i]->di(indexOffsetVelocityOneBased + vd)); // d/dv_vd
+      }
+    }
+  }
+  
   _vlasovSoln->setRHS(vlasovRHS);
     
   vlasovMesh->registerSolution(_vlasovSoln);
@@ -320,15 +501,15 @@ _m(m)
   std::vector<double> v0,vMax;
   
   std::vector<SpatialFilterPtr> minVelocityFilters, maxVelocityFilters;
-  for (int i=0; i<_velocityDim; i++)
+  for (int vd=0; vd<_velocityDim; vd++)
   {
-    auto & dimVertices = velocitySpaceVertices[i];
+    auto & dimVertices = velocitySpaceVertices[vd];
     const int numVertices = dimVertices.size();
     v0.push_back(dimVertices[0]);
     vMax.push_back(dimVertices[numVertices-1]);
     
-    SpatialFilterPtr minVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + i, v0[i]  );
-    SpatialFilterPtr maxVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + i, vMax[i]);
+    SpatialFilterPtr minVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + vd, v0[vd]  );
+    SpatialFilterPtr maxVelocityFilter = SpatialFilter::matchingComponent(indexOffsetVelocityZeroBased + vd, vMax[vd]);
     
     minVelocityFilters.push_back(minVelocityFilter);
     maxVelocityFilters.push_back(maxVelocityFilter);
@@ -373,31 +554,6 @@ _m(m)
   
   PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
 }
-
-VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
-                                                               Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
-                                                               MeshTopologyPtr spatialMeshTopology,
-                                                               double dt,
-                                                               std::vector<double> velocitySpaceVertices_x,
-                                                               std::vector<double> velocitySpaceVertices_y,
-                                                               const int H1Order, const int delta_k,
-                                                               const int maxMomentNumberForDriver)
-:
-VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
-                               velocitySpaceVertices_x, velocitySpaceVertices_y, std::vector<double>(),
-                               H1Order, delta_k, maxMomentNumberForDriver) {}
-
-VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
-                                                               Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
-                                                               MeshTopologyPtr spatialMeshTopology,
-                                                               double dt,
-                                                               std::vector<double> velocitySpaceVertices_x,
-                                                               const int H1Order, const int delta_k,
-                                                               const int maxMomentNumberForDriver)
-:
-VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
-                               velocitySpaceVertices_x, std::vector<double>(), std::vector<double>(),
-                               H1Order, delta_k, maxMomentNumberForDriver) {}
 
 MeshPtr VlasovBackwardEulerFormulation::vlasovMesh()
 {
@@ -456,12 +612,16 @@ SolutionPtr VlasovBackwardEulerFormulation::configurationSpaceSolution()
 
 void VlasovBackwardEulerFormulation::configurationSpaceSolve()
 {
-  _solutionMoments->update();
+  for (int i=0; i<_numSpecies; i++)
+  {
+    _solutionMoments[i]->update();
+  }
   {
     double n0;
     if (_enforceQuasiNeutrality)
     {
-      FunctionPtr zeroMoment   = _solutionMoments->solutionMomentFunction(0);
+      TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "quasi-neutrality enforcement assumes single species");
+      FunctionPtr zeroMoment   = _solutionMoments[0]->solutionMomentFunction(0);
       auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
       const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
       const double f_integral  = zeroMoment->integrate(configurationMesh);
@@ -545,16 +705,16 @@ VarPtr VlasovBackwardEulerFormulation::E_configurationSpaceTrace(const int zeroB
   return _configurationSpaceFormulation->E_hat(zeroBasedComp);
 }
 
-VarPtr VlasovBackwardEulerFormulation::f()
+VarPtr VlasovBackwardEulerFormulation::f(int speciesOrdinal)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->trialVar(S_F);
+  return vf->trialVar(_f_names[speciesOrdinal]);
 }
 
-VarPtr VlasovBackwardEulerFormulation::f_hat()
+VarPtr VlasovBackwardEulerFormulation::f_hat(int speciesOrdinal)
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
-  return vf->trialVar(S_F_HAT);
+  return vf->trialVar(_f_hat_names[speciesOrdinal]);
 }
 
 void VlasovBackwardEulerFormulation::finishTimeStep()
@@ -595,8 +755,16 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     solveNumber++;
   }
   
-  auto density  = _solutionMoments->solutionMomentFunction(0); // used in viz output
-    
+  std::vector<FunctionPtr> density(_numSpecies);
+  std::vector<std::string> densityLabels(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    density[i] = _solutionMoments[i]->solutionMomentFunction(0); // used in viz output
+    densityLabels[i] = (_speciesLabels[i].size()) == 0 ? "n_e" : "n_" + _speciesLabels[i];
+  }
+  
+  
+  
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
@@ -629,8 +797,16 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     // Compute difference between current and previous substep solutions.  For substepOrdinal == 0, this is the difference with prior time step.
     
     auto vlasovMesh  = _vlasovSoln->mesh();
-    const double fDiff_L2 = _fDiff->l2norm(vlasovMesh);
-    const double f_L2 = _fSoln->l2norm(vlasovMesh);
+    double fDiff_L2_squared = 0, f_L2_squared = 0;
+    for (int i=0; i<_numSpecies; i++)
+    {
+      double fDiff_L2_i = _fDiff[i]->l2norm(vlasovMesh);
+      double f_L2_i     = _fSoln[i]->l2norm(vlasovMesh);
+      fDiff_L2_squared += fDiff_L2_i * fDiff_L2_i;
+      f_L2_squared     += f_L2_i * f_L2_i;
+    }
+    const double fDiff_L2 = sqrt(fDiff_L2_squared);
+    const double f_L2 = sqrt(f_L2_squared);
     const double fRelDiff = fDiff_L2 / f_L2;
     
     const double configurationSpaceRelativeDiff = _configurationSpaceFormulation->l2NormOfSolutionUpdate();
@@ -651,7 +827,7 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     }
     if (exportViz)
     {
-      configurationViz->exportSolution(_configurationSpaceFormulation->solution(),{density}, {"n_e"},substepOrdinal+1);
+      configurationViz->exportSolution(_configurationSpaceFormulation->solution(),density, densityLabels,substepOrdinal+1);
       vlasovViz->exportSolution(vlasovSolution(),substepOrdinal+1);
     }
   } // substep loop (fixed point iteration)
@@ -882,63 +1058,141 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
 
 void VlasovBackwardEulerFormulation::setInitialConditions(FunctionPtr f0)
 {
+  setInitialConditions(std::vector<FunctionPtr>{f0});
+}
+
+void VlasovBackwardEulerFormulation::setInitialConditions(std::vector<FunctionPtr> f0)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(int(f0.size()) != _numSpecies, std::invalid_argument, "Must define initial conditions for each species");
   std::map<int,FunctionPtr> projectionMap;
-  projectionMap[this->f()->ID()] = f0;
+  for (int speciesOrdinal=0; speciesOrdinal<_numSpecies; speciesOrdinal++)
+  {
+    projectionMap[this->f(speciesOrdinal)->ID()] = f0[speciesOrdinal];
+  }
   
   const int solutionOrdinal = 0;
   _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
+  configurationSpaceSolve();
+  
+  if (_crankNicolson)
+  {
+    // Crank-Nicolson requires that the previous-solution trace be set as well.
+    FunctionPtr n = Function::normal();
+    FunctionPtr nx_dot_v = Function::zero();
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      auto n_d = n->spatialComponent(vd+1); // spatialComponent() is one-based
+      FunctionPtr v_d = this->v_i(vd); // v_i() is zero-based
+      nx_dot_v = nx_dot_v + n_d * v_d;
+    }
+    
+    std::vector<FunctionPtr> grad_v_weight(_velocityDim); // the thing that gets dotted with grad_v of f (in the strong form)
+    
+    std::vector<FunctionPtr> E(3,Function::zero());
+    std::vector<FunctionPtr> B(3,Function::zero());
+    
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      E[vd] = _configurationSpaceFormulation->E_i(vd);
+      B[vd] = _configurationSpaceFormulation->B_i(vd);
+    }
+    
+    // we only include the v_cross_B term for 3V case
+    // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
+    std::vector<FunctionPtr> v_cross_B(3,Function::zero());
+    if (_velocityDim == 3)
+    {
+      FunctionPtr v_0 = this->v_i(0);
+      FunctionPtr v_1 = this->v_i(1);
+      FunctionPtr v_2 = this->v_i(2);
+      v_cross_B[0] = v_1 * B[2] - v_2 * B[1];
+      v_cross_B[1] = v_2 * B[0] - v_0 * B[2];
+      v_cross_B[2] = v_0 * B[1] - v_1 * B[0];
+    }
+    
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      grad_v_weight[vd] = E[vd] + v_cross_B[vd];
+    }
+    
+    for (int i=0; i<_numSpecies; i++)
+    {
+      FunctionPtr nv_dot_a = Function::zero();
+      for (int vd=0; vd<_velocityDim; vd++)
+      {
+        auto a_vd  = (_q[i]/_m[i]) * grad_v_weight[vd];
+        auto nv_vd = n->spatialComponent(_spaceDim + vd + 1); // spatialComponent() is one-based
+        nv_dot_a = nv_dot_a + nv_vd * a_vd;
+      }
+      
+      FunctionPtr tn0 = f0[i] * (nx_dot_v + nv_dot_a);
+      FunctionPtr sgn_n = Function::sideParity();
+      projectionMap[this->t_n_hat(i)->ID()] = tn0 * sgn_n;
+    }
+    _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
+  }
+  
   _vlasovSolnPrev->setSolution(_vlasovSoln);
   _vlasovSolnPriorTime->setSolution(_vlasovSoln);
-  _t = 0;
   
-  configurationSpaceSolve();
+  _t = 0;
 }
 
 void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
 {
+  using std::vector;
+  setInitialAndInflowConditions(vector<FunctionPtr>{f0}, vector<FunctionPtr>{f_in});
+}
+
+void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(int(f_in.size()) != _numSpecies, std::invalid_argument, "Must define inflow conditions for each species");
   auto vlasovBC = BC::bc();
   
-  VarPtr t_n = this->t_n_hat();
-  for (int vd=0; vd<_velocityDim; vd++)
+  for (int speciesOrdinal=0; speciesOrdinal<_numSpecies; speciesOrdinal++)
   {
-    const int tagMin = this->tagVlasovMinVelocity(vd);
-    const int tagMax = this->tagVlasovMaxVelocity(vd);
-    vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
-    vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    VarPtr t_n = this->t_n_hat(speciesOrdinal);
+    for (int vd=0; vd<_velocityDim; vd++)
+    {
+      const int tagMin = this->tagVlasovMinVelocity(vd);
+      const int tagMax = this->tagVlasovMaxVelocity(vd);
+      vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
+      vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+    }
+    
+    FunctionPtr n = Function::normal();
+    FunctionPtr v_dot_nx = Function::zero();
+    for (int vd=0; vd<std::min(_velocityDim,_spaceDim); vd++)
+    {
+      FunctionPtr v_d = this->v_i(vd);
+      FunctionPtr n_d = n->spatialComponent(vd+1); // 1-based index for Function::spatialComponent();
+      v_dot_nx = v_dot_nx + v_d * n_d;
+    }
+    
+    const int tagSpatialInflow = this->tagVlasovSpatialInflow();
+    vlasovBC->addDirichlet(t_n, tagSpatialInflow, v_dot_nx * f_in[speciesOrdinal]);
   }
-  
-  FunctionPtr n = Function::normal();
-  FunctionPtr v_dot_nx = Function::zero();
-  for (int vd=0; vd<std::min(_velocityDim,_spaceDim); vd++)
-  {
-    FunctionPtr v_d = this->v_i(vd);
-    FunctionPtr n_d = n->spatialComponent(vd+1); // 1-based index for Function::spatialComponent();
-    v_dot_nx = v_dot_nx + v_d * n_d;
-  }
-  
-  const int tagSpatialInflow = this->tagVlasovSpatialInflow();
-  vlasovBC->addDirichlet(t_n, tagSpatialInflow, v_dot_nx * f_in);
 
   _vlasovSoln->setBC(vlasovBC);
   
   setInitialConditions(f0);
 }
 
-Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMoments()
+Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMoments(int i)
 {
-  return _solutionMoments;
+  return _solutionMoments[i];
 }
 
-Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMomentsPriorTime()
+Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMomentsPriorTime(int i)
 {
-  return _solutionMomentsPriorTime;
+  return _solutionMomentsPriorTime[i];
 }
 
 // test variables:
-VarPtr VlasovBackwardEulerFormulation::w()
+VarPtr VlasovBackwardEulerFormulation::w(int i)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->testVar(S_W, HGRAD);
+  return vf->testVar(_w_names[i], HGRAD);
 }
 
 void VlasovBackwardEulerFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
@@ -980,10 +1234,10 @@ double VlasovBackwardEulerFormulation::t() const
   return _t;
 }
 
-VarPtr VlasovBackwardEulerFormulation::t_n_hat()
+VarPtr VlasovBackwardEulerFormulation::t_n_hat(int i)
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
-  return vf->trialVar(S_T_N_HAT);
+  return vf->trialVar(_tn_hat_names[i]);
 }
 
 FunctionPtr VlasovBackwardEulerFormulation::v_i(int compZeroBased) const

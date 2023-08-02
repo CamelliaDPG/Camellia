@@ -261,6 +261,7 @@ int main(int argc, char *argv[])
     int checkpointFrequency = -1; // default to matching outputFrequency
     bool useSerendipity = false;
     double A_override = -1.; // use default values for gamma if not set
+    bool useCrankNicolson = false;
     
     std::string restartDir = "";
     
@@ -298,6 +299,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("maxDofsForDirectSolve", &maxDofsForDirectSolve);
     cmdp.setOption("restartDir", &restartDir);
     cmdp.setOption("checkpointFrequency", &checkpointFrequency);
+    cmdp.setOption("useCrankNicolson", "useBackwardEuler", &useCrankNicolson);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -344,7 +346,8 @@ int main(int argc, char *argv[])
       vxVertices.push_back(vx);
     }
     
-    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k);
+    const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
+    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k, maxMomentNumber, useCrankNicolson);
     form.refineUniformly(numUniformRefinements);
     form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     form.setRunQuietly(true);
@@ -354,6 +357,7 @@ int main(int argc, char *argv[])
     auto numVlasovDofs      = form.vlasovMesh()->numGlobalDofs();
     if (rank == 0)
     {
+      if (useCrankNicolson) std::cout << "Using Crank-Nicolson in time.\n";
       std::cout << "Poisson mesh has " << numPoissonElements << " elements and " << numPoissonDofs << " dofs.\n";
       std::cout << "Vlasov mesh has  "  << numVlasovElements << " elements and " << numVlasovDofs  << " dofs.\n";
     }
@@ -432,6 +436,10 @@ int main(int argc, char *argv[])
     vElements <<= numUniformRefinements;
 
     suffix << "_" << xElements << "x" << vElements;
+    if (useCrankNicolson)
+    {
+      suffix << "_CN";
+    }
 
     std::string problemPrefix;
     if (pureAdvection)
@@ -603,8 +611,7 @@ int main(int argc, char *argv[])
     FunctionPtr E_squared = E_soln * E_soln;
     FunctionPtr abs_E_soln = Teuchos::rcp( new AbsFunction(E_soln) );
     
-    const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
-    auto solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form.vlasovSolution(), form.f(), form.configurationSpaceMesh()) );
+    auto solutionMoments = form.solutionMoments();
         
     auto density  = solutionMoments->solutionMomentFunction(0);
     auto momentum = solutionMoments->solutionMomentFunction(1);
