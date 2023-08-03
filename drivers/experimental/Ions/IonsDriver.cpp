@@ -570,7 +570,7 @@ int main(int argc, char *argv[])
       }
     }
     
-    double sigmaSquared_e = 0.01 * u0_e * u0_e; // let thermal velocity be 10% of drift velocity
+    double sigmaSquared_e = 0.000625 * u0_e * u0_e; // let thermal velocity be 2.5% of drift velocity
     double n = 1.0;
     const double firstMomentOfMaxwellian_e = MaxwellianFunction::momentNormalized1D(u0_e, sigmaSquared_e, 1); // will return u0_e
     const double J_inflow_physical_e = 0.95 * 2.1e5; // Amps // TODO: make the 0.95 weight subject to CLI parameter (0.95 is Case C2 from C & L)
@@ -844,7 +844,7 @@ int main(int argc, char *argv[])
     {
       const int num1DPointsPoisson = 10; // default is 4
       poissonViz->exportSolution(form.configurationSpaceSolution(),t,num1DPointsPoisson);
-      vlasovViz->exportSolution(form.vlasovSolution(),t,num1DPointsPoisson);
+      vlasovViz->exportSolution(form.vlasovSolution(),t);
     }
     
     FunctionPtr E_soln = Function::solution(form.configurationSpaceFormulation()->E_fieldVar(0), form.configurationSpaceSolution());
@@ -947,7 +947,7 @@ int main(int argc, char *argv[])
         {
           solutionMoments->update(); // update to get latest density, velocity
           const int num1DPointsPoisson = 10; // default is 4
-          vlasovViz->exportSolution(form.vlasovSolution(),t,num1DPointsPoisson);
+          vlasovViz->exportSolution(form.vlasovSolution(),t);
           poissonViz->exportSolution(form.configurationSpaceSolution(), {density,velocity}, {"n_e","v"},t,num1DPointsPoisson);
         }
         
