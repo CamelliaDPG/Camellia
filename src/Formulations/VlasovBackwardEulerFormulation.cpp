@@ -367,9 +367,7 @@ _speciesLabels(speciesLabels)
       w_against_f_i[i] = w_against_f_i[i] - theta * v[d] * w[i]->di(indexOffsetSpaceOneBased + d); // dx_d
     }
   }
-  
-  std::vector<FunctionPtr> grad_v_weight(_velocityDim); // the thing that gets dotted with grad_v of f (in the strong form)
-  
+    
   std::vector<FunctionPtr> E(3,Function::zero());
   std::vector<FunctionPtr> B(3,Function::zero());
   
@@ -390,16 +388,23 @@ _speciesLabels(speciesLabels)
   }
   
   auto extraAcceleration = _configurationSpaceFormulation->extraAcceleration();
-  for (int i=0; i<_velocityDim; i++)
+  
+  // initialize acceleration term, _a
   {
-    grad_v_weight[i] = E[i] + v_cross_B[i] + extraAcceleration[i];
+    _a = std::vector<FunctionPtr>(_velocityDim); // this gets dotted with  grad_v (q[i]/m[i]) f_i (in the strong form)
+    
+    for (int d=0; d<_velocityDim; d++)
+    {
+      _a[d] = E[d] + v_cross_B[d] + extraAcceleration[d];
+    }
   }
+
   
   for (int i=0; i<_numSpecies; i++)
   {
     for (int d=0; d<_velocityDim; d++)
     {
-      auto weight = grad_v_weight[d];
+      auto weight = _a[d];
       w_against_f_i[i] = w_against_f_i[i] - theta * (q[i]/m[i]) * weight * w[i]->di(indexOffsetVelocityOneBased + d); // d/dv_d
 //      _vlasovBF->addTerm(-(q[i]/m[i]) * weight * f[i], w[i]->di(indexOffsetVelocityOneBased + d)); // d/dv_d
     }
@@ -442,7 +447,7 @@ _speciesLabels(speciesLabels)
     }
     for (int vd=0; vd<_velocityDim; vd++)
     {
-      grad_v_weight_priorTime[vd] = E_priorTime[vd] + v_cross_B_priorTime[vd];
+      grad_v_weight_priorTime[vd] = E_priorTime[vd] + v_cross_B_priorTime[vd] + extraAcceleration[vd];
     }
   }
     
@@ -553,6 +558,11 @@ _speciesLabels(speciesLabels)
   }
   
   PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+}
+
+vector<FunctionPtr> VlasovBackwardEulerFormulation::a()
+{
+  return _a;
 }
 
 MeshPtr VlasovBackwardEulerFormulation::vlasovMesh()

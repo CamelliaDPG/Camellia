@@ -60,6 +60,8 @@ private:
   std::vector<std::string> _speciesLabels;
   std::vector<std::string> _f_names, _w_names, _f_hat_names, _tn_hat_names;
   
+  vector<FunctionPtr> _a; // acceleration term. Set during construction as a function of configuration-space solution.
+  
   ParameterFunctionPtr _n0; // if quasi-neutrality is enforced, this is set when initial conditions are set, as the integral of f0 over the whole of phase space, divided by the measure of the configuration-space mesh.
   
   //! on each refinement, refine any element with error greater than threshold times the maximum element error.  Values > 1.0 mean no refinement
@@ -186,6 +188,9 @@ public:
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0,
                                  const bool useCrankNicolson = false);
+
+  //! Returns the acceleration term, defined on the configuration space mesh, as an array of length velocityDim().
+    vector<FunctionPtr> a();
 
   //! load from checkpoint
   void loadFromCheckpoint(const std::string &restartDir);
