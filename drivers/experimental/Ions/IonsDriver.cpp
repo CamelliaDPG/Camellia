@@ -298,6 +298,7 @@ int main(int argc, char *argv[])
     bool disableMagneticField = false;
     double overrideEps0 = -1.; // if set from CLI, will override the computed eps0 value.
     bool useCrankNicolson = false;
+    bool useConservativeNorm = false; // if true, override Vlasov IP to use one for which we can demonstrate local (mass) conservation
     
     double physicalGapWidth = .00216; // [m], from Christenson and Lau (1994)
     
@@ -339,6 +340,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("disableElectricField", "includeElectricField", &disableElectricField);
     cmdp.setOption("disableMagneticField", "includeMagneticField", &disableMagneticField);
     cmdp.setOption("useCrankNicolson", "useBackwardEuler", &useCrankNicolson);
+    cmdp.setOption("useConservativeNorm", "useGraphNorm", &useConservativeNorm);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -509,6 +511,23 @@ int main(int argc, char *argv[])
     
     VlasovBackwardEulerFormulation form(q_values, m_values, speciesLabels, useSerendipityBasis, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k, maxMomentNumber, useCrankNicolson);
     
+    if (useConservativeNorm)
+    {
+      double theta = useCrankNicolson ? 0.5 : 1.0;
+      auto w  = form.w();
+      auto vx = form.v_i(0);
+      auto ax = form.a()[0];
+      
+      auto w_dx = w->di(1);
+      auto w_dv = w->di(2);
+      
+      IPPtr ip = IP::ip();
+      ip->addTerm(w);
+      ip->addTerm(w - (2 * theta * dt * vx) * w_dx - (2*theta*dt*ax)* w_dv);
+      
+      form.vlasovSolution()->setIP(ip);
+    }
+
     if (disableElectricField)
     {
       // set the RHS to 0 -- in combination with the zero potential BC we set above, this forces the electric field to be zero.
@@ -650,7 +669,7 @@ int main(int argc, char *argv[])
     }
     form.setInitialAndInflowConditions(f0, f_in);
     
-    double bcResolutionTolerance = 0.01; // 1.0; // 0.01; // DEBUGGING: turn off bc refinements
+    double bcResolutionTolerance = 1e-6; // 1.0; // 0.01; // DEBUGGING: turn off bc refinements
     for (auto bcTuple : bcFunctionsToResolve)
     {
       using std::get;
