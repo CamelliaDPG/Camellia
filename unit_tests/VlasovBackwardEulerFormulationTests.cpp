@@ -223,8 +223,6 @@ namespace {
 //    Teuchos::RCP<HDF5Exporter> vlasovViz = Teuchos::rcp( new HDF5Exporter (vlasovSoln->mesh(), "VlasovBackwardEulerFormulation_InflowConditions", "/tmp"));
 //    vlasovViz->exportSolution(vlasovSoln, form.t());
     
-    // TODO: add a check of tn_0 for the Crank-Nicolson case (for which it should be projected when initial conditions are set)
-    
     form.takeTimeStep();
 //    vlasovViz->exportSolution(vlasovSoln, 0.1);
     

@@ -350,11 +350,10 @@ _speciesLabels(speciesLabels)
   for (int i=0; i<_numSpecies; i++)
   {
     w_against_f_i[i] = w[i] / _dt;
-//    _vlasovBF->addTerm(f[i] / _dt, w[i]);
     
     if (l2Trace)
     {
-      _vlasovBF->addTerm(theta * t_n_hat[i], w[i]);
+      _vlasovBF->addTerm(t_n_hat[i], w[i]); // let t_n_hat be the trace of the *sum* of theta * f^{k+1} and (1-theta) f^k; solve for the sum.  This lets us avoid placing a trace term on the RHS.
     }
     else
     {
@@ -405,8 +404,7 @@ _speciesLabels(speciesLabels)
     for (int d=0; d<_velocityDim; d++)
     {
       auto weight = _a[d];
-      w_against_f_i[i] = w_against_f_i[i] - theta * (q[i]/m[i]) * weight * w[i]->di(indexOffsetVelocityOneBased + d); // d/dv_d
-//      _vlasovBF->addTerm(-(q[i]/m[i]) * weight * f[i], w[i]->di(indexOffsetVelocityOneBased + d)); // d/dv_d
+      w_against_f_i[i] = w_against_f_i[i] - theta * (_q[i]/_m[i]) * weight * w[i]->di(indexOffsetVelocityOneBased + d); // d/dv_d
     }
   }
   // now add in the f terms:
@@ -468,18 +466,6 @@ _speciesLabels(speciesLabels)
   
     if (theta != 1.0)
     {
-      if (l2Trace)
-      {
-        auto t_n_hat_previous_i = Function::solution(t_n_hat[i], vlasovSolnPriorTimeWeakPtr, weightFluxesBySideParity,
-                                                     solnComponent, stageOrdinal, std::string("k"));
-        vlasovRHS->addTerm(-(1-theta) * t_n_hat_previous_i * w[i]);
-      }
-      else
-      {
-        // TODO: add support for conforming traces
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Conforming traces not yet supported.");
-      }
-      
       for (int d=0; d<_spaceDim; d++)
       {
         vlasovRHS->addTerm( (1-theta) * v[d] * f_previous * w[i]->di(indexOffsetSpaceOneBased + d));  // dx_d
@@ -488,7 +474,7 @@ _speciesLabels(speciesLabels)
       for (int vd=0; vd<_velocityDim; vd++)
       {
         auto weight = grad_v_weight_priorTime[vd];
-        vlasovRHS->addTerm( (1-theta) * (q[i]/m[i]) * weight * f_previous * w[i]->di(indexOffsetVelocityOneBased + vd)); // d/dv_vd
+        vlasovRHS->addTerm( (1-theta) * (_q[i]/_m[i]) * weight * f_previous * w[i]->di(indexOffsetVelocityOneBased + vd)); // d/dv_vd
       }
     }
   }
@@ -1056,6 +1042,17 @@ void VlasovBackwardEulerFormulation::setTimeStep(double dt)
 
 void VlasovBackwardEulerFormulation::startTimeStep()
 {
+//  {
+//    // DEBUGGING
+//    double E_extruded_norm = _configurationSpaceFormulation->E_i(0)->l2norm(_vlasovSoln->mesh());
+//    const int rank = MPIWrapper::CommWorld()->MyPID();
+//
+//    if (rank == 0)
+//    {
+//      std::cout << "E_extruded_norm = " << E_extruded_norm << std::endl;
+//    }
+//  }
+  
   _vlasovSolnPriorTime->setSolution(_vlasovSoln);
   _configurationSpaceFormulation->copySolutionToPriorTime();
 }
@@ -1083,64 +1080,6 @@ void VlasovBackwardEulerFormulation::setInitialConditions(std::vector<FunctionPt
   const int solutionOrdinal = 0;
   _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
   configurationSpaceSolve();
-  
-  if (_crankNicolson)
-  {
-    // Crank-Nicolson requires that the previous-solution trace be set as well.
-    FunctionPtr n = Function::normal();
-    FunctionPtr nx_dot_v = Function::zero();
-    for (int vd=0; vd<_velocityDim; vd++)
-    {
-      auto n_d = n->spatialComponent(vd+1); // spatialComponent() is one-based
-      FunctionPtr v_d = this->v_i(vd); // v_i() is zero-based
-      nx_dot_v = nx_dot_v + n_d * v_d;
-    }
-    
-    std::vector<FunctionPtr> grad_v_weight(_velocityDim); // the thing that gets dotted with grad_v of f (in the strong form)
-    
-    std::vector<FunctionPtr> E(3,Function::zero());
-    std::vector<FunctionPtr> B(3,Function::zero());
-    
-    for (int vd=0; vd<_velocityDim; vd++)
-    {
-      E[vd] = _configurationSpaceFormulation->E_i(vd);
-      B[vd] = _configurationSpaceFormulation->B_i(vd);
-    }
-    
-    // we only include the v_cross_B term for 3V case
-    // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
-    std::vector<FunctionPtr> v_cross_B(3,Function::zero());
-    if (_velocityDim == 3)
-    {
-      FunctionPtr v_0 = this->v_i(0);
-      FunctionPtr v_1 = this->v_i(1);
-      FunctionPtr v_2 = this->v_i(2);
-      v_cross_B[0] = v_1 * B[2] - v_2 * B[1];
-      v_cross_B[1] = v_2 * B[0] - v_0 * B[2];
-      v_cross_B[2] = v_0 * B[1] - v_1 * B[0];
-    }
-    
-    for (int vd=0; vd<_velocityDim; vd++)
-    {
-      grad_v_weight[vd] = E[vd] + v_cross_B[vd];
-    }
-    
-    for (int i=0; i<_numSpecies; i++)
-    {
-      FunctionPtr nv_dot_a = Function::zero();
-      for (int vd=0; vd<_velocityDim; vd++)
-      {
-        auto a_vd  = (_q[i]/_m[i]) * grad_v_weight[vd];
-        auto nv_vd = n->spatialComponent(_spaceDim + vd + 1); // spatialComponent() is one-based
-        nv_dot_a = nv_dot_a + nv_vd * a_vd;
-      }
-      
-      FunctionPtr tn0 = f0[i] * (nx_dot_v + nv_dot_a);
-      FunctionPtr sgn_n = Function::sideParity();
-      projectionMap[this->t_n_hat(i)->ID()] = tn0 * sgn_n;
-    }
-    _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
-  }
   
   _vlasovSolnPrev->setSolution(_vlasovSoln);
   _vlasovSolnPriorTime->setSolution(_vlasovSoln);
