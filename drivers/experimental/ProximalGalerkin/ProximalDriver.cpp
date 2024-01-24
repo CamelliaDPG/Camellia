@@ -24,15 +24,21 @@ int main(int argc, char *argv[])
   {
     Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
     
-    double alpha1 = 0.5;
+    double alpha1 = 1.0;
     int numElements = 2;
     double x0 = -1.0;
     double x1 = 1.0;
     int polyOrder = 1;
+    double tolNewton = 1e-1;
+    double tolExit   = 1e-10;
+    double maxAlpha = 1e10;
         
     cmdp.setOption("meshWidth", &numElements );
     cmdp.setOption("polyOrder", &polyOrder );
     cmdp.setOption("alpha1", &alpha1);
+    cmdp.setOption("maxAlpha", &maxAlpha);
+    cmdp.setOption("tolNewton", &tolNewton);
+    cmdp.setOption("tolExit", &tolExit);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -72,8 +78,11 @@ int main(int argc, char *argv[])
     SpatialFilterPtr xLeftSF  = SpatialFilter::lessThanOrEqualToX(x0);
     SpatialFilterPtr xRightSF = SpatialFilter::greaterThanOrEqualToX(x1);
     
-    bc->addDirichlet(u, xLeftSF, Function::zero());
-    bc->addDirichlet(u, xRightSF, Function::constant(pow(x1,4)));
+    FunctionPtr H = Function::heaviside(0);
+    FunctionPtr f = -12.0 * H * Function::xn(2);
+    FunctionPtr u_exact = H * Function::xn(4);
+    
+    bc->addDirichlet(u, SpatialFilter::allSpace(), u_exact); // imposes the exact solution's values on the whole boundary
     
     Teuchos::RCP<HDF5Exporter> viz_soln, viz_incr;
     viz_soln = Teuchos::rcp( new HDF5Exporter (mesh, "proximalSolution", "/tmp"));
@@ -95,15 +104,11 @@ int main(int argc, char *argv[])
     
     bf->addTerm(-exp_psi_soln * psi, phi);
     
-    FunctionPtr H = Function::heaviside(0);
-    FunctionPtr f = -12.0 * H * Function::xn(2);
-    FunctionPtr u_exact = H * Function::xn(4);
     
     rhs->addTerm((alphaFxn * f + psi_prev - psi_soln_weak_ref) * v);
     rhs->addTerm(exp_psi_soln * phi);
     
-    double tolNewton = 1e-1;
-    double tolExit   = 1e-10;
+    
     
     soln->initializeLHSVector();
     
@@ -113,11 +118,11 @@ int main(int argc, char *argv[])
     
     int t = 0;
     
-    for (int k=1; k<20; k++)
+    for (int k=1;; k++)
     {
       cout << "k: " << k << endl;
       soln_prev->setSolution(soln);
-      for (int n=0; n<20; n++)
+      for (int n=0;; n++)
       {
         cout << "  n: " << n << endl;
         soln_incr->solve();
@@ -137,7 +142,7 @@ int main(int argc, char *argv[])
       std::cout << "  u_err:   " << u_err   << endl;
       if (uk_diff < tolExit) break;
       
-      alpha = min(max(alpha1,pow(r,pow(q,k-1))-alpha),1e10);
+      alpha = min(max(alpha1,pow(r,pow(q,k-1))-alpha),maxAlpha);
       cout << "alpha: " << alpha << endl;
       alphaParameter->setValue(alpha);
     }
