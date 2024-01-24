@@ -27,7 +27,7 @@ public:
     //                    The filter sf2 & !sf1 implements the clause "sf1 does not match, and sf2 does"
     auto f1_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f1, sf1);
     SpatialFilterPtr sf2_minus_sf1 = sf2 & !sf1;
-    auto f2_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f1, sf2_minus_sf1);
+    auto f2_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f2, sf2_minus_sf1);
     _f = f1_filtered + f2_filtered;
   }
   void setTime(double time)
