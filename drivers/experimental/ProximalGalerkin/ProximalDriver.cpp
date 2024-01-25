@@ -1,17 +1,14 @@
 //
-// © 2016-2018 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
+// © 2016-2024 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
 
 #include "Camellia.h"
 
 #include "ExpFunction.h"
-#include "GDAMinimumRule.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
-#include "PoissonFormulation.h"
 #include "RHS.h"
 #include "Solution.h"
-#include "TrigFunctions.h"
 
 using namespace Camellia;
 using namespace std;
@@ -104,11 +101,8 @@ int main(int argc, char *argv[])
     
     bf->addTerm(-exp_psi_soln * psi, phi);
     
-    
     rhs->addTerm((alphaFxn * f + psi_prev - psi_soln_weak_ref) * v);
     rhs->addTerm(exp_psi_soln * phi);
-    
-    
     
     soln->initializeLHSVector();
     
