@@ -366,7 +366,14 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         }
         else
         {
-          basis = intrepid2LineHGRAD(basisPolyOrder);
+          if (fs == FUNCTION_SPACE_HGRAD)
+          {
+            basis = intrepid2LineHGRAD(basisPolyOrder);
+          }
+          else
+          {
+            basis = intrepid2LineHGRAD_DISC(basisPolyOrder);
+          }
         }
       }
       break;

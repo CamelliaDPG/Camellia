@@ -641,6 +641,11 @@ BasisPtr intrepid2TensorBasis(BasisPtr firstBasis, BasisPtr extrusionBasis)
     fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HGRAD;
     fs_Camellia  = FUNCTION_SPACE_HGRAD;
   }
+  else if ((fsFirst == FUNCTION_SPACE_HGRAD_DISC) && (fsExtrusion == FUNCTION_SPACE_HGRAD_DISC))
+  {
+    fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HGRAD;
+    fs_Camellia  = FUNCTION_SPACE_HGRAD_DISC;
+  }
   else if ((fsFirst == FUNCTION_SPACE_HVOL) && (fsExtrusion == FUNCTION_SPACE_HVOL))
   {
     fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HVOL;
