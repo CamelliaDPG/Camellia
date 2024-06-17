@@ -127,11 +127,7 @@ private:
 
   GlobalIndexType _bcDofCount; // global count of the number of BCs imposed during last call to imposeBCs().
   
-  double _globalSystemConditionEstimate;
-
   double _zmcRho;
-
-  static double conditionNumberEstimate( Epetra_LinearProblem & problem, int &errCode );
 
   void setGlobalSolutionFromCellLocalCoefficients();
 
@@ -229,9 +225,6 @@ public:
                                        const Camellia::FieldContainer<Scalar> &allCoeffs, int trialID, int sideIndex);
 
   void clear();
-
-  // ! After a problem has been set up (stiffness matrix, rhs assembled; BCs imposed), this method will compute and return a condition number estimate using AztecOO.
-  double conditionNumberEstimate(int &errCode) const;
   
   int cubatureEnrichmentDegree() const;
   void setCubatureEnrichmentDegree(int value);
@@ -315,8 +308,6 @@ public:
 
   void computeResiduals();
   void computeErrorRepresentation();
-
-  double globalCondEstLastSolve(); // the condition # estimate for the last system matrix used in a solve, if _reportConditionNumber is true.
 
   void discardInactiveCellCoefficients();
   double energyErrorTotal();

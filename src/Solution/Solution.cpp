@@ -80,23 +80,6 @@ using namespace Camellia;
 const static string SOLVER_TIMER_STRING = "time spent in linear solver";
 
 template <typename Scalar>
-double TSolution<Scalar>::conditionNumberEstimate( Epetra_LinearProblem & problem, int &errCode )
-{
-  // estimates the 2-norm condition number
-  AztecOOConditionNumber conditionEstimator;
-  conditionEstimator.initialize(*problem.GetOperator());
-
-  int maxIters = 40000;
-  double tol = 1e-10;
-  errCode = conditionEstimator.computeConditionNumber(maxIters, tol);
-  if (errCode!=0)
-    cout << "status result from computeConditionNumber(): " << errCode << endl;
-  double condest = conditionEstimator.getConditionNumber();
-
-  return condest;
-}
-
-template <typename Scalar>
 int TSolution<Scalar>::cubatureEnrichmentDegree() const
 {
   return _cubatureEnrichmentDegree;
@@ -196,7 +179,6 @@ void TSolution<Scalar>::initialize()
   _rankLocalEnergyErrorComputed = false;
   _reportConditionNumber = false;
   _reportTimingResults = false;
-  _globalSystemConditionEstimate = -1;
   _cubatureEnrichmentDegree = 0;
   
   _zmcsAsLagrangeMultipliers = true; // default -- when false, it's user's / Solver's responsibility to enforce ZMCs
@@ -994,17 +976,6 @@ void TSolution<Scalar>::getBasisCoefficientsForCell(Camellia::FieldContainer<Sca
   }
 }
 
-// ! After a problem has been set up (stiffness matrix, rhs assembled; BCs imposed), this method will compute and return a condition number estimate using AztecOO.
-template <typename Scalar>
-double TSolution<Scalar>::conditionNumberEstimate(int &errCode) const
-{
-  // if a problem has not been set up, return -1
-  if (_globalStiffMatrix == Teuchos::null) return -1;
-  
-  Epetra_LinearProblem linearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector);
-  return conditionNumberEstimate(linearProblem, errCode);
-}
-
 // ! provides the GID corresponding to an element lagrange constraint
 template <typename Scalar>
 GlobalIndexType TSolution<Scalar>::elementLagrangeIndex(GlobalIndexType cellID, int lagrangeOrdinal) const
@@ -1601,20 +1572,6 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,*Comm);
   Epetra_Time timer(*Comm);
-
-  if (_reportConditionNumber)
-  {
-    //    double oneNorm = globalStiffMatrix.NormOne();
-    Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*lhsVector, &*_rhsVector));
-    int errCode;
-    double condest = conditionNumberEstimate(*problem, errCode);
-    if (rank == 0)
-    {
-      // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
-      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
-    }
-    _globalSystemConditionEstimate = condest;
-  }
 
   timer.ResetStartTime();
 
@@ -2508,13 +2465,6 @@ template <typename Scalar>
 TVectorPtr<Scalar> TSolution<Scalar>::getGlobalCoefficients2()
 {
   return _lhsVector2;
-}
-
-template <typename Scalar>
-double TSolution<Scalar>::globalCondEstLastSolve()
-{
-  // the condition # estimate for the last system matrix used in a solve, if _reportConditionNumber is true.
-  return _globalSystemConditionEstimate;
 }
 
 template <typename Scalar>

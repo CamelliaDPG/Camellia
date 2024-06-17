@@ -524,7 +524,6 @@ int main(int argc, char *argv[])
   int numRefinements = 0;
   double energyThreshold = 0.2; // for refinements
   string formulationChoice = "Ultraweak";
-  bool conditionNumberEstimate = false;
   bool computeLAPACKConditionNumber = false;
   bool exportMatricesLastRefinement = false;
   bool exportVisualization = false;
@@ -592,7 +591,6 @@ int main(int argc, char *argv[])
   cmdp.setOption("refErrThreshold", &refErrThreshold, "will stop refinements when L^2 error of solution is below refErrThreshold, or numRefinements is reached.");
   cmdp.setOption("refineUniformly", "refineUsingErrorIndicator", &refineUniformly);
   cmdp.setOption("reportRefinedCells", "dontReportRefinedCells", &reportRefinedCells);
-  cmdp.setOption("reportConditionNumber", "dontReportConditionNumber", &conditionNumberEstimate);
   cmdp.setOption("smootherApplicationCount", &smootherApplicationCount, "number of times to apply smoother at each multigrid level");
   cmdp.setOption("computeLAPACKConditionNumber", "dontComputeLAPACKConditionNumber", &computeLAPACKConditionNumber);
   cmdp.setOption("reportSolutionTimings", "dontReportSolutionTimings", &reportSolutionTimings);
@@ -921,23 +919,6 @@ int main(int argc, char *argv[])
     condNumbers.push_back(condNum);
     cout << scientific << setprecision(1);
     if (rank == 0) cout << "Condition Number (LAPACK) for refinement " << refinementNumber << ": " << condNum << endl;
-  }
-  else if (conditionNumberEstimate)
-  {
-    int errCode;
-    double conditionNumber = solution->conditionNumberEstimate(errCode);
-    if (rank==0)
-    {
-      if (errCode != 0)
-      {
-        cout << "Condition Number estimation failed with error code " << errCode;
-        cout << " (estimate, for what it's worth--very little, probably--was " << conditionNumber << ")\n";
-      }
-      else
-      {
-        cout << "Condition Number estimate initial mesh: " << conditionNumber << endl;
-      }
-    }
   }
   if (writeEigValues)
   {
