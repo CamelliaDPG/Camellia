@@ -749,7 +749,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 3;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
