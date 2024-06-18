@@ -25,10 +25,25 @@ public:
     // The logic here is: If sf1 matches, use f1 to compute the values.
     //                    If sf1 does not match, and sf2 does, use f2 to compute the values.
     //                    The filter sf2 & !sf1 implements the clause "sf1 does not match, and sf2 does"
-    auto f1_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f1, sf1);
+    FunctionPtr f1_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f1, sf1);
     SpatialFilterPtr sf2_minus_sf1 = sf2 & !sf1;
-    auto f2_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f2, sf2_minus_sf1);
+    FunctionPtr f2_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f2, sf2_minus_sf1);
+    FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
+    if (! f1_filtered->boundaryValueOnly())
+    {
+      // then force it to be:
+      f1_filtered = f1_filtered * boundaryRestriction;
+    }
+    if (! f2_filtered->boundaryValueOnly())
+    {
+      // then force it to be:
+      f2_filtered = f2_filtered * boundaryRestriction;
+    }
     _f = f1_filtered + f2_filtered;
+  }
+  bool boundaryValueOnly() override
+  {
+    return true;
   }
   void setTime(double time)
   {
