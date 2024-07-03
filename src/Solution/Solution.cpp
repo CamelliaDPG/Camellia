@@ -91,7 +91,7 @@ void TSolution<Scalar>::setCubatureEnrichmentDegree(int value)
   _cubatureEnrichmentDegree = value;
 }
 
-static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
+static const int MAX_BATCH_SIZE_IN_BYTES = 128*1024*1024; // 128 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
 
 // copy constructor:
@@ -387,6 +387,11 @@ void TSolution<Scalar>::addReplaceSolution(Teuchos::RCP< TSolution<Scalar> > oth
   invalidateCachedBasisCoefficientsForFields();
 }
 
+template <typename Scalar>
+int TSolution<Scalar>::cellBatchSize() const
+{
+  return _cellBatchSize;
+}
 
 template <typename Scalar>
 bool TSolution<Scalar>::cellHasCoefficientsAssigned(GlobalIndexType cellID, int solutionOrdinal)
@@ -1165,7 +1170,16 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTrialDofs = trialOrderingPtr->totalDofs();
     int numTestDofs = testOrderingPtr->totalDofs();
-    int maxCellBatch = MAX_BATCH_SIZE_IN_BYTES / 8 / (numTestDofs*numTestDofs + numTestDofs*numTrialDofs + numTrialDofs*numTrialDofs);
+    int maxCellBatch;
+    
+    if (_cellBatchSize <= 0)
+    {
+      maxCellBatch = MAX_BATCH_SIZE_IN_BYTES / 8 / (numTestDofs*numTestDofs + numTestDofs*numTrialDofs + numTrialDofs*numTrialDofs);
+    }
+    else
+    {
+      maxCellBatch = _cellBatchSize;
+    }
     maxCellBatch = max( maxCellBatch, MIN_BATCH_SIZE_IN_CELLS );
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     //cout << "maxCellBatch: " << maxCellBatch << endl;
@@ -2938,6 +2952,12 @@ template <typename Scalar>
 TMatrixPtr<Scalar> TSolution<Scalar>::getStiffnessMatrix2()
 {
   return _globalStiffMatrix2;
+}
+
+template <typename Scalar>
+void TSolution<Scalar>::setCellBatchSize(const int newBatchSize)
+{
+  _cellBatchSize = newBatchSize;
 }
 
 template <typename Scalar>

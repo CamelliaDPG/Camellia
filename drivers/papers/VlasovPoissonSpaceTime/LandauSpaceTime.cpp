@@ -1,8 +1,6 @@
 //
 // © 2016-2022 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
-//
-
-#include "Camellia.h"
+//.h"
 
 #include "AbsFunction.h"
 #include "BasisSumFunction.h"
@@ -112,6 +110,16 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const double x0, c
                                                               numUniformRefinements));
   }
   return form;
+}
+
+double roundToThreeSignificantDigits(double value) {
+  if (value == 0.0) {
+      return 0.0;
+  }
+  
+  int precision = 3 - static_cast<int>(std::floor(std::log10(std::abs(value))) + 1);
+  double roundedValue = std::round(value * std::pow(10, precision)) / std::pow(10, precision);
+  return roundedValue;
 }
 
 vector<pair<double,double>> evaluateTemporalSolutionFunction(SolutionPtr temporalSolution, FunctionPtr temporalSolutionFunction,
@@ -307,6 +315,14 @@ int main(int argc, char *argv[])
   
   const int rank = mpiSession.getRank();
   
+#ifdef KOKKOS_ENABLE_DEBUG_BOUNDS_CHECK
+  if (rank==0)
+    std::cout << "Kokkos bounds checking is enabled.\n";
+#else
+  if (rank==0)
+    std::cout << "Kokkos bounds checking is disabled.\n";
+#endif
+  
   {
     mpiSession.barrier();
     
@@ -348,19 +364,26 @@ int main(int argc, char *argv[])
     int minSubsteps = 5;  // for fixed-point iteration.
     int maxSubsteps = 15; // for fixed-point iteration.
     double fixedPointTol = 1e-8;
+    int worksetSize = -1;
+    
+    bool skipPostProcessing = false;
     
     int numTimeSlabs = 40; // 40 * 2 (tWidth) = 80 final time
+    bool useStandardAssembly = false; // use sum-factorized assembly
     
     std::string EFieldMode1File = "", EFieldMode1DecayRateFile = "";
     std::string resultsFilePrefix = "";
+    std::string vlasovTimingsOutputFile = "";
     
     cmdp.setOption("xElements", &xElements);
     cmdp.setOption("tElements", &tElements);
     cmdp.setOption("vElements", &vElements);
+    cmdp.setOption("worksetSize", &worksetSize, "workset size for Vlasov assembly; -1 indicates to allow Solution to determine automatically");
     cmdp.setOption("numUniformRefinements", &numUniformRefinements);
     cmdp.setOption("H1Order", &H1Order);
     cmdp.setOption("delta_k", &delta_k);
     cmdp.setOption("resultsFilePrefix", &resultsFilePrefix);
+    cmdp.setOption("vlasovTimingsOutput", &vlasovTimingsOutputFile);
     cmdp.setOption("u0", &u0);
     cmdp.setOption("v0", &v0, "minimum velocity coordinate in domain");
     cmdp.setOption("vWidth", &vWidth, "span of velocity coordinates in domain");
@@ -378,6 +401,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("maxDofsForDirectSolve", &maxDofsForDirectSolve);
     cmdp.setOption("useMimeticDPG", "useStandardDPG", &useMimeticDPG);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
+    cmdp.setOption("useStandardAssembly", "useSumFactorizedAssembly", &useStandardAssembly);
+    cmdp.setOption("skipPostProcessing", "doPostProcessing", &skipPostProcessing, "skip post-processing steps (intended use is performance timings)");
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -391,6 +416,18 @@ int main(int argc, char *argv[])
     
     auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, delta_k, usePeriodicBCs,
                                      useSerendipityBasis, useMimeticDPG, numUniformRefinements);
+    
+    if (worksetSize != -1)
+    {
+      form->vlasovSolution()->setCellBatchSize(worksetSize);
+    }
+    
+    if (useStandardAssembly)
+    {
+      // override vlasov IP
+      auto vlasovBF = form->vlasovBF();
+      form->vlasovSolution()->setIP(vlasovBF->graphNorm());
+    }
     
     auto sampleElementType = form->vlasovMesh()->globalDofAssignment()->getSampleElementType();
     if (rank == 0)
@@ -553,6 +590,48 @@ int main(int argc, char *argv[])
     }
     int fourierEnrichment = 5; // quadrature enrichment for Fourier mode integral
     
+    // set up timings printer
+    double totalTimeG_vlasov = 0, totalTimeB_vlasov = 0, totalTimeT_vlasov = 0, totalTimeK_vlasov = 0;
+    int totalElementCount_vlasov = 0;
+    std::function<void(int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType)> vlasovOptimalTestTimingCallback;
+    vlasovOptimalTestTimingCallback = [&totalTimeG_vlasov, &totalTimeB_vlasov, &totalTimeT_vlasov, &totalTimeK_vlasov, &totalElementCount_vlasov]
+      (int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType) {
+        totalElementCount_vlasov += numElements;
+        totalTimeG_vlasov        += timeG;
+        totalTimeB_vlasov        += timeB;
+        totalTimeT_vlasov        += timeT;
+        totalTimeK_vlasov        += timeK;
+    };
+    double totalTimeG_vlasov_core_integration = 0;
+    int totalElementCount_vlasov_core_integration = 0; // should match totalElementCount_vlasov
+    double totalTime_block1 = 0, totalTime_block2 = 0, totalTime_block3 = 0, totalTime_block4 = 0;
+    std::function<void(int numElements, double timeG_integrate, double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> vlasovGramCoreIntegrationTimingCallback;
+    vlasovGramCoreIntegrationTimingCallback = [&totalTimeG_vlasov_core_integration, &totalElementCount_vlasov_core_integration,
+     &totalTime_block1, &totalTime_block2, &totalTime_block3, &totalTime_block4]
+      (int numElements, double timeCoreIntegration, double time_block1, double time_block2, double time_block3, double time_block4) {
+        totalElementCount_vlasov_core_integration += numElements;
+        totalTimeG_vlasov_core_integration        += timeCoreIntegration;
+        totalTime_block1 += time_block1;
+        totalTime_block2 += time_block2;
+        totalTime_block3 += time_block3;
+        totalTime_block4 += time_block4;
+    };
+    double totalTimeG_poisson = 0, totalTimeB_poisson = 0, totalTimeT_poisson = 0, totalTimeK_poisson = 0;
+    int totalElementCount_poisson = 0;
+    std::function<void(int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType)> poissonOptimalTestTimingCallback;
+    poissonOptimalTestTimingCallback = [&totalTimeG_poisson, &totalTimeB_poisson, &totalTimeT_poisson, &totalTimeK_poisson, &totalElementCount_poisson]
+      (int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType) {
+        totalElementCount_poisson += numElements;
+        totalTimeG_poisson        += timeG;
+        totalTimeB_poisson        += timeB;
+        totalTimeT_poisson        += timeT;
+        totalTimeK_poisson        += timeK;
+    };
+    // register the timing callbacks
+    form->vlasovBF()->setOptimalTestTimingCallback(vlasovOptimalTestTimingCallback);
+    form->configurationSpaceSolution()->bf()->setOptimalTestTimingCallback(poissonOptimalTestTimingCallback);
+    form->setVlasovGramAssemblyTimingCallback(vlasovGramCoreIntegrationTimingCallback);
+    
     vector<pair<double,double>> fourierPeakValues; // (t, ln(|E1|))
     bool logEFieldSineModeIsIncreasing = false; // if it was increasing, and then decreases: local maximum
     double previousFourierValue = 0;
@@ -597,171 +676,173 @@ int main(int argc, char *argv[])
       
       form->solve();
       
-      SpatialIntegralOfSpaceTimeSolution fourierIntegral(form->configurationSpaceSolution(), form->configurationSpaceFormulation()->E_fieldVar(0), sinFxnFirstFourier, fourierEnrichment);
-      
-      if (fourierViz == Teuchos::null)
+      if (!skipPostProcessing)
       {
-        fourierViz = Teuchos::rcp(new HDF5Exporter (fourierIntegral.temporalMesh(), fourierSS.str(), directoryPath) );
-      }
-      else
-      {
-        fourierViz->setMesh(fourierIntegral.temporalMesh());
-      }
-      // first Fourier mode of the electric field:
-      FunctionPtr E1 = (2.0 / xWidth) * fourierIntegral.temporalFunction();
-      // what we are most interested in plotting is ln |E1|:
-      FunctionPtr abs_E1 = AbsFunction::abs(E1);
-      FunctionPtr ln_abs_E1 = Teuchos::rcp (new Ln<double>(abs_E1) );
-      fourierViz->exportFunction({E1, ln_abs_E1}, {"E1","ln(|E1|)"}, slabNumber); // TODO: revise the Fourier output to time/slab independent… (GnuPlotUtil??)
-      
-      double dt_export = 0.01; // granularity for plots, etc.
-      // output time values that are an even multiple of dt
-      double t0 = int(slabStartTime / dt_export) * dt_export;
-      if (t0 < slabStartTime)
-      {
-        t0 += dt_export;
-      }
-      double t1 = int(slabEndTime / dt_export) * dt_export;
-      if (std::abs(t1 - slabEndTime) < 1e-10)
-      {
-        // if the final output time would match the end of the slab, cheat back by dt_fourier, unless it's the final slab
-        // (each slab "owns" its start time; only the final slab "owns" its end time)
-        if (slabNumber != numTimeSlabs - 1)
-        {
-          t1 -= dt_export;
-        }
-      }
-
-      if (t0 <= t1)
-      {
-        auto fourierValues = evaluateTemporalSolutionFunction(fourierIntegral.temporalSolution(), ln_abs_E1, t0, t1, dt_export);
-        int numTemporalValues = (t1 - t0 + 1e-10) / dt_export + 1;
-        auto totalMassValues     = form->totalMassTimeSeries     (t0, dt_export, numTemporalValues);
-        auto totalMomentumValues = form->totalXMomentumTimeSeries(t0, dt_export, numTemporalValues);
-        auto totalEnergyValues   = form->totalEnergyTimeSeries   (t0, dt_export, numTemporalValues);
+        SpatialIntegralOfSpaceTimeSolution fourierIntegral(form->configurationSpaceSolution(), form->configurationSpaceFormulation()->E_fieldVar(0), sinFxnFirstFourier, fourierEnrichment);
         
-        if (slabNumber == 0)
+        if (fourierViz == Teuchos::null)
         {
-          initialMass     = totalMassValues[0].second;
-          initialMomentum = totalMomentumValues[0].second;
-          initialEnergy   = totalEnergyValues[0].second;
+          fourierViz = Teuchos::rcp(new HDF5Exporter (fourierIntegral.temporalMesh(), fourierSS.str(), directoryPath) );
+        }
+        else
+        {
+          fourierViz->setMesh(fourierIntegral.temporalMesh());
+        }
+        // first Fourier mode of the electric field:
+        FunctionPtr E1 = (2.0 / xWidth) * fourierIntegral.temporalFunction();
+        // what we are most interested in plotting is ln |E1|:
+        FunctionPtr abs_E1 = AbsFunction::abs(E1);
+        FunctionPtr ln_abs_E1 = Teuchos::rcp (new Ln<double>(abs_E1) );
+        fourierViz->exportFunction({E1, ln_abs_E1}, {"E1","ln(|E1|)"}, slabNumber); // TODO: revise the Fourier output to time/slab independent… (GnuPlotUtil??)
+        
+        double dt_export = 0.01; // granularity for plots, etc.
+        // output time values that are an even multiple of dt
+        double t0 = int(slabStartTime / dt_export) * dt_export;
+        if (t0 < slabStartTime)
+        {
+          t0 += dt_export;
+        }
+        double t1 = int(slabEndTime / dt_export) * dt_export;
+        if (std::abs(t1 - slabEndTime) < 1e-10)
+        {
+          // if the final output time would match the end of the slab, cheat back by dt_fourier, unless it's the final slab
+          // (each slab "owns" its start time; only the final slab "owns" its end time)
+          if (slabNumber != numTimeSlabs - 1)
+          {
+            t1 -= dt_export;
+          }
+        }
+        
+        if (t0 <= t1)
+        {
+          auto fourierValues = evaluateTemporalSolutionFunction(fourierIntegral.temporalSolution(), ln_abs_E1, t0, t1, dt_export);
+          int numTemporalValues = (t1 - t0 + 1e-10) / dt_export + 1;
+          auto totalMassValues     = form->totalMassTimeSeries     (t0, dt_export, numTemporalValues);
+          auto totalMomentumValues = form->totalXMomentumTimeSeries(t0, dt_export, numTemporalValues);
+          auto totalEnergyValues   = form->totalEnergyTimeSeries   (t0, dt_export, numTemporalValues);
+          
+          if (slabNumber == 0)
+          {
+            initialMass     = totalMassValues[0].second;
+            initialMomentum = totalMomentumValues[0].second;
+            initialEnergy   = totalEnergyValues[0].second;
+            
+            if (rank == 0)
+            {
+              std::cout << "Total Mass at t=0:     " << initialMass     << std::endl;
+              std::cout << "Total Momentum at t=0: " << initialMomentum << std::endl;
+              std::cout << "Total Energy at t=0:   " << initialEnergy   << std::endl;
+            }
+          }
+          for (auto entry : totalMassValues)
+          {
+            const double massLoss = initialMass - entry.second;
+            if (std::abs(massLoss) > std::abs(maxMassLoss) )
+            {
+              maxMassLoss   = massLoss;
+              maxMassLoss_t = entry.first;
+            }
+          }
+          for (auto entry : totalMomentumValues)
+          {
+            const double momentumLoss = initialMomentum - entry.second;
+            if (std::abs(momentumLoss) > std::abs(maxMomentumLoss) )
+            {
+              maxMomentumLoss   = momentumLoss;
+              maxMomentumLoss_t = entry.first;
+            }
+          }
+          for (auto entry : totalEnergyValues)
+          {
+            const double energyLoss = initialEnergy - entry.second;
+            if (std::abs(energyLoss) > std::abs(maxEnergyLoss) )
+            {
+              maxEnergyLoss   = energyLoss;
+              maxEnergyLoss_t = entry.first;
+            }
+          }
+          
+          auto totalNetFlux = traceSolnFxn->integrate(form->vlasovMesh());
           
           if (rank == 0)
           {
-            std::cout << "Total Mass at t=0:     " << initialMass     << std::endl;
-            std::cout << "Total Momentum at t=0: " << initialMomentum << std::endl;
-            std::cout << "Total Energy at t=0:   " << initialEnergy   << std::endl;
-          }
-        }
-        for (auto entry : totalMassValues)
-        {
-          const double massLoss = initialMass - entry.second;
-          if (std::abs(massLoss) > std::abs(maxMassLoss) )
-          {
-            maxMassLoss   = massLoss;
-            maxMassLoss_t = entry.first;
-          }
-        }
-        for (auto entry : totalMomentumValues)
-        {
-          const double momentumLoss = initialMomentum - entry.second;
-          if (std::abs(momentumLoss) > std::abs(maxMomentumLoss) )
-          {
-            maxMomentumLoss   = momentumLoss;
-            maxMomentumLoss_t = entry.first;
-          }
-        }
-        for (auto entry : totalEnergyValues)
-        {
-          const double energyLoss = initialEnergy - entry.second;
-          if (std::abs(energyLoss) > std::abs(maxEnergyLoss) )
-          {
-            maxEnergyLoss   = energyLoss;
-            maxEnergyLoss_t = entry.first;
-          }
-        }
-        
-        auto totalNetFlux = traceSolnFxn->integrate(form->vlasovMesh());
-        
-        if (rank == 0)
-        {
-          const bool append = (slabNumber > 0);
-          exportTimeSeriesValues(EFieldMode1File,   append, fourierValues,       "ln(|E1|)");
-          exportTimeSeriesValues(totalMassFile,     append, totalMassValues,     "mass");
-          exportTimeSeriesValues(totalMomentumFile, append, totalMomentumValues, "momentum");
-          exportTimeSeriesValues(totalEnergyFile,   append, totalEnergyValues,   "energy");
-          
-          form->printLocalConservationReportForSlab(slabNumber);
-          
-          std::cout << "total net mass flux (integral of trace variable) is " << totalNetFlux << std::endl;
-          std::cout << "max mass loss thus far is at time " << maxMassLoss_t << ": " << maxMassLoss << std::endl;
-          std::cout << "max momentum loss thus far is at time " << maxMomentumLoss_t << ": " << maxMomentumLoss << std::endl;
-          std::cout << "max energy loss thus far is at time " << maxEnergyLoss_t << ": " << maxEnergyLoss << std::endl;
-        }
-        
-        auto slabFourierPeakValues = getPeakValues(previousFourierValue, t_previous, logEFieldSineModeIsIncreasing, fourierValues);
-        const int previousPeakCount = fourierPeakValues.size();
-        fourierPeakValues.insert(fourierPeakValues.end(), slabFourierPeakValues.begin(), slabFourierPeakValues.end());
-        
-        const int numNewPeaks = slabFourierPeakValues.size();
-        if (rank == 0)
-        {
-          // this reporting is designed to match the console output of our time-marching Landau driver:
-          for (int newPeakOrdinal = 0; newPeakOrdinal < numNewPeaks; newPeakOrdinal++)
-          {
-            const auto &t     = slabFourierPeakValues[newPeakOrdinal].first;
-            const auto &value = slabFourierPeakValues[newPeakOrdinal].second;
-            std::cout << "local maximum of logarithm of dominant E-field mode at t=" << t << ": " << value;
+            const bool append = (slabNumber > 0);
+            exportTimeSeriesValues(EFieldMode1File,   append, fourierValues,       "ln(|E1|)");
+            exportTimeSeriesValues(totalMassFile,     append, totalMassValues,     "mass");
+            exportTimeSeriesValues(totalMomentumFile, append, totalMomentumValues, "momentum");
+            exportTimeSeriesValues(totalEnergyFile,   append, totalEnergyValues,   "energy");
             
-            const int peakOrdinal = newPeakOrdinal + previousPeakCount;
-            if (peakOrdinal > 0)
+            form->printLocalConservationReportForSlab(slabNumber);
+            
+            std::cout << "total net mass flux (integral of trace variable) is " << totalNetFlux << std::endl;
+            std::cout << "max mass loss thus far is at time " << maxMassLoss_t << ": " << maxMassLoss << std::endl;
+            std::cout << "max momentum loss thus far is at time " << maxMomentumLoss_t << ": " << maxMomentumLoss << std::endl;
+            std::cout << "max energy loss thus far is at time " << maxEnergyLoss_t << ": " << maxEnergyLoss << std::endl;
+          }
+          
+          auto slabFourierPeakValues = getPeakValues(previousFourierValue, t_previous, logEFieldSineModeIsIncreasing, fourierValues);
+          const int previousPeakCount = fourierPeakValues.size();
+          fourierPeakValues.insert(fourierPeakValues.end(), slabFourierPeakValues.begin(), slabFourierPeakValues.end());
+          
+          const int numNewPeaks = slabFourierPeakValues.size();
+          if (rank == 0)
+          {
+            // this reporting is designed to match the console output of our time-marching Landau driver:
+            for (int newPeakOrdinal = 0; newPeakOrdinal < numNewPeaks; newPeakOrdinal++)
             {
-              // then report the local rate:
-              const auto &t_prev     = fourierPeakValues[peakOrdinal-1].first;
-              const auto &value_prev = fourierPeakValues[peakOrdinal-1].second;
-              double rate = (value - value_prev) / (t - t_prev);
-              std::cout << " (rate: " << rate << ")";
+              const auto &t     = slabFourierPeakValues[newPeakOrdinal].first;
+              const auto &value = slabFourierPeakValues[newPeakOrdinal].second;
+              std::cout << "local maximum of logarithm of dominant E-field mode at t=" << t << ": " << value;
+              
+              const int peakOrdinal = newPeakOrdinal + previousPeakCount;
+              if (peakOrdinal > 0)
+              {
+                // then report the local rate:
+                const auto &t_prev     = fourierPeakValues[peakOrdinal-1].first;
+                const auto &value_prev = fourierPeakValues[peakOrdinal-1].second;
+                double rate = (value - value_prev) / (t - t_prev);
+                std::cout << " (rate: " << rate << ")";
+              }
+              std::cout << std::endl;
             }
-            std::cout << std::endl;
-          }
-          
-          // if the new peaks have taken us past the seventh, compute an overall rate by computing slope from third to seventh peak
-          if ((previousPeakCount < 7) && (slabFourierPeakValues.size() >= 7))
-          {
-            const double thirdPeak   = fourierPeakValues[2].second;
-            const double seventhPeak = fourierPeakValues[6].second;
             
-            const double third_t   = fourierPeakValues[2].first;
-            const double seventh_t = fourierPeakValues[6].first;
-            
-            const double mode1DecayRate = (seventhPeak - thirdPeak) / (seventh_t - third_t);
-            std::cout << "Overall decay rate: " << mode1DecayRate << std::endl;
+            // if the new peaks have taken us past the seventh, compute an overall rate by computing slope from third to seventh peak
+            if ((previousPeakCount < 7) && (slabFourierPeakValues.size() >= 7))
+            {
+              const double thirdPeak   = fourierPeakValues[2].second;
+              const double seventhPeak = fourierPeakValues[6].second;
+              
+              const double third_t   = fourierPeakValues[2].first;
+              const double seventh_t = fourierPeakValues[6].first;
+              
+              const double mode1DecayRate = (seventhPeak - thirdPeak) / (seventh_t - third_t);
+              std::cout << "Overall decay rate: " << mode1DecayRate << std::endl;
+            }
           }
         }
-      }
-      
-      {
-         /*
-         // output to EFieldMode1File,
-         //t_ln_b1_pairs;
-         if (rank == 0)
-         {
+        
+        {
+          /*
+           // output to EFieldMode1File,
+           //t_ln_b1_pairs;
+           if (rank == 0)
+           {
            std::ofstream EFieldMode1DecayRateFileStream(EFieldMode1DecayRateFile, std::ios::out);
            EFieldMode1DecayRateFileStream << setprecision(15);
            EFieldMode1DecayRateFileStream << "E-Field, Mode 1 Decay Rate: " << mode1DecayRate << std::endl;
            EFieldMode1DecayRateFileStream.close();
-         }
-         */
-      }
-      
-      
-      solutionMoments->update();
-      
-      if (saveViz)
-      {
-        poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, slabNumber);
-        vlasovViz->exportSolution(form->vlasovSolution(), otherFunctions, otherFunctionNames, slabNumber);
-      }
+           }
+           */
+        }
+        
+        solutionMoments->update();
+        
+        if (saveViz)
+        {
+          poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, slabNumber);
+          vlasovViz->exportSolution(form->vlasovSolution(), otherFunctions, otherFunctionNames, slabNumber);
+        }
+      } // end "post-processing" block
       
       if (slabNumber + 1 < numTimeSlabs)
       {
@@ -772,6 +853,74 @@ int main(int argc, char *argv[])
           // mesh has changed; update viz exporters (not a common use case; let's hope it works!):
           poissonViz->setMesh(form->configurationSpaceMesh());
           vlasovViz->setMesh(form->vlasovMesh());
+        }
+      }
+      Epetra_CommPtr Comm = MPIWrapper::CommWorld();
+      totalTimeG_vlasov = MPIWrapper::sum(*Comm, totalTimeG_vlasov);
+      totalTimeB_vlasov = MPIWrapper::sum(*Comm, totalTimeB_vlasov);
+      totalTimeT_vlasov = MPIWrapper::sum(*Comm, totalTimeT_vlasov);
+      totalTimeK_vlasov = MPIWrapper::sum(*Comm, totalTimeK_vlasov);
+      totalElementCount_vlasov = MPIWrapper::sum(*Comm, totalElementCount_vlasov);
+      totalTimeG_poisson = MPIWrapper::sum(*Comm, totalTimeG_poisson);
+      totalTimeB_poisson = MPIWrapper::sum(*Comm, totalTimeB_poisson);
+      totalTimeT_poisson = MPIWrapper::sum(*Comm, totalTimeT_poisson);
+      totalTimeK_poisson = MPIWrapper::sum(*Comm, totalTimeK_poisson);
+      totalElementCount_poisson = MPIWrapper::sum(*Comm, totalElementCount_poisson);
+      
+      totalTimeG_vlasov_core_integration        = MPIWrapper::sum(*Comm, totalTimeG_vlasov_core_integration);
+      totalElementCount_vlasov_core_integration = MPIWrapper::sum(*Comm, totalElementCount_vlasov_core_integration);
+      
+      if (rank == 0)
+      {
+//        cout << "Running average time/element for Vlasov optimal test computations:\n";
+//        cout << "G:   " <<  totalTimeG / totalElementCount << " sec.\n";
+//        cout << "B:   " <<  totalTimeB / totalElementCount << " sec.\n";
+//        cout << "T:   " <<  totalTimeT / totalElementCount << " sec.\n";
+//        cout << "K:   " <<  totalTimeK / totalElementCount << " sec.\n";
+//        cout << "RHS: " << totalTimeRHS / totalRHSElements << " sec.\n";
+        
+        cout << "Running total time for Vlasov optimal test computations:\n";
+        cout << "G (core): " <<  totalTimeG_vlasov_core_integration << " sec.\n";
+        cout << "G:        " <<  totalTimeG_vlasov << " sec.\n";
+        cout << "B:        " <<  totalTimeB_vlasov << " sec.\n";
+        cout << "K:        " <<  totalTimeK_vlasov << " sec.\n";
+        
+        cout << "totalTime_block1: " << totalTime_block1 << endl;
+        cout << "totalTime_block2: " << totalTime_block2 << endl;
+        cout << "totalTime_block3: " << totalTime_block3 << endl;
+        cout << "totalTime_block4: " << totalTime_block4 << endl;
+        
+        cout << "Running total time for Poisson optimal test computations:\n";
+        cout << "G:   " <<  totalTimeG_poisson << " sec.\n";
+        cout << "B:   " <<  totalTimeB_poisson << " sec.\n";
+        cout << "K:   " <<  totalTimeK_poisson << " sec.\n";
+        
+        if (vlasovTimingsOutputFile != "")
+        {
+          bool fileExists = false;
+          {
+            std::ifstream file(vlasovTimingsOutputFile);
+            fileExists = file.good();
+          }
+          if (!fileExists)
+          {
+            std::ofstream file(vlasovTimingsOutputFile);
+            file << "p_test\tworksetSize\tH1Order\tdelta_k\tG_core_time\tG_time\tB_time\tGAlgorithm\n";
+            file.close();
+          }
+          std::ofstream file(vlasovTimingsOutputFile, std::ios::app);
+          file << H1Order + delta_k << "\t" << worksetSize << "\t" << H1Order << "\t" << delta_k << "\t" << roundToThreeSignificantDigits(totalTimeG_vlasov_core_integration);
+          file << "\t" << roundToThreeSignificantDigits(totalTimeG_vlasov) << "\t" << roundToThreeSignificantDigits(totalTimeB_vlasov);
+          if (useStandardAssembly)
+          {
+            file << "\t" << "standard";
+          }
+          else
+          {
+            file << "\t" << "sum-factorized";
+          }
+          file << "\n";
+          file.close();
         }
       }
     }

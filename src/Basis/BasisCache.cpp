@@ -947,11 +947,13 @@ const Camellia::FieldContainer<double> & BasisCache::getJacobianInv()
   return _cellJacobInvFC;
 }
 
-Intrepid2::BasisValues<double,DeviceType>
-BasisCache::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
-                      const Intrepid2::TensorPoints<double,DeviceType> inputPoints)
+const Intrepid2::BasisValues<double,DeviceType> &
+BasisCache::getValues(BasisPtr intrepid2Basis, Intrepid2::EOperator op, bool useCubPointsSideRefCell)
 {
-  pair< Camellia::Basis<>*, Intrepid2::EOperator> key = make_pair(intrepid2Basis, op);
+  Intrepid2BasisWrapper<double>* basisAsIntrepid2 = dynamic_cast<Intrepid2BasisWrapper<double>*>(intrepid2Basis.get());
+  TEUCHOS_TEST_FOR_EXCEPTION(basisAsIntrepid2 == NULL, std::logic_error, "basis must be an Intrepid2BasisWrapper instance");
+  
+  pair< Camellia::Basis<>*, Intrepid2::EOperator> key = make_pair(intrepid2Basis.get(), op);
   
   auto resultFound = _knownValues.find(key);
   if (resultFound != _knownValues.end())
@@ -960,11 +962,14 @@ BasisCache::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::
   }
   else
   {
-    auto result = BasisEvaluation::getValues(intrepid2Basis, op, inputPoints);
+    const auto &points = useCubPointsSideRefCell ? _cubPointsSideRefCell : _cubPoints;
+    TEUCHOS_TEST_FOR_EXCEPTION(!points.isValid(), std::logic_error, "points container is not valid!");
+    
+    auto result = BasisEvaluation::getValues(basisAsIntrepid2, op, points);
     pair< pair< Camellia::Basis<>*, Intrepid2::EOperator>, Intrepid2::BasisValues<double,DeviceType> > resultEntry {key, result};
     _knownValues.insert(resultEntry);
 //    _knownValues[key] = result; // TODO: submit Intrepid2 PR with default constructor for BasisValues — that will allow use to write this instead of the more complex thing above.
-    return result;
+    return _knownValues[key];
   }
 }
 
@@ -1076,9 +1081,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
         TEUCHOS_TEST_FOR_EXCEPTION(!standardIntrepidOperator, std::invalid_argument, "relatedOp must be known to Intrepid2");
         
         Intrepid2::EOperator intrepid2Op = static_cast<Intrepid2::EOperator>(relatedOp);
-        const auto &points = useCubPointsSideRefCell ? _cubPointsSideRefCell : _cubPoints;
-        TEUCHOS_TEST_FOR_EXCEPTION(!points.isValid(), std::logic_error, "points container is not valid!");
-        auto basisValues = getValues(basisAsIntrepid2,intrepid2Op,points);
+        auto basisValues = getValues(basis,intrepid2Op,useCubPointsSideRefCell);
         auto convertedBasisValues = FieldContainerConversion<double>::fromBasisValues(basisValues);
         referenceValues = Teuchos::rcp(new FieldContainer<double>(convertedBasisValues));
       }
@@ -1242,7 +1245,7 @@ const Camellia::FieldContainer<double> & BasisCache::getSideUnitNormals(int side
   return _basisCacheSides[sideOrdinal]->getSideNormals();
 }
 
-const Intrepid2::TensorPoints<double,DeviceType> BasisCache::getRefCellPoints() const
+const Intrepid2::TensorPoints<double,DeviceType> & BasisCache::getRefCellPoints() const
 {
   return _cubPoints;
 }
@@ -1268,7 +1271,7 @@ Camellia::FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(c
   return refCellPoints;
 }
 
-const Intrepid2::TensorPoints<double,DeviceType> BasisCache::getSideRefCellPointsInVolumeCoordinates()
+const Intrepid2::TensorPoints<double,DeviceType> & BasisCache::getSideRefCellPointsInVolumeCoordinates()
 {
   if (! isSideCache())
   {
