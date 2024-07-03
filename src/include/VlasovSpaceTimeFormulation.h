@@ -48,6 +48,7 @@ private:
   
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
+  bool _useSumFactorizedAssembly = true;
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
@@ -362,6 +363,9 @@ public:
   //! Returns the number of velocity dimensions in the mesh.
   int velocityDim() const;
   
+  //! Returns the number of species.
+  int numSpecies() const;
+  
   /** \brief  Returns a tag matching the initial time side set on the configuration-space mesh.
         The initial-time side set is created during construction.  See createConfigurationMeshSideSetTag() for specification of arbitrary regions of the configuration-space mesh boundary.
   */
@@ -440,8 +444,15 @@ public:
   /** \brief Returns true if useSerendipityBasis was passed in at construction (in which case the Serendipity basis family is used for trial and test spaces).  */
   bool useSerendipityBasis() const;
   
+  void setUseSumFactorizedAssembly(bool useSumFactorizedAssembly);
+  
+  bool useSumFactorizedAssembly() const;
+  
   /** \brief  Returns a Function representing the specified velocity-space coordinate. */
   FunctionPtr v_i(const int zeroBasedComp) const;
+  
+  void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
+                                                              double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);
 };
 
 }

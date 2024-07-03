@@ -141,11 +141,11 @@ public:
   // ! Debugging facility: "narrates" as bilinear form is accumulated.  Particularly useful if you are seeing "zero row" warnings (best set to true on at most one MPI rank; otherwise, the output will be confusing...)
   void setPrintTermWiseIntegrationOutput(bool value);
 
-  void stiffnessMatrix(Camellia::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
-                       const Camellia::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
-  void stiffnessMatrix(Camellia::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
-                       const Camellia::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
-                       bool rowMajor, bool checkForZeroCols);
+  virtual void stiffnessMatrix(Camellia::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
+                               const Camellia::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  virtual void stiffnessMatrix(Camellia::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
+                               const Camellia::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
+                               bool rowMajor, bool checkForZeroCols);
 
   // legacy version of stiffnessMatrix():
   virtual void stiffnessMatrix(Camellia::FieldContainer<Scalar> &stiffness, DofOrderingPtr trialOrdering,

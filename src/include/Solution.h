@@ -78,6 +78,8 @@ private:
   TRHSPtr<Scalar> _rhs, _rhsWithoutTableauModification;
   TIPPtr<Scalar> _ip;
   
+  int _cellBatchSize = -1; // -1 ==> automatically determined
+  
   SolutionStagePtr _solutionStage;
   
   LinearTermPtr _goalOrientedRHS;  // trial space functional.
@@ -224,6 +226,9 @@ public:
   static void basisCoeffsForTrialOrder(Camellia::FieldContainer<Scalar> &basisCoeffs, DofOrderingPtr trialOrder,
                                        const Camellia::FieldContainer<Scalar> &allCoeffs, int trialID, int sideIndex);
 
+  int cellBatchSize() const;
+  void setCellBatchSize(const int newBatchSize);
+  
   void clear();
   
   int cubatureEnrichmentDegree() const;

@@ -20,7 +20,7 @@ class RampBoundaryFunction_U1 : public SimpleFunction<double>
 public:
   RampBoundaryFunction_U1(double eps)
   :
-  SimpleFunction<double>("StokesCavityFlowExample-RampBoundaryFunction_U1")
+  SimpleFunction<double>("StokesCavityFlowExample-RampBoundaryFunction_U1", 0xff)
   {
     _eps = eps;
   }
@@ -93,7 +93,7 @@ class TimeRamp : public SimpleFunction<double>
 public:
   TimeRamp(FunctionPtr timeConstantParamFxn, double timeScale)
   :
-  SimpleFunction<double>("StokesCavityFlowExample-TimeRamp")
+  SimpleFunction<double>("StokesCavityFlowExample-TimeRamp", 0xff)
   {
     _time = timeConstantParamFxn;
     _timeScale = timeScale;

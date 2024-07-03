@@ -1195,7 +1195,7 @@ Scalar  TFunction<Scalar>::integrate(BasisCachePtr basisCache, bool divideByTwoF
 
   for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
   {
-    bool weight = 1.0;
+    double weight = 1.0;
     if (divideByTwoForInteriorSides && cellHasInteriorSide[cellOrdinal])
     {
       weight = 0.5;

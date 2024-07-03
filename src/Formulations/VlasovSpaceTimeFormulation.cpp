@@ -32,6 +32,12 @@
 
 #include "CamelliaDataHelpers.h"
 
+#include "Intrepid2_BasisValues.hpp"
+#include "Intrepid2_DerivedBasisFamily.hpp"
+#include "Intrepid2_FunctionSpaceTools.hpp"
+#include "Intrepid2_IntegrationTools.hpp"
+#include "Intrepid2_NodalBasisFamily.hpp"
+
 using namespace Camellia;
 
 using std::string;
@@ -101,6 +107,799 @@ namespace
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Not supported");
     }
   };
+
+  Intrepid2::Data<double, DeviceType> getJacobianData(Teuchos::RCP<BasisCache> basisCache, int numConfigSpaceDims)
+  {
+    DeviceView<double> data;
+    const int rank = 4; // C,P,D,D
+    const int CELL_DIM  = 0;
+    const int POINT_DIM = 1;
+    const int D1_DIM    = 2;
+    const int D2_DIM    = 3;
+    
+    const int spaceDim        = basisCache->getSpaceDim();
+    const int numCellsWorkset = basisCache->cellIDs().size();
+    const int pointsPerCell   = basisCache->getRefCellPoints().extent_int(0);
+    int physicalSpaceDim      = numConfigSpaceDims - 1; // strip off temporal dimension
+    
+    using Intrepid2::CONSTANT;
+    using Intrepid2::GENERAL;
+    using Intrepid2::BLOCK_PLUS_DIAGONAL;
+    
+    Kokkos::Array<int,7>                          extents        { numCellsWorkset, pointsPerCell, spaceDim, spaceDim,        1,        1,        1 };
+    Kokkos::Array<Intrepid2::DataVariationType,7> variationType  {        CONSTANT,      CONSTANT, CONSTANT, CONSTANT, CONSTANT, CONSTANT, CONSTANT };
+    
+    int blockPlusDiagonalLastNonDiagonal = physicalSpaceDim - 1;
+    variationType[D1_DIM]    = BLOCK_PLUS_DIAGONAL;
+    variationType[D2_DIM]    = BLOCK_PLUS_DIAGONAL;
+    
+    // check if grid is uniform AND entirely formed by orthogonal extrusions:
+    bool gridIsUniform = true;
+    std::vector<double> cellWidths(spaceDim,0);
+    try
+    {
+      double tol = 1e-14;
+      for (int cellOrdinal=0; cellOrdinal<numCellsWorkset; cellOrdinal++)
+      {
+        for (int d=0; d<spaceDim; d++)
+        {
+          double cellWidth = basisCache->extrusionWidth(d, cellOrdinal); // throws exception if the cell is not of uniform width in specified dimension
+          if (cellWidths[d] == 0)
+            cellWidths[d] = cellWidth;
+          else
+          {
+            const double s1Abs  = fabs(cellWidths[d]);
+            const double s2Abs  = fabs(cellWidth);
+            const double maxAbs = (s1Abs > s2Abs) ? s1Abs : s2Abs;
+            const double relErr = fabs( cellWidths[d] - cellWidth ) / ( tol + maxAbs );
+            if (relErr > tol)
+            {
+              // not uniform
+              gridIsUniform = false;
+              break;
+            }
+          }
+        }
+        if (!gridIsUniform) break;
+      }
+    }
+    catch (...)
+    {
+      // not uniform, then
+      gridIsUniform = false;
+    }
+    int jacobianSize = gridIsUniform ? spaceDim : physicalSpaceDim * physicalSpaceDim + spaceDim - physicalSpaceDim;
+    
+    bool affine = gridIsUniform; // gridIsUniform ==> affine (due to what we mean by gridIsUniform)
+    if (spaceDim == 3)
+    {
+      // 2 orthogonal extrusions ==> affine elements
+      affine = true;
+    }
+    
+    if (affine && !gridIsUniform)
+    {
+      variationType[CELL_DIM]  = GENERAL;
+      variationType[POINT_DIM] = CONSTANT;
+    }
+    
+    if (gridIsUniform) variationType[CELL_DIM] = CONSTANT;
+          
+    if (gridIsUniform)
+    {
+      // diagonal Jacobian
+      blockPlusDiagonalLastNonDiagonal = -1;
+      
+      data = DeviceView<double>("VlasovSpaceTimeIP: Jacobian data", jacobianSize);
+    }
+    else
+    {
+      variationType[CELL_DIM]  = GENERAL;
+      blockPlusDiagonalLastNonDiagonal = numConfigSpaceDims - 2; // 0-based index, and temporal extrusion is diagonal
+      if (affine)
+      {
+        // no point variation
+        variationType[POINT_DIM] = CONSTANT;
+        data = DeviceView<double>("VlasovSpaceTimeIP: Jacobian data", numCellsWorkset, jacobianSize);
+        
+      }
+      else
+      {
+        variationType[POINT_DIM] = GENERAL;
+        data = DeviceView<double>("VlasovSpaceTimeIP: Jacobian data", numCellsWorkset, pointsPerCell, jacobianSize);
+      }
+    }
+    
+    if (gridIsUniform)
+    {
+      auto dataHost = Kokkos::create_mirror_view(HostMemorySpace(), data);
+      for (int d=0; d<spaceDim; d++)
+      {
+        dataHost(d) = cellWidths[d] / 2.0;
+      }
+      Kokkos::deep_copy(data, dataHost);
+    }
+    else
+    {
+      using CellTools = Intrepid2::CellTools<DeviceType>;
+      
+      using BasisFamily = Intrepid2::DerivedNodalBasisFamily<DeviceType,double,double>;
+      const int linearPolyOrder = 1;
+      CellTopoPtr physicalCellTopo = basisCache->cellTopology()->getBaseTopology();
+      if (physicalCellTopo->getDimension() < physicalSpaceDim)
+      {
+        // then extrude to get the physical cell topo:
+        physicalCellTopo = CellTopology::cellTopology(physicalCellTopo, physicalSpaceDim - physicalCellTopo->getDimension());
+      }
+      else if (physicalCellTopo->getDimension() > physicalSpaceDim)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Base cell topology has more than the expected number of dimensions");
+      }
+      
+      auto basisForPhysicalNodes = Intrepid2::getBasis<BasisFamily>(physicalCellTopo->getShardsTopology(), Intrepid2::FUNCTION_SPACE_HGRAD, linearPolyOrder);
+      
+      {
+        int numFields = basisForPhysicalNodes->getCardinality();
+        
+        auto & scratchStorage = SharedScratchStorage<double>::sharedScratchStorage();
+        auto dataViewPhysicalCell = scratchStorage.checkoutScratchStorage({numCellsWorkset, pointsPerCell, physicalSpaceDim, physicalSpaceDim});
+        auto fullNodesView = basisCache->getPhysicalCellNodes().checkoutDeviceView();
+        auto nodesPhysicalCell = Kokkos::subview(fullNodesView, Kokkos::ALL, numFields, physicalSpaceDim);
+        
+        auto cellExtrusionJacobians = scratchStorage.checkoutScratchStorage({numCellsWorkset, spaceDim - physicalSpaceDim});
+        auto cellExtrusionJacobiansHost = Kokkos::create_mirror_view(HostMemorySpace(), cellExtrusionJacobians);
+        
+        for (int cellOrdinal=0; cellOrdinal<numCellsWorkset; cellOrdinal++)
+        {
+          for (int d=physicalSpaceDim; d<spaceDim; d++)
+          {
+            cellExtrusionJacobiansHost(cellOrdinal,d) = basisCache->extrusionWidth(d-physicalSpaceDim, cellOrdinal) / 2.0;
+          }
+        }
+        Kokkos::deep_copy(cellExtrusionJacobians, cellExtrusionJacobiansHost);
+        
+        TEUCHOS_TEST_FOR_EXCEPTION(basisForPhysicalNodes == Teuchos::null, std::invalid_argument, "basisForNodes must not be null");
+        
+        auto fullPoints = basisCache->getRefCellPoints();
+        
+        std::vector<int> physicalDims;
+        int numDimsCaptured = 0;
+        for (int d=0; d<physicalSpaceDim; d++)
+        {
+          physicalDims.push_back(d);
+          numDimsCaptured += fullPoints.getTensorComponent(d).extent_int(1); // (P,D)
+          if (numDimsCaptured == physicalSpaceDim) break;
+        }
+        auto points = Intrepid2::TensorPoints<double,DeviceType>(basisCache->getRefCellPoints(), physicalDims);
+        std::vector<int> otherDims;
+        for (int d=points.numTensorComponents(); d<spaceDim; d++)
+        {
+          otherDims.push_back(d);
+        }
+        auto extrusionPoints = Intrepid2::TensorPoints<double,DeviceType>(basisCache->getRefCellPoints(), otherDims);
+        int numExtrusionPoints = extrusionPoints.extent_int(0);
+        
+        auto basisGradients = basisForPhysicalNodes->allocateBasisValues(points, Intrepid2::OPERATOR_GRAD);
+        basisForPhysicalNodes->getValues(basisGradients, points, Intrepid2::OPERATOR_GRAD);
+        
+        CellTools::setJacobian(dataViewPhysicalCell, nodesPhysicalCell, basisGradients);
+        
+        int numPhysicalPoints = points.extent_int(0);
+        
+        Kokkos::MDRangePolicy< Kokkos::Rank<2> > rangePolicy({0,0},{numCellsWorkset,numPhysicalPoints});
+        
+        int numNondiagonalEntries = (blockPlusDiagonalLastNonDiagonal + 1) * (blockPlusDiagonalLastNonDiagonal + 1);
+        // copy dataViewPhysicalCell into data, adding the extrusion (Jacobian diagonal) data
+        Kokkos::parallel_for("VlasovSpaceTimeIP: set Jacobian data", rangePolicy,
+        KOKKOS_LAMBDA (const int cellOrdinal, const int physicalPointOrdinal) {
+          int pointIndex = physicalPointOrdinal;
+          for (int extrusionPointOrdinal=0; extrusionPointOrdinal<numExtrusionPoints; extrusionPointOrdinal++)
+          {
+            // TODO: find a way to avoid all this redundant computation and storage in higher dimensions (same data stored for each extrusionPointOrdinal)
+            for (int d1=0; d1<physicalSpaceDim; d1++)
+            {
+              for (int d2=0; d2<physicalSpaceDim; d2++)
+              {
+                const int flatIndex = d1 * (blockPlusDiagonalLastNonDiagonal + 1) + d2;
+                data(cellOrdinal, pointIndex, flatIndex) = dataViewPhysicalCell(cellOrdinal,physicalPointOrdinal,d1,d2);
+              }
+            }
+            for (int d=physicalSpaceDim; d<spaceDim; d++)
+            {
+              const int flatIndex = numNondiagonalEntries + d - physicalSpaceDim;
+              data(cellOrdinal, pointIndex, flatIndex) = cellExtrusionJacobians(cellOrdinal, d - physicalSpaceDim);
+            }
+            pointIndex += numExtrusionPoints;
+          }
+        });
+        
+        scratchStorage.checkinScratchStorage(dataViewPhysicalCell);
+        scratchStorage.checkinScratchStorage(cellExtrusionJacobians);
+      }
+    }
+    
+    Intrepid2::Data<double,DeviceType> jacobianData(data,rank,extents,variationType,blockPlusDiagonalLastNonDiagonal);
+    
+    return jacobianData;
+  }
+
+  Intrepid2::TensorData<double,DeviceType> allocateCellMeasure( const Intrepid2::Data<double,DeviceType> & jacobianDet, const Intrepid2::TensorData<double,DeviceType> & cubatureWeights )
+  {
+    // Output possibilities for a cubatureWeights with N components:
+    // 1. For AFFINE elements (jacobianDet cell-wise constant), returns a container with N+1 tensorial components; the first component corresponds to cells
+    // 2. Otherwise, returns a container with 1 tensorial component
+    
+    using Intrepid2::CONSTANT;
+    using Intrepid2::GENERAL;
+    using Intrepid2::Data;
+    using Intrepid2::DataVariationType;
+    using Intrepid2::TensorData;
+    
+    INTREPID2_TEST_FOR_EXCEPTION(cubatureWeights.rank() != 1, std::invalid_argument, "cubatureWeights container must have shape (P)");
+    
+    bool affine = jacobianDet.getVariationTypes()[1] == Intrepid2::CONSTANT; // affine if Jacobian does not vary in point dimension
+    
+    const int numTensorComponents = affine ? cubatureWeights.numTensorComponents() + 1 : 1;
+    std::vector< Data<double,DeviceType> > tensorComponents(numTensorComponents);
+    
+    if (affine)
+    {
+      const int cellExtent = jacobianDet.extent_int(0);
+      Kokkos::Array<Intrepid2::DataVariationType,7> cellVariationTypes {jacobianDet.getVariationTypes()[0], CONSTANT, CONSTANT, CONSTANT, CONSTANT, CONSTANT, CONSTANT};
+      const int cellDataDim = jacobianDet.getDataExtent(0);
+      Kokkos::Array<int,7> cellExtents{cellExtent,1,1,1,1,1,1};
+      
+      DeviceView<double> detDataView ("cell relative volumes", cellDataDim);
+      tensorComponents[0] = Data<double,DeviceType>(detDataView,1,cellExtents,cellVariationTypes);
+      
+      for (int cubTensorComponent=0; cubTensorComponent<numTensorComponents-1; cubTensorComponent++)
+      {
+        auto cubatureComponent = cubatureWeights.getTensorComponent(cubTensorComponent);
+        const auto cubatureExtents        = cubatureComponent.getExtents();
+        const auto cubatureVariationTypes = cubatureComponent.getVariationTypes();
+        const int numPoints               = cubatureComponent.getDataExtent(0);
+        DeviceView<double> cubatureWeightView ("cubature component weights", numPoints);
+        const int pointComponentRank = 1;
+        tensorComponents[cubTensorComponent+1] = Data<double,DeviceType>(cubatureWeightView,pointComponentRank,cubatureExtents,cubatureVariationTypes);
+      }
+    }
+    else
+    {
+      const int cellExtent = jacobianDet.extent_int(0);
+      Kokkos::Array<DataVariationType,7> variationTypes {jacobianDet.getVariationTypes()[0], GENERAL, CONSTANT, CONSTANT, CONSTANT, CONSTANT, CONSTANT};
+      const int cellDataDim = jacobianDet.getDataExtent(0);
+      
+      const int numPoints = cubatureWeights.extent_int(0);
+      Kokkos::Array<int,7> extents{cellExtent,numPoints,1,1,1,1,1};
+      
+      DeviceView<double> cubatureWeightView;
+      if (variationTypes[0] != CONSTANT)
+      {
+        cubatureWeightView = DeviceView<double>("cell measure", cellDataDim, numPoints);
+      }
+      else
+      {
+        cubatureWeightView = DeviceView<double>("cell measure", numPoints);
+      }
+      const int cellMeasureRank = 2;
+      tensorComponents[0] = Data<double,DeviceType>(cubatureWeightView,cellMeasureRank,extents,variationTypes);
+    }
+    const bool separateFirstComponent = (numTensorComponents > 1);
+    return TensorData<double,DeviceType>(tensorComponents, separateFirstComponent);
+  }
+    
+  void computeCellMeasure( Intrepid2::TensorData<double,DeviceType> &cellMeasure,
+                           const Intrepid2::Data<double,DeviceType> & jacobianDet,
+                           const Intrepid2::TensorData<double,DeviceType> & cubatureWeights )
+  {
+    // Output possibilities for a cubatureWeights with N components:
+    // 1. For AFFINE elements (jacobianDet constant on each cell), returns a container with N+1 tensorial components; the first component corresponds to cells
+    // 2. Otherwise, returns a container with 1 tensorial component
+    
+    INTREPID2_TEST_FOR_EXCEPTION((cellMeasure.numTensorComponents() != cubatureWeights.numTensorComponents() + 1) && (cellMeasure.numTensorComponents() != 1), std::invalid_argument,
+                                 "cellMeasure must either have a tensor component count of 1 or a tensor component count that is one higher than that of cubatureWeights");
+    
+    INTREPID2_TEST_FOR_EXCEPTION(cubatureWeights.rank() != 1, std::invalid_argument, "cubatureWeights container must have shape (P)");
+    
+    if (cellMeasure.numTensorComponents() == cubatureWeights.numTensorComponents() + 1)
+    {
+      // affine case; the first component should contain the cell volume divided by ref cell volume; this should be stored in jacobianDet
+      Kokkos::deep_copy(cellMeasure.getTensorComponent(0).getUnderlyingView1(), jacobianDet.getUnderlyingView1()); // copy point-invariant data from jacobianDet to the first tensor component of cell measure container
+      const int numTensorDimensions = cubatureWeights.numTensorComponents();
+      for (int i=1; i<numTensorDimensions+1; i++)
+      {
+        Kokkos::deep_copy(cellMeasure.getTensorComponent(i).getUnderlyingView1(), cubatureWeights.getTensorComponent(i-1).getUnderlyingView1());
+      }
+    }
+    else
+    {
+      auto detVaries  = jacobianDet.getVariationTypes();
+      
+      using Intrepid2::CONSTANT;
+      
+      const bool detCellVaries  = detVaries[0] != CONSTANT;
+      const bool detPointVaries = detVaries[1] != CONSTANT;
+      
+      if (detCellVaries && detPointVaries)
+      {
+        auto cellMeasureData = cellMeasure.getTensorComponent(0).getUnderlyingView2();
+        auto detData = jacobianDet.getUnderlyingView2();
+        const int numCells = detData.extent_int(0);
+        const int numPoints = detData.extent_int(1);
+        INTREPID2_TEST_FOR_EXCEPTION(numCells != cellMeasureData.extent_int(0), std::invalid_argument, "cellMeasureData doesn't match jacobianDet in cell dimension");
+        INTREPID2_TEST_FOR_EXCEPTION(numPoints != cellMeasureData.extent_int(1), std::invalid_argument, "cellMeasureData doesn't match jacobianDet in point dimension");
+
+        using ExecutionSpace = typename DeviceType::execution_space;
+        Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>> rangePolicy({0,0},{numCells,numPoints});
+        Kokkos::parallel_for(rangePolicy,
+                             KOKKOS_LAMBDA(int cellOrdinal, int pointOrdinal) {
+          cellMeasureData(cellOrdinal,pointOrdinal) = detData(cellOrdinal,pointOrdinal) * cubatureWeights(pointOrdinal);
+        });
+      }
+      else if (detCellVaries && !detPointVaries)
+      {
+        auto cellMeasureData = cellMeasure.getTensorComponent(0).getUnderlyingView2();
+        auto detData = jacobianDet.getUnderlyingView1();
+        using ExecutionSpace = typename DeviceType::execution_space;
+        Kokkos::parallel_for(
+        Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{detData.extent_int(0),cubatureWeights.extent_int(0)}),
+        KOKKOS_LAMBDA (int cellOrdinal, int pointOrdinal) {
+          cellMeasureData(cellOrdinal,pointOrdinal) = detData(cellOrdinal) * cubatureWeights(pointOrdinal);
+        });
+      }
+      else
+      {
+        // constant jacobian det case
+        // cell measure data has shape (P)
+        auto cellMeasureData = cellMeasure.getTensorComponent(0).getUnderlyingView1();
+        auto detData = jacobianDet.getUnderlyingView1();
+        using ExecutionSpace = typename DeviceType::execution_space;
+        Kokkos::parallel_for(Kokkos::RangePolicy<ExecutionSpace>(0,cellMeasureData.extent_int(0)),
+        KOKKOS_LAMBDA (const int &pointOrdinal) {
+          cellMeasureData(pointOrdinal) = detData(0) * cubatureWeights(pointOrdinal);
+        });
+      }
+    }
+  }
+
+  KOKKOS_INLINE_FUNCTION int pointOrdinalFromComponents(const Kokkos::Array<int,7> &cpppExtents,
+                                                        const int &i0, const int &i1, const int &i2,
+                                                        const int &i3, const int &i4, const int &i5)
+  {
+    return i0 + cpppExtents[1] * (i1 + cpppExtents[2] * (i2 + cpppExtents[3] * (i3 + cpppExtents[4] * (i4 + cpppExtents[5] * i5))));
+  }
+
+  class VlasovSpaceTimeBF : public TBF<double>
+  {
+    vector<FunctionPtr> _acceleration;   // index: space dimension
+    vector<double> _accelerationWeights; // index: species
+    VlasovSpaceTimeFormulation & _form;
+    int _numConfigSpaceDims;
+    int _numVelocitySpaceDims;
+  public:
+    VlasovSpaceTimeBF(VarFactoryPtr varFactory, VlasovSpaceTimeFormulation & form) :
+    TBF<double>( varFactory ),
+    _form(form)
+    {
+      _numConfigSpaceDims   = form.configurationSpaceMesh()->getDimension(); // note this includes time dimension
+      _numVelocitySpaceDims = form.velocityDim();
+      
+      _acceleration = _form.a(-1);
+      for (int speciesOrdinal = 0; speciesOrdinal < _form.numSpecies(); speciesOrdinal++)
+      {
+        _accelerationWeights[speciesOrdinal] = form.q(speciesOrdinal) / form.m(speciesOrdinal);
+      }
+    }
+    
+    void localStiffnessMatrixAndRHS(Camellia::FieldContainer<double> &localStiffness,
+                                    Camellia::FieldContainer<double> &rhsVector,
+                                    TIPPtr<double> ip, BasisCachePtr ipBasisCache,
+                                    TRHSPtr<double> rhs,  BasisCachePtr basisCache) override
+    {
+      Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation = _form.configurationSpaceFormulation();
+      
+      const vector<GlobalIndexType>* cellIDs = &basisCache->cellIDs();
+      const int numCells = cellIDs->size();
+      if (numCells != localStiffness.dimension(0))
+      {
+        cout << "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness");
+      }
+      
+      ElementTypePtr elemType = _form.vlasovMesh()->getElementType((*cellIDs)[0]); // we assume all cells provided are of the same type
+      DofOrderingPtr trialOrder = elemType->trialOrderPtr;
+      DofOrderingPtr testOrder = elemType->testOrderPtr;
+      int numTestDofs = testOrder->totalDofs();
+      int numTrialDofs = trialOrder->totalDofs();
+      if ((numTrialDofs != localStiffness.dimension(1)) || (numTrialDofs != localStiffness.dimension(2)))
+      {
+        cout << "localStiffness should have dimensions (C,numTrialFields,numTrialFields).\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffness should have dimensions (C,numTrialFields,numTrialFields).");
+      }
+      
+      const int spaceDim = _numConfigSpaceDims;
+      const int velocityDim = _numVelocitySpaceDims;
+      
+      // the di() methods are 1-based:
+      const int indexOffsetSpaceOneBased    = 1;
+      const int indexOffsetTimeOneBased     = 1 + spaceDim;
+      const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
+        
+//      // The below assumes that spaceDim <= velocityDim; enforce that here:
+//      TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > velocityDim, std::invalid_argument, "velocityDim must be at least as large as spaceDim");
+//      std::vector<FunctionPtr> v;
+//      for (int vd=0; vd<velocityDim; vd++)
+//      {
+//        v.push_back(this->v_i(vd));
+//      }
+//      
+//      for (int i=0; i<_numSpecies; i++)
+//      {
+//        VarPtr f = this->f(i);
+//        VarPtr w = this->w(i);
+//        VarPtr t_n_hat = this->t_n_hat(i);
+//        
+//        for (int d=0; d<spaceDim; d++)
+//        {
+//          vlasovBF->addTerm( -v[d] * f, w->di(indexOffsetSpaceOneBased + d));  // dx_d
+//        }
+//        vlasovBF->addTerm( -f, w->di(indexOffsetTimeOneBased)); // dt
+//        
+//        auto a = this->a(); // acceleration term
+//        for (int vd=0; vd<velocityDim; vd++)
+//        {
+//          // grad v of f
+//          vlasovBF->addTerm(-a[vd] * f, w->di(indexOffsetVelocityOneBased + vd));
+//        }
+//        
+//        vlasovBF->addTerm(t_n_hat, w);
+//      }
+      
+      // the dof ordering should have just one entry, for a single H^1 test function w
+      TEUCHOS_TEST_FOR_EXCEPTION(testOrder->getVarIDs().size() != 1, std::invalid_argument, "Unexpected number of test variables");
+      auto w0_ID = _form.w(0)->ID(); // we assume basis for all w_i is the same
+      auto f0_ID = _form.f(0)->ID(); // we assume basis for all f_i is the same
+      
+      // evaluate acceleration at quadrature points
+      // we could speed this up for Poisson by only evaluating at physical points
+      // we could also speed it up for Maxwell by evaluating B and v separately, and doing the cross product, etc.
+      
+      auto refPoints = basisCache->getRefCellPoints();
+      
+      const int numPoints = refPoints.extent_int(0); // (P,D)
+      
+      auto & scratchStorage = SharedScratchStorage<double>::sharedScratchStorage();
+      
+//      Kokkos::Array< DeviceView<double>, 3> accelerationValues; // at most 3 components
+      Kokkos::Array< Intrepid2::Data<double, DeviceType>, 3> accelerationValues; // at most 3 components
+      
+      auto numAccelerationComponents = _acceleration.size();
+      for (int vd=0; vd<numAccelerationComponents; vd++)
+      {
+        accelerationValues[vd] = _acceleration[vd]->checkoutValuesData(basisCache);
+        _acceleration[vd]->values(accelerationValues[vd], basisCache);
+      }
+      
+      Kokkos::Array< DeviceView<double>, 3> velocityValues; // at most 3 components
+      for (int vd=0; vd<_numVelocitySpaceDims; vd++)
+      {
+        velocityValues[vd] = scratchStorage.checkoutScratchStorage({numCells, numPoints}, "velocityValues");
+        auto vdFxn = _form.v_i(vd);
+        vdFxn->values(velocityValues[vd], ASSIGN, basisCache);
+      }
+      
+      auto wBasis =  testOrder->getBasis(w0_ID)->intrepid2Basis();
+      auto fBasis = trialOrder->getBasis(f0_ID)->intrepid2Basis();
+      
+      const int w_basisCardinality = wBasis->getCardinality();
+      const int f_basisCardinality = fBasis->getCardinality();
+      
+      auto w_basisValues    = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_VALUE);
+      auto w_basisGradients = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_GRAD);
+      
+      wBasis->getValues(w_basisValues,    refPoints, Intrepid2::OPERATOR_VALUE);
+      wBasis->getValues(w_basisGradients, refPoints, Intrepid2::OPERATOR_GRAD);
+      
+      auto f_basisValues = fBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_VALUE);
+      fBasis->getValues(f_basisValues, refPoints, Intrepid2::OPERATOR_VALUE);
+      
+      auto jacobian       = getJacobianData(basisCache, _numConfigSpaceDims);
+      auto jacobianDet    = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
+      auto jacobianInv    = Intrepid2::CellTools<DeviceType>::allocateJacobianInv(jacobian);
+      auto jacobianDetInv = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
+      Intrepid2::CellTools<DeviceType>::setJacobianDet(jacobianDet, jacobian);
+      Intrepid2::CellTools<DeviceType>::setJacobianInv(jacobianInv, jacobian);
+      Intrepid2::CellTools<DeviceType>::setJacobianDetInv(jacobianDetInv, jacobian);
+      
+      using fst = Intrepid2::FunctionSpaceTools<DeviceType>;
+      
+      auto w_transformedBasisValues = fst::getHGRADtransformVALUE(numCells,       w_basisValues);
+      auto f_transformedBasisValues = fst::getHVOLtransformVALUE (jacobianDetInv, f_basisValues);
+      
+      auto cellMeasures = allocateCellMeasure(jacobianDet, basisCache->getCubatureWeights());
+      computeCellMeasure(cellMeasures, jacobianDet, basisCache->getCubatureWeights());
+      
+      //   (- f_i, v \cdot grad_x w_i + d/dt w_i + a \cdot grad_v w_i)
+      // = (  f_i, (-v -1 -a) \cdot grad w_i )
+      // allocate container for [v 1 a], with shape (C,P,D)
+      auto gradientWeightsView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov gradient vector weights");
+      
+      for (int speciesOrdinal=0; speciesOrdinal<_form.numSpecies(); speciesOrdinal++)
+      {
+        // fill container:
+        using ExecutionSpace = typename DeviceType::execution_space;
+        int numVelocitySpaceDims = _numVelocitySpaceDims;
+        auto extents_7 = accelerationValues[0].getExtents();
+        double species_a_weight = _accelerationWeights[speciesOrdinal];
+        Kokkos::Array<int,6> extents_6 {extents_7[0],extents_7[1],extents_7[2],extents_7[3],extents_7[4],extents_7[5]};
+        Kokkos::parallel_for(Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<6>>({0,0,0,0,0,0},extents_6),
+        KOKKOS_LAMBDA (const int &cellOrdinal, const int &i0, const int &i1, const int &i2, const int &i3, const int &i4)
+        {
+          for (int i5=0; i5<extents_7[6]; i5++)
+          {
+            const int pointOrdinal = pointOrdinalFromComponents(extents_7, i0, i1, i2, i3, i4, i5);
+            // velocity first (weights spatial gradient):
+            for (int d=0; d<numVelocitySpaceDims; d++)
+            {
+              const auto & vd = velocityValues[d](cellOrdinal,pointOrdinal);
+              gradientWeightsView(cellOrdinal,pointOrdinal,d) = -vd;
+            }
+            // temporal gradient weight is unit:
+            gradientWeightsView(cellOrdinal,pointOrdinal,numVelocitySpaceDims) = -1.0;
+            // acceleration weights velocity gradient
+            for (int d=0; d<numAccelerationComponents; d++)
+            {
+              const auto & ad = accelerationValues[d](cellOrdinal, i0, i1, i2, i3, i4, i5);
+              gradientWeightsView(cellOrdinal,pointOrdinal,d+numVelocitySpaceDims+1) = -ad * species_a_weight;
+            }
+          }
+        });
+        
+        // compute mat-vec result between gradientWeightsView and the jacobianInv.  Be careful about the direction of the multiplication.
+        
+        Intrepid2::Data<double,DeviceType> gradientWeightsData(gradientWeightsView);
+        
+        auto transformVectorView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov transform vector");
+        Intrepid2::Data<double,DeviceType> transformVectorData(transformVectorView);
+        
+        transformVectorData.storeMatVec(jacobianInv, gradientWeightsData, true); // true: transpose jacobianInv when multiplying
+        
+        Intrepid2::TransformedBasisValues<double, DeviceType> w_transformedBasisGradients(transformVectorData, w_basisGradients);
+        
+        bool sumInto = false;
+        auto integralDataFieldGrad = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(f_transformedBasisValues, cellMeasures, w_transformedBasisGradients);
+        Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataFieldGrad, f_transformedBasisValues, cellMeasures, w_transformedBasisGradients, sumInto);
+        
+        // TODO: 1. place (field, test) values into a rectangular stiffness matrix
+        // TODO: 2. compute (trace, test) values; place these in the same rectangular stiffness matrix
+        // TODO: 3. place (test, test) values into a Gram matrix
+        // TODO: 4. compute B^T G^-1 B (via Cholesky, e.g.), and store into square stiffness matrix
+        // TODO: 5. compute RHS against enriched test space
+        // TODO: 6. contract enriched RHS against optimal tests G^-1 B; copy into rhsVector.
+        // TODO: 7. set options for skipping 4,6, and instead placing in a larger "mixed method"/saddle-point formulation.
+      } // speciesOrdinal
+      
+      scratchStorage.checkinScratchStorage(gradientWeightsView);
+    }
+  };
+
+  class VlasovSpaceTimeIP : public TIP<double>
+  {
+    vector<FunctionPtr> _acceleration;
+    VlasovSpaceTimeFormulation & _form;
+    int _numConfigSpaceDims;
+    int _numVelocitySpaceDims;
+    
+    std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataValueValue; // key: (basis polyOrder, numCells)
+    std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataGradGrad; // key: (basis polyOrder, numCells)
+    
+    std::function<void(int numElements, double timeG_integrate,
+                                                                double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> _gramAssemblyTimingCallback;
+  public:
+    VlasovSpaceTimeIP(VlasovSpaceTimeFormulation & form)
+    :
+    TIP<double>(),
+    _form(form)
+    {
+      _numConfigSpaceDims   = form.configurationSpaceMesh()->getDimension(); // note this includes time dimension
+      _numVelocitySpaceDims = form.velocityDim();
+      
+      if (form.numSpecies() != 1)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "VlasovSpaceTimeIP does not yet support multiple species");
+      }
+      int speciesOrdinal = 0;
+      _acceleration = form.a(speciesOrdinal);
+    }
+    
+    void computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
+                                   Teuchos::RCP<DofOrdering> dofOrdering,
+                                   Teuchos::RCP<BasisCache> basisCache) override
+    {
+      // the dof ordering should have just one entry, for a single H^1 test function w
+      TEUCHOS_TEST_FOR_EXCEPTION(dofOrdering->getVarIDs().size() != 1, std::invalid_argument, "Unexpected number of test variables");
+      auto wID = *dofOrdering->getVarIDs().begin();
+      
+      Epetra_Time timer(*MPIWrapper::CommSerial());
+      
+      // evaluate acceleration at quadrature points
+      // we could speed this up for Poisson by only evaluating at physical points
+      // we could also speed it up for Maxwell by evaluating B and v separately, and doing the cross product, etc.
+      
+      const auto & refPoints = basisCache->getRefCellPoints();
+      
+      const int numCells  = innerProduct.dimension(0); // (C,F,F)
+      const int numPoints = refPoints.extent_int(0); // (P,D)
+      const int spaceDim  = refPoints.extent_int(1);
+      
+      auto & scratchStorage = SharedScratchStorage<double>::sharedScratchStorage();
+      
+//      Kokkos::Array< DeviceView<double>, 3> accelerationValues; // at most 3 components
+      Kokkos::Array< Intrepid2::Data<double, DeviceType>, 3> accelerationValues; // at most 3 components
+      
+      auto numAccelerationComponents = _acceleration.size();
+      for (int vd=0; vd<numAccelerationComponents; vd++)
+      {
+        accelerationValues[vd] = _acceleration[vd]->checkoutValuesData(basisCache);
+        _acceleration[vd]->values(accelerationValues[vd], basisCache);
+      }
+      
+      Kokkos::Array< DeviceView<double>, 3> velocityValues; // at most 3 components
+      for (int vd=0; vd<_numVelocitySpaceDims; vd++)
+      {
+        velocityValues[vd] = scratchStorage.checkoutScratchStorage({numCells, numPoints}, "velocityValues");
+        auto vdFxn = _form.v_i(vd);
+        vdFxn->values(velocityValues[vd], ASSIGN, basisCache);
+      }
+      
+      auto wBasis = dofOrdering->getBasis(wID);
+//      auto wBasis = wBasisWrapper->intrepid2Basis();
+      const int basisCardinality = wBasis->getCardinality();
+  
+      const auto & basisValues    = basisCache->getValues(wBasis, Intrepid2::OPERATOR_VALUE, false);
+      const auto & basisGradients = basisCache->getValues(wBasis, Intrepid2::OPERATOR_GRAD,  false);
+      
+//      auto basisValues    = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_VALUE);
+//      auto basisGradients = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_GRAD);
+//      
+//      wBasis->getValues(basisValues,    refPoints, Intrepid2::OPERATOR_VALUE);
+//      wBasis->getValues(basisGradients, refPoints, Intrepid2::OPERATOR_GRAD);
+      
+      auto jacobian    = getJacobianData(basisCache, _numConfigSpaceDims);
+      
+      auto jacobianDet = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
+      auto jacobianInv = Intrepid2::CellTools<DeviceType>::allocateJacobianInv(jacobian);
+      Intrepid2::CellTools<DeviceType>::setJacobianDet(jacobianDet, jacobian);
+      Intrepid2::CellTools<DeviceType>::setJacobianInv(jacobianInv, jacobian);
+      
+      using fst = Intrepid2::FunctionSpaceTools<DeviceType>;
+      auto transformedBasisValues    = fst::getHGRADtransformVALUE(numCells, basisValues);
+      
+      auto cellMeasures = allocateCellMeasure(jacobianDet, basisCache->getCubatureWeights());
+      computeCellMeasure(cellMeasures, jacobianDet, basisCache->getCubatureWeights());
+      
+      std::pair<int,int> integralDataKey {wBasis->getDegree(),numCells};
+      if (_integralDataValueValue.find(integralDataKey) == _integralDataValueValue.end())
+      {
+        _integralDataValueValue[integralDataKey] = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisValues, cellMeasures, transformedBasisValues);
+      }
+      auto & integralDataValueValue = _integralDataValueValue[integralDataKey];
+//      auto integralDataValueValue = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisValues, cellMeasures, transformedBasisValues);
+      
+      double time_block1 = timer.ElapsedTime();
+      timer.ResetStartTime();
+      
+      double coreIntegrationTime = 0;
+      
+      double flopEstimateValueValue = 0;
+      bool sumInto = false;
+      // (w1, w2)
+      timer.ResetStartTime();
+      Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataValueValue, transformedBasisValues, cellMeasures, transformedBasisValues, sumInto, &flopEstimateValueValue);
+      coreIntegrationTime = timer.ElapsedTime();
+      timer.ResetStartTime();
+      
+      // (v \cdot grad_x w1 + d/dt w1 + a \cdot grad_v w1, v \cdot grad_x w2 + d/dt w2 + a \cdot grad_v w2)
+      // allocate container for [v 1 a], with shape (C,P,D)
+      auto gradientWeightsView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov gradient vector weights");
+      // fill container:
+      using ExecutionSpace = typename DeviceType::execution_space;
+      int numVelocitySpaceDims = _numVelocitySpaceDims;
+      auto extents_7 = accelerationValues[0].getExtents();
+      Kokkos::Array<int,6> extents_6 {extents_7[0],extents_7[1],extents_7[2],extents_7[3],extents_7[4],extents_7[5]};
+      Kokkos::parallel_for(
+        Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<6>>({0,0,0,0,0,0},extents_6),
+        KOKKOS_LAMBDA (const int &cellOrdinal, const int &i0, const int &i1, const int &i2, const int &i3, const int &i4)
+        {
+          for (int i5=0; i5<extents_7[6]; i5++)
+          {
+            const int pointOrdinal = pointOrdinalFromComponents(extents_7, i0, i1, i2, i3, i4, i5);
+            // velocity first (weights spatial gradient):
+            for (int d=0; d<numVelocitySpaceDims; d++)
+            {
+              const auto & vd = velocityValues[d](cellOrdinal,pointOrdinal);
+              gradientWeightsView(cellOrdinal,pointOrdinal,d) = vd;
+            }
+            // temporal gradient weight is unit:
+            gradientWeightsView(cellOrdinal,pointOrdinal,numVelocitySpaceDims) = 1.0;
+            // acceleration weights velocity gradient
+            for (int d=0; d<numAccelerationComponents; d++)
+            {
+              const auto & ad = accelerationValues[d](cellOrdinal, i0, i1, i2, i3, i4, i5);
+              gradientWeightsView(cellOrdinal,pointOrdinal,d+numVelocitySpaceDims+1) = ad;
+            }
+          }
+        });
+      
+      // compute mat-vec result between gradientWeightsView and the jacobianInv.  Be careful about the direction of the multiplication.
+      
+      Intrepid2::Data<double,DeviceType> gradientWeightsData(gradientWeightsView);
+      
+      auto transformVectorView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov transform vector");
+      Intrepid2::Data<double,DeviceType> transformVectorData(transformVectorView);
+      
+      transformVectorData.storeMatVec(jacobianInv, gradientWeightsData, true); // true: transpose jacobianInv when multiplying
+      
+      Intrepid2::TransformedBasisValues<double, DeviceType> transformedBasisGradients(transformVectorData, basisGradients);
+      
+      if (_integralDataGradGrad.find(integralDataKey) == _integralDataGradGrad.end())
+      {
+        _integralDataGradGrad[integralDataKey] = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisGradients, cellMeasures, transformedBasisGradients);
+      }
+      auto & integralDataGradGrad = _integralDataGradGrad[integralDataKey];
+//      auto integralDataGradGrad = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisGradients, cellMeasures, transformedBasisGradients);
+      double time_block2 = timer.ElapsedTime();
+      timer.ResetStartTime();
+      
+      sumInto = false;
+      double flopEstimateGradGrad = 0;
+      timer.ResetStartTime();
+      Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataGradGrad, transformedBasisGradients, cellMeasures, transformedBasisGradients, sumInto, &flopEstimateGradGrad);
+      coreIntegrationTime += timer.ElapsedTime();
+      timer.ResetStartTime();
+//      std::cout << "flop estimate for (value, value): " << flopEstimateValueValue << std::endl;
+//      std::cout << "flop estimate for ( grad,  grad): " << flopEstimateGradGrad   << std::endl;
+
+      auto ipView = innerProduct.checkoutDeviceView();
+      Kokkos::parallel_for(
+                           Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,basisCardinality,basisCardinality}),
+      KOKKOS_LAMBDA (int cellOrdinal, int i, int j) {
+//        std::cout << "integralDataValueValue(" << cellOrdinal << "," << i << "," << j << ") = " << integralDataValueValue(cellOrdinal,i,j) << std::endl;
+//        std::cout << "  integralDataGradGrad(" << cellOrdinal << "," << i << "," << j << ") = " << integralDataGradGrad(cellOrdinal,i,j) << std::endl;
+        ipView(cellOrdinal,i,j) = integralDataValueValue(cellOrdinal,i,j) + integralDataGradGrad(cellOrdinal,i,j);
+      });
+      Kokkos::fence();
+      double time_block3 = timer.ElapsedTime();
+      timer.ResetStartTime();
+      
+      innerProduct.checkinDeviceView(true); // true: deep copy to host.  If we could guarantee that caller wouldn't try to access on host, we could eliminate this.  But we can't, and probably shouldn't until we've changed the method signature here to have a DeviceView passed in.  Basically the contract for Camellia::FieldContainer is that it should always be accessible on host.
+
+      for (int vd=0; vd<_acceleration.size(); vd++)
+      {
+        _acceleration[vd]->checkinValuesData(accelerationValues[vd]);
+      }
+      
+      for (int vd=0; vd<_numVelocitySpaceDims; vd++)
+      {
+        scratchStorage.checkinScratchStorage(velocityValues[vd]);
+      }
+      scratchStorage.checkinScratchStorage(gradientWeightsView);
+      scratchStorage.checkinScratchStorage(transformVectorView);
+      
+      double time_block4 = timer.ElapsedTime();
+      
+      if (_gramAssemblyTimingCallback)
+      {
+        _gramAssemblyTimingCallback(numCells,coreIntegrationTime, time_block1, time_block2, time_block3, time_block4);
+      }
+    }
+    
+    void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
+                                                                double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback)
+    {
+      _gramAssemblyTimingCallback = gramAssemblyTimingCallback;
+    }
+  };
 }
 
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
@@ -159,6 +958,12 @@ _numUniformRefinements(numUniformRefinements)
   TEUCHOS_TEST_FOR_EXCEPTION(_q.size() != _m.size(), std::invalid_argument, "q and m arguments must agree in length");
   TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies == 0, std::invalid_argument, "Must have at least one species");
   
+  if (_useSerendipityBasis)
+  {
+    // at the moment, Intrepid2's sum factorization does not allow us to use Serendipity basis
+    _useSumFactorizedAssembly = false;
+  }
+  
   if (_speciesLabels.size() == 0)
   {
     if (_numSpecies == 1)
@@ -208,13 +1013,20 @@ SolutionPtr VlasovSpaceTimeFormulation::vlasovSolution()
 
 vector<FunctionPtr> VlasovSpaceTimeFormulation::a(int i)
 {
-  // returns the acceleration term for species i
-  vector<FunctionPtr> a_i(_a.size());
-  for (unsigned vd=0; vd<_a.size(); vd++)
+  // returns the acceleration term for species i; if i == -1, returns an acceleration term that should be weighted by (q / m) for the species
+  if (i == -1)
   {
-    a_i[vd] = (_q[i] / _m[i]) * _a[vd];
+    return _a;
   }
-  return a_i;
+  else
+  {
+    vector<FunctionPtr> a_i(_a.size());
+    for (unsigned vd=0; vd<_a.size(); vd++)
+    {
+      a_i[vd] = (_q[i] / _m[i]) * _a[vd];
+    }
+    return a_i;
+  }
 }
 
 void VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr configVariable, FunctionPtr dirichletValue)
@@ -433,8 +1245,16 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
 
 IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct()
 {
-  auto vlasovBF = this->vlasovSolution()->bf();
-  return vlasovBF->graphNorm();
+  if (_useSumFactorizedAssembly)
+  {
+    auto ip = Teuchos::rcp( new VlasovSpaceTimeIP(*this) );
+    return ip;
+  }
+  else
+  {
+    auto vlasovBF = this->vlasovSolution()->bf();
+    return vlasovBF->graphNorm();
+  }
 }
 
 VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
@@ -997,6 +1817,12 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   return nextSlabForm;
 }
 
+//! Returns the number of velocity dimensions in the mesh.
+int VlasovSpaceTimeFormulation::numSpecies() const
+{
+  return _numSpecies;
+}
+
 int VlasovSpaceTimeFormulation::numUniformRefinements() const
 {
   return _numUniformRefinements;
@@ -1436,6 +2262,16 @@ void VlasovSpaceTimeFormulation::setMaxMomentForConservationDiagnostics(const in
         _energy[i] = _solutionMoments[i]->solutionMomentFunction(2,0,0) + _solutionMoments[i]->solutionMomentFunction(0,2,0) + _solutionMoments[i]->solutionMomentFunction(0,0,2);
       }
     }
+  }
+}
+
+void VlasovSpaceTimeFormulation::setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
+                                                                                        double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback)
+{
+  VlasovSpaceTimeIP* ip = dynamic_cast<VlasovSpaceTimeIP*>(_vlasovSoln->ip().get());
+  if (ip != NULL)
+  {
+    ip->setVlasovGramAssemblyTimingCallback(gramAssemblyTimingCallback);
   }
 }
 

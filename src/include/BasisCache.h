@@ -214,8 +214,7 @@ public:
   Camellia::FieldContainer<double> & getWeightedMeasures();
   Camellia::FieldContainer<double> getCellMeasures();
 
-  Intrepid2::BasisValues<double,DeviceType> getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
-                                                         const Intrepid2::TensorPoints<double,DeviceType> inputPoints);
+  const Intrepid2::BasisValues<double,DeviceType>& getValues(BasisPtr intrepid2Basis, Intrepid2::EOperator op, bool useCubPointsSideRefCell = false);
   
   virtual Teuchos::RCP< const Camellia::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   virtual Teuchos::RCP< const Camellia::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
@@ -289,8 +288,8 @@ public:
   const Camellia::FieldContainer<double> &getRefCellPointsFC();
   const Camellia::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinatesFC();
   
-  const Intrepid2::TensorPoints<double,DeviceType> getRefCellPoints() const;
-  const Intrepid2::TensorPoints<double,DeviceType> getSideRefCellPointsInVolumeCoordinates();
+  const Intrepid2::TensorPoints<double,DeviceType> & getRefCellPoints() const;
+  const Intrepid2::TensorPoints<double,DeviceType> & getSideRefCellPointsInVolumeCoordinates();
   
   void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell);
   virtual void setRefCellPoints(Intrepid2::TensorPoints<double,DeviceType> pointsRefCell, Intrepid2::TensorData<double,DeviceType> weightsRefCell, int cubatureDegree = -1);
