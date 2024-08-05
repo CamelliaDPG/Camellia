@@ -34,7 +34,6 @@
 
 #include "DofOrdering.h"
 
-class Epetra_CrsMatrix;
 namespace Camellia
 {
   const static string LINEAR_TERM_INTEGRATION_TIMER_1_STRING = "linear term integration 1";
@@ -57,23 +56,11 @@ class TLinearTerm
   std::map< int, double > _energyNormForCellIDGlobal;
 
   // some private utility methods:
-  static void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC,
-                        TLinearTermPtr<double> u, DofOrderingPtr uOrdering,
-                        TLinearTermPtr<double> v, DofOrderingPtr vOrdering,
-                        BasisCachePtr basisCache, bool sumInto=true);
   static void integrate(Camellia::FieldContainer<Scalar> &values,
                         TLinearTermPtr<Scalar> u, DofOrderingPtr uOrdering,
                         TLinearTermPtr<Scalar> v, DofOrderingPtr vOrdering,
                         BasisCachePtr basisCache, bool sumInto=true);
   static void multiplyFluxValuesByParity(Camellia::FieldContainer<Scalar> &fluxValues, BasisCachePtr sideBasisCache);
-
-  // poor man's templating: just provide both versions of the values argument, making the other version null or size 0
-  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
-                 TLinearTermPtr<double> otherTerm, DofOrderingPtr otherDofOrdering,
-                 BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
-                 TLinearTermPtr<double> otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
-                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
 public: // was protected; changed for debugging (no big deal either way, I think)
   const std::vector< TLinearSummand<Scalar> > & summands() const;
@@ -123,14 +110,6 @@ public:
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
   void integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
                  TLinearTermPtr<Scalar> otherTerm, VarPtr otherVarID, TFunctionPtr<Scalar> fxn,
-                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
-
-  // CrsMatrix versions (for the two-LinearTerm (matrix) variants of integrate)
-  void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
-                 TLinearTermPtr<double> otherTerm, DofOrderingPtr otherDofOrdering,
-                 BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
-                 TLinearTermPtr<double> otherTerm, VarPtr otherVarID, TFunctionPtr<Scalar> fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
