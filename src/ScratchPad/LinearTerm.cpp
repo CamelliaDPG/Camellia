@@ -16,7 +16,6 @@
 #include "TensorBasis.h"
 #include "TimeLogger.h"
 
-#include <Epetra_CrsMatrix.h>
 #include <Intrepid_FunctionSpaceTools.hpp>
 
 #include <Intrepid2_TensorArgumentIterator.hpp>
@@ -457,18 +456,9 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
 }
 
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values,
+void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &valuesFC,
                                     TLinearTermPtr<Scalar> u, DofOrderingPtr uOrdering,
                                     TLinearTermPtr<Scalar> v, DofOrderingPtr vOrdering,
-                                    BasisCachePtr basisCache, bool sumInto)
-{
-  integrate(NULL, values, u, uOrdering, v, vOrdering, basisCache, sumInto);
-}
-
-template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC,
-                                    TLinearTermPtr<double> u, DofOrderingPtr uOrdering,
-                                    TLinearTermPtr<double> v, DofOrderingPtr vOrdering,
                                     BasisCachePtr basisCache, bool sumInto)
 {
   TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate two terms");
@@ -481,20 +471,9 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
   }
   int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
   // will integrate either in volume or along a side, depending on the type of BasisCache passed in
-  if (valuesCrsMatrix==NULL)   // then the FC is the one to fill
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(0) != numCells, std::invalid_argument, "values.dim(0) != numCells");
-    TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(1) != uOrdering->totalDofs(), std::invalid_argument, "values.dim(1) != uOrdering->totalDofs()");
-    TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(2) != vOrdering->totalDofs(), std::invalid_argument, "values.dim(2) != vOrdering->totalDofs()");
-  }
-  else
-  {
-    if (numCells != 1)
-    {
-      cout << "CrsMatrix version of integrate() requires that numCells = 1.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CrsMatrix version of integrate() requires that numCells = 1.");
-    }
-  }
+  TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(0) != numCells, std::invalid_argument, "values.dim(0) != numCells");
+  TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(1) != uOrdering->totalDofs(), std::invalid_argument, "values.dim(1) != uOrdering->totalDofs()");
+  TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(2) != vOrdering->totalDofs(), std::invalid_argument, "values.dim(2) != vOrdering->totalDofs()");
 
   bool symmetric = false; // turning off a so far buggy attempt at optimization
   //  bool symmetric = (u.get()==v.get()) && (uOrdering.get() == vOrdering.get());
@@ -632,43 +611,23 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
       vector<int> uDofIndices = uOrdering->getDofIndices(uID,uSideIndex);
       vector<int> vDofIndices = vOrdering->getDofIndices(vID,vSideIndex);
 
-      if (valuesCrsMatrix==NULL)
+      // there may be a more efficient way to do this copying:
+      for (unsigned k=0; k < numCells; k++)
       {
-        // there may be a more efficient way to do this copying:
-        for (unsigned k=0; k < numCells; k++)
-        {
-          for (int i=0; i < uBasisCardinality; i++)
-          {
-            int uDofIndex = uDofIndices[i];
-            for (int j=0; j < vBasisCardinality; j++)
-            {
-              int vDofIndex = vDofIndices[j];
-              double value = miniMatrix(k,i,j); // separate line for debugger inspection
-              valuesFC(k,uDofIndex,vDofIndex) += value;
-              if ((symmetric) && (uOrdinal != vOrdinal))    // pretty sure this point is where the bug in symmetric accumulation comes in.  Pretty sure we'll get some double-accumulation.  I'm not sure how to fix it just yet, though.
-              {
-                valuesFC(k,vDofIndex,uDofIndex) += value;
-              }
-              //            cout << "values(" << k << ", " << uDofIndex << ", " << vDofIndex << ") += " << value << endl;
-            }
-          }
-        }
-      }
-      else     // CrsMatrix version
-      {
-        Camellia::FieldContainer<int> uDofIndicesFC(uDofIndices.size()), vDofIndicesFC(vDofIndices.size());
-        for (int i=0; i < uBasisCardinality; i++)
-        {
-          uDofIndicesFC[i] = uDofIndices[i];
-        }
-        for (int j=0; j < vBasisCardinality; j++)
-        {
-          vDofIndicesFC[j] = vDofIndicesFC[j];
-        }
         for (int i=0; i < uBasisCardinality; i++)
         {
           int uDofIndex = uDofIndices[i];
-          valuesCrsMatrix->SumIntoGlobalValues(uDofIndex, vBasisCardinality, &miniMatrix(0,i,0), &vDofIndicesFC[0]);
+          for (int j=0; j < vBasisCardinality; j++)
+          {
+            int vDofIndex = vDofIndices[j];
+            double value = miniMatrix(k,i,j); // separate line for debugger inspection
+            valuesFC(k,uDofIndex,vDofIndex) += value;
+            if ((symmetric) && (uOrdinal != vOrdinal))    // pretty sure this point is where the bug in symmetric accumulation comes in.  Pretty sure we'll get some double-accumulation.  I'm not sure how to fix it just yet, though.
+            {
+              valuesFC(k,vDofIndex,uDofIndex) += value;
+            }
+            //            cout << "values(" << k << ", " << uDofIndex << ", " << vDofIndex << ") += " << value << endl;
+          }
         }
       }
     }
@@ -678,25 +637,8 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
 }
 
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisOrdering,
-                                    TLinearTermPtr<double> otherTerm, DofOrderingPtr otherOrdering,
-                                    BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
-{
-  static Camellia::FieldContainer<double> emptyValues;
-  integrate(values, emptyValues, thisOrdering, otherTerm, otherOrdering, basisCache, forceBoundaryTerm, sumInto);
-}
-
-template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
+void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &valuesFC, DofOrderingPtr thisOrdering,
                                     TLinearTermPtr<Scalar> otherTerm, DofOrderingPtr otherOrdering,
-                                    BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
-{
-  integrate(NULL, values, thisOrdering, otherTerm, otherOrdering, basisCache, forceBoundaryTerm, sumInto);
-}
-
-template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC, DofOrderingPtr thisOrdering,
-                                    TLinearTermPtr<double> otherTerm, DofOrderingPtr otherOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
   TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate two terms");
@@ -726,7 +668,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia:
   if (basisCache->isSideCache())
   {
     // then we just integrate along the one side:
-    integrate(valuesCrsMatrix, valuesFC, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache);
+    integrate(valuesFC, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache);
     return;
   }
   else if (forceBoundaryTerm)
@@ -736,7 +678,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia:
     int numSides = basisCache->cellTopology()->getSideCount();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++)
     {
-      integrate(valuesCrsMatrix, valuesFC, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
+      integrate(valuesFC, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
     }
   }
   else
@@ -758,7 +700,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia:
     }
 
     // volume integration first:  ( (u,v) from above )
-    integrate(valuesCrsMatrix, valuesFC, otherNonBoundaryOnly, otherOrdering, thisNonBoundaryOnly, thisOrdering, basisCache);
+    integrate(valuesFC, otherNonBoundaryOnly, otherOrdering, thisNonBoundaryOnly, thisOrdering, basisCache);
 
     // sides:
     // (u + du, v + dv) - (u,v) = (u + du, dv) + (du, v)
@@ -767,9 +709,9 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia:
     {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
       // (u + du, dv)
-      integrate(valuesCrsMatrix, valuesFC, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, sideCache);
+      integrate(valuesFC, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, sideCache);
       // (du, v)
-      integrate(valuesCrsMatrix, valuesFC, otherNonBoundaryOnly, otherOrdering, thisBoundaryOnly, thisOrdering, sideCache);
+      integrate(valuesFC, otherNonBoundaryOnly, otherOrdering, thisBoundaryOnly, thisOrdering, sideCache);
     }
   }
 }
