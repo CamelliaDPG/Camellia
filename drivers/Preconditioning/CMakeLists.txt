@@ -3,7 +3,7 @@ project(PreconditioningDrivers)
 add_executable(ConditionNumberTestsDriver "ConditionNumberTestsDriver.cpp")
 target_link_libraries(ConditionNumberTestsDriver Camellia)
 
-add_executable(PreconditioningTestsDriver "PreconditioningTestsDriver.cpp")
+add_executable(PreconditioningTestsDriver EXCLUDE_FROM_ALL "PreconditioningTestsDriver.cpp")
 target_link_libraries(PreconditioningTestsDriver Camellia)
 
 add_executable(MultigridPreconditioningDriver "MultigridPreconditioningDriver.cpp")

@@ -26,9 +26,6 @@
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 
-#include "AztecOO.h"
-#include "AztecOO_StatusTestResNorm.h"
-
 #include "Epetra_Operator_to_Epetra_Matrix.h"
 #include "Epetra_SerialComm.h"
 
