@@ -48,7 +48,7 @@ private:
   
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
-  bool _useSumFactorizedAssembly = true;
+  bool _useSumFactorizedAssembly = false; // 8-7-24: turning this off because some tests fail during Cholesky factorization of the Vlasov Gram matrix; need to add some tests to verify correctness of sum-factorized assembly!!  (i.e. the matrix should be the same as without!)
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
