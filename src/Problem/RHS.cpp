@@ -11,7 +11,7 @@ template <typename Scalar>
 void TRHS<Scalar>::addTerm( TLinearTermPtr<Scalar> rhsTerm )
 {
   if (rhsTerm->summands().size() == 0) return; // nothing to do, in that case
-  TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
+//  TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
   TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->rank() != 0, std::invalid_argument, "RHS only handles scalar terms.");
   if (_lt.get())
   {

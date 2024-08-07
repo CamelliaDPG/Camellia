@@ -167,6 +167,110 @@ public:
   }
 };
 
+class NodalBasisFamily : public BasisFamily
+{
+public:
+  NodalBasisFamily();
+  
+  using BasisFamily::getBasis;
+  BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1) override
+  {
+    auto basis = getCachedBasis(cellTopo,fs,p_H1);
+    if (basis == Teuchos::null)
+    {
+      if (cellTopo->getTensorialDegree() == 0)
+      {
+        using Intrepid2BasisFamily = Intrepid2::DerivedNodalBasisFamily<Camellia::DeviceType>;
+        using Intrepid2BasisPtr = Intrepid2BasisFamily::BasisPtr;
+        Intrepid2::EFunctionSpace intrepid2FS;
+        int rank;
+        // TODO: factor out this switch statement (will be reused)
+        switch (fs[0])
+        {
+          case FUNCTION_SPACE_HGRAD:      intrepid2FS = Intrepid2::FUNCTION_SPACE_HGRAD; rank = 0; break;
+          case FUNCTION_SPACE_HCURL:      intrepid2FS = Intrepid2::FUNCTION_SPACE_HCURL; rank = 1; break;
+          case FUNCTION_SPACE_HDIV:       intrepid2FS = Intrepid2::FUNCTION_SPACE_HDIV;  rank = 1; break;
+          case FUNCTION_SPACE_HVOL:       intrepid2FS = Intrepid2::FUNCTION_SPACE_HVOL;  rank = 0; break;
+          case FUNCTION_SPACE_HGRAD_DISC: intrepid2FS = Intrepid2::FUNCTION_SPACE_HGRAD; rank = 0; break;
+          case FUNCTION_SPACE_HCURL_DISC: intrepid2FS = Intrepid2::FUNCTION_SPACE_HCURL; rank = 1; break;
+          case FUNCTION_SPACE_HDIV_DISC:  intrepid2FS = Intrepid2::FUNCTION_SPACE_HDIV;  rank = 1; break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported EFunctionSpace");
+        }
+        
+        const int spaceDim = cellTopo->getDimension();
+        if (spaceDim == 0)
+        {
+          basis = PointBasis<>::pointBasis();
+        }
+        else if (p_H1.size() == 1)
+        {
+          int polyOrder = (intrepid2FS == Intrepid2::FUNCTION_SPACE_HVOL) ? p_H1[0] - 1 : p_H1[0];
+          Intrepid2BasisPtr intrepid2Basis = Intrepid2::getBasis<Intrepid2BasisFamily>(cellTopo->getShardsTopology(), intrepid2FS, polyOrder);
+          basis = Teuchos::rcp( new Intrepid2BasisWrapper<>(intrepid2Basis, spaceDim, rank, fs[0]) );
+        }
+        else
+        {
+          if (cellTopo->isHypercube())
+          {
+            Intrepid2BasisPtr intrepid2Basis;
+            if (spaceDim == 3)
+            {
+              intrepid2Basis = Intrepid2::getHexahedronBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0], p_H1[1], p_H1[2]);
+            }
+            else if (spaceDim == 2)
+            {
+              intrepid2Basis = Intrepid2::getQuadrilateralBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0], p_H1[1]);
+            }
+            else if (spaceDim == 1)
+            {
+              intrepid2Basis = Intrepid2::getLineBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]);
+            }
+            basis = Teuchos::rcp( new Intrepid2BasisWrapper<>(intrepid2Basis, spaceDim, rank, fs[0]) );
+          }
+          else
+          {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported CellTopo for anisotropic poly order");
+          }
+        }
+      }
+      else
+      {
+        std::vector<EFunctionSpace> fsComponentVector;
+        std::vector<int> p_H1_component;
+        EFunctionSpace fsExtrusion;
+        int p_H1_extrusion;
+        if (fs.size() == 1)
+        {
+          fsComponentVector = fs;
+          fsExtrusion = fs[0];
+        }
+        else
+        {
+          fsComponentVector.insert(fsComponentVector.begin(), fs.begin(), fs.end() - 1);
+          fsExtrusion = fs[fs.size()-1];
+        }
+        if (p_H1.size() == 1)
+        {
+          p_H1_component = p_H1;
+          p_H1_extrusion = p_H1[0];
+        }
+        else
+        {
+          p_H1_component.insert(p_H1_component.begin(), p_H1.begin(), p_H1.end() - 1);
+          p_H1_extrusion = p_H1[p_H1.size() - 1];
+        }
+        auto tensorialComponentBasis = getBasis(cellTopo->getTensorialComponent(), fsComponentVector, p_H1_component);
+        auto lineBasis = getBasis(CellTopology::line(), fsExtrusion, p_H1_extrusion);
+        
+        basis = intrepid2TensorBasis(tensorialComponentBasis, lineBasis);
+      }
+      setCachedBasis(cellTopo,fs,p_H1,basis);
+    }
+    return basis;
+  }
+};
+
 class SerendipityBasisFamily : public BasisFamily
 {
 public:
@@ -236,6 +340,12 @@ BasisPtr BasisFamily::getCachedBasis(CellTopoPtr cellTopo, const std::vector<EFu
 }
 
 BasisFamilyPtr BasisFamily::hierarchicalBasisFamily()
+{
+  static BasisFamilyPtr basisFamily = Teuchos::rcp(new HierarchicalBasisFamily);
+  return basisFamily;
+}
+
+BasisFamilyPtr BasisFamily::nodalBasisFamily()
 {
   static BasisFamilyPtr basisFamily = Teuchos::rcp(new HierarchicalBasisFamily);
   return basisFamily;
