@@ -68,8 +68,6 @@
 #include "TimeLogger.h"
 #include "Var.h"
 
-#include "AztecOO_ConditionNumber.h"
-
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
 #include <Epetra_SerialComm.h>

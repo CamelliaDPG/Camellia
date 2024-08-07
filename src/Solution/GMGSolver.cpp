@@ -15,7 +15,6 @@
 #include "GMGSolver.h"
 #include "MPIWrapper.h"
 
-#include "AztecOO.h"
 #include <BelosEpetraAdapter.hpp>
 #include <BelosPseudoBlockCGSolMgr.hpp>
 #include <BelosPseudoBlockGmresSolMgr.hpp>
@@ -26,6 +25,12 @@
 #include "EpetraExt_MultiVectorOut.h"
 
 #include <Teuchos_ParameterList.hpp>
+
+// hard-code some constants from AztecOO.h that are also used by us and/or Belos:
+const int AZ_warnings = -3; /* Print out only warning messages              */
+
+const int AZ_r0  = 0; /* ||r||_2 / ||r^{(0)}||_2                      */
+const int AZ_rhs = 1; /* ||r||_2 / ||b||_2                            */
 
 using namespace Camellia;
 
@@ -549,238 +554,121 @@ int GMGSolver::solve(bool buildCoarseStiffness)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   
-  bool useBelos = true; // new option, under development (otherwise, use Aztec)
-  
   int solveResult;
   
-  if (useBelos)
+  using namespace Teuchos;
+  typedef Epetra_MultiVector MV;
+  typedef double Scalar;
+  typedef Epetra_Operator OP;
+  typedef Belos::LinearProblem<Scalar, MV, OP> BelosProblem;
+  typedef RCP<BelosProblem> BelosProblemPtr;
+  BelosProblemPtr problem = rcp( new BelosProblem(_stiffnessMatrix, _lhs, _rhs) );
+  
+  Belos::SolverFactory<Scalar, MV, OP> factory;
+  RCP<Belos::SolverManager<Scalar, MV, OP> > solver;
+  
+  if (buildCoarseStiffness)
   {
-    using namespace Teuchos;
-    typedef Epetra_MultiVector MV;
-    typedef double Scalar;
-    typedef Epetra_Operator OP;
-    typedef Belos::LinearProblem<Scalar, MV, OP> BelosProblem;
-    typedef RCP<BelosProblem> BelosProblemPtr;
-    BelosProblemPtr problem = rcp( new BelosProblem(_stiffnessMatrix, _lhs, _rhs) );
-    
-    Belos::SolverFactory<Scalar, MV, OP> factory;
-    RCP<Belos::SolverManager<Scalar, MV, OP> > solver;
-    
-    if (buildCoarseStiffness)
-    {
-      _gmgOperator->setFineStiffnessMatrix(_stiffnessMatrix.get());
-    }
-    
-    RCP<ParameterList> solverParams = parameterList();
-    
-    string resScaling = "Norm of RHS";
-    if (_azConvergenceOption == AZ_rhs)
-    {
-      resScaling = "Norm of RHS";
-    }
-    else if (_azConvergenceOption == AZ_r0)
-    {
-      resScaling = "Norm of Initial Residual";
-    }
-    
-    solverParams->set ("Maximum Iterations", _maxIters);
-    solverParams->set ("Convergence Tolerance", _tol);
-    solverParams->set ("Estimate Condition Number", _computeCondest);
-    solverParams->set ("Residual Scaling", resScaling);
-    
-    if (_azOutput > 0)
-    {
-      solverParams->set("Verbosity",Belos::Errors + Belos::Warnings + Belos::StatusTestDetails);
-      solverParams->set("Output Frequency",_azOutput);
-      solverParams->set("Output Style",Belos::Brief);
-    }
-    
-    Belos::PseudoBlockCGSolMgr<Scalar,MV,OP>* cgSolver;
+    _gmgOperator->setFineStiffnessMatrix(_stiffnessMatrix.get());
+  }
+  
+  RCP<ParameterList> solverParams = parameterList();
+  
+  string resScaling = "Norm of RHS";
+  if (_azConvergenceOption == AZ_rhs)
+  {
+    resScaling = "Norm of RHS";
+  }
+  else if (_azConvergenceOption == AZ_r0)
+  {
+    resScaling = "Norm of Initial Residual";
+  }
+  
+  solverParams->set ("Maximum Iterations", _maxIters);
+  solverParams->set ("Convergence Tolerance", _tol);
+  solverParams->set ("Estimate Condition Number", _computeCondest);
+  solverParams->set ("Residual Scaling", resScaling);
+  
+  if (_azOutput > 0)
+  {
+    solverParams->set("Verbosity",Belos::Errors + Belos::Warnings + Belos::StatusTestDetails);
+    solverParams->set("Output Frequency",_azOutput);
+    solverParams->set("Output Style",Belos::Brief);
+  }
+  
+  Belos::PseudoBlockCGSolMgr<Scalar,MV,OP>* cgSolver;
 //    Belos::PseudoBlockGmresSolMgr<Scalar,MV,OP>* gmresSolver;
-    
-    if (_useCG)
-    {
-      solver = factory.create("CG", solverParams);
-      cgSolver = dynamic_cast<Belos::PseudoBlockCGSolMgr<Scalar,MV,OP>*>(solver.get());
-    }
-    else
-    {
-      solverParams->set ("Num Blocks", 200); // is this equivalent to AZ_kspace??
-      solver = factory.create("GMRES", solverParams);
+  
+  if (_useCG)
+  {
+    solver = factory.create("CG", solverParams);
+    cgSolver = dynamic_cast<Belos::PseudoBlockCGSolMgr<Scalar,MV,OP>*>(solver.get());
+  }
+  else
+  {
+    solverParams->set ("Num Blocks", 200); // is this equivalent to AZ_kspace??
+    solver = factory.create("GMRES", solverParams);
 //      gmresSolver = dynamic_cast<Belos::PseudoBlockGmresSolMgr<Scalar,MV,OP>*>(solver.get());
-    }
-    
+  }
+  
 //    {
 //      // TRYING SOMETHING
 //      Epetra_MultiVector B_times_rhs(_rhs->Map(), _rhs->NumVectors());
 //      _gmgOperator->ApplySmoother(*_rhs, B_times_rhs, true); // true: apply weight on left
 //      double normValues[_rhs->NumVectors()];
 //      _rhs->Dot(B_times_rhs, &normValues[0]);
-//      
+//
 //      if (rank == 0) cout << "GMGSolver: Schwarz-induced norm of _rhs: " << normValues[0] << "\n";
 //    }
-    
-    problem->setRightPrec(_gmgOperator);
-    problem->setProblem();
-    solver->setProblem(problem);
+  
+  problem->setRightPrec(_gmgOperator);
+  problem->setProblem();
+  solver->setProblem(problem);
 
-    if (_exportFullOperators)
-    {
-      ostringstream path;
-      path << _pathForExport << "M.dat";
-      if (rank == 0) cout << "Writing preconditioner to " << path.str() << endl;
-      EpetraExt::RowMatrixToMatrixMarketFile(path.str().c_str(),*_gmgOperator->getMatrixRepresentation(), NULL, NULL, false);
-      path.str("");
-      path << _pathForExport << "A.dat";
-      if (rank == 0) cout << "Writing system matrix to " << path.str() << endl;
-      EpetraExt::RowMatrixToMatrixMarketFile(path.str().c_str(),*_stiffnessMatrix, NULL, NULL, false);
-    }
-    
+  if (_exportFullOperators)
+  {
+    ostringstream path;
+    path << _pathForExport << "M.dat";
+    if (rank == 0) cout << "Writing preconditioner to " << path.str() << endl;
+    EpetraExt::RowMatrixToMatrixMarketFile(path.str().c_str(),*_gmgOperator->getMatrixRepresentation(), NULL, NULL, false);
+    path.str("");
+    path << _pathForExport << "A.dat";
+    if (rank == 0) cout << "Writing system matrix to " << path.str() << endl;
+    EpetraExt::RowMatrixToMatrixMarketFile(path.str().c_str(),*_stiffnessMatrix, NULL, NULL, false);
+  }
+  
 //    cout << "NOTE: setting user convergence status test.\n";
 //    Teuchos::RCP<Belos::StatusTest<Scalar,MV,OP> > smootherTestNorm = Teuchos::rcp(new ConvergenceTestOpNorm<Scalar, MV, OP>(gmgOperator()->getSmoother(), _tol));
 //    cgSolver->setUserConvStatusTest(smootherTestNorm);
-    
-    Belos::ReturnType belosResult = solver->solve();
-    
-    if (belosResult == Belos::Converged)
-    {
-      solveResult = 0; // success
-    }
-    else if ((solver->getNumIters() == _maxIters) && !_returnErrorIfMaxItersReached)
-    {
-      solveResult = 0;
-    }
-    else
-    {
-      solveResult = 1;  // failure (not converged, and user indicates that should be an error)
-    }
-    
-    if (_computeCondest && _useCG)  // right now, gmresSolver does not support condest
-    {
-      _condest = cgSolver->getConditionEstimate();
-      if ((rank==0) && (_azOutput > 0))
-      {
-        cout << "Condition number estimate: " << _condest << endl;
-      }
-    }
-    
-    // TODO: try some more sophisticated stopping criterion
-    
-    _iterationCount = solver->getNumIters();
+  
+  Belos::ReturnType belosResult = solver->solve();
+  
+  if (belosResult == Belos::Converged)
+  {
+    solveResult = 0; // success
+  }
+  else if ((solver->getNumIters() == _maxIters) && !_returnErrorIfMaxItersReached)
+  {
+    solveResult = 0;
   }
   else
   {
-    Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
-    AztecOO solver(problem);
-
-    Epetra_CrsMatrix *A = dynamic_cast<Epetra_CrsMatrix *>( problem.GetMatrix() );
-
-    if (A == NULL)
+    solveResult = 1;  // failure (not converged, and user indicates that should be an error)
+  }
+  
+  if (_computeCondest && _useCG)  // right now, gmresSolver does not support condest
+  {
+    _condest = cgSolver->getConditionEstimate();
+    if ((rank==0) && (_azOutput > 0))
     {
-      cout << "Error: GMGSolver requires an Epetra_CrsMatrix.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: GMGSolver requires an Epetra_CrsMatrix.\n");
-    }
-
-    //  EpetraExt::RowMatrixToMatlabFile("/tmp/A_pre_scaling.dat",*A);
-
-    //  Epetra_MultiVector *b = problem().GetRHS();
-    //  EpetraExt::MultiVectorToMatlabFile("/tmp/b_pre_scaling.dat",*b);
-
-    //  Epetra_MultiVector *x = problem().GetLHS();
-    //  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
-
-  //  const Epetra_Map* map = &A->RowMatrixRowMap();
-
-    if (buildCoarseStiffness)
-    {
-      _gmgOperator->setFineStiffnessMatrix(A);
-    }
-
-    solver.SetAztecOption(AZ_scaling, AZ_none);
-    if (_useCG)
-    {
-      if (_computeCondest)
-      {
-        solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
-      }
-      else
-      {
-        solver.SetAztecOption(AZ_solver, AZ_cg);
-      }
-    }
-    else
-    {
-      solver.SetAztecOption(AZ_kspace, 200); // default is 30
-      if (_computeCondest)
-      {
-        solver.SetAztecOption(AZ_solver, AZ_gmres_condnum);
-      }
-      else
-      {
-        solver.SetAztecOption(AZ_solver, AZ_gmres);
-      }
-    }
-
-    solver.SetPrecOperator(_gmgOperator.get());
-    //  solver.SetAztecOption(AZ_precond, AZ_none);
-    solver.SetAztecOption(AZ_precond, AZ_user_precond);
-    solver.SetAztecOption(AZ_conv, _azConvergenceOption);
-    //  solver.SetAztecOption(AZ_output, AZ_last);
-    solver.SetAztecOption(AZ_output, _azOutput);
-
-    solveResult = solver.Iterate(_maxIters,_tol);
-
-    const double* status = solver.GetAztecStatus();
-    int remainingIters = _maxIters;
-
-    int whyTerminated = status[AZ_why];
-    int maxRestarts = 1;
-    int numRestarts = 0;
-    while ((whyTerminated==AZ_loss) && (numRestarts < maxRestarts))
-    {
-      remainingIters -= status[AZ_its];
-      if (rank==0) cout << "Aztec warned that the recursive residual indicates convergence even though the true residual is too large.  Restarting with the new solution as initial guess, with maxIters = " << remainingIters << endl;
-      solveResult = solver.Iterate(remainingIters,_tol);
-      whyTerminated = status[AZ_why];
-      numRestarts++;
-    }
-    remainingIters -= status[AZ_its];
-    _iterationCount = _maxIters - remainingIters;
-    _condest = solver.Condest(); // will be -1 if running without condest
-
-    if ((whyTerminated == _maxIters) && !_returnErrorIfMaxItersReached)
-    {
-      // then we consider that a success
-      solveResult = 0;
-    }
-    
-    if (rank==0)
-    {
-      switch (whyTerminated)
-      {
-      case AZ_normal:
-        //        cout << "whyTerminated: AZ_normal " << endl;
-        break;
-      case AZ_param:
-        cout << "whyTerminated: AZ_param " << endl;
-        break;
-      case AZ_breakdown:
-        cout << "whyTerminated: AZ_breakdown " << endl;
-        break;
-      case AZ_loss:
-        cout << "whyTerminated: AZ_loss " << endl;
-        break;
-      case AZ_ill_cond:
-        cout << "whyTerminated: AZ_ill_cond " << endl;
-        break;
-      case AZ_maxits:
-        cout << "whyTerminated: AZ_maxits " << endl;
-        break;
-      default:
-        break;
-      }
+      cout << "Condition number estimate: " << _condest << endl;
     }
   }
+  
+  // TODO: try some more sophisticated stopping criterion
+  
+  _iterationCount = solver->getNumIters();
+
   
   _iterationCountLog.push_back(_iterationCount);
 

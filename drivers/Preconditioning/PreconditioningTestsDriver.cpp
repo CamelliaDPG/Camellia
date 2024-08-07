@@ -18,6 +18,8 @@
 #include "TrigFunctions.h"
 #include "TypeDefs.h"
 
+// 8/7/24 This driver requires AztecOO, now deprecated by Trilinos.  We are removing other dependencies on AztecOO from Camellia, but we won't update this driver; you'll need to include AztecOO with your Trilinos installation (or somewhere else CMake can find it) to build this driver.
+
 #include "AztecOO.h"
 #include "AztecOO_StatusTestResNorm.h"
 

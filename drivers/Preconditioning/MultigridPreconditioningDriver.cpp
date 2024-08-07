@@ -22,7 +22,6 @@
 #include "TypeDefs.h"
 
 #include "Amesos_config.h"
-#include "AztecOO.h"
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
 #include "EpetraExt_MatrixMatrix.h"
@@ -528,7 +527,30 @@ void printTimings()
     if (rank == 0)
     {
       cout << "WARNING: Timings lists do not agree on all ranks; instead of taking maximums, just printing rank 0's timings:\n";
-      Camellia::print<string,double>("selected timings on rank 0", timings);
+      vector<double> timingValues;
+      for (auto entry : timings)
+      {
+        timingValues.push_back(entry.second);
+      }
+      if (rank == 0)
+      {
+        cout << "************************************************\n";
+        cout << " Selected timings, values on rank 0:\n";
+        
+        cout << setprecision(2);
+        cout << std::scientific;
+        
+        int i=0;
+        for (auto entry : timings)
+        {
+          cout.setf(std::ios::left, std::ios::adjustfield);
+          cout << std::setw(35) << entry.first;
+          cout.setf(std::ios::right, std::ios::adjustfield);
+          cout << std::setw(8);
+          cout << timingValues[i++] << " sec." << endl;
+        }
+        cout << "************************************************\n";
+      }
     }
   }
   else
