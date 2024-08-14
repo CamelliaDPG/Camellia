@@ -410,7 +410,8 @@ CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const v
   return _cells[cellIndex];
 }
 
-IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex)
+IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices,
+                                IndexType parentCellIndex, RefinementPatternPtr parentRefPattern)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_cells.find(cellIndex) != _cells.end(), std::invalid_argument, "addCell: cell with specified cellIndex already exists!");
  
@@ -503,10 +504,13 @@ IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const
   _cells[cellIndex] = cell;
   _validCells.insert(cellIndex);
   _activeCells.insert(cellIndex);
-  _rootCells.insert(cellIndex); // will remove if a parent relationship is established
   if (parentCellIndex != -1)
   {
     cell->setParent(getCell(parentCellIndex));
+  }
+  else
+  {
+    _rootCells.insert(cellIndex); // will remove if a parent relationship is established later
   }
 
   // set neighbors:
@@ -646,16 +650,6 @@ IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const
 
 void MeshTopology::addCellForSide(IndexType cellIndex, unsigned int sideOrdinal, IndexType sideEntityIndex)
 {
-//  {
-//    // DEBUGGING
-//    if ((Comm() != Teuchos::null) && (Comm()->MyPID() == 1) && (_spaceDim == 1))
-//    {
-//      if ((sideEntityIndex == 0) && (_vertices[sideEntityIndex][0] == 0.0))
-//      {
-//        cout << "addCellForSide(" << cellIndex << "," << sideOrdinal << "," << sideEntityIndex << ")\n";
-//      }
-//    }
-//  }
   TEUCHOS_TEST_FOR_EXCEPT(sideEntityIndex == MESHTOPOLOGY_INVALID_ENTITY_INDEX);
   
   if (_cellsForSideEntities.size() <= sideEntityIndex)
@@ -873,7 +867,7 @@ IndexType MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<IndexType
   return entityIndex;
 }
 
-void MeshTopology::addChildren(IndexType firstChildIndex, CellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices)
+void MeshTopology::addChildren(IndexType firstChildIndex, CellPtr parentCell, RefinementPatternPtr refPattern, const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices)
 {
   int numChildren = childTopos.size();
   TEUCHOS_TEST_FOR_EXCEPTION(numChildren != childVertices.size(), std::invalid_argument, "childTopos and childVertices must be the same size");
@@ -884,12 +878,13 @@ void MeshTopology::addChildren(IndexType firstChildIndex, CellPtr parentCell, co
     // add if we don't already know about this child (we might already know it and have pruned its siblings away...)
     if (!isValidCellIndex(childCellIndex))
     {
-      addCell(childCellIndex, childTopos[childOrdinal], childVertices[childOrdinal],parentCell->cellIndex());
+      addCell(childCellIndex, childTopos[childOrdinal], childVertices[childOrdinal],parentCell->cellIndex(),refPattern);
       _rootCells.erase(childCellIndex);
     }
     childIndices.push_back(childCellIndex);
     childCellIndex++;
   }
+  parentCell->setRefinementPattern(refPattern);
   parentCell->setChildren(childIndices);
   
   // if any entity sets contain parent cell, add child cells, too
@@ -3544,7 +3539,6 @@ void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPatte
   vector< CellTopoPtr > childTopos(numChildren,cell->topology());
 
   refineCellEntities(cell, refPattern);
-  cell->setRefinementPattern(refPattern);
 
   bool newRefinement = (cell->children().size() == 0);
   if (newRefinement)
@@ -3552,7 +3546,7 @@ void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPatte
     // cell is active; deactivate it before we add children
     deactivateCell(cell);
   }
-  addChildren(firstChildCellIndex, cell, childTopos, childVertices);
+  addChildren(firstChildCellIndex, cell, refPattern, childTopos, childVertices);
 
   determineGeneralizedParentsForRefinement(cell, refPattern);
 
@@ -4015,6 +4009,15 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
   // through a call to addCell()
   CellPtr cell = _cells[cellIndex];
   
+  GlobalIndexType parentCellIndex = MESHTOPOLOGY_INVALID_CELL_INDEX;
+  RefinementPatternPtr parentRefPattern;
+  if (cell->getParent() != Teuchos::null)
+  {
+    parentCellIndex  = cell->getParent()->cellIndex();
+    parentRefPattern = cell->getParent()->refinementPattern();
+  }
+  
+  
   auto cellVertices = cell->vertices();
   auto cellTopo = cell->topology();
   
@@ -4059,16 +4062,46 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
       auto cell1 = sideCells.first;
       auto cell2 = sideCells.second;
       
+      // does parent cell share the side (as can happen with anisotropic refinements)?
+      auto parent = deletedCell->getParent();
+      unsigned sideOrdinalInParent = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
+      if (parent != Teuchos::null)
+      {
+        sideOrdinalInParent = parent->findSubcellOrdinal(sideDim, sideEntityIndex);
+      }
+      
       bool noCellsForSide = false;
       if (cell1.first == cellIDToDelete)
       {
-        cell1 = make_pair(-1, -1);
-        noCellsForSide = (cell2.first == -1);
+        if (sideOrdinalInParent != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
+        {
+          cell1.first  = parent->cellIndex();
+          cell1.second = sideOrdinalInParent;
+        }
+        else
+        {
+          // copy cell2 into the cell1 slot: if exactly one is occupied, prefer for it to be cell1
+          cell1 = cell2;
+          cell2 = make_pair(-1, -1);
+          noCellsForSide = (cell1.first == -1);
+        }
       }
       else if (cell2.first == cellIDToDelete)
       {
-        cell2 = make_pair(-1, -1);
-        noCellsForSide = (cell1.first == -1);
+        if (sideOrdinalInParent != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
+        {
+          cell2.first  = parent->cellIndex();
+          cell2.second = sideOrdinalInParent;
+        }
+        else
+        {
+          cell2 = make_pair(-1, -1);
+          noCellsForSide = (cell1.first == -1);
+        }
+      }
+      else
+      {
+        
       }
       
       if (!noCellsForSide)
@@ -4092,16 +4125,7 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
   }
   
   // add the cell back in -- this will activate it, establish neighbor relationships, etc.
-  this->addCell(cellIndex, cellTopo, cellVertices); // this also adds the cell to _rootCells; we'll erase in a minute if it doesn't belong there
-  
-  // addCell does *not* rediscover parent-child relationships
-  // if the original cell had a parent, we need to tell it about that parent again here
-  if (cell->getParent() != Teuchos::null)
-  {
-    auto childIndices = cell->getParent()->getChildIndices(thisPtr);
-    cell->getParent()->setChildren(childIndices); // this will call setParent() on each of the children
-    _rootCells.erase(cellIndex); // if cell has a parent, it isn't a root cell.
-  }
+  this->addCell(cellIndex, cellTopo, cellVertices, parentCellIndex, parentRefPattern);
 }
 
 void MeshTopology::verticesForCell(Camellia::FieldContainer<double>& vertices, GlobalIndexType cellID) const

@@ -82,7 +82,8 @@ namespace Camellia {
     
     virtual ~ExtrudedMeshTopology();
 
-    IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1) override;
+    IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, 
+                      IndexType parentCellIndex = -1, RefinementPatternPtr parentRefPattern = Teuchos::null) override;
     
     //! At present, simply calls base class's implementation.  In the future, may do something more sophisticated involving tensor structures.
     void addVertex(const std::vector<double>& vertex) override;

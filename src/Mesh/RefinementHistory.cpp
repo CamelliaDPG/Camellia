@@ -95,20 +95,37 @@ RefinementPatternPtr RefinementHistory::refPatternForRefType(RefinementType refT
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorial degree > 1 not handled for anisotropic refinements");
     }
-    if ((refType==H_X_REFINEMENT) && (cellTopo->getKey().first == shards::Quadrilateral<4>::key))
+    if (refType==H_X_REFINEMENT)
     {
-      if (cellTopo->getKey().second == 0)
-        return RefinementPattern::xAnisotropicRefinementPatternQuad();
-      else if (cellTopo->getKey().second == 1)
-        return RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
+      if (cellTopo->getKey().first == shards::Quadrilateral<4>::key)
+      {
+        if (cellTopo->getKey().second == 0)
+          return RefinementPattern::xAnisotropicRefinementPatternQuad();
+        else if (cellTopo->getKey().second == 1)
+          return RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
+      }
+      else if (cellTopo->getKey().first == shards::Line<2>::key)
+      {
+        if (cellTopo->getKey().second == 1) // once-extruded line
+          return RefinementPattern::xAnisotropicRefinementPatternExtrudedLine();
+      }
     }
-    else if ((refType==H_Y_REFINEMENT) && (cellTopo->getKey().second == shards::Quadrilateral<4>::key))
+    else if (refType == H_Y_REFINEMENT)
     {
-      if (cellTopo->getKey().second == 0)
-        return RefinementPattern::yAnisotropicRefinementPatternQuad();
-      else if (cellTopo->getKey().second == 1)
-        return RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
+      if (cellTopo->getKey().second == shards::Quadrilateral<4>::key)
+      {
+        if (cellTopo->getKey().second == 0)
+          return RefinementPattern::yAnisotropicRefinementPatternQuad();
+        else if (cellTopo->getKey().second == 1)
+          return RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
+      }
+      else if (cellTopo->getKey().first == shards::Line<2>::key)
+      {
+        if (cellTopo->getKey().second == 1) // once-extruded line
+          return RefinementPattern::yAnisotropicRefinementPatternExtrudedLine();
+      }
     }
+    
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
 }
@@ -237,9 +254,11 @@ void RefinementHistory::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repa
 
 void RefinementHistory::playback(MeshPtr mesh)
 {
-  for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++)
+  int refNumber = 0;
+  int numRefs = int(_refinements.size());
+  for (int refNumber=0; refNumber<numRefs; refNumber++)
   {
-    Refinement ref = *refIt;
+    const auto &ref = _refinements[refNumber];
     RefinementType refType = ref.first;
     set<GlobalIndexType> cellIDs = ref.second;
 
