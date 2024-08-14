@@ -554,6 +554,93 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
     testPruneAddPrune(meshTopo, out, success);
   }
   
+  void testAnisotropicNeighborExtruded2D(Teuchos::FancyOStream &out, bool &success)
+  {
+    auto twoElementInterval = MeshFactory::intervalMeshTopology(0, 1, 2);
+    using std::vector;
+    vector< vector<double> > extrusionVertices;
+    extrusionVertices.push_back({0.,1.});
+    auto twoElementExtruded = MeshFactory::extrudedMeshTopology(twoElementInterval, extrusionVertices);
+    
+    const GlobalIndexType  LEFT_CELL_INDEX = 0;
+    const GlobalIndexType RIGHT_CELL_INDEX = 1;
+    
+    CellPtr  leftCell = twoElementExtruded->getCell( LEFT_CELL_INDEX);
+    CellPtr rightCell = twoElementExtruded->getCell(RIGHT_CELL_INDEX);
+    
+    twoElementExtruded->refineCell( LEFT_CELL_INDEX); // isotropic refinement
+    twoElementExtruded->refineCell(RIGHT_CELL_INDEX); // isotropic refinement
+    
+    twoElementExtruded->unrefineCell(LEFT_CELL_INDEX, leftCell->refinementPattern());
+    
+    // vector< pair< GlobalIndexType, unsigned> >
+    auto descendantsForSide = rightCell->getDescendantsForSide(2, twoElementExtruded, true);
+    GlobalIndexType isotropicChildCellIndex = descendantsForSide[0].first;
+    
+    auto xAnisotropicRefinement = RefinementPattern::xAnisotropicRefinementPatternExtrudedLine();
+    twoElementExtruded->refineCell(isotropicChildCellIndex, xAnisotropicRefinement, twoElementExtruded->nextCellID());
+    
+    CellPtr isotropicChildCell = twoElementExtruded->getCell(isotropicChildCellIndex);
+    GlobalIndexType anisotropicGrandchildCellIndex = isotropicChildCell->getChildIndices(twoElementExtruded)[0];
+    
+    CellPtr anisotropicGrandchildCell = twoElementExtruded->getCell(anisotropicGrandchildCellIndex);
+    
+    // is the left's neighbor on its right side cell 1 (the root cell from original mesh)?
+    // is the leftmost anisotropically-generated cell's left neighbor cell 0?
+    const unsigned int RIGHT_SIDE = 3;
+    const unsigned int  LEFT_SIDE = 2;
+    auto leftNeighborIndex       =  leftCell->getNeighborInfo(RIGHT_SIDE, twoElementExtruded).first;
+    auto grandchildNeighborIndex = anisotropicGrandchildCell->getNeighborInfo( LEFT_SIDE, twoElementExtruded).first;
+    
+    TEST_EQUALITY(      leftNeighborIndex, RIGHT_CELL_INDEX);
+    TEST_EQUALITY(grandchildNeighborIndex,  LEFT_CELL_INDEX);
+    
+    testNeighbors(twoElementExtruded, out, success);
+  }
+
+  void testAnisotropicUnrefinementExtruded2D(Teuchos::FancyOStream &out, bool &success)
+  {
+    auto twoElementInterval = MeshFactory::intervalMeshTopology(0, 1, 2);
+    using std::vector;
+    vector< vector<double> > extrusionVertices;
+    extrusionVertices.push_back({0.,1.});
+    auto twoElementExtruded = MeshFactory::extrudedMeshTopology(twoElementInterval, extrusionVertices);
+    
+    auto xAnisotropicRefinement = RefinementPattern::xAnisotropicRefinementPatternExtrudedLine();
+    
+    CellPtr  leftCell = twoElementExtruded->getCell(0);
+    CellPtr rightCell = twoElementExtruded->getCell(1);
+    
+    // sanity check: is the neighbor relationship what we expect it to be before refinement?
+    
+    const unsigned int RIGHT_SIDE = 3;
+    const unsigned int  LEFT_SIDE = 2;
+    GlobalIndexType  leftNeighborIndex =  leftCell->getNeighborInfo(RIGHT_SIDE, twoElementExtruded).first;
+    GlobalIndexType rightNeighborIndex = rightCell->getNeighborInfo( LEFT_SIDE, twoElementExtruded).first;
+    
+    TEST_EQUALITY( leftNeighborIndex, rightCell->cellIndex());
+    TEST_EQUALITY(rightNeighborIndex,  leftCell->cellIndex());
+    
+    twoElementExtruded->refineCell( leftCell->cellIndex(), xAnisotropicRefinement, twoElementExtruded->nextCellID());
+    twoElementExtruded->refineCell(rightCell->cellIndex(), xAnisotropicRefinement, twoElementExtruded->nextCellID());
+    
+    twoElementExtruded->unrefineCell( leftCell->cellIndex(),  leftCell->refinementPattern());
+    twoElementExtruded->unrefineCell(rightCell->cellIndex(), rightCell->refinementPattern());
+    
+    // Is the neighbor relationship back to its original state?
+    // the cell objects will have been reconstructed; need to get them fresh:
+    leftCell = twoElementExtruded->getCell(0);
+    rightCell = twoElementExtruded->getCell(1);
+    
+    leftNeighborIndex  =  leftCell->getNeighborInfo(RIGHT_SIDE, twoElementExtruded).first;
+    rightNeighborIndex = rightCell->getNeighborInfo( LEFT_SIDE, twoElementExtruded).first;
+    
+    TEST_EQUALITY( leftNeighborIndex, rightCell->cellIndex());
+    TEST_EQUALITY(rightNeighborIndex,  leftCell->cellIndex());
+    
+    testNeighbors(twoElementExtruded, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( MeshTopology, ActiveCellCount )
   {
     MPIWrapper::CommWorld()->Barrier();
@@ -586,6 +673,16 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
 //    TEST_EQUALITY(meshTopo->activeCellCount(), expectedActiveCellCount);
   }
   
+  TEUCHOS_UNIT_TEST( MeshTopology, AnisotropicNeighborExtruded2D )
+  {
+    testAnisotropicNeighborExtruded2D(out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( MeshTopology, AnisotropicUnrefinementExtruded2D )
+  {
+    testAnisotropicUnrefinementExtruded2D(out, success);
+  }
+
 TEUCHOS_UNIT_TEST( MeshTopology, InitialMeshEntitiesActiveCellCount)
 {
   // one easy way to create a quad mesh topology is to use MeshFactory

@@ -322,7 +322,7 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideO
   
   // pair (descendantCellIndex, descendantSideIndex)
   vector< pair< GlobalIndexType, unsigned> > descendantsForSide;
-  if ( ! meshTopoViewForCellValidity->isParent(_cellIndex) )
+  if ( ! meshTopoViewForCellValidity->isParent(_cellIndex) || (_childIndices.size() == 0) ) // cell may be in process of becoming a parent (and therefore be inactive in meshTopo, but not yet have child indices); if so, we want to return the cell itself, just as if it weren't a marked as a parent.
   {
     descendantsForSide.push_back( {_cellIndex, sideOrdinal} );
     return descendantsForSide;

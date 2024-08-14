@@ -125,6 +125,9 @@ namespace Camellia {
   static RefinementPatternPtr timeExtrudedRegularRefinementPattern(CellTopoPtr cellTopo);
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad(); // vertical cut
   static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad(); // horizontal cut
+  
+  static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternExtrudedLine();
+  static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternExtrudedLine();
     
   static RefinementPatternPtr xAnisotropicRefinementPatternQuadTimeExtruded();
   static RefinementPatternPtr yAnisotropicRefinementPatternQuadTimeExtruded();

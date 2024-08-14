@@ -98,8 +98,8 @@ class MeshTopology : public MeshTopologyView
   set<IndexType> descendants(unsigned d, IndexType entityIndex) const;
 
   //  pair< IndexType, set<IndexType> > determineEntityConstraints(unsigned d, IndexType entityIndex);
-  void addChildren(IndexType firstChildCellIndex, CellPtr cell, const vector< CellTopoPtr > &childTopos,
-                   const vector< vector<IndexType> > &childVertices);
+  void addChildren(IndexType firstChildCellIndex, CellPtr cell, RefinementPatternPtr refPattern, 
+                   const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices);
 
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
   
@@ -122,7 +122,8 @@ class MeshTopology : public MeshTopologyView
   void deepCopyCells();
 
 protected:
-  virtual IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
+  virtual IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1,
+                            RefinementPatternPtr parentRefPattern = Teuchos::null);
   CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());

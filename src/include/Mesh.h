@@ -76,10 +76,6 @@ class Mesh : public RefinementObserver, public DofInterpreter
 
   map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Camellia::FieldContainer<double> &vertexCoordinates);
 
-  ElementPtr addElement(const vector<IndexType> & vertexIndices, ElementTypePtr elemType);
-  void addChildren(ElementPtr parent, vector< vector<IndexType> > &children,
-                   vector< vector< pair< IndexType, IndexType> > > &childrenForSide);
-
   Camellia::FieldContainer<double> physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs );
 
   void setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly);

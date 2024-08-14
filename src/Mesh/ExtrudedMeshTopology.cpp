@@ -175,7 +175,7 @@ namespace
   
   ExtrudedMeshTopology::~ExtrudedMeshTopology() {}
 
-  IndexType ExtrudedMeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex)
+  IndexType ExtrudedMeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex, RefinementPatternPtr parentRefPattern)
   {
     // cellVertices are ordered so that the physical cell comes first; it gets repeated according to the extrusion
     // TODO: add checks that cellVertices is consistent with this claim.
@@ -210,7 +210,7 @@ namespace
       {
         IndexType physicalParentIndex = _phaseToComponentMap[parentCellIndex][0];
         
-        RefinementPatternPtr phaseRefPattern = getCell(parentCellIndex)->refinementPattern();
+        RefinementPatternPtr phaseRefPattern = parentRefPattern;
         auto physicalRefPattern = physicalRefinement(phaseRefPattern);
         auto nextCellID = _lowerDimensionalMeshTopology->nextCellID();
         _lowerDimensionalMeshTopology->refineCell(physicalParentIndex, physicalRefPattern, nextCellID);
@@ -261,7 +261,7 @@ namespace
     }
                 
     // call base class
-    return this->MeshTopology::addCell(cellIndex, cellTopo, cellVertices, parentCellIndex);
+    return this->MeshTopology::addCell(cellIndex, cellTopo, cellVertices, parentCellIndex, parentRefPattern);
   }
   
   //! At present, simply calls base class's implementation.  In the future, may do something more sophisticated involving tensor structures.

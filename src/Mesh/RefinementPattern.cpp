@@ -1908,6 +1908,90 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPattern
   return _refPatterns[key];
 }
 
+Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPatternExtrudedLine()
+{
+  CellTopoPtr extrudedLine = CellTopology::lineTensorTopology(CellTopology::line() );
+  
+  int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(1,0);
+  RefinementPatternKey key = {extrudedLine->getKey(),refinementOrdinal};
+  
+  if (_refPatterns.find(key) == _refPatterns.end())
+  {
+    Camellia::FieldContainer<double> refinedPoints(2,4,2);
+    // left child:
+    refinedPoints(0,0,0) = -1.0; // x0
+    refinedPoints(0,0,1) = -1.0; // v0
+    refinedPoints(0,1,0) =  0.0; // x1
+    refinedPoints(0,1,1) = -1.0; // v0
+    refinedPoints(0,2,0) = -1.0; // x0
+    refinedPoints(0,2,1) =  1.0; // v1
+    refinedPoints(0,3,0) =  0.0; // x1
+    refinedPoints(0,3,1) =  1.0; // v1
+    // right child:
+    refinedPoints(1,0,0) =  0.0; // x0
+    refinedPoints(1,0,1) = -1.0; // v0
+    refinedPoints(1,1,0) =  1.0; // x1
+    refinedPoints(1,1,1) = -1.0; // v0
+    refinedPoints(1,2,0) =  0.0; // x0
+    refinedPoints(1,2,1) =  1.0; // v1
+    refinedPoints(1,3,0) =  1.0; // x1
+    refinedPoints(1,3,1) =  1.0; // v1
+    
+    vector< RefinementPatternPtr > sideRefinements;
+    auto noRefinementPatternLine = RefinementPattern::noRefinementPatternLine();
+    auto regularRefinementPatternLine = RefinementPattern::regularRefinementPatternLine();
+    sideRefinements.push_back(regularRefinementPatternLine);
+    sideRefinements.push_back(regularRefinementPatternLine);
+    sideRefinements.push_back(     noRefinementPatternLine);
+    sideRefinements.push_back(     noRefinementPatternLine);
+    
+    _refPatterns[key] = Teuchos::rcp( new RefinementPattern(extrudedLine,refinedPoints,sideRefinements,refinementOrdinal) );
+  }
+  return _refPatterns[key];
+}
+
+Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPatternExtrudedLine()
+{
+  CellTopoPtr extrudedLine = CellTopology::lineTensorTopology(CellTopology::line() );
+  
+  int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(0,1);
+  RefinementPatternKey key = {extrudedLine->getKey(),refinementOrdinal};
+  
+  if (_refPatterns.find(key) == _refPatterns.end())
+  {
+    Camellia::FieldContainer<double> refinedPoints(2,4,2);
+    // bottom child:
+    refinedPoints(0,0,0) = -1.0; // x0
+    refinedPoints(0,0,1) = -1.0; // v0
+    refinedPoints(0,1,0) =  1.0; // x1
+    refinedPoints(0,1,1) = -1.0; // v0
+    refinedPoints(0,2,0) = -1.0; // x0
+    refinedPoints(0,2,1) =  0.0; // v1
+    refinedPoints(0,3,0) =  0.0; // x1
+    refinedPoints(0,3,1) =  0.0; // v1
+    // top child:
+    refinedPoints(1,0,0) = -1.0; // x0
+    refinedPoints(1,0,1) =  0.0; // v0
+    refinedPoints(1,1,0) =  1.0; // x1
+    refinedPoints(1,1,1) =  0.0; // v0
+    refinedPoints(1,2,0) = -1.0; // x0
+    refinedPoints(1,2,1) =  1.0; // v1
+    refinedPoints(1,3,0) =  1.0; // x1
+    refinedPoints(1,3,1) =  1.0; // v1
+    
+    vector< RefinementPatternPtr > sideRefinements;
+    auto noRefinementPatternLine = RefinementPattern::noRefinementPatternLine();
+    auto regularRefinementPatternLine = RefinementPattern::regularRefinementPatternLine();
+    sideRefinements.push_back(     noRefinementPatternLine);
+    sideRefinements.push_back(     noRefinementPatternLine);
+    sideRefinements.push_back(regularRefinementPatternLine);
+    sideRefinements.push_back(regularRefinementPatternLine);
+    
+    _refPatterns[key] = Teuchos::rcp( new RefinementPattern(extrudedLine,refinedPoints,sideRefinements,refinementOrdinal) );
+  }
+  return _refPatterns[key];
+}
+
 // cuts a quad x time vertically (x-refines the element), leaving y and t untouched
 RefinementPatternPtr RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded()
 {

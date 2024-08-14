@@ -456,7 +456,7 @@ namespace
     
     auto extrudedMeshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims);
     
-    const int rootCellCount = extrudedMeshTopo->getRootCellIndicesGlobal().size();
+    const int rootCellCount = int(extrudedMeshTopo->getRootCellIndicesGlobal().size());
     
     const IndexType cellIDZero = 0;
     
@@ -475,7 +475,7 @@ namespace
     extrudedMeshTopo->unrefineCell(firstChildCellID, refPattern);
     
     // root cell count should not have changed:
-    const int latestRootCellCount = extrudedMeshTopo->getRootCellIndicesGlobal().size();
+    const int latestRootCellCount = int(extrudedMeshTopo->getRootCellIndicesGlobal().size());
     TEST_EQUALITY(rootCellCount, latestRootCellCount);
   }
 
