@@ -37,6 +37,8 @@ public:
   static const string S_F_HAT;   // trace variable
   static const string S_T_N_HAT; // trace variable
   static const string S_W;       // test variable
+protected:
+  bool _useSumFactorizedAssembly = false; // TODO: change this to "true" after Trilinos PR 13391 has propagated to master
 private:
   int _spaceDim;
   int _velocityDim;
@@ -48,7 +50,6 @@ private:
   
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
-  bool _useSumFactorizedAssembly = false; // 8-7-24: turning this off because some tests fail during Cholesky factorization of the Vlasov Gram matrix; need to add some tests to verify correctness of sum-factorized assembly!!  (i.e. the matrix should be the same as without!)
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
@@ -203,7 +204,7 @@ public:
   virtual void initializeVlasovBilinearForm(BFPtr emptyVlasovBF);
   
   //! called from constructor, after Vlasov BF object is initialized.
-  virtual IPPtr constructVlasovInnerProduct();
+  virtual IPPtr constructVlasovInnerProduct(const bool useSumFactorizedAssembly);
   
   // field variables:
   VarPtr f(int i=0);  // Vlasov distribution (species i)

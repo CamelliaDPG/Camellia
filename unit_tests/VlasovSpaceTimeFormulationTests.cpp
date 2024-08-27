@@ -20,6 +20,8 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "CamelliaTestingHelpers.h"
+
 #include <Intrepid2_SerendipityBasis.hpp>
 
 using namespace Camellia;
@@ -67,7 +69,8 @@ namespace {
 
   Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const int xElements, const int tElements, const int vElements,
                                                                 const int H1Order, const bool usePeriodicBCs, double q,
-                                                                const bool useSerendipity, const bool useMimeticDPG)
+                                                                const bool useSerendipity, const bool useMimeticDPG,
+                                                                const int delta_k = 2)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -78,7 +81,6 @@ namespace {
     double v0     = TEST_V0;
     double vWidth = TEST_VWIDTH;
     
-    const int delta_k = 2;
     const int numUniformRefinements = 0;
     
     Teuchos::RCP<ConfigurationSpaceFormulationPoisson> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q, eps0, SPACE_TIME) );
@@ -766,6 +768,55 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     soln_magnitude = f_exact->l2norm(vlasovSoln->mesh());
     f_err_l2 = (f_soln_nextSlab-f_exact)->l2norm(vlasovSoln->mesh());
     TEST_COMPARE(f_err_l2, <=, relTol_f * soln_magnitude);
+  }
+
+  void testSumFactorizedGramAssembly(Teuchos::FancyOStream &out, bool &success)
+  {
+    const double q = 1.;
+    
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vElements = 1;
+    const int H1Order   = 3;
+    const int delta_k   = 2;
+    
+    const bool usePeriodicBCs = true;
+    const bool useSerendipity = false;
+    const bool useMimeticDPG  = false;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG, delta_k);
+    
+    auto sfIP = form->constructVlasovInnerProduct(true);
+    auto ip   = form->constructVlasovInnerProduct(false);
+    
+    auto myCells = form->vlasovMesh()->cellIDsInPartition();
+    
+    const double absTol = 1e-12;
+    const double relTol = 1e-14;
+    for (auto cellID : myCells)
+    {
+      const bool testVsTest = true;
+      auto basisCache   = BasisCache::basisCacheForCell(form->vlasovMesh(), cellID, testVsTest);
+      auto testOrdering = form->vlasovMesh()->getElementType(cellID)->testOrderPtr;
+      const int numCells    = 1;
+      const int numTestDofs = testOrdering->totalDofs();
+      FieldContainer<double> sfIPMatrix(numCells,numTestDofs,numTestDofs);
+      FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
+      
+      sfIP->computeInnerProductMatrix(sfIPMatrix, testOrdering, basisCache);
+      ip->computeInnerProductMatrix(    ipMatrix, testOrdering, basisCache);
+      
+      bool localSuccess = compareFloatingArraysCamellia(sfIPMatrix, "sum-factorized IP matrix", ipMatrix, "expected IP matrix", relTol, absTol, out);
+      
+      if (! localSuccess)
+      {
+        out << "IP comparison failed on cell " << cellID << std::endl;
+        success = false;
+        
+        out << "sum-factorized-assembly matrix: " << sfIPMatrix << std::endl;
+        out << "standard-assembly matrix: " << ipMatrix << std::endl;
+      }
+    }
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, NextTimeSlab )
@@ -1605,6 +1656,11 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
         TEST_COMPARE(vertex[VELOCITY_COMPONENT_INDEX_ZERO_BASED], ==, TEST_V0);
       }
     }
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, SumFactorizedGramAssembly )
+  {
+    testSumFactorizedGramAssembly(out, success);
   }
 
 // include tests against MimeticVlasovSpaceTimeFormulation in this compilation block:
