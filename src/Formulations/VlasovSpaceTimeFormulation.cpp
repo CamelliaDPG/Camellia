@@ -1243,9 +1243,9 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
-IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct()
+IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct(const bool useSumFactorizedAssembly)
 {
-  if (_useSumFactorizedAssembly)
+  if (useSumFactorizedAssembly)
   {
     auto ip = Teuchos::rcp( new VlasovSpaceTimeIP(*this) );
     return ip;
@@ -1612,7 +1612,7 @@ void VlasovSpaceTimeFormulation::initialize()
     
   vlasovMesh->registerSolution(_vlasovSoln);
     
-  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct();
+  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct(_useSumFactorizedAssembly);
   _vlasovSoln->setIP(vlasovTestNorm);
   
   SpatialFilterPtr inflowFilter = Teuchos::rcp(new SpatialFilterSpatialInflow(_spaceDim,indexOffsetVelocityZeroBased) );
