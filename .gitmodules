@@ -1,3 +1,6 @@
 [submodule "TPL/choice"]
 	path = TPL/choice
 	url = https://github.com/poulson/choice.git
+[submodule "tpl/boba"]
+	path = tpl/boba
+	url = ssh://git@czgitlab.llnl.gov:7999/boba/boba.git
