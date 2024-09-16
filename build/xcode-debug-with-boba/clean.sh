@@ -1,0 +1,1 @@
+rm -rf CMakeCache.txt CMakeFiles DartConfiguration.tcl Testing drivers CMakeScripts Camellia.build Debug manual-examples CTestTestfile.cmake Camellia.xcodeproj build cmake_install.cmake examples unit_tests

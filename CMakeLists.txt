@@ -89,6 +89,15 @@ else()
   MESSAGE("mlc_ROOT not defined; mlc support will not be available.")
 endif()
 
+if (DEFINED BOBA_ROOT)
+  find_package(BOBA CONFIG REQUIRED)
+
+  MESSAGE("Found BoBa; will link, and define HAVE_BOBA preprocessor variable")
+  add_compile_definitions(HAVE_BOBA)
+  
+  link_libraries(BOBA::BOBA)
+endif()
+
 MESSAGE(" Looking for Trilinos in ${TRILINOS_PATH}/lib/cmake/Trilinos
   ${TRILINOS_PATH} $ENV{TRILINOS_DIR}")
 
