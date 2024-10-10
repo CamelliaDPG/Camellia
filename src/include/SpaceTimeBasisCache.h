@@ -25,7 +25,7 @@ class SpaceTimeBasisCache : public BasisCache
   bool _storeTransformedValues;
 
   // side constructor:
-  SpaceTimeBasisCache(int sideIndex, Teuchos::RCP<SpaceTimeBasisCache> volumeCache, int trialDegree, int testDegree);
+  SpaceTimeBasisCache(int sideIndex, Teuchos::RCP<SpaceTimeBasisCache> volumeCache, int trialDegree, int testDegree, Intrepid2::EPolyType polyTypeForQuadrature = Intrepid2::POLYTYPE_MAX);
 
   Camellia::EOperator spaceOp(Camellia::EOperator op);
   Camellia::EOperator timeOp(Camellia::EOperator op);
@@ -55,18 +55,21 @@ public:
                       const Camellia::FieldContainer<double> &physicalNodesTemporal,
                       const Camellia::FieldContainer<double> &physicalNodesSpaceTime,
                       const std::vector<GlobalIndexType> &cellIDs,
-                      bool testVsTest, int cubatureDegreeEnrichment);
+                      bool testVsTest, int cubatureDegreeEnrichment,
+                      Intrepid2::EPolyType polyTypeForQuadrature = Intrepid2::POLYTYPE_MAX);
   SpaceTimeBasisCache(const Camellia::FieldContainer<double> &physicalNodesSpatial,
                       const Camellia::FieldContainer<double> &physicalNodesTemporal,
                       const Camellia::FieldContainer<double> &physicalCellNodes,
-                      CellTopoPtr cellTopo, int cubDegree);
+                      CellTopoPtr cellTopo, int cubDegree,
+                      Intrepid2::EPolyType polyTypeForQuadrature = Intrepid2::POLYTYPE_MAX);
   SpaceTimeBasisCache(CellTopoPtr cellTopo,
                       const Camellia::FieldContainer<double> &physicalNodesSpatial,
                       const Camellia::FieldContainer<double> &physicalNodesTemporal,
                       const Camellia::FieldContainer<double> &physicalCellNodes,
                       const Camellia::FieldContainer<double> &refCellPointsSpatial,
                       const Camellia::FieldContainer<double> &refCellPointsTemporal,
-                      const Camellia::FieldContainer<double> &refCellPoints);
+                      const Camellia::FieldContainer<double> &refCellPoints,
+                      Intrepid2::EPolyType polyTypeForQuadrature = Intrepid2::POLYTYPE_MAX);
 
 
   BasisCachePtr getSpatialBasisCache();

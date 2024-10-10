@@ -723,6 +723,18 @@ pair<CellTopologyKey,int> GlobalDofAssignment::getElementTypeLookupKey(GlobalInd
   return key;
 }
 
+map< pair<CellTopologyKey,int>, set<GlobalIndexType> > GlobalDofAssignment::getElementTypePartitionForCells(const  set<GlobalIndexType> &cellIDs)
+{
+  map< pair<CellTopologyKey,int>, set<GlobalIndexType> > elemTypePartitions;
+  
+  for (const auto & cellID : cellIDs)
+  {
+    auto elemTypeKey = getElementTypeLookupKey(cellID);
+    elemTypePartitions[elemTypeKey].insert(cellID);
+  }
+  return elemTypePartitions;
+}
+
 MeshPartitionPolicyPtr GlobalDofAssignment::getPartitionPolicy()
 {
   return _partitionPolicy;

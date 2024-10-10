@@ -7,6 +7,8 @@
 #include "BasisCache.h"
 #include "ConstantScalarFunction.h"
 
+#include "CamelliaDebugUtility.h"
+
 using namespace Camellia;
 
 template <typename Scalar>
@@ -317,6 +319,25 @@ void ProductFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceTyp
   
   _f1->checkinValuesData(f1Data);
   _f2->checkinValuesData(f2Data);
+  
+//  {
+//    // DEBUGGING
+//    const int numPoints = values.extent_int(1);
+//    if (numPoints == 64)
+//    {
+//      cout << "ProductFunction: ";
+//      cout << _f1->getClassName() << " x " << _f2->getClassName() << ":\n";
+//      
+//      if (values.rank() == 2)
+//      {
+//        Camellia::print2(cout, "ProductFunction values (Data path)", values);
+//      }
+//      else if (values.rank() == 3)
+//      {
+//        Camellia::print3(cout, "ProductFunction values (Data path)", values);
+//      }
+//    }
+//  }
 }
 
 template <typename Scalar>
@@ -353,6 +374,24 @@ void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView
     assignValues<Scalar>(values, modType, valuesScratch);
     basisCache->checkinScratchStorage<Scalar>(valuesScratch);
   }
+//  {
+//    // DEBUGGING
+//    const int numPoints = values.extent_int(1);
+//    if (numPoints == 64)
+//    {
+//      cout << "ProductFunction: ";
+//      cout << _f1->getClassName() << " x " << _f2->getClassName() << ":\n";
+//      
+//      if (values.rank() == 2)
+//      {
+//        Camellia::print2(cout, "ProductFunction values (View path)", values);
+//      }
+//      else if (values.rank() == 3)
+//      {
+//        Camellia::print3(cout, "ProductFunction values (View path)", values);
+//      }
+//    }
+//  }
 }
 
 namespace Camellia

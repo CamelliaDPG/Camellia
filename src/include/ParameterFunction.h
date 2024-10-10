@@ -24,14 +24,14 @@ class ParameterFunction : public TFunction<double>
   TFunctionPtr<double> _fxn;
   std::string _name = ""; // if name is specified, this will be used by displayString() instead of _fxn->displayString()...
 public:
-  ParameterFunction(double value);
-  ParameterFunction(TFunctionPtr<double> value);
+  ParameterFunction(double value, const std::string &name="");
+  ParameterFunction(TFunctionPtr<double> value, const std::string &name="");
 
-  TFunctionPtr<double> getValue() const;
+  virtual TFunctionPtr<double> getValue() const;
   
   // ! For scalar constant-valued "value" types only; returns the current value as a double
   // ! Throws an exception if _fxn.get() cannot be cast to ConstantScalarFunction
-  double getConstantValue() const;
+  virtual double getConstantValue() const;
 
   void setValue(TFunctionPtr<double> fxn);
   void setValue(double value);
@@ -65,8 +65,8 @@ public:
   
   void setName(const std::string &name);
 
-  static Teuchos::RCP<ParameterFunction> parameterFunction(double value);
-  static Teuchos::RCP<ParameterFunction> parameterFunction(TFunctionPtr<double> fxn);
+  static Teuchos::RCP<ParameterFunction> parameterFunction(double value, const std::string &name="");
+  static Teuchos::RCP<ParameterFunction> parameterFunction(TFunctionPtr<double> fxn, const std::string &name="");
 };
 }
 

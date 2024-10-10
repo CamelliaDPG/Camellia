@@ -95,6 +95,29 @@ namespace Camellia
     }
   }
 
+  template<class Rank4Functor>
+  void print4(std::ostream &out, const std::string &name, const Rank4Functor &functor)
+  {
+    const int dim0 = functor.extent_int(0);
+    const int dim1 = functor.extent_int(1);
+    const int dim2 = functor.extent_int(2);
+    const int dim3 = functor.extent_int(3);
+    out << name << ":\n";
+    for (int i0=0; i0<dim0; i0++)
+    {
+      for (int i1=0; i1<dim1; i1++)
+      {
+        for (int i2=0; i2<dim2; i2++)
+        {
+          for (int i3=0; i3<dim3; i3++)
+          {
+            out << "(" << i0 << "," << i1 << "," << i2 << "," << i3 << "): " << functor(i0,i1,i2,i3) << std::endl;
+          }
+        }
+      }
+    }
+  }
+
   // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
   // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
   // ! otherwise, interprets them as test space variables.

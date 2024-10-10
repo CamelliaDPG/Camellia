@@ -912,6 +912,7 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        std::vector<double> velocitySpaceVertices_z,
                                                        const int H1Order, const int delta_k,
                                                        const int numUniformRefinements,
+                                                       const int maxMomentNumberForDriver,
                                                        const bool deferInitialization)
 :
 VlasovSpaceTimeFormulation(vector<double>{q}, vector<double>{m}, vector<string>{""},
@@ -924,6 +925,7 @@ VlasovSpaceTimeFormulation(vector<double>{q}, vector<double>{m}, vector<string>{
                            velocitySpaceVertices_z,
                            H1Order, delta_k,
                            numUniformRefinements,
+                           maxMomentNumberForDriver,
                            deferInitialization)
 {}
 
@@ -937,12 +939,14 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(std::vector<double> q, st
                                                        std::vector<double> velocitySpaceVertices_z,
                                                        const int H1Order, const int delta_k,
                                                        const int numUniformRefinements,
+                                                       const int maxMomentNumberForDriver,
                                                        const bool deferInitialization)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _useSerendipityBasis(useSerendipityBasis),
 _H1Order(H1Order),
 _delta_k(delta_k),
+_maxMomentNumberForDriver(maxMomentNumberForDriver),
 _configurationSpaceFormulation(configurationSpaceFormulation),
 _numSpecies(q.size()),
 _q(q),
@@ -1194,6 +1198,33 @@ MeshPtr VlasovSpaceTimeFormulation::configurationSpaceMesh()
 SolutionPtr VlasovSpaceTimeFormulation::configurationSpaceSolution()
 {
   return _configurationSpaceFormulation->solution();
+}
+
+void VlasovSpaceTimeFormulation::configurationSpaceSolve()
+{
+  for (int i=0; i<_numSpecies; i++)
+  {
+    _solutionMoments[i]->update();
+  }
+  {
+    double n0;
+    if (_enforceQuasiNeutrality)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "quasi-neutrality enforcement assumes single species");
+      FunctionPtr zeroMoment   = _solutionMoments[0]->solutionMomentFunction(0);
+      auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+      const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+      const double f_integral  = zeroMoment->integrate(configurationMesh);
+      n0 = f_integral / meshMeasure;
+    }
+    else
+    {
+      n0 = 0;
+    }
+    _n0->setValue(n0);
+  }
+  _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
+  _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
 }
 
 const double &VlasovSpaceTimeFormulation::conservationLawResidualNorm(int slabOrdinal, int speciesOrdinal)
@@ -1536,7 +1567,7 @@ void VlasovSpaceTimeFormulation::initialize()
   _vlasovSoln     = Solution::solution(_vlasovBF,vlasovMesh);
   _vlasovSolnPrev = Solution::solution(_vlasovBF,vlasovMesh); // will copy out after fixed-point solve
   
-  const int maxMomentNumber = _configurationSpaceFormulation->maxMomentNumber();
+  const int maxMomentNumber = std::max(_configurationSpaceFormulation->maxMomentNumber(), _maxMomentNumberForDriver);
   _solutionMoments.resize(_numSpecies);
   for (int i=0; i<_numSpecies; i++)
   {
@@ -2142,13 +2173,83 @@ void VlasovSpaceTimeFormulation::setInitialConditions(vector<FunctionPtr> f0)
   _n0->setValue(n0);
 }
 
-void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
+void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in, double timeRampWidthForInitialConditions)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "For multi-species formulations, must call the multi-species setInitialConditions");
-  this->setInitialAndInflowConditions(vector<FunctionPtr>{f0}, vector<FunctionPtr>{f_in});
+  this->setInitialAndInflowConditions(vector<FunctionPtr>{f0}, vector<FunctionPtr>{f_in}, timeRampWidthForInitialConditions);
 }
 
-void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(vector<FunctionPtr> f0, vector<FunctionPtr> f_in)
+class TemporalRamp : public TFunction<double>
+{
+  double _rampWidth; // amount of time before the value is 1.0
+  int _timeDim; // 0-based
+public:
+  TemporalRamp(double rampWidth, int timeDimension)
+  :
+  _rampWidth(rampWidth),
+  _timeDim(timeDimension)
+  {}
+  
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+  {
+    auto & spaceTimePoints = basisCache->getPhysicalCubaturePointsFC();
+    const int numCells  = spaceTimePoints.dimension(0);
+    const int numPoints = spaceTimePoints.dimension(1);
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        const double t = spaceTimePoints(cellOrdinal,pointOrdinal,_timeDim);
+        double value;
+        if (t < _rampWidth)
+        {
+          value = t / _rampWidth;
+        }
+        else
+        {
+          value = 1.0;
+        }
+        values(cellOrdinal,pointOrdinal) = value;
+      }
+    }
+  }
+  
+  TFunctionPtr<double> dx() override
+  {
+    return Function::zero();
+  }
+  
+  TFunctionPtr<double> dy() override
+  {
+    return di(1);
+  }
+  
+  TFunctionPtr<double> dz() override
+  {
+    return di(2);
+  }
+  
+  TFunctionPtr<double> dt() override
+  {
+    return di(_timeDim + 1);
+  }
+  
+  TFunctionPtr<double> di(int i) override
+  {
+    if (i == _timeDim + 1) // i is 1-based; _timeDim is 0-based
+    {
+      auto heavisideT = Function::heaviside(_rampWidth,2); // 1 for z < _rampWidth, 0 otherwise
+      return (1.0 / _rampWidth) * heavisideT;
+    }
+    else
+    {
+      return Function::zero();
+    }
+  }
+};
+
+void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(vector<FunctionPtr> f0, vector<FunctionPtr> f_in, double timeRampWidthForInitialConditions)
 {
   _f0 = f0;
   _f_inflow = f_in;
@@ -2181,8 +2282,16 @@ void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(vector<FunctionPt
   
   const int tagSpatialInflow = this->tagVlasovSpatialInflow();
   
+  const int tCompZeroBased = _spaceDim;
+  FunctionPtr timeRamp = Teuchos::rcp(new TemporalRamp(timeRampWidthForInitialConditions, tCompZeroBased));
   for (int i=0; i<_numSpecies; i++)
   {
+    if (timeRampWidthForInitialConditions != 0.0)
+    {
+      
+      f_in[i] = f_in[i] * timeRamp;
+    }
+    
     VarPtr t_n = this->t_n_hat(i);
     vlasovBC->addDirichlet(t_n, tagSpatialInflow, v_dot_nx * f_in[i]);
   }

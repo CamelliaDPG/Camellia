@@ -17,17 +17,18 @@
 #include "CubatureFactory.h"
 
 #include "Intrepid2_CubatureDirectLineGauss.hpp"
+#include "Intrepid2_CubaturePolylib.hpp"
 
 using namespace Teuchos;
 
 using namespace Camellia;
 
-Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, int cubDegree)
+Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, int cubDegree, Intrepid2::EPolyType polyType)
 {
   Teuchos::RCP< Cubature > shardsTopoCub;
   if (cellTopo->getShardsTopology().getDimension() != 0)
   {
-    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), cubDegree);
+    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), cubDegree, polyType);
   }
   else
   {
@@ -87,7 +88,7 @@ Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::c
   }
 }
 
-Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, std::vector<int> cubDegree)
+Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, std::vector<int> cubDegree, Intrepid2::EPolyType polyType)
 {
   Teuchos::RCP< Cubature > shardsTopoCub;
   int degreeOffset = 0;
@@ -96,13 +97,13 @@ Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::c
     vector<int> shardsDegrees;
     shardsDegrees.insert(shardsDegrees.begin(), cubDegree.begin(),cubDegree.begin() + cellTopo->getShardsTopology().getDimension());
     degreeOffset = cellTopo->getShardsTopology().getDimension();
-    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), shardsDegrees);
+    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), shardsDegrees, polyType);
   }
   else if (cubDegree.size() == cellTopo->getTensorialDegree() + 1)
   {
     int shardsDegree = cubDegree[0];
     degreeOffset = 1;
-    Teuchos::RCP< Cubature > shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), shardsDegree);
+    Teuchos::RCP< Cubature > shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), shardsDegree, polyType);
   }
   else
   {
@@ -117,8 +118,19 @@ Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::c
   {
     shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
     
-    using CubatureDirectLine = Intrepid2::CubatureDirectLineGauss<DeviceType,double,double>;
-    CubatureDirectLine lineCub0(cubDegree[degreeOffset]);
+    using CubatureDirect = Intrepid2::CubatureDirect<DeviceType,double,double>;
+    Teuchos::RCP<CubatureDirect> lineCub0;
+    if (polyType == Intrepid2::POLYTYPE_MAX)
+    {
+      using CubatureDirectLine = Intrepid2::CubatureDirectLineGauss<DeviceType,double,double>;
+      lineCub0 = Teuchos::rcp(new CubatureDirectLine(cubDegree[degreeOffset]));
+    }
+    else
+    {
+      using CubaturePolylib = Intrepid2::CubaturePolylib<DeviceType,double,double>;
+      lineCub0 = Teuchos::rcp(new CubaturePolylib(cubDegree[degreeOffset], polyType));
+    }
+    
     
     using CubatureTensor = Intrepid2::CubatureTensor<DeviceType,double,double>;
     
@@ -130,7 +142,7 @@ Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::c
     CubatureTensor* shardsTopoCubAsTensor = dynamic_cast<CubatureTensor*>(shardsTopoCub.get());
     if (shardsTopoCubAsTensor)
     {
-      cubatureTensor = Teuchos::rcp(new CubatureTensor(*shardsTopoCubAsTensor, lineCub0));
+      cubatureTensor = Teuchos::rcp(new CubatureTensor(*shardsTopoCubAsTensor, *lineCub0));
     }
     else
     {
@@ -142,13 +154,23 @@ Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::c
       
       CubatureDirect cubatureDirect = *cubatureDirectPtr;
       
-      cubatureTensor = Teuchos::rcp(new CubatureTensor(*cubatureDirectPtr, lineCub0));
+      cubatureTensor = Teuchos::rcp(new CubatureTensor(*cubatureDirectPtr, *lineCub0));
     }
     
     for (int tensorialComponent=1; tensorialComponent<cellTopo->getTensorialDegree(); tensorialComponent++)
     {
-      CubatureDirectLine lineCub(cubDegree[tensorialComponent + degreeOffset]);
-      cubatureTensor = Teuchos::rcp( new CubatureTensor(*cubatureTensor, lineCub) );
+      Teuchos::RCP<CubatureDirect> lineCub;
+      if (polyType == Intrepid2::POLYTYPE_MAX)
+      {
+        using CubatureDirectLine = Intrepid2::CubatureDirectLineGauss<DeviceType,double,double>;
+        lineCub = Teuchos::rcp(new CubatureDirectLine(cubDegree[tensorialComponent + degreeOffset]));
+      }
+      else
+      {
+        using CubaturePolylib = Intrepid2::CubaturePolylib<DeviceType,double,double>;
+        lineCub = Teuchos::rcp(new CubaturePolylib(cubDegree[tensorialComponent + degreeOffset], polyType));
+      }
+      cubatureTensor = Teuchos::rcp( new CubatureTensor(*cubatureTensor, *lineCub) );
     }
     return cubatureTensor;
   }

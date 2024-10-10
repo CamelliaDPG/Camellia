@@ -146,55 +146,84 @@ public:
   }
 };
 
-class HeavisideFunction : public SimpleFunction<double>
+class HeavisideFunction : public TFunction<double>
 {
-  double _xShift;
+  double _shift;
+  int _compDim; // 0 based
 public:
-  HeavisideFunction(double xShift=0.0)
-  :
-  SimpleFunction<double>("HeavisideFunction",VARIES_IN_DIMENSION_0)
-  {
-    _xShift = xShift;
-  }
+  HeavisideFunction(double shift=0.0, int compDim = 0) :
+  TFunction<double>("HeavisideFunction",0),
+  _shift(shift),
+  _compDim(compDim)
+  {}
+
   
-  using SimpleFunction<double>::value;
-  double value(double x)
+  using TFunction<double>::values;
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
-    return (x < _xShift) ? 0.0 : 1.0;
-  }
-  
-  std::string displayString()
-  {
-    ostringstream name;
-    name << "H_x(" << _xShift << ")";
-    return name.str();
+    auto & physCubPoints = basisCache->getPhysicalCubaturePointsFC();
+    const int numCells = physCubPoints.dimension(0);
+    const int numPoints = physCubPoints.dimension(1);
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        const double value = (physCubPoints(cellOrdinal,pointOrdinal,_compDim) < _shift) ? 0.0 : 1.0;
+        values(cellOrdinal,pointOrdinal) = value;
+      }
+    }
   }
 };
 
-class HeavisideFunctionY : public SimpleFunction<double>
-{
-  double _yShift;
-public:
-  HeavisideFunctionY(double yShift=0.0)
-  :
-  SimpleFunction<double>("HeavisideFunctionY",VARIES_IN_DIMENSION_0)
-  {
-    _yShift = yShift;
-  }
-  
-  using SimpleFunction<double>::value;
-  double value(double x, double y)
-  {
-    return (y < _yShift) ? 0.0 : 1.0;
-  }
-  
-  std::string displayString()
-  {
-    ostringstream name;
-    name << "H_y(" << _yShift << ")";
-    return name.str();
-  }
-};
+//class HeavisideFunction : public SimpleFunction<double>
+//{
+//  double _xShift;
+//public:
+//  HeavisideFunction(double xShift=0.0)
+//  :
+//  SimpleFunction<double>("HeavisideFunction",VARIES_IN_DIMENSION_0)
+//  {
+//    _xShift = xShift;
+//  }
+//
+//  using SimpleFunction<double>::value;
+//  double value(double x)
+//  {
+//    return (x < _xShift) ? 0.0 : 1.0;
+//  }
+//
+//  std::string displayString()
+//  {
+//    ostringstream name;
+//    name << "H_x(" << _xShift << ")";
+//    return name.str();
+//  }
+//};
+
+//class HeavisideFunctionY : public SimpleFunction<double>
+//{
+//  double _yShift;
+//public:
+//  HeavisideFunctionY(double yShift=0.0)
+//  :
+//  SimpleFunction<double>("HeavisideFunctionY",VARIES_IN_DIMENSION_0)
+//  {
+//    _yShift = yShift;
+//  }
+//
+//  using SimpleFunction<double>::value;
+//  double value(double x, double y)
+//  {
+//    return (y < _yShift) ? 0.0 : 1.0;
+//  }
+//
+//  std::string displayString()
+//  {
+//    ostringstream name;
+//    name << "H_y(" << _yShift << ")";
+//    return name.str();
+//  }
+//};
 
 class MeshBoundaryCharacteristicFunction : public TFunction<double>
 {
@@ -453,16 +482,104 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
   
   callsToFunctionsWithoutDevicePathImplementations[this->getClassName()]++;
   
-  Teuchos::Array<int> dim(values.rank());
-  for (int i=0; i<values.rank(); i++)
+  // call Data path
+  auto data = checkoutValuesData(basisCache);
+  this->values(data, basisCache);
+  
+  if (data.rank() == values.rank())
   {
-    dim[i] = values.extent_int(i);
+    assignValues<Scalar>(values, modType, data);
   }
-  Camellia::FieldContainer<Scalar> fc(dim);
-  this->values(fc, basisCache);              // either happens on host or ends with deep_copy to host (one inefficiency)
-  auto fcView = fc.checkoutDeviceView(true); // true: deep_copy from host (the other main inefficiency)
-  assignValues<Scalar>(values, modType, fcView);
-  fc.checkinDeviceView(false);
+  else
+  {
+    // data may have extra point dimensions, if the points container permits tensor decomposition
+    // values has a flat view of the points.  The below code translates between them.  It's a bit
+    // verbose, but will do the job (for functions of up to rank 1, so far).
+    
+    // TODO: provide some Data reshaping facility, maybe within Intrepid2.  Or do something else to separate this logic out to make it more generally accessible.
+    int functionRank = this->rank(); // 0 for scalar, 1 for vector, etc.
+    Teuchos::Array<int> dim(functionRank + 2);
+    dim[0] = data.extent_int(0);  // (C,P1[,...,Pn][,D1,D2,...])
+    int numPoints = 1;
+    int numUniquePoints = 1;
+    int numPointComponents = data.rank() - functionRank - 1;
+    Kokkos::Array<int,5> pointCounts;
+    for (int i=1; i<numPointComponents+1; i++)
+    {
+      numPoints *= data.extent_int(i);
+      pointCounts[i-1] = data.extent_int(i);
+    }
+    for (int i=numPointComponents+1; i<5; i++)
+    {
+      // pad pointCounts with 1's for simplicity of index-mapping code
+      pointCounts[i-1] = 1;
+    }
+    dim[1] = numPoints;
+    for (int i=numPointComponents+1; i<data.rank(); i++)
+    {
+      dim[i-numPointComponents+1] = data.extent_int(i);
+    }
+    const int spaceDim  = basisCache->getPhysicalCubaturePoints().extent_int(2); // (C,P,D)
+    auto dataView = data.getUnderlyingView();
+    
+    Kokkos::parallel_for("copy data to expanded view", Kokkos::MDRangePolicy<DeviceType::execution_space,Kokkos::Rank<2>>({0,0},{dim[0],numPoints}),
+    KOKKOS_LAMBDA(const int &cellOrdinal, const int &expandedPointOrdinal)
+    {
+      const int MAX_ARGS = Intrepid2::Parameters::MaxTensorComponents;
+      Kokkos::Array<int,MAX_ARGS> dataArgs;
+      for (int d=0; d<MAX_ARGS; d++)
+      {
+        dataArgs[d] = 0;
+      }
+      dataArgs[0] = cellOrdinal;
+      dataArgs[1] = expandedPointOrdinal % pointCounts[0];
+      int pointProduct = 1;
+      for (int d=1; d<numPointComponents; d++)
+      {
+        pointProduct *= pointCounts[d-1];
+        dataArgs[d+1] = (expandedPointOrdinal / pointProduct) % pointCounts[d];
+      }
+      
+      const int numDataArgs = numPointComponents + 1 + functionRank;
+      
+      const int d1_max = (functionRank == 0) ? 1 : spaceDim;
+      const int d2_max = (functionRank <= 1) ? 1 : spaceDim;
+      
+      using ref_type = typename Intrepid2::Data<Scalar,Camellia::DeviceType>::reference_type;
+      
+      for (int d1=0; d1<d1_max; d1++)
+      {
+        // we allow d1, d2 to be beyond the maximum allowed number of arguments if they are zero (allows us to support more dimensions for scalar-valued case while still using the same assignment logic below)
+        if (numPointComponents+1 < MAX_ARGS) dataArgs[numPointComponents+1] = d1;
+        else INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(d1 != 0, std::invalid_argument, "Unsupported dataArgs (too many components)");
+        for (int d2=0; d2<d2_max; d2++)
+        {
+          if (numPointComponents+2 < MAX_ARGS) dataArgs[numPointComponents+2] = d2;
+          else INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(d2 != 0, std::invalid_argument, "Unsupported dataArgs (too many components)");
+          const Scalar* data_entry;
+          switch (numDataArgs)
+          {
+            case 1: data_entry = &data.getEntry(dataArgs[0]); break;
+            case 2: data_entry = &data.getEntry(dataArgs[0],dataArgs[1]); break;
+            case 3: data_entry = &data.getEntry(dataArgs[0],dataArgs[1],dataArgs[2]); break;
+            case 4: data_entry = &data.getEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3]); break;
+            case 5: data_entry = &data.getEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4]); break;
+            case 6: data_entry = &data.getEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5]); break;
+            case 7: data_entry = &data.getEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5],dataArgs[6]); break;
+            default: INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "unsupported numDataArgs");
+          }
+          
+          auto & view_value = (functionRank==0) ? values(cellOrdinal,expandedPointOrdinal) :
+                              (functionRank==1) ? values(cellOrdinal,expandedPointOrdinal, d1) :
+                                                  values(cellOrdinal,expandedPointOrdinal, d1, d2);
+          
+          view_value = *data_entry;
+        }
+      }
+    });
+  }
+  
+  checkinValuesData(data);
 }
 
 template <typename Scalar>
@@ -1078,13 +1195,19 @@ TFunctionPtr<Scalar> TFunction<Scalar>::grad(int numComponents)
 template <typename Scalar>
 TFunctionPtr<double> TFunction<Scalar>::heaviside(double xShift)
 {
-  return Teuchos::rcp( new HeavisideFunction(xShift) );
+  return Teuchos::rcp( new HeavisideFunction(xShift, 0) );
+}
+
+template <typename Scalar>
+TFunctionPtr<double> TFunction<Scalar>::heaviside(double shift, int compDim)
+{
+  return Teuchos::rcp( new HeavisideFunction(shift, compDim) );
 }
 
 template <typename Scalar>
 TFunctionPtr<double> TFunction<Scalar>::heavisideY(double yShift)
 {
-  return Teuchos::rcp( new HeavisideFunctionY(yShift) );
+  return Teuchos::rcp( new HeavisideFunction(yShift, 1) );
 }
 
   template <typename Scalar>
@@ -2541,38 +2664,55 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
     set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
     for (GlobalIndexType cellID : cellIDs)
     {
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
-      int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
-      int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
-      Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
-      this->values(fxnValues,basisCache);
-      
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+      BasisCachePtr volumeCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
+      std::vector<BasisCachePtr> basisCaches;
+      if (this->boundaryValueOnly())
       {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-        {
-          localMax = std::max(localMax,fxnValues(cellIndex,ptIndex));
-        }
-      }
-      if (!basisCache->isSideCache())
-      {
-        int numSides = basisCache->cellTopology()->getSideCount();
+        int numSides = volumeCache->cellTopology()->getSideCount();
         for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
         {
-          auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
-          int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
-          int numSidePoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
-          Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
-          this->values(fxnValues,sideCache);
-          for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+          basisCaches.push_back(volumeCache->getSideBasisCache(sideOrdinal));
+        }
+      }
+      else
+      {
+        basisCaches.push_back(volumeCache);
+      }
+      
+      for (auto basisCache : basisCaches)
+      {
+        int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+        int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
+        Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
+        this->values(fxnValues,basisCache);
+        
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+        {
+          for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
           {
-            for (int ptIndex=0; ptIndex<numSidePoints; ptIndex++)
-            {
-              localMax = std::max(localMax,fxnValues(cellIndex,ptIndex));
-            }
+            localMax = std::max(localMax,fxnValues(cellIndex,ptIndex));
           }
         }
       }
+//      if (!basisCache->isSideCache())
+//      {
+//        int numSides = basisCache->cellTopology()->getSideCount();
+//        for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+//        {
+//          auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
+//          int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+//          int numSidePoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
+//          Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
+//          this->values(fxnValues,sideCache);
+//          for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+//          {
+//            for (int ptIndex=0; ptIndex<numSidePoints; ptIndex++)
+//            {
+//              localMax = std::max(localMax,fxnValues(cellIndex,ptIndex));
+//            }
+//          }
+//        }
+//      }
     }
     double globalMax = 0.0;
     mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
@@ -2588,39 +2728,56 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
     set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
     for (GlobalIndexType cellID : cellIDs)
     {
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
-      int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
-      int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
-      Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
-      this->values(fxnValues,basisCache);
-      
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+      BasisCachePtr volumeCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
+      std::vector<BasisCachePtr> basisCaches;
+      if (this->boundaryValueOnly())
       {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-        {
-          localMin = std::min(localMin,fxnValues(cellIndex,ptIndex));
-        }
-      }
-
-      if (!basisCache->isSideCache())
-      {
-        int numSides = basisCache->cellTopology()->getSideCount();
+        int numSides = volumeCache->cellTopology()->getSideCount();
         for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
         {
-          auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
-          int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
-          int numSidePoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
-          Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
-          this->values(fxnValues,sideCache);
-          for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+          basisCaches.push_back(volumeCache->getSideBasisCache(sideOrdinal));
+        }
+      }
+      else
+      {
+        basisCaches.push_back(volumeCache);
+      }
+      
+      for (auto basisCache : basisCaches)
+      {
+        int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+        int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
+        Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
+        this->values(fxnValues,basisCache);
+        
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+        {
+          for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
           {
-            for (int ptIndex=0; ptIndex<numSidePoints; ptIndex++)
-            {
-              localMin = std::min(localMin,fxnValues(cellIndex,ptIndex));
-            }
+            localMin = std::min(localMin,fxnValues(cellIndex,ptIndex));
           }
         }
       }
+
+//      if (!basisCache->isSideCache())
+//      {
+//        int numSides = basisCache->cellTopology()->getSideCount();
+//        for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+//        {
+//          auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
+//          int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+//          int numSidePoints = sideCache->getPhysicalCubaturePointsFC().dimension(1);
+//          Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
+//          this->values(fxnValues,sideCache);
+//          for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+//          {
+//            for (int ptIndex=0; ptIndex<numSidePoints; ptIndex++)
+//            {
+//              localMin = std::min(localMin,fxnValues(cellIndex,ptIndex));
+//            }
+//          }
+//        }
+//      }
     }
     double globalMin = 0.0;
     mesh->Comm()->MinAll(&localMin, &globalMin, 1);
@@ -3129,7 +3286,7 @@ TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar
 template <typename Scalar>
 std::vector<Intrepid2::DimensionInfo> TFunction<Scalar>::valuesDataDims(BasisCachePtr basisCache)
 {
-  // default implementation uses _variationDimensions -- this is the bitwise or of enumeration values indicating which in coordinate
+  // default implementation uses _variationDimensions -- this is the bitwise or of enumeration values indicating in which coordinate
   // dimensions the function can vary.  Even if it does not vary in any coordinate dimensions, though, it can still vary in cell
   // and vector-value dimensions.  I.e., a vector-valued function has nominal output shape (C,P,D).  _variationDimensions tells you
   // something about the structure of P in cases where the point set has structure; it does not tell you anything about C or D.
@@ -3162,6 +3319,7 @@ std::vector<Intrepid2::DimensionInfo> TFunction<Scalar>::valuesDataDims(BasisCac
     spaceDimSoFar += componentNumDims;
     
     const int componentPointCount = pointsComponent.extent_int(1);
+    TEUCHOS_TEST_FOR_EXCEPTION(componentPointCount < 0, std::invalid_argument, "componentPointCount is out of bounds!");
     DimensionInfo compPointDimInfo = variesInComponent ? generalVariationDimensionInfo(componentPointCount) : constantDimensionInfo(componentPointCount);
     
     dimensionInfo.push_back(compPointDimInfo);
@@ -3255,121 +3413,347 @@ void TFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> dat
   
   TEUCHOS_FUNC_TIME_MONITOR("TFunction<Scalar> values(Data,BasisCachePtr)");
   
-  /*
-   This implementation calls TFunction<Scalar>::values(DeviceView,ASSIGN,BasisCachePtr).
-   
-   To manage this, we allocate a DeviceView, and then copy from DeviceView to Data.
-   
-   This is not the most efficient approach possible; it would be better to get the underlying View from Data, and write to
-   it directly.  But as written, the values() implementations we call does not support the multi-component point enumeration that
-   we require for Data, when PhysicalTensorPoints has tensor structure.
-   
-   We may revisit this in the future.
-   */
+  int functionRank = this->rank(); // 0 for scalar, 1 for vector, etc.
+  TEUCHOS_TEST_FOR_EXCEPTION(functionRank > 2, std::invalid_argument, "values(Data,BasisCachePtr) is only supported for scalar, vector, and matrix functions");
   
-  // for now, anyway, we only support this for scalar Function values.  Enforcing this probably leads to better performance anyway, as it
-  // forces component-wise evaluations, which should generally have a smaller memory footprint, and increases the chances of reuse through
-  // SharedScratchStorage.
-  TEUCHOS_TEST_FOR_EXCEPTION(this->rank() != 0, std::invalid_argument, "values(Data,BasisCachePtr) is only supported for scalar Solution values");
- 
-  const int numCells  = basisCache->getPhysicalCubaturePoints().extent_int(0);
-  const int numPoints = basisCache->getPhysicalCubaturePoints().extent_int(1); // (C,P,D)
-  
-  // set up to create a DeviceView to use as argument to the other values() implementation, below
-  std::vector<int> viewDims {numCells,numPoints};
-  
-  const int numPointComponents = data.rank() - 1 - this->rank(); // vector (rank 1) Function has data shape (C,P0[,P1,…],D); this counts how many Pn's there are
-  std::vector<int> pointComponentBounds(numPointComponents);
-  for (int d=1; d<=numPointComponents; d++)
+  if (!_callingDevicePathValues)
   {
-    pointComponentBounds[d-1] = data.extent_int(d);
-  }
-  for (int d=numPointComponents+1; d<data.rank(); d++)
-  {
-    viewDims.push_back(data.extent_int(d));
-  }
-  
-  auto valuesView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorage(viewDims,"Function::values(Data,…) scratch view");
-  
-  // compute values:
-  this->values(valuesView,ASSIGN,basisCache);
-  
-  // create a TensorArgumentIterator to interface between point enumeration in valuesView and the potentially multi-component point arguments
-  // in Intrepid2::Data.
-  Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> pointBoundsArray;
-  for (int d=0; d<numPointComponents; d++)
-  {
-    pointBoundsArray[d] = pointComponentBounds[d];
-  }
-  for (int d=numPointComponents; d<Intrepid2::Parameters::MaxTensorComponents; d++)
-  {
-    pointBoundsArray[d] = 1;
-  }
-  
-  auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(valuesView); // (C,P)
-  
-  auto dataView = data.getUnderlyingView(); // underlying view as DynRankView.  The fixed-rank View may have faster access speeds, but this allows
-                                            // us a common implementation independent of the rank.  See values.getUnderlyingView<rank>() for the alternative.
+    /*
+     This implementation calls TFunction<Scalar>::values(DeviceView,ASSIGN,BasisCachePtr).
+     
+     To manage this, we allocate a DeviceView, and then copy from DeviceView to Data.
+     
+     This is not the most efficient approach possible; it would be better to get the underlying View from Data, and write to
+     it directly.  But as written, the values() implementations we call does not support the multi-component point enumeration that
+     we require for Data, when PhysicalTensorPoints has tensor structure.
+     
+     We may revisit this in the future.
+     */
+        
+    const int numCells  = basisCache->getPhysicalCubaturePoints().extent_int(0);
+    const int numPoints = basisCache->getPhysicalCubaturePoints().extent_int(1); // (C,P,D)
+    const int spaceDim  = basisCache->getPhysicalCubaturePoints().extent_int(2); // (C,P,D)
     
-  Kokkos::parallel_for("TFunction<Scalar>::values(), copy from DeviceView to Data's view", rangePolicy,
-  KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointOrdinal)
-  {
-    // it's unfortunate to have the overhead of TensorArgumentIterator construction call (etc.) within the lambda.
-    // TODO: look for a better way.
-    Intrepid2::TensorArgumentIterator pi(pointBoundsArray); // point iterator; values has shape (C,P1[,P2,…][,D,…]) where P = P1 * P2 * …
+    // set up to create a DeviceView to use as argument to the other values() implementation, below
+    std::vector<int> viewDims {numCells,numPoints};
     
-    pi.setEnumerationIndex(pointOrdinal);
-    
-    Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> dataArgs;
-    for (int d=0; d<Intrepid2::Parameters::MaxTensorComponents; d++)
+    const int numPointComponents = data.rank() - 1 - functionRank; // vector (rank 1) Function has data shape (C,P0[,P1,…],D); this counts how many Pn's there are
+    std::vector<int> pointComponentBounds(numPointComponents);
+    for (int d=1; d<=numPointComponents; d++)
     {
-      dataArgs[d] = 0;
+      pointComponentBounds[d-1] = data.extent_int(d);
     }
-    dataArgs[0] = cellOrdinal;
-    for (int d=1; d<numPointComponents+1; d++)
+    for (int d=numPointComponents+1; d<data.rank(); d++)
     {
-      dataArgs[d] = pi.argument(d-1);
+      viewDims.push_back(data.extent_int(d));
     }
     
-    if (numPointComponents == 1)
+    auto valuesView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorage(viewDims,"Function::values(Data,…) scratch view");
+    
+    // compute values:
+    _callingDevicePathValues = true;
+    this->values(valuesView,ASSIGN,basisCache);
+    _callingDevicePathValues = false;
+    
+    // create a TensorArgumentIterator to interface between point enumeration in valuesView and the potentially multi-component point arguments
+    // in Intrepid2::Data.
+    Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> pointBoundsArray;
+    for (int d=0; d<numPointComponents; d++)
     {
-      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1]);
+      pointBoundsArray[d] = pointComponentBounds[d];
+    }
+    for (int d=numPointComponents; d<Intrepid2::Parameters::MaxTensorComponents; d++)
+    {
+      pointBoundsArray[d] = 1;
+    }
+    
+    auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(valuesView); // (C,P)
+    
+    auto dataView = data.getUnderlyingView(); // underlying view as DynRankView.  The fixed-rank View may have faster access speeds, but this allows
+    // us a common implementation independent of the rank.  See values.getUnderlyingView<rank>() for the alternative.
+        
+    Kokkos::parallel_for("TFunction<Scalar>::values(), copy from DeviceView to Data's view", rangePolicy,
+                         KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointOrdinal)
+                         {
+      // it's unfortunate to have the overhead of TensorArgumentIterator construction call (etc.) within the lambda.
+      // TODO: look for a better way.
+      Intrepid2::TensorArgumentIterator pi(pointBoundsArray); // point iterator; values has shape (C,P1[,P2,…][,D,…]) where P = P1 * P2 * …
       
-      dataValue = valuesView(cellOrdinal,pointOrdinal);
-    }
-    else if (numPointComponents == 2)
+      pi.setEnumerationIndex(pointOrdinal);
+      
+      static const int MAX_ARGS = Intrepid2::Parameters::MaxTensorComponents;
+      Kokkos::Array<int,MAX_ARGS> dataArgs;
+      for (int d=0; d<MAX_ARGS; d++)
+      {
+        dataArgs[d] = 0;
+      }
+      dataArgs[0] = cellOrdinal;
+      for (int d=1; d<numPointComponents+1; d++)
+      {
+        dataArgs[d] = pi.argument(d-1);
+      }
+      const int numDataArgs = numPointComponents + 1 + functionRank;
+      
+      const int d1_max = (functionRank == 0) ? 1 : spaceDim;
+      const int d2_max = (functionRank <= 1) ? 1 : spaceDim;
+      
+      using ref_type = typename Intrepid2::Data<Scalar,Camellia::DeviceType>::reference_type;
+      
+      for (int d1=0; d1<d1_max; d1++)
+      {
+        // we allow d1, d2 to be beyond the maximum allowed number of arguments if they are zero (allows us to support more dimensions for scalar-valued case while still using the same assignment logic below)
+        if (numPointComponents+1 < MAX_ARGS) dataArgs[numPointComponents+1] = d1;
+        else INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(d1 != 0, std::invalid_argument, "Unsupported dataArgs (too many components)");
+        for (int d2=0; d2<d2_max; d2++)
+        {
+          if (numPointComponents+2 < MAX_ARGS) dataArgs[numPointComponents+2] = d2;
+          else INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(d2 != 0, std::invalid_argument, "Unsupported dataArgs (too many components)");
+          Scalar* data_entry;
+          switch (numDataArgs)
+          {
+            case 1: data_entry = &data.getWritableEntry(dataArgs[0]); break;
+            case 2: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1]); break;
+            case 3: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2]); break;
+            case 4: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3]); break;
+            case 5: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4]); break;
+            case 6: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5]); break;
+            case 7: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5],dataArgs[6]); break;
+          }
+          
+          const auto & view_value = (functionRank==0) ? valuesView(cellOrdinal,pointOrdinal) :
+                                    (functionRank==1) ? valuesView(cellOrdinal,pointOrdinal, d1) :
+                                                        valuesView(cellOrdinal,pointOrdinal, d1, d2);
+          
+          *data_entry = view_value;
+        }
+      }
+    });
+    
+    SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(valuesView);
+  }
+  else // _callingDevicePathValues is true
+  {    
+    Teuchos::Array<int> dim(functionRank + 2);
+    dim[0] = data.extent_int(0);  // (C,P1[,...,Pn][,D1,D2,...])
+    int numPoints = 1;
+    int numUniquePoints = 1;
+    int numPointComponents = data.rank() - functionRank - 1;
+    Kokkos::Array<int,6> pointCounts;
+    Kokkos::Array<int,6> uniquePointCounts;
+    for (int i=1; i<numPointComponents+1; i++)
     {
-      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2]);
-      dataValue = valuesView(cellOrdinal,pointOrdinal);
+      numPoints *= data.extent_int(i);
+      numUniquePoints *= data.getDataExtent(i);
+      uniquePointCounts[i-1] = data.getDataExtent(i);
+      pointCounts[i-1] = data.extent_int(i);
     }
-    else if (numPointComponents == 3)
+    static const int MAX_ARGS = Intrepid2::Parameters::MaxTensorComponents;
+    auto d1_variationType = (numPointComponents+1 < MAX_ARGS) ? data.getVariationTypes()[numPointComponents+1] : Intrepid2::CONSTANT;
+    auto d2_variationType = (numPointComponents+2 < MAX_ARGS) ? data.getVariationTypes()[numPointComponents+2] : Intrepid2::CONSTANT;
+    
+    int numDataArgs = numPointComponents + 1;
+    int d1_data_extent = 1;
+    int d2_data_extent = 1;
+    int a = data.blockPlusDiagonalLastNonDiagonal(); // used for BLOCK_PLUS_DIAGONAL cases, to map from packed representation in Data's underlying view to the expanded one in fcView
+    int ap1_2 = (a + 1) * (a + 1); // number of non-diagonals (argument for some helpers in Intrepid2::Data for the BLOCK_PLUS_DIAGONAL stuff)
+    if (d1_variationType != Intrepid2::CONSTANT)
     {
-      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3]);
-      dataValue = valuesView(cellOrdinal,pointOrdinal);
+      numDataArgs += 1;
+      d1_data_extent = data.getDataExtent(numPointComponents + 1);
     }
-    else if (numPointComponents == 4)
+    if ((d2_variationType != Intrepid2::CONSTANT) && (d2_variationType != Intrepid2::BLOCK_PLUS_DIAGONAL))
     {
-      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4]);
-      dataValue = valuesView(cellOrdinal,pointOrdinal);
+      // (BLOCK_PLUS_DIAGONAL stores the whole structure in the d1 dimension)
+      numDataArgs += 1;
+      d2_data_extent = data.getDataExtent(numPointComponents + 2);
     }
-    else if (numPointComponents == 5)
+        
+    for (int i=numPointComponents+1; i<7; i++)
     {
-      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5]);
-      dataValue = valuesView(cellOrdinal,pointOrdinal);
+      // pad pointCounts with 1's for simplicity of index-mapping code
+      pointCounts[i-1] = 1;
+      uniquePointCounts[i-1] = 1;
     }
-    else if (numPointComponents == 6)
+    dim[1] = numPoints;
+    for (int i=numPointComponents+1; i<data.rank(); i++)
     {
-      auto & dataValue = data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5],dataArgs[6]);
-      dataValue = valuesView(cellOrdinal,pointOrdinal);
+      dim[i-numPointComponents+1] = data.extent_int(i);
     }
-    else
+    Camellia::FieldContainer<Scalar> fc(dim);
+    this->values(fc, basisCache);              // either happens on host or ends with deep_copy to host (one inefficiency)
+    auto fcView = fc.checkoutDeviceView(true); // true: deep_copy from host (the other main inefficiency)
+    auto dataView = data.getUnderlyingView();
+    
+    Kokkos::parallel_for("copy fc to data", Kokkos::MDRangePolicy<DeviceType::execution_space,Kokkos::Rank<2>>({0,0},{dim[0],numUniquePoints}),
+    KOKKOS_LAMBDA(const int &cellOrdinal, const int &uniquePointOrdinal)
     {
-      // the following line does not compile under CUDA (error is 'identifier "device_assert" is undefined')
-      //INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "unsupported numPointComponents.");
-    }
-  });
-  
-  SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(valuesView);
+      Kokkos::Array<int,6> up;
+      up[0] = uniquePointOrdinal % uniquePointCounts[0];
+      int pointProduct = 1;
+      for (int d=1; d<numPointComponents; d++)
+      {
+        pointProduct *= uniquePointCounts[d-1];
+        up[d] = (uniquePointOrdinal / pointProduct) % uniquePointCounts[d];
+      }
+      
+      int expandedPointOrdinal = 0;
+      for (int d=numPointComponents-1; d>0; d--)
+      {
+        expandedPointOrdinal += up[d];
+        expandedPointOrdinal *= pointCounts[d-1];
+      }
+      expandedPointOrdinal += up[0];
+      
+      using ref_type = typename Intrepid2::Data<Scalar,Camellia::DeviceType>::reference_type;
+      
+      for (int d1=0; d1<d1_data_extent; d1++)
+      {
+        for (int d2=0; d2<d2_data_extent; d2++)
+        {
+          int i = -1; // view arguments: will be set if we are actually in a non-scalar case
+          int j = -1;
+          const int numDnArgs = numDataArgs - (numPointComponents + 1);
+          if (numDnArgs == 1)
+          {
+            if (d1_variationType == Intrepid2::BLOCK_PLUS_DIAGONAL)
+            {
+              // everything is packed into the d1 argument
+              // formula is:
+              // if (d1 > (a+1)^2): i = j = d1 + (a + 1) - (a + 1)^2
+              // else             : i = d1 / (a + 1); j = d1 % (a + 1)
+              
+              if (d1 > ap1_2)
+              {
+                i = d1 + (a + 1) - ap1_2;
+                j = i;
+              }
+              else
+              {
+                i = d1 / (a + 1);
+                j = d1 % (a + 1);
+              }
+              up[numDataArgs-2] = d1; // up has extent numDataArgs - 1 (cellOrdinal is not stored)
+            }
+            else if (d1_variationType == Intrepid2::CONSTANT)
+            {
+              // then d2 arg must pass through
+              up[numDataArgs-2] = d2;
+              i = (functionRank == 1) ? d2 : 0;
+              j = (functionRank == 1) ? -1 : 0;
+            }
+            else if (d1_data_extent > 1)
+            {
+              // d1_variationType is GENERAL or MODULUS; either way, we pass it through
+              up[numDataArgs-2] = d1;
+              i = d1;
+              j = (functionRank == 1) ? -1 : 0;
+            }
+            else
+            {
+              up[numDataArgs-2] = d2;
+              i = 0;
+              j = d2;
+            }
+          }
+          else if (numDnArgs == 2)
+          {
+            // then I believe the only possibility is a direct mapping:
+            up[numDataArgs-3] = d1;
+            up[numDataArgs-2] = d2;
+            i = d1;
+            j = d2;
+          }
+          Scalar* data_entry;
+          switch (numDataArgs)
+          {
+            case 1: data_entry = &data.getWritableEntry(cellOrdinal); break;
+            case 2: data_entry = &data.getWritableEntry(cellOrdinal,up[0]); break;
+            case 3: data_entry = &data.getWritableEntry(cellOrdinal,up[0],up[1]); break;
+            case 4: data_entry = &data.getWritableEntry(cellOrdinal,up[0],up[1],up[2]); break;
+            case 5: data_entry = &data.getWritableEntry(cellOrdinal,up[0],up[1],up[2],up[3]); break;
+            case 6: data_entry = &data.getWritableEntry(cellOrdinal,up[0],up[1],up[2],up[3],up[4]); break;
+            case 7: data_entry = &data.getWritableEntry(cellOrdinal,up[0],up[1],up[2],up[3],up[4],up[5]); break;
+            default: INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "unsupported numDataArgs");
+          }
+          
+          const auto & view_value = (functionRank==0) ? fcView(cellOrdinal,expandedPointOrdinal) :
+                                    (functionRank==1) ? fcView(cellOrdinal,expandedPointOrdinal, i) :
+                                                        fcView(cellOrdinal,expandedPointOrdinal, i, j);
+          
+          *data_entry = view_value;
+        }
+      }
+      
+//      // TODO: simplify the code below by imitating the switch/case above for the data-fill-from-view case.
+//      if (functionRank == 0)
+//      {
+//        if (numPointComponents == 1)
+//        {
+//          dataView(cellOrdinal,up[0]) = fcView(cellOrdinal,expandedPointOrdinal);
+//        }
+//        else if (numPointComponents == 2)
+//        {
+//          dataView(cellOrdinal,up[0],up[1]) = fcView(cellOrdinal,expandedPointOrdinal);
+//        }
+//        else if (numPointComponents == 3)
+//        {
+//          dataView(cellOrdinal,up[0],up[1],up[2]) = fcView(cellOrdinal,expandedPointOrdinal);
+//        }
+//        else if (numPointComponents == 4)
+//        {
+//          dataView(cellOrdinal,up[0],up[1],up[2],up[3]) = fcView(cellOrdinal,expandedPointOrdinal);
+//        }
+//        else if (numPointComponents == 5)
+//        {
+//          dataView(cellOrdinal,up[0],up[1],up[2],up[3],up[4]) = fcView(cellOrdinal,expandedPointOrdinal);
+//        }
+//        else if (numPointComponents == 6)
+//        {
+//          dataView(cellOrdinal,up[0],up[1],up[2],up[3],up[4],up[5]) = fcView(cellOrdinal,expandedPointOrdinal);
+//        }
+//        else
+//        {
+//          INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "Unsupported point component count");
+//        }
+//      }
+//      else if (functionRank == 1)
+//      {
+//        for (int d=0; d<dim[2]; d++)
+//        {
+//          if (numPointComponents == 1)
+//          {
+//            dataView(cellOrdinal,up[0],d) = fcView(cellOrdinal,expandedPointOrdinal,d);
+//          }
+//          else if (numPointComponents == 2)
+//          {
+//            dataView(cellOrdinal,up[0],up[1],d) = fcView(cellOrdinal,expandedPointOrdinal,d);
+//          }
+//          else if (numPointComponents == 3)
+//          {
+//            dataView(cellOrdinal,up[0],up[1],up[2],d) = fcView(cellOrdinal,expandedPointOrdinal,d);
+//          }
+//          else if (numPointComponents == 4)
+//          {
+//            dataView(cellOrdinal,up[0],up[1],up[2],up[3],d) = fcView(cellOrdinal,expandedPointOrdinal,d);
+//          }
+//          else if (numPointComponents == 5)
+//          {
+//            dataView(cellOrdinal,up[0],up[1],up[2],up[3],up[4],d) = fcView(cellOrdinal,expandedPointOrdinal,d);
+//          }
+//          else
+//          {
+//            INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "Unsupported point component count");
+//          }
+//        }
+//      }
+//      else
+//      {
+//        INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "Unsupported function rank");
+//      }
+    });
+    
+    fc.checkinDeviceView(false);
+  }
 }
 
 template <typename Scalar>

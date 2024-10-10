@@ -47,6 +47,8 @@ namespace Camellia {
     DeviceView checkoutScratchStorageMatchingDeviceView(DeviceView &deviceView, std::string description="");
     DeviceView checkoutScratchStorageMatchingHostView(HostView &hostView, std::string description="");
     
+    DeviceView checkoutScratchStorage(FunctionPtr f, BasisCachePtr basisCache, std::string description="");
+    
     using ScratchDataDimensions = std::vector<Intrepid2::DimensionInfo>;
     Data checkoutScratchData(const ScratchDataDimensions &dataDims, std::string description="");
     void checkinScratchData(const Data &data);
@@ -58,6 +60,7 @@ namespace Camellia {
     long hitCount();
     
     static SharedScratchStorage & sharedScratchStorage(); // returns singleton instance
+    static Teuchos::RCP<SharedScratchStorage> sharedScratchStoragePtr(); // returns rcp to singleton instance
   };
   
   void clearSharedScratchStorage(); // should be called during finalize()

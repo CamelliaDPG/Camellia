@@ -79,6 +79,51 @@ namespace Camellia {
       }
     }
   public:
+    static Camellia::FieldContainer<Scalar, 0> fromData(Data &data)
+    {
+      if (!data.isValid())
+      {
+        // then return an empty FC
+        return Camellia::FieldContainer<Scalar, 0>();
+      }
+      
+      // TensorData can be rank 0, 1, 2 or 3
+      const int rank = Intrepid2::getFunctorRank(data);
+      if (rank == 0)
+      {
+        return Camellia::FieldContainer<Scalar, 0>();
+      }
+      else if (rank == 1)
+      {
+        return fromDeviceContainerWithRank<Data,1>(data);
+      }
+      else if (rank == 2)
+      {
+        return fromDeviceContainerWithRank<Data,2>(data);
+      }
+      else if (rank == 3)
+      {
+        return fromDeviceContainerWithRank<Data,3>(data);
+      }
+      else if (rank == 4)
+      {
+        return fromDeviceContainerWithRank<Data,4>(data);
+      }
+      else if (rank == 5)
+      {
+        return fromDeviceContainerWithRank<Data,5>(data);
+      }
+      else if (rank == 6)
+      {
+        return fromDeviceContainerWithRank<Data,6>(data);
+      }
+      else if (rank == 7)
+      {
+        return fromDeviceContainerWithRank<Data,7>(data);
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
+    }
+    
     static Camellia::FieldContainer<Scalar, 0> fromTensorData(TensorData &tensorData)
     {
       if (!tensorData.isValid())
@@ -140,6 +185,31 @@ namespace Camellia {
     {
       // DynRankView can be any rank, up to 7
       return fromDeviceContainer(view);
+    }
+    
+    static TensorData toData(Camellia::FieldContainer<Scalar, 0> &dataFC)
+    {
+      // we allow empty/invalid containers here; for FCs, this is indicated by having size 0
+      if (dataFC.size() == 0)
+      {
+        return Data();
+      }
+      
+      // dataFC has shape (P)
+      auto deviceView = dataFC.checkoutDeviceView(true); // true: deep copy from host
+      auto dataView = Allocation<Scalar>::allocateDeviceViewMatchingView(deviceView);
+      Kokkos::deep_copy(dataView,deviceView);
+      // the following deallocation record is a cheat: since dataView is wrapped in TensorData (which is Intrepid2), we don't have a great hook for determining when it goes out of scope and the deallocation is about to occur.  Ultimately, usage of this conversion method will be replaced by native Intrepid2 methods, which probably will do their own allocations, not necessarily recorded by Camellia.
+      Allocation<Scalar>::recordDeviceViewDeallocation(dataView);
+      
+      // Under CUDA, layouts may differ between Intrepid2 ScalarView and Camellia Device View; the following allocates a Scalar View and copies the data.
+      // This serves to underscore the point that all these conversion methods are conveniences, and necessarily represent inefficiencies.  We should use
+      // Intrepid2 (or compatible) containers in all performance-critical portions of the code.
+      auto dataViewIntrepid2 = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(dataView);
+      deepCopy(dataViewIntrepid2, dataView);
+      
+      auto data = Data(dataViewIntrepid2);
+      return data;
     }
     
     static TensorData toTensorData(Camellia::FieldContainer<Scalar, 0> &dataFC)

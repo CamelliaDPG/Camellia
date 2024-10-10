@@ -25,7 +25,8 @@ void Exp<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, Va
     Kokkos::fence();
     Kokkos::parallel_for("Exp_values", rangePolicy,
     KOKKOS_LAMBDA (const int i0, const int i1) {
-      values(i0,i1) = std::exp(values(i0,i1));
+      auto & value = values(i0,i1);
+      value = std::exp(value);
     });
   }
   else

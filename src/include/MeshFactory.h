@@ -78,6 +78,10 @@ public:
   
   static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, std::vector<std::vector<double>> extrusionVertices);
   
+  // produces a tensor-product mesh topology using intervalMeshTopology() and extrudedMeshTopology()
+  static MeshTopologyPtr hypercubeMeshTopology(vector<double> dimensions, vector<int> elementCounts,
+                                               vector<double> x0 = vector<double>());
+  
   static MeshTopologyPtr importMOABMesh(string filePath, bool readInParallel=false);
   
   static MeshPtr intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced

@@ -47,6 +47,7 @@ template <typename Scalar>
 {
 private:
   int _cubatureEnrichmentDegree;
+  Intrepid2::EPolyType _polyTypeForQuadrature = Intrepid2::POLYTYPE_MAX;
   
   template<class MapType, class KeyType, class ValueType>
   inline
@@ -233,6 +234,8 @@ public:
   
   int cubatureEnrichmentDegree() const;
   void setCubatureEnrichmentDegree(int value);
+  
+  void setPolyTypeForQuadrature(Intrepid2::EPolyType polyTypeForQuadrature);
   
   const std::string & getIdentifier() const;
   void setIdentifier(const std::string &solutionIdentifier);

@@ -262,6 +262,9 @@ int main(int argc, char *argv[])
     bool useSerendipity = false;
     double A_override = -1.; // use default values for gamma if not set
     bool useCrankNicolson = false;
+    std::string normChoice = "graph";
+    bool enforcePositivity = false;
+    bool useConformingTraces = false;
     
     std::string restartDir = "";
     
@@ -287,6 +290,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("vWidth", &vWidth, "span of velocity coordinates in domain");
     cmdp.setOption("minSubsteps", &minSubsteps);
     cmdp.setOption("maxSubsteps", &maxSubsteps);
+    cmdp.setOption("norm", &normChoice);
     cmdp.setOption("fixedPointTol", &fixedPointTol);
     cmdp.setOption("viz", "noViz", &saveViz);
     cmdp.setOption("numTimeSteps", &numTimeSteps);
@@ -300,6 +304,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("restartDir", &restartDir);
     cmdp.setOption("checkpointFrequency", &checkpointFrequency);
     cmdp.setOption("useCrankNicolson", "useBackwardEuler", &useCrankNicolson);
+    cmdp.setOption("enforcePositivity", "dontEnforcePositivity", &enforcePositivity);
+    cmdp.setOption("useConformingTraces", "useNonConformingTraces", &useConformingTraces);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -347,7 +353,8 @@ int main(int argc, char *argv[])
     }
     
     const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
-    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k, maxMomentNumber, useCrankNicolson);
+    VlasovBackwardEulerFormulation form(q, m, useSerendipity, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k, maxMomentNumber, useCrankNicolson, enforcePositivity, useConformingTraces);
+    form.setTestIP(normChoice);
     form.refineUniformly(numUniformRefinements);
     form.setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     form.setRunQuietly(true);
@@ -426,9 +433,17 @@ int main(int argc, char *argv[])
     if (!default_gamma) suffix << "_A" << gamma;
     suffix << "_H1Order" << H1Order;
     suffix << "_delta_k" << delta_k;
-    if (form.t() != 0.0)
+    if (form.t()->getConstantValue() != 0.0)
     {
       suffix << "_tStart" << form.t();
+    }
+    if (enforcePositivity)
+    {
+      suffix << "_proxG";
+    }
+    if (useConformingTraces)
+    {
+      suffix << "_confTrace";
     }
 
     // adjust x and v element counts according to the number of uniform refinements requested.
@@ -752,11 +767,11 @@ int main(int argc, char *argv[])
       EFieldMode1FileStream.close();
     }
     
-    int startingTimeStepNumber = (form.t() / dt) + 1;
+    int startingTimeStepNumber = (form.t()->getConstantValue() / dt) + 1;
     for (int timeStepNumber=startingTimeStepNumber; timeStepNumber<=numTimeSteps; timeStepNumber++)
     {
       form.takeTimeStep();
-      t = form.t();
+      t = form.t()->getConstantValue();
       
       const double currentLogEFieldSineMode = std::log(std::abs(getElectricFieldSineMode(1)));
       
@@ -883,8 +898,7 @@ int main(int argc, char *argv[])
         std::map<double,double> pointWeight_values; // map from x coordinate to cell measure-weighted quadrature weight
         GlobalIndexType firstPhysicalCellID = *allActivePhysicalCells.begin();
         
-        const int cubatureEnrichmentDegree = 5; // over-integrate to make up for undermeasurement on coarse initial meshes
-        auto basisCache = BasisCache::basisCacheForCell(form.configurationSpaceMesh(), firstPhysicalCellID, false, cubatureEnrichmentDegree); // false: not test versus test
+        auto basisCache = BasisCache::basisCacheForCell(form.configurationSpaceMesh(), firstPhysicalCellID, false, 0); // false: not test versus test
         std::vector<GlobalIndexType> physicalCellIDsVector(allActivePhysicalCells.begin(),allActivePhysicalCells.end());
         
         const int numPoints = basisCache->getRefCellPoints().extent_int(0);

@@ -29,7 +29,7 @@ public:
   string displayString() override;
   
   using TFunction<Scalar>::isZero;
-  bool isZero() override;
+  virtual bool isZero() override;
   
   void scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache);
   
@@ -48,7 +48,7 @@ public:
   std::vector<Intrepid2::DimensionInfo> valuesDataDims(BasisCachePtr basisCache) override;
   void values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
   
-  Scalar value();
+  virtual Scalar value() const;
   
   TFunctionPtr<Scalar> dx() override;
   TFunctionPtr<Scalar> dy() override;

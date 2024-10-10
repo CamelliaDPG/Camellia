@@ -50,6 +50,8 @@ namespace Camellia {
     
     std::vector< std::pair<GlobalIndexType,double> > globalMinimumErrorParentCells(const int cellReductionTarget, const std::set<GlobalIndexType> &excludedChildren);
     
+    std::vector< std::pair<GlobalIndexType,double> > globalParentCellsBelowThreshold(const double &maxError, const std::set<GlobalIndexType> &excludedChildren);
+    
     //! determine rank-local error measures.  Subclasses should populate _localErrorMeasures
     virtual void measureError() = 0;
     

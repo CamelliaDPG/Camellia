@@ -35,7 +35,7 @@ string ConstantScalarFunction<Scalar>::displayString()
 template <typename Scalar>
 bool ConstantScalarFunction<Scalar>::isZero()
 {
-  return 0.0 == _value;
+  return 0.0 == this->value();
 }
 
 template <typename Scalar>
@@ -57,7 +57,7 @@ void ConstantScalarFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::De
 {
   auto underlyingView1 = values.template getUnderlyingView<1>();
   
-  auto value = _value;
+  const auto value = this->value();
   Kokkos::parallel_for("set values", 1,
   KOKKOS_LAMBDA (const int & /*entryOrdinal*/) {
     underlyingView1(0) = value;
@@ -70,11 +70,11 @@ void ConstantScalarFunction<Scalar>::values(typename Camellia::FieldContainer<Sc
   TEUCHOS_FUNC_TIME_MONITOR("ConstantScalarFunction values()");
   if (modType == ASSIGN)
   {
-    Kokkos::deep_copy(values, _value);
+    Kokkos::deep_copy(values, this->value());
   }
   else
   {
-    auto value = _value;
+    auto value = this->value();
     auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy2(values);
     Kokkos::parallel_for("ConstantScalarFunction mod assignment", rangePolicy,
     KOKKOS_LAMBDA (const int i0, const int i1) {
@@ -91,7 +91,7 @@ void ConstantScalarFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldC
   auto dv = values.checkoutDeviceView(copyFromHost);
   const int dim6 = dv.extent_int(6);
   
-  auto value = _value;
+  auto value = this->value();
   using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
   Kokkos::parallel_for("ConstantScalarFunction_scalarModifyFunctionValues", values.getMDRangePolicy6(),
   KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
@@ -108,7 +108,7 @@ void ConstantScalarFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldC
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
-  if (_value != 1.0)
+  if (this->value() != 1.0)
   {
     this->scalarModifyFunctionValues(values, MULTIPLY, basisCache);
   }
@@ -117,7 +117,7 @@ void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Camellia::Fiel
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
-  if (_value != 1.0)
+  if (this->value() != 1.0)
   {
     this->scalarModifyFunctionValues(values, DIVIDE, basisCache);
   }
@@ -137,7 +137,7 @@ void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Camellia::FieldCont
 }
 
 template <typename Scalar>
-Scalar ConstantScalarFunction<Scalar>::value()
+Scalar ConstantScalarFunction<Scalar>::value() const
 {
   return _value;
 }

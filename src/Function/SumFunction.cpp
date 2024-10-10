@@ -5,6 +5,8 @@
 
 #include "BasisCache.h"
 
+#include "CamelliaDebugUtility.h"
+
 using namespace Camellia;
 
 template <typename Scalar>
@@ -92,6 +94,28 @@ void SumFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> v
   
   _f1->checkinValuesData(f1Data);
   _f2->checkinValuesData(f2Data);
+
+//  {
+//    // DEBUGGING
+//    const int numPoints = values.extent_int(1);
+//    if (numPoints == 64)
+//    {
+//      cout << "SumFunction: ";
+//      cout << _f1->getClassName() << " + " << _f2->getClassName() << ":\n";
+//      if (values.rank() == 2)
+//      {
+//        Camellia::print2(cout, "SumFunction values (Data path)", values);
+//      }
+//      else if (values.rank() == 3)
+//      {
+//        Camellia::print3(cout, "SumFunction values (Data path)", values);
+//      }
+//      else if (values.rank() == 4)
+//      {
+//        Camellia::print4(cout, "SumFunction values (Data path)", values);
+//      }
+//    }
+//  }
 }
 
 template <typename Scalar>
@@ -114,6 +138,27 @@ void SumFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Devi
     assignValues<Scalar>(values, modType, sumValues);
     basisCache->checkinScratchStorage<Scalar>(sumValues);
   }
+//  {
+//    // DEBUGGING
+//    const int numPoints = values.extent_int(1);
+//    if (numPoints == 64)
+//    {
+//      cout << "SumFunction: ";
+//      cout << _f1->getClassName() << " + " << _f2->getClassName() << ":\n";
+//      if (values.rank() == 2)
+//      {
+//        Camellia::print2(cout, "SumFunction values (View path)", values);
+//      }
+//      else if (values.rank() == 3)
+//      {
+//        Camellia::print3(cout, "SumFunction values (View path)", values);
+//      }
+//      else if (values.rank() == 4)
+//      {
+//        Camellia::print4(cout, "SumFunction values (View path)", values);
+//      }
+//    }
+//  }
 }
 
 template <typename Scalar>

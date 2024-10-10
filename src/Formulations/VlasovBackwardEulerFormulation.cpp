@@ -20,10 +20,13 @@
 #include "MonomialFunctions.h"
 #include "ParameterFunction.h"
 #include "PhysicalSolutionExtrusion.hpp"
+#include "Projector.h"
 #include "RefinementStrategy.h"
 #include "RHS.h"
+#include "SharedScratchStorage.h"
 #include "Solution.h"
 #include "SolutionStage.h"
+#include "TimeRampFunction.h"
 #include "TypeDefs.h"
 
 #include <sys/stat.h> // for mkdir, stat()
@@ -39,6 +42,9 @@ const string VlasovBackwardEulerFormulation::S_F = "f";
 
 const string VlasovBackwardEulerFormulation::S_F_HAT = "\\widehat{f}";
 const string VlasovBackwardEulerFormulation::S_T_N_HAT = "\\widehat{t}_n";
+
+const string VlasovBackwardEulerFormulation::S_PSI = "\\psi";
+const string VlasovBackwardEulerFormulation::S_PHI = "\\phi";
 
 const string VlasovBackwardEulerFormulation::S_W = "w";
 
@@ -113,11 +119,13 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                std::vector<double> velocitySpaceVertices_z,
                                                                const int H1Order, const int delta_k,
                                                                const int maxMomentNumberForDriver,
-                                                               const bool useCrankNicolson)
+                                                               const bool useCrankNicolson,
+                                                               const bool enforcePositivity,
+                                                               const bool useConformingTraces)
 :
 VlasovBackwardEulerFormulation({q},{m},{""},useSerendipityBasis,configurationSpaceFormulation,spatialMeshTopology,
                                dt, velocitySpaceVertices_x, velocitySpaceVertices_y, velocitySpaceVertices_z,
-                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson)
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson, enforcePositivity, useConformingTraces)
 {}
 
 VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
@@ -128,11 +136,13 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                std::vector<double> velocitySpaceVertices_y,
                                                                const int H1Order, const int delta_k,
                                                                const int maxMomentNumberForDriver,
-                                                               const bool useCrankNicolson)
+                                                               const bool useCrankNicolson,
+                                                               const bool enforcePositivity,
+                                                               const bool useConformingTraces)
 :
 VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
                                velocitySpaceVertices_x, velocitySpaceVertices_y, std::vector<double>(),
-                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson) {}
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson, enforcePositivity, useConformingTraces) {}
 
 VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -141,11 +151,13 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(double q, double 
                                                                std::vector<double> velocitySpaceVertices_x,
                                                                const int H1Order, const int delta_k,
                                                                const int maxMomentNumberForDriver,
-                                                               const bool useCrankNicolson)
+                                                               const bool useCrankNicolson,
+                                                               const bool enforcePositivity,
+                                                               const bool useConformingTraces)
 :
 VlasovBackwardEulerFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
                                velocitySpaceVertices_x, std::vector<double>(), std::vector<double>(),
-                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson) {}
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson, enforcePositivity, useConformingTraces) {}
 
 VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(vector<double> q, vector<double> m, vector<string> speciesLabels,
                                                                bool useSerendipityBasis,
@@ -155,11 +167,13 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(vector<double> q,
                                                                std::vector<double> velocitySpaceVertices_x,
                                                                const int H1Order, const int delta_k,
                                                                const int maxMomentNumberForDriver,
-                                                               const bool useCrankNicolson)
+                                                               const bool useCrankNicolson,
+                                                               const bool enforcePositivity,
+                                                               const bool useConformingTraces)
 :
 VlasovBackwardEulerFormulation(q, m, speciesLabels, useSerendipityBasis, configurationSpaceFormulation, spatialMeshTopology, dt,
                                velocitySpaceVertices_x, std::vector<double>(), std::vector<double>(),
-                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson) {}
+                               H1Order, delta_k, maxMomentNumberForDriver, useCrankNicolson, enforcePositivity, useConformingTraces) {}
 
 VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(vector<double> q, vector<double> m, vector<string> speciesLabels,
                                                                bool useSerendipityBasis,
@@ -171,12 +185,16 @@ VlasovBackwardEulerFormulation::VlasovBackwardEulerFormulation(vector<double> q,
                                                                vector<double> velocitySpaceVertices_z,
                                                                const int H1Order, const int delta_k,
                                                                const int maxMomentNumberForDriver,
-                                                               const bool useCrankNicolson)
+                                                               const bool useCrankNicolson,
+                                                               const bool enforcePositivity,
+                                                               const bool useConformingTraces)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _useSerendipityBasis(useSerendipityBasis),
+_useConformingTraces(useConformingTraces),
 _delta_k(delta_k),
 _crankNicolson(useCrankNicolson),
+_enforcePositivity(enforcePositivity),
 _configurationSpaceFormulation(configurationSpaceFormulation),
 _numSpecies(q.size()),
 _q(q),
@@ -186,6 +204,10 @@ _speciesLabels(speciesLabels)
   TEUCHOS_TEST_FOR_EXCEPTION(_q.size() != _m.size(), std::invalid_argument, "q and m arguments must agree in length");
   
   TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies == 0, std::invalid_argument, "Must have at least one species");
+  
+  _strongInflowBCFlag = ParameterFunction::parameterFunction(1); // default to BCs strongly imposed at inflow; can be overridden when setInitialAndInflowConditions() is called.
+  
+  const bool l2Trace = !_useConformingTraces;
   
   if (speciesLabels.size() == 0)
   {
@@ -226,6 +248,8 @@ _speciesLabels(speciesLabels)
   
   MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(_configurationSpaceMeshTopology, velocitySpaceVertices);
   
+  const int numLatentVariables = _enforcePositivity ? _numSpecies : 0;
+  
   _spaceDim = spatialMeshTopology->getDimension();
   _velocityDim = velocitySpaceVertices.size();
   _configurationSpaceFormulation->setDimensions(_spaceDim, _velocityDim);
@@ -239,7 +263,10 @@ _speciesLabels(speciesLabels)
 
   // tests
   std::vector<VarPtr> w(_numSpecies);   // Vlasov test function
+  std::vector<VarPtr> phi(numLatentVariables); // test function for equation defining latent variable psi = ln f
 
+  std::vector<VarPtr> psi(numLatentVariables);
+  
   TFunctionPtr<double> parity = TFunction<double>::sideParity();
   TFunctionPtr<double> n = TFunction<double>::normal();
   
@@ -248,6 +275,8 @@ _speciesLabels(speciesLabels)
   map<int,int> trialOrderEnhancements;
   _f_names.resize(_numSpecies);
   _w_names.resize(_numSpecies);
+  _psi_names.resize(numLatentVariables);
+  _phi_names.resize(numLatentVariables);
   _f_hat_names.resize(_numSpecies,"");
   _tn_hat_names.resize(_numSpecies,"");
   for (int i=0; i<_numSpecies; i++)
@@ -261,13 +290,33 @@ _speciesLabels(speciesLabels)
     VarPtr f_i = vlasovVF->fieldVar(_f_names[i]);
     VarPtr w_i = vlasovVF->testVar(_w_names[i], HGRAD); // w lies in HGRAD of phase space
     
-    VarPtr t_n_hat_i = vlasovVF->fluxVar(_tn_hat_names[i]);
-    trialOrderEnhancements[t_n_hat_i->ID()] = 1; // +1 for non-conforming
-    
     f[i]       = f_i;
     w[i]       = w_i;
-    t_n_hat[i] = t_n_hat_i;
+    if (l2Trace)
+    {
+      VarPtr t_n_hat_i = vlasovVF->fluxVar(_tn_hat_names[i]);
+      trialOrderEnhancements[t_n_hat_i->ID()] =  1; // +1 for non-conforming
+      t_n_hat[i] = t_n_hat_i;
+    }
+    else
+    {
+      VarPtr f_hat_i = vlasovVF->traceVar(_f_hat_names[i]);
+      f_hat[i] = f_hat_i;
+    }
+    
+    if (_enforcePositivity)
+    {
+      _psi_names[i] = S_PSI + suffix;
+      _phi_names[i] = S_PHI + suffix;
+      psi[i] = vlasovVF->fieldVar(_psi_names[i], CONSTANT_SCALAR);
+      // CONSTANT_SCALAR: setting the latent variables psi to have element-wise constant solutions (saves us from doing an inexact projection, e.g., of the exponential of a polynomial onto a polynomial during the flux-limiting -- that could be OK, of course, but it might not be uniformly positive post-projection.)
+      
+      phi[i] = vlasovVF->testVar(_phi_names[i], L2); // CONSTANT_SCALAR: Unclear on whether this is better than L2 for the test function.  We have some issues with Cholesky factorization failing; trying CONSTANT_SCALAR to ameliorate.
+      _alphaPG = ParameterFunction::parameterFunction(1);
+    }
   }
+  
+  FunctionPtr alphaPG = _alphaPG; // cast to FunctionPtr to enable operator overloads below
   
   BasisFamilyPtr basisFamily;
   if (_useSerendipityBasis)
@@ -301,13 +350,13 @@ _speciesLabels(speciesLabels)
   auto vlasovBC = BC::bc();
   for (int i=0; i<_numSpecies; i++)
   {
-    VarPtr t_n = this->t_n_hat(i);
+    VarPtr traceVar = _useConformingTraces ? this->f_hat(i) : this->t_n_hat(i);
     for (int vd=0; vd<_velocityDim; vd++)
     {
       const int tagMin = this->tagVlasovMinVelocity(vd);
       const int tagMax = this->tagVlasovMaxVelocity(vd);
-      vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
-      vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+      vlasovBC->addDirichlet(traceVar, tagMin, Function::zero());
+      vlasovBC->addDirichlet(traceVar, tagMax, Function::zero());
     }
   }
   _vlasovSoln->setBC(vlasovBC);
@@ -339,6 +388,12 @@ _speciesLabels(speciesLabels)
   {
     v.push_back(this->v_i(i));
   }
+    
+  FunctionPtr v_dot_nx = Function::zero();
+  for (int i=0; i<_velocityDim; i++)
+  {
+    v_dot_nx = v_dot_nx + v[i] * n->spatialComponent(i+indexOffsetSpaceOneBased); // spatialComponent() is 1-based
+  }
   
   // revision 6-8-23: move weights on f[i] onto w[i], so that we get something like b(f[i], g(w[i])), where g incorporates diff ops and weights
   std::vector<LinearTermPtr> w_against_f_i(_numSpecies);
@@ -346,19 +401,13 @@ _speciesLabels(speciesLabels)
   // theta for time-stepping rule: 1.0 for backward Euler; 0.5 for Crank-Nicolson
   const double theta = _crankNicolson ? 0.5 : 1.0;
   
-  const bool l2Trace = true;
   for (int i=0; i<_numSpecies; i++)
   {
     w_against_f_i[i] = w[i] / _dt;
     
-    if (l2Trace)
+    if (_enforcePositivity)
     {
-      _vlasovBF->addTerm(t_n_hat[i], w[i]); // let t_n_hat be the trace of the *sum* of theta * f^{k+1} and (1-theta) f^k; solve for the sum.  This lets us avoid placing a trace term on the RHS.
-    }
-    else
-    {
-      // TODO: add support for conforming traces
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Conforming traces not yet supported.");
+      _vlasovBF->addTerm(psi[i] / alphaPG, w[i]);
     }
     
     for (int d=0; d<_spaceDim; d++)
@@ -366,7 +415,7 @@ _speciesLabels(speciesLabels)
       w_against_f_i[i] = w_against_f_i[i] - theta * v[d] * w[i]->di(indexOffsetSpaceOneBased + d); // dx_d
     }
   }
-    
+  
   std::vector<FunctionPtr> E(3,Function::zero());
   std::vector<FunctionPtr> B(3,Function::zero());
   
@@ -388,6 +437,7 @@ _speciesLabels(speciesLabels)
   
   auto extraAcceleration = _configurationSpaceFormulation->extraAcceleration();
   
+  FunctionPtr a_dot_nv = Function::zero();
   // initialize acceleration term, _a
   {
     _a = std::vector<FunctionPtr>(_velocityDim); // this gets dotted with  grad_v (q[i]/m[i]) f_i (in the strong form)
@@ -395,9 +445,41 @@ _speciesLabels(speciesLabels)
     for (int d=0; d<_velocityDim; d++)
     {
       _a[d] = E[d] + v_cross_B[d] + extraAcceleration[d];
+      auto nvd = n->spatialComponent(d+indexOffsetVelocityOneBased);
+      a_dot_nv = a_dot_nv + _a[d] * nvd;
     }
   }
-
+  
+  auto vlasovSolnWeakPtr          = Teuchos::rcp(_vlasovSoln.get(),          false);
+  auto vlasovSolnPriorTimeWeakPtr = Teuchos::rcp(_vlasovSolnPriorTime.get(), false);
+  auto vlasovSolnPrevWeakPtr      = Teuchos::rcp(_vlasovSolnPrev.get(),      false);
+  _traceSolnPriorTime.resize(_numSpecies);
+  auto vlasovRHS = RHS::rhs();
+  
+  // add trace terms
+  for (int i=0; i<_numSpecies; i++)
+  {
+    auto trace_i = l2Trace ? t_n_hat[i] : f_hat[i];
+    const bool weightFluxesBySideParity = true;
+    const SolutionComponent solnComponent = STANDARD_SOLUTION;
+    const int stageOrdinal = 0; // would be -1 if we had an ERKTableau
+    _traceSolnPriorTime[i] = Function::solution(trace_i, vlasovSolnPriorTimeWeakPtr, weightFluxesBySideParity,
+                                                solnComponent, stageOrdinal, std::string("k"));
+    
+    FunctionPtr strongBCFilter = _strongInflowBCFlag; // will be 1 when strong BCs are imposed, 0 otherwise
+    if (l2Trace)
+    {
+      _vlasovBF->addTerm(theta * t_n_hat[i], w[i]);
+      
+      vlasovRHS->addTerm(-(1-theta) * _traceSolnPriorTime[i] * strongBCFilter * w[i]);
+    }
+    else
+    {
+      // _boltzmannBF->addTerm((v * n->x() + (q/m) * _E_extruded * n->y()) * f_hat, w); // for explicit, f_hat should be understood as the trace of the solution at prior time…
+      _vlasovBF->addTerm(f_hat[i], (v_dot_nx + (_q[i]/_m[i]) * a_dot_nv) * w[i]);
+      vlasovRHS->addTerm(-(1-theta) * _traceSolnPriorTime[i] * strongBCFilter * (v_dot_nx + (_q[i]/_m[i]) * a_dot_nv) * w[i]); // TODO: ensure that Solution's trace projection is enabled; I'm pretty sure it's off right now.  We will get some wrong values if the inflow is refined and the trace projection is disabled.
+    }
+  }
   
   for (int i=0; i<_numSpecies; i++)
   {
@@ -412,14 +494,11 @@ _speciesLabels(speciesLabels)
   {
     _vlasovBF->addTerm(f[i], w_against_f_i[i]);
   }
-
-  auto vlasovSolnWeakPtr          = Teuchos::rcp(_vlasovSoln.get(),          false);
-  auto vlasovSolnPriorTimeWeakPtr = Teuchos::rcp(_vlasovSolnPriorTime.get(), false);
-  auto vlasovSolnPrevWeakPtr      = Teuchos::rcp(_vlasovSolnPrev.get(),      false);
   
-  auto vlasovRHS = RHS::rhs();
   _fSoln.resize(_numSpecies);
   _fDiff.resize(_numSpecies);
+  _fSolnPriorTime.resize(_numSpecies);
+  _expPsiSoln.resize(numLatentVariables);
   
   std::vector<FunctionPtr> grad_v_weight_priorTime(_velocityDim); // the thing that gets dotted with grad_v of f (in the strong form)
   
@@ -459,22 +538,38 @@ _speciesLabels(speciesLabels)
     const bool weightFluxesBySideParity = true;
     const SolutionComponent solnComponent = STANDARD_SOLUTION;
     const int stageOrdinal = 0; // would be -1 if we had an ERKTableau
-    auto f_previous = Function::solution(f[i], vlasovSolnPriorTimeWeakPtr, weightFluxesBySideParity,
+    auto f_priorTime = Function::solution(f[i], vlasovSolnPriorTimeWeakPtr, weightFluxesBySideParity,
                                          solnComponent, stageOrdinal, std::string("k"));
     
-    vlasovRHS->addTerm(f_previous / FunctionPtr(_dt) * w[i]);
+    _fSolnPriorTime[i] = f_priorTime;
+    
+    vlasovRHS->addTerm(f_priorTime / FunctionPtr(_dt) * w[i]);
   
+    if (_enforcePositivity)
+    {
+      vlasovSolnWeakPtr->setPolyTypeForQuadrature(Intrepid2::POLYTYPE_GAUSS_LOBATTO);
+      _expPsiSoln[i] = Exp<double>::exp(Function::solution(psi[i], vlasovSolnWeakPtr));
+      
+      FunctionPtr psi_solnPrev = Function::solution(psi[i], vlasovSolnPrevWeakPtr);
+      vlasovRHS->addTerm((psi_solnPrev / alphaPG) * w[i]);
+      
+      FunctionPtr exp_psi = Exp<double>::exp(psi_solnPrev);
+      
+      _vlasovBF->addTerm(f[i] - exp_psi * psi[i], phi[i]);
+      vlasovRHS->addTerm((exp_psi - psi_solnPrev * exp_psi) * phi[i]);
+    }
+    
     if (theta != 1.0)
     {
       for (int d=0; d<_spaceDim; d++)
       {
-        vlasovRHS->addTerm( (1-theta) * v[d] * f_previous * w[i]->di(indexOffsetSpaceOneBased + d));  // dx_d
+        vlasovRHS->addTerm( (1-theta) * v[d] * f_priorTime * w[i]->di(indexOffsetSpaceOneBased + d));  // dx_d
       }
       
       for (int vd=0; vd<_velocityDim; vd++)
       {
         auto weight = grad_v_weight_priorTime[vd];
-        vlasovRHS->addTerm( (1-theta) * (_q[i]/_m[i]) * weight * f_previous * w[i]->di(indexOffsetVelocityOneBased + vd)); // d/dv_vd
+        vlasovRHS->addTerm( (1-theta) * (_q[i]/_m[i]) * weight * f_priorTime * w[i]->di(indexOffsetVelocityOneBased + vd)); // d/dv_vd
       }
     }
   }
@@ -483,6 +578,7 @@ _speciesLabels(speciesLabels)
     
   vlasovMesh->registerSolution(_vlasovSoln);
   vlasovMesh->registerSolution(_vlasovSolnPriorTime);
+  vlasovMesh->registerSolution(_vlasovSolnPrev);
     
   IPPtr vlasovTestNorm = _vlasovBF->graphNorm();
   _vlasovSoln->setIP(vlasovTestNorm);
@@ -551,6 +647,11 @@ vector<FunctionPtr> VlasovBackwardEulerFormulation::a()
   return _a;
 }
 
+FunctionPtr VlasovBackwardEulerFormulation::alpha()
+{
+  return _alphaPG;
+}
+
 MeshPtr VlasovBackwardEulerFormulation::vlasovMesh()
 {
   return _vlasovSoln->mesh();
@@ -559,6 +660,16 @@ MeshPtr VlasovBackwardEulerFormulation::vlasovMesh()
 SolutionPtr VlasovBackwardEulerFormulation::vlasovSolution()
 {
   return _vlasovSoln;
+}
+
+SolutionPtr VlasovBackwardEulerFormulation::vlasovSolutionPrevious()
+{
+  return _vlasovSolnPrev;
+}
+
+SolutionPtr VlasovBackwardEulerFormulation::vlasovSolutionPriorTime()
+{
+  return _vlasovSolnPriorTime;
 }
 
 void VlasovBackwardEulerFormulation::addConfigurationSpaceBC(const int tag, VarPtr configVariable, FunctionPtr dirichletValue)
@@ -701,6 +812,11 @@ VarPtr VlasovBackwardEulerFormulation::E_configurationSpaceTrace(const int zeroB
   return _configurationSpaceFormulation->E_hat(zeroBasedComp);
 }
 
+double VlasovBackwardEulerFormulation::expPsiForCell(GlobalIndexType cellID)
+{
+  return _expPsiForCell[cellID]; // TODO: support multiple species here
+}
+
 VarPtr VlasovBackwardEulerFormulation::f(int speciesOrdinal)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
@@ -716,6 +832,8 @@ VarPtr VlasovBackwardEulerFormulation::f_hat(int speciesOrdinal)
 void VlasovBackwardEulerFormulation::finishTimeStep()
 {
   const int rank = MPIWrapper::CommWorld()->MyPID();
+  
+  _fluxLimitingWeightForCell.clear();
   
   Teuchos::RCP<GMGSolver> gmgSolver;
   
@@ -759,14 +877,24 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     densityLabels[i] = (_speciesLabels[i].size()) == 0 ? "n_e" : "n_" + _speciesLabels[i];
   }
   
-  
-  
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
   int numSubstepsTaken = _maxSubsteps;
+  double alpha = _alpha0;
+  
+  double fRelDiff = 1.0;
+  
+  int alphaUpdateFrequency = 4; // let alpha stay same for this many substeps
+  std::vector<double> prior_fRelDiffs(alphaUpdateFrequency, std::numeric_limits<double>::max());
+  
   for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
   {
+    if (_enforcePositivity)
+    {
+      _alphaPG->setValue(alpha);
+    }
+    
     _vlasovSolnPrev->setSolution(_vlasovSoln);
     _configurationSpaceFormulation->copySolutionToPrevious();
     
@@ -789,6 +917,113 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
       _vlasovSoln->solve(_gmgSolver);
       substepIterationCounts[substepOrdinal] = _gmgSolver->iterationCount();
     }
+    bool fluxLimiting = true;
+    if (_enforcePositivity && fluxLimiting)
+    {
+      // set f = theta_K f + (1-theta_K) * exp (psi)
+      // want one value of theta per species per cell
+      // we can do this on the local MPI rank (no communication required)
+      
+      const auto & myCellIDs = _vlasovSoln->mesh()->cellIDsInPartition();
+      const auto numMyCells = myCellIDs.size();
+      
+      for (const auto & cellID : myCellIDs)
+      {
+        auto basisCache = BasisCache::basisCacheForCell(_vlasovSoln->mesh(), cellID, false, 0, Intrepid2::POLYTYPE_GAUSS_LOBATTO);
+        auto f_values   = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(_fSoln[0],      basisCache);
+        auto psi_values = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(_expPsiSoln[0], basisCache);
+        
+        // we assume all the species use a common basis for f
+        auto trialDofOrdering = _vlasovSoln->mesh()->getElementType(cellID)->trialOrderPtr;
+        auto fBasis = trialDofOrdering->getBasis(this->f(0)->ID());
+        int basisCardinality   = fBasis->getCardinality();
+        FieldContainer<double> basisCoefficients(1, basisCardinality); // (C,F)
+        
+        auto psiBasis = trialDofOrdering->getBasis(this->psi(0)->ID());
+        TEUCHOS_TEST_FOR_EXCEPTION(psiBasis->getCardinality() != 1, std::invalid_argument, "This implementation assumes constant basis for psi");
+        FieldContainer<double> psiBasisCoefficients(1, psiBasis->getCardinality()); // (C,F)
+        
+        auto allCoefficientsForCell = _vlasovSoln->allCoefficientsForCellID(cellID);
+        
+        // first, impose a minimum value for psi (avoid FPEs, etc.)
+        const double PSI_MIN = -40;
+        const double PSI_MAX =  20;
+        for (int i=0; i<_numSpecies; i++)
+        {
+          auto psi_soln = Function::solution(this->psi(i), _vlasovSoln);
+          
+          psi_soln->values(psi_values, ASSIGN, basisCache);
+          
+          double psi_value;
+          Kokkos::Min<double> minPsi(psi_value);
+          
+          int numPoints  = psi_values.extent_int(1);
+          Kokkos::parallel_reduce("VlasovBackwardEulerFormulation flux limiting, setting psi floor", numPoints,
+          KOKKOS_LAMBDA (const int &pointOrdinal, double& intermediatePsi)
+          {
+            const auto & psi_value_point = psi_values(0,pointOrdinal);
+            intermediatePsi = std::min(psi_value_point, intermediatePsi);
+          }, minPsi);
+          
+          psi_value = std::max(PSI_MIN, psi_value);
+          psi_value = std::min(PSI_MAX, psi_value);
+          
+          Projector<double>::projectFunctionOntoBasis(psiBasisCoefficients, Function::constant(psi_value), psiBasis, basisCache);
+          const double exp_psi_value = exp(psi_value);
+          
+          const int psi_ID = this->psi(i)->ID();
+          for (int dofOrdinal=0; dofOrdinal < psiBasis->getCardinality(); dofOrdinal++)
+          {
+            int localDofIndex = trialDofOrdering->getDofIndex(psi_ID, dofOrdinal);
+            const auto & projected_psi_coefficient = psiBasisCoefficients(0, dofOrdinal);
+            allCoefficientsForCell(localDofIndex) = projected_psi_coefficient;
+          }
+          
+          double theta = 1;
+          auto & f       = _fSoln[i];
+          
+          f->values      (f_values,       ASSIGN, basisCache);
+          
+          Kokkos::Min<double> minTheta(theta);
+          
+          numPoints  = f_values.extent_int(1);
+          Kokkos::parallel_reduce("VlasovBackwardEulerFormulation flux limiting, theta determination", numPoints,
+          KOKKOS_LAMBDA (const int &pointOrdinal, double& intermediateTheta)
+          {
+            double theta_pt = 1.0;
+            const auto & f_value = f_values(0,pointOrdinal);
+            
+            if (f_value < 0)
+            {
+              theta_pt = 1 - f_value / (f_value - exp_psi_value);
+            }
+            intermediateTheta = std::min(theta_pt, intermediateTheta);
+          }, minTheta);
+          
+//          if (cellID == 1024) // DEBUGGING output for Christenson-Lau with 32x64 coarse mesh, 0 UR
+//          {
+//            std::cout << "theta for cell " << cellID << ": " << theta << std::endl;
+//          }
+          
+          _fluxLimitingWeightForCell[cellID] = theta;
+          _expPsiForCell[cellID] = exp_psi_value;
+          
+          Projector<double>::projectFunctionOntoBasis(basisCoefficients, theta * f + (1-theta) * exp_psi_value, fBasis, basisCache);
+          
+          const int f_ID = this->f(i)->ID();
+          for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
+          {
+            int localDofIndex = trialDofOrdering->getDofIndex(f_ID, dofOrdinal);
+            allCoefficientsForCell(localDofIndex) = basisCoefficients(0, dofOrdinal);
+          }
+        }
+        
+        _vlasovSoln->setSolnCoeffsForCellID(allCoefficientsForCell, cellID);
+
+        SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(f_values);
+        SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(psi_values);
+      }
+    }
     configurationSpaceSolve();
     // Compute difference between current and previous substep solutions.  For substepOrdinal == 0, this is the difference with prior time step.
     
@@ -803,7 +1038,52 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     }
     const double fDiff_L2 = sqrt(fDiff_L2_squared);
     const double f_L2 = sqrt(f_L2_squared);
-    const double fRelDiff = fDiff_L2 / f_L2;
+    fRelDiff = fDiff_L2 / f_L2;
+    
+    if (_enforcePositivity)
+    {
+      const double alphaMin = 1e-8;
+      const double alphaMax = 1e8;
+      // adjust alpha for next substep:
+      if (_alphaMultiplier > 0)
+      {
+        alpha *= _alphaMultiplier;
+      }
+      else if (prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)] != std::numeric_limits<double>::max())
+      {
+        const double fRelDiff_previous = prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)];
+        double relativeChange = (fRelDiff_previous - fRelDiff) / std::max(fRelDiff, fRelDiff_previous);
+        
+        if (std::abs(relativeChange) < 1e-1)
+        {
+          // stagnated: increase alpha
+          if (alpha != alphaMax)
+          {
+            alpha = std::min(2.0 * alpha, alphaMax);
+            // ensure that we won't adjust alpha for at least alphaUpdateFrequency steps:
+            prior_fRelDiffs = std::vector<double>(alphaUpdateFrequency, std::numeric_limits<double>::max());
+          }
+          if (rank == 0) std::cout << "stagnated: alpha: " << alpha << std::endl;
+        }
+        else if (relativeChange < 0)
+        {
+          // diverging: decrease alpha
+          if (alpha != alphaMin)
+          {
+            alpha = std::max(0.25 * alpha, alphaMin);
+            // ensure that we won't adjust alpha for at least alphaUpdateFrequency steps:
+            prior_fRelDiffs = std::vector<double>(alphaUpdateFrequency, std::numeric_limits<double>::max());
+          }
+          if (rank == 0) std::cout << "diverging: alpha: " << alpha << std::endl;
+        }
+        else
+        {
+          // converging rapidly enough: leave alpha alone
+          if (rank == 0) std::cout << "converging: alpha: " << alpha << std::endl;
+        }
+      }
+    }
+    prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)] = fRelDiff;
     
     const double configurationSpaceRelativeDiff = _configurationSpaceFormulation->l2NormOfSolutionUpdate();
     
@@ -811,6 +1091,10 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     
     if ((rank == 0) && !_runQuietly)
     {
+//      if (f_L2 < _fixedPointTolerance)
+//      {
+        std::cout << "Substep " << substepOrdinal+1 << ", absolute L^2 norm of difference in f: " << fDiff_L2 << std::endl;
+//      }
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E and/or B: " << configurationSpaceRelativeDiff << std::endl;
     }
@@ -832,7 +1116,12 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
   _iterationCounts.push_back(substepIterationCounts);
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
   
-  _t += _dt->getConstantValue();
+  _t->setValue(_t->getConstantValue() + _dt->getConstantValue());
+}
+
+double VlasovBackwardEulerFormulation::fluxLimitingWeightForCell(GlobalIndexType cellID)
+{
+  return _fluxLimitingWeightForCell[cellID];
 }
 
 Teuchos::RCP<GMGSolver> VlasovBackwardEulerFormulation::gmgSolver()
@@ -868,10 +1157,17 @@ void VlasovBackwardEulerFormulation::loadFromCheckpoint(const std::string &check
     std::string timeFile = checkpointDir + "/time.txt";
     std::ifstream timeFileStream(timeFile, std::ios::in);
     
-    timeFileStream >> _t;
+    double t;
+    timeFileStream >> t;
+    _t->setValue(t);
     
     timeFileStream.close();
   }
+}
+
+double VlasovBackwardEulerFormulation::m(const int speciesOrdinal) const
+{
+  return _m[speciesOrdinal];
 }
 
 int VlasovBackwardEulerFormulation::maxSubstepsTaken() const
@@ -913,6 +1209,23 @@ double VlasovBackwardEulerFormulation::averageSubstepsTaken() const
   {
     return 0;
   }
+}
+
+VarPtr VlasovBackwardEulerFormulation::phi(const int speciesOrdinal)
+{
+  VarFactoryPtr vf = _vlasovBF->varFactory();
+  return vf->testVar(_phi_names[speciesOrdinal], L2);
+}
+
+VarPtr VlasovBackwardEulerFormulation::psi(const int speciesOrdinal)
+{
+  VarFactoryPtr vf = _vlasovBF->varFactory();
+  return vf->trialVar(_psi_names[speciesOrdinal]);
+}
+
+double VlasovBackwardEulerFormulation::q(const int speciesOrdinal) const
+{
+  return _q[speciesOrdinal];
 }
 
 void VlasovBackwardEulerFormulation::refineUniformly(const int numRefinements)
@@ -990,6 +1303,12 @@ void VlasovBackwardEulerFormulation::saveCheckpoint(const std::string &checkpoin
   _configurationSpaceFormulation->saveCheckpoint(checkpointDir);
 }
 
+void VlasovBackwardEulerFormulation::setAlpha(const double alpha0, const double alphaMultiplier)
+{
+  _alpha0 = alpha0;
+  _alphaMultiplier = alphaMultiplier;
+}
+
 void VlasovBackwardEulerFormulation::setEnforceQuasiNeutrality(bool enforceQuasiNeutrality)
 {
   _enforceQuasiNeutrality = enforceQuasiNeutrality;
@@ -1030,6 +1349,77 @@ void VlasovBackwardEulerFormulation::setIterativeSolveTolerances(const std::vect
   _cgTols = cgTols;
 }
 
+void VlasovBackwardEulerFormulation::setTestIP(VlasovBackwardEulerFormulation::TestIPChoice ipChoice)
+{
+  IPPtr ip;
+  switch (ipChoice) {
+    case VLASOV_TIME_MARCHING_GRAPH_INNER_PRODUCT:
+      ip = this->vlasovSolution()->bf()->graphNorm();
+      break;
+    
+    case VLASOV_TIME_MARCHING_L2_INNER_PRODUCT:
+      ip = this->vlasovSolution()->bf()->l2Norm();
+      break;
+    case VLASOV_TIME_MARCHING_CONSERVATIVE_INNER_PRODUCT:
+    {
+      double theta = _crankNicolson ? 0.5 : 1.0;
+      ip = IP::ip();
+      FunctionPtr dt = _dt;
+      auto vx = this->v_i(0); // TODO: generalize this to higher dimensions
+      auto ax = this->a()[0]; // TODO: generalize this to higher dimensions
+      
+      for (int i=0; i<_numSpecies; i++)
+      {
+        auto w  = this->w(i);
+        auto w_dx = w->di(1);
+        auto w_dv = w->di(2);
+        
+        ip->addTerm(w);
+        
+        if (!_enforcePositivity)
+        {
+          ip->addTerm(w - (2 * theta * dt * vx) * w_dx - (2*theta*dt*ax)* w_dv);
+        }
+        else
+        {
+          auto phi = this->phi(i);
+          ip->addTerm(w - (2 * theta * dt * vx) * w_dx - (2*theta*dt*ax)* w_dv + 2 * dt * phi);
+          
+          auto psi_prev = Function::solution(this->psi(i), this->vlasovSolutionPrevious());
+          auto exp_psi_prev = Exp<double>::exp(psi_prev);
+          FunctionPtr alpha = this->alpha();
+          auto sqrt_beta = Function::sqrtFunction(2 * alpha * dt * exp_psi_prev);
+          ip->addTerm(sqrt_beta * phi);
+        }
+      }
+    }
+      break;
+  }
+  this->vlasovSolution()->setIP(ip);
+}
+
+void VlasovBackwardEulerFormulation::setTestIP(std::string ipChoiceString)
+{
+  VlasovBackwardEulerFormulation::TestIPChoice ipChoice;
+  if (ipChoiceString == "graph")
+  {
+    ipChoice = Camellia::VlasovBackwardEulerFormulation::VLASOV_TIME_MARCHING_GRAPH_INNER_PRODUCT;
+  }
+  else if (ipChoiceString == "L2")
+  {
+    ipChoice = Camellia::VlasovBackwardEulerFormulation::VLASOV_TIME_MARCHING_L2_INNER_PRODUCT;
+  }
+  else if (ipChoiceString == "conservative")
+  {
+    ipChoice = Camellia::VlasovBackwardEulerFormulation::VLASOV_TIME_MARCHING_CONSERVATIVE_INNER_PRODUCT;
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported ipChoice");
+  }
+  this->setTestIP(ipChoice);
+}
+
 void VlasovBackwardEulerFormulation::setRunQuietly(bool runQuietly)
 {
   _runQuietly = runQuietly;
@@ -1063,50 +1453,124 @@ void VlasovBackwardEulerFormulation::takeTimeStep()
   finishTimeStep();
 }
 
-void VlasovBackwardEulerFormulation::setInitialConditions(FunctionPtr f0)
+void VlasovBackwardEulerFormulation::setInitialConditions(FunctionPtr f0, bool enforceInflowBCsWeakly)
 {
-  setInitialConditions(std::vector<FunctionPtr>{f0});
+  setInitialConditions(std::vector<FunctionPtr>{f0}, enforceInflowBCsWeakly);
 }
 
-void VlasovBackwardEulerFormulation::setInitialConditions(std::vector<FunctionPtr> f0)
+void VlasovBackwardEulerFormulation::setInitialConditions(std::vector<FunctionPtr> f0, bool enforceInflowBCsWeakly)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(int(f0.size()) != _numSpecies, std::invalid_argument, "Must define initial conditions for each species");
   std::map<int,FunctionPtr> projectionMap;
+    
+  FunctionPtr n = Function::normal();
+  FunctionPtr v_dot_nx = Function::zero();
+  for (int vd=0; vd<std::min(_velocityDim,_spaceDim); vd++)
+  {
+    FunctionPtr v_d = this->v_i(vd);
+    FunctionPtr n_d = n->spatialComponent(vd+1); // 1-based index for Function::spatialComponent();
+    v_dot_nx = v_dot_nx + v_d * n_d;
+  }
+  
+  FunctionPtr a_dot_nv = Function::zero();
+  {
+    const int indexOffsetVelocityOneBased = _spaceDim + 1;
+    for (int d=0; d<_velocityDim; d++)
+    {
+      auto nvd = n->spatialComponent(d+indexOffsetVelocityOneBased);
+      a_dot_nv = a_dot_nv + _a[d] * nvd;
+    }
+  }
+  
   for (int speciesOrdinal=0; speciesOrdinal<_numSpecies; speciesOrdinal++)
   {
+    FunctionPtr sgn = Function::sideParity();
+    FunctionPtr n   = Function::normal();
+    FunctionPtr f0_trace;
+ 
+    if (_useConformingTraces)
+      f0_trace = f0[speciesOrdinal];
+    else
+      f0_trace = f0[speciesOrdinal] * (v_dot_nx + (_q[speciesOrdinal]/_m[speciesOrdinal]) * a_dot_nv) * sgn;
+    
+    if (enforceInflowBCsWeakly)
+    {
+      // then we want to set homogeneous conditions at the boundaries
+      const int tagSpatialInflow = this->tagVlasovSpatialInflow();
+      FunctionPtr inflow_characteristic = Function::meshSideSetCharacteristic(DIRICHLET_SET_TAG_NAME, tagSpatialInflow);
+      
+      f0_trace = f0_trace - inflow_characteristic * f0_trace; // 0 at inflow boundary, original f0_trace everywhere else
+    }
+    
+    VarPtr traceVar = _useConformingTraces ? this->f_hat(speciesOrdinal) : this->t_n_hat(speciesOrdinal);
+    
     projectionMap[this->f(speciesOrdinal)->ID()] = f0[speciesOrdinal];
+    projectionMap[traceVar->ID()] = f0_trace;
+    
+    if (_enforcePositivity)
+    {
+      FunctionPtr psi0;
+      if (f0[speciesOrdinal]->isZero())
+      {
+        psi0 = Function::constant(-40);
+      }
+      else
+      {
+        psi0 = Teuchos::rcp( new Ln<double>(f0[speciesOrdinal]) );
+      }
+      projectionMap[this->psi(speciesOrdinal)->ID()] = psi0;
+    }
   }
   
   const int solutionOrdinal = 0;
   _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
   configurationSpaceSolve();
   
+  // project again to get an f0_trace that reflects configuration-space solution
+  _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
+  
   _vlasovSolnPrev->setSolution(_vlasovSoln);
   _vlasovSolnPriorTime->setSolution(_vlasovSoln);
   
-  _t = 0;
+  _t->setValue(0);
 }
 
-void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in)
+void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in,
+                                                                   double timeRampForInflowConditions)
 {
   using std::vector;
-  setInitialAndInflowConditions(vector<FunctionPtr>{f0}, vector<FunctionPtr>{f_in});
+  setInitialAndInflowConditions(vector<FunctionPtr>{f0}, vector<FunctionPtr>{f_in}, timeRampForInflowConditions, _enforcePositivity);
 }
 
-void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in)
+void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in,
+                                                                   double timeRampForInflowConditions, bool imposeInflowWeakly)
+{
+  using std::vector;
+  setInitialAndInflowConditions(vector<FunctionPtr>{f0}, vector<FunctionPtr>{f_in}, timeRampForInflowConditions, imposeInflowWeakly);
+}
+
+void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in,
+                                                                   double timeRampForInflowConditions)
+{
+  setInitialAndInflowConditions(f0, f_in, timeRampForInflowConditions, _enforcePositivity);
+}
+
+void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in,
+                                                                   double timeRampForInflowConditions, bool imposeInflowWeakly)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(int(f_in.size()) != _numSpecies, std::invalid_argument, "Must define inflow conditions for each species");
   auto vlasovBC = BC::bc();
   
   for (int speciesOrdinal=0; speciesOrdinal<_numSpecies; speciesOrdinal++)
   {
-    VarPtr t_n = this->t_n_hat(speciesOrdinal);
+    VarPtr traceVar = _useConformingTraces ? this->f_hat(speciesOrdinal) : this->t_n_hat(speciesOrdinal);
+    
     for (int vd=0; vd<_velocityDim; vd++)
     {
       const int tagMin = this->tagVlasovMinVelocity(vd);
       const int tagMax = this->tagVlasovMaxVelocity(vd);
-      vlasovBC->addDirichlet(t_n, tagMin, Function::zero());
-      vlasovBC->addDirichlet(t_n, tagMax, Function::zero());
+      vlasovBC->addDirichlet(traceVar, tagMin, Function::zero());
+      vlasovBC->addDirichlet(traceVar, tagMax, Function::zero());
     }
     
     FunctionPtr n = Function::normal();
@@ -1119,12 +1583,39 @@ void VlasovBackwardEulerFormulation::setInitialAndInflowConditions(std::vector<F
     }
     
     const int tagSpatialInflow = this->tagVlasovSpatialInflow();
-    vlasovBC->addDirichlet(t_n, tagSpatialInflow, v_dot_nx * f_in[speciesOrdinal]);
+    
+    FunctionPtr f_BC = f_in[speciesOrdinal];
+    if (timeRampForInflowConditions != 0.0)
+    {
+      ParameterFunctionPtr t  = this->t();
+      double dt = _dt->getConstantValue(); // want the time ramp at time t to be evaluated at t + dt
+      FunctionPtr timeRamp = TimeRampFunction::timeRamp(this->t(), timeRampForInflowConditions, -dt); // timeRamp evaluated at current time
+      f_BC = f_BC * timeRamp;
+    }
+    if (!imposeInflowWeakly)
+    {
+      FunctionPtr traceBC = _useConformingTraces ? f_BC : v_dot_nx * f_BC;
+      vlasovBC->addDirichlet(traceVar, tagSpatialInflow, traceBC);
+    }
+    else
+    {
+      // if imposeInflowWeakly is set, don't project BC functions onto the trace space
+      // instead, use homogeneous BCs, and add something to the RHS at inflow
+      _strongInflowBCFlag->setValue(0); // turns off a term that gets added to the RHS otherwise
+      vlasovBC->addDirichlet(traceVar, tagSpatialInflow, Function::zero());
+      FunctionPtr inflow_characteristic = Function::meshSideSetCharacteristic(DIRICHLET_SET_TAG_NAME, tagSpatialInflow);
+      f_BC = _crankNicolson ? 0.5 * (f_in[speciesOrdinal] + _fSolnPriorTime[speciesOrdinal]) : f_in[speciesOrdinal];
+      FunctionPtr tn_BC = inflow_characteristic * v_dot_nx * f_BC;
+      _vlasovSoln->rhs()->addTerm(-tn_BC * this->w(speciesOrdinal)); // minus sign comes from moving this term from the LHS to the RHS
+
+      // note: the above is only correct for non-conforming traces
+      TEUCHOS_TEST_FOR_EXCEPTION(_useConformingTraces, std::invalid_argument, "conforming traces not yet supported for weakly imposed BCs");
+    }
   }
 
   _vlasovSoln->setBC(vlasovBC);
   
-  setInitialConditions(f0);
+  setInitialConditions(f0, imposeInflowWeakly);
 }
 
 Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMoments(int i)
@@ -1135,6 +1626,11 @@ Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMoments(in
 Teuchos::RCP<SolutionMoments> VlasovBackwardEulerFormulation::solutionMomentsPriorTime(int i)
 {
   return _solutionMomentsPriorTime[i];
+}
+
+double VlasovBackwardEulerFormulation::timeStep() const
+{
+  return _dt->getConstantValue();
 }
 
 // test variables:
@@ -1178,7 +1674,7 @@ int VlasovBackwardEulerFormulation::tagVlasovMinVelocity(int zeroBasedComp) cons
   }
 }
 
-double VlasovBackwardEulerFormulation::t() const
+ParameterFunctionPtr VlasovBackwardEulerFormulation::t() const
 {
   return _t;
 }

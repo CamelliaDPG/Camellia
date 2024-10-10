@@ -28,6 +28,11 @@ _phaseMesh(phaseSpaceMesh)
   _physicalMesh->globalDofAssignment()->setAllowMeshTopologyPruning(false); // want to keep all physical geometry info available to all MPI ranks
 }
 
+PhasePhysicalMeshMap::~PhasePhysicalMeshMap()
+{
+  _phaseMesh->unregisterObserver(this);
+}
+
 PhasePhysicalPointIterator PhasePhysicalMeshMap::getPhysicalPointIterator(BasisCachePtr phaseSpaceBasisCache, GlobalIndexType phaseSpaceCellID,
                                                                           map< GlobalIndexType , pair<BasisCachePtr, vector<int> > > &physicalBasisCachePairs) const
 {

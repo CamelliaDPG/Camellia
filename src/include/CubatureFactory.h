@@ -55,7 +55,7 @@ public:
 
     \return Cubature object.
     */
-  Teuchos::RCP<Cubature> create(CellTopoPtr cellTopo, int cubDegree);
+  Teuchos::RCP<Cubature> create(CellTopoPtr cellTopo, int cubDegree, Intrepid2::EPolyType polyType = Intrepid2::POLYTYPE_MAX);
 
   //! Creates cubature object cubature degree that may vary according to dimension
   /*!
@@ -66,7 +66,7 @@ public:
 
    \return Cubature object.
    */
-  Teuchos::RCP<Cubature> create(CellTopoPtr cellTopo, std::vector<int> cubDegree);
+  Teuchos::RCP<Cubature> create(CellTopoPtr cellTopo, std::vector<int> cubDegree, Intrepid2::EPolyType polyType = Intrepid2::POLYTYPE_MAX);
   //@}
 }; // class CubatureFactory
 

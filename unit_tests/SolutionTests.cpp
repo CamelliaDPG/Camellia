@@ -2255,6 +2255,52 @@ namespace
     TEST_COMPARE(err_l2, <, tol);
   }
 
+  void testProject1D1VMeshAnisotropicallyRefined(double tol, Teuchos::FancyOStream &out, bool &success)
+  {
+    // project an exactly-recoverable function onto a single-element mesh.
+    // We use H^1 order of 2, which means L^2 variables get linear bases.
+    std::vector<int> H1Orders(2, 2); // we set one polynomial order in the base dimension, and one in each extrusion dimension
+    auto mesh = makeSingleElementExtrudedTestMesh(1, 1, H1Orders);
+    mesh->hRefine(vector<GlobalIndexType>{0}); // make 2x2 mesh
+    
+    auto xAnisotropicRef = RefinementPattern::xAnisotropicRefinementPatternExtrudedLine();
+    // refine one element anisotropically:
+    mesh->hRefine(vector<GlobalIndexType>{1}, xAnisotropicRef);
+    // the above makes a hanging node; refine one of its children -- these are cells 4 and 5
+    mesh->hRefine(vector<GlobalIndexType>{5}, xAnisotropicRef);
+    // now we have a 2-irregular mesh; fix that:
+    mesh->enforceOneIrregularity();
+    
+    SolutionPtr soln = Solution::solution(mesh);
+    
+    FunctionPtr f = Function::constant(1.0);
+    for (int d=0; d<2; d++)
+    {
+      FunctionPtr xi = MonomialFunction::xi_n(d,1);
+      f = xi * f;
+    }
+    
+    std::map<int,FunctionPtr> projectionMap;
+    VarPtr uField = mesh->bilinearForm()->varFactory()->fieldVar("u");
+    projectionMap[uField->ID()] = f;
+    VarPtr uFlux  = mesh->bilinearForm()->varFactory()->fluxVar("uhat");
+    projectionMap[uFlux->ID()] = f;
+    
+    soln->projectOntoMesh(projectionMap);
+    
+    FunctionPtr u_soln = Function::solution(uField, soln);
+    
+    double err_l2 = (f - u_soln)->l2norm(mesh);
+    
+    TEST_COMPARE(err_l2, <, tol);
+    
+    FunctionPtr sideParity = Function::sideParity();
+    FunctionPtr uFlux_soln = Function::solution(uFlux, soln, true);
+    double flux_err_l2 = (f * sideParity - uFlux_soln)->l2norm(mesh);
+    
+    TEST_COMPARE(flux_err_l2, <, tol);
+  }
+
   void testProjectExtrudedMeshConstantExtrusions(int baseDim, int extrusionDim, double tol, Teuchos::FancyOStream &out, bool &success)
   {
     // project a spatial (base-mesh) function onto an extruded mesh
@@ -2280,6 +2326,12 @@ namespace
       double err_l2 = (f->di(i) - u_soln->di(i))->l2norm(mesh);
       TEST_COMPARE(err_l2, <, tol);
     }
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, Project1D1VMeshAnisotropicallyRefined )
+  {
+    const double tol = 1e-14;
+    testProject1D1VMeshAnisotropicallyRefined(tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMesh1D1V )

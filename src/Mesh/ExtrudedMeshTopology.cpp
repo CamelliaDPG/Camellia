@@ -404,6 +404,8 @@ namespace
   {
     this->MeshTopology::unrefineCell(cellIndex, refPattern);
     
+    // TODO: update _componentToPhaseMaps, _phaseToComponentMap to eliminate the phase-space cells that are no longer valid
+    
     const bool didRepartitionAndRebuild = false; // *we* didn't; that's not something that MeshTopology does…
     const set<IndexType> cellIndexSet {cellIndex};
     MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
@@ -431,26 +433,87 @@ namespace
   void PhysicalMeshUpdater::didHRefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern,
                                        bool didRepartitionAndRebuild)
   {
-    std::set<GlobalIndexType> refinedPhysicalCellIDs; // may include some cells that were previously refined.  GDA::didHRefine() should tolerate this.
-    
-    std::vector<IndexType> componentCellCounts{_extrudedMeshTopology->physicalMeshTopology()->cellCount()};
-    for (int d=0; d<_extrudedMeshTopology->numExtrusionDimensions(); d++)
-    {
-      componentCellCounts.push_back(_extrudedMeshTopology->extrusionMeshTopology(d)->cellCount());
-    }
+    std::set<GlobalIndexType> refinedPhysicalCellIDs;
     
     for (const auto & phaseSpaceCellID : cellIDs)
     {
       IndexType physicalCellID = _extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID);
-      refinedPhysicalCellIDs.insert(physicalCellID);
+      
+      if (_previouslyRefinedPhysicalCells.find(physicalCellID) == _previouslyRefinedPhysicalCells.end())
+      {
+        refinedPhysicalCellIDs.insert(physicalCellID);
+      }
     }
     
     _physicalMesh->globalDofAssignment()->didHRefine(refinedPhysicalCellIDs);
+    
+    // for now, we assume that refined cells stay refined (no unrefinements in physical mesh).
+    // if we want to relax that assumption, we could override didUnrefine() and once *all* phase
+    // space cells that map to child elements are unrefined, we could then unrefine the physical cell
+    // in the physical mesh.  This is not too likely to come up in practice, I think, and physical mesh
+    // costs will likely always be dominated by phase space mesh costs.  But if we did do this, at the
+    // point of unrefinement, we would want to remove the unrefined cell IDs from _previouslyRefinedPhysicalCells.
+    _previouslyRefinedPhysicalCells.insert(refinedPhysicalCellIDs.begin(),refinedPhysicalCellIDs.end());
     
     // get mesh to repartition, if phase space mesh was repartitioned.
     if (didRepartitionAndRebuild)
     {
       _physicalMesh->repartitionAndRebuild();
+    }
+  }
+
+  void PhysicalMeshUpdater::pRefine(const set<GlobalIndexType> &cellIDs, int pToAdd, bool repartitionAndRebuild)
+  {
+    std::map<GlobalIndexType, int> physicalCellIDsToMinOrder;
+    
+    auto physicalMeshTopo = _physicalMesh->getTopology();
+    
+    for (const auto & phaseSpaceCellID : cellIDs)
+    {
+      int p = _phaseSpaceMesh->cellPolyOrder(phaseSpaceCellID) + pToAdd; // assumes isotropic in p
+      IndexType physicalCellID = _extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID);
+      
+      // this cell, and all descendants should also have p as minimum order:
+      auto physicalCell = physicalMeshTopo->getCell(physicalCellID);
+      bool leafNodesOnly = false; // include inactive descendants, too
+      auto descendants = physicalCell->getDescendants(physicalMeshTopo, leafNodesOnly);
+      
+      for (const auto & descendantCellID : descendants)
+      {
+        physicalCellIDsToMinOrder[descendantCellID] = std::max(physicalCellIDsToMinOrder[descendantCellID], p);
+      }
+    }
+    
+    map<GlobalIndexType, int> cell_dp;
+    for (const auto & entry : physicalCellIDsToMinOrder)
+    {
+      const auto & physicalCellID = entry.first;
+      const auto & min_p          = entry.second;
+      
+      auto current_p = _physicalMesh->cellPolyOrder(physicalCellID); // assumes isotropic in p
+      
+      if (current_p < min_p)
+      {
+        int dp = min_p - current_p; // dp: the amount of refinement
+        cell_dp[physicalCellID] = dp;
+      }
+    }
+    
+    map<int, set<GlobalIndexType> > pRefinements;
+    for (auto entry : cell_dp)
+    {
+      pRefinements[entry.second].insert(entry.first);
+    }
+    
+    for (auto entry : pRefinements)
+    {
+      const auto & dp            = entry.first;
+      const auto & cellsToRefine = entry.second;
+    
+      if (cellsToRefine.size() > 0)
+      {
+        _physicalMesh->pRefine(cellsToRefine, dp, repartitionAndRebuild);
+      }
     }
   }
   

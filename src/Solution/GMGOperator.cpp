@@ -1102,6 +1102,9 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   DofOrderingPtr coarseTrialOrdering = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr;
   DofOrderingPtr fineTrialOrdering = _fineMesh->getElementType(fineCellID)->trialOrderPtr;
 
+  BasisCachePtr fineBasisCache   = BasisCache::basisCacheForCell(_fineMesh, fineCellID);
+  BasisCachePtr coarseBasisCache = BasisCache::basisCacheForCell(_coarseMesh, coarseCellID);
+  
 //  cout << "coarse trial ordering: \n";
 //  coarseTrialOrdering->print(cout);
   
@@ -1225,6 +1228,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 //        cout << "Warning: for debugging purposes, skipping projection of fluxes and traces in GMGOperator.\n";
         for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++)
         {
+          BasisCachePtr fineDomainCache = fineBasisCache->getSideBasisCache(sideOrdinal);
+          
           if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
           
           if (condensedDofInterpreterCoarse != NULL)
@@ -1263,10 +1268,21 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned coarseSubcellOrdinal = 0, coarseDomainOrdinal = 0; // the volume
                 unsigned coarseSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
-                SubBasisReconciliationWeights weights = _br->constrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                            sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-                                                                                            ancestor->topology(),
-                                                                                            spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
+                
+                SubBasisReconciliationWeights weights;
+                
+                if (coarseBasis->functionSpace() == fineBasis->functionSpace())
+                {
+                  // then we can compute basis weights in reference space, and cache them
+                  weights = _br->constrainedWeightsForTermTraced(termTraced, varTracedID,
+                                                                 sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
+                                                                 ancestor->topology(),
+                                                                 spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
+                }
+                else
+                {
+                  weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, varTracedID, sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, ancestor->topology(), spaceDim, coarseBasis, fineDomainCache, coarseBasisCache);
+                }
                 // Now: Zero out weights on fine dofs that are
                 // - *not* interior to the coarse domain, or
                 // - on interior subcells that are not owned by the child cell.
@@ -1275,6 +1291,12 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 //       on ownership of the fine dofs on the interior of a refined element being assigned in the same
                 //       way on every refined element.  This is in fact the case in GDAMinimumRule, and it seems a natural
                 //       thing, but if it were to change, that would be a problem.
+                
+                // we may have filtered out all the fine dofs; if so, we can continue
+                if (weights.weights.size() == 0)
+                {
+                  continue;
+                }
                 
                 // **** end new weight-adjusting code ****
                 
@@ -1301,14 +1323,30 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned volumeSubcellOrdinal = 0, volumeDomainOrdinal = 0;
                 unsigned volumeSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
-                SubBasisReconciliationWeights weights = _br->constrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                            sideDim, fineBasis,
-                                                                                            fineSubcellOrdinalInFineDomain, refBranch,
-                                                                                            sideOrdinal, volumeTopo,
-                                                                                            spaceDim, volumeBasis, volumeSubcellOrdinal,
-                                                                                            volumeDomainOrdinal, volumeSubcellPermutation);
+                
+                SubBasisReconciliationWeights weights;
+                if (volumeBasis->functionSpace() == fineBasis->functionSpace())
+                {
+                  // then we can compute basis weights in reference space, and cache them
+                  weights = _br->constrainedWeightsForTermTraced(termTraced, varTracedID,
+                                                                 sideDim, fineBasis,
+                                                                 fineSubcellOrdinalInFineDomain, refBranch,
+                                                                 sideOrdinal, volumeTopo,
+                                                                 spaceDim, volumeBasis, volumeSubcellOrdinal,
+                                                                 volumeDomainOrdinal, volumeSubcellPermutation);
+                }
+                else
+                {
+                  weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, varTracedID, sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, ancestor->topology(), spaceDim, volumeBasis, fineDomainCache, coarseBasisCache);
+                }
                 
                 weights = BasisReconciliation::filterOutZeroRowsAndColumns(weights);
+                
+                // we may have filtered out all the fine dofs; if so, we can continue
+                if (weights.weights.size() == 0)
+                {
+                  continue;
+                }
                 
                 // TODO: treat the case (as with pressure in Stokes VGP) where termTraced includes some field variables that are not condensible.
                 
@@ -1401,11 +1439,17 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 // - *not* interior to the coarse domain, or
                 // - on interior subcells that are not owned by the child cell.
                 filterOutDuplicateFineDofs(fineBasis, fineCell, sideOrdinal, true, refBranch, weights);
+                // we may have filtered out all the fine dofs; if so, we can continue
+                if (weights.weights.size() == 0)
+                {
+                  continue;
+                }
                 
                 coarseDofIndicesVector.clear();
                 coarseDofIndicesVector.insert(coarseDofIndicesVector.begin(),
                                               weights.coarseOrdinals.begin(), weights.coarseOrdinals.end());
                 // **** end new weight-adjusting code ****
+                
                 
                 basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(weights.fineOrdinals, coarseDofIndicesVector, weights.weights));
                 fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndicesVector.begin(),coarseDofIndicesVector.end());
@@ -1435,7 +1479,31 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               coarseBasis = coarseBasis->continuousBasis();
               TEUCHOS_TEST_FOR_EXCEPTION(fineBasis->functionSpace() != coarseBasis->functionSpace(), std::invalid_argument, "Even after getting continuous basis for coarseBasis, fine and coarse function spaces disagree");
             }
-            SubBasisReconciliationWeights weights = _br->constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
+            SubBasisReconciliationWeights weights;
+            
+            {
+              // ancestralPermutation goes from canonical to cell's side's ancestor's ordering:
+              unsigned ancestralCellPermutation = ancestor->subcellPermutation(sideDim, coarseSideOrdinal);
+              // constrainingPermutation goes from canonical to the constraining side's ordering
+              unsigned constrainingCellPermutation = fineCell->subcellPermutation(sideDim, sideOrdinal); // subcell permutation as seen from the perspective of the constraining cell's side
+              
+              // ancestralPermutationInverse goes from ancestral view to canonical
+              unsigned ancestralPermutationInverse = CamelliaCellTools::permutationInverse(fineBasis->domainTopology(), ancestralCellPermutation);
+              unsigned ancestralToConstrainedPermutation = CamelliaCellTools::permutationComposition(fineBasis->domainTopology(), ancestralPermutationInverse, constrainingCellPermutation);
+              
+              unsigned fineSubcellOrdinalInFineDomain = 0; // whole fine basis
+              unsigned coarseSubcellOrdinalInCoarseDomain = 0; // whole coarse basis
+              unsigned fineDomainOrdinalInRefinementLeaf = sideOrdinal;
+              unsigned coarseDomainOrdinalInCoarseCellTopo = coarseSideOrdinal;
+              
+              weights = BasisReconciliation::computeConstrainedWeights(sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch,
+                                                                       fineDomainOrdinalInRefinementLeaf,
+                                                                       ancestor->topology(), sideDim,
+                                                                       coarseBasis, coarseSubcellOrdinalInCoarseDomain,
+                                                                       coarseDomainOrdinalInCoarseCellTopo,
+                                                                       ancestralToConstrainedPermutation);
+            }
+            
             
             vector<GlobalIndexType> coarseDofIndices(weights.coarseOrdinals.size());
             int i = 0;

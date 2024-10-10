@@ -513,6 +513,30 @@ MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cyli
   return shiftedHemkerMesh(-meshWidth/2, meshWidth/2, meshHeight, cylinderRadius, bilinearForm, H1Order, pToAddTest);
 }
 
+MeshTopologyPtr MeshFactory::hypercubeMeshTopology(vector<double> dimensions, vector<int> elementCounts,
+                                                   vector<double> meshOrigin)
+{
+  int spaceDim = int(dimensions.size());
+  if (meshOrigin.size() == 0)
+  {
+    meshOrigin = vector<double>(spaceDim,0.0);
+  }
+  double x0 = meshOrigin[0];
+  double x1 = x0 + dimensions[0];
+  int xWidth = elementCounts[0];
+  auto intervalMeshTopo = intervalMeshTopology(x0, x1, xWidth);
+  
+  if (spaceDim == 1) return intervalMeshTopo;
+  
+  vector<double> remainingDimensions   (   dimensions.begin() + 1,    dimensions.end());
+  vector<int>    remainingElementCounts(elementCounts.begin() + 1, elementCounts.end());
+  vector<double> remainingMeshOrigin   (   meshOrigin.begin() + 1,    meshOrigin.end());
+  
+  auto meshTopo = extrudedMeshTopology(intervalMeshTopo, remainingMeshOrigin, remainingDimensions, remainingElementCounts);
+  
+  return meshTopo;
+}
+
 MeshTopologyPtr MeshFactory::importMOABMesh(string filePath, bool readInParallel)
 {
   return MOABReader::readMOABMesh(filePath, !readInParallel);
