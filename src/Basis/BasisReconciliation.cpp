@@ -638,7 +638,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   return weights;
 }
 
-SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
+SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForTermTracedRefSpace
+ (LinearTermPtr termTraced, int fieldID,
     unsigned fineSubcellDimension,
     BasisPtr finerBasis,
     unsigned fineSubcellOrdinalInFineDomain,
@@ -651,6 +652,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
     unsigned coarseSubcellPermutation)
 {
   SubBasisReconciliationWeights weights;
+  
+  // TODO: add an implementation that accepts a basisCache for computing coarserBasisValues (replaces coarseDomainCache, below)
+  TEUCHOS_TEST_FOR_EXCEPTION(finerBasis->functionSpace() != coarserBasis->functionSpace(), std::invalid_argument,
+                             "Fine basis and coarse basis must agree on function space if we want to compute constrained weights in reference space (otherwise we need to compute them in physical space).");
   
   vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
   vector<int> coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, 0);
@@ -698,6 +703,134 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
 
   // TODO: consider this change that might make for a cleaner implementation:
   // - Make BasisCache::fakeSideCache always (or by default) set up cellSideParities that are 1.0
+  int oneCell = 1;
+  int numSides = fineDomainCache->cellTopology()->getSideCount();
+  Camellia::FieldContainer<double> cellSideParities(oneCell,numSides);
+  cellSideParities.initialize(1.0);
+  Camellia::FieldContainer<double> fineDomainSideNormalsSpaceTime;
+  if (fineDomainCache->cellTopology()->getTensorialDegree() > 0)
+    fineDomainSideNormalsSpaceTime = fineDomainCache->getSideNormalsSpaceTime();
+  BasisCachePtr fakeSideCache = BasisCache::fakeSideCache(fineDomainCache->getSideIndex(), coarseDomainCache,
+                                                          coarseDomainCache->getRefCellPointsFC(),
+                                                          fineDomainCache->getSideNormals(), cellSideParities,
+                                                          fineDomainSideNormalsSpaceTime);
+  termTraced->values(coarserBasisValues, fieldID, coarserBasis, fakeSideCache);
+
+  // reshape to get rid of cell dimension:
+  if (termTraced->rank() == 0)
+  {
+    coarserBasisValues.resize(coarserBasisValues.dimension(1), coarserBasisValues.dimension(2));
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "termTraced reconciliation does not yet support rank > 0 terms...");
+  }
+
+  Teuchos::RCP< const Camellia::FieldContainer<double> > finerBasisValues = fineDomainCache->getTransformedValues(finerBasis, OP_VALUE, false);
+  Teuchos::RCP< const Camellia::FieldContainer<double> > finerBasisValuesWeighted = fineDomainCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
+
+  Camellia::FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
+  sizeFCForBasisValues(fineBasisValuesFiltered, finerBasis, numPoints, true, weights.fineOrdinals.size());
+  sizeFCForBasisValues(fineBasisValuesFilteredWeighted, finerBasis, numPoints, true, weights.fineOrdinals.size());
+  sizeFCForTermTracedValues(coarserBasisValuesFiltered, termTraced, coarserBasis, numPoints, true, weights.coarseOrdinals.size());
+
+  filterFCValues(fineBasisValuesFiltered, *(finerBasisValues.get()), weights.fineOrdinals, finerBasis->getCardinality());
+  filterFCValues(fineBasisValuesFilteredWeighted, *(finerBasisValuesWeighted.get()), weights.fineOrdinals, finerBasis->getCardinality());
+  filterFCValues(coarserBasisValuesFiltered, coarserBasisValues, weights.coarseOrdinals, coarserBasis->getCardinality());
+
+  Camellia::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
+  Camellia::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
+
+  Intrepid::FieldContainer<double> &lhsValuesIntrepid                       = lhsValues;
+  Intrepid::FieldContainer<double> &rhsValuesIntrepid                       = rhsValues;
+  Intrepid::FieldContainer<double> &coarserBasisValuesFilteredIntrepid      = coarserBasisValuesFiltered;
+  Intrepid::FieldContainer<double> &fineBasisValuesFilteredIntrepid         = fineBasisValuesFiltered;
+  Intrepid::FieldContainer<double> &fineBasisValuesFilteredWeightedIntrepid = fineBasisValuesFilteredWeighted;
+  
+  // the casts above are important to let FunctionSpaceTools invoke BLAS
+  Intrepid::FunctionSpaceTools::integrate<double>(lhsValuesIntrepid,fineBasisValuesFilteredIntrepid,fineBasisValuesFilteredWeightedIntrepid,Intrepid::COMP_BLAS);
+  Intrepid::FunctionSpaceTools::integrate<double>(rhsValuesIntrepid,fineBasisValuesFilteredWeightedIntrepid,coarserBasisValuesFilteredIntrepid,Intrepid::COMP_BLAS);
+  
+  lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
+  rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
+
+  weights.weights.resize(weights.fineOrdinals.size(), weights.coarseOrdinals.size());
+
+//  cout << "lhsValues:\n" << lhsValues;
+//  cout << "rhsValues:\n" << rhsValues;
+
+//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  
+  int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  if (err != 0)
+  {
+    cout << "ERROR: solve for BasisReconciliation returned error code " << err << endl;
+    cout << "lhsValues:\n" << lhsValues;
+    cout << "rhsValues:\n" << rhsValues;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solve for BasisReconciliation returned error code.");
+  }
+  return weights;
+}
+
+SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
+    unsigned fineSubcellDimension,
+    BasisPtr finerBasis,
+    unsigned fineSubcellOrdinalInFineDomain,
+    RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+    unsigned fineDomainOrdinalInRefinementLeaf,
+    CellTopoPtr coarseCellTopo,
+    unsigned coarseSubcellDimension,
+    BasisPtr coarserBasis,
+    BasisCachePtr fineDomainCache,
+    BasisCachePtr coarseDomainCache)
+{
+  SubBasisReconciliationWeights weights;
+  
+  unsigned coarseSubcellOrdinalInCoarseDomain = 0;  // when the coarse domain is a side, this can be non-zero, but fields are always in the volume, so this will always be 0
+  unsigned coarseDomainOrdinalInCoarseCellTopo = 0; // again, since coarse domain is for a field variable, this will always be 0
+  unsigned coarseSubcellPermutation = 0;            // not sure if this will ever be nontrivial permutation in practice; we don't test anything else here
+  
+  vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
+  vector<int> coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, 0);
+  weights.fineOrdinals = set<int>(fineOrdinals.begin(),fineOrdinals.end());
+  weights.coarseOrdinals = set<int>(coarseOrdinals.begin(), coarseOrdinals.end());
+  
+  if (weights.fineOrdinals.size() == 0)
+  {
+    if (weights.coarseOrdinals.size() != 0)
+    {
+      cout << "fineOrdinals determined to be empty when coarseOrdinals is not!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fineOrdinals determined to be empty when coarseOrdinals is not!");
+    }
+    weights.weights.resize(0, 0);
+    return weights;
+  }
+
+  setupFineAndCoarseBasisCachesForReconciliation(fineDomainCache, coarseDomainCache,
+      fineSubcellDimension, finerBasis, fineSubcellOrdinalInFineDomain,
+      cellRefinementBranch, fineDomainOrdinalInRefinementLeaf, coarseCellTopo,
+      coarseSubcellDimension, coarserBasis, coarseSubcellOrdinalInCoarseDomain,
+      coarseDomainOrdinalInCoarseCellTopo, coarseSubcellPermutation);
+  
+  int numPoints = fineDomainCache->getRefCellPointsFC().dimension(0); // (P,D): 0 is the points dimension
+
+  // set up a dummy DofOrdering for the coarse domain:
+  CellTopoPtr coarseDomainTopo = coarserBasis->domainTopology();
+  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(coarseDomainTopo));
+
+  dofOrderPtr->addEntry(fieldID,coarserBasis, coarserBasis->rangeRank());
+
+  Camellia::FieldContainer<double> coarserBasisValues;
+  if (termTraced->rank() == 0)
+  {
+    int oneCell = 1;
+    coarserBasisValues.resize(oneCell, coarserBasis->getCardinality(),numPoints);
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "termTraced reconciliation does not yet support rank > 0 terms...");
+  }
+
   int oneCell = 1;
   int numSides = fineDomainCache->cellTopology()->getSideCount();
   Camellia::FieldContainer<double> cellSideParities(oneCell,numSides);
@@ -867,14 +1000,14 @@ const SubBasisReconciliationWeights &BasisReconciliation::constrainedWeightsForT
   
   if (_termsTraced.find(cacheKey) == _termsTraced.end())
   {
-    SubBasisReconciliationWeights weights = computeConstrainedWeightsForTermTraced(termTraced, fieldID, fineSubcellDimension,
-                                                                                   finerBasis, fineSubcellOrdinalInFineDomain,
-                                                                                   cellRefinementBranch,
-                                                                                   fineDomainOrdinalInRefinementLeaf,
-                                                                                   coarseCellTopo, coarseSubcellDimension,
-                                                                                   coarserBasis, coarseSubcellOrdinalInCoarseDomain,
-                                                                                   coarseDomainOrdinalInCoarseCellTopo,
-                                                                                   coarseSubcellPermutation);
+    SubBasisReconciliationWeights weights = computeConstrainedWeightsForTermTracedRefSpace(termTraced, fieldID, fineSubcellDimension,
+                                                                                           finerBasis, fineSubcellOrdinalInFineDomain,
+                                                                                           cellRefinementBranch,
+                                                                                           fineDomainOrdinalInRefinementLeaf,
+                                                                                           coarseCellTopo, coarseSubcellDimension,
+                                                                                           coarserBasis, coarseSubcellOrdinalInCoarseDomain,
+                                                                                           coarseDomainOrdinalInCoarseCellTopo,
+                                                                                           coarseSubcellPermutation);
     _termsTraced[cacheKey] = filterOutZeroRowsAndColumns(weights); // 10-14-15 added zero-row-and-column filtering
 //    _termsTraced[cacheKey] = weights;
   }
@@ -1510,22 +1643,22 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
 
   Camellia::FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(fineTopoRefNodes, fineTopo);
-  Camellia::FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
-  CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
+  
 
   Camellia::FieldContainer<double> coarseDomainPoints; // these are as seen from the coarse cell's neighbor -- we use the coarseDomainPermutation together with the physicalCellNodes on the coarse domain to convert...
   Camellia::FieldContainer<double> fineDomainPoints; // points at which the fine basis will be evaluated
   Camellia::FieldContainer<double> cubatureWeightsFineSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
 
-  coarseDomainCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
-
-  if (fineCellRefinementBranch.size() == 0)
+  if (coarseDomainCache == Teuchos::null)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellRefinementBranch must have at least one refinement!");
+    coarseDomainCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
+    
+    Camellia::FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
+    
+    coarseTopoRefNodes.resize(1,coarseTopoRefNodes.dimension(0),coarseTopoRefNodes.dimension(1));
+    coarseDomainCache->setPhysicalCellNodes(coarseTopoRefNodes, vector<GlobalIndexType>(), false);
   }
-
-  Camellia::FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
-  CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
 
   Camellia::FieldContainer<double> subcellCubaturePoints;
   int numPoints;
@@ -1560,13 +1693,31 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
     cubatureWeightsFineSubcell(0) = 1.0;
   }
 
-  mapFineSubcellPointsToCoarseDomain(coarseDomainPoints, subcellCubaturePoints,
-                                     fineSubcellDimension, fineSubcellOrdinalInFineDomain,
-                                     fineDomainDim, fineDomainOrdinalInRefinementLeaf,
-                                     fineCellRefinementBranch, coarseCellTopo,
-                                     coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
-                                     coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo,
-                                     coarseSubcellPermutation);
+  if (fineCellRefinementBranch.size() > 0)
+  {
+    mapFineSubcellPointsToCoarseDomain(coarseDomainPoints, subcellCubaturePoints,
+                                       fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                       fineDomainDim, fineDomainOrdinalInRefinementLeaf,
+                                       fineCellRefinementBranch, coarseCellTopo,
+                                       coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                       coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo,
+                                       coarseSubcellPermutation);
+  }
+  else
+  {
+    // for empty refinement branch, we require that the coarse and fine exactly match -- right now, don't
+    // support e.g. permuted vertices.  Could enable that in the future…
+
+    TEUCHOS_TEST_FOR_EXCEPTION(int(fineSubcellDimension) != fineDomainDim, std::invalid_argument, "coarse and fine subcells must occupy the whole domain if refinement branch is empty");
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(fineSubcellDimension != coarseSubcellDimension, std::invalid_argument, "coarse and fine subcells must exactly match if refinement branch is empty");
+    TEUCHOS_TEST_FOR_EXCEPTION(fineSubcellOrdinalInFineDomain != coarseSubcellOrdinalInCoarseDomain, std::invalid_argument, "coarse and fine subcells must exactly match if refinement branch is empty");
+    TEUCHOS_TEST_FOR_EXCEPTION(coarseSubcellPermutation != 0, std::invalid_argument, "coarse and fine subcells must exactly match if refinement branch is empty");
+    
+    // supposing that all those assumptions are satisfied, we can legitimately just set coarseDomainPoints to subcellCubaturePoints
+    
+    coarseDomainPoints = subcellCubaturePoints;
+  }
 
 //  cout << "coarseDomainPoints:\n" << coarseDomainPoints;
 
@@ -1574,30 +1725,45 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
 //  leafDomainNodes.resize(1,leafDomainNodes.dimension(0),leafDomainNodes.dimension(1));
 //  fineDomainCache->setPhysicalCellNodes(leafDomainNodes, vector<GlobalIndexType>(), false);
 
-  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(leafCellTopo, cubDegree, false) ); // false: don't create side cache
-  leafCellNodes.resize(1,leafCellNodes.dimension(0),leafCellNodes.dimension(1));
-  fineCellCache->setPhysicalCellNodes(leafCellNodes, {}, false);
-
-  if (leafCellTopo->getDimension() > fineDomainDim)
+  if (fineDomainCache == Teuchos::null)
   {
-    if (leafCellTopo->getDimension() != fineDomainDim + 1)
+    Camellia::FieldContainer<double> leafCellNodes;
+    CellTopoPtr leafCellTopo;
+    
+    if (fineCellRefinementBranch.size() > 0)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis domains that are not either on cells or cell sides are unsupported.");
+      leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
+      leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
     }
-    // need to use the following constructor so that the side cache will have a strong RCP to the volume one.
-    // (BasisCache::createSideCaches() uses weak RCPs from side cache to volume to avoid circular references.)
-    fineDomainCache = BasisCache::sideBasisCache(fineCellCache, fineDomainOrdinalInRefinementLeaf);
-    fineDomainCache->setPhysicalCellNodes(leafCellNodes, {}, false);
-  }
-  else
-  {
-    fineDomainCache = fineCellCache;
+    else
+    {
+      leafCellNodes.resize(coarseTopo->getVertexCount(), coarseTopo->getDimension());
+      CamelliaCellTools::refCellNodesForTopology(leafCellNodes, coarseTopo);
+      leafCellTopo = coarseTopo;
+    }
+    
+    BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(leafCellTopo, cubDegree, false) ); // false: don't create side cache
+    leafCellNodes.resize(1,leafCellNodes.dimension(0),leafCellNodes.dimension(1));
+    fineCellCache->setPhysicalCellNodes(leafCellNodes, {}, false);
+
+    if (leafCellTopo->getDimension() > fineDomainDim)
+    {
+      if (leafCellTopo->getDimension() != fineDomainDim + 1)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis domains that are not either on cells or cell sides are unsupported.");
+      }
+      // need to use the following constructor so that the side cache will have a strong RCP to the volume one.
+      // (BasisCache::createSideCaches() uses weak RCPs from side cache to volume to avoid circular references.)
+      fineDomainCache = BasisCache::sideBasisCache(fineCellCache, fineDomainOrdinalInRefinementLeaf);
+      fineDomainCache->setPhysicalCellNodes(leafCellNodes, {}, false);
+    }
+    else
+    {
+      fineDomainCache = fineCellCache;
+    }
   }
   fineDomainCache->setRefCellPointsFC(fineDomainPoints, cubatureWeightsFineSubcell);
   coarseDomainCache->setRefCellPointsFC(coarseDomainPoints);
-
-  coarseTopoRefNodes.resize(1,coarseTopoRefNodes.dimension(0),coarseTopoRefNodes.dimension(1));
-  coarseDomainCache->setPhysicalCellNodes(coarseTopoRefNodes, vector<GlobalIndexType>(), false);
 }
 
 SubBasisReconciliationWeights BasisReconciliation::sumWeights(const SubBasisReconciliationWeights &aWeights, const SubBasisReconciliationWeights &bWeights)

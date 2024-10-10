@@ -109,6 +109,36 @@ namespace Camellia
     return i0 + dim0 * (i1 + dim1 * (i2 + dim2 * (i3 + dim3 * i4)));
   }
 
+  KOKKOS_INLINE_FUNCTION ordinal_type tensorEnumerationIndex(const ordinal_type &i0, const ordinal_type &i1, const ordinal_type &i2,
+                                                             const ordinal_type &i3, const ordinal_type &i4, const ordinal_type &i5,
+                                                             const ordinal_type &dim0, const ordinal_type &dim1,
+                                                             const ordinal_type &dim2, const ordinal_type &dim3,
+                                                             const ordinal_type &dim4)
+  {
+    return i0 + dim0 * (i1 + dim1 * (i2 + dim2 * (i3 + dim3 * (i4 + dim4 * i5))));
+  }
+
+  KOKKOS_INLINE_FUNCTION ordinal_type tensorEnumerationIndex(const ordinal_type &i0, const ordinal_type &i1, const ordinal_type &i2,
+                                                             const ordinal_type &i3, const ordinal_type &i4, const ordinal_type &i5,
+                                                             const ordinal_type &i6,
+                                                             const ordinal_type &dim0, const ordinal_type &dim1,
+                                                             const ordinal_type &dim2, const ordinal_type &dim3,
+                                                             const ordinal_type &dim4, const ordinal_type &dim5)
+  {
+    return i0 + dim0 * (i1 + dim1 * (i2 + dim2 * (i3 + dim3 * (i4 + dim4 * (i5 + dim5 * i6)))));
+  }
+
+  KOKKOS_INLINE_FUNCTION ordinal_type tensorEnumerationIndex(const ordinal_type &i0, const ordinal_type &i1, const ordinal_type &i2,
+                                                             const ordinal_type &i3, const ordinal_type &i4, const ordinal_type &i5,
+                                                             const ordinal_type &i6, const ordinal_type &i7,
+                                                             const ordinal_type &dim0, const ordinal_type &dim1,
+                                                             const ordinal_type &dim2, const ordinal_type &dim3,
+                                                             const ordinal_type &dim4, const ordinal_type &dim5,
+                                                             const ordinal_type &dim6)
+  {
+    return i0 + dim0 * (i1 + dim1 * (i2 + dim2 * (i3 + dim3 * (i4 + dim4 * (i5 + dim5 * (i6 + dim6 * i7))))));
+  }
+
   //! Wraps a View(-like) container with e.g. (C,P) dimensions, and presents as a container with (C,P0,P1,…,Pn) where the Pi dimensions are tensor components in the P dimension.
   template<class Scalar, class ViewType, ordinal_type expandedRank, ordinal_type startCollapseDim, ordinal_type lastCollapseDim>
   class ViewCollapseDimensions
@@ -148,12 +178,62 @@ namespace Camellia
     
     template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
     KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==2) && (P0 == 1) && (Pn == 1), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1) const
+    {
+      // the (C,P0) --> (C,P0) case
+      return _view(i0,i1);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==3) && (P0 == 1) && (Pn == 1), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2) const
+    {
+      // the (C,P0,D) --> (C,P0,D) case
+      return _view(i0,i1,i2);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==4) && (P0 == 1) && (Pn == 1), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1,
+               const array_index_type & i2, const array_index_type & i3) const
+    {
+      // the (C,P0,D1,D2) --> (C,P0,D1,D2) case
+      return _view(i0,i1,i2,i3);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
     enable_if_t<(M==3) && (P0 == 1) && (Pn == 2), return_type>
     operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2) const
     {
       // the (C,P0,P1) --> (C,P) case
       const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,_componentDims[0]);
       return _view(i0,pointOrdinal);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==4) && (P0 == 1) && (Pn == 2), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3) const
+    {
+      // the (C,P0,P1,D) --> (C,P,D) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,_componentDims[0]);
+      return _view(i0,pointOrdinal,i3);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==5) && (P0 == 1) && (Pn == 2), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4) const
+    {
+      // the (C,P0,P1,D1,D2) --> (C,P,D1,D2) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,_componentDims[0]);
+      return _view(i0,pointOrdinal,i3,i4);
     }
     
     template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
@@ -169,12 +249,128 @@ namespace Camellia
     
     template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
     KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==5) && (P0 == 1) && (Pn == 3), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4) const
+    {
+      // the (C,P0,P1,P2,D) --> (C,P,D) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,_componentDims[0],_componentDims[1]);
+      return _view(i0,pointOrdinal,i4);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==6) && (P0 == 1) && (Pn == 3), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5) const
+    {
+      // the (C,P0,P1,P2,D0,D1) --> (C,P,D0,D1) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,_componentDims[0],_componentDims[1]);
+      return _view(i0,pointOrdinal,i4,i5);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
     enable_if_t<(M==5) && (P0 == 1) && (Pn == 4), return_type>
     operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
                const array_index_type & i3, const array_index_type & i4) const
     {
       // the (C,P0,P1,P2,P3) --> (C,P) case
       const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,_componentDims[0],_componentDims[1],_componentDims[2]);
+      return _view(i0,pointOrdinal);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==6) && (P0 == 1) && (Pn == 4), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5) const
+    {
+      // the (C,P0,P1,P2,P3,D) --> (C,P,D) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,_componentDims[0],_componentDims[1],_componentDims[2]);
+      return _view(i0,pointOrdinal,i5);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==7) && (P0 == 1) && (Pn == 4), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5,
+               const array_index_type & i6) const
+    {
+      // the (C,P0,P1,P2,P3,D0,D1) --> (C,P,D0,D1) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,_componentDims[0],_componentDims[1],_componentDims[2]);
+      return _view(i0,pointOrdinal,i5,i6);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==6) && (P0 == 1) && (Pn == 5), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5) const
+    {
+      // the (C,P0,P1,P2,P3,P4) --> (C,P) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,i5,_componentDims[0],_componentDims[1],_componentDims[2],_componentDims[3]);
+      return _view(i0,pointOrdinal);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==7) && (P0 == 1) && (Pn == 5), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5,
+               const array_index_type & i6) const
+    {
+      // the (C,P0,P1,P2,P3,P4,D) --> (C,P,D) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,i5,_componentDims[0],_componentDims[1],_componentDims[2],_componentDims[3]);
+      return _view(i0,pointOrdinal,i6);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==8) && (P0 == 1) && (Pn == 5), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5,
+               const array_index_type & i6, const array_index_type & i7) const
+    {
+      // the (C,P0,P1,P2,P3,P4,D0,D1) --> (C,P,D0,D1) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,i5,_componentDims[0],_componentDims[1],_componentDims[2],_componentDims[3]);
+      return _view(i0,pointOrdinal,i6,i7);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==7) && (P0 == 1) && (Pn == 6), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5,
+               const array_index_type & i6) const
+    {
+      // the (C,P0,P1,P2,P3,P4,P5) --> (C,P) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,i5,i6,_componentDims[0],_componentDims[1],_componentDims[2],_componentDims[3],_componentDims[4]);
+      return _view(i0,pointOrdinal);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==8) && (P0 == 1) && (Pn == 6), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5,
+               const array_index_type & i6, const array_index_type & i7) const
+    {
+      // the (C,P0,P1,P2,P3,P4,P5,D) --> (C,P,D) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,i5,i6,_componentDims[0],_componentDims[1],_componentDims[2],_componentDims[3],_componentDims[4]);
+      return _view(i0,pointOrdinal,i7);
+    }
+    
+    template <int M = expandedRank, int P0 = startCollapseDim, int Pn = lastCollapseDim>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<(M==8) && (P0 == 1) && (Pn == 7), return_type>
+    operator()(const array_index_type & i0, const array_index_type & i1, const array_index_type & i2,
+               const array_index_type & i3, const array_index_type & i4, const array_index_type & i5,
+               const array_index_type & i6, const array_index_type & i7) const
+    {
+      // the (C,P0,P1,P2,P3,P4,P5,P6) --> (C,P) case
+      const ordinal_type pointOrdinal = tensorEnumerationIndex(i1,i2,i3,i4,i5,i6,i7,_componentDims[0],_componentDims[1],_componentDims[2],_componentDims[3],_componentDims[4],_componentDims[5]);
       return _view(i0,pointOrdinal);
     }
     

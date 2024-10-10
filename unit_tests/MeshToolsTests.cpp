@@ -407,8 +407,9 @@ TEUCHOS_UNIT_TEST( MeshTools, MeshSliceTimeZero_Cone )
   FunctionPtr u0 = Teuchos::rcp( new Cone_U0(cone_x0, cone_y0, r, h, false) );
 
   int k = 2;
-  int delta_k = 5; // because the projection isn't exact, and this will enhance the cubature degree
+  int delta_k = 0;
   int H1Order = k + 1;
+  int cubatureEnrichmentDegree = 2; // because the projection isn't exact, enrich the cubature degree
 
   VarFactoryPtr varFactory = VarFactory::varFactory();
   // traces:
@@ -497,6 +498,7 @@ TEUCHOS_UNIT_TEST( MeshTools, MeshSliceTimeZero_Cone )
   MeshPtr meshSlice = MeshTools::timeSliceMesh(initialMesh, 0, cellMap, H1Order);
 
   SolutionPtr soln = Solution::solution(mesh,bc,RHS::rhs(), ip);
+  soln->setCubatureEnrichmentDegree(cubatureEnrichmentDegree);
 
   // project u0 onto the whole spacetime mesh (i.e. it'll look like the initial value is a steady solution)
   std::map<int, FunctionPtr> functionMap;

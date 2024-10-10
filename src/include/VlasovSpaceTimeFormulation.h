@@ -48,6 +48,8 @@ private:
   int _H1Order;
   int _delta_k;
   
+  int _maxMomentNumberForDriver;
+  
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
   
@@ -178,6 +180,7 @@ public:
                              std::vector<double> velocitySpaceVertices_z,
                              const int H1Order, const int delta_k,
                              const int numUniformRefinements,
+                             const int maxMomentNumberForDriver = 0,
                              const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
   
   VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
@@ -189,6 +192,7 @@ public:
                              std::vector<double> velocitySpaceVertices_z,
                              const int H1Order, const int delta_k,
                              const int numUniformRefinements,
+                             const int maxMomentNumberForDriver = 0,
                              const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
 
   //! take time step.
@@ -246,10 +250,10 @@ public:
   void setInitialConditions(FunctionPtr f0);
   
   //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).
-  void setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in);
+  void setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in, double timeRampWidthForInitialConditions = 0);
   
   //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).  Single-species variant; calls the multi-species variant.
-  void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in);
+  void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in, double timeRampWidthForInitialConditions = 0);
   
   void setEnforceQuasiNeutrality(bool enforceQuasiNeutrality);
   bool enforceQuasiNeutrality() const;
@@ -327,6 +331,9 @@ public:
   /** \brief Reset the BCs for the configuration space mesh; can be used prior to fresh calls to addConfigurationSpaceBC().
   */
   void clearConfigurationSpaceBCs();
+  
+  //! solve for the configuration-space solution, based on current Vlasov solution.
+  void configurationSpaceSolve();
   
   //! Computes (or recomputes) the conservation diagnostics.  Typically, this is called during solve().  Only computes up to the maximum moment for conservation diagnostics (which defaults to -1).
   void computeConservationDiagnostics(bool updateSolutionMoments);

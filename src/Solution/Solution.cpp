@@ -955,6 +955,7 @@ void TSolution<Scalar>::getBasisCoefficientsForCell(Camellia::FieldContainer<Sca
   basisCoefficients.resize(basisCardinality);
   const int baseSolutionOrdinal = (standardOrInfluence == STANDARD_SOLUTION) ? 0 : 1;
   Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[baseSolutionOrdinal][cellID];
+  TEUCHOS_TEST_FOR_EXCEPTION(solnCoeffs.dimension(0) != trialOrder->totalDofs(), std::invalid_argument, "Stored solution for cell has the wrong number of coefficients");
   for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
   {
     int localDofIndex = (*dofIndices)[dofOrdinal];
@@ -1161,8 +1162,8 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
     vector<GlobalIndexType> cellIDsOfType = _mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
     
     GlobalIndexType sampleCellID = cellIDsOfType[0];
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,sampleCellID,false,_cubatureEnrichmentDegree);
-    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh,sampleCellID,true,_cubatureEnrichmentDegree);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,sampleCellID,false,_cubatureEnrichmentDegree,_polyTypeForQuadrature);
+    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh,sampleCellID,true,_cubatureEnrichmentDegree,_polyTypeForQuadrature);
 
     DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
@@ -2332,6 +2333,8 @@ template <typename Scalar>
 void TSolution<Scalar>::imposeZMCsUsingLagrange()
 {
   narrate("imposeZMCsUsingLagrange()");
+  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
+  if (zeroMeanConstraints.size() == 0) return; // nothing to do
   int rank = _mesh->Comm()->MyPID();
 
   if (_zmcsAsRankOneUpdate)
@@ -2352,7 +2355,6 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
 //  }
 
   // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
-  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   for (int trialID : zeroMeanConstraints)
   {
     // sample an element to make sure that the basis used for trialID is nodal
@@ -2790,7 +2792,7 @@ void TSolution<Scalar>::computeErrorRepresentation()
   const set<GlobalIndexType>* rankLocalCells = &_mesh->cellIDsInPartition();
   for (GlobalIndexType cellID : *rankLocalCells)
   {
-    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true);
+    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true, _cubatureEnrichmentDegree, _polyTypeForQuadrature);
     ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
 
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
@@ -2868,7 +2870,7 @@ void TSolution<Scalar>::computeResiduals()
       localCoefficients.resize(numTrialDofs);
     }
 
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree, _polyTypeForQuadrature);
     _rhs->integrateAgainstStandardBasis(residual, testOrdering, basisCache);
 
 //    cout << "computeResiduals(): testOrdering:\n" << *testOrdering;
@@ -3320,7 +3322,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
       CamelliaCellTools::mapToReferenceFrame(refElemPoints,physicalPointsForCell,_mesh->getTopology(),cellID,_mesh->globalDofAssignment()->getCubatureDegree(cellID));
       refElemPoints.resize(numPoints,spaceDim);
 
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree, _polyTypeForQuadrature);
       basisCache->setRefCellPointsFC(refElemPoints);
       std::vector<int> dim;
       values.dimensions(dim);
@@ -3413,7 +3415,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
       Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
       int basisRank = trialOrder->getBasisRank(trialID);
 
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree, _polyTypeForQuadrature);
       basisCache->setRefCellPointsFC(refElemPoint);
       Teuchos::Array<int> dim;
       dim.push_back(1); // one cell
@@ -3612,6 +3614,12 @@ void TSolution<Scalar>::setLocalCoefficientsForCell(GlobalIndexType cellID, cons
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coefficients container doesn't have the right shape; should be rank 1");
   }
   replaceMapEntry(_solutionForCellID[solutionNumber], cellID, coefficients);
+}
+
+template <typename Scalar>
+void TSolution<Scalar>::setPolyTypeForQuadrature(Intrepid2::EPolyType polyTypeForQuadrature)
+{
+  _polyTypeForQuadrature = polyTypeForQuadrature;
 }
 
 template <typename Scalar>
@@ -4283,7 +4291,7 @@ void TSolution<Scalar>::projectChildrenOntoParent(GlobalIndexType parentCellID, 
   vector<BasisCachePtr> subdomainCaches(childIndices.size());
   for (int childOrdinal=0; childOrdinal<childIndices.size(); childOrdinal++)
   {
-    subdomainCaches[childOrdinal] = BasisCache::basisCacheForCell(_mesh, childIndices[childOrdinal]);
+    subdomainCaches[childOrdinal] = BasisCache::basisCacheForCell(_mesh, childIndices[childOrdinal], false, 0, _polyTypeForQuadrature);
   }
   
   int numCells = 1; // just single parent cell handled here
@@ -4358,9 +4366,9 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
     // in the unusual case that e.g. there are no test functions defined, we might need to enrich relative to the standard trial-vs.-test BasisCache
     int trialDegree = elemTypePtr->trialOrderPtr->maxBasisDegree();
     int testDegree  = elemTypePtr->testOrderPtr->maxBasisDegree();
-    int trialEnrichmentRequired = trialDegree * 2 - testDegree; // may be negative
+    int trialEnrichmentRequired = trialDegree - testDegree; // may be negative
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree + trialEnrichmentRequired);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree + trialEnrichmentRequired, _polyTypeForQuadrature);
 
     if (fluxOrTrace)
     {
@@ -4555,7 +4563,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
     ElementTypePtr childType = _mesh->getElementType(childID);
     int childSideCount = childCell->getSideCount();
 
-    int child_p_order = _mesh->getElementType(childID)->trialOrderPtr->maxBasisDegree();
+    int child_p_order = childType->trialOrderPtr->maxBasisDegree();
     int cubatureDegree = std::max(parent_p_order + child_p_order, child_p_order * 2);
 
 //    cout << "child_p_order = " << child_p_order << endl;

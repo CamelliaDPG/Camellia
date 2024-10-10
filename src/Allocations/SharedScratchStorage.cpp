@@ -16,6 +16,9 @@
 #include "Camellia_FieldContainer.hpp"
 #include "Camellia_KokkosAllocations.h"
 
+#include "BasisCache.h"
+#include "Function.h"
+
 namespace Camellia
 {
 //using ScratchDataDimensions = std::vector<Intrepid2::DimensionInfo>;
@@ -161,6 +164,27 @@ namespace Camellia
   {
     return _dynRank.checkoutScratchStorage(dim, description);
   }
+
+  template<typename Scalar>
+  typename SharedScratchStorage<Scalar>::DeviceView
+  SharedScratchStorage<Scalar>::checkoutScratchStorage(FunctionPtr f, BasisCachePtr basisCache, std::string description)
+  {
+    if (description == "")
+    {
+      description = f->displayString() + " View allocation";
+    }
+    const int numCells  = basisCache->numCells();
+    const int numPoints = basisCache->getRefCellPoints().extent_int(0);
+    const int spaceDim  = basisCache->cellTopology()->getDimension();
+    ScratchStorageDimensions dim { numCells, numPoints };
+    
+    for (int r=0; r<f->rank(); r++)
+    {
+      dim.push_back(spaceDim);
+    }
+    
+    return checkoutScratchStorage(dim, description);
+  }
   
   template<typename Scalar>
   typename SharedScratchStorage<Scalar>::DeviceView
@@ -211,11 +235,21 @@ namespace Camellia
     return hitCount;
   }
   
+  // TODO: replace this with one that returns an RCP.  (Avoid accidental local duplication.)
   template<typename Scalar>
   SharedScratchStorage<Scalar> & SharedScratchStorage<Scalar>::sharedScratchStorage() // returns singleton instance
   {
     static SharedScratchStorage<Scalar> sharedStorage;
     return sharedStorage;
+  }
+
+  template<typename Scalar>
+  Teuchos::RCP<SharedScratchStorage<Scalar> > SharedScratchStorage<Scalar>::sharedScratchStoragePtr() // returns singleton instance
+  {
+    auto & ssStorage = SharedScratchStorage<Scalar>::sharedScratchStorage();
+    static auto ssStorageRCP = Teuchos::rcp(&ssStorage, false); // false: does not own memory
+    
+    return ssStorageRCP;
   }
   
   template class SharedScratchStorage<double>;  // for now, we only support double, int, bool.  Could add support for long long, complex, float, etc.

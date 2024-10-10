@@ -136,9 +136,13 @@ namespace Camellia {
     MeshPtr _physicalMesh;
     
     ExtrudedMeshTopology* _extrudedMeshTopology; // phase space MeshTopology
+    
+    std::set<GlobalIndexType> _previouslyRefinedPhysicalCells;
   public:
     PhysicalMeshUpdater(MeshPtr phaseSpaceMesh, MeshPtr physicalMesh);
 
+    void pRefine(const set<GlobalIndexType> &cellIDs, int pToAdd, bool repartitionAndRebuild) override;
+    
     using RefinementObserver::didHRefine;
     void didHRefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern,
                     bool didRepartitionAndRebuild) override;

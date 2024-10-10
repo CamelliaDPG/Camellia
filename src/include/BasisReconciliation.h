@@ -21,6 +21,7 @@
 #include "Basis.h"
 
 #include "LinearTerm.h"
+#include "TypeDefs.h"
 
 namespace Camellia
 {
@@ -128,7 +129,8 @@ public:
       unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
       unsigned coarseSubcellPermutation);  // coarseSubcellPermutation: how to permute the nodes of the refinement root to get the subcell seen by the coarse cell.  (This is DIFFERENT from the one in the other computeConstrainedWeights, which deals with the view from the ancestral and coarse *domains*.)
 
-  static SubBasisReconciliationWeights computeConstrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
+  //! Ref Space: requires that both fine and coarse basis belong to the same function space
+  static SubBasisReconciliationWeights computeConstrainedWeightsForTermTracedRefSpace(LinearTermPtr termTraced, int fieldID,
       unsigned fineSubcellDimension,
       BasisPtr finerBasis,
       unsigned fineSubcellOrdinalInFineDomain,
@@ -139,6 +141,18 @@ public:
       BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
       unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
       unsigned coarseSubcellPermutation);  // coarseSubcellPermutation: how to permute the nodes of the refinement root to get the subcell seen by the coarse cell.  (This is DIFFERENT from the one in the side-centric computeConstrainedWeights, which deals with the view from the ancestral and coarse *domains*.)
+
+  static SubBasisReconciliationWeights computeConstrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
+      unsigned fineSubcellDimension,
+      BasisPtr finerBasis,
+      unsigned fineSubcellOrdinalInFineDomain,
+      RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+      unsigned fineDomainOrdinalInRefinementLeaf,
+      CellTopoPtr coarseCellTopo,
+      unsigned coarseSubcellDimension,
+      BasisPtr coarserBasis,
+      BasisCachePtr fineDomainCache,
+      BasisCachePtr coarseDomainCache);  // coarseSubcellPermutation: how to permute the nodes of the refinement root to get the subcell seen by the coarse cell.  (This is DIFFERENT from the one in the side-centric computeConstrainedWeights, which deals with the view from the ancestral and coarse *domains*.)
 
   static SubBasisReconciliationWeights weightsForCoarseSubcell(const SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells);
 

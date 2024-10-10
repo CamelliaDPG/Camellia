@@ -327,7 +327,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
     TEUCHOS_TEST_FOR_EXCEPTION(conformingBasis->getCardinality() != basis->getCardinality(), std::logic_error, "continuous basis should have same cardinality as discontinuous");
     startingDimensionForProjection = domainDim;
   }
-  else if (wrapsHGRADBasis && (basis->getDegree() > 0))
+  else if (wrapsHGRADBasis && (basis->getDegree() > 0) && (basis->functionSpace() == FUNCTION_SPACE_HVOL))
   {
     // sometimes discretizations wrap an Intrepid2 HGRAD basis with a Camellia basis that claims to be HVOL (discontinuous);
     // by using HGRAD basis for projections, we allow "cheating" imposition of BCs on e.g. vertices, since the underlying basis has well-defined vertex functions.

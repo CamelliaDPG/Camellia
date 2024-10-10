@@ -1115,6 +1115,11 @@ void Boltzmann1D1VFormulation::setUseGeometricMultigrid(bool useGeometricMultigr
   _useGeometricMultigrid = useGeometricMultigrid;
 }
 
+void Boltzmann1D1VFormulation::setVerboseSolve(bool verbose)
+{
+  _verboseSolve = verbose;
+}
+
 double Boltzmann1D1VFormulation::t() const
 {
   return _t;
@@ -1160,7 +1165,7 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     _boltzmannSolnPrevSubstep->setSolution(_boltzmannSoln);
     _gaussSolnPrevSubstep->setSolution(_gaussSoln);
     
-    if ((rank == 0) && (maxSubsteps > 1))
+    if ((rank == 0) && (maxSubsteps > 1) && _verboseSolve)
     {
       std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
     }
@@ -1200,7 +1205,7 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     substepStepSizesVlasov.push_back(fRelDiff);
     substepStepSizesPoisson.push_back(ERelDiff);
     
-    if ((rank == 0) && (maxSubsteps > 1))
+    if ((rank == 0) && (maxSubsteps > 1) && _verboseSolve)
     {
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
       std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in E: " << ERelDiff << std::endl << std::endl;

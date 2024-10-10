@@ -18,10 +18,10 @@ PhysicalPointCache::PhysicalPointCache(const Camellia::FieldContainer<double> &p
   _physCubPointsFC = physCubPoints;
   
   // copy the physical points into a single PhysicalTensorPoints component
-  const int numCells     = _physCubPointsFC.dimension(0);
+  _numCells = _physCubPointsFC.dimension(0);
   const int numPoints    = _physCubPointsFC.dimension(1);
   const int numCoordDims = _physCubPointsFC.dimension(2);
-  Kokkos::DynRankView<double, DeviceType> physPointsComponent("physical points component",numCells,numPoints,numCoordDims);
+  Kokkos::DynRankView<double, DeviceType> physPointsComponent("physical points component",_numCells,numPoints,numCoordDims);
   auto physCubPointsView = _physCubPointsFC.checkoutDeviceView();
   Kokkos::deep_copy(physPointsComponent, physCubPointsView);
   vector< Kokkos::DynRankView<double, DeviceType> > physicalTensorPointsComponents {physPointsComponent};

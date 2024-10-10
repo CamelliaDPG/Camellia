@@ -51,7 +51,8 @@ MimeticVlasovSpaceTimeFormulation::MimeticVlasovSpaceTimeFormulation(double q, d
                                                                      std::vector<double> velocitySpaceVertices_y,
                                                                      std::vector<double> velocitySpaceVertices_z,
                                                                      const int H1Order, const int delta_k,
-                                                                     const int numUniformRefinements)
+                                                                     const int numUniformRefinements,
+                                                                     const int maxMomentNumberForDriver)
 :
 VlasovSpaceTimeFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
@@ -60,6 +61,7 @@ VlasovSpaceTimeFormulation(q, m, useSerendipityBasis, configurationSpaceFormulat
                            velocitySpaceVertices_z,
                            H1Order, delta_k,
                            numUniformRefinements,
+                           maxMomentNumberForDriver,
                            true) // true: defer initialization; we call it below.
 {
   this->_useSumFactorizedAssembly = false; // set base class's flag: we don't (yet) support sum-factorized assembly here.

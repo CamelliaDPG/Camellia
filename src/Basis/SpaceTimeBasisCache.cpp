@@ -24,8 +24,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
     const Camellia::FieldContainer<double> &physicalNodesTemporal,
     const Camellia::FieldContainer<double> &physicalNodesSpaceTime,
     const std::vector<GlobalIndexType> &cellIDs,
-    bool testVsTest, int cubatureDegreeEnrichment)
-  : BasisCache(spaceTimeElementType, spaceTimeMesh, testVsTest, cubatureDegreeEnrichment, true, false)
+    bool testVsTest, int cubatureDegreeEnrichment, Intrepid2::EPolyType polyTypeForQuadrature)
+  : BasisCache(spaceTimeElementType, spaceTimeMesh, testVsTest, cubatureDegreeEnrichment, true, false, polyTypeForQuadrature)
 {
   _storeTransformedValues = _defaultStoreTransformedValues;
   int cellCount = cellIDs.size();
@@ -78,8 +78,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
 SpaceTimeBasisCache::SpaceTimeBasisCache(const Camellia::FieldContainer<double> &physicalNodesSpatial,
     const Camellia::FieldContainer<double> &physicalNodesTemporal,
     const Camellia::FieldContainer<double> &physicalCellNodes,
-    CellTopoPtr cellTopo, int cubDegreeSpaceTime)
-  : BasisCache(physicalCellNodes,cellTopo,cubDegreeSpaceTime,false,true)   // false: don't create side caches during construction; true: tensor product topology (which we should have here) --> space-time
+    CellTopoPtr cellTopo, int cubDegreeSpaceTime, Intrepid2::EPolyType polyTypeForQuadrature)
+  : BasisCache(physicalCellNodes,cellTopo,cubDegreeSpaceTime,false,true,polyTypeForQuadrature)   // false: don't create side caches during construction; true: tensor product topology (which we should have here) --> space-time
 {
   _storeTransformedValues = _defaultStoreTransformedValues;
   
@@ -137,7 +137,7 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(const Camellia::FieldContainer<double> 
 
 // side constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTimeBasisCache> volumeCache,
-    int trialDegree, int testDegree)
+    int trialDegree, int testDegree, Intrepid2::EPolyType polyTypeForQuadrature)
   : BasisCache(sideOrdinal, volumeCache, trialDegree, testDegree, (BasisPtr) Teuchos::null)
 {
   _storeTransformedValues = _defaultStoreTransformedValues;

@@ -339,6 +339,46 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumEr
   return globalEntries;
 }
 
+std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalParentCellsBelowThreshold(const double &maxError, const std::set<GlobalIndexType> &excludedChildren)
+{
+  gatherParentError(excludedChildren);
+  
+  auto meshTopo = _mesh->getTopology();
+  using ParentErrorEntry = std::pair<GlobalIndexType,double>;
+  std::vector<ParentErrorEntry> parentErrorMeasuresVector;
+  for (const auto &entry : _parentErrorMeasures)
+  {
+    // check children:
+    auto parentCell = meshTopo->getCell(entry.first);
+    auto childIDs = parentCell->getChildIndices(meshTopo);
+    bool hasExcludedChild = false;
+    for (const auto & childID : childIDs)
+    {
+      if (excludedChildren.find(childID) != excludedChildren.end())
+      {
+        hasExcludedChild = true;
+        break;
+      }
+    }
+    if (!hasExcludedChild)
+    {
+      const double &error = entry.second;
+      if (error <= maxError)
+      {
+        parentErrorMeasuresVector.push_back(entry);
+      }
+    }
+  }
+  
+  auto comm = _mesh->Comm();
+    
+  std::vector<ParentErrorEntry> gatheredValues;
+  std::vector<int> offsets;
+  MPIWrapper::allGatherVariable<ParentErrorEntry>(*comm, gatheredValues, parentErrorMeasuresVector, offsets);
+  
+  return gatheredValues;
+}
+
 double ErrorIndicator::totalError() const
 {
   double localTotalSquared = 0;

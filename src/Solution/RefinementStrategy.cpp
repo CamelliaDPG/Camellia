@@ -385,10 +385,19 @@ void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalInde
   // measure error
   _errorIndicator->measureError();
   
-  double maxError = _errorIndicator->maxError(localCellsToExclude);
-  
+  double maxError = _errorIndicator->maxError();
   double errorThreshold = maxError * _relativeErrorThreshold;
-  _errorIndicator->localCellsAboveErrorThreshold(errorThreshold, cellsToRefine);
+  
+  vector<GlobalIndexType> cellsAboveThreshold;
+  _errorIndicator->localCellsAboveErrorThreshold(errorThreshold, cellsAboveThreshold);
+  
+  for (auto cell : cellsAboveThreshold)
+  {
+    if (localCellsToExclude.find(cell) == localCellsToExclude.end())
+    {
+      cellsToRefine.push_back(cell);
+    }
+  }
 }
 
 // defaults to h-refinement
@@ -558,6 +567,93 @@ template <typename Scalar>
 GlobalIndexType TRefinementStrategy<Scalar>::getNumRefinements() const
 {
   return _results.size();
+}
+
+template <typename Scalar>
+int TRefinementStrategy<Scalar>::greedyUnrefinement(double relativeErrorThreshold, // relative to maximum element error in the mesh
+                                                     bool printToConsole)
+{
+  ErrorIndicatorPtr unrefinementErrorIndicator = (_unrefinementErrorIndicator == Teuchos::null) ? _errorIndicator : _unrefinementErrorIndicator;
+  unrefinementErrorIndicator->measureError();
+  const double maxElementError = unrefinementErrorIndicator->maxError();
+  const double absoluteErrorThreshold = relativeErrorThreshold * maxElementError;
+  
+  std::set<GlobalIndexType> childCellsToExclude;
+  std::vector< std::pair<GlobalIndexType,double> > parentEntries = unrefinementErrorIndicator->globalParentCellsBelowThreshold(absoluteErrorThreshold, childCellsToExclude);
+  
+  auto parentCellsBelowThreshold = std::set<GlobalIndexType>();
+  for (auto entry : parentEntries)
+  {
+    parentCellsBelowThreshold.insert(entry.first);
+  }
+  
+  MeshPtr mesh = this->mesh();
+  auto meshTopo = mesh->getTopology();
+  
+  std::set<GlobalIndexType> compatibleUnrefinements;   // not more than 1-irregularity that results
+  
+  auto unrefinementPermitted = [&](const GlobalIndexType &cellID) -> bool // return of true indicates that unrefinement is permissible
+  {
+    CellPtr cell = meshTopo->getCell(cellID);
+    const unsigned int sideCount = cell->getSideCount();
+    for (unsigned int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      auto neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
+      auto neighborCellID = neighborInfo.first;
+      if (neighborCellID != -1)
+      {
+        CellPtr neighbor = meshTopo->getCell(neighborCellID);
+        if (neighbor->isParent(meshTopo))
+        {
+          // if neighbor is refined along side, then we are only allowed to unrefine this cell if neighbor's children along the side are active -- most precisely, they should be unrefined peers of this cell's children along the shared side.
+          const auto sideOrdinalInNeighbor = neighborInfo.second;
+          auto neighborChildEntries = neighbor->refinementPattern()->childrenForSides()[sideOrdinalInNeighbor];
+          const bool neighborSideIsRefined = (neighborChildEntries.size() > 1);
+          if (neighborSideIsRefined)
+          {
+            auto cellChildEntries = cell->refinementPattern()->childrenForSides()[sideOrdinal];
+            for (const auto & cellChildEntry : cellChildEntries)
+            {
+              const unsigned & cellChildOrdinal     = cellChildEntry.first;
+              const unsigned & cellChildSideOrdinal = cellChildEntry.second;
+              
+              CellPtr cellChild = cell->children()[cellChildOrdinal];
+              auto cellChildNeighborInfo = cellChild->getNeighborInfo(cellChildSideOrdinal, meshTopo);
+              auto cellChildNeighborInfoCellID = cellChildNeighborInfo.first;
+              
+              if (meshTopo->isParent(cellChildNeighborInfoCellID))
+              {
+                // neighbor's child on side is further refined => we can't unrefine cell
+                return false;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // if we get here, no neighbors prevent this cell from being unrefined
+    return true;
+  };
+  
+  for (auto parentCellID : parentCellsBelowThreshold)
+  {
+    if (unrefinementPermitted(parentCellID))
+    {
+      compatibleUnrefinements.insert(parentCellID);
+    }
+  }
+  
+  if (compatibleUnrefinements.size() > 0)
+  {
+    if (printToConsole) Camellia::print("cells for unrefinement", compatibleUnrefinements);
+    
+    unrefineCells(compatibleUnrefinements);
+    mesh->repartitionAndRebuild();
+    unrefinementErrorIndicator->measureError(); // now that we have unrefined, measure the error again
+  }
+  
+  return int(compatibleUnrefinements.size());
 }
 
 template <typename Scalar>

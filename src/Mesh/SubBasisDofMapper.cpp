@@ -40,10 +40,11 @@ SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<int> &dofOrd
   if (checkForPermutation)
   {
     // check the constraint matrix to see if it's a permutation
-    if (constraintMatrix.dimension(0) == constraintMatrix.dimension(1))
+    const int n = constraintMatrix.dimension(0);
+    TEUCHOS_TEST_FOR_EXCEPTION(n == 0, std::invalid_argument, "Constraint matrix is empty!");
+    if ((n != 0) && (n == constraintMatrix.dimension(1)))
     {
       double tol = 1e-8;
-      int n = constraintMatrix.dimension(0);
       bool foundInvalidEntry = false; // entry that isn't 1 or 0, or a second 1 in a row/column, or a row/column without a 1
       // check columns
       for (int i=0; i<n; i++)

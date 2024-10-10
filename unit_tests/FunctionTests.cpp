@@ -1100,8 +1100,12 @@ TEUCHOS_UNIT_TEST( Function, ValuesDevicePath )
     auto fcView = fc.checkoutDeviceView(false); // false: don't copy from host
     Kokkos::deep_copy( fcView, existingValue);
     
-    BasisCachePtr nullBasisCache;
-    f.TFunction<double>::values(fcView, modType, nullBasisCache); // device path
+    BasisCachePtr simpleBasisCache = BasisCache::basisCache1D(0, 1, 3);
+    FieldContainer<double> refCellPoints(dim1,1);
+    FieldContainer<double> cellNodes(dim0,2,1); // 2 points define line
+    simpleBasisCache->setRefCellPointsFC(refCellPoints);
+    simpleBasisCache->setPhysicalCellNodes(cellNodes, {0,1}, false);
+    f.TFunction<double>::values(fcView, modType, simpleBasisCache); // device path
     fc.checkinDeviceView(true); // true: copy back to host
     double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {

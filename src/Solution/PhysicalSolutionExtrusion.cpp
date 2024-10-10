@@ -171,60 +171,130 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   auto physicalMeshTopology = physicalMesh->getTopology();
   
   const vector<GlobalIndexType> & phaseSpaceCellIDs = basisCache->cellIDs();
-  const int numCells = phaseSpaceCellIDs.size();
+  const int numCells = int(phaseSpaceCellIDs.size());
   
   if (numCells == 0) return;
   
-  vector<GlobalIndexType> physicalCellIDs(numCells);
+  set<GlobalIndexType> physicalCellIDs;
+  map<GlobalIndexType,vector<int> > phaseSpaceCellOrdinalsForPhysicalCellID; // vector value because the same physical cell ordinal may recur
+  
+  auto & scratch = SharedScratchStorage<GlobalIndexType>::sharedScratchStorage();
+  
+  // checkout scratch storage to allow us, for each element type, to set up device-side lookups from the physical cell ordinals to the phase-space cell ordinals
+  DeviceView<GlobalIndexType> fullListOrdinals = scratch.checkoutScratchStorage({numCells},"fullListOrdinals");
+  
+  DeviceView<GlobalIndexType> partitionedOrdinalToFullListOffset = scratch.checkoutScratchStorage({numCells},"partitionedOrdinalToFullListOffset");
+
+  DeviceView<GlobalIndexType> partitionedOrdinalToFullListCount = scratch.checkoutScratchStorage({numCells},"partitionedOrdinalToFullListCount");
+  
+  auto partitionedOrdinalToFullListOffsetHost = Kokkos::create_mirror_view(partitionedOrdinalToFullListOffset);
+  auto partitionedOrdinalToFullListCountHost  = Kokkos::create_mirror_view(partitionedOrdinalToFullListCount);
+  auto fullListOrdinalsHost                   = Kokkos::create_mirror_view(fullListOrdinals);
   
   for (int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++)
   {
-    physicalCellIDs[cellOrdinal] = extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellIDs[cellOrdinal]);
+    auto physicalCellID = extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellIDs[cellOrdinal]);
+    physicalCellIDs.insert(physicalCellID);
+    extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellIDs[cellOrdinal]);
+    phaseSpaceCellOrdinalsForPhysicalCellID[physicalCellID].push_back(cellOrdinal);
   }
   
-  // get the cell topo from a sample cell (these will all be the same, since phase-space cell topo is the same, by virtue of having a single BasisCache).
-  auto physicalCellTopo = physicalMeshTopology->getCell(physicalCellIDs[0])->topology();
+  auto physicalGDA = physicalMesh->globalDofAssignment();
+  auto elemTypeToPhysicalCellMap = physicalGDA->getElementTypePartitionForCells(physicalCellIDs);
   
-  FieldContainer<double> physicalCellNodes = physicalMesh->physicalCellNodes(physicalCellIDs);
-  BasisCachePtr physicalBasisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, physicalCellTopo, physicalRefPoints) );
-  physicalBasisCache->setMesh(physicalMesh);
-  physicalBasisCache->setCellIDs(physicalCellIDs);
-    
-  auto g_dataValues = _physicalSolnFxn->checkoutValuesData(physicalBasisCache);
-    
-  _physicalSolnFxn->values(g_dataValues, physicalBasisCache);
-    
-  // copy g_dataValues into values
-  using ExecutionSpace = Camellia::DeviceExecutionSpace;
-  if ((numPhysicalPointComponents == 1) && (numVelocityDimensions == 1))
+  for (auto elemTypePhysicalCellsEntry : elemTypeToPhysicalCellMap)
   {
-    // 1D1V case
-    auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{numCells,physicalPointCounts[0]});
+    const auto & elemTypeKey                   = elemTypePhysicalCellsEntry.first;
+    const auto & physicalCellIDsForElementType = elemTypePhysicalCellsEntry.second;
+    const auto   elemType = physicalGDA->getElementTypeForKey(elemTypeKey);
     
-    Kokkos::parallel_for("SolutionMomentFunction_values", policy,
-    KOKKOS_LAMBDA (const int &cellOrdinal, const int &x0)
+    int numCellsForElemType = int(physicalCellIDsForElementType.size());
+    auto physicalCellIDIt = physicalCellIDsForElementType.begin();
+    int offset = 0;
+    for (int partitionCellOrdinal=0; partitionCellOrdinal<numCellsForElemType; partitionCellOrdinal++)
     {
-      values.getWritableEntry(cellOrdinal,x0,0) = g_dataValues(cellOrdinal,x0);
-    });
-  }
-  else if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
-  {
-    // 2D1V or 1D1T1V case (space-time 1D1V)
-    auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,physicalPointCounts[0],physicalPointCounts[1]});
+      const auto physicalCellID = *physicalCellIDIt++;
+      const auto &fullListOrdinals = phaseSpaceCellOrdinalsForPhysicalCellID[physicalCellID];
+      int count = int(fullListOrdinals.size());
+      
+      partitionedOrdinalToFullListCountHost(partitionCellOrdinal)  = count;
+      partitionedOrdinalToFullListOffsetHost(partitionCellOrdinal) = offset;
+      
+      for (int i=0; i<count; i++)
+      {
+        auto fullListOrdinal = fullListOrdinals[i];
+        fullListOrdinalsHost(offset + i) = fullListOrdinal;
+      }
+      
+      offset += count;
+    }
     
-    Kokkos::parallel_for("SolutionMomentFunction_values", policy,
-    KOKKOS_LAMBDA (const int &cellOrdinal, const int &x0, const int &x1)
+    Kokkos::deep_copy(partitionedOrdinalToFullListOffset, partitionedOrdinalToFullListOffsetHost);
+    Kokkos::deep_copy(partitionedOrdinalToFullListCount, partitionedOrdinalToFullListCountHost);
+    Kokkos::deep_copy(fullListOrdinals, fullListOrdinalsHost);
+    
+    vector<GlobalIndexType> physicalCellIDsVector(physicalCellIDsForElementType.begin(),physicalCellIDsForElementType.end());
+    FieldContainer<double> physicalCellNodes = physicalMesh->physicalCellNodes(physicalCellIDsVector);
+    BasisCachePtr physicalBasisCache = BasisCache::basisCacheForCellType(physicalMesh, elemType);
+    physicalBasisCache->setRefCellPoints(physicalRefPoints);
+    bool createSideCache = false;
+    physicalBasisCache->setPhysicalCellNodes(physicalCellNodes, physicalCellIDsVector, createSideCache);
+      
+    auto g_dataValues = _physicalSolnFxn->checkoutValuesData(physicalBasisCache);
+      
+    _physicalSolnFxn->values(g_dataValues, physicalBasisCache);
+      
+    // copy g_dataValues into values
+    using ExecutionSpace = Camellia::DeviceExecutionSpace;
+    if ((numPhysicalPointComponents == 1) && (numVelocityDimensions == 1))
     {
-      values.getWritableEntry(cellOrdinal,x0,x1,0) = g_dataValues(cellOrdinal,x0,x1);
-    });
+      // 1D1V case
+      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{numCellsForElemType,physicalPointCounts[0]});
+      
+      Kokkos::parallel_for("PhysicalSolutionExtrusion::values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal, const int &x0)
+      {
+        const auto & value = g_dataValues(cellOrdinal,x0);
+        int numPhaseSpaceCellOrdinals   = partitionedOrdinalToFullListCount(cellOrdinal);
+        int phaseSpaceCellOrdinalOffset = partitionedOrdinalToFullListOffset(cellOrdinal);
+        
+        for (int i=0; i<numPhaseSpaceCellOrdinals; i++)
+        {
+          auto & phaseSpaceCellOrdinal = fullListOrdinals(i+phaseSpaceCellOrdinalOffset);
+          values.getWritableEntry(phaseSpaceCellOrdinal,x0,0) = value;
+        }
+      });
+    }
+    else if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 1))
+    {
+      // 2D1V or 1D1T1V case (space-time 1D1V)
+      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCellsForElemType,physicalPointCounts[0],physicalPointCounts[1]});
+      
+      Kokkos::parallel_for("PhysicalSolutionExtrusion::values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal, const int &x0, const int &x1)
+      {
+        const auto & value = g_dataValues(cellOrdinal,x0,x1);
+        int numPhaseSpaceCellOrdinals   = partitionedOrdinalToFullListCount(cellOrdinal);
+        int phaseSpaceCellOrdinalOffset = partitionedOrdinalToFullListOffset(cellOrdinal);
+        
+        for (int i=0; i<numPhaseSpaceCellOrdinals; i++)
+        {
+          auto & phaseSpaceCellOrdinal = fullListOrdinals(i+phaseSpaceCellOrdinalOffset);
+          values.getWritableEntry(phaseSpaceCellOrdinal,x0,x1,0) = value;
+        }
+      });
+    }
+    else
+    {
+      // TODO: add support for other physical/velocity component counts
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported physical/velocity component count");
+    }
+    
+    _physicalSolnFxn->checkinValuesData(g_dataValues);
   }
-  else
-  {
-    // TODO: add support for other physical/velocity component counts
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported physical/velocity component count");
-  }
-  
-  _physicalSolnFxn->checkinValuesData(g_dataValues);
+  SharedScratchStorage<GlobalIndexType>::sharedScratchStorage().checkinScratchStorage(fullListOrdinals);
+  SharedScratchStorage<GlobalIndexType>::sharedScratchStorage().checkinScratchStorage(partitionedOrdinalToFullListOffset);
+  SharedScratchStorage<GlobalIndexType>::sharedScratchStorage().checkinScratchStorage(partitionedOrdinalToFullListCount);
 }
 
 bool PhysicalSolutionExtrusion::boundaryValueOnly()

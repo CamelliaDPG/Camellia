@@ -19,6 +19,8 @@
     \brief Utilities to make writing tests easier.
 */
 
+#include <Intrepid2_TestUtils.hpp>
+
 #include "Teuchos_ConfigDefs.hpp"
 #include "Teuchos_ScalarTraits.hpp"
 #include "Teuchos_TypeNameTraits.hpp"
@@ -88,6 +90,90 @@ bool compareFloatingArraysCamellia(const Array1 &a1, const std::string &a1_name,
   {
     return fabs( s1 - s2 ) <= absTol + fabs(s1) * relTol;
   }
+
+//! Wrap Intrepid2::testFloatingEquality to convert compile-time rank-mismatch errors to runtime ones.
+//! this method assumes both functors are accessible on device.
+template <int rank, class FunctorType1, class FunctorType2, typename Scalar=typename FunctorType1::value_type, class ExecutionSpace = typename FunctorType1::execution_space>
+typename std::enable_if< (Intrepid2::supports_rank<FunctorType1,rank>::value && Intrepid2::supports_rank<FunctorType2,rank>::value), void >::type
+testFloatingEquality(const FunctorType1 &functor1, const FunctorType2 &functor2, double relTol, double absTol, Teuchos::FancyOStream &out, bool &success,
+                     std::string functor1Name = "Functor 1", std::string functor2Name = "Functor 2")
+{
+  static_assert( Intrepid2::supports_rank<FunctorType1,rank>::value, "Functor1 must support the specified rank through operator().");
+  static_assert( Intrepid2::supports_rank<FunctorType2,rank>::value, "Functor2 must support the specified rank through operator().");
+  
+  Intrepid2::testFloatingEquality<FunctorType1, FunctorType2, rank, Scalar, ExecutionSpace> (functor1,functor2,relTol,absTol,out,success,functor1Name,functor2Name);
+}
+
+//! Wrap Intrepid2::testFloatingEquality to convert compile-time rank-mismatch errors to runtime ones.
+//! this method assumes both functors are accessible on device.
+template <int rank, class FunctorType1, class FunctorType2, typename Scalar=typename FunctorType1::value_type, class ExecutionSpace = typename FunctorType1::execution_space>
+typename std::enable_if< !(Intrepid2::supports_rank<FunctorType1,rank>::value && Intrepid2::supports_rank<FunctorType2,rank>::value), void >::type
+testFloatingEquality(const FunctorType1 &functor1, const FunctorType2 &functor2, double relTol, double absTol, Teuchos::FancyOStream &out, bool &success,
+                     std::string functor1Name = "Functor 1", std::string functor2Name = "Functor 2")
+{
+  bool functor1SupportsRank = Intrepid2::supports_rank<FunctorType1,rank>::value;
+  if (!functor1SupportsRank)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Functor 1 does not support the specified rank");
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Functor 2 does not support the specified rank");
+  }
+}
+
+class D1
+{
+public:
+  static const int spaceDim = 1;
+};
+class D2
+{
+public:
+  static const int spaceDim = 2;
+};
+class D3
+{
+public:
+  static const int spaceDim = 3;
+};
+class D4
+{
+public:
+  static const int spaceDim = 4;
+};
+class D5
+{
+public:
+  static const int spaceDim = 5;
+};
+class D6
+{
+public:
+  static const int spaceDim = 6;
+};
+class D7
+{
+public:
+  static const int spaceDim = 7;
+};
+
+class R0
+{
+public:
+  static const int rank = 0;
+};
+class R1
+{
+public:
+  static const int rank = 1;
+};
+class R2
+{
+public:
+  static const int rank = 2;
+};
+
 } // namespace Camellia
 
 /** \brief Assert that a1.size()==a2.size() and rel_error(a[i],b[i]) <= tol, i=0...., where the error is relative to the maximum entry in the arrays.

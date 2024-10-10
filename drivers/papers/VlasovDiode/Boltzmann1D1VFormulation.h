@@ -43,6 +43,7 @@ private:
   Boltzmann1D1VFormulationChoice _formulationChoice;
   bool _usePeriodicBCs;
   bool _enforceQuasiNeutrality;
+  bool _verboseSolve = false;
   
   Teuchos::RCP<PoissonFormulation> _poissonForm; // used by Gauss
   
@@ -286,6 +287,7 @@ public:
   FunctionPtr vx() const;
   
   void setUseGeometricMultigrid(bool useGeometricMultigrid);
+  void setVerboseSolve(bool verbose);
   
   Teuchos::RCP<GMGSolver> constructGMGSolver();
 };

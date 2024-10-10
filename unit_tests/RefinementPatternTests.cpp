@@ -107,6 +107,23 @@ namespace
     }
   }
 
+  TEUCHOS_UNIT_TEST( RefinementPattern, ExtrudedLineAnisotropicRefinement )
+  {
+    MeshTopologyPtr baseMeshTopo = MeshFactory::intervalMeshTopology(0.0, 1.0, 2);
+    MeshTopologyPtr meshTopo = MeshFactory::extrudedMeshTopology(baseMeshTopo, {{0.,1.}});
+    
+//    cout << "All mesh entities before refinement:\n";
+//    meshTopo->printAllEntities();
+    
+    auto extrudedLine_xRef = RefinementPattern::xAnisotropicRefinementPatternExtrudedLine();
+    
+    meshTopo->refineCell(0,extrudedLine_xRef,meshTopo->nextCellID());
+    
+//    cout << "All mesh entities after refinement:\n";
+//    meshTopo->printAllEntities();
+//    TODO: add some actual correctness test here!
+  }
+
   TEUCHOS_UNIT_TEST( RefinementPattern, GeneralizedRefinementBranchForLeafSubcell_HangingVertexOnOutsideEdge )
   {
     RefinementPatternPtr quadRefinement = RefinementPattern::regularRefinementPatternQuad();

@@ -303,6 +303,7 @@ public:
   // ! implements Heaviside step function, shifted right by xValue
   static TFunctionPtr<double> heaviside(double xValue);
   static TFunctionPtr<double> heavisideY(double yValue);
+  static TFunctionPtr<double> heaviside(double x_i_value, int i_zeroBased); // i = 0 corresponds to one-argument heaviside()
   
   //! neighborFunction is defined on the mesh skeleton; evaluates f from the point of view of the neighbor on each face.
   //! on the mesh boundary, simply computes f on the (interior) element.

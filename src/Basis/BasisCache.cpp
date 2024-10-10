@@ -135,9 +135,9 @@ void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopo
     Teuchos::RCP< Cubature > cellTopoCub;
     
     if (_cubDegree >= 0)
-      cellTopoCub = cubFactory.create(_cellTopo, _cubDegree);
+      cellTopoCub = cubFactory.create(_cellTopo, _cubDegree, _polyTypeForQuadrature);
     else if (_cubDegrees.size() > 0)
-      cellTopoCub = cubFactory.create(_cellTopo, _cubDegrees);
+      cellTopoCub = cubFactory.create(_cellTopo, _cubDegrees, _polyTypeForQuadrature);
     
     if (cellTopoCub != Teuchos::null)
     {
@@ -240,9 +240,10 @@ void BasisCache::createSideCaches()
   }
 }
 
-BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
+BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   _cellTopo = cellTopo;
+  _polyTypeForQuadrature = polyTypeForQuadrature;
 
   DofOrdering trialOrdering(cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
@@ -253,10 +254,11 @@ BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCache
 }
 
 BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
-                       int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime)
+                       int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   _cellTopo = elemType->cellTopoPtr;
+  _polyTypeForQuadrature = polyTypeForQuadrature;
 
   _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
 
@@ -288,8 +290,10 @@ BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
 // protected constructor basically for the sake of the SpaceTimeBasisCache, which wants to disable side cache creation during construction.
 BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
                        int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime,
-                       bool createSideCacheToo)
+                       bool createSideCacheToo, Intrepid2::EPolyType polyTypeForQuadrature)
 {
+  _polyTypeForQuadrature = polyTypeForQuadrature;
+  
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   _cellTopo = elemType->cellTopoPtr;
 
@@ -319,9 +323,10 @@ BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
 }
 
 BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
-                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
+                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   _cellTopo = cellTopo;
+  _polyTypeForQuadrature = polyTypeForQuadrature;
   findMaximumDegreeBasisForSides(trialOrdering);
 
   _isSideCache = false;
@@ -332,9 +337,10 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
 
 BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes,
                        shards::CellTopology &cellTopo,
-                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo)
+                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   _cellTopo = CellTopology::cellTopology(cellTopo);
+  _polyTypeForQuadrature = polyTypeForQuadrature;
   findMaximumDegreeBasisForSides(trialOrdering);
 
   _isSideCache = false;
@@ -394,11 +400,12 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),false);
 }
 
-BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo)
+BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _cellTopo = CellTopology::cellTopology(cellTopo);
+  _polyTypeForQuadrature = polyTypeForQuadrature;
   DofOrdering trialOrdering(_cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
 
@@ -408,11 +415,12 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
-BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo)
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _cellTopo = CellTopology::cellTopology(cellTopo);
+  _polyTypeForQuadrature = polyTypeForQuadrature;
   DofOrdering trialOrdering(_cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
 
@@ -424,11 +432,13 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
-BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime,
+                       Intrepid2::EPolyType polyTypeForQuadrature)
 {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _cellTopo = cellTopo;
+  _polyTypeForQuadrature = polyTypeForQuadrature;
   DofOrdering trialOrdering(_cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
 
@@ -520,9 +530,9 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     using Cubature = Intrepid2::Cubature<DeviceType,double,double>;
     Teuchos::RCP< Cubature > sideCub;
     if (_cubDegree >= 0)
-      sideCub = cubFactory.create(side, _cubDegree);
+      sideCub = cubFactory.create(side, _cubDegree, _polyTypeForQuadrature);
     else if (_cubDegrees.size() > 0)
-      sideCub = cubFactory.create(side, _cubDegrees);
+      sideCub = cubFactory.create(side, _cubDegrees, _polyTypeForQuadrature);
 
     int numCubPointsSide;
     
@@ -1814,10 +1824,10 @@ BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree)
 }
 
 BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID,
-                                            bool testVsTest, int cubatureDegreeEnrichment)
+                                            bool testVsTest, int cubatureDegreeEnrichment, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   ElementTypePtr elemType = mesh->getElementType(cellID);
-  return basisCacheForCell(mesh,mesh->getTopology(),cellID,elemType,testVsTest,cubatureDegreeEnrichment,mesh->tensorTopologyMeansSpaceTime());
+  return basisCacheForCell(mesh,mesh->getTopology(),cellID,elemType,testVsTest,cubatureDegreeEnrichment,mesh->tensorTopologyMeansSpaceTime(),polyTypeForQuadrature);
 }
 
 BasisCachePtr BasisCache::basisCacheForCell(ConstMeshTopologyViewPtr meshTopology, GlobalIndexType cellID, ElementTypePtr elemType,
@@ -1827,7 +1837,7 @@ BasisCachePtr BasisCache::basisCacheForCell(ConstMeshTopologyViewPtr meshTopolog
 }
 
 BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, ConstMeshTopologyViewPtr meshTopology, GlobalIndexType cellID, ElementTypePtr elemType,
-                                            bool testVsTest, int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime)
+                                            bool testVsTest, int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime, Intrepid2::EPolyType polyTypeForQuadrature)
 {
   // mesh is allowed to be null
   vector<GlobalIndexType> cellIDs(1,cellID);
@@ -1890,11 +1900,11 @@ BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, ConstMeshTopologyViewP
     }
     BasisCachePtr basisCache = Teuchos::rcp( new SpaceTimeBasisCache(mesh, elemType, physicalCellNodesSpace,
                                physicalCellNodesTime, physicalCellNodes, cellIDs,
-                               testVsTest, cubatureDegreeEnrichment) );
+                               testVsTest, cubatureDegreeEnrichment, polyTypeForQuadrature) );
     return basisCache;
   }
 
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, tensorProductTopologyMeansSpaceTime) );
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, tensorProductTopologyMeansSpaceTime, polyTypeForQuadrature) );
   bool createSideCache = true;
   basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCache);
   if (mesh != Teuchos::null)

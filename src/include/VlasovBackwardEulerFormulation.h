@@ -33,10 +33,18 @@ class VlasovBackwardEulerFormulation
 :
 public RefinementObserver
 {
+public:
+  enum TestIPChoice
+  {
+    VLASOV_TIME_MARCHING_GRAPH_INNER_PRODUCT,
+    VLASOV_TIME_MARCHING_CONSERVATIVE_INNER_PRODUCT,
+    VLASOV_TIME_MARCHING_L2_INNER_PRODUCT
+  };
 private:
   int _spaceDim;
   int _velocityDim;
   const bool _useSerendipityBasis; // const because we construct the mesh based on this in the constructor; we'd have to recreate the mesh when this changed.
+  const bool _useConformingTraces;
   
   BFPtr _vlasovBF;
   int _delta_k;
@@ -44,6 +52,12 @@ private:
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
   bool _crankNicolson = false;
+  bool _enforcePositivity = false; // if true, use proximal Galerkin to enforce positivity
+  
+  double _alpha0 = 1.0;
+  double _alphaMultiplier = 1.0;
+  std::map<GlobalIndexType,double> _fluxLimitingWeightForCell; // last used weight for MPI-local cells
+  std::map<GlobalIndexType,double> _expPsiForCell; // exponential of latent variable, available for MPI-local cells
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev;      // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
@@ -52,13 +66,13 @@ private:
   Teuchos::RCP<ConfigurationSpaceFormulation> _configurationSpaceFormulation; // could be Poisson or Maxwell (among others)
   MeshTopologyPtr _configurationSpaceMeshTopology; // spatial mesh, created during VlasovBackwardEulerFormulation construction
   
-  double _t = 0; // current time
+  ParameterFunctionPtr _t = ParameterFunction::parameterFunction(0.0,"t"); // current time
   
   int _numSpecies;
   std::vector<double> _q; // index is species ordinal
   std::vector<double> _m;
   std::vector<std::string> _speciesLabels;
-  std::vector<std::string> _f_names, _w_names, _f_hat_names, _tn_hat_names;
+  std::vector<std::string> _f_names, _w_names, _f_hat_names, _tn_hat_names, _psi_names, _phi_names; // psi: latent variable for Proximal Galerkin (phi: test function for the new Proximal Galerkin equation)
   
   vector<FunctionPtr> _a; // acceleration term. Set during construction as a function of configuration-space solution.
   
@@ -84,12 +98,20 @@ private:
   // set by user:
   ParameterFunctionPtr _dt;
   
+  // weight for proximal-Galerkin latent variable (1/alpha weights the additional terms in the Vlasov equation)
+  ParameterFunctionPtr _alphaPG;
+  
+  // set when inflow BCs are specified:
+  ParameterFunctionPtr _strongInflowBCFlag; // 1 if strong BCs are used at inflow, 0 otherwise
+  
   std::vector<Teuchos::RCP<SolutionMoments>> _solutionMoments; // one moments object per species
   std::vector<Teuchos::RCP<SolutionMoments>> _solutionMomentsPriorTime;
   
   std::vector<FunctionPtr> _fSoln; // Camellia Function defining the solution of distribution f_i (refers to _vlasovSoln)
+  std::vector<FunctionPtr> _expPsiSoln; // the exponential of latent psi_i (refers to _vlasovSoln); a uniformly positive representation of f_i
   std::vector<FunctionPtr> _fDiff; // fixed-point step in Vlasov field f
-  std::vector<FunctionPtr> _fSolnPrev; // distribution f at previous time step
+  std::vector<FunctionPtr> _fSolnPriorTime; // distribution f at previous time step
+  std::vector<FunctionPtr> _traceSolnPriorTime; // trace solution (tn_hat or f_hat) at previous time step
 
   int _minSubsteps = 3;  // minimum number of fixed-point iterations to run (alternating vlasov, configuration-space solves)
   int _maxSubsteps = 15; // maximum number of fixed-point iterations to run
@@ -108,6 +130,8 @@ private:
   static const string S_F_HAT;   // trace variable
   static const string S_T_N_HAT; // trace variable
   static const string S_W;       // test variable
+  static const string S_PSI;     // latent variable psi
+  static const string S_PHI;     // latent variable test function phi
   
   // tags for BCs:
   static const int VLASOV_TAG_SPATIAL_INFLOW = 0; // region where (v \cdot n_x) < 0
@@ -135,7 +159,9 @@ public:
                                  std::vector<double> velocitySpaceVertices_z,
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0,
-                                 const bool useCrankNicolson = false);
+                                 const bool useCrankNicolson = false,
+                                 const bool enforcePositivity = false,
+                                 const bool useConformingTraces = false);
   
   VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -145,7 +171,9 @@ public:
                                  std::vector<double> velocitySpaceVertices_y,
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0,
-                                 const bool useCrankNicolson = false);
+                                 const bool useCrankNicolson = false,
+                                 const bool enforcePositivity = false,
+                                 const bool useConformingTraces = false);
   
   VlasovBackwardEulerFormulation(double q, double m, bool useSerendipityBasis,
                                  Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -154,7 +182,9 @@ public:
                                  std::vector<double> velocitySpaceVertices_x,
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0,
-                                 const bool useCrankNicolson = false);
+                                 const bool useCrankNicolson = false,
+                                 const bool enforcePositivity = false,
+                                 const bool useConformingTraces = false);
   
   VlasovBackwardEulerFormulation(std::vector<double> q, std::vector<double> m, std::vector<std::string> speciesLabels,
                                  bool useSerendipityBasis,
@@ -166,7 +196,9 @@ public:
                                  std::vector<double> velocitySpaceVertices_z,
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0,
-                                 const bool useCrankNicolson = false);
+                                 const bool useCrankNicolson = false,
+                                 const bool enforcePositivity = false,
+                                 const bool useConformingTraces = false);
   
   VlasovBackwardEulerFormulation(std::vector<double> q, std::vector<double> m, std::vector<std::string> speciesLabels,
                                  bool useSerendipityBasis,
@@ -177,7 +209,9 @@ public:
                                  std::vector<double> velocitySpaceVertices_y,
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0,
-                                 const bool useCrankNicolson = false);
+                                 const bool useCrankNicolson = false,
+                                 const bool enforcePositivity = false,
+                                 const bool useConformingTraces = false);
   
   VlasovBackwardEulerFormulation(std::vector<double> q, std::vector<double> m, std::vector<std::string> speciesLabels,
                                  bool useSerendipityBasis,
@@ -187,7 +221,9 @@ public:
                                  std::vector<double> velocitySpaceVertices_x,
                                  const int H1Order, const int delta_k,
                                  const int maxMomentNumber = 0,
-                                 const bool useCrankNicolson = false);
+                                 const bool useCrankNicolson = false,
+                                 const bool enforcePositivity = false,
+                                 const bool useConformingTraces = false);
 
   //! Returns the acceleration term, defined on the configuration space mesh, as an array of length velocityDim().
     vector<FunctionPtr> a();
@@ -208,10 +244,13 @@ public:
   void finishTimeStep();
 
   //! current time.
-  double t() const;
+  ParameterFunctionPtr t() const;
   
   //! solve for the configuration-space solution, based on current Vlasov solution.
   void configurationSpaceSolve();
+  
+  //! get the size of the (next) time step.
+  double timeStep() const;
   
   //! set the size of the (next) time step.
   void setTimeStep(double dt);
@@ -221,6 +260,7 @@ public:
   
   // field variables:
   VarPtr f(int speciesOrdinal=0);
+  VarPtr psi(int speciesOrdinal=0); // latent variable (for proximal Galerkin, when enforcePositivity is set to true)
   
   // traces:
   VarPtr f_hat(int speciesOrdinal=0);
@@ -228,6 +268,8 @@ public:
   
   // test variables:
   VarPtr w(int speciesOrdinal=0);
+  
+  VarPtr phi(int speciesOrdinal=0); // latent test variable (for proximal Galerkin, when enforcePositivity is set to true)
   
   MeshPtr vlasovMesh();
   MeshPtr configurationSpaceMesh();
@@ -238,8 +280,16 @@ public:
   
   //! SolutionMoments object for the prior-time solution.  Note that this does not get updated automatically in the course of a solve (it is not used internally).
   Teuchos::RCP<SolutionMoments> solutionMomentsPriorTime(int i=0);
-      
+  
+  //! The Vlasov solution at the current time step.
   SolutionPtr vlasovSolution();
+  
+  //! The Vlasov solution from the previous substep.
+  SolutionPtr vlasovSolutionPrevious();
+  
+  //! The Vlasov solution at the previous time step.
+  SolutionPtr vlasovSolutionPriorTime();
+  
   SolutionPtr configurationSpaceSolution();
     
   bool hasL2Trace() const;
@@ -248,17 +298,45 @@ public:
   int minSubstepsTaken() const;
   double averageSubstepsTaken() const;
   
+  //! Set the initial alpha value and multiplier for Proximal Galerkin.  Only applies when enforcePositivity was set to true at construction.  alpha is set to alpha0 at the start of each time step, and multiplied by alphaMultiplier during each substep.
+  void setAlpha(const double alpha0, const double alphaMultiplier);
+  
+  //! Returns a (possibly dynamic) function for the alpha value in Proximal Galerkin.
+  FunctionPtr alpha();
+  
+  //! Returns the exponential of the latent variable psi for the specified cell (which must be active and owned by this MPI rank).  Only valid if positivity enforcement is turned on.
+  double expPsiForCell(GlobalIndexType cellID);
+  
+  //! Returns the flux-limiting weight for the specified cell (which must be active and owned by this MPI rank).  The weight is used to weight f and the exponential of the latent variable, psi.  A 1.0 weight means that f is given full weight (no limiting required); a 0 weight means f does not contribute at all.
+  double fluxLimitingWeightForCell(GlobalIndexType cellID);
+  
   //! Set the initial conditions without setting inflow conditions (relevant for the periodic case).  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
-  void setInitialConditions(FunctionPtr f0);
+  void setInitialConditions(FunctionPtr f0, bool imposeInflowWeakly);
+  
+  //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.  Calls the four-argument setInitialAndInflowConditions() with imposeInflowWeakly = _enforcePositivity.
+  void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in,
+                                     double timeRampForInflowConditions = 0);
   
   //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case).  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
-  void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in);
+  void setInitialAndInflowConditions(FunctionPtr f0, FunctionPtr f_in,
+                                     double timeRampForInflowConditions,
+                                     bool imposeInflowWeakly);
   
   //! Set the initial conditions without setting inflow conditions (relevant for the periodic case): multi-species version.  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
-  void setInitialConditions(std::vector<FunctionPtr> f0);
+  void setInitialConditions(std::vector<FunctionPtr> f0, bool imposeInflowWeakly);
+  
+  //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case): multi-species version.  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.  Calls the four-argument setInitialAndInflowConditions() with imposeInflowWeakly = _enforcePositivity.
+  void setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in,
+                                     double timeRampForInflowConditions = 0);
   
   //! Set the initial, boundary conditions for Vlasov (relevant for the non-periodic case): multi-species version.  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.
-  void setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in);
+  void setInitialAndInflowConditions(std::vector<FunctionPtr> f0, std::vector<FunctionPtr> f_in,
+                                     double timeRampForInflowConditions,
+                                     bool imposeInflowWeakly);
+  
+  void setTestIP(VlasovBackwardEulerFormulation::TestIPChoice ipChoice);
+  
+  void setTestIP(std::string ipChoiceString);
   
   void setEnforceQuasiNeutrality(bool enforceQuasiNeutrality);
   
@@ -354,6 +432,10 @@ public:
   int tagVlasovSpatialInflow() const;
   int tagVlasovMaxVelocity(int zeroBasedComp) const;
   int tagVlasovMinVelocity(int zeroBasedComp) const;
+  
+  double q(const int speciesOrdinal) const;
+  
+  double m(const int speciesOrdinal) const;
   
   /** \brief  Returns a Function representing the specified component of configuration space. */
   FunctionPtr x_i(const int zeroBasedComp) const;

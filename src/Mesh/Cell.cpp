@@ -334,6 +334,13 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideO
   {
     unsigned childOrdinal = entry.first;
     unsigned childSideOrdinal = entry.second;
+    if (childOrdinal >= _childIndices.size())
+    {
+      // In a run of IonsDriver with a lot of unrefinements and a mix of x-anisotropic and isotropic refinements, we see the exception below being thrown far into the run.
+      // The following output is intended to give a little more information about what is happening, for when it happens again.
+      std::cout << "In cell " << _cellIndex << ", childOrdinal " << childOrdinal << " is beyond the bounds of _childIndices, which has " << _childIndices.size() << " entries.\n";
+    }
+    
     TEUCHOS_TEST_FOR_EXCEPTION(childOrdinal >= _childIndices.size(), std::invalid_argument, "Internal error: childOrdinal is out of bounds!");
     IndexType childCellIndex = _childIndices[childOrdinal];
     if ( (meshTopoViewForCellValidity->isValidCellIndex(childCellIndex) && !meshTopoViewForCellValidity->isParent(childCellIndex)) || (! leafNodesOnly ) )

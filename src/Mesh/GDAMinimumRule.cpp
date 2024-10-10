@@ -182,7 +182,8 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs)
       {
         if (_meshTopology->isValidCellIndex(childCellID))
         {
-          setPRefinementDegree(childCellID, parentDeltaP);
+          auto childDeltaP = getPRefinementDegree(childCellID);
+          setPRefinementDegree(childCellID, max(parentDeltaP,childDeltaP));
           assignParities(childCellID);
           // determine neighbors, so their parities can be updated below:
           CellPtr childCell = _meshTopology->getCell(childCellID);
@@ -860,9 +861,14 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
       
       for (int localDofIndex : *localDofIndices)
       {
-        *globalCoefficient++ = *basisCoefficient++;
         auto permutationEntry = permutationMap->find(localDofIndex);
-        *globalDofIndex++ = permutationEntry->second;
+        // for hierarchical bases in particular, it can happen that we have a "permutation" map that simply drops
+        // some of the degrees of freedom; this is due to the nesting of the polynomial bases.
+        if (permutationEntry != permutationMap->end())
+        {
+          *globalCoefficient++ = *basisCoefficient++;
+          *globalDofIndex++ = permutationEntry->second;
+        }
       }
     }
     else

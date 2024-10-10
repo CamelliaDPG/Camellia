@@ -58,6 +58,8 @@ namespace Camellia
     using RefinementObserver::didHUnrefine;
     void didHUnrefine(MeshTopologyPtr phaseSpaceMesh, const std::set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild) override;
     void didRepartition(MeshTopologyPtr phaseSpaceMesh) override;
+    
+    ~PhasePhysicalMeshMap();
   };
 }
 

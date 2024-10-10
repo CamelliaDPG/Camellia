@@ -9,25 +9,35 @@
 
 using namespace Camellia;
 
-ParameterFunction::ParameterFunction(double value) : TFunction<double>("ParameterFunction",0)
+ParameterFunction::ParameterFunction(double value, const std::string &name) : TFunction<double>("ParameterFunction",0)
 {
   setValue(value);
+  setName(name);
 }
 
-ParameterFunction::ParameterFunction(TFunctionPtr<double> fxn) : TFunction<double>("ParameterFunction",fxn->rank())
+ParameterFunction::ParameterFunction(TFunctionPtr<double> fxn, const std::string &name) : TFunction<double>("ParameterFunction",fxn->rank())
 {
   setValue(fxn);
+  setName(name);
 }
 
 double ParameterFunction::getConstantValue() const
 {
-  auto scalarFxn = dynamic_cast<ConstantScalarFunction<double>*>(_fxn.get());
-  if (scalarFxn == NULL)
+  auto scalarFxn    = dynamic_cast<ConstantScalarFunction<double>*>(_fxn.get());
+  auto parameterFxn = dynamic_cast<ParameterFunction*>(_fxn.get());
+  if ((scalarFxn == NULL) && (parameterFxn == NULL))
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getConstantValue() only supported for _fxn that is a subclass of ConstantScalarFunction<double>");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getConstantValue() only supported for _fxn that is a subclass of ConstantScalarFunction<double>, or is itself a ParameterFunction");
+  }
+  else if (scalarFxn != NULL)
+  {
+    return scalarFxn->value();
+  } else
+  {
+    return parameterFxn->getConstantValue();
   }
   
-  return scalarFxn->value();
+  
 }
 
 TFunctionPtr<double> ParameterFunction::getValue() const
@@ -125,13 +135,13 @@ string ParameterFunction::displayString()
   }
 }
 
-Teuchos::RCP<ParameterFunction> ParameterFunction::parameterFunction(double value)
+Teuchos::RCP<ParameterFunction> ParameterFunction::parameterFunction(double value, const std::string &name)
 {
-  return Teuchos::rcp( new ParameterFunction(value) );
+  return Teuchos::rcp( new ParameterFunction(value, name) );
 }
-Teuchos::RCP<ParameterFunction> ParameterFunction::parameterFunction(TFunctionPtr<double> fxn)
+Teuchos::RCP<ParameterFunction> ParameterFunction::parameterFunction(TFunctionPtr<double> fxn, const std::string &name)
 {
-  return Teuchos::rcp( new ParameterFunction(fxn) );
+  return Teuchos::rcp( new ParameterFunction(fxn, name) );
 }
 
 void ParameterFunction::setName(const std::string &name)

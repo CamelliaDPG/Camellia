@@ -258,6 +258,14 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   out << "tn_soln_magnitude = " << tn_soln_magnitude << std::endl;
   TEST_COMPARE(tn_projection_err, <=, tol * tn_soln_magnitude);
   
+  if (outputViz)
+  {
+    std::ostringstream vlasovVizPath;
+    vlasovVizPath << vizPrefix << "_VlasovProjection";
+    auto vlasovViz = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovVizPath.str(), "/tmp"));
+    vlasovViz->exportSolution(form->vlasovSolution(), std::vector<FunctionPtr> {f_soln-f_exact, f_exact, tn_soln-tn_0, tn_0}, std::vector<string>{"f err", "f exact", "t_n err", "t_n exact"});
+  }
+  
   // now, project again, this time with a zero t_n
   //  {
   //    // DEBUGGING: do we move from correct solution if we start there?
@@ -1154,6 +1162,52 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
     patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol,
+                           out, success, outputViz, testPrefix);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic_refined )
+  {
+    const double q      = TEST_Q;
+    const double eps0   = TEST_EPS0;
+    
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr v = Function::zn(1);
+    const double vWidth = TEST_VWIDTH;
+//    const double C = (TEST_X0 + TEST_XWIDTH / 2.) * (TEST_V0 + TEST_VWIDTH / 2.); // + TEST_V0 * TEST_VWIDTH * TEST_VWIDTH + TEST_V0 * TEST_V0 * TEST_VWIDTH + TEST_VWIDTH * TEST_VWIDTH * TEST_VWIDTH / 3.;
+//    FunctionPtr f_exact = x * v - C;
+//
+//    FunctionPtr E_exact = (q/eps0) * (x * x / 4. * (2 * TEST_V0 * TEST_VWIDTH + TEST_VWIDTH * TEST_VWIDTH) - C * TEST_VWIDTH * x);
+//    FunctionPtr V_E = -(q/eps0) * (x * x * x / 12. * (2 * TEST_V0 * TEST_VWIDTH + TEST_VWIDTH * TEST_VWIDTH) - C * TEST_VWIDTH * x * x / 2.);
+    
+    FunctionPtr f_exact = x/vWidth + v - (TEST_X0 + TEST_XWIDTH) / (2.0 * vWidth); // chosen to have zero integral on the phase-space domain
+    
+    FunctionPtr E_exact = (q/eps0) * (x * x / 2.0 - ((TEST_X0 + TEST_XWIDTH) / 2.0) * x);
+    FunctionPtr V_E = -(q/eps0) * (x * x * x / 6.0 - ((TEST_X0 + TEST_XWIDTH) / 4.0) * x * x);
+
+    const int xElements = 4;
+    const int tElements = 1;
+    const int vElements = 8; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 4; // quadratic L^2 functions; allows exact representation of f0 * E0, required for trace solution
+    const double tol = 1e-11;
+    
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
+    const bool useSerendipity    = false;
+    const bool useMimeticDPG     = false;
+    
+    const bool outputViz = true;
+    const std::string testPrefix = "PatchTest_f_linear_E_quadratic_refined";
+    
+    std::vector<std::vector<GlobalIndexType>> refinementSequence;
+    refinementSequence.push_back({16});
+//    refinementSequence.push_back({16,17,18,19});
+//    refinementSequence.push_back({32,33,34,35,40,41,42,43,48,49,50,51,56,57,58,59});
+//    refinementSequence.push_back({64,65,66,67,72,73,74,75,80,81,82,83,88,89,90,91,96,97,98,99,104,105,106,107,112,113,114,115,120,121,122,123,128,129,130,131,136,137,138,139,144,145,146,147,152,153,154,155,160,161,162,163,168,169,170,171,176,177,178,179,184,185,186,187});
+//    refinementSequence.push_back({224,225,226,227,232,233,234,235,240,241,242,243,248,249,250,251,256,257,258,259,264,265,266,267,272,273,274,275,280,281,282,283,288,289,290,291,296,297,298,299,304,305,306,307,312,313,314,315,320,321,322,323,328,329,330,331,336,337,338,339,344,345,346,347,352,353,354,355,360,361,362,363,368,369,370,371,376,377,378,379,384,385,386,387,392,393,394,395,400,401,402,403,408,409,410,411,416,417,418,419,424,425,426,427,432,433,434,435,440,441,442,443,448,449,450,451,456,457,458,459,464,465,466,467,472,473,474,475,480,481,482,483,488,489,490,491,496,497,498,499,504,505,506,507,512,513,514,515,520,521,522,523,528,529,530,531,536,537,538,539,544,545,546,547,552,553,554,555,560,561,562,563,568,569,570,571,576,577,578,579,584,585,586,587,592,593,594,595,600,601,602,603,608,609,610,611,616,617,618,619,624,625,626,627,632,633,634,635,640,641,642,643,648,649,650,651,656,657,658,659,664,665,666,667,672,673,674,675,680,681,682,683,688,689,690,691,696,697,698,699,704,705,706,707,712,713,714,715,720,721,722,723,728,729,730,731});
+//    refinementSequence.push_back({880,882,928,930,944,946,1120,1122,1124,1126,1136,1138,1140,1142,1184,1186,1188,1190,1200,1202,1204,1206,2932,2934,2980,2982,2996});
+//    refinementSequence.push_back({866,948,950,2912,2914,2928,3424,3426,3432,3434,3438,3440,3442,3444,3446,3448,3450,3452,3454,3456,3458,3460,3462,3464,3466,3468,3470,3472,3474,3476,3478,3480,3482,3484,3486,3488,3490,3496,3498,3504,3506,3508,3510,3512,3514,3516,3518,3520,3522,3528,3530,3536,3538,3540,3542,3544,3546,3548,3550,3552,3554,3560,3562,3568,3570,3572,3574,3576,3578,3580,3582,3584,3586,3592,3594,3598,3600,3602,3604,3606,3608,3610,3612,3614,3616,3618,3620,3622,3628,3630,3636,3638,3682,3684,3686,3688,3690,3692,3694});
+//    refinementSequence.push_back({3428,3430,3436,3534,3556,3558,3564,3566,3588,3590,3596,3624,3680,3752,3754,3758,3760,3762,3768,3770,3776,3778,3780,3782,3788,3790,3796,3798,3804,3806,3812,3814,3820,3822,3828,3830,3832,3834,3840,3842,3844,3846,3848,3850,3852,3854,3856,3858,3862,3864,3866,3868,3870,3872,3874,3876,3878,3880,3882,3884,3886,3888,3890,3892,3894,3896,3898,3900,3902,3904,3906,3908,3910,3912,3914,3916,3918,3920,3922,3924,3926,3928,3930,3932,3934,3936,3938,3940,3942,3944,3946,3948,3950,3952,3954,3956,3958,3960,3962,3964,3966,3968,3970,3972,3974,3976,3978,3980,3982,3984,3986,3988,3990,3992,3994,3996,3998,4000,4002,4004,4006,4008,4010,4012,4014,4016,4018,4020,4022,4024,4026,4028,4030,4032,4034,4040,4042,4048,4050,4056,4058,4062,4064,4066,4068,4070,4072,4074,4076,4078,4080,4082,4084,4086,4088,4090,4092,4094,4096,4098,4100,4102,4104,4106,4108,4110,4112,4114,4116,4118,4120,4122,4124,4126,4128,4130,4132,4134,4136,4138,4140,4142,4144,4146,4148,4150,4152,4154,4156,4158,4160,4162,4164,4166,4168,4170,4172,4174,4176,4178,4180,4182,4184,4186,4188,4190,4192,4194,4196,4198,4200,4202,4204,4206,4208,4210,4212,4214,4216,4218,4220,4222,4224,4226,4228,4230,4232,4234,4236,4238,4240,4242,4244,4246,4248,4250,4252,4254,4256,4258,4260,4262,4264,4266,4268,4270,4272,4274,4276,4278,4280,4282,4284,4286,4288,4290,4292,4294,4296,4298,4300,4302,4304,4306,4308,4310,4312,4314,4316,4318,4320,4322,4324,4326,4328,4330,4332,4334,4336,4338,4340,4342,4344,4346,4348,4350,4352,4354,4356,4360,4362,4364,4366,4368,4370,4372,4374,4376,4378,4380,4382,4384,4386,4388,4390,4392,4394,4396,4398,4400,4402,4404,4406,4408,4410,4412,4414,4416,4418,4420,4422,4428,4430,4436,4438,4440,4442,4444,4446,4448,4450,4452,4454,4456,4458,4460,4462,4464,4466,4468,4470,4472,4474,4476,4478,4484,4486,4488,4490,4502,4506,4508,4512,4514,4516,4518,4520,4522,4524,4526,4528,4530,4532,4534,4536,4538,4540,4542,4584,4586,4628,4630});
+    
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 

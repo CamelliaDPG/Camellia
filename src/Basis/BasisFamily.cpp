@@ -41,7 +41,7 @@ namespace {
     auto fsExtrusion = extrusionBasis->functionSpace();
     if (fsFirst == fsExtrusion)
     {
-      if (fsFirst == FUNCTION_SPACE_HGRAD)
+      if ((fsFirst == FUNCTION_SPACE_HGRAD) || (fsFirst == FUNCTION_SPACE_HGRAD_DISC))
       {
         fs_Intrepid2 = Intrepid2::FUNCTION_SPACE_HGRAD;
         fs = fsFirst;
@@ -69,8 +69,34 @@ public:
   HierarchicalBasisFamily();
   
   using BasisFamily::getBasis;
-  BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1) override
+  BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs_in, const std::vector<int> &p_H1_in) override
   {
+    auto fs = fs_in;
+    std::vector<int> p_H1 = p_H1_in;
+    {
+      // FUNCTION_SPACE_REAL_SCALAR: means we want elementwise constant basis
+      // We allow the fs argument to be one long; if so, it will apply to each dimension of the p_H1 argument
+      if (fs[0] == FUNCTION_SPACE_REAL_SCALAR)
+      {
+        fs[0]   = FUNCTION_SPACE_HVOL;
+        p_H1[0] = 1; // H^1 order 1 --> L^2 order 0
+        if (fs.size() == 1)
+        {
+          for (int r=1; r<p_H1.size(); r++)
+          {
+            p_H1[r] = 1;
+          }
+        }
+      }
+      for (int r=1; r<fs.size(); r++)
+      {
+        if (fs[r] == FUNCTION_SPACE_REAL_SCALAR)
+        {
+          fs[r]   = FUNCTION_SPACE_HVOL;
+          p_H1[r] = 1;
+        }
+      }
+    }
     auto basis = getCachedBasis(cellTopo,fs,p_H1);
     if (basis == Teuchos::null)
     {
@@ -345,16 +371,17 @@ BasisFamilyPtr BasisFamily::hierarchicalBasisFamily()
   return basisFamily;
 }
 
-BasisFamilyPtr BasisFamily::nodalBasisFamily()
-{
-  static BasisFamilyPtr basisFamily = Teuchos::rcp(new HierarchicalBasisFamily);
-  return basisFamily;
-}
-
 const std::string & BasisFamily::name()
 {
   return _name;
 }
+
+BasisFamilyPtr BasisFamily::nodalBasisFamily()
+{
+  static BasisFamilyPtr basisFamily = Teuchos::rcp(new NodalBasisFamily);
+  return basisFamily;
+}
+
 
 BasisFamilyPtr BasisFamily::serendipityBasisFamily()
 {
@@ -377,7 +404,11 @@ void BasisFamily::setCachedBasis(CellTopoPtr cellTopo, const std::vector<EFuncti
 }
 
 HierarchicalBasisFamily::HierarchicalBasisFamily()
-: BasisFamily("Intrepid2 Hieriarchical", true) // true because this only ever gets constructed as a static that persists through Kokkos::finalize()
+: BasisFamily("Intrepid2 Hierarchical", true) // true because this only ever gets constructed as a static that persists through Kokkos::finalize()
+{}
+
+NodalBasisFamily::NodalBasisFamily()
+: BasisFamily("Intrepid2 Nodal", true) // true because this only ever gets constructed as a static that persists through Kokkos::finalize()
 {}
 
 SerendipityBasisFamily::SerendipityBasisFamily()
