@@ -503,13 +503,13 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
     int numPoints = 1;
     int numUniquePoints = 1;
     int numPointComponents = data.rank() - functionRank - 1;
-    Kokkos::Array<int,5> pointCounts;
+    Kokkos::Array<int,6> pointCounts;
     for (int i=1; i<numPointComponents+1; i++)
     {
       numPoints *= data.extent_int(i);
       pointCounts[i-1] = data.extent_int(i);
     }
-    for (int i=numPointComponents+1; i<5; i++)
+    for (int i=numPointComponents+1; i<7; i++)
     {
       // pad pointCounts with 1's for simplicity of index-mapping code
       pointCounts[i-1] = 1;
