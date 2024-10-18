@@ -656,8 +656,27 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported function space for point topology.");
             }
             break;
+            case shards::Hexahedron<>::key:
+              switch(fs)
+              {
+                case Camellia::FUNCTION_SPACE_HGRAD:
+                case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+                  //if (polyOrder==0) {
+                  //  basis = Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >() ) ;
+                  //} else {
+                  if (fs == FUNCTION_SPACE_HGRAD)
+                  {
+                    basis = intrepid2HexHGRAD(polyOrder);
+                  }
+                  else
+                  {
+                    basis = intrepid2HexHGRAD_DISC(polyOrder);
+                  }
+              }
+              break;
           default:
-            TEUCHOS_TEST_FOR_EXCEPTION( ( (shardsKey != shards::Quadrilateral<4>::key)        &&
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (shardsKey != shards::Hexahedron<>::key)            &&
+                                          (shardsKey != shards::Quadrilateral<4>::key)        &&
                                           (shardsKey != shards::Triangle<3>::key)             &&
                                           (shardsKey != shards::Line<2>::key)                 &&
                                           (shardsKey != shards::Node::key)),
