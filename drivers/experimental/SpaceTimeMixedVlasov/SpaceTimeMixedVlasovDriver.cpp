@@ -5,14 +5,54 @@
 #include "Camellia.h"
 #include "GDAMinimumRule.h"
 #include "HDF5Exporter.h"
+#include "LocalDofMapper.h"
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
 #include "RHS.h"
 #include "Solution.h"
 #include "TrigFunctions.h"
 
+#include "EpetraExt_RowMatrixOut.h"
+
 using namespace Camellia;
 using namespace std;
+
+//! This implementation is thanks to ChatGPT.  We'll see if it works!
+void reorderMatrix(const Epetra_CrsMatrix& originalMatrix,
+                   const std::map<int, int>& reorderMap,
+                   Epetra_CrsMatrix& reorderedMatrix) {
+    int numRows = originalMatrix.NumMyRows();
+    int numCols = originalMatrix.NumMyCols();
+
+    // Iterate over the original matrix
+    for (int i = 0; i < numRows; ++i) {
+        double* values;
+        int* indices;
+        int numEntries;
+
+        // Get the row entries
+        originalMatrix.ExtractMyRowView(i, numEntries, values, indices);
+
+        // Find the new row index using the reorder map
+        auto it = reorderMap.find(i);
+        if (it != reorderMap.end()) {
+            int newRow = it->second;
+
+            // Insert the values into the reordered matrix
+            for (int j = 0; j < numEntries; ++j) {
+                // Find the new column index using the reorder map
+                auto colIt = reorderMap.find(indices[j]);
+                if (colIt != reorderMap.end()) {
+                    int newCol = colIt->second;
+                    reorderedMatrix.InsertGlobalValues(newRow, 1, &values[j], &newCol);
+                }
+            }
+        }
+    }
+
+    // Finish the construction of the reordered matrix
+    reorderedMatrix.FillComplete();
+}
 
 int main(int argc, char *argv[])
 {
@@ -33,6 +73,7 @@ int main(int argc, char *argv[])
     int pToAdd = spaceDim+velocityDim;
     
     std::string modeString = "single"; // single run; other options are "h" and "p" for h and p convergence tests
+    std::string sortedMatrixPath = "";
     
     cmdp.setOption("xElements", &numElements_x );
     cmdp.setOption("tElements", &numElements_t );
@@ -46,6 +87,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("v0", &domainDim[2][0] );
     cmdp.setOption("v1", &domainDim[2][1] );
     cmdp.setOption("mode", &modeString, "single, h, or p");
+    cmdp.setOption("varSortedMatrixOutputPath", &sortedMatrixPath);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -175,32 +217,96 @@ int main(int argc, char *argv[])
 //      Epetra_CommPtr Comm = Teuchos::null,
 //      bool allowMeshTopologyPruning = true);
       
-      MeshPtr mesh = MeshFactory::rectilinearMesh(vlasovBF,
-                                                  {domainDim[0][1]-domainDim[0][0],domainDim[1][1]-domainDim[1][0],domainDim[2][1]-domainDim[2][0]},
-                                                  {numElements_x_i,numElements_t_i,numElements_v_i}, polyOrder);
+//      MeshPtr mesh = MeshFactory::rectilinearMesh(vlasovBF,
+//                                                  {domainDim[0][1]-domainDim[0][0],domainDim[1][1]-domainDim[1][0],domainDim[2][1]-domainDim[2][0]},
+//                                                  {numElements_x_i,numElements_t_i,numElements_v_i}, polyOrder);
       
 //      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
 
       
-//      auto spatialMeshTopo  = MeshFactory::intervalMeshTopology(domainDim[0][0], domainDim[0][1], numElements_x_i);
-//      auto spaceTimeMeshTopo = MeshFactory::extrudedMeshTopology(spatialMeshTopo, {domainDim[1][0]}, {domainDim[1][1]}, {numElements_t_i});
-//      auto phaseSpaceMeshTopo = MeshFactory::extrudedMeshTopology(spaceTimeMeshTopo, {domainDim[2][0]}, {domainDim[2][1]}, {numElements_v_i});
+      auto spatialMeshTopo  = MeshFactory::intervalMeshTopology(domainDim[0][0], domainDim[0][1], numElements_x_i);
+      auto spaceTimeMeshTopo = MeshFactory::extrudedMeshTopology(spatialMeshTopo, {domainDim[1][0]}, {domainDim[1][1]}, {numElements_t_i});
+      auto phaseSpaceMeshTopo = MeshFactory::extrudedMeshTopology(spaceTimeMeshTopo, {domainDim[2][0]}, {domainDim[2][1]}, {numElements_v_i});
+      
+      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
+      
+//      static bool haveOutputted = false;
 //      
-//      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
-      
-      static bool haveOutputted = false;
-      
-      if (!haveOutputted)
-      {
-        auto elemTypeSample = mesh->getElementType(0);
-        elemTypeSample->trialOrderPtr->print(std::cout);
-        haveOutputted = true;
-      }
+//      if (!haveOutputted)
+//      {
+//        auto elemTypeSample = mesh->getElementType(0);
+//        elemTypeSample->trialOrderPtr->print(std::cout);
+//        haveOutputted = true;
+//      }
       
       SolutionPtr soln = Solution::solution(vlasovBF, mesh, bc, rhs);
-      soln->setWriteMatrixToMatrixMarketFile(true, "/tmp/K.dat");
+//      soln->setWriteMatrixToMatrixMarketFile(true, "/tmp/K.dat");
       
       soln->solve();
+      
+      auto K = soln->getStiffnessMatrix();
+      
+      if (sortedMatrixPath != "")
+      {
+        // please don't emulate the code below; it's just a quick and dirty way to get a reordered Epetra matrix
+        
+        // determine which global IDs belong to which variables
+        auto trialIDs = vf->trialIDs();
+        auto cellIDs = mesh->cellIDsInPartition();
+        
+        std::map<int, std::set<GlobalIndexType> > idsForTrialVar;
+        std::map<GlobalIndexType,GlobalIndexType> idToSortedID;
+        
+        GDAMinimumRule* gda = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+        
+        for (const auto &cellID: cellIDs)
+        {
+          auto dofMapper = gda->getDofMapper(cellID);
+          
+          auto cellTopo = mesh->getElementType(cellID)->cellTopoPtr;
+          
+          auto dim = cellTopo->getDimension();
+          for (int d=0; d<=dim; d++)
+          {
+            int scCount = cellTopo->getSubcellCount(d);
+            for (int sc=0; sc<scCount; sc++)
+            {
+              for (const int &trialID : trialIDs)
+              {
+//                (int varID, unsigned d, unsigned subcord, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime);
+                auto globalIDs = dofMapper->globalIndicesForSubcell(trialID, d, sc, false, false);
+                idsForTrialVar[trialID].insert(globalIDs.begin(), globalIDs.end());
+              }
+            }
+          }
+        }
+        
+        int newGIDOffset = 0;
+        for (const int &trialID : trialIDs)
+        {
+          auto oldTrialGIDs = idsForTrialVar[trialID];
+          cout << "trialID " << trialID << " has " << oldTrialGIDs.size() << " global dofs.\n";
+//          Camellia::print("global IDs for trial", oldTrialGIDs);
+          for (auto &oldID : oldTrialGIDs)
+          {
+            idToSortedID[oldID] = newGIDOffset++;
+          }
+        }
+        
+        Epetra_Map partitionMap = soln->getPartitionMap();
+        
+        int maxRowSize = 0; // will cause more mallocs during insertion into the CrsMatrix, but will minimize the amount of memory allocated now.
+        Epetra_FECrsMatrix K_sorted(::Copy, partitionMap, maxRowSize);
+        
+//        for (int idOrdinal=0; idOrdinal<newGIDOffset; idOrdinal++)
+//        {
+//          cout << idOrdinal << " -> " << idToSortedID[idOrdinal] << endl;
+//        }
+        
+        reorderMatrix(*K, idToSortedID, K_sorted);
+        
+        EpetraExt::RowMatrixToMatrixMarketFile(sortedMatrixPath.c_str(),K_sorted,NULL,NULL,false);
+      }
       
       // compute L^2 error in f:
       FunctionPtr f_soln = Function::solution(f, soln);
