@@ -229,6 +229,50 @@ int main(int argc, char *argv[])
       auto phaseSpaceMeshTopo = MeshFactory::extrudedMeshTopology(spaceTimeMeshTopo, {domainDim[2][0]}, {domainDim[2][1]}, {numElements_v_i});
       
       MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
+
+      // we separate tn into three components: the space-normal, time-normal, and velocity-normal sides
+      // map from the side ordinal in a cell to which sub-trace ID.
+      // we start the numbering for the new sub-trace IDs after the last variable we created, eps_w
+      int tn_x = eps_w->ID() + 1;
+      int tn_t = tn_x + 1;
+      int tn_v = tn_x + 2;
+      map<unsigned,int> traceVariableForSideOrdinal;
+      
+      /*
+       *  For tensor-product topologies T x L (L being the line topology), there are two "copies" of T, T0 and T1,
+       *  and the enumeration of subcells of dimension d goes as follows:
+          - d-dimensional subcells from T0
+          - d-dimensional subcells from T1
+          - ((d-1)-dimensional subcells of T) x L.
+       
+       We can view our cell topology as a line in x, extruded in t.  The result is then extruded in v.
+       
+       For the xt quad, the sides are numbered like this:
+       
+        ___1___
+       |       |
+       |2     3|
+       |       |
+        ---0---
+           
+       The xtv hexahedron has sides numbered like this:
+       0: near xt quad
+       1:  far xt quad
+       2: 0 side from xt quad extruded in v: bottom xv quad
+       3: 1 side from xt quad extruded in v: top xv quad
+       4: 2 side from xt quad extruded in v: left tv quad
+       5: 3 side from xt quad extruded in v: right tv quad
+       
+       x-normal is the tv quads: 4,5
+       t-normal is the xv quads: 2,3
+       v-normal is the xt quads: 0,1
+       */
+      traceVariableForSideOrdinal[0] = tn_v;
+      traceVariableForSideOrdinal[1] = tn_v;
+      traceVariableForSideOrdinal[2] = tn_t;
+      traceVariableForSideOrdinal[3] = tn_t;
+      traceVariableForSideOrdinal[4] = tn_x;
+      traceVariableForSideOrdinal[5] = tn_x;
       
 //      static bool haveOutputted = false;
 //      
@@ -273,19 +317,49 @@ int main(int argc, char *argv[])
             {
               for (const int &trialID : trialIDs)
               {
-//                (int varID, unsigned d, unsigned subcord, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime);
-                auto globalIDs = dofMapper->globalIndicesForSubcell(trialID, d, sc, false, false);
-                idsForTrialVar[trialID].insert(globalIDs.begin(), globalIDs.end());
+                if (trialID == tn_hat->ID())
+                {
+                  // subdivide tn variables according to side ID:
+                  if (d == dim-1)
+                  {
+                    auto globalIDs = dofMapper->globalIndicesForSubcell(trialID, d, sc, false, false);
+                    int tn_id = traceVariableForSideOrdinal[sc];
+                    idsForTrialVar[tn_id].insert(globalIDs.begin(), globalIDs.end());
+                  }
+                }
+                else
+                {
+                  auto globalIDs = dofMapper->globalIndicesForSubcell(trialID, d, sc, false, false);
+                  idsForTrialVar[trialID].insert(globalIDs.begin(), globalIDs.end());
+                }
               }
             }
           }
         }
         
         int newGIDOffset = 0;
+        std::map<int,std::string> tn_ids;
+        tn_ids[tn_x] = "tn_x";
+        tn_ids[tn_t] = "tn_t";
+        tn_ids[tn_v] = "tn_v";
+        
+        for (const auto & entry : tn_ids)
+        {
+          const auto & tn_id = entry.first;
+          const auto & tn_str = entry.second;
+          auto oldTrialGIDs = idsForTrialVar[tn_id];
+          cout << tn_str << " has " << oldTrialGIDs.size() << " global dofs.\n";
+          for (auto &oldID : oldTrialGIDs)
+          {
+            idToSortedID[oldID] = newGIDOffset++;
+          }
+        }
+        
         for (const int &trialID : trialIDs)
         {
+          if (trialID == tn_hat->ID()) continue; // skip tn; we covered it above
           auto oldTrialGIDs = idsForTrialVar[trialID];
-          cout << "trialID " << trialID << " has " << oldTrialGIDs.size() << " global dofs.\n";
+          cout << vf->trial(trialID)->name() << " has " << oldTrialGIDs.size() << " global dofs.\n";
 //          Camellia::print("global IDs for trial", oldTrialGIDs);
           for (auto &oldID : oldTrialGIDs)
           {
