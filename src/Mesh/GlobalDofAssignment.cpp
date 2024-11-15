@@ -329,25 +329,66 @@ vector<GlobalIndexType> GlobalDofAssignment::cellIDsOfElementType(PartitionIndex
   }
   
   // first, let's find the key that corresponds to elemType
+  bool keyFound = false;
   pair<CellTopologyKey,int> key;
   for (auto entry : _elementTypesForCellTopology)
   {
-    if (entry.second->equals(*elemType))
+    if (*(entry.second) == *elemType)
     {
       key = entry.first;
+      keyFound = true;
       break;
     }
   }
-  vector<GlobalIndexType> cellsForElementType;
-  const set<GlobalIndexType>* cellsInPartition = &_partitions[partitionNumber];
-  for (GlobalIndexType cellID : *cellsInPartition)
+  if (keyFound)
   {
-    if (getElementTypeLookupKey(cellID) == key)
+    vector<GlobalIndexType> cellsForElementType;
+    const set<GlobalIndexType>* cellsInPartition = &_partitions[partitionNumber];
+    for (GlobalIndexType cellID : *cellsInPartition)
     {
-      cellsForElementType.push_back(cellID);
+      if (getElementTypeLookupKey(cellID) == key)
+      {
+        cellsForElementType.push_back(cellID);
+      }
     }
+    return cellsForElementType;
   }
-  return cellsForElementType;
+  else
+  {
+    // check for tag-indexed element type
+    // let's look for the tuple that corresponds to elemType
+    bool tupleFound = false;
+    std::tuple<CellTopologyKey,int,std::set<tag>, std::map<int, std::set< tag > > > tuple;
+    for (auto entry : _elementTypesForKeyAndTags)
+    {
+      if (*(entry.second) == *elemType)
+      {
+        tuple = entry.first;
+        tupleFound = true;
+        break;
+      }
+    }
+    if (tupleFound)
+    {
+      vector<GlobalIndexType> cellsForElementType;
+      const set<GlobalIndexType>* cellsInPartition = &_partitions[partitionNumber];
+      key = {std::get<0>(tuple), std::get<1>(tuple)};
+      for (GlobalIndexType cellID : *cellsInPartition)
+      {
+        if (getElementTypeLookupKey(cellID) == key)
+        {
+          // then get the full ElementType and compare
+          auto cellElemType = elementType(cellID);
+          if (*cellElemType == *elemType)
+          {
+            cellsForElementType.push_back(cellID);
+          }
+        }
+      }
+      return cellsForElementType;
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching cells found");
+  }
 }
 
 const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber) const
@@ -420,14 +461,16 @@ void GlobalDofAssignment::determineMinimumSubcellDimensionForContinuityEnforceme
   int myMinimumSubcellDimension = _meshTopology->getDimension();
   set<pair<CellTopologyKey,int>> myCellKeys;
   const set<GlobalIndexType>* myCellIDs = &cellsInPartition(-1);
+  
+  std::set<ElementType> elemTypes; // not elemTypePtr; use ElementType's == implementation for de-duplication
   for (GlobalIndexType myCellID : *myCellIDs)
   {
-    myCellKeys.insert(this->getElementTypeLookupKey(myCellID));
+    auto elemTypePtr = this->elementType(myCellID);
+    elemTypes.insert(*elemTypePtr);
   }
-  for (auto myCellKey : myCellKeys)
+  for (const auto &elemType : elemTypes)
   {
-    ElementTypePtr elemType = this->getElementTypeForKey(myCellKey);
-    int elemMin = elemType->trialOrderPtr->minimumSubcellDimensionForContinuity();
+    int elemMin = elemType.trialOrderPtr->minimumSubcellDimensionForContinuity();
     myMinimumSubcellDimension = min(myMinimumSubcellDimension,elemMin);
     if (myMinimumSubcellDimension == 0) break; // can't go lower than 0
   }
@@ -480,7 +523,39 @@ void GlobalDofAssignment::didHUnrefine(MeshTopologyPtr meshToRefine, const set<G
 ElementTypePtr GlobalDofAssignment::elementType(GlobalIndexType cellID)
 {
   pair<CellTopologyKey, int> key = getElementTypeLookupKey(cellID);
-  return getElementTypeForKey(key);
+  
+  auto varTagFilters = _varFactory->tagFilters();
+  using tag = std::pair<std::string,int>;
+  std::map<int, std::set<tag> > tagsForSide;
+  std::set<tag> tagsForVolume;
+  
+  int volumeDim = _meshTopology->getDimension();
+  int sideDim   = volumeDim - 1;
+  
+  for (auto varTag : varTagFilters)
+  {
+    vector<EntitySetPtr> entitySets = _meshTopology->baseMeshTopology()->getEntitySetsForTagID(varTag.first, varTag.second);
+    for (EntitySetPtr entitySet : entitySets)
+    {
+      auto volumeOrdinals = entitySet->subcellOrdinals(_meshTopology, cellID, volumeDim);
+      if (volumeOrdinals.size() > 0) tagsForVolume.insert(varTag);
+      
+      auto sideOrdinals = entitySet->subcellOrdinals(_meshTopology, cellID, sideDim);
+      for (const auto & sideOrdinal : sideOrdinals)
+      {
+        tagsForSide[sideOrdinal].insert(varTag);
+      }
+    }
+  }
+  
+  if ((tagsForVolume.size() == 0) && (tagsForSide.size() == 0))
+  {
+    return getElementTypeForKey(key);
+  }
+  else
+  {
+    return getElementTypeForKeyAndTags(key,tagsForVolume,tagsForSide);
+  }
 }
 
 const map<GlobalIndexType,int>& GlobalDofAssignment::getCellPRefinements() const
@@ -625,18 +700,19 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
   // Ultimately, it probably will be an error to call this with argument that is not equal to the current rank.
   if (partitionNumber != -1)
   {
-    const set<GlobalIndexType>* cellIDsForPartition = &this->cellsInPartition(partitionNumber);
-    
-    set<pair<CellTopologyKey,int>> elementTypeKeys;
-    for (GlobalIndexType cellID : *cellIDsForPartition)
-    {
-      elementTypeKeys.insert(getElementTypeLookupKey(cellID));
-    }
+    const set<GlobalIndexType> cellIDsForPartition = this->cellsInPartition(partitionNumber);
     
     vector< ElementTypePtr > elemTypes;
-    for (auto key : elementTypeKeys)
+    set< ElementType > elemTypesSet;
+    
+    for (const GlobalIndexType & cellID : cellIDsForPartition)
     {
-      elemTypes.push_back(getElementTypeForKey(key));
+      auto elemTypePtr = elementType(cellID);
+      if (elemTypesSet.find(*elemTypePtr) == elemTypesSet.end() )
+      {
+        elemTypesSet.insert(*elemTypePtr);
+        elemTypes.push_back(elemTypePtr);
+      }
     }
     return elemTypes;
   }
@@ -644,23 +720,23 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
   {
     int numRanks = _mesh->Comm()->NumProc();
     
-    set<pair<CellTopologyKey,int>> elementTypeKeys;
+    vector< ElementTypePtr > elemTypes;
+    set< ElementType > elemTypesSet;
     
     for (int rank=0; rank<numRanks; rank++)
     {
-      const set<GlobalIndexType>* cellIDsForPartition = &this->cellsInPartition(rank);
-      for (GlobalIndexType cellID : *cellIDsForPartition)
+      const set<GlobalIndexType> & cellIDsForPartition = this->cellsInPartition(rank);
+      for (const GlobalIndexType & cellID : cellIDsForPartition)
       {
-        elementTypeKeys.insert(getElementTypeLookupKey(cellID));
+        auto elemTypePtr = elementType(cellID);
+        if (elemTypesSet.find(*elemTypePtr) == elemTypesSet.end() )
+        {
+          elemTypesSet.insert(*elemTypePtr);
+          elemTypes.push_back(elemTypePtr);
+        }
       }
     }
     
-    vector< ElementTypePtr > elemTypes;
-    for (auto key : elementTypeKeys)
-    {
-      elemTypes.push_back(getElementTypeForKey(key));
-    }
-
     return elemTypes;
   }
 }
@@ -697,7 +773,7 @@ ElementTypePtr GlobalDofAssignment::getElementTypeForKey(pair<CellTopologyKey,in
   {
     int deltaP = key.second;
     vector<int> H1Order = getH1OrderForPRefinement(deltaP);
-    const int numPComponents = H1Order.size();
+    const int numPComponents = int(H1Order.size());
     vector<int> testDegree(numPComponents);
     for (int pComponent=0; pComponent<numPComponents; pComponent++)
     {
@@ -711,6 +787,36 @@ ElementTypePtr GlobalDofAssignment::getElementTypeForKey(pair<CellTopologyKey,in
     _elementTypesForCellTopology[key] = elemType;
   }
   return _elementTypesForCellTopology[key];
+}
+
+using tag = std::pair<std::string,int>;
+ElementTypePtr GlobalDofAssignment::getElementTypeForKeyAndTags(pair<CellTopologyKey,int> key,
+                                                                const std::set< tag > &tagsForVolume,
+                                                                const std::map<int, std::set< tag > > &tagsForSide)
+{
+//  CellTopologyKey first = key.first;
+//  int second = key.second;
+//  std::set<tag> third = tagsForVolume;
+//  std::map<int,tag> fourth = tagsForSide;
+  std::tuple<CellTopologyKey,int,std::set<tag>, std::map<int, std::set< tag > > > keyTagsTuple = make_tuple(key.first,key.second,tagsForVolume,tagsForSide);
+  if (_elementTypesForKeyAndTags.find(keyTagsTuple) == _elementTypesForKeyAndTags.end())
+  {
+    int deltaP = key.second;
+    vector<int> H1Order = getH1OrderForPRefinement(deltaP);
+    const int numPComponents = int(H1Order.size());
+    vector<int> testDegree(numPComponents);
+    for (int pComponent=0; pComponent<numPComponents; pComponent++)
+    {
+      testDegree[pComponent] = H1Order[pComponent] + _testOrderEnhancement;
+    }
+    
+    CellTopoPtr cellTopo = CellTopology::cellTopology(key.first);
+    DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(H1Order, cellTopo, _enforceConformityLocally,tagsForVolume,tagsForSide);
+    DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, cellTopo,tagsForVolume,tagsForSide);
+    ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cellTopo);
+    _elementTypesForKeyAndTags[keyTagsTuple] = elemType;
+  }
+  return _elementTypesForKeyAndTags[keyTagsTuple];
 }
 
 pair<CellTopologyKey,int> GlobalDofAssignment::getElementTypeLookupKey(GlobalIndexType cellID)

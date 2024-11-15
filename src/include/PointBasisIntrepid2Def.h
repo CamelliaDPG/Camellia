@@ -27,12 +27,12 @@ namespace Camellia
     using Intrepid2::ordinal_type;
     const ordinal_type spaceDim = 0;
 
-    this->basisCardinality_  = 1;
-    this->basisDegree_       = 0;
-    this->basisCellTopology_ = shards::getCellTopologyData<shards::Node >();
-    this->basisType_         = Intrepid2::BASIS_FEM_DEFAULT;
-    this->basisCoordinates_  = Intrepid2::COORDINATES_CARTESIAN;
-    this->functionSpace_     = Intrepid2::FUNCTION_SPACE_HVOL;
+    this->basisCardinality_     = 1;
+    this->basisDegree_          = 0;
+    this->basisCellTopologyKey_ = shards::Node::key;
+    this->basisType_            = Intrepid2::BASIS_FEM_DEFAULT;
+    this->basisCoordinates_     = Intrepid2::COORDINATES_CARTESIAN;
+    this->functionSpace_        = Intrepid2::FUNCTION_SPACE_HGRAD;
 
     // initialize tags
     {

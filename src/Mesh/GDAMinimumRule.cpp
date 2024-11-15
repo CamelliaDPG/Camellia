@@ -81,14 +81,15 @@ bool GDAMinimumRule::allowMeshTopologyPruning()
 }
 
 typedef pair< IndexType, unsigned > CellPair;
-CellPair GDAMinimumRule::cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex)
+CellPair GDAMinimumRule::cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex, std::vector< std::pair<std::string, int> > tags)
 {
-  set< CellPair > cellsForSubcell = _meshTopology->getCellsContainingEntity(d, entityIndex);
+  // TODO: here, add optional tag filter which requires for d <= sideDim that the side (second in CellPair) matches a specified tag.
+  set< CellPair > cellsForSubcell = _meshTopology->getCellsContainingEntity(d, entityIndex, tags);
   
   if (cellsForSubcell.size() == 0)
   {
     // repeat the call so we can see it in the debugger:
-    cellsForSubcell = _meshTopology->getCellsContainingEntity(d, entityIndex);
+    cellsForSubcell = _meshTopology->getCellsContainingEntity(d, entityIndex, tags);
     TEUCHOS_TEST_FOR_EXCEPTION(cellsForSubcell.size() == 0, std::invalid_argument, "no cells found that match constraining entity");
   }
   
@@ -527,7 +528,8 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cel
 set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned int dim, unsigned int subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
 {
   LocalDofMapperPtr dofMapper = getDofMapper(cellID);
-  set<GlobalIndexType> globalDofIndices = dofMapper->globalIndicesForSubcell(varID, dim, subcellOrdinal, upgradeToContinuousBasis, tensorTopologyMeansSpaceTime);
+  bool includeSubSubcells = true;
+  set<GlobalIndexType> globalDofIndices = dofMapper->globalIndicesForSubcell(varID, dim, subcellOrdinal, upgradeToContinuousBasis, tensorTopologyMeansSpaceTime, includeSubSubcells);
   
   return globalDofIndices;
 }
@@ -1339,7 +1341,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
         {
           if (fineOrdinalCoefficientsThusFar.find(fineOrdinal) != fineOrdinalCoefficientsThusFar.end())
           {
-            double tol = 1e-14;
+            double tol = 1e-13;
             double previousCoefficient = fineOrdinalCoefficientsThusFar[fineOrdinal];
             if (abs(previousCoefficient-coefficient) > tol)
             {
@@ -2409,7 +2411,21 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 
     CellPtr cell = _meshTopology->getCell(cellID);
     TEUCHOS_TEST_FOR_EXCEPTION(cell->isParent(_meshTopology), std::invalid_argument, "Error: cell is not active (it is a parent) -- constraint tables are not valid for inactive cells…");
-    DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
+    std::vector< std::pair<std::string, int> > tags;
+    {
+      // check for tag filters
+      DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
+      auto trialIDs = trialOrdering->getVarIDs();
+      for (const auto & trialID : trialIDs)
+      {
+        VarPtr var = this->_varFactory->trial(trialID);
+        if (var->hasTag())
+        {
+          auto tag = var->getTag();
+          tags.push_back(tag);
+        }
+      }
+    }
     CellTopoPtr topo = cell->topology();
     unsigned spaceDim = topo->getDimension();
     unsigned sideDim = spaceDim - 1;
@@ -2437,7 +2453,6 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
       {
         if (! processedSubcells[d][subcord])   // i.e. we don't yet know the constraining entity for this subcell
         {
-
           IndexType entityIndex = cell->entityIndex(d, subcord);
 
 //          cout << "entity of dimension " << d << " with entity index " << entityIndex << ": " << endl;
@@ -2450,7 +2465,8 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 //          cout << "is constrained by entity of dimension " << constrainingEntity.second << "  with entity index " << constrainingEntity.first << ": " << endl;
 //          _meshTopology->printEntityVertices(constrainingEntity.second, constrainingEntity.first);
 
-          CellPair constrainingCellPair = cellContainingEntityWithLeastH1Order(constrainingEntityDimension, constrainingEntityIndex);
+          // does the constraining entity match one (or more) of the tags?  Then we will require that the constraining cell/side match, too.
+          CellPair constrainingCellPair = cellContainingEntityWithLeastH1Order(constrainingEntityDimension, constrainingEntityIndex, tags);
           constrainingSubcellInfo[d][subcord].cellID = constrainingCellPair.first;
 
           unsigned constrainingCellID = constrainingCellPair.first;
@@ -2461,22 +2477,55 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
           if (constrainingCellTopo->getTensorialDegree() > 0)
           {
             // presumption is space-time.  In this case, we prefer spatial sides when we have a choice
-            // (because some trace/flux variables are only defined on spatial sides)
+            // (because some trace/flux variables are only defined on spatial sides).  But if tags are specified, we
+            // do *not* allow this because the new side might not match the tag; the current one is guaranteed to.
             if (constrainingEntityDimension < sideDim) // if constrainingEntityDimension == sideDim, then the constraining entity is a side, so there isn't another side on constrainingCell that contains the constraining entity
             {
               if (! constrainingCellTopo->sideIsSpatial(constrainingSideOrdinal))
               {
+                // if constraining side matches some tags, then we require that any replacement side matches those, too.
+                std::vector< std::pair<std::string, int> > tagsToMatch;
+                for (const auto & tag : tags)
+                {
+                  auto oldSideEntityIndex = constrainingCell->entityIndex(sideDim, constrainingSideOrdinal);
+                  const bool matchesTag = _meshTopology->entityMatchesTag(sideDim, oldSideEntityIndex, tag);
+                  if (matchesTag)
+                  {
+                    tagsToMatch.push_back(tag);
+                  }
+                }
+                
                 for (unsigned newSideOrdinal=0; newSideOrdinal<constrainingCellTopo->getSideCount(); newSideOrdinal++)
                 {
                   if (constrainingCellTopo->sideIsSpatial(newSideOrdinal))
                   {
-                    // spatial side.  Does it contain the constraining entity?
+                    // Does this spatial side contain the constraining entity?
                     unsigned subcellOrdinalInSide = constrainingCell->findSubcellOrdinalInSide(constrainingEntityDimension, constrainingEntityIndex, newSideOrdinal);
-                    if (subcellOrdinalInSide != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
+                    
+                    if (subcellOrdinalInSide == INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
                     {
-                      constrainingSideOrdinal = newSideOrdinal;
-                      break;
+                      // this side does not contain the constraining entity
+                      continue;
                     }
+                    
+                    bool newSideOrdinalFailsTagCheck = false;
+                    for (const auto & tag : tagsToMatch)
+                    {
+                      auto newSideEntityIndex = constrainingCell->entityIndex(sideDim, newSideOrdinal);
+                      const bool matchesTag = _meshTopology->entityMatchesTag(sideDim, newSideEntityIndex, tag);
+                      if (!matchesTag)
+                      {
+                        newSideOrdinalFailsTagCheck = true;
+                        break;
+                      }
+                    }
+                    if (newSideOrdinalFailsTagCheck)
+                    {
+                      continue; // try next newSideOrdinal.
+                    }
+                    // if we get here, the side "newSideOrdinal" contains the constraining entity, and passes the tag check
+                    constrainingSideOrdinal = newSideOrdinal;
+                    break;
                   }
                 }
               }
@@ -2617,7 +2666,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
               constrainingDimension, constrainingSubcellInfo[d][scOrdinal].subcellOrdinal);
           constrainingEntityIndex = constrainingCell->entityIndex(constrainingDimension, constrainingSubcellOrdinalInCell);
         }
-        CellPair owningCellAndSide = cellContainingEntityWithLeastH1Order(constrainingDimension, constrainingEntityIndex);
+        CellPair owningCellAndSide = cellContainingEntityWithLeastH1Order(constrainingDimension, constrainingEntityIndex, tags);
         auto owningCellID = owningCellAndSide.first;
         if (_meshTopology->isValidCellIndex(owningCellID))
         {
@@ -2739,6 +2788,23 @@ void GDAMinimumRule::getConstrainingEntityInfo(GlobalIndexType cellID, CellConst
                                                AnnotatedEntity* &constrainingInfo, OwnershipInfo* &ownershipInfo,
                                                bool &spaceOnlyConstraint)
 {
+  if (var->hasTag())
+  {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Need to do something to get cell constraints for a tag-filtered variable");
+//    // the problem we are running into right now is that the side selected as a constraining side for a tag-filtered trace variable is one that
+    // is not actually contained in the tag (though it contains some subcells that do).
+    // probably what we want to do is actually to do something like getCellConstraints() but where it asks for the cells with least H1Order that contain the entity (which might be a vertex which is contained in higher-dimensional sides), we want somehow to make sure that a side selected for the constraint actually has a basis defined for the variable.  I will note that at the point where we call getCellConstraints(), we have a VarPtr, just as we do here.  I kind of think *this* point is too late, and that we should have done something at the point we called getCellConstraints(): check if hasTag() is true, and if so, we circumscribe the search to only include cells that have at least a side that matches, and then whatever we do that specifies (in cellConstraints.subcellConstraints[d][scord].sideOrdinal) which *side* owns the entity, that should also require that said side has the tag applied to it.
+    
+//    constrainingInfo = &cellConstraints.subcellConstraints[d][scord];
+//    ownershipInfo = &cellConstraints.owningCellIDForSubcell[d][scord];
+//    
+//    DofOrderingPtr sscConstrainingTrialOrdering = elementType(constrainingInfo->cellID)->trialOrderPtr;
+//    if (sscConstrainingTrialOrdering)
+//    
+//    BasisPtr sscConstrainingBasis = sscConstrainingTrialOrdering->getBasis(var->ID(), subsubcellConstraints->sideOrdinal);
+//    
+//    
+  }
   if (var->isDefinedOnTemporalInterface())
   {
     constrainingInfo = &cellConstraints.subcellConstraints[d][scord];

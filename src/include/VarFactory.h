@@ -126,6 +126,9 @@ public:
   {
     return Teuchos::rcp(new VarFactory);
   }
+  
+  //! iterates over all variables to construct a list of tags that apply to some variable.
+  std::set< std::pair<std::string,int> > tagFilters();
 };
 }
 

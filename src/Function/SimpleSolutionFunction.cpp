@@ -167,6 +167,48 @@ void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType>
 template <typename Scalar>
 bool SimpleSolutionFunction<Scalar>::isDefined(BasisCachePtr basisCache) const
 {
+  bool varHasTag = _var->hasTag();
+  if (varHasTag)
+  {
+    auto tag = _var->getTag();
+    auto baseMeshTopo = basisCache->mesh()->getTopology()->baseMeshTopology();
+    auto cellsVector = basisCache->cellIDs();
+    std::set<IndexType> cellsSet(cellsVector.begin(),cellsVector.end());
+    auto entitySets = baseMeshTopo->getEntitySetsForTagID(tag.first, tag.second);
+    bool someMatches = false;
+    
+    int sideDim = baseMeshTopo->getDimension() - 1;
+    
+    bool sideVar = !_var->isDefinedOnVolume();
+    if (basisCache->getSideIndex() < 0) return false;
+    
+    for (const auto & entitySet : entitySets)
+    {
+      auto matchingCells = entitySet->cellIDsThatMatch(basisCache->mesh()->getTopology(), cellsSet);
+      if (sideVar)
+      {
+        for (auto matchingCell : matchingCells)
+        {
+          auto matchingSides = entitySet->subcellOrdinals(basisCache->mesh()->getTopology(), matchingCell, sideDim);
+          for (const auto &matchingSide : matchingSides)
+          {
+            if (matchingSide == basisCache->getSideIndex())
+            {
+              someMatches = true;
+            }
+          }
+        }
+      }
+      else
+      {
+        if (matchingCells.size() > 0)
+        {
+          someMatches = true;
+        }
+      }
+    }
+    if (!someMatches) return false;
+  }
   bool volumeCache = !basisCache->isSideCache();
   if (volumeCache)
   {

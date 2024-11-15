@@ -154,6 +154,104 @@ inline bool operator==(const Camellia::DofOrdering& lhs, const Camellia::DofOrde
 
 inline bool operator!=(const Camellia::DofOrdering& lhs, const Camellia::DofOrdering& rhs){ return !(lhs == rhs); }
 
+inline bool operator<(const Camellia::DofOrdering& lhs, const Camellia::DofOrdering& rhs)
+{
+  if (lhs == rhs) return false;
+  
+  if (lhs.cellTopology()->getKey() != rhs.cellTopology()->getKey())
+  {
+    auto lhsKey = lhs.cellTopology()->getKey();
+    auto rhsKey = rhs.cellTopology()->getKey();
+    
+    if (lhsKey.first != rhsKey.first)
+    {
+      return lhsKey.first < rhsKey.first;
+    }
+    else
+    {
+      return lhsKey.second < rhsKey.second;
+    }
+  }
+  const auto & lhsVarIDs = lhs.getVarIDs();
+  const auto & rhsVarIDs = rhs.getVarIDs();
+  if (lhsVarIDs != rhsVarIDs)
+  {
+    if (lhsVarIDs.size() != rhsVarIDs.size())
+    {
+      return lhsVarIDs.size() < rhsVarIDs.size();
+    }
+    else
+    {
+      auto lhsIt = lhsVarIDs.begin();
+      auto rhsIt = rhsVarIDs.begin();
+      while (lhsIt != lhsVarIDs.end())
+      {
+        if (*lhsIt != *rhsIt)
+        {
+          return *lhsIt < *rhsIt;
+        }
+        lhsIt++;
+        rhsIt++;
+      }
+    }
+  }
+  
+  for (int varID : lhs.getVarIDs())
+  {
+    auto lhsSides = lhs.getSidesForVarID(varID);
+    auto rhsSides = rhs.getSidesForVarID(varID);
+    if (lhsSides != rhsSides)
+    {
+      if (lhsSides.size() != rhsSides.size())
+      {
+        return lhsSides.size() < rhsSides.size();
+      }
+      else
+      {
+        auto lhsIt = lhsSides.begin();
+        auto rhsIt = rhsSides.begin();
+        while (lhsIt != lhsSides.end())
+        {
+          if (*lhsIt != *rhsIt)
+          {
+            return *lhsIt < *rhsIt;
+          }
+          lhsIt++;
+          rhsIt++;
+        }
+      }
+    }
+    for (int side : lhs.getSidesForVarID(varID))
+    {
+      const auto & lhsDofIndices = lhs.getDofIndices(varID,side);
+      const auto & rhsDofIndices = rhs.getDofIndices(varID,side);
+      if (lhsDofIndices != rhsDofIndices)
+      {
+        if (lhsDofIndices.size() != rhsDofIndices.size())
+        {
+          return lhsDofIndices.size() < rhsDofIndices.size();
+        }
+        else
+        {
+          auto lhsIt = lhsDofIndices.begin();
+          auto rhsIt = rhsDofIndices.begin();
+          while (lhsIt != lhsSides.end())
+          {
+            if (*lhsIt != *rhsIt)
+            {
+              return *lhsIt < *rhsIt;
+            }
+            lhsIt++;
+            rhsIt++;
+          }
+        }
+      }
+    }
+  }
+  return false; // no differences found: lhs == rhs.
+}
+
+
 std::ostream& operator << (std::ostream& os, const Camellia::DofOrdering& dofOrdering);
 
 #endif

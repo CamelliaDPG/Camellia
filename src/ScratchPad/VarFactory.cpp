@@ -296,6 +296,21 @@ void VarFactory::setTrialBasisFamily(BasisFamilyPtr basisFamily)
   // TODO: store basisFamily as a default for new trial vars
 }
 
+std::set< std::pair<std::string,int> > VarFactory::tagFilters()
+{
+  std::set< std::pair<std::string,int> > filterSet;
+  
+  for (auto trialVarEntry : _trialVars)
+  {
+    auto tag = trialVarEntry.second->getTag();
+    if (tag.first != "")
+    {
+      filterSet.insert(tag);
+    }
+  }
+  return filterSet;
+}
+
 VarPtr VarFactory::traceVar(string name, LinearTermPtr termTraced, Space fs, int ID)
 {
   if (_trialVars.find(name) != _trialVars.end() )

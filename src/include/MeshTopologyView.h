@@ -94,6 +94,8 @@ namespace Camellia {
     virtual bool entityIsGeneralizedAncestor(unsigned ancestorDimension, IndexType ancestor,
                                              unsigned descendentDimension, IndexType descendent) const;
     
+    virtual bool entityMatchesTag(unsigned d, IndexType entityIndex, const std::pair<std::string, int> &tag) const;
+    
     virtual IndexType getActiveCellCount(unsigned d, IndexType entityIndex) const;
     virtual const std::set<IndexType> &getLocallyKnownActiveCellIndices() const;
     
@@ -107,11 +109,19 @@ namespace Camellia {
     
     virtual CellPtr getCell(IndexType cellIndex) const;
     virtual std::vector<double> getCellCentroid(IndexType cellIndex) const;
-    virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, IndexType entityIndex) const;
-    virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingEntities(unsigned d, const std::vector<IndexType> &entities) const;
+    //! Each entry in tagEntitySets is understood to specify a tag.  If the searched-for entity is contained in some of those tags, then it is required that the matching cell contains a side that matches each such tag.
+    virtual std::set< std::pair<IndexType, unsigned> >
+    getCellsContainingEntity(unsigned d, IndexType entityIndex,
+                             std::vector< std::pair<std::string, int> > tags = std::vector< std::pair<std::string, int> >()) const;
+    //! If the searched-for entity is contained in some of the tags, then it is required that the matching cell contains a side that matches each such tag.
+    virtual std::set< std::pair<IndexType, unsigned> >
+    getCellsContainingEntities(unsigned d, const std::vector<IndexType> &entities,
+                               std::vector< std::pair<std::string, int> > tags = std::vector< std::pair<std::string, int> >()) const;
     
     virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingSides(const std::vector<IndexType> &sideEntityIndices) const;
-    virtual std::vector<IndexType> getSidesContainingEntities(unsigned d, const std::vector<IndexType> &entities) const;
+    virtual std::vector<IndexType> 
+    getSidesContainingEntities(unsigned d, const std::vector<IndexType> &entities,
+                               std::vector< std::pair<std::string, int> > tags = std::vector< std::pair<std::string, int> >()) const;
     virtual std::vector<IndexType> getCellsForSide(IndexType sideEntityIndex) const;
 
     virtual std::pair<IndexType, unsigned> getConstrainingEntity(unsigned d, IndexType entityIndex) const;
@@ -124,7 +134,9 @@ namespace Camellia {
     
     virtual const std::set<IndexType> &getRootCellIndicesLocal() const;
     
-    virtual std::vector< IndexType > getSidesContainingEntity(unsigned d, IndexType entityIndex) const;
+    virtual std::vector< IndexType > 
+    getSidesContainingEntity(unsigned d, IndexType entityIndex,
+                             std::vector< std::pair<std::string, int> > tags = std::vector< std::pair<std::string, int> >()) const;
     
     virtual bool isDistributed() const;
     

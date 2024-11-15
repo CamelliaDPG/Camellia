@@ -426,17 +426,22 @@ namespace Camellia
     return physicalCentroid;
   }
   
-  std::set< std::pair<IndexType, unsigned> > SubExtrudedMeshTopology::getCellsContainingEntity(unsigned d, IndexType entityIndex) const
+  std::set< std::pair<IndexType, unsigned> > 
+  SubExtrudedMeshTopology::getCellsContainingEntity(unsigned d, IndexType entityIndex, std::vector< std::pair<std::string, int> > tags) const
   {
     std::vector<IndexType> entityIndices { entityIndex };
-    return getCellsContainingEntities(d, entityIndices);
+    return getCellsContainingEntities(d, entityIndices, tags);
   }
   
-  std::set< std::pair<IndexType, unsigned> > SubExtrudedMeshTopology::getCellsContainingEntities(unsigned d, const std::vector<IndexType> &entities) const
+  std::set< std::pair<IndexType, unsigned> > 
+  SubExtrudedMeshTopology::getCellsContainingEntities(unsigned d, const std::vector<IndexType> &entities,
+                                                      vector< pair<string, int> > tags) const
   {
     const int sideDim = this->getDimension() - 1;
     
     TEUCHOS_TEST_FOR_EXCEPTION(d < sideDim, std::invalid_argument, "SubExtrudedMeshTopology only supports entity indexing for side entities (and, trivially, for volumes)");
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(tags.size() > 0, std::invalid_argument, "tags argument not yet supported here");
     
     std::set< std::pair<IndexType, unsigned> > cellInfoSet;
     if (d > sideDim)
@@ -466,7 +471,8 @@ namespace Camellia
     return getCellsContainingEntities(sideDim, sideEntityIndices);
   }
   
-  std::vector<IndexType> SubExtrudedMeshTopology::getSidesContainingEntities(unsigned d, const std::vector<IndexType> &entities) const
+  std::vector<IndexType> SubExtrudedMeshTopology::getSidesContainingEntities(unsigned d, const std::vector<IndexType> &entities,
+                                                                             vector< pair<string, int> > tags) const
   {
     const int sideDim = this->getDimension() - 1;
     
@@ -542,7 +548,8 @@ namespace Camellia
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Unimplemented method");
   }
   
-  std::vector< IndexType > SubExtrudedMeshTopology::getSidesContainingEntity(unsigned d, IndexType entityIndex) const
+  std::vector< IndexType > SubExtrudedMeshTopology::getSidesContainingEntity(unsigned d, IndexType entityIndex,
+                                                                             std::vector< std::pair<std::string, int> > tags) const
   {
     // we start by overriding all virtual methods in MeshTopologyView with an implementation that simply throws an exception; we let the tests help us figure out what methods we actually need to implement…
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Unimplemented method");

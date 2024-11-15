@@ -42,19 +42,31 @@ public: // TODO: create accessors for these Ptrs, and make them private...
     this->cellTopoPtr = cellTopoPtr;
   }
   
-  bool equals(const ElementType &rhs) const
+  bool operator==(const ElementType &rhs) const
   {
     if (*this->trialOrderPtr != *rhs.trialOrderPtr) return false;
     if (*this->testOrderPtr != *rhs.testOrderPtr) return false;
     if (this->cellTopoPtr->getKey() != rhs.cellTopoPtr->getKey()) return false;
     return true;
   }
+  
+  bool operator<(const ElementType &rhs) const
+  {
+    // let cellTopo be most significant comparison, then trial, then test
+    if (this->cellTopoPtr->getKey() != rhs.cellTopoPtr->getKey())
+    {
+      return this->cellTopoPtr->getKey() < rhs.cellTopoPtr->getKey();
+    }
+    else if (*(this->trialOrderPtr) != *(rhs.trialOrderPtr))
+    {
+      return *(this->trialOrderPtr) < *(rhs.trialOrderPtr);
+    }
+    else
+    {
+      return *(this->testOrderPtr) < *(rhs.testOrderPtr);
+    }
+  }
 };
-}
-
-inline bool operator==(const Camellia::ElementType& lhs, const Camellia::ElementType& rhs)
-{
-  return lhs.equals(rhs);
 }
 
 inline bool operator!=(const Camellia::ElementType& lhs, const Camellia::ElementType& rhs){ return !(lhs == rhs); }

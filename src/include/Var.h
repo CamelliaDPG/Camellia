@@ -45,6 +45,10 @@ class Var   // really Var x Operator
   
   Space _temporalFS; // TODO: consider replacing this with "vector<Space> _extrusionSpaces" -- to apply to general tensorial extrusions
   BasisFamilyPtr _basisFamily;
+  
+  // when _tagName and _tagID are set, the Var is understood to be defined on mesh entities marked with that tag.  Default is for the variable to be defined everywhere in the mesh, according to type (traces and fluxes on the whole mesh skeleton, fields on the volumetric mesh, tests on the volumetric mesh).
+  std::string _tagName = "";
+  int _tagID = -1;
 public:
   Var(int ID, int rank, std::string name, Camellia::EOperator op =  Camellia::OP_VALUE,
       Camellia::Space fs = Camellia::UNKNOWN_FS, Camellia::VarType varType = Camellia::UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL),
@@ -111,6 +115,14 @@ public:
   void setBasisFamily(BasisFamilyPtr basisFamily);
   
   BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<int> &p_H1, const int sideOrdinal = -1) const;
+  
+  //! when tagName and tagID are set, the Var is understood to be defined on mesh entities marked with that tag.  Default is for the variable to be defined everywhere in the mesh, according to type (traces and fluxes on the whole mesh skeleton, fields on the volumetric mesh, tests on the volumetric mesh).
+  void setTag(std::string tagName, int tagID);
+  
+  std::pair<std::string, int> getTag() const;
+  
+  //! True if tagName has been set to something other than "".
+  bool hasTag() const;
   
   template <typename Scalar>
   static VarPtr varForTrialID(int trialID, TBFPtr<Scalar> bf);

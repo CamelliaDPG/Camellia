@@ -50,12 +50,59 @@ DofOrderingFactory::DofOrderingFactory(TBFPtr<double> bilinearForm,
   _testOrderEnhancements = testOrderEnhancements;
 }
 
+using tag = std::pair<std::string,int>;
+
 DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo)
+{
+  std::set<Tag> tagsForVolume;
+  const std::map<int, std::set<Tag>> tagsForSide;
+  
+  return this->testOrdering(polyOrder,cellTopo,tagsForVolume,tagsForSide);
+}
+
+DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo, const std::set<Tag> &tagsForVolume, 
+                                                const std::map<int, std::set<Tag>> &tagsForSide)
 {
   PolynomialOrder::checkPolyOrderValidity(polyOrder, cellTopo);
   const int polyOrderTime = PolynomialOrder::temporalPolyOrder(polyOrder);
   
-  auto key = make_pair(polyOrder,cellTopo->getKey());
+  using namespace std;
+  set<Tag> keyTagsForVolume;
+  map<int, set<Tag>> keyTagsForSide;
+  const auto & testVars = _varFactory->testVars();
+  for (const auto & varEntry : testVars)
+  {
+    const auto & var = varEntry.second;
+    if (var->hasTag())
+    {
+      auto tag = var->getTag();
+      if (var->isDefinedOnVolume())
+      {
+        if (tagsForVolume.find(tag) != tagsForVolume.end())
+        {
+          keyTagsForVolume.insert(tag);
+        }
+      }
+      else
+      {
+        for (auto sideEntry : tagsForSide)
+        {
+          const int &sideOrdinal = sideEntry.first;
+          const set<Tag> &tags   = sideEntry.second;
+          
+          if (tags.find(tag) != tags.end())
+          {
+            keyTagsForSide[sideOrdinal].insert(tag);
+          }
+        }
+      }
+    }
+  }
+  
+  // trial_key arguments: (polyOrder, CellTopo, conforming (legacy, for max. rule), volume tags, side tags.  Volume tags, side tags only included if there are tag-filtered variables matching them.
+  // test_key is the same, but skip the "conforming" bool argument.
+  const auto key = make_tuple(polyOrder,cellTopo->getKey(),keyTagsForVolume,keyTagsForSide);
+  // std::tuple<vector<int>,CellTopologyKey,     set<Tag>,map<int,Tag> >;
   if (_testOrderings.find(key) != _testOrderings.end()) return _testOrderings[key];
   
   // vector<int> testIDs = _bilinearForm->testIDs();
@@ -69,6 +116,36 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
   for (int testID : testIDs)
   {
     VarPtr testVar = _varFactory->test(testID);
+    VarType varType = _varFactory->test(testID)->varType();
+    bool sideVar = (varType == FLUX) || (varType == TRACE);
+    if (testVar->hasTag())
+    {
+      auto tag = testVar->getTag();
+      // then we need to check if this variable exists on the element
+      if (!sideVar) // tagsForVolume governs
+      {
+        if (tagsForVolume.find(tag) == tagsForVolume.end())
+        {
+          // no match; proceed to next trialID
+          continue;
+        }
+      }
+      else // tagsForSide governs
+      {
+        bool matchFound = false;
+        for (const auto & mapEntry : tagsForSide)
+        {
+          const auto & sideTags = mapEntry.second;
+          if (sideTags.find(tag) != sideTags.end())
+          {
+            matchFound = true;
+            break;
+          }
+        }
+        if (!matchFound) continue; // next testID
+      }
+    }
+    
     Camellia::EFunctionSpace fs = efsForSpace(testVar->space());
     BasisPtr basis;
     const int testPolyOrderTime = polyOrderTime + getTestOrderEnhancement(testID);
@@ -79,8 +156,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
     }
     Camellia::EFunctionSpace fsTemporal = efsForSpace(testVar->temporalFunctionSpace());
     
-    VarType varType = testVar->varType();
-    if ((varType == FLUX) || (varType == TRACE))
+    if (sideVar)
     {
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();
@@ -96,6 +172,24 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
         {
           // skip adding on this side
           continue;
+        }
+        if (testVar->hasTag())
+        {
+          if (tagsForSide.find(sideOrdinal) == tagsForSide.end())
+          {
+            // no tags at all on this side; skip variable on this side
+            continue;
+          }
+          else
+          {
+            auto tagSetForSide = tagsForSide.find(sideOrdinal)->second;
+            auto tag = testVar->getTag();
+            if (tagSetForSide.find(tag) == tagSetForSide.end())
+            {
+              // no tag matching this variable on this side; skip variable on this side
+              continue;
+            }
+          }
         }
         
         if (testVar->getBasisFamily() != Teuchos::null)
@@ -161,14 +255,57 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder,
   return testOrdering(polyOrder, cellTopo);
 }
 
-DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
-    CellTopoPtr cellTopo,
-    bool conformingVertices)
+using tag = std::pair<std::string,int>;
+
+DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo, bool conformingVertices)
+{
+  std::set<Tag> tagsForVolume;
+  const std::map<int, std::set<Tag>> tagsForSide;
+  
+  return this->trialOrdering(polyOrder,cellTopo,conformingVertices,tagsForVolume,tagsForSide);
+}
+
+DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo, bool conformingVertices,
+                                                 const std::set<Tag> &tagsForVolume, const std::map<int, std::set<Tag>> &tagsForSide)
 {
   PolynomialOrder::checkPolyOrderValidity(polyOrder, cellTopo);
   const int polyOrderTime = PolynomialOrder::temporalPolyOrder(polyOrder);
   
-  auto key = make_pair(make_pair(polyOrder,cellTopo->getKey()),conformingVertices);
+  using namespace std;
+  set<Tag> keyTagsForVolume;
+  map<int, set<Tag>> keyTagsForSide;
+  const auto & trialVars = _varFactory->trialVars();
+  for (const auto & varEntry : trialVars)
+  {
+    const auto & var = varEntry.second;
+    if (var->hasTag())
+    {
+      auto tag = var->getTag();
+      if (var->isDefinedOnVolume())
+      {
+        if (tagsForVolume.find(tag) != tagsForVolume.end())
+        {
+          keyTagsForVolume.insert(tag);
+        }
+      }
+      else
+      {
+        for (auto sideEntry : tagsForSide)
+        {
+          const int &sideOrdinal = sideEntry.first;
+          const set<Tag> &tags   = sideEntry.second;
+          
+          if (tags.find(tag) != tags.end())
+          {
+            keyTagsForSide[sideOrdinal].insert(tag);
+          }
+        }
+      }
+    }
+  }
+  
+  // trial_key arguments: (polyOrder, CellTopo, conforming (legacy, for max. rule), volume tags, side tags.  Volume tags, side tags only included if there are tag-filtered variables matching them.
+  auto key = make_tuple(polyOrder,cellTopo->getKey(),conformingVertices,keyTagsForVolume,keyTagsForSide);
   if (_trialOrderings.find(key) != _trialOrderings.end()) return _trialOrderings[key];
   
   // conformingVertices = true only works for 2D topologies
@@ -190,6 +327,36 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
   for (const int &trialID : trialIDs)
   {
     VarPtr trialVar = _varFactory->trialVars().find(trialID)->second;
+    VarType varType = _varFactory->trial(trialID)->varType();
+    bool sideVar = (varType == FLUX) || (varType == TRACE);
+    if (trialVar->hasTag())
+    {
+      auto tag = trialVar->getTag();
+      // then we need to check if this variable exists on the element
+      if (!sideVar) // tagsForVolume governs
+      {
+        if (tagsForVolume.find(tag) == tagsForVolume.end())
+        {
+          // no match; proceed to next trialID
+          continue;
+        }
+      }
+      else // tagsForSide governs
+      {
+        bool matchFound = false;
+        for (const auto & mapEntry : tagsForSide)
+        {
+          const auto & sideTags = mapEntry.second;
+          if (sideTags.find(tag) != sideTags.end())
+          {
+            matchFound = true;
+            break;
+          }
+        }
+        if (!matchFound) continue; // next trialID
+      }
+    }
+    
     Camellia::EFunctionSpace fs         = efsForSpace(trialVar->space());
     Camellia::EFunctionSpace temporalFS = efsForSpace(trialVar->temporalFunctionSpace());
     
@@ -204,8 +371,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
 
     int basisRank;
 
-   VarType varType = _varFactory->trial(trialID)->varType();
-    if ((varType == FLUX) || (varType == TRACE))
+    if (sideVar)
     {
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();
@@ -218,6 +384,24 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
         {
           // skip adding on this side
           continue;
+        }
+        if (trialVar->hasTag())
+        {
+          if (tagsForSide.find(sideOrdinal) == tagsForSide.end())
+          {
+            // no tags at all on this side; skip variable on this side
+            continue;
+          }
+          else
+          {
+            auto tagSetForSide = tagsForSide.find(sideOrdinal)->second;
+            auto tag = trialVar->getTag();
+            if (tagSetForSide.find(tag) == tagSetForSide.end())
+            {
+              // no tag matching this variable on this side; skip variable on this side
+              continue;
+            }
+          }
         }
         
         vector<int> trialIDPolyOrderSide = PolynomialOrder::sidePolynomialOrder(trialIDPolyOrder, cellTopo, sideOrdinal);

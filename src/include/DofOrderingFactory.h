@@ -39,6 +39,8 @@ namespace Camellia
 {
 class DofOrderingFactory
 {
+public:
+  using Tag = std::pair<std::string,int>;
 private:
   struct Comparator
   {
@@ -112,8 +114,13 @@ private:
   map<DofOrdering*, DofOrderingPtr > _fieldOrderingForTrial;
   map<DofOrdering*, DofOrderingPtr > _traceOrderingForTrial;
   
-  map<pair<pair<vector<int>,CellTopologyKey>,bool>, DofOrderingPtr> _trialOrderings; // bool: "conforming" (used by GDAMaximumRule2D)
-  map<pair<vector<int>,CellTopologyKey>, DofOrderingPtr> _testOrderings;
+  // trial_key arguments: (polyOrder, CellTopo, conforming (legacy, for max. rule), volume tags, side tags.  Volume tags, side tags only included if there are tag-filtered variables matching them.
+  // test_key is the same, but skip the "conforming" bool argument.
+  using trial_key = std::tuple<vector<int>,CellTopologyKey,bool,set<Tag>,map<int,set<Tag> > >;
+  using test_key  = std::tuple<vector<int>,CellTopologyKey,     set<Tag>,map<int,set<Tag> > >;
+  
+  map<trial_key, DofOrderingPtr> _trialOrderings; // bool: "conforming" (used by GDAMaximumRule2D)
+  map< test_key, DofOrderingPtr> _testOrderings;
   
   VarFactoryPtr _varFactory;
   map<DofOrdering*,bool> _isConforming;
@@ -138,7 +145,12 @@ public:
                                bool conformingVertices = true);
 
   DofOrderingPtr testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo);
+  DofOrderingPtr testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo,
+                              const std::set< Tag > &tagsForVolume, const std::map<int, std::set< Tag > > &tagsForSide);
+  
   DofOrderingPtr trialOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo, bool conformingVertices = true);
+  DofOrderingPtr trialOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo, bool conformingVertices,
+                               const std::set< Tag > &tagsForVolume, const std::map<int, std::set< Tag > > &tagsForSide);
 
   int testPolyOrder(DofOrderingPtr testOrdering);
   int trialPolyOrder(DofOrderingPtr trialOrdering);

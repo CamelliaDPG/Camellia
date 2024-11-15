@@ -57,9 +57,11 @@ protected:
 
 //  std::map<GlobalIndexType, std::vector<int> > _cellH1Orders;
 //  std::map<GlobalIndexType, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
+  using tag = pair<std::string,int>;
   std::map<GlobalIndexType, int> _cellPRefinements; // key: cellID; value: deltaP.  0 assumed for cells not present.
   std::map<pair<CellTopologyKey,int>, ElementTypePtr> _elementTypesForCellTopology; // key.second: deltaP (may be negative)
-
+  std::map<std::tuple<CellTopologyKey,int,std::set<tag>,std::map<int,std::set<tag>>>, ElementTypePtr> _elementTypesForKeyAndTags; // key<2>: volume tags; key<3>: side tags
+  
   vector< set< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
   map<GlobalIndexType, IndexType> _partitionForCellID;
 
@@ -122,6 +124,10 @@ public:
   {
     return {cellTopo->getKey(),deltaP};
   }
+  
+  ElementTypePtr getElementTypeForKeyAndTags(pair<CellTopologyKey,int> key, const std::set< pair<std::string,int> > &tagsForVolume,
+                                             const std::map<int, std::set< pair<std::string,int> > > &tagsForSide);
+    
   // gets *some* element type; useful when it's known or expected that the mesh will be of uniform type.  Note that this can fail for distributed meshes, if there are ranks that don't have any cells.  (Does *not* do any MPI communication.)  But this should be safe for any mesh where allowPruning = false.
   ElementTypePtr getSampleElementType();
   

@@ -35,6 +35,9 @@ namespace Camellia {
     bool containsEntity(int d, IndexType entityIndex) const;
     void removeEntity(int d, IndexType entityIndex);
     
+    //! Adds all the constituent subcells of previously defined entities with a minimum dimension of dmin.
+    void addSubcellEntities(ConstMeshTopologyViewPtr meshTopo, int dmin);
+    
     // ! Returns the cellIDs from the provided set that contain at least one entity in the set, according to the provided MeshTopologyView.
     std::set<IndexType> cellIDsThatMatch(ConstMeshTopologyViewPtr meshTopo, const std::set<IndexType> &cellIDs) const;
     

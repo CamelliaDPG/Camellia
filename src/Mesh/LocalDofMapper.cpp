@@ -565,7 +565,7 @@ const vector<GlobalIndexType> &LocalDofMapper::globalIndices()
   return _globalIndices;
 }
 
-set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned d, unsigned subcord, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
+set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned d, unsigned subcord, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime, bool includeSubSubcells)
 {
 //  typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
 //  map< int, BasisMap > _volumeMaps; // keys are var IDs (fields)
@@ -574,6 +574,8 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
   CellTopoPtr volumeTopo = _dofOrdering->cellTopology();
 
   set<GlobalIndexType> indexSet; // guarantee uniqueness using set
+  
+  int minSubSubcellDimension = includeSubSubcells ? 0 : d;
   
   for (auto entry : _volumeMaps)
   {
@@ -586,7 +588,7 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
       volumeBasis = volumeBasis->continuousBasis();
     }
     
-    vector<int> dofOrdinalsVector = volumeBasis->dofOrdinalsForSubcell(d, subcord, 0);
+    vector<int> dofOrdinalsVector = volumeBasis->dofOrdinalsForSubcell(d, subcord, minSubSubcellDimension);
     set<int> dofOrdinals(dofOrdinalsVector.begin(), dofOrdinalsVector.end());
     
     for (auto subBasisMap : volumeMap)
@@ -616,8 +618,7 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
       {
         sideBasis = sideBasis->continuousBasis();
       }
-      
-      vector<int> dofOrdinalsVector = sideBasis->dofOrdinalsForSubcell(d, sideSubcellOrdinal, 0);
+      vector<int> dofOrdinalsVector = sideBasis->dofOrdinalsForSubcell(d, sideSubcellOrdinal, minSubSubcellDimension);
       set<int> dofOrdinals(dofOrdinalsVector.begin(), dofOrdinalsVector.end());
       
       for (auto subBasisMap : sideMap)

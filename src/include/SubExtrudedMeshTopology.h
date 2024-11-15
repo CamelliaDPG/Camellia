@@ -100,13 +100,18 @@ namespace Camellia {
     
     virtual std::vector<double> getCellCentroid(IndexType cellIndex) const override;
     
-    virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, IndexType entityIndex) const override;
+    virtual std::set< std::pair<IndexType, unsigned> > 
+    getCellsContainingEntity(unsigned d, IndexType entityIndex,
+                             std::vector< std::pair<string, int> > tags = std::vector< std::pair<std::string, int> >()) const override;
     
-    virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingEntities(unsigned d, const std::vector<IndexType> &entities) const override;
+    virtual std::set< std::pair<IndexType, unsigned> > 
+    getCellsContainingEntities(unsigned d, const std::vector<IndexType> &entities,
+                               std::vector< std::pair<string, int> > tags = std::vector< std::pair<std::string, int> >()) const override;
     
     virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingSides(const std::vector<IndexType> &sideEntityIndices) const override;
     
-    virtual std::vector<IndexType> getSidesContainingEntities(unsigned d, const std::vector<IndexType> &entities) const override;
+    virtual std::vector<IndexType> getSidesContainingEntities(unsigned d, const std::vector<IndexType> &entities,
+                                                              vector< pair<string, int> > tags = vector< pair<string, int> >()) const override;
     
     std::vector< std::pair<IndexType,unsigned> > getCellInfoForSide(IndexType sideEntityIndex) const;
     
@@ -122,7 +127,9 @@ namespace Camellia {
     
     virtual const std::set<IndexType> &getRootCellIndicesLocal() const override;
     
-    virtual std::vector< IndexType > getSidesContainingEntity(unsigned d, IndexType entityIndex) const override;
+    virtual std::vector< IndexType > 
+    getSidesContainingEntity(unsigned d, IndexType entityIndex,
+                             std::vector< std::pair<std::string, int> > tags = std::vector< std::pair<std::string, int> >()) const override;
     
     virtual bool isDistributed() const override;
     

@@ -59,6 +59,8 @@ int main(int argc, char *argv[])
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   Kokkos::initialize(argc, argv); // initialize Kokkos
   
+  const int rank = mpiSession.getRank();
+  
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
   {
@@ -189,17 +191,27 @@ int main(int argc, char *argv[])
     FunctionPtr x = Function::xn(1); // x^1
     FunctionPtr t = Function::yn(1); // t^1
     
-    FunctionPtr f_exact = x + t + v;
     FunctionPtr sin_pi_x_over_2 = TrigFunctions<double>::sin(0.5 * M_PI * x);
     FunctionPtr cos_2_pi_t      = TrigFunctions<double>::cos(2.0 * M_PI * t);
+    FunctionPtr cos_pi_v        = TrigFunctions<double>::cos(      M_PI * v);
     
-    FunctionPtr rhs_exact = v + 1 + E;
+    FunctionPtr f_exact = sin_pi_x_over_2 * cos_2_pi_t + cos_pi_v;
+    
+    FunctionPtr rhs_exact = v * f_exact->dx() + f_exact->dy() + E * f_exact->dz();
     rhs->addTerm(rhs_exact * w);
     
-    // impose boundary conditions on the potential along the whole (spatial) mesh boundary ( phi_hat is only defined on the spatial part of the boundary):
+    // impose boundary conditions on tn at the inflow.  This is defined by:
+    //   (v,1,E) \cdot n < 0.
+    // n for us is always parallel to one of the axes.  So depending on which side we are on,
+    // there will be a requirement on v * n_x, n_t, or E n_v.  Since E is 1, and our domain is [0,1]^3,
+    // the inflow boundary is as follows:
+    // - the plane x = 0,
+    // - the plane t = 0,
+    // - the plane v = 0
+    SpatialFilterPtr inflow = SpatialFilter::lessThanOrEqualToX(0.0) | SpatialFilter::lessThanOrEqualToY(0.0) | SpatialFilter::lessThanZ(0.0);
     FunctionPtr n = Function::normal();
     FunctionPtr tn_exact = v * f_exact * n->x() + f_exact * n->y() + f_exact * E * n->z();
-    bc->addDirichlet(tn_hat, SpatialFilter::allSpace(), tn_exact);
+    bc->addDirichlet(tn_hat, inflow, tn_exact);
     
     int numRuns = int(numElements_x_series.size());
     for (int i=0; i<numRuns; i++)
@@ -208,7 +220,10 @@ int main(int argc, char *argv[])
       const int numElements_x_i = numElements_x_series[i];
       const int numElements_t_i = numElements_t_series[i];
       const int numElements_v_i = numElements_v_series[i];
-      std::cout << "Running with polyOrder " << polyOrder_i << " on " << numElements_x_i << " x " << numElements_t_i << " x " << numElements_v_i << " mesh.\n";
+      if (rank == 0)
+      {
+        std::cout << "Running with polyOrder " << polyOrder_i << " on " << numElements_x_i << " x " << numElements_t_i << " x " << numElements_v_i << " mesh.\n";
+      }
 
       //  static MeshPtr rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts,
 //      int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>(),
@@ -383,13 +398,20 @@ int main(int argc, char *argv[])
       }
       
       // compute L^2 error in f:
-      FunctionPtr f_soln = Function::solution(f, soln);
+      int quadratureEnrichment = 8;
+      FunctionPtr f_soln = Function::solution(f, soln, quadratureEnrichment);
       double l2_err = (f_soln - f_exact)->l2norm(mesh);
       
-      double exact_l2_norm = f_exact->l2norm(mesh);
+      double exact_l2_norm = f_exact->l2norm(mesh, quadratureEnrichment);
+      double f_l2_norm     =  f_soln->l2norm(mesh, quadratureEnrichment);
       
-      std::cout << "absolute L^2 error: " << l2_err << std::endl;
-      std::cout << "relative L^2 error: " << l2_err / exact_l2_norm << "\n\n";
+      if (rank == 0)
+      {
+        std::cout << "absolute L^2 error: " << l2_err << std::endl;
+        std::cout << "relative L^2 error: " << l2_err / exact_l2_norm << "\n\n";
+        std::cout << "exact L^2 norm: " << exact_l2_norm << std::endl;
+        std::cout << "L^2 norm of soln: " << f_l2_norm << std::endl;
+      }
     }
   }
   Camellia::finalize(false);

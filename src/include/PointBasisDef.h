@@ -27,7 +27,7 @@ namespace Camellia
   PointBasis<Scalar,ArrayScalar>::PointBasis()
   :
   Intrepid2BasisWrapper<Scalar, ArrayScalar>(Teuchos::rcp(new PointBasisIntrepid2<Camellia::DeviceType,Scalar,Scalar>),
-                                             0,0,::Camellia::FUNCTION_SPACE_HVOL)
+                                             0,0,::Camellia::FUNCTION_SPACE_HGRAD)
   {}
 
   template<class Scalar, class ArrayScalar>

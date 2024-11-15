@@ -133,7 +133,9 @@ class GDAMinimumRule : public GlobalDofAssignment
   static BasisMap getRestrictedBasisMap(BasisMap &basisMap, const set<int> &basisDofOrdinalRestriction); // restricts to part of the basis
 
   typedef pair< IndexType, unsigned > CellPair;  // (cellIndex, sideOrdinal) -- sideOrdinal contains the specified entity
-  CellPair cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex);
+  CellPair cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex, 
+                                                std::vector< std::pair<std::string, int> > tags
+                                                = std::vector< std::pair<std::string, int> >()); // if tags are specified, if the entity matches one or more of them, only matches cells that contain a side that also matches; throws an exception if none does.
   
   void distributeGlobalDofOwnership(const map<GlobalIndexType, SubcellDofIndices> &myOwnedGlobalDofs,
                                     const set<GlobalIndexType> &remoteCellIDs);

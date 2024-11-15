@@ -316,6 +316,11 @@ BasisFamilyPtr Var::getBasisFamily() const
   return _basisFamily;
 }
 
+std::pair<std::string, int> Var::getTag() const
+{
+  return {_tagName,_tagID};
+}
+
 int Var::ID() const
 {
   return _id;
@@ -411,6 +416,11 @@ VarPtr Var::curl(int spaceDim) const
     // in 3D, curl is rank-preserving.  (Vectors map to vectors.)
     return Teuchos::rcp( new Var(_id, _rank, _name, Camellia::OP_CURL, UNKNOWN_FS, _varType ) );
   }
+}
+
+bool Var::hasTag() const
+{
+  return _tagName != "";
 }
 
 bool Var::isDefinedOnVolume() const
@@ -547,6 +557,12 @@ LinearTermPtr Var::dot_normal() const
 bool Var::isSpaceTime() const
 {
   return _temporalFS != UNKNOWN_FS;
+}
+
+void Var::setTag(std::string tagName, int tagID)
+{
+  _tagName = tagName;
+  _tagID   = tagID;
 }
 
 void Var::setTemporalFunctionSpace(const Space &fs)

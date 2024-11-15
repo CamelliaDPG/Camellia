@@ -201,6 +201,7 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   
   auto physicalGDA = physicalMesh->globalDofAssignment();
   auto elemTypeToPhysicalCellMap = physicalGDA->getElementTypePartitionForCells(physicalCellIDs);
+  // TODO: worry about what happens if the physical mesh has tag-filtered variables
   
   for (auto elemTypePhysicalCellsEntry : elemTypeToPhysicalCellMap)
   {

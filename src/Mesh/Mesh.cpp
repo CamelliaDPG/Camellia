@@ -1250,7 +1250,7 @@ Camellia::FieldContainer<double> Mesh::physicalCellNodes( vector<GlobalIndexType
   for (auto cellID : cellIDs)
   {
     auto cellElemType = getElementType(cellID);
-    TEUCHOS_TEST_FOR_EXCEPTION(! elemType->equals(*cellElemType), std::invalid_argument, "all cellIDs must have same element type in physicalCellNodes");
+    TEUCHOS_TEST_FOR_EXCEPTION(*elemType != *cellElemType, std::invalid_argument, "all cellIDs must have same element type in physicalCellNodes");
   }
   return physicalCellNodes(elemType, cellIDs);
 }

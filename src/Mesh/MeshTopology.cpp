@@ -1796,6 +1796,26 @@ bool MeshTopology::entityIsGeneralizedAncestor(unsigned ancestorDimension, Index
   return false;
 }
 
+bool MeshTopology::entityMatchesTag(unsigned int d, IndexType entityIndex, const std::pair<std::string, int> &tag) const
+{
+  const auto &tagName = tag.first;
+  const auto &tagID   = tag.second;
+  auto foundTagSetsEntry = _tagSetsInteger.find(tagName);
+  if (foundTagSetsEntry == _tagSetsInteger.end()) return false;
+  
+  vector<EntitySetPtr> entitySets;
+  for (pair<EntityHandle,int> tagEntry : foundTagSetsEntry->second)
+  {
+    if (tagEntry.second == tagID)
+    {
+      auto entitySet = getEntitySet(tagEntry.first);
+      if (entitySet->containsEntity(d, entityIndex))
+        return true;
+    }
+  }
+  return false;
+}
+
 IndexType MeshTopology::getActiveCellCount(unsigned int d, IndexType entityIndex) const
 {
   if (_activeCellsForEntities[d].size() <= entityIndex)
@@ -2680,7 +2700,8 @@ bool MeshTopology::isValidCellIndex(IndexType cellIndex) const
 //  return _cells.find(cellIndex) != _cells.end();
 }
 
-vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, IndexType entityIndex) const
+vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, IndexType entityIndex,
+                                                           std::vector< std::pair<std::string, int> > tags) const
 {
   unsigned sideDim = getDimension() - 1;
   if (d == sideDim) return {entityIndex};
@@ -2689,10 +2710,67 @@ vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, IndexType
   {
     return {};
   }
-  return _sidesForEntities[d][entityIndex];
+  const auto & sidesForEntity = _sidesForEntities[d][entityIndex];
+  // check if any tags match
+  int tagEntryOrdinal = 0;
+  const int numTags = int(tags.size());
+  vector< vector<EntitySetPtr> > tagEntitySets;
+  for (int tagOrdinal = 0; tagOrdinal<numTags; tagOrdinal++)
+  {
+    auto entitySets = getEntitySetsForTagID(tags[tagOrdinal].first, tags[tagOrdinal].second);
+    
+    bool foundMatch = false;
+    for (auto entitySet : entitySets)
+    {
+      if (entitySet->containsEntity(d, entityIndex))
+      {
+        foundMatch = true;
+        break;
+      }
+    }
+    if (foundMatch)
+    {
+      tagEntitySets.push_back(entitySets);
+    }
+  }
+  if (tagEntitySets.size() == 0) return sidesForEntity;
+  else
+  {
+    vector<IndexType> filteredSidesForEntity;
+    
+    for (auto sideIndex : sidesForEntity)
+    {
+      bool matchesAll = true;
+      
+      for (auto entitySetsForTag : tagEntitySets)
+      {
+        bool foundMatch = false;
+        
+        for (auto entitySet : entitySetsForTag)
+        {
+          if (entitySet->containsEntity(sideDim, sideIndex))
+          {
+            foundMatch = true;
+            break;
+          }
+        }
+        if (!foundMatch)
+        {
+          matchesAll = false;
+          break;
+        }
+      }
+      if (matchesAll)
+      {
+        filteredSidesForEntity.push_back(sideIndex);
+      }
+    }
+    return filteredSidesForEntity;
+  }
 }
 
-vector<IndexType> MeshTopology::getSidesContainingEntities(unsigned d, const vector<IndexType> &entities) const
+vector<IndexType> MeshTopology::getSidesContainingEntities(unsigned d, const vector<IndexType> &entities,
+                                                           std::vector< std::pair<std::string, int> > tags) const
 {
   set<IndexType> sidesSet;
   unsigned sideDim = getDimension() - 1;
@@ -2702,7 +2780,8 @@ vector<IndexType> MeshTopology::getSidesContainingEntities(unsigned d, const vec
     
     if (_sidesForEntities[d].size() > entityIndex)
     {
-      sidesSet.insert(_sidesForEntities[d][entityIndex].begin(),_sidesForEntities[d][entityIndex].end());
+      auto entitySides = getSidesContainingEntity(d, entityIndex, tags);
+      sidesSet.insert(entitySides.begin(),entitySides.end());
     }
   }
   return vector<IndexType>(sidesSet.begin(),sidesSet.end());

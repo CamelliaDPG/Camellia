@@ -381,6 +381,11 @@ bool MeshTopologyView::entityIsGeneralizedAncestor(unsigned int ancestorDimensio
   return _meshTopo->entityIsGeneralizedAncestor(ancestorDimension, ancestor, descendentDimension, descendent);
 }
 
+bool MeshTopologyView::entityMatchesTag(unsigned int d, IndexType entityIndex, const std::pair<std::string, int> &tag) const
+{
+  return _meshTopo->entityMatchesTag(d, entityIndex, tag);
+}
+
 const set<IndexType> &MeshTopologyView::getLocallyKnownActiveCellIndices() const
 {
   return _activeCells;
@@ -484,7 +489,8 @@ vector<double> MeshTopologyView::getCellCentroid(IndexType cellIndex) const
 }
 
 // ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
-set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsigned d, IndexType entityIndex) const  // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.  New 6-22-16: guaranteed to return the side in the cell with least ordinal.  This allows the returned set to be independent of the side indexing in MeshTopology (potentially important for distributed MeshTopology).
+set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsigned d, IndexType entityIndex,
+                                                                            std::vector< std::pair<std::string, int> > tags) const  // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.  New 6-22-16: guaranteed to return the side in the cell with least ordinal.  This allows the returned set to be independent of the side indexing in MeshTopology (potentially important for distributed MeshTopology).
 {
   if (d==getDimension())
   {
@@ -498,7 +504,7 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsi
     auto canonicalVertexIndexVector = baseMeshTopology()->getCanonicalEntityNodesViaPeriodicBCs(d, vertexIndexVector);
     entityIndex = canonicalVertexIndexVector[0];
   }
-  vector<IndexType> sidesForEntity = getSidesContainingEntity(d, entityIndex);
+  vector<IndexType> sidesForEntity = getSidesContainingEntity(d, entityIndex, tags);
   typedef pair<IndexType,unsigned> CellPair;
   map< IndexType, unsigned > cellSides;
   int sideDim = getDimension() - 1;
@@ -535,9 +541,11 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsi
   return cells;
 }
 
-set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntities(unsigned d, const vector<IndexType> &entities) const
+set< pair<IndexType, unsigned> >
+MeshTopologyView::getCellsContainingEntities(unsigned d, const vector<IndexType> &entities,
+                                             std::vector< std::pair<std::string, int> > tags) const
 {
-  vector<IndexType> sidesForEntities = getSidesContainingEntities(d,entities);
+  vector<IndexType> sidesForEntities = getSidesContainingEntities(d,entities,tags);
   return getCellsContainingSides(sidesForEntities);
 }
 
@@ -581,10 +589,11 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingSides(const
   return cellEntries;
 }
 
-vector<IndexType> MeshTopologyView::getSidesContainingEntities(unsigned d, const vector<IndexType> &entities) const
+vector<IndexType> MeshTopologyView::getSidesContainingEntities(unsigned d, const vector<IndexType> &entities,
+                                                               std::vector< std::pair<std::string, int> > tags) const
 {
   vector<IndexType> viewSides;
-  vector<IndexType> meshTopoSides = _meshTopo->getSidesContainingEntities(d,entities);
+  vector<IndexType> meshTopoSides = _meshTopo->getSidesContainingEntities(d,entities,tags);
   
   for (IndexType topoSideIndex : meshTopoSides)
   {
@@ -939,12 +948,13 @@ const set<IndexType> & MeshTopologyView::getRootCellIndicesLocal() const
   return _rootCells;
 }
 
-vector<IndexType> MeshTopologyView::getSidesContainingEntity(unsigned d, IndexType entityIndex) const
+vector<IndexType> MeshTopologyView::getSidesContainingEntity(unsigned d, IndexType entityIndex,
+                                                             vector< pair<string, int> > tags) const
 {
   unsigned sideDim = getDimension() - 1;
   vector<IndexType> meshTopoSides;
   if (d == sideDim) meshTopoSides = {entityIndex};
-  else meshTopoSides = _meshTopo->getSidesContainingEntity(d, entityIndex);
+  else meshTopoSides = _meshTopo->getSidesContainingEntity(d, entityIndex, tags);
   
   vector<IndexType> viewSides; // meshTopoSides, filtered for sides that belong to valid cells
   for (IndexType topoSideIndex : meshTopoSides)

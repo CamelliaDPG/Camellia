@@ -29,6 +29,32 @@ void EntitySet::addEntity(int d, IndexType entityIndex)
   _entities[d].insert(entityIndex);
 }
 
+void EntitySet::addSubcellEntities(ConstMeshTopologyViewPtr meshTopo, int dmin)
+{
+  const int dmax = int(_entities.size()) - 1;
+  std::vector< std::set<IndexType> > entitiesToAdd(dmax+1);
+  for (int d=dmin+1; d<=dmax; d++)
+  {
+    const auto & entities_d = _entities[d];
+    for (auto entityIndex : entities_d)
+    {
+      for (int subd=0; subd<d; subd++)
+      {
+        std::vector<IndexType> subEntities;
+        meshTopo->baseMeshTopology()->getSubEntityIndices(d, entityIndex, subd, subEntities);
+        entitiesToAdd[subd].insert(subEntities.begin(), subEntities.end());
+      }
+    }
+  }
+  for (int d=0; d<int(entitiesToAdd.size()); d++)
+  {
+    for (auto entityIndex : entitiesToAdd[d])
+    {
+      addEntity(d, entityIndex);
+    }
+  }
+}
+
 bool EntitySet::containsEntity(int d, IndexType entityIndex) const
 {
   if (d >= _entities.size()) return false;
