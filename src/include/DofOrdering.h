@@ -51,6 +51,8 @@ class DofOrdering
 
   std::map< int, CellTopoPtr > _cellTopologyForSide; // -1 is field variable
   
+  std::set< int > _volumeVars; // variables whose side matches VOLUME_INTERIOR_SIDE_INDEX.
+  
   // optional registration of VarFactory and whether this is a trial ordering or a test ordering:
   // (this is only used for debugging output at the moment)
   VarFactoryPtr _varFactory;
@@ -109,6 +111,8 @@ public:
 
   CellTopoPtr cellTopology(int sideIndex = -1) const;
 
+  bool isVolumeVar(int varID) const;
+  
   int minimumSubcellDimensionForContinuity() const; // across all bases
   int maxBasisDegree();
   int maxBasisDegreeForVolume();

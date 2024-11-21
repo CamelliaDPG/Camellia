@@ -272,7 +272,7 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
           
           BasisPtr basis;
           int numDofsSide;
-          if (trialOrderingPtr->getSidesForVarID(trialID).size() == 1)
+          if (trialOrderingPtr->isVolumeVar(trialID))
           {
             // volume basis
             basis = trialOrderingPtr->getBasis(trialID);

@@ -12,6 +12,7 @@
 #include "Solution.h"
 #include "TrigFunctions.h"
 
+#include "Epetra_RowMatrix.h"
 #include "EpetraExt_RowMatrixOut.h"
 
 using namespace Camellia;
@@ -21,37 +22,89 @@ using namespace std;
 void reorderMatrix(const Epetra_CrsMatrix& originalMatrix,
                    const std::map<int, int>& reorderMap,
                    Epetra_CrsMatrix& reorderedMatrix) {
-    int numRows = originalMatrix.NumMyRows();
-    int numCols = originalMatrix.NumMyCols();
-
-    // Iterate over the original matrix
-    for (int i = 0; i < numRows; ++i) {
-        double* values;
-        int* indices;
-        int numEntries;
-
-        // Get the row entries
-        originalMatrix.ExtractMyRowView(i, numEntries, values, indices);
-
-        // Find the new row index using the reorder map
-        auto it = reorderMap.find(i);
-        if (it != reorderMap.end()) {
-            int newRow = it->second;
-
-            // Insert the values into the reordered matrix
-            for (int j = 0; j < numEntries; ++j) {
-                // Find the new column index using the reorder map
-                auto colIt = reorderMap.find(indices[j]);
-                if (colIt != reorderMap.end()) {
-                    int newCol = colIt->second;
-                    reorderedMatrix.InsertGlobalValues(newRow, 1, &values[j], &newCol);
-                }
-            }
+  int numRows = originalMatrix.NumMyRows();
+  int numCols = originalMatrix.NumMyCols();
+  
+  // Iterate over the original matrix
+  for (int i = 0; i < numRows; ++i) {
+    double* values;
+    int* indices;
+    int numEntries;
+    
+    // Get the row entries
+    originalMatrix.ExtractMyRowView(i, numEntries, values, indices);
+    
+    // Find the new row index using the reorder map
+    auto it = reorderMap.find(i);
+    if (it != reorderMap.end()) {
+      int newRow = it->second;
+      
+      // Insert the values into the reordered matrix
+      for (int j = 0; j < numEntries; ++j) {
+        // Find the new column index using the reorder map
+        auto colIt = reorderMap.find(indices[j]);
+        if (colIt != reorderMap.end()) {
+          int newCol = colIt->second;
+          reorderedMatrix.InsertGlobalValues(newRow, 1, &values[j], &newCol);
         }
+      }
     }
+  }
+}
+  
+std::pair<Epetra_CrsMatrix, Epetra_Vector>
+subMatrixAndSubVector(const Epetra_CrsMatrix& originalMatrix, const Epetra_FEVector& originalVector,
+                      const std::set<int>& allRowsToKeep) {
+  Epetra_Map originalRowMap = originalMatrix.RowMatrixRowMap();
+  Epetra_Map originalColMap = originalMatrix.RowMatrixColMap();
+  
+  std::vector<int> myRowsToKeep;
+  for (auto row : allRowsToKeep)
+  {
+    if (originalRowMap.LID(row) != -1)
+    {
+      // owned locally
+      myRowsToKeep.push_back(row);
+    }
+  }
+  
+  Epetra_Map subRowMap(-1, int(myRowsToKeep.size()), &myRowsToKeep[0], 0, originalRowMap.Comm());
 
-    // Finish the construction of the reordered matrix
-    reorderedMatrix.FillComplete();
+  int maxRowSize = 0; // will cause more mallocs during insertion into the CrsMatrix, but will minimize the amount of memory allocated now.
+  Epetra_FECrsMatrix subMatrix(::Copy, subRowMap, maxRowSize);
+  
+  // Epetra_Vector(const Epetra_BlockMap& Map, bool zeroOut = true);
+//  int ReplaceMyValues(int NumEntries, int BlockOffset, const double * Values, const int * Indices);
+  
+  Epetra_Vector subVector(subRowMap);
+  
+  // Iterate over the original matrix
+  for (auto row : myRowsToKeep) {
+    int i = originalRowMap.LID(row);
+    int i_new = subRowMap.LID(row);
+    subVector[i_new] = originalVector[0][i];
+    
+    double* values;
+    int* indices;
+    int numEntries;
+
+    // Get the row entries
+    originalMatrix.ExtractMyRowView(i, numEntries, values, indices);
+    
+    for (int j = 0; j < numEntries; ++j) {
+      auto col_lid = indices[j];
+      auto col = originalColMap.GID(col_lid);
+      if (allRowsToKeep.find(col) != allRowsToKeep.end())
+      {
+        subMatrix.InsertGlobalValues(row, 1, &values[j], &col);
+      }
+    }
+  }
+
+  // Finish the construction of the submatrix
+  subMatrix.FillComplete();
+  
+  return {subMatrix, subVector};
 }
 
 int main(int argc, char *argv[])
@@ -70,19 +123,22 @@ int main(int argc, char *argv[])
     int numElements_x = 2;
     int numElements_t = 2;
     int numElements_v = 2;
+    double beta = 1.;
     
-    vector<vector<double>> domainDim(spaceDim+velocityDim+1,vector<double>{0.0,1.0}); // first index: spaceDim; second: 0/1 for x0, x1, etc.
-    int polyOrder = 2;
-    int pToAdd = spaceDim+velocityDim;
+    vector<vector<double>> domainDim(meshDim,vector<double>{0.0,1.0}); // first index: spaceDim; second: 0/1 for x0, x1, etc.
+    int p = 2;
+    int dp = spaceDim+velocityDim;
     
-    std::string modeString = "single"; // single run; other options are "h" and "p" for h and p convergence tests
+    std::string modeString = "single"; // single run; other options are "h" and "p" for h and p convergence tests, and "dp" for a test-space enrichment test
     std::string sortedMatrixPath = "";
+    bool useGraphNorm = true; // if false, use L^2 norm
+    bool exportViz    = false;
     
     cmdp.setOption("xElements", &numElements_x );
     cmdp.setOption("tElements", &numElements_t );
     cmdp.setOption("vElements", &numElements_v );
-    cmdp.setOption("polyOrder", &polyOrder );
-    cmdp.setOption("deltaP", &pToAdd);
+    cmdp.setOption( "p", &p );
+    cmdp.setOption("dp", &dp);
     cmdp.setOption("x0", &domainDim[0][0] );
     cmdp.setOption("x1", &domainDim[0][1] );
     cmdp.setOption("t0", &domainDim[1][0] );
@@ -90,6 +146,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("v0", &domainDim[2][0] );
     cmdp.setOption("v1", &domainDim[2][1] );
     cmdp.setOption("mode", &modeString, "single, h, or p");
+    cmdp.setOption("beta", &beta, "beta weight for L^2 term in graph norm (beta -> 0 should be L^2 projection, according to usual DPG theory)");
+    cmdp.setOption("useGraphNorm","useL2Norm",&useGraphNorm);
     cmdp.setOption("varSortedMatrixOutputPath", &sortedMatrixPath);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -101,13 +159,14 @@ int main(int argc, char *argv[])
     }
     
     std::vector<int> numElements_x_series, numElements_t_series, numElements_v_series;
-    std::vector<int> polyOrder_series;
+    std::vector<int> p_series, dp_series;
     if (modeString == "single")
     {
       numElements_x_series.push_back(numElements_x);
       numElements_t_series.push_back(numElements_t);
       numElements_v_series.push_back(numElements_v);
-      polyOrder_series.push_back(polyOrder);
+      p_series.push_back(p);
+      dp_series.push_back(dp);
     }
     else if (modeString == "h")
     {
@@ -118,7 +177,8 @@ int main(int argc, char *argv[])
         numElements_x_series.push_back(numElements_x * elementMultiplier);
         numElements_t_series.push_back(numElements_t * elementMultiplier);
         numElements_v_series.push_back(numElements_v * elementMultiplier);
-        polyOrder_series.push_back(polyOrder);
+        p_series.push_back(p);
+        dp_series.push_back(dp);
         elementMultiplier *= 2;
       }
     }
@@ -129,8 +189,24 @@ int main(int argc, char *argv[])
       {
         numElements_x_series.push_back(numElements_x);
         numElements_t_series.push_back(numElements_t);
-        numElements_t_series.push_back(numElements_v);
-        polyOrder_series.push_back(polyOrder + i);
+        numElements_v_series.push_back(numElements_v);
+        p_series.push_back(p + i);
+        dp_series.push_back(dp);
+      }
+    }
+    else if (modeString == "dp")
+    {
+      const int numRefinements = 5;
+      for (int i=0; i<numRefinements; i++)
+      {
+        int maxTraceDegree = p;
+        int maxTestDegree  = p + dp + i;
+        
+        numElements_x_series.push_back(numElements_x);
+        numElements_t_series.push_back(numElements_t);
+        numElements_v_series.push_back(numElements_v);
+        p_series.push_back(p);
+        dp_series.push_back(dp+i);
       }
     }
     else
@@ -142,6 +218,16 @@ int main(int argc, char *argv[])
     VarPtr f_hat     = vf->traceVar("f_hat");
     VarPtr f         = vf->fieldVar("f");
     VarPtr eps_w     = vf->fieldVar("eps_w", HGRAD);
+    
+    // We will impose boundary conditions on f_hat at the inflow.  This is defined by:
+    //   (v,1,E) \cdot n < 0.
+    // n for us is always parallel to one of the axes.  So depending on which side we are on,
+    // there will be a requirement on v * n_x, n_t, or E n_v.  Since E is 1, and our domain is [0,1]^3,
+    // the inflow boundary is as follows:
+    // - the plane x = 0,
+    // - the plane t = 0,
+    // - the plane v = 0
+    SpatialFilterPtr inflow = SpatialFilter::lessThanOrEqualToX(0.0) | SpatialFilter::lessThanOrEqualToY(0.0) | SpatialFilter::lessThanOrEqualToZ(0.0);
     
     f_hat->setTag("boundary", 0);
     
@@ -163,7 +249,7 @@ int main(int argc, char *argv[])
     FunctionPtr n = Function::normal();
     
     FunctionPtr v_dot_nx = v * n->spatialComponent(DX_DIM); // spatialComponent is 1-based
-    FunctionPtr nt       = n->spatialComponent(DT_DIM);
+    FunctionPtr       nt =     n->spatialComponent(DT_DIM);
     FunctionPtr a_dot_nv = E * n->spatialComponent(DV_DIM);
     
     // B:
@@ -179,13 +265,18 @@ int main(int argc, char *argv[])
     vlasovBF->addTerm(                  eps_w->di(DV_DIM), -E * delta_f); // dw/dv
     
     // G:
-    vlasovBF->addTerm( v * eps_w->di(DX_DIM) + eps_w->di(DT_DIM) + E * eps_w->di(DV_DIM),
-                       v *     w->di(DX_DIM) +     w->di(DT_DIM) + E *     w->di(DV_DIM));
-    vlasovBF->addTerm( eps_w, w );
+    if (useGraphNorm)
+    {
+      vlasovBF->addTerm( v * eps_w->di(DX_DIM) + eps_w->di(DT_DIM) + E * eps_w->di(DV_DIM),
+                         v *     w->di(DX_DIM) +     w->di(DT_DIM) + E *     w->di(DV_DIM));
+      vlasovBF->addTerm( beta * eps_w, w );
+    }
+    else
+    {
+      // L^2 norm
+      vlasovBF->addTerm( eps_w, w );
+    }
     
-    std::map<int,int> polyOrderEnhancements;
-    // the test functions should be discretized with order pToAdd higher than the trial H^1 order
-    polyOrderEnhancements[eps_w->ID()]  = pToAdd;
     MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
     Epetra_CommPtr nullComm = Teuchos::null;
     const bool allowPruning = false;  // to keep inter-mesh geometry determinations from getting too complex, don't allow the mesh topology to be pruned to keep only MPI-local geometry.
@@ -205,63 +296,44 @@ int main(int argc, char *argv[])
     FunctionPtr rhs_exact = v * f_exact->dx() + f_exact->dy() + E * f_exact->dz();
     rhs->addTerm(rhs_exact * w);
     
-    // impose boundary conditions on f at the inflow.  This is defined by:
-    //   (v,1,E) \cdot n < 0.
-    // n for us is always parallel to one of the axes.  So depending on which side we are on,
-    // there will be a requirement on v * n_x, n_t, or E n_v.  Since E is 1, and our domain is [0,1]^3,
-    // the inflow boundary is as follows:
-    // - the plane x = 0,
-    // - the plane t = 0,
-    // - the plane v = 0
-    SpatialFilterPtr inflow = SpatialFilter::lessThanOrEqualToX(0.0) | SpatialFilter::lessThanOrEqualToY(0.0) | SpatialFilter::lessThanZ(0.0);
     bc->addDirichlet(f_hat, inflow, f_exact);
+    
+    {
+      // experimental, corresponds to setting w = 0 at outflow
+      bc->addDirichlet(eps_w, !inflow, Function::zero());
+    }
     
     int numRuns = int(numElements_x_series.size());
     for (int i=0; i<numRuns; i++)
     {
-      const int polyOrder_i     = polyOrder_series[i];
       const int numElements_x_i = numElements_x_series[i];
       const int numElements_t_i = numElements_t_series[i];
       const int numElements_v_i = numElements_v_series[i];
+      const int  p_i            =  p_series[i];
+      const int dp_i            = dp_series[i];
       if (rank == 0)
       {
-        std::cout << "Running with polyOrder " << polyOrder_i << " on " << numElements_x_i << " x " << numElements_t_i << " x " << numElements_v_i << " mesh.\n";
+        std::cout << "Running with p=" << p_i << " (dp=" << dp_i << ") on " << numElements_x_i << " x " << numElements_t_i << " x " << numElements_v_i << " mesh.\n";
       }
-
-      //  static MeshPtr rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts,
-//      int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>(),
-//      map<int,int> trialOrderEnhancements = map<int,int>(),
-//      map<int,int> testOrderEnhancements = map<int,int>(),
-//      Epetra_CommPtr Comm = Teuchos::null,
-//      bool allowMeshTopologyPruning = true);
-      
-//      MeshPtr mesh = MeshFactory::rectilinearMesh(vlasovBF,
-//                                                  {domainDim[0][1]-domainDim[0][0],domainDim[1][1]-domainDim[1][0],domainDim[2][1]-domainDim[2][0]},
-//                                                  {numElements_x_i,numElements_t_i,numElements_v_i}, polyOrder);
-      
-//      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
-
       
       auto spatialMeshTopo  = MeshFactory::intervalMeshTopology(domainDim[0][0], domainDim[0][1], numElements_x_i);
       auto spaceTimeMeshTopo = MeshFactory::extrudedMeshTopology(spatialMeshTopo, {domainDim[1][0]}, {domainDim[1][1]}, {numElements_t_i});
       auto phaseSpaceMeshTopo = MeshFactory::extrudedMeshTopology(spaceTimeMeshTopo, {domainDim[2][0]}, {domainDim[2][1]}, {numElements_v_i});
       
       auto boundarySideSet = phaseSpaceMeshTopo->createEntitySet();
-      std::vector<IndexType> boundarySides = phaseSpaceMeshTopo->getBoundarySidesThatMatch(SpatialFilter::allSpace());
-//      std::cout << "Boundary (cell.sideOrdinal): ";
-      for (const auto & boundarySide : boundarySides)
+      std::vector<IndexType> inflowBoundarySides = phaseSpaceMeshTopo->getBoundarySidesThatMatch(inflow);
+      for (const auto & boundarySide : inflowBoundarySides)
       {
         boundarySideSet->addEntity(meshDim-1, boundarySide);
-//        auto cellPairForSide = phaseSpaceMeshTopo->getFirstCellForSide(boundarySide);
-//        auto cellID      = cellPairForSide.first;
-//        auto sideOrdinal = cellPairForSide.second;
-//        std::cout << "(" << cellID << "." << sideOrdinal << ") ";
       }
-//      std::cout << std::endl;
       boundarySideSet->addSubcellEntities(phaseSpaceMeshTopo, 0);
       phaseSpaceMeshTopo->applyTag("boundary", 0, boundarySideSet);
       
-      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
+      std::map<int,int> polyOrderEnhancements;
+      // the test functions should be discretized with order pToAdd higher than the trial H^1 order
+      polyOrderEnhancements[eps_w->ID()]  = dp_i;
+      
+      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, p_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
       
       // we separate tn into three components: the space-normal, time-normal, and velocity-normal sides
       // map from the side ordinal in a cell to which sub-trace ID.
@@ -274,18 +346,8 @@ int main(int argc, char *argv[])
       int f_v1 = f_x0 + 5;
       map<unsigned,int> traceVariableForSideOrdinal;
       
-//      static bool haveOutputted = false;
-//      
-//      if (!haveOutputted)
-//      {
-//        auto elemTypeSample = mesh->getElementType(0);
-//        elemTypeSample->trialOrderPtr->print(std::cout);
-//        haveOutputted = true;
-//      }
-      
       SolutionPtr soln = Solution::solution(vlasovBF, mesh, bc, rhs);
-//      soln->setWriteMatrixToMatrixMarketFile(true, "/tmp/K.dat");
-      
+
       soln->solve();
       
       auto K = soln->getStiffnessMatrix();
@@ -429,12 +491,7 @@ int main(int argc, char *argv[])
         
         int maxRowSize = 0; // will cause more mallocs during insertion into the CrsMatrix, but will minimize the amount of memory allocated now.
         Epetra_FECrsMatrix K_sorted(::Copy, partitionMap, maxRowSize);
-        
-//        for (int idOrdinal=0; idOrdinal<newGIDOffset; idOrdinal++)
-//        {
-//          cout << idOrdinal << " -> " << idToSortedID[idOrdinal] << endl;
-//        }
-        
+                
         reorderMatrix(*K, idToSortedID, K_sorted);
         
         EpetraExt::RowMatrixToMatrixMarketFile(sortedMatrixPath.c_str(),K_sorted,NULL,NULL,false);
@@ -448,16 +505,60 @@ int main(int argc, char *argv[])
       double exact_l2_norm = f_exact->l2norm(mesh, quadratureEnrichment);
       double f_l2_norm = f_soln->l2norm(mesh, quadratureEnrichment);
       
+      double energyError;
+      {
+        // compute error estimate
+        GDAMinimumRule* gda = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+        const auto & myCellIDs = mesh->cellIDsInPartition();
+        
+        std::set<int> gramRowsThisRank; // use set to deduplicate
+        
+        for (auto cellID : myCellIDs)
+        {
+          // GDAMinimumRule::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned int dim, unsigned int subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
+          auto dofIndices = gda->globalDofIndicesForVarOnSubcell(eps_w->ID(), cellID, meshDim, 0, false, false);
+          gramRowsThisRank.insert(dofIndices.begin(), dofIndices.end());
+        }
+        
+        // convert to vector for allGatherVariable()
+        std::vector<int> myGramRows(gramRowsThisRank.begin(),gramRowsThisRank.end());
+        std::vector<int> gramRowsVector;
+        std::vector<int> offsets;
+        MPIWrapper::allGatherVariable(*mesh->Comm(), gramRowsVector, myGramRows, offsets);
+        
+        std::set<int> gramRows(gramRowsVector.begin(),gramRowsVector.end()); // deduplicate with set
+        
+        auto gramMatrixAndEpsW = subMatrixAndSubVector(*K, *soln->getLHSVector(), gramRows);
+        
+        auto & G = gramMatrixAndEpsW.first;
+        auto & epsw_h = gramMatrixAndEpsW.second;
+        
+        Epetra_Vector G_epsw(epsw_h); // copy constructor
+        
+        G.Apply(epsw_h, G_epsw);
+        
+        epsw_h.Dot(G_epsw, &energyError);
+        energyError = sqrt(energyError);
+      }
+      
       if (rank == 0)
       {
         std::cout << "absolute L^2 error: " << l2_err << std::endl;
         std::cout << "relative L^2 error: " << l2_err / exact_l2_norm << "\n\n";
-        std::cout << "exact L^2 norm: " << exact_l2_norm << std::endl;
+        
+        std::cout << "beta in graph norm:      " << beta << std::endl;
+        std::cout << "energy error:            " << energyError << std::endl;
+        std::cout << "energy norm effectivity: " << energyError / l2_err << std::endl << std::endl;
+        
+        std::cout << "exact L^2 norm:   " << exact_l2_norm << std::endl;
         std::cout << "L^2 norm of soln: " << f_l2_norm << std::endl;
       }
       
-      Teuchos::RCP<HDF5Exporter> viz = Teuchos::rcp(new HDF5Exporter(mesh, "ConformingVlasov", "/tmp"));
-      viz->exportSolution(soln);
+      if (exportViz)
+      {
+        Teuchos::RCP<HDF5Exporter> viz = Teuchos::rcp(new HDF5Exporter(mesh, "ConformingVlasov", "/tmp"));
+        viz->exportSolution(soln);
+      }
     }
   }
   Camellia::finalize(false);

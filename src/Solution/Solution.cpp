@@ -451,445 +451,448 @@ void TSolution<Scalar>::applyDGJumpTerms()
     bilinearTerms = &_bf->getJumpTerms();
   }
   
-  for (GlobalIndexType cellID : myCellIDs)
+  if (bilinearTerms->size() > 0)
   {
-    CellPtr cell = meshTopo->getCell(cellID);
-    CellTopoPtr cellTopo = cell->topology();
-    ElementTypePtr elemType = _mesh->getElementType(cellID);
-    
-    Camellia::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-    BasisCachePtr cellBasisCacheVolume;
-    if (basisCacheForVolumeTopo.find(cellTopo->getKey()) == basisCacheForVolumeTopo.end())
+    for (GlobalIndexType cellID : myCellIDs)
     {
-      basisCacheForVolumeTopo[cellTopo->getKey()] = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo,
-                                                                                 emptyRefPointsVolume, emptyCubWeights) );
-    }
-    
-    cellBasisCacheVolume = basisCacheForVolumeTopo[cellTopo->getKey()];
-    cellBasisCacheVolume->setPhysicalCellNodes(physicalCellNodes, {cellID}, false);
-    
-    cellBasisCacheVolume->setCellIDs({cellID});
-    cellBasisCacheVolume->setMesh(_mesh);
-    
-    // now, determine the max cubature degree for the "me vs. me" terms
-    int myMaxCubatureDegree = 0;
-    
-    DofOrderingPtr trialOrder = elemType->trialOrderPtr;
-    DofOrderingPtr testOrder = elemType->testOrderPtr;
-    
-    int sideCount = cell->getSideCount();
-
-    for (TBilinearTerm<Scalar> bilinearTerm : *bilinearTerms)
-    {
-      TLinearTermPtr<Scalar> trialTerm = bilinearTerm.first;
-      TLinearTermPtr<Scalar> testTerm = bilinearTerm.second;
+      CellPtr cell = meshTopo->getCell(cellID);
+      CellTopoPtr cellTopo = cell->topology();
+      ElementTypePtr elemType = _mesh->getElementType(cellID);
       
-      // in what follows, we do assume that the test and trial terms are both scalar-valued
-      // TODO: relax this assumption
-      TEUCHOS_TEST_FOR_EXCEPTION(trialTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
-      TEUCHOS_TEST_FOR_EXCEPTION(testTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
-    }
-    
-    for (TBilinearTerm<Scalar> bilinearTerm : *bilinearTerms)
-    {
-      TLinearTermPtr<Scalar> trialTerm = bilinearTerm.first;
-      TLinearTermPtr<Scalar> testTerm = bilinearTerm.second;
-      
-      const std::set<int> * trialVarIDs = &trialTerm->varIDs();
-      const std::set<int> * testVarIDs = &testTerm->varIDs();
-      
-      for (int trialVarID : *trialVarIDs)
+      Camellia::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+      BasisCachePtr cellBasisCacheVolume;
+      if (basisCacheForVolumeTopo.find(cellTopo->getKey()) == basisCacheForVolumeTopo.end())
       {
-        BasisPtr trialBasis = trialOrder->getBasis(trialVarID);
+        basisCacheForVolumeTopo[cellTopo->getKey()] = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo,
+                                                                                   emptyRefPointsVolume, emptyCubWeights) );
+      }
+      
+      cellBasisCacheVolume = basisCacheForVolumeTopo[cellTopo->getKey()];
+      cellBasisCacheVolume->setPhysicalCellNodes(physicalCellNodes, {cellID}, false);
+      
+      cellBasisCacheVolume->setCellIDs({cellID});
+      cellBasisCacheVolume->setMesh(_mesh);
+      
+      // now, determine the max cubature degree for the "me vs. me" terms
+      int myMaxCubatureDegree = 0;
+      
+      DofOrderingPtr trialOrder = elemType->trialOrderPtr;
+      DofOrderingPtr testOrder = elemType->testOrderPtr;
+      
+      int sideCount = cell->getSideCount();
+      
+      for (TBilinearTerm<Scalar> bilinearTerm : *bilinearTerms)
+      {
+        TLinearTermPtr<Scalar> trialTerm = bilinearTerm.first;
+        TLinearTermPtr<Scalar> testTerm = bilinearTerm.second;
         
-        vector<GlobalIndexType> myGlobalDofs_trial_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, trialVarID);
+        // in what follows, we do assume that the test and trial terms are both scalar-valued
+        // TODO: relax this assumption
+        TEUCHOS_TEST_FOR_EXCEPTION(trialTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
+        TEUCHOS_TEST_FOR_EXCEPTION(testTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
+      }
+      
+      for (TBilinearTerm<Scalar> bilinearTerm : *bilinearTerms)
+      {
+        TLinearTermPtr<Scalar> trialTerm = bilinearTerm.first;
+        TLinearTermPtr<Scalar> testTerm = bilinearTerm.second;
         
-        for (int testVarID : *testVarIDs)
+        const std::set<int> * trialVarIDs = &trialTerm->varIDs();
+        const std::set<int> * testVarIDs = &testTerm->varIDs();
+        
+        for (int trialVarID : *trialVarIDs)
         {
-          BasisPtr testBasis = testOrder->getBasis(testVarID);
+          BasisPtr trialBasis = trialOrder->getBasis(trialVarID);
           
-          vector<GlobalIndexType> myGlobalDofs_test_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, testVarID);
+          vector<GlobalIndexType> myGlobalDofs_trial_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, trialVarID);
           
-          for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
+          for (int testVarID : *testVarIDs)
           {
-            // we'll filter this down to match only the side dofs, so we need to do this inside the sideOrdinal loop:
-            vector<GlobalIndexTypeToCast> myGlobalDofs_trial(myGlobalDofs_trial_native.begin(),myGlobalDofs_trial_native.end());
-            vector<GlobalIndexTypeToCast> myGlobalDofs_test(myGlobalDofs_test_native.begin(),myGlobalDofs_test_native.end());
+            BasisPtr testBasis = testOrder->getBasis(testVarID);
             
-            pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
-            GlobalIndexType neighborCellID = neighborInfo.first;
-            unsigned mySideOrdinalInNeighbor = neighborInfo.second;
-            if (activeCellIDs.find(neighborCellID) == activeCellIDs.end())
+            vector<GlobalIndexType> myGlobalDofs_test_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, testVarID);
+            
+            for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
             {
-              // no active neigbor on this side: either this is not an interior face (neighborCellID == -1),
-              // or the neighbor is refined and therefore inactive.  If the latter, then the neighbor's
-              // descendants will collectively "own" this side.
-              continue;
-            }
-            
-            // Finally, we need to check whether the neighbor is a "peer" in terms of h-refinements.
-            // If so, we use the cellID to break the tie of ownership; lower cellID owns the face.
-            CellPtr neighbor = meshTopo->getCell(neighborInfo.first);
-            pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
-            bool neighborIsPeer = neighborNeighborInfo.first == cell->cellIndex();
-            if (neighborIsPeer && (cellID > neighborCellID))
-            {
-              // neighbor wins the tie-breaker
-              continue;
-            }
-            
-            // if we get here, we own the face and should compute its contribution.
-            // determine global dof indices:
-            vector<GlobalIndexType> neighborGlobalDofs_trial_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, trialVarID);
-            vector<GlobalIndexTypeToCast> neighborGlobalDofs_trial(neighborGlobalDofs_trial_native.begin(),neighborGlobalDofs_trial_native.end());
-            
-            vector<GlobalIndexType> neighborGlobalDofs_test_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, testVarID);
-            vector<GlobalIndexTypeToCast> neighborGlobalDofs_test(neighborGlobalDofs_test_native.begin(),neighborGlobalDofs_test_native.end());
-            
-            // figure out what the cubature degree should be
-            DofOrderingPtr neighborTrialOrder = _mesh->getElementType(neighborCellID)->trialOrderPtr;
-            DofOrderingPtr neighborTestOrder = _mesh->getElementType(neighborCellID)->testOrderPtr;
-            BasisPtr trialBasisNeighbor = neighborTrialOrder->getBasis(trialVarID);
-            BasisPtr testBasisNeighbor = neighborTestOrder->getBasis(testVarID);
-            int neighborCubatureDegree = trialBasisNeighbor->getDegree() + testBasisNeighbor->getDegree();
-            
-            int cubaturePolyOrder = max(myMaxCubatureDegree, neighborCubatureDegree);
-            
-            // set up side basis cache
-            CellTopoPtr mySideTopo = cellTopo->getSide(sideOrdinal); // for non-peers, this is the descendant cell topo
-            
-            pair<int,CellTopologyKey> sideCacheKey{sideOrdinal,cellTopo->getKey()};
-            if (basisCacheForSideOnVolumeTopo.find(sideCacheKey) == basisCacheForSideOnVolumeTopo.end())
-            {
-              basisCacheForSideOnVolumeTopo[sideCacheKey] = Teuchos::rcp( new BasisCache(sideOrdinal, cellBasisCacheVolume,
-                                                                                         emptyRefPointsSide, emptyCubWeights, -1));
-            }
-            BasisCachePtr cellBasisCacheSide = basisCacheForSideOnVolumeTopo[sideCacheKey];
-            
-            pair<CellTopologyKey,int> cubKey{mySideTopo->getKey(),cubaturePolyOrder};
-            if (cubWeightsForSideTopo.find(cubKey) == cubWeightsForSideTopo.end())
-            {
-              int cubDegree = cubKey.second;
-              if (sideDim > 0)
+              // we'll filter this down to match only the side dofs, so we need to do this inside the sideOrdinal loop:
+              vector<GlobalIndexTypeToCast> myGlobalDofs_trial(myGlobalDofs_trial_native.begin(),myGlobalDofs_trial_native.end());
+              vector<GlobalIndexTypeToCast> myGlobalDofs_test(myGlobalDofs_test_native.begin(),myGlobalDofs_test_native.end());
+              
+              pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
+              GlobalIndexType neighborCellID = neighborInfo.first;
+              unsigned mySideOrdinalInNeighbor = neighborInfo.second;
+              if (activeCellIDs.find(neighborCellID) == activeCellIDs.end())
               {
-                using Cubature = Intrepid2::Cubature<DeviceType,double,double>;
-                Teuchos::RCP< Cubature > sideCub;
-                
-                if (cubDegree >= 0)
-                  sideCub = cubFactory.create(mySideTopo, cubDegree);
-                
-                Camellia::FieldContainer<double> cubPoints, cubWeights;
-                
-                if (sideCub != Teuchos::null)
+                // no active neigbor on this side: either this is not an interior face (neighborCellID == -1),
+                // or the neighbor is refined and therefore inactive.  If the latter, then the neighbor's
+                // descendants will collectively "own" this side.
+                continue;
+              }
+              
+              // Finally, we need to check whether the neighbor is a "peer" in terms of h-refinements.
+              // If so, we use the cellID to break the tie of ownership; lower cellID owns the face.
+              CellPtr neighbor = meshTopo->getCell(neighborInfo.first);
+              pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
+              bool neighborIsPeer = neighborNeighborInfo.first == cell->cellIndex();
+              if (neighborIsPeer && (cellID > neighborCellID))
+              {
+                // neighbor wins the tie-breaker
+                continue;
+              }
+              
+              // if we get here, we own the face and should compute its contribution.
+              // determine global dof indices:
+              vector<GlobalIndexType> neighborGlobalDofs_trial_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, trialVarID);
+              vector<GlobalIndexTypeToCast> neighborGlobalDofs_trial(neighborGlobalDofs_trial_native.begin(),neighborGlobalDofs_trial_native.end());
+              
+              vector<GlobalIndexType> neighborGlobalDofs_test_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, testVarID);
+              vector<GlobalIndexTypeToCast> neighborGlobalDofs_test(neighborGlobalDofs_test_native.begin(),neighborGlobalDofs_test_native.end());
+              
+              // figure out what the cubature degree should be
+              DofOrderingPtr neighborTrialOrder = _mesh->getElementType(neighborCellID)->trialOrderPtr;
+              DofOrderingPtr neighborTestOrder = _mesh->getElementType(neighborCellID)->testOrderPtr;
+              BasisPtr trialBasisNeighbor = neighborTrialOrder->getBasis(trialVarID);
+              BasisPtr testBasisNeighbor = neighborTestOrder->getBasis(testVarID);
+              int neighborCubatureDegree = trialBasisNeighbor->getDegree() + testBasisNeighbor->getDegree();
+              
+              int cubaturePolyOrder = max(myMaxCubatureDegree, neighborCubatureDegree);
+              
+              // set up side basis cache
+              CellTopoPtr mySideTopo = cellTopo->getSide(sideOrdinal); // for non-peers, this is the descendant cell topo
+              
+              pair<int,CellTopologyKey> sideCacheKey{sideOrdinal,cellTopo->getKey()};
+              if (basisCacheForSideOnVolumeTopo.find(sideCacheKey) == basisCacheForSideOnVolumeTopo.end())
+              {
+                basisCacheForSideOnVolumeTopo[sideCacheKey] = Teuchos::rcp( new BasisCache(sideOrdinal, cellBasisCacheVolume,
+                                                                                           emptyRefPointsSide, emptyCubWeights, -1));
+              }
+              BasisCachePtr cellBasisCacheSide = basisCacheForSideOnVolumeTopo[sideCacheKey];
+              
+              pair<CellTopologyKey,int> cubKey{mySideTopo->getKey(),cubaturePolyOrder};
+              if (cubWeightsForSideTopo.find(cubKey) == cubWeightsForSideTopo.end())
+              {
+                int cubDegree = cubKey.second;
+                if (sideDim > 0)
                 {
-                  auto tensorCubatureWeights = sideCub->allocateCubatureWeights();
-                  auto tensorCubaturePoints = sideCub->allocateCubaturePoints();
+                  using Cubature = Intrepid2::Cubature<DeviceType,double,double>;
+                  Teuchos::RCP< Cubature > sideCub;
                   
-                  sideCub->getCubature(tensorCubaturePoints, tensorCubatureWeights);
+                  if (cubDegree >= 0)
+                    sideCub = cubFactory.create(mySideTopo, cubDegree);
                   
-                  cubPoints  = FieldContainerConversion<double>::fromTensorPoints(tensorCubaturePoints);
-                  cubWeights = FieldContainerConversion<double>::fromTensorData(tensorCubatureWeights);
+                  Camellia::FieldContainer<double> cubPoints, cubWeights;
+                  
+                  if (sideCub != Teuchos::null)
+                  {
+                    auto tensorCubatureWeights = sideCub->allocateCubatureWeights();
+                    auto tensorCubaturePoints = sideCub->allocateCubaturePoints();
+                    
+                    sideCub->getCubature(tensorCubaturePoints, tensorCubatureWeights);
+                    
+                    cubPoints  = FieldContainerConversion<double>::fromTensorPoints(tensorCubaturePoints);
+                    cubWeights = FieldContainerConversion<double>::fromTensorData(tensorCubatureWeights);
+                  }
+                  else
+                  {
+                    int numCubPointsSide = 0;
+                    cubPoints = Camellia::FieldContainer<double>(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+                    cubWeights = Camellia::FieldContainer<double>(numCubPointsSide);
+                  }
+                  
+                  cubPointsForSideTopo[cubKey] = cubPoints;
+                  cubWeightsForSideTopo[cubKey] = cubWeights;
                 }
                 else
                 {
-                  int numCubPointsSide = 0;
-                  cubPoints = Camellia::FieldContainer<double>(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-                  cubWeights = Camellia::FieldContainer<double>(numCubPointsSide);
+                  int numCubPointsSide = 1;
+                  Camellia::FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+                  Camellia::FieldContainer<double> cubWeights(numCubPointsSide);
+                  
+                  cubPoints.initialize(0.0);
+                  cubWeights.initialize(1.0);
+                  cubPointsForSideTopo[cubKey] = cubPoints;
+                  cubWeightsForSideTopo[cubKey] = cubWeights;
                 }
+              }
+              if (cellBasisCacheSide->cubatureDegree() != cubaturePolyOrder)
+              {
+                cellBasisCacheSide->setRefCellPointsFC(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder);
+              }
+              cellBasisCacheSide->setPhysicalCellNodes(cellBasisCacheVolume->getPhysicalCellNodes(), {cellID}, false);
+              
+              int numCells = 1;
+              int numTrialFields = trialBasis->getCardinality();
+              int numPoints = cellBasisCacheSide->getRefCellPointsFC().dimension(0);
+              Camellia::FieldContainer<double> trial_values(numCells, numTrialFields, numPoints);
+              trialTerm->values(trial_values, trialVarID, trialBasis, cellBasisCacheSide);
+              
+              // we integrate against the jump term beta * [v n]
+              // this is simply the sum of beta * (v n) from cell and neighbor's point of view
+              
+              int numTestFields = testBasis->getCardinality();
+              Camellia::FieldContainer<double> test_values(numCells, numTestFields, numPoints);
+              testTerm->values(test_values, testVarID, testBasis, cellBasisCacheSide);
+              
+              // filter to include only those members of uBasis that have support on the side
+              // (it might be nice to have LinearTerm::values() support this directly, via a basisDofOrdinal container argument...)
+              auto filterSideBasisValues = [] (BasisPtr basis, int sideOrdinal,
+                                               Camellia::FieldContainer<double> &values) -> void
+              {
+                set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+                int numFilteredFields = mySideBasisDofOrdinals.size();
+                int numCells = values.dimension(0);
+                int numPoints = values.dimension(2);
+                Camellia::FieldContainer<double> filteredValues(numCells,numFilteredFields,numPoints);
+                for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+                {
+                  int filteredDofOrdinal = 0;
+                  for (int basisDofOrdinal : mySideBasisDofOrdinals)
+                  {
+                    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+                    {
+                      filteredValues(cellOrdinal,filteredDofOrdinal,pointOrdinal) = values(cellOrdinal,basisDofOrdinal,pointOrdinal);
+                    }
+                    filteredDofOrdinal++;
+                  }
+                }
+                values = filteredValues;
+              };
+              
+              auto filterGlobalDofOrdinals = [] (BasisPtr basis, int sideOrdinal,
+                                                 vector<GlobalIndexTypeToCast> &globalDofOrdinals) -> void
+              {
+                set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+                vector<GlobalIndexTypeToCast> filteredGlobalDofOrdinals;
+                for (int basisDofOrdinal : mySideBasisDofOrdinals)
+                {
+                  filteredGlobalDofOrdinals.push_back(globalDofOrdinals[basisDofOrdinal]);
+                }
+                globalDofOrdinals = filteredGlobalDofOrdinals;
+              };
+              
+              filterSideBasisValues(trialBasis,sideOrdinal,trial_values);
+              filterSideBasisValues(testBasis,sideOrdinal,test_values);
+              filterGlobalDofOrdinals(trialBasis,sideOrdinal,myGlobalDofs_trial);
+              filterGlobalDofOrdinals(testBasis,sideOrdinal,myGlobalDofs_test);
+              numTrialFields = myGlobalDofs_trial.size();
+              numTestFields = myGlobalDofs_test.size();
+              
+              // Now the geometrically challenging bit: we need to line up the physical points in
+              // the cellBasisCacheSide with those in a BasisCache for the neighbor cell
+              
+              CellTopoPtr neighborTopo = neighbor->topology();
+              CellTopoPtr sideTopo = neighborTopo->getSide(mySideOrdinalInNeighbor); // for non-peers, this is my ancestor's cell topo
+              int nodeCount = sideTopo->getNodeCount();
+              
+              unsigned permutationFromMeToNeighbor;
+              Camellia::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPointsFC();
+              
+              if (!neighborIsPeer) // then we have some refinements relative to neighbor
+              {
+                /*******   Map my ref points to my ancestor ******/
+                pair<GlobalIndexType,unsigned> ancestorInfo = neighbor->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
+                GlobalIndexType ancestorCellIndex = ancestorInfo.first;
+                unsigned ancestorSideOrdinal = ancestorInfo.second;
                 
-                cubPointsForSideTopo[cubKey] = cubPoints;
-                cubWeightsForSideTopo[cubKey] = cubWeights;
+                RefinementBranch refinementBranch = cell->refinementBranchForSide(sideOrdinal, meshTopo);
+                RefinementBranch sideRefinementBranch = RefinementPattern::sideRefinementBranch(refinementBranch, ancestorSideOrdinal);
+                Camellia::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
+                
+                cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
+                BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
+                
+                ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder);
+                
+                // now, the "physical" points in ancestral cache are the ones we want
+                myRefPoints = ancestralBasisCache->getPhysicalCubaturePointsFC();
+                myRefPoints.resize(myRefPoints.dimension(1),myRefPoints.dimension(2)); // strip cell dimension
+                
+                /*******  Determine ancestor's permutation of the side relative to neighbor ******/
+                CellPtr ancestor = meshTopo->getCell(ancestorCellIndex);
+                vector<IndexType> ancestorSideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
+                
+                CellTopoPtr sideTopo = ancestor->topology()->getSide(ancestorSideOrdinal);
+                // the following permutations map from canonical ordering to that seen by the cell
+                // we want to construct a mapping that takes us from ancestor's ordering to neighbor's
+                unsigned ancestorSidePermutation = ancestor->subcellPermutation(sideDim, sideOrdinal);
+                unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
+                
+                // invert ancestor permutation; this takes us from my ordering to canonical
+                unsigned ancestorInverse = CamelliaCellTools::permutationInverse(sideTopo, ancestorSidePermutation);
+                // compose this with neighbor permutation; this takes us from canonical to neighbor
+                permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, ancestorInverse, neighborSidePermutation);
               }
               else
               {
-                int numCubPointsSide = 1;
-                Camellia::FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-                Camellia::FieldContainer<double> cubWeights(numCubPointsSide);
+                // neighbor is peer, but might not be active (i.e., might have descendants)
                 
-                cubPoints.initialize(0.0);
-                cubWeights.initialize(1.0);
-                cubPointsForSideTopo[cubKey] = cubPoints;
-                cubWeightsForSideTopo[cubKey] = cubWeights;
+                // the following permutations map from canonical ordering to that seen by the cell
+                // we want to construct a mapping that takes us from my ordering to neighbor's
+                unsigned mySidePermutation       = cell->subcellPermutation(sideDim, sideOrdinal);
+                unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
+                
+                // invert my permutation; this takes us from my ordering to canonical
+                unsigned myInverse = CamelliaCellTools::permutationInverse(sideTopo, mySidePermutation);
+                // compose this with neighbor permutation; this takes us from canonical to neighbor
+                permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, myInverse, neighborSidePermutation);
               }
-            }
-            if (cellBasisCacheSide->cubatureDegree() != cubaturePolyOrder)
-            {
-              cellBasisCacheSide->setRefCellPointsFC(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder);
-            }
-            cellBasisCacheSide->setPhysicalCellNodes(cellBasisCacheVolume->getPhysicalCellNodes(), {cellID}, false);
-            
-            int numCells = 1;
-            int numTrialFields = trialBasis->getCardinality();
-            int numPoints = cellBasisCacheSide->getRefCellPointsFC().dimension(0);
-            Camellia::FieldContainer<double> trial_values(numCells, numTrialFields, numPoints);
-            trialTerm->values(trial_values, trialVarID, trialBasis, cellBasisCacheSide);
-            
-            // we integrate against the jump term beta * [v n]
-            // this is simply the sum of beta * (v n) from cell and neighbor's point of view
-            
-            int numTestFields = testBasis->getCardinality();
-            Camellia::FieldContainer<double> test_values(numCells, numTestFields, numPoints);
-            testTerm->values(test_values, testVarID, testBasis, cellBasisCacheSide);
-            
-            // filter to include only those members of uBasis that have support on the side
-            // (it might be nice to have LinearTerm::values() support this directly, via a basisDofOrdinal container argument...)
-            auto filterSideBasisValues = [] (BasisPtr basis, int sideOrdinal,
-                                             Camellia::FieldContainer<double> &values) -> void
-            {
-              set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
-              int numFilteredFields = mySideBasisDofOrdinals.size();
-              int numCells = values.dimension(0);
-              int numPoints = values.dimension(2);
-              Camellia::FieldContainer<double> filteredValues(numCells,numFilteredFields,numPoints);
-              for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+              
+              Camellia::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
+              CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, sideTopo, permutationFromMeToNeighbor);
+              permutedRefNodes.resize(1,nodeCount,sideDim); // add cell dimension to make this a "physical" node container
+              if (basisCacheForReferenceCellTopo.find(sideTopo->getKey()) == basisCacheForReferenceCellTopo.end())
               {
-                int filteredDofOrdinal = 0;
-                for (int basisDofOrdinal : mySideBasisDofOrdinals)
+                basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
+              }
+              BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
+              referenceBasisCache->setRefCellPointsFC(myRefPoints,emptyCubWeights,cubaturePolyOrder);
+              std::vector<GlobalIndexType> cellIDs = {0}; // unused
+              referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
+              // now, the "physical" points are the ones we should use as ref points for the neighbor
+              Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePointsFC();
+              neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
+              
+              Camellia::FieldContainer<double> neighborCellNodes = _mesh->physicalCellNodesForCell(neighborCellID);
+              if (basisCacheForNeighborVolumeTopo.find(neighborTopo->getKey()) == basisCacheForNeighborVolumeTopo.end())
+              {
+                basisCacheForNeighborVolumeTopo[neighborTopo->getKey()] = Teuchos::rcp( new BasisCache(neighborCellNodes, neighborTopo,
+                                                                                                       emptyRefPointsVolume, emptyCubWeights) );
+              }
+              BasisCachePtr neighborVolumeCache = basisCacheForNeighborVolumeTopo[neighborTopo->getKey()];
+              neighborVolumeCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
+              
+              pair<int,CellTopologyKey> neighborSideCacheKey{mySideOrdinalInNeighbor,neighborTopo->getKey()};
+              if (basisCacheForSideOnNeighborVolumeTopo.find(neighborSideCacheKey) == basisCacheForSideOnNeighborVolumeTopo.end())
+              {
+                basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey]
+                = Teuchos::rcp( new BasisCache(mySideOrdinalInNeighbor, neighborVolumeCache, emptyRefPointsSide, emptyCubWeights, -1));
+              }
+              BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
+              neighborSideCache->setRefCellPointsFC(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder);
+              neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
+              
+              // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...
+              if (meshTopo->getPeriodicBCs().size() == 0)
+              {
+                // Sanity check that the physical points agree:
+                double tol = 1e-15;
+                Camellia::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePointsFC();
+                Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePointsFC();
+                
+                bool pointsMatch = (myPhysicalPoints.size() == neighborPhysicalPoints.size()); // true unless we find a point that doesn't match
+                if (pointsMatch)
                 {
-                  for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+                  for (int i=0; i<myPhysicalPoints.size(); i++)
                   {
-                    filteredValues(cellOrdinal,filteredDofOrdinal,pointOrdinal) = values(cellOrdinal,basisDofOrdinal,pointOrdinal);
+                    double diff = abs(myPhysicalPoints[i]-neighborPhysicalPoints[i]);
+                    if (diff > tol)
+                    {
+                      pointsMatch = false;
+                      break;
+                    }
                   }
-                  filteredDofOrdinal++;
                 }
-              }
-              values = filteredValues;
-            };
-            
-            auto filterGlobalDofOrdinals = [] (BasisPtr basis, int sideOrdinal,
-                                               vector<GlobalIndexTypeToCast> &globalDofOrdinals) -> void
-            {
-              set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
-              vector<GlobalIndexTypeToCast> filteredGlobalDofOrdinals;
-              for (int basisDofOrdinal : mySideBasisDofOrdinals)
-              {
-                filteredGlobalDofOrdinals.push_back(globalDofOrdinals[basisDofOrdinal]);
-              }
-              globalDofOrdinals = filteredGlobalDofOrdinals;
-            };
-            
-            filterSideBasisValues(trialBasis,sideOrdinal,trial_values);
-            filterSideBasisValues(testBasis,sideOrdinal,test_values);
-            filterGlobalDofOrdinals(trialBasis,sideOrdinal,myGlobalDofs_trial);
-            filterGlobalDofOrdinals(testBasis,sideOrdinal,myGlobalDofs_test);
-            numTrialFields = myGlobalDofs_trial.size();
-            numTestFields = myGlobalDofs_test.size();
-            
-            // Now the geometrically challenging bit: we need to line up the physical points in
-            // the cellBasisCacheSide with those in a BasisCache for the neighbor cell
-            
-            CellTopoPtr neighborTopo = neighbor->topology();
-            CellTopoPtr sideTopo = neighborTopo->getSide(mySideOrdinalInNeighbor); // for non-peers, this is my ancestor's cell topo
-            int nodeCount = sideTopo->getNodeCount();
-            
-            unsigned permutationFromMeToNeighbor;
-            Camellia::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPointsFC();
-            
-            if (!neighborIsPeer) // then we have some refinements relative to neighbor
-            {
-              /*******   Map my ref points to my ancestor ******/
-              pair<GlobalIndexType,unsigned> ancestorInfo = neighbor->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
-              GlobalIndexType ancestorCellIndex = ancestorInfo.first;
-              unsigned ancestorSideOrdinal = ancestorInfo.second;
-              
-              RefinementBranch refinementBranch = cell->refinementBranchForSide(sideOrdinal, meshTopo);
-              RefinementBranch sideRefinementBranch = RefinementPattern::sideRefinementBranch(refinementBranch, ancestorSideOrdinal);
-              Camellia::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
-              
-              cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
-              BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
-              
-              ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder);
-              
-              // now, the "physical" points in ancestral cache are the ones we want
-              myRefPoints = ancestralBasisCache->getPhysicalCubaturePointsFC();
-              myRefPoints.resize(myRefPoints.dimension(1),myRefPoints.dimension(2)); // strip cell dimension
-              
-              /*******  Determine ancestor's permutation of the side relative to neighbor ******/
-              CellPtr ancestor = meshTopo->getCell(ancestorCellIndex);
-              vector<IndexType> ancestorSideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
-              
-              CellTopoPtr sideTopo = ancestor->topology()->getSide(ancestorSideOrdinal);
-              // the following permutations map from canonical ordering to that seen by the cell
-              // we want to construct a mapping that takes us from ancestor's ordering to neighbor's
-              unsigned ancestorSidePermutation = ancestor->subcellPermutation(sideDim, sideOrdinal);
-              unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
-              
-              // invert ancestor permutation; this takes us from my ordering to canonical
-              unsigned ancestorInverse = CamelliaCellTools::permutationInverse(sideTopo, ancestorSidePermutation);
-              // compose this with neighbor permutation; this takes us from canonical to neighbor
-              permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, ancestorInverse, neighborSidePermutation);
-            }
-            else
-            {
-              // neighbor is peer, but might not be active (i.e., might have descendants)
-              
-              // the following permutations map from canonical ordering to that seen by the cell
-              // we want to construct a mapping that takes us from my ordering to neighbor's
-              unsigned mySidePermutation       = cell->subcellPermutation(sideDim, sideOrdinal);
-              unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
-              
-              // invert my permutation; this takes us from my ordering to canonical
-              unsigned myInverse = CamelliaCellTools::permutationInverse(sideTopo, mySidePermutation);
-              // compose this with neighbor permutation; this takes us from canonical to neighbor
-              permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, myInverse, neighborSidePermutation);
-            }
-            
-            Camellia::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
-            CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, sideTopo, permutationFromMeToNeighbor);
-            permutedRefNodes.resize(1,nodeCount,sideDim); // add cell dimension to make this a "physical" node container
-            if (basisCacheForReferenceCellTopo.find(sideTopo->getKey()) == basisCacheForReferenceCellTopo.end())
-            {
-              basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
-            }
-            BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
-            referenceBasisCache->setRefCellPointsFC(myRefPoints,emptyCubWeights,cubaturePolyOrder);
-            std::vector<GlobalIndexType> cellIDs = {0}; // unused
-            referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
-            // now, the "physical" points are the ones we should use as ref points for the neighbor
-            Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePointsFC();
-            neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
-            
-            Camellia::FieldContainer<double> neighborCellNodes = _mesh->physicalCellNodesForCell(neighborCellID);
-            if (basisCacheForNeighborVolumeTopo.find(neighborTopo->getKey()) == basisCacheForNeighborVolumeTopo.end())
-            {
-              basisCacheForNeighborVolumeTopo[neighborTopo->getKey()] = Teuchos::rcp( new BasisCache(neighborCellNodes, neighborTopo,
-                                                                                                     emptyRefPointsVolume, emptyCubWeights) );
-            }
-            BasisCachePtr neighborVolumeCache = basisCacheForNeighborVolumeTopo[neighborTopo->getKey()];
-            neighborVolumeCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
-            
-            pair<int,CellTopologyKey> neighborSideCacheKey{mySideOrdinalInNeighbor,neighborTopo->getKey()};
-            if (basisCacheForSideOnNeighborVolumeTopo.find(neighborSideCacheKey) == basisCacheForSideOnNeighborVolumeTopo.end())
-            {
-              basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey]
-              = Teuchos::rcp( new BasisCache(mySideOrdinalInNeighbor, neighborVolumeCache, emptyRefPointsSide, emptyCubWeights, -1));
-            }
-            BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
-            neighborSideCache->setRefCellPointsFC(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder);
-            neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
-            
-            // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...
-            if (meshTopo->getPeriodicBCs().size() == 0)
-            {
-              // Sanity check that the physical points agree:
-              double tol = 1e-15;
-              Camellia::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePointsFC();
-              Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePointsFC();
-              
-              bool pointsMatch = (myPhysicalPoints.size() == neighborPhysicalPoints.size()); // true unless we find a point that doesn't match
-              if (pointsMatch)
-              {
-                for (int i=0; i<myPhysicalPoints.size(); i++)
+                
+                if (!pointsMatch)
                 {
-                  double diff = abs(myPhysicalPoints[i]-neighborPhysicalPoints[i]);
-                  if (diff > tol)
-                  {
-                    pointsMatch = false;
-                    break;
-                  }
+                  cout << "ERROR: pointsMatch is false.\n";
+                  cout << "myPhysicalPoints:\n" << myPhysicalPoints;
+                  cout << "neighborPhysicalPoints:\n" << neighborPhysicalPoints;
                 }
               }
               
-              if (!pointsMatch)
-              {
-                cout << "ERROR: pointsMatch is false.\n";
-                cout << "myPhysicalPoints:\n" << myPhysicalPoints;
-                cout << "neighborPhysicalPoints:\n" << neighborPhysicalPoints;
-              }
-            }
-            
-            int numNeighborTrialFields = trialBasisNeighbor->getCardinality();
-            int numNeighborTestFields = testBasisNeighbor->getCardinality();
-            
-            Camellia::FieldContainer<double> neighbor_trial_values(numCells, numNeighborTrialFields, numPoints);
-            trialTerm->values(neighbor_trial_values, trialVarID, trialBasisNeighbor, neighborSideCache);
-            
-            Camellia::FieldContainer<double> neighbor_test_values(numCells, numNeighborTestFields, numPoints);
-            testTerm->values(neighbor_test_values, testVarID, testBasisNeighbor, neighborSideCache);
-            
-            int neighborSideOrdinal = neighborSideCache->getSideIndex();
-            filterSideBasisValues(trialBasisNeighbor,neighborSideOrdinal,neighbor_trial_values);
-            filterSideBasisValues(testBasisNeighbor,neighborSideOrdinal,neighbor_test_values);
-            filterGlobalDofOrdinals(trialBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_trial);
-            filterGlobalDofOrdinals(testBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_test);
-            numNeighborTrialFields = neighborGlobalDofs_trial.size();
-            numNeighborTestFields = neighborGlobalDofs_test.size();
-            
-            // weight u_values containers using cubature weights defined in cellBasisCacheSide:
-            Intrepid::FunctionSpaceTools::multiplyMeasure<double>(trial_values, cellBasisCacheSide->getWeightedMeasures(), trial_values);
-            Intrepid::FunctionSpaceTools::multiplyMeasure<double>(neighbor_trial_values, cellBasisCacheSide->getWeightedMeasures(), neighbor_trial_values);
-            
-            // now, we compute four integrals (test, trial) and insert into global stiffness
-            // define a lambda function for insertion
-            auto insertValues = [stiffnessMatrix] (vector<int> &rowDofOrdinals, vector<int> &colDofOrdinals,
-                                                   Intrepid::FieldContainer<double> &values) -> void
-            {
-              // values container is (cell, test, trial)
-              int rowCount = rowDofOrdinals.size();
-              int colCount = colDofOrdinals.size();
+              int numNeighborTrialFields = trialBasisNeighbor->getCardinality();
+              int numNeighborTestFields = testBasisNeighbor->getCardinality();
               
-              //        stiffnessMatrix->InsertGlobalValues(rowCount,&rowDofOrdinals[0],colCount,&colDofOrdinals[0],&values(0,0,0),
-              //                                            Epetra_FECrsMatrix::ROW_MAJOR); // COL_MAJOR is the right thing, actually, but for some reason does not work...
+              Camellia::FieldContainer<double> neighbor_trial_values(numCells, numNeighborTrialFields, numPoints);
+              trialTerm->values(neighbor_trial_values, trialVarID, trialBasisNeighbor, neighborSideCache);
               
-              // because I don't trust Epetra in terms of the format, let's insert values one at a time
-              for (int i=0; i<rowCount; i++)
+              Camellia::FieldContainer<double> neighbor_test_values(numCells, numNeighborTestFields, numPoints);
+              testTerm->values(neighbor_test_values, testVarID, testBasisNeighbor, neighborSideCache);
+              
+              int neighborSideOrdinal = neighborSideCache->getSideIndex();
+              filterSideBasisValues(trialBasisNeighbor,neighborSideOrdinal,neighbor_trial_values);
+              filterSideBasisValues(testBasisNeighbor,neighborSideOrdinal,neighbor_test_values);
+              filterGlobalDofOrdinals(trialBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_trial);
+              filterGlobalDofOrdinals(testBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_test);
+              numNeighborTrialFields = neighborGlobalDofs_trial.size();
+              numNeighborTestFields = neighborGlobalDofs_test.size();
+              
+              // weight u_values containers using cubature weights defined in cellBasisCacheSide:
+              Intrepid::FunctionSpaceTools::multiplyMeasure<double>(trial_values, cellBasisCacheSide->getWeightedMeasures(), trial_values);
+              Intrepid::FunctionSpaceTools::multiplyMeasure<double>(neighbor_trial_values, cellBasisCacheSide->getWeightedMeasures(), neighbor_trial_values);
+              
+              // now, we compute four integrals (test, trial) and insert into global stiffness
+              // define a lambda function for insertion
+              auto insertValues = [stiffnessMatrix] (vector<int> &rowDofOrdinals, vector<int> &colDofOrdinals,
+                                                     Intrepid::FieldContainer<double> &values) -> void
               {
-                for (int j=0; j<colCount; j++)
+                // values container is (cell, test, trial)
+                int rowCount = rowDofOrdinals.size();
+                int colCount = colDofOrdinals.size();
+                
+                //        stiffnessMatrix->InsertGlobalValues(rowCount,&rowDofOrdinals[0],colCount,&colDofOrdinals[0],&values(0,0,0),
+                //                                            Epetra_FECrsMatrix::ROW_MAJOR); // COL_MAJOR is the right thing, actually, but for some reason does not work...
+                
+                // because I don't trust Epetra in terms of the format, let's insert values one at a time
+                for (int i=0; i<rowCount; i++)
                 {
-                  // rows in Camellia::FieldContainer correspond to trial variables, cols to test
-                  // in stiffness matrix, it's the opposite.
-                  if (values(0,i,j) != 0) // skip 0's, which I believe Epetra should ignore anyway
+                  for (int j=0; j<colCount; j++)
                   {
-                    //              cout << "Inserting (" << rowDofOrdinals[i] << "," << colDofOrdinals[j] << ") = ";
-                    //              cout << values(0,i,j) << endl;
-                    stiffnessMatrix->InsertGlobalValues(1,&rowDofOrdinals[i],1,&colDofOrdinals[j],&values(0,i,j));
+                    // rows in Camellia::FieldContainer correspond to trial variables, cols to test
+                    // in stiffness matrix, it's the opposite.
+                    if (values(0,i,j) != 0) // skip 0's, which I believe Epetra should ignore anyway
+                    {
+                      //              cout << "Inserting (" << rowDofOrdinals[i] << "," << colDofOrdinals[j] << ") = ";
+                      //              cout << values(0,i,j) << endl;
+                      stiffnessMatrix->InsertGlobalValues(1,&rowDofOrdinals[i],1,&colDofOrdinals[j],&values(0,i,j));
+                    }
                   }
                 }
-              }
-            };
-            
-            auto hasNonzeros = [] (Camellia::FieldContainer<double> &values, double tol) -> bool
-            {
-              for (int i=0; i<values.size(); i++)
+              };
+              
+              auto hasNonzeros = [] (Camellia::FieldContainer<double> &values, double tol) -> bool
               {
-                if (abs(values[i]) > tol) return true;
+                for (int i=0; i<values.size(); i++)
+                {
+                  if (abs(values[i]) > tol) return true;
+                }
+                return false;
+              };
+              
+              Intrepid::FieldContainer<double> &test_values_intrepid           = test_values;
+              Intrepid::FieldContainer<double> &trial_values_intrepid          = trial_values;
+              Intrepid::FieldContainer<double> &neighbor_test_values_intrepid  = neighbor_test_values;
+              Intrepid::FieldContainer<double> &neighbor_trial_values_intrepid = neighbor_trial_values;
+              // the casts above are important to let FunctionSpaceTools::integrate invoke BLAS
+              if (hasNonzeros(test_values,0) && hasNonzeros(trial_values,0))
+              {
+                Intrepid::FieldContainer<double> integralValues_me_me(numCells,numTestFields,numTrialFields);
+                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,test_values_intrepid,trial_values_intrepid,Intrepid::COMP_BLAS);
+                insertValues(myGlobalDofs_trial,myGlobalDofs_test,integralValues_me_me);
               }
-              return false;
-            };
-            
-            Intrepid::FieldContainer<double> &test_values_intrepid           = test_values;
-            Intrepid::FieldContainer<double> &trial_values_intrepid          = trial_values;
-            Intrepid::FieldContainer<double> &neighbor_test_values_intrepid  = neighbor_test_values;
-            Intrepid::FieldContainer<double> &neighbor_trial_values_intrepid = neighbor_trial_values;
-            // the casts above are important to let FunctionSpaceTools::integrate invoke BLAS
-            if (hasNonzeros(test_values,0) && hasNonzeros(trial_values,0))
-            {
-              Intrepid::FieldContainer<double> integralValues_me_me(numCells,numTestFields,numTrialFields);
-              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,test_values_intrepid,trial_values_intrepid,Intrepid::COMP_BLAS);
-              insertValues(myGlobalDofs_trial,myGlobalDofs_test,integralValues_me_me);
-            }
-            
-            if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(trial_values,0))
-            {
-              Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborTestFields,numTrialFields);
-              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_test_values_intrepid,trial_values_intrepid,Intrepid::COMP_BLAS);
-              insertValues(neighborGlobalDofs_test,myGlobalDofs_trial,integralValues_neighbor_me);
-            }
-            
-            if (hasNonzeros(test_values,0) && hasNonzeros(neighbor_trial_values,0))
-            {
-              Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numTestFields,numNeighborTrialFields);
-              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,test_values_intrepid,neighbor_trial_values_intrepid,Intrepid::COMP_BLAS);
-              insertValues(myGlobalDofs_test,neighborGlobalDofs_trial,integralValues_me_neighbor);
-            }
-            
-            if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(neighbor_trial_values,0))
-            {
-              Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborTestFields,numNeighborTrialFields);
-              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_test_values_intrepid,neighbor_trial_values_intrepid,
-                                                              Intrepid::COMP_BLAS);
-              insertValues(neighborGlobalDofs_test,neighborGlobalDofs_trial,integralValues_neighbor_neighbor);
+              
+              if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(trial_values,0))
+              {
+                Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborTestFields,numTrialFields);
+                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_test_values_intrepid,trial_values_intrepid,Intrepid::COMP_BLAS);
+                insertValues(neighborGlobalDofs_test,myGlobalDofs_trial,integralValues_neighbor_me);
+              }
+              
+              if (hasNonzeros(test_values,0) && hasNonzeros(neighbor_trial_values,0))
+              {
+                Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numTestFields,numNeighborTrialFields);
+                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,test_values_intrepid,neighbor_trial_values_intrepid,Intrepid::COMP_BLAS);
+                insertValues(myGlobalDofs_test,neighborGlobalDofs_trial,integralValues_me_neighbor);
+              }
+              
+              if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(neighbor_trial_values,0))
+              {
+                Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborTestFields,numNeighborTrialFields);
+                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_test_values_intrepid,neighbor_trial_values_intrepid,
+                                                                Intrepid::COMP_BLAS);
+                insertValues(neighborGlobalDofs_test,neighborGlobalDofs_trial,integralValues_neighbor_neighbor);
+              }
             }
           }
         }
@@ -3726,7 +3729,7 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
   {
     // non-null _oldDofInterpreter is a proxy for having a condensation interpreter
     // if using static condensation, we skip storing field values
-    if ((_oldDofInterpreter.get() == NULL) || (trialOrder->getNumSidesForVarID(trialID) != 1))
+    if ((_oldDofInterpreter.get() == NULL) || (!trialOrder->isVolumeVar(trialID)))
     {
       Camellia::FieldContainer<Scalar> globalCoefficients;
       Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
@@ -4488,7 +4491,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
   {
     int trialID = *trialIDIt;
-    if (oldTrialOrdering->getSidesForVarID(trialID).size() == 1)   // field variable, the only kind we honor right now
+    if (oldTrialOrdering->isVolumeVar(trialID))
     {
       BasisPtr basis = oldTrialOrdering->getBasis(trialID);
       int basisCardinality = basis->getCardinality();
@@ -4511,7 +4514,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
   {
     int trialID = *trialIDIt;
-    if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1)   // trace (flux) variable
+    if (!oldTrialOrdering->isVolumeVar(trialID))   // trace (flux) variable
     {
       VarPtr var = vf->trialVars().find(trialID)->second;
 
@@ -4535,7 +4538,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
     for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
     {
       int trialID = *trialIDIt;
-      if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1)   // trace (flux) variable
+      if (!oldTrialOrdering->isVolumeVar(trialID))   // trace (flux) variable
       {
         if (!oldTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
         BasisPtr basis = oldTrialOrdering->getBasis(trialID, sideOrdinal);

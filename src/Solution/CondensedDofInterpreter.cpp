@@ -530,16 +530,16 @@ bool CondensedDofInterpreter<Scalar>::varDofsAreUsuallyCondensible(int varID, in
 {
   // eventually it would be nice to determine which sub-basis ordinals can be condensed, but right now we only
   // condense out the truly discontinuous bases defined for variables on the element interior.
-  
-  int sideCount = dofOrdering->getSidesForVarID(varID).size();
-  if (sideCount != 1) return false;
+
+  const bool isVolumeVar = dofOrdering->isVolumeVar(varID);
+  if (!isVolumeVar) return false;
   
   BasisPtr basis = dofOrdering->getBasis(varID);
   Camellia::EFunctionSpace fs = basis->functionSpace();
   
   bool isDiscontinuous = functionSpaceIsDiscontinuous(fs);
   
-  return isDiscontinuous && (sideCount==1) && (_uncondensibleVarIDs.find(varID) == _uncondensibleVarIDs.end());
+  return isDiscontinuous && isVolumeVar && (_uncondensibleVarIDs.find(varID) == _uncondensibleVarIDs.end());
 }
 
 template <typename Scalar>

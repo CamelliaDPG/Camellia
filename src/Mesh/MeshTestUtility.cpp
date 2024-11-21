@@ -141,13 +141,14 @@ bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol)
     for (set<int>::iterator varIt=varIDs.begin(); varIt != varIDs.end(); varIt++)
     {
       int varID = *varIt;
+      const bool isVolumeVar = trialOrder->isVolumeVar(varID);
       const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
       for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
       {
         int sideOrdinal = *sideIt;
 
         BasisPtr basis;
-        if (sidesForVar->size() == 1)
+        if (isVolumeVar)
         {
           basis = trialOrder->getBasis(varID);
         }
@@ -161,7 +162,7 @@ bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol)
         for (int dofOrdinal=0; dofOrdinal<basis->getCardinality(); dofOrdinal++)
         {
           int localDofIndex;
-          if (sidesForVar->size() == 1)
+          if (isVolumeVar)
           {
             localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal);
           }

@@ -83,7 +83,6 @@ bool GDAMinimumRule::allowMeshTopologyPruning()
 typedef pair< IndexType, unsigned > CellPair;
 CellPair GDAMinimumRule::cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex, std::vector< std::pair<std::string, int> > tags)
 {
-  // TODO: here, add optional tag filter which requires for d <= sideDim that the side (second in CellPair) matches a specified tag.
   set< CellPair > cellsForSubcell = _meshTopology->getCellsContainingEntity(d, entityIndex, tags);
   
   if (cellsForSubcell.size() == 0)

@@ -348,7 +348,11 @@ vector<GlobalIndexType> GlobalDofAssignment::cellIDsOfElementType(PartitionIndex
     {
       if (getElementTypeLookupKey(cellID) == key)
       {
-        cellsForElementType.push_back(cellID);
+        auto cellElemType = elementType(cellID);
+        if (*cellElemType == *elemType)
+        {
+          cellsForElementType.push_back(cellID);
+        }
       }
     }
     return cellsForElementType;

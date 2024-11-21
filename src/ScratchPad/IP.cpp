@@ -435,7 +435,7 @@ std::vector<int> TIP<Scalar>::homogeneousBCDofOrdinalsForCell(MeshPtr mesh, Glob
   {
     VarPtr var = bcEntry.first;
     
-    bool varIsDefinedOnVolume = (dofOrdering->getSidesForVarID(var->ID()).size() == 1);
+    bool varIsDefinedOnVolume = dofOrdering->isVolumeVar(var->ID());
     if (!varIsDefinedOnVolume)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Imposition of test-space BCs is not (yet) supported for trace test variables");

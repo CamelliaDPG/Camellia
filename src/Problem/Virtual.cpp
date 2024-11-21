@@ -67,7 +67,7 @@ public:
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
       const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
-      bool isTrace = (sidesForVar->size() > 1);
+      bool isTrace = !trialOrder->isVolumeVar(varID);
       for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
         int sideOrdinal = *sideIt;
         vector<int> dofIndices = trialOrder->getDofIndices(varID,sideOrdinal);

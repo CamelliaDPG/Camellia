@@ -768,7 +768,7 @@ Camellia::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Came
         vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(_fittableGlobalDofOrdinalsOnSides.size());
         set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume;
         
-        bool volumeVar = _dofOrdering->getSidesForVarID(varID).size() == 1;
+        bool volumeVar = _dofOrdering->isVolumeVar(varID);
         if (volumeVar)
         {
           BasisMap volumeMap = _volumeMaps[varID];

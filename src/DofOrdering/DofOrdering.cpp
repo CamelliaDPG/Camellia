@@ -56,6 +56,11 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideOrd
 //  _nextIndex += basis->getCardinality();
   bases[basisKey] = basis;
   basisRanks[varID] = basisRank;
+  
+  if (sideOrdinal == VOLUME_INTERIOR_SIDE_INDEX)
+  {
+    _volumeVars.insert(varID);
+  }
 }
 
 void DofOrdering::addIdentification(int varID, int side1, int basisDofOrdinal1,
@@ -306,13 +311,13 @@ set<int> DofOrdering::getTraceDofIndices()
   set<int> traceDofIndices;
   for (int varID : varIDs)
   {
-    const vector<int> *sides = &getSidesForVarID(varID);
-    if (sides->size() > 1) // trace
+    if (!isVolumeVar(varID)) // trace
     {
-      for (int sideOrdinal : *sides)
+      const auto & sides = getSidesForVarID(varID);
+      for (const auto & sideOrdinal : sides)
       {
-        const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
-        traceDofIndices.insert(indices->begin(),indices->end());
+        const auto & indices = getDofIndices(varID, sideOrdinal);
+        traceDofIndices.insert(indices.begin(),indices.end());
       }
     }
   }
@@ -358,6 +363,11 @@ bool DofOrdering::hasSideVarIDs()
 bool DofOrdering::isTrialOrdering() const
 {
   return _isTrialOrdering;
+}
+
+bool DofOrdering::isVolumeVar(int varID) const
+{
+  return _volumeVars.find(varID) != _volumeVars.end();
 }
 
 int DofOrdering::maxBasisDegree()

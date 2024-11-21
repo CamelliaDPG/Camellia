@@ -833,7 +833,7 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseC
     bool hasConformingTraces = false;
     for (int varID : trialOrderRawPtr->getVarIDs())
     {
-      if (trialOrderRawPtr->getSidesForVarID(varID).size() > 1)
+      if (!trialOrderRawPtr->isVolumeVar(varID))
       {
         // trace or flux; use basis on first side as example
         EFunctionSpace fs = trialOrderRawPtr->getBasis(varID, trialOrderRawPtr->getSidesForVarID(varID)[0])->functionSpace();
@@ -1194,7 +1194,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
       VarPtr trialVar = vf->trialVars().find(trialID)->second;
 
-      if (coarseTrialOrdering->getSidesForVarID(trialID).size() == 1)   // field variable
+      if (coarseTrialOrdering->isVolumeVar(trialID))   // field variable
       {
         if (condensedDofInterpreterCoarse != NULL)
         {
@@ -1550,8 +1550,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     {
       VarPtr trialVar = vf->trial(trialID);
 
-      const vector<int>* fineSidesForVarID = &fineTrialOrdering->getSidesForVarID(trialID);
-      if (fineSidesForVarID->size() == 1)   // field variable
+      const vector<int>& fineSidesForVarID = fineTrialOrdering->getSidesForVarID(trialID);
+      if (fineTrialOrdering->isVolumeVar(trialID))   // field variable
       {
         if ((condensedDofInterpreterCoarse == NULL) || (condensedDofInterpreterCoarse->varDofsAreCondensible(coarseCellID, trialID, 0, fineTrialOrdering)))
         {
@@ -1561,12 +1561,12 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       }
       else
       {
-        for (int fineSideOrdinal : *fineSidesForVarID)
+        for (const int & fineSideOrdinal : fineSidesForVarID)
         {
           int coarseSideOrdinal = fineSideToCoarseSide[fineSideOrdinal];
           if (coarseSideOrdinal != -1)
           {
-            vector<int> dofIndices = coarseTrialOrdering->getDofIndices(trialID,coarseSideOrdinal);
+            const vector<int> & dofIndices = coarseTrialOrdering->getDofIndices(trialID,coarseSideOrdinal);
             fittableGlobalDofOrdinalsOnSides[fineSideOrdinal].insert(dofIndices.begin(),dofIndices.end());
           }
         }

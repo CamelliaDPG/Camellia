@@ -965,12 +965,12 @@ namespace
             auto trialOrdering = elemType->trialOrderPtr;
             for (auto varID : trialIDs)
             {
-              int numSides = trialOrdering->getNumSidesForVarID(varID);
-              if (numSides > 1)
+              if (trialOrdering->isVolumeVar(varID))
               {
-                for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+                const auto & sides = trialOrdering->getSidesForVarID(varID);
+                for (const auto &sideOrdinal : sides)
                 {
-                  auto dofIndices = trialOrdering->getDofIndices(varID,sideOrdinal);
+                  const auto & dofIndices = trialOrdering->getDofIndices(varID,sideOrdinal);
                   for (auto dofIndex : dofIndices)
                   {
                     if (dofIndex == trialOrdinal)

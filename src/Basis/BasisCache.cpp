@@ -767,23 +767,33 @@ void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering)
 {
   _maxDegreeBasisForSide.clear();
   vector<int> sideTrialIDs;
+  vector<int> volumeTrialIDs; // just those that have some support on sides (not L^2 bases)
   set<int> trialIDs = trialOrdering.getVarIDs();
-  for (set<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
+  int maxVolumeDegree = 0;
+  for (const auto &trialID : trialIDs)
   {
-    int trialID = *trialIt;
-    if (trialOrdering.getSidesForVarID(trialID).size() > 1)
+    if (!trialOrdering.isVolumeVar(trialID))
     {
       sideTrialIDs.push_back(trialID);
+    }
+    else
+    {
+      auto volumeBasis = trialOrdering.getBasis(trialID);
+      auto functionSpace = volumeBasis->functionSpace();
+      if (!functionSpaceIsDiscontinuous(functionSpace))
+      {
+        maxVolumeDegree = volumeBasis->getDegree();
+      }
     }
   }
   int numSides = _cellTopo->getSideCount();
 
-  int numSideTrialIDs = sideTrialIDs.size();
+  int numSideTrialIDs = int(sideTrialIDs.size());
   for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
   {
     BasisPtr maxDegreeBasisOnSide;
     // loop through looking for highest-degree basis
-    int maxTrialDegree = -1;
+    int maxTrialDegree = maxVolumeDegree;
     for (int i=0; i<numSideTrialIDs; i++)
     {
       if (trialOrdering.hasBasisEntry(sideTrialIDs[i], sideOrdinal))
