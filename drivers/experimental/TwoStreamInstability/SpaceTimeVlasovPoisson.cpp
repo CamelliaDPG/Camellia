@@ -2031,6 +2031,10 @@ int main(int argc, char *argv[])
       u0 = 4.5;
       n0 = 0.1;
       usePeriodicBCs = true;
+      if (rank == 0)
+      {
+        std::cout << "Running bump-on-tail problem.\n";
+      }
     }
     else if (problemChoice == COLD_DIODE)
     {
@@ -2097,6 +2101,7 @@ int main(int argc, char *argv[])
       
       if (rank == 0)
       {
+        std::cout << "Running cold diode problem.\n";
         std::cout << "E scaling :         " << EScaling << std::endl;
         std::cout << "potential scaling : " << potentialScaling << std::endl;
         std::cout << "spatial scaling :   " << spatialScaling << std::endl;
@@ -2110,6 +2115,13 @@ int main(int argc, char *argv[])
         std::cout << "sigma = " << sigma << std::endl;
         std::cout << "u0 = " << u0 << std::endl;
         std::cout << "n0 = " << n0 << std::endl;
+      }
+    }
+    else if (problemChoice == TWO_STREAM)
+    {
+      if (rank == 0)
+      {
+        std::cout << "Running two-stream problem.\n";
       }
     }
     
@@ -2126,6 +2138,10 @@ int main(int argc, char *argv[])
     
     if (performDebugRefinementSeries)
     {
+      if (rank == 0)
+      {
+        std::cout << "calling performDebuggingRefinementSeries().\n";
+      }
       performDebuggingRefinementSeries(form);
     }
     
@@ -2145,6 +2161,23 @@ int main(int argc, char *argv[])
         runPatchTestNumber[patchTestToRun] = true;
         patchTestNumberOffset                = patchTestToRun - 1;
         patchTestNumberOffsetWithSeparateBCs = patchTestToRun - 1;
+      }
+      
+      if (rank == 0)
+      {
+        if (runPatchTestNumber.size() == 1)
+        {
+          std::cout << "running patch test " << runPatchTestNumber.begin()->second << "\n";
+        }
+        else
+        {
+          std::cout << "running patch tests: ";
+          for (auto testEntry : runPatchTestNumber)
+          {
+            std::cout << testEntry.second << " ";
+          }
+          std::cout << std::endl;
+        }
       }
       
       // TEST 1
