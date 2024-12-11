@@ -439,84 +439,93 @@ namespace
     int delta_k = 1;
     auto meshTopo = MeshFactory::hypercubeMeshTopology(meshDims, elementCounts);
     auto mesh     = MeshFactory::minRuleMesh(meshTopo, poissonForm.bf(), H1Order, delta_k);
-    auto elemType = mesh->elementTypes()[0];
-    BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
     
-    int numCells   = basisCache->getPhysicalCubaturePoints().extent_int(0);
-    int numPoints  = basisCache->getPhysicalCubaturePoints().extent_int(1);
+    // for debugger attachment in MPI runs:
+    mesh->Comm()->Barrier();
+    int mpiRank = mesh->Comm()->MyPID();
     
-    Teuchos::Array<int> dimensions(2 + rank);
-    dimensions[0] = numCells;
-    dimensions[1] = numPoints;
-    for (int r=0; r<rank; r++)
+    auto elemTypes = mesh->elementTypes(mpiRank);
+    if (elemTypes.size() > 0)
     {
-      dimensions[2+r] = spaceDim;
+      auto elemType = mesh->elementTypes()[0];
+      BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
+      
+      int numCells   = basisCache->getPhysicalCubaturePoints().extent_int(0);
+      int numPoints  = basisCache->getPhysicalCubaturePoints().extent_int(1);
+      
+      Teuchos::Array<int> dimensions(2 + rank);
+      dimensions[0] = numCells;
+      dimensions[1] = numPoints;
+      for (int r=0; r<rank; r++)
+      {
+        dimensions[2+r] = spaceDim;
+      }
+      
+      auto ssStorage = SharedScratchStorage<double>::sharedScratchStoragePtr();
+      
+      auto baselineData = baselineFunction->checkoutValuesData(basisCache);
+      FieldContainer<double> baselineFC(dimensions);
+      auto baselineView = ssStorage->checkoutScratchStorage(baselineFunction, basisCache);
+      
+      baselineFunction->values(baselineData, basisCache);
+      baselineFunction->values(  baselineFC, basisCache);
+      baselineFunction->values(baselineView, ASSIGN, basisCache);
+      
+      auto testFunctionData = functionUnderTest->checkoutValuesData(basisCache);
+      FieldContainer<double> testFunctionFC(dimensions);
+      auto testFunctionView = ssStorage->checkoutScratchStorage(functionUnderTest, basisCache);
+      
+      functionUnderTest->values(testFunctionData, basisCache);
+      functionUnderTest->values(  testFunctionFC, basisCache);
+      functionUnderTest->values(testFunctionView, ASSIGN, basisCache);
+      
+      constexpr int expandedRank = spaceDim+1+rank;
+      
+      //template<class Scalar, class DataContainer, int expandedRank, int startCollapseDim, int lastCollapseDim>
+      using ViewInterpreter = ViewCollapseDimensions<double,DeviceView<double>,expandedRank,1,spaceDim>; // maps (C,P0,…,PD[,D0,…]) --> (C,P[,D0,…])
+      
+      static_assert(Intrepid2::supports_rank<ViewInterpreter, expandedRank>::value, "ViewInterpreter should support rank expandedRank");
+      
+      Kokkos::Array<int,spaceDim> pointComponentBounds;
+      for (int d=1; d<=spaceDim; d++)
+      {
+        pointComponentBounds[d-1] = baselineData.extent_int(d);
+      }
+      
+      // 1. sanity check: the baseline implementations agree
+      // data nominal shape is (C,P0,…,PD); we interpret the (C,P) views
+      ViewInterpreter baselineViewExpanded(baselineView, pointComponentBounds);
+      testFloatingEquality<expandedRank>(baselineViewExpanded, baselineData, tol, tol, out, success, "baselineView", "baselineData");
+      
+      auto baselineFCView = baselineFC.checkoutDeviceView();
+      ViewInterpreter baselineFCViewExpanded(baselineFCView, pointComponentBounds);
+      testFloatingEquality<expandedRank>(baselineFCViewExpanded, baselineData, tol, tol, out, success, "baselineFCView", "baselineData");
+      
+      testFloatingEquality<rank+2>(baselineFCView, baselineView, tol, tol, out, success, "baselineFC", "baselineView");
+      
+      // 2. test that the testFunction* containers agree with each other
+      ViewInterpreter testFunctionViewExpanded(testFunctionView, pointComponentBounds);
+      testFloatingEquality<expandedRank>(testFunctionViewExpanded, testFunctionData, tol, tol, out, success, "testFunctionView", "testFunctionData");
+      
+      auto testFunctionFCView = testFunctionFC.checkoutDeviceView();
+      ViewInterpreter testFunctionFCViewExpanded(testFunctionFCView, pointComponentBounds);
+      testFloatingEquality<expandedRank>(testFunctionFCViewExpanded, testFunctionData, tol, tol, out, success, "testFunctionFCView", "testFunctionData");
+      
+      testFloatingEquality<rank+2>(testFunctionFCView, testFunctionView, tol, tol, out, success, "testFunctionFC", "testFunctionView");
+      
+      // 3. test that the testFunction* containers agree with their baseline counterparts
+      testFloatingEquality<expandedRank>(baselineData,   testFunctionData, tol, tol, out, success,   "baselineData",   "testFunctionData");
+      testFloatingEquality<rank+2>(      baselineView,   testFunctionView, tol, tol, out, success,   "baselineView",   "testFunctionView");
+      testFloatingEquality<rank+2>(    baselineFCView, testFunctionFCView, tol, tol, out, success, "baselineFCView", "testFunctionFCView");
+      
+      baselineFunction->checkinValuesData(baselineData);
+      ssStorage->checkinScratchStorage(baselineView);
+      baselineFC.checkinDeviceView(false);
+      
+      functionUnderTest->checkinValuesData(testFunctionData);
+      ssStorage->checkinScratchStorage(testFunctionView);
+      testFunctionFC.checkinDeviceView(false);
     }
-    
-    auto ssStorage = SharedScratchStorage<double>::sharedScratchStoragePtr();
-    
-    auto baselineData = baselineFunction->checkoutValuesData(basisCache);
-    FieldContainer<double> baselineFC(dimensions);
-    auto baselineView = ssStorage->checkoutScratchStorage(baselineFunction, basisCache);
-    
-    baselineFunction->values(baselineData, basisCache);
-    baselineFunction->values(  baselineFC, basisCache);
-    baselineFunction->values(baselineView, ASSIGN, basisCache);
-    
-    auto testFunctionData = functionUnderTest->checkoutValuesData(basisCache);
-    FieldContainer<double> testFunctionFC(dimensions);
-    auto testFunctionView = ssStorage->checkoutScratchStorage(functionUnderTest, basisCache);
-    
-    functionUnderTest->values(testFunctionData, basisCache);
-    functionUnderTest->values(  testFunctionFC, basisCache);
-    functionUnderTest->values(testFunctionView, ASSIGN, basisCache);
-    
-    constexpr int expandedRank = spaceDim+1+rank;
-    
-    //template<class Scalar, class DataContainer, int expandedRank, int startCollapseDim, int lastCollapseDim>
-    using ViewInterpreter = ViewCollapseDimensions<double,DeviceView<double>,expandedRank,1,spaceDim>; // maps (C,P0,…,PD[,D0,…]) --> (C,P[,D0,…])
-    
-    static_assert(Intrepid2::supports_rank<ViewInterpreter, expandedRank>::value, "ViewInterpreter should support rank expandedRank");
-    
-    Kokkos::Array<int,spaceDim> pointComponentBounds;
-    for (int d=1; d<=spaceDim; d++)
-    {
-      pointComponentBounds[d-1] = baselineData.extent_int(d);
-    }
-    
-    // 1. sanity check: the baseline implementations agree
-    // data nominal shape is (C,P0,…,PD); we interpret the (C,P) views
-    ViewInterpreter baselineViewExpanded(baselineView, pointComponentBounds);
-    testFloatingEquality<expandedRank>(baselineViewExpanded, baselineData, tol, tol, out, success, "baselineView", "baselineData");
-    
-    auto baselineFCView = baselineFC.checkoutDeviceView();
-    ViewInterpreter baselineFCViewExpanded(baselineFCView, pointComponentBounds);
-    testFloatingEquality<expandedRank>(baselineFCViewExpanded, baselineData, tol, tol, out, success, "baselineFCView", "baselineData");
-    
-    testFloatingEquality<rank+2>(baselineFCView, baselineView, tol, tol, out, success, "baselineFC", "baselineView");
-    
-    // 2. test that the testFunction* containers agree with each other
-    ViewInterpreter testFunctionViewExpanded(testFunctionView, pointComponentBounds);
-    testFloatingEquality<expandedRank>(testFunctionViewExpanded, testFunctionData, tol, tol, out, success, "testFunctionView", "testFunctionData");
-    
-    auto testFunctionFCView = testFunctionFC.checkoutDeviceView();
-    ViewInterpreter testFunctionFCViewExpanded(testFunctionFCView, pointComponentBounds);
-    testFloatingEquality<expandedRank>(testFunctionFCViewExpanded, testFunctionData, tol, tol, out, success, "testFunctionFCView", "testFunctionData");
-    
-    testFloatingEquality<rank+2>(testFunctionFCView, testFunctionView, tol, tol, out, success, "testFunctionFC", "testFunctionView");
-    
-    // 3. test that the testFunction* containers agree with their baseline counterparts
-    testFloatingEquality<expandedRank>(baselineData,   testFunctionData, tol, tol, out, success,   "baselineData",   "testFunctionData");
-    testFloatingEquality<rank+2>(      baselineView,   testFunctionView, tol, tol, out, success,   "baselineView",   "testFunctionView");
-    testFloatingEquality<rank+2>(    baselineFCView, testFunctionFCView, tol, tol, out, success, "baselineFCView", "testFunctionFCView");
-        
-    baselineFunction->checkinValuesData(baselineData);
-    ssStorage->checkinScratchStorage(baselineView);
-    baselineFC.checkinDeviceView(false);
-    
-    functionUnderTest->checkinValuesData(testFunctionData);
-    ssStorage->checkinScratchStorage(testFunctionView);
-    testFunctionFC.checkinDeviceView(false);
   }
 
   TEUCHOS_UNIT_TEST_TEMPLATE_2_DECL(FunctionValues, Exhaustive, DimTag, RankTag)
