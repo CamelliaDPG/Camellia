@@ -38,6 +38,9 @@ namespace Camellia {
     //! Adds all the constituent subcells of previously defined entities with a minimum dimension of dmin.
     void addSubcellEntities(ConstMeshTopologyViewPtr meshTopo, int dmin);
     
+    // ! Returns cellIDs for all active cells that contain at least one entity in the set, according to the provided MeshTopologyView.
+    std::set<IndexType> activeCellIDsThatMatch(ConstMeshTopologyViewPtr meshTopo) const;
+    
     // ! Returns the cellIDs from the provided set that contain at least one entity in the set, according to the provided MeshTopologyView.
     std::set<IndexType> cellIDsThatMatch(ConstMeshTopologyViewPtr meshTopo, const std::set<IndexType> &cellIDs) const;
     

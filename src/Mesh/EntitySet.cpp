@@ -20,6 +20,30 @@ EntitySet::EntitySet(EntityHandle thisHandle)
   _handle = thisHandle;
 }
 
+std::set<IndexType> EntitySet::activeCellIDsThatMatch(ConstMeshTopologyViewPtr meshTopo) const
+{
+  // this method does not support distributed geometry
+  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->isDistributed(), std::invalid_argument, "activeCellIDsThatMatch() requires locally-duplicated MeshTopology.");
+  set<IndexType> matchingCellIDs;
+  const auto &activeCellIDs = meshTopo->getLocallyKnownActiveCellIndices(); // since not distributed, all cells are locally known
+  for (int d=0; d<_entities.size(); d++)
+  {
+    for (IndexType entityIndex : _entities[d])
+    {
+      set< pair<IndexType, unsigned> > cellEntries = meshTopo->getCellsContainingEntity(d, entityIndex);
+      for (auto cellEntry : cellEntries)
+      {
+        const auto & cellID = cellEntry.first;
+        if (activeCellIDs.find(cellID) != activeCellIDs.end())
+        {
+          matchingCellIDs.insert(cellEntry.first);
+        }
+      }
+    }
+  }
+  return matchingCellIDs;
+}
+
 void EntitySet::addEntity(int d, IndexType entityIndex)
 {
   if (d >= _entities.size())

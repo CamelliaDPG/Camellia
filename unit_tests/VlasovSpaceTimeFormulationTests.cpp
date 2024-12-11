@@ -390,6 +390,257 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
                          outputViz, vizPrefix);
 }
 
+void patchTestTimeSlab(const bool refineOnSecondSlab,
+                       FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
+                       const double q,
+                       const int H1Order, const int xElements, const int tElements, const int vElements,
+                       const bool overrideVlasovBCs,
+                       const bool useSerendipity,
+                       const bool useMimeticDPG,
+                       const double tol,
+                       Teuchos::FancyOStream &out, bool &success,
+                       const bool outputViz=false, const string vizPrefix="")
+{
+  const bool usePeriodicBCs = false;
+  
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+  
+  form->setUseGeometricMultigrid(true);
+  form->setIterativeSolveTolerance(1e-15);
+//    form->setIterativeSolveOutputLevel(10);
+  form->setFixedPointMaxSubsteps(5);
+  form->setFixedPointMinSubsteps(2);
+  
+  FunctionPtr vx = form->v_i(0);
+
+  auto vlasovSoln = form->vlasovSolution();
+  
+  auto poissonForm = form->configurationSpaceFormulation();
+  auto poissonSoln = form->configurationSpaceSolution();
+  FunctionPtr E_soln = Function::solution(poissonForm->E_fieldVar(0), poissonSoln);
+  FunctionPtr f_soln = Function::solution(form->f(), vlasovSoln);
+  
+  vlasovSoln->rhs()->addTerm(vlasovRHSForExactSoln(form, f_exact, E_exact, q));
+  
+  form->setInitialAndInflowConditions(f_exact, f_exact);
+  
+  SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
+  SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
+  
+  const bool restrictSideSetsToBoundary = !usePeriodicBCs; // for periodic BCs, the config mesh region will *not* be on a mesh boundary
+  auto xLeftRightTag = form->createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, restrictSideSetsToBoundary);
+  auto VE_traceVar = form->VE_configurationSpaceTrace();
+  form->addConfigurationSpaceBC(xLeftRightTag, VE_traceVar, VE_exact);
+  
+  if (overrideVlasovBCs)
+  {
+    auto vlasovBC = BC::bc();
+    VarPtr traceVar = form->t_n_hat();
+    
+    const int initialTimeTag = form->tagVlasovInitialTime();
+    
+    vlasovBC->addDirichlet(traceVar, initialTimeTag, -f_exact); // minus sign thanks to outward normal on temporal interface
+    
+    const int VX_COMPONENT = 0;
+    
+    const int minVelocityTag = form->tagVlasovMinVelocity(VX_COMPONENT);
+    const int maxVelocityTag = form->tagVlasovMaxVelocity(VX_COMPONENT);
+    
+    vlasovBC->addDirichlet(traceVar, minVelocityTag, -f_exact * (q/TEST_M) * E_exact); // outward normal is negative
+    vlasovBC->addDirichlet(traceVar, maxVelocityTag,  f_exact * (q/TEST_M) * E_exact); // outward normal is positive
+    
+    const int inflowTag = form->tagVlasovSpatialInflow();
+    
+    FunctionPtr n = Function::normal();
+    
+    FunctionPtr traceValue = f_exact * vx * n->x();
+    vlasovBC->addDirichlet(traceVar, inflowTag,  traceValue);
+    vlasovSoln->setBC(vlasovBC);
+  }
+  
+  auto cellTopo = CellTopology::cellTopology(CellTopology::line(), 2);
+  auto vlasovMesh  = vlasovSoln->mesh();
+  auto poissonMesh = poissonSoln->mesh();
+  
+  const double m    = TEST_M;
+  
+  FunctionPtr sgn = Function::sideParity();
+  FunctionPtr n   = Function::normal();
+  FunctionPtr tn_0 = f_exact * (vx * n->x() + n->y() + (q/m) * E_exact * n->z()) * sgn;
+  
+  // to do the "pure" Poisson solve, we do need to have an f solution defined, since that enters the RHS
+  std::map<int, FunctionPtr> initialGuess_Vlasov; // project the exact field solution onto the mesh
+  initialGuess_Vlasov[form->f()->ID()] = f_exact;
+  initialGuess_Vlasov[form->t_n_hat()->ID()] = tn_0;
+  vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
+  
+  // check that tn_0 can be represented on the mesh, at least to within tol
+  FunctionPtr tn_soln = Function::solution(form->t_n_hat(), vlasovSoln, false);
+  FunctionPtr tn_err = tn_0 - tn_soln;
+  double tn_projection_err = tn_err->l2norm(vlasovSoln->mesh());
+  double tn_soln_magnitude = tn_soln->l2norm(vlasovSoln->mesh());
+  out << "tn_soln_magnitude = " << tn_soln_magnitude << std::endl;
+  TEST_COMPARE(tn_projection_err, <=, tol * tn_soln_magnitude);
+  
+  if (outputViz)
+  {
+    std::ostringstream vlasovVizPath;
+    vlasovVizPath << vizPrefix << "_VlasovProjection";
+    auto vlasovViz = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovVizPath.str(), "/tmp"));
+    vlasovViz->exportSolution(form->vlasovSolution(), std::vector<FunctionPtr> {f_soln-f_exact, f_exact, tn_soln-tn_0, tn_0}, std::vector<string>{"f err", "f exact", "t_n err", "t_n exact"});
+  }
+  
+  // now, project again, this time with a zero t_n
+  initialGuess_Vlasov[form->t_n_hat()->ID()] = Function::zero();
+  vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
+
+  form->configurationSpaceFormulation()->solve(true); // true: ensure that SolutionMomentFunction is properly set with the value that we just projected.
+  poissonSoln->solve();
+
+  out << "Checking E_soln after pure Poisson solve.\n";
+  double E_soln_magnitude = E_soln->l2norm(poissonSoln->mesh());
+  double E_err_l2 = (E_soln-E_exact)->l2norm(poissonSoln->mesh());
+
+  TEST_COMPARE(E_err_l2, <=, tol * E_soln_magnitude);
+
+  out << "Checking VE_soln after pure Poisson solve.\n";
+  
+  FunctionPtr VE_soln = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), poissonSoln);
+  double VE_soln_magnitude = VE_soln->l2norm(poissonSoln->mesh());
+  double VE_err_l2 = (VE_soln-VE_exact)->l2norm(poissonSoln->mesh());
+
+  TEST_COMPARE(VE_err_l2, <=, tol * VE_soln_magnitude);
+  
+  if (outputViz)
+  {
+    std::ostringstream poissonVizPath;
+    poissonVizPath << vizPrefix << "_PurePoisson";
+    
+    auto poissonViz = Teuchos::rcp(new HDF5Exporter(form->configurationSpaceMesh(), poissonVizPath.str(), "/tmp"));
+    poissonViz->exportSolution(form->configurationSpaceSolution(), std::vector<FunctionPtr> {E_soln-E_exact, E_exact, VE_soln-VE_exact, VE_exact}, std::vector<string>{"E err", "E exact", "V_E err", "V_E exact"});
+  }
+
+  form->solve();
+
+  out << "Comparing f0 with f_soln after Vlasov-Poisson solve.\n";
+  double f_soln_magnitude = f_soln->l2norm(vlasovSoln->mesh());
+  double f_err_l2 = (f_soln-f_exact)->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(f_err_l2, <=, tol * f_soln_magnitude);
+  
+  out << "Checking E_soln after Vlasov-Poisson solve.\n";
+  E_soln_magnitude = E_soln->l2norm(poissonSoln->mesh());
+  E_err_l2 = (E_soln-E_exact)->l2norm(poissonSoln->mesh());
+  
+  TEST_COMPARE(E_err_l2, <=, tol * E_soln_magnitude);
+  
+  out << "Checking VE_soln after Vlasov-Poisson solve.\n";
+  VE_soln_magnitude = VE_soln->l2norm(poissonSoln->mesh());
+  VE_err_l2 = (VE_soln-VE_exact)->l2norm(poissonSoln->mesh());
+  
+  TEST_COMPARE(VE_err_l2, <=, tol * VE_soln_magnitude);
+
+  out << "Comparing tn_0 with t_n_soln after Vlasov-Poisson solve.\n";
+
+  const int time_comp_zero_based = form->configurationSpaceMesh()->getDimension() - 1; // time is last dimension of Poisson mesh
+  SpatialFilterPtr initialTimeFilter = SpatialFilter::matchingComponent(time_comp_zero_based, TEST_T0);
+
+  double tn_err_overall = tn_err->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(tn_err_overall, <=, tol * tn_soln_magnitude);
+
+  out << "Comparing initial-time BC with solution (checking initial time imposition).\n";
+  auto initialTime_tn_err = SpatiallyFilteredFunction<double>::spatiallyFilteredFunction(tn_err, initialTimeFilter);
+  double timeBC_err = initialTime_tn_err->l2norm(vlasovSoln->mesh());
+  auto initialTime_tn_soln = SpatiallyFilteredFunction<double>::spatiallyFilteredFunction(tn_soln, initialTimeFilter);
+  double initialTime_tn_magnitude = initialTime_tn_soln->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(timeBC_err, <=, tol * initialTime_tn_magnitude);
+  
+  TEST_ASSERT(tn_0->boundaryValueOnly() || tn_0->isZero()); // if zero, we allow it not to claim to be boundary-only.  (This is an artifact of the logic regarding Function products: zero times anything is zero, and we don't retain the boundary-valuedness in the zero result.  We could fix this, but it's not a high priority.)
+  TEST_ASSERT(tn_soln->boundaryValueOnly());
+
+  tn_soln_magnitude = tn_0->l2norm(vlasovSoln->mesh());
+  double tn_err_l2 = (tn_soln-tn_0)->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(tn_err_l2, <=, tol * tn_soln_magnitude);
+  
+  out << "Checking f_soln.\n";
+  f_soln_magnitude = f_exact->l2norm(vlasovSoln->mesh());
+  f_err_l2 = (f_soln-f_exact)->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(f_err_l2, <=, tol * f_soln_magnitude);
+  
+  auto nextSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
+  form = nextSlab;
+  vlasovSoln  = form->vlasovSolution();
+  poissonForm = form->configurationSpaceFormulation();
+  poissonSoln = form->configurationSpaceSolution();
+  tn_soln = Function::solution(form->t_n_hat(), vlasovSoln, false);
+  tn_err = tn_0 - tn_soln;
+  vlasovSoln->rhs()->addTerm(vlasovRHSForExactSoln(form, f_exact, E_exact, q));
+  
+  if (refineOnSecondSlab)
+  {
+    // find elements at the temporal interface:
+    auto initialTimeTag = form->tagVlasovInitialTime();
+    auto meshTopo = Teuchos::rcp(form->vlasovMesh()->getTopology()->baseMeshTopology(), false);
+    auto entitySets = meshTopo->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, initialTimeTag);
+    std::set<IndexType> allCells = form->vlasovMesh()->getActiveCellIDsGlobal();
+    
+    std::set<IndexType> cellsToRefine;
+    for (auto entitySet : entitySets)
+    {
+      std::set<IndexType> matchingCells = entitySet->cellIDsThatMatch(meshTopo, allCells);
+      cellsToRefine.insert(matchingCells.begin(),matchingCells.end());
+    }
+    
+    out << "Refining cells at initial time interface on second slab.\n";
+    form->vlasovMesh()->hRefine(cellsToRefine);
+  }
+  
+  out << "Solving on second slab.\n";
+  form->solve();
+  
+  initialTimeFilter = SpatialFilter::matchingComponent(time_comp_zero_based, TEST_T0 + TEST_TWIDTH);
+
+  out << "Comparing tn_0 with tn_soln on second time slab.\n";
+  tn_soln_magnitude =   tn_0->l2norm(vlasovSoln->mesh());
+  tn_err_overall    = tn_err->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(tn_err_overall, <=, tol * tn_soln_magnitude);
+
+  out << "Comparing initial-time BC with solution (checking initial time imposition) on second slab.\n";
+  initialTime_tn_err = SpatiallyFilteredFunction<double>::spatiallyFilteredFunction(tn_err, initialTimeFilter);
+  timeBC_err = initialTime_tn_err->l2norm(vlasovSoln->mesh());
+  initialTime_tn_soln = SpatiallyFilteredFunction<double>::spatiallyFilteredFunction(tn_soln, initialTimeFilter);
+  initialTime_tn_magnitude = initialTime_tn_soln->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(timeBC_err, <=, tol * initialTime_tn_magnitude);
+  
+  E_soln = Function::solution(poissonForm->E_fieldVar(0), poissonSoln);
+  f_soln = Function::solution(form->f(), vlasovSoln);
+  
+  out << "Comparing f0 with f_soln after Vlasov-Poisson solve on second time slab.\n";
+  f_soln_magnitude = f_soln->l2norm(vlasovSoln->mesh());
+  f_err_l2 = (f_soln-f_exact)->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(f_err_l2, <=, tol * f_soln_magnitude);
+  
+  out << "Checking E_soln after Vlasov-Poisson solve on second time slab.\n";
+  E_soln_magnitude = E_soln->l2norm(poissonSoln->mesh());
+  E_err_l2 = (E_soln-E_exact)->l2norm(poissonSoln->mesh());
+  
+  TEST_COMPARE(E_err_l2, <=, tol * E_soln_magnitude);
+}
+
+void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
+                              const double q,
+                              const int H1Order, const int xElements, const int tElements, const int vElements,
+                              const bool overrideVlasovBCs,
+                              const bool useSerendipity,
+                              const bool useMimeticDPG,
+                              const double tol,
+                              Teuchos::FancyOStream &out, bool &success,
+                              const bool outputViz=false, const string vizPrefix="")
+{
+  bool refineOnSecondSlab = true;
+  patchTestTimeSlab(refineOnSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+}
+
+
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, ConservationDiagnostics )
   {
     FunctionPtr  f_exact;
@@ -492,19 +743,8 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 
   void testNextTimeSlab(const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success)
   {
-    // sets up a formulation like the PoissonTwoStreamSteadyState test below, but does not solve.  Checks that the new slab
-    // is created, and has the right number of elements, and that it copies settings (intended to include all the settings
-    // we want to be be copied).
-    double n0 = 1.;
-    double sigma = 1;
-    double u0 = 3.0;
-    
-    // 1D1T1V
-    const int firstVelocityDimension = 2; // zero-based
-    const int numVelocityDimensions  = 1;
-    FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, { u0}, sigma * sigma, 0.5 * n0);
-    FunctionPtr fM_minus_u0  = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, {-u0}, sigma * sigma, 0.5 * n0);
-    FunctionPtr f0           = fM_u0 + fM_minus_u0;
+    // sets up a formulation, but does not solve.  Checks that the new slab is created, has the right number
+    // of elements, and that it copies settings (intended to include all the settings we want to be be copied).
     
     const double q = 1.;
     
@@ -515,7 +755,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     const bool useSerendipity = false;
     
-    FunctionPtr  f_exact = f0;
+    FunctionPtr  f_exact = Function::zero();
     FunctionPtr VE_exact = Function::zero();
     FunctionPtr  E_exact = Function::zero();
         
@@ -552,6 +792,13 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     auto trialVars = form->vlasovBF()->varFactory()->trialVars();
     auto testVars  = form->vlasovBF()->varFactory()->testVars();
+    
+    // to avoid console warnings about cell data not being present, project onto the first slab's solution to set
+    // the tn values at the temporal outflow.
+    auto tn = form->t_n_hat();
+    std::map<int,FunctionPtr> tn_map;
+    tn_map[tn->ID()] = Function::zero();
+    form->vlasovSolution()->projectOntoMesh(tn_map);
     
     auto nextSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
     
@@ -904,12 +1151,6 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     double u0 = 3.0;
     
     // 1D1T1V
-    const int firstVelocityDimension = 2; // zero-based
-    const int numVelocityDimensions  = 1;
-    FunctionPtr fM_u0        = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, { u0}, sigma * sigma, 0.5 * n0);
-    FunctionPtr fM_minus_u0  = MaxwellianFunction::maxwellian(firstVelocityDimension, numVelocityDimensions, {-u0}, sigma * sigma, 0.5 * n0);
-    FunctionPtr f0           = fM_u0 + fM_minus_u0;
-    
     const double q = 1.;
     
     const int xElements = 2;
@@ -920,7 +1161,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const bool useSerendipity = false;
     const bool useMimeticDPG  = false;
     
-    FunctionPtr  f_exact = f0;
+    FunctionPtr  f_exact = Function::zero();
     FunctionPtr VE_exact = Function::zero();
     FunctionPtr  E_exact = Function::zero();
         
@@ -932,21 +1173,30 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     
     MeshDestructorObserver dtorObserver(form->vlasovMesh());
     
+    // to avoid console warnings about cell data not being present, project onto the first slab's solution to set
+    // the tn values at the temporal outflow.
+    auto tn = form->t_n_hat();
+    std::map<int,FunctionPtr> tn_map;
+    tn_map[tn->ID()] = Function::zero();
+    form->vlasovSolution()->projectOntoMesh(tn_map);
+    
     TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
     
     auto secondSlab = form->nextTimeSlab(TEST_TWIDTH, tElements);
+    secondSlab->vlasovSolution()->projectOntoMesh(tn_map);
     auto thirdSlab  = secondSlab->nextTimeSlab(TEST_TWIDTH, tElements);
     
-    // still should not have been destroyed; we still have a reference, both through form and secondSlab:
+    // still should not have been destroyed; we still have a reference, through form:
     TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
     
     form = Teuchos::null;
     
-    // still should not have been destroyed; we still have a reference, through secondSlab:
-    TEST_EQUALITY(false, dtorObserver.meshDestructorHasBeenCalled());
+    // we used to have references one deep with temporal BCs referring to the immediately prior slab;
+    // on the new (directly set) BC implementation, there are no back-references (a better design).
+    // So on the new design, mesh dtor should have been called just now.
+    TEST_EQUALITY(true, dtorObserver.meshDestructorHasBeenCalled());
     
     secondSlab = Teuchos::null;
-    // now it should have been destroyed:
     TEST_EQUALITY(true, dtorObserver.meshDestructorHasBeenCalled());
   }
 
@@ -982,6 +1232,62 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     const double tol = 1e-12;
     
     patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTestTimeSlab_f_xv2_E_zero )
+  {
+    const double q    = 0; // 0 charge --> zero electric field
+    
+    const int xElements = 4;
+    const int tElements = 1;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+    
+    const int spaceDim = 1;
+    const bool spaceTimeMesh = true;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr v  = getVx(spaceDim, spaceTimeMesh);
+    FunctionPtr v2 = v * v;
+    FunctionPtr f_exact = x * v2;
+    FunctionPtr E_exact = Function::zero();
+    FunctionPtr VE_exact = Function::zero();
+    
+    const bool overrideVlasovBCs = false;
+    const bool useSerendipity    = false;
+    const bool useMimeticDPG     = false;
+    const double tol = 1e-12;
+    
+    bool refineSecondSlab = false;
+    
+    patchTestTimeSlab(refineSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTestRefinedTimeSlab_f_xv2_E_zero )
+  {
+    const double q    = 0; // 0 charge --> zero electric field
+    
+    const int xElements = 4;
+    const int tElements = 1;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 3; // quadratic L^2 functions; allows exact representation of analytic solution trace
+    
+    const int spaceDim = 1;
+    const bool spaceTimeMesh = true;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr v  = getVx(spaceDim, spaceTimeMesh);
+    FunctionPtr v2 = v * v;
+    FunctionPtr f_exact = x * v2;
+    FunctionPtr E_exact = Function::zero();
+    FunctionPtr VE_exact = Function::zero();
+    
+    const bool overrideVlasovBCs = false;
+    const bool useSerendipity    = false;
+    const bool useMimeticDPG     = false;
+    const double tol = 1e-12;
+    
+    patchTestRefinedTimeSlab(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero_Serendipity )

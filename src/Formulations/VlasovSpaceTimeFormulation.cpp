@@ -1328,27 +1328,6 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   
   MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
   
-  std::vector<FunctionPtr> f0(_numSpecies);
-  for (int i=0; i<_numSpecies; i++)
-  {
-    VarPtr tn = this->t_n_hat(i);
-    bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
-    SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
-    auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
-    tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
-    // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
-    f0[i] = tnInterfaceFxn;
-  }
-  
-  if (_f_inflow.size() != 0)
-  {
-    nextSlabForm->setInitialAndInflowConditions(f0, _f_inflow);
-  }
-  else
-  {
-    nextSlabForm->setInitialConditions(f0);
-  }
-  
   for (auto sideSetTagFilter : _configurationSpaceSideSetFilters)
   {
     nextSlabForm->createConfigurationMeshSideSetTag(sideSetTagFilter.first,sideSetTagFilter.second);
@@ -1394,21 +1373,89 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   }
   _vlasovSoln->importSolutionForOffRankCells(currentCellIDsForRank);
   
-  /*
-   Note: the above will work if there is not cell migration or refinement after we return nextSlabForm.
-         If nextSlabForm gets refined, then a new pass of hRefineToMatchAtBoundary() will be needed, along
-         with the above import.  Probably the right solution going forward will be to separate out this
-         functionality into a new helper method, and call it both from here and upon mesh refinement;
-         doing the latter transparently will require that the next slab has a reference to the previous.
-         So that we don't require all slabs to stay in memory, we'll want to nullify this reference during
-         nextTimeSlab().  (Also need to nullify the BC for the current slab -- as we do below -- for the
-         same reason: it refers to the previous slab's solution, which has a BC for the previous one, etc.
-         So we have a linked list of Solution objects; need to break those links to free up the memory.)
-   */
-  // nullify the BC for current slab; if it's not the first slab, it will have reference to a prior slab's solution,
-  // and on back to the first slab, unless we nullify.  We could also call setInitialConditions(Function::zero()) or
-  // something like that, but setting to null has the advantage that we'll fail fast if the user tries to do a solve
-  // on the current slab after calling nextTimeSlab() -- it will crash with a null pointer exception.
+  // set up Functions that can be evaluated on the next slab with reference to the current (will be projected onto next below)
+  std::map<int,FunctionPtr> f0_currentSlabToNext;
+  std::vector<FunctionPtr>  f0_next(_numSpecies);
+  for (int i=0; i<_numSpecies; i++)
+  {
+    VarPtr tn = this->t_n_hat(i);
+    bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
+    SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
+    auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
+    tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
+    // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
+    f0_currentSlabToNext[tn->ID()] = tnInterfaceFxn;
+    
+    // use a weak pointer because the solution will have this reference as part of its own BCs, which would result in a ref-counted pointer cycle.
+    SolutionPtr nextSlabVlasovSolnWeakPtr = Teuchos::rcp(nextSlabForm->vlasovSolution().get(), false);
+    FunctionPtr tnFxnNextSlab = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, nextSlabVlasovSolnWeakPtr, weightFluxesBySideParity) );
+    f0_next[i] = -tnFxnNextSlab; // at temporal inflow, the normal in "tn" is negative, so f = - tn.
+  }
+  
+  // find cells on next slab's initial-time boundary
+  auto initialTimeTag = nextSlabForm->tagVlasovInitialTime();
+  auto meshTopo = Teuchos::rcp(nextSlabForm->vlasovMesh()->getTopology()->baseMeshTopology(), false);
+  auto entitySets = meshTopo->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, initialTimeTag);
+  
+  const auto & myCells = nextSlabForm->vlasovMesh()->cellIDsInPartition();
+  std::set<IndexType> myInitialTimeCells; // those owned by this MPI rank
+  for (auto entitySet : entitySets)
+  {
+    std::set<IndexType> matchingCells = entitySet->cellIDsThatMatch(meshTopo, myCells);
+    myInitialTimeCells.insert(matchingCells.begin(),matchingCells.end());
+  }
+  
+  auto nextVlasovSoln = nextSlabForm->vlasovSolution();
+  auto nextVlasovMesh = nextSlabForm->vlasovMesh();
+  
+  nextVlasovSoln->initializeLHSVector(); // ensures that setSolnCoeffsForCellID() sets not only the local solnCoefficients but also the corresponding entries in the global solution vector.
+  
+  for (const auto & nextCellID : myInitialTimeCells)
+  {
+    const auto elemType = nextVlasovMesh->getElementType(nextCellID);
+    
+    IndexType currentCellID = cellIDMap[nextCellID];
+    
+    int currentSideIndex;
+    int nextSideIndex;
+    if (sideOrdinalMap.size() == 1)
+    {
+      // if all the cells agree on their side ordinals (which will be true if the spatial cells all have the same topology), then it's easy to figure out which sides we're talking about here.  The maps are built to be able to take a cell ID from the "next" slab and find the corresponding cell ID in the previous one.
+      nextSideIndex    = sideOrdinalMap.begin()->first;  // values are the sides in the next slab
+      currentSideIndex = sideOrdinalMap.begin()->second;
+    }
+    else
+    {
+      // TODO: write some logic to determine which is the initial-time side for the cell; might look at MeshTools::hRefineToMatchAtBoundary() for inspiration.  (Then again, that method might also assume that the cell topologies are the same, and might need to be revised to support this use case.)
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Support for multiple spatial cell topologies is not yet implemented in configureNextSlab()");
+    }
+    
+    for (int i=0; i<_numSpecies; i++)
+    {
+      VarPtr tn = this->t_n_hat(i);
+      
+      int basisCardinality = nextVlasovMesh->getElementType(nextCellID)->trialOrderPtr->getBasisCardinality(tn->ID(), nextSideIndex);
+      FieldContainer<double> coefficients(basisCardinality);
+      _vlasovSoln->solnCoeffsForCellID(coefficients, currentCellID, tn->ID(), currentSideIndex);
+      // because tn has an outward-facing normal included, we need to reverse the sign of the coefficients for the cell in the next slab
+      for (int i=0; i<basisCardinality; i++)
+      {
+        coefficients[i] *= -1;
+      }
+      nextVlasovSoln->setSolnCoeffsForCellID(coefficients, nextCellID, tn->ID(), nextSideIndex);
+    }
+  }
+  
+  // NOTE: for the conforming case (not yet supported here: this will be the case when we use "f_hat" instead of "tn_hat"), in which some initial-condition data will be shared between neighboring cells, we will need to do an import at this point.
+  
+  if (_f_inflow.size() != 0)
+  {
+    nextSlabForm->setInitialAndInflowConditions(f0_next, _f_inflow);
+  }
+  else
+  {
+    nextSlabForm->setInitialConditions(f0_next);
+  }
   _vlasovSoln->setBC(Teuchos::null);
 }
 
