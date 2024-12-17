@@ -1374,17 +1374,12 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   _vlasovSoln->importSolutionForOffRankCells(currentCellIDsForRank);
   
   // set up Functions that can be evaluated on the next slab with reference to the current (will be projected onto next below)
-  std::map<int,FunctionPtr> f0_currentSlabToNext;
   std::vector<FunctionPtr>  f0_next(_numSpecies);
   for (int i=0; i<_numSpecies; i++)
   {
     VarPtr tn = this->t_n_hat(i);
     bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
     SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
-    auto tnInterfaceFxn = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, thisSlabVlasovSoln, weightFluxesBySideParity) );
-    tnInterfaceFxn->setCellIDMap(cellIDMap, sideOrdinalMap); // this map translates from the nextSlabVlasovMesh's numbering to thisSlabVlasovMesh's.
-    // at temporal outflow, the normal in "tn" is positive, so tn = f.  This means we can simply use tnInterfaceFxn as "f0" for the next slab.
-    f0_currentSlabToNext[tn->ID()] = tnInterfaceFxn;
     
     // use a weak pointer because the solution will have this reference as part of its own BCs, which would result in a ref-counted pointer cycle.
     SolutionPtr nextSlabVlasovSolnWeakPtr = Teuchos::rcp(nextSlabForm->vlasovSolution().get(), false);

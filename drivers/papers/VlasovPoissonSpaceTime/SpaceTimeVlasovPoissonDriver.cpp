@@ -1929,8 +1929,11 @@ int main(int argc, char *argv[])
     bool useAdaptivity = false;
     int numRefinements = 3;
     
-  //  double refinementThreshold   = 0.999999; // essentially, refine just the maximum error element (and any that thanks to solution symmetry have same error)
-  //  double unrefinementThreshold = 1.000001; // similarly, unrefine just the minimum-error parent element
+    bool useTimeSlabs = false;
+    int numTimeSlabs = 1;
+    
+    //  double refinementThreshold   = 0.999999; // essentially, refine just the maximum error element (and any that thanks to solution symmetry have same error)
+    //  double unrefinementThreshold = 1.000001; // similarly, unrefine just the minimum-error parent element
     double refinementThreshold = 0.80; // refine elements with at least 80% of the maximum per-element error
     int maxElements = 64 * 64; // do unrefinements to keep total mesh size smaller than this
     bool gateRefinements = true;
@@ -1960,7 +1963,7 @@ int main(int argc, char *argv[])
     int solutionOutputFrequency = 1;
     int overkillTimeStepsBetweenComparisons = 1;
     int solutionComparisonFrequency = 1;
-//    bool useGeometricMultigrid = true;
+    //    bool useGeometricMultigrid = true;
     int iterativeSolveOutputLevel = 100; // output every one hundred CG iterations
     double iterativeSolveTolerance = 1e-9;
     double iterativeSolveMaxIters  = 10000;
@@ -2005,6 +2008,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("outputDir", &outputDir);
     cmdp.setOption("timeStepC0", &timeStepC0);
     cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
+    cmdp.setOption("useTimeSlabs", "solveForAllTime", &useTimeSlabs);
+    cmdp.setOption("numTimeSlabs", &numTimeSlabs);
     cmdp.setOption("numRefinements", &numRefinements);
     cmdp.setOption("problem", &problemChoiceString);
     cmdp.setOption("doerflerTarget", &doerflerTarget);
@@ -2020,7 +2025,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("overkillMeshRefinementLevel", &overkillRefinementLevel);
     cmdp.setOption("overkillH1Order", &overkillH1Order);
     cmdp.setOption("uniformMeshRefinementLevel", &uniformMeshRefinementLevel);
-//    cmdp.setOption("useGeometricMultigrid", "useDirectSolver", &useGeometricMultigrid);
+    //    cmdp.setOption("useGeometricMultigrid", "useDirectSolver", &useGeometricMultigrid);
     cmdp.setOption("iterativeSolveOutputLevel", &iterativeSolveOutputLevel);
     cmdp.setOption("iterativeSolveMaxIters", &iterativeSolveMaxIters);
     cmdp.setOption("iterativeSolveTolerance", &iterativeSolveTolerance);
@@ -2117,7 +2122,7 @@ int main(int argc, char *argv[])
       if (coldDiodeSigma == -1)
       {
         sigma  = vWidth / vElementsAfterUniformRefinements; // let sigma be the width of one element
-      //    sigma  = 1e6 / velocityScaling;
+        //    sigma  = 1e6 / velocityScaling;
       }
       else
       {
@@ -2156,9 +2161,10 @@ int main(int argc, char *argv[])
     }
     else if (problemChoice == TWO_STREAM)
     {
+      tWidth = 50;
       if (rank == 0)
       {
-        std::cout << "Running two-stream problem.\n";
+        std::cout << "Running two-stream problem; time domain goes from 0 to " << tWidth << ".\n";
       }
     }
     
@@ -2167,10 +2173,15 @@ int main(int argc, char *argv[])
       initialTimeDivision = 0; // no extra initial time elements (can be used with a time ramp if positive)
     }
     
+    if (useTimeSlabs)
+    {
+      tWidth /= numTimeSlabs;
+    }
+    
     auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, delta_k, usePeriodicBCs,
                                      useSerendipityBasis, numUniformRefinements);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-        
+    
     if (performDebugRefinementSeries)
     {
       if (rank == 0)
@@ -2219,16 +2230,16 @@ int main(int argc, char *argv[])
       if (runPatchTestNumber[1])
       {
         FunctionPtr x       = Function::xn(1);
-
+        
         FunctionPtr f_exact   = Function::constant(0.0);
         FunctionPtr E_exact = Function::constant(1.0);
         FunctionPtr V_E_exact = -x;
-
+        
         const bool overrideVlasovBCs = false;    // required if f is nonzero at velocity extrema
         const bool zeroInitialConditions = true; // for f
         performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
       }
-
+      
       // TEST 2
       if (runPatchTestNumber[2])
       {
@@ -2236,125 +2247,125 @@ int main(int argc, char *argv[])
         FunctionPtr f_exact   = Function::constant(1.0);
         FunctionPtr E_exact   =   (q / eps0 * vWidth) * x;
         FunctionPtr V_E_exact = - (q / eps0 * vWidth) / 2.0 * x * x;
-
+        
         const bool overrideVlasovBCs = true;     // required if f is nonzero at velocity extrema
         const bool zeroInitialConditions = true; // for f
         performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
       }
-
+      
       // TEST 3
       if (runPatchTestNumber[3])
-    {
-      // a non-patch exact solution
-
-      FunctionPtr x         = Function::xn(1);
-      FunctionPtr v         = Function::zn(1);
-      FunctionPtr sin_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
-      FunctionPtr f_exact   = sin_fxn * x / xWidth;
-      FunctionPtr E_exact   = Function::zero();
-      FunctionPtr V_E_exact = Function::zero();
-
-      const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
-      const bool zeroInitialConditions = false; // for f
-      performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
-      
-      const bool addSourceTerm = true;
-      const bool vlasovSolveOnly = false;
-      auto f_initialConditions   = f_exact; // f_exact does not vary in time
-      auto f_xInflowConditions   = Function::zero(); // f is zero on the left
-      auto f_vBoundaryConditions = Function::zero(); // f is zero at v boundaries
-      performDebuggingPatchTestWithSeparateBCs(form, f_exact, E_exact, V_E_exact, f_initialConditions, f_xInflowConditions, f_vBoundaryConditions, f_vBoundaryConditions, q, m, addSourceTerm, vlasovSolveOnly);
-    }
-      
-    // TEST 4
-      if (runPatchTestNumber[4])
-    {
-      // a non-patch exact solution with E non-zero
-
-      FunctionPtr x         = Function::xn(1);
-      FunctionPtr v         = Function::zn(1);
-      FunctionPtr sin_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
-      FunctionPtr f_exact   = sin_fxn * sin_fxn * x / xWidth; // integral in v of this is x / (2 * xWidth)
-      FunctionPtr E_exact   = q / (4. * eps0 * xWidth) * x * x  - (q * xWidth) / (12. * eps0); // integral in x of (rho / eps0), with the constant selected such that V_E is 0 at left and right boundaries
-      // set V_E to give 0 value at left and right boundaries:
-      FunctionPtr V_E_exact = - q / (12. * eps0 * xWidth) * (x * x * x) + (q * xWidth) / (12. * eps0) * x;
-
-      const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
-      const bool zeroInitialConditions = false; // for f
-      performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
-    }
-    
-    // TEST 5
-      if (runPatchTestNumber[5])
-    {
-      // a non-patch exact solution with sinusoidal E
-
-      FunctionPtr x           = Function::xn(1);
-      FunctionPtr v           = Function::zn(1);
-      FunctionPtr sin_v_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
-      FunctionPtr cos_x_fxn   = TrigFunctions<double>::cos(M_PI / (2. * xWidth) * x);
-      FunctionPtr f_exact     = sin_v_fxn * sin_v_fxn * cos_x_fxn; // integral in v of this is cos_x_fxn / 2
-
-      FunctionPtr sin_x_fxn   = TrigFunctions<double>::sin(M_PI / (2. * xWidth) * x);
-      const double C = - 2. * q * xWidth / (eps0 * M_PI * M_PI);
-      const double D = C * xWidth;
-      FunctionPtr E_exact   = (q / eps0) * (xWidth / M_PI) * sin_x_fxn + C; // integral in x of (rho / eps0), with the constant selected such that V_E is 0 at left and right boundaries
-      // set V_E to give 0 value at left and right boundaries:
-      FunctionPtr V_E_exact = (q / eps0) * (2. * xWidth * xWidth / (M_PI * M_PI) ) * cos_x_fxn  - C * x + D;
-
       {
-        // DEBUGGING
-        // is E = - d/dx (V_E)?
-        auto mesh = form->configurationSpaceMesh();
-        double err = (E_exact + V_E_exact->dx())->l2norm(mesh);
-        if (rank == 0) std::cout << "err for E_exact, V_E_exact relation: " << err << std::endl;
-
-        // is (d/dx E) = rho / eps0?
-        FunctionPtr rho = (q / 2.0) * cos_x_fxn;
-        err = (E_exact->dx() - rho / eps0)->l2norm(mesh);
-        if (rank == 0) std::cout << "err for E_exact, rho relation: " << err << std::endl;
-
-        // is V_E_exact(0) = 0?
-        double V_L = V_E_exact->evaluate(0);
-        double V_R = V_E_exact->evaluate(xWidth);
-        if (rank == 0) std::cout << "V_E(0)   = " << V_L << std::endl;
-        if (rank == 0) std::cout << "V_E(x_w) = " << V_R << std::endl;
-
+        // a non-patch exact solution
+        
+        FunctionPtr x         = Function::xn(1);
+        FunctionPtr v         = Function::zn(1);
+        FunctionPtr sin_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
+        FunctionPtr f_exact   = sin_fxn * x / xWidth;
+        FunctionPtr E_exact   = Function::zero();
+        FunctionPtr V_E_exact = Function::zero();
+        
+        const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
+        const bool zeroInitialConditions = false; // for f
+        performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
+        
+        const bool addSourceTerm = true;
+        const bool vlasovSolveOnly = false;
+        auto f_initialConditions   = f_exact; // f_exact does not vary in time
+        auto f_xInflowConditions   = Function::zero(); // f is zero on the left
+        auto f_vBoundaryConditions = Function::zero(); // f is zero at v boundaries
+        performDebuggingPatchTestWithSeparateBCs(form, f_exact, E_exact, V_E_exact, f_initialConditions, f_xInflowConditions, f_vBoundaryConditions, f_vBoundaryConditions, q, m, addSourceTerm, vlasovSolveOnly);
       }
-
-      const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
-      const bool zeroInitialConditions = false; // for f
-      performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
-    }
-
-      // TEST 6
-      if (runPatchTestNumber[6])
+      
+      // TEST 4
+      if (runPatchTestNumber[4])
       {
-        // a patch exact solution, zero at the v boundaries.  (Requires H^1 order of 4 for exact recovery.)
-
+        // a non-patch exact solution with E non-zero
+        
+        FunctionPtr x         = Function::xn(1);
+        FunctionPtr v         = Function::zn(1);
+        FunctionPtr sin_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
+        FunctionPtr f_exact   = sin_fxn * sin_fxn * x / xWidth; // integral in v of this is x / (2 * xWidth)
+        FunctionPtr E_exact   = q / (4. * eps0 * xWidth) * x * x  - (q * xWidth) / (12. * eps0); // integral in x of (rho / eps0), with the constant selected such that V_E is 0 at left and right boundaries
+        // set V_E to give 0 value at left and right boundaries:
+        FunctionPtr V_E_exact = - q / (12. * eps0 * xWidth) * (x * x * x) + (q * xWidth) / (12. * eps0) * x;
+        
+        const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
+        const bool zeroInitialConditions = false; // for f
+        performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
+      }
+      
+      // TEST 5
+      if (runPatchTestNumber[5])
+      {
+        // a non-patch exact solution with sinusoidal E
+        
         FunctionPtr x           = Function::xn(1);
-        FunctionPtr t           = Function::yn(1);
         FunctionPtr v           = Function::zn(1);
-        FunctionPtr f_exact     = (v-0.5) *(1.5-v) * (x + xWidth) * t / xWidth; // integral in v of this is 1/(6 x_w) * (x + x_w) * t
-
-        // set C, D so that V_E has 0 value at left boundary, 1.0 at right boundary:
-        FunctionPtr C         = - q / (9. * eps0) * xWidth * t - 1. / xWidth;
-        const double D        = 0.0;
-        FunctionPtr E_exact   = q / (12 * eps0 * xWidth) * x * x * t + q / (6.*eps0) * x * t + C;
-        FunctionPtr V_E_exact = - q / (36 * eps0 * xWidth) * x * x * x * t - q / (12. * eps0) * x * x * t - C * x + D;
-
+        FunctionPtr sin_v_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
+        FunctionPtr cos_x_fxn   = TrigFunctions<double>::cos(M_PI / (2. * xWidth) * x);
+        FunctionPtr f_exact     = sin_v_fxn * sin_v_fxn * cos_x_fxn; // integral in v of this is cos_x_fxn / 2
+        
+        FunctionPtr sin_x_fxn   = TrigFunctions<double>::sin(M_PI / (2. * xWidth) * x);
+        const double C = - 2. * q * xWidth / (eps0 * M_PI * M_PI);
+        const double D = C * xWidth;
+        FunctionPtr E_exact   = (q / eps0) * (xWidth / M_PI) * sin_x_fxn + C; // integral in x of (rho / eps0), with the constant selected such that V_E is 0 at left and right boundaries
+        // set V_E to give 0 value at left and right boundaries:
+        FunctionPtr V_E_exact = (q / eps0) * (2. * xWidth * xWidth / (M_PI * M_PI) ) * cos_x_fxn  - C * x + D;
+        
         {
           // DEBUGGING
           // is E = - d/dx (V_E)?
           auto mesh = form->configurationSpaceMesh();
           double err = (E_exact + V_E_exact->dx())->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, V_E_exact relation: " << err << std::endl;
-
+          
+          // is (d/dx E) = rho / eps0?
+          FunctionPtr rho = (q / 2.0) * cos_x_fxn;
+          err = (E_exact->dx() - rho / eps0)->l2norm(mesh);
+          if (rank == 0) std::cout << "err for E_exact, rho relation: " << err << std::endl;
+          
+          // is V_E_exact(0) = 0?
+          double V_L = V_E_exact->evaluate(0);
+          double V_R = V_E_exact->evaluate(xWidth);
+          if (rank == 0) std::cout << "V_E(0)   = " << V_L << std::endl;
+          if (rank == 0) std::cout << "V_E(x_w) = " << V_R << std::endl;
+          
+        }
+        
+        const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
+        const bool zeroInitialConditions = false; // for f
+        performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
+      }
+      
+      // TEST 6
+      if (runPatchTestNumber[6])
+      {
+        // a patch exact solution, zero at the v boundaries.  (Requires H^1 order of 4 for exact recovery.)
+        
+        FunctionPtr x           = Function::xn(1);
+        FunctionPtr t           = Function::yn(1);
+        FunctionPtr v           = Function::zn(1);
+        FunctionPtr f_exact     = (v-0.5) *(1.5-v) * (x + xWidth) * t / xWidth; // integral in v of this is 1/(6 x_w) * (x + x_w) * t
+        
+        // set C, D so that V_E has 0 value at left boundary, 1.0 at right boundary:
+        FunctionPtr C         = - q / (9. * eps0) * xWidth * t - 1. / xWidth;
+        const double D        = 0.0;
+        FunctionPtr E_exact   = q / (12 * eps0 * xWidth) * x * x * t + q / (6.*eps0) * x * t + C;
+        FunctionPtr V_E_exact = - q / (36 * eps0 * xWidth) * x * x * x * t - q / (12. * eps0) * x * x * t - C * x + D;
+        
+        {
+          // DEBUGGING
+          // is E = - d/dx (V_E)?
+          auto mesh = form->configurationSpaceMesh();
+          double err = (E_exact + V_E_exact->dx())->l2norm(mesh);
+          if (rank == 0) std::cout << "err for E_exact, V_E_exact relation: " << err << std::endl;
+          
           // is (d/dx E) = rho / eps0?
           FunctionPtr rho = q / (6.0 * xWidth) * (x + xWidth) * t;
           err = (E_exact->dx() - rho / eps0)->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, rho relation: " << err << std::endl;
-
+          
           // is V_E_exact(0) = 0?
           double V_L = V_E_exact->evaluate(0,0); // time 0
           double V_R = V_E_exact->evaluate(xWidth,0);
@@ -2365,7 +2376,7 @@ int main(int argc, char *argv[])
           if (rank == 0) std::cout << "V_E(0,1)   = " << V_L << std::endl;
           if (rank == 0) std::cout << "V_E(x_w,1) = " << V_R << std::endl;
         }
-
+        
         const bool overrideVlasovBCs = false; // f is 0 at v_max, v_min: we don't need to override…
         const bool zeroInitialConditions = false;
         performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
@@ -2375,38 +2386,38 @@ int main(int argc, char *argv[])
       if (runPatchTestNumber[7])
       {
         // a non-patch exact solution with zero E-field (but non-zero q).
-
+        
         FunctionPtr x           = Function::xn(1);
         FunctionPtr t           = Function::yn(1);
         FunctionPtr v           = Function::zn(1);
         FunctionPtr sin_v_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
         FunctionPtr cos_x_fxn   = TrigFunctions<double>::cos(M_PI / (2. * xWidth) * x);
         FunctionPtr f_exact     = sin_v_fxn * cos_x_fxn * (1 - t); // integral in v of this is 0
-
+        
         FunctionPtr E_exact   = Function::zero();
         // set V_E to give 0 value at left and right boundaries:
         FunctionPtr V_E_exact = Function::zero();
-
+        
         {
           // DEBUGGING
           // is E = - d/dx (V_E)?
           auto mesh = form->configurationSpaceMesh();
           double err = (E_exact + V_E_exact->dx())->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, V_E_exact relation: " << err << std::endl;
-
+          
           // is (d/dx E) = rho / eps0?
           FunctionPtr rho = Function::zero();
           err = (E_exact->dx() - rho / eps0)->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, rho relation: " << err << std::endl;
-
+          
           // is V_E_exact(0) = 0?
           double V_L = V_E_exact->evaluate(0);
           double V_R = V_E_exact->evaluate(xWidth);
           if (rank == 0) std::cout << "V_E(0)   = " << V_L << std::endl;
           if (rank == 0) std::cout << "V_E(x_w) = " << V_R << std::endl;
-
+          
         }
-
+        
         const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
         const bool zeroInitialConditions = false; // for f
         performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
@@ -2423,41 +2434,41 @@ int main(int argc, char *argv[])
       {
         // TEST 8
         // a non-patch exact solution with time-varying sinusoidal E
-
+        
         FunctionPtr x           = Function::xn(1);
         FunctionPtr t           = Function::yn(1);
         FunctionPtr v           = Function::zn(1);
         FunctionPtr sin_v_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
         FunctionPtr cos_x_fxn   = TrigFunctions<double>::cos(M_PI / (2. * xWidth) * x);
         FunctionPtr f_exact     = sin_v_fxn * sin_v_fxn * cos_x_fxn * (1 - t); // integral in v of this is cos_x_fxn * (1 - t) / 2
-
+        
         FunctionPtr sin_x_fxn   = TrigFunctions<double>::sin(M_PI / (2. * xWidth) * x);
         const double C = - 2. * q * xWidth / (eps0 * M_PI * M_PI);
         const double D = C * xWidth;
         FunctionPtr E_exact   = (q / eps0) * (xWidth / M_PI) * sin_x_fxn * (1-t) + C * (1-t); // integral in x of (rho / eps0), with the constant selected such that V_E is 0 at left and right boundaries
         // set V_E to give 0 value at left and right boundaries:
         FunctionPtr V_E_exact = (q / eps0) * (2. * xWidth * xWidth / (M_PI * M_PI) ) * cos_x_fxn * (1-t)  - C * x * (1-t) + D * (1-t);
-
+        
         {
           // DEBUGGING
           // is E = - d/dx (V_E)?
           auto mesh = form->configurationSpaceMesh();
           double err = (E_exact + V_E_exact->dx())->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, V_E_exact relation: " << err << std::endl;
-
+          
           // is (d/dx E) = rho / eps0?
           FunctionPtr rho = (q / 2.0) * cos_x_fxn * (1-t);
           err = (E_exact->dx() - rho / eps0)->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, rho relation: " << err << std::endl;
-
+          
           // is V_E_exact(0) = 0?
           double V_L = V_E_exact->evaluate(0);
           double V_R = V_E_exact->evaluate(xWidth);
           if (rank == 0) std::cout << "V_E(0)   = " << V_L << std::endl;
           if (rank == 0) std::cout << "V_E(x_w) = " << V_R << std::endl;
-
+          
         }
-
+        
         const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
         const bool zeroInitialConditions = false; // for f
         performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
@@ -2467,67 +2478,67 @@ int main(int argc, char *argv[])
       {
         // TEST 9
         // a non-patch exact solution with q = 0, varying in all dimensions
-/*
-        VlasovPoissonSpaceTimeFormulation form_q0(formulationChoice, 0, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment);
-
-        performDebuggingRefinementSeries(form_q0);
-
-        FunctionPtr x           = Function::xn(1);
-        FunctionPtr t           = Function::yn(1);
-        FunctionPtr v           = Function::zn(1);
-        FunctionPtr sin_v_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
-        FunctionPtr cos_x_fxn   = TrigFunctions<double>::cos(M_PI / (2. * xWidth) * x);
-        FunctionPtr f_exact     = sin_v_fxn * sin_v_fxn * cos_x_fxn * (1 - t); // integral in v of this is cos_x_fxn * (1 - t) / 2
-
-        FunctionPtr sin_x_fxn   = TrigFunctions<double>::sin(M_PI / (2. * xWidth) * x);
-        FunctionPtr E_exact   = Function::zero();
-        // set V_E to give 0 value at left and right boundaries:
-        FunctionPtr V_E_exact = Function::zero();
-
-        const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
-        const bool zeroInitialConditions = false; // for f
-        performDebuggingPatchTest(form_q0, f_exact, E_exact, V_E_exact, 0, m, overrideVlasovBCs, zeroInitialConditions); // 0: q value to eliminate electric field*/
+        /*
+         VlasovPoissonSpaceTimeFormulation form_q0(formulationChoice, 0, eps0, m, x0, xWidth, xElements, t0, tWidth, tElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, enforceQuasiNeutrality, useSerendipityBasis, vlasovTraceEnrichment);
+         
+         performDebuggingRefinementSeries(form_q0);
+         
+         FunctionPtr x           = Function::xn(1);
+         FunctionPtr t           = Function::yn(1);
+         FunctionPtr v           = Function::zn(1);
+         FunctionPtr sin_v_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
+         FunctionPtr cos_x_fxn   = TrigFunctions<double>::cos(M_PI / (2. * xWidth) * x);
+         FunctionPtr f_exact     = sin_v_fxn * sin_v_fxn * cos_x_fxn * (1 - t); // integral in v of this is cos_x_fxn * (1 - t) / 2
+         
+         FunctionPtr sin_x_fxn   = TrigFunctions<double>::sin(M_PI / (2. * xWidth) * x);
+         FunctionPtr E_exact   = Function::zero();
+         // set V_E to give 0 value at left and right boundaries:
+         FunctionPtr V_E_exact = Function::zero();
+         
+         const bool overrideVlasovBCs = false;     // required if f is nonzero at velocity extrema
+         const bool zeroInitialConditions = false; // for f
+         performDebuggingPatchTest(form_q0, f_exact, E_exact, V_E_exact, 0, m, overrideVlasovBCs, zeroInitialConditions); // 0: q value to eliminate electric field*/
       }
       
       if (runPatchTestNumber[10])
       {
         // TEST 10
         // one more non-patch exact solution with time-varying sinusoidal E
-
+        
         FunctionPtr x           = Function::xn(1);
         FunctionPtr t           = Function::yn(1);
         FunctionPtr v           = Function::zn(1);
         FunctionPtr sin_v_fxn   = TrigFunctions<double>::sin(2.0 * M_PI * (v - 0.5)); // 0 at the v boundaries
         FunctionPtr cos_x_fxn   = TrigFunctions<double>::cos(M_PI / (2. * xWidth) * x);
         FunctionPtr f_exact     = sin_v_fxn * sin_v_fxn * cos_x_fxn * (1 - t) + t; // integral in v of this is cos_x_fxn * (1 - t) / 2 + t
-
+        
         FunctionPtr sin_x_fxn   = TrigFunctions<double>::sin(M_PI / (2. * xWidth) * x);
         FunctionPtr C = -q / (2.0 * eps0) * t - 2. * q * xWidth / (eps0 * M_PI * M_PI) * (1.-t);
         FunctionPtr D = -2. * q * xWidth * xWidth / (eps0 * M_PI * M_PI) * (1-t);
         FunctionPtr E_exact   = (q / eps0) * (xWidth / M_PI) * sin_x_fxn * (1-t) + (q / eps0) * x * t + C; // integral in x of (rho / eps0), with the constant selected such that V_E is 0 at left and right boundaries
         // set V_E to give 0 value at left and right boundaries:
         FunctionPtr V_E_exact = (q / eps0) * (2. * xWidth * xWidth / (M_PI * M_PI) ) * cos_x_fxn * (1-t)  - q/(2. * eps0) * x * x * t - C * x + D;
-
+        
         {
           // DEBUGGING
           // is E = - d/dx (V_E)?
           auto mesh = form->configurationSpaceMesh();
           double err = (E_exact + V_E_exact->dx())->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, V_E_exact relation: " << err << std::endl;
-
+          
           // is (d/dx E) = rho / eps0?
           FunctionPtr rho = (q / 2.0) * cos_x_fxn * (1-t) + q * t;
           err = (E_exact->dx() - rho / eps0)->l2norm(mesh);
           if (rank == 0) std::cout << "err for E_exact, rho relation: " << err << std::endl;
-
+          
           // is V_E_exact(0) = 0?
           double V_L = V_E_exact->evaluate(0);
           double V_R = V_E_exact->evaluate(xWidth);
           if (rank == 0) std::cout << "V_E(0)   = " << V_L << std::endl;
           if (rank == 0) std::cout << "V_E(x_w) = " << V_R << std::endl;
-
+          
         }
-
+        
         const bool overrideVlasovBCs = true;     // required if f is nonzero at velocity extrema
         const bool zeroInitialConditions = false; // for f
         performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions);
@@ -2539,7 +2550,7 @@ int main(int argc, char *argv[])
         // doing something different in the patch tests…
         bool overrideVlasovBCs = true; // need this true if f(v_max) != 0 or f(v_min) != 0.
         
-//        FunctionPtr temporalRamp = Teuchos::rcp( new TemporalRamp1D1T(0.1) ); // ramp to 1 from t=0 to t=0.1
+        //        FunctionPtr temporalRamp = Teuchos::rcp( new TemporalRamp1D1T(0.1) ); // ramp to 1 from t=0 to t=0.1
         FunctionPtr f = Teuchos::rcp( new Maxwellian1T1V(u0, sigma, n0) ); // BC for f on the left
         FunctionPtr E = Function::zero();
         FunctionPtr V_E = Function::zero();
@@ -2580,10 +2591,10 @@ int main(int argc, char *argv[])
         FunctionPtr t           = Function::yn(1);
         FunctionPtr v           = Function::zn(1);
         FunctionPtr f_exact     = x - v * t;  // v df / dx + df / dt = v - v = 0
-
+        
         FunctionPtr E_exact   = Function::zero();
         FunctionPtr V_E_exact = Function::zero();
-
+        
         const bool overrideVlasovBCs = false; // f is 0 at v_max, v_min: we don't need to override…
         const bool zeroInitialConditions = false;
         const bool addSourceTerm = false;
@@ -2601,9 +2612,9 @@ int main(int argc, char *argv[])
         FunctionPtr v           = Function::zn(1);
         FunctionPtr E_exact     = Function::constant(m/q);
         FunctionPtr f_exact     = 2 * x + v - t - v * v;  // v df / dx + df / dt + q / m E df/dv = 2 v - 1 + 1  - 2 v = 0
-
+        
         FunctionPtr V_E_exact = Function::zero(); // pure Vlasov solve: V_E_exact does not actually enter the solve…
-
+        
         const bool overrideVlasovBCs = true; // f is NOT 0 at v_max, v_min: we need to override…
         const bool zeroInitialConditions = false;
         const bool addSourceTerm = false;
@@ -2621,9 +2632,9 @@ int main(int argc, char *argv[])
         FunctionPtr v           = Function::zn(1);
         FunctionPtr E_exact     = (m/q) * (x + t);
         FunctionPtr f_exact     = - 2 * v + 2 * x * t - v * v + x * x + t * t;  // v df / dx + df / dt + q / m E df/dv = 2tv + 2xv + 2x + 2t - 2x - 2t - 2xv - 2tv = 0
-
+        
         FunctionPtr V_E_exact = Function::zero(); // pure Vlasov solve: V_E_exact does not actually enter the solve…
-
+        
         const bool overrideVlasovBCs = true; // f is NOT 0 at v_max, v_min: we need to override…
         const bool zeroInitialConditions = false;
         const bool addSourceTerm = false;
@@ -2730,10 +2741,10 @@ int main(int argc, char *argv[])
         FunctionPtr t           = Function::yn(1);
         FunctionPtr v           = Function::zn(1);
         FunctionPtr f_exact     = x + t;
-
+        
         FunctionPtr E_exact   = Function::zero();
         FunctionPtr V_E_exact = Function::zero();
-
+        
         const bool overrideVlasovBCs = true;
         const bool zeroInitialConditions = false;
         const bool addSourceTerm = true;
@@ -2741,7 +2752,7 @@ int main(int argc, char *argv[])
         performDebuggingPatchTest(form, f_exact, E_exact, V_E_exact, q, m, overrideVlasovBCs, zeroInitialConditions, addSourceTerm, pureVlasovSolve);
       }
       
-    // TODO: try testing Vlasov solve only, with a projected E field and zero forcing
+      // TODO: try testing Vlasov solve only, with a projected E field and zero forcing
       exit(0);
     }
     
@@ -2752,9 +2763,9 @@ int main(int argc, char *argv[])
     // we'll use this function to allow labeling of visualization output
     FunctionPtr cellIDFunction = Teuchos::rcp(new CellIDFunction);
     
-//    form->setUseGeometricMultigrid(useGeometricMultigrid);
+    //    form->setUseGeometricMultigrid(useGeometricMultigrid);
     form->setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
-//    form->setIterativeSolveTolerance(iterativeSolveTolerance);
+    //    form->setIterativeSolveTolerance(iterativeSolveTolerance);
     std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
     if (maxSubsteps > 3)
     {
@@ -2803,9 +2814,9 @@ int main(int argc, char *argv[])
     else if (problemChoice == COLD_DIODE)
     {
       // experimentally: start with a beam that goes all the way across
-  //    FunctionPtr fM_u0 = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, n0) );
-  //    f0 = fM_u0;
-  //    adaptToCaptureInitialData = true;
+      //    FunctionPtr fM_u0 = Teuchos::rcp(new Maxwellian1T1V( u0, sigma, n0) );
+      //    f0 = fM_u0;
+      //    adaptToCaptureInitialData = true;
       
       f0 = Function::zero(); // start with vacuum
       adaptToCaptureInitialData = false; // zero solution is always exactly captured…
@@ -2846,7 +2857,7 @@ int main(int argc, char *argv[])
       
       return 0; // exit
     }
-        
+    
     if (!usePeriodicBCs)
     {
       if (problemChoice == COLD_DIODE)
@@ -2881,6 +2892,23 @@ int main(int argc, char *argv[])
     }
     else
     {
+      if (useAdaptivity)
+      {
+        if (problemChoice == TWO_STREAM)
+        {
+          auto initialTimeTag = form->tagVlasovInitialTime();
+          
+          FunctionPtr sgn = Function::sideParity();
+          FunctionPtr n = Function::normal();
+          FunctionPtr n_t = n->spatialComponent(2); // 1-based
+          
+          FunctionPtr tn_temporalInflowExact = f0 * sgn * n_t;
+          const bool weightFluxesBySideParity = true;
+          FunctionPtr tn_soln = Function::solution(form->t_n_hat(), form->vlasovSolution(), weightFluxesBySideParity);
+          
+          bcFunctionsToResolve.push_back({{tn_temporalInflowExact, tn_soln},initialTimeTag});
+        }
+      }
       form->setInitialConditions(f0);
       
       // need to pin the potential at 0 to eliminate the constant mode.
@@ -2912,7 +2940,7 @@ int main(int argc, char *argv[])
       
       double refinementThresholdForInitialData = 0.80;
       auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
-//      refStrategy->setMaxElements(maxElements);
+      //      refStrategy->setMaxElements(maxElements);
       refStrategy->setMaxP(H1Order);
       
       double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form->vlasovMesh(), quadratureEnrichment);
@@ -3064,7 +3092,7 @@ int main(int argc, char *argv[])
       vlasovViz = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovSS.str(), directoryPath));
       poissonViz = Teuchos::rcp(new HDF5Exporter (form->configurationSpaceMesh(), poissonSS.str(), directoryPath) );
     }
-      
+    
     FunctionPtr E_soln = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
     FunctionPtr E_squared = E_soln * E_soln;
     FunctionPtr abs_E_soln = Teuchos::rcp( new AbsFunction(E_soln) );
@@ -3073,11 +3101,11 @@ int main(int argc, char *argv[])
     form->setFixedPointMinSubsteps(minSubsteps);
     form->setFixedPointMaxSubsteps(maxSubsteps);
     
-  //  form->vlasovSolution()->setWriteMatrixToFile(true, "/tmp/A_Vlasov.dat");
+    //  form->vlasovSolution()->setWriteMatrixToFile(true, "/tmp/A_Vlasov.dat");
     
     const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
     auto solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form->vlasovSolution(), form->f(), form->configurationSpaceMesh()) );
-        
+    
     FunctionPtr potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
     
     auto density  = solutionMoments->solutionMomentFunction(0);
@@ -3103,7 +3131,7 @@ int main(int argc, char *argv[])
       // output (physical/dimensional) results
       // ultimately, we want E-field, velocity, and some other things
       // to begin with, let's output the E-field values computed at quadrature points at final time
-            
+      
       // the di() methods are 1-based:
       static const int SPATIAL_INDEX  = 1;
       static const int TEMPORAL_INDEX = 2;
@@ -3115,7 +3143,7 @@ int main(int argc, char *argv[])
       static const int VELOCITY_INDEX_ZERO_BASED = VELOCITY_INDEX - 1;
       
       // find elements that match final time
-
+      
       SpatialFilterPtr finalTimeFilter = SpatialFilter::matchingComponent(TEMPORAL_INDEX_ZERO_BASED, t0 + tWidth);
       
       auto poissonMeshTopo = form->configurationSpaceMesh()->getTopology()->baseMeshTopology();
@@ -3176,7 +3204,7 @@ int main(int argc, char *argv[])
           
           const int numTemporalPoints = temporalPoints.extent_int(0); // (P,D)
           Kokkos::parallel_for(numTemporalPoints, KOKKOS_LAMBDA(const int &pointOrdinal)
-          {
+                               {
             // map points from (-1,1) to the reference-space preimage of (.999,1.0) in physical space
             // ref space scaling goes from (-1,1) to (1.0 - temporalWidth, 1.0)
             // formula is t_physical = (t_ref + 1) * w/2 + 1 - w
@@ -3314,7 +3342,7 @@ int main(int argc, char *argv[])
         
         double bc_norm = (bcFxnExact * bcRestriction)->l2norm(form->vlasovMesh(), quadratureEnrichment);
         bcRelErr = bc_err->l2norm(form->vlasovMesh(), quadratureEnrichment) / bc_norm;
-                  
+        
         if (rank==0)
         {
           std::cout << "BC resolution, relative error in L^2 norm: " << bcRelErr << std::endl;
@@ -3324,7 +3352,7 @@ int main(int argc, char *argv[])
       auto vlasovElementCount  = form->vlasovMesh()->numActiveElements();
       auto poissonElementCount = form->configurationSpaceMesh()->numActiveElements();
       auto poissonDofCount     = form->configurationSpaceMesh()->numGlobalDofs();
-            
+      
       if (rank == 0)
       {
         writeRefReport(vlasovElementCount, numVlasovDofs, poissonElementCount, poissonDofCount, bcRelErr, energyError);
@@ -3332,56 +3360,186 @@ int main(int argc, char *argv[])
       }
     };
     
-    if (!useAdaptivity)
+    if (useTimeSlabs)
     {
-      auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
-      if (numVlasovDofs > maxDofsForDirectSolve)
+      if (!useAdaptivity)
       {
-        if (rank == 0)
+        for (int timeSlabOrdinal=0; timeSlabOrdinal<numTimeSlabs; timeSlabOrdinal++)
         {
-          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
+          if (rank == 0)
+          {
+            std::cout << "*******************************************************************\n";
+            std::cout << "*                     Starting Time Slab " << timeSlabOrdinal;
+            if      (timeSlabOrdinal < 10)   std::cout << "                        *\n";
+            else if (timeSlabOrdinal < 100)  std::cout << "                       *\n";
+            else if (timeSlabOrdinal < 1000) std::cout << "                      *\n";
+            else                             std::cout << "                     *\n";
+            std::cout << "*******************************************************************\n";
+          }
+          auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
+          if (numVlasovDofs > maxDofsForDirectSolve)
+          {
+            if (rank == 0)
+            {
+              std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
+            }
+            form->setUseGeometricMultigrid(true);
+          }
+          else
+          {
+            if (rank == 0)
+            {
+              std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+            }
+            form->setUseGeometricMultigrid(false);
+          }
+          
+          form->solve();
+          
+          solutionMoments->update();
+          
+          if (saveViz)
+          {
+            std::string  vlasovSlabStr =  vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
+            std::string poissonSlabStr = poissonSS.str() + "_slab" + to_string(timeSlabOrdinal);
+            
+            auto vlasovVizSlab  = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovSlabStr, directoryPath));
+            auto poissonVizSlab = Teuchos::rcp(new HDF5Exporter (form->configurationSpaceMesh(), poissonSlabStr, directoryPath) );
+            
+            poissonVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"});
+            vlasovVizSlab->exportSolution(form->vlasovSolution(), {cellIDFunction}, {"cell ID (Vlasov)"});
+          }
+          // TODO: figure out what to do with writeResults() in context of time slabs
+          // writeResults(0);
+          
+          // next time slab
+          form = form->nextTimeSlab(tWidth, tElements);
+          
+          {
+            // solutions have been recreated for the new slab.  We need to update anything that depends on the solution
+            const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
+            solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form->vlasovSolution(), form->f(), form->configurationSpaceMesh()) );
+            
+            potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
+            
+            density  = solutionMoments->solutionMomentFunction(0);
+            momentum = solutionMoments->solutionMomentFunction(1);
+            
+            velocity = momentum / density;
+          }
         }
-        form->setUseGeometricMultigrid(true);
       }
-      else
+      else // useAdaptivity = true
       {
-        if (rank == 0)
+        for (int timeSlabOrdinal=0; timeSlabOrdinal<numTimeSlabs; timeSlabOrdinal++)
         {
-          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+          Teuchos::RCP<HDF5Exporter> vlasovVizSlab, poissonVizSlab;
+          
+          if (saveViz)
+          {
+            std::string  vlasovSlabStr =  vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
+            std::string poissonSlabStr = poissonSS.str() + "_slab" + to_string(timeSlabOrdinal);
+            
+            vlasovVizSlab  = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovSlabStr, directoryPath));
+            poissonVizSlab = Teuchos::rcp(new HDF5Exporter (form->configurationSpaceMesh(), poissonSlabStr, directoryPath) );
+          }
+          
+          if (rank == 0)
+          {
+            std::cout << "*******************************************************************\n";
+            std::cout << "*                     Starting Time Slab " << timeSlabOrdinal;
+            if      (timeSlabOrdinal < 10)   std::cout << "                        *\n";
+            else if (timeSlabOrdinal < 100)  std::cout << "                       *\n";
+            else if (timeSlabOrdinal < 1000) std::cout << "                      *\n";
+            else                             std::cout << "                     *\n";
+            std::cout << "*******************************************************************\n";
+          }
+          RefinementStrategyPtr refStrategy;
+          
+          if (doerflerTarget <= 0)
+          {
+            refStrategy = Teuchos::rcp(new RefinementStrategy(form->vlasovSolution(), refinementThreshold));
+            refStrategy->setMaxElements(maxElements); // allow unrefinements
+          }
+          else
+          {
+            ErrorIndicatorPtr errorIndicator = ErrorIndicator::energyErrorIndicator(form->vlasovSolution());
+            
+            refStrategy = Teuchos::rcp(new DoerflerRefinementStrategy(errorIndicator, doerflerTarget) );
+          }
+          
+          double energyError;
+          auto energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form->vlasovSolution());
+          
+          for (int refinementNumber=0; refinementNumber<numRefinements; refinementNumber++)
+          {
+            auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
+            if (numVlasovDofs > maxDofsForDirectSolve)
+            {
+              if (rank == 0)
+              {
+                std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
+              }
+              form->setUseGeometricMultigrid(true);
+            }
+            else
+            {
+              if (rank == 0)
+              {
+                std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+              }
+              form->setUseGeometricMultigrid(false);
+            }
+            
+            form->solve();
+            
+            solutionMoments->update();
+            
+            energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
+            // TODO: revise reportBCResolutionAndRefinementComplete() to make it compatible with time-slabbing, or create a new reporting mechanism.
+//            reportBCResolutionAndRefinementComplete(refinementNumber, energyError);
+            
+            if (saveViz)
+            {
+              poissonVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, refinementNumber);
+              vlasovVizSlab->exportSolution(form->vlasovSolution(), {cellIDFunction}, {"cell ID (Vlasov)"}, refinementNumber);
+            }
+            // TODO: figure out what to do with writeResults() in context of time slabs
+            // writeResults(refinementNumber);
+            
+            refStrategy->refine(rank==0);
+            
+            // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+            form->configurationSpaceMesh()->repartitionAndRebuild();
+            auto poissonElementCount = form->configurationSpaceMesh()->numActiveElements();
+            auto poissonDofCount     = form->configurationSpaceMesh()->numGlobalDofs();
+            if (rank == 0)
+            {
+              std::cout << "Poisson mesh has " << poissonElementCount << " active elements and " << poissonDofCount << " global degrees of freedom.\n";
+            }
+          } // refinement loop
+          
+          // next time slab
+          form = form->nextTimeSlab(tWidth, tElements);
+          
+          {
+            // solutions have been recreated for the new slab.  We need to update anything that depends on the solution
+            const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
+            solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form->vlasovSolution(), form->f(), form->configurationSpaceMesh()) );
+            
+            potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
+            
+            density  = solutionMoments->solutionMomentFunction(0);
+            momentum = solutionMoments->solutionMomentFunction(1);
+            
+            velocity = momentum / density;
+          }
         }
-        form->setUseGeometricMultigrid(false);
-      }
-      
-      form->solve();
-      
-      solutionMoments->update();
-      
-      if (saveViz)
-      {
-        poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"});
-        vlasovViz->exportSolution(form->vlasovSolution(), {cellIDFunction}, {"cell ID (Vlasov)"});
-      }
-      writeResults(0);
+      } // end time slab + useAdaptivity
     }
-    else
+    else // useTimeSlabs = false
     {
-      RefinementStrategyPtr refStrategy;
-      
-      if (doerflerTarget <= 0)
-      {
-        refStrategy = Teuchos::rcp(new RefinementStrategy(form->vlasovSolution(), refinementThreshold));
-        refStrategy->setMaxElements(maxElements); // allow unrefinements
-      }
-      else
-      {
-        ErrorIndicatorPtr errorIndicator = ErrorIndicator::energyErrorIndicator(form->vlasovSolution());
-        
-        refStrategy = Teuchos::rcp(new DoerflerRefinementStrategy(errorIndicator, doerflerTarget) );
-      }
-      
-      double energyError;
-      auto energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form->vlasovSolution());
-      for (int refinementNumber=0; refinementNumber<numRefinements; refinementNumber++)
+      if (!useAdaptivity)
       {
         auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
         if (numVlasovDofs > maxDofsForDirectSolve)
@@ -3401,97 +3559,147 @@ int main(int argc, char *argv[])
           form->setUseGeometricMultigrid(false);
         }
         
-//        {
-//          if (rank == 0)
-//          {
-//            std::cout << "zeroing electric field between adaptive solves; this is primarily for debugging.\n";
-//          }
-//          std::map<int, FunctionPtr> functionMap;
-//          functionMap[form->configurationSpaceFormulation()->E_fieldVar(0)->ID()] = Function::zero();
-//          form->configurationSpaceSolution()->projectOntoMesh(functionMap);
-//
-//          {
-//            auto E_extruded = form->configurationSpaceFormulation()->E_i(0);
-//
-//            // make sure E_extruded is ready to evaluate…
-//            static_cast<PhysicalSolutionExtrusion*>(E_extruded.get())->updateValues();
-//          }
-//        }
-        
         form->solve();
         
         solutionMoments->update();
         
-        writeResults(refinementNumber);
-        
-        energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
-        reportBCResolutionAndRefinementComplete(refinementNumber, energyError);
-        
         if (saveViz)
         {
-          poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, refinementNumber);
-          vlasovViz->exportSolution(form->vlasovSolution(), {energyErrorFunction,cellIDFunction}, {"energy error","cell ID (Vlasov)"}, refinementNumber);
+          poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"});
+          vlasovViz->exportSolution(form->vlasovSolution(), {cellIDFunction}, {"cell ID (Vlasov)"});
         }
-        
-        refStrategy->refine(rank==0);
-        
-        // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
-        form->configurationSpaceMesh()->repartitionAndRebuild();
-        auto poissonElementCount = form->configurationSpaceMesh()->numActiveElements();
-        auto poissonDofCount     = form->configurationSpaceMesh()->numGlobalDofs();
-        if (rank == 0)
-        {
-          std::cout << "Poisson mesh has " << poissonElementCount << " active elements and " << poissonDofCount << " global degrees of freedom.\n";
-        }
-      }
-      auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
-      if (numVlasovDofs > maxDofsForDirectSolve)
-      {
-        if (rank == 0)
-        {
-          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
-        }
-        form->setUseGeometricMultigrid(true);
+        writeResults(0);
       }
       else
       {
-        if (rank == 0)
+        RefinementStrategyPtr refStrategy;
+        
+        if (doerflerTarget <= 0)
         {
-          std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+          refStrategy = Teuchos::rcp(new RefinementStrategy(form->vlasovSolution(), refinementThreshold));
+          refStrategy->setMaxElements(maxElements); // allow unrefinements
         }
-        form->setUseGeometricMultigrid(false);
+        else
+        {
+          ErrorIndicatorPtr errorIndicator = ErrorIndicator::energyErrorIndicator(form->vlasovSolution());
+          
+          refStrategy = Teuchos::rcp(new DoerflerRefinementStrategy(errorIndicator, doerflerTarget) );
+        }
+        
+        double energyError;
+        auto energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form->vlasovSolution());
+        for (int refinementNumber=0; refinementNumber<numRefinements; refinementNumber++)
+        {
+          auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
+          if (numVlasovDofs > maxDofsForDirectSolve)
+          {
+            if (rank == 0)
+            {
+              std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
+            }
+            form->setUseGeometricMultigrid(true);
+          }
+          else
+          {
+            if (rank == 0)
+            {
+              std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+            }
+            form->setUseGeometricMultigrid(false);
+          }
+          
+          //        {
+          //          if (rank == 0)
+          //          {
+          //            std::cout << "zeroing electric field between adaptive solves; this is primarily for debugging.\n";
+          //          }
+          //          std::map<int, FunctionPtr> functionMap;
+          //          functionMap[form->configurationSpaceFormulation()->E_fieldVar(0)->ID()] = Function::zero();
+          //          form->configurationSpaceSolution()->projectOntoMesh(functionMap);
+          //
+          //          {
+          //            auto E_extruded = form->configurationSpaceFormulation()->E_i(0);
+          //
+          //            // make sure E_extruded is ready to evaluate…
+          //            static_cast<PhysicalSolutionExtrusion*>(E_extruded.get())->updateValues();
+          //          }
+          //        }
+          
+          form->solve();
+          
+          solutionMoments->update();
+          
+          writeResults(refinementNumber);
+          
+          energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
+          reportBCResolutionAndRefinementComplete(refinementNumber, energyError);
+          
+          if (saveViz)
+          {
+            poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, refinementNumber);
+            vlasovViz->exportSolution(form->vlasovSolution(), {energyErrorFunction,cellIDFunction}, {"energy error","cell ID (Vlasov)"}, refinementNumber);
+          }
+          
+          refStrategy->refine(rank==0);
+          
+          // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
+          form->configurationSpaceMesh()->repartitionAndRebuild();
+          auto poissonElementCount = form->configurationSpaceMesh()->numActiveElements();
+          auto poissonDofCount     = form->configurationSpaceMesh()->numGlobalDofs();
+          if (rank == 0)
+          {
+            std::cout << "Poisson mesh has " << poissonElementCount << " active elements and " << poissonDofCount << " global degrees of freedom.\n";
+          }
+        }
+        auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
+        if (numVlasovDofs > maxDofsForDirectSolve)
+        {
+          if (rank == 0)
+          {
+            std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to true.\n";
+          }
+          form->setUseGeometricMultigrid(true);
+        }
+        else
+        {
+          if (rank == 0)
+          {
+            std::cout << "numVlasovDofs = " << numVlasovDofs << "; setting useGeometricMultigrid to false.\n";
+          }
+          form->setUseGeometricMultigrid(false);
+        }
+        
+        //      {
+        //        if (rank == 0)
+        //        {
+        //          std::cout << "zeroing electric field between adaptive solves; this is primarily for debugging.\n";
+        //        }
+        //        std::map<int, FunctionPtr> functionMap;
+        //        functionMap[form->configurationSpaceFormulation()->E_fieldVar(0)->ID()] = Function::zero();
+        //        form->configurationSpaceSolution()->projectOntoMesh(functionMap);
+        //
+        //        {
+        //          auto E_extruded = form->configurationSpaceFormulation()->E_i(0);
+        //
+        //          // make sure E_extruded is ready to evaluate…
+        //          static_cast<PhysicalSolutionExtrusion*>(E_extruded.get())->updateValues();
+        //        }
+        //      }
+        
+        form->solve();
+        energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
+        
+        solutionMoments->update();
+        
+        if (saveViz)
+        {
+          poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, numRefinements);
+          vlasovViz->exportSolution(form->vlasovSolution(), {energyErrorFunction,cellIDFunction}, {"energy error","cell ID (Vlasov)"}, numRefinements);
+        }
+        writeResults(numRefinements);
+        
+        reportBCResolutionAndRefinementComplete(numRefinements, energyError);
       }
-      
-//      {
-//        if (rank == 0)
-//        {
-//          std::cout << "zeroing electric field between adaptive solves; this is primarily for debugging.\n";
-//        }
-//        std::map<int, FunctionPtr> functionMap;
-//        functionMap[form->configurationSpaceFormulation()->E_fieldVar(0)->ID()] = Function::zero();
-//        form->configurationSpaceSolution()->projectOntoMesh(functionMap);
-//
-//        {
-//          auto E_extruded = form->configurationSpaceFormulation()->E_i(0);
-//
-//          // make sure E_extruded is ready to evaluate…
-//          static_cast<PhysicalSolutionExtrusion*>(E_extruded.get())->updateValues();
-//        }
-//      }
-      
-      form->solve();
-      energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
-
-      solutionMoments->update();
-      
-      if (saveViz)
-      {
-        poissonViz->exportSolution(form->configurationSpaceSolution(), {density,velocity,cellIDFunction}, {"n_e","v","cell ID (Poisson)"}, numRefinements);
-        vlasovViz->exportSolution(form->vlasovSolution(), {energyErrorFunction,cellIDFunction}, {"energy error","cell ID (Vlasov)"}, numRefinements);
-      }
-      writeResults(numRefinements);
-      
-      reportBCResolutionAndRefinementComplete(numRefinements, energyError);
     }
   }
   

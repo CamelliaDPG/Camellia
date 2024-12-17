@@ -106,6 +106,7 @@ void MeshTools::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMa
   bool didRefine = false;
   do // until we don't refine
   {
+    didRefine = false;
     map<IndexType,IndexType> cellIDMapTemp;
     map<int,int> sideOrdinalMapTemp;
     mapCellIDsAtBoundary(cellIDMapTemp, sideOrdinalMapTemp, fromTopo, fromBoundaryTag, toTopo);
@@ -128,14 +129,19 @@ void MeshTools::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMa
       {
         if (cellTo->isParent(toTopo))
         {
-          // if we supported anistropic refinements, this could be allowed.  But for now, this is an error.
+          // if we supported anisotropic refinements, this could be allowed.  But for now, this is an error.
           TEUCHOS_TEST_FOR_EXCEPTION(cellTo->isParent(toTopo), std::invalid_argument, "cellIDMap with one parent cell mapped to another parent cell");
         }
-        fromCellsToRefine.insert(cellIDFrom);
+        toCellsToRefine.insert(cellIDTo);
       }
       else if (cellTo->isParent(toTopo))
       {
-        toCellsToRefine.insert(cellIDTo);
+        if (cellFrom->isParent(fromTopo))
+        {
+          // if we supported anisotropic refinements, this could be allowed.  But for now, this is an error.
+          TEUCHOS_TEST_FOR_EXCEPTION(cellFrom->isParent(fromTopo), std::invalid_argument, "cellIDMap with one parent cell mapped to another parent cell");
+        }
+        fromCellsToRefine.insert(cellIDFrom);
       }
     }
     
