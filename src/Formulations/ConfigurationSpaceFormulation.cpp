@@ -10,10 +10,15 @@
 
 using namespace Camellia;
 
-ConfigurationSpaceFormulation::ConfigurationSpaceFormulation(bool useSerendipityBasis)
+ConfigurationSpaceFormulation::ConfigurationSpaceFormulation(const EBasisFamily basisFamily)
 :
-_useSerendipityBasis(useSerendipityBasis)
+_basisFamily(basisFamily)
 {}
+
+EBasisFamily ConfigurationSpaceFormulation::basisFamily() const
+{
+  return _basisFamily;
+}
 
 void ConfigurationSpaceFormulation::copySolutionToPrevious()
 {
@@ -225,11 +230,6 @@ SolutionPtr ConfigurationSpaceFormulation::solution()
 SolutionPtr ConfigurationSpaceFormulation::solutionPriorTime()
 {
   return _configurationSolnPriorTime;
-}
-
-bool ConfigurationSpaceFormulation::useSerendipityBasis() const
-{
-  return _useSerendipityBasis;
 }
 
 VarPtr ConfigurationSpaceFormulation::VE_fieldVar()

@@ -753,7 +753,9 @@ int main(int argc, char *argv[])
     
     int maxMomentNumber = 1; // we want to compute bulk velocity
     
-    VlasovSpaceTimeFormulation form(q_values, m_values, speciesLabels, useSerendipityBasis, poissonConfig, spatialMeshTopo, tVertices, vxVertices, std::vector<double>(), std::vector<double>(), H1Order, delta_k, numUniformRefinements, maxMomentNumber);
+    const EBasisFamily basisFamily = useSerendipityBasis ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL;
+    
+    VlasovSpaceTimeFormulation form(q_values, m_values, speciesLabels, poissonConfig, spatialMeshTopo, tVertices, vxVertices, std::vector<double>(), std::vector<double>(), H1Order, delta_k, numUniformRefinements, basisFamily, maxMomentNumber);
     
 //    if (useConservativeNorm)
 //    {

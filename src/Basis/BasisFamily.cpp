@@ -347,6 +347,18 @@ _name(name)
   }
 }
 
+BasisFamilyPtr BasisFamily::basisFamily(const EBasisFamily &bf)
+{
+  switch (bf)
+  {
+    case BASIS_FAMILY_HIERARCHICAL: return hierarchicalBasisFamily();
+    case BASIS_FAMILY_SERENDIPITY:  return serendipityBasisFamily();
+    case BASIS_FAMILY_NODAL:        return nodalBasisFamily();
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported EBasisFamily choice");
+  }
+}
+
 BasisPtr BasisFamily::getBasis(CellTopoPtr cellTopo, EFunctionSpace fs, const int p_H1)
 {
   std::vector<EFunctionSpace> fsVector {fs};

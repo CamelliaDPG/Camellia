@@ -148,15 +148,7 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
     v_Poisson   = poissonVF->testVar(S_V_POISSON, HGRAD);   // HGRAD in space
     tau_Poisson = poissonVF->testVar(S_TAU_POISSON, tauSpace); // HDIV or HGRAD in space
   }
-  BasisFamilyPtr basisFamily;
-  if (_useSerendipityBasis)
-  {
-    basisFamily = BasisFamily::serendipityBasisFamily();
-  }
-  else
-  {
-    basisFamily = BasisFamily::hierarchicalBasisFamily();
-  }
+  BasisFamilyPtr basisFamily = BasisFamily::basisFamily(_basisFamily);
   poissonVF->setBasisFamily(basisFamily);
   
   _poissonBF = BF::bf(poissonVF);

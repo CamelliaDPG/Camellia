@@ -903,7 +903,6 @@ namespace
 }
 
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
-                                                       bool useSerendipityBasis,
                                                        Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                        MeshTopologyPtr spatialMeshTopology,
                                                        std::vector<double> temporalVertices,
@@ -912,11 +911,11 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        std::vector<double> velocitySpaceVertices_z,
                                                        const int H1Order, const int delta_k,
                                                        const int numUniformRefinements,
+                                                       const EBasisFamily basisFamily,
                                                        const int maxMomentNumberForDriver,
                                                        const bool deferInitialization)
 :
 VlasovSpaceTimeFormulation(vector<double>{q}, vector<double>{m}, vector<string>{""},
-                           useSerendipityBasis,
                            configurationSpaceFormulation,
                            spatialMeshTopology,
                            temporalVertices,
@@ -925,12 +924,12 @@ VlasovSpaceTimeFormulation(vector<double>{q}, vector<double>{m}, vector<string>{
                            velocitySpaceVertices_z,
                            H1Order, delta_k,
                            numUniformRefinements,
+                           basisFamily,
                            maxMomentNumberForDriver,
                            deferInitialization)
 {}
 
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(std::vector<double> q, std::vector<double> m, vector<string> speciesLabels,
-                                                       bool useSerendipityBasis,
                                                        Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                        MeshTopologyPtr spatialMeshTopology,
                                                        std::vector<double> temporalVertices,
@@ -939,11 +938,12 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(std::vector<double> q, st
                                                        std::vector<double> velocitySpaceVertices_z,
                                                        const int H1Order, const int delta_k,
                                                        const int numUniformRefinements,
+                                                       const EBasisFamily basisFamily,
                                                        const int maxMomentNumberForDriver,
                                                        const bool deferInitialization)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
-_useSerendipityBasis(useSerendipityBasis),
+_basisFamily(basisFamily),
 _H1Order(H1Order),
 _delta_k(delta_k),
 _maxMomentNumberForDriver(maxMomentNumberForDriver),
@@ -962,7 +962,7 @@ _numUniformRefinements(numUniformRefinements)
   TEUCHOS_TEST_FOR_EXCEPTION(_q.size() != _m.size(), std::invalid_argument, "q and m arguments must agree in length");
   TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies == 0, std::invalid_argument, "Must have at least one species");
   
-  if (_useSerendipityBasis)
+  if (_basisFamily == BASIS_FAMILY_SERENDIPITY)
   {
     // at the moment, Intrepid2's sum factorization does not allow us to use Serendipity basis
     _useSumFactorizedAssembly = false;
@@ -1048,6 +1048,11 @@ void VlasovSpaceTimeFormulation::addConfigurationSpaceBC(const int tag, VarPtr c
 VarPtr VlasovSpaceTimeFormulation::B_configurationSpaceTrace(const int zeroBasedComp)
 {
   return _configurationSpaceFormulation->B_hat(zeroBasedComp);
+}
+
+EBasisFamily VlasovSpaceTimeFormulation::basisFamily() const
+{
+  return _basisFamily;
 }
 
 void VlasovSpaceTimeFormulation::clearConfigurationSpaceBCs()
@@ -1295,15 +1300,7 @@ VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
   // only-supported-on-spatial-interfaces thing that we need for space-time Poisson.
   VarFactoryPtr vlasovVF = VarFactory::varFactory();
   
-  BasisFamilyPtr basisFamily;
-  if (_useSerendipityBasis)
-  {
-    basisFamily = BasisFamily::serendipityBasisFamily();
-  }
-  else
-  {
-    basisFamily = BasisFamily::hierarchicalBasisFamily();
-  }
+  BasisFamilyPtr basisFamily = BasisFamily::basisFamily(_basisFamily);
   
   for (int i=0; i<_numSpecies; i++)
   {
@@ -1881,9 +1878,9 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
   auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(_spatialMeshTopology);
   
-  auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _speciesLabels, _useSerendipityBasis, _configurationSpaceFormulation, rootSpatialMeshTopology,
+  auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _speciesLabels, _configurationSpaceFormulation, rootSpatialMeshTopology,
                                                                   temporalVertices, _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z,
-                                                                  _H1Order, _delta_k, _numUniformRefinements));
+                                                                  _H1Order, _delta_k, _numUniformRefinements, _basisFamily));
   
   configureNextSlab(nextSlabForm);
   
@@ -2768,11 +2765,6 @@ vector< pair<double,double> > VlasovSpaceTimeFormulation::totalZMomentumTimeSeri
 bool VlasovSpaceTimeFormulation::useGeometricMultigrid() const
 {
   return _useGeometricMultigrid;
-}
-
-bool VlasovSpaceTimeFormulation::useSerendipityBasis() const
-{
-  return _useSerendipityBasis;
 }
 
 FunctionPtr VlasovSpaceTimeFormulation::v_i(int compZeroBased) const

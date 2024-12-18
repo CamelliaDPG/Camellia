@@ -42,7 +42,7 @@ protected:
 private:
   int _spaceDim;
   int _velocityDim;
-  bool _useSerendipityBasis;
+  EBasisFamily _basisFamily;
   
   BFPtr _vlasovBF;
   int _H1Order;
@@ -171,7 +171,7 @@ protected:
   virtual std::map<int,FunctionPtr> testForZMomentumConservation(int i);
   virtual std::map<int,FunctionPtr> testForEnergyConservation(int i);
 public:
-  VlasovSpaceTimeFormulation(std::vector<double> q, std::vector<double> m, vector<string> speciesLabels, bool useSerendipityBasis,
+  VlasovSpaceTimeFormulation(std::vector<double> q, std::vector<double> m, vector<string> speciesLabels,
                              Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                              MeshTopologyPtr spatialMeshTopology,
                              std::vector<double> temporalVertices,
@@ -180,11 +180,11 @@ public:
                              std::vector<double> velocitySpaceVertices_z,
                              const int H1Order, const int delta_k,
                              const int numUniformRefinements,
+                             const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL,
                              const int maxMomentNumberForDriver = 0,
                              const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
   
-  VlasovSpaceTimeFormulation(double q, double m, bool useSerendipityBasis,
-                             Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
+  VlasovSpaceTimeFormulation(double q, double m, Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                              MeshTopologyPtr spatialMeshTopology,
                              std::vector<double> temporalVertices,
                              std::vector<double> velocitySpaceVertices_x,
@@ -192,6 +192,7 @@ public:
                              std::vector<double> velocitySpaceVertices_z,
                              const int H1Order, const int delta_k,
                              const int numUniformRefinements,
+                             const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL,
                              const int maxMomentNumberForDriver = 0,
                              const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
 
@@ -449,8 +450,8 @@ public:
   //! v_z-dimension velocity space vertices passed in at construction
   std::vector<double> velocitySpaceVertices_z() const;
   
-  /** \brief Returns true if useSerendipityBasis was passed in at construction (in which case the Serendipity basis family is used for trial and test spaces).  */
-  bool useSerendipityBasis() const;
+  /** \brief Returns the basis family employed by the discretizations.  */
+  EBasisFamily basisFamily() const;
   
   void setUseSumFactorizedAssembly(bool useSumFactorizedAssembly);
   

@@ -43,7 +43,6 @@ const vector<string> MimeticVlasovSpaceTimeFormulation::S_WV {S_WV_VX, S_WV_VY, 
 const vector<string> MimeticVlasovSpaceTimeFormulation::S_WA {S_WA_X,  S_WA_Y,  S_WA_Z };
 
 MimeticVlasovSpaceTimeFormulation::MimeticVlasovSpaceTimeFormulation(double q, double m,
-                                                                     bool useSerendipityBasis,
                                                                      Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                      MeshTopologyPtr spatialMeshTopology,
                                                                      std::vector<double> temporalVertices,
@@ -52,15 +51,17 @@ MimeticVlasovSpaceTimeFormulation::MimeticVlasovSpaceTimeFormulation(double q, d
                                                                      std::vector<double> velocitySpaceVertices_z,
                                                                      const int H1Order, const int delta_k,
                                                                      const int numUniformRefinements,
+                                                                     const EBasisFamily &basisFamily,
                                                                      const int maxMomentNumberForDriver)
 :
-VlasovSpaceTimeFormulation(q, m, useSerendipityBasis, configurationSpaceFormulation,
+VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocitySpaceVertices_x,
                            velocitySpaceVertices_y,
                            velocitySpaceVertices_z,
                            H1Order, delta_k,
                            numUniformRefinements,
+                           basisFamily,
                            maxMomentNumberForDriver,
                            true) // true: defer initialization; we call it below.
 {
@@ -158,15 +159,7 @@ VarFactoryPtr MimeticVlasovSpaceTimeFormulation::constructVlasovVarFactory()
 {
   VarFactoryPtr vlasovVF = VarFactory::varFactory();
   
-  BasisFamilyPtr basisFamily;
-  if (this->useSerendipityBasis())
-  {
-    basisFamily = BasisFamily::serendipityBasisFamily();
-  }
-  else
-  {
-    basisFamily = BasisFamily::hierarchicalBasisFamily();
-  }
+  BasisFamilyPtr basisFamily = BasisFamily::basisFamily(this->basisFamily());
   
   VarPtr f = vlasovVF->fieldVar(VlasovSpaceTimeFormulation::S_F);            // distribution function (field variable)
   VarPtr w = vlasovVF->testVar(VlasovSpaceTimeFormulation::S_W, HGRAD);      // test function w; lies in HGRAD of the whole space-time phase space
@@ -350,9 +343,9 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> MimeticVlasovSpaceTimeFormulation::next
   // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
   auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(spatialMeshTopology());
   
-  auto nextSlabForm = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q(), m(), useSerendipityBasis(), configurationSpaceFormulation(), rootSpatialMeshTopology,
+  auto nextSlabForm = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q(), m(), configurationSpaceFormulation(), rootSpatialMeshTopology,
                                                                          temporalVertices, velocitySpaceVertices_x(), velocitySpaceVertices_y(), velocitySpaceVertices_z(),
-                                                                         H1Order(), delta_k(), numUniformRefinements()));
+                                                                         H1Order(), delta_k(), numUniformRefinements(), basisFamily()));
   
   configureNextSlab(nextSlabForm);
   

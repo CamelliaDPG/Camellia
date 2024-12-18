@@ -421,13 +421,16 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const double x0, c
   
   Teuchos::RCP<VlasovSpaceTimeFormulation> form;
   
-  form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+  EBasisFamily basisFamily = useSerendipity ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL;
+  
+  form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, configForm, spatialMeshTopo,
                                                      temporalVertices,
                                                      velocitySpaceVertices_x,
                                                      velocitySpaceVertices_y,
                                                      velocitySpaceVertices_z,
                                                      H1Order, delta_k,
-                                                     numUniformRefinements));
+                                                     numUniformRefinements,
+                                                     basisFamily));
   return form;
 }
 

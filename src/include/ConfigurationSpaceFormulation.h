@@ -28,7 +28,7 @@ namespace Camellia
     SolutionPtr _configurationSolnPriorTime; // prior-time solution; null for space-time configurations.
     MeshPtr _phaseMesh;
     MeshTopologyPtr _configurationMeshTopo;
-    bool _useSerendipityBasis;
+    EBasisFamily _basisFamily;
     
     int _spaceDim    = -1; // should be set during Vlasov construction
     int _velocityDim = -1;
@@ -37,7 +37,7 @@ namespace Camellia
     bool _exportViz = false;
     std::string _vizOutputDir = "/tmp";
   public:
-    ConfigurationSpaceFormulation(bool useSerendipityBasis = false);
+    ConfigurationSpaceFormulation(const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL);
     
     //! Create the configuration-space mesh based on the provided space-time MeshTopology.
     virtual void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) = 0;
@@ -132,7 +132,8 @@ namespace Camellia
     //! Perform MPI communication, etc. to ensure that the B_i, E_i function values for a given configuration-space cell are available on each MPI rank that has a corresponding phase-space cell.
     virtual void updateConfigurationSpaceFunctions() = 0;
     
-    bool useSerendipityBasis() const;
+    /** \brief Returns the basis family employed by the discretizations.  */
+    EBasisFamily basisFamily() const;
     
     //! load from checkpoint
     virtual void loadFromCheckpoint(const std::string &restartDir);

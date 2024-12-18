@@ -18,6 +18,13 @@ namespace Camellia
   class BasisFamily;
   using BasisFamilyPtr = Teuchos::RCP<BasisFamily>;
   
+  enum EBasisFamily
+  {
+    BASIS_FAMILY_HIERARCHICAL,
+    BASIS_FAMILY_SERENDIPITY,
+    BASIS_FAMILY_NODAL
+  };
+
   class BasisFamily
   {
     const std::string _name;
@@ -38,6 +45,8 @@ namespace Camellia
     static BasisFamilyPtr hierarchicalBasisFamily();
     static BasisFamilyPtr nodalBasisFamily();
     static BasisFamilyPtr serendipityBasisFamily();
+    
+    static BasisFamilyPtr basisFamily(const EBasisFamily &bf);
     
     static BasisFamilyPtr singletonBasisFamily(BasisPtr basis);
   };

@@ -69,7 +69,7 @@ namespace {
 
   Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const int xElements, const int tElements, const int vElements,
                                                                 const int H1Order, const bool usePeriodicBCs, double q,
-                                                                const bool useSerendipity, const bool useMimeticDPG,
+                                                                const EBasisFamily &basisFamily, const bool useMimeticDPG,
                                                                 const int delta_k = 2)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
@@ -107,23 +107,25 @@ namespace {
     Teuchos::RCP<VlasovSpaceTimeFormulation> form;
     if (!useMimeticDPG)
     {
-      form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+      form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, configForm, spatialMeshTopo,
                                                          temporalVertices,
                                                          velocitySpaceVertices_x,
                                                          velocitySpaceVertices_y,
                                                          velocitySpaceVertices_z,
                                                          H1Order, delta_k,
-                                                         numUniformRefinements) );
+                                                         numUniformRefinements,
+                                                         basisFamily) );
     }
     else
     {
-      form = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+      form = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q, m, configForm, spatialMeshTopo,
                                                                 temporalVertices,
                                                                 velocitySpaceVertices_x,
                                                                 velocitySpaceVertices_y,
                                                                 velocitySpaceVertices_z,
                                                                 H1Order, delta_k,
-                                                                numUniformRefinements) );
+                                                                numUniformRefinements,
+                                                                basisFamily) );
     }
     return form;
   }
@@ -163,7 +165,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
                             const int H1Order, const int xElements, const int tElements, const int vElements,
                             std::vector<std::vector<GlobalIndexType> > refinementSequence,
                             const bool overrideVlasovBCs,
-                            const bool useSerendipity,
+                            const EBasisFamily &basisFamily,
                             const bool useMimeticDPG,
                             const double tol,
                             Teuchos::FancyOStream &out, bool &success,
@@ -171,7 +173,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 {
   const bool usePeriodicBCs = false;
   
-  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
   
   form->setUseGeometricMultigrid(true);
   form->setIterativeSolveTolerance(1e-15);
@@ -376,7 +378,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
                             const double q,
                             const int H1Order, const int xElements, const int tElements, const int vElements,
                             const bool overrideVlasovBCs,
-                            const bool useSerendipity,
+                            const EBasisFamily &basisFamily,
                             const bool useMimeticDPG,
                             const double tol,
                             Teuchos::FancyOStream &out, bool &success,
@@ -385,7 +387,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   std::vector<std::vector<GlobalIndexType> > refinementSequence;
   patchTestVlasovPoisson(f_exact, E_exact, VE_exact,
                          q, H1Order, xElements, tElements, vElements, refinementSequence,
-                         overrideVlasovBCs, useSerendipity, useMimeticDPG,
+                         overrideVlasovBCs, basisFamily, useMimeticDPG,
                          tol, out, success,
                          outputViz, vizPrefix);
 }
@@ -395,7 +397,7 @@ void patchTestTimeSlab(const bool refineOnSecondSlab,
                        const double q,
                        const int H1Order, const int xElements, const int tElements, const int vElements,
                        const bool overrideVlasovBCs,
-                       const bool useSerendipity,
+                       const EBasisFamily &basisFamily,
                        const bool useMimeticDPG,
                        const double tol,
                        Teuchos::FancyOStream &out, bool &success,
@@ -403,7 +405,7 @@ void patchTestTimeSlab(const bool refineOnSecondSlab,
 {
   const bool usePeriodicBCs = false;
   
-  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
   
   form->setUseGeometricMultigrid(true);
   form->setIterativeSolveTolerance(1e-15);
@@ -630,14 +632,14 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
                               const double q,
                               const int H1Order, const int xElements, const int tElements, const int vElements,
                               const bool overrideVlasovBCs,
-                              const bool useSerendipity,
+                              const EBasisFamily &basisFamily,
                               const bool useMimeticDPG,
                               const double tol,
                               Teuchos::FancyOStream &out, bool &success,
                               const bool outputViz=false, const string vizPrefix="")
 {
   bool refineOnSecondSlab = true;
-  patchTestTimeSlab(refineOnSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+  patchTestTimeSlab(refineOnSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
 }
 
 
@@ -656,12 +658,12 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 4;
     const int H1Order   = 3;
     
-    const bool useSerendipity    = false;
-    const bool useMimeticDPG     = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
+    const bool useMimeticDPG       = false;
     
     const bool usePeriodicBCs = true;
     
-    auto initialSlab = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto initialSlab = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
    
     auto initialVlasovSoln = initialSlab->vlasovSolution();
     
@@ -753,7 +755,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 2;
     const int H1Order   = 2;
     
-    const bool useSerendipity = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     
     FunctionPtr  f_exact = Function::zero();
     FunctionPtr VE_exact = Function::zero();
@@ -761,7 +763,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
         
     const bool usePeriodicBCs = true;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
    
     form->setInitialAndInflowConditions(f_exact, f_exact);
     
@@ -856,7 +858,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 8; // we need a somewhat fine mesh in v to get relatively good resolution
     const int H1Order   = 4;
     
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const double poissonTolRelaxation = 1.0 + tolRelativeToProjectionError; // if we're tolerating looseness in f, we'd better tolerate in poisson, too.
     const double absTolPoisson = 1e-4 * poissonTolRelaxation; // Poisson solutions should be 0, so we use an absolute tol for these
     
@@ -869,7 +871,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     
     const bool usePeriodicBCs = true;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
     
     form->setUseGeometricMultigrid(true);
     form->setIterativeSolveTolerance(1e-8);
@@ -1036,10 +1038,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int delta_k   = 2;
     
     const bool usePeriodicBCs = true;
-    const bool useSerendipity = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG  = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG, delta_k);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG, delta_k);
     
     auto sfIP = form->constructVlasovInnerProduct(true);
     auto ip   = form->constructVlasovInnerProduct(false);
@@ -1090,10 +1092,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool usePeriodicBCs = true;
     const double q = 1.0;
     const double m = 1.0;
-    const bool useSerendipity = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG  = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
     
     auto vx = form->v_i(0);
     // note that E_exact and f_exact are *not* compatible solutions; E is not a solution to Poisson loaded with the zeroth moment of f.
@@ -1158,7 +1160,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 8; // we need a somewhat fine mesh in v to get relatively good resolution
     const int H1Order   = 4;
     
-    const bool useSerendipity = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG  = false;
     
     FunctionPtr  f_exact = Function::zero();
@@ -1167,7 +1169,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
         
     const bool usePeriodicBCs = true;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
    
     form->setInitialAndInflowConditions(f_exact, f_exact);
     
@@ -1227,11 +1229,11 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     FunctionPtr VE_exact = Function::zero();
     
     const bool overrideVlasovBCs = false;
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTestTimeSlab_f_xv2_E_zero )
@@ -1254,13 +1256,13 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     FunctionPtr VE_exact = Function::zero();
     
     const bool overrideVlasovBCs = false;
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
     bool refineSecondSlab = false;
     
-    patchTestTimeSlab(refineSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+    patchTestTimeSlab(refineSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTestRefinedTimeSlab_f_xv2_E_zero )
@@ -1283,11 +1285,11 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     FunctionPtr VE_exact = Function::zero();
     
     const bool overrideVlasovBCs = false;
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestRefinedTimeSlab(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+    patchTestRefinedTimeSlab(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero_Serendipity )
@@ -1310,11 +1312,11 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     FunctionPtr VE_exact = Function::zero();
     
     const bool overrideVlasovBCs = false;
-    const bool useSerendipity    = true;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_zero_E_1 )
@@ -1332,11 +1334,11 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int H1Order   = 2; // linear L^2 functions (allows exact VE)
     
     const bool overrideVlasovBCs = false;
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_zero_E_1_Serendipity )
@@ -1354,11 +1356,11 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int H1Order   = 2; // linear L^2 functions (allows exact VE)
     
     const bool overrideVlasovBCs = false;
-    const bool useSerendipity    = true;
+    const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
     const bool useMimeticDPG     = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear )
@@ -1383,9 +1385,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool outputViz = false;
     const std::string vizPrefix = "PatchTest_f_constant_E_linear";
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear_Serendipity )
@@ -1410,9 +1412,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool outputViz = false;
     const std::string vizPrefix = "PatchTest_f_constant_E_linear";
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
-    const bool useSerendipity    = true;
+    const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
     const bool useMimeticDPG     = false;
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic )
@@ -1434,12 +1436,12 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const double tol = 1e-12;
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol,
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 
@@ -1462,12 +1464,12 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const double tol = 1e-12;
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
-    const bool useSerendipity    = true;
+    const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
     const bool useMimeticDPG     = false;
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol,
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 
@@ -1497,7 +1499,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const double tol = 1e-11;
     
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
-    const bool useSerendipity    = false;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     
     const bool outputViz = true;
@@ -1513,7 +1515,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
 //    refinementSequence.push_back({866,948,950,2912,2914,2928,3424,3426,3432,3434,3438,3440,3442,3444,3446,3448,3450,3452,3454,3456,3458,3460,3462,3464,3466,3468,3470,3472,3474,3476,3478,3480,3482,3484,3486,3488,3490,3496,3498,3504,3506,3508,3510,3512,3514,3516,3518,3520,3522,3528,3530,3536,3538,3540,3542,3544,3546,3548,3550,3552,3554,3560,3562,3568,3570,3572,3574,3576,3578,3580,3582,3584,3586,3592,3594,3598,3600,3602,3604,3606,3608,3610,3612,3614,3616,3618,3620,3622,3628,3630,3636,3638,3682,3684,3686,3688,3690,3692,3694});
 //    refinementSequence.push_back({3428,3430,3436,3534,3556,3558,3564,3566,3588,3590,3596,3624,3680,3752,3754,3758,3760,3762,3768,3770,3776,3778,3780,3782,3788,3790,3796,3798,3804,3806,3812,3814,3820,3822,3828,3830,3832,3834,3840,3842,3844,3846,3848,3850,3852,3854,3856,3858,3862,3864,3866,3868,3870,3872,3874,3876,3878,3880,3882,3884,3886,3888,3890,3892,3894,3896,3898,3900,3902,3904,3906,3908,3910,3912,3914,3916,3918,3920,3922,3924,3926,3928,3930,3932,3934,3936,3938,3940,3942,3944,3946,3948,3950,3952,3954,3956,3958,3960,3962,3964,3966,3968,3970,3972,3974,3976,3978,3980,3982,3984,3986,3988,3990,3992,3994,3996,3998,4000,4002,4004,4006,4008,4010,4012,4014,4016,4018,4020,4022,4024,4026,4028,4030,4032,4034,4040,4042,4048,4050,4056,4058,4062,4064,4066,4068,4070,4072,4074,4076,4078,4080,4082,4084,4086,4088,4090,4092,4094,4096,4098,4100,4102,4104,4106,4108,4110,4112,4114,4116,4118,4120,4122,4124,4126,4128,4130,4132,4134,4136,4138,4140,4142,4144,4146,4148,4150,4152,4154,4156,4158,4160,4162,4164,4166,4168,4170,4172,4174,4176,4178,4180,4182,4184,4186,4188,4190,4192,4194,4196,4198,4200,4202,4204,4206,4208,4210,4212,4214,4216,4218,4220,4222,4224,4226,4228,4230,4232,4234,4236,4238,4240,4242,4244,4246,4248,4250,4252,4254,4256,4258,4260,4262,4264,4266,4268,4270,4272,4274,4276,4278,4280,4282,4284,4286,4288,4290,4292,4294,4296,4298,4300,4302,4304,4306,4308,4310,4312,4314,4316,4318,4320,4322,4324,4326,4328,4330,4332,4334,4336,4338,4340,4342,4344,4346,4348,4350,4352,4354,4356,4360,4362,4364,4366,4368,4370,4372,4374,4376,4378,4380,4382,4384,4386,4388,4390,4392,4394,4396,4398,4400,4402,4404,4406,4408,4410,4412,4414,4416,4418,4420,4422,4428,4430,4436,4438,4440,4442,4444,4446,4448,4450,4452,4454,4456,4458,4460,4462,4464,4466,4468,4470,4472,4474,4476,4478,4484,4486,4488,4490,4502,4506,4508,4512,4514,4516,4518,4520,4522,4524,4526,4528,4530,4532,4534,4536,4538,4540,4542,4584,4586,4628,4630});
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, useSerendipity, useMimeticDPG, tol,
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 
@@ -1542,8 +1544,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     
     const double tol = 1e-13;
     
-    auto serendipityForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, true,  useMimeticDPG);  // true: use Serendipity
-    auto fullTensorForm  = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, false, useMimeticDPG); // false: don't use Serendipity
+    auto serendipityForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, BASIS_FAMILY_SERENDIPITY,  useMimeticDPG);
+    auto fullTensorForm  = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, BASIS_FAMILY_HIERARCHICAL, useMimeticDPG);
     
     auto serendipityIP = serendipityForm->vlasovSolution()->ip();
     auto fullTensorIP  = fullTensorForm->vlasovSolution()->ip();
@@ -1784,10 +1786,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 4;
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
-    const bool useSerendipity = false; // should not affect test in any way
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1843,10 +1845,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 4;
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
-    const bool useSerendipity = false; // should not affect test in any way
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL; // should not affect test in any way
     const bool useMimeticDPG     = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1909,10 +1911,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 4;
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
-    const bool useSerendipity = false; // should not affect test in any way
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL; // should not affect test in any way
     const bool useMimeticDPG  = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1968,10 +1970,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const int vElements = 4;
     const int H1Order   = 3;
     const bool usePeriodicBCs = false;
-    const bool useSerendipity = false; // should not affect test in any way
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL; // should not affect test in any way
     const bool useMimeticDPG  = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, useSerendipity, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();

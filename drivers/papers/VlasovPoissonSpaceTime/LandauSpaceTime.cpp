@@ -62,7 +62,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const double x0, c
                                                               const int xElements, const int tElements, const int vElements,
                                                               double q, double eps0, double m,
                                                               const int H1Order, const int delta_k,
-                                                              const bool usePeriodicBCs, const bool useSerendipity,
+                                                              const bool usePeriodicBCs, const EBasisFamily &basisFamily,
                                                               const bool useMimeticDPG,
                                                               const int numUniformRefinements)
 {
@@ -91,23 +91,25 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const double x0, c
   
   if (!useMimeticDPG)
   {
-    form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+    form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, configForm, spatialMeshTopo,
                                                        temporalVertices,
                                                        velocitySpaceVertices_x,
                                                        velocitySpaceVertices_y,
                                                        velocitySpaceVertices_z,
                                                        H1Order, delta_k,
-                                                       numUniformRefinements));
+                                                       numUniformRefinements,
+                                                       basisFamily));
   }
   else
   {
-    form = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q, m, useSerendipity, configForm, spatialMeshTopo,
+    form = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q, m, configForm, spatialMeshTopo,
                                                               temporalVertices,
                                                               velocitySpaceVertices_x,
                                                               velocitySpaceVertices_y,
                                                               velocitySpaceVertices_z,
                                                               H1Order, delta_k,
-                                                              numUniformRefinements));
+                                                              numUniformRefinements,
+                                                              basisFamily));
   }
   return form;
 }
@@ -413,9 +415,10 @@ int main(int argc, char *argv[])
     }
     
     bool usePeriodicBCs = true;
+    EBasisFamily basisFamily = useSerendipityBasis ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL;
     
     auto form = getFormulation1D1T1V(x0, xWidth, t0, tWidth, v0, vWidth, xElements, tElements, vElements, q, eps0, m, H1Order, delta_k, usePeriodicBCs,
-                                     useSerendipityBasis, useMimeticDPG, numUniformRefinements);
+                                     basisFamily, useMimeticDPG, numUniformRefinements);
     
     if (worksetSize != -1)
     {
