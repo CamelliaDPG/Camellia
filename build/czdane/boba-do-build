@@ -1,0 +1,15 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+SRC=$(realpath $ROOT/../../tpl/boba)
+
+STARTDIR=$(pwd)
+
+cd $SRC
+python3 boba_builder.py --boba \
+    --camp Off --RAJA Off --umpire Off --Adiak Off --fmt Off --Caliper Off \
+    --examples Off --tests Off --mpi On \
+    --recipe $ROOT/boba_build_dane_parallel.json
+
+cd $STARTDIR

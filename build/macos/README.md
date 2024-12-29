@@ -34,8 +34,7 @@ First, build and install the dependencies:
 ./build/macos/trilinos-do-install
 ```
 
-Next, build and install boba (note: you may need to add the "sstream" standard
-header to `tpl/boba/include/BOBA/tensors/boba_tensor.hpp`):
+Next, build and install boba:
 
 ```sh
 ./build/macos/boba-do-build

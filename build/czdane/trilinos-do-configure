@@ -6,7 +6,7 @@ MPI_ROOT=/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1
 HDF5_ROOT=$ROOT/hdf5
 
 cmake \
-    -D BUILD_SHARED_LIBS=OFF \
+    -D BUILD_SHARED_LIBS=ON \
     -D CMAKE_BUILD_TYPE=Release \
     -D CMAKE_INSTALL_PREFIX=$ROOT/trilinos \
     -D CMAKE_C_COMPILER=$MPI_ROOT/bin/mpicc \

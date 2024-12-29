@@ -30,6 +30,7 @@ Download the dependencies:
 ```sh
 ./build/czdane/hdf5-do-download
 ./build/czdane/trilinos-do-download
+# TODO ./build/czdane/boba-do-download
 ```
 
 Build and install the dependencies, then build camellia
@@ -42,6 +43,8 @@ Build and install the dependencies, then build camellia
 ./build/czdane/trilinos-do-configure
 ./build/czdane/trilinos-do-build
 ./build/czdane/trilinos-do-install
+# boba
+./build/czdane/boba-do-build
 # camellia
 ./build/czdane/camellia-do-configure
 ./build/czdane/camellia-do-build

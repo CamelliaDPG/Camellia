@@ -13,5 +13,8 @@
 !trilinos-do-build
 !trilinos-do-install
 
+!boba-do-build
+!boba_build_dane_parallel.json
+
 !camellia-do-configure
 !camellia-do-build

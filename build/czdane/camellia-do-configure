@@ -3,6 +3,7 @@
 ROOT=$(dirname $(realpath $0))
 MPI_ROOT=/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1
 TRILINOS_ROOT=$ROOT/trilinos
+BOBA_ROOT=$(realpath $ROOT/../../tpl/boba/install/BOBA_cpu)
 
 SRC=$(realpath $ROOT/../..)
 
@@ -15,6 +16,7 @@ cmake \
     -D CMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -D CMAKE_INSTALL_PREFIX=$ROOT/camellia \
     -D TRILINOS_PATH=$TRILINOS_ROOT \
+    -D BOBA_ROOT=$BOBA_ROOT \
     -D BUILD_EXPERIMENTAL_DRIVERS=ON \
     -D BUILD_PRECONDITIONING_DRIVERS=ON \
     -B $ROOT/camellia-build \

@@ -1,0 +1,55 @@
+{
+  "libraries": {
+    "blt": {
+      "cmake": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_VERBOSE_MAKEFILE": "On",
+        "CMAKE_C_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicc",
+        "CMAKE_CXX_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicxx",
+        "BLT_CXX_STD": "c++17",
+        "CXX_STANDARD": "17",
+        "ENABLE_OPENMP": "Off"
+      }
+    },
+    "eigen": {
+      "cmake": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_VERBOSE_MAKEFILE": "On",
+        "CMAKE_C_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicc",
+        "CMAKE_CXX_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicxx",
+        "BLT_CXX_STD": "c++17",
+        "CXX_STANDARD": "17",
+        "ENABLE_OPENMP": "Off"
+      }
+    },
+    "Caliper": {
+      "cmake": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_VERBOSE_MAKEFILE": "On",
+        "CMAKE_C_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicc",
+        "CMAKE_CXX_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicxx",
+        "BLT_CXX_STD": "c++17",
+        "CXX_STANDARD": "17",
+        "BLT_SOURCE_DIR": "",
+        "ENABLE_OPENMP": "Off"
+      }
+    },
+    "BOBA": {
+      "cmake": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_VERBOSE_MAKEFILE": "On",
+        "CMAKE_C_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicc",
+        "CMAKE_CXX_COMPILER": "/usr/tce/packages/mvapich2/mvapich2-2.3.7-intel-2023.2.1/bin/mpicxx",
+        "BLT_CXX_STD": "c++17",
+        "CXX_STANDARD": "17",
+        "BOBA_CHECKPOINTS": "Off",
+        "BOBA_DEBUG": "Off",
+        "BOBA_ENABLE_EXAMPLES": "On",
+        "BOBA_ENABLE_TESTS": "On",
+        "ENABLE_OPENMP": "Off",
+        "BLT_SOURCE_DIR": ""
+      }
+    }
+  },
+  "cmake_path": "/usr/tce/packages/cmake/cmake-3.23.1/bin/cmake"
+}
