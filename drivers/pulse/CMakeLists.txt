@@ -1,3 +1,4 @@
 project(pulse)
 
 add_subdirectory(SpaceTimeMixedPoissonBoba)
+add_subdirectory(SpaceTimeMixedVlasovBoba)
