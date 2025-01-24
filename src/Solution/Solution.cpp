@@ -4453,14 +4453,15 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
 {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
-  if (_solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end())
+  const auto oldDataRecord = _solutionForCellID[solutionOrdinal].find(cellID);
+  if (oldDataRecord == _solutionForCellID[solutionOrdinal].end())
   {
 //    cout << "on rank " << rank << ", no solution for " << cellID << "; skipping projection onto children.\n";
     return; // zero solution on cell
   }
 //  cout << "on rank " << rank << ", projecting " << cellID << " data onto children.\n";
-  const Camellia::FieldContainer<Scalar>& oldData = _solutionForCellID[solutionOrdinal][cellID];
-//  cout << "cell " << cellID << " data: \n" << *oldData;
+  const Camellia::FieldContainer<Scalar>& oldData = oldDataRecord->second;
+  //  cout << "cell " << cellID << " data: \n" << oldData;
   projectOldCellOntoNewCells(cellID, oldElemType, oldData, childIDs, solutionOrdinal);
 }
 
@@ -4483,8 +4484,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
   map<int, TFunctionPtr<Scalar> > fieldMap;
 
   CellPtr parentCell = _mesh->getTopology()->getCell(cellID);
-  int dummyCubatureDegree = 1;
-  BasisCachePtr parentRefCellCache = BasisCache::basisCacheForReferenceCell(parentCell->topology(), dummyCubatureDegree);
+  BasisCachePtr parentCellCache = BasisCache::basisCacheForCell(_mesh, cellID);
 
 //   cout << "projecting from cell " << cellID << " onto its children.\n";
 
@@ -4505,7 +4505,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
 
 //       cout << "basisCoefficients for parent volume trialID " << trialID << ":\n" << basisCoefficients;
 
-      TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
+      TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentCellCache) );
       fieldMap[trialID] = oldTrialFunction;
     }
   }
@@ -4534,7 +4534,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
   {
     CellTopoPtr sideTopo = parentCell->topology()->getSubcell(sideDim, sideOrdinal);
-    BasisCachePtr parentSideTopoBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, dummyCubatureDegree);
+    BasisCachePtr parentSideBasisCache = parentCellCache->getSideBasisCache(sideOrdinal);
     for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
     {
       int trialID = *trialIDIt;
@@ -4550,7 +4550,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
           int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
           basisCoefficients(dofOrdinal) = oldData(dofIndex);
         }
-        TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
+        TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentSideBasisCache) );
         traceMap[sideOrdinal][trialID] = oldTrialFunction;
       }
     }
@@ -4572,41 +4572,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
 //    cout << "child_p_order = " << child_p_order << endl;
 //    cout << "parent_p_order = " << parent_p_order << endl;
     
-    BasisCachePtr volumeBasisCache;
-    vector<BasisCachePtr> sideBasisCache(childSideCount);
-
-    if (parentCell->children().size() > 0)
-    {
-      RefinementBranch refBranch(1,make_pair(parentCell->refinementPattern().get(), childOrdinal));
-      volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(childCell->topology(), cubatureDegree, refBranch, true);
-      for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++)
-      {
-        CellTopoPtr sideTopo = childCell->topology()->getSubcell(sideDim, sideOrdinal);
-        unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
-                                     : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
-
-        RefinementBranch sideBranch;
-        if (parentSideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
-          sideBranch = RefinementPattern::subcellRefinementBranch(refBranch, sideDim, parentSideOrdinal);
-        if (sideBranch.size()==0)
-        {
-          sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
-        }
-        else
-        {
-          sideBasisCache[sideOrdinal] = BasisCache::basisCacheForRefinedReferenceCell(sideTopo, cubatureDegree, sideBranch);
-        }
-      }
-    }
-    else
-    {
-      volumeBasisCache = BasisCache::basisCacheForReferenceCell(childCell->topology(), cubatureDegree, true);
-      for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++)
-      {
-        CellTopoPtr sideTopo = childCell->topology()->getSubcell(sideDim, sideOrdinal);
-        sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
-      }
-    }
+    BasisCachePtr childVolumeBasisCache = BasisCache::basisCacheForCell(_mesh, childID);
 
     // (re)initialize the Camellia::FieldContainer storing the solution--element type may have changed (in case of p-refinement)
     Camellia::FieldContainer<Scalar> childSolutionCoefficients(childType->trialOrderPtr->totalDofs());
@@ -4620,7 +4586,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
       TFunctionPtr<Scalar> fieldFxn = fieldFxnIt->second;
       BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID);
       basisCoefficients.resize(1,childBasis->getCardinality());
-      Projector<Scalar>::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, volumeBasisCache);
+      Projector<Scalar>::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, childVolumeBasisCache);
 
 //      cout << "projected basisCoefficients for child volume trialID " << varID << ":\n" << basisCoefficients;
 
@@ -4647,7 +4613,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
       bool parityFlipped = false;
       if (parentSideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
       {
-        basisCacheForSide = sideBasisCache[sideOrdinal];
+        basisCacheForSide = childVolumeBasisCache->getSideBasisCache(sideOrdinal);
         /*
          Since parent and child share a side, need to worry about parity flips.
          If there is a flip, then we need effectively to negate the parity seen
@@ -4661,7 +4627,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
       }
       else
       {
-        basisCacheForSide = volumeBasisCache->getSideBasisCache(sideOrdinal);
+        basisCacheForSide = childVolumeBasisCache->getSideBasisCache(sideOrdinal);
         sideParities = _mesh->cellSideParitiesForCell(childID);
       }
       basisCacheForSide->setCellSideParities(sideParities);
@@ -4754,7 +4720,7 @@ void TSolution<Scalar>::reverseParitiesForLocalCoefficients(GlobalIndexType cell
   auto coefficientsEntry = _solutionForCellID[solutionOrdinal].find(cellID);
   if (coefficientsEntry != _solutionForCellID[solutionOrdinal].end())
   {
-    Camellia::FieldContainer<double> coefficients = coefficientsEntry->second; // copy so we can modify
+    Camellia::FieldContainer<double> & coefficients = coefficientsEntry->second;
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     auto fluxVars = _mesh->bilinearForm()->varFactory()->fluxVars();
     for (VarPtr fluxVar : fluxVars)
@@ -4773,7 +4739,7 @@ void TSolution<Scalar>::reverseParitiesForLocalCoefficients(GlobalIndexType cell
         }
       }
     }
-    replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, coefficients); // put back the modified coefficients
+//    replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, coefficients); // put back the modified coefficients
   }
 }
 

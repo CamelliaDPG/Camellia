@@ -47,7 +47,7 @@ namespace
 void testBasisAllDofOrdinalsAssignedToSubcells(BasisPtr basis, Teuchos::FancyOStream &out, bool &success)
 {
   int domainDim = basis->domainTopology()->getDimension();
-  int allSubcellDofOrdinalsCount = basis->dofOrdinalsForSubcells(domainDim, true).size();
+  auto allSubcellDofOrdinalsCount = basis->dofOrdinalsForSubcells(domainDim, true).size();
   TEST_EQUALITY(basis->getCardinality(), allSubcellDofOrdinalsCount);
 }
   

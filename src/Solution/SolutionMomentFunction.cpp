@@ -12,6 +12,8 @@
 
 #include "SolutionMomentFunction.h"
 
+#include "Camellia_TensorIndices.h"
+
 namespace
 {
   // private (anonymous-namespaced) class to define a simple basis integration kernel.  We moved this out of a lambda defined in the SolutionMomentFunction constructor because nvcc complained about not being able to take the address of the enclosing function.
@@ -91,9 +93,10 @@ namespace Camellia
     Intrepid2::TensorPoints<double,Camellia::DeviceType> points = basisCache->getRefCellPoints();
     Intrepid2::BasisValues<double,Camellia::DeviceType> basisValues = extrudedSpatialBasis->allocateBasisValues(points);
     
-    extrudedSpatialBasis->getValues(basisValues, points);
-
-    // we implicitly assume here that reference-to-physical transform (the pullback due to the function space) is identity
+    constFCPtr transformedValues = basisCache->getTransformedValues(extrudedSpatialBasis, OP_VALUE, useCubPointsSideRefCell);
+    
+    // transformedValues has dimensions (C,F,P,[D,D])
+    auto dv_transformedValues = transformedValues->checkoutDeviceView();
     
     auto allSpatialBasisCoefficients  = _solutionMoments.getSpatialBasisCoefficients();
     
@@ -142,7 +145,7 @@ namespace Camellia
         for (int dof = 0; dof < numDofs; dof++)
         {
           double weight = spatialBasisCoefficients(cellOrdinal,dof);
-          const double & basisValue = basisValues(dof,pointOrdinal);
+          const double & basisValue = dv_transformedValues(physicalCellOrdinalInBasisCache,dof,pointOrdinal); //basisValues(dof,pointOrdinal);
           view(physicalCellOrdinalInBasisCache,pointOrdinal) += basisValue * weight;
         }
       });
@@ -152,15 +155,17 @@ namespace Camellia
       auto view = values.getUnderlyingView<3>();
       Kokkos::deep_copy(view, 0.0); // initialize
       
+      int numPhysicalPoints = view.extent_int(1);
+      
       auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{view.extent(0),view.extent(1),view.extent(2)});
       using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
       
       TEUCHOS_TEST_FOR_EXCEPTION(basisValues.numTensorDataFamilies() != 1, std::invalid_argument, "basisValues has unexpected number of TensorData families");
       
-      auto tensorBasisValues = basisValues.tensorData();
-      
-      auto spatialValues   = basisValues.tensorData().getTensorComponent(0);
-      auto extrusionValues = basisValues.tensorData().getTensorComponent(1);
+//      auto tensorBasisValues = basisValues.tensorData();
+//
+//      auto spatialValues   = basisValues.tensorData().getTensorComponent(0);
+//      auto extrusionValues = basisValues.tensorData().getTensorComponent(1);
       
       Kokkos::parallel_for("SolutionMomentFunction_values", policy,
       KOKKOS_LAMBDA (const array_index_type &physicalCellOrdinalInBasisCache, const array_index_type &physicalPointOrdinal, const array_index_type &extrusionPointOrdinal)
@@ -169,15 +174,20 @@ namespace Camellia
         for (int dof = 0; dof < numDofs; dof++)
         {
           double weight = spatialBasisCoefficients(cellOrdinal,dof);
-          const int fieldIndex = 0;
-          const long long spatialFieldOrdinal   = tensorBasisValues.getTensorComponentIndex(0, fieldIndex, dof);
-          const long long extrusionFieldOrdinal = tensorBasisValues.getTensorComponentIndex(1, fieldIndex, dof);
-          const double & spatialBasisValue   = spatialValues(spatialFieldOrdinal,physicalPointOrdinal);
-          const double & extrusionBasisValue = extrusionValues(extrusionFieldOrdinal,extrusionPointOrdinal);
-          view(physicalCellOrdinalInBasisCache,physicalPointOrdinal,extrusionPointOrdinal) += spatialBasisValue * extrusionBasisValue * weight;
+          int pointOrdinal;
+          TensorIndices::setTensorOrdinal(pointOrdinal, physicalPointOrdinal, numPhysicalPoints, extrusionPointOrdinal);
+          const double & basisValue = dv_transformedValues(physicalCellOrdinalInBasisCache,dof,pointOrdinal); //basisValues(dof,pointOrdinal);
+//          const int fieldIndex = 0;
+//          const long long spatialFieldOrdinal   = tensorBasisValues.getTensorComponentIndex(0, fieldIndex, dof);
+//          const long long extrusionFieldOrdinal = tensorBasisValues.getTensorComponentIndex(1, fieldIndex, dof);
+//          const double & spatialBasisValue   = spatialValues(spatialFieldOrdinal,physicalPointOrdinal);
+//          const double & extrusionBasisValue = extrusionValues(extrusionFieldOrdinal,extrusionPointOrdinal);
+//          view(physicalCellOrdinalInBasisCache,physicalPointOrdinal,extrusionPointOrdinal) += spatialBasisValue * extrusionBasisValue * weight;
+          view(physicalCellOrdinalInBasisCache,physicalPointOrdinal,extrusionPointOrdinal) += basisValue * weight;
         }
       });
     }
+    transformedValues->checkinDeviceView(false); // false: don't copy back to host (has not changed)
     SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(physicalCellOrdinalLookup);
   }
 

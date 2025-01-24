@@ -14,6 +14,7 @@
 #include "BasisFactory.h"
 #include "BasisSumFunction.h"
 #include "Function.h"
+#include "MeshFactory.h"
 #include "SpaceTimeHeatFormulation.h"
 #include "TensorBasis.h"
 #include "TypeDefs.h"
@@ -95,6 +96,147 @@ void testConstantBasisSpaceTime(CellTopoPtr spaceTopo, bool testSides, Teuchos::
     double l2Err = (f * restrictor - basisSumFunction * restrictor)->l2norm(spaceTimeMesh);
     TEST_COMPARE(l2Err, <, tol);
   }
+}
+
+void testOverridingBasisCache(Teuchos::FancyOStream &out, bool &success)
+{
+  MPIWrapper::CommWorld()->Barrier();
+  int spaceDim = 2;
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  int H1Order = 2;
+  vector<int> elemCounts = {1,1};
+  
+  GlobalIndexType rootCellID = 0;
+  
+  const int numSides = 1;
+  
+  for (int rootSideIndex = 0; rootSideIndex<numSides; rootSideIndex++)
+  {
+    // create a non-distributed mesh (will be replicated on each MPI rank): we are not testing anything MPI-related here…
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order, 0, {0.,0.},
+                                                map<int,int>(), map<int,int>(), MPIWrapper::CommSerial());
+
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    mesh->registerSolution(solution);
+    
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
+    map<int, FunctionPtr> solutionMap;
+  //  solutionMap[form.u()->ID()] = Function::constant(1.0);
+  //  solutionMap[form.sigma()->ID()] = Function::constant({1.0,0.0});
+    solutionMap[form.u_hat()->ID()] = Function::constant(1.0) * traceFxn;
+    FunctionPtr n_parity = Function::normal() * Function::sideParity();
+    solutionMap[form.sigma_n_hat()->ID()] = Function::constant({0.0,1.0}) * n_parity;
+    
+    solution->projectOntoCell(solutionMap, rootCellID, rootSideIndex);
+    
+    // get solution coefficients:
+    auto elemType = solution->mesh()->getElementType(rootCellID);
+    BasisPtr   u_hat_basis = elemType->trialOrderPtr->getBasis(form.u_hat()->ID(),       rootSideIndex);
+    BasisPtr sigma_n_basis = elemType->trialOrderPtr->getBasis(form.sigma_n_hat()->ID(), rootSideIndex);
+    FieldContainer<double> basisCoefficients_u_hat(u_hat_basis->getCardinality());
+    FieldContainer<double> basisCoefficients_sigma_n(sigma_n_basis->getCardinality());
+    solution->getBasisCoefficientsForCell(basisCoefficients_u_hat,   form.u_hat()->ID(),       rootCellID, STANDARD_SOLUTION, 0, rootSideIndex);
+    solution->getBasisCoefficientsForCell(basisCoefficients_sigma_n, form.sigma_n_hat()->ID(), rootCellID, STANDARD_SOLUTION, 0, rootSideIndex);
+    
+    BasisCachePtr rootCellBasisCache     = BasisCache::basisCacheForCell(mesh, rootCellID);
+    BasisCachePtr rootCellSideBasisCache = rootCellBasisCache->getSideBasisCache(rootSideIndex);
+    
+    // now, refine uniformly:
+    RefinementStrategy::hRefineUniformly(mesh);
+    
+//    out << "sigma_n, basis coefficients on root cell:\n";
+//    for (int basisOrdinal=0; basisOrdinal<sigma_n_basis->getCardinality(); basisOrdinal++)
+//    {
+//      out << basisOrdinal << ": " << basisCoefficients_sigma_n(basisOrdinal) << std::endl;
+//    }
+    
+    const bool boundaryValueOnly = true;
+    BasisSumFunction     u_bsf(  u_hat_basis, basisCoefficients_u_hat,   rootCellSideBasisCache, OP_VALUE, boundaryValueOnly);
+    BasisSumFunction sigma_bsf(sigma_n_basis, basisCoefficients_sigma_n, rootCellSideBasisCache, OP_VALUE, boundaryValueOnly);
+    
+    double tol = 1e-14;
+    
+    FunctionPtr   u_hat_exact = solutionMap[form.u_hat()->ID()];
+    FunctionPtr sigma_n_exact = solutionMap[form.sigma_n_hat()->ID()];
+    
+    // as a sanity check, let's first confirm that the actual values agree with expected on the root basis cache
+    {
+      const int numCells = 1;
+      const int cellOrdinal = 0;
+      auto numPoints = rootCellSideBasisCache->getRefCellPointsFC().dimension(0);
+      
+      FieldContainer<double> u_actual_values(numCells,numPoints);
+      FieldContainer<double> u_exact_values(numCells,numPoints);
+      u_bsf.values(u_actual_values, rootCellSideBasisCache);
+      u_hat_exact->values(u_exact_values, rootCellSideBasisCache);
+      
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        double  exact_value = u_exact_values(cellOrdinal,pointOrdinal);
+        double actual_value = u_actual_values(cellOrdinal,pointOrdinal);
+        TEST_FLOATING_EQUALITY(exact_value, actual_value, tol);
+      }
+      
+      FieldContainer<double> sigma_actual_values(numCells,numPoints);
+      FieldContainer<double> sigma_exact_values(numCells,numPoints);
+      sigma_bsf.values(sigma_actual_values, rootCellSideBasisCache);
+      sigma_n_exact->values(sigma_exact_values, rootCellSideBasisCache);
+      
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        double  exact_value = sigma_exact_values(cellOrdinal,pointOrdinal);
+        double actual_value = sigma_actual_values(cellOrdinal,pointOrdinal);
+        TEST_FLOATING_EQUALITY(exact_value, actual_value, tol);
+      }
+    }
+    
+    auto rootCell = mesh->getTopology()->getCell(rootCellID);
+    
+    auto childrenInfo = rootCell->childrenForSide(rootSideIndex);
+    for (auto childInfo : childrenInfo)
+    {
+      auto childID   = childInfo.first;
+      auto childSide = childInfo.second;
+      
+      auto childVolumeCache = BasisCache::basisCacheForCell(mesh, childID);
+      auto childSideCache   = childVolumeCache->getSideBasisCache(childSide);
+      
+      int numCells = 1;
+      auto numPoints = childSideCache->getRefCellPointsFC().dimension(0);
+      
+      FieldContainer<double> u_actual_values(numCells,numPoints);
+      FieldContainer<double> u_exact_values(numCells,numPoints);
+      u_bsf.values(u_actual_values, childSideCache);
+      u_hat_exact->values(u_exact_values, childSideCache);
+      
+      const int cellOrdinal = 0;
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        double  exact_value = u_exact_values(cellOrdinal,pointOrdinal);
+        double actual_value = u_actual_values(cellOrdinal,pointOrdinal);
+        TEST_FLOATING_EQUALITY(exact_value, actual_value, tol);
+      }
+      
+      FieldContainer<double> sigma_actual_values(numCells,numPoints);
+      FieldContainer<double> sigma_exact_values(numCells,numPoints);
+      sigma_bsf.values(sigma_actual_values, childSideCache);
+      sigma_n_exact->values(sigma_exact_values, childSideCache);
+      
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        double  exact_value = sigma_exact_values(cellOrdinal,pointOrdinal);
+        double actual_value = sigma_actual_values(cellOrdinal,pointOrdinal);
+        TEST_FLOATING_EQUALITY(exact_value, actual_value, tol);
+      }
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( BasisSumFunction, OverridingBasisCache )
+{
+  testOverridingBasisCache(out, success);
 }
 
 TEUCHOS_UNIT_TEST( BasisSumFunction, TensorBasisLine )

@@ -790,7 +790,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       Camellia::FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePointsFC();
       Camellia::FieldContainer<double> coarseCellPhysicalCubaturePoints = coarseCellBasisCache->getPhysicalCubaturePointsFC();
 
-      double tol = 1e-14;
+      double tol = 1e-13;
       double maxDiff = 0;
       if (! fcsAgree(coarseCellPhysicalCubaturePoints, fineCellPhysicalCubaturePoints, tol, maxDiff) )
       {

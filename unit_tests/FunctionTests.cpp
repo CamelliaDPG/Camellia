@@ -406,7 +406,16 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     vector<int> elemCounts = {2,2};
     set<int> unitCellIDs = {0,3};
     
-    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {2.0,2.0}, elemCounts, H1Order);
+    const double domain_x = 2.0;
+    const double domain_y = 2.0;
+    
+    const double h_x         = domain_x / elemCounts[0];
+    const double h_y         = domain_y / elemCounts[1];
+    const double ref_space_h = 2.0; // [-1,1] ref space line
+    const double h_scaling_x = h_x / ref_space_h;
+    const double h_scaling_y = h_y / ref_space_h;
+    
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {domain_x,domain_y}, elemCounts, H1Order);
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     
     LinearTermPtr dummyGoal = 1.0 * form.u(); // just something to let there be two solutions...
@@ -416,6 +425,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     auto myCellIDs = mesh->cellIDsInPartition();
     
+    const double coefficient_scaling = (form.u()->space() == L2) ? h_scaling_x * h_scaling_y : 1.0;
+    
     SolutionComponent solutionComponent = INFLUENCE_SOLUTION; // use the second solution for our actual test
     int solutionStage = 0;
     int solutionOrdinal = solution->solutionOrdinal(solutionComponent, solutionStage);
@@ -424,8 +435,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
       auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
       Camellia::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
       bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
-      if (hasUnitSolution) solnCoefficients.initialize(1.0);
-      else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
+      if (hasUnitSolution) solnCoefficients.initialize(1.0 * coefficient_scaling);
+      else                 solnCoefficients.initialize(0.0 * coefficient_scaling); // this will give all variables a constant 1.0 value
       
       solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
       
@@ -481,7 +492,16 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     vector<int> elemCounts = {2,2};
     set<int> unitCellIDs = {0,3};
     
-    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+    const double domain_x = 1.0;
+    const double domain_y = 1.0;
+    
+    const double h_x         = domain_x / elemCounts[0];
+    const double h_y         = domain_y / elemCounts[1];
+    const double ref_space_h = 2.0; // [-1,1] ref space line
+    const double h_scaling_x = h_x / ref_space_h;
+    const double h_scaling_y = h_y / ref_space_h;
+    
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {domain_x,domain_y}, elemCounts, H1Order);
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     
     LinearTermPtr dummyGoal = 1.0 * form.u(); // just something to let there be two solutions...
@@ -491,6 +511,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     auto myCellIDs = mesh->cellIDsInPartition();
     
+    const double coefficient_scaling = (form.u()->space() == L2) ? h_scaling_x * h_scaling_y : 1.0;
+    
     SolutionComponent solutionComponent = INFLUENCE_SOLUTION; // use the second solution for our actual test
     int solutionStage = 0;
     int solutionOrdinal = solution->solutionOrdinal(solutionComponent, solutionStage);
@@ -499,8 +521,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
       auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
       Camellia::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
       bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
-      if (hasUnitSolution) solnCoefficients.initialize(1.0);
-      else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
+      if (hasUnitSolution) solnCoefficients.initialize(1.0 * coefficient_scaling);
+      else                 solnCoefficients.initialize(0.0 * coefficient_scaling); // this will give all variables a constant 1.0 value
       
       solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
       
@@ -571,8 +593,19 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunction )
   vector<int> elemCounts = {2,2};
   set<int> unitCellIDs = {0,3};
   
-  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  const double domain_x = 1.0;
+  const double domain_y = 1.0;
+  
+  const double h_x         = domain_x / elemCounts[0];
+  const double h_y         = domain_y / elemCounts[1];
+  const double ref_space_h = 2.0; // [-1,1] ref space line
+  const double h_scaling_x = h_x / ref_space_h;
+  const double h_scaling_y = h_y / ref_space_h;
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {domain_x,domain_y}, elemCounts, H1Order);
   SolutionPtr solution = Solution::solution(form.bf(), mesh);
+  
+  const double coefficient_scaling = (form.u()->space() == L2) ? h_scaling_x * h_scaling_y : 1.0;
   
   solution->initializeLHSVector();
   
@@ -583,8 +616,8 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunction )
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
     Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
     bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
-    if (hasUnitSolution) solnCoefficients.initialize(1.0);
-    else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
+    if (hasUnitSolution) solnCoefficients.initialize(1.0 * coefficient_scaling);
+    else                 solnCoefficients.initialize(0.0 * coefficient_scaling); // this will give all variables a constant 1.0 value
     
     solution->setSolnCoeffsForCellID(solnCoefficients, cellID);
   }
@@ -755,7 +788,19 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
   vector<int> elemCounts = {2,2};
   set<int> unitCellIDs = {3,4,6};
   
-  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  const double domain_x = 1.0;
+  const double domain_y = 1.0;
+  
+  const double h_x         = domain_x / elemCounts[0];
+  const double h_y         = domain_y / elemCounts[1];
+  const double ref_space_h = 2.0; // [-1,1] ref space line
+  const double h_scaling_x = h_x / ref_space_h;
+  const double h_scaling_y = h_y / ref_space_h;
+  
+  const double coefficient_scaling = (form.u()->space() == L2) ? h_scaling_x * h_scaling_y : 1.0;
+  const double refined_coefficient_scaling = coefficient_scaling / 4.0;
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {domain_x,domain_y}, elemCounts, H1Order);
   const vector<GlobalIndexType> cellsToHRefine = {0};
   mesh->hRefine(cellsToHRefine);
   
@@ -770,8 +815,16 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
     Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
     bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
-    if (hasUnitSolution) solnCoefficients.initialize(1.0); // this will give all variables a constant 1.0 value
-    else                 solnCoefficients.initialize(0.0);
+    if (hasUnitSolution)
+    {
+      // this will give all variables a constant 1.0 value:
+      if (cellID == 3) solnCoefficients.initialize(1.0 * coefficient_scaling);
+      else             solnCoefficients.initialize(1.0 * refined_coefficient_scaling); // cells 4 and 6 are refined
+    }
+    else
+    {
+      solnCoefficients.initialize(0.0 * coefficient_scaling);
+    }
     
     solution->setSolnCoeffsForCellID(solnCoefficients, cellID);
   }
@@ -873,7 +926,17 @@ TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
   vector<int> elemCounts = {2,2};
   set<int> unitCellIDs = {0,3};
   
-  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  const double domain_x = 1.0;
+  const double domain_y = 1.0;
+  
+  const double h_x         = domain_x / elemCounts[0];
+  const double h_y         = domain_y / elemCounts[1];
+  const double ref_space_h = 2.0; // [-1,1] ref space line
+  const double h_scaling_x = h_x / ref_space_h;
+  const double h_scaling_y = h_y / ref_space_h;
+  const double coefficient_scaling = (form.u()->space() == L2) ? h_scaling_x * h_scaling_y : 1.0;
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {domain_x,domain_y}, elemCounts, H1Order);
   SolutionPtr solution = Solution::solution(form.bf(), mesh);
   
   solution->initializeLHSVector();
@@ -885,8 +948,8 @@ TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
     Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
     bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
-    if (hasUnitSolution) solnCoefficients.initialize(1.0);
-    else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
+    if (hasUnitSolution) solnCoefficients.initialize(1.0 * coefficient_scaling);
+    else                 solnCoefficients.initialize(0.0 * coefficient_scaling); // this will give all variables a constant 1.0 value
     
     solution->setSolnCoeffsForCellID(solnCoefficients, cellID);
   }

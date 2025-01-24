@@ -616,6 +616,12 @@ void SolutionMoments::update()
     }
     
     auto extrusionBasisIntegralsArray = _extrusionBasisIntegrals; // avoiding implicit reference to this in lambda below
+    Kokkos::Array<bool,Intrepid2::Parameters::MaxTensorComponents> extrusionBasisIsL2; // implies we need to transform
+    for (int i=0; i<int(_extrusionBases.size()); i++)
+    {
+      auto basis = _extrusionBases[i];
+      extrusionBasisIsL2[i] = (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL);
+    }
     using namespace ::Camellia::TensorIndices;
     Kokkos::parallel_for("integrate over phase space", extrudedSpatialUnfilteredBasisCardinality,
     KOKKOS_LAMBDA (const int extrudedSpatialBasisOrdinal) {
@@ -679,29 +685,32 @@ void SolutionMoments::update()
                 if (survivingExtrusionDimension == d) continue; // this dimension remains un-integrated; skip
                 int momentNumber = momentIndex[d];
                 const auto & extrusionBasisIntegrals = extrusionBasisIntegralsArray[d];
-                const int extrusionBasisCardinality = extrusionBasisIntegrals.extent_int(0);
                 const int &extrusionComponentFieldOrdinal = phaseFieldOrdinalComponents[d+1];
+                
+                const double &v0 = extrusion_v0[d];
+                const double &v1 = extrusion_v1[d];
+                
+                const double a = v0 + v1;
+                const double b = v1 - v0;
+                
+                const double piolaWeight = extrusionBasisIsL2[d] ? 2.0 / b : 1.0;
                 
                 if (momentNumber == 0)
                 {
                   const double & extrusionBasisIntegral = extrusionBasisIntegrals(momentNumber,extrusionComponentFieldOrdinal);
-                  extrusionComponentProduct *= extrusionBasisIntegral;
+                  extrusionComponentProduct *= extrusionBasisIntegral * piolaWeight;
                 }
                 else
                 {
                   double binomialSum = 0.0;
-                  const double &v0 = extrusion_v0[d];
-                  const double &v1 = extrusion_v1[d];
-
-                  const double a = v0 + v1;
-                  const double b = v1 - v0;
+                  
                   for (int l=0; l<=momentNumber; l++)
                   {
                     const double & extrusionBasisIntegral = extrusionBasisIntegrals(l,extrusionComponentFieldOrdinal);
                     const double binomialWeight = binomialCoefficient(a, b, momentNumber, l);
                     binomialSum += binomialWeight * extrusionBasisIntegral;
                   }
-                  extrusionComponentProduct *= pow(0.5,momentNumber) * binomialSum;
+                  extrusionComponentProduct *= pow(0.5,momentNumber) * binomialSum * piolaWeight;
                 }
               }
               extrusionIntegralValue += extrusionComponentProduct;
@@ -1049,7 +1058,6 @@ SolutionMoments::~SolutionMoments()
 TEUCHOS_UNIT_TEST( SolutionMoments_cpp, BinomialSum )
 {
   // check that the binomialCoefficient() method works to compute appropriate weights.
-  double binomialSum = 0.0;
   const double a = 0.75;
   const double b = 0.25;
 

@@ -1339,7 +1339,6 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     solutionMap[form.u()->ID()] = x;
     solutionMap[form.sigma()->ID()] = Function::constant({1.0,0.0});
     solutionMap[form.u_hat()->ID()] = x * traceFxn;
-    FunctionPtr n = Function::normal();
     FunctionPtr n_parity = Function::normal() * Function::sideParity();
     solutionMap[form.sigma_n_hat()->ID()] = Function::constant({1.0,0.0}) * n_parity;
     
@@ -1369,8 +1368,8 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
       VarPtr var = form.bf()->varFactory()->trial(varID);
       FunctionPtr solnFxn = Function::solution(var, solution, false);
       double err = (solnFxn - exactFxn)->l2norm(mesh);
-      TEUCHOS_TEST_COMPARE(err, <, tol, out, success);
       out << "After refinement, err for variable " << var->name() << ": " << err << endl;
+      TEUCHOS_TEST_COMPARE(err, <, tol, out, success);
     }
   }
   

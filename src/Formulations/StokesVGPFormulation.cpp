@@ -242,7 +242,7 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   vector<vector<LinearTermPtr>> sigma(spaceDim,vector<LinearTermPtr>(spaceDim));
   if (!_spaceTime)
   {
-    p = _vf->fieldVar(S_P);
+    p = _vf->fieldVar(S_P, HGRAD_DISC); // use discontinuous H^1 to allow setting of point constraints
 
     sigma11 = _vf->fieldVar(S_SIGMA11);
     sigma12 = _vf->fieldVar(S_SIGMA12);
@@ -278,7 +278,7 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   }
   else
   {
-    p = _vf->fieldVarSpaceTime(S_P);
+    p = _vf->fieldVarSpaceTime(S_P, HGRAD_DISC, HGRAD_DISC);  // use discontinuous H^1 to allow setting of point constraints
 
     sigma11 = _vf->fieldVarSpaceTime(S_SIGMA11);
     sigma12 = _vf->fieldVarSpaceTime(S_SIGMA12);
@@ -429,6 +429,8 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
       _trialVariablePolyOrderAdjustments[var->ID()] = adjustment;
     }
   }
+  // since we use a discontinuous H^1 basis for pressure, need to reduce its order by 1:
+  _trialVariablePolyOrderAdjustments[p->ID()] -= 1;
 
   _steadyStokesBF = Teuchos::rcp( new BF(_vf) );
 

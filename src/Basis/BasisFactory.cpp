@@ -488,9 +488,65 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
         }
         else
         {
-          const int scalarRank = 0, vectorRank = 1;
+          const int scalarRank = 0;
           switch (shardsKey)
           {
+            case shards::Hexahedron<8>::key:
+              switch(fs)
+              {
+              case Camellia::FUNCTION_SPACE_HGRAD:
+                  basis = intrepid2HexHGRAD(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+                  basis = intrepid2HexHGRAD_DISC(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HDIV:
+                  basis = intrepid2HexHDIV(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HDIV_DISC:
+                  basis = intrepid2HexHDIV_DISC(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HCURL:
+                  basis = intrepid2HexHCURL(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HCURL_DISC:
+                  basis = intrepid2HexHCURL_DISC(polyOrder);
+                break;
+              case Camellia::FUNCTION_SPACE_HVOL:
+                  basis = intrepid2HexHVOL(polyOrder-1);
+                break;
+              default:
+                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function space for topology Hexahedron<8>");
+              }
+              break;
+            case shards::Tetrahedron<4>::key:
+              switch(fs)
+              {
+              case Camellia::FUNCTION_SPACE_HGRAD:
+                  basis = intrepid2TetHGRAD(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+                  basis = intrepid2TetHGRAD_DISC(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HDIV:
+                  basis = intrepid2TetHDIV(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HDIV_DISC:
+                  basis = intrepid2TetHDIV_DISC(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HCURL:
+                  basis = intrepid2TetHCURL(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HCURL_DISC:
+                  basis = intrepid2TetHDIV_DISC(polyOrder);
+                  break;
+              case Camellia::FUNCTION_SPACE_HVOL:
+                  basis = intrepid2TetHVOL(polyOrder-1);
+                break;
+              default:
+                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function space for topology Tetrahedron<4>");
+              }
+              break;
           case shards::Quadrilateral<4>::key:
             switch(fs)
             {
@@ -628,6 +684,7 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
             }
             break;
             case Camellia::FUNCTION_SPACE_HVOL:
+            {
               if (_useLegendreForLineHVOL)   // not actually conforming, except in the L^2 sense...
               {
                 basis = Teuchos::rcp( new LegendreHVOL_LineBasis<>(polyOrder-1) );
@@ -636,7 +693,8 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
               {
                 basis = intrepid2LineHVOL(polyOrder-1);
               }
-              break;
+            }
+            break;
             default:
               TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
                                             (fs != Camellia::FUNCTION_SPACE_HVOL) ),
@@ -656,33 +714,15 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported function space for point topology.");
             }
             break;
-            case shards::Hexahedron<>::key:
-              switch(fs)
-              {
-                case Camellia::FUNCTION_SPACE_HGRAD:
-                case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-                  //if (polyOrder==0) {
-                  //  basis = Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >() ) ;
-                  //} else {
-                  if (fs == FUNCTION_SPACE_HGRAD)
-                  {
-                    basis = intrepid2HexHGRAD(polyOrder);
-                  }
-                  else
-                  {
-                    basis = intrepid2HexHGRAD_DISC(polyOrder);
-                  }
-              }
-              break;
           default:
-            TEUCHOS_TEST_FOR_EXCEPTION( ( (shardsKey != shards::Hexahedron<>::key)            &&
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (shardsKey != shards::Hexahedron<8>::key)           &&
+                                          (shardsKey != shards::Tetrahedron<4>::key)          &&
                                           (shardsKey != shards::Quadrilateral<4>::key)        &&
                                           (shardsKey != shards::Triangle<3>::key)             &&
                                           (shardsKey != shards::Line<2>::key)                 &&
                                           (shardsKey != shards::Node::key)),
                                         std::invalid_argument,
-                                        "Unknown cell topology for basis selection. Please use Node, Line_2, Quadrilateral_4, or Triangle_3.");
-
+                                        "Unknown cell topology for basis selection. Please use Node, Line_2, Quadrilateral_4, Triangle_3, Hexahedron_8, or Tetrahedron_4.");
           }
         }
       }

@@ -508,7 +508,10 @@ namespace
     
     MeshPtr formMesh = form.solutionIncrement()->mesh(); //Teuchos::rcp( new Mesh(meshTopo, form.bf(), fieldPolyOrder+1, delta_k) ) ;
     vector<int> H1Order = {fieldPolyOrder + 1, fieldPolyOrder + 1};
-    MeshPtr manualMesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k) ) ;
+    // pressure now uses HGRAD_DISC basis; to get equal-order pressure we need to subtract 1 from its poly order
+    map<int,int> trialOrderAdjustments;
+    trialOrderAdjustments[form.p()->ID()] = -1;
+    MeshPtr manualMesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k, trialOrderAdjustments) ) ;
     
     GlobalIndexType numGlobalDofsFormMesh = formMesh->numGlobalDofs();
     GlobalIndexType numGlobalDofsManualMesh = manualMesh->numGlobalDofs();

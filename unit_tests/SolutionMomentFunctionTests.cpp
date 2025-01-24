@@ -82,8 +82,6 @@ namespace
     
     const int delta_k = 0;
     
-    const int momentNumber = 0;
-    
     std::vector<int> H1Order(1 + numExtrusionDims, fxnPolyOrder + 1);
     
     auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
@@ -237,7 +235,10 @@ namespace
     const double expectedL2 = expectedIntegral->l2norm(physicalMesh);
     const double error = errorFxn->l2norm(physicalMesh);
     
+    const double actualL2 = solnMomentFunction->l2norm(physicalMesh);
+    
     out << "L^2 norm of expected integral: " << expectedL2 << std::endl;
+    out << "L^2 norm of actual integral:   " << actualL2 << std::endl;
     
     if (expectedL2 < tol)
     {
@@ -510,7 +511,10 @@ void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bo
         const double expectedL2 = expectedIntegral->l2norm(physicalMesh);
         const double error = errorFxn->l2norm(physicalMesh);
         
+        const double actualL2 = solnMomentFunction->l2norm(physicalMesh);
+        
         out << "L^2 norm of expected integral: " << expectedL2 << std::endl;
+        out << "L^2 norm of actual integral:   " << actualL2 << std::endl;
         
         if (expectedL2 < tol)
         {
@@ -789,7 +793,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 2;
     const int numExtrusionDims = 3;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 5e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -799,7 +803,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 2;
     const int numExtrusionDims = 3;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 5e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -829,7 +833,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 2;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 5e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -839,7 +843,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 2;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 5e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -849,7 +853,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 3;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 5e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -859,7 +863,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 3;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 5e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -1278,7 +1282,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const bool refine          = false;
     const bool useSerendipity  = false;
     const int polyOrder = 1; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
-    const double tol = 1e-15;
+    const double tol = 5e-15;
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:

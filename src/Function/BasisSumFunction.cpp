@@ -171,7 +171,43 @@ void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType 
     // we implicitly assume that the points given lie inside the physical cell nodes for _overridingBasisCache
     // Note that this transformation does not take curvilinearity into account.
     CellTopoPtr cellTopo = basisCache->cellTopology();
-    if (cellTopo->getDimension() > 0)
+    if (_overridingBasisCache->isSideCache())
+    {
+      // we require a few things in this case:
+      // 1. basisCache is also a side cache
+      // 2. overridingBasisCache and basisCache each have cellIDs/meshes defined, and there is exactly one cellID for each.
+      // 3. overridingBasisCache must belong to an ancestor of the cell for basisCache
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(! basisCache->isSideCache(), std::invalid_argument, "if _overridingBasisCache is a side cache, then basisCache must also be a side cache.");
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(_overridingBasisCache->cellIDs().size() != 1, std::invalid_argument, "for side impositions, _overridingBasisCache must have exactly one cell");
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellIDs().size() != 1, std::invalid_argument, "for side impositions, basisCache must have exactly one cell");
+      
+      const auto overridingCellID = *_overridingBasisCache->cellIDs().begin();
+      const auto cellID = *basisCache->cellIDs().begin();
+      
+      auto meshTopo = basisCache->mesh()->getTopology();
+      
+      auto cell = meshTopo->getCell(cellID);
+      const bool cellIsDescendant = cell->isDescendant(overridingCellID);
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(!cellIsDescendant, std::invalid_argument, "for BasisSumFunction on side basisCache, the cell for basisCache must be a descendant of the cell for _overridingBasisCache");
+      
+      auto volumeRefBranch = cell->refinementBranch(overridingCellID);
+      
+      auto sideRefBranch = RefinementPattern::sideRefinementBranch(volumeRefBranch, basisCache->getSideIndex());
+      
+      const auto &refPointsFC = basisCache->getRefCellPointsFC();
+      
+      Camellia::FieldContainer<double> overridingRefPoints(refPointsFC.dimension(0), refPointsFC.dimension(1));
+      
+      RefinementPattern::mapRefCellPointsToAncestor(sideRefBranch, refPointsFC, overridingRefPoints);
+      
+      _overridingBasisCache->setRefCellPointsFC(overridingRefPoints, basisCache->getCubatureWeightsFC());
+      basisCache = _overridingBasisCache;
+    }
+    else if (cellTopo->getDimension() > 0)
     {
       const Camellia::FieldContainer<double>* physicalCellNodes = &basisCache->getPhysicalCellNodes();
       const int numCells = physicalCellNodes->dimension(0);

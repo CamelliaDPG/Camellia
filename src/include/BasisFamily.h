@@ -40,6 +40,10 @@ namespace Camellia
     virtual BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1) = 0;
     BasisPtr getBasis(CellTopoPtr cellTopo, EFunctionSpace fs, const int p_H1);
     
+    //! returns a basis that corresponds to taking a derivative d/dx_i of the basis returned by getBasis(cellTopo, fs, p_H1), alongside a matrix of coefficients specifying the 1D basis weights.  The outer (first) index for the weights is the basis ordinal in the original 1D component basis; the inner/second index is the basis ordinal in the derivative 1D component basis.  (We specify it this way, rather than in terms of the full tensor basis, to maintain maximum flexibility for downstream implementations to exploit the tensor structure.)
+    //! So far, this method supports only very limited use cases; it requires a hierarchical basis, and only supports fully-decomposed tensorial function spaces. The function space in the derivative dimension must be HGRAD or HGRAD_DISC.
+    virtual std::pair<BasisPtr, std::vector<std::vector<double> > > getDerivativeBasis( CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1, const int &i_zero_based);
+    
     const std::string & name();
     
     static BasisFamilyPtr hierarchicalBasisFamily();

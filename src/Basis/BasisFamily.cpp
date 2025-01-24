@@ -377,6 +377,40 @@ BasisPtr BasisFamily::getCachedBasis(CellTopoPtr cellTopo, const std::vector<EFu
   return Teuchos::null;
 }
 
+//! returns a basis that corresponds to taking a derivative d/dx_i of the basis returned by getBasis(cellTopo, fs, p_H1), alongside a matrix of coefficients specifying the 1D basis weights.  The outer (first) index for the weights is the basis ordinal in the original 1D component basis; the inner/second index is the basis ordinal in the derivative 1D component basis.  (We specify it this way, rather than in terms of the full tensor basis, to maintain maximum flexibility for downstream implementations to exploit the tensor structure.)
+//! So far, this method supports only very limited use cases; it requires a hierarchical basis, and only supports fully-decomposed tensorial function spaces. The function space in the derivative dimension must be HGRAD or HGRAD_DISC.
+std::pair<BasisPtr, std::vector<std::vector<double> > > BasisFamily::getDerivativeBasis( CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1, const int &i_zero_based)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(int(fs.size()) < i_zero_based, std::invalid_argument, "we require tensor-product fs with at least i+1 components");
+  
+  TEUCHOS_TEST_FOR_EXCEPTION((fs[i_zero_based] != FUNCTION_SPACE_HGRAD) && (fs[i_zero_based] != FUNCTION_SPACE_HGRAD_DISC), std::invalid_argument, "fs in the derivative dimension must be H^1");
+  
+  // copy fs container
+  auto fs_dxi = fs;
+  fs_dxi[i_zero_based] = FUNCTION_SPACE_HVOL;
+  
+  auto basis_dxi = getBasis(cellTopo,fs_dxi,p_H1);
+  
+  using std::vector;
+  const int H1_cardinality = p_H1[i_zero_based] + 1;
+  const int L2_cardinality = H1_cardinality - 1;
+  vector<vector<double> > weights(H1_cardinality, vector<double>(L2_cardinality, 0.0));
+  
+  // on the line:
+  // - first H^1 basis function is 1-x
+  // - second H^1 basis function is x.
+  // - first L^2 basis function is 1/2.
+  // - For i > 0, the (i-1)th L^2 basis function is 1/2 the derivative of the ith H^1 basis function.
+  // (the 1/2 values have to do with the fact that our ref element is (-1,1), and has width 2.)
+  weights[0][0] = -0.5;
+  for (int i=1; i<H1_cardinality; i++)
+  {
+    weights[i][i-1] = 0.5;
+  }
+  
+  return {basis_dxi,weights};
+}
+
 BasisFamilyPtr BasisFamily::hierarchicalBasisFamily()
 {
   static BasisFamilyPtr basisFamily = Teuchos::rcp(new HierarchicalBasisFamily);

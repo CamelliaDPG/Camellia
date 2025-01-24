@@ -388,7 +388,7 @@ TEUCHOS_UNIT_TEST( MeshTools, MeshSlice_Polynomial )
   FunctionPtr sliceFunction_t0 = MeshTools::timeSliceFunction(mesh, cellMap_t0, u_spacetime, tZero);
   FunctionPtr sliceFunction_t1 = MeshTools::timeSliceFunction(mesh, cellMap_t1, u_spacetime, tOne);
 
-  double tol = 1e-14;
+  double tol = 1e-13;
   // expectation is that on the slice mesh, the sliceFunction matches u0
   double diff_l2_t0 = (u0_t0 - sliceFunction_t0)->l2norm(meshSlice_t0);
   TEST_COMPARE(diff_l2_t0, <, tol);

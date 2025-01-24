@@ -99,12 +99,6 @@ namespace
   
   MeshPtr minimalPoissonHangingNodeMesh(int H1Order, int delta_k, int spaceDim, PoissonFormulation::PoissonFormulationChoice formChoice)
   {
-    // exact solution: for now, we just use a linear u
-    FunctionPtr x = Function::xn(1);
-    FunctionPtr y = Function::yn(1);
-    
-    FunctionPtr u_exact = -x + y;
-    
     bool useConformingTraces = true; // doesn't matter for continuous Galerkin
     PoissonFormulation poissonForm(spaceDim, useConformingTraces, formChoice);
     
@@ -264,7 +258,16 @@ namespace
     VarPtr u = poissonForm.u();
     BCPtr bc = BC::bc();
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
-    bc->addDirichlet(u, boundary, u_exact);
+    
+    if (formChoice != PoissonFormulation::ULTRAWEAK)
+    {
+      bc->addDirichlet(u, boundary, u_exact);
+    }
+    else
+    {
+      auto u_hat = poissonForm.u_hat();
+      bc->addDirichlet(u_hat, boundary, u_exact);
+    }
     
     SolutionPtr soln = Solution::solution(poissonForm.bf(), mesh, bc, rhs, ip);
     
@@ -293,14 +296,13 @@ namespace
 #endif
     }
     
-    soln->clear();
+//    soln->clear();
     
-    // because valgrind is complaining that SuperLU_Dist is doing some incorrect reads here, we
-    // replace with KLU.
     SolverPtr solver = Solver::getSolver(Solver::KLU, false);
-    soln->solve(solver);
+    int solveSuccess = soln->solve(solver);
     
-    Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
+    TEST_EQUALITY(solveSuccess, 0);
+    
     Epetra_SerialComm Comm;
     Epetra_Map partMap = soln->getPartitionMap();
     
@@ -310,6 +312,7 @@ namespace
     Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
     Epetra_Import  solnImporter(solnMap, partMap);
     Epetra_Vector  solnCoeff(solnMap);
+    Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
     solnCoeff.Import(*lhsVector, solnImporter, Insert);
     
 // TODO: work out whether MeshTestUtility::neighborBasesAgreeOnSides() is valid on CG meshes

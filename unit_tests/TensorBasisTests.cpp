@@ -710,7 +710,7 @@ TEUCHOS_UNIT_TEST( TensorBasis, BasisFillsContainerQuadHDIV_2D )
 
 TEUCHOS_UNIT_TEST( TensorBasis, Projection_2D_x )
 {
-  const double tol = 1e-16; // TODO: relax this to something more reasonable.
+  const double tol = 1e-15;
   
   const int baseDim          = 1; // corresponds to the fact that the initial mesh topo is 1D.
   const int numExtrusionDims = 1;

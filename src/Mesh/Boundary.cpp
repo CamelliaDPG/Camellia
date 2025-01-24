@@ -278,6 +278,10 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
             basis = trialOrderingPtr->getBasis(trialID);
             // get the dof ordinals for the side (interpreted as a "continuous" basis)
             numDofsSide = basis->dofOrdinalsForSide(sideOrdinal).size();
+            if (numDofsSide == 0)
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(numDofsSide == 0, std::invalid_argument, "BC imposition requested for a basis that has no dofs assigned to the side -- maybe a field variable defined with an L^2 (HVOL) basis?");
+            }
           }
           else if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal))
           {

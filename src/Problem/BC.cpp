@@ -45,17 +45,17 @@ public:
   {
     return true;
   }
-  void setTime(double time)
+  void setTime(double time) override
   {
     this->_time = time;
     _f->setTime(time);
   }
   using TFunction<Scalar>::values;
-  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override
   {
     _f->values(values, basisCache);
   }
-  virtual void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache)
+  virtual void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache) override
   {
     _f->values(values, modType, basisCache);
   }

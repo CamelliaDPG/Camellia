@@ -474,30 +474,33 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Cam
   _sideNormalsSpaceTime = sideNormalsSpaceTime;
   _cellSideParities = cellSideParities;
   
-  // the assumption is that if you're using this constructor, the volume points provided are already in reference space
-  // so that the transformations are all identities
-  int cellDim = _cellTopo->getDimension(); // for space-time, cellDim = _spaceDim + 1
-  _cellJacobianFC.resize(numCells, numPoints, cellDim, cellDim);
-  _cellJacobInvFC.resize(numCells, numPoints, cellDim, cellDim);
-  _cellJacobDetFC.resize(numCells, numPoints);
-  _cellJacobianFC.initialize(0.0);
-  _cellJacobInvFC.initialize(0.0);
-  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-  {
-    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-    {
-      for (int d=0; d<cellDim; d++)
-      {
-        _cellJacobianFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
-        _cellJacobInvFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
-      }
-    }
-  }
-  
-  _cellJacobDetFC.initialize(1.0);
-  _cellJacobianIsValid = true;
-  _cellJacobianInverseIsValid = true;
-  _cellJacobianDeterminantIsValid = true;
+//  // the assumption is that if you're using this constructor, the volume points provided are already in reference space
+//  // so that the transformations are all identities
+//  int cellDim = _cellTopo->getDimension(); // for space-time, cellDim = _spaceDim + 1
+//  _cellJacobianFC.resize(numCells, numPoints, cellDim, cellDim);
+//  _cellJacobInvFC.resize(numCells, numPoints, cellDim, cellDim);
+//  _cellJacobDetFC.resize(numCells, numPoints);
+//  _cellJacobianFC.initialize(0.0);
+//  _cellJacobInvFC.initialize(0.0);
+//  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+//  {
+//    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+//    {
+//      for (int d=0; d<cellDim; d++)
+//      {
+//        _cellJacobianFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
+//        _cellJacobInvFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
+//      }
+//    }
+//  }
+//
+//  _cellJacobDetFC.initialize(1.0);
+//  _cellJacobianIsValid = true;
+//  _cellJacobianInverseIsValid = true;
+//  _cellJacobianDeterminantIsValid = true;
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
   _sideNormalsIsValid = true;
   _physCubPointsIsValid = false;
 }
@@ -1339,7 +1342,10 @@ void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &poin
   _knownValuesTransformedWeighted.clear();
   _knownValuesTransformedDottedWithNormal.clear();
 
-  _cubWeightsFC = cubWeights;
+  if (&_cubWeightsFC != &cubWeights) // FieldContainer complains about self-assignments; if we detect one here, just skip the assignment
+  {
+    _cubWeightsFC = cubWeights;
+  }
 
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -1657,6 +1663,10 @@ void BasisCache::determineJacobianInverseAndDeterminant()
     // Jacobians not meaningful then...
     _cellJacobianInverseIsValid = true;
     _cellJacobianDeterminantIsValid = true;
+    
+    // for L^2 basis transforms on the node topology, it's convenient to have a trivial/identity jacobian determinant defined.
+    _cellJacobDetFC.resize(_numCells, 1);
+    _cellJacobDetFC.initialize(1.0);
     return;
   }
   

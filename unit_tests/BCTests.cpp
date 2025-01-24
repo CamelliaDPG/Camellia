@@ -83,7 +83,8 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     // test that the coefficients determined for a BC object that uses the new tag-based BCs
     // matches those determined by SpatialFilters
     bool conformingTraces = true;
-    PoissonFormulation form(spaceDim,conformingTraces);
+    PoissonFormulation::PoissonFormulationChoice formChoice = useFieldBCs ? PoissonFormulation::PRIMAL : PoissonFormulation::ULTRAWEAK;
+    PoissonFormulation form(spaceDim,conformingTraces,formChoice);
     
     VarPtr var = useFieldBCs ? form.u() : form.u_hat();
 

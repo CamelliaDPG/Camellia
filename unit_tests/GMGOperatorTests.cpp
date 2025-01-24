@@ -493,6 +493,7 @@ namespace
       printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
     }
     
+    out << "Sanity checking the energy error of the exact solution (should be 0).\n";
     energyError = fineSoln->energyErrorTotal();
     TEST_COMPARE(energyError, <, tol);
     
@@ -516,6 +517,7 @@ namespace
 //    cout << "coarseSolutionVector:\n"  << *coarseSolutionVector;
 //    cout << "P * coarseSolutionVector:\n"  << *fineSoln->getLHSVector();
     
+    out << "Checking the energy error of the prolongated coarse solution.\n";
     fineSoln->importSolution();
     
     energyError = fineSoln->energyErrorTotal();
@@ -652,6 +654,17 @@ namespace
     
     coarseSoln->projectOntoMesh(exactSolnMap);
     
+    {
+      bool warnAboutOffRank = false;
+      set<GlobalIndexType> myCellIDs = coarseSoln->mesh()->cellIDsInPartition();
+      for (GlobalIndexType cellID : myCellIDs) {
+        Camellia::FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+        out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
+        DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+        printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+      }
+    }
+    
     double energyError = coarseSoln->energyErrorTotal();
     
     // sanity check: our exact solution should give us 0 energy error
@@ -691,6 +704,17 @@ namespace
     
     fineSoln->importSolution();
     
+//    { // DEBUGGING: export to disk
+//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+//      int rank = Teuchos::GlobalMPISession::getRank();
+//      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
+//
+//      GDAMinimumRule* fineGDA = dynamic_cast<GDAMinimumRule*>(fineMesh->globalDofAssignment().get());
+//      fineGDA->printGlobalDofInfo();
+//
+//      GDAMinimumRule* coarseGDA = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+//      coarseGDA->printGlobalDofInfo();
+//    }
     
     energyError = fineSoln->energyErrorTotal();
     TEST_COMPARE(energyError, <, tol);

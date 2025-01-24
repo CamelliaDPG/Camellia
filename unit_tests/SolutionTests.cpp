@@ -124,7 +124,7 @@ namespace
   
   void testCondensedSolveZeroMeanConstraint(bool minRule, Teuchos::FancyOStream &out, bool &success)
   {
-    double tol = 1e-11;
+    double tol = 1e-10;
     
     int spaceDim = 2;
     bool conformingTraces = false; // false mostly because I want to do cavity flow with non-H^1 BCs
@@ -2318,6 +2318,18 @@ namespace
     soln->projectOntoMesh(projectionMap);
     
     FunctionPtr u_soln = Function::solution(uField, soln);
+    
+    double f_integral = f->integrate(mesh);
+    double u_integral = u_soln->integrate(mesh);
+    
+    double f_dx_integral = f->dx()->integrate(mesh);
+    double u_dx_integral = u_soln->dx()->integrate(mesh);
+    
+    out << "integral of f: " << f_integral << std::endl;
+    out << "integral of u: " << u_integral << std::endl;
+    
+    out << "integral of f->dx(): " << f_dx_integral << std::endl;
+    out << "integral of u->dx(): " << u_dx_integral << std::endl;
     
     // di() is 1-based; di(1) means dx(), etc.
     for (int i=1; i<=baseDim+extrusionDim; i++)

@@ -10,7 +10,7 @@ namespace Camellia
 {
   MeshPtr makeSingleElementExtrudedTestMesh( int baseSpaceDim, int numTensorExtrusions, std::vector<int> H1Orders )
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(H1Orders.size() != numTensorExtrusions+1, std::invalid_argument, "number of H1Orders must be 1 for base dim, plus 1 for each extrusion dimension");
+    TEUCHOS_TEST_FOR_EXCEPTION(int(H1Orders.size()) != numTensorExtrusions+1, std::invalid_argument, "number of H1Orders must be 1 for base dim, plus 1 for each extrusion dimension");
     
     MeshPtr mesh;
 
