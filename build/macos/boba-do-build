@@ -9,7 +9,7 @@ STARTDIR=$(pwd)
 cd $SRC
 
 python3 boba_builder.py --boba \
-    --camp Off --RAJA Off --umpire Off --Adiak Off --fmt Off --Caliper Off \
+    --eigen On --camp Off --RAJA Off --umpire Off --Adiak Off --fmt Off --Caliper Off \
     --examples Off --tests Off --mpi Off \
     --recipe $SRC/recipes/boba_build_macbook.json
 

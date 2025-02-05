@@ -5,3 +5,5 @@ add_executable(SpaceTimeMixedVlasovBobaDriver "SpaceTimeMixedVlasovBobaDriver.cp
 target_link_libraries(SpaceTimeMixedVlasovBobaDriver 
   Camellia
 )
+
+configure_file(assembleBlocks.m assembleBlocks.m COPYONLY)
