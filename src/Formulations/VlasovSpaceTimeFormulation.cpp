@@ -1680,8 +1680,6 @@ void VlasovSpaceTimeFormulation::initialize()
   auto vlasovRHS = RHS::rhs();
   _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
     
-  vlasovMesh->registerSolution(_vlasovSoln);
-    
   IPPtr vlasovTestNorm = this->constructVlasovInnerProduct(_useSumFactorizedAssembly);
   _vlasovSoln->setIP(vlasovTestNorm);
   
@@ -1770,6 +1768,9 @@ void VlasovSpaceTimeFormulation::initialize()
     _vlasovSoln->mesh()->hRefine(activeCells);
     // (the configuration-space mesh will automatically be refined when the Vlasov mesh is, by virtue of the registerForUpdates() call above)
   }
+  
+  vlasovMesh->registerSolution(_vlasovSoln);
+  
   _initialized = true;
 }
 

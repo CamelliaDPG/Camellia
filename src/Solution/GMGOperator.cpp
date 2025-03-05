@@ -1102,9 +1102,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   DofOrderingPtr coarseTrialOrdering = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr;
   DofOrderingPtr fineTrialOrdering = _fineMesh->getElementType(fineCellID)->trialOrderPtr;
 
-  BasisCachePtr fineBasisCache   = BasisCache::basisCacheForCell(_fineMesh, fineCellID);
-  BasisCachePtr coarseBasisCache = BasisCache::basisCacheForCell(_coarseMesh, coarseCellID);
-  
 //  cout << "coarse trial ordering: \n";
 //  coarseTrialOrdering->print(cout);
   
@@ -1145,6 +1142,9 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
   else
   {
+    BasisCachePtr fineBasisCache   = BasisCache::basisCacheForCell(_fineMesh, fineCellID);
+    BasisCachePtr coarseBasisCache = BasisCache::basisCacheForCell(_coarseMesh, coarseCellID);
+    
     Teuchos::RCP<Epetra_SerialDenseMatrix> coarseFluxToFieldMapMatrix;
     vector<int> fluxOrdinalToLocalDofIndex;
     set<int> condensibleVarIDs;
