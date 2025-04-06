@@ -766,7 +766,7 @@ compressBlockSystem(const boba::block_operator<host_matrix, subvectors::size, su
   // So we then only need to compress the matrix corresponding to
   // N = \sum_r\sum_l A_0r x B_rl x C_l0
 #if PERMUTE
-  boba_warn("WArning! Permute has not be verified yet.");
+  boba_warn("Warning! Permute has not be verified yet.");
 #endif
   {
     size_t row = 0;
@@ -1102,8 +1102,36 @@ int main(int argc, char *argv[])
     const auto compression_from_sparsity = static_cast<double>(matrix->NumGlobalRows()) * static_cast<double>(matrix->NumGlobalCols()) / static_cast<double>(matrix->NumGlobalNonzeros());
     std::cout << "sparse_matrix   CR " << compression_from_sparsity << std::endl;
     std::cout << "block_tt_matrix CR " << block_tt_matrix.compression_rate() << std::endl;
+    std::cout << "block_tt_matrix sparsity (currently not used) " << block_tt_matrix.sparsity() << std::endl;
 
     boba_print("finished compression");
+
+    // ---------------------------------------------
+    // Direct Gramian inverse
+    // ---------------------------------------------
+    if(false) // Attempt direct inversion of Gramian
+    {
+      boba_print("Attempting direct inverse of Gramian matrix");
+      // See boba/examples/tests/test_tensor_train_matrix.cpp
+      // Initialize with alpha*A^T
+      double alpha = 0.01;
+      auto inverse_guess = block_tt_matrix({0, 0}).transpose();
+      inverse_guess *= alpha;
+      double residual_final = 0;
+      double tolerance = 1.0e-03;
+      size_t maximum_iterations = 2000;
+      size_t scheme_option = 2;
+      bool use_fused_method = true;
+      bool use_inline_round = true;
+      bool verbose = true;
+
+      block_tt_matrix({0, 0}).compute_inverse(inverse_guess, residual_final, tolerance, maximum_iterations, scheme_option, use_fused_method, use_inline_round, verbose);
+
+      boba_print(inverse_guess.ranks_string());
+      boba_print(inverse_guess.compression_rate());
+      boba_print("done with direct Gramian inverse");
+      exit(0);
+    }
 
     // ---------------------------------------------
     // Sanity check
