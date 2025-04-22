@@ -183,8 +183,8 @@ void HDF5Exporter::exportFunction(TFunctionPtr<double> function, string function
 
 void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
-  int commRank = _mesh->Comm()->MyPID();
-  int numProcs = _mesh->Comm()->NumProc();
+  int commRank = _mesh->Comm()->getRank();
+  int numProcs = _mesh->Comm()->getSize();
   
   if (functions.size() != functionNames.size())
   {

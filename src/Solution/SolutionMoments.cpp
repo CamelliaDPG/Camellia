@@ -281,7 +281,7 @@ BasisPtr SolutionMoments::extrudedSpatialBasis()
 
 void SolutionMoments::gatherOnRankZero()
 {
-  const int rank = _configurationSpaceMesh->Comm()->MyPID();
+  const int rank = _configurationSpaceMesh->Comm()->getRank();
   
   // send the physical cell contributions to their owners, and store in _spatialBasisCoefficients container
   // we use a convenience method in MPIWrapper for this; note that this sends a bunch of extra data that a manual data-packing implementation would not need to.  (The convenience method requires that we have a vector of fixed-length entries; that's where the inefficiency comes from.)
@@ -315,7 +315,7 @@ void SolutionMoments::gatherOnRankZero()
   PartitionIndexType destinationRank = 0;
   dataToSend[destinationRank] = dataVector;
   std::vector<DataType> dataReceived;
-  MPIWrapper::sendDataVectors(_configurationSpaceMesh->Comm(), dataToSend, dataReceived);
+  MPIWrapper::sendDataVectors(MPIWrapper::EpetraComm(_configurationSpaceMesh->Comm()), dataToSend, dataReceived);
   
   auto globalActiveCellIDs = _configurationSpaceMesh->getActiveCellIDsGlobal();
   const GlobalIndexType numGlobalActiveCells = globalActiveCellIDs.size();

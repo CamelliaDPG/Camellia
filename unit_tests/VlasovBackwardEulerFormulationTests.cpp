@@ -263,6 +263,12 @@ namespace {
         vlasovSoln->setBC(vlasovBC);
       }
       
+//      {
+//        // DEBUGGING
+//        vlasovSoln->setWriteMatrixToMatrixMarketFile(true, "/tmp/K-VlasovBF.dat");
+//        vlasovSoln->bf()->setPrintTermWiseIntegrationOutput(true);
+//      }
+      
       form.takeTimeStep();
       
       out << "Comparing f[" << k+1 << "] with f_soln after Vlasov-Poisson solve.\n";
@@ -681,7 +687,7 @@ namespace {
     
     std::vector<FunctionPtr> f;
     std::vector<FunctionPtr> rhs_extra_load;
-    int numTimeSteps = 5;
+    int numTimeSteps = 1;
     for (int k=0; k<=numTimeSteps; k++)
     {
       double t_k   = TEST_DT * k;

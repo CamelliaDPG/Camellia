@@ -82,7 +82,7 @@ namespace
         }
       }
     }
-    mesh->Comm()->SumAll(&mySideOrdinal, &globalSideOrdinal, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &mySideOrdinal, &globalSideOrdinal);
     
     while (meshIrregularity < irregularity)
     {
@@ -104,7 +104,7 @@ namespace
           }
         }
       }
-      mesh->Comm()->MaxAll(&mySideOrdinal, &globalSideOrdinal, 1);
+      Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_MAX, 1, &mySideOrdinal, &globalSideOrdinal);
       
       // setup for the next refinement, if any:
       mySideOrdinal = 0;
@@ -116,7 +116,7 @@ namespace
         myChildWithNeighborCellID = childEntry.first;
       }
       int globalChildWithNeighborCellID;
-      mesh->Comm()->MaxAll(&myChildWithNeighborCellID, &globalChildWithNeighborCellID, 1);
+      Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_MAX, 1, &myChildWithNeighborCellID, &globalChildWithNeighborCellID);
       cellsToRefine = {(GlobalIndexType)globalChildWithNeighborCellID};
     }
     return mesh;
@@ -1061,7 +1061,7 @@ namespace
     // make sure at least someone found the vertex
     int myFoundVertex = vertexFound ? 1 : 0;
     int globalFoundVertex;
-    mesh->Comm()->SumAll(&myFoundVertex, &globalFoundVertex, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &myFoundVertex, &globalFoundVertex);
     TEST_ASSERT(globalFoundVertex > 0);
     
     vector<pair<IndexType,unsigned>> cellsForVertex;
@@ -1862,7 +1862,7 @@ namespace
     auto outputMesh = [mesh] (int ordinal) -> void
     {
       MeshTopologyPtr meshCopy = mesh->getTopology()->getGatheredCopy();
-      int rank = mesh->Comm()->MyPID();
+      int rank = mesh->Comm()->getRank();
       if (rank == 0)
       {
         bool labelCells = true;

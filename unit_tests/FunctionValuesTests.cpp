@@ -441,8 +441,8 @@ namespace
     auto mesh     = MeshFactory::minRuleMesh(meshTopo, poissonForm.bf(), H1Order, delta_k);
     
     // for debugger attachment in MPI runs:
-    mesh->Comm()->Barrier();
-    int mpiRank = mesh->Comm()->MyPID();
+    mesh->Comm()->barrier();
+    int mpiRank = mesh->Comm()->getRank();
     
     auto elemTypes = mesh->elementTypes(mpiRank);
     if (elemTypes.size() > 0)

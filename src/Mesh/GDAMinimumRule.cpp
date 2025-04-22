@@ -311,7 +311,7 @@ void GDAMinimumRule::distributeCellGlobalDofs(const map<GlobalIndexType, Subcell
   TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::distributeCellGlobalDofs");
   int timerHandle = TimeLogger::sharedInstance()->startTimer("distributeCellGlobalDofs");
   
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
   map<GlobalIndexType,PartitionIndexType> remoteCellOwners;
   for (GlobalIndexType remoteCellID : remoteCellIDs)
   {
@@ -326,7 +326,8 @@ void GDAMinimumRule::distributeCellGlobalDofs(const map<GlobalIndexType, Subcell
     }
   }
   map<GlobalIndexType, SubcellDofIndices> remoteCellGlobalDofs;
-  distributeSubcellDofIndices(_mesh->Comm(), myCellGlobalDofs, remoteCellOwners, remoteCellGlobalDofs);
+  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
+  distributeSubcellDofIndices(epetraComm, myCellGlobalDofs, remoteCellOwners, remoteCellGlobalDofs);
   for (GlobalIndexType cellID : remoteCellIDs)
   {
     if (remoteCellGlobalDofs.find(cellID) == remoteCellGlobalDofs.end())
@@ -346,10 +347,10 @@ void GDAMinimumRule::distributeGlobalDofOwnership(const map<GlobalIndexType, Sub
   TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::distributeGlobalDofOwnership");
   int timerHandle = TimeLogger::sharedInstance()->startTimer("distributeGlobalDofOwnership");
   
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
   {
     // DEBUGGING: barrier for breakpoint.
-    _mesh->Comm()->Barrier();
+    _mesh->Comm()->barrier();
   }
   map<GlobalIndexType,PartitionIndexType> remoteCellOwners;
   for (GlobalIndexType remoteCellID : remoteCellIDs)
@@ -385,8 +386,9 @@ void GDAMinimumRule::distributeGlobalDofOwnership(const map<GlobalIndexType, Sub
       remoteCellOwners[remoteCellID] = partitionForCell;
     }
   }
+  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
   map<GlobalIndexType, SubcellDofIndices> remotelyOwnedGlobalDofs;
-  distributeSubcellDofIndices(_mesh->Comm(), myOwnedGlobalDofs, remoteCellOwners, remotelyOwnedGlobalDofs);
+  distributeSubcellDofIndices(epetraComm, myOwnedGlobalDofs, remoteCellOwners, remotelyOwnedGlobalDofs);
   for (GlobalIndexType cellID : remoteCellIDs)
   {
     if (remotelyOwnedGlobalDofs.find(cellID) == remotelyOwnedGlobalDofs.end())
@@ -509,7 +511,8 @@ GlobalIndexType GDAMinimumRule::globalDofCount()
   // assumes the lookups have been rebuilt since the last change that would affect the count
 
   // TODO: Consider working out a way to guard against a stale value here.  E.g. could have a "dirty" flag that gets set anytime there's a change to the refinements, and cleared when lookups are rebuilt.  If we're dirty when we get here, we rebuild before returning the global dof count.
-  int numRanks = _partitionPolicy->Comm()->NumProc();
+  int numRanks = _partitionPolicy->Comm()->getSize();
+  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(_partitionDofOffsets.size()) <= numRanks, std::invalid_argument, "_partitionDofOffsets is not sized correctly");
   return _partitionDofOffsets[numRanks];
 }
 
@@ -535,7 +538,7 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForVarOnSubcell(int varID, 
 
 set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber)
 {
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
 
   if (partitionNumber==-1) partitionNumber = rank;
 
@@ -2041,9 +2044,9 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
             bool meshIsConsistent = MeshTestUtility::checkConstraintConsistency(_mesh);
             
             if (meshIsConsistent)
-              cout << "passes consistency check on rank " << _mesh->Comm()->MyPID() << endl;
+              cout << "passes consistency check on rank " << _mesh->Comm()->getRank() << endl;
             else
-              cout << "FAILS consistency check on rank " << _mesh->Comm()->MyPID() << endl;
+              cout << "FAILS consistency check on rank " << _mesh->Comm()->getRank() << endl;
             
             
             TEUCHOS_TEST_FOR_EXCEPTION(furtherConstrained && subcellIsGeometricallyConstrained, std::invalid_argument, "Mesh has a cascading constraint (may not be 1-irregular)");
@@ -2997,7 +3000,7 @@ SubcellDofIndices & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
     return _ownedGlobalDofIndicesCache[cellID];
   }
   
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
   //  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
   set<GlobalIndexType>* myCellIDs = &_partitions[rank];
   
@@ -3530,7 +3533,7 @@ void GDAMinimumRule::rebuildLookups()
   _partitionFluxDofCount = 0;
   _partitionTraceDofCount = 0;
 
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
 //  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
   set<GlobalIndexType>* myCellIDs = &_partitions[rank];
 
@@ -3625,9 +3628,9 @@ void GDAMinimumRule::rebuildLookups()
     }
   }
 
-  int numRanks = _partitionPolicy->Comm()->NumProc();
+  int numRanks = _partitionPolicy->Comm()->getSize();
   vector<GlobalIndexType> partitionDofCounts(numRanks);
-  MPIWrapper::allGather(*_partitionPolicy->Comm(), partitionDofCounts, _partitionDofCount);
+  MPIWrapper::allGather(_partitionPolicy->Comm(), partitionDofCounts, _partitionDofCount);
   
   _partitionDofOffsets.resize(numRanks+1); // global dof count will be at the end
   _partitionDofOffsets[0] = 0;

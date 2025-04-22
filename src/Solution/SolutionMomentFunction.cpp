@@ -115,7 +115,7 @@ namespace Camellia
       auto matchingEntry = std::lower_bound(physicalCellIDs.begin(), physicalCellIDs.end(), cellID);
       if ((matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID)
       {
-        int rank = basisCache->mesh()->Comm()->MyPID();
+        int rank = basisCache->mesh()->Comm()->getRank();
         std::cout << "physical cell " << cellID << " not found in physicalCellIDs container on rank " << rank << std::endl;
       }
       TEUCHOS_TEST_FOR_EXCEPTION((matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID,std::invalid_argument,"cellID not found");
@@ -230,7 +230,7 @@ namespace Camellia
       const bool notFound = (matchingEntry == physicalCellIDs.end()) || *matchingEntry != cellID;
       if ( notFound )
       {
-        int rank = basisCache->mesh()->Comm()->MyPID();
+        int rank = basisCache->mesh()->Comm()->getRank();
         std::cout << "physical cell " << cellID << " not found in physicalCellIDs container on rank " << rank << std::endl;
       }
       TEUCHOS_TEST_FOR_EXCEPTION(notFound,std::invalid_argument,"cellID not found");

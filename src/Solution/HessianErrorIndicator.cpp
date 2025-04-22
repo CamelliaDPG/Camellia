@@ -209,9 +209,9 @@ void HessianErrorIndicator<Scalar>::measureError()
   }
   
   // request remote neighbors' gradients
-  Epetra_CommPtr Comm = _mesh->Comm();
+  auto Comm = _mesh->Comm();
   
-  int myRank = Comm->MyPID();
+  int myRank = Comm->getRank();
   std::map<int,std::vector<std::pair<int,GlobalIndexType>>> requests; // owning PID -> (myPID, cell whose gradient we want)
   for (GlobalIndexType remoteCellID : remoteNeighbors)
   {

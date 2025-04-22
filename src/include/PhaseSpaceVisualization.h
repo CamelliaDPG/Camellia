@@ -52,7 +52,7 @@ namespace Camellia {
           const bool allowPruning = false;
           const int delta_k = 0;
           const int physicalH1Order = phaseSpaceMesh->globalDofAssignment()->getInitialH1Order()[0];
-          MeshPtr extrudedPhysicalMesh = MeshFactory::minRuleMesh(extrudedPhysicalMeshTopology, phaseSpaceMesh->bilinearForm(), physicalH1Order, delta_k, phaseSpaceMesh->Comm(), allowPruning);
+          MeshPtr extrudedPhysicalMesh = MeshFactory::minRuleMesh(extrudedPhysicalMeshTopology, phaseSpaceMesh->bilinearForm(), physicalH1Order, delta_k, MPIWrapper::EpetraComm(phaseSpaceMesh->Comm()), allowPruning);
           const int momentNumber = 0; // only zeroth moment used/supported thus far
           
           auto solutionMoments = Teuchos::rcp( new SolutionMoments(momentNumber, phaseSpaceSoln, fieldVar, extrudedPhysicalMesh, d) );

@@ -301,14 +301,14 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
       
       GlobalIndexTypeToCast cellIDTime1;
       int ownerRankTime0 = mesh->globalDofAssignment()->partitionForCellID(cellIDTime0);
-      int myRank = mesh->Comm()->MyPID();
+      int myRank = mesh->Comm()->getRank();
       if (myRank == ownerRankTime0)
       {
         cellTime0 = mesh->getTopology()->getCell(cellIDTime0);
         cellTime1 = cellTime0->getNeighbor(sideOrdinal_t1, mesh->getTopology());
         cellIDTime1 = cellTime1->cellIndex();
       }
-      mesh->Comm()->Broadcast(&cellIDTime1, 1, ownerRankTime0);
+      Teuchos::broadcast(*mesh->Comm(), ownerRankTime0, 1, &cellIDTime1);
       
       int ownerRankTime1 = mesh->globalDofAssignment()->partitionForCellID(cellIDTime1);
       
@@ -348,8 +348,8 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
             solnFxn->values(valuesTime1, sideBasisCacheTime1);
             valueTime1 = valuesTime1[0];
           }
-          mesh->Comm()->Broadcast(&valueTime0, 1, ownerRankTime0);
-          mesh->Comm()->Broadcast(&valueTime1, 1, ownerRankTime1);
+          Teuchos::broadcast(*mesh->Comm(), ownerRankTime0, 1, &valueTime0);
+          Teuchos::broadcast(*mesh->Comm(), ownerRankTime1, 1, &valueTime1);
           
           double tol = 1e-15;
           TEUCHOS_TEST_FLOATING_EQUALITY(valueTime0, valueTime1, tol, out, success);

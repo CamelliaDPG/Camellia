@@ -322,7 +322,7 @@ Boundary & Mesh::boundary()
 
 vector< GlobalIndexType > Mesh::cellIDsOfType(ElementTypePtr elemType)
 {
-  int rank = Comm()->MyPID();
+  int rank = Comm()->getRank();
   return cellIDsOfType(rank,elemType);
 }
 
@@ -377,7 +377,7 @@ vector<GlobalIndexType> Mesh::cellIDsForPoints(const Camellia::FieldContainer<do
   return cellIDs;
 }
 
-Epetra_CommPtr& Mesh::Comm()
+Teuchos_CommPtr Mesh::Comm()
 {
   return _gda->getPartitionPolicy()->Comm();
 }
@@ -427,7 +427,7 @@ vector<ElementPtr> Mesh::elementsForPoints(const Camellia::FieldContainer<double
 
 void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
 {
-  int rank = Comm()->MyPID();
+  int rank = Comm()->getRank();
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   bool meshChanged = false;
   
@@ -502,7 +502,7 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
     }
     vector<RefinementPatternKey> allRefPatterns;
     vector<int> offsets;
-    MPIWrapper::allGatherVariable(*Comm(), allRefPatterns, myRefPatterns, offsets);
+    MPIWrapper::allGatherVariable(Comm(), allRefPatterns, myRefPatterns, offsets);
     
     // eliminate duplicates and gather cellIDs to refine
     map<RefinementPatternKey, set<GlobalIndexType> > irregularCellsToRefineGlobal;
@@ -518,7 +518,7 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
       }
       vector<GlobalIndexType> cellIDsToRefineGlobal;
       vector<int> offsets;
-      MPIWrapper::allGatherVariable(*Comm(), cellIDsToRefineGlobal, cellIDsToRefineLocal, offsets);
+      MPIWrapper::allGatherVariable(Comm(), cellIDsToRefineGlobal, cellIDsToRefineLocal, offsets);
       irregularCellsToRefineGlobal[refKey].insert(cellIDsToRefineGlobal.begin(),cellIDsToRefineGlobal.end());
     }
     
@@ -586,7 +586,7 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
     vector<GlobalIndexType> cellIDsToPRefineLocal(cellsToPRefine.begin(),cellsToPRefine.end());
     vector<GlobalIndexType> cellIDsToPRefineGlobal;
     vector<int> offsets;
-    MPIWrapper::allGatherVariable(*Comm(), cellIDsToPRefineGlobal, cellIDsToPRefineLocal, offsets);
+    MPIWrapper::allGatherVariable(Comm(), cellIDsToPRefineGlobal, cellIDsToPRefineLocal, offsets);
     if (cellIDsToPRefineGlobal.size() > 0)
     {
       set<GlobalIndexType> cellSet(cellIDsToPRefineGlobal.begin(), cellIDsToPRefineGlobal.end());
@@ -613,7 +613,7 @@ Camellia::FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemType
   // return dynamic_cast<GDAMaximumRule2D*>(_gda.get())->cellSideParities(elemTypePtr);
 
   // new implementation below:
-  int rank = Comm()->MyPID();
+  int rank = Comm()->getRank();
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
 
   int numCells = cellIDs.size();
@@ -703,7 +703,7 @@ set<GlobalIndexType> Mesh::getActiveCellIDsGlobal()
   const set<GlobalIndexType>* myCellIDs = &cellIDsInPartition();
   vector<int> offsets;
   vector<GlobalIndexType> myCellIDsVector(myCellIDs->begin(), myCellIDs->end());
-  MPIWrapper::allGatherVariable(*Comm(), gatheredCellIDs, myCellIDsVector, offsets);
+  MPIWrapper::allGatherVariable(Comm(), gatheredCellIDs, myCellIDsVector, offsets);
 
   set<GlobalIndexType> activeCellIDs(gatheredCellIDs.begin(),gatheredCellIDs.end());
   return activeCellIDs;
@@ -875,7 +875,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebui
   }
   vector<pair<GlobalIndexType,CellTopologyKey>> gatheredCellTopoKeys;
   vector<int> offsets;
-  MPIWrapper::allGatherVariable(*Comm(), gatheredCellTopoKeys, myCellTopologyKeys, offsets);
+  MPIWrapper::allGatherVariable(Comm(), gatheredCellTopoKeys, myCellTopologyKeys, offsets);
   
   map< CellTopologyKey, set<GlobalIndexType> > cellIDsForTopo;
   
@@ -999,8 +999,7 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
       myNonparentsFound++;
     }
   }
-  int totalNonParentsFound = 0;
-  Comm()->SumAll(&myNonparentsFound, &totalNonParentsFound, 1);
+  int totalNonParentsFound = MPIWrapper::sum(Comm(), myNonparentsFound);
   TEUCHOS_TEST_FOR_EXCEPTION(totalNonParentsFound > 0, std::invalid_argument, "cellIDs passed to hUnrefine must be parents!");
   
   // because unrefinements are destructive (they delete children), need "will" notification instead of "did",
@@ -1039,7 +1038,7 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
   }
   vector<pair<GlobalIndexType,RefinementPatternKey>> gatheredRefPatternKeys;
   vector<int> offsets;
-  MPIWrapper::allGatherVariable(*Comm(), gatheredRefPatternKeys, myRefPatternKeys, offsets);
+  MPIWrapper::allGatherVariable(Comm(), gatheredRefPatternKeys, myRefPatternKeys, offsets);
   
   map< RefinementPatternKey, set<GlobalIndexType> > cellIDsForRefinementPattern;
   
@@ -1097,7 +1096,8 @@ void Mesh::initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPoli
       Comm = Teuchos::rcp( new Epetra_SerialComm() );
 #endif
     }
-    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy(Comm) );
+    auto teuchosComm = MPIWrapper::TeuchosComm(Comm);
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy(teuchosComm) );
   }
 }
 
@@ -1133,8 +1133,7 @@ int Mesh::irregularity()
       myIrregularity = max(edgeIrregularity, myIrregularity);
     }
   }
-  int globalIrregularity = 0;
-  Comm()->MaxAll(&myIrregularity, &globalIrregularity, 1);
+  int globalIrregularity = MPIWrapper::max(Comm(), myIrregularity);
   return globalIrregularity;
 }
 
@@ -1169,16 +1168,14 @@ GlobalIndexType Mesh::numFluxDofs()
 {
   GlobalIndexType fluxDofsForPartition = _gda->numPartitionOwnedGlobalFluxIndices();
   GlobalIndexType traceDofsForPartition = _gda->numPartitionOwnedGlobalTraceIndices();
-//  GlobalIndexType fluxDofsForPartition = _gda->partitionOwnedGlobalFluxIndices().size();
-//  GlobalIndexType traceDofsForPartition = _gda->partitionOwnedGlobalTraceIndices().size();
 
-  return MPIWrapper::sum(*Comm(), (GlobalIndexTypeToCast)(fluxDofsForPartition + traceDofsForPartition));
+  return MPIWrapper::sum(Comm(), (GlobalIndexTypeToCast)(fluxDofsForPartition + traceDofsForPartition));
 }
 
 GlobalIndexType Mesh::numFieldDofs()
 {
   GlobalIndexType fieldDofsForPartition = _gda->numPartitionOwnedGlobalFieldIndices();
-  return MPIWrapper::sum(*Comm(),(GlobalIndexTypeToCast)fieldDofsForPartition);
+  return MPIWrapper::sum(Comm(),(GlobalIndexTypeToCast)fieldDofsForPartition);
 }
 
 GlobalIndexType Mesh::numGlobalDofs()
@@ -1215,7 +1212,7 @@ GlobalIndexType Mesh::partitionLocalIndexForGlobalDofIndex( GlobalIndexType glob
 
 Camellia::FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr)
 {
-  int rank = Comm()->MyPID();
+  int rank = Comm()->getRank();
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
 
   return physicalCellNodes(elemTypePtr, cellIDs);
@@ -1747,7 +1744,7 @@ vector<double> Mesh::getCellOrientation(GlobalIndexType cellID)
 #ifdef HAVE_EPETRAEXT_HDF5
 void Mesh::saveToHDF5(string filename)
 {
-  int numProcs = Comm()->NumProc();
+  int numProcs = Comm()->getSize();
 
   /*
    1. I'm still a bit vague on how to use EpetraExt::HDF5 to read and write distributed objects; the methods
@@ -1769,10 +1766,11 @@ void Mesh::saveToHDF5(string filename)
    
    */
   
-  EpetraExt::HDF5 hdf5(*Comm());
+  auto epetraComm = MPIWrapper::EpetraComm(Comm());
+  EpetraExt::HDF5 hdf5(*epetraComm);
   hdf5.Create(filename);
   
-  getTopology()->writeToHDF5(Comm(), hdf5);
+  getTopology()->writeToHDF5(epetraComm, hdf5);
   
 //  // get my view of the base mesh topology; write it to a byte array
 //  const MeshTopology* baseMeshTopology = getTopology()->baseMeshTopology();
@@ -1866,10 +1864,10 @@ void Mesh::saveToHDF5(string filename)
   vector<int> myCellIDsVector(myCellIDs->begin(), myCellIDs->end());
   int myCellCount = myCellIDsVector.size();
   vector<int> partitionCounts(numProcs);
-  Comm()->GatherAll(&myCellCount, &partitionCounts[0], 1);
+  epetraComm->GatherAll(&myCellCount, &partitionCounts[0], 1);
 
   int globalCellCount;
-  Comm()->SumAll(&myCellCount, &globalCellCount, 1);
+  epetraComm->SumAll(&myCellCount, &globalCellCount, 1);
   
   hdf5.Write("Mesh", "partition counts", H5T_NATIVE_INT, numProcs, &partitionCounts[0]);
   hdf5.Write("Mesh", "partitions", myCellCount, globalCellCount, H5T_NATIVE_INT, &myCellIDsVector[0]);
@@ -1901,7 +1899,7 @@ void Mesh::saveToHDF5(string filename)
 // end HAVE_EPETRAEXT_HDF5 include guard
 #endif
 
-Teuchos_CommPtr& Mesh::TeuchosComm()
+Teuchos_CommPtr Mesh::TeuchosComm()
 {
   return _gda->getPartitionPolicy()->TeuchosComm();
 }

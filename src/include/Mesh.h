@@ -130,8 +130,8 @@ public:
   void saveToHDF5(string filename);
 #endif
 
-  Epetra_CommPtr& Comm();
-  Teuchos_CommPtr& TeuchosComm();
+  Teuchos_CommPtr Comm();
+  Teuchos_CommPtr TeuchosComm();
   
   // ! deepCopy makes a deep copy of both MeshTopology and GDA, but not bilinear form
   MeshPtr deepCopy();

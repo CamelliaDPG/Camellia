@@ -545,7 +545,7 @@ bool CondensedDofInterpreter<Scalar>::varDofsAreUsuallyCondensible(int varID, in
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::importInterpretedMapForNeighborGlobalIndices(const map<PartitionIndexType,set<GlobalIndexType>> &partitionToMeshGlobalIndices)
 {
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
   
   // myRequestOwners should be in nondecreasing order (it appears)
   // this is accomplished by virtue of the order in which we traverse partitionToMeshGlobalIndices
@@ -561,7 +561,8 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForNeighborGlobalIndic
   }
   int myRequestCount = myRequest.size();
   
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*_mesh->Comm());
+  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
+  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
   
   GlobalIndexTypeToCast* myRequestPtr = NULL;
   int *myRequestOwnersPtr = NULL;
@@ -637,7 +638,7 @@ template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::importInterpretedMapForOffRankCells(const std::set<GlobalIndexType> &cellIDs)
 {
 //  set<GlobalIndexType> dofIndicesSet;
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
   
   // myRequestOwners should be in nondecreasing order (it appears)
   // this is accomplished by requestMap
@@ -664,9 +665,10 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForOffRankCells(const 
     }
   }
   
-  int myRequestCount = myRequest.size();
+  int myRequestCount = int(myRequest.size());
   
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*_mesh->Comm());
+  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
+  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
   
   GlobalIndexTypeToCast* myRequestPtr = NULL;
   int *myRequestOwnersPtr = NULL;
@@ -820,7 +822,7 @@ map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpret
             
 //            {
 //              // DEBUGGING
-//              int rank = _mesh->Comm()->MyPID();
+//              int rank = _mesh->Comm()->getRank();
 //              cout << "On rank " << rank << ", CondensedDofInterpreter found singleton BC on cell " << cellID;
 //              cout << ", with localDofIndex " << localDofIndex << " and interpretedDofIndex " << interpretedDofIndex << endl;
 //            }
@@ -861,24 +863,23 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
   _interpretedFluxDofIndices.clear();
   _interpretedToGlobalDofIndexMap.clear();
 
-  PartitionIndexType rank = _mesh->Comm()->MyPID();
+  PartitionIndexType rank = _mesh->Comm()->getRank();
   set<GlobalIndexType> cellsForFluxStorage = _mesh->globalDofAssignment()->cellsInPartition(rank);
   cellsForFluxStorage.insert(_offRankCellsToInclude.begin(),_offRankCellsToInclude.end());
   map<GlobalIndexType, IndexType> partitionLocalFluxMap = interpretedFluxMapLocal(cellsForFluxStorage);
 
   _myGlobalDofIndexCount = partitionLocalFluxMap.size();
   int myCount = _myGlobalDofIndexCount;
-  int myOffset = 0;
-  _mesh->Comm()->ScanSum(&myCount, &myOffset, 1);
+  int myOffset = MPIWrapper::scanSum(_mesh->Comm(), myCount);
   _myGlobalDofIndexOffset = myOffset - myCount;
   
-  int numRanks = _mesh->Comm()->NumProc();
+  int numRanks = _mesh->Comm()->getSize();
   _globalDofIndexOffsets.resize(numRanks);
-  MPIWrapper::allGather(*_mesh->Comm(), _globalDofIndexOffsets, _myGlobalDofIndexOffset);
+  MPIWrapper::allGather(_mesh->Comm(), _globalDofIndexOffsets, _myGlobalDofIndexOffset);
   
   vector<GlobalIndexType> fluxDofCountForRank(numRanks);
 //  fluxDofCountForRank(rank) = (GlobalIndexTypeToCast) _myGlobalDofIndexCount;
-  MPIWrapper::allGather(*_mesh->Comm(), fluxDofCountForRank, _myGlobalDofIndexCount);
+  MPIWrapper::allGather(_mesh->Comm(), fluxDofCountForRank, _myGlobalDofIndexCount);
 
   // initialize _interpretedToGlobalDofIndexMap for the guys we own
   for (map<GlobalIndexType, IndexType>::iterator entryIt = partitionLocalFluxMap.begin(); entryIt != partitionLocalFluxMap.end(); entryIt++)
@@ -922,7 +923,7 @@ GlobalIndexType CondensedDofInterpreter<Scalar>::globalDofCount()
     reinitialize();
   }
   
-  return MPIWrapper::sum(*_mesh->Comm(), (GlobalIndexTypeToCast)_myGlobalDofIndexCount);
+  return MPIWrapper::sum(_mesh->Comm(), (GlobalIndexTypeToCast)_myGlobalDofIndexCount);
 }
 
 template <typename Scalar>
@@ -931,9 +932,9 @@ set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForPartiti
   if (rank == -1)
   {
     // default to current partition, just as Mesh does.
-    rank = _mesh->Comm()->MyPID();
+    rank = _mesh->Comm()->getRank();
   }
-  if (rank == _mesh->Comm()->MyPID())
+  if (rank == _mesh->Comm()->getRank())
   {
     vector<GlobalIndexType> myGlobalDofIndicesVector(_myGlobalDofIndexCount);
     GlobalIndexType nextOffset = _myGlobalDofIndexOffset + _myGlobalDofIndexCount;
@@ -956,7 +957,7 @@ template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<Scalar> &basisCoefficients,
     Camellia::FieldContainer<Scalar> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
   // NOTE: cellID MUST belong to this partition, or have been included in "offRankCellsToInclude" constructor argument
   if ((_offRankCellsToInclude.find(cellID) == _offRankCellsToInclude.end()) && (_mesh->cellIDsInPartition().find(cellID)==_mesh->cellIDsInPartition().end()))
   {
@@ -991,7 +992,7 @@ void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalInde
     }
     else
     {
-      cout << "On rank " << _mesh->Comm()->MyPID() << ", ";
+      cout << "On rank " << _mesh->Comm()->getRank() << ", ";
       cout << "globalDofIndex not found for specified interpretedDofIndex " << interpretedDofIndex << " (may not be a flux?)\n";
       cout << "cellID " << cellID << ", varID " << varID << ", side " << sideOrdinal << endl;
       
@@ -1064,7 +1065,7 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
     Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   // NOTE: cellID MUST belong to this partition, or have been included in "offRankCellsToInclude" constructor argument
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
   if ((_offRankCellsToInclude.find(cellID) == _offRankCellsToInclude.end()) && (_mesh->partitionForCellID(cellID) != rank))
   {
     cout << "cellID " << cellID << " does not belong to partition " << rank;

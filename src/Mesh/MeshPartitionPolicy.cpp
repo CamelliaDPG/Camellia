@@ -15,11 +15,11 @@
 using namespace Camellia;
 using namespace std;
 
-MeshPartitionPolicy::MeshPartitionPolicy(Epetra_CommPtr Comm) : _Comm(Comm) {
+MeshPartitionPolicy::MeshPartitionPolicy(Teuchos_CommPtr Comm) : _Comm(Comm) {
   TEUCHOS_TEST_FOR_EXCEPTION(Comm == Teuchos::null, std::invalid_argument, "Comm may not be null!");
 }
 
-Epetra_CommPtr& MeshPartitionPolicy::Comm()
+Teuchos_CommPtr MeshPartitionPolicy::Comm()
 {
   return _Comm;
 }
@@ -128,7 +128,7 @@ MeshPartitionPolicyPtr MeshPartitionPolicy::inducedPartitionPolicyFromRefinedMes
   // all-gather the entries
   vector<GlobalIndexTypeToCast> allEntries;
   vector<int> offsets;
-  MPIWrapper::allGatherVariable(*inducingRefinedMesh->Comm(), allEntries, myEntries, offsets);
+  MPIWrapper::allGatherVariable(inducingRefinedMesh->Comm(), allEntries, myEntries, offsets);
   
   map<GlobalIndexType,GlobalIndexType> cellIDMap;
   for (int i=0; i<allEntries.size()/2; i++)
@@ -141,38 +141,13 @@ MeshPartitionPolicyPtr MeshPartitionPolicy::inducedPartitionPolicyFromRefinedMes
   return Teuchos::rcp( new InducedMeshPartitionPolicy(inducingRefinedMesh, cellIDMap) );
 }
 
-MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy(Epetra_CommPtr Comm)
+MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy(Teuchos_CommPtr Comm)
 {
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy(Comm) );
   return partitionPolicy;
 }
 
-Teuchos_CommPtr& MeshPartitionPolicy::TeuchosComm()
+Teuchos_CommPtr MeshPartitionPolicy::TeuchosComm()
 {
-  if (_TeuchosComm == Teuchos::null)
-  {
-#ifdef HAVE_MPI
-    Epetra_MpiComm* mpiComm = dynamic_cast<Epetra_MpiComm*>(_Comm.get());
-    if (mpiComm == NULL)
-    {
-      // serial communicator
-      _TeuchosComm = MPIWrapper::TeuchosCommSerial();
-    }
-    else
-    {
-      if (mpiComm->GetMpiComm() == MPI_COMM_WORLD)
-      {
-        _TeuchosComm = MPIWrapper::TeuchosCommWorld();
-      }
-      else
-      {
-        _TeuchosComm = Teuchos::rcp( new Teuchos::MpiComm<int> (mpiComm->GetMpiComm()) );
-      }
-    }
-#else
-  // if we don't have MPI, then it can only be a serial communicator
-    _TeuchosComm = MPIWrapper::TeuchosCommSerial();
-#endif
-  }
-  return _TeuchosComm;
+  return _Comm;
 }

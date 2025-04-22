@@ -79,8 +79,8 @@ private:
                                char *buf,
                                int *ierr);
 public:
-  ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm);
-  ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm, string partitionerName);
+  ZoltanMeshPartitionPolicy(Teuchos_CommPtr Comm);
+  ZoltanMeshPartitionPolicy(Teuchos_CommPtr Comm, string partitionerName);
   virtual void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions);
 };
 }

@@ -300,7 +300,7 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
     for (int partitionOrdinal = 0; partitionOrdinal < numPartitions; partitionOrdinal++)
     {
       localMeshTopos[partitionOrdinal] = originalMesh->deepCopy();
-      localMeshTopos[partitionOrdinal]->pruneToInclude(MPIWrapper::CommSerial(), partitions[partitionOrdinal], vertexDim);
+      localMeshTopos[partitionOrdinal]->pruneToInclude(MPIWrapper::TeuchosCommSerial(), partitions[partitionOrdinal], vertexDim);
       // pretty much a sanity check (we have other tests against pruneToInclude):
       testMeshTopologiesMatchOnCells(originalMesh, localMeshTopos[partitionOrdinal], partitions[partitionOrdinal], vertexDim, out, success);
     }
@@ -338,7 +338,7 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
       MeshTopologyPtr thisLocalMeshTopo = localMeshTopos[partitionOrdinal];
       int previousPartitionOrdinal = (partitionOrdinal + numPartitions - 1) % numPartitions;
       set<GlobalIndexType> previousCells = partitions[previousPartitionOrdinal];
-      thisLocalMeshTopo->pruneToInclude(MPIWrapper::CommSerial(), previousCells, vertexDim);
+      thisLocalMeshTopo->pruneToInclude(MPIWrapper::TeuchosCommSerial(), previousCells, vertexDim);
       
       testMeshTopologiesMatchOnCells(originalMesh, thisLocalMeshTopo, previousCells, vertexDim, out, success);
     }
@@ -418,7 +418,7 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
       
       // check if there are any missing active cells; if not, then we shouldn't expect a memory footprint reduction
       bool someCellsShouldBeDeleted = (activeCellsToKeep.size() != activeCellIDs->size());
-      meshTopo->pruneToInclude(MPIWrapper::CommWorld(), {cellID}, vertexDim);
+      meshTopo->pruneToInclude(MPIWrapper::TeuchosCommWorld(), {cellID}, vertexDim);
       unsigned prunedMemoryFootprint = meshTopo->approximateMemoryFootprint();
       if (someCellsShouldBeDeleted)
       {

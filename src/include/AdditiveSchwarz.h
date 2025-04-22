@@ -913,7 +913,7 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
   int AdditiveSchwarz<T>::MaxGlobalOverlapSideNeighborCount(MeshPtr mesh, int overlap, bool hierarchical, int dimForNeighborRelationship)
   {
     const set<GlobalIndexType>* myCellIndices = &mesh->cellIDsInPartition();
-    Epetra_CommPtr Comm = mesh->Comm();
+    Teuchos_CommPtr Comm = mesh->Comm();
     
     int localMaxNeighbors = 0;
     MeshTopologyViewPtr meshTopo = mesh->getTopology();
@@ -940,7 +940,7 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
     // this is a fairly quick-and-dirty implementation; could be reworked to reduce redundant data sent
     std::map<GlobalIndexType,std::vector<GlobalIndexType>> remoteCellNeighbors;
     
-    int myRank = Comm->MyPID();
+    int myRank = Comm->getRank();
     std::map<int,std::vector<std::pair<int,GlobalIndexType>>> requests; // owning PID -> (myPID, cell whose neighbor lists we want)
     for (GlobalIndexType remoteCellID : remoteCells)
     {
@@ -948,8 +948,10 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
       requests[rank].push_back({myRank,remoteCellID});
     }
     
+    auto epetraComm = MPIWrapper::EpetraComm(Comm);
+    
     std::vector<std::pair<int,GlobalIndexType>> requestsReceived;
-    MPIWrapper::sendDataVectors(Comm, requests, requestsReceived);
+    MPIWrapper::sendDataVectors(epetraComm, requests, requestsReceived);
     
     std::map<int,std::vector<std::pair<GlobalIndexType,GlobalIndexType>>> responsesToSend;
     std::vector<std::pair<GlobalIndexType,GlobalIndexType>> responsesReceived;
@@ -965,7 +967,7 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
         responsesToSend[remotePID].push_back({myCellID,neighborID});
       }
     }
-    MPIWrapper::sendDataVectors(Comm, responsesToSend, responsesReceived);
+    MPIWrapper::sendDataVectors(epetraComm, responsesToSend, responsesReceived);
     for (auto response : responsesReceived)
     {
       GlobalIndexType remoteCellID = response.first;
@@ -1003,7 +1005,7 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
     
     
     int globalMaxNeighbors;
-    Comm->MaxAll(&localMaxNeighbors, &globalMaxNeighbors, 1);
+    Teuchos::reduceAll(*Comm, Teuchos::REDUCE_MAX, 1, &localMaxNeighbors, &globalMaxNeighbors);
     return globalMaxNeighbors;
   }
   

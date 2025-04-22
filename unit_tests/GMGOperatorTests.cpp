@@ -602,16 +602,16 @@ namespace
         }
         else if (testHMultigrid)
         {
-          int potentialBroadcaster = fineMesh->Comm()->NumProc();
+          int potentialBroadcaster = fineMesh->Comm()->getSize();
           if (fineMesh->getTopology()->isValidCellIndex(lastRefinedCellID))
           {
             CellPtr lastRefinedCell = fineMesh->getTopology()->getCell(lastRefinedCellID);
             lastRefinedCellID = lastRefinedCell->getChildIndices(fineMesh->getTopology())[0];
-            potentialBroadcaster = fineMesh->Comm()->MyPID();
+            potentialBroadcaster = fineMesh->Comm()->getRank();
           }
           int globalBroadcaster;
-          fineMesh->Comm()->MinAll(&potentialBroadcaster, &globalBroadcaster, 1);
-          fineMesh->Comm()->Broadcast(&lastRefinedCellID, 1, globalBroadcaster);
+          Teuchos::reduceAll(*fineMesh->Comm(), Teuchos::REDUCE_MIN, 1, &potentialBroadcaster, &globalBroadcaster);
+          Teuchos::broadcast(*fineMesh->Comm(), globalBroadcaster, 1, &lastRefinedCellID);
         }
         cellsToRefine.insert(lastRefinedCellID);
       }

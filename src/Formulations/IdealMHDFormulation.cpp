@@ -1311,7 +1311,7 @@ double IdealMHDFormulation::solveAndAccumulate()
   double l2_squared = _L2IncrementFunction->integrate(_solnIncrement->mesh());
   _l2NormOfIncrement = sqrt(l2_squared);
   
-  int rank = _solnIncrement->mesh()->Comm()->MyPID();
+  int rank = _solnIncrement->mesh()->Comm()->getRank();
   
   set<int> nonlinearVariables, linearVariables;
   

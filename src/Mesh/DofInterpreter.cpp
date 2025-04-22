@@ -166,7 +166,7 @@ void DofInterpreter::interpretLocalData(GlobalIndexType cellID, const Camellia::
 std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std::vector<GlobalIndexType> &cellIDs)
 {
   set<GlobalIndexType> dofIndicesSet;
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
 
   // myRequestOwners should be in nondecreasing order (it appears)
   // this is accomplished by requestMap
@@ -200,10 +200,10 @@ std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std:
 
   int myRequestCount = myRequest.size();
   
-  const auto & Comm = *_mesh->Comm();
+  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
   
-  int globalRequestCount = MPIWrapper::sum(Comm, myRequestCount);
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(Comm);
+  int globalRequestCount = MPIWrapper::sum(*epetraComm, myRequestCount);
+  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
 
   if (globalRequestCount > 0)
   {
@@ -301,7 +301,8 @@ map<GlobalIndexType,set<GlobalIndexType>> DofInterpreter::importGlobalIndicesMap
    
    */
   
-  Epetra_CommPtr Comm = _mesh->Comm();
+  
+  auto comm = _mesh->Comm();
   map<GlobalIndexType,set<GlobalIndexType>> globalIndicesMap;
   
   int myCount, maxGlobalCount; // always 0 or 1: how many cells we're asking for, whether anyone is still asking for a cell
@@ -322,7 +323,7 @@ map<GlobalIndexType,set<GlobalIndexType>> DofInterpreter::importGlobalIndicesMap
       myCount = 0;
       myRequest = {};
     }
-    Comm->MaxAll(&myCount, &maxGlobalCount, 1);
+    Teuchos::reduceAll(*comm, Teuchos::REDUCE_MAX, 1, &myCount, &maxGlobalCount);
     
     if (maxGlobalCount > 0)
     {

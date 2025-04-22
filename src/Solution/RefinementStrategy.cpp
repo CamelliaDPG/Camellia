@@ -189,11 +189,11 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
     }
   }
 
-  GlobalIndexTypeToCast numCellsToHRefine = 0;
-  GlobalIndexTypeToCast myNumCellsToHRefine = myCellsToHRefine.size();
-  mesh->Comm()->SumAll(&myNumCellsToHRefine, &numCellsToHRefine, 1);
+  GlobalIndexTypeToCast myNumCellsToHRefine = GlobalIndexTypeToCast(myCellsToHRefine.size());
+  GlobalIndexTypeToCast numCellsToHRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToHRefine);
+  
   GlobalIndexTypeToCast myCellOrdinalOffset = 0;
-  mesh->Comm()->ScanSum(&myNumCellsToHRefine, &myCellOrdinalOffset, 1);
+  Teuchos::scan(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &myNumCellsToHRefine, &myCellOrdinalOffset);
   myCellOrdinalOffset -= myNumCellsToHRefine;
   
   vector<GlobalIndexTypeToCast> globalCellsToRefineVector(numCellsToHRefine, 0);
@@ -202,19 +202,16 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
     globalCellsToRefineVector[myCellOrdinalOffset + i] = myCellsToHRefine[i];
   }
   vector<GlobalIndexTypeToCast> gatheredCellsToRefineVector(numCellsToHRefine, 0);
-  mesh->Comm()->SumAll(&globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0], numCellsToHRefine);
-
+  Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, numCellsToHRefine, &globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0]);
   vector<GlobalIndexType> cellsToRefine(gatheredCellsToRefineVector.begin(),gatheredCellsToRefineVector.end());;
   
-  GlobalIndexTypeToCast numCellsToPRefine = 0;
-  GlobalIndexTypeToCast myNumCellsToPRefine = myCellsToPRefine.size();
-  mesh->Comm()->SumAll(&myNumCellsToPRefine, &numCellsToPRefine, 1);
+  GlobalIndexTypeToCast myNumCellsToPRefine = GlobalIndexTypeToCast(myCellsToPRefine.size());
+  GlobalIndexTypeToCast numCellsToPRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToPRefine);
   
   vector<GlobalIndexType> cellsToPRefine;
   if (numCellsToPRefine > 0)
   {
-    myCellOrdinalOffset = 0;
-    mesh->Comm()->ScanSum(&myNumCellsToPRefine, &myCellOrdinalOffset, 1);
+    myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), myNumCellsToPRefine);
     myCellOrdinalOffset -= myNumCellsToPRefine;
 
     vector<GlobalIndexTypeToCast> globalCellsToPRefineVector(numCellsToPRefine, 0);
@@ -223,9 +220,8 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
       globalCellsToPRefineVector[myCellOrdinalOffset + i] = myCellsToPRefine[i];
     }
     vector<GlobalIndexTypeToCast> gatheredCellsToPRefineVector(numCellsToPRefine, 0);
-    mesh->Comm()->SumAll(&globalCellsToPRefineVector[0], &gatheredCellsToPRefineVector[0], numCellsToPRefine);
-
-    cellsToPRefine = vector<GlobalIndexType>(gatheredCellsToPRefineVector.begin(),gatheredCellsToPRefineVector.end());
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, numCellsToPRefine, &globalCellsToPRefineVector[0], &gatheredCellsToPRefineVector[0]);
+    vector<GlobalIndexType> cellsToPRefine(gatheredCellsToPRefineVector.begin(),gatheredCellsToPRefineVector.end());
   }
   
   std::sort(cellsToRefine.begin(), cellsToRefine.end());
@@ -235,7 +231,6 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
   
   if (unrefine)
   {
-    int numCellsToBeAdded = 0;
     int localNumCellsToBeAdded = 0;
     std::set<GlobalIndexType> cellsToRefineSet(cellsToRefine.begin(),cellsToRefine.end());
     for (const auto & cellID : cellsToRefine)
@@ -271,8 +266,8 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
         
       }
     }
-    mesh->Comm()->SumAll(&localNumCellsToBeAdded, &numCellsToBeAdded, 1);
-
+    int numCellsToBeAdded = MPIWrapper::sum(mesh->Comm(), localNumCellsToBeAdded);
+    
     const int numActiveCellsAfterRefinement = mesh->numActiveElements() + numCellsToBeAdded;
     const int cellReductionTarget = std::max(numActiveCellsAfterRefinement - _maxElementCount, 0);
     
@@ -333,7 +328,7 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
       std::vector<GlobalIndexType> globalAdditionalChildCellsToExclude;
       
       std::vector<int> offsets;
-      MPIWrapper::allGatherVariable(*mesh->Comm(), globalAdditionalChildCellsToExclude, myAdditionalChildCellsToExcludeVector, offsets);
+      MPIWrapper::allGatherVariable(mesh->Comm(), globalAdditionalChildCellsToExclude, myAdditionalChildCellsToExcludeVector, offsets);
       
       childCellsToExclude.insert(globalAdditionalChildCellsToExclude.begin(),globalAdditionalChildCellsToExclude.end());
     }
@@ -372,7 +367,7 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
   GlobalIndexType activeElementCount = mesh->numActiveElements();
   GlobalIndexType globalDofCount = mesh->numGlobalDofs();
   
-  if (printToConsole && (mesh->Comm()->MyPID() == 0))
+  if (printToConsole && (mesh->Comm()->getRank() == 0))
   {
     cout << "Prior to refinement, total error: " << totalError << endl;
     cout << "After refinement, mesh has " << activeElementCount << " elements and " << globalDofCount << " global dofs" << endl;

@@ -25,7 +25,7 @@
 
 using namespace Camellia;
 
-ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm) : MeshPartitionPolicy(Comm)
+ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Teuchos_CommPtr Comm) : MeshPartitionPolicy(Comm)
 {
   string partitionerName = "HSFC"; // was "BLOCK"
   string debug_level = "0"; // was "10"
@@ -33,7 +33,7 @@ ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm) : Mesh
   _ZoltanPartitioner = partitionerName;
   _debug_level = debug_level;
 }
-ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm, string partitionerName) : MeshPartitionPolicy(Comm)
+ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Teuchos_CommPtr Comm, string partitionerName) : MeshPartitionPolicy(Comm)
 {
   string debug_level = "0";
   _ZoltanPartitioner = partitionerName;
@@ -42,7 +42,7 @@ ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm, string
 
 void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
 {
-  int myNode = Comm()->MyPID();
+  int myNode = Comm()->getRank();
 //  cout << "Entered ZoltanMeshPartitionPolicy::partitionMesh() on rank " << myNode << endl;
 //  cout << "ZoltanMeshPartitionPolicy::partitionMesh, registered solution count: " << mesh->globalDofAssignment()->getRegisteredSolutions().size() << endl;
   int numNodes = numPartitions;
@@ -64,11 +64,11 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
   if (numNodes>1)
   {
 #ifdef HAVE_MPI
-    Epetra_MpiComm* mpiComm = dynamic_cast<Epetra_MpiComm*>(this->Comm().get());
-    
-    if (mpiComm != NULL)
+    if (Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(this->Comm()) != Teuchos::null)
     {
-      Zoltan *zz = new Zoltan(mpiComm->Comm());
+      MPI_Comm mpiComm = *Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(this->Comm())->getRawMpiComm();
+      
+      Zoltan *zz = new Zoltan(mpiComm);
       if (zz == NULL)
       {
         cout << "ZoltanMeshPartititionPolicy: construction of new Zoltan object failed.\n";
@@ -189,7 +189,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
         vector<int> myCellIDs(rankLocalCells.begin(),rankLocalCells.end());
         vector<int> allCellIDs;
         vector<int> offsets;
-        MPIWrapper::allGatherVariable(*mesh->Comm(), allCellIDs, myCellIDs, offsets);
+        MPIWrapper::allGatherVariable(mesh->Comm(), allCellIDs, myCellIDs, offsets);
         
         vector<set<GlobalIndexType> > partitions(offsets.size());
         for (int rank=0; rank<offsets.size(); rank++)

@@ -700,18 +700,18 @@ void StokesVGPFormulation::addPointPressureCondition(vector<double> vertex)
     if (meshTopo->isDistributed())
     {
       // then take vertex 0 on the first rank that has at least one vertex
-      int myMinRankWithAVertex = meshTopo->Comm()->NumProc();
+      int myMinRankWithAVertex = meshTopo->Comm()->getSize();
       bool haveAVertex = meshTopo->cellCount() > 0;
       if (haveAVertex)
       {
-        myMinRankWithAVertex = meshTopo->Comm()->MyPID();
+        myMinRankWithAVertex = meshTopo->Comm()->getRank();
       }
       int globalMinRankWithAVertex;
-      meshTopo->Comm()->MinAll(&myMinRankWithAVertex, &globalMinRankWithAVertex, 1);
-      if (globalMinRankWithAVertex == meshTopo->Comm()->NumProc())
+      Teuchos::reduceAll(*meshTopo->Comm(), Teuchos::REDUCE_MIN, 1, &myMinRankWithAVertex, &globalMinRankWithAVertex);
+      if (globalMinRankWithAVertex == meshTopo->Comm()->getSize())
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No known vertices for MeshTopology");
       vertex.resize(meshTopo->getDimension());
-      meshTopo->Comm()->Broadcast(&vertex[0], vertex.size(), globalMinRankWithAVertex);
+      Teuchos::broadcast(*meshTopo->Comm(), globalMinRankWithAVertex, int(vertex.size()), &vertex[0]);
     }
     else
     {

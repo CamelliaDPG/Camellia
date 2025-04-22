@@ -244,10 +244,10 @@ namespace
     auto soln_TwoRHS = simplePoissonSolutionWithSecondaryRHS(elementWidths, H1Order, useConformingTraces, homogeneousBCs);
     
     auto Comm = soln_TwoRHS->mesh()->Comm();
-    int rank = Comm->MyPID();
+    int rank = Comm->getRank();
     
     // barrier for debugger attachment:
-    Comm->Barrier();
+    Comm->barrier();
     
     //    {
     //      // DEBUGGING: write out the matrices and RHSes to file

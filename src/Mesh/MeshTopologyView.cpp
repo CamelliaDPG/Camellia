@@ -264,14 +264,16 @@ void MeshTopologyView::buildLookups()
     else
       myGreatestID = -1;
     GlobalIndexTypeToCast globalMaxID = 0;
-    _meshTopo->Comm()->MaxAll(&myGreatestID, &globalMaxID, 1);
+//    _meshTopo->Comm()->MaxAll(&myGreatestID, &globalMaxID, 1);
+    Teuchos::reduceAll(*_meshTopo->Comm(), Teuchos::REDUCE_MAX, 1, &myGreatestID, &globalMaxID);
     _globalCellCount = globalMaxID + 1;
     
     // determine which cells are locally owned
     set<IndexType> myActiveCellIndices = getMyActiveCellIndices();
     int myActiveCellCount = myActiveCellIndices.size();
     int globalActiveCellCount = 0;
-    _meshTopo->Comm()->SumAll(&myActiveCellCount, &globalActiveCellCount, 1);
+//    _meshTopo->Comm()->SumAll(&myActiveCellCount, &globalActiveCellCount, 1);
+    Teuchos::reduceAll(*_meshTopo->Comm(), Teuchos::REDUCE_SUM, 1, &myActiveCellCount, &globalActiveCellCount);
     _globalActiveCellCount = globalActiveCellCount;
   }
   else
@@ -360,7 +362,7 @@ vector<IndexType> MeshTopologyView::cellIDsWithCentroids(const std::vector<std::
   return cellIDs;
 }
 
-Epetra_CommPtr MeshTopologyView::Comm() const
+Teuchos_CommPtr MeshTopologyView::Comm() const
 {
   return _meshTopo->Comm();
 }
@@ -824,7 +826,7 @@ set<IndexType> MeshTopologyView::getGatheredActiveCellsForTime(double t) const
   }
   vector<GlobalIndexTypeToCast> gatheredCellsForTime;
   vector<int> offsets;
-  MPIWrapper::allGatherVariable(*Comm(), gatheredCellsForTime, myCellsForTime, offsets);
+  MPIWrapper::allGatherVariable(Comm(), gatheredCellsForTime, myCellsForTime, offsets);
   set<GlobalIndexType> gatheredCellSet(gatheredCellsForTime.begin(),gatheredCellsForTime.end());
   return gatheredCellSet;
 }
@@ -834,7 +836,7 @@ MeshTopologyPtr MeshTopologyView::getGatheredCopy() const
   MeshGeometryInfo baseMeshGeometry;
   CellDataMigration::getGeometry(this, baseMeshGeometry);
   auto periodicBCs = this->getPeriodicBCs();
-  const bool isDistributed = (Comm() != Teuchos::null) && (Comm()->NumProc() > 1);
+  const bool isDistributed = (Comm() != Teuchos::null) && (Comm()->getSize() > 1);
   if (isDistributed)
   {
     int myGeometrySize = CellDataMigration::getGeometryDataSize(baseMeshGeometry);
@@ -844,7 +846,7 @@ MeshTopologyPtr MeshTopologyView::getGatheredCopy() const
     
     vector<char> gatheredGeometryData;
     vector<int> offsets;
-    MPIWrapper::allGatherVariable<char>(*Comm(),gatheredGeometryData,myGeometryData,offsets);
+    MPIWrapper::allGatherVariable<char>(Comm(),gatheredGeometryData,myGeometryData,offsets);
     
     MeshGeometryInfo gatheredBaseMeshGeometry;
     const char* gatheredDataLocation = &gatheredGeometryData[0];
@@ -1021,7 +1023,7 @@ vector<IndexType> MeshTopologyView::getVertexIndicesMatching(const vector<double
 
 bool MeshTopologyView::isDistributed() const
 {
-  return (_meshTopo->Comm() != Teuchos::null) && (_meshTopo->Comm()->NumProc() > 1);
+  return (_meshTopo->Comm() != Teuchos::null) && (_meshTopo->Comm()->getSize() > 1);
 }
 
 bool MeshTopologyView::isParent(IndexType cellIndex) const
@@ -1117,11 +1119,7 @@ MeshTopologyViewPtr MeshTopologyView::readFromFile(Epetra_CommPtr Comm, string f
 void MeshTopologyView::writeToFile(string filename) const
 {
 #ifdef HAVE_EPETRAEXT_HDF5
-  Epetra_CommPtr comm = Comm();
-  if (comm == Teuchos::null)
-  {
-    comm = MPIWrapper::CommSerial();
-  }
+  Epetra_CommPtr comm = MPIWrapper::EpetraComm(Comm());
   
   EpetraExt::HDF5 hdf5(*comm);
   hdf5.Create(filename);
@@ -1184,7 +1182,10 @@ MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Epetra_CommPtr Comm, EpetraEx
   
   const char* geometryDataLocation = (myGeometrySize > 0) ? &myGeometryData[0] : NULL;
   CellDataMigration::readGeometryData(geometryDataLocation, myGeometrySize, geometryInfo);
-  MeshTopologyPtr baseMeshTopo = Teuchos::rcp( new MeshTopology(Comm, geometryInfo) );
+  
+  Teuchos_CommPtr teuchosComm = MPIWrapper::TeuchosComm(Comm);
+  
+  MeshTopologyPtr baseMeshTopo = Teuchos::rcp( new MeshTopology(teuchosComm, geometryInfo) );
   
   // if the base mesh topology has a pure view, record that, too
   bool isDistributedView = hdf5.IsContained("MeshTopologyViewDistributed");

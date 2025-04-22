@@ -225,7 +225,7 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh2DMaximumRule)
   const set<GlobalIndexType>* myCellIDs = &mesh2DMaximumRule->cellIDsInPartition();
   map<ElementType*, vector<GlobalIndexType> > cellIDsForElementType; // build lookup tables
   map<ElementType*, GlobalIndexType> partitionOffsetsForElementType; // to convert from globalCellIndex
-  int rank = mesh2DMaximumRule->Comm()->MyPID();
+  int rank = mesh2DMaximumRule->Comm()->getRank();
   for (GlobalIndexType cellID : *myCellIDs)
   {
     Teuchos::RCP<Element> elem = mesh2DMaximumRule->getElement(cellID);

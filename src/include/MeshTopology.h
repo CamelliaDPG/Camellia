@@ -43,7 +43,7 @@ namespace Camellia
 class MeshTopology : public MeshTopologyView
 {
   // _Comm and _ownedCellIndices are used when MeshTopology is distributed
-  Epetra_CommPtr _Comm;
+  Teuchos_CommPtr _Comm;
   std::set<GlobalIndexType> _ownedCellIndices;
   int _pruningOrdinal = -1;
   
@@ -128,7 +128,7 @@ protected:
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
-  MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
+  MeshTopology(Teuchos_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   virtual ~MeshTopology() {}
 
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
@@ -182,7 +182,7 @@ public:
                                    unsigned descendentDimension, IndexType descendent) const;
 
   // ! If the MeshTopology is distributed, returns the Comm object used.  Otherwise, returns Teuchos::null, which is meant to indicate that the MeshTopology is replicated on every MPI rank on which it is used.
-  Epetra_CommPtr Comm() const;
+  Teuchos_CommPtr Comm() const;
   
   virtual bool isDistributed() const;
   
@@ -299,7 +299,7 @@ public:
   void pruningHalo(std::set<GlobalIndexType> &haloCellIndices, const std::set<GlobalIndexType> &ownedCellIndices,
                    unsigned dimForNeighborRelation) const;
   // ! Removes all entities that do not belong to the "halo" of the cells indicated, stores ownedCellIndices, and sets the Comm object.
-  void pruneToInclude(Epetra_CommPtr Comm, const std::set<GlobalIndexType> &ownedCellIndices,
+  void pruneToInclude(Teuchos_CommPtr Comm, const std::set<GlobalIndexType> &ownedCellIndices,
                       unsigned dimForNeighborRelation);
   // ! Returns a counter, incremented when pruneToInclude was last called.  Allows caching of things that depend on ownedCellIndices (used in MeshTopologyView's determination of *its* ownedCellIndices).
   int pruningOrdinal() const;

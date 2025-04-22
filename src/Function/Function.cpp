@@ -1457,8 +1457,7 @@ template <typename Scalar>
 void TFunction<Scalar>::importDataForOffRankCells(MeshPtr mesh, const std::set<GlobalIndexType> &offRankCells)
 {
   // code below is adapted from Solution::importSolutionForOffRankCells
-  Epetra_CommPtr Comm = mesh->Comm();
-  int rank = Comm->MyPID();
+  int rank = mesh->Comm()->getRank();
   
   // we require that all the cellIDs be locally known in terms of the geometry
   // (for distributed MeshTopology, this basically means that we only allow importing
@@ -1502,7 +1501,8 @@ void TFunction<Scalar>::importDataForOffRankCells(MeshPtr mesh, const std::set<G
   }
   
   int myRequestCount = myRequest.size();
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*mesh->Comm());
+  auto epetraComm = MPIWrapper::EpetraComm(mesh->Comm());
+  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
   
   GlobalIndexTypeToCast* myRequestPtr = NULL;
   int *myRequestOwnersPtr = NULL;
@@ -1960,7 +1960,9 @@ Scalar TFunction<Scalar>::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDe
       integral+= this->integralOfJump(mesh,cellID,sideIndex,cubatureDegreeEnrichment);
     }
   }
-  return MPIWrapper::sum(*mesh->Comm(), integral);
+  
+  auto epetraComm = MPIWrapper::EpetraComm(mesh->Comm());
+  return MPIWrapper::sum(*epetraComm, integral);
 }
 
 template <typename Scalar>
@@ -2016,7 +2018,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
    */
   
     
-  Epetra_CommPtr Comm = mesh->Comm();
+//  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(mesh->Comm());
   
   MeshTopologyViewPtr meshTopo = mesh->getTopology();
   const set<GlobalIndexType> & activeCellIDs = meshTopo->getLocallyKnownActiveCellIndices();
@@ -2535,7 +2537,8 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
       }
     }
   }
-  MPIWrapper::sendDataMaps(mesh->Comm(), recipientDataMaps, receivedMap);
+  Epetra_CommPtr epetraComm = MPIWrapper::EpetraComm(mesh->Comm());
+  MPIWrapper::sendDataMaps(epetraComm, recipientDataMaps, receivedMap);
   // incorporate the received data into our sideL2Norms
   for (auto receivedEntry : receivedMap)
   {
@@ -2570,7 +2573,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
 template <typename Scalar>
 Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache, bool spatialSidesOnly)
 {
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   vector< ElementTypePtr > elementTypes = mesh->elementTypes(rank);
   
   Scalar integral = 0;
@@ -2651,7 +2654,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
     }
   }
   double globalMax = 0.0;
-  mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+  Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_MAX, 1, &localMax, &globalMax);
   return globalMax;
 }
   
@@ -2715,7 +2718,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
 //      }
     }
     double globalMax = 0.0;
-    mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_MAX, 1, &localMax, &globalMax);
     return globalMax;
   }
   
@@ -2780,7 +2783,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
 //      }
     }
     double globalMin = 0.0;
-    mesh->Comm()->MinAll(&localMin, &globalMin, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_MIN, 1, &localMin, &globalMin);
     return globalMin;
   }
 
@@ -3005,7 +3008,7 @@ void TFunction<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh,
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
   int spaceDim = 2; // TODO: generalize to 3D...
 
-  PartitionIndexType rank = mesh->Comm()->MyPID();
+  PartitionIndexType rank = mesh->Comm()->getRank();
   
   BasisCachePtr basisCache;
   for (ElementTypePtr elemTypePtr : elementTypes)
@@ -3101,7 +3104,7 @@ void TFunction<Scalar>::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const s
   int globalCellInd = 1; //matlab indexes from 1
   BasisCachePtr basisCache;
   
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   
   for (ElementTypePtr elemTypePtr : elementTypes)   //thru quads/triangles/etc
   {

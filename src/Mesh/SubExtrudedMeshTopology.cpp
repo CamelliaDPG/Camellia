@@ -211,7 +211,7 @@ namespace Camellia
   }
   
   // ! If the base MeshTopology is distributed, returns the Comm object used.  Otherwise, returns Teuchos::null, which is meant to indicate that the MeshTopology is replicated on every MPI rank on which it is used.
-  Epetra_CommPtr SubExtrudedMeshTopology::Comm() const
+  Teuchos_CommPtr SubExtrudedMeshTopology::Comm() const
   {
     return Teuchos::null;
   }

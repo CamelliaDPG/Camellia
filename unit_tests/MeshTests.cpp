@@ -154,7 +154,7 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
     
     int expectedActiveCellOffset = 0;
     int myCellCount = mesh->cellIDsInPartition().size();
-    mesh->Comm()->ScanSum(&myCellCount, &expectedActiveCellOffset, 1);
+    Teuchos::scan(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &myCellCount, &expectedActiveCellOffset);
     expectedActiveCellOffset -= myCellCount;
     
     int activeCellOffset = mesh->activeCellOffset();
@@ -1496,7 +1496,7 @@ void testUnrefine(int levels, int spaceDim, Teuchos::FancyOStream &out, bool &su
     
     std::vector<GlobalIndexType> globalRefinedCellChildren;
     std::vector<int> offsets;
-    MPIWrapper::allGatherVariable<GlobalIndexType>(*mesh->Comm(), globalRefinedCellChildren, myRefinedCellChildren, offsets);
+    MPIWrapper::allGatherVariable<GlobalIndexType>(mesh->Comm(), globalRefinedCellChildren, myRefinedCellChildren, offsets);
     std::sort(globalRefinedCellChildren.begin(), globalRefinedCellChildren.end());
     
     cellsToRefine = globalRefinedCellChildren;

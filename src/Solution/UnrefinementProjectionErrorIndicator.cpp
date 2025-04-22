@@ -37,7 +37,7 @@ void UnrefinementProjectionErrorIndicator::gatherParentError(const std::set<Glob
   // this method fills _parentErrorMeasures; clear it first
   _parentErrorMeasures.clear();
   
-  const int myPID = _mesh->Comm()->MyPID();
+  const int myPID = _mesh->Comm()->getRank();
   
   auto meshTopo = _mesh->getTopology();
   

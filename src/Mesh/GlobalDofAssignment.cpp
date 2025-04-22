@@ -47,7 +47,7 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory,
     _allowMeshTopologyPruning = false;
   }
   
-  Epetra_CommPtr Comm = _mesh->getTopology()->Comm();
+  auto Comm = _mesh->getTopology()->Comm();
   
   if (_mesh->getTopology()->Comm() != Teuchos::null)
   {
@@ -58,18 +58,18 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory,
       assignParities(cellID);
     }
     
-    _numPartitions = Comm->NumProc();
+    _numPartitions = Comm->getSize();
     
     int globalActiveCellCount = _mesh->getTopology()->activeCellCount();
     set<GlobalIndexType> myCellIDs = _mesh->getTopology()->getMyActiveCellIndices();
     int numMyCellIDs = myCellIDs.size();
 
     int myPartitionOffset;
-    Comm->ScanSum(&numMyCellIDs, &myPartitionOffset, 1);
+    Teuchos::scan(*Comm, Teuchos::REDUCE_SUM, 1, &numMyCellIDs, &myPartitionOffset);
     myPartitionOffset -= numMyCellIDs;
     
     vector<int> gatheredPartitionOffsets(_numPartitions,0);
-    Comm->GatherAll(&myPartitionOffset, &gatheredPartitionOffsets[0], 1);
+    Teuchos::gatherAll(*Comm, 1, &myPartitionOffset, int(_numPartitions), &gatheredPartitionOffsets[0]);
     
     vector<GlobalIndexTypeToCast> partitionOrderedCells(globalActiveCellCount,0);
     vector<GlobalIndexTypeToCast> gatheredPartitionOrderedCells(globalActiveCellCount,0);
@@ -81,7 +81,7 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory,
       i++;
     }
     // since this does not contain the same number of entries on each rank, can't use GatherAll
-    Comm->SumAll(&partitionOrderedCells[0], &gatheredPartitionOrderedCells[0], globalActiveCellCount);
+    Teuchos::reduceAll(*Comm, Teuchos::REDUCE_SUM, globalActiveCellCount, &partitionOrderedCells[0], &gatheredPartitionOrderedCells[0]);
     
     _partitions = vector<set<GlobalIndexType> >(_numPartitions);
     for (int partitionOrdinal=0; partitionOrdinal<_numPartitions; partitionOrdinal++)
@@ -105,14 +105,13 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory,
       assignParities(cellID);
     }
     
-    _numPartitions = _partitionPolicy->Comm()->NumProc();
+    _numPartitions = _partitionPolicy->Comm()->getSize();
     _partitions = vector<set<GlobalIndexType> >(_numPartitions);
     
     // before repartitioning (which should happen immediately), put all active cells on rank 0
     _partitions[0] = activeCellIDs;
   }
 
-  constructActiveCellMap();
   determineMinimumSubcellDimensionForContinuityEnforcement();
 }
 
@@ -137,9 +136,6 @@ GlobalDofAssignment::GlobalDofAssignment( GlobalDofAssignment &otherGDA ) : DofI
 
   _partitions = otherGDA._partitions;
   _partitionForCellID = otherGDA._partitionForCellID;
-
-  _activeCellMap = Teuchos::rcp( new Epetra_Map(*otherGDA._activeCellMap) );
-//  _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<>(*otherGDA._activeCellMap2) );
 
   _numPartitions = otherGDA._numPartitions;
 
@@ -222,7 +218,7 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID )
           cout << "cell ID: " << cellID << endl;
           cout << "neighbor cell ID: " << neighborCellID << endl;
           cout << "sideOrdinal: " << sideOrdinal << endl;
-          if (_mesh->Comm()->NumProc() == 1)
+          if (_mesh->Comm()->getSize() == 1)
           {
             GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/bad_mesh", _mesh, true);
             cout << "Wrote labeled mesh to /tmp/bad_mesh.\n";
@@ -322,7 +318,7 @@ vector<GlobalIndexType> GlobalDofAssignment::cellIDsOfElementType(PartitionIndex
     cout << "cellIDsOfElementType called with partitionNumber==-1.  Returning empty vector.\n";
     return vector<GlobalIndexType>();
   }
-  if (_meshTopology->isDistributed() && (partitionNumber != _meshTopology->Comm()->MyPID()))
+  if (_meshTopology->isDistributed() && (partitionNumber != _meshTopology->Comm()->getRank()))
   {
     cout << "For distributed MeshTopology, cellIDsOfElementType() only supports the current partition.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "For distributed MeshTopology, cellIDsOfElementType() only supports the current partition");
@@ -397,7 +393,7 @@ vector<GlobalIndexType> GlobalDofAssignment::cellIDsOfElementType(PartitionIndex
 
 const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber) const
 {
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
   if (partitionNumber == -1)
   {
     partitionNumber = rank;
@@ -423,43 +419,6 @@ Camellia::FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( G
   return cellSideParities;
 }
 
-void GlobalDofAssignment::constructActiveCellMap()
-{
-  const set<GlobalIndexType>* myCellIDs = &cellsInPartition(-1);
-  vector<GlobalIndexTypeToCast> myCellIDsVector(myCellIDs->begin(), myCellIDs->end());
-
-  int indexBase = 0;
-  if (myCellIDsVector.size()==0)
-    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsVector.size(), NULL, indexBase, *_partitionPolicy->Comm()) );
-  else
-    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsVector.size(), &myCellIDsVector[0], indexBase, *_partitionPolicy->Comm()) );
-}
-
-void GlobalDofAssignment::constructActiveCellMap2()
-{
-  using LO = ::Tpetra::Details::DefaultTypes::local_ordinal_type;
-  using GO = ::Tpetra::Details::DefaultTypes::global_ordinal_type;
-  
-  const set<GlobalIndexType> & cellIDs = cellsInPartition(-1);
-  vector<GO> myCellIDsVector(cellIDs.size());
-  
-  int i=0;
-  for (const GlobalIndexType & cellID : cellIDs)
-  {
-    myCellIDsVector[i++] = static_cast<GO>(cellID);
-  }
-  
-  Teuchos::ArrayView< const GO > myCellIDsAV(myCellIDsVector);
-
-  int indexBase = 0;
-  if (myCellIDsVector.size()==0)
-    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
-                                    myCellIDsVector.size(), indexBase, _partitionPolicy->TeuchosComm()) );
-  else
-    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
-                                    myCellIDsAV, indexBase, _partitionPolicy->TeuchosComm()) );
-}
-
 void GlobalDofAssignment::determineMinimumSubcellDimensionForContinuityEnforcement()
 {
   int myMinimumSubcellDimension = _meshTopology->getDimension();
@@ -479,7 +438,8 @@ void GlobalDofAssignment::determineMinimumSubcellDimensionForContinuityEnforceme
     if (myMinimumSubcellDimension == 0) break; // can't go lower than 0
   }
   int globalMinimumSubcellDimension;
-  _partitionPolicy->Comm()->MinAll(&myMinimumSubcellDimension, &globalMinimumSubcellDimension, 1);
+//  _partitionPolicy->Comm()->MinAll(&myMinimumSubcellDimension, &globalMinimumSubcellDimension, 1);
+  Teuchos::reduceAll(*_partitionPolicy->Comm(), Teuchos::REDUCE_MIN, 1, &myMinimumSubcellDimension, &globalMinimumSubcellDimension);
   _minContinuityDimension = globalMinimumSubcellDimension;
 }
 
@@ -645,7 +605,6 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
       _partitionForCellID.erase(parentID);
     }
   }
-  constructActiveCellMap();
 }
 
 void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)   // subclasses should call super
@@ -694,9 +653,6 @@ void GlobalDofAssignment::willHUnrefine(const set<GlobalIndexType> &parentCellID
       }
     }
   }
-  
-  // TODO: do something to ensure that the active cell map is reconstructed after the unrefinement actually takes place
-  constructActiveCellMap();
 }
 
 vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType partitionNumber)
@@ -722,7 +678,7 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
   }
   else
   {
-    int numRanks = _mesh->Comm()->NumProc();
+    int numRanks = _mesh->Comm()->getSize();
     
     vector< ElementTypePtr > elemTypes;
     set< ElementType > elemTypesSet;
@@ -743,16 +699,6 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
     
     return elemTypes;
   }
-}
-
-Teuchos::RCP<Epetra_Map> GlobalDofAssignment::getActiveCellMap()
-{
-  return _activeCellMap;
-}
-
-MapPtr GlobalDofAssignment::getActiveCellMap2()
-{
-  return _activeCellMap2;
 }
 
 int GlobalDofAssignment::getCubatureDegree(GlobalIndexType cellID)
@@ -1040,7 +986,7 @@ void GlobalDofAssignment::projectChildCoefficientsOntoParents(const std::set<Glo
 {
   // rule is that the parent coefficients end up on the first child's partition
   // therefore, we need to send all child coefficients that do not belong to the same partition as the first child to that partition
-  int myRank = _partitionPolicy->Comm()->MyPID();
+  int myRank = _partitionPolicy->Comm()->getRank();
   
   // we will use Solution::importSolutionForOffRankCells(cellIDs)
   // we build up a list of off-rank cells whose data we need
@@ -1164,8 +1110,8 @@ void GlobalDofAssignment::setPartitions(Camellia::FieldContainer<GlobalIndexType
 {
 //  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndicesGlobal();
 
-  int partitionNumber     = _partitionPolicy->Comm()->MyPID();
-  int partitionCount      = _partitionPolicy->Comm()->NumProc();
+  int partitionNumber     = _partitionPolicy->Comm()->getRank();
+  int partitionCount      = _partitionPolicy->Comm()->getSize();
 
   TEUCHOS_TEST_FOR_EXCEPTION(partitionedMesh.dimension(0) > partitionCount, std::invalid_argument,
                              "Number of partitions exceeds the maximum MPI rank; this is unsupported");
@@ -1195,7 +1141,6 @@ void GlobalDofAssignment::setPartitions(Camellia::FieldContainer<GlobalIndexType
     }
   }
   
-  constructActiveCellMap();
   if (rebuildDofLookups)
   {
     determineMinimumSubcellDimensionForContinuityEnforcement();
@@ -1206,11 +1151,11 @@ void GlobalDofAssignment::setPartitions(Camellia::FieldContainer<GlobalIndexType
 
 void GlobalDofAssignment::setPartitions(std::vector<std::set<GlobalIndexType> > &partitions, bool rebuildDofLookups)
 {
-  int thisPartitionNumber = _partitionPolicy->Comm()->MyPID();
+  int thisPartitionNumber = _partitionPolicy->Comm()->getRank();
 
   // not sure numProcs == partitions.size() is a great requirement to impose, but it is an assumption we make in some places,
   // so we require it here.
-  int numProcs = _partitionPolicy->Comm()->NumProc();
+  int numProcs = _partitionPolicy->Comm()->getSize();
   TEUCHOS_TEST_FOR_EXCEPTION(numProcs != partitions.size(), std::invalid_argument, "partitions.size() must be equal to numProcs!");
 
   _partitions = partitions;
@@ -1229,7 +1174,6 @@ void GlobalDofAssignment::setPartitions(std::vector<std::set<GlobalIndexType> > 
       _activeCellOffset += partitions[i].size();
     }
   }
-  constructActiveCellMap();
   if (rebuildDofLookups)
   {
     determineMinimumSubcellDimensionForContinuityEnforcement();
@@ -1278,7 +1222,7 @@ IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID, i
 {
   if (partitionNumber == -1)
   {
-    partitionNumber     = _partitionPolicy->Comm()->MyPID();
+    partitionNumber     = _partitionPolicy->Comm()->getRank();
   }
 
   ElementTypePtr elemType = elementType(cellID);

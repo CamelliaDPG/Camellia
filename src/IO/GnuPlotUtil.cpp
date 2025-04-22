@@ -16,7 +16,7 @@ MeshPtr gatherMeshToRankZeroIfDistributed(MeshPtr mesh)
 {
   if (mesh->getTopology()->isDistributed())
   {
-    int rank = mesh->Comm()->MyPID();
+    int rank = mesh->Comm()->getRank();
     MeshTopologyPtr meshTopoGathered = mesh->getTopology()->getGatheredCopy();
     if (rank == 0)
     {
@@ -89,7 +89,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
     return;
   }
 
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   int spaceDim = mesh->getDimension(); // not that this will really work in 3D...
 
   // check whether all cells are available on rank 0; if not, gather to rank 0
@@ -244,7 +244,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
   int rank = 0;
   if (meshTopo->isDistributed())
   {
-    rank = meshTopo->Comm()->MyPID();
+    rank = meshTopo->Comm()->getRank();
     meshTopoCopy = meshTopo->getGatheredCopy();
   }
   else
@@ -345,7 +345,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
 
 void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells, string rgbColor, string title, int labelFontSize)
 {
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   
   // check whether all cells are available on rank 0; if not, gather to rank 0
   mesh = gatherMeshToRankZeroIfDistributed(mesh);

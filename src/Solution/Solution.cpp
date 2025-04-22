@@ -409,7 +409,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
    with finer quadrature, in the case of a locally refined mesh.
    */
   
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   int numProcs = Comm->NumProc();
   
   int indexBase = 0;
@@ -1123,7 +1123,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 {
   TEUCHOS_FUNC_TIME_MONITOR("Solution::populateStiffnessAndLoad");
   narrate("populateStiffnessAndLoad()");
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   int rank = Comm->MyPID();
   int numProcs = Comm->NumProc();
 
@@ -1449,7 +1449,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 //      else
 //        zmcIndex = 0;
 //
-//      zmcIndex = MPIWrapper::sum(*_mesh->Comm(), zmcIndex);
+//      zmcIndex = MPIWrapper::sum(_mesh->Comm(), zmcIndex);
 //
 //      Camellia::FieldContainer<Scalar> basisIntegrals;
 //      Camellia::FieldContainer<GlobalIndexTypeToCast> globalIndices;
@@ -1581,7 +1581,7 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
 
   int timerHandle = TimeLogger::sharedInstance()->startTimer(SOLVER_TIMER_STRING);
   
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   int rank = Comm->MyPID();
   int numProcs = Comm->NumProc();
 
@@ -1814,7 +1814,7 @@ template <typename Scalar>
 void TSolution<Scalar>::importSolution()
 {
   TEUCHOS_FUNC_TIME_MONITOR("Solution::importSolution");
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   Epetra_Time timer(*Comm);
 
   auto lhsVector = (_solutionStage == Teuchos::null) ? _lhsVector : _lhsVectorCurrentStage;
@@ -1906,7 +1906,7 @@ void TSolution<Scalar>::importSolution()
 template <typename Scalar>
 void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndexType> &cellIDs)
 {
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   int rank = Comm->MyPID();
 
   // we require that all the cellIDs be locally known in terms of the geometry
@@ -1951,7 +1951,8 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
   }
 
   int myRequestCount = myRequest.size();
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*_mesh->Comm());
+  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
+  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
 
   GlobalIndexTypeToCast* myRequestPtr = NULL;
   int *myRequestOwnersPtr = NULL;
@@ -2065,7 +2066,7 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
 template <typename Scalar>
 void TSolution<Scalar>::importGlobalSolution()
 {
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   Epetra_Time timer(*Comm);
 
   GlobalIndexType globalDofCount = _mesh->globalDofAssignment()->globalDofCount();
@@ -2146,7 +2147,7 @@ void TSolution<Scalar>::imposeBCs()
 {
   TEUCHOS_FUNC_TIME_MONITOR("Solution::imposeBCs");
   narrate("imposeBCs()");
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
 
   Epetra_Map partMap = getPartitionMap();
 
@@ -2216,7 +2217,7 @@ void TSolution<Scalar>::imposeBCs()
   if (_warnAboutDiscontinuousBCs == 1)
   {
     // print a simple warning on rank 0
-    foundDiscontinuousBC = MPIWrapper::globalOr(*this->mesh()->Comm(), foundDiscontinuousBC);
+    foundDiscontinuousBC = MPIWrapper::globalOr(this->mesh()->Comm(), foundDiscontinuousBC);
     if (foundDiscontinuousBC && (rank == 0))
     {
       cout << "WARNING: discontinuous boundary conditions detected.  Call Solution::setWarnAboutDiscontinuousBCs() with outputLevel=0 to suppress this warning; with outputLevel=2 for full details about the differing values\n";
@@ -2282,7 +2283,7 @@ void TSolution<Scalar>::imposeBCs()
     }
   }
   
-  _bcDofCount = MPIWrapper::sum(*this->mesh()->Comm(), GlobalIndexType(numBCs));
+  _bcDofCount = MPIWrapper::sum(this->mesh()->Comm(), GlobalIndexType(numBCs));
   
   Epetra_MultiVector rhsDirichlet(partMap,_rhsVector->NumVectors());
   _globalStiffMatrix->Apply(v,rhsDirichlet);
@@ -2338,7 +2339,7 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
   narrate("imposeZMCsUsingLagrange()");
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   if (zeroMeanConstraints.size() == 0) return; // nothing to do
-  int rank = _mesh->Comm()->MyPID();
+  int rank = _mesh->Comm()->getRank();
 
   if (_zmcsAsRankOneUpdate)
   {
@@ -2379,7 +2380,7 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
     else
       zmcIndex = 0;
 
-    zmcIndex = MPIWrapper::sum(*_mesh->Comm(),zmcIndex);
+    zmcIndex = MPIWrapper::sum(_mesh->Comm(),zmcIndex);
 
     if (_zmcsAsLagrangeMultipliers)
     {
@@ -2390,12 +2391,12 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
 
       Camellia::FieldContainer<int> offsets;
       Camellia::FieldContainer<Scalar> allBasisIntegrals;
-      MPIWrapper::allGatherVariable(*_mesh->Comm(),allBasisIntegrals,basisIntegrals,offsets);
+      MPIWrapper::allGatherVariable(_mesh->Comm(),allBasisIntegrals,basisIntegrals,offsets);
 
 //      if (rank==0) cout << "allBasisIntegrals:\n" << allBasisIntegrals;
 
       Camellia::FieldContainer<GlobalIndexTypeToCast> allGlobalIndices;
-      MPIWrapper::allGatherVariable(*_mesh->Comm(),allGlobalIndices,globalIndices,offsets);
+      MPIWrapper::allGatherVariable(_mesh->Comm(),allGlobalIndices,globalIndices,offsets);
 
 //      if (rank==0) cout << "allGlobalIndices:\n" << allGlobalIndices;
 
@@ -2634,7 +2635,7 @@ double TSolution<Scalar>::meshMeasure()
 template <typename Scalar>
 double TSolution<Scalar>::InfNormOfSolutionGlobal(int trialID)
 {
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   int numProcs = Comm->NumProc();
 
   int indexBase = 0;
@@ -2654,7 +2655,7 @@ double TSolution<Scalar>::InfNormOfSolutionGlobal(int trialID)
 template <typename Scalar>
 double TSolution<Scalar>::InfNormOfSolution(int trialID)
 {
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   int rank = Comm->MyPID();
   
   double value = 0.0;
@@ -2745,7 +2746,7 @@ double TSolution<Scalar>::energyErrorTotal()
   {
     energyErrorSquared += (cellEnergyIt->second) * (cellEnergyIt->second);
   }
-  energyErrorSquared = MPIWrapper::sum(*_mesh->Comm(),energyErrorSquared);
+  energyErrorSquared = MPIWrapper::sum(_mesh->Comm(),energyErrorSquared);
   return sqrt(energyErrorSquared);
 }
 
@@ -3342,7 +3343,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
     }
     //  when the cell containing the point is off-rank, we have 0s.
     // We sum entrywise to get the missing values.
-    MPIWrapper::entryWiseSum(*_mesh->Comm(),values);
+    MPIWrapper::entryWiseSum(_mesh->Comm(),values);
   }
   else     // (P,D) physicalPoints
   {
@@ -4003,15 +4004,15 @@ int TSolution<Scalar>::solutionOrdinal(SolutionComponent solutionComponent, int 
 template <typename Scalar>
 Epetra_Map TSolution<Scalar>::getPartitionMap()
 {
-  Epetra_CommPtr Comm = _mesh->Comm();
-  int rank = Comm->MyPID();
+  int rank = _mesh->Comm()->getRank();
+  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
 
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
 
-  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,Comm.get());
+  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,epetraComm.get());
   return partMap;
 }
 
@@ -4820,7 +4821,7 @@ void TSolution<Scalar>::saveToHDF5(string filename)
   // vector representation, for the computational savings of not having to reconstruct
   // the global vector from the local representation.
 
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   
   EpetraExt::HDF5 hdf5(*Comm);
   hdf5.Create(filename);
@@ -4841,7 +4842,7 @@ void TSolution<Scalar>::loadFromHDF5(string filename)
   this->clear();
   initializeLHSVector();
   
-  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
 
   EpetraExt::HDF5 hdf5(*Comm);
   hdf5.Open(filename, H5F_ACC_RDONLY);

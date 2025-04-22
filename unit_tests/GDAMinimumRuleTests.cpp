@@ -499,7 +499,7 @@ namespace
                 }
                 if (!coordsAgree)
                 {
-                  int myRank = mesh->Comm()->MyPID();
+                  int myRank = mesh->Comm()->getRank();
                   out << "dof coords for global dof index " << globalDofOrdinal << " disagree on rank " << myRank << endl;
                   Camellia::print(out, "first entry", prevDofCoord);
                   Camellia::print(out, "current entry", dofCoords);
@@ -555,8 +555,8 @@ namespace
           myDofCoordEntries.push_back({globalDofIndex,point});
         }
         vector<int> offsets;
-        MPIWrapper::allGatherVariable(*mesh->Comm(), gatheredDofCoordEntries, myDofCoordEntries, offsets);
-        int numProcs = mesh->Comm()->NumProc();
+        MPIWrapper::allGatherVariable(mesh->Comm(), gatheredDofCoordEntries, myDofCoordEntries, offsets);
+        int numProcs = mesh->Comm()->getSize();
         offsets.push_back(gatheredDofCoordEntries.size());
         for (int rank=0; rank < numProcs; rank++)
         {
@@ -609,8 +609,8 @@ namespace
           myDofCoordEntries.push_back({globalDofIndex,point});
         }
         vector<int> offsets;
-        MPIWrapper::allGatherVariable(*mesh->Comm(), gatheredDofCoordEntries, myDofCoordEntries, offsets);
-        int numProcs = mesh->Comm()->NumProc();
+        MPIWrapper::allGatherVariable(mesh->Comm(), gatheredDofCoordEntries, myDofCoordEntries, offsets);
+        int numProcs = mesh->Comm()->getSize();
         offsets.push_back(gatheredDofCoordEntries.size());
         for (int rank=0; rank < numProcs; rank++)
         {
@@ -665,8 +665,8 @@ namespace
           myDofCoordEntries.push_back({globalDofIndex,point});
         }
         vector<int> offsets;
-        MPIWrapper::allGatherVariable(*mesh->Comm(), gatheredDofCoordEntries, myDofCoordEntries, offsets);
-        int numProcs = mesh->Comm()->NumProc();
+        MPIWrapper::allGatherVariable(mesh->Comm(), gatheredDofCoordEntries, myDofCoordEntries, offsets);
+        int numProcs = mesh->Comm()->getSize();
         offsets.push_back(gatheredDofCoordEntries.size());
         for (int rank=0; rank < numProcs; rank++)
         {
@@ -1345,7 +1345,7 @@ namespace
       }
     }
     int commonCellIDToRefine;
-    mesh->Comm()->MinAll(&localCellIDToRefine, &commonCellIDToRefine, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_MIN, 1, &localCellIDToRefine, &commonCellIDToRefine);
     TEUCHOS_TEST_FOR_EXCEPTION(commonCellIDToRefine == INT_MAX, std::invalid_argument, "did not find a cell to refine");
     
     cellIDs = {(GlobalIndexType)commonCellIDToRefine};
@@ -1410,7 +1410,7 @@ namespace
     }
     // communicate side ordinal to all processors
     int globalSharedSideOrdinal;
-    mesh->Comm()->SumAll(&localSharedSideOrdinal, &globalSharedSideOrdinal, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &localSharedSideOrdinal, &globalSharedSideOrdinal);
     
     while (meshIrregularity < irregularity)
     {
@@ -1432,8 +1432,8 @@ namespace
         localSharedSideOrdinal = childEntry.second;
         localCellID = childWithNeighborCellID;
       }
-      mesh->Comm()->SumAll(&localSharedSideOrdinal, &globalSharedSideOrdinal, 1);
-      mesh->Comm()->SumAll(&localCellID, &commonCellID, 1);
+      Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &localSharedSideOrdinal, &globalSharedSideOrdinal);
+      Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &localCellID, &commonCellID);
       
       cellToRefine = commonCellID;
       myCellIDs = &mesh->cellIDsInPartition();
@@ -1956,7 +1956,7 @@ namespace
     MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
                                                 elementCounts[0], elementCounts[1], useTriangles);
     
-    PartitionIndexType rank = mesh->Comm()->MyPID();
+    PartitionIndexType rank = mesh->Comm()->getRank();
     
     double prescribedValue = 1.0;
     SolutionPtr soln = Solution::solution(form.bf(), mesh);
@@ -1982,7 +1982,7 @@ namespace
       }
     }
     map<GlobalIndexType,double> offRankBCs;
-    MPIWrapper::sendDataMaps(mesh->Comm(), bcValuesToSend, offRankBCs);
+    MPIWrapper::sendDataMaps(MPIWrapper::EpetraComm(mesh->Comm()), bcValuesToSend, offRankBCs);
     
     // we prescribe 1 at at all the bc indices, and 0 everywhere else.
     // then we check the values on the elements.

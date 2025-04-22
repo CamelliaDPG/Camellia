@@ -90,7 +90,7 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
   }
 }
 
-MeshTopology::MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo, vector<PeriodicBCPtr> periodicBCs)
+MeshTopology::MeshTopology(Teuchos_CommPtr Comm, const MeshGeometryInfo &meshGeometryInfo, vector<PeriodicBCPtr> periodicBCs)
 {
   _periodicBCs = periodicBCs;
   // initialize data structures with spaceDim
@@ -104,7 +104,7 @@ MeshTopology::MeshTopology(Epetra_CommPtr Comm, const MeshGeometryInfo &meshGeom
   int globalSpaceDim;
   if (Comm != Teuchos::null)
   {
-    Comm->MaxAll(&mySpaceDim, &globalSpaceDim, 1);
+    Teuchos::reduceAll(*Comm, Teuchos::REDUCE_MAX, 1, &mySpaceDim, &globalSpaceDim);
   }
   else
   {
@@ -169,10 +169,10 @@ vector<IndexType> MeshTopology::getActiveCellIndicesGlobal() const
   const set<GlobalIndexType>* myCellIDs = &_ownedCellIndices;
   int myCellCount = myCellIDs->size();
   int priorCellCount = 0;
-  Comm()->ScanSum(&myCellCount, &priorCellCount, 1);
+  Teuchos::scan(*Comm(), Teuchos::REDUCE_SUM, 1, &myCellCount, &priorCellCount);
   priorCellCount -= myCellCount;
   int globalCellCount = 0;
-  Comm()->SumAll(&myCellCount, &globalCellCount, 1);
+  Teuchos::reduceAll(*Comm(), Teuchos::REDUCE_SUM, 1, &myCellCount, &globalCellCount);
   vector<int> allCellIDsInt(globalCellCount);
   auto myCellIDPtr = myCellIDs->begin();
   for (int i=priorCellCount; i<priorCellCount+myCellCount; i++)
@@ -181,7 +181,7 @@ vector<IndexType> MeshTopology::getActiveCellIndicesGlobal() const
     myCellIDPtr++;
   }
   vector<int> gatheredCellIDs(globalCellCount);
-  Comm()->SumAll(&allCellIDsInt[0], &gatheredCellIDs[0], globalCellCount);
+  Teuchos::reduceAll(*Comm(), Teuchos::REDUCE_SUM, globalCellCount, &allCellIDsInt[0], &gatheredCellIDs[0]);
   vector<IndexType> allCellIDs(gatheredCellIDs.begin(),gatheredCellIDs.end());
   return allCellIDs;
 }
@@ -1203,7 +1203,7 @@ EntitySetPtr MeshTopology::createEntitySet()
 }
 
 // ! If the MeshTopology is distributed, returns the Comm object used.  Otherwise, returns Teuchos::null, which is meant to indicate that the MeshTopology is replicated on every MPI rank on which it is used.
-Epetra_CommPtr MeshTopology::Comm() const
+Teuchos_CommPtr MeshTopology::Comm() const
 {
   return _Comm;
 }
@@ -2691,7 +2691,7 @@ bool MeshTopology::isBoundarySide(IndexType sideEntityIndex) const
 
 bool MeshTopology::isDistributed() const
 {
-  return (Comm() != Teuchos::null) && (Comm()->NumProc() > 1);
+  return (Comm() != Teuchos::null) && (Comm()->getSize() > 1);
 }
 
 bool MeshTopology::isValidCellIndex(IndexType cellIndex) const
@@ -3147,7 +3147,7 @@ void MeshTopology::pruningHalo(std::set<GlobalIndexType> &haloCellIndices, const
   }
 }
 
-void MeshTopology::pruneToInclude(Epetra_CommPtr Comm, const std::set<GlobalIndexType> &ownedCellIndices,
+void MeshTopology::pruneToInclude(Teuchos_CommPtr Comm, const std::set<GlobalIndexType> &ownedCellIndices,
                                   unsigned dimForNeighborRelation)
 {
   // the cells passed in are the ones the user wants to include -- e.g. those owned by the MPI rank.
@@ -3998,10 +3998,10 @@ set<IndexType> MeshTopology::getRootCellIndicesGlobal() const
   
   GlobalIndexTypeToCast myOwnedRootCellCount = ownedRootCells.size();
   GlobalIndexTypeToCast globalRootCellCount = 0;
-  Comm()->SumAll(&myOwnedRootCellCount, &globalRootCellCount, 1);
+  Teuchos::reduceAll(*Comm(), Teuchos::REDUCE_SUM, 1, &myOwnedRootCellCount, &globalRootCellCount);
   
   GlobalIndexTypeToCast myEntryOffset = 0;
-  Comm()->ScanSum(&myOwnedRootCellCount, &myEntryOffset, 1);
+  Teuchos::scan(*Comm(), Teuchos::REDUCE_SUM, 1, &myOwnedRootCellCount, &myEntryOffset);
   myEntryOffset -= myOwnedRootCellCount;
   
   vector<GlobalIndexTypeToCast> allRootCellIDs(globalRootCellCount);
@@ -4010,7 +4010,7 @@ set<IndexType> MeshTopology::getRootCellIndicesGlobal() const
     allRootCellIDs[myEntryOrdinal + myEntryOffset] = ownedRootCells[myEntryOrdinal];
   }
   vector<GlobalIndexTypeToCast> gatheredRootCellIDs(globalRootCellCount);
-  Comm()->SumAll(&allRootCellIDs[0], &gatheredRootCellIDs[0], globalRootCellCount);
+  Teuchos::reduceAll(*Comm(), Teuchos::REDUCE_SUM, globalRootCellCount, &allRootCellIDs[0], &gatheredRootCellIDs[0]);
   
   set<IndexType> allRootSet(gatheredRootCellIDs.begin(),gatheredRootCellIDs.end());
   TEUCHOS_TEST_FOR_EXCEPTION(allRootSet.size() != globalRootCellCount, std::invalid_argument, "Internal error: some root cell indices appear to have been doubly claimed.");

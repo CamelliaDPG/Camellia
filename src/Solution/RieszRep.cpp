@@ -151,8 +151,7 @@ double TRieszRep<Scalar>::getNorm()
   {
     normSumLocal += _rieszRepNormSquared[cellID];
   }
-  double normSumGlobal = 0.0;
-  _mesh->Comm()->SumAll(&normSumLocal, &normSumGlobal, 1);
+  double normSumGlobal = MPIWrapper::sum(_mesh->Comm(), normSumLocal);
   return sqrt(normSumGlobal);
 }
 

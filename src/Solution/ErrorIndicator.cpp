@@ -56,9 +56,8 @@ const std::map<GlobalIndexType,double> & ErrorIndicator::localErrorMeasures() co
 
 double ErrorIndicator::maxError(const std::set<GlobalIndexType> localCellsToExclude) const
 {
-  double localMax = maxLocalError(localCellsToExclude);
-  double globalMax;
-  _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+  const double localMax = maxLocalError(localCellsToExclude);
+  const double globalMax = MPIWrapper::max(_mesh->Comm(), localMax);
   return globalMax;
 }
 
@@ -89,8 +88,7 @@ double ErrorIndicator::minError() const
     localMinError = std::fmin(localMinError, errEntry.second);
   }
   
-  double globalMinError = localMinError;
-  _mesh->Comm()->MinAll(&localMinError, &globalMinError, 1);
+  double globalMinError = MPIWrapper::min(_mesh->Comm(), localMinError);
   return globalMinError;
 }
 
@@ -102,8 +100,7 @@ double ErrorIndicator::minParentError() const
     localMinError = std::fmin(localMinError, errEntry.second);
   }
   
-  double globalMinError = localMinError;
-  _mesh->Comm()->MinAll(&localMinError, &globalMinError, 1);
+  double globalMinError = MPIWrapper::min(_mesh->Comm(), localMinError);
   return globalMinError;
 }
 
@@ -125,7 +122,7 @@ void ErrorIndicator::gatherParentError(const std::set<GlobalIndexType> &excluded
   map<int, map<GlobalIndexType,double > > recipientDataMaps;
   map<GlobalIndexType, double > receivedMap;
   
-  const int myPID = _mesh->Comm()->MyPID();
+  const int myPID = _mesh->Comm()->getRank();
   
   auto meshTopo = _mesh->getTopology();
   
@@ -226,7 +223,7 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMaximumEr
   const int maxGatherCount = std::max(10000,cellCountTarget*4);
   auto globalEntries = MPIGlobalMinMax::globalMaximums(comm, localErrorMeasures, cellCountTarget, maxGatherCount);
   
-  const int myPID = comm->MyPID();
+  const int myPID = comm->getRank();
   
   auto meshTopo = _mesh->getTopology();
   
@@ -284,7 +281,7 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumEr
   const int maxGatherCount = std::max(100000,cellReductionTarget*4);
   auto globalEntries = MPIGlobalMinMax::globalMinimums(comm, parentErrorMeasures, cellReductionTarget, maxGatherCount);
   
-  const int myPID = comm->MyPID();
+  const int myPID = comm->getRank();
   
   const auto &myCellIDs = _mesh->cellIDsInPartition();
   std::set<GlobalIndexType> myParentCellIDs;
@@ -306,20 +303,19 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumEr
   }
   
   // do a global sum to get the child counts for each entry
-  std::vector<int> localChildCount(globalEntries.size());
+  std::vector<int> globalChildCount(globalEntries.size());
   int i=0;
   for (const auto &entry : globalEntries)
   {
     const auto & parentCellID = entry.first;
     if (myParentCellIDs.find(parentCellID) != myParentCellIDs.end())
     {
-      localChildCount[i] = meshTopo->getCell(parentCellID)->numChildren();
+      globalChildCount[i] = meshTopo->getCell(parentCellID)->numChildren();
     }
     i++;
   }
   
-  std::vector<int> globalChildCount(globalEntries.size());
-  comm->SumAll(&localChildCount[0], &globalChildCount[0], globalEntries.size());
+  MPIWrapper::entryWiseSum(comm, globalChildCount);
   
   // now, go through global entries again, counting children until we pass the target
   int cellReduction = 0;
@@ -374,7 +370,7 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalParentCel
     
   std::vector<ParentErrorEntry> gatheredValues;
   std::vector<int> offsets;
-  MPIWrapper::allGatherVariable<ParentErrorEntry>(*comm, gatheredValues, parentErrorMeasuresVector, offsets);
+  MPIWrapper::allGatherVariable<ParentErrorEntry>(comm, gatheredValues, parentErrorMeasuresVector, offsets);
   
   return gatheredValues;
 }
@@ -386,8 +382,7 @@ double ErrorIndicator::totalError() const
     double cellError = measureEntry.second;
     localTotalSquared += cellError * cellError;
   }
-  double globalTotalSquared;
-  _mesh->Comm()->SumAll(&localTotalSquared, &globalTotalSquared, 1);
+  double globalTotalSquared = MPIWrapper::sum(_mesh->Comm(), localTotalSquared);
   return sqrt(globalTotalSquared);
 }
 

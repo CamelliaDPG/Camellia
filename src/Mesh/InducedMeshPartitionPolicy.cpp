@@ -28,7 +28,7 @@ Teuchos::RCP<InducedMeshPartitionPolicy> InducedMeshPartitionPolicy::inducedMesh
 }
 
 InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr thisMesh, MeshPtr otherMesh)
-: MeshPartitionPolicy(otherMesh->Comm())
+: MeshPartitionPolicy(otherMesh->TeuchosComm())
 {
   _otherMesh = otherMesh;
   
@@ -67,7 +67,7 @@ InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr thisMesh, MeshPtr
 }
 
 InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr thisMesh, MeshPtr otherMesh, const map<GlobalIndexType, GlobalIndexType> & cellIDMap)
-: MeshPartitionPolicy(otherMesh->Comm())
+: MeshPartitionPolicy(otherMesh->TeuchosComm())
 {
   _thisMesh = thisMesh;
   _otherMesh = otherMesh;
@@ -75,7 +75,7 @@ InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr thisMesh, MeshPtr
 }
 
 InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr otherMesh, const map<GlobalIndexType, GlobalIndexType> & cellIDMap)
-: MeshPartitionPolicy(otherMesh->Comm())
+: MeshPartitionPolicy(otherMesh->TeuchosComm())
 {
   _thisMesh = Teuchos::null;
   _otherMesh = otherMesh;

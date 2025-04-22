@@ -85,7 +85,7 @@ namespace Camellia {
                   unsigned dimForNeighborRelation) const;
     
     // ! If the base MeshTopology is distributed, returns the Comm object used.  Otherwise, returns Teuchos::null, which is meant to indicate that the MeshTopology is replicated on every MPI rank on which it is used.
-    virtual Epetra_CommPtr Comm() const;
+    virtual Teuchos_CommPtr Comm() const;
     
     // ! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs).  Not supported for MeshTopologyViews with _meshTopo defined (i.e. those that are themselves defined in terms of another MeshTopology object).
     virtual Teuchos::RCP<MeshTopology> deepCopy() const;

@@ -65,15 +65,9 @@ protected:
   vector< set< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
   map<GlobalIndexType, IndexType> _partitionForCellID;
 
-  Teuchos::RCP<Epetra_Map> _activeCellMap;
-  MapPtr _activeCellMap2;
-
   unsigned _numPartitions;
 
   vector< TSolutionPtr<double> > _registeredSolutions; // solutions that should be modified upon refinement (by subclasses--maximum rule has to worry about cell side upgrades, whereas minimum rule does not, so there's not a great way to do this in the abstract superclass.)
-  
-  void constructActiveCellMap();
-  void constructActiveCellMap2();
 
   // ! Returns the key for the specified cell, suitable for lookups in _elementTypesForCellTopology
   pair<CellTopologyKey,int> getElementTypeLookupKey(GlobalIndexType cellID);
@@ -92,8 +86,6 @@ public:
   virtual ~GlobalDofAssignment() {}
 
   GlobalIndexType activeCellOffset();
-  Teuchos::RCP<Epetra_Map> getActiveCellMap();
-  MapPtr getActiveCellMap2();
 
   // ! copies
   virtual GlobalDofAssignmentPtr deepCopy() = 0;

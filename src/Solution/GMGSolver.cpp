@@ -380,8 +380,7 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
     IndexType cellIndex = *thisLevelCellIndices.begin();
     myTensorialDegree = fineMeshTopo->getCell(cellIndex)->topology()->getTensorialDegree();
   }
-  int tensorialDegree;
-  fineMesh->Comm()->MaxAll(&myTensorialDegree, &tensorialDegree, 1);
+  int tensorialDegree = MPIWrapper::max(fineMesh->Comm(), myTensorialDegree);
   // if we have no elements, trust the global guy.  Otherwise, check that the global guy matches ours.
   if (thisLevelCellIndices.size() > 0)
   {
@@ -502,14 +501,14 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
         }
       }
       
-      someCellWasRefined = MPIWrapper::globalOr(*meshToPRefine->Comm(),someCellWasRefined);
+      someCellWasRefined = MPIWrapper::globalOr(meshToPRefine->Comm(),someCellWasRefined);
       
       if (someCellWasRefined)
       {
         // gather the pRefinements
         vector<int> offsets;
         vector<pair<GlobalIndexTypeToCast,int>> pRefinementsGathered;
-        MPIWrapper::allGatherVariable(*meshToPRefine->Comm(), pRefinementsGathered, pRefinementsVector, offsets);
+        MPIWrapper::allGatherVariable(meshToPRefine->Comm(), pRefinementsGathered, pRefinementsVector, offsets);
         pRefinements.clear();
         pRefinements.insert(pRefinementsGathered.begin(),pRefinementsGathered.end());
         

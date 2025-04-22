@@ -95,41 +95,36 @@ void FixedCountRefinementStrategy::refineAndUnrefine(bool unrefine, bool printTo
     }
   }
   
-  GlobalIndexTypeToCast numCellsToHRefine = 0;
   GlobalIndexTypeToCast myNumCellsToHRefine = myCellsToHRefine.size();
-  mesh->Comm()->SumAll(&myNumCellsToHRefine, &numCellsToHRefine, 1);
-  GlobalIndexTypeToCast myCellOrdinalOffset = 0;
-  mesh->Comm()->ScanSum(&myNumCellsToHRefine, &myCellOrdinalOffset, 1);
+  GlobalIndexTypeToCast numCellsToHRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToHRefine);
+  
+  GlobalIndexTypeToCast myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), myNumCellsToHRefine);
   myCellOrdinalOffset -= myNumCellsToHRefine;
   
-  vector<GlobalIndexTypeToCast> globalCellsToRefineVector(numCellsToHRefine, 0);
+  vector<GlobalIndexTypeToCast> gatheredCellsToRefineVector(numCellsToHRefine, 0);
   for (int i=0; i<myNumCellsToHRefine; i++)
   {
-    globalCellsToRefineVector[myCellOrdinalOffset + i] = myCellsToHRefine[i];
+    gatheredCellsToRefineVector[myCellOrdinalOffset + i] = myCellsToHRefine[i];
   }
-  vector<GlobalIndexTypeToCast> gatheredCellsToRefineVector(numCellsToHRefine, 0);
-  mesh->Comm()->SumAll(&globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0], numCellsToHRefine);
+  MPIWrapper::entryWiseSum(mesh->Comm(), gatheredCellsToRefineVector);
 
   vector<GlobalIndexType> cellsToRefine(gatheredCellsToRefineVector.begin(),gatheredCellsToRefineVector.end());;
   
-  GlobalIndexTypeToCast numCellsToPRefine = 0;
   GlobalIndexTypeToCast myNumCellsToPRefine = myCellsToPRefine.size();
-  mesh->Comm()->SumAll(&myNumCellsToPRefine, &numCellsToPRefine, 1);
+  GlobalIndexTypeToCast numCellsToPRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToPRefine);
   
   vector<GlobalIndexType> cellsToPRefine;
   if (numCellsToPRefine > 0)
   {
-    myCellOrdinalOffset = 0;
-    mesh->Comm()->ScanSum(&myNumCellsToPRefine, &myCellOrdinalOffset, 1);
+    myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), myNumCellsToPRefine);
     myCellOrdinalOffset -= myNumCellsToPRefine;
 
-    vector<GlobalIndexTypeToCast> globalCellsToPRefineVector(numCellsToPRefine, 0);
+    vector<GlobalIndexTypeToCast> gatheredCellsToPRefineVector(numCellsToPRefine, 0);
     for (int i=0; i<myNumCellsToPRefine; i++)
     {
-      globalCellsToPRefineVector[myCellOrdinalOffset + i] = myCellsToPRefine[i];
+      gatheredCellsToPRefineVector[myCellOrdinalOffset + i] = myCellsToPRefine[i];
     }
-    vector<GlobalIndexTypeToCast> gatheredCellsToPRefineVector(numCellsToPRefine, 0);
-    mesh->Comm()->SumAll(&globalCellsToPRefineVector[0], &gatheredCellsToPRefineVector[0], numCellsToPRefine);
+    MPIWrapper::entryWiseSum(mesh->Comm(), gatheredCellsToPRefineVector);
 
     cellsToPRefine = vector<GlobalIndexType>(gatheredCellsToPRefineVector.begin(),gatheredCellsToPRefineVector.end());
   }
@@ -158,7 +153,7 @@ void FixedCountRefinementStrategy::refineAndUnrefine(bool unrefine, bool printTo
   GlobalIndexType activeElementCount = mesh->numActiveElements();
   GlobalIndexType globalDofCount = mesh->numGlobalDofs();
   
-  if (printToConsole && (mesh->Comm()->MyPID() == 0))
+  if (printToConsole && (mesh->Comm()->getRank() == 0))
   {
     cout << "Prior to refinement, total error: " << totalError << endl;
     cout << "After refinement, mesh has " << activeElementCount << " elements and " << globalDofCount << " global dofs" << endl;

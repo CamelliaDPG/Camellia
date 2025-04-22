@@ -51,7 +51,7 @@ namespace
     int meshIrregularity = 0;
     vector<GlobalIndexType> cellsToRefine = {1};
     PartitionIndexType cellOwner = mesh->globalDofAssignment()->partitionForCellID(cellsToRefine[0]);
-    PartitionIndexType myRank = mesh->Comm()->MyPID();
+    PartitionIndexType myRank = mesh->Comm()->getRank();
     int sharedSideOrdinal;
     if (myRank == cellOwner)
     {
@@ -65,7 +65,7 @@ namespace
         }
       }
     }
-    mesh->Comm()->Broadcast(&sharedSideOrdinal, 1, cellOwner);
+    Teuchos::broadcast(*mesh->Comm(), cellOwner, 1, &sharedSideOrdinal);
     
     while (meshIrregularity < irregularity)
     {
@@ -74,7 +74,7 @@ namespace
       meshIrregularity++;
       
       // setup for the next refinement, if any:
-      int potentialBroadcaster = mesh->Comm()->NumProc(); // max value for broadcasting rank.
+      int potentialBroadcaster = mesh->Comm()->getSize(); // max value for broadcasting rank.
       if (mesh->getTopology()->isValidCellIndex(cellsToRefine[0]))
       {
         CellPtr cellToRefine = mesh->getTopology()->getCell(cellsToRefine[0]);
@@ -86,9 +86,9 @@ namespace
       }
       // take global minimum to find out who broadcasts the cell ID to refine and side ordinal:
       int globalBroadcaster;
-      mesh->Comm()->MinAll(&potentialBroadcaster, &globalBroadcaster, 1);
+      Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_MIN, 1, &potentialBroadcaster, &globalBroadcaster);
       vector<int> values = {(int)cellsToRefine[0],sharedSideOrdinal};
-      mesh->Comm()->Broadcast(&values[0], 2, globalBroadcaster);
+      Teuchos::broadcast(*mesh->Comm(), globalBroadcaster, 2, &values[0]);
       cellsToRefine[0] = values[0];
       sharedSideOrdinal = values[1];
     }
@@ -369,7 +369,7 @@ namespace
       neighborCellIndexToRefineLocal = cell->getNeighbor(sideOrdinal, mesh->getTopology())->cellIndex();
     }
     GlobalIndexTypeToCast neighborCellIndexToRefineGlobal = 0;
-    mesh->Comm()->SumAll(&neighborCellIndexToRefineLocal, &neighborCellIndexToRefineGlobal, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &neighborCellIndexToRefineLocal, &neighborCellIndexToRefineGlobal);
     
     GlobalIndexType neighborCellIndexToRefine = neighborCellIndexToRefineGlobal;
     
@@ -411,7 +411,7 @@ namespace
       neighborCellIndexToRefineLocal = cell->getNeighbor(sideOrdinal, mesh->getTopology())->cellIndex();
     }
     GlobalIndexTypeToCast neighborCellIndexToRefineGlobal = 0;
-    mesh->Comm()->SumAll(&neighborCellIndexToRefineLocal, &neighborCellIndexToRefineGlobal, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &neighborCellIndexToRefineLocal, &neighborCellIndexToRefineGlobal);
     
     GlobalIndexType neighborCellIndexToRefine = neighborCellIndexToRefineGlobal;
     
@@ -432,7 +432,7 @@ namespace
       newNeighborCellIndexLocal = newNeighbor->cellIndex();
     }
     GlobalIndexTypeToCast newNeighborCellIndexGlobal = 0;
-    mesh->Comm()->SumAll(&newNeighborCellIndexLocal, &newNeighborCellIndexGlobal, 1);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, 1, &newNeighborCellIndexLocal, &newNeighborCellIndexGlobal);
     
     GlobalIndexType newNeighborCellIndex = newNeighborCellIndexGlobal;
     

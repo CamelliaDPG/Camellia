@@ -298,7 +298,7 @@ SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionP
     }
     
     std::vector<DataType> dataReceived;
-    MPIWrapper::sendDataVectors(_temporalMesh->Comm(), dataToSend, dataReceived);
+    MPIWrapper::sendDataVectors(MPIWrapper::EpetraComm(_temporalMesh->Comm()), dataToSend, dataReceived);
     
       // note that the following map logic is not maximally efficient, but it's unlikely to be a bottleneck due to the relatively small size of the data
     using std::map;

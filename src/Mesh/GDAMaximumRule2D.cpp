@@ -234,7 +234,7 @@ void GDAMaximumRule2D::buildTypeLookups()
 
 //  cout << "_numPartitions = " << _numPartitions << endl;
 
-//  int rank = _partitionPolicy->Comm()->MyPID();
+//  int rank = _partitionPolicy->Comm()->getRank();
 
   for (PartitionIndexType partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++)
   {
@@ -391,7 +391,7 @@ int GDAMaximumRule2D::cellPolyOrder(GlobalIndexType cellID)
 Camellia::FieldContainer<double> & GDAMaximumRule2D::cellSideParities( ElementTypePtr elemTypePtr )
 {
 #ifdef HAVE_MPI
-  int partitionNumber     = _partitionPolicy->Comm()->MyPID();
+  int partitionNumber     = _partitionPolicy->Comm()->getRank();
 #else
   int partitionNumber     = 0;
 #endif
@@ -837,7 +837,7 @@ void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOr
 
 GlobalIndexType GDAMaximumRule2D::globalCellIndex(GlobalIndexType cellID)
 {
-//  int rank = _partitionPolicy->Comm()->MyPID();
+//  int rank = _partitionPolicy->Comm()->getRank();
 //  cout << "on rank " << rank << ", cellID " << cellID << " has globalCellIndex " << _globalCellIndices[cellID] << endl;
   return _globalCellIndices[cellID];
 }
@@ -931,7 +931,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
 
 bool GDAMaximumRule2D::isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const
 {
-  int myRank = _mesh->Comm()->MyPID();
+  int myRank = _mesh->Comm()->getRank();
   return _partitionedGlobalDofIndices[myRank].find(globalDofIndex) != _partitionedGlobalDofIndices[myRank].end();
 }
 
@@ -963,7 +963,7 @@ GlobalIndexType GDAMaximumRule2D::numPartitionOwnedGlobalTraceIndices()
 
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices()
 {
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
 
   set<GlobalIndexType> fieldIndices;
   set<GlobalIndexType> cellIDs = cellsInPartition(-1);
@@ -992,7 +992,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices()
 
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedIndicesForVariables(set<int> varIDs)
 {
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
 
   set<GlobalIndexType> varIndices;
   set<GlobalIndexType> cellIDs = cellsInPartition(-1);
@@ -1025,7 +1025,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedIndicesForVariables(set<int
 
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices()
 {
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
 
   set<GlobalIndexType> fluxIndices;
   vector< VarPtr > fluxVars = _varFactory->fluxVars();
@@ -1059,7 +1059,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices()
 
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
 {
-  int rank = _partitionPolicy->Comm()->MyPID();
+  int rank = _partitionPolicy->Comm()->getRank();
 
   set<GlobalIndexType> traceIndices;
   vector< VarPtr > traceVars = _varFactory->traceVars();
@@ -1494,7 +1494,7 @@ PartitionIndexType GDAMaximumRule2D::partitionForGlobalDofIndex( GlobalIndexType
 
 IndexType GDAMaximumRule2D::partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber) // partitionNumber == -1 means use MPI rank as partitionNumber
 {
-  if (partitionNumber != _partitionPolicy->Comm()->MyPID())
+  if (partitionNumber != _partitionPolicy->Comm()->getRank())
   {
     if (partitionNumber != -1)
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GDAMaximumRule2D does not support off-rank partitionNumbers in partitionLocalCellIndex.");
@@ -1510,7 +1510,7 @@ GlobalIndexType GDAMaximumRule2D::partitionLocalIndexForGlobalDofIndex( GlobalIn
 Camellia::FieldContainer<double> & GDAMaximumRule2D::physicalCellNodes( ElementTypePtr elemTypePtr)
 {
 #ifdef HAVE_MPI
-  int partitionNumber     = _partitionPolicy->Comm()->MyPID();
+  int partitionNumber     = _partitionPolicy->Comm()->getRank();
 #else
   int partitionNumber     = 0;
 #endif

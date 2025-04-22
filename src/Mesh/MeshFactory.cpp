@@ -545,7 +545,12 @@ MeshTopologyPtr MeshFactory::importMOABMesh(string filePath, bool readInParallel
 MeshPtr MeshFactory::intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k)
 {
   MeshTopologyPtr meshTopology = intervalMeshTopology(xLeft, xRight, numElements);
-  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
+  const bool allowMeshTopologyPruning = false;
+  std::map<int,int> emptyMap;
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k,
+                                emptyMap,emptyMap,
+                                Teuchos::null, Teuchos::null,
+                                allowMeshTopologyPruning) );
 }
 
 MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, int numElements, bool usePeriodicBCs)

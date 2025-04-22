@@ -593,7 +593,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
     auto outputMesh = [mesh] (int ordinal) -> void
     {
       MeshTopologyPtr meshCopy = mesh->getTopology()->getGatheredCopy();
-      int rank = mesh->Comm()->MyPID();
+      int rank = mesh->Comm()->getRank();
       if (rank == 0)
       {
         bool labelCells = true;
