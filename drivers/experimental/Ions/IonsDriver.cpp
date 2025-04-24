@@ -174,7 +174,7 @@ double getMaxMagnitudeOnCell(FunctionPtr fxn, MeshPtr mesh, GlobalIndexType &cel
         myMax = std::max(std::abs(pointValue), myMax);
       }
     }
-    double globalMax = MPIWrapper::sum(*mesh->Comm(), myMax);
+    double globalMax = MPIWrapper::sum(mesh->Comm(), myMax);
 //    std::cout << "max value on cell " << activeCellID << ": " << globalMax << std::endl;
     maxValue = std::max(maxValue, globalMax);
   }
@@ -219,7 +219,7 @@ namespace Camellia
       ExtrudedMeshTopology* extrudedMeshTopo = dynamic_cast<ExtrudedMeshTopology*>(meshTopo.get());
       TEUCHOS_TEST_FOR_EXCEPTION(extrudedMeshTopo == NULL, std::invalid_argument, "Phase-space MeshTopology must be an ExtrudedMeshTopology");
       
-      bool printToConsole = (this->mesh()->Comm()->MyPID() == 0);
+      bool printToConsole = (this->mesh()->Comm()->getRank() == 0);
       
       auto physicalMeshTopo = extrudedMeshTopo->physicalMeshTopology();
       
@@ -718,7 +718,7 @@ bool performRefinements(VlasovBackwardEulerFormulation &form, RefinementStrategy
   if (doUnrefinements)
   {
     // for now, print refinement info to console on rank 0.
-    const bool printToConsole = form.vlasovMesh()->Comm()->MyPID() == 0;
+    const bool printToConsole = form.vlasovMesh()->Comm()->getRank() == 0;
     unrefinementStrategy->setRelativeErrorThreshold(1.1); // ensure that we only do unrefinements
     int maxUnrefinementSteps = 1; // In case we end up unable to unrefine to maxElements for some reason, cap the number of unrefinements
     int numUnrefinementStepsTaken = 0;
@@ -1135,6 +1135,9 @@ int main(int argc, char *argv[])
     double m_e_scaled;
     double m_ion_scaled;
     
+    const double J_C = 2.1e5; // A / m^2; critical value from Christenson & Lau
+    const double A   = 0.001492; // corresponds to J_C (redundantly specifying here)
+    
     // determine scalings
     {
       const double e   = 1.602176634e-19; // electron's electric charge in Coulombs
@@ -1163,7 +1166,6 @@ int main(int argc, char *argv[])
         cout << "extra acceleration term: " << B_scaled * Omega_scaled << " x.\n";
       extraAccelerationFormula = B_scaled * Omega_scaled * x;
       
-      const double J_C = 2.1e5; // A / m^2; critical value from Christenson & Lau
       n0 = J_C / (qScaling * velocityScaling); // number density of plasma
       
       const double omega_p = qScaling * sqrt( n0 / (mScaling * permittivity));
@@ -1198,6 +1200,7 @@ int main(int argc, char *argv[])
         std::cout << "V scaling:           " << potentialScaling << std::endl;
         std::cout << "physical gap width:  " << physicalGapWidth << std::endl;
         std::cout << "spatial scaling:     " << spatialScaling << std::endl;
+        std::cout << "A in y/z (m^2):      " << A << std::endl;
         std::cout << "temporal scaling:    " << timeScaling << std::endl;
         std::cout << "domain width:        " << xWidth << std::endl;
         std::cout << "n0:                  " << n0 << std::endl;
@@ -1766,6 +1769,29 @@ int main(int argc, char *argv[])
     std::ostringstream poissonSS;
     poissonSS << problemPrefix << "Poisson" << suffix.str();
     
+    std::string electronCountTimeSeriesFile;
+    {
+      std::ostringstream densityFileStringStream;
+      densityFileStringStream << outputDir << "/";
+      if (resultsFilePrefix == "")
+      {
+        densityFileStringStream << "electronCount_" << problemPrefix << "_" << suffix.str();
+      }
+      else
+      {
+        densityFileStringStream << resultsFilePrefix;
+      }
+      
+      densityFileStringStream << "_" << numTimeSteps << "_timeSteps";
+      densityFileStringStream << ".dat";
+      electronCountTimeSeriesFile = densityFileStringStream.str();
+      
+      // clear the file
+      std::ofstream outputStream(electronCountTimeSeriesFile);
+      outputStream << "Time (ns)\tElectron Count\n";
+      outputStream.close();
+    }
+    
     if (resultsFile == "")
     {
       std::ostringstream resultsFileStream;
@@ -1889,6 +1915,18 @@ int main(int argc, char *argv[])
     auto momentum = solutionMoments->solutionMomentFunction(1); // aka current
     auto velocity = momentum / density;
             
+    auto writeElectronCount = [&](double t) {
+      const double densityIntegral = density->integrate(form.configurationSpaceMesh());
+      const double electronCount = densityIntegral * spatialScaling * A * n0;
+      const double physicalTimeInNanoSeconds = t * timeScaling * 1e9;
+      if (rank == 0)
+      {
+        std::ofstream outputStream(electronCountTimeSeriesFile, std::ios_base::app);
+        outputStream << physicalTimeInNanoSeconds << "\t" << electronCount << std::endl;
+        refReportFileStream.close();
+      }
+    };
+    
     bool previousSolveUsedGeometricMultigrid = false;
     bool previousSolveUsedDirect = false;
     
@@ -2023,7 +2061,7 @@ int main(int argc, char *argv[])
                   meshChanged = false;
                 }
                 
-                bool printToConsole = (form.vlasovMesh()->Comm()->MyPID() == 0);
+                bool printToConsole = (form.vlasovMesh()->Comm()->getRank() == 0);
                 numUnrefinementsThisPass = unrefinementStrategy->greedyUnrefinement(greedyUnrefinementThreshold, printToConsole);
                 
                 if (numUnrefinementsThisPass > 0)
@@ -2124,6 +2162,8 @@ int main(int argc, char *argv[])
         }
         
         reportTimeStepComplete(timeStepNumber,totalEnergyError);
+        
+        writeElectronCount(t);
       }
     } // end time step loop
         
