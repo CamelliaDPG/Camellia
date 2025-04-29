@@ -2572,7 +2572,7 @@ namespace
     SolutionPtr soln = Solution::solution(mesh,bc,rhs,ip);
     
 #ifdef HAVE_EPETRAEXT_HDF5
-    string filePrefix = "SavedSolution";
+    string filePrefix = "/tmp/SavedSolution";
     soln->save(filePrefix);
     
     soln->load(bf, filePrefix);
