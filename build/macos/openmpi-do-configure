@@ -1,0 +1,14 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+STARTDIR=$(pwd)
+
+mkdir $ROOT/openmpi-build
+cd $ROOT/openmpi-build
+
+$ROOT/openmpi-src/configure \
+    --prefix=$ROOT/openmpi \
+    --enable-shared
+
+cd $STARTDIR

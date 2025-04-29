@@ -1,0 +1,18 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+OPENMPI_ROOT=$ROOT/openmpi
+
+STARTDIR=$(pwd)
+
+mkdir $ROOT/hdf5-build
+cd $ROOT/hdf5-build
+
+CC=$OPENMPI_ROOT/bin/mpicc CXX=$OPENMPI_ROOT/bin/mpicxx \
+    $ROOT/hdf5-src/configure \
+    --prefix=$ROOT/hdf5 \
+    --enable-shared \
+    --enable-parallel
+
+cd $STARTDIR

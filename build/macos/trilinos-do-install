@@ -1,0 +1,5 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+cmake --build $ROOT/trilinos-build --target install

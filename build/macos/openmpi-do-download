@@ -1,0 +1,13 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+STARTDIR=$(pwd)
+
+cd $ROOT
+
+curl -fLo openmpi-src.tar.gz https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.6.tar.gz
+tar -xf openmpi-src.tar.gz
+mv openmpi-4.1.6/ openmpi-src/
+
+cd $STARTDIR

@@ -1,0 +1,22 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+OPENMPI_ROOT=$ROOT/openmpi
+TRILINOS_ROOT=$ROOT/trilinos
+
+SRC=$(realpath $ROOT/../..)
+
+cmake \
+    -D BUILD_SHARED_LIBS=ON \
+    -D CMAKE_BUILD_TYPE=RelWithDebInfo \
+    -D CMAKE_C_COMPILER=$OPENMPI_ROOT/bin/mpicc \
+    -D CMAKE_CXX_COMPILER=$OPENMPI_ROOT/bin/mpicxx \
+    -D CMAKE_CXX_EXTENSIONS=OFF \
+    -D CMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -D CMAKE_INSTALL_PREFIX=$ROOT/camellia \
+    -D TRILINOS_PATH=$TRILINOS_ROOT \
+    -D BUILD_EXPERIMENTAL_DRIVERS=ON \
+    -D BUILD_PRECONDITIONING_DRIVERS=ON \
+    -B $ROOT/camellia-build \
+    -S $SRC
