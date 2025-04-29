@@ -67,6 +67,7 @@ namespace
   };
 
   //! Compute (n choose k)
+  KOKKOS_INLINE_FUNCTION
   int choose(const int &n, const int &k)
   {
     int result = 1;

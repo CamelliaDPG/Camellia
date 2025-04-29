@@ -111,7 +111,7 @@ template <typename Scalar>
 void PolarizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("PolarizedFunction values()");
-  static const double PI = 3.141592653589793238462;
+  const double PI = 3.141592653589793238462;
   const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePointsFC());
   Camellia::FieldContainer<double> polarPoints = *points;
   auto dv_polarPoints = polarPoints.checkoutDeviceView();

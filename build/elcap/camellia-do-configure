@@ -1,0 +1,29 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+#MPI_ROOT=/opt/cray/pe/mpich/8.1.31/ofi/crayclang/18.0
+MPI_ROOT=/usr/tce/packages/cray-mpich/cray-mpich-8.1.31-rocmcc-6.3.1-cce-18.0.1h-magic/
+TRILINOS_ROOT=$ROOT/trilinos
+
+SRC=$(realpath $ROOT/../..)
+
+#-D CMAKE_HIP_ARCHITECTURES="gfx942" \
+#-D CMAKE_CXX_FLAGS="--offload-arch=gfx942" \
+
+cmake \
+    -D BUILD_SHARED_LIBS=ON \
+    -D CMAKE_BUILD_TYPE=RelWithDebInfo \
+    -D CMAKE_C_COMPILER=$MPI_ROOT/bin/mpicc \
+    -D CMAKE_CXX_COMPILER=$MPI_ROOT/bin/mpicxx \
+    -D CMAKE_CXX_EXTENSIONS=OFF \
+    -D CMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -D CMAKE_INSTALL_PREFIX=$ROOT/camellia \
+    -D TRILINOS_PATH=$TRILINOS_ROOT \
+    -D BUILD_EXPERIMENTAL_DRIVERS=ON \
+    -D BUILD_PRECONDITIONING_DRIVERS=ON \
+    -D ENABLE_HIP=On \
+    -D CMAKE_HIP_ARCHITECTURES="gfx942" \
+    -D CMAKE_CXX_FLAGS="--offload-arch=gfx942" \
+    -D CMAKE_EXE_LINKER_FLAGS="--offload-arch=gfx942" \
+    -B $ROOT/camellia-build \
+    -S $SRC

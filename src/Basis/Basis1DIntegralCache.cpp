@@ -74,8 +74,12 @@ Basis1DIntegralCache<Scalar>::getReferenceSpaceIntegral(BasisPtr basis1, bool di
     auto refPoints       = cubature->allocateCubaturePoints();
     auto cubatureWeights = cubature->allocateCubatureWeights();
     cubature->getCubature(refPoints, cubatureWeights);
-    
+
+#ifndef KOKKOS_ENABLE_HIP
     Intrepid2::TensorPoints<double,Kokkos::DefaultHostExecutionSpace::device_type> refPointsHost(refPoints);
+#else
+    Intrepid2::TensorPoints<double,Kokkos::HIPHostPinnedSpace::device_type> refPointsHost(refPoints);
+#endif
     
     const int numPoints = refPoints.extent_int(0);
     
@@ -144,8 +148,12 @@ Basis1DIntegralCache<Scalar>::getReferenceSpaceIntegral(BasisPtr basis1, bool di
     auto refPoints       = cubature->allocateCubaturePoints();
     auto cubatureWeights = cubature->allocateCubatureWeights();
     cubature->getCubature(refPoints, cubatureWeights);
-    
+
+#ifndef KOKKOS_ENABLE_HIP
     Intrepid2::TensorPoints<double,Kokkos::DefaultHostExecutionSpace::device_type> refPointsHost(refPoints);
+#else
+    Intrepid2::TensorPoints<double,Kokkos::HIPHostPinnedSpace::device_type> refPointsHost(refPoints);
+#endif
     
     const int numPoints = refPoints.extent_int(0);
     
@@ -220,8 +228,12 @@ Basis1DIntegralCache<Scalar>::getReferenceSpaceIntegral(BasisPtr basis1, bool di
     auto refPoints       = cubature->allocateCubaturePoints();
     auto cubatureWeights = cubature->allocateCubatureWeights();
     cubature->getCubature(refPoints, cubatureWeights);
-    
+
+#ifndef KOKKOS_ENABLE_HIP
     Intrepid2::TensorPoints<double,Kokkos::DefaultHostExecutionSpace::device_type> refPointsHost(refPoints);
+#else
+    Intrepid2::TensorPoints<double,Kokkos::HIPHostPinnedSpace::device_type> refPointsHost(refPoints);
+#endif
     
     const int numPoints = refPoints.extent_int(0);
     

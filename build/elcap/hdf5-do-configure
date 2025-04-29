@@ -1,0 +1,18 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+STARTDIR=$(pwd)
+
+MPI_ROOT=/opt/cray/pe/mpich/8.1.31/ofi/crayclang/18.0
+
+mkdir $ROOT/hdf5-build
+cd $ROOT/hdf5-build
+
+CC=$MPI_ROOT/bin/mpicc CXX=$MPI_ROOT/bin/mpicxx \
+    $ROOT/hdf5-src/configure \
+    --prefix=$ROOT/hdf5 \
+    --enable-shared \
+    --enable-parallel
+
+cd $STARTDIR
