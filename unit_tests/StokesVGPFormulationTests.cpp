@@ -771,7 +771,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 
   form.initializeSolution(meshTopo, fieldPolyOrder, delta_k);
 
-  string savePrefix = "StokesVGPTest";
+  string savePrefix = "/tmp/StokesVGPTest";
   form.save(savePrefix);
 
   StokesVGPFormulation loadedForm = StokesVGPFormulation::steadyFormulation(meshTopo->getDimension(), mu, useConformingTraces);
