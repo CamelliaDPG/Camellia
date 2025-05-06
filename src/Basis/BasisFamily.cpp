@@ -136,17 +136,18 @@ public:
           if (cellTopo->isHypercube())
           {
             Intrepid2BasisPtr intrepid2Basis;
+            const int dp = (intrepid2FS == Intrepid2::FUNCTION_SPACE_HVOL) ? -1 : 0; // adjustment for the fact that Intrepid2 specifies polynomial degree rather than H^1 order.
             if (spaceDim == 3)
             {
-              intrepid2Basis = Intrepid2::getHexahedronBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0], p_H1[1], p_H1[2]);
+              intrepid2Basis = Intrepid2::getHexahedronBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]+dp, p_H1[1]+dp, p_H1[2]+dp);
             }
             else if (spaceDim == 2)
             {
-              intrepid2Basis = Intrepid2::getQuadrilateralBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0], p_H1[1]);
+              intrepid2Basis = Intrepid2::getQuadrilateralBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]+dp, p_H1[1]+dp);
             }
             else if (spaceDim == 1)
             {
-              intrepid2Basis = Intrepid2::getLineBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]);
+              intrepid2Basis = Intrepid2::getLineBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]+dp);
             }
             basis = Teuchos::rcp( new Intrepid2BasisWrapper<>(intrepid2Basis, spaceDim, rank, fs[0]) );
           }
@@ -240,17 +241,18 @@ public:
           if (cellTopo->isHypercube())
           {
             Intrepid2BasisPtr intrepid2Basis;
+            const int dp = (intrepid2FS == Intrepid2::FUNCTION_SPACE_HVOL) ? -1 : 0; // adjustment for the fact that Intrepid2 specifies polynomial degree rather than H^1 order.
             if (spaceDim == 3)
             {
-              intrepid2Basis = Intrepid2::getHexahedronBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0], p_H1[1], p_H1[2]);
+              intrepid2Basis = Intrepid2::getHexahedronBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]+dp, p_H1[1]+dp, p_H1[2]+dp);
             }
             else if (spaceDim == 2)
             {
-              intrepid2Basis = Intrepid2::getQuadrilateralBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0], p_H1[1]);
+              intrepid2Basis = Intrepid2::getQuadrilateralBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]+dp, p_H1[1]+dp);
             }
             else if (spaceDim == 1)
             {
-              intrepid2Basis = Intrepid2::getLineBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]);
+              intrepid2Basis = Intrepid2::getLineBasis<Intrepid2BasisFamily>(intrepid2FS, p_H1[0]+dp);
             }
             basis = Teuchos::rcp( new Intrepid2BasisWrapper<>(intrepid2Basis, spaceDim, rank, fs[0]) );
           }
