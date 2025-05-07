@@ -64,14 +64,14 @@ rhs_discretization_1d(Camellia::BasisPtr basis,
 //
 // with
 //
-// c(x, t, v) = pi * sin(pi * x) * cos(pi * t) * cos(pi * v)
-//            + pi * cos(pi * x) * sin(pi * t) * cos(pi * v) * v
-//            - pi * sin(pi * x) * sin(pi * t) * sin(pi * v)
+// c(x, t, v) = (x - x^2) (1 - 2 t) (1 - 4 v^2) +
+//              (1 - 2 x) (t - t^2) (v - 4 v^3) +
+//              (x - x^2) (t - t^2) (-8v)
 //
 // and imposing zero Dirichlet boundary condition, which corresponds to the
 // exact solution
 //
-// f(x, t, v) = sin(pi * x) * sin(pi * t) * cos(pi * v)
+// f(x, t, v) = (x - x^2) (t - t^2) (1 - 4 v^2)
 //
 void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, const size_t &p, const size_t &dp,
                        const bool &solve,
@@ -97,21 +97,19 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
                                              p, dp);
   stiffness.savetxt("stiffness", ".dat");
 
-  const double PI = 4.0 * std::atan(1.0);
+  auto fx  = rhs_discretization_1d(test_basis, x_min, x_max, nx, [](const double &x) { return x - x * x; });
+  auto fxx = rhs_discretization_1d(test_basis, x_min, x_max, nx, [](const double &x) { return 1.0 - 2.0 * x; });
 
-  auto sin_pi_x   = rhs_discretization_1d(test_basis, x_min, x_max, nx, [&PI](const double &x) { return std::sin(PI * x); });
-  auto cos_pi_x   = rhs_discretization_1d(test_basis, x_min, x_max, nx, [&PI](const double &x) { return std::cos(PI * x); });
+  auto ft  = rhs_discretization_1d(test_basis, t_min, t_max, nt, [](const double &t) { return t - t * t; });
+  auto ftt = rhs_discretization_1d(test_basis, t_min, t_max, nt, [](const double &t) { return 1.0 - 2.0 * t; });
 
-  auto sin_pi_t   = rhs_discretization_1d(test_basis, t_min, t_max, nt, [&PI](const double &t) { return std::sin(PI * t); });
-  auto cos_pi_t   = rhs_discretization_1d(test_basis, t_min, t_max, nt, [&PI](const double &t) { return std::cos(PI * t); });
+  auto fv  = rhs_discretization_1d(test_basis, v_min, v_max, nv, [](const double &v) { return 1.0 - 4.0 * v * v; });
+  auto vfv = rhs_discretization_1d(test_basis, v_min, v_max, nv, [](const double &v) { return v - 4.0 * v * v * v; });
+  auto fvv = rhs_discretization_1d(test_basis, v_min, v_max, nv, [](const double &v) { return -8.0 * v; });
 
-  auto sin_pi_v   = rhs_discretization_1d(test_basis, v_min, v_max, nv, [&PI](const double &v) { return std::sin(PI * v); });
-  auto cos_pi_v   = rhs_discretization_1d(test_basis, v_min, v_max, nv, [&PI](const double &v) { return std::cos(PI * v); });
-  auto v_cos_pi_v = rhs_discretization_1d(test_basis, v_min, v_max, nv, [&PI](const double &v) { return v * std::cos(PI * v); });
-
-  auto rhs_test = boba::make_tt_from_vectors<3, host_space, double, size_t>({PI * sin_pi_x, cos_pi_t,   cos_pi_v}) +
-                  boba::make_tt_from_vectors<3, host_space, double, size_t>({PI * cos_pi_x, sin_pi_t, v_cos_pi_v}) +
-                  boba::make_tt_from_vectors<3, host_space, double, size_t>({PI * sin_pi_x, sin_pi_t,  -sin_pi_v});
+  auto rhs_test = boba::make_tt_from_vectors<3, host_space, double, size_t>({ fx, ftt,  fv}) +
+                  boba::make_tt_from_vectors<3, host_space, double, size_t>({fxx,  ft, vfv}) +
+                  boba::make_tt_from_vectors<3, host_space, double, size_t>({ fx,  ft, fvv});
   rhs_test.round();
 
   std::cout << "rhs" << std::endl
