@@ -53,6 +53,8 @@ public:
     didHUnrefine(cellIDs, didRepartitionAndRebuild);
   }
   
+  virtual void didPRefine(const set<GlobalIndexType> &cellIDs, int pToAdd) {}
+  
   virtual void didRepartition(MeshTopologyPtr meshTopo) {}
   
   virtual void meshDestructorCalled() {}

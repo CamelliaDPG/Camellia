@@ -807,6 +807,16 @@ void VlasovBackwardEulerFormulation::didHUnrefine(const set<GlobalIndexType> &ce
   _gmgSolver = Teuchos::null;
 }
 
+void VlasovBackwardEulerFormulation::didPRefine(const set<GlobalIndexType> &cellIDs, int pToAdd)
+{
+  _gmgSolver = Teuchos::null;
+}
+
+void VlasovBackwardEulerFormulation::didRepartition(MeshTopologyPtr meshTopo)
+{
+  _gmgSolver = Teuchos::null;
+}
+
 VarPtr VlasovBackwardEulerFormulation::E_configurationSpaceTrace(const int zeroBasedComp)
 {
   return _configurationSpaceFormulation->E_hat(zeroBasedComp);

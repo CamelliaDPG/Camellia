@@ -1397,6 +1397,11 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
   {
     _meshTopology->transformationFunction()->didPRefine(cellIDsForPRefinements);
   }
+  
+  for (auto refObserver : _registeredObservers)
+  {
+    refObserver->didPRefine(cellIDsForPRefinements, pToAdd);
+  }
 
   if (repartitionAndRebuild)
   {

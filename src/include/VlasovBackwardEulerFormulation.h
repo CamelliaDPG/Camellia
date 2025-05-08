@@ -447,10 +447,16 @@ public:
   void refineUniformly(const int numRefinements);
   
   //! RefinementObserver method.  Will be called when the Vlasov mesh is refined.
-  void didHRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool didRepartitionAndRebuild);
+  void didHRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool didRepartitionAndRebuild) override;
+  
+  //! RefinementObserver method.  Will be called when the Vlasov mesh is p-refined.
+  void didPRefine(const set<GlobalIndexType> &cellIDs, int pToAdd) override;
+  
+  //! RefinementObserver method.  Will be called when the Vlasov mesh is repartitioned.
+  void didRepartition(MeshTopologyPtr meshTopo) override;
   
   //! RefinementObserver method.  Will be called when the Vlasov mesh is unrefined.
-  void didHUnrefine(const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild);
+  void didHUnrefine(const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild) override;
   
   //! If true, will not output details of fixed point iteration to console
   void setRunQuietly(bool runQuietly);
