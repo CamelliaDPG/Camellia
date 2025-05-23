@@ -428,7 +428,7 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
         {
           out << "FAILURE: When pruning to include cell " << cellID << ", expected pruning to reduce memory footprint.\n";
           out << "Original memory footprint: " << originalMemoryFootprint << "; pruned memory footprint: " << prunedMemoryFootprint << endl;
-          print(out, "Expected active cells to be included", activeCellsToKeep);
+          Camellia::print(out, "Expected active cells to be included", activeCellsToKeep);
         }
       }
       else
@@ -482,8 +482,8 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
       {
         success = false;
         out << "FAILURE: neighbors of cell " << cellID << " after pruning do not match neighbors before pruning.\n";
-        print(out, "before pruning", neighbors);
-        print(out, "after pruning", neighborsAfterPruning);
+        Camellia::print(out, "before pruning", neighbors);
+        Camellia::print(out, "after pruning", neighborsAfterPruning);
       }
       else
       {

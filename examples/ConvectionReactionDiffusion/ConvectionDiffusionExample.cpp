@@ -55,7 +55,6 @@ enum ExactSolutionChoice {
 const static int INFLOW_TAG_ID  = 0; // arbitrary, just an identifier
 const static int OUTFLOW_TAG_ID = 1;
 
-using namespace Teuchos;
 FunctionPtr exp(FunctionPtr power)
 {
   return rcp(new Exp<double>(power));
