@@ -47,6 +47,34 @@ namespace Camellia
   template<typename key_type, typename value_type>
   void print(const std::string &name, const std::map<key_type, value_type> &data);
   
+  template<typename data_type>
+  void print(ostream &out, const std::string &name, const FieldContainer<data_type> &data)
+  {
+    out << name << ": ";
+    int numEntries = data.size();
+    for (int i=0; i<numEntries; i++)
+    {
+      out << data[i] << " ";
+    }
+    out << std::endl;
+  }
+
+  template<typename data_type>
+  void print(const std::string &name, const FieldContainer<data_type> &data)
+  {
+    print<data_type>(std::cout, name, data);
+  }
+
+  void print(std::ostream &out, const std::string &name, const FieldContainer<double> &data)
+  {
+    print<double>(out, name, data);
+  }
+
+  void print(const std::string &name, const FieldContainer<double> &data)
+  {
+    print<double>(name, data);
+  }
+
 //  template<typename data_type>
 //  void print(const std::string &name, const vector<data_type> &data)
 //  {
@@ -88,6 +116,11 @@ namespace Camellia
   void print(const std::string &name, const std::map<int, double> &data)
   {
     print<int, double>(name, data);
+  }
+
+  void print(const std::string &name, const std::map<int, int> &data)
+  {
+    print<int, int>(name, data);
   }
   
   void print(const std::string &name, const std::map<unsigned, double> &data)
@@ -138,6 +171,11 @@ namespace Camellia
   {
     print<int, double>(out, name, data);
   }
+
+  void print(ostream &out, const std::string &name, const map<int, int> &data)
+  {
+    print<int, int>(out, name, data);
+  }
   
   void print(ostream &out, const std::string &name, const map<unsigned, double> &data)
   {
@@ -178,21 +216,51 @@ namespace Camellia
   {
     print<set<long long>>(out, name, data);
   }
+
   void print(ostream &out, const std::string &name, const set<double> &data)
   {
     print<set<double>>(out, name, data);
   }
+
+  void print2DArray(std::ostream &out, std::string &label, const Camellia::FieldContainer<double> &array, int precision, double nonzeroThreshold)
+  {
+    Teuchos::oblackholestream oldFormatState;
+    oldFormatState.copyfmt(out);
+    
+    out << label << ": ";
+    
+    out << setprecision(precision);
+    
+    out.setf(std::ios_base::scientific, std::ios_base::floatfield);
+    
+    for (int i=0; i<array.dimension(0); i++)
+    {
+      out << "[";
+      for (int j=0; j<array.dimension(1); j++)
+      {
+        const double value = array(i,j);
+        if (std::abs(value) < nonzeroThreshold)
+          out << 0 << " ";
+        else
+          out << value << " ";
+      }
+      out << "]";
+    }
+    out << std::endl;
+    
+    out.copyfmt(oldFormatState);
+  }
   
   void printLabeledDofCoefficients(VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Camellia::FieldContainer<double> &dofCoefficients,
-                                   bool trialSpaceDofs)
+                                   bool trialSpaceDofs, double nonzeroThreshold)
   {
     printLabeledDofCoefficients(std::cout, vf, dofOrdering, dofCoefficients, trialSpaceDofs);
   }
   
   void printLabeledDofCoefficients(ostream &out, VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Camellia::FieldContainer<double> &dofCoefficients,
-                                   bool trialSpaceDofs)
+                                   bool trialSpaceDofs, double nonzeroThreshold)
   {
     if (dofOrdering->totalDofs() != dofCoefficients.size())
     {
@@ -229,7 +297,7 @@ namespace Camellia
         int basisDofOrdinal = 0;
         for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++)
         {
-          if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
+          if (printNonZerosOnly && (std::abs(dofCoefficients[*dofIndexIt])>nonzeroThreshold)) continue;
           out.setf(std::ios::right, std::ios::adjustfield);
           out << std::setw(3) << basisDofOrdinal;
           out << "             ";
@@ -254,7 +322,7 @@ namespace Camellia
           int basisDofOrdinal = 0;
           for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++)
           {
-            if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
+            if (printNonZerosOnly && (std::abs(dofCoefficients[*dofIndexIt])>nonzeroThreshold)) continue;
             out.setf(std::ios::right, std::ios::adjustfield);
             out << std::setw(3) << basisDofOrdinal;
             out << "             ";
@@ -280,7 +348,7 @@ namespace Camellia
           int basisDofOrdinal = 0;
           for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++)
           {
-            if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
+            if (printNonZerosOnly && (std::abs(dofCoefficients[*dofIndexIt])>nonzeroThreshold)) continue;
             out.setf(std::ios::right, std::ios::adjustfield);
             out << std::setw(3) << basisDofOrdinal;
             out << "             ";

@@ -224,6 +224,9 @@ public:
                                  const bool useCrankNicolson = false,
                                  const bool enforcePositivity = false,
                                  const bool useConformingTraces = false);
+  
+  //! destructor
+  ~VlasovBackwardEulerFormulation();
 
   //! Returns the acceleration term, defined on the configuration space mesh, as an array of length velocityDim().
     vector<FunctionPtr> a();

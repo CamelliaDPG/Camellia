@@ -642,6 +642,14 @@ _speciesLabels(speciesLabels)
   PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
 }
 
+VlasovBackwardEulerFormulation::~VlasovBackwardEulerFormulation()
+{
+  if ((_vlasovSoln != Teuchos::null) && (_vlasovSoln->mesh() != Teuchos::null))
+  {
+    _vlasovSoln->mesh()->unregisterObserver(this);
+  }
+}
+
 vector<FunctionPtr> VlasovBackwardEulerFormulation::a()
 {
   return _a;
@@ -875,6 +883,11 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     
     configurationViz->exportSolution(_configurationSpaceFormulation->solution(),0);
     vlasovViz->exportSolution(vlasovSolution(),0);
+    
+    if (rank == 0)
+    {
+      std::cout << "VlasovBackwardEulerFormulation: exported debugging visualizations for solveNumber " << solveNumber << std::endl;
+    }
     
     solveNumber++;
   }

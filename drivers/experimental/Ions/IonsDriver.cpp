@@ -1972,7 +1972,12 @@ int main(int argc, char *argv[])
     auto lhsTerm = form.vlasovSolution()->bf()->testFunctional(solnMap, testVarIDsToExclude);
     auto residual = lhsTerm - rhsTerm;
     
-    double solnNorm = RieszRep::rieszRep(form.vlasovMesh(), form.vlasovSolution()->ip(), lhsTerm)->getNorm();
+    // Recompute Poisson before reporting energy error; may have changed due to mesh refinement for BC resolution
+    form.configurationSpaceSolve();
+    
+    auto solnRep = RieszRep::rieszRep(form.vlasovMesh(), form.vlasovSolution()->ip(), lhsTerm);
+    double solnNorm = solnRep->getNorm();
+
     if (rank == 0)
     {
       std::cout << "Initial solution, energy norm: " << solnNorm << std::endl;
@@ -2015,6 +2020,7 @@ int main(int argc, char *argv[])
           if (performRefinements(form, refStrategy, unrefinementStrategy, maxElements) )
           {
             meshChanged = true;
+            form.configurationSpaceSolve();
           }
           
           if (enforcePositivity)
@@ -2028,6 +2034,7 @@ int main(int argc, char *argv[])
             if ( performRefinements(form, fluxLimitingRefStrategy, unrefinementStrategy, maxElements) )
             {
               meshChanged = true;
+              form.configurationSpaceSolve();
             }
           }
           

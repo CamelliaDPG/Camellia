@@ -25,6 +25,7 @@ namespace Camellia
   void print(const std::string &name, const std::map<unsigned, unsigned> &data);
   void print(const std::string &name, const std::map<unsigned, double> &data);
   void print(const std::string &name, const std::map<int, double> &data);
+  void print(const std::string &name, const std::map<int, int> &data);
   
   void print(const std::string &name, const std::vector<int> &data);
   void print(const std::string &name, const std::vector<unsigned> &data);
@@ -39,6 +40,7 @@ namespace Camellia
   void print(std::ostream &out, const std::string &name, const std::map<unsigned, unsigned> &data);
   void print(std::ostream &out, const std::string &name, const std::map<unsigned, double> &data);
   void print(std::ostream &out, const std::string &name, const std::map<int, double> &data);
+  void print(std::ostream &out, const std::string &name, const std::map<int, int> &data);
   
   void print(std::ostream &out, const std::string &name, const std::vector<int> &data);
   void print(std::ostream &out, const std::string &name, const std::vector<unsigned> &data);
@@ -49,6 +51,9 @@ namespace Camellia
   void print(std::ostream &out, const std::string &name, const std::set<int> &data);
   void print(std::ostream &out, const std::string &name, const std::set<long long> &data);
   void print(std::ostream &out, const std::string &name, const std::set<double> &data);
+
+  void print(const std::string &name, const FieldContainer<double> &data);
+  void print(std::ostream &out, const std::string &name, const FieldContainer<double> &data);
   
   template<class Rank1Functor>
   void print1(std::ostream &out, const std::string &name, const Rank1Functor &functor)
@@ -118,19 +123,22 @@ namespace Camellia
     }
   }
 
-  // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
+  // ! prints out the coefficients for each variable, labeled using the names from the VarFactory.
   // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
   // ! otherwise, interprets them as test space variables.
   void printLabeledDofCoefficients(VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Camellia::FieldContainer<double> &dofCoefficients,
-                                   bool trialSpaceDofs = true);
+                                   bool trialSpaceDofs = true, double nonzeroThreshold = 0);
   
-  // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
+  // ! prints out the coefficients for each variable, labeled using the names from the VarFactory.
   // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
   // ! otherwise, interprets them as test space variables.
   void printLabeledDofCoefficients(std::ostream &out, VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Camellia::FieldContainer<double> &dofCoefficients,
-                                   bool trialSpaceDofs = true);
+                                   bool trialSpaceDofs = true, double nonzeroThreshold = 0);
+
+  //! print all values on a single line, labeled with label.
+  void print2DArray(std::ostream &out, std::string &label, const Camellia::FieldContainer<double> &array, int precision = 3, double nonzeroThreshold = 0);
   
   // ! Prints out a summary of the rank-local map information.  Not an MPI collective operation.
   void printMapSummary(const Epetra_BlockMap &map, std::string mapName);

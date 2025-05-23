@@ -1000,6 +1000,21 @@ void GlobalDofAssignment::projectChildCoefficientsOntoParents(const std::set<Glo
     {
       auto parentCell = _meshTopology->getCell(parentCellID);
       auto childIndices = parentCell->getChildIndices(_meshTopology);
+      int parentDeltaP = getPRefinementDegree(parentCellID);
+      bool parentNeedsUpdatedP = false;
+      for (const auto & childID : childIndices)
+      {
+        int childDeltaP = getPRefinementDegree(childID);
+        if (childDeltaP > parentDeltaP)
+        {
+          parentDeltaP = childDeltaP;
+          parentNeedsUpdatedP = true;
+        }
+      }
+      if (parentNeedsUpdatedP)
+      {
+        this->setPRefinementDegree(parentCellID, parentDeltaP);
+      }
       auto firstChildID = childIndices[0];
       auto destinationRank = partitionForCellID(firstChildID);
       if (destinationRank == myRank) // if first child is locally owned, then we may have some data to request
