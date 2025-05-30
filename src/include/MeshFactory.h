@@ -122,6 +122,13 @@ public:
                                           double x0=0.0, double y0=0.0,
                                           vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
 
+  //! define a rectilinear mesh which disallows MeshTopology "pruning": the deletion of geometric entities that are not required on the local MPI rank.
+  static MeshPtr rectilinearMeshNoPruning(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts,
+                                          int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>(),
+                                          map<int,int> trialOrderEnhancements = map<int,int>(),
+                                          map<int,int> testOrderEnhancements = map<int,int>(),
+                                          Epetra_CommPtr Comm = Teuchos::null);
+  
   static MeshPtr rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts,
                                  int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>(),
                                  map<int,int> trialOrderEnhancements = map<int,int>(),

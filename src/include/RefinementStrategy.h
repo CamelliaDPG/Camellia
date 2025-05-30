@@ -82,7 +82,10 @@ public:
   virtual void hRefineUniformly();
   
   //! greedy unrefinement using _unrefinementErrorIndicator if provided (otherwise _errorIndicator).  Returns the number of unrefined elements
-  virtual int greedyUnrefinement(double relativeErrorThreshold, bool printToConsole=false);
+  virtual int greedyHUnrefinement(double relativeErrorThreshold, bool printToConsole=false);
+  
+  //! greedy h-unrefinement using _unrefinementErrorIndicator if provided (otherwise _errorIndicator).  Returns the number of unrefined elements
+  virtual int greedyPUnrefinement(double relativeErrorThreshold, bool printToConsole=false);
 
   virtual void refineCells(vector<GlobalIndexType> &cellIDs);
   virtual void unrefineCells(const std::set<GlobalIndexType> &cellIDs);

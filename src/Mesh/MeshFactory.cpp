@@ -632,6 +632,13 @@ MeshTopologyPtr MeshFactory::intervalMeshTopology(std::vector<double> vertices_1
   return meshTopology;
 }
 
+MeshPtr MeshFactory::rectilinearMeshNoPruning(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order,
+                                              int pToAddTest, vector<double> x0, map<int,int> trialOrderEnhancements,
+                                              map<int,int> testOrderEnhancements, Epetra_CommPtr Comm)
+{
+  return rectilinearMesh(bf, dimensions, elementCounts, H1Order, pToAddTest, x0, trialOrderEnhancements, testOrderEnhancements, Comm, false);
+}
+
 MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order,
                                      int pToAddTest, vector<double> x0, map<int,int> trialOrderEnhancements,
                                      map<int,int> testOrderEnhancements, Epetra_CommPtr Comm, bool allowMeshTopologyPruning)

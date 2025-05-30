@@ -6,6 +6,7 @@
 
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
+#include "GlobalDofAssignment.h"
 #include "Mesh.h"
 #include "MPIWrapper.h"
 #include "SerialDenseWrapper.h"
@@ -565,7 +566,7 @@ GlobalIndexType TRefinementStrategy<Scalar>::getNumRefinements() const
 }
 
 template <typename Scalar>
-int TRefinementStrategy<Scalar>::greedyUnrefinement(double relativeErrorThreshold, // relative to maximum element error in the mesh
+int TRefinementStrategy<Scalar>::greedyHUnrefinement(double relativeErrorThreshold, // relative to maximum element error in the mesh
                                                      bool printToConsole)
 {
   ErrorIndicatorPtr unrefinementErrorIndicator = (_unrefinementErrorIndicator == Teuchos::null) ? _errorIndicator : _unrefinementErrorIndicator;
@@ -585,11 +586,11 @@ int TRefinementStrategy<Scalar>::greedyUnrefinement(double relativeErrorThreshol
   MeshPtr mesh = this->mesh();
   auto meshTopo = mesh->getTopology();
   
-  std::set<GlobalIndexType> compatibleUnrefinements;   // not more than 1-irregularity that results
+  std::set<GlobalIndexType> compatibleHUnrefinements;   // h-unrefinements such that not more than 1-irregularity will result
   
-  auto unrefinementPermitted = [&](const GlobalIndexType &cellID) -> bool // return of true indicates that unrefinement is permissible
+  auto hUnrefinementPermitted = [&](const GlobalIndexType &parentCellID) -> bool // return of true indicates that unrefinement is permissible
   {
-    CellPtr cell = meshTopo->getCell(cellID);
+    CellPtr cell = meshTopo->getCell(parentCellID);
     const unsigned int sideCount = cell->getSideCount();
     for (unsigned int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
     {
@@ -633,22 +634,147 @@ int TRefinementStrategy<Scalar>::greedyUnrefinement(double relativeErrorThreshol
   
   for (auto parentCellID : parentCellsBelowThreshold)
   {
-    if (unrefinementPermitted(parentCellID))
+    if (hUnrefinementPermitted(parentCellID))
     {
-      compatibleUnrefinements.insert(parentCellID);
+      compatibleHUnrefinements.insert(parentCellID);
     }
   }
   
-  if (compatibleUnrefinements.size() > 0)
+  if (compatibleHUnrefinements.size() > 0)
   {
-    if (printToConsole) Camellia::print("cells for unrefinement", compatibleUnrefinements);
+    if (printToConsole) Camellia::print("cells for unrefinement", compatibleHUnrefinements);
     
-    unrefineCells(compatibleUnrefinements);
+    unrefineCells(compatibleHUnrefinements);
     mesh->repartitionAndRebuild();
     unrefinementErrorIndicator->measureError(); // now that we have unrefined, measure the error again
   }
   
-  return int(compatibleUnrefinements.size());
+  return int(compatibleHUnrefinements.size());
+}
+
+template <typename Scalar>
+int TRefinementStrategy<Scalar>::greedyPUnrefinement(double relativeErrorThreshold, // relative to maximum element error in the mesh
+                                                     bool printToConsole)
+{
+  ErrorIndicatorPtr unrefinementErrorIndicator = (_unrefinementErrorIndicator == Teuchos::null) ? _errorIndicator : _unrefinementErrorIndicator;
+  unrefinementErrorIndicator->measureError();
+  const double maxElementError = unrefinementErrorIndicator->maxError();
+  const double absoluteErrorThreshold = relativeErrorThreshold * maxElementError;
+  
+  std::set<GlobalIndexType> pUnrefinementCandidates = unrefinementErrorIndicator->globalCellsBelowThreshold(absoluteErrorThreshold);
+  
+  MeshPtr mesh = this->mesh();
+  auto meshTopo = mesh->getTopology();
+  
+  std::set<GlobalIndexType> compatiblePUnrefinements;   // p-unrefinements such that no neighbor will have a jump of more than 1 in p.
+  
+  const auto & cellPRefinements = mesh()->globalDofAssignment()->getCellPRefinements();
+  int initialH1Order = mesh()->globalDofAssignment()->getInitialH1Order()[0]; // assuming isotropic
+  
+  const int minH1Order = 1; // don't allow p in any cell to go below this; hard-coded for now (1 is the lowest well-defined choice)
+  
+  /*
+   Basic idea:
+   - we can p-unrefine any cell whose order is higher than minH1Order, and whose active neighbors all have p no larger than the cell's p.
+   - in pUnrefinementPermitted(), we do the following for a cell of order p:
+     - if p == minH1Order, return NO.
+     - if cell's active neighbors all will have order no higher than p after the cells in compatiblePUnrefinements have their order reduced by 1, return YES.
+     - if any of cell's active neighbors have order p+1 and are NOT included in pUnrefinementCandidates, return NO.
+     - otherwise, return MAYBE.
+   - pass through pUnrefinementCandidates, repeatedly calling pUnrefinementPermitted() on each cell:
+     - if YES or NO, delete the cell from pUnrefinementCandidates.
+     - if YES, add the cell to compatiblePUnrefinements
+     - if MAYBE, continue
+   - repeat the above until pUnrefinementCandidates is empty
+   */
+  
+  enum class PUnrefinementPossible
+  {
+    YES,
+    NO,
+    MAYBE
+  };
+  
+  auto pForCell = [&](const GlobalIndexType &cellID) -> int
+  {
+    auto dpEntry = cellPRefinements.find(cellID);
+    const int dpCell = (dpEntry != cellPRefinements.end()) ? dpEntry->second : 0;
+    
+    // after the known-compatible unrefinements take place, how will this cell's p change?
+    int unrefinement_dp = (compatiblePUnrefinements.find(cellID) == compatiblePUnrefinements.end()) ? 0 : -1;
+    
+    return initialH1Order + dpCell + unrefinement_dp;
+  };
+  
+  auto pUnrefinementPermitted = [&](const GlobalIndexType &cellID) -> PUnrefinementPossible //
+  {
+    CellPtr cell = meshTopo->getCell(cellID);
+    const unsigned int sideCount = cell->getSideCount();
+    
+    int pCell = pForCell(cellID);
+    if (pCell <= minH1Order) return PUnrefinementPossible::NO;
+        
+    for (unsigned int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      auto neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
+      const auto & neighborCellID = neighborInfo.first;
+      if (neighborCellID == MESHTOPOLOGY_INVALID_CELL_INDEX) continue; // no neighbor (boundary side)
+      
+      auto neighborSideOrdinal = neighborInfo.second;
+      // if neighbor is a parent, then we want to check children along this side
+      CellPtr neighbor = meshTopo->getCell(neighborCellID);
+      const bool leafNodesOnly = true; // this only matters if there are multiple levels of refinement (i.e. mesh is not 1-irregular, which it should be)
+      vector<pair<GlobalIndexType,unsigned>> childrenForSide = neighbor->getDescendantsForSide(neighborSideOrdinal, meshTopo, leafNodesOnly); // if cell is not a parent, returns the cell itself
+      
+      for (auto activeNeighborEntry : childrenForSide)
+      {
+        auto & activeNeighborID = activeNeighborEntry.first;
+        
+        const int pNeighbor = pForCell(activeNeighborID);
+        
+        if (pNeighbor <= pCell) continue; // neighbor presents no obstacle to refinement
+        
+        if (pUnrefinementCandidates.find(activeNeighborID) == pUnrefinementCandidates.end())
+        {
+          return PUnrefinementPossible::NO;
+        }
+        
+        // if we get here, neighbor might be unrefined, but hasn't been yet
+        return PUnrefinementPossible::MAYBE;
+      }
+    }
+    
+    // if we get here, no neighbors prevent this cell from being unrefined
+    return PUnrefinementPossible::YES;
+  };
+  
+  while (pUnrefinementCandidates.size() > 0)
+  {
+    std::set<GlobalIndexType> processedCandidates;
+    for (const auto &cellID : pUnrefinementCandidates)
+    {
+      auto status = pUnrefinementPermitted(cellID);
+      if (status == PUnrefinementPossible::MAYBE) continue; // can't process this one yet
+      
+      processedCandidates.insert(cellID);
+      
+      if (status == PUnrefinementPossible::YES) compatiblePUnrefinements.insert(cellID);
+    }
+    for (const auto &processedCellID : processedCandidates)
+    {
+      pUnrefinementCandidates.erase(processedCellID);
+    }
+  }
+  
+  if (compatiblePUnrefinements.size() > 0)
+  {
+    if (printToConsole) Camellia::print("cells for p-unrefinement", compatiblePUnrefinements);
+    bool repartitionAndRebuild = true;
+    int pToAdd = -1;
+    mesh->pRefine(compatiblePUnrefinements, pToAdd);
+  }
+  
+  return int(compatiblePUnrefinements.size());
 }
 
 template <typename Scalar>
