@@ -12,9 +12,7 @@ template <std::size_t numDim>
 class BasisNd {
 public:
   BasisNd(const boba::Array<Basis1dPtr, numDim> &basis) {
-    for (std::size_t n = 0; n < numDim; ++n) {
-      boba_assert(basis[n] != Teuchos::null, "function component is null");
-    }
+    // null components are allowed
     basis_ = basis;
   }
 

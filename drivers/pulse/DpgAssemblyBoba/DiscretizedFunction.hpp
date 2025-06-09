@@ -34,7 +34,10 @@ public:
     if (numTerm == 0) {
       boba::Array<std::size_t, numDim> sizes;
       for (std::size_t dimId = 0; dimId < numDim; ++dimId) {
-        sizes[dimId] = basis_->getComponent(dimId)->getCardinality() * mesh_->getComponent(dimId)->getNumElement();
+        auto basis = basis_->getComponent(dimId);
+        auto mesh = mesh_->getComponent(dimId);
+        sizes[dimId] = (basis != Teuchos::null) ? basis->getCardinality() * mesh->getNumElement()
+                                                : (mesh->getNumElement() - 1); // for now, hard-coding zero Dirichlet boundary condition
       }
 
       output.setup(sizes);
@@ -63,61 +66,92 @@ private:
       const auto &basis = basis_->getComponent(dimId);
       const auto &mesh = mesh_->getComponent(dimId);
 
-      //
-      // construct cubature
-      //
+      if (basis != Teuchos::null) {
+        //
+        // construct cubature
+        //
 
-      const int cubatureDegree = 2 * basis->getDegree(); // making an assumption here...
+        const int cubatureDegree = 2 * basis->getDegree(); // making an assumption here...
 
-      auto cubature = Camellia::CubatureFactory().create(Camellia::CellTopology::line(), cubatureDegree);
+        auto cubature = Camellia::CubatureFactory().create(Camellia::CellTopology::line(), cubatureDegree);
 
-      auto cubaturePoints = cubature->allocateCubaturePoints();
-      auto cubatureWeights = cubature->allocateCubatureWeights();
-      cubature->getCubature(cubaturePoints, cubatureWeights);
+        auto cubaturePoints = cubature->allocateCubaturePoints();
+        auto cubatureWeights = cubature->allocateCubatureWeights();
+        cubature->getCubature(cubaturePoints, cubatureWeights);
 
-      const std::size_t numCubature = cubaturePoints.extent(0);
+        const std::size_t numCubature = cubaturePoints.extent(0);
 
-      //
-      // evaluate basis at cubature points
-      //
+        //
+        // evaluate basis at cubature points
+        //
 
-      auto basisValues = basis->allocateBasisValues(cubaturePoints, Intrepid2::OPERATOR_VALUE);
-      basis->getValues(basisValues, cubaturePoints, Intrepid2::OPERATOR_VALUE);
+        auto basisValues = basis->allocateBasisValues(cubaturePoints, Intrepid2::OPERATOR_VALUE);
+        basis->getValues(basisValues, cubaturePoints, Intrepid2::OPERATOR_VALUE);
 
-      const std::size_t numBasis = basisValues.extent(0);
+        const std::size_t numBasis = basisValues.extent(0);
 
-      //
-      // determine shifts and scalings for element points
-      //
+        //
+        // determine shifts and scalings for element points
+        //
 
-      const std::size_t numElement = mesh->getNumElement();
+        const std::size_t numElement = mesh->getNumElement();
 
-      std::vector<double> shifts(numElement);
-      std::vector<double> scales(numElement);
-      for (std::size_t elementId = 0; elementId < numElement; ++elementId) {
-        shifts[elementId] = mesh->getElementMidpoint(elementId);
-        scales[elementId] = 0.5 * mesh->getElementLength(elementId);
-      }
-
-      //
-      // compute coefficients through integration/quadrature
-      //
-
-      for (std::size_t termId = 0; termId < numTerm; ++termId) {
-        auto func = func_->getTermComponent(termId, dimId);
-
-        discretization_[termId][dimId].resize(numElement * numBasis);
-        auto discretizationView = discretization_[termId][dimId].view();
-
+        std::vector<double> shifts(numElement);
+        std::vector<double> scales(numElement);
         for (std::size_t elementId = 0; elementId < numElement; ++elementId) {
-          for (std::size_t basisId = 0; basisId < numBasis; ++basisId) {
-            double value = 0.0;
-            for (std::size_t cubatureId = 0; cubatureId < numCubature; ++cubatureId) {
-              const int j = static_cast<int>(basisId);
-              const int k = static_cast<int>(cubatureId);
-              value += basisValues(j, k) * (*func)(shifts[elementId] + scales[elementId] * cubaturePoints(k, 0)) * scales[elementId] * cubatureWeights(k);
+          shifts[elementId] = mesh->getElementMidpoint(elementId);
+          scales[elementId] = 0.5 * mesh->getElementLength(elementId);
+        }
+
+        //
+        // compute coefficients through integration/quadrature
+        //
+
+        for (std::size_t termId = 0; termId < numTerm; ++termId) {
+          auto func = func_->getTermComponent(termId, dimId);
+
+          discretization_[termId][dimId].resize(numElement * numBasis);
+          auto discretizationView = discretization_[termId][dimId].view();
+
+          for (std::size_t elementId = 0; elementId < numElement; ++elementId) {
+            for (std::size_t basisId = 0; basisId < numBasis; ++basisId) {
+              double value = 0.0;
+              for (std::size_t cubatureId = 0; cubatureId < numCubature; ++cubatureId) {
+                const int j = static_cast<int>(basisId);
+                const int k = static_cast<int>(cubatureId);
+                value += basisValues(j, k) * (*func)(shifts[elementId] + scales[elementId] * cubaturePoints(k, 0)) * scales[elementId] * cubatureWeights(k);
+              }
+              discretizationView(basisId + elementId * numBasis) = value;
             }
-            discretizationView(basisId + elementId * numBasis) = value;
+          }
+        }
+      } else {
+        // -*- null basis, only want function evaluation at element boundaries -*-
+
+        //
+        // determine element boundaries
+        //
+
+        const std::size_t numElement = mesh->getNumElement();
+
+       // for now, hard-coding zero Dirichlet boundary condition
+        std::vector<double> points(numElement - 1);
+        for (std::size_t elementId = 1; elementId < numElement; ++elementId) {
+          points[elementId - 1] = mesh->getElementLeftPoint(elementId);
+        }
+
+        //
+        // evaluate functions
+        //
+
+        for (std::size_t termId = 0; termId < numTerm; ++termId) {
+          auto func = func_->getTermComponent(termId, dimId);
+
+          discretization_[termId][dimId].resize(numElement - 1);
+          auto discretizationView = discretization_[termId][dimId].view();
+
+          for (std::size_t boundaryId = 0; boundaryId < numElement - 1; ++boundaryId) {
+            discretizationView(boundaryId) = (*func)(points[boundaryId]);
           }
         }
       }

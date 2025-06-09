@@ -17,56 +17,6 @@
 #include "MeshNd.hpp"
 
 //
-// Given an 1D function soln(), compute its discretization over uniform mesh with
-// nx elements over [x_min, x_max] and specified basis within each element. The
-// output is a vector whose (ib + ix * nb)-th entry corresponds to value of the
-// function at the node of the ib-th basis over the ix-th element.
-//
-host_vector
-soln_discretization_1d(Camellia::BasisPtr basis,
-                       const double &x_min, const double &x_max, const size_t &nx,
-                       const std::function<double(double)> &soln_fun) {
-  const int nb = basis->getCardinality();
-  const double dx = (x_max - x_min) / nx;
-
-  Intrepid::FieldContainer<double, 0> basis_nodes(nb, 1);
-  basis->getDofCoords(basis_nodes);
-
-  host_vector soln_vec({nx * nb});
-  auto soln_vec_view = soln_vec.view();
-  for (int ix = 0; ix < nx; ++ix) {
-    const double shift = x_min + 0.5 * (2 * ix + 1) * dx;
-    const double scale = 0.5 * dx;
-    for (int ib = 0; ib < nb; ++ib) {
-      const double value = soln_fun(shift + scale * basis_nodes(ib, 0));
-
-      const size_t i = static_cast<size_t>(ib + ix * nb);
-      soln_vec_view(i) = value;
-    }
-  }
-
-  return soln_vec;
-}
-
-host_vector
-soln_discretization_1d(const double &x_min, const double &x_max, const size_t &nx,
-                       const std::function<double(double)> &soln_fun) {
-  const double dx = (x_max - x_min) / nx;
-
-  host_vector soln_vec({nx - 1});
-  auto soln_vec_view = soln_vec.view();
-  for (int ix = 1; ix < nx; ++ix) {
-    const double shift = x_min + ix * dx;
-    const double value = soln_fun(shift);
-
-    const size_t i = static_cast<size_t>(ix - 1);
-    soln_vec_view(i) = value;
-  }
-
-  return soln_vec;
-}
-
-//
 // Assemble and solve for the Vlasov system with known E = 1:
 //
 // f_t + v f_x + f_v = c over 0 <= x <= 1, 0 <= t <= 1, -0.5 <= v <= 0.5
@@ -102,15 +52,11 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   auto trace_basis_1d = newBasis1d(Camellia::L2,         p + 1 );
   auto test_basis_1d  = newBasis1d(Camellia::HGRAD_DISC, p + dp);
 
-  auto test_basis  = newBasisNd<3>({ test_basis_1d,  test_basis_1d,  test_basis_1d});
-  auto field_basis = newBasisNd<3>({field_basis_1d, field_basis_1d, field_basis_1d});
-
-  auto stiffness = construct_vlasov_matrices(test_basis_1d, trace_basis_1d, field_basis_1d,
-                                             x_min, x_max, nx,
-                                             t_min, t_max, nt,
-                                             v_min, v_max, nv,
-                                             p, dp);
-  stiffness.savetxt("stiffness", ".dat");
+  auto   test_basis = newBasisNd<3>({ test_basis_1d,  test_basis_1d,  test_basis_1d});
+  auto tracex_basis = newBasisNd<3>({ Teuchos::null, trace_basis_1d, trace_basis_1d});
+  auto tracet_basis = newBasisNd<3>({trace_basis_1d,  Teuchos::null, trace_basis_1d});
+  auto tracev_basis = newBasisNd<3>({trace_basis_1d, trace_basis_1d,  Teuchos::null});
+  auto  field_basis = newBasisNd<3>({field_basis_1d, field_basis_1d, field_basis_1d});
 
   auto   fx_fun = [](const double &x) { return x - x * x; };
   auto  dfx_fun = [](const double &x) { return 1.0 - 2.0 * x; };
@@ -121,19 +67,37 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   auto v_fv_fun = [](const double &v) { return v - 4.0 * v * v * v; };
   auto zero_fun = [](const double &s) { return 0.0; };
 
-  auto rhs_fun = newFunctionNd<3>();
-  rhs_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d(dft_fun), newFunction1d(  fv_fun)});
-  rhs_fun->addTerm(1.0, {newFunction1d(dfx_fun), newFunction1d( ft_fun), newFunction1d(v_fv_fun)});
-  rhs_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d( ft_fun), newFunction1d( dfv_fun)});
+  auto load_fun = newFunctionNd<3>();
+  load_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d(dft_fun), newFunction1d(  fv_fun)});
+  load_fun->addTerm(1.0, {newFunction1d(dfx_fun), newFunction1d( ft_fun), newFunction1d(v_fv_fun)});
+  load_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d( ft_fun), newFunction1d( dfv_fun)});
 
-  auto rhs_test = discretizeFunction(rhs_fun, test_basis, mesh)->getTtRepresentation(/* round = */ true);
+  auto load = discretizeFunction(load_fun, test_basis, mesh)->getTtRepresentation(/* round = */ true);
 
-  std::cout << "rhs" << std::endl
-            << "  cols  = " << rhs_test.sizes() << std::endl
-            << "  ranks = " << rhs_test.ranks_string() << std::endl << std::endl;
+  auto eps_fun = newFunctionNd<3>({newFunction1d(zero_fun), newFunction1d(zero_fun), newFunction1d(zero_fun)});
+  auto exact_eps = discretizeFunction(eps_fun, test_basis, mesh)->getTtRepresentation();
+
+  auto tnx_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(v_fv_fun)});
+  auto exact_tnx = discretizeFunction(tnx_fun, tracex_basis, mesh)->getTtRepresentation();
+
+  auto tnt_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
+  auto exact_tnt = discretizeFunction(tnt_fun, tracet_basis, mesh)->getTtRepresentation();
+
+  auto tnv_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
+  auto exact_tnv = discretizeFunction(tnv_fun, tracev_basis, mesh)->getTtRepresentation();
+
+  auto f_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
+  auto exact_f = discretizeFunction(f_fun, field_basis, mesh)->getTtRepresentation();
+
+  auto stiffness = construct_vlasov_matrices(test_basis_1d, trace_basis_1d, field_basis_1d,
+                                             x_min, x_max, nx,
+                                             t_min, t_max, nt,
+                                             v_min, v_max, nv,
+                                             p, dp);
+  stiffness.savetxt("stiffness", ".dat");
 
   boba::block_vector<host_tt_vector<3>, vlasov_vars::size> rhs;
-  rhs(vlasov_vars::test)    = rhs_test;
+  rhs(vlasov_vars::test)    = load;
   rhs(vlasov_vars::trace_x) = zero_tt_vector<3>(stiffness({vlasov_vars::test, vlasov_vars::trace_x}).core_cols());
   rhs(vlasov_vars::trace_t) = zero_tt_vector<3>(stiffness({vlasov_vars::test, vlasov_vars::trace_t}).core_cols());
   rhs(vlasov_vars::trace_v) = zero_tt_vector<3>(stiffness({vlasov_vars::test, vlasov_vars::trace_v}).core_cols());
@@ -141,34 +105,47 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
 
   rhs.savetxt("rhs", ".dat");
 
-  auto fx_bdy = soln_discretization_1d(x_min, x_max, nx,   fx_fun);
-  auto ft_bdy = soln_discretization_1d(t_min, t_max, nt,   ft_fun);
-  auto fv_bdy = soln_discretization_1d(v_min, v_max, nv,   fv_fun);
-
-  auto   fx_trace = soln_discretization_1d(trace_basis_1d, x_min, x_max, nx,   fx_fun);
-  auto   ft_trace = soln_discretization_1d(trace_basis_1d, t_min, t_max, nt,   ft_fun);
-  auto   fv_trace = soln_discretization_1d(trace_basis_1d, v_min, v_max, nv,   fv_fun);
-  auto v_fv_trace = soln_discretization_1d(trace_basis_1d, v_min, v_max, nv, v_fv_fun);
-
-  auto f_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
-  auto f_field = discretizeFunction(f_fun, field_basis, mesh)->getTtRepresentation();
-
-  auto eps_fun = newFunctionNd<3>({newFunction1d(zero_fun), newFunction1d(zero_fun), newFunction1d(zero_fun)});
-  auto eps_test = discretizeFunction(eps_fun, test_basis, mesh)->getTtRepresentation();
-
   boba::block_vector<host_tt_vector<3>, vlasov_vars::size> exact_soln;
-  exact_soln(vlasov_vars::test)    = eps_test;
-  exact_soln(vlasov_vars::trace_x) = boba::make_tt_from_vectors<3, host_space, double, size_t>({    fx_bdy,   ft_trace, v_fv_trace});
-  exact_soln(vlasov_vars::trace_t) = boba::make_tt_from_vectors<3, host_space, double, size_t>({  fx_trace,     ft_bdy,   fv_trace});
-  exact_soln(vlasov_vars::trace_v) = boba::make_tt_from_vectors<3, host_space, double, size_t>({  fx_trace,   ft_trace,     fv_bdy});
-  exact_soln(vlasov_vars::field)   = f_field;
+  exact_soln(vlasov_vars::test)    = exact_eps;
+  exact_soln(vlasov_vars::trace_x) = exact_tnx;
+  exact_soln(vlasov_vars::trace_t) = exact_tnt;
+  exact_soln(vlasov_vars::trace_v) = exact_tnv;
+  exact_soln(vlasov_vars::field)   = exact_f;
 
   exact_soln.savetxt("exact_soln", ".dat");
 
   auto exact_residual = rhs - stiffness * exact_soln;
-  std::cout << "exact_residual_norm" << std::endl;
+
+  std::cout << "load" << std::endl
+            << "  sizes = " << load.sizes() << std::endl
+            << "  ranks = " << load.ranks_string() << std::endl << std::endl;
+
+  std::cout << "exact_eps" << std::endl
+            << "  sizes = " << exact_eps.sizes() << std::endl
+            << "  ranks = " << exact_eps.ranks_string() << std::endl << std::endl;
+
+  std::cout << "exact_tnx" << std::endl
+            << "  sizes = " << exact_tnx.sizes() << std::endl
+            << "  ranks = " << exact_tnx.ranks_string() << std::endl << std::endl;
+
+  std::cout << "exact_tnt" << std::endl
+            << "  sizes = " << exact_tnt.sizes() << std::endl
+            << "  ranks = " << exact_tnt.ranks_string() << std::endl << std::endl;
+
+  std::cout << "exact_tnv" << std::endl
+            << "  sizes = " << exact_tnv.sizes() << std::endl
+            << "  ranks = " << exact_tnv.ranks_string() << std::endl << std::endl;
+
+  std::cout << "exact_f" << std::endl
+            << "  sizes = " << exact_f.sizes() << std::endl
+            << "  ranks = " << exact_f.ranks_string() << std::endl << std::endl;
+
+  std::cout << "exact_residual" << std::endl;
   for (size_t i = 0; i < vlasov_vars::size; ++i) {
-      std::cout << "  [" << i << "] = " << exact_residual(i).norm_frobenius() << std::endl;
+    std::cout << "  component_" << i << std::endl 
+              << "    sizes = " << exact_residual(i).sizes() << std::endl
+              << "    ranks = " << exact_residual(i).sizes() << std::endl
+              << "    norm  = " << exact_residual(i).norm_frobenius() << std::endl;
   }
   std::cout << std::endl;
 
