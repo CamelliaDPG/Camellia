@@ -1,61 +1,20 @@
-#include <cmath>
 #include <functional>
 #include <iostream>
 
-#include "Basis.h"
-#include "BasisFamily.h"
 #include "Camellia.h"
-#include "CellTopology.h"
-#include "CubatureFactory.h"
 #include "TypeDefs.h"
 #include "Var.h"
 
 #include "boba_types.hpp"
 #include "vlasov_system.hpp"
 
-//
-// Given an 1D function rhs(), compute its discretization over uniform mesh with
-// nx elements over [x_min, x_max] and specified basis within each element. The
-// output is a vector whose (ib + ix * nb)-th entry corresponds to L2 inner
-// product of rhs() and ib-th basis over the ix-th element.
-//
-host_vector
-rhs_discretization_1d(Camellia::BasisPtr basis,
-                      const double &x_min, const double &x_max, const size_t &nx,
-                      const std::function<double(double)> &rhs_fun) {
-  const int nb = basis->getCardinality();
-  const double dx = (x_max - x_min) / nx;
-
-  const int cubature_degree = 2 * basis->getDegree();
-  auto cubature = Camellia::CubatureFactory().create(Camellia::CellTopology::line(), cubature_degree);
-
-  auto cubature_points = cubature->allocateCubaturePoints();
-  auto cubature_weights = cubature->allocateCubatureWeights();
-  cubature->getCubature(cubature_points, cubature_weights);
-
-  const int nc = cubature_points.extent_int(0);
-
-  auto basis_values = basis->allocateBasisValues(cubature_points, Intrepid2::OPERATOR_VALUE);
-  basis->getValues(basis_values, cubature_points, Intrepid2::OPERATOR_VALUE);
-
-  host_vector rhs_vec({nx * nb});
-  auto rhs_vec_view = rhs_vec.view();
-  for (int ix = 0; ix < nx; ++ix) {
-    const double shift = x_min + 0.5 * (2 * ix + 1) * dx;
-    const double scale = 0.5 * dx;
-    for (int ib = 0; ib < nb; ++ib) {
-      double value = 0.0;
-      for (int ic = 0; ic < nc; ++ic) {
-        value += scale * basis_values(ib, ic) * rhs_fun(shift + scale * cubature_points(ic, 0)) * cubature_weights(ic);
-      }
-
-      const size_t i = static_cast<size_t>(ib + ix * nb);
-      rhs_vec_view(i) = value;
-    }
-  }
-
-  return rhs_vec;
-}
+#include "Basis1d.hpp"
+#include "BasisNd.hpp"
+#include "DiscretizedFunction.hpp"
+#include "Function1d.hpp"
+#include "FunctionNd.hpp"
+#include "Mesh1d.hpp"
+#include "MeshNd.hpp"
 
 //
 // Given an 1D function soln(), compute its discretization over uniform mesh with
@@ -133,14 +92,20 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   const double v_min = -0.5;
   const double v_max =  0.5;
 
-  auto line = Camellia::CellTopology::line();
+  auto x_mesh = newMesh1d(x_min, x_max, nx);
+  auto t_mesh = newMesh1d(t_min, t_max, nt);
+  auto v_mesh = newMesh1d(v_min, v_max, nv);
 
-  auto basis_family = Camellia::BasisFamily::nodalBasisFamily();
-  auto test_basis   = basis_family->getBasis(line, Camellia::efsForSpace(Camellia::HGRAD_DISC), p + dp);
-  auto field_basis  = basis_family->getBasis(line, Camellia::efsForSpace(Camellia::L2),         p     );
-  auto trace_basis  = basis_family->getBasis(line, Camellia::efsForSpace(Camellia::L2),         p + 1 );
+  auto mesh = newMeshNd<3>({x_mesh, t_mesh, v_mesh});
 
-  auto stiffness = construct_vlasov_matrices(test_basis, trace_basis, field_basis,
+  auto field_basis_1d = newBasis1d(Camellia::L2,         p     );
+  auto trace_basis_1d = newBasis1d(Camellia::L2,         p + 1 );
+  auto test_basis_1d  = newBasis1d(Camellia::HGRAD_DISC, p + dp);
+
+  auto test_basis  = newBasisNd<3>({ test_basis_1d,  test_basis_1d,  test_basis_1d});
+  auto field_basis = newBasisNd<3>({field_basis_1d, field_basis_1d, field_basis_1d});
+
+  auto stiffness = construct_vlasov_matrices(test_basis_1d, trace_basis_1d, field_basis_1d,
                                              x_min, x_max, nx,
                                              t_min, t_max, nt,
                                              v_min, v_max, nv,
@@ -154,19 +119,14 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   auto   fv_fun = [](const double &v) { return 1.0 - 4.0 * v * v; };
   auto  dfv_fun = [](const double &v) { return -8.0 * v; };
   auto v_fv_fun = [](const double &v) { return v - 4.0 * v * v * v; };
+  auto zero_fun = [](const double &s) { return 0.0; };
 
-  auto   fx = rhs_discretization_1d(test_basis, x_min, x_max, nx,  fx_fun);
-  auto  dfx = rhs_discretization_1d(test_basis, x_min, x_max, nx, dfx_fun);
-  auto   ft = rhs_discretization_1d(test_basis, t_min, t_max, nt,  ft_fun);
-  auto  dft = rhs_discretization_1d(test_basis, t_min, t_max, nt, dft_fun);
-  auto   fv = rhs_discretization_1d(test_basis, v_min, v_max, nv,   fv_fun);
-  auto  dfv = rhs_discretization_1d(test_basis, v_min, v_max, nv,  dfv_fun);
-  auto v_fv = rhs_discretization_1d(test_basis, v_min, v_max, nv, v_fv_fun);
+  auto rhs_fun = newFunctionNd<3>();
+  rhs_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d(dft_fun), newFunction1d(  fv_fun)});
+  rhs_fun->addTerm(1.0, {newFunction1d(dfx_fun), newFunction1d( ft_fun), newFunction1d(v_fv_fun)});
+  rhs_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d( ft_fun), newFunction1d( dfv_fun)});
 
-  auto rhs_test = boba::make_tt_from_vectors<3, host_space, double, size_t>({ fx, dft,   fv}) +
-                  boba::make_tt_from_vectors<3, host_space, double, size_t>({dfx,  ft, v_fv}) +
-                  boba::make_tt_from_vectors<3, host_space, double, size_t>({ fx,  ft,  dfv});
-  rhs_test.round();
+  auto rhs_test = discretizeFunction(rhs_fun, test_basis, mesh)->getTtRepresentation(/* round = */ true);
 
   std::cout << "rhs" << std::endl
             << "  cols  = " << rhs_test.sizes() << std::endl
@@ -185,25 +145,23 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   auto ft_bdy = soln_discretization_1d(t_min, t_max, nt,   ft_fun);
   auto fv_bdy = soln_discretization_1d(v_min, v_max, nv,   fv_fun);
 
-  auto   fx_trace = soln_discretization_1d(trace_basis, x_min, x_max, nx,   fx_fun);
-  auto   ft_trace = soln_discretization_1d(trace_basis, t_min, t_max, nt,   ft_fun);
-  auto   fv_trace = soln_discretization_1d(trace_basis, v_min, v_max, nv,   fv_fun);
-  auto v_fv_trace = soln_discretization_1d(trace_basis, v_min, v_max, nv, v_fv_fun);
+  auto   fx_trace = soln_discretization_1d(trace_basis_1d, x_min, x_max, nx,   fx_fun);
+  auto   ft_trace = soln_discretization_1d(trace_basis_1d, t_min, t_max, nt,   ft_fun);
+  auto   fv_trace = soln_discretization_1d(trace_basis_1d, v_min, v_max, nv,   fv_fun);
+  auto v_fv_trace = soln_discretization_1d(trace_basis_1d, v_min, v_max, nv, v_fv_fun);
 
-  auto fx_field = soln_discretization_1d(field_basis, x_min, x_max, nx, fx_fun);
-  auto ft_field = soln_discretization_1d(field_basis, t_min, t_max, nx, ft_fun);
-  auto fv_field = soln_discretization_1d(field_basis, v_min, v_max, nx, fv_fun);
+  auto f_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
+  auto f_field = discretizeFunction(f_fun, field_basis, mesh)->getTtRepresentation();
 
-  auto epsx_test = soln_discretization_1d(test_basis, x_min, x_max, nx, [](const double &x) { return 0.0; });
-  auto epst_test = soln_discretization_1d(test_basis, t_min, t_max, nt, [](const double &t) { return 0.0; });
-  auto epsv_test = soln_discretization_1d(test_basis, v_min, v_max, nv, [](const double &v) { return 0.0; });
+  auto eps_fun = newFunctionNd<3>({newFunction1d(zero_fun), newFunction1d(zero_fun), newFunction1d(zero_fun)});
+  auto eps_test = discretizeFunction(eps_fun, test_basis, mesh)->getTtRepresentation();
 
   boba::block_vector<host_tt_vector<3>, vlasov_vars::size> exact_soln;
-  exact_soln(vlasov_vars::test)    = boba::make_tt_from_vectors<3, host_space, double, size_t>({ epsx_test,  epst_test,  epsv_test});
+  exact_soln(vlasov_vars::test)    = eps_test;
   exact_soln(vlasov_vars::trace_x) = boba::make_tt_from_vectors<3, host_space, double, size_t>({    fx_bdy,   ft_trace, v_fv_trace});
   exact_soln(vlasov_vars::trace_t) = boba::make_tt_from_vectors<3, host_space, double, size_t>({  fx_trace,     ft_bdy,   fv_trace});
   exact_soln(vlasov_vars::trace_v) = boba::make_tt_from_vectors<3, host_space, double, size_t>({  fx_trace,   ft_trace,     fv_bdy});
-  exact_soln(vlasov_vars::field)   = boba::make_tt_from_vectors<3, host_space, double, size_t>({  fx_field,   ft_field,   fv_field});
+  exact_soln(vlasov_vars::field)   = f_field;
 
   exact_soln.savetxt("exact_soln", ".dat");
 
