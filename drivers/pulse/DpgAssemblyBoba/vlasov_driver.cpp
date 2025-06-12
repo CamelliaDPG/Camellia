@@ -10,7 +10,6 @@
 
 #include "Basis1d.hpp"
 #include "BasisNd.hpp"
-#include "DiscretizedFunction.hpp"
 #include "Function1d.hpp"
 #include "FunctionNd.hpp"
 #include "Mesh1d.hpp"
@@ -58,36 +57,36 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   auto tracev_basis = newBasisNd<3>({trace_basis_1d, trace_basis_1d,  Teuchos::null});
   auto  field_basis = newBasisNd<3>({field_basis_1d, field_basis_1d, field_basis_1d});
 
-  auto   fx_fun = [](const double &x) { return x - x * x; };
-  auto  dfx_fun = [](const double &x) { return 1.0 - 2.0 * x; };
-  auto   ft_fun = [](const double &t) { return t - t * t; };
-  auto  dft_fun = [](const double &t) { return 1.0 - 2.0 * t; };
-  auto   fv_fun = [](const double &v) { return 1.0 - 4.0 * v * v; };
-  auto  dfv_fun = [](const double &v) { return -8.0 * v; };
-  auto v_fv_fun = [](const double &v) { return v - 4.0 * v * v * v; };
-  auto zero_fun = [](const double &s) { return 0.0; };
+  auto   fx_fun = newFunction1d([](const double &x) { return x - x * x; });
+  auto   ft_fun = newFunction1d([](const double &t) { return t - t * t; });
+  auto   fv_fun = newFunction1d([](const double &v) { return 1.0 - 4.0 * v * v; });
+  auto  dfx_fun = newFunction1d([](const double &x) { return 1.0 - 2.0 * x; });
+  auto  dft_fun = newFunction1d([](const double &t) { return 1.0 - 2.0 * t; });
+  auto  dfv_fun = newFunction1d([](const double &v) { return -8.0 * v; });
+  auto v_fv_fun = newFunction1d([](const double &v) { return v - 4.0 * v * v * v; });
+  auto zero_fun = newFunction1d([](const double &s) { return 0.0; });
 
   auto load_fun = newFunctionNd<3>();
-  load_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d(dft_fun), newFunction1d(  fv_fun)});
-  load_fun->addTerm(1.0, {newFunction1d(dfx_fun), newFunction1d( ft_fun), newFunction1d(v_fv_fun)});
-  load_fun->addTerm(1.0, {newFunction1d( fx_fun), newFunction1d( ft_fun), newFunction1d( dfv_fun)});
+  load_fun->addTerm(1.0, { fx_fun, dft_fun,   fv_fun});
+  load_fun->addTerm(1.0, {dfx_fun,  ft_fun, v_fv_fun});
+  load_fun->addTerm(1.0, { fx_fun,  ft_fun,  dfv_fun});
 
-  auto load = discretizeFunction(load_fun, test_basis, mesh)->getTtRepresentation(/* round = */ true);
+  auto load = load_fun->getDiscretization(test_basis, mesh);
 
-  auto eps_fun = newFunctionNd<3>({newFunction1d(zero_fun), newFunction1d(zero_fun), newFunction1d(zero_fun)});
-  auto exact_eps = discretizeFunction(eps_fun, test_basis, mesh)->getTtRepresentation();
+  auto eps_fun = newFunctionNd<3>({zero_fun, zero_fun, zero_fun});
+  auto exact_eps = eps_fun->getBasisExpansion(test_basis, mesh);
 
-  auto tnx_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(v_fv_fun)});
-  auto exact_tnx = discretizeFunction(tnx_fun, tracex_basis, mesh)->getTtRepresentation();
+  auto tnx_fun = newFunctionNd<3>({fx_fun, ft_fun, v_fv_fun});
+  auto exact_tnx = tnx_fun->getBasisExpansion(tracex_basis, mesh);
 
-  auto tnt_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
-  auto exact_tnt = discretizeFunction(tnt_fun, tracet_basis, mesh)->getTtRepresentation();
+  auto tnt_fun = newFunctionNd<3>({fx_fun, ft_fun, fv_fun});
+  auto exact_tnt = tnt_fun->getBasisExpansion(tracet_basis, mesh);
 
-  auto tnv_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
-  auto exact_tnv = discretizeFunction(tnv_fun, tracev_basis, mesh)->getTtRepresentation();
+  auto tnv_fun = newFunctionNd<3>({fx_fun, ft_fun, fv_fun});
+  auto exact_tnv = tnv_fun->getBasisExpansion(tracev_basis, mesh);
 
-  auto f_fun = newFunctionNd<3>({newFunction1d(fx_fun), newFunction1d(ft_fun), newFunction1d(fv_fun)});
-  auto exact_f = discretizeFunction(f_fun, field_basis, mesh)->getTtRepresentation();
+  auto f_fun = newFunctionNd<3>({fx_fun, ft_fun, fv_fun});
+  auto exact_f = f_fun->getBasisExpansion(field_basis, mesh);
 
   auto stiffness = construct_vlasov_matrices(test_basis_1d, trace_basis_1d, field_basis_1d,
                                              x_min, x_max, nx,
@@ -144,7 +143,7 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   for (size_t i = 0; i < vlasov_vars::size; ++i) {
     std::cout << "  component_" << i << std::endl 
               << "    sizes = " << exact_residual(i).sizes() << std::endl
-              << "    ranks = " << exact_residual(i).sizes() << std::endl
+              << "    ranks = " << exact_residual(i).ranks_string() << std::endl
               << "    norm  = " << exact_residual(i).norm_frobenius() << std::endl;
   }
   std::cout << std::endl;
