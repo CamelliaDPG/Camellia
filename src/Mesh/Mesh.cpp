@@ -1384,10 +1384,9 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
   if (cellIDsForPRefinements.size() == 0) return;
 
   // refine any registered meshes
-  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
-       meshIt != _registeredObservers.end(); meshIt++)
+  for (auto refObserver : _registeredObservers)
   {
-    (*meshIt)->pRefine(cellIDsForPRefinements, pToAdd, repartitionAndRebuild);
+    refObserver->pRefine(cellIDsForPRefinements, pToAdd, repartitionAndRebuild);
   }
 
   _gda->didPRefine(cellIDsForPRefinements, pToAdd);

@@ -352,18 +352,24 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
     if (parentCellsToUnrefine.size() > 0) Camellia::print("cells for unrefinement", parentCellsToUnrefine);
   }
   
-  refineCells(cellsToRefine);
-  pRefineCells(mesh, cellsToPRefine);
-  unrefineCells(parentCellsToUnrefine);
+  int cellsChanged = 0;
+  cellsChanged += refineCells(cellsToRefine);
+  cellsChanged += pRefineCells(mesh, cellsToPRefine);
+  cellsChanged += unrefineCells(parentCellsToUnrefine);
 
-  bool repartitionAndRebuild = false;
-  if (_enforceOneIrregularity)
+  bool meshChanged = (cellsChanged > 0);
+  
+  if (meshChanged)
   {
-    mesh->enforceOneIrregularity(repartitionAndRebuild);
+    bool repartitionAndRebuild = false;
+    if (_enforceOneIrregularity)
+    {
+      mesh->enforceOneIrregularity(repartitionAndRebuild);
+    }
+    
+    // now, repartition and rebuild:
+    mesh->repartitionAndRebuild();
   }
-
-  // now, repartition and rebuild:
-  mesh->repartitionAndRebuild();
   
   GlobalIndexType activeElementCount = mesh->numActiveElements();
   GlobalIndexType globalDofCount = mesh->numGlobalDofs();
@@ -398,30 +404,33 @@ void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalInde
 
 // defaults to h-refinement
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::refineCells(vector<GlobalIndexType> &cellIDs)
+int TRefinementStrategy<Scalar>::refineCells(vector<GlobalIndexType> &cellIDs)
 {
   MeshPtr mesh = this->mesh();
   hRefineCells(mesh, cellIDs);
+  return static_cast<int>(cellIDs.size());
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs)
+int TRefinementStrategy<Scalar>::pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs)
 {
   bool repartitionAndRebuild = false;
   int pToAdd = 1;
   set<GlobalIndexType> cellIDSet(cellIDs.begin(),cellIDs.end());
   mesh->pRefine(cellIDSet, pToAdd, repartitionAndRebuild);
+  return static_cast<int>(cellIDs.size());
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs)
+int TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs)
 {
   bool repartitionAndRebuild = false;
   mesh->hRefine(cellIDs, repartitionAndRebuild);
+  return static_cast<int>(cellIDs.size());
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::hRefineUniformly()
+int TRefinementStrategy<Scalar>::hRefineUniformly()
 {
   // record results prior to refinement
   _errorIndicator->measureError();
@@ -430,17 +439,18 @@ void TRefinementStrategy<Scalar>::hRefineUniformly()
   MeshPtr mesh = this->mesh();
   RefinementResults results = setResults(mesh->numElements(), mesh->numGlobalDofs(), totalError);
   _results.push_back(results);
-  TRefinementStrategy<Scalar>::hRefineUniformly(mesh);
+  return TRefinementStrategy<Scalar>::hRefineUniformly(mesh);
 }
 
 // ! static method
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::hRefineUniformly(MeshPtr mesh)
+int TRefinementStrategy<Scalar>::hRefineUniformly(MeshPtr mesh)
 {
   set<GlobalIndexType> cellsToRefine = mesh->getActiveCellIDsGlobal();
   vector<GlobalIndexType> cellsToRefineVector(cellsToRefine.begin(),cellsToRefine.end());
   hRefineCells(mesh, cellsToRefineVector);
   mesh->repartitionAndRebuild();
+  return static_cast<int>(cellsToRefineVector.size());
 }
 
 template <typename Scalar>
@@ -562,7 +572,7 @@ GlobalIndexType TRefinementStrategy<Scalar>::getNumDofs(int refinementNumber)
 template <typename Scalar>
 GlobalIndexType TRefinementStrategy<Scalar>::getNumRefinements() const
 {
-  return _results.size();
+  return static_cast<int>(_results.size());
 }
 
 template <typename Scalar>
@@ -645,11 +655,10 @@ int TRefinementStrategy<Scalar>::greedyHUnrefinement(double relativeErrorThresho
     if (printToConsole) Camellia::print("cells for unrefinement", compatibleHUnrefinements);
     
     unrefineCells(compatibleHUnrefinements);
-    mesh->repartitionAndRebuild();
     unrefinementErrorIndicator->measureError(); // now that we have unrefined, measure the error again
   }
   
-  return int(compatibleHUnrefinements.size());
+  return static_cast<int>(compatibleHUnrefinements.size());
 }
 
 template <typename Scalar>
@@ -769,19 +778,22 @@ int TRefinementStrategy<Scalar>::greedyPUnrefinement(double relativeErrorThresho
   if (compatiblePUnrefinements.size() > 0)
   {
     if (printToConsole) Camellia::print("cells for p-unrefinement", compatiblePUnrefinements);
-    bool repartitionAndRebuild = true;
     int pToAdd = -1;
-    mesh->pRefine(compatiblePUnrefinements, pToAdd);
+    bool repartitionAndRebuild = false;
+    mesh->pRefine(compatiblePUnrefinements, pToAdd, repartitionAndRebuild);
+    
+    unrefinementErrorIndicator->measureError(); // now that we have unrefined, measure the error again
   }
   
-  return int(compatiblePUnrefinements.size());
+  return static_cast<int>(compatiblePUnrefinements.size());
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::unrefineCells(const std::set<GlobalIndexType> &cellIDs)
+int TRefinementStrategy<Scalar>::unrefineCells(const std::set<GlobalIndexType> &cellIDs)
 {
   const bool repartitionAndRebuild = false;
   this->mesh()->hUnrefine(cellIDs, repartitionAndRebuild);
+  return static_cast<int>(cellIDs.size());
 }
 
 namespace Camellia

@@ -74,7 +74,7 @@ namespace
                      const bool useSerendipity,
                      FunctionPtr phaseSpaceFxn, FunctionPtr expectedIntegral,
                      const int &iMomentNumber, const int &jMomentNumber, const int &kMomentNumber,
-                     bool refine,
+                     bool refine, bool pCoarsen,
                      const double tol,
                      Teuchos::FancyOStream &out, bool &success)
   {
@@ -93,6 +93,11 @@ namespace
     if (useSerendipity)
     {
       f->setBasisFamily(BasisFamily::serendipityBasisFamily());
+    }
+    else if (pCoarsen)
+    {
+      // variable-p requires hierarchical basis
+      f->setBasisFamily(BasisFamily::hierarchicalBasisFamily());
     }
     
     BFPtr bf = BF::bf(vf);
@@ -182,6 +187,8 @@ namespace
     std::map<int, FunctionPtr> functionMap;
     functionMap[f->ID()] = phaseSpaceFxn;
     
+    mesh->registerSolution(soln);
+    
     soln->projectOntoMesh(functionMap);
     
     const int maxMomentNumber = iMomentNumber + jMomentNumber + kMomentNumber;
@@ -205,6 +212,22 @@ namespace
     
     // because we don't allow pruning, cell 0 is known everywhere.  We use it to determine spatial quadrature points on the reference element.
     BasisCachePtr sampleBasisCache = BasisCache::basisCacheForCell(physicalMesh, 0);
+    solnMoments.update();
+    
+    if (pCoarsen)
+    {
+      // we reduce p in every odd-numbered active cell by 1
+      auto activeCellIDs = mesh->getActiveCellIDsGlobal();
+      std::set<GlobalIndexType> oddCellIDs;
+      for (auto cellID : activeCellIDs)
+      {
+        if ((cellID % 2) == 1)
+        {
+          oddCellIDs.insert(cellID);
+        }
+      }
+      mesh->pRefine(oddCellIDs, -1);
+    }
     solnMoments.update();
     
     FunctionPtr errorFxn = expectedIntegral - solnMomentFunction;
@@ -294,6 +317,26 @@ namespace
                      const int fxnPolyOrder,
                      const bool useSerendipity,
                      FunctionPtr phaseSpaceFxn, FunctionPtr expectedIntegral,
+                     const int &iMomentNumber, const int &jMomentNumber, const int &kMomentNumber,
+                     bool refine,
+                     const double tol,
+                     Teuchos::FancyOStream &out, bool &success)
+  {
+    bool pCoarsen = false;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, useSpaceTime,
+                  survivingExtrusionDim,
+                  fxnPolyOrder, useSerendipity,
+                  phaseSpaceFxn, expectedIntegral,
+                  iMomentNumber, jMomentNumber, kMomentNumber,
+                  refine, pCoarsen, tol, out, success);
+  }
+
+  void testIntegrate(const int numPhysicalDims, const int numExtrusionDims, const bool useSpaceTime,
+                     int survivingExtrusionDim, // use -1 for no surviving dims
+                     const int fxnPolyOrder,
+                     const bool useSerendipity,
+                     FunctionPtr phaseSpaceFxn, FunctionPtr expectedIntegral,
                      bool refine,
                      const double tol,
                      Teuchos::FancyOStream &out, bool &success)
@@ -305,6 +348,24 @@ namespace
                   0,0,0,
                   refine, tol, out, success);
   }
+
+void testIntegrate(const int numPhysicalDims, const int numExtrusionDims, const bool useSpaceTime,
+                   int survivingExtrusionDim, // use -1 for no surviving dims
+                   const int fxnPolyOrder,
+                   const bool useSerendipity,
+                   FunctionPtr phaseSpaceFxn, FunctionPtr expectedIntegral,
+                   bool refine, bool pCoarsen,
+                   const double tol,
+                   Teuchos::FancyOStream &out, bool &success)
+{
+  testIntegrate(numPhysicalDims, numExtrusionDims, useSpaceTime,
+                survivingExtrusionDim,
+                fxnPolyOrder, useSerendipity,
+                phaseSpaceFxn, expectedIntegral,
+                0,0,0,
+                refine, pCoarsen, tol, out, success);
+}
+
 
 //! expectedMoments: has momentNumber+1 entries in each of the three dimensions.  When i + j + k > momentNumber, entries ignored (may be null)
 void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bool useSpaceTime,
@@ -1309,6 +1370,25 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1V_pCoarsen )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const bool useSerendipity  = false;
+    const bool pCoarsen        = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::xn(1);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, pCoarsen, tol, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1V_Refine )
   {
     const int numPhysicalDims  = 1;
@@ -1325,6 +1405,25 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
     
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1V_Refine_pCoarsen )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = true;
+    const bool useSerendipity  = false;
+    const bool pCoarsen        = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::xn(1);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, pCoarsen, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V )
@@ -1404,6 +1503,30 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D1V_pCoarsen )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = false;
+    const bool useSerendipity  = false;
+    const bool pCoarsen        = true;
+    const int polyOrder = 3; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = x * y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    FunctionPtr f_integral = y_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, pCoarsen, tol, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D1V_Refine )
   {
     const int numPhysicalDims  = 1;
@@ -1425,6 +1548,30 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     FunctionPtr f_integral = y_integral * x;
     
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xy2_1D1V_Refine_pCoarsen )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 1;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = false;
+    const bool refine          = true;
+    const bool useSerendipity  = false;
+    const bool pCoarsen        = true;
+    const int polyOrder = 3; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr f = x * y2;
+    // integral in y is y^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double y_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double y_min = EXTRUSION_ORIGIN;
+    const double y_integral = (pow(y_max, 3) - pow(y_min, 3)) / 3.0;
+    FunctionPtr f_integral = y_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, pCoarsen, tol, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xz2_1D1T1V )

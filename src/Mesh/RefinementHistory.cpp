@@ -38,6 +38,14 @@ RefinementType refinementTypeForString(string refTypeStr)
   {
     return P_REFINEMENT;
   }
+  else if (refTypeStr == "pu")
+  {
+    return P_UNREFINEMENT;
+  }
+  else if (refTypeStr == "re")
+  {
+    return REPARTITION_AND_REBUILD;
+  }
   else
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unknown refinement type string.");
@@ -59,8 +67,12 @@ string stringForRefinementType(RefinementType refType)
     return "p";
   case H_UNREFINEMENT:
     return "hu";
+  case P_UNREFINEMENT:
+    return "pu";
   case NULL_REFINEMENT:
     return "hn";
+  case REPARTITION_AND_REBUILD:
+    return "re";
   case UNKNOWN_REFINEMENT:
   default:
     return "UNKNOWN";
@@ -83,6 +95,12 @@ RefinementPatternPtr refPatternForRefTypeLegacy(RefinementType refType, CellTopo
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
   }
+}
+
+void RefinementHistory::didRepartition(MeshTopologyPtr meshTopo)
+{
+  _refinements.push_back(make_pair(REPARTITION_AND_REBUILD, std::set<GlobalIndexType>()));
+  saveToFile(_saveFile);
 }
 
 RefinementPatternPtr RefinementHistory::refPatternForRefType(RefinementType refType, CellTopoPtr cellTopo)
@@ -231,18 +249,20 @@ void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RC
   }
   Refinement ref = make_pair(refType, cellIDs);
   _refinements.push_back(ref);
+  saveToFile(_saveFile);
 }
 
 void RefinementHistory::pRefine(const set<GlobalIndexType> &cellIDs, int pToAdd, bool repartitionAndRebuild)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(pToAdd < 0, std::invalid_argument, "RefinementHistory::pRefine does not (yet) support negative pToAdd");
   if (cellIDs.size() == 0) return;
   // right now, Refinement structure does not have support for different pToAdd values; we just do multiple p-refinements with pToAdd = 1.
-  Refinement ref = make_pair(P_REFINEMENT, cellIDs);
-  for (int i=0; i<pToAdd; i++)
+  Refinement ref = (pToAdd >= 1) ? make_pair(P_REFINEMENT, cellIDs) : make_pair(P_UNREFINEMENT, cellIDs);
+  const int numRefs = std::abs(pToAdd);
+  for (int i=0; i<numRefs; i++)
   {
     _refinements.push_back(ref);
   }
+  saveToFile(_saveFile);
 }
 
 void RefinementHistory::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
@@ -250,6 +270,7 @@ void RefinementHistory::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repa
   if (cellIDs.size() == 0) return;
   Refinement ref = make_pair(H_UNREFINEMENT, cellIDs);
   _refinements.push_back(ref);
+  saveToFile(_saveFile);
 }
 
 void RefinementHistory::playback(MeshPtr mesh)
@@ -275,38 +296,49 @@ void RefinementHistory::playback(MeshPtr mesh)
         }
       }
     }
-    GlobalIndexType sampleCellID = *(cellIDs.begin());
-    CellTopoPtr cellTopo = mesh->getElementType(sampleCellID)->cellTopoPtr;
 
     switch (refType)
     {
     case P_REFINEMENT:
-      mesh->pRefine(cellIDs);
+      mesh->pRefine(cellIDs,1,false);
+      break;
+    case P_UNREFINEMENT:
+      mesh->pRefine(cellIDs,-1,false);
       break;
     case H_UNREFINEMENT:
-      mesh->hUnrefine(cellIDs);
+      mesh->hUnrefine(cellIDs,false);
+      break;
+    case REPARTITION_AND_REBUILD:
+      mesh->repartitionAndRebuild();
       break;
     default: // if we get here, it should be an h-refinement with a ref pattern
-      mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo));
+      {
+        GlobalIndexType sampleCellID = *(cellIDs.begin());
+        CellTopoPtr cellTopo = mesh->getElementType(sampleCellID)->cellTopoPtr;
+        mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo), false);
+      }
     }
   }
 }
 
 void RefinementHistory::saveToFile(string fileName)
 {
-  ofstream fout(fileName.c_str());
-  for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++)
+  if (fileName != "")
   {
-    Refinement ref = *refIt;
-    RefinementType refType = ref.first;
-    set<GlobalIndexType> cellIDs = ref.second;
-    fout << stringForRefinementType(refType) << " ";
-    for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++)
+    ofstream fout(fileName.c_str());
+    for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++)
     {
-      GlobalIndexType cellID = *cellIt;
-      fout << cellID << " ";
+      Refinement ref = *refIt;
+      RefinementType refType = ref.first;
+      set<GlobalIndexType> cellIDs = ref.second;
+      fout << stringForRefinementType(refType) << " ";
+      for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++)
+      {
+        GlobalIndexType cellID = *cellIt;
+        fout << cellID << " ";
+      }
+      fout << endl;
     }
-    fout << endl;
   }
 }
 
@@ -326,8 +358,12 @@ void RefinementHistory::loadFromFile(string fileName)
     set<GlobalIndexType> cellIDs;
     while (linestream.good())
     {
+      cellID = -1;
       linestream >> cellID;
-      cellIDs.insert(cellID);
+      if (cellID != -1)
+      {
+        cellIDs.insert(cellID);
+      }
     }
     if (refTypeStr.length() > 0)
     {
@@ -366,3 +402,8 @@ void RefinementHistory::saveToHDF5(EpetraExt::HDF5 &hdf5)
   }
 }
 #endif
+
+void RefinementHistory::setSaveFile(std::string &saveFile)
+{
+  _saveFile = saveFile;
+}
