@@ -135,6 +135,122 @@ public:
   }
 };
 
+class ErrorIndicatorFunction : public Function
+{
+  ErrorIndicatorPtr _errorIndicator;
+public:
+  ErrorIndicatorFunction(ErrorIndicatorPtr errorIndicator)
+  :
+  Function("ErrorIndicatorFunction", 0, Function::VARIES_IN_NO_DIMENSION), // constant on each cell
+  _errorIndicator(errorIndicator)
+  {}
+
+  using Function::values;
+  
+  virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    // we assume that measureError() has been called before values() is called
+    // we also assume that values() will only be called for MPI-local cells
+    
+    const auto & errorMeasures = _errorIndicator->localErrorMeasures();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+
+    int numCells = cellIDs.size();
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      const auto &cellID = cellIDs[cellOrdinal];
+      auto entry = errorMeasures.find(cellID);
+      if (entry == errorMeasures.end())
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID not found in local errorMeasures");
+      }
+      const double error = entry->second;
+      
+      for (int pointOrdinal=0; pointOrdinal<values.dimension(1); pointOrdinal++)
+      {
+        values(cellOrdinal,pointOrdinal) = error;
+      }
+    }
+  }
+  
+  void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+  {
+    auto underlyingView1 = values.template getUnderlyingView<1>();
+    
+    const int numCells = underlyingView1.extent_int(0);
+    
+    const auto & errorMeasures = _errorIndicator->localErrorMeasures();
+    
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() != numCells, std::invalid_argument, "underlying view doesn't have the expected length");
+    
+    auto underlyingViewHost = Kokkos::create_mirror_view(underlyingView1);
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      const auto &cellID = cellIDs[cellOrdinal];
+      auto entry = errorMeasures.find(cellID);
+      if (entry == errorMeasures.end())
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID not found in local errorMeasures");
+      }
+      const double error = entry->second;
+      
+      underlyingViewHost(cellOrdinal) = error;
+    }
+    
+    Kokkos::deep_copy(underlyingView1, underlyingViewHost);
+  }
+};
+
+class FluxLimitingThetaFunction : public Function
+{
+  VlasovBackwardEulerFormulation & _form;
+public:
+  FluxLimitingThetaFunction(VlasovBackwardEulerFormulation &form) 
+  :
+  Function("FluxLimitingThetaFunction", 0, Function::VARIES_IN_NO_DIMENSION), // constant on each cell
+  _form(form)
+  {}
+
+  using Function::values;
+  
+  virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+
+    int numCells = cellIDs.size();
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      const double theta = _form.fluxLimitingWeightForCell(cellIDs[cellOrdinal]);
+      
+      for (int pointOrdinal=0; pointOrdinal<values.dimension(1); pointOrdinal++)
+      {
+        values(cellOrdinal,pointOrdinal) = theta;
+      }
+    }
+  }
+  
+  void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+  {
+    auto underlyingView1 = values.template getUnderlyingView<1>();
+    
+    const int numCells = underlyingView1.extent_int(0);
+    
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() != numCells, std::invalid_argument, "underlying view doesn't have the expected length");
+    
+    auto underlyingViewHost = Kokkos::create_mirror_view(underlyingView1);
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      underlyingViewHost(cellOrdinal) = _form.fluxLimitingWeightForCell(cellIDs[cellOrdinal]);
+    }
+    
+    Kokkos::deep_copy(underlyingView1, underlyingViewHost);
+  }
+};
+
 // this communication strategy is wasteful, but we don't expect this to be a major bottleneck…
 double getMaxMagnitudeOnCell(FunctionPtr fxn, MeshPtr mesh, GlobalIndexType &cellID)
 {
@@ -1835,6 +1951,19 @@ int main(int argc, char *argv[])
       vlasovFunctionsToExport.push_back(energyErrorFunction);
       vlasovFunctionsToExportNames.push_back("Vlasov energy error");
       
+      if (enforcePositivity)
+      {
+        FunctionPtr thetaFluxLimitingFunction = Teuchos::rcp(new FluxLimitingThetaFunction(form));
+        vlasovFunctionsToExport.push_back(thetaFluxLimitingFunction);
+        vlasovFunctionsToExportNames.push_back("Vlasov flux-limiting theta");
+        
+        auto thetaErrorIndicator = fluxLimitingRefStrategy->errorIndicator();
+        thetaErrorIndicator->measureError();
+        FunctionPtr fluxLimitingErrorIndicator = Teuchos::rcp(new ErrorIndicatorFunction(thetaErrorIndicator));
+        vlasovFunctionsToExport.push_back(fluxLimitingErrorIndicator);
+        vlasovFunctionsToExportNames.push_back("Vlasov flux-limiting error");
+      }
+      
       FunctionPtr cellIDFunction = Teuchos::rcp(new CellIDFunction);
       vlasovFunctionsToExport.push_back(cellIDFunction);
       vlasovFunctionsToExportNames.push_back("Vlasov cell ID");
@@ -2106,6 +2235,11 @@ int main(int argc, char *argv[])
       {
         if (saveViz)
         {
+          if (enforcePositivity)
+          {
+            fluxLimitingRefStrategy->errorIndicator()->measureError(); // update to ensure that we have local values for visualization
+          }
+          
           solutionMoments->update(); // update to get latest density, velocity
           vlasovViz->exportSolution(form.vlasovSolution(),vlasovFunctionsToExport,vlasovFunctionsToExportNames,t,num1DPointsVlasov);
           poissonViz->exportSolution(form.configurationSpaceSolution(),poissonFunctionsToExport,poissonFunctionsToExportNames,t,num1DPointsPoisson);
