@@ -79,7 +79,7 @@ BasisEvaluation::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrep
     }
     if (tensorBasis != NULL)
     {
-      const int numBasisComponents = tensorBasis->getTensorBasisComponents().size();
+      const int numBasisComponents = static_cast<int>(tensorBasis->getTensorBasisComponents().size());
       if (numBasisComponents > inputPoints.numTensorComponents() && (inputPoints.numTensorComponents() != 1))
       {
         supportedTensorPoints = false;

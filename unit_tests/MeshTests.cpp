@@ -186,7 +186,7 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
       DofOrderingPtr trialOrdering = originalMesh->getElementType(coarseCellID)->trialOrderPtr;
       int localDofs = trialOrdering->totalDofs();
       
-      MeshPtr singleCellMesh = Teuchos::rcp( new Mesh(originalMesh, coarseCellID, MPIWrapper::CommSerial()) );
+      MeshPtr singleCellMesh = Teuchos::rcp( new Mesh(originalMesh, coarseCellID, MPIWrapper::TeuchosCommSerial()) );
       
       int globalDofs = singleCellMesh->numGlobalDofs();
       
@@ -406,7 +406,7 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
     
     PoissonFormulation form(spaceDim,conformingTraces);
     MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order, 0, vector<double>(), map<int,int>(),
-                                                map<int,int>(), MPIWrapper::CommSerial());
+                                                map<int,int>(), MPIWrapper::TeuchosCommSerial());
     MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
     
     int numActiveElementsExpected = elemCounts[0] * elemCounts[1] * elemCounts[2];
@@ -474,7 +474,7 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
     
     // now, repeat all the above, skipping the cell ID determinations
     mesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order, 0, vector<double>(), map<int,int>(),
-                                                map<int,int>(), MPIWrapper::CommWorld());
+                                                map<int,int>(), MPIWrapper::TeuchosCommWorld());
     meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
     
     numActiveElementsExpected = elemCounts[0] * elemCounts[1] * elemCounts[2];

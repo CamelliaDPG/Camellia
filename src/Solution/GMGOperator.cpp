@@ -860,7 +860,7 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseC
     
     vector<int> fluxIndices = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
     
-    Epetra_CommPtr SerialComm = MPIWrapper::CommSerial();
+    Teuchos_CommPtr SerialComm = MPIWrapper::TeuchosCommSerial();
     MeshPtr coarseSingleCellMesh = Teuchos::rcp( new Mesh(_coarseMesh, coarseCellID, SerialComm) );
     
     // the fact that the local view does not enforce conformity means that for conforming traces
@@ -877,7 +877,8 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseC
     GlobalIndexType zeroCellID = 0;
     int indexBase = 0;
     int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
-    Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*SerialComm);
+    auto epetraSerialComm = MPIWrapper::EpetraComm(SerialComm);
+    Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*epetraSerialComm);
     Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
     
     Teuchos::RCP<Epetra_SerialDenseMatrix> fluxMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fluxIndices.size(),fluxIndices.size()) );

@@ -177,7 +177,7 @@ void ConfigurationSpaceFormulationMaxwell::initializeMesh(MeshTopologyPtr meshTo
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim > 1 cases not yet implemented");
   }
   
-  Epetra_CommPtr comm = Teuchos::null;
+  Teuchos_CommPtr comm = Teuchos::null;
   const bool allowPruning = false;
   map<int,int> trialOrderEnhancements;
   map<int,int> testOrderEnhancements;

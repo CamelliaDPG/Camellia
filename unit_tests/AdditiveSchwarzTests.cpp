@@ -31,7 +31,7 @@ namespace
     int spaceDim = meshTopo->getDimension();
     PoissonFormulation form(spaceDim, conformingTraces);
     int delta_k = 1; // we don't care how well we do in the Gram inversion..
-    Epetra_CommPtr Comm = MPIWrapper::CommWorld();
+    Teuchos_CommPtr Comm = MPIWrapper::TeuchosCommWorld();
     int H1Order = 1;
     MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, form.bf(), H1Order, delta_k, Comm);
     
@@ -79,7 +79,7 @@ namespace
     
     PoissonFormulation form(spaceDim, conformingTraces);
     int delta_k = 1; // we don't care how well we do in the Gram inversion..
-    Epetra_CommPtr Comm = MPIWrapper::CommWorld();
+    Teuchos_CommPtr Comm = MPIWrapper::TeuchosCommWorld();
     int H1Order = 1;
     MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, form.bf(), H1Order, delta_k, Comm);
     bool useHierarchicalNeighbors = false;

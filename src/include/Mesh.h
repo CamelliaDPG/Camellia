@@ -70,7 +70,7 @@ class Mesh : public RefinementObserver, public DofInterpreter
   Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
        int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
-  void initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Epetra_CommPtr Comm);
+  void initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Teuchos_CommPtr Comm);
 
   vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
 
@@ -93,36 +93,36 @@ public:
   // Preferred Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
 
   // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
 
   // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
        TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >(), Epetra_CommPtr Comm = Teuchos::null);
+       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >(), Teuchos_CommPtr Comm = Teuchos::null);
 
   // Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null);
   
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-       MeshPartitionPolicyPtr meshPartitionPolicy, Epetra_CommPtr Comm,
+       MeshPartitionPolicyPtr meshPartitionPolicy, Teuchos_CommPtr Comm,
        bool allowMeshTopologyPruning);
 
   // Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
 
   // ! Constructor for a single-element mesh extracted from an existing mesh
-  Mesh(MeshPtr mesh, GlobalIndexType cellID, Epetra_CommPtr Comm);
+  Mesh(MeshPtr mesh, GlobalIndexType cellID, Teuchos_CommPtr Comm);
   
   ~Mesh();
   

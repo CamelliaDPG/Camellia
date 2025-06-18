@@ -629,6 +629,8 @@ void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int de
     int cell_H1 = _initialH1OrderTrial[0] + _cellPRefinements[cellID];
     if      (cell_H1 < _minH1Order) _minH1Order = cell_H1;
     else if (cell_H1 > _maxH1Order) _maxH1Order = cell_H1;
+
+    TEUCHOS_TEST_FOR_EXCEPTION(cell_H1 < 1, std::invalid_argument, "H^1 order must be at least 1");
     
     maxH1AmongRefinedCells = std::max(cell_H1, maxH1AmongRefinedCells);
     minH1AmongRefinedCells = std::min(cell_H1, minH1AmongRefinedCells);
@@ -902,6 +904,7 @@ vector<int> GlobalDofAssignment::getH1OrderForPRefinement(int deltaP)
   for (int d=0; d<H1Order.size(); d++)
   {
     H1Order[d] += deltaP;
+    TEUCHOS_TEST_FOR_EXCEPTION(H1Order[d] < 1, std::invalid_argument, "H^1 order must be >= 1 in each component");
   }
   
   return H1Order;
@@ -1049,17 +1052,17 @@ void GlobalDofAssignment::projectChildCoefficientsOntoParents(const std::set<Glo
     {
       auto parentCell = _meshTopology->getCell(parentCellID);
       auto childIndices = parentCell->getChildIndices(_meshTopology);
-      int parentDeltaP = getPRefinementDegree(parentCellID);
-      bool parentNeedsUpdatedP = false;
+      int parentOldDeltaP = getPRefinementDegree(parentCellID);
+      
+      const int min_dp = this->getMinH1Order() - this->getInitialH1Order()[0]; // minimum dp across whole mesh;
+      int maxChild_dp = min_dp;
       for (const auto & childID : childIndices)
       {
         int childDeltaP = getPRefinementDegree(childID);
-        if (childDeltaP > parentDeltaP)
-        {
-          parentDeltaP = childDeltaP;
-          parentNeedsUpdatedP = true;
-        }
+        maxChild_dp = std::max(maxChild_dp, childDeltaP);
       }
+      const int parentDeltaP = maxChild_dp;
+      const bool parentNeedsUpdatedP = (parentDeltaP != parentOldDeltaP);
       if (parentNeedsUpdatedP)
       {
         this->setPRefinementDegree(parentCellID, parentDeltaP);
@@ -1330,6 +1333,10 @@ void GlobalDofAssignment::setPRefinementDegree(GlobalIndexType cellID, int delta
   }
   else
   {
+    for (auto p_initial_comp : _initialH1OrderTrial)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(p_initial_comp + deltaP < 1, std::invalid_argument, "H^1 order must be at least 1 in each component");
+    }
     _cellPRefinements[cellID] = deltaP;
   }
 }

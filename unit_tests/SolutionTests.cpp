@@ -17,6 +17,7 @@
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
 #include "CamelliaTestingHelpers.h"
+#include "ConvectionFormulation.h"
 #include "Cell.h"
 #include "ERKTableau.h"
 #include "GlobalDofAssignment.h"
@@ -2704,5 +2705,191 @@ namespace
   {
     int spaceDim = 3;
     testUnrefine(spaceDim, out, success);
+  }
+
+  void testUnrefineAnisotropicExtrudedVariableP(Teuchos::FancyOStream &out, bool &success)
+  {
+    const int spaceDim = 2;
+    int H1Order = 4; // high enough order that we can coarsen twice and still represent u = x exactly.
+    bool conformingTraces = true;
+    FunctionPtr convectionField = Function::vectorize(Function::constant(1.), Function::constant(1.));
+    ConvectionFormulation form(spaceDim, convectionField);
+    
+    int meshWidth = 1;
+    vector<double> domainDim(spaceDim, 1.0);
+    vector<int> meshDim(spaceDim, meshWidth);
+    auto meshTopo_1D = MeshFactory::intervalMeshTopology(0, 1, meshWidth);
+    auto extrudedMeshTopo = MeshFactory::extrudedMeshTopology(meshTopo_1D, {{0.,1.}});
+    Teuchos_CommPtr Comm = MPIWrapper::TeuchosCommWorld();
+    const bool allowPruning = false;
+    MeshPtr mesh = MeshFactory::minRuleMesh(extrudedMeshTopo, form.bf(), H1Order, 0, Comm, allowPruning);
+    
+    GlobalIndexType parentCellID = 0;
+    
+    SolutionPtr soln = Solution::solution(mesh);
+    mesh->registerSolution(soln);
+    
+    // add a concrete solution, so we can check that projections are done appropriately
+    // we will just use one that can be exactly represented (a patch test)
+    
+    FunctionPtr u_exact = Function::xn(1);
+    std::map<int, FunctionPtr> solnMap;
+    solnMap[form.u()->ID()] = u_exact;
+    
+    soln->projectOntoMesh(solnMap);
+    
+    if (mesh->myCellsInclude(parentCellID))
+    {
+      auto elemType = mesh->getElementType(parentCellID);
+      auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
+      
+      Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
+      soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
+      
+      out << "parentCoefficients before refinement:\n" << basisCoeffs;
+    }
+    
+    FunctionPtr u_soln = Function::solution(form.u(), soln);
+    
+    // sanity check: verify that u_soln and u_exact match in the original mesh
+    double tol = 1e-14;
+    double err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    vector<GlobalIndexType> cellsToRefine = {parentCellID};
+    auto ref_x = RefinementPattern::xAnisotropicRefinementPatternExtrudedLine();
+    mesh->hRefine(cellsToRefine,ref_x);
+    
+    auto meshTopo = mesh->getTopology();
+    auto childCells = meshTopo->getCell(parentCellID)->getChildIndices(meshTopo);
+    mesh->pRefine(childCells,-1);
+    childCells.pop_back(); // delete right cell from child list
+    mesh->pRefine(childCells,-1); // coarsen left cell one more time
+    
+    // check that after the refinements, u_soln still matches u_exact
+    err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    // for this to be an effective test, we discard parent cell's old coefficients -- these should be recomputed during hUnrefine()
+    soln->discardInactiveCellCoefficients();
+    
+    bool parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
+    TEST_ASSERT(!parentHasCoefficients);
+    
+    mesh->hUnrefine({parentCellID});
+    
+    if (mesh->myCellsInclude(parentCellID))
+    {
+      parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
+      TEST_ASSERT(parentHasCoefficients);
+      
+      auto elemType = mesh->getElementType(parentCellID);
+      auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
+      
+      Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
+
+      soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
+    
+      out << "parentCoefficients after unrefinement:\n" << basisCoeffs;
+    }
+    
+    // check that after the unrefinement, u_soln still matches u_exact
+    err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, UnrefineVariableP_2D )
+  {
+    testUnrefineAnisotropicExtrudedVariableP(out, success);
+  }
+
+  void testUnrefineAnisotropicExtruded(Teuchos::FancyOStream &out, bool &success)
+  {
+    const int spaceDim = 2;
+    int H1Order = 3;
+    bool conformingTraces = true;
+    FunctionPtr convectionField = Function::vectorize(Function::constant(1.), Function::constant(1.));
+    ConvectionFormulation form(spaceDim, convectionField);
+    
+    int meshWidth = 1;
+    vector<double> domainDim(spaceDim, 1.0);
+    vector<int> meshDim(spaceDim, meshWidth);
+    auto meshTopo_1D = MeshFactory::intervalMeshTopology(0, 1, meshWidth);
+    auto extrudedMeshTopo = MeshFactory::extrudedMeshTopology(meshTopo_1D, {{0.,1.}});
+    Teuchos_CommPtr Comm = MPIWrapper::TeuchosCommWorld();
+    const bool allowPruning = false;
+    MeshPtr mesh = MeshFactory::minRuleMesh(extrudedMeshTopo, form.bf(), H1Order, 0, Comm, allowPruning);
+    
+    GlobalIndexType parentCellID = 0;
+    
+    SolutionPtr soln = Solution::solution(mesh);
+    mesh->registerSolution(soln);
+    
+    // add a concrete solution, so we can check that projections are done appropriately
+    // we will just use one that can be exactly represented (a patch test)
+    
+    FunctionPtr u_exact = Function::xn(1);
+    std::map<int, FunctionPtr> solnMap;
+    solnMap[form.u()->ID()] = u_exact;
+    
+    soln->projectOntoMesh(solnMap);
+    
+    if (mesh->myCellsInclude(parentCellID))
+    {
+      auto elemType = mesh->getElementType(parentCellID);
+      auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
+      
+      Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
+      soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
+      
+      out << "parentCoefficients before refinement:\n" << basisCoeffs;
+    }
+    
+    FunctionPtr u_soln = Function::solution(form.u(), soln);
+    
+    // sanity check: verify that u_soln and u_exact match in the original mesh
+    double tol = 1e-14;
+    double err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    vector<GlobalIndexType> cellsToRefine = {parentCellID};
+    auto ref_x = RefinementPattern::xAnisotropicRefinementPatternExtrudedLine();
+    mesh->hRefine(cellsToRefine,ref_x);
+    
+    // check that after the refinements, u_soln still matches u_exact
+    err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    // for this to be an effective test, we discard parent cell's old coefficients -- these should be recomputed during hUnrefine()
+    soln->discardInactiveCellCoefficients();
+    
+    bool parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
+    TEST_ASSERT(!parentHasCoefficients);
+    
+    mesh->hUnrefine({parentCellID});
+    
+    if (mesh->myCellsInclude(parentCellID))
+    {
+      parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
+      TEST_ASSERT(parentHasCoefficients);
+      
+      auto elemType = mesh->getElementType(parentCellID);
+      auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
+      
+      Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
+
+      soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
+    
+      out << "parentCoefficients after unrefinement:\n" << basisCoeffs;
+    }
+    
+    // check that after the unrefinement, u_soln still matches u_exact
+    err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, UnrefineAnisotropicExtruded_2D )
+  {
+    testUnrefineAnisotropicExtruded(out, success);
   }
 } // namespace

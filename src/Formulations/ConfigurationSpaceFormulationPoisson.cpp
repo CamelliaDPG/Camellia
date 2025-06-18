@@ -176,7 +176,7 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
     _poissonBF->addTerm(E_hat, v_Poisson);
   }
   
-  Epetra_CommPtr comm = Teuchos::null;
+  Teuchos_CommPtr comm = Teuchos::null;
   const bool allowPruning = false;
   map<int,int> trialOrderEnhancements;
   map<int,int> testOrderEnhancements;

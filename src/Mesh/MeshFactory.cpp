@@ -174,8 +174,9 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_Com
 
   // for now, we actually neglect the "myCells" container, and let that information come through the MeshTopology, if it is
   // distributed, or else through the usual default assignment from GlobalDofAssignment and the (default) partition policy.
+  auto teuchosComm = MPIWrapper::TeuchosComm(Comm);
   MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopoView, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements,
-                                         Teuchos::null, Comm) );
+                                         Teuchos::null, teuchosComm) );
   mesh->globalDofAssignment()->setCellPRefinements(pRefinements);
   return mesh;
 }
@@ -183,14 +184,14 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_Com
 #endif
 
 MeshPtr MeshFactory::minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k,
-                                 Epetra_CommPtr Comm, bool allowPruning)
+                                 Teuchos_CommPtr Comm, bool allowPruning)
 {
   std::vector<int> H1OrderVector {H1Order};
   return minRuleMesh(meshTopo,bf,H1OrderVector,delta_k,Comm,allowPruning);
 }
 
 MeshPtr MeshFactory::minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, vector<int> H1Order, int delta_k,
-                                 Epetra_CommPtr Comm, bool allowPruning)
+                                 Teuchos_CommPtr Comm, bool allowPruning)
 {
   std::map<int,int> emptyMap;
   MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
@@ -198,7 +199,7 @@ MeshPtr MeshFactory::minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf
   return mesh;
 }
 
-MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters, Epetra_CommPtr Comm)
+MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters, Teuchos_CommPtr Comm)
 {
   bool useMinRule = parameters.get<bool>("useMinRule",true);
   TBFPtr<double> bf = parameters.get< TBFPtr<double> >("bf");
@@ -344,7 +345,7 @@ public:
 };*/
 
 MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, Camellia::FieldContainer<double> &quadNodes, int pToAddTest,
-                              Epetra_CommPtr Comm)
+                              Teuchos_CommPtr Comm)
 {
   if (quadNodes.size() != 8)
   {
@@ -377,7 +378,7 @@ MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, Camellia::FieldCon
 MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, int pToAddTest,
                               double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
                               double x0, double y0, vector<PeriodicBCPtr> periodicBCs,
-                              Epetra_CommPtr Comm)
+                              Teuchos_CommPtr Comm)
 {
 
   Teuchos::ParameterList pl;
@@ -401,7 +402,7 @@ MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, int pToAddTest,
 MeshPtr MeshFactory::quadMeshMinRule(TBFPtr<double> bf, int H1Order, int pToAddTest,
                                      double width, double height, int horizontalElements, int verticalElements,
                                      bool divideIntoTriangles, double x0, double y0, vector<PeriodicBCPtr> periodicBCs,
-                                     Epetra_CommPtr Comm)
+                                     Teuchos_CommPtr Comm)
 {
   Teuchos::ParameterList pl;
 
@@ -634,14 +635,14 @@ MeshTopologyPtr MeshFactory::intervalMeshTopology(std::vector<double> vertices_1
 
 MeshPtr MeshFactory::rectilinearMeshNoPruning(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order,
                                               int pToAddTest, vector<double> x0, map<int,int> trialOrderEnhancements,
-                                              map<int,int> testOrderEnhancements, Epetra_CommPtr Comm)
+                                              map<int,int> testOrderEnhancements, Teuchos_CommPtr Comm)
 {
   return rectilinearMesh(bf, dimensions, elementCounts, H1Order, pToAddTest, x0, trialOrderEnhancements, testOrderEnhancements, Comm, false);
 }
 
 MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order,
                                      int pToAddTest, vector<double> x0, map<int,int> trialOrderEnhancements,
-                                     map<int,int> testOrderEnhancements, Epetra_CommPtr Comm, bool allowMeshTopologyPruning)
+                                     map<int,int> testOrderEnhancements, Teuchos_CommPtr Comm, bool allowMeshTopologyPruning)
 {
   int spaceDim = dimensions.size();
   if (pToAddTest==-1)
@@ -1355,7 +1356,7 @@ MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshH
 
 MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
                                    TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd,
-                                   Epetra_CommPtr Comm)
+                                   Teuchos_CommPtr Comm)
 {
   MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1); // for refined spatial topologies, this can be more than 1-irregular--we enforce 1-irregularity below.
 
