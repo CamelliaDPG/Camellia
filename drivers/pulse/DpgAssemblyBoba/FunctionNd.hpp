@@ -5,32 +5,28 @@
 
 #include <Teuchos_RCP.hpp>
 
-#include "CubatureFactory.h"
 #include "BOBA/boba.hpp"
+#include "CubatureFactory.h"
 
 #include "BasisNd.hpp"
 #include "Function1d.hpp"
 #include "MeshNd.hpp"
 
+template <std::size_t numDim>
+class FunctionNd;
+
+template <std::size_t N>
+using FunctionNdPtr = Teuchos::RCP<FunctionNd<N>>;
+
 // multivariate function as sum of tensor products of univariate functions
 template <std::size_t numDim>
 class FunctionNd {
 public:
-  FunctionNd() : coeffs_(), terms_() {}
+  FunctionNd() : numTerm_(0), coeffs_(), terms_() {}
 
-  FunctionNd(const boba::Array<Function1dPtr, numDim> &term) : coeffs_(1), terms_(1) {
+  FunctionNd(const boba::Array<Function1dPtr, numDim> &term) : numTerm_(1), coeffs_(1), terms_(1) {
     coeffs_[0] = 1.0;
     terms_[0] = term;
-  }
-
-  void
-  addTerm(const boba::Array<Function1dPtr, numDim> &newTerm) {
-    for (std::size_t n = 0; n < numDim; ++n) {
-      boba_assert(newTerm[n] != Teuchos::null, "term component is null");
-
-      coeffs_.push_back(1.0);
-      terms_.push_back(newTerm);
-    }
   }
 
   void
@@ -38,8 +34,56 @@ public:
     for (std::size_t n = 0; n < numDim; ++n) {
       boba_assert(newTerm[n] != Teuchos::null, "term component is null");
     }
+
+    numTerm_ += 1;
     coeffs_.push_back(newCoeff);
     terms_.push_back(newTerm);
+  }
+
+  void
+  addTerm(const boba::Array<Function1dPtr, numDim> &newTerm) {
+    addTerm(1.0, newTerm);
+  }
+
+  friend FunctionNdPtr<numDim>
+  operator+(FunctionNdPtr<numDim> f, FunctionNdPtr<numDim> g) {
+    auto h = Teuchos::rcp(new FunctionNd<numDim>());
+    for (std::size_t i = 0; i < f->numTerm_; ++i) {
+      h->addTerm(f->coeffs_[i], f->terms_[i]);
+    }
+    for (std::size_t j = 0; j < g->numTerm_; ++j) {
+      h->addTerm(g->coeffs_[j], g->terms_[j]);
+    }
+    return h;
+  }
+
+  friend FunctionNdPtr<numDim>
+  operator-(FunctionNdPtr<numDim> f, FunctionNdPtr<numDim> g) {
+    auto h = Teuchos::rcp(new FunctionNd<numDim>());
+    for (std::size_t i = 0; i < f->numTerm_; ++i) {
+      h->addTerm(f->coeffs_[i], f->terms_[i]);
+    }
+    for (std::size_t j = 0; j < g->numTerm_; ++j) {
+      h->addTerm(-g->coeffs_[j], g->terms_[j]);
+    }
+    return h;
+  }
+
+  friend FunctionNdPtr<numDim>
+  operator*(FunctionNdPtr<numDim> f, FunctionNdPtr<numDim> g) {
+    auto h = Teuchos::rcp(new FunctionNd<numDim>());
+    for (std::size_t i = 0; i < f->numTerm_; ++i) {
+      for (std::size_t j = 0; j < g->numTerm_; ++j) {
+        auto coeff = f->coeffs_[i] * g->coeffs_[j];
+        boba::Array<Function1dPtr, numDim> term;
+        for (std::size_t k = 0; k < numDim; ++k) {
+          term[k] = f->terms_[i][k] * g->terms_[j][k];
+        }
+        h->addTerm(coeff, term);
+      }
+    }
+
+    return h;
   }
 
   boba::tensor_train<numDim, boba::execution_space::CPU, double, std::size_t>
@@ -61,8 +105,7 @@ public:
 private:
   std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>>
   computeBasisExpansion(BasisNdPtr<numDim> basis, MeshNdPtr<numDim> mesh) {
-    const std::size_t numTerm = coeffs_.size();
-    std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>> discretization(numTerm);
+    std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>> discretization(numTerm_);
 
     for (std::size_t dimId = 0; dimId < numDim; ++dimId) {
       auto basis1d = basis->getComponent(dimId);
@@ -94,7 +137,7 @@ private:
         // evaluate function at basis nodes
         //
 
-        for (std::size_t termId = 0; termId < numTerm; ++termId) {
+        for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
           discretization[termId][dimId].resize(numElement * numBasis);
@@ -126,7 +169,7 @@ private:
         // evaluate function at element boundaries
         //
 
-        for (std::size_t termId = 0; termId < numTerm; ++termId) {
+        for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
           discretization[termId][dimId].resize(numElement - 1);
@@ -144,8 +187,7 @@ private:
 
   std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>>
   computeDiscretization(BasisNdPtr<numDim> basis, MeshNdPtr<numDim> mesh) {
-    const std::size_t numTerm = coeffs_.size();
-    std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>> discretization(numTerm);
+    std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>> discretization(numTerm_);
 
     for (std::size_t dimId = 0; dimId < numDim; ++dimId) {
       auto basis1d = basis->getComponent(dimId);
@@ -192,7 +234,7 @@ private:
         // compute coefficients through integration/quadrature
         //
 
-        for (std::size_t termId = 0; termId < numTerm; ++termId) {
+        for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
           discretization[termId][dimId].resize(numElement * numBasis);
@@ -229,7 +271,7 @@ private:
         // evaluate function at element boundaries
         //
 
-        for (std::size_t termId = 0; termId < numTerm; ++termId) {
+        for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
           discretization[termId][dimId].resize(numElement - 1);
@@ -250,8 +292,7 @@ private:
                       BasisNdPtr<numDim> basis, MeshNdPtr<numDim> mesh) {
     boba::tensor_train<numDim, boba::execution_space::CPU, double, std::size_t> output;
 
-    std::size_t numTerm = coeffs_.size();
-    if (numTerm == 0) {
+    if (numTerm_ == 0) {
       boba::Array<std::size_t, numDim> sizes;
       for (std::size_t dimId = 0; dimId < numDim; ++dimId) {
         auto basis1d = basis->getComponent(dimId);
@@ -264,11 +305,11 @@ private:
       output.fill_with_zeros();
     } else {
       output = coeffs_[0] * boba::make_tt_from_vectors(cp_tensor[0]);
-      for (std::size_t termId = 1; termId < numTerm; ++termId) {
+      for (std::size_t termId = 1; termId < numTerm_; ++termId) {
         output += coeffs_[termId] * boba::make_tt_from_vectors(cp_tensor[termId]);
       }
 
-      if (numTerm > 1) {
+      if (numTerm_ > 1) {
         output.round();
       }
     }
@@ -277,12 +318,10 @@ private:
   }
 
 private:
+  std::size_t numTerm_;
   std::vector<double> coeffs_;
   std::vector<boba::Array<Function1dPtr, numDim>> terms_;
 };
-
-template <std::size_t N>
-using FunctionNdPtr = Teuchos::RCP<FunctionNd<N>>;
 
 template <std::size_t N>
 FunctionNdPtr<N>
