@@ -2,6 +2,7 @@
 // © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
 
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
@@ -9,7 +10,7 @@
 #include "RHS.h"
 #include "Solution.h"
 
-#include "EpetraExt_RowMatrixOut.h"
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 using namespace std;
@@ -54,7 +55,7 @@ int main(int argc, char *argv[])
 //  minRule->printGlobalDofInfo();
   
   Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
-  EpetraExt::RowMatrixToMatrixMarketFile("A.dat",*A, NULL, NULL, false);
+  Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A.dat", E_to_T::matrix(A));
   
   return 0;
 }

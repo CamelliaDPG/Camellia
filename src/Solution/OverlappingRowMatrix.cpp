@@ -32,6 +32,7 @@
 #include "Epetra_MultiVector.h"
 
 #include "CamelliaDebugUtility.h"
+#include "E_to_T.hpp"
 
 #include "Teuchos_GlobalMPISession.hpp"
 
@@ -39,8 +40,7 @@
 
 #include "Epetra_SerialComm.h"
 
-// EpetraExt includes
-#include "EpetraExt_RowMatrixOut.h"
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Teuchos;
 
@@ -490,8 +490,9 @@ OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
 //  { // DEBUGGING
 //
 //    int rank = Teuchos::GlobalMPISession::getRank();
-//    
-//    EpetraExt::RowMatrixToMatrixMarketFile("A.dat",A(), NULL, NULL, false); // false: don't write header
+//
+//    auto A_epetra = Teuchos::rcp(&A(), false);
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A.dat", E_to_T::matrix(A_epetra));
 //    printMapSummary(*ExtMap_, "ExtMap_");
 //    printMapSummary(*Map_, "Map_");
 //
@@ -546,7 +547,8 @@ OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
 ////      cout << "Calling localMatrix.FillComplete().\n";
 ////      localMatrix.FillComplete();
 ////      cout << "writing localMatrix to file.\n";
-////      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/rank3_local.dat",localMatrix, NULL, NULL, false);
+//    auto localMatrixPtr = Teuchos::rcp(&localMatrix, false);
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/rank3_local.dat", E_to_T::matrix(localMatrixPtr));
 //    }
 //
 ////    Teuchos::RCP<const Epetra_RowMatrix> this_A = Teuchos::rcp( &this->A(), false );
@@ -559,11 +561,12 @@ OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
 ////
 ////    ostringstream rankLabel;
 ////    rankLabel << "/tmp/B_" << rank << ".dat";
-////    EpetraExt::RowMatrixToMatrixMarketFile(rankLabel.str().c_str(),*B, NULL, NULL, false);
+//    auto BPtr = Teuchos::rcp(&B, false);
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(rankLabel.str(), E_to_T::matrix(BPtr));
 ////
 ////    rankLabel.str("");
 ////    rankLabel << "/tmp/A_" << rank << ".dat";
-////    EpetraExt::RowMatrixToMatrixMarketFile(rankLabel.str().c_str(),*A, NULL, NULL, false);
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(rankLabel.str(), E_to_T::matrix(A));
 //  }
 }
 

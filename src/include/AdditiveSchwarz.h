@@ -51,15 +51,15 @@
 
 #include "CamelliaDebugUtility.h"
 #include "DofInterpreter.h"
+#include "E_to_T.hpp"
 #include "LocalFilter.h"
 #include "Mesh.h"
 #include "MPIWrapper.h"
 #include "TypeDefs.h"
 
-// EpetraExt includes
-#include "EpetraExt_RowMatrixOut.h"
-
 #include "Epetra_Operator_to_Epetra_Matrix.h"
+
+#include <MatrixMarket_Tpetra.hpp>
 
 //! AdditiveSchwarz: a class to define Additive Schwarz preconditioners of Epetra_RowMatrix's; largely copied from IfPack_AdditiveSchwarz, then modified to use Camellia's OverlappingRowMatrix in place of the IfPack_OverlappingRowMatrix.
 
@@ -759,7 +759,7 @@ int AdditiveSchwarz<T>::Compute()
 //      Teuchos::RCP<LocalFilter> localizedMatrix = _LocalizedMatrices[i];
 //      ostringstream matrixLocation;
 //      matrixLocation << Teuchos::GlobalMPISession::getRank() << "." << i << ".dat";
-//      EpetraExt::RowMatrixToMatrixMarketFile(matrixLocation.str().c_str(),*localizedMatrix, NULL, NULL, false); // false: don't write header
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(matrixLocation.str(), E_to_T::matrix(localizedMatrix));
 //      cout << "AdditiveSchwarz: inverse computation returned error on rank " << Teuchos::GlobalMPISession::getRank() << ", local matrix number " << i;
 //      cout << "; wrote matrix to " << matrixLocation.str() << endl;
       cout << "AdditiveSchwarz: inverse computation returned error on rank " << Teuchos::GlobalMPISession::getRank() << ", local matrix number " << i << endl;

@@ -117,7 +117,6 @@ private:
 
   bool _reportConditionNumber, _reportTimingResults;
   bool _saveMeshOnSolveError = true; // if there is a solve error, save the mesh to disk for potential analysis
-  bool _writeMatrixToMatlabFile;
   bool _writeMatrixToMatrixMarketFile;
   bool _writeRHSToMatrixMarketFile;
   bool _zmcsAsRankOneUpdate;

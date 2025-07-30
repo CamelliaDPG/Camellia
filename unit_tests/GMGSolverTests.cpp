@@ -14,6 +14,7 @@
 #include "EpetraExt_RowMatrixOut.h"
 
 #include "CamelliaDebugUtility.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GnuPlotUtil.h"
 #include "GMGSolver.h"
@@ -25,6 +26,8 @@
 #include "Solution.h"
 #include "SuperLUDistSolver.h"
 
+#include <MatrixMarket_Tpetra.hpp>
+
 using namespace Camellia;
 
 namespace
@@ -33,27 +36,28 @@ namespace
   {
     int rank = Teuchos::GlobalMPISession::getRank();
 
-    Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
-    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/op.dat",*opMatrix,NULL,NULL,false);
+    auto opMatrix = op->getMatrixRepresentation();
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/op.dat", E_to_T::matrix(opMatrix));
     if (rank==0) cout << "wrote op matrix to /tmp/op.dat\n";
 
-    Teuchos::RCP<Epetra_RowMatrix> P = op->getProlongationOperator();
-    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+    auto P = op->getProlongationOperator();
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
     if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 
-    Teuchos::RCP<Epetra_RowMatrix> coarseMatrix = op->getCoarseStiffnessMatrix();
-    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/coarse.dat",*coarseMatrix,NULL,NULL,false);
+    auto coarseMatrix = op->getCoarseStiffnessMatrix();
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/coarse.dat", E_to_T::matrix(coarseMatrix));
     if (rank==0) cout << "wrote coarse stiffness matrix to /tmp/coarse.dat\n";
 
     if (op->getSmootherType() != GMGOperator::NONE)
     {
-      Teuchos::RCP<Epetra_RowMatrix> smoother = op->getSmootherAsMatrix();
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/smoother.dat",*smoother,NULL,NULL,false);
+      auto smoother = op->getSmootherAsMatrix();
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/smoother.dat", E_to_T::matrix(smoother));
       if (rank==0) cout << "wrote smoother matrix to /tmp/smoother.dat\n";
     }
 
     string fineStiffnessLocation = "/tmp/A.dat";
-    EpetraExt::RowMatrixToMatrixMarketFile(fineStiffnessLocation.c_str(),*op->getFineStiffnessMatrix(),NULL,NULL,false);
+    auto A_ptr = Teuchos::rcp(op->getFineStiffnessMatrix(), false);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fineStiffnessLocation, E_to_T::matrix(A_ptr));
     if (rank==0) cout << "wrote fine stiffness matrix to " << fineStiffnessLocation << endl;
   }
 
@@ -439,7 +443,7 @@ namespace
   void testOperatorIsSPD(Teuchos::RCP<GMGOperator> op, Teuchos::FancyOStream &out, bool &success)
   {
     Camellia::FieldContainer<double> denseMatrix;
-    Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
+    auto opMatrix = op->getMatrixRepresentation();
     SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*opMatrix, denseMatrix);
 
     double relTol = 1e-6; // we don't need very tight tolerance
@@ -1183,31 +1187,15 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
 //    fineSolution->populateStiffnessAndLoad();
 //    op->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix().get());
 //
-//    Camellia::FieldContainer<double> denseMatrix;
-//    Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
-//    SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*opMatrix, denseMatrix);
-//
-//    if (rank==0) cout << "For debugging, writing things out to disk\n";
-//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/op.dat",*opMatrix,NULL,NULL,false);
-//    if (rank==0) cout << "wrote op matrix to /tmp/op.dat\n";
-//
-//    Teuchos::RCP<Epetra_RowMatrix> P = op->getProlongationOperator();
-//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
-//    if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
-//
-//    Teuchos::RCP<Epetra_RowMatrix> coarseMatrix = op->getCoarseStiffnessMatrix();
-//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/coarse.dat",*coarseMatrix,NULL,NULL,false);
-//    if (rank==0) cout << "wrote coarse stiffness matrix to /tmp/coarse.dat\n";
-//
 //    if (op->getSmootherType() != GMGOperator::NONE)
 //    {
-//      Teuchos::RCP<Epetra_RowMatrix> smoother = op->getSmootherAsMatrix();
-//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/smoother.dat",*smoother,NULL,NULL,false);
+//      auto smoother = op->getSmootherAsMatrix();
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/smoother.dat", E_to_T::matrix(smoother));
 //      if (rank==0) cout << "wrote smoother matrix to /tmp/smoother.dat\n";
 //    }
 //
 //    string fineStiffnessLocation = "/tmp/A.dat";
-//    EpetraExt::RowMatrixToMatrixMarketFile(fineStiffnessLocation.c_str(),*op->getFineStiffnessMatrix(),NULL,NULL,false);
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fineStiffnessLocation, E_to_T::matrix(op->getFineStiffnessMatrix()));
 //    if (rank==0) cout << "wrote fine stiffness matrix to " << fineStiffnessLocation << endl;
 //
 //    int GID = 0;

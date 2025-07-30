@@ -9,16 +9,18 @@
 //
 //
 
-#include "EpetraExt_RowMatrixOut.h"
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "StokesVGPFormulation.h"
 
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "Solution.h"
+
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 
@@ -877,7 +879,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
         
         Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
         string fileName = "/tmp/A.dat";
-        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, E_to_T::matrix(A));
       }
       cout << "bf:\n";
       spaceTimeForm.bf()->printTrialTestInteractions();
@@ -979,7 +981,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 //        
 //        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
 //        string fileName = "/tmp/A.dat";
-//        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+//        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, E_to_T::matrix(A));
 //      }
 //      cout << "bf:\n";
 //      spaceTimeForm.bf()->printTrialTestInteractions();
@@ -1073,7 +1075,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 //        
 //        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
 //        string fileName = "/tmp/A.dat";
-//        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+//        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, E_to_T::matrix(A));
 //      }
 //      cout << "bf:\n";
 //      spaceTimeForm.bf()->printTrialTestInteractions();

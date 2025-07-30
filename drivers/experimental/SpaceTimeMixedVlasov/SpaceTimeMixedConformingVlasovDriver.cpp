@@ -3,6 +3,7 @@
 //
 
 #include "Camellia.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "HDF5Exporter.h"
 #include "LocalDofMapper.h"
@@ -13,7 +14,8 @@
 #include "TrigFunctions.h"
 
 #include "Epetra_RowMatrix.h"
-#include "EpetraExt_RowMatrixOut.h"
+
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 using namespace std;
@@ -494,7 +496,8 @@ int main(int argc, char *argv[])
                 
         reorderMatrix(*K, idToSortedID, K_sorted);
         
-        EpetraExt::RowMatrixToMatrixMarketFile(sortedMatrixPath.c_str(),K_sorted,NULL,NULL,false);
+        auto K_sorted_ptr = Teuchos::rcp(&K_sorted, false);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(sortedMatrixPath, E_to_T::matrix(K_sorted_ptr));
       }
       
       // compute L^2 error in f:

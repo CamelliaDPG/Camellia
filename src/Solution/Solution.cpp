@@ -52,6 +52,7 @@
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
+#include "E_to_T.hpp"
 #include "Function.h"
 #include "IP.h"
 #include "GlobalDofAssignment.h"
@@ -72,6 +73,8 @@
 #include <EpetraExt_HDF5.h>
 #include <Epetra_SerialComm.h>
 #endif
+
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 
@@ -108,7 +111,6 @@ TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln) : Narrator("Solution
   _lagrangeConstraints = soln.lagrangeConstraints();
   _reportConditionNumber = false;
   _reportTimingResults = false;
-  _writeMatrixToMatlabFile = false;
   _writeMatrixToMatrixMarketFile = false;
   _writeRHSToMatrixMarketFile = false;
   _cubatureEnrichmentDegree = soln.cubatureEnrichmentDegree();
@@ -169,7 +171,6 @@ void TSolution<Scalar>::initialize()
   
   TimeLogger::sharedInstance()->createTimeEntry(SOLVER_TIMER_STRING);
   
-  _writeMatrixToMatlabFile = false;
   _writeMatrixToMatrixMarketFile = false;
   _writeRHSToMatrixMarketFile = false;
   _residualsComputed = false;
@@ -1514,13 +1515,9 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   }
 
   // Dump matrices to disk
-  if (_writeMatrixToMatlabFile)
-  {
-    EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),*_globalStiffMatrix);
-  }
   if (_writeMatrixToMatrixMarketFile)
   {
-    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),*_globalStiffMatrix,NULL,NULL,false);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(_matrixFilePath, E_to_T::matrix(_globalStiffMatrix));
   }
 
   int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
@@ -3758,7 +3755,7 @@ const vector< map< GlobalIndexType, Camellia::FieldContainer<Scalar> > > & TSolu
 template <typename Scalar>
 void TSolution<Scalar>::setWriteMatrixToFile(bool value, const string &filePath)
 {
-  _writeMatrixToMatlabFile = value;
+  _writeMatrixToMatrixMarketFile = value;
   _matrixFilePath = filePath;
 }
 
