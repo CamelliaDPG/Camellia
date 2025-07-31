@@ -18,6 +18,14 @@
 using namespace Camellia;
 
 namespace {
+  void check_p_H1(const std::vector<int> &p_H1)
+  {
+    for (const auto &p_comp : p_H1)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(p_comp < 1, std::invalid_argument, "Each component of H^1 order must be at least 1");
+    }
+  }
+
   BasisPtr intrepid2TensorBasis(BasisPtr firstBasis, BasisPtr extrusionBasis)
   {
     using BasisBase   = Intrepid2::Basis<Camellia::DeviceType,double,double>;
@@ -97,6 +105,7 @@ public:
         }
       }
     }
+    check_p_H1(p_H1);
     auto basis = getCachedBasis(cellTopo,fs,p_H1);
     if (basis == Teuchos::null)
     {
@@ -202,6 +211,7 @@ public:
   using BasisFamily::getBasis;
   BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1) override
   {
+    check_p_H1(p_H1);
     auto basis = getCachedBasis(cellTopo,fs,p_H1);
     if (basis == Teuchos::null)
     {
@@ -307,6 +317,7 @@ public:
   using BasisFamily::getBasis;
   BasisPtr getBasis(CellTopoPtr cellTopo, const std::vector<EFunctionSpace> &fs, const std::vector<int> &p_H1) override
   {
+    check_p_H1(p_H1);
     auto basis = getCachedBasis(cellTopo,fs,p_H1);
     if (basis == Teuchos::null)
     {

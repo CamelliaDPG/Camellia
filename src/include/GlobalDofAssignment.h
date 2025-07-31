@@ -52,6 +52,10 @@ protected:
   DofOrderingFactoryPtr _dofOrderingFactory;
   MeshPartitionPolicyPtr _partitionPolicy;
   std::vector<int> _initialH1OrderTrial;
+  
+  int _minH1Order;
+  int _maxH1Order;
+  
   int _minContinuityDimension; // 0 for vertex continuity; (d-1) for "face" continuity
   int _testOrderEnhancement;
 
@@ -144,6 +148,12 @@ public:
   
   int getPRefinementDegree(GlobalIndexType cellID);
   int getTestOrderEnrichment();
+  
+  //! assumes isotropic in p.  Returns the maximum H^1 order for an element.
+  int getMaxH1Order() const;
+  
+  //! assumes isotropic in p.  Returns the minimum H^1 order for an element.
+  int getMinH1Order() const;
 
   virtual GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   virtual GlobalIndexType globalDofCount() = 0;

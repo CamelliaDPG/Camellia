@@ -196,6 +196,8 @@ void Projector<Scalar>::projectFunctionOntoBasis(Camellia::FieldContainer<Scalar
       rhsFileName << "/tmp/b" << cellID << ".dat";
       SerialDenseWrapper::writeMatrixToMatlabFile(rhsFileName.str(), cellRHS);
       cout << "Wrote rhs to " << rhsFileName.str() << endl;
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "SerialDenseWrapper::solveSPDSystemMultipleRHS failure in Projector");
     }
     
     basisCoefficients.resize(numCells,cardinality);
@@ -655,6 +657,8 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Camellia::FieldConta
       rhsFileName << "/tmp/b" << cellID << ".dat";
       SerialDenseWrapper::writeMatrixToMatlabFile(rhsFileName.str(), cellRHS);
       cout << "Wrote rhs to " << rhsFileName.str() << endl;
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "SerialDenseWrapper::solveSPDSystemMultipleRHS failure in Projector");
     }
     
     basisCoefficients.resize(numCells,cardinality);
@@ -730,6 +734,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
   CamelliaCellTools::refCellNodesForTopology(referenceDomainNodes, domainTopo);
   
   int basisCardinality = parentBasis->getCardinality();
+  const int minCubatureDegree = basisCardinality * 2;
   
   set<int> allDofs;
   for (int i=0; i<basisCardinality; i++)
@@ -770,7 +775,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
   int numCells = basisCoefficients.dimension(0);
   Camellia::FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
   
-  int maxCubatureDegreeSubdomain = 0;
+  int maxCubatureDegreeSubdomain = minCubatureDegree;
   for (auto subdomainCache : subdomainCaches)
   {
     maxCubatureDegreeSubdomain = std::max(maxCubatureDegreeSubdomain, subdomainCache->cubatureDegree());

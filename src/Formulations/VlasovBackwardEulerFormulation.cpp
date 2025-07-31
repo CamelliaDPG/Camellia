@@ -334,7 +334,7 @@ _speciesLabels(speciesLabels)
   
   const bool allowPruning = false; // some day, we might want to have a fully distributed mesh.  But right now, ExtrudedMeshTopology relies on knowing all the phase-space cell IDs.  Would not be too hard to do the appropriate MPI communication, but right now the memory cost of the mesh is not prohibitive.
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
-  Epetra_CommPtr comm = MPIWrapper::CommWorld();
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
   MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, H1Order, delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );
   
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
@@ -642,6 +642,14 @@ _speciesLabels(speciesLabels)
   PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
 }
 
+VlasovBackwardEulerFormulation::~VlasovBackwardEulerFormulation()
+{
+  if ((_vlasovSoln != Teuchos::null) && (_vlasovSoln->mesh() != Teuchos::null))
+  {
+    _vlasovSoln->mesh()->unregisterObserver(this);
+  }
+}
+
 vector<FunctionPtr> VlasovBackwardEulerFormulation::a()
 {
   return _a;
@@ -875,6 +883,11 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
     
     configurationViz->exportSolution(_configurationSpaceFormulation->solution(),0);
     vlasovViz->exportSolution(vlasovSolution(),0);
+    
+    if (rank == 0)
+    {
+      std::cout << "VlasovBackwardEulerFormulation: exported debugging visualizations for solveNumber " << solveNumber << std::endl;
+    }
     
     solveNumber++;
   }

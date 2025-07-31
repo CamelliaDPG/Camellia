@@ -90,29 +90,29 @@ public:
   static MeshTopologyPtr intervalMeshTopology(std::vector<double> vertices, bool periodicBCs=false); // arbitrarily spaced 1D
   static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements, vector<PeriodicBCPtr> periodicBCs);
 
-  static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
+  static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k, Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
   
   static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, vector<int> H1Order, int delta_k,
-                             Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
+                             Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
   
-  static MeshPtr quadMesh(Teuchos::ParameterList &parameters, Epetra_CommPtr Comm = Teuchos::null);
+  static MeshPtr quadMesh(Teuchos::ParameterList &parameters, Teuchos_CommPtr Comm = Teuchos::null);
 
   static MeshPtr quadMesh(TBFPtr<double> bf, int H1Order, int pToAddTest=2,
                           double width=1.0, double height=1.0,
                           int horizontalElements=1, int verticalElements=1,
                           bool divideIntoTriangles=false,
                           double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>(),
-                          Epetra_CommPtr Comm = Teuchos::null);
+                          Teuchos_CommPtr Comm = Teuchos::null);
 
   static MeshPtr quadMeshMinRule(TBFPtr<double> bf, int H1Order, int pToAddTest=2,
                                  double width=1.0, double height=1.0,
                                  int horizontalElements=1, int verticalElements=1,
                                  bool divideIntoTriangles=false,
                                  double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>(),
-                                 Epetra_CommPtr Comm = Teuchos::null);
+                                 Teuchos_CommPtr Comm = Teuchos::null);
 
   static MeshPtr quadMesh(TBFPtr<double> bf, int H1Order, Camellia::FieldContainer<double> &quadNodes, int pToAddTest=2,
-                          Epetra_CommPtr Comm = Teuchos::null);
+                          Teuchos_CommPtr Comm = Teuchos::null);
 
   static void quadMeshCellIDs(Camellia::FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles);
 
@@ -122,11 +122,18 @@ public:
                                           double x0=0.0, double y0=0.0,
                                           vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
 
+  //! define a rectilinear mesh which disallows MeshTopology "pruning": the deletion of geometric entities that are not required on the local MPI rank.
+  static MeshPtr rectilinearMeshNoPruning(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts,
+                                          int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>(),
+                                          map<int,int> trialOrderEnhancements = map<int,int>(),
+                                          map<int,int> testOrderEnhancements = map<int,int>(),
+                                          Teuchos_CommPtr Comm = Teuchos::null);
+  
   static MeshPtr rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts,
                                  int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>(),
                                  map<int,int> trialOrderEnhancements = map<int,int>(),
                                  map<int,int> testOrderEnhancements = map<int,int>(),
-                                 Epetra_CommPtr Comm = Teuchos::null,
+                                 Teuchos_CommPtr Comm = Teuchos::null,
                                  bool allowMeshTopologyPruning = true);
 
   static MeshTopologyPtr rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts,
@@ -142,7 +149,7 @@ public:
   
   static MeshPtr spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
                                TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd,
-                               Epetra_CommPtr Comm = Teuchos::null);
+                               Teuchos_CommPtr Comm = Teuchos::null);
 
   static MeshTopologyPtr spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions=1);
   

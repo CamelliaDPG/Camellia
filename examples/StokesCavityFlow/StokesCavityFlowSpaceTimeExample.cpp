@@ -4,13 +4,14 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+#include "E_to_T.hpp"
 #include "Function.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "SimpleFunction.h"
 #include "StokesVGPFormulation.h"
 
-#include "EpetraExt_RowMatrixOut.h"
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 
@@ -23,7 +24,8 @@ class SpaceTimeRampBoundaryFunction_U1 : public SimpleFunction<double>
 public:
   SpaceTimeRampBoundaryFunction_U1(double eps, bool useVerticalBCs, int polyOrder)
   :
-  SimpleFunction<double>("StokesCavityFlowSpaceTimeExample-SpaceTimeRampBoundaryFunction_U1")
+  SimpleFunction<double>("StokesCavityFlowSpaceTimeExample-SpaceTimeRampBoundaryFunction_U1",
+                         VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1 | VARIES_IN_DIMENSION_2 | VARIES_IN_DIMENSION_3)
   {
     _eps = eps;
     _useVerticalBCs = useVerticalBCs;
@@ -124,7 +126,8 @@ class TimeRampSpaceTime : public SimpleFunction<double>
 public:
   TimeRampSpaceTime(double timeScale)
   :
-  SimpleFunction<double>("StokesCavityFlowSpaceTimeExample-TimeRampSpaceTime")
+  SimpleFunction<double>("StokesCavityFlowSpaceTimeExample-TimeRampSpaceTime",
+                         VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1 | VARIES_IN_DIMENSION_2 | VARIES_IN_DIMENSION_3)
   {
     _timeScale = timeScale;
   }
@@ -331,7 +334,7 @@ int main(int argc, char *argv[])
     Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
     string fileName = "A.dat";
     if (rank==0) cout << "writing stiffness matrix to " << fileName << ".\n";
-    EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, E_to_T::matrix(A));
     
     return 0;
   }

@@ -6,6 +6,7 @@
 #include "BasisFactory.h"
 #include "CamelliaDebugUtility.h"
 #include "ExpFunction.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GMGOperator.h"
 #include "GnuPlotUtil.h"
@@ -27,8 +28,9 @@
 #include "Epetra_SerialComm.h"
 
 #include "EpetraExt_MatrixMatrix.h"
-#include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
+
+#include <MatrixMarket_Tpetra.hpp>
 
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_Amesos.h"
@@ -81,7 +83,7 @@ Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(::Epetra_Row
     GMGOperator::FactorType schwarzBlockFactorization,
     int levelOfFill, double fillRatio, bool hOnly)
 {
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   int sideDim = mesh->getTopology()->getDimension() - 1;
   Teuchos::RCP<Ifpack_Preconditioner> preconditioner;
   Teuchos::ParameterList List;
@@ -268,7 +270,7 @@ public:
 //
 //      int rank = Teuchos::GlobalMPISession::getRank();
 //      if (rank==0) cout << "writing preconditioner to /tmp/preconditioner.dat.\n";
-//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/preconditioner.dat", E_to_T::matrix(M));
 
     }
     else
@@ -352,7 +354,7 @@ public:
 //
 //      int rank = Teuchos::GlobalMPISession::getRank();
 //      if (rank==0) cout << "writing preconditioner to /tmp/preconditioner.dat.\n";
-//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/preconditioner.dat", E_to_T::matrix(M));
 
     }
     else
@@ -1117,7 +1119,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       vector<double> origin(spaceDim,0);
       IndexType vertexIndex;
       bool vertexFound = mesh->getTopology()->getVertexIndex(origin, vertexIndex);
-      vertexFound = MPIWrapper::globalOr(*mesh->Comm(), vertexFound);
+      vertexFound = MPIWrapper::globalOr(mesh->Comm(), vertexFound);
       if (!vertexFound)
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
@@ -1449,32 +1451,32 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       // if (rank==0) cout << "writeAndExit not yet supported for schwarzOnly.\n";
       
       if (rank==0) cout << "writing A to A_fine.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("A_fine.dat",*A, NULL, NULL, false);
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A_fine.dat", E_to_T::matrix(A));
       
       Teuchos::RCP< Epetra_CrsMatrix > S = ((AztecSolver *) solver.get())->getPreconditionerMatrix(solution->getPartitionMap());
       if (rank==0) cout << "writing Schwarz preconditioner to S.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("S.dat",*S, NULL, NULL, false);
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("S.dat", E_to_T::matrix(S));
     }
     else
     {
       Teuchos::RCP<GMGOperator> op = ((GMGSolver*)solver.get())->gmgOperator();
       if (rank==0) cout << "writing op to op.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("op.dat",*op->getMatrixRepresentation(), NULL, NULL, false);
-
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("op.dat", E_to_T::matrix(op->getMatrixRepresentation()));
+      
       Teuchos::RCP< Epetra_CrsMatrix > A_coarse = op->getCoarseStiffnessMatrix();
       if (rank==0) cout << "writing A_coarse to A_coarse.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("A_coarse.dat",*A_coarse, NULL, NULL, false);
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A_coarse.dat", E_to_T::matrix(A_coarse));
 
       Teuchos::RCP< Epetra_CrsMatrix > P = op->getProlongationOperator();
       if (rank==0) cout << "writing P to P.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("P.dat",*P, NULL, NULL, false);
-
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("P.dat", E_to_T::matrix(P));
+      
       if (rank==0) cout << "writing A to A_fine.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("A_fine.dat",*A, NULL, NULL, false);
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A_fine.dat", E_to_T::matrix(A));
 
       if (rank==0) cout << "writing smoother to S.dat.\n";
       Teuchos::RCP< Epetra_CrsMatrix > S = op->getSmootherAsMatrix();
-      EpetraExt::RowMatrixToMatrixMarketFile("S.dat",*S, NULL, NULL, false);
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("S.dat", E_to_T::matrix(S));
 
       if (op->getSmootherWeightVector() != Teuchos::null)
       {
@@ -1506,7 +1508,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
         E.InsertGlobalValues(cellIndex, values.size(), &values[0], &neighborIndices[0]);
       }
       E.FillComplete();
-      EpetraExt::RowMatrixToMatrixMarketFile("E.dat",E, NULL, NULL, false);
+      auto E_ptr = Teuchos::rcp(&E, false);
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("E.dat", E_to_T::matrix(E_ptr));
       if (rank==0) cout << "wrote fine mesh element connectivity matrix to E.dat.\n";
       
       {
@@ -1534,12 +1537,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
         identity.FillComplete();
         
         if (rank==0) cout << "writing identity to I.dat.\n";
-        EpetraExt::RowMatrixToMatrixMarketFile("I.dat",identity, NULL, NULL, false);
+        auto identityPtr = Teuchos::rcp(&identity,false);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("I.dat", E_to_T::matrix(identityPtr));
         op->setFineStiffnessMatrix(&identity);
 
         if (rank==0) cout << "writing smoother for identity to W.dat.\n";
         Teuchos::RCP< Epetra_CrsMatrix > W = op->getSmootherAsMatrix();
-        EpetraExt::RowMatrixToMatrixMarketFile("W.dat",*W, NULL, NULL, false);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("W.dat", E_to_T::matrix(W));
       }
       
       return;

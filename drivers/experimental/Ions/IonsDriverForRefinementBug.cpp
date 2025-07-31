@@ -477,6 +477,7 @@ namespace Camellia
       {
         std::cout << "Vlasov mesh has " << this->mesh()->getTopology()->activeCellCount() << " active elements and " << this->mesh()->globalDofCount() << " degrees of freedom.\n";
       }
+      return static_cast<int>(cellsForXRefinement.size() + cellsForIsotropicRefinement.size());
     }
   };
 

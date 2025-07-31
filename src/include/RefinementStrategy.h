@@ -79,16 +79,23 @@ public:
   
   virtual void refine(bool printToConsole=false);
   virtual void refineAndUnrefine(bool unrefine, bool printToConsole);
-  virtual void hRefineUniformly();
+  virtual int hRefineUniformly();
   
   //! greedy unrefinement using _unrefinementErrorIndicator if provided (otherwise _errorIndicator).  Returns the number of unrefined elements
-  virtual int greedyUnrefinement(double relativeErrorThreshold, bool printToConsole=false);
+  virtual int greedyHUnrefinement(double relativeErrorThreshold, bool printToConsole=false);
+  
+  //! greedy p-unrefinement using _unrefinementErrorIndicator if provided (otherwise _errorIndicator).  Returns the number of unrefined elements
+  virtual int greedyPUnrefinement(double relativeErrorThreshold, bool printToConsole=false);
 
-  virtual void refineCells(vector<GlobalIndexType> &cellIDs);
-  virtual void unrefineCells(const std::set<GlobalIndexType> &cellIDs);
-  static void pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
-  static void hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
-  static void hRefineUniformly(MeshPtr mesh);
+  //! request to refine the specified cells; the return value indicates the number of cells that were refined (may be different than the number requested, depending on a subclass's implementation).
+  virtual int refineCells(vector<GlobalIndexType> &cellIDs);
+  
+  //! request to unrefine the specified cells; the return value indicates the number of cells that were refined (may be different than the number requested, depending on a subclass's implementation).
+  virtual int unrefineCells(const std::set<GlobalIndexType> &cellIDs);
+  
+  static int pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
+  static int hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
+  static int hRefineUniformly(MeshPtr mesh);
 
   //! Record element count, dof count, energy error as if a refinement had taken place.  Useful when error is measured but no refinement is actually performed.
   void recordResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);

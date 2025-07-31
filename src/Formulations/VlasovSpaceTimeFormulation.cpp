@@ -1598,7 +1598,7 @@ void VlasovSpaceTimeFormulation::initialize()
   
   const bool allowPruning = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
-  Epetra_CommPtr comm = MPIWrapper::CommWorld();
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
   MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements(), testOrderEnhancements(), partitionPolicy, comm, allowPruning) );
   
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);

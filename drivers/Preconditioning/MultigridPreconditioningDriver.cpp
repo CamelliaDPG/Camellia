@@ -6,6 +6,7 @@
 #include "CondensedDofInterpreter.h"
 #include "ConvectionDiffusionFormulation.h"
 #include "ExpFunction.h"
+#include "E_to_T.hpp"
 #include "GMGOperator.h"
 #include "GMGSolver.h"
 #include "GnuPlotUtil.h"
@@ -34,6 +35,7 @@
 #include "Ifpack_ILU.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 using namespace std;
@@ -419,7 +421,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       mesh->hRefine(activeCellIDs);
       if (rank==0)
       {
-        print("h-refining cells", activeCellIDs);
+        Camellia::print("h-refining cells", activeCellIDs);
       }
       
       MeshTopologyViewPtr meshTopoView;
@@ -914,10 +916,10 @@ int main(int argc, char *argv[])
     GlobalIndexType sampleCellID = 0;
     int totalTrialDofs, totalTestDofs;
     double B_denseMatrixSize, G_denseMatrixSize, K_denseMatrixSize, B_sparseMatrixSize, G_sparseMatrixSize;
-    int rankWithSampleCell = solution->mesh()->Comm()->NumProc();
+    int rankWithSampleCell = solution->mesh()->Comm()->getSize();
     if (solution->mesh()->getTopology()->isValidCellIndex(sampleCellID))
     {
-      rankWithSampleCell = solution->mesh()->Comm()->MyPID();
+      rankWithSampleCell = solution->mesh()->Comm()->getRank();
       ElementTypePtr sampleElementType = solution->mesh()->getElementType(sampleCellID);
       totalTrialDofs = sampleElementType->trialOrderPtr->totalDofs();
       totalTestDofs = sampleElementType->testOrderPtr->totalDofs();
@@ -930,7 +932,7 @@ int main(int argc, char *argv[])
       G_sparseMatrixSize = ( ip->nonZeroEntryCount(sampleElementType->testOrderPtr) * doubleSizeInBytes) / bytesPerMB;
     }
 
-    Comm = solution->mesh()->Comm();
+    Comm = MPIWrapper::EpetraComm(solution->mesh()->Comm());
     
     int minRankWithSampleCell;
     Comm->MinAll(&rankWithSampleCell, &minRankWithSampleCell, 1);
@@ -948,12 +950,11 @@ int main(int argc, char *argv[])
     int coarseMeshTraceDofs = meshesCoarseToFine[0]->numFluxDofs();
     
     double cellHaloTime = solution->mesh()->getTopology()->totalTimeComputingCellHalos();
-    double maxCellHaloTime;
-    solution->mesh()->Comm()->MaxAll(&cellHaloTime, &maxCellHaloTime, 1);
+    double maxCellHaloTime = MPIWrapper::max(solution->mesh()->Comm(), cellHaloTime);
     
     if (rank==0)
     {
-      int numLevels = meshesCoarseToFine.size();
+      int numLevels = static_cast<int>(meshesCoarseToFine.size());
       cout << setprecision(2);
       cout << "Mesh initialization completed in " << meshInitializationTime << " seconds.  Fine mesh has " << numDofs;
       cout << " global degrees of freedom (" << numTraceDofs << " trace dofs) on " << numElements << " elements.\n";
@@ -1122,10 +1123,10 @@ int main(int argc, char *argv[])
       {
         Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
         if (rank==0) cout << "writing op to op.dat.\n";
-        EpetraExt::RowMatrixToMatrixMarketFile("op.dat",*op->getMatrixRepresentation(), NULL, NULL, false);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("op.dat", E_to_T::matrix(op->getMatrixRepresentation()));
         
         if (rank==0) cout << "writing fine stiffness to A.dat.\n";
-        EpetraExt::RowMatrixToMatrixMarketFile("A.dat",*solution->getStiffnessMatrix(), NULL, NULL, false);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A.dat", E_to_T::matrix(solution->getStiffnessMatrix()));
       }
     }
     else

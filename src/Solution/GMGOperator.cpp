@@ -19,9 +19,12 @@
 #include "CamelliaCellTools.h"
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "SerialDenseWrapper.h"
 #include "TimeLogger.h"
+
+#include <MatrixMarket_Tpetra.hpp>
 
 // EpetraExt includes
 #include "EpetraExt_MatrixMatrix.h"
@@ -201,21 +204,9 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   }
 
 //  cout << "Writing fine stiffness to disk before setting up smoother.\n";
-//  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
-  
-//  { // DEBUGGING
-//    if (this->getOperatorLevel() == 2)
-//    {
-//      cout << "Writing fine stiffness to disk before setting up smoother.\n";
-//      EpetraExt::RowMatrixToMatrixMarketFile("A_fine.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
-//    }
-//  }
+//  Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/A.dat", E_to_T::matrix(fineStiffnessMatrix));
   
   Epetra_Time coarseStiffnessTimer(Comm());
-
-//  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
-
-//  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*_P, NULL, NULL, false); // false: don't write header
 
   if (!_fineCoarseRolesSwapped)
   {
@@ -252,23 +243,12 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     
     PT_A_P->FillComplete();
     
-    //  { // DEBUGGING
-    //    if (this->getOperatorLevel() == 2)
-    //    {
-    //      cout << "Writing AP to disk.\n";
-    //      EpetraExt::RowMatrixToMatrixMarketFile("AP.dat",AP, NULL, NULL, false); // false: don't write header
-    //      cout << "Writing PT_A_P to disk.\n";
-    //      EpetraExt::RowMatrixToMatrixMarketFile("PT_A_P.dat",*PT_A_P, NULL, NULL, false); // false: don't write header
-    //    }
-    //  }
+//    string PT_A_P_path = "/tmp/PT_AP.dat";
+//    cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(PT_A_P_path, E_to_T::matrix(PT_A_P));
     
-    //  string PT_A_P_path = "/tmp/PT_AP.dat";
-    //  cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
-    //  EpetraExt::RowMatrixToMatrixMarketFile(PT_A_P_path.c_str(), *PT_A_P, NULL, NULL, false); // false: don't write header
-    //
-    //  string P_path = "/tmp/P.dat";
-    //  cout << "Writing P to disk at " << P_path << endl;
-    //  EpetraExt::RowMatrixToMatrixMarketFile(P_path.c_str(),*_P, NULL, NULL, false); // false: don't write header
+//    string P_path = "/tmp/P.dat";
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(P_path, E_to_T::matrix(_P));
     
     Epetra_Map coarsePartitionMap = _coarseSolution->getPartitionMap();
     Epetra_Import  coarseImporter(coarsePartitionMap, PT_A_P->RowMap());
@@ -860,7 +840,7 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseC
     
     vector<int> fluxIndices = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
     
-    Epetra_CommPtr SerialComm = MPIWrapper::CommSerial();
+    Teuchos_CommPtr SerialComm = MPIWrapper::TeuchosCommSerial();
     MeshPtr coarseSingleCellMesh = Teuchos::rcp( new Mesh(_coarseMesh, coarseCellID, SerialComm) );
     
     // the fact that the local view does not enforce conformity means that for conforming traces
@@ -877,7 +857,8 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseC
     GlobalIndexType zeroCellID = 0;
     int indexBase = 0;
     int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
-    Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*SerialComm);
+    auto epetraSerialComm = MPIWrapper::EpetraComm(SerialComm);
+    Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*epetraSerialComm);
     Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
     
     Teuchos::RCP<Epetra_SerialDenseMatrix> fluxMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fluxIndices.size(),fluxIndices.size()) );

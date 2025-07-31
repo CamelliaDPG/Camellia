@@ -145,6 +145,36 @@ TEUCHOS_UNIT_TEST( Hexahedron, PrintSides )
   meshTopo->printAllEntities();
 }
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <cfenv>        // for std::fenv_t
+#include <cmath>        // for sqrt()
+#include <csignal>      // for signal()
+#include <fenv.h>       // for fegetenv(), fesetenv()
+
+void fpe_signal_handler(int /*signal*/) {
+  std::cerr << "Floating point exception!\n";
+  exit(1);
+}
+
+TEUCHOS_UNIT_TEST( Ternary, AssignParens )
+{
+  std::fenv_t env;
+  fegetenv(&env);
+  env.__fpcr = env.__fpcr | __fpcr_trap_invalid | __fpcr_trap_divbyzero | __fpcr_trap_overflow;
+  fesetenv(&env);
+  signal(SIGFPE, fpe_signal_handler);
+  
+  double actual = 0.0;
+  double desired = 0.0;
+  double correction;
+  
+  correction = ((desired == 0) ? 1.0 : actual/desired);
+  
+  TEST_EQUALITY(1, correction);
+}
+
 TEUCHOS_UNIT_TEST( TimeMarchingMatrices, PrintMatrices )
 {
   VarFactoryPtr vf = VarFactory::varFactory();

@@ -41,6 +41,9 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory,
   _testOrderEnhancement = testOrderEnhancement;
   _enforceConformityLocally = enforceConformityLocally;
   
+  _minH1Order = initialH1OrderTrial[0];
+  _maxH1Order = initialH1OrderTrial[0];
+  
   // For now, disallow mesh topology pruning (aka properly distributed MeshTopology) when periodicBCs are present
   if (mesh->getTopology()->getPeriodicBCs().size() > 0)
   {
@@ -609,6 +612,10 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
 
 void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)   // subclasses should call super
 {
+  bool doGlobalMinCheck = false;
+  bool doGlobalMaxCheck = false;
+  int maxH1AmongRefinedCells = 0;
+  int minH1AmongRefinedCells = std::numeric_limits<int>::max();
   for (GlobalIndexType cellID : cellIDs)
   {
     if (_cellPRefinements.find(cellID) == _cellPRefinements.end())
@@ -619,6 +626,40 @@ void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int de
     {
       _cellPRefinements[cellID] += deltaP;
     }
+    int cell_H1 = _initialH1OrderTrial[0] + _cellPRefinements[cellID];
+    if      (cell_H1 < _minH1Order) _minH1Order = cell_H1;
+    else if (cell_H1 > _maxH1Order) _maxH1Order = cell_H1;
+
+    TEUCHOS_TEST_FOR_EXCEPTION(cell_H1 < 1, std::invalid_argument, "H^1 order must be at least 1");
+    
+    maxH1AmongRefinedCells = std::max(cell_H1, maxH1AmongRefinedCells);
+    minH1AmongRefinedCells = std::min(cell_H1, minH1AmongRefinedCells);
+  }
+  if (minH1AmongRefinedCells > _minH1Order)
+  {
+    // need to check whether there are any cells in the mesh that have lower order; if not, raise _minH1Order
+    const auto &myCells = _mesh->cellIDsInPartition();
+    
+    int myMinH1Order = minH1AmongRefinedCells;
+    for (auto cellID : myCells)
+    {
+      myMinH1Order = std::min(getH1Order(cellID)[0], myMinH1Order); // assumes isotropic
+    }
+    
+    _minH1Order = MPIWrapper::min(_mesh->Comm(), myMinH1Order);
+  }
+  if (maxH1AmongRefinedCells < _maxH1Order)
+  {
+    // need to check whether there are any cells in the mesh that have higher order; if not, reduce _maxH1Order
+    const auto &myCells = _mesh->cellIDsInPartition();
+    
+    int myMaxH1Order = maxH1AmongRefinedCells;
+    for (auto cellID : myCells)
+    {
+      myMaxH1Order = std::max(getH1Order(cellID)[0], myMaxH1Order); // assumes isotropic
+    }
+    
+    _maxH1Order = MPIWrapper::max(_mesh->Comm(), myMaxH1Order);
   }
 }
 
@@ -791,6 +832,16 @@ map< pair<CellTopologyKey,int>, set<GlobalIndexType> > GlobalDofAssignment::getE
   return elemTypePartitions;
 }
 
+int GlobalDofAssignment::getMaxH1Order() const
+{
+  return _maxH1Order;
+}
+
+int GlobalDofAssignment::getMinH1Order() const
+{
+  return _minH1Order;
+}
+
 MeshPartitionPolicyPtr GlobalDofAssignment::getPartitionPolicy()
 {
   return _partitionPolicy;
@@ -853,6 +904,7 @@ vector<int> GlobalDofAssignment::getH1OrderForPRefinement(int deltaP)
   for (int d=0; d<H1Order.size(); d++)
   {
     H1Order[d] += deltaP;
+    TEUCHOS_TEST_FOR_EXCEPTION(H1Order[d] < 1, std::invalid_argument, "H^1 order must be >= 1 in each component");
   }
   
   return H1Order;
@@ -1000,6 +1052,21 @@ void GlobalDofAssignment::projectChildCoefficientsOntoParents(const std::set<Glo
     {
       auto parentCell = _meshTopology->getCell(parentCellID);
       auto childIndices = parentCell->getChildIndices(_meshTopology);
+      int parentOldDeltaP = getPRefinementDegree(parentCellID);
+      
+      const int min_dp = this->getMinH1Order() - this->getInitialH1Order()[0]; // minimum dp across whole mesh;
+      int maxChild_dp = min_dp;
+      for (const auto & childID : childIndices)
+      {
+        int childDeltaP = getPRefinementDegree(childID);
+        maxChild_dp = std::max(maxChild_dp, childDeltaP);
+      }
+      const int parentDeltaP = maxChild_dp;
+      const bool parentNeedsUpdatedP = (parentDeltaP != parentOldDeltaP);
+      if (parentNeedsUpdatedP)
+      {
+        this->setPRefinementDegree(parentCellID, parentDeltaP);
+      }
       auto firstChildID = childIndices[0];
       auto destinationRank = partitionForCellID(firstChildID);
       if (destinationRank == myRank) // if first child is locally owned, then we may have some data to request
@@ -1266,6 +1333,10 @@ void GlobalDofAssignment::setPRefinementDegree(GlobalIndexType cellID, int delta
   }
   else
   {
+    for (auto p_initial_comp : _initialH1OrderTrial)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(p_initial_comp + deltaP < 1, std::invalid_argument, "H^1 order must be at least 1 in each component");
+    }
     _cellPRefinements[cellID] = deltaP;
   }
 }

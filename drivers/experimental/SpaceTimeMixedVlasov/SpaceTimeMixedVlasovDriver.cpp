@@ -3,6 +3,7 @@
 //
 
 #include "Camellia.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "HDF5Exporter.h"
 #include "LocalDofMapper.h"
@@ -12,7 +13,7 @@
 #include "Solution.h"
 #include "TrigFunctions.h"
 
-#include "EpetraExt_RowMatrixOut.h"
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 using namespace std;
@@ -254,7 +255,6 @@ int main(int argc, char *argv[])
     vlasovBF->addTerm( beta * eps_w, w );
     
     MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
-    Epetra_CommPtr nullComm = Teuchos::null;
     const bool allowPruning = false;  // to keep inter-mesh geometry determinations from getting too complex, don't allow the mesh topology to be pruned to keep only MPI-local geometry.
     
     BCPtr  bc  = BC::bc();
@@ -319,7 +319,7 @@ int main(int argc, char *argv[])
         polyOrderEnhancements[eps_w->ID()]  = dp_i;
       }
 
-      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, p_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
+      MeshPtr mesh = Teuchos::rcp( new Mesh (phaseSpaceMeshTopo, vlasovBF, p_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, Teuchos::null, allowPruning) );
 
       // we separate tn into three components: the space-normal, time-normal, and velocity-normal sides
       // map from the side ordinal in a cell to which sub-trace ID.
@@ -456,7 +456,8 @@ int main(int argc, char *argv[])
                 
         reorderMatrix(*K, idToSortedID, K_sorted);
         
-        EpetraExt::RowMatrixToMatrixMarketFile(sortedMatrixPath.c_str(),K_sorted,NULL,NULL,false);
+        auto K_sorted_ptr = Teuchos::rcp(&K_sorted, false);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(sortedMatrixPath, E_to_T::matrix(K_sorted_ptr));
       }
       
       // compute L^2 error in f:
@@ -486,7 +487,7 @@ int main(int argc, char *argv[])
         std::vector<int> myGramRows(gramRowsThisRank.begin(),gramRowsThisRank.end());
         std::vector<int> gramRowsVector;
         std::vector<int> offsets;
-        MPIWrapper::allGatherVariable(*mesh->Comm(), gramRowsVector, myGramRows, offsets);
+        MPIWrapper::allGatherVariable(mesh->Comm(), gramRowsVector, myGramRows, offsets);
         
         std::set<int> gramRows(gramRowsVector.begin(),gramRowsVector.end()); // deduplicate with set
         

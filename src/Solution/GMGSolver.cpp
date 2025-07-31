@@ -24,6 +24,9 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
+#include "E_to_T.hpp"
+#include "MatrixMarket_Tpetra.hpp"
+
 #include <Teuchos_ParameterList.hpp>
 
 // hard-code some constants from AztecOO.h that are also used by us and/or Belos:
@@ -628,14 +631,21 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   {
     ostringstream path;
     path << _pathForExport << "M.dat";
-    if (rank == 0) cout << "Writing preconditioner to " << path.str() << endl;
-    EpetraExt::RowMatrixToMatrixMarketFile(path.str().c_str(),*_gmgOperator->getMatrixRepresentation(), NULL, NULL, false);
+    auto M_epetra = _gmgOperator->getMatrixRepresentation();
+    
+    if (rank == 0)
+    {
+      cout << "Writing preconditioner to " << path.str() << endl;
+    }
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), E_to_T::matrix(M_epetra));
+    
     path.str("");
     path << _pathForExport << "A.dat";
-    if (rank == 0) cout << "Writing system matrix to " << path.str() << endl;
-    EpetraExt::RowMatrixToMatrixMarketFile(path.str().c_str(),*_stiffnessMatrix, NULL, NULL, false);
-
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "DEBUGGING: throw after matrix write.");
+    if (rank == 0)
+    {
+      cout << "Writing system matrix to " << path.str() << endl;
+    }
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), E_to_T::matrix(_stiffnessMatrix));
   }
   
 //    cout << "NOTE: setting user convergence status test.\n";

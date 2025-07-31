@@ -9,12 +9,12 @@
 //
 //
 
-#include "EpetraExt_RowMatrixOut.h"
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "CamelliaDebugUtility.h"
 #include "CamelliaTestingHelpers.h"
 //#include "ConvectionDiffusionReactionFormulation.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GMGOperator.h"
 #include "MeshFactory.h"
@@ -118,7 +118,7 @@ namespace
     }
     
 //    { // DEBUGGING: export to disk
-//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
 //      int rank = Teuchos::GlobalMPISession::getRank();
 //      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 //    }
@@ -531,7 +531,7 @@ namespace
     }
 
 //    { // DEBUGGING: export to disk
-//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
 //      int rank = Teuchos::GlobalMPISession::getRank();
 //      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 //      
@@ -705,7 +705,7 @@ namespace
     fineSoln->importSolution();
     
 //    { // DEBUGGING: export to disk
-//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
 //      int rank = Teuchos::GlobalMPISession::getRank();
 //      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 //
@@ -841,7 +841,7 @@ namespace
 //    Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
 //    
 //    cout << "Outputting P to file.\n";
-//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P, NULL, NULL, false); // false: don't write header
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
 //    
 //    fineSoln->projectOntoMesh(exactSolnMap);
 //    coarseSoln->initializeLHSVector();

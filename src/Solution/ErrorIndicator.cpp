@@ -335,6 +335,25 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumEr
   return globalEntries;
 }
 
+std::set<GlobalIndexType> ErrorIndicator::globalCellsBelowThreshold(const double &threshold, const std::set<GlobalIndexType> localExcludedCells)
+{
+  std::vector<GlobalIndexType> localCellsBelowThreshold;
+  for (auto measureEntry : _localErrorMeasures) {
+    GlobalIndexType cellID = measureEntry.first;
+    double cellError = measureEntry.second;
+    if ((cellError < threshold) && (localExcludedCells.find(cellID) == localExcludedCells.end()))
+    {
+      localCellsBelowThreshold.push_back(cellID);
+    }
+  }
+  std::vector<GlobalIndexType> gatheredCellsVector;
+  std::vector<int> offsets;
+  MPIWrapper::allGatherVariable<GlobalIndexType>(_mesh->Comm(), gatheredCellsVector, localCellsBelowThreshold, offsets);
+  
+  std::set<GlobalIndexType> gatheredCells(gatheredCellsVector.begin(),gatheredCellsVector.end());
+  return gatheredCells;
+}
+
 std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalParentCellsBelowThreshold(const double &maxError, const std::set<GlobalIndexType> &excludedChildren)
 {
   gatherParentError(excludedChildren);

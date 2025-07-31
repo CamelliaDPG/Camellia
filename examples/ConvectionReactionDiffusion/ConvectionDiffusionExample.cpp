@@ -6,6 +6,7 @@
 #include "ConvectionDiffusionReactionFormulation.h"
 #include "EnergyErrorFunction.h"
 #include "ExpFunction.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GMGSolver.h"
 #include "GnuPlotUtil.h"
@@ -19,9 +20,9 @@
 
 // Tpetra includes
 #include <MatrixMarket_Tpetra.hpp>
+
 // EpetraExt includes
 #include "EpetraExt_MatrixMatrix.h"
-#include "EpetraExt_RowMatrixOut.h"
 
 typedef double Scalar;
 
@@ -55,7 +56,6 @@ enum ExactSolutionChoice {
 const static int INFLOW_TAG_ID  = 0; // arbitrary, just an identifier
 const static int OUTFLOW_TAG_ID = 1;
 
-using namespace Teuchos;
 FunctionPtr exp(FunctionPtr power)
 {
   return rcp(new Exp<double>(power));
@@ -432,11 +432,11 @@ double h_mean(MeshPtr mesh)
     my_hMax = max(values[0],my_hMax);
     my_hMin = min(values[0],my_hMin);
   }
-  double hMax, hMin;
-  mesh->Comm()->MaxAll(&my_hMax, &hMax, 1);
-  mesh->Comm()->MinAll(&my_hMin, &hMin, 1);
+  double hMax = MPIWrapper::max(mesh->Comm(), my_hMax);
+  double hMin = MPIWrapper::min(mesh->Comm(), my_hMax);
+  
   double hMean = sqrt(hMax * hMin);
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   if (rank == 0) cout << "hMean: " << hMean << endl;
   return hMean;
 }
@@ -457,7 +457,7 @@ void saveMesh(MeshPtr mesh, string meshSavePrefix, int refinementNumber)
 
 bool meshesMatch(MeshPtr mesh, MeshTopologyViewPtr meshTopoView)
 {
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   int meshElements = mesh->numElements();
   int meshTopoElements = meshTopoView->cellCount();
   if (meshElements != meshTopoElements)
@@ -1140,23 +1140,6 @@ int main(int argc, char *argv[])
       condNumbers.push_back(condNum);
       if (rank == 0) cout << "Condition Number (LAPACK) for refinement " << refinementNumber << ": " << condNum << endl;
     }
-    else if (conditionNumberEstimate)
-    {
-      int errCode;
-      double conditionNumber = solution->conditionNumberEstimate(errCode);
-      if (rank==0)
-      {
-        if (errCode != 0)
-        {
-          cout << "Condition Number estimation failed with error code " << errCode;
-          cout << " (estimate, for what it's worth--very little, probably--was " << conditionNumber << ")\n";
-        }
-        else
-        {
-          cout << "Condition Number estimate refinement " << refinementNumber << ": " << conditionNumber << endl;
-        }
-      }
-    }
     if (writeEigValues)
     {
       ostringstream eigFileName;
@@ -1211,7 +1194,7 @@ int main(int argc, char *argv[])
     ostringstream stiffmatrixName;
     stiffmatrixName << thisRunPrefix.str() << "finalStiffness.dat";
     Teuchos::RCP<Epetra_CrsMatrix> stiffness = solution->getStiffnessMatrix();
-    EpetraExt::RowMatrixToMatrixMarketFile(stiffmatrixName.str().c_str(),*stiffness, NULL, NULL, false);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(stiffmatrixName.str(), E_to_T::matrix(stiffness));
     if (rank == 0) cout << "Wrote unpreconditioned matrix to " << stiffmatrixName.str() << endl;
     
     auto gmgSolver = getGMGSolver();
@@ -1228,7 +1211,8 @@ int main(int argc, char *argv[])
     
     ostringstream preconditionedStiffmatrixName;
     preconditionedStiffmatrixName << thisRunPrefix.str() << "finalStiffnessPreconditioned.dat";
-    EpetraExt::RowMatrixToMatrixMarketFile(preconditionedStiffmatrixName.str().c_str(),preconditionedStiffness, NULL, NULL, false);
+    auto preconditionedStiffnessPtr = Teuchos::rcp(&preconditionedStiffness, false);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(preconditionedStiffmatrixName.str(), E_to_T::matrix(preconditionedStiffnessPtr));
     if (rank == 0) cout << "Wrote preconditioned matrix to " << preconditionedStiffmatrixName.str() << endl;
   }
   

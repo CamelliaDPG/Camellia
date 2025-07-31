@@ -93,7 +93,7 @@ namespace
     
     BFPtr bf = BF::bf(vf);
     
-    Epetra_CommPtr comm = MPIWrapper::CommWorld();
+    Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
     const bool allowPruning = false;
     MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
     

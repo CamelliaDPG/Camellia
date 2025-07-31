@@ -116,7 +116,7 @@ void testOverridingBasisCache(Teuchos::FancyOStream &out, bool &success)
   {
     // create a non-distributed mesh (will be replicated on each MPI rank): we are not testing anything MPI-related here…
     MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order, 0, {0.,0.},
-                                                map<int,int>(), map<int,int>(), MPIWrapper::CommSerial());
+                                                map<int,int>(), map<int,int>(), MPIWrapper::TeuchosCommSerial());
 
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     mesh->registerSolution(solution);

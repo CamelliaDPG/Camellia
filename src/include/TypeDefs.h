@@ -205,6 +205,10 @@ template <typename Scalar>
 using TMatrix = Tpetra::CrsMatrix<Scalar>;
 template <typename Scalar>
 using TMatrixPtr = Teuchos::RCP< TMatrix<Scalar> >;
+using TGraph = TMatrix<double>::crs_graph_type;
+using TGraphPtr = Teuchos::RCP< TGraph >;
+using TMap = TMatrix<double>::map_type;
+using TMapPtr = Teuchos::RCP< TMap >;
 template <typename Scalar>
 using TVector = Tpetra::MultiVector<Scalar>;
 template <typename Scalar>

@@ -8,105 +8,30 @@
 #ifndef SolutionMoments_hpp
 #define SolutionMoments_hpp
 
-#include "Camellia_TensorIndices.h"
-#include "CubatureFactory.h"
-#include "Function.h"
-#include "MPIWrapper.h"
-#include "SubExtrudedMeshTopology.h"
+#include "SolutionMomentsForPolyOrder.h"
 #include "TypeDefs.h"
+
+#include <Intrepid2_HierarchicalBasisProlongator.hpp>
 
 namespace Camellia
 {
-  namespace MomentIndices
-  {
-    //! gets the number of distinct moments given the specified moment count.  In 3D, returns 1 for 1, 4 for 2, etc.
-    KOKKOS_INLINE_FUNCTION int getNumMomentEntries(const int &momentCount, const int &numDims)
-    {
-      if (numDims == 3)
-      {
-        return (momentCount)*(momentCount+1)*(momentCount+2) / 6;
-      }
-      else if (numDims == 2)
-      {
-        return (momentCount)*(momentCount+1) / 2;
-      }
-      else if (numDims == 1)
-      {
-        return momentCount;
-      }
-      else
-      {
-        return -1;
-      }
-    }
-  
-    //! returns an index, with k as the fastest-moving, for contiguous moment indexing.  For zeroth moment, momentCount should be 1; for zeroth and first, it shoud be 2, etc.
-    KOKKOS_INLINE_FUNCTION int getMomentIndex(const int &xMoment, const int &yMoment, const int &zMoment,
-                                              const int &momentCount)
-    {
-      // TODO: implement a closed-form version of this; for now we do the brute force thing:
-      int index = 0;
-      for(int i=0; i<momentCount; ++i)
-        for(int j=0; j<momentCount-i; ++j)
-          for(int k=0; k<momentCount-i-j; ++k)
-          {
-            if ((i==xMoment) && (j==yMoment) && (k==zMoment))
-              return index;
-            index++;
-          }
-      return index;
-    }
-  
-    //! returns an index, with final dimension as the fastest-moving, for contiguous moment indexing.  For zeroth moment, momentCount should be 1; for zeroth and first, it shoud be 2, etc.  This is the 2D variant.
-    KOKKOS_INLINE_FUNCTION int getMomentIndex(const int &xMoment, const int &yMoment, const int &momentCount)
-    {
-      // TODO: implement a closed-form version of this; for now we do the brute force thing:
-      int index = 0;
-      for(int i=0; i<momentCount; ++i)
-        for(int j=0; j<momentCount-i; ++j)
-        {
-          if ((i==xMoment) && (j==yMoment))
-            return index;
-          index++;
-        }
-      return index;
-    }
-  
-    //! returns an index, with final dimension as the fastest-moving, for contiguous moment indexing.  For zeroth moment, momentCount should be 1; for zeroth and first, it shoud be 2, etc.  This is the 1D variant.
-    KOKKOS_INLINE_FUNCTION int getMomentIndex(const int &xMoment, const int &momentCount)
-    {
-      return xMoment;
-    }
-  }
-
   class SolutionMoments
   {
     using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-    using SerendipityOrdinalMap = typename Intrepid2::Basis<DeviceType,double,double>::OrdinalTypeArray1D;
-    
-    const int _maxMomentNumber;
-    
-    BasisPtr _spatialBasis; // _spatialBasis x extrusionBases = _phaseSpaceBasis.
-    BasisPtr _phaseSpaceBasis;
-    BasisPtr _extrudedSpatialBasis; // if there is a "surviving" extrusion dimension, _extrudedSpatialBasis = spatialBasis * extrusionBasis.  Otherwise, it's just spatialBasis.
-    std::vector<BasisPtr> _extrusionBases;
-    Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> _componentBasisCardinalities; // first entry belongs to spatial basis
-    
-    SerendipityOrdinalMap _serendipityToTensorBasisOrdinal; // indices are serendipity ordinals; values are tensor basis ordinals
-    SerendipityOrdinalMap _tensorToSerendipityOrdinal;      // reverse map; -1 where serendipity deletes (inefficient use of memory here -- consider alternatives?)
-    
+    using Prolongator = Intrepid2::HierarchicalBasisProlongator<DeviceType,double,double>;
     using BasisIntegralView = Camellia::DeviceView<double>;
     int _numExtrusionDimensions;
-    Kokkos::Array<BasisIntegralView,Intrepid2::Parameters::MaxTensorComponents> _extrusionBasisIntegrals; // one entry per extrusion dimension; each has shape (F); each is a *unit reference space* integral: we integrate over [-1,1], and then divide by 2.  That way, we can simply multiply by the physical measure to get the physical integral.
+    BasisPtr _highestOrderExtrudedSpatialBasis;
+    
+    int _maxMomentNumber;
     
     SolutionPtr _soln; // in phase space, defined on an ExtrudedMeshTopology
     VarPtr _fieldVar;
-    
     MeshPtr _configurationSpaceMesh; // to start, this is only allowed to be defined on the physical MeshTopology from the ExtrudedMeshTopology in _soln, but we will eventually support a more general slice (extrusions of that physical MeshTopology)
     
     std::vector<IndexType> _physicalCellIDs; // sorted list of physical cell IDs, for which moments are stored in _spatialBasisCoefficients
     
-    BasisIntegralView _spatialBasisCoefficients; // (M,C,F) container, defined on the rank-owned cells of the physicalMesh
+    BasisIntegralView _spatialBasisCoefficients; // (M,C,F) container, defined on the rank-owned cells of the physicalMesh; if physicalMesh varies in p, then this is sized to accommodate maximum p in the F index.
     bool _spatialBasisCoefficientsHasBeenCheckedOut = false;
     
     using IndexView = Camellia::DeviceView<IndexType>;
@@ -115,6 +40,12 @@ namespace Camellia
     int _numDimensionsPhysicalMesh;
     
     BasisReconciliation _basisReconciliation;
+    
+    std::map<int, BasisPtr> _extrudedSpatialBases; // key is deltaP, relative to initialH1Order
+    
+    std::map<std::pair<int,int>,Teuchos::RCP<Prolongator>> _physicalMeshProlongators; // keys are deltaP values relative to initialH1Order[0] of the physicalMesh, for {coarse basis, fine basis}.  (Fine basis being the actual physical-mesh basis.)
+    
+    std::map<int,Teuchos::RCP<SolutionMomentsForPolyOrder> > _momentsForDeltaP; // keys are deltaP values
   public:
     SolutionMoments(const int &maxMomentNumber, SolutionPtr phaseSpaceSoln, VarPtr fieldVar, MeshPtr physicalMesh,
                     int survivingExtrusionDimension = -1);

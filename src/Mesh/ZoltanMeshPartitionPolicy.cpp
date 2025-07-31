@@ -326,7 +326,7 @@ void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, i
 {
   Mesh* mesh = ((MigrationData*) data)->mesh;
 
-  // loop thru all objects
+  // loop through all objects
   for (int i=0; i<num_obj; i++)
   {
     GlobalIndexType cellID = global_ids[i];

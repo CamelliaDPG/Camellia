@@ -46,7 +46,7 @@ map<int,int> Mesh::_emptyIntIntMap;
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Teuchos_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
@@ -69,7 +69,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<in
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Teuchos_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
@@ -92,7 +92,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Ord
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Teuchos_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
@@ -117,14 +117,14 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr meshPartitionPolicy, Epetra_CommPtr Comm)
+           MeshPartitionPolicyPtr meshPartitionPolicy, Teuchos_CommPtr Comm)
 :
 Mesh::Mesh(meshTopology, bilinearForm, H1Order, pToAddTest, trialOrderEnhancements, testOrderEnhancements, meshPartitionPolicy, Comm, (meshTopology->getPeriodicBCs().size() == 0))
 {}
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Teuchos_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
@@ -149,7 +149,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
            TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs,
-           Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+           Teuchos_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
 {
 
 //  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
@@ -235,7 +235,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> g
 }
 
 // ! Constructor for a single-element mesh extracted from an existing mesh
-Mesh::Mesh(MeshPtr mesh, GlobalIndexType cellID, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+Mesh::Mesh(MeshPtr mesh, GlobalIndexType cellID, Teuchos_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _pToAddToTest = mesh->testSpaceEnrichment();
   int meshDim = mesh->getTopology()->getDimension();
@@ -1084,20 +1084,19 @@ void Mesh::initializeTransformationFunction()
   }
 }
 
-void Mesh::initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Epetra_CommPtr Comm)
+void Mesh::initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Teuchos_CommPtr Comm)
 {
   if ( partitionPolicy.get() == NULL )
   {
     if (Comm == Teuchos::null)
     {
 #ifdef HAVE_MPI
-      Comm = Teuchos::rcp( new Epetra_MpiComm(MPI_COMM_WORLD) );
+      Comm = MPIWrapper::TeuchosCommWorld();
 #else
-      Comm = Teuchos::rcp( new Epetra_SerialComm() );
+      Comm = MPIWrapper::TeuchosCommSerial();
 #endif
     }
-    auto teuchosComm = MPIWrapper::TeuchosComm(Comm);
-    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy(teuchosComm) );
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy(Comm) );
   }
 }
 
@@ -1384,10 +1383,9 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
   if (cellIDsForPRefinements.size() == 0) return;
 
   // refine any registered meshes
-  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
-       meshIt != _registeredObservers.end(); meshIt++)
+  for (auto refObserver : _registeredObservers)
   {
-    (*meshIt)->pRefine(cellIDsForPRefinements, pToAdd, repartitionAndRebuild);
+    refObserver->pRefine(cellIDsForPRefinements, pToAdd, repartitionAndRebuild);
   }
 
   _gda->didPRefine(cellIDsForPRefinements, pToAdd);

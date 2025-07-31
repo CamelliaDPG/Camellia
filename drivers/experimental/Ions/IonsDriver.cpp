@@ -17,6 +17,7 @@
 #include "HDF5Exporter.h"
 #include "MaxwellianFunction.h"
 #include "Projector.h"
+#include "RefinementHistory.h"
 #include "RefinementStrategy.h"
 #include "RHS.h"
 #include "Solution.h"
@@ -134,6 +135,122 @@ public:
   }
 };
 
+class ErrorIndicatorFunction : public Function
+{
+  ErrorIndicatorPtr _errorIndicator;
+public:
+  ErrorIndicatorFunction(ErrorIndicatorPtr errorIndicator)
+  :
+  Function("ErrorIndicatorFunction", 0, Function::VARIES_IN_NO_DIMENSION), // constant on each cell
+  _errorIndicator(errorIndicator)
+  {}
+
+  using Function::values;
+  
+  virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    // we assume that measureError() has been called before values() is called
+    // we also assume that values() will only be called for MPI-local cells
+    
+    const auto & errorMeasures = _errorIndicator->localErrorMeasures();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+
+    int numCells = cellIDs.size();
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      const auto &cellID = cellIDs[cellOrdinal];
+      auto entry = errorMeasures.find(cellID);
+      if (entry == errorMeasures.end())
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID not found in local errorMeasures");
+      }
+      const double error = entry->second;
+      
+      for (int pointOrdinal=0; pointOrdinal<values.dimension(1); pointOrdinal++)
+      {
+        values(cellOrdinal,pointOrdinal) = error;
+      }
+    }
+  }
+  
+  void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+  {
+    auto underlyingView1 = values.template getUnderlyingView<1>();
+    
+    const int numCells = underlyingView1.extent_int(0);
+    
+    const auto & errorMeasures = _errorIndicator->localErrorMeasures();
+    
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() != numCells, std::invalid_argument, "underlying view doesn't have the expected length");
+    
+    auto underlyingViewHost = Kokkos::create_mirror_view(underlyingView1);
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      const auto &cellID = cellIDs[cellOrdinal];
+      auto entry = errorMeasures.find(cellID);
+      if (entry == errorMeasures.end())
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID not found in local errorMeasures");
+      }
+      const double error = entry->second;
+      
+      underlyingViewHost(cellOrdinal) = error;
+    }
+    
+    Kokkos::deep_copy(underlyingView1, underlyingViewHost);
+  }
+};
+
+class FluxLimitingThetaFunction : public Function
+{
+  VlasovBackwardEulerFormulation & _form;
+public:
+  FluxLimitingThetaFunction(VlasovBackwardEulerFormulation &form) 
+  :
+  Function("FluxLimitingThetaFunction", 0, Function::VARIES_IN_NO_DIMENSION), // constant on each cell
+  _form(form)
+  {}
+
+  using Function::values;
+  
+  virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+
+    int numCells = cellIDs.size();
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      const double theta = _form.fluxLimitingWeightForCell(cellIDs[cellOrdinal]);
+      
+      for (int pointOrdinal=0; pointOrdinal<values.dimension(1); pointOrdinal++)
+      {
+        values(cellOrdinal,pointOrdinal) = theta;
+      }
+    }
+  }
+  
+  void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+  {
+    auto underlyingView1 = values.template getUnderlyingView<1>();
+    
+    const int numCells = underlyingView1.extent_int(0);
+    
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() != numCells, std::invalid_argument, "underlying view doesn't have the expected length");
+    
+    auto underlyingViewHost = Kokkos::create_mirror_view(underlyingView1);
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      underlyingViewHost(cellOrdinal) = _form.fluxLimitingWeightForCell(cellIDs[cellOrdinal]);
+    }
+    
+    Kokkos::deep_copy(underlyingView1, underlyingViewHost);
+  }
+};
+
 // this communication strategy is wasteful, but we don't expect this to be a major bottleneck…
 double getMaxMagnitudeOnCell(FunctionPtr fxn, MeshPtr mesh, GlobalIndexType &cellID)
 {
@@ -206,7 +323,7 @@ namespace Camellia
       TEUCHOS_TEST_FOR_EXCEPTION(extrudedMeshTopo == NULL, std::invalid_argument, "Phase-space MeshTopology must be an ExtrudedMeshTopology");
     }
 
-    virtual void refineCells(vector<GlobalIndexType> &cellIDs) override
+    virtual int refineCells(vector<GlobalIndexType> &cellIDs) override
     {
       bool repartitionAndRebuild = false;
       
@@ -598,6 +715,7 @@ namespace Camellia
       {
         std::cout << "Vlasov mesh has " << this->mesh()->getTopology()->activeCellCount() << " active elements and " << this->mesh()->globalDofCount() << " degrees of freedom.\n";
       }
+      return static_cast<int>(cell_dp.size() + cellsForXRefinement.size() + cellsForIsotropicRefinement.size());
     }
   };
 
@@ -783,81 +901,6 @@ ParameterFunctionPtr setPoissonBC(VlasovBackwardEulerFormulation &form, const do
   return rightBCFunction;
 }
 
-//! MPI-collective method for 1D meshes.  Evaluates f_soln on whatever rank owns the point x, and communicates the result to every rank.  Returns the value.
-double getSolutionFunctionValue(MeshPtr solnMesh, FunctionPtr f_soln, const double x)
-{
-  FieldContainer<double> points(1,1);
-  points(0,0) = x;
-  
-  auto cellIDs = solnMesh->cellIDsForPoints(points);
-  
-  double value = 0.0;
-  if (cellIDs.size() > 0)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() != 1, std::invalid_argument, "Found more than one cellID for point x.");
-    const auto cellID = cellIDs[0];
-    
-    if (solnMesh->myCellsInclude(cellID))
-    {
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(solnMesh, cellID);
-      
-      if (f_soln->boundaryValueOnly())
-      {
-        // i.e., a trace
-        // 1D trace: sides are just points.  Does x match one of the sides?
-        const auto & nodes = basisCache->getPhysicalCellNodes();
-        double leftNode  = nodes(0,0,0); // (C,N,D)
-        double rightNode = nodes(0,1,0);
-        BasisCachePtr sideCache;
-        if (std::abs(x-leftNode) < 1e-14)
-        {
-          sideCache = basisCache->getSideBasisCache(0);
-        }
-        else if (std::abs(x-rightNode) < 1e-14)
-        {
-          sideCache = basisCache->getSideBasisCache(1);
-        }
-        else
-        {
-          std::cout << "ERROR: x is not a mesh vertex, but f_soln is a trace solution.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found");
-        }
-        
-        FieldContainer<double> fValue(1,1); // (C,P)
-        
-        f_soln->values(fValue, sideCache);
-        
-        value = fValue(0,0);
-      }
-      else
-      {
-        // volume variable
-        FieldContainer<double> refPoint(1,1,1);
-        FieldContainer<double> physPoint(1,1,1);
-        physPoint(0,0,0) = x;
-        
-        int cubatureDegree = 1; // not curvilinear…
-        
-        CamelliaCellTools::mapToReferenceFrame( refPoint, physPoint, solnMesh->getTopology(), cellID, cubatureDegree);
-        
-        refPoint.resize(1,1);
-        
-        basisCache->setRefCellPointsFC(refPoint);
-        
-        FieldContainer<double> fValue(1,1); // (C,P)
-        
-        f_soln->values(fValue, basisCache);
-        
-        value = fValue(0,0);
-      }
-    }
-  }
-  
-  // all but the MPI-owner have a zero value, so we can sum to communicate the value to all ranks.
-  value = MPIWrapper::sum(value);
-  return value;
-}
-
 double inflowErrorOnBoundary(VlasovBackwardEulerFormulation &form, std::vector<FunctionPtr> f_in, const int bcTag, const int p_max)
 {
   const std::string & tagName = DIRICHLET_SET_TAG_NAME;
@@ -910,7 +953,7 @@ void setUseGMG(VlasovBackwardEulerFormulation &form, int maxDofsForDirectSolve, 
 
 int main(int argc, char *argv[])
 {
-  // enable_floating_point_exceptions();
+//  enable_floating_point_exceptions();
   
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   
@@ -1004,6 +1047,8 @@ int main(int argc, char *argv[])
     std::string resultsFilePrefix = "";
     
     std::string resultsFile = "";
+    std::string refHistorySaveFile = "";
+    std::string refHistoryLoadFile = "";
     
     std::string refStrategyString = "anisotropicCFL"; // "greedy" or "fixed-count" alternatives
     
@@ -1065,6 +1110,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("voltageBCDamping", &voltageBCDamping);
     cmdp.setOption("criticalCurrentRatio", &criticalCurrentRatio);
     cmdp.setOption("cubatureEnrichmentDegree", &cubatureEnrichmentDegree);
+    cmdp.setOption("saveRefHistoryToFile", &refHistorySaveFile);
+    cmdp.setOption("loadRefHistoryFromFile", &refHistoryLoadFile);
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -1273,6 +1320,21 @@ int main(int argc, char *argv[])
     int maxMomentNumber = 1; // we want to compute current for circuit solve.
     
     VlasovBackwardEulerFormulation form(q_values, m_values, speciesLabels, useSerendipityBasis, poissonConfig, spatialMeshTopo, dt, vxVertices, H1Order, delta_k, maxMomentNumber, useCrankNicolson, enforcePositivity);
+    
+    Teuchos::RCP<RefinementHistory> refHistory;
+    if (refHistorySaveFile != "")
+    {
+      refHistory = Teuchos::rcp(new RefinementHistory);
+      if (rank == 0) refHistory->setSaveFile(refHistorySaveFile); // only do the writing on rank 0
+      form.vlasovMesh()->registerObserver(refHistory);
+    }
+    if (refHistoryLoadFile != "")
+    {
+      RefinementHistory loadedRefHistory;
+      loadedRefHistory.loadFromFile(refHistoryLoadFile); // we read on every rank
+      loadedRefHistory.playback(form.vlasovMesh()); // will also record in refHistory if that exists
+      form.vlasovMesh()->repartitionAndRebuild();
+    }
     
     form.vlasovSolution()->setCubatureEnrichmentDegree(cubatureEnrichmentDegree);
     
@@ -1889,6 +1951,19 @@ int main(int argc, char *argv[])
       vlasovFunctionsToExport.push_back(energyErrorFunction);
       vlasovFunctionsToExportNames.push_back("Vlasov energy error");
       
+      if (enforcePositivity)
+      {
+        FunctionPtr thetaFluxLimitingFunction = Teuchos::rcp(new FluxLimitingThetaFunction(form));
+        vlasovFunctionsToExport.push_back(thetaFluxLimitingFunction);
+        vlasovFunctionsToExportNames.push_back("Vlasov flux-limiting theta");
+        
+        auto thetaErrorIndicator = fluxLimitingRefStrategy->errorIndicator();
+        thetaErrorIndicator->measureError();
+        FunctionPtr fluxLimitingErrorIndicator = Teuchos::rcp(new ErrorIndicatorFunction(thetaErrorIndicator));
+        vlasovFunctionsToExport.push_back(fluxLimitingErrorIndicator);
+        vlasovFunctionsToExportNames.push_back("Vlasov flux-limiting error");
+      }
+      
       FunctionPtr cellIDFunction = Teuchos::rcp(new CellIDFunction);
       vlasovFunctionsToExport.push_back(cellIDFunction);
       vlasovFunctionsToExportNames.push_back("Vlasov cell ID");
@@ -1972,7 +2047,12 @@ int main(int argc, char *argv[])
     auto lhsTerm = form.vlasovSolution()->bf()->testFunctional(solnMap, testVarIDsToExclude);
     auto residual = lhsTerm - rhsTerm;
     
-    double solnNorm = RieszRep::rieszRep(form.vlasovMesh(), form.vlasovSolution()->ip(), lhsTerm)->getNorm();
+    // Recompute Poisson before reporting energy error; may have changed due to mesh refinement for BC resolution
+    form.configurationSpaceSolve();
+    
+    auto solnRep = RieszRep::rieszRep(form.vlasovMesh(), form.vlasovSolution()->ip(), lhsTerm);
+    double solnNorm = solnRep->getNorm();
+
     if (rank == 0)
     {
       std::cout << "Initial solution, energy norm: " << solnNorm << std::endl;
@@ -2015,6 +2095,7 @@ int main(int argc, char *argv[])
           if (performRefinements(form, refStrategy, unrefinementStrategy, maxElements) )
           {
             meshChanged = true;
+            form.configurationSpaceSolve();
           }
           
           if (enforcePositivity)
@@ -2028,6 +2109,7 @@ int main(int argc, char *argv[])
             if ( performRefinements(form, fluxLimitingRefStrategy, unrefinementStrategy, maxElements) )
             {
               meshChanged = true;
+              form.configurationSpaceSolve();
             }
           }
           
@@ -2040,39 +2122,32 @@ int main(int argc, char *argv[])
               {
                 if (meshChanged)
                 {
-//                  {
-//                    // DEBUGGING: output viz at (t+dt) to allow diagnosis when we fail to solve in finishTimeStep() call
-//                    solutionMoments->update(); // update to get latest density, velocity
-//                    form.configurationSpaceSolve();
-//                    form.configurationSpaceFormulation()->updateConfigurationSpaceFunctions();
-//                    
-//                    auto Ex_extruded = form.configurationSpaceFormulation()->E_i(0);
-//                    
-//                    auto phaseSpaceFunctionNames = vlasovFunctionsToExportNames;
-//                    phaseSpaceFunctionNames.push_back("Ex_extruded");
-//                    auto phaseSpaceFunctions     = vlasovFunctionsToExport;
-//                    phaseSpaceFunctions.push_back(Ex_extruded);
-//                    
-//                    vlasovViz->exportSolution(form.vlasovSolution(),phaseSpaceFunctions,phaseSpaceFunctionNames,t+dt,num1DPointsVlasov);
-//                    poissonViz->exportSolution(form.configurationSpaceSolution(),poissonFunctionsToExport,poissonFunctionsToExportNames,t+dt,num1DPointsPoisson);
-//                  }
+                  // repartition and rebuild physical mesh prior to assembling/solving
+                  form.configurationSpaceMesh()->repartitionAndRebuild();
+                  
+                  // also reconstruct GMG solver, if one is in use:
+                  form.reconstructGMGSolver();
+                  
                   // solve again so we can legitimately measure error again
                   form.finishTimeStep();
                   meshChanged = false;
                 }
                 
                 bool printToConsole = (form.vlasovMesh()->Comm()->getRank() == 0);
-                numUnrefinementsThisPass = unrefinementStrategy->greedyUnrefinement(greedyUnrefinementThreshold, printToConsole);
+                numUnrefinementsThisPass = unrefinementStrategy->greedyHUnrefinement(greedyUnrefinementThreshold, printToConsole);
+                
+                if (numUnrefinementsThisPass == 0)
+                {
+                  // if no h-unrefinements this pass, then try a p-unrefinement
+                  numUnrefinementsThisPass = unrefinementStrategy->greedyPUnrefinement(greedyUnrefinementThreshold, printToConsole);
+                }
                 
                 if (numUnrefinementsThisPass > 0)
                 {
+                  // repartition and rebuild phase-space mesh -- greedy*Unrefinement() does not do this automatically (which performRefinements(), above, does do)
+                  form.vlasovMesh()->repartitionAndRebuild();
+                  
                   meshChanged = true;
-                  
-                  // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
-                  form.configurationSpaceMesh()->repartitionAndRebuild();
-                  
-                  // also reconstruct GMG solver, if one is in use:
-                  form.reconstructGMGSolver();
                 }
               } while (numUnrefinementsThisPass > 0);
             }
@@ -2088,6 +2163,13 @@ int main(int argc, char *argv[])
         if (meshChanged)
         {
           // then solve again
+          
+          // repartition and rebuild physical mesh prior to assembling/solving
+          form.configurationSpaceMesh()->repartitionAndRebuild();
+          
+          // also reconstruct GMG solver, if one is in use:
+          form.reconstructGMGSolver();
+          
           form.finishTimeStep();
         }
       }
@@ -2153,6 +2235,11 @@ int main(int argc, char *argv[])
       {
         if (saveViz)
         {
+          if (enforcePositivity)
+          {
+            fluxLimitingRefStrategy->errorIndicator()->measureError(); // update to ensure that we have local values for visualization
+          }
+          
           solutionMoments->update(); // update to get latest density, velocity
           vlasovViz->exportSolution(form.vlasovSolution(),vlasovFunctionsToExport,vlasovFunctionsToExportNames,t,num1DPointsVlasov);
           poissonViz->exportSolution(form.configurationSpaceSolution(),poissonFunctionsToExport,poissonFunctionsToExportNames,t,num1DPointsPoisson);

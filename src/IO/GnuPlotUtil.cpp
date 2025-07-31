@@ -23,7 +23,7 @@ MeshPtr gatherMeshToRankZeroIfDistributed(MeshPtr mesh)
       mesh = MeshFactory::minRuleMesh(meshTopoGathered, mesh->bilinearForm(),
                                       mesh->globalDofAssignment()->getInitialH1Order(),
                                       mesh->globalDofAssignment()->getTestOrderEnrichment(),
-                                      MPIWrapper::CommSerial());
+                                      MPIWrapper::TeuchosCommSerial());
     }
     else
     {

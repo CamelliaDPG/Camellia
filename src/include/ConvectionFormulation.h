@@ -17,6 +17,7 @@
 #define Camellia_ConvectionFormulation_h
 
 #include "VarFactory.h"
+#include "BasisFamily.h"
 #include "BF.h"
 
 namespace Camellia
@@ -32,7 +33,8 @@ class ConvectionFormulation
 
   static const string S_V;
 public:
-  ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction);
+  ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction,
+                        BasisFamilyPtr basisFamily = BasisFamily::hierarchicalBasisFamily());
 
   BFPtr bf();
 

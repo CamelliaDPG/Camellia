@@ -296,6 +296,122 @@ namespace
       TEST_FLOATING_EQUALITY(expectedValue, hessianValue, tol);
     }
   }
+
+  TEUCHOS_UNIT_TEST(ErrorIndicator, GlobalCellsBelowThreshold)
+  {
+    // set things up with the hessian error indicator as in HessianHighOrder
+    // then check whether globalCellsBelowThreshold() behaves as expected.
+    int meshWidth = 5, meshHeight = 5;
+    
+    SolutionPtr soln;
+    VarPtr var;
+    initializeSolution(soln, var, meshWidth, meshHeight);
+    
+    ErrorIndicatorPtr hessianIndicator = ErrorIndicator::hessianErrorIndicator(soln, var);
+    hessianIndicator->measureError();
+    
+    MeshTopologyViewPtr meshTopo = soln->mesh()->getTopology()->getGatheredCopy();
+    int spaceDim = meshTopo->getDimension();
+    
+    double tol = 1e-12;
+    const set<GlobalIndexType>* myCells = &soln->mesh()->cellIDsInPartition();
+    const map<GlobalIndexType,double> & localHessianValues = hessianIndicator->localErrorMeasures();
+    
+    using DataType = std::pair<GlobalIndexType, double>;
+    std::vector<DataType> localHessianValuesVector(localHessianValues.begin(),localHessianValues.end());
+    
+    std::vector<DataType> globalHessianValues;
+    std::vector<int> offsets;
+    MPIWrapper::allGatherVariable(soln->mesh()->Comm(), globalHessianValues, localHessianValuesVector, offsets);
+    
+    for (const auto & entry : globalHessianValues)
+    {
+      const double errThreshold = entry.second * (1. + 1e-13); // cheat slightly above this element, so that this element is included
+      auto actualCellsBelowThreshold = hessianIndicator->globalCellsBelowThreshold(errThreshold); // note: MPI collective method (important that the outer for loop is over globalHessianValues rather than localHessianValues)
+      
+      std::set<GlobalIndexType> expectedCellsBelowThreshold;
+      for (auto potentialMatchEntry : globalHessianValues)
+      {
+        if (potentialMatchEntry.second < errThreshold)
+        {
+          expectedCellsBelowThreshold.insert(potentialMatchEntry.first);
+        }
+      }
+      
+      auto numCellsExpected = expectedCellsBelowThreshold.size();
+      auto numCellsActual   = actualCellsBelowThreshold.size();
+      TEST_EQUALITY(numCellsExpected, numCellsActual);
+      
+      if (numCellsActual == numCellsExpected)
+      {
+        auto expectedIt = expectedCellsBelowThreshold.begin();
+        auto actualIt   = actualCellsBelowThreshold.begin();
+        for (; expectedIt != expectedCellsBelowThreshold.end(); expectedIt++, actualIt++)
+        {
+          TEST_EQUALITY(*expectedIt, *actualIt);
+        }
+      }
+    }
+  }
+
+  TEUCHOS_UNIT_TEST(ErrorIndicator, LocalCellsAboveThreshold)
+  {
+    // set things up with the hessian error indicator as in HessianHighOrder
+    // then check whether localCellsAboveErrorThreshold() behaves as expected.
+    int meshWidth = 5, meshHeight = 5;
+    
+    SolutionPtr soln;
+    VarPtr var;
+    initializeSolution(soln, var, meshWidth, meshHeight);
+    
+    ErrorIndicatorPtr hessianIndicator = ErrorIndicator::hessianErrorIndicator(soln, var);
+    hessianIndicator->measureError();
+    
+    MeshTopologyViewPtr meshTopo = soln->mesh()->getTopology()->getGatheredCopy();
+    int spaceDim = meshTopo->getDimension();
+    
+    double tol = 1e-12;
+    const set<GlobalIndexType>* myCells = &soln->mesh()->cellIDsInPartition();
+    const map<GlobalIndexType,double> & hessianValues = hessianIndicator->localErrorMeasures();
+    
+    std::vector<std::pair<GlobalIndexType, double>> sortedVector(hessianValues.begin(), hessianValues.end());
+
+    // Sort by error
+    std::sort(sortedVector.begin(), sortedVector.end(), [](const auto& a, const auto& b) {
+        return a.second < b.second; // Compare based on the error value
+    });
+
+    for (auto entryIt = sortedVector.begin(); entryIt != sortedVector.end(); entryIt++)
+    {
+      const double errThreshold = entryIt->second * (1. - 1e-13); // cheat slightly below this element, so that this element is included
+      std::vector<GlobalIndexType> cellsAboveThreshold;
+      hessianIndicator->localCellsAboveErrorThreshold(errThreshold, cellsAboveThreshold);
+      std::set<GlobalIndexType> actualCellsAboveThreshold(cellsAboveThreshold.begin(),cellsAboveThreshold.end());
+      
+      std::set<GlobalIndexType> expectedCellsAboveThreshold;
+      for (auto potentialMatchEntry : hessianValues)
+      {
+        if (potentialMatchEntry.second > errThreshold)
+        {
+          expectedCellsAboveThreshold.insert(potentialMatchEntry.first);
+        }
+      }
+      
+      auto numCellsExpected = expectedCellsAboveThreshold.size();
+      auto numCellsActual   = cellsAboveThreshold.size();
+      TEST_EQUALITY(numCellsExpected, numCellsActual);
+      
+      if (numCellsActual == numCellsExpected)
+      {
+        auto expectedIt = expectedCellsAboveThreshold.begin();
+        auto actualIt   = actualCellsAboveThreshold.begin();
+        for (; expectedIt != expectedCellsAboveThreshold.end(); expectedIt++, actualIt++)
+        {
+          TEST_EQUALITY(*expectedIt, *actualIt);
+        }
+      }
+    }
+  }
   
 //  // meta-test: just to see that initializeSolution is doing what it should, by looking at it
 //  TEUCHOS_UNIT_TEST(ErrorIndicator, VisualizeInitializedSolution)

@@ -169,6 +169,7 @@ namespace Camellia {
       {
         return fromDeviceContainerWithRank<BasisValues,4>(basisValues);
       }
+      std::cout << "FieldContainerConversion::fromBasisValues(): Encountered unsupported BasisValues rank = " << rank << std::endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
     }
     

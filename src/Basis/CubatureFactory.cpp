@@ -19,8 +19,6 @@
 #include "Intrepid2_CubatureDirectLineGauss.hpp"
 #include "Intrepid2_CubaturePolylib.hpp"
 
-using namespace Teuchos;
-
 using namespace Camellia;
 
 Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, int cubDegree, Intrepid2::EPolyType polyType)
