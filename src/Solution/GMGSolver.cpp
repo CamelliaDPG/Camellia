@@ -634,6 +634,8 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     path << _pathForExport << "A.dat";
     if (rank == 0) cout << "Writing system matrix to " << path.str() << endl;
     EpetraExt::RowMatrixToMatrixMarketFile(path.str().c_str(),*_stiffnessMatrix, NULL, NULL, false);
+
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "DEBUGGING: throw after matrix write.");
   }
   
 //    cout << "NOTE: setting user convergence status test.\n";

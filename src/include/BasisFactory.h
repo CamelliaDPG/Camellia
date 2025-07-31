@@ -42,9 +42,9 @@ private:
   _existingBases; // keys are ((polyOrder,cellTopoKey),fs))
   map< pair< pair<int,int>, Camellia::EFunctionSpace >, BasisPtr >
   _conformingBases; // keys are ((polyOrder,cellTopoKey),fs))
-  map< tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
+  map< std::tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
   _tensorBases; // keys are (one-lower tensorial degree basis, final tensorial polynomial degree, final function space)
-  map< tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
+  map< std::tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
   _conformingTensorBases; // keys are (one-lower tensorial degree basis, final tensorial polynomial degree, final function space)
 
   map<unsigned, BasisPtr> _nodalBasisForShardsTopology;
