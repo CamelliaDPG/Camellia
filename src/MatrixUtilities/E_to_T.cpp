@@ -13,6 +13,8 @@
 
 #include "MPIWrapper.h"
 
+#include <Epetra_MultiVector.h>
+
 using namespace Camellia;
 
 TGraphPtr E_to_T::graph(const Epetra_CrsGraph &eGraph)
@@ -110,4 +112,30 @@ Teuchos::RCP< TMatrix<double> > E_to_T::matrix(Teuchos::RCP<Epetra_CrsMatrix> eM
   tMatrix->fillComplete();
   
   return tMatrix;
+}
+
+TVectorPtr<double> E_to_T::vector(Teuchos::RCP<Epetra_MultiVector> eVector)
+{
+  auto tMap = map(eVector->Map());
+  
+  const int numVectors = eVector->NumVectors();
+  
+  auto tVector = Teuchos::rcp(new TVector<double>(tMap, numVectors));
+  
+  auto myRowCount = tMap->getLocalNumElements();
+  for (int i=0; i<myRowCount; i++)
+  {
+    for (int j=0; j<numVectors; j++)
+    {
+      double value = (*eVector)[j][i];
+      tVector->replaceLocalValue(i, j, value);
+    }
+  }
+
+  if (tVector->need_sync_device())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This implementation does not yet sync to device.");
+  }
+  
+  return tVector;
 }

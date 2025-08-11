@@ -3,6 +3,7 @@
 //
 
 #include "Camellia.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
@@ -10,6 +11,8 @@
 #include "RHS.h"
 #include "Solution.h"
 #include "TrigFunctions.h"
+
+#include <MatrixMarket_Tpetra.hpp>
 
 using namespace Camellia;
 using namespace std;
@@ -31,6 +34,7 @@ int main(int argc, char *argv[])
     int pToAdd = spaceDim;
     
     std::string modeString = "single"; // single run; other options are "h" and "p" for h and p convergence tests
+    std::string matrixPath = "", rhsPath = "", solnPath = "";
     
     cmdp.setOption("xElements", &numElements_x );
     cmdp.setOption("tElements", &numElements_t );
@@ -41,6 +45,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("t0", &domainDim[1][0] );
     cmdp.setOption("t1", &domainDim[1][1] );
     cmdp.setOption("mode", &modeString, "single, h, or p");
+    cmdp.setOption("matrixOut", &matrixPath, "where on disk to save the matrix (leave blank for no output)");
+    cmdp.setOption("rhsOut", &rhsPath, "where on disk to save the rhs vector (leave blank for no output)");
+    cmdp.setOption("solnOut", &solnPath, "where on disk to save the solution vector (leave blank for no output)");
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -134,7 +141,6 @@ int main(int argc, char *argv[])
     polyOrderEnhancements[eps_q->ID()]   = 1 + pToAdd;
     polyOrderEnhancements[eps_tau->ID()] = 1 + pToAdd;
     MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
-    Epetra_CommPtr nullComm = Teuchos::null;
     const bool allowPruning = false;  // to keep inter-mesh geometry determinations from getting too complex, don't allow the mesh topology to be pruned to keep only MPI-local geometry.
     
     BCPtr  bc  = BC::bc();
@@ -146,7 +152,8 @@ int main(int argc, char *argv[])
     FunctionPtr sin_pi_x_over_2 = TrigFunctions<double>::sin(0.5 * M_PI * x);
     FunctionPtr cos_2_pi_t      = TrigFunctions<double>::cos(2.0 * M_PI * t);
     
-    FunctionPtr phi_exact = -4. / (M_PI * M_PI) * sin_pi_x_over_2 * cos_2_pi_t;
+    FunctionPtr phi_exact = x + 3;
+//    FunctionPtr phi_exact = -4. / (M_PI * M_PI) * sin_pi_x_over_2 * cos_2_pi_t;
     FunctionPtr phi_xx    = phi_exact->dx()->dx();
     rhs->addTerm(-phi_xx * tau);
     
@@ -164,10 +171,17 @@ int main(int argc, char *argv[])
       auto spatialMeshTopo  = MeshFactory::intervalMeshTopology(domainDim[0][0], domainDim[0][1], numElements_x_i);
       auto extrudedMeshTopo = MeshFactory::extrudedMeshTopology(spatialMeshTopo, {domainDim[1][0]}, {domainDim[1][1]}, {numElements_t_i});
       
-      MeshPtr mesh = Teuchos::rcp( new Mesh (extrudedMeshTopo, poissonBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, nullComm, allowPruning) );
+      MeshPtr mesh = Teuchos::rcp( new Mesh (extrudedMeshTopo, poissonBF, polyOrder_i, 0, polyOrderEnhancements, polyOrderEnhancements, nullPartitionPolicy, Teuchos::null, allowPruning) );
       
       SolutionPtr soln = Solution::solution(poissonBF, mesh, bc, rhs);
-//      soln->setWriteMatrixToMatrixMarketFile(true, "/tmp/K.dat");
+      if (matrixPath != "")
+      {
+        soln->setWriteMatrixToFile(true, matrixPath);
+      }
+      if (rhsPath != "")
+      {
+        soln->setWriteRHSToMatrixMarketFile(true, rhsPath);
+      }
       
       soln->solve();
       
@@ -179,6 +193,13 @@ int main(int argc, char *argv[])
       
       std::cout << "absolute L^2 error: " << l2_err << std::endl;
       std::cout << "relative L^2 error: " << l2_err / exact_l2_norm << "\n\n";
+      
+      if (solnPath != "")
+      {
+        auto eSolnVector = soln->getLHSVector();
+        auto tVector = E_to_T::vector(eSolnVector);
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeDenseFile(solnPath, tVector);
+      }
     }
   }
   Camellia::finalize(false);

@@ -1511,7 +1511,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
     {
       cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
     }
-    EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),*_rhsVector,0,0,false);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeDenseFile(_rhsFilePath, E_to_T::vector(_rhsVector));
   }
 
   // Dump matrices to disk

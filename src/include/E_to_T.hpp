@@ -29,6 +29,7 @@ public:
   static TGraphPtr graph(const Epetra_CrsGraph &eGraph);
   static TMapPtr map(const Epetra_BlockMap &eMap);
   static TMatrixPtr<double> matrix(Teuchos::RCP<Epetra_CrsMatrix> eMatrix);
+  static TVectorPtr<double> vector(Teuchos::RCP<Epetra_MultiVector> eVector);
 };
 }
 
