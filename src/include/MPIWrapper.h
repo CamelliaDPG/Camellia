@@ -89,8 +89,8 @@ public:
   static Teuchos_CommPtr TeuchosCommSerial();
   static Teuchos_CommPtr TeuchosCommWorld();
   
-  static Epetra_CommPtr   EpetraComm(Teuchos_CommPtr teuchosComm);
-  static Teuchos_CommPtr TeuchosComm( Epetra_CommPtr epetraComm);
+  static Epetra_CommPtr   EpetraComm(const Teuchos_CommPtr teuchosComm);
+  static Teuchos_CommPtr TeuchosComm(Epetra_CommPtr epetraComm);
   
   static int rank();
 
@@ -646,7 +646,8 @@ public:
       if (Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm) != Teuchos::null)
       {
         MPI_Comm mpiComm = *Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm)->getRawMpiComm();
-        MPI_Allgatherv(reinterpret_cast<char*>(&myValues[0]), mySize, MPI_CHAR, reinterpret_cast<char*>(&gatheredValues[0]), &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm);
+        char* myPtr = (myValues.size() > 0) ? reinterpret_cast<char*>(&myValues[0]) : NULL;
+        MPI_Allgatherv(myPtr, mySize, MPI_CHAR, reinterpret_cast<char*>(&gatheredValues[0]), &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm);
       }
       else
       {

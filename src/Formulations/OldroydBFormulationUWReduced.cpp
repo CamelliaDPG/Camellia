@@ -1372,7 +1372,6 @@ TRieszRepPtr<double> OldroydBFormulationUWReduced::rieszResidual(FunctionPtr for
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void OldroydBFormulationUWReduced::save(std::string prefixString)
 {
-#ifdef HAVE_EPETRAEXT_HDF5
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
 
@@ -1381,9 +1380,6 @@ void OldroydBFormulationUWReduced::save(std::string prefixString)
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
 }
 
 // ! set current time step used for transient solve

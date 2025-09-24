@@ -1209,13 +1209,9 @@ void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fie
   }
   else
   {
-#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_oldroydBBF, savedSolutionAndMeshPrefix+".mesh");
     _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
-#else
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
   }
 
   RHSPtr rhs = this->rhs(forcingFunction, _neglectFluxesOnRHS); // in transient case, this will refer to _previousSolution
@@ -1255,11 +1251,7 @@ void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fie
     }
     else
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), savedSolutionAndMeshPrefix+"_stream.mesh");
-#else
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
     }
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
@@ -1296,11 +1288,7 @@ void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fie
 
     if (savedSolutionAndMeshPrefix != "")
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       _streamSolution->loadFromHDF5(savedSolutionAndMeshPrefix + "_stream.soln");
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
     }
   }
 }
@@ -1815,7 +1803,6 @@ TRieszRepPtr<double> OldroydBFormulationUW::rieszResidual(FunctionPtr forcingFun
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void OldroydBFormulationUW::save(std::string prefixString)
 {
-#ifdef HAVE_EPETRAEXT_HDF5
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
 
@@ -1824,9 +1811,6 @@ void OldroydBFormulationUW::save(std::string prefixString)
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
 }
 
 // ! set current time step used for transient solve

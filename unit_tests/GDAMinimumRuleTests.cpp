@@ -286,14 +286,12 @@ namespace
       success = false;
       cout << "GDAMinimumRuleTests failure: for 1-irregular ";
       cout << spaceDim << "D mesh and exactly recoverable solution, u error after projection is " << u_err_l2 << endl;
-#ifdef HAVE_EPETRAEXT_HDF5
       string outputSuperDir = ".";
       string outputDir = "poisson2DHangingNodeProjection";
       HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
       cout << "Writing u err to " << outputSuperDir << "/" << outputDir << endl;
       
       exporter.exportFunction(u_err, "u_err");
-#endif
     }
     
 //    soln->clear();
@@ -331,7 +329,6 @@ namespace
       cout << "GDAMinimumRuleTests failure: for 1-irregular ";
       cout << spaceDim << "D mesh and exactly recoverable solution, u error is " << u_err_l2 << endl;
       
-#ifdef HAVE_EPETRAEXT_HDF5
       string outputSuperDir = ".";
       string outputDir = "poisson2DHangingNodeError";
       HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
@@ -343,7 +340,6 @@ namespace
       cout << "Writing solution to " << outputSuperDir << "/" << outputDir << endl;
       HDF5Exporter solutionExporter(mesh, outputDir, outputSuperDir);
       solutionExporter.exportSolution(soln);
-#endif
     }
     
 //    HDF5Exporter exporter(mesh, "poisson2DHangingNodeSolution", "/tmp");
@@ -2342,14 +2338,12 @@ namespace
       minRule->printConstraintInfo(1);
       minRule->getDofMapper(1)->printMappingReport();
 
-#ifdef HAVE_EPETRAEXT_HDF5
       string outputSuperDir = "/tmp";
       string outputDir = "PoissonSoln";
       HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
       cout << "Writing u to " << outputSuperDir << "/" << outputDir << endl;
 
       exporter.exportSolution(soln);
-#endif
     }
   }
   
@@ -2460,14 +2454,12 @@ namespace
       {
         success = false;
         cout << "GDAMinimumRuleTests failure: for " << irregularity << "-irregular 3D mesh and exactly recoverable solution, u error is " << u_err_l2 << endl;
-#ifdef HAVE_EPETRAEXT_HDF5
         string outputSuperDir = ".";
         string outputDir = "poisson3DHangingNode";
         HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
         cout << "Writing u err to " << outputSuperDir << "/" << outputDir << endl;
         
         exporter.exportFunction(u_err, "u_err");
-#endif
       }
     }
   }

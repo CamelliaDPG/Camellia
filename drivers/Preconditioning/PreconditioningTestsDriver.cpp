@@ -375,21 +375,17 @@ public:
 #include <xmmintrin.h>
 #endif
 
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
-#include "HDF5Exporter.h"
-#endif
-
-#include "GlobalDofAssignment.h"
-
 #include "CondensedDofInterpreter.h"
+#include "ConvectionDiffusionFormulation.h"
+#include "GlobalDofAssignment.h"
+#include "HDF5Exporter.h"
+#include "PoissonFormulation.h"
+#include "StokesVGPFormulation.h"
 
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 
-#include "PoissonFormulation.h"
-#include "ConvectionDiffusionFormulation.h"
-#include "StokesVGPFormulation.h"
+
 
 #include "GMGSolver.h"
 

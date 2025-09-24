@@ -1,4 +1,5 @@
 #include "GnuPlotUtil.h"
+#include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
@@ -15,17 +16,7 @@
 #include <xmmintrin.h>
 #endif
 
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
-#define USE_HDF5
-#else
-#undef USE_HDF5
-#endif
-#undef USE_HDF5 // just because I have a version incompatibility thing happening right now...
 
-#ifdef USE_HDF5
-#include "HDF5Exporter.h"
-#endif
 
 using namespace Camellia;
 

@@ -1102,43 +1102,33 @@ MeshTopologyViewPtr MeshTopologyView::getView(const set<IndexType> &activeCells)
   return Teuchos::rcp( new MeshTopologyView(_meshTopo, activeCells) );
 }
 
-MeshTopologyViewPtr MeshTopologyView::readFromFile(Epetra_CommPtr Comm, string filename)
+MeshTopologyViewPtr MeshTopologyView::readFromFile(Teuchos_CommPtr Comm, string filename)
 {
-#ifdef HAVE_EPETRAEXT_HDF5
-  EpetraExt::HDF5 hdf5(*Comm);
-  hdf5.Open(filename);
+  HDF5 hdf5(Comm);
+  hdf5.Open(filename, H5F_ACC_RDONLY);
   MeshTopologyViewPtr meshTopoView = readFromHDF5(Comm, hdf5);
   hdf5.Close();
   return meshTopoView;
-#else
-  // no file reading if we don't have HDF5 support…
-  return Teuchos::null;
-#endif
 }
 
 void MeshTopologyView::writeToFile(string filename) const
 {
-#ifdef HAVE_EPETRAEXT_HDF5
-  Epetra_CommPtr comm = MPIWrapper::EpetraComm(Comm());
-  
-  EpetraExt::HDF5 hdf5(*comm);
+  HDF5 hdf5(Comm());
   hdf5.Create(filename);
   
-  writeToHDF5(comm, hdf5);
+  writeToHDF5(Comm(), hdf5);
   hdf5.Close();
-#endif
 }
 
-#ifdef HAVE_EPETRAEXT_HDF5
-MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Epetra_CommPtr Comm, EpetraExt::HDF5 &hdf5)
+MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Teuchos_CommPtr Comm, HDF5 &hdf5)
 {
   int numChunks;
   hdf5.Read("MeshTopology", "num chunks", numChunks);
   vector<int> chunkSizes(numChunks);
   hdf5.Read("MeshTopology", "chunk sizes", H5T_NATIVE_INT, numChunks, &chunkSizes[0]);
   
-  int myRank = Comm->MyPID();
-  int numProcs = Comm->NumProc();
+  int myRank = Comm->getRank();
+  int numProcs = Comm->getSize();
   vector<int> myChunkRanks; // ranks that were part of the write, now assigned to me
   if (numProcs < numChunks)
   {
@@ -1173,8 +1163,7 @@ MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Epetra_CommPtr Comm, EpetraEx
   {
     myGeometrySize += chunkSizes[myChunkRank];
   }
-  int globalGeometrySize;
-  Comm->SumAll(&myGeometrySize, &globalGeometrySize, 1);
+  int globalGeometrySize = MPIWrapper::sum(Comm, myGeometrySize);
   vector<char> myGeometryData(myGeometrySize);
   void* myGeometryLocation = (myGeometrySize > 0) ? &myGeometryData[0] : NULL;
   hdf5.Read("MeshTopology", "geometry chunks", myGeometrySize, globalGeometrySize, H5T_NATIVE_CHAR, myGeometryLocation);
@@ -1182,10 +1171,8 @@ MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Epetra_CommPtr Comm, EpetraEx
   
   const char* geometryDataLocation = (myGeometrySize > 0) ? &myGeometryData[0] : NULL;
   CellDataMigration::readGeometryData(geometryDataLocation, myGeometrySize, geometryInfo);
-  
-  Teuchos_CommPtr teuchosComm = MPIWrapper::TeuchosComm(Comm);
-  
-  MeshTopologyPtr baseMeshTopo = Teuchos::rcp( new MeshTopology(teuchosComm, geometryInfo) );
+    
+  MeshTopologyPtr baseMeshTopo = Teuchos::rcp( new MeshTopology(Comm, geometryInfo) );
   
   // if the base mesh topology has a pure view, record that, too
   bool isDistributedView = hdf5.IsContained("MeshTopologyViewDistributed");
@@ -1214,8 +1201,7 @@ MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Epetra_CommPtr Comm, EpetraEx
       {
         myKnownCellCount += knownCellCounts[myChunkRank];
       }
-      int globalKnownCellCount;
-      Comm()->SumAll(&myKnownCellCount, &globalKnownCellCount, 1);
+      int globalKnownCellCount = MPIWrapper::sum(Comm, myKnownCellCount);
       
       vector<int> myKnownCellsVector(myKnownCellCount); // may contain duplicates
       void* myKnownCellsLocation = (myKnownCellCount > 0) ? &myKnownCellsVector[0] : NULL;
@@ -1237,7 +1223,7 @@ MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Epetra_CommPtr Comm, EpetraEx
   return meshTopoView;
 }
 
-void MeshTopologyView::writeToHDF5(Epetra_CommPtr Comm, EpetraExt::HDF5 &hdf5) const
+void MeshTopologyView::writeToHDF5(Teuchos_CommPtr Comm, HDF5 &hdf5) const
 {
   // get my view of the base mesh topology; write it to a byte array
   const MeshTopology* baseMeshTopology = this->baseMeshTopology();
@@ -1251,12 +1237,11 @@ void MeshTopologyView::writeToHDF5(Epetra_CommPtr Comm, EpetraExt::HDF5 &hdf5) c
   // gather all the rank sizes so that we can write a global "header" indicating where the boundaries lie
   // among other things, this will allow safe reading when the number of reading processors is
   // different from the number of writing processors
-  int numProcs = Comm->NumProc();
+  int numProcs = Comm->getSize();
   vector<int> chunkSizes(numProcs);
-  Comm->GatherAll(&myGeometrySize, &chunkSizes[0], 1);
+  MPIWrapper::allGather(Comm, chunkSizes, myGeometrySize);
   
-  int globalGeometrySize;
-  Comm->SumAll(&myGeometrySize, &globalGeometrySize, 1);
+  int globalGeometrySize = MPIWrapper::sum(Comm, myGeometrySize);
   
   hdf5.Write("MeshTopology", "num chunks", numProcs);
   hdf5.Write("MeshTopology", "chunk sizes", H5T_NATIVE_INT, numProcs, &chunkSizes[0]);
@@ -1271,13 +1256,12 @@ void MeshTopologyView::writeToHDF5(Epetra_CommPtr Comm, EpetraExt::HDF5 &hdf5) c
       hdf5.Write("MeshTopologyViewDistributed", "numProcs", numProcs);
       const set<IndexType>* myViewCellIDs = &getLocallyKnownActiveCellIndices();
       vector<int> cellIDVector(myViewCellIDs->begin(),myViewCellIDs->end());
-      int myKnownCellCount = myViewCellIDs->size();
+      int myKnownCellCount = static_cast<int>(myViewCellIDs->size());
       vector<int> knownCellCounts(numProcs);
-      Comm->GatherAll(&myKnownCellCount, &knownCellCounts[0], 1);
+      MPIWrapper::allGather(Comm, knownCellCounts, myKnownCellCount);
       hdf5.Write("MeshTopologyViewDistributed", "known cell counts", H5T_NATIVE_INT, numProcs, &knownCellCounts[0]);
       
-      int globalKnownActiveCellCount;
-      Comm->SumAll(&myKnownCellCount, &globalKnownActiveCellCount, 1);
+      int globalKnownActiveCellCount = MPIWrapper::sum(Comm, myKnownCellCount);
       hdf5.Write("MeshTopologyViewDistributed", "known cell IDs", myKnownCellCount, globalKnownActiveCellCount,
                  H5T_NATIVE_INT, &cellIDVector[0]);
     }
@@ -1287,11 +1271,10 @@ void MeshTopologyView::writeToHDF5(Epetra_CommPtr Comm, EpetraExt::HDF5 &hdf5) c
       // (reader can detect the difference based on whether there is an entry named "known cell sizes")
       const set<IndexType>* viewCellIDs = &getLocallyKnownActiveCellIndices();
       vector<int> cellIDVector(viewCellIDs->begin(),viewCellIDs->end());
-      int knownCellCount = viewCellIDs->size();
+      int knownCellCount = static_cast<int>(viewCellIDs->size());
       
       hdf5.Write("MeshTopologyView", "known cell count", knownCellCount);
       hdf5.Write("MeshTopologyView", "known cell IDs", H5T_NATIVE_INT, knownCellCount, &cellIDVector[0]);
     }
   }
 }
-#endif // ifdef HAVE_EPETRAEXT_HDF5

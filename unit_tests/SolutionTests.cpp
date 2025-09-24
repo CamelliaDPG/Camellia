@@ -223,7 +223,6 @@ namespace
       cout << "Failing test: Condensed solve with zero-mean constraint on refined (hanging-node) mesh does not match regular solve" << endl;
       cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
       
-#ifdef HAVE_EPETRAEXT_HDF5
       ostringstream dir_name;
       if (minRule)
         dir_name << "refinedMaxRuleMeshStandardVsCondensedSolve";
@@ -233,7 +232,6 @@ namespace
       VarFactoryPtr vf = bf->varFactory();
       exporter.exportSolution(solution,0);
       exporter.exportSolution(condensedSolution,1);
-#endif
       success=false;
     }
     p_soln = Function::solution(p,solution);
@@ -1009,14 +1007,12 @@ namespace
       out << "Failing test: Condensed solve with single-point constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
       out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
       success=false;
-#ifdef HAVE_EPETRAEXT_HDF5
       ostringstream dir_name;
       dir_name << "multiElementMinRuleMeshStandardVsCondensedSolve";
       HDF5Exporter exporter(mesh,dir_name.str());
       VarFactoryPtr vf = bf->varFactory();
       exporter.exportSolution(solution,vf,0);
       exporter.exportSolution(condensedSolution,vf,1);
-#endif
     }
     p_soln = Function::solution(p,solution);
     p_condensed_soln = Function::solution(p,condensedSolution);
@@ -1783,7 +1779,6 @@ namespace
     
     if (!success)
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       HDF5Exporter exporter(mesh, "projectFluxOnRefinedMesh2DFailure");
       exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
       
@@ -1799,7 +1794,6 @@ namespace
           out << "error on cell " << cellID << ": " << errOnCell << endl;
         }
       }
-#endif
     }
   }
   
@@ -1878,7 +1872,6 @@ namespace
 
     if (!success)
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       HDF5Exporter exporter(mesh, "ProjectFluxOnRefinedMesh2D_2x2_Starting, after one refinement");
       exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
       
@@ -1898,7 +1891,6 @@ namespace
           cout << "error on cell " << cellID << ": " << errOnCell << endl;
         }
       }
-#endif
     }
     
     cellIDs = {4};
@@ -1914,7 +1906,6 @@ namespace
       if (!success)
       {
         outputMesh(0);
-#ifdef HAVE_EPETRAEXT_HDF5
         HDF5Exporter exporter(mesh, "ProjectFluxOnRefinedMesh2D_2x2_Starting");
         exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
         
@@ -1932,7 +1923,6 @@ namespace
             cout << "error on cell " << cellID << ": " << errOnCell << endl;
           }
         }
-#endif
       }
     }
   }
@@ -2572,7 +2562,6 @@ namespace
     IPPtr ip = bf->graphNorm();
     SolutionPtr soln = Solution::solution(mesh,bc,rhs,ip);
     
-#ifdef HAVE_EPETRAEXT_HDF5
     string filePrefix = "/tmp/SavedSolution";
     soln->save(filePrefix);
     
@@ -2588,9 +2577,6 @@ namespace
     set<GlobalIndexType> cellsToRefine;
     cellsToRefine.insert(0);
     loadedMesh->pRefine(cellsToRefine);
-#else
-    out << "SKIPPING testSaveAndLoad2D() test because Trilinos built without Epetra HDF5 support.\n";
-#endif
   }
   
   TEUCHOS_UNIT_TEST( Solution, SaveAndLoadPoissonConforming )

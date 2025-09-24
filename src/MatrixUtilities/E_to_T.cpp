@@ -74,7 +74,8 @@ TMapPtr E_to_T::map(const Epetra_BlockMap &eMap)
   Epetra_CommPtr eComm = Teuchos::rcp(&const_cast<Epetra_Comm&>(eMap.Comm()),false);
   Teuchos_CommPtr comm = MPIWrapper::TeuchosComm(eComm);
   
-  TMapPtr tMap = Teuchos::rcp(new TMap(numGlobalElements, &goMyIndices[0], numMyElements, 0, comm));
+  GO* myIndicesPtr = (goMyIndices.size() > 0) ? &goMyIndices[0] : NULL;
+  TMapPtr tMap = Teuchos::rcp(new TMap(numGlobalElements, myIndicesPtr, numMyElements, 0, comm));
   return tMap;
 }
 

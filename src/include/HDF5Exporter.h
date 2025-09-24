@@ -14,9 +14,6 @@
  *
  */
 
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
-
 #include "TypeDefs.h"
 
 #include "Solution.h"
@@ -106,5 +103,3 @@ map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor=2,
 /* END OF DUMMY IMPLEMENTATION */
 
 #endif
-
-#endif /* end of include guard: HDF5EXPORTER_H */

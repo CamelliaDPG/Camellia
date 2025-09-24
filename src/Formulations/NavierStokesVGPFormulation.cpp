@@ -481,11 +481,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyViewPtr meshT
     }
     else
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), filePrefix+"_stream.mesh");
-#else
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
     }
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
@@ -521,11 +517,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyViewPtr meshT
 
     if (filePrefix != "")
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       _streamSolution->loadFromHDF5(filePrefix + "_stream.soln");
-#else
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
     }
   }
 }
@@ -1225,7 +1217,6 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void NavierStokesVGPFormulation::save(std::string prefixString)
 {
-#ifdef HAVE_EPETRAEXT_HDF5
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
   _solnIncrement->saveToHDF5(prefixString+"_previous.soln");
@@ -1235,9 +1226,6 @@ void NavierStokesVGPFormulation::save(std::string prefixString)
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
 }
 
 TSolutionPtr<double> NavierStokesVGPFormulation::solution()

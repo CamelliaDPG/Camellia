@@ -1269,11 +1269,14 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     mesh->hRefine(activeCells, quadRefinement);
   }
   
-#ifdef HAVE_EPETRAEXT_HDF5
   string meshFile = "/tmp/SavedMesh.HDF5";
   mesh->saveToHDF5(meshFile);
 
   MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, meshFile);
+  TEST_EQUALITY(loadedMesh->globalDofAssignment()->getInitialH1Order()[0], mesh->globalDofAssignment()->getInitialH1Order()[0]);
+  TEST_EQUALITY(loadedMesh->numActiveElements(), mesh->numActiveElements());
+  TEST_EQUALITY(loadedMesh->numFieldDofs(), mesh->numFieldDofs());
+  TEST_EQUALITY(loadedMesh->numFluxDofs(), mesh->numFluxDofs());
   TEST_EQUALITY(loadedMesh->globalDofCount(), mesh->globalDofCount());
 
   // just to confirm that we can manipulate the loaded mesh:
@@ -1281,15 +1284,15 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
   cellsToRefine.insert(0);
   loadedMesh->pRefine(cellsToRefine);
   
-  // we default to using CommWorld for loading and creation.  Try loading in serial:
-  loadedMesh = MeshFactory::loadFromHDF5(bf, meshFile, MPIWrapper::CommSerial());
-  TEST_EQUALITY(loadedMesh->globalDofCount(), mesh->globalDofCount());
+  // we default to using CommWorld for loading and creation.  Try loading in serial, if we are on just one rank:
+  if (mesh->Comm()->getSize() == 1)
+  {
+    loadedMesh = MeshFactory::loadFromHDF5(bf, meshFile, MPIWrapper::TeuchosCommSerial());
+    TEST_EQUALITY(loadedMesh->globalDofCount(), mesh->globalDofCount());
+  }
   
   // delete the file we created
   remove(meshFile.c_str());
-#else
-  out << "SKIPPING testSaveAndLoad() because Trilinos built without Epetra HDF5 support.\n";
-#endif
 }
   
   TEUCHOS_UNIT_TEST( Mesh, ProjectFieldSolution )

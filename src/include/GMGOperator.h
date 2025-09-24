@@ -130,9 +130,7 @@ private:
   int prolongationRowCount() const;
   int prolongationColCount() const;
   
-#ifdef HAVE_EPETRAEXT_HDF5
   Teuchos::RCP<HDF5Exporter> _functionExporter;
-#endif
   FunctionPtr _functionToExport;
   std::string _functionToExportName;
   int _exportTimeStep;
@@ -399,10 +397,8 @@ public:
   //! Returns the fine dof interpreter
   Teuchos::RCP<DofInterpreter> getFineDofInterpreter();
 
-#ifdef HAVE_EPETRAEXT_HDF5
   //! Set an exporter for typically an error function, to allow visualization of various smoother/coarse solve steps.
   void setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, FunctionPtr function, std::string functionName="error");
-#endif
   
   //! Informs the GMGOperator whether it is the finest one.  (If not, can freely discard local stiffness matrices stored in CondensedDofInterpreter, e.g.).  Default value is true.
   void setIsFinest(bool value);

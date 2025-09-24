@@ -3,6 +3,7 @@
 #include "MeshFactory.h"
 #include <Teuchos_GlobalMPISession.hpp>
 #include "GnuPlotUtil.h"
+#include "HDF5Exporter.h"
 
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
@@ -13,11 +14,6 @@
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
-#endif
-
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
-#include "HDF5Exporter.h"
 #endif
 
 #include "MeshTransferFunction.h"
@@ -314,13 +310,11 @@ int main(int argc, char *argv[])
   }
 
 
-#ifdef HAVE_EPETRAEXT_HDF5
   ostringstream dir_name;
   dir_name << "spacetime_slice_convectingCone_k" << k << "_startSlab" << startingSlabNumber;
   map<GlobalIndexType,GlobalIndexType> cellMap;
   MeshPtr meshSlice = MeshTools::timeSliceMesh(initialMesh, 0, cellMap, H1Order);
   HDF5Exporter sliceExporter(meshSlice,dir_name.str());
-#endif
 
   soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
   soln->setUseCondensedSolve(useCondensedSolve);
@@ -356,7 +350,6 @@ int main(int argc, char *argv[])
       soln->solve(solver);
       soln->reportTimings();
 
-#ifdef HAVE_EPETRAEXT_HDF5
       ostringstream dir_name;
       dir_name << "spacetime_convectingCone_k" << k << "_t" << timeSlab;
       HDF5Exporter exporter(soln->mesh(),dir_name.str());
@@ -379,7 +372,6 @@ int main(int argc, char *argv[])
         file_name << ".mesh";
         soln->mesh()->saveToHDF5(file_name.str());
       }
-#endif
       FunctionPtr u_soln = Function::solution(u, soln);
 
       double solnNorm = u_soln->l2norm(mesh);

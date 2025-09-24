@@ -900,7 +900,6 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   }
   else
   {
-#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_stokesBF, savedSolutionAndMeshPrefix+".mesh");
     mesh->setTensorTopologyMeansSpaceTime(_spaceTime);
     _solution = TSolution<double>::solution(mesh, bc);
@@ -910,9 +909,6 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
       _previousSolution = TSolution<double>::solution(mesh,bc);
       _previousSolution->loadFromHDF5(savedSolutionAndMeshPrefix+"_previous.soln");
     }
-#else
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
   }
 
   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
@@ -953,11 +949,7 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     }
     else
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), savedSolutionAndMeshPrefix+"_stream.mesh");
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
     }
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
@@ -993,11 +985,7 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
 
     if (savedSolutionAndMeshPrefix != "")
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       _streamSolution->loadFromHDF5(savedSolutionAndMeshPrefix + "_stream.soln");
-#else
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
     }
   }
 }
@@ -1248,7 +1236,6 @@ VarPtr StokesVGPFormulation::q() const
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void StokesVGPFormulation::save(std::string prefixString)
 {
-#ifdef HAVE_EPETRAEXT_HDF5
   _solution->mesh()->saveToHDF5(prefixString+".mesh");
   _solution->saveToHDF5(prefixString+".soln");
   if (_timeStepping)
@@ -1260,9 +1247,6 @@ void StokesVGPFormulation::save(std::string prefixString)
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
 }
 
 // ! set current time step used for transient solve

@@ -27,13 +27,8 @@
 
 #include "TypeDefs.h"
 
-#include "EpetraExt_ConfigDefs.h"
-#include "EpetraExt_HDF5.h"
+#include "Camellia_HDF5.hpp"
 #include "Camellia_FieldContainer.hpp"
-
-#ifndef HAVE_EPETRAEXT_HDF5
-#warning "HAVE_EPETRAEXT_HDF5 is not defined."
-#endif
 
 #include <set>
 #include <vector>
@@ -176,14 +171,12 @@ namespace Camellia {
     double totalTimeComputingCellHalos() const;
     
     // I/O support (uses HDF5 methods, below, to implement)
-    static MeshTopologyViewPtr readFromFile(Epetra_CommPtr Comm, std::string filename);
+    static MeshTopologyViewPtr readFromFile(Teuchos_CommPtr Comm, std::string filename);
     void writeToFile(std::string filename) const;
     
-#ifdef HAVE_EPETRAEXT_HDF5
     // HDF5 support
-    static MeshTopologyViewPtr readFromHDF5(Epetra_CommPtr comm, EpetraExt::HDF5 &hdf5);
-    void writeToHDF5(Epetra_CommPtr comm, EpetraExt::HDF5 &hdf5) const;
-#endif
+    static MeshTopologyViewPtr readFromHDF5(Teuchos_CommPtr comm, HDF5 &hdf5);
+    void writeToHDF5(Teuchos_CommPtr comm, HDF5 &hdf5) const;
   };
 
 }

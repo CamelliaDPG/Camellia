@@ -22,15 +22,12 @@
 #include "Teuchos_TimeMonitor.hpp"
 #include "Amesos_config.h"
 
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
-#include "HDF5Exporter.h"
-#endif
-
 #include "BF.h"
-#include "Function.h"
-#include "RefinementStrategy.h"
 #include "ErrorIndicator.h"
+#include "Function.h"
+#include "HDF5Exporter.h"
+#include "RefinementStrategy.h"
+
 #include "AcousticsFormulation.h"
 // #include "PoissonFormulation.h"
 #include "SpatiallyFilteredFunction.h"

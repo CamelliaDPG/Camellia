@@ -20,10 +20,6 @@
 #include <BelosPseudoBlockGmresSolMgr.hpp>
 #include <BelosSolverFactory.hpp>
 
-// EpetraExt includes
-#include "EpetraExt_RowMatrixOut.h"
-#include "EpetraExt_MultiVectorOut.h"
-
 #include "E_to_T.hpp"
 #include "MatrixMarket_Tpetra.hpp"
 

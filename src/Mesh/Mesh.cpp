@@ -26,10 +26,7 @@
 #include "Teuchos_RCP.hpp"
 #include <Teuchos_GlobalMPISession.hpp>
 
-#ifdef HAVE_EPETRAEXT_HDF5
-#include <EpetraExt_HDF5.h>
-#include <Epetra_SerialComm.h>
-#endif
+#include "Camellia_HDF5.hpp"
 
 #include "MeshFactory.h"
 
@@ -1743,92 +1740,14 @@ vector<double> Mesh::getCellOrientation(GlobalIndexType cellID)
   return orientation;
 }
 
-
-#ifdef HAVE_EPETRAEXT_HDF5
 void Mesh::saveToHDF5(string filename)
 {
   int numProcs = Comm()->getSize();
-
-  /*
-   1. I'm still a bit vague on how to use EpetraExt::HDF5 to read and write distributed objects; the methods
-        Write (const std::string &GroupName, const std::string &DataSetName, int MySize, int GlobalSize, int type, const void *data)
-      and
-        Read (const std::string &GroupName, const std::string &DataSetName, int MySize, int GlobalSize, const int type, void *data)
-      are clearly important, but we need to develop a strategy for writing and reading the geometry data, which is variable in length.
-   2. It may be that the best thing is to store the whole halo for each active cell in a packet of its own, and then do something to
-      indicate where the packet boundaries are.
-   3. Alternately, we could have a big blob of data written for each rank, with some indication where the rank boundaries are in the
-      global structure.  I.e., you commit to reading a whole rank's worth, or not.  This has the advantage that we can avoid some
-      redundant storage.
-   
-   The idea in #2 would be *relatively* straightforward to implement using existing methods in CellDataMigration.
-   
-   It is probably better to move loadFromHDF5 into Mesh, rather than having it in MeshFactory.
-   
-   Don't forget to save the p-refinements!
-   
-   */
   
-  auto epetraComm = MPIWrapper::EpetraComm(Comm());
-  EpetraExt::HDF5 hdf5(*epetraComm);
+  HDF5 hdf5(Comm());
   hdf5.Create(filename);
   
-  getTopology()->writeToHDF5(epetraComm, hdf5);
-  
-//  // get my view of the base mesh topology; write it to a byte array
-//  const MeshTopology* baseMeshTopology = getTopology()->baseMeshTopology();
-//  MeshGeometryInfo baseMeshGeometry;
-//  CellDataMigration::getGeometry(baseMeshTopology, baseMeshGeometry);
-//  int myGeometrySize = CellDataMigration::getGeometryDataSize(baseMeshGeometry);
-//  vector<char> myGeometryData(myGeometrySize);
-//  char *myWriteLocation = &myGeometryData[0];
-//  CellDataMigration::writeGeometryData(baseMeshGeometry, myWriteLocation, myGeometrySize);
-//  
-//  // gather all the rank sizes so that we can write a global "header" indicating where the boundaries lie
-//  // among other things, this will allow safe reading when the number of reading processors is
-//  // different from the number of writing processors
-//  vector<int> chunkSizes(numProcs);
-//  Comm()->GatherAll(&myGeometrySize, &chunkSizes[0], 1);
-//  
-//  int globalGeometrySize;
-//  Comm()->SumAll(&myGeometrySize, &globalGeometrySize, 1);
-//  
-//
-//  hdf5.Write("MeshTopology", "num chunks", numProcs);
-//  hdf5.Write("MeshTopology", "chunk sizes", H5T_NATIVE_INT, numProcs, &chunkSizes[0]);
-//  hdf5.Write("MeshTopology", "geometry chunks", myGeometrySize, globalGeometrySize, H5T_NATIVE_CHAR, &myGeometryData[0]);
-//  
-//  // if the base mesh topology has a pure view, record that, too
-//  bool isView = (dynamic_cast<MeshTopology*>(getTopology().get()) == NULL);
-//  if (isView)
-//  {
-//    if (getTopology()->isDistributed())
-//    {
-//      hdf5.Write("MeshTopologyViewDistributed", "numProcs", numProcs);
-//      const set<IndexType>* myViewCellIDs = &getTopology()->getLocallyKnownActiveCellIndices();
-//      vector<int> cellIDVector(myViewCellIDs->begin(),myViewCellIDs->end());
-//      int myKnownCellCount = myViewCellIDs->size();
-//      vector<int> knownCellCounts(numProcs);
-//      Comm()->GatherAll(&myKnownCellCount, &knownCellCounts[0], 1);
-//      hdf5.Write("MeshTopologyViewDistributed", "known cell counts", H5T_NATIVE_INT, numProcs, &knownCellCounts[0]);
-//      
-//      int globalKnownActiveCellCount;
-//      Comm()->SumAll(&myKnownCellCount, &globalKnownActiveCellCount, 1);
-//      hdf5.Write("MeshTopologyViewDistributed", "known cell IDs", myKnownCellCount, globalKnownActiveCellCount,
-//                 H5T_NATIVE_INT, &cellIDVector[0]);
-//    }
-//    else
-//    {
-//      // if topology is *not* distributed, everyone sees the same cells, and we can just write those out
-//      // (reader can detect the difference based on whether there is an entry named "known cell sizes")
-//      const set<IndexType>* viewCellIDs = &getTopology()->getLocallyKnownActiveCellIndices();
-//      vector<int> cellIDVector(viewCellIDs->begin(),viewCellIDs->end());
-//      int knownCellCount = viewCellIDs->size();
-//      
-//      hdf5.Write("MeshTopologyView", "known cell count", knownCellCount);
-//      hdf5.Write("MeshTopologyView", "known cell IDs", H5T_NATIVE_INT, knownCellCount, &cellIDVector[0]);
-//    }
-//  }
+  getTopology()->writeToHDF5(Comm(), hdf5);
   
   map<int, int> trialOrderEnhancements = getDofOrderingFactory().getTrialOrderEnhancements();
   map<int, int> testOrderEnhancements = getDofOrderingFactory().getTestOrderEnhancements();
@@ -1865,15 +1784,15 @@ void Mesh::saveToHDF5(string filename)
 
   const set<IndexType>* myCellIDs = &this->cellIDsInPartition();
   vector<int> myCellIDsVector(myCellIDs->begin(), myCellIDs->end());
-  int myCellCount = myCellIDsVector.size();
+  int myCellCount = static_cast<int>(myCellIDsVector.size());
   vector<int> partitionCounts(numProcs);
-  epetraComm->GatherAll(&myCellCount, &partitionCounts[0], 1);
+  MPIWrapper::allGather(Comm(), partitionCounts, myCellCount);
 
-  int globalCellCount;
-  epetraComm->SumAll(&myCellCount, &globalCellCount, 1);
+  int globalCellCount = MPIWrapper::sum(Comm(), myCellCount);
   
   hdf5.Write("Mesh", "partition counts", H5T_NATIVE_INT, numProcs, &partitionCounts[0]);
-  hdf5.Write("Mesh", "partitions", myCellCount, globalCellCount, H5T_NATIVE_INT, &myCellIDsVector[0]);
+  int* myCellIDsVectorPtr = (myCellIDsVector.size() > 0) ? &myCellIDsVector[0] : NULL;
+  hdf5.Write("Mesh", "partitions", myCellCount, globalCellCount, H5T_NATIVE_INT, myCellIDsVectorPtr);
   
   // for now, the p refinements are globally known:
   const map<GlobalIndexType,int>* pRefinements = &globalDofAssignment()->getCellPRefinements();
@@ -1884,12 +1803,11 @@ void Mesh::saveToHDF5(string filename)
     pRefinementsVector[index++] = entry.first;
     pRefinementsVector[index++] = entry.second;
   }
-  int pRefinementsSize = pRefinementsVector.size();
+  int pRefinementsSize = static_cast<int>(pRefinementsVector.size());
   hdf5.Write("Mesh", "p refinements size", pRefinementsSize);
   if (pRefinementsSize > 0) {
-    hdf5.Write("Mesh", "p refinements", H5T_NATIVE_INT, pRefinementsVector.size(), &pRefinementsVector[0]);
+    hdf5.Write("Mesh", "p refinements", H5T_NATIVE_INT, pRefinementsSize, &pRefinementsVector[0]);
   }
-  
   
   if (meshUsesMaximumRule())
     hdf5.Write("Mesh", "GDARule", "max");
@@ -1899,8 +1817,6 @@ void Mesh::saveToHDF5(string filename)
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
   hdf5.Close();
 }
-// end HAVE_EPETRAEXT_HDF5 include guard
-#endif
 
 Teuchos_CommPtr Mesh::TeuchosComm()
 {

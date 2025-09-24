@@ -4,6 +4,7 @@
 
 #include "MeshFactory.h"
 
+#include "Camellia_HDF5.hpp"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
 #include "CellDataMigration.h"
@@ -14,11 +15,6 @@
 #include "MPIWrapper.h"
 #include "ParametricCurve.h"
 #include "RefinementHistory.h"
-
-#ifdef HAVE_EPETRAEXT_HDF5
-#include <EpetraExt_HDF5.h>
-#include <Epetra_SerialComm.h>
-#endif
 
 using namespace Camellia;
 
@@ -46,23 +42,22 @@ MeshTopologyPtr MeshFactory::extrudedMeshTopology(MeshTopologyPtr baseMeshTopolo
   return Teuchos::rcp(new ExtrudedMeshTopology(baseMeshTopology,extrusionVertices));
 }
 
-#ifdef HAVE_EPETRAEXT_HDF5
-MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_CommPtr Comm)
+MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Teuchos_CommPtr Comm)
 {
   if (Comm == Teuchos::null)
   {
-    Comm = MPIWrapper::CommWorld();
+    Comm = MPIWrapper::TeuchosCommWorld();
   }
-  EpetraExt::HDF5 hdf5(*Comm);
-  hdf5.Open(filename);
+  HDF5 hdf5(Comm);
+  hdf5.Open(filename, H5F_ACC_RDONLY);
   
   MeshTopologyViewPtr meshTopoView = MeshTopologyView::readFromHDF5(Comm, hdf5);
   
   int numChunks;
   hdf5.Read("MeshTopology", "num chunks", numChunks);
   
-  int myRank = Comm->MyPID();
-  int numProcs = Comm->NumProc();
+  int myRank = Comm->getRank();
+  int numProcs = Comm->getSize();
   vector<int> myChunkRanks; // ranks that were part of the write, now assigned to me
   if (numProcs < numChunks)
   {
@@ -136,8 +131,7 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_Com
   {
     myCellCount += partitionCounts[myChunkRank];
   }
-  int globalActiveCellCount;
-  Comm()->SumAll(&myCellCount, &globalActiveCellCount, 1);
+  int globalActiveCellCount = MPIWrapper::sum(Comm, myCellCount);
   
   vector<int> myCellsIntVector(myCellCount); // may contain duplicates
   void* myCellsLocation = (myCellCount > 0) ? &myCellsIntVector[0] : NULL;
@@ -174,14 +168,11 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_Com
 
   // for now, we actually neglect the "myCells" container, and let that information come through the MeshTopology, if it is
   // distributed, or else through the usual default assignment from GlobalDofAssignment and the (default) partition policy.
-  auto teuchosComm = MPIWrapper::TeuchosComm(Comm);
   MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopoView, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements,
-                                         Teuchos::null, teuchosComm) );
+                                         Teuchos::null, Comm) );
   mesh->globalDofAssignment()->setCellPRefinements(pRefinements);
   return mesh;
 }
-// end HAVE_EPETRAEXT_HDF5 include guard
-#endif
 
 MeshPtr MeshFactory::minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k,
                                  Teuchos_CommPtr Comm, bool allowPruning)

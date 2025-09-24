@@ -17,12 +17,6 @@
 // Intrepid includes
 #include "Camellia_FieldContainer.hpp"
 
-// Epetra includes
-#include "EpetraExt_ConfigDefs.h"
-#include <Epetra_Map.h>
-
-#include "Epetra_Vector.h"
-
 #include "ElementType.h"
 #include "ElementTypeFactory.h"
 #include "Element.h"
@@ -126,10 +120,8 @@ public:
   
   ~Mesh();
   
-#ifdef HAVE_EPETRAEXT_HDF5
   void saveToHDF5(string filename);
-#endif
-
+  
   Teuchos_CommPtr Comm();
   Teuchos_CommPtr TeuchosComm();
   

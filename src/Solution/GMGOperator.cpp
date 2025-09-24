@@ -790,15 +790,11 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
 
 void GMGOperator::exportFunction()
 {
-#ifdef HAVE_EPETRAEXT_HDF5
   if (_functionExporter != Teuchos::null)
   {
     _functionExporter->exportFunction(_functionToExport, _functionToExportName, _exportTimeStep);
     _exportTimeStep++;
   }
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
 }
 
 Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const
@@ -2215,7 +2211,6 @@ void GMGOperator::setFillRatio(double fillRatio)
 //  cout << "fill ratio set to " << fillRatio << endl;
 }
 
-#ifdef HAVE_EPETRAEXT_HDF5
 void GMGOperator::setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, FunctionPtr function, string functionName)
 {
   _functionExporter = exporter;
@@ -2223,7 +2218,6 @@ void GMGOperator::setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, Funct
   _functionToExportName = functionName;
   _exportTimeStep = 0;
 }
-#endif
 
 void GMGOperator::setIsFinest(bool value)
 {

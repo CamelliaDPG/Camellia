@@ -289,7 +289,6 @@ namespace
     SolverPtr solver = Solver::getSolver(Solver::KLU, false);
     exactPoissonSolution->solve(solver);
     Teuchos::RCP<Epetra_MultiVector> lhsVector = exactPoissonSolution->getLHSVector();
-    //        EpetraExt::MultiVectorToMatlabFile("/tmp/x_direct.dat",*lhsVector);
 
     Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
 
@@ -317,9 +316,6 @@ namespace
     }
     Teuchos::RCP<Epetra_Vector> diagA_sqrt = Teuchos::rcp( new Epetra_Vector(*map, 1) );
     diagA_sqrt->Reciprocal(*diagA_sqrt_inv);
-
-    //              EpetraExt::RowMatrixToMatlabFile("/tmp/A.dat",*A);
-    //              EpetraExt::MultiVectorToMatlabFile("/tmp/rhs.dat",rhsVectorCopy2);
 
     // determine the expected value
     // if smoother applied before coarse solve, then we expect exact agreement between direct solution and iterative.

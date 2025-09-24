@@ -54,8 +54,8 @@ typedef int GlobalIndexTypeToCast; // for constructing Epetra_Maps, etc.  (these
 #define NEUMANN_SET_TAG_NAME   "NEUMANN_SET"
 typedef unsigned long EntityHandle; // identical to MOAB's EntityHandle type.  We define our own because we don't want to require MOAB, at least not yet.
   
-  typedef Teuchos::RCP<Epetra_Comm> Epetra_CommPtr;
-  typedef Teuchos::RCP<Teuchos::Comm<int>> Teuchos_CommPtr;
+  typedef Teuchos::RCP<const Epetra_Comm> Epetra_CommPtr;
+  typedef Teuchos::RCP<const Teuchos::Comm<int>> Teuchos_CommPtr;
 
 // Camellia forward declarations and typedefs
 class BasisCache;
@@ -207,8 +207,10 @@ template <typename Scalar>
 using TMatrixPtr = Teuchos::RCP< TMatrix<Scalar> >;
 using TGraph = TMatrix<double>::crs_graph_type;
 using TGraphPtr = Teuchos::RCP< TGraph >;
+using TGraphConstPtr = Teuchos::RCP< const TGraph >;
 using TMap = TMatrix<double>::map_type;
 using TMapPtr = Teuchos::RCP< TMap >;
+using TMapConstPtr = Teuchos::RCP< const TMap >;
 template <typename Scalar>
 using TVector = Tpetra::MultiVector<Scalar>;
 template <typename Scalar>

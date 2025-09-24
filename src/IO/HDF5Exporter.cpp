@@ -4,26 +4,16 @@
 
 #include "HDF5Exporter.h"
 
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
-
+#include "Camellia_FieldContainerConversion.hpp"
+#include "Camellia_HDF5.hpp"
 #include "CamelliaCellTools.h"
-#include "MeshTools.h"
+#include "CellTopology.h"
 #include "GlobalDofAssignment.h"
-
-#ifdef HAVE_MPI
-#include <Teuchos_GlobalMPISession.hpp>
-#include "Epetra_MpiComm.h"
-#endif
-
-#include "Epetra_SerialComm.h"
-#include "EpetraExt_HDF5.h"
+#include "MeshTools.h"
+#include "MPIWrapper.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include "Camellia_FieldContainerConversion.hpp"
-#include "CellTopology.h"
 
 using namespace Camellia;
 
@@ -31,13 +21,9 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string outputDirName, string outputDirS
   _dirSuperPath(outputDirSuperPath), _fieldXdmf("Xdmf"), _traceXdmf("Xdmf"),
   _fieldDomain("Domain"), _traceDomain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
-  int commRank = Teuchos::GlobalMPISession::getRank();
-
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
+  auto comm = MPIWrapper::TeuchosCommWorld();
+  
+  int commRank = comm->getRank();
 
   if (commRank==0)
   {
@@ -55,7 +41,7 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string outputDirName, string outputDirS
     success = mkdir(dirPath.str().c_str(), S_IRWXU | S_IRWXG);
   }
 
-  Comm.Barrier(); // everyone should wait until rank 0 has created the directories
+  comm->barrier(); // everyone should wait until rank 0 has created the directories
 
   if (commRank == 0)
   {
@@ -285,8 +271,9 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
     h5OutRel << "HDF5/" << "trace-part" << commRank << "-time" << timeVal << ".h5";
     h5OutFull << _dirSuperPath << "/" << _dirName << "/" << h5OutRel.str();
   }
-  Epetra_SerialComm Comm;
-  EpetraExt::HDF5 hdf5(Comm);
+  
+  auto serialComm = MPIWrapper::TeuchosCommSerial();
+  HDF5 hdf5(serialComm);
   hdf5.Create(h5OutFull.str());
 
   unsigned int total_vertices = 0;
@@ -1427,6 +1414,3 @@ namespace Camellia {
     return cellIDToPolyOrder;
   }
 }
-
-// end HAVE_EPETRAEXT_HDF5 include guard
-#endif

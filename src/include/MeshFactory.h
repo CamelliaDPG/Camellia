@@ -20,7 +20,6 @@
 #include "Mesh.h"
 
 #include <Teuchos_ParameterList.hpp>
-#include "EpetraExt_ConfigDefs.h"
 
 // static class for creating meshes
 
@@ -31,9 +30,7 @@ class MeshFactory
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's likely a better way)
 public:
   // These versions are all deprecated, new versions should take in a VarFactoryPtr instead of BFPtr
-#ifdef HAVE_EPETRAEXT_HDF5
-  static MeshPtr loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_CommPtr Comm = Teuchos::null);
-#endif
+  static MeshPtr loadFromHDF5(TBFPtr<double> bf, string filename, Teuchos_CommPtr Comm = Teuchos::null);
   static MeshPtr hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
                             TBFPtr<double> bilinearForm, int H1Order, int pToAddTest);
 

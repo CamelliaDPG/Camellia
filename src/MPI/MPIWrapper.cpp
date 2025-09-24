@@ -81,7 +81,7 @@ Epetra_CommPtr MPIWrapper::CommWorld()
   return Comm;
 }
 
-Epetra_CommPtr MPIWrapper::EpetraComm(Teuchos_CommPtr teuchosComm)
+Epetra_CommPtr MPIWrapper::EpetraComm(const Teuchos_CommPtr teuchosComm)
 {
   Epetra_CommPtr comm;
   if (teuchosComm == Teuchos::null)

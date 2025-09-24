@@ -389,7 +389,6 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   }
   else
   {
-#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
     _backgroundFlow = Solution::solution(_bf, mesh, bc);
     _solnIncrement = Solution::solution(_bf, mesh, bc);
@@ -397,9 +396,6 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     _backgroundFlow->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
     _solnIncrement->loadFromHDF5(savedSolutionAndMeshPrefix+"_increment.soln");
     _solnPrevTime->loadFromHDF5(savedSolutionAndMeshPrefix+"_prevtime.soln");
-#else
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
   }
   
   // avoid circular references when setting up bf object

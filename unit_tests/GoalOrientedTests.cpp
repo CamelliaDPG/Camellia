@@ -108,16 +108,6 @@ namespace
     soln_OneRHS->solve();
     soln_TwoRHS->solve();
     
-    //    {
-    //      // DEBUGGING:
-    //      auto lhs_OneRHS = soln_OneRHS->getLHSVector();
-    //      auto lhs_TwoRHS = soln_TwoRHS->getLHSVector();
-    //      bool includeHeaders = true;
-    //
-    //      EpetraExt::MultiVectorToMatrixMarketFile("/tmp/x_one.dat",*lhs_OneRHS,0,0,includeHeaders);
-    //      EpetraExt::MultiVectorToMatrixMarketFile("/tmp/x_two.dat",*lhs_TwoRHS,0,0,includeHeaders);
-    //    }
-    
     // we want to check that the (primary) solutions match each other
     // we'll do some higher-level tests below, but to start with, we'll check that the solution coefficients match
     auto lhs_OneRHS = soln_OneRHS->getLHSVector();
@@ -248,24 +238,6 @@ namespace
     
     // barrier for debugger attachment:
     Comm->barrier();
-    
-    //    {
-    //      // DEBUGGING: write out the matrices and RHSes to file
-    //      soln_OneRHS->setWriteMatrixToMatrixMarketFile(true, "/tmp/A_one.dat");
-    //      soln_TwoRHS->setWriteMatrixToMatrixMarketFile(true, "/tmp/A_two.dat");
-    //      soln_OneRHS->setWriteRHSToMatrixMarketFile(true, "/tmp/b_one.dat");
-    //      soln_TwoRHS->setWriteRHSToMatrixMarketFile(true, "/tmp/b_two.dat");
-    //    }
-    
-    //    {
-    //      // DEBUGGING:
-    //      auto lhs_OneRHS = soln_OneRHS->getLHSVector();
-    //      auto lhs_TwoRHS = soln_TwoRHS->getLHSVector();
-    //      bool includeHeaders = true;
-    //
-    //      EpetraExt::MultiVectorToMatrixMarketFile("/tmp/x_one.dat",*lhs_OneRHS,0,0,includeHeaders);
-    //      EpetraExt::MultiVectorToMatrixMarketFile("/tmp/x_two.dat",*lhs_TwoRHS,0,0,includeHeaders);
-    //    }
     
     // we want to check that the (primary) solutions match each other
     // we'll do some higher-level tests below, but to start with, we'll check that the solution coefficients match

@@ -24,10 +24,6 @@
 #include "Epetra_Distributor.h"
 #include "Epetra_Time.h"
 
-// EpetraExt includes
-#include "EpetraExt_RowMatrixOut.h"
-#include "EpetraExt_MultiVectorOut.h"
-
 #include "Epetra_SerialDenseSolver.h"
 #include "Epetra_SerialSymDenseMatrix.h"
 #include "Epetra_SerialSpdDenseSolver.h"
@@ -48,6 +44,7 @@
 #include "BasisEvaluation.h"
 #include "BasisCache.h"
 #include "BasisSumFunction.h"
+#include "Camellia_HDF5.hpp"
 #include "CamelliaCellTools.h"
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
@@ -66,13 +63,9 @@
 #include "SerialDenseWrapper.h"
 #include "SolutionStage.h"
 #include "Solver.h"
+#include "T_to_E.hpp"
 #include "TimeLogger.h"
 #include "Var.h"
-
-#ifdef HAVE_EPETRAEXT_HDF5
-#include <EpetraExt_HDF5.h>
-#include <Epetra_SerialComm.h>
-#endif
 
 #include <MatrixMarket_Tpetra.hpp>
 
@@ -1482,16 +1475,11 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 
   _rhsVector->GlobalAssemble();
 
-  //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
-
   globalStiffness->GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
 
   double timeGlobalAssembly = timer.ElapsedTime();
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
   timeGlobalAssemblyVector[0] = timeGlobalAssembly;
-
-//  cout << "debugging: outputting stiffness matrix before BC imposition to /tmp/stiffness_noBCs.dat\n";
-//  EpetraExt::RowMatrixToMatlabFile("/tmp/stiffness_noBCs.dat",*_globalStiffMatrix);
 
   // determine and impose BCs
 
@@ -1603,11 +1591,9 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
     if (rank==0) cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
     if (_saveMeshOnSolveError)
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       string savePrefix = "solveFailure";
       if (rank==0) cout << "**** Outputting solution and mesh with prefix " << savePrefix << ". ****\n";
       save(savePrefix);
-#endif
     }
   }
 
@@ -4035,7 +4021,7 @@ Epetra_Map TSolution<Scalar>::getPartitionMap()
 
 template <typename Scalar>
 Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
-    int zeroMeanConstraintsSize, Epetra_Comm* Comm )
+    int zeroMeanConstraintsSize, const Epetra_Comm* Comm )
 {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
   const set<GlobalIndexType>* cellIDsInPartition = &_mesh->globalDofAssignment()->cellsInPartition(rank);
@@ -4788,7 +4774,6 @@ Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::solution(MeshPtr mesh, TBCP
 //  fout.close();
 //}
 
-#ifdef HAVE_EPETRAEXT_HDF5
 template <typename Scalar>
 void TSolution<Scalar>::save(string meshAndSolutionPrefix)
 {
@@ -4817,17 +4802,20 @@ void TSolution<Scalar>::saveToHDF5(string filename)
   // storage cost and the headache of figuring out whether it's safe to use the
   // vector representation, for the computational savings of not having to reconstruct
   // the global vector from the local representation.
-
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
   
-  EpetraExt::HDF5 hdf5(*Comm);
+  Camellia::HDF5 hdf5(_mesh->Comm());
   hdf5.Create(filename);
   if (_lhsVector == Teuchos::null)
   {
     // then we'll save the zero solution.
     initializeLHSVector();
   }
-  hdf5.Write("Solution", *_lhsVector);
+  auto tpetraVector = E_to_T::vector(_lhsVector);
+  
+  // For now anyway, we write in exactly the format that EpetraExt did.
+  std::string GroupName = "Solution";
+  hdf5.Write(GroupName, tpetraVector, false); // false: don't write transpose
+  
   hdf5.Close();
 }
 
@@ -4839,23 +4827,24 @@ void TSolution<Scalar>::loadFromHDF5(string filename)
   this->clear();
   initializeLHSVector();
   
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-
-  EpetraExt::HDF5 hdf5(*Comm);
-  hdf5.Open(filename, H5F_ACC_RDONLY);
-  Epetra_MultiVector *lhsVec;
   Epetra_Map partMap = getPartitionMap();
-  hdf5.Read("Solution", partMap, lhsVec);
-
-  Epetra_Import  solnImporter(_lhsVector->Map(), lhsVec->Map());
-  _lhsVector->Import(*lhsVec, solnImporter, Insert);
-
-  delete lhsVec;
+  TMapPtr tMap = E_to_T::map(partMap);
   
+  Camellia::HDF5 hdf5(_mesh->Comm());
+  hdf5.Open(filename, H5F_ACC_RDONLY);
+  
+  auto tVector = hdf5.ReadMultiVector("Solution", tMap);
+
   hdf5.Close();
+  
+  // convert to Epetra vector
+  auto eVector = T_to_E::vector(tVector);
+  // import into our FEVector
+  Epetra_Import  solnImporter(_lhsVector->Map(), eVector->Map());
+  _lhsVector->Import(*eVector, solnImporter, Insert);
+  
   importSolution();
 }
-#endif
 
 template <typename Scalar>
 vector<int> TSolution<Scalar>::getZeroMeanConstraints()

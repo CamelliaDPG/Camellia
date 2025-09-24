@@ -9,7 +9,6 @@
 //
 //
 
-#include "EpetraExt_RowMatrixOut.h"
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "HeatFormulation.h"

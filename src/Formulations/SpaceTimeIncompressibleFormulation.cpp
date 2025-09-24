@@ -253,16 +253,12 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   }
   else
   {
-#ifdef HAVE_EPETRAEXT_HDF5
     // // BFPTR version should be deprecated
     _mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
     _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     // _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
-#else
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
   }
   // _solutionUpdate->setFilter(problem->pc());
   // _solutionBackground->setFilter(problem->pc());
@@ -606,13 +602,9 @@ set<int> SpaceTimeIncompressibleFormulation::nonlinearVars()
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void SpaceTimeIncompressibleFormulation::save(std::string prefixString)
 {
-#ifdef HAVE_EPETRAEXT_HDF5
   _solutionUpdate->mesh()->saveToHDF5(prefixString+".mesh");
   // _solutionUpdate->saveToHDF5(prefixString+"_update.soln");
   _solutionBackground->saveToHDF5(prefixString+".soln");
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
 }
 
 // ! Returns the solution

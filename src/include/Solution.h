@@ -177,7 +177,7 @@ public:
 
   Epetra_Map getPartitionMap();
   Epetra_Map getPartitionMap(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
-                             GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
+                             GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, const Epetra_Comm* Comm );
 
   MapPtr getPartitionMap2();
   MapPtr getPartitionMap2(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
@@ -367,12 +367,10 @@ public:
 //  void readFromFile(const std::string &filePath, int solutionOrdinal=0);
 //  void writeToFile(const std::string &filePath, int solutionOrdinal=0);
 
-#ifdef HAVE_EPETRAEXT_HDF5
   void save(std::string meshAndSolutionPrefix);
   static TSolutionPtr<Scalar> load(TBFPtr<Scalar> bf, std::string meshAndSolutionPrefix);
   void saveToHDF5(std::string filename);
   void loadFromHDF5(std::string filename);
-#endif
 
   // Default of 0 adapts the number of points based on poly order
   void writeToVTK(const std::string& filePath, unsigned int num1DPts=0);

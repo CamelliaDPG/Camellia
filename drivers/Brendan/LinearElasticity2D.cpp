@@ -18,10 +18,7 @@
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
-#endif
 
 #include "BF.h"
 

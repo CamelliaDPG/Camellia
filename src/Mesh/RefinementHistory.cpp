@@ -374,35 +374,6 @@ void RefinementHistory::loadFromFile(string fileName)
   }
 }
 
-#ifdef HAVE_EPETRAEXT_HDF5
-void RefinementHistory::saveToHDF5(EpetraExt::HDF5 &hdf5)
-{
-  vector<int> histArray;
-  for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++)
-  {
-    Refinement ref = *refIt;
-    RefinementType refType = ref.first;
-    set<GlobalIndexType> cellIDs = ref.second;
-    histArray.push_back(refType);
-    histArray.push_back(cellIDs.size());
-    for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++)
-    {
-      GlobalIndexType cellID = *cellIt;
-      histArray.push_back(cellID);
-    }
-  }
-  int histArraySize = histArray.size();
-  hdf5.Write("Mesh", "histArraySize", histArraySize);
-  if (histArraySize > 0)
-  {
-    hdf5.Write("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
-  }
-  else
-  {
-  }
-}
-#endif
-
 void RefinementHistory::setSaveFile(std::string &saveFile)
 {
   _saveFile = saveFile;

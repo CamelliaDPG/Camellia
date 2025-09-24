@@ -167,14 +167,10 @@ void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int 
   }
   else
   {
-#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
     mesh->setTensorTopologyMeansSpaceTime(true);
     _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
-#else
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
   }
 
   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
@@ -268,12 +264,8 @@ VarPtr SpaceTimeHeatFormulation::tau()
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void SpaceTimeHeatFormulation::save(std::string prefixString)
 {
-#ifdef HAVE_EPETRAEXT_HDF5
   _solution->mesh()->saveToHDF5(prefixString+".mesh");
   _solution->saveToHDF5(prefixString+".soln");
-#else
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
-#endif
 }
 
 // ! Returns the solution

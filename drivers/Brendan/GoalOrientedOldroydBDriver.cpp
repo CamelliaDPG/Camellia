@@ -13,15 +13,10 @@
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 #include "Teuchos_TimeMonitor.hpp"
-#include "Amesos_config.h"
-
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
-#include "HDF5Exporter.h"
-#endif
 
 #include "BF.h"
 #include "Function.h"
+#include "HDF5Exporter.h"
 #include "RefinementStrategy.h"
 #include "ErrorIndicator.h"
 #include "EnergyErrorIndicator.h"

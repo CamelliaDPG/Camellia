@@ -187,7 +187,6 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
 
   if (success==false)   // then export
   {
-#ifdef HAVE_EPETRAEXT_HDF5
     HDF5Exporter solnExporter(mesh, "soln", "/tmp");
     VarFactoryPtr vf = bf->varFactory();
     solnExporter.exportSolution(solution, 0, 10);
@@ -222,7 +221,6 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
     fxnNames.push_back("sigma_n_err");
     fxns.push_back(sigma_n_err);
     fxnExporter.exportFunction(fxns, fxnNames, 0, 10);
-#endif
   }
 }
 } // namespace

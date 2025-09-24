@@ -639,13 +639,11 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
     
     if (!success)
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       HDF5Exporter exporter(mesh, "stokesTestFailure, prior to solve");
       exporter.exportSolution(form.solution(),0);
       
       HDF5Exporter exporter2(mesh, "stokesTestFailure, prior to solve, difference in tn1");
       exporter2.exportFunction({tn1_hat_soln-tn1_exact,tn1_hat_soln, tn1_exact},{"tn1 error", "tn1_hat solution", "tn1_hat exact"},0);
-#endif
     }
     
     form.addInflowCondition(SpatialFilter::allSpace(), Function::vectorize(u1_exact, u2_exact));
@@ -663,10 +661,8 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
     
     if (!success)
     {
-#ifdef HAVE_EPETRAEXT_HDF5
       HDF5Exporter exporter(mesh, "stokesTestFailure");
       exporter.exportSolution(form.solution(),0);
-#endif
     }
 //    else
 //    {
@@ -885,7 +881,6 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
       spaceTimeForm.bf()->printTrialTestInteractions();
       
       cout << "forcing function: " << f->displayString() << endl;
-#ifdef HAVE_EPETRAEXT_HDF5
       HDF5Exporter exporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
       FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
       exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
@@ -898,7 +893,6 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
       spaceTimeForm.solve();
       solutionExporter.exportSolution(spaceTimeForm.solution(), 1.0, 5);
       cout << "Exported solution.\n";
-#endif
     }
   }
 
