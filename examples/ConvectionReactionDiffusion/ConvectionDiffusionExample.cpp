@@ -356,14 +356,14 @@ public:
   }
 };
 
-double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix)
+double conditionNumberLAPACK(TMatrixPtr<double> stiffnessMatrix)
 {
   Camellia::FieldContainer<double> A;
-  SerialDenseWrapper::extractFCFromEpetra_RowMatrix(stiffnessMatrix, A);
+  SerialDenseWrapper::extractFCFromTMatrix(stiffnessMatrix, A);
   
   bool use2norm = false;
   
-  int rank = stiffnessMatrix.Comm().MyPID();
+  int rank = stiffnessMatrix->getComm()->getRank();
   
   double condest;
   if (rank == 0)
@@ -390,16 +390,16 @@ double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix)
       condest = SerialDenseWrapper::condest(A);
     }
   }
-  stiffnessMatrix.Comm().Broadcast(&condest, 1, 0);
+  stiffnessMatrix->getComm()->broadcast(0, sizeof(condest), reinterpret_cast<char*>(&condest));
   return condest;
 }
 
-void writeEigenValues(const Epetra_RowMatrix &stiffnessMatrix, string filename)
+void writeEigenValues(TMatrixPtr<double> stiffnessMatrix, string filename)
 {
   Camellia::FieldContainer<double> A;
-  SerialDenseWrapper::extractFCFromEpetra_RowMatrix(stiffnessMatrix, A);
+  SerialDenseWrapper::extractFCFromTMatrix(stiffnessMatrix, A);
   
-  int rank = stiffnessMatrix.Comm().MyPID();
+  int rank = stiffnessMatrix->getComm()->getRank();
   if (rank == 0)
   {
     Camellia::FieldContainer<double> lambda_real(A.dimension(0)), lambda_imag(A.dimension(0));
@@ -912,9 +912,11 @@ int main(int argc, char *argv[])
   assemblyTimes.push_back(solution->totalTimeLocalStiffness());
   solveTimes.push_back(solution->totalTimeSolve());
   
+  auto eStiffness = solution->getStiffnessMatrix();
+  auto tStiffness = E_to_T::matrix(eStiffness);
   if (computeLAPACKConditionNumber)
   {
-    double condNum = conditionNumberLAPACK(*solution->getStiffnessMatrix());
+    double condNum = conditionNumberLAPACK(tStiffness);
     condNumbers.push_back(condNum);
     cout << scientific << setprecision(1);
     if (rank == 0) cout << "Condition Number (LAPACK) for refinement " << refinementNumber << ": " << condNum << endl;
@@ -924,7 +926,7 @@ int main(int argc, char *argv[])
     ostringstream eigFileName;
     eigFileName << thisRunPrefix.str() << "ref" << refinementNumber << "_eig.txt";
     if (rank == 0) cout << "computing eigValues and writing to " << eigFileName.str() << endl;
-    writeEigenValues(*solution->getStiffnessMatrix(), eigFileName.str());
+    writeEigenValues(tStiffness, eigFileName.str());
   }
   if (reportSolutionTimings)
   {
@@ -1135,7 +1137,9 @@ int main(int argc, char *argv[])
     
     if (computeLAPACKConditionNumber)
     {
-      double condNum = conditionNumberLAPACK(*solution->getStiffnessMatrix());
+      auto eStiffness = solution->getStiffnessMatrix();
+      auto tStiffness = E_to_T::matrix(eStiffness);
+      double condNum = conditionNumberLAPACK(tStiffness);
       condNumbers.push_back(condNum);
       if (rank == 0) cout << "Condition Number (LAPACK) for refinement " << refinementNumber << ": " << condNum << endl;
     }
@@ -1144,7 +1148,7 @@ int main(int argc, char *argv[])
       ostringstream eigFileName;
       eigFileName << thisRunPrefix.str() << "ref" << refinementNumber << "_eig.txt";
       if (rank == 0) cout << "computing eigValues and writing to " << eigFileName.str() << endl;
-      writeEigenValues(*solution->getStiffnessMatrix(), eigFileName.str());
+      writeEigenValues(tStiffness, eigFileName.str());
     }
     
     if (formulationIsDPG)

@@ -398,82 +398,58 @@ namespace Camellia {
     return INFO;
   }
   
-  int SerialDenseWrapper::extractFCFromEpetra_RowMatrix(const Epetra_RowMatrix &A, Camellia::FieldContainer<double> &A_fc)
+  int SerialDenseWrapper::extractFCFromTMatrix(TMatrixPtr<double> A, Camellia::FieldContainer<double> &A_fc)
   {
-    int myRank = A.Comm().MyPID();
-    GlobalIndexTypeToCast numRowsGlobal = A.NumGlobalRows();
-    GlobalIndexTypeToCast numMyRows = (myRank == 0) ? numRowsGlobal : 0;
-    Epetra_Map     importMap(numRowsGlobal, numMyRows, 0, A.Comm());
-    Epetra_Import  rowImporter(importMap, A.RowMatrixRowMap());
-    Epetra_CrsMatrix A0(::Copy,importMap,0);
-    A0.Import(A, rowImporter, Insert);
-    A0.FillComplete();
+    int myRank = A->getComm()->getRank();
+    auto numRowsGlobal = A->getGlobalNumRows();
+    auto numMyRows = (myRank == 0) ? numRowsGlobal : 0;
     
-    A_fc.resize(A.NumGlobalRows(), A.NumGlobalCols());
+    TMapPtr importMap = Teuchos::rcp( new TMap(numRowsGlobal, numMyRows, 0, A->getComm()) );
+    Tpetra::Import<>  rowImporter(A->getRowMap(), importMap); // source, destination
+    
+    TMatrix<double> A0(importMap,0);
+    A0.doImport(*A, rowImporter, Tpetra::INSERT);
+    A0.fillComplete();
+    
+    A_fc.resize(static_cast<int>(numRowsGlobal), static_cast<int>(A->getGlobalNumCols()));
     
     // fill in on rank 0
     if (myRank == 0)
     {
-      int maxCols = A0.NumGlobalCols(); // upper bound on columns for any row
+      int maxCols = static_cast<int>(A0.getLocalMaxNumRowEntries());
       Camellia::FieldContainer<int> localColIDs(maxCols); // upper bound on columns for any row
       Camellia::FieldContainer<double> values(maxCols);
       
+      auto rowGidsView = A0.getRowMap()->getMyGlobalIndices();
+      auto colGidsView = A0.getColMap()->getMyGlobalIndices();
+      
+      using GlobalIndicesHostView = TMatrix<double>::nonconst_global_inds_host_view_type;
+      GlobalIndicesHostView tCols("Tpetra matrix columns host view", maxCols);
+      using ValuesViewHost = TMatrix<double>::nonconst_values_host_view_type;
+      ValuesViewHost tValues("Tpetra matrix row values", maxCols);
+      
       for (int myRow=0; myRow < numRowsGlobal; myRow++)
       {
-        int i = A0.RowMatrixRowMap().GID(myRow); // global row ID
+        auto gRow = rowGidsView[myRow]; // global row ID
         int numCols = -1;
-        int err = A0.NumMyRowEntries(myRow, numCols);
-        TEUCHOS_TEST_FOR_EXCEPTION(err !=0, std::invalid_argument, "Error encountered during row extraction");
-        int numColsExtracted = 0;
-        if (numCols > 0)
+        size_t numRowEntries = 0;
+        
+        A0.getGlobalRowCopy(gRow, tCols, tValues, numRowEntries);
+        
+        for (int colOrdinal=0; colOrdinal < numRowEntries; colOrdinal++)
         {
-          A0.ExtractMyRowCopy(myRow,numCols,numColsExtracted,&values[0],&localColIDs[0]);
-          TEUCHOS_TEST_FOR_EXCEPTION(numCols != numColsExtracted, std::invalid_argument, "");
-          for (int colOrdinal=0; colOrdinal < numColsExtracted; colOrdinal++)
-          {
-            int localColID = localColIDs(colOrdinal);
-            int j = A0.RowMatrixColMap().GID(localColID);
-            A_fc(i,j) = values(colOrdinal);
-          }
+          int localColID = static_cast<int>(tCols(colOrdinal));
+          auto gCol = static_cast<int>(colGidsView(localColID));
+          A_fc(static_cast<int>(gRow),static_cast<int>(gCol)) = values(colOrdinal);
         }
       }
     }
     
     // now, broadcast A_fc from rank 0:
-    A.Comm().Broadcast(&A_fc[0], A_fc.size(), 0);
+    char* fcData = A_fc.size() > 0 ? reinterpret_cast<char*>(&A_fc[0]) : NULL;
+    A->getComm()->broadcast(0, A_fc.size(), fcData);
     
     return 0;
-    
-    // PREVIOUS implementation follows
-    
-    // this is not the most efficient way to do this; using an Epetra_Importer would probably be faster
-    // (I write it this way because it's easier for me to think about this way, and this method is meant primarily for
-    //  testing and debugging.)
-/*    A_fc.resize(A.NumGlobalRows(), A.NumGlobalCols());
-    // fill in the locally-known entries:
-    for (int myRow=0; myRow < A.NumMyRows(); myRow++)
-    {
-      int i = A.RowMatrixRowMap().GID(myRow); // global row ID
-      int numCols = -1;
-      int err = A.NumMyRowEntries(myRow, numCols);
-      TEUCHOS_TEST_FOR_EXCEPTION(err !=0, std::invalid_argument, "Error encountered during row extraction");
-      Camellia::FieldContainer<int> localColIDs(numCols);
-      Camellia::FieldContainer<double> values(numCols);
-      int numColsExtracted = 0;
-      if (numCols > 0)
-      {
-        A.ExtractMyRowCopy(myRow,numCols,numColsExtracted,&values[0],&localColIDs[0]);
-        TEUCHOS_TEST_FOR_EXCEPTION(numCols != numColsExtracted, std::invalid_argument, "");
-        for (int colOrdinal=0; colOrdinal < numColsExtracted; colOrdinal++)
-        {
-          int localColID = localColIDs(colOrdinal);
-          int j = A.RowMatrixColMap().GID(localColID);
-          A_fc(i,j) = values(colOrdinal);
-        }
-      }
-    }
-    MPIWrapper::entryWiseSum<double>(A.Comm(),A_fc);
-    return 0;*/
   }
   
   void SerialDenseWrapper::filterMatrix(Camellia::FieldContainer<double> &filteredMatrix, const Camellia::FieldContainer<double> &matrix,

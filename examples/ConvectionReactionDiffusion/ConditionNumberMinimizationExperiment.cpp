@@ -4,6 +4,7 @@
 
 #include "Camellia.h"
 
+#include "E_to_T.hpp"
 #include "MeshFactory.h"
 #include "SerialDenseWrapper.h"
 
@@ -17,10 +18,10 @@ using namespace Camellia;
  
  */
 
-double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix, bool diagScaling)
+double conditionNumberLAPACK(TMatrixPtr<double> stiffnessMatrix, bool diagScaling)
 {
   Camellia::FieldContainer<double> A;
-  SerialDenseWrapper::extractFCFromEpetra_RowMatrix(stiffnessMatrix, A);
+  SerialDenseWrapper::extractFCFromTMatrix(stiffnessMatrix, A);
   if (diagScaling)
   {
     for (int i=0; i<A.dimension(0); i++)
@@ -116,9 +117,10 @@ int main(int argc, char *argv[])
   soln->initializeStiffnessAndLoad();
   soln->populateStiffnessAndLoad();
   
-  Teuchos::RCP<Epetra_RowMatrix> stiffness = soln->getStiffnessMatrix();
+  auto eStiffness = soln->getStiffnessMatrix();
+  auto tStiffness = E_to_T::matrix(eStiffness);
   
-  double condNumber = conditionNumberLAPACK(*stiffness, diagScaling);
+  double condNumber = conditionNumberLAPACK(tStiffness, diagScaling);
   
   cout << "condest (1-norm): " << condNumber << endl;
   

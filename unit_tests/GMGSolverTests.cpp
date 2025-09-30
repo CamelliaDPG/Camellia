@@ -444,8 +444,7 @@ namespace
   {
     Camellia::FieldContainer<double> denseMatrix;
     auto opMatrix = op->getMatrixRepresentation();
-    auto eOpMatrix = T_to_E::matrix(opMatrix);
-    SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*eOpMatrix, denseMatrix);
+    SerialDenseWrapper::extractFCFromTMatrix(opMatrix, denseMatrix);
 
     double relTol = 1e-6; // we don't need very tight tolerance
     double absTol = relTol; // what counts as a zero, basically

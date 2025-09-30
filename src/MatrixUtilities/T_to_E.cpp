@@ -28,7 +28,7 @@ Teuchos::RCP<Epetra_Map> T_to_E::map(const TMapConstPtr & tMap)
   int numLocalRows = static_cast<int>(tMap->getLocalNumElements());
 
   // pull out the list of local GIDs
-  auto gidsView = tMap->getLocalElementList();
+  auto gidsView = tMap->getMyGlobalIndices();
   std::vector<int> myGIDs(numLocalRows);
   for (int i=0; i<numLocalRows; i++)
     myGIDs[i] = static_cast<int>(gidsView[i]);

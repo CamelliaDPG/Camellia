@@ -5,6 +5,7 @@
 #include "CamelliaDebugUtility.h"
 #include "CondensedDofInterpreter.h"
 #include "ConvectionDiffusionFormulation.h"
+#include "E_to_T.hpp"
 #include "ExpFunction.h"
 #include "GDAMinimumRule.h"
 #include "GlobalDofAssignment.h"
@@ -543,10 +544,10 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, IPPtr &graphNorm,
   solution->setUseCondensedSolve(useStaticCondensation);
 }
 
-double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix)
+double conditionNumberLAPACK(TMatrixPtr<double> stiffnessMatrix)
 {
   Camellia::FieldContainer<double> A;
-  SerialDenseWrapper::extractFCFromEpetra_RowMatrix(stiffnessMatrix, A);
+  SerialDenseWrapper::extractFCFromTMatrix(stiffnessMatrix, A);
   
   bool use2norm = false;
   
@@ -607,9 +608,9 @@ void run(ProblemChoice problemChoice, int spaceDim, int numCells, int k, int del
   solution->initializeStiffnessAndLoad();
   solution->populateStiffnessAndLoad();
   
-  Teuchos::RCP<Epetra_RowMatrix> stiffness = solution->getStiffnessMatrix();
-
-  condNumber = conditionNumberLAPACK(*stiffness);
+  auto eStiffness = solution->getStiffnessMatrix();
+  auto tStiffness = E_to_T::matrix(eStiffness);
+  condNumber = conditionNumberLAPACK(tStiffness);
 }
 
 void runMany(ProblemChoice problemChoice, int spaceDim, int k,

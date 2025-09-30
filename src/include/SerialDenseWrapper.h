@@ -34,7 +34,7 @@ namespace Camellia
     static int determinantAndInverse(Camellia::FieldContainer<double> &detValues, Camellia::FieldContainer<double> &outInverses,
                                      const Camellia::FieldContainer<double> &inMatrices);
     
-    static int extractFCFromEpetra_RowMatrix(const Epetra_RowMatrix &A, Camellia::FieldContainer<double> &A_fc);
+    static int extractFCFromTMatrix(TMatrixPtr<double> A, Camellia::FieldContainer<double> &A_fc);
     
     static void filterMatrix(Camellia::FieldContainer<double> &filteredMatrix, const Camellia::FieldContainer<double> &matrix,
                              const std::set<int> &rowOrdinals, const std::set<int> &colOrdinals);
