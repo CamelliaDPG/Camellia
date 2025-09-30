@@ -30,8 +30,8 @@ public:
   /// Convert a Tpetra::CrsGraph into an Epetra_CrsGraph
   static Teuchos::RCP<Epetra_CrsGraph> graph(const TGraphConstPtr & tGraph);
 
-  /// Convert a Tpetra::Map into an Epetra_BlockMap (with block size = 1)
-  static Teuchos::RCP<Epetra_BlockMap> map(const TMapConstPtr & tMap);
+  /// Convert a Tpetra::Map into an Epetra_Map
+  static Teuchos::RCP<Epetra_Map> map(const TMapConstPtr & tMap);
 
   /// Convert a Tpetra::CrsMatrix<double> into an Epetra_CrsMatrix
   static Teuchos::RCP<Epetra_CrsMatrix> matrix(const TMatrixPtr<double> & tMatrix);

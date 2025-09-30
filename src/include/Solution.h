@@ -153,6 +153,7 @@ private:
   int _cachedCellBasisCoefficientsForFieldsSolutionOrdinal = -2; // which solution ordinal do they correspond to?
   void invalidateCachedBasisCoefficientsForFields();
   
+  Epetra_Map getPartitionMap_Epetra();
 protected:
   RHSPtr rhsWithoutTableauModification() const;
 public:
@@ -175,7 +176,7 @@ public:
   Teuchos::RCP<DofInterpreter> getDofInterpreter() const;
   void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
 
-  Epetra_Map getPartitionMap();
+  TMapPtr getPartitionMap();
   Epetra_Map getPartitionMap(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
                              GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, const Epetra_Comm* Comm );
 

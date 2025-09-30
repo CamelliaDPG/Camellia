@@ -154,13 +154,13 @@ namespace
       soln->lagrangeConstraints()->addConstraint(uHatIntegrand == Function::constant(1.0));
     }
     
-    Epetra_Map partMap = soln->getPartitionMap();
+    auto partMap = soln->getPartitionMap();
     for (GlobalIndexType myCellID : mesh->cellIDsInPartition())
     {
       for (int lagrangeOrdinal=0; lagrangeOrdinal<numConstraints; lagrangeOrdinal++)
       {
         GlobalIndexType GID = soln->elementLagrangeIndex(myCellID, lagrangeOrdinal);
-        int LID = partMap.LID(GID);
+        int LID = partMap->getLocalElement(GID);
         // if GID is local (as it should be), LID should be non-negative
         TEST_COMPARE(LID, >=, 0);
       }
@@ -188,7 +188,7 @@ namespace
       for (int lagrangeOrdinal=0; lagrangeOrdinal<numConstraints; lagrangeOrdinal++)
       {
         GlobalIndexType GID = soln->elementLagrangeIndex(myCellID, lagrangeOrdinal);
-        int LID = partMap.LID(GID);
+        int LID = partMap->getLocalElement(GID);
         out << "lagrangeOrdinal " << lagrangeOrdinal << " has GID " << GID << ", LID " << LID << endl;
         
         auto trialOrdering = mesh->getElementType(myCellID)->trialOrderPtr;

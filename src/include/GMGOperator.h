@@ -84,7 +84,7 @@ private:
   SmootherApplicationType _smootherApplicationType;
   
   MeshPtr _fineMesh, _coarseMesh;
-  Epetra_Map _finePartitionMap;
+  TMapPtr _finePartitionMap;
 
   BCPtr _bc;
 
@@ -125,7 +125,7 @@ private:
   Teuchos::RCP<Epetra_FECrsMatrix> constructProlongationOperator(Teuchos::RCP<DofInterpreter> coarseDofInterpreter,
                                                                  Teuchos::RCP<DofInterpreter> fineDofInterpreter,
                                                                  bool useStaticCondensation,
-                                                                 Epetra_Map &coarseMap, Epetra_Map &fineMap,
+                                                                 TMapPtr coarseMap, TMapPtr fineMap,
                                                                  MeshPtr coarseMesh, MeshPtr fineMesh);
   
   int prolongationRowCount() const;
@@ -150,11 +150,11 @@ public:
   //@}
   
   GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
-              MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+              MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
               Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
   
   GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
-              MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+              MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
               bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
 
   //! @name Constructor (for coarsest grid operator)
@@ -164,7 +164,7 @@ public:
    \param coarseIP - May be null if useStaticCondensation is false
    */
   GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
-              Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+              Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
               Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation,
               Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
   //@}
@@ -175,7 +175,7 @@ public:
   /*! This constructor is intended for any multigrid operators finer than the coarsest mesh.
    */
   GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
-              Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, bool useStaticCondensation,
+              Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap, bool useStaticCondensation,
               Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
   //@}
 
@@ -225,12 +225,12 @@ public:
              Scalar alpha          = Teuchos::ScalarTraits<Scalar>::one(),
              Scalar beta           = Teuchos::ScalarTraits<Scalar>::zero()) const override;
   
-  //! Returns the result of a the coarse operator (either the coarse solver or the coarse GMGOperator) applied to a Epetra_MultiVector X in Y.
+  //! Returns the result of a the coarse operator (either the coarse solver or the coarse GMGOperator) applied to a Tpetra MultiVector X in Y.
   /*!
    \param In
-   X - A Epetra_MultiVector of dimension NumVectors to multiply with matrix.
+   X - A Tpetra MultiVector of dimension NumVectors to multiply with matrix.
    \param Out
-   Y -A Epetra_MultiVector of dimension NumVectors containing result.
+   Y -A Tpetra MultiVector of dimension NumVectors containing result.
    
    \return Integer error code, set to 0 if successful.
    */
@@ -239,9 +239,9 @@ public:
   //! Returns the result of a Epetra_Operator inverse applied to an Epetra_MultiVector X in Y.
   /*!
    \param In
-   X - A Epetra_MultiVector of dimension NumVectors to solve for.
+   X - A Tpetra MultiVector of dimension NumVectors to multiply with matrix.
    \param Out
-   Y -A Epetra_MultiVector of dimension NumVectors containing result.
+   Y -A Tpetra MultiVector of dimension NumVectors containing result.
 
    \return Integer error code, set to 0 if successful.
 
@@ -252,9 +252,9 @@ public:
   //! Returns the result of the smoother, using any scalar or vector weights that are set, applied to a Epetra_MultiVector X in Y.
   /*!
    \param In
-   X - A Epetra_MultiVector of dimension NumVectors to multiply with matrix.
+   X - A Tpetra MultiVector of dimension NumVectors to multiply with matrix.
    \param Out
-   Y -A Epetra_MultiVector of dimension NumVectors containing result.
+   Y -A Tpetra MultiVector of dimension NumVectors containing result.
    
    \return Integer error code, set to 0 if successful.
    */

@@ -58,7 +58,7 @@ extern "C" void HPM_Stop(char *);
 using Scalar = double;
 
 GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
-                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation) :
 Narrator("GMGOperator"),
 _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
@@ -154,18 +154,18 @@ _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
 }
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
-                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
 : GMGOperator(V_CYCLE, zeroBCs, coarseMesh, coarseIP, fineMesh, fineDofInterpreter, finePartitionMap, coarseSolver, useStaticCondensation, sharedBasisReconciliation) {}
 
 
 GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
-                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
                          bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
 : GMGOperator(multigridStrategy, zeroBCs, coarseMesh, coarseIP, fineMesh, fineDofInterpreter, finePartitionMap, Teuchos::null, useStaticCondensation, sharedBasisReconciliation) {}
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
-                         Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                         Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
                          bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
 : GMGOperator(zeroBCs, coarseMesh, coarseIP, fineMesh, fineDofInterpreter, finePartitionMap, Teuchos::null, useStaticCondensation, sharedBasisReconciliation) {}
 
@@ -210,8 +210,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(TMatrixPtr<Scalar> tFineStiffness
   int maxRowSize = 0; // _P->MaxNumEntries();
   
   // compute A * P
-  auto tMap = E_to_T::map(_finePartitionMap);
-  TMatrix<double> AP(tMap, maxRowSize);
+  TMatrix<double> AP(_finePartitionMap, maxRowSize);
   
   Tpetra::MatrixMatrix::Multiply(*tFineStiffnessMatrix, false, *_P, false, AP);
   
@@ -222,8 +221,9 @@ void GMGOperator::computeCoarseStiffnessMatrix(TMatrixPtr<Scalar> tFineStiffness
   Tpetra::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P); // calls fillComplete()
     
   auto ePT_A_P = T_to_E::matrix(PT_A_P);
-  Epetra_Map coarsePartitionMap = _coarseSolution->getPartitionMap();
-  Epetra_Import  coarseImporter(coarsePartitionMap, ePT_A_P->RowMap());
+  auto coarsePartitionMap = _coarseSolution->getPartitionMap();
+  auto eCoarsePartitionMap = T_to_E::map(coarsePartitionMap);
+  Epetra_Import  coarseImporter(*eCoarsePartitionMap, ePT_A_P->RowMap());
   
   Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness;
   if (_coarseSolution->getZMCsAsGlobalLagrange() &&
@@ -233,7 +233,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(TMatrixPtr<Scalar> tFineStiffness
     //              since this will call FillComplete()
     
     int numEntriesPerRow = 0; // sub-optimal, but easy
-    coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, coarsePartitionMap, numEntriesPerRow) );
+    coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, *eCoarsePartitionMap, numEntriesPerRow) );
     coarseStiffness->Import(*ePT_A_P,coarseImporter,::Insert);
     _coarseSolution->setStiffnessMatrix(coarseStiffness);
     _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
@@ -309,7 +309,7 @@ void GMGOperator::constructLocalCoefficientMaps()
 Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuchos::RCP<DofInterpreter> coarseDofInterpreter,
                                                                             Teuchos::RCP<DofInterpreter> fineDofInterpreter,
                                                                             bool useStaticCondensation,
-                                                                            Epetra_Map &coarseMap, Epetra_Map &fineMap,
+                                                                            TMapPtr coarseMap, TMapPtr tFineMap,
                                                                             MeshPtr coarseMesh, MeshPtr fineMesh)
 {
   // row indices belong to the fine grid, columns to the coarse
@@ -319,6 +319,8 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
   
   CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
   CondensedDofInterpreter<double>* condensedDofInterpreterFine = NULL;
+  
+  auto eFineMap = T_to_E::map(tFineMap);
   
   set<int> varsToExclude;
   if (useStaticCondensation)
@@ -330,7 +332,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     varsToExclude = condensedDofInterpreterCoarse->condensibleVariableIDs();
   }
   
-  Teuchos::RCP<Epetra_FECrsMatrix> P = Teuchos::rcp( new Epetra_FECrsMatrix(::Copy, fineMap, maxRowSizeToPrescribe) );
+  Teuchos::RCP<Epetra_FECrsMatrix> P = Teuchos::rcp( new Epetra_FECrsMatrix(::Copy, *eFineMap, maxRowSizeToPrescribe) );
   
   // by convention, all constraints come at the end.  (Element and global lagrange constraints, zero-mean constraints.)
   // There should be the same number in the coarse and the fine Solution objects, and the mapping is taken to be the identity.
@@ -348,13 +350,13 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     Epetra_SerialComm SerialComm; // rank-local map
     
     GlobalIndexTypeToCast* myGlobalIndicesPtr;
-    fineMap.MyGlobalElementsPtr(*&myGlobalIndicesPtr);
+    eFineMap->MyGlobalElementsPtr(*&myGlobalIndicesPtr);
     
     map<GlobalIndexTypeToCast, set<GlobalIndexType> > cellsForGlobalDofOrdinal;
-    vector<GlobalIndexTypeToCast> myGlobalIndices(fineMap.NumMyElements());
+    vector<GlobalIndexTypeToCast> myGlobalIndices(eFineMap->NumMyElements());
     {
       set<GlobalIndexTypeToCast> globalIndicesForRank;
-      for  (int i=0; i <fineMap.NumMyElements(); i++)
+      for  (int i=0; i<eFineMap->NumMyElements(); i++)
       {
         globalIndicesForRank.insert(myGlobalIndicesPtr[i]);
         myGlobalIndices[i] = myGlobalIndicesPtr[i];
@@ -394,9 +396,9 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     Camellia::FieldContainer<double> fineCellCoefficients;
     Camellia::FieldContainer<double> basisCoefficients;
     
-    for (int localID=0; localID < fineMap.NumMyElements(); localID++)
+    for (int localID=0; localID < eFineMap->NumMyElements(); localID++)
     {
-      GlobalIndexTypeToCast globalRow = fineMap.GID(localID);
+      GlobalIndexTypeToCast globalRow = eFineMap->GID(localID);
       map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
       (*XLocal)[localID] = 1.0;
       
@@ -581,7 +583,8 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
 //  
 //    cout << "before FillComplete(), P has " << P->NumGlobalRows64() << " rows and " << P->NumGlobalCols64() << " columns.\n";
   
-  P->GlobalAssemble(coarseMap, fineMap);
+  auto eCoarseMap = T_to_E::map(coarseMap);
+  P->GlobalAssemble(*eCoarseMap, *eFineMap);
   
 //  cout << "after FillComplete(), P has " << P->NumGlobalRows64() << " rows and " << P->NumGlobalCols64() << " columns.\n";
   
@@ -590,7 +593,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
   { // DEBUGGING
     // check whether all domain map (coarseMap) GIDs are present as column indices
     // (they should be, but it appears there are cases when they aren't)
-    int numDomainElements = coarseMap.NumMyElements();
+    int numDomainElements = eCoarseMap->NumMyElements();
     
     int numMyRows = P->NumMyRows();
     
@@ -609,7 +612,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
       {
         int GID = colIndices[j];
         
-        int LID = coarseMap.LID(GID);
+        int LID = eCoarseMap->LID(GID);
         if (LID != -1)
         {
           bool previouslyFound = localGID[LID];
@@ -629,7 +632,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
       for (int colLID=0; colLID<numDomainElements; colLID++)
       {
         if (localGID[colLID]) continue;
-        int GID = coarseMap.GID(colLID);
+        int GID = eCoarseMap->GID(colLID);
         cout << GID << " ";
       }
       cout << endl;
@@ -660,7 +663,7 @@ TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator()
   Epetra_Time prolongationTimer(*eComm);
   narrate("constructProlongationOperator");
   
-  Epetra_Map coarseMap = _coarseSolution->getPartitionMap();
+  auto coarseMap = _coarseSolution->getPartitionMap();
   auto eP = this->constructProlongationOperator(_coarseSolution->getDofInterpreter(), _fineDofInterpreter, _useStaticCondensation,
                                                 coarseMap, _finePartitionMap, _coarseMesh, _fineMesh);
   
@@ -1918,19 +1921,19 @@ bool GMGOperator::HasNormInf() const
 //! Returns a pointer to the communicator associated with this operator.
 const Teuchos_CommPtr GMGOperator::Comm() const
 {
-  return MPIWrapper::TeuchosComm(Teuchos::rcp(&_finePartitionMap.Comm(), false));
+  return _fineMesh->Comm();
 }
 
 //! Returns the Map object associated with the domain of this operator.
 TMapConstPtr GMGOperator::getDomainMap() const
 {
-  return E_to_T::map(_finePartitionMap);
+  return _finePartitionMap;
 }
 
 //! Returns the Map object associated with the range of this operator.
 TMapConstPtr GMGOperator::getRangeMap() const
 {
-  return E_to_T::map(_finePartitionMap);
+  return _finePartitionMap;
 }
 
 int GMGOperator::prolongationColCount() const
@@ -2502,7 +2505,8 @@ std::string GMGOperator::smootherString(SmootherChoice choice)
 
 TMatrixPtr<double> GMGOperator::getMatrixRepresentation()
 {
-  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*this, _finePartitionMap);
+  auto eMap    = T_to_E::map(_finePartitionMap);
+  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*this, *eMap);
   return E_to_T::matrix(eMatrix);
 }
 
@@ -2524,7 +2528,8 @@ Teuchos::RCP<Epetra_Operator> GMGOperator::getSmoother() const
 TMatrixPtr<double> GMGOperator::getSmootherAsMatrix()
 {
   narrate("getSmootherAsMatrix()");
-  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, _finePartitionMap);
+  auto eMap    = T_to_E::map(_finePartitionMap);
+  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, *eMap);
   return E_to_T::matrix(eMatrix);
 }
 

@@ -35,6 +35,7 @@
 #include "Solution.h"
 #include "SpaceTimeHeatDivFormulation.h"
 #include "StokesVGPFormulation.h"
+#include "T_to_E.hpp"
 #include "TypeDefs.h"
 #include "VarFactory.h"
 
@@ -302,13 +303,14 @@ namespace
     TEST_EQUALITY(solveSuccess, 0);
     
     Epetra_SerialComm Comm;
-    Epetra_Map partMap = soln->getPartitionMap();
+    auto partMap = soln->getPartitionMap();
+    auto ePartMap = T_to_E::map(partMap);
     
     // Import solution onto current processor
     GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
     GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
     Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-    Epetra_Import  solnImporter(solnMap, partMap);
+    Epetra_Import  solnImporter(solnMap, *ePartMap);
     Epetra_Vector  solnCoeff(solnMap);
     Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
     solnCoeff.Import(*lhsVector, solnImporter, Insert);
@@ -2431,13 +2433,14 @@ namespace
       
       Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
       Epetra_SerialComm Comm;
-      Epetra_Map partMap = soln->getPartitionMap();
+      auto partMap = soln->getPartitionMap();
+      auto ePartMap = T_to_E::map(partMap);
       
       // Import solution onto current processor
       GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
       GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
       Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      Epetra_Import  solnImporter(solnMap, partMap);
+      Epetra_Import  solnImporter(solnMap, *ePartMap);
       Epetra_Vector  solnCoeff(solnMap);
       solnCoeff.Import(*lhsVector, solnImporter, Insert);
       

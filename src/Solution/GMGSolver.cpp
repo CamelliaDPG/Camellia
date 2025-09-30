@@ -15,7 +15,6 @@
 #include "GMGSolver.h"
 #include "MPIWrapper.h"
 
-#include <BelosEpetraAdapter.hpp>
 #include <BelosPseudoBlockCGSolMgr.hpp>
 #include <BelosPseudoBlockGmresSolMgr.hpp>
 #include <BelosSolverFactory.hpp>
@@ -36,7 +35,7 @@ const int AZ_rhs = 1; /* ||r||_2 / ||b||_2                            */
 using namespace Camellia;
 
 GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
-                     MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                     MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
                      int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, int cubatureEnrichmentDegree) :
   Narrator("GMGSolver"),
   _finePartitionMap(finePartitionMap)
@@ -181,7 +180,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
   Teuchos::RCP<DofInterpreter> fineDofInterpreter = fineSolution->getDofInterpreter();
   IPPtr ip = fineSolution->ip();
   BCPtr zeroBCs = fineSolution->bc()->copyImposingZero();
-  Epetra_Map finePartitionMap = fineSolution->getPartitionMap();
+  auto finePartitionMap = fineSolution->getPartitionMap();
   
   if (multigridStrategy == GMGOperator::SMOOTHER_ONLY)
   {
@@ -613,16 +612,6 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     solver = factory.create("GMRES", solverParams);
 //      gmresSolver = dynamic_cast<Belos::PseudoBlockGmresSolMgr<Scalar,MV,OP>*>(solver.get());
   }
-  
-//    {
-//      // TRYING SOMETHING
-//      Epetra_MultiVector B_times_rhs(_rhs->Map(), _rhs->NumVectors());
-//      _gmgOperator->ApplySmoother(*_rhs, B_times_rhs, true); // true: apply weight on left
-//      double normValues[_rhs->NumVectors()];
-//      _rhs->Dot(B_times_rhs, &normValues[0]);
-//
-//      if (rank == 0) cout << "GMGSolver: Schwarz-induced norm of _rhs: " << normValues[0] << "\n";
-//    }
   
   problem->setRightPrec(_gmgOperator);
   problem->setProblem();

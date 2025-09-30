@@ -30,7 +30,7 @@ class GMGSolver : public Solver, public Narrator
   string _pathForExport = "./";
   bool _returnErrorIfMaxItersReached = false; // default to false.
 
-  Epetra_Map _finePartitionMap;
+  TMapPtr _finePartitionMap;
 
   Teuchos::RCP<GMGOperator> _gmgOperator;
 
@@ -58,7 +58,7 @@ class GMGSolver : public Solver, public Narrator
                                                                Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
-            Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, int cubatureEnrichmentDegree=0);
+            TMapPtr finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, int cubatureEnrichmentDegree=0);
   GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
   GMGSolver(TSolutionPtr<double> fineSolution, int maxIters, double tol, int H1OrderCoarse = 1,
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);

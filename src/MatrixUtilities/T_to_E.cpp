@@ -19,7 +19,7 @@
 
 using namespace Camellia;
 
-Teuchos::RCP<Epetra_BlockMap> T_to_E::map(const TMapConstPtr & tMap)
+Teuchos::RCP<Epetra_Map> T_to_E::map(const TMapConstPtr & tMap)
 {
   using GO = TMap::global_ordinal_type;
 
@@ -49,8 +49,8 @@ Teuchos::RCP<Epetra_CrsGraph> T_to_E::graph(const TGraphConstPtr & tGraph)
 {
   using GO = TGraph::global_ordinal_type;
 
-  Teuchos::RCP<Epetra_BlockMap> eRowMap = map(tGraph->getRowMap());
-  Teuchos::RCP<Epetra_BlockMap> eColMap = map(tGraph->getColMap());
+  auto eRowMap = map(tGraph->getRowMap());
+  auto eColMap = map(tGraph->getColMap());
 
   size_t maxEntries = tGraph->getLocalMaxNumRowEntries();
 

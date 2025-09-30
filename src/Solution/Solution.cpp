@@ -1047,7 +1047,7 @@ void TSolution<Scalar>::setSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln)
 template <typename Scalar>
 void TSolution<Scalar>::initializeLHSVector()
 {
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we
   // may or may not have a goal-oriented RHS (the latter only makes sense, for now, anyway,
@@ -1068,7 +1068,7 @@ template <typename Scalar>
 void TSolution<Scalar>::initializeLoad()
 {
   narrate("initializeLoad");
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
 
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we
@@ -1084,7 +1084,7 @@ template <typename Scalar>
 void TSolution<Scalar>::initializeStiffnessAndLoad()
 {
   narrate("initializeStiffnessAndLoad");
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
   
 //  int maxRowSize = _mesh->rowSizeUpperBound();
   int maxRowSize = 0; // will cause more mallocs during insertion into the CrsMatrix, but will minimize the amount of memory allocated now.
@@ -1130,7 +1130,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   }
 
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
 
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -1834,7 +1834,7 @@ void TSolution<Scalar>::importSolution()
   Epetra_Map     myCellsMap = Epetra_Map(-1, myDofCount, myDofs, 0, *Comm); // 0: IndexBase
 
   // Import solution onto current processor
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
   Epetra_Import  solnImporter(myCellsMap, partMap);
   Epetra_MultiVector  solnCoeff(myCellsMap, lhsVector->NumVectors());
 //  cout << "on rank " << rank << ", about to Import\n";
@@ -2065,7 +2065,7 @@ void TSolution<Scalar>::importGlobalSolution()
   Epetra_Map     myCellsMap(-1, globalDofCount, myDofs, 0, *Comm);
 
   // Import global solution onto each processor
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
   Epetra_Import  solnImporter(myCellsMap, partMap);
   Epetra_Vector  solnCoeff(myCellsMap);
   solnCoeff.Import(*_lhsVector, solnImporter, Insert);
@@ -2132,7 +2132,7 @@ void TSolution<Scalar>::imposeBCs()
   narrate("imposeBCs()");
   int rank = _mesh->Comm()->getRank();
 
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
 
   Camellia::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
   Camellia::FieldContainer<double> bcGlobalValuesFC;
@@ -2329,7 +2329,7 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "imposeZMCsUsingLagrange called when _zmcsAsRankOneUpdate is true!");
   }
 
-  Epetra_Map partMap = getPartitionMap();
+  Epetra_Map partMap = getPartitionMap_Epetra();
 
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int localRowIndex = myGlobalIndicesSet.size();
@@ -2444,8 +2444,8 @@ template <typename Scalar>
 void TSolution<Scalar>::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter)
 {
   _dofInterpreter = dofInterpreter;
-  Epetra_Map map = getPartitionMap();
-  Teuchos::RCP<Epetra_Map> mapPtr = Teuchos::rcp( new Epetra_Map(map) ); // copy map to RCP
+//  Epetra_Map map = getPartitionMap();
+//  Teuchos::RCP<Epetra_Map> mapPtr = Teuchos::rcp( new Epetra_Map(map) ); // copy map to RCP
 //  _mesh->boundary().setDofInterpreter(_dofInterpreter.get(), mapPtr);
   // TODO: notice that the above call to Boundary::setDofInterpreter() will cause incompatibilities if two solutions share
   //       a mesh but not a dof interpreter.  This basically only would come up in standard cases if one solution has
@@ -3985,7 +3985,14 @@ int TSolution<Scalar>::solutionOrdinal(SolutionComponent solutionComponent, int 
 }
 
 template <typename Scalar>
-Epetra_Map TSolution<Scalar>::getPartitionMap()
+TMapPtr TSolution<Scalar>::getPartitionMap()
+{
+  Epetra_Map partMap = getPartitionMap_Epetra();
+  return E_to_T::map(partMap);
+}
+
+template <typename Scalar>
+Epetra_Map TSolution<Scalar>::getPartitionMap_Epetra()
 {
   int rank = _mesh->Comm()->getRank();
   auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
@@ -3993,7 +4000,7 @@ Epetra_Map TSolution<Scalar>::getPartitionMap()
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-  int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
+  int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : static_cast<int>(zeroMeanConstraints.size());
 
   Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,epetraComm.get());
   return partMap;
@@ -4002,7 +4009,7 @@ Epetra_Map TSolution<Scalar>::getPartitionMap()
 //template <typename Scalar>
 //Epetra_Map TSolution<Scalar>::getPartitionMapSolutionDofsOnly()   // omits lagrange multipliers, ZMCs, etc.
 //{
-//  Epetra_Map partMapWithZMC = getPartitionMap();
+//  Epetra_Map partMapWithZMC = getPartitionMap_Epetra();
 //  vector<int> myGlobalIndices(partMapWithZMC.NumMyElements());
 //  partMapWithZMC.MyGlobalElements(&myGlobalIndices[0]);
 //  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
@@ -4827,13 +4834,12 @@ void TSolution<Scalar>::loadFromHDF5(string filename)
   this->clear();
   initializeLHSVector();
   
-  Epetra_Map partMap = getPartitionMap();
-  TMapPtr tMap = E_to_T::map(partMap);
+  auto partMap = getPartitionMap();
   
   Camellia::HDF5 hdf5(_mesh->Comm());
   hdf5.Open(filename, H5F_ACC_RDONLY);
   
-  auto tVector = hdf5.ReadMultiVector("Solution", tMap);
+  auto tVector = hdf5.ReadMultiVector("Solution", partMap);
 
   hdf5.Close();
   

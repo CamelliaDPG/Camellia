@@ -14,6 +14,7 @@
 #include "MeshFactory.h"
 #include "MeshTestUtility.h"
 #include "PoissonFormulation.h"
+#include "T_to_E.hpp"
 
 #include "Epetra_Import.h"
 
@@ -256,13 +257,14 @@ namespace
       // check neighbor agreement for standard
       Epetra_MultiVector *lhsVector = solnStandard->getGlobalCoefficients();
       Epetra_SerialComm Comm;
-      Epetra_Map partMap = solnStandard->getPartitionMap();
+      auto partMap = solnStandard->getPartitionMap();
+      auto ePartMap = T_to_E::map(partMap);
 
       // Import solution onto current processor
       GlobalIndexTypeToCast numNodesGlobal = standardMesh->numGlobalDofs();
       GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
       Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      Epetra_Import  solnImporter(solnMap, partMap);
+      Epetra_Import  solnImporter(solnMap, *ePartMap);
       Epetra_Vector  solnCoeff(solnMap);
       solnCoeff.Import(*lhsVector, solnImporter, Insert);
 
@@ -276,13 +278,14 @@ namespace
       // check neighbor agreement for extruded
       Epetra_MultiVector *lhsVector = solnExtruded->getGlobalCoefficients();
       Epetra_SerialComm Comm;
-      Epetra_Map partMap = solnExtruded->getPartitionMap();
+      auto partMap = solnExtruded->getPartitionMap();
+      auto ePartMap = T_to_E::map(partMap);
 
       // Import solution onto current processor
       GlobalIndexTypeToCast numNodesGlobal = extrudedMesh->numGlobalDofs();
       GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
       Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      Epetra_Import  solnImporter(solnMap, partMap);
+      Epetra_Import  solnImporter(solnMap, *ePartMap);
       Epetra_Vector  solnCoeff(solnMap);
       solnCoeff.Import(*lhsVector, solnImporter, Insert);
 
