@@ -28,8 +28,8 @@ class E_to_T
 public:
   static TGraphPtr graph(const Epetra_CrsGraph &eGraph);
   static TMapPtr map(const Epetra_BlockMap &eMap);
-  static TMatrixPtr<double> matrix(Teuchos::RCP<Epetra_CrsMatrix> eMatrix);
-  static TVectorPtr<double> vector(Teuchos::RCP<Epetra_MultiVector> eVector);
+  static TMatrixPtr<double> matrix(Teuchos::RCP<const Epetra_CrsMatrix> eMatrix);
+  static TVectorPtr<double> vector(Teuchos::RCP<const Epetra_MultiVector> eVector);
 };
 }
 

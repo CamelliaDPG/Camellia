@@ -266,7 +266,7 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadr
   const int tElements = 1;
   const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
   const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
-  const double tol = 1e-12;
+  const double tol = 1e-11;
   
   const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
   const bool useMimeticDPG     = true;

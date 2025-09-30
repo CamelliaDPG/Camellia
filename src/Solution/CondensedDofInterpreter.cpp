@@ -606,14 +606,14 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForNeighborGlobalIndic
   char* indicesToExportPtr = NULL;
   if (numEntriesToExport > 0)
   {
-    sizePtr = &sizes[0];
-    indicesToExportPtr = (char *) &indicesToExport[0];
+    sizePtr = sizes.data();
+    indicesToExportPtr = (char *) indicesToExport.data();
   }
   distributor->Do(indicesToExportPtr, objSize, sizePtr, importLength, globalIndexData);
   const char* copyFromLocation = globalIndexData;
   int numDofsImport = importLength / objSize;
   vector<GlobalIndexTypeToCast> globalIndicesMapVector(numDofsImport);
-  GlobalIndexTypeToCast* copyToLocation = &globalIndicesMapVector[0];
+  GlobalIndexTypeToCast* copyToLocation = globalIndicesMapVector.data();
   for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
   {
     memcpy(copyToLocation, copyFromLocation, objSize);
@@ -724,14 +724,14 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForOffRankCells(const 
   char* indicesToExportPtr = NULL;
   if (numCellsToExport > 0)
   {
-    sizePtr = &sizes[0];
-    indicesToExportPtr = (char *) &indicesToExport[0];
+    sizePtr = sizes.data();
+    indicesToExportPtr = (char *) indicesToExport.data();
   }
   distributor->Do(indicesToExportPtr, objSize, sizePtr, importLength, globalIndexData);
   const char* copyFromLocation = globalIndexData;
   int numDofsImport = importLength / objSize;
   vector<GlobalIndexTypeToCast> globalIndicesMapVector(numDofsImport);
-  GlobalIndexTypeToCast* copyToLocation = &globalIndicesMapVector[0];
+  GlobalIndexTypeToCast* copyToLocation = globalIndicesMapVector.data();
   for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
   {
     memcpy(copyToLocation, copyFromLocation, objSize);

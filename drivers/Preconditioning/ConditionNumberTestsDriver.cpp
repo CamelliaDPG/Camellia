@@ -26,13 +26,6 @@
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 
-#include "Epetra_Operator_to_Epetra_Matrix.h"
-#include "Epetra_SerialComm.h"
-
-#include "EpetraExt_MatrixMatrix.h"
-#include "EpetraExt_RowMatrixOut.h"
-#include "EpetraExt_MultiVectorOut.h"
-
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_Amesos.h"
 #include "Ifpack_IC.h"
@@ -530,7 +523,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, IPPtr &graphNorm,
       vector<double> origin(spaceDim,0);
       IndexType vertexIndex;
       bool vertexFound = mesh->getTopology()->getVertexIndex(origin, vertexIndex);
-      vertexFound = MPIWrapper::globalOr(*mesh->Comm(), vertexFound);
+      vertexFound = MPIWrapper::globalOr(mesh->Comm(), vertexFound);
       if (!vertexFound)
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");

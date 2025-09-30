@@ -24,11 +24,6 @@
 
 #include "Amesos_config.h"
 
-#include "Epetra_Operator_to_Epetra_Matrix.h"
-#include "EpetraExt_MatrixMatrix.h"
-#include "EpetraExt_RowMatrixOut.h"
-#include "EpetraExt_MultiVectorOut.h"
-
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_Amesos.h"
 #include "Ifpack_IC.h"
@@ -1123,7 +1118,7 @@ int main(int argc, char *argv[])
       {
         Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
         if (rank==0) cout << "writing op to op.dat.\n";
-        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("op.dat", E_to_T::matrix(op->getMatrixRepresentation()));
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("op.dat", op->getMatrixRepresentation());
         
         if (rank==0) cout << "writing fine stiffness to A.dat.\n";
         Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A.dat", E_to_T::matrix(solution->getStiffnessMatrix()));

@@ -215,7 +215,11 @@ template <typename Scalar>
 using TVector = Tpetra::MultiVector<Scalar>;
 template <typename Scalar>
 using TVectorPtr = Teuchos::RCP< TVector<Scalar> >;
+template <typename Scalar>
+using TVectorConstPtr = Teuchos::RCP< const TVector<Scalar> >;
 // typedef TVectorPtr<double> VectorPtr;
+template <typename Scalar>
+using TOperator = Tpetra::Operator<Scalar>;
   
 #ifdef KOKKOS_ENABLE_CUDA
   using DeviceType = Kokkos::Device<Kokkos::Cuda,Kokkos::CudaSpace>;  // we want to avoid UVM; Kokkos default may be Kokkos::CudaUVMSpace

@@ -647,7 +647,7 @@ public:
       {
         MPI_Comm mpiComm = *Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm)->getRawMpiComm();
         char* myPtr = (myValues.size() > 0) ? reinterpret_cast<char*>(&myValues[0]) : NULL;
-        MPI_Allgatherv(myPtr, mySize, MPI_CHAR, reinterpret_cast<char*>(&gatheredValues[0]), &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm);
+        MPI_Allgatherv(myPtr, mySize, MPI_CHAR, reinterpret_cast<char*>(gatheredValues.data()), valuesSizes.data(), offsets.data(), MPI_CHAR, mpiComm);
       }
       else
       {

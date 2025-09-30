@@ -47,9 +47,9 @@ class Mesh : public RefinementObserver, public DofInterpreter
   Teuchos::RCP<GlobalDofAssignment> _gda;
 
   int _pToAddToTest;
-  bool _enforceMBFluxContinuity; // default to false (the historical value)
-  bool _usePatchBasis; // use MultiBasis if this is false.
-  bool _useConformingTraces; // if true, enforces vertex trace continuity
+  bool _enforceMBFluxContinuity = false; // default to false (the historical value)
+  bool _usePatchBasis = true; // use MultiBasis if this is false.
+  bool _useConformingTraces = true; // if true, enforces vertex trace continuity
 
   TBFPtr<double> _bilinearForm;
   VarFactoryPtr _varFactory;

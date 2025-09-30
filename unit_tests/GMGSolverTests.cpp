@@ -11,8 +11,6 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
-#include "EpetraExt_RowMatrixOut.h"
-
 #include "CamelliaDebugUtility.h"
 #include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
@@ -25,6 +23,7 @@
 #include "SerialDenseWrapper.h"
 #include "Solution.h"
 #include "SuperLUDistSolver.h"
+#include "T_to_E.hpp"
 
 #include <MatrixMarket_Tpetra.hpp>
 
@@ -37,27 +36,27 @@ namespace
     int rank = Teuchos::GlobalMPISession::getRank();
 
     auto opMatrix = op->getMatrixRepresentation();
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/op.dat", E_to_T::matrix(opMatrix));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/op.dat", opMatrix);
     if (rank==0) cout << "wrote op matrix to /tmp/op.dat\n";
 
     auto P = op->getProlongationOperator();
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", P);
     if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 
     auto coarseMatrix = op->getCoarseStiffnessMatrix();
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/coarse.dat", E_to_T::matrix(coarseMatrix));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/coarse.dat", coarseMatrix);
     if (rank==0) cout << "wrote coarse stiffness matrix to /tmp/coarse.dat\n";
 
     if (op->getSmootherType() != GMGOperator::NONE)
     {
       auto smoother = op->getSmootherAsMatrix();
-      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/smoother.dat", E_to_T::matrix(smoother));
+      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/smoother.dat", smoother);
       if (rank==0) cout << "wrote smoother matrix to /tmp/smoother.dat\n";
     }
 
     string fineStiffnessLocation = "/tmp/A.dat";
-    auto A_ptr = Teuchos::rcp(op->getFineStiffnessMatrix(), false);
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fineStiffnessLocation, E_to_T::matrix(A_ptr));
+    auto A_ptr = op->getFineStiffnessMatrix();
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fineStiffnessLocation, A_ptr);
     if (rank==0) cout << "wrote fine stiffness matrix to " << fineStiffnessLocation << endl;
   }
 
@@ -295,7 +294,7 @@ namespace
     // since we may change the RHS vector below, let's make a copy and use that
     Epetra_MultiVector rhsVectorCopy2(rhsVectorCopy);
 
-    Epetra_CrsMatrix *A = exactPoissonSolution->getStiffnessMatrix().get();
+    auto A = exactPoissonSolution->getStiffnessMatrix();
 
     const Epetra_Map* map = &A->RowMatrixRowMap();
 
@@ -337,10 +336,15 @@ namespace
 
     gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
 
-    gmgSolver->gmgOperator()->setFineStiffnessMatrix(A);
+    auto tRHSVectorCopy2 = E_to_T::vector(Teuchos::rcp(&rhsVectorCopy2, false));
+    auto tGMG_lhsVector  = E_to_T::vector(Teuchos::rcp(&gmg_lhsVector, false));
+//    gmgSolver->gmgOperator()->setDebugMode(true);
+    gmgSolver->gmgOperator()->setFineStiffnessMatrix(E_to_T::matrix(A));
     gmgSolver->gmgOperator()->setSmootherApplicationType(smootherApplicationType);
-    gmgSolver->gmgOperator()->ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
+    gmgSolver->gmgOperator()->ApplyInverse(*tRHSVectorCopy2, *tGMG_lhsVector);
 
+    gmg_lhsVector = *T_to_E::vector(tGMG_lhsVector);
+    
     double tol = 1e-10;
     int minLID = gmg_lhsVector.Map().MinLID();
     int numLIDs = gmg_lhsVector.Map().NumMyElements();
@@ -440,7 +444,8 @@ namespace
   {
     Camellia::FieldContainer<double> denseMatrix;
     auto opMatrix = op->getMatrixRepresentation();
-    SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*opMatrix, denseMatrix);
+    auto eOpMatrix = T_to_E::matrix(opMatrix);
+    SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*eOpMatrix, denseMatrix);
 
     double relTol = 1e-6; // we don't need very tight tolerance
     double absTol = relTol; // what counts as a zero, basically
@@ -964,7 +969,8 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
     fineSolution->initializeLHSVector();
     fineSolution->initializeStiffnessAndLoad();
     fineSolution->populateStiffnessAndLoad();
-    solver->gmgOperator()->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix().get());
+    auto tStiffness = E_to_T::matrix(fineSolution->getStiffnessMatrix());
+    solver->gmgOperator()->setFineStiffnessMatrix(tStiffness);
 
     vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE, GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ};
 
@@ -973,7 +979,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
       string smootherString = GMGOperator::smootherString(smoother);
       out << "***************** Testing smoother choice " << smootherString << " *****************" << endl;
       solver->gmgOperator()->setSmootherType(smoother);
-      solver->gmgOperator()->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix().get());
+      solver->gmgOperator()->setFineStiffnessMatrix(tStiffness);
       if (smoother == GMGOperator::NONE)
       {
         testOperatorIsSPD(solver->gmgOperator(), out, success);

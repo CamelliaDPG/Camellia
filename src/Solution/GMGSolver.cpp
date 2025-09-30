@@ -19,8 +19,10 @@
 #include <BelosPseudoBlockCGSolMgr.hpp>
 #include <BelosPseudoBlockGmresSolMgr.hpp>
 #include <BelosSolverFactory.hpp>
+#include <BelosSolverFactory_Tpetra.hpp>
 
 #include "E_to_T.hpp"
+#include "T_to_E.hpp"
 #include "MatrixMarket_Tpetra.hpp"
 
 #include <Teuchos_ParameterList.hpp>
@@ -555,19 +557,22 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   int solveResult;
   
   using namespace Teuchos;
-  typedef Epetra_MultiVector MV;
-  typedef double Scalar;
-  typedef Epetra_Operator OP;
+  using Scalar = double;
+  using MV = TVector<Scalar>;
+  using OP = TOperator<Scalar>;
   typedef Belos::LinearProblem<Scalar, MV, OP> BelosProblem;
   typedef RCP<BelosProblem> BelosProblemPtr;
-  BelosProblemPtr problem = rcp( new BelosProblem(_stiffnessMatrix, _lhs, _rhs) );
+  auto tStiffness = E_to_T::matrix(_stiffnessMatrix);
+  auto t_lhs = E_to_T::vector(_lhs);
+  auto t_rhs = E_to_T::vector(_rhs);
+  BelosProblemPtr problem = rcp( new BelosProblem(tStiffness, t_lhs, t_rhs) );
   
   Belos::SolverFactory<Scalar, MV, OP> factory;
   RCP<Belos::SolverManager<Scalar, MV, OP> > solver;
   
   if (buildCoarseStiffness)
   {
-    _gmgOperator->setFineStiffnessMatrix(_stiffnessMatrix.get());
+    _gmgOperator->setFineStiffnessMatrix(tStiffness);
   }
   
   RCP<ParameterList> solverParams = parameterList();
@@ -627,13 +632,13 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   {
     ostringstream path;
     path << _pathForExport << "M.dat";
-    auto M_epetra = _gmgOperator->getMatrixRepresentation();
+    auto M = _gmgOperator->getMatrixRepresentation();
     
     if (rank == 0)
     {
       cout << "Writing preconditioner to " << path.str() << endl;
     }
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), E_to_T::matrix(M_epetra));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), M);
     
     path.str("");
     path << _pathForExport << "A.dat";
@@ -641,7 +646,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     {
       cout << "Writing system matrix to " << path.str() << endl;
     }
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), E_to_T::matrix(_stiffnessMatrix));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), tStiffness);
   }
   
 //    cout << "NOTE: setting user convergence status test.\n";
@@ -675,10 +680,12 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   // TODO: try some more sophisticated stopping criterion
   
   _iterationCount = solver->getNumIters();
-
   
   _iterationCountLog.push_back(_iterationCount);
 
+  auto e_lhs = T_to_E::vector(t_lhs);
+  _lhs->Update(1.0, *e_lhs, 0.0);
+  
   return solveResult;
 }
 

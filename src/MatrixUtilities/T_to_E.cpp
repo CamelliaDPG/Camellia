@@ -79,51 +79,113 @@ Teuchos::RCP<Epetra_CrsGraph> T_to_E::graph(const TGraphConstPtr & tGraph)
                                   static_cast<int>(numEntries),
                                   eCols.data() );
   }
+  
+  /*
+   auto eDomainMap = eGraph.DomainMap();
+   TMapPtr tDomainMap = map(eDomainMap);
+   
+   TMapPtr tRangeMap = tRowMap;
+   
+   tGraph->fillComplete(tDomainMap, tRangeMap);
+   */
+  
+  auto tDomainMap = tGraph->getDomainMap();
+  auto eDomainMap = map(tDomainMap);
+  auto eRangeMap  = eRowMap;
 
-  epGraph->FillComplete();
+  epGraph->FillComplete(*eDomainMap, *eRangeMap);
   return epGraph;
 }
+
+//// Letting Gemini try (matrix)
+//Teuchos::RCP<Epetra_CrsMatrix> T_to_E::matrix(const TMatrixPtr<double> & tMatrix)
+//{
+//  using GO = TMatrix<double>::global_ordinal_type;
+//  using LO = TMatrix<double>::local_ordinal_type;
+//  using ValuesViewHost = TMatrix<double>::nonconst_values_host_view_type;
+//  using GlobalIndicesHostView = TMatrix<double>::nonconst_global_inds_host_view_type;
+//  
+//  // Convert the graph first
+//  auto eGraph = graph(tMatrix->getCrsGraph());
+//
+//  // Create the Epetra matrix using the converted graph
+//  auto eMatrix = Teuchos::rcp(new Epetra_CrsMatrix(Copy, *eGraph));
+//
+//  // Get maps for conversion
+//  auto rowMapT = tMatrix->getRowMap();
+//  int numMyRows = static_cast<int>(rowMapT->getLocalNumElements());
+//  auto rowLIDs = rowMapT->getLocalElementList(); // Use local IDs to iterate efficiently
+//  
+//  // Create buffers for the max number of entries per row
+//  size_t maxNumEntries = tMatrix->getLocalMaxNumRowEntries();
+//  GlobalIndicesHostView tCols("Tpetra column indices", maxNumEntries);
+//  ValuesViewHost tValues("Tpetra row values", maxNumEntries);
+//
+//  // Iterate over owned local rows to populate the Epetra matrix
+//  for (LO r_local = 0; r_local < numMyRows; ++r_local)
+//  {
+//    GO r_global = rowMapT->getGlobalElement(r_local);
+//    size_t numEntriesInRow = 0;
+//
+//    // Use getLocalRowCopy to get the actual number of entries in the row
+//    tMatrix->getGlobalRowCopy(r_global, tCols, tValues, numEntriesInRow);
+//
+//    // Prepare Epetra-compatible column indices
+//    std::vector<int> eCols_vec(numEntriesInRow);
+//    for (size_t j = 0; j < numEntriesInRow; ++j) {
+//      eCols_vec[j] = static_cast<int>(tCols[j]);
+//    }
+//
+//    // Insert the values and indices into the Epetra matrix
+//    eMatrix->InsertGlobalValues(static_cast<int>(r_global),
+//                                static_cast<int>(numEntriesInRow),
+//                                tValues.data(),
+//                                eCols_vec.data());
+//  }
+//
+//  // Finalize the Epetra matrix
+//  eMatrix->FillComplete();
+//  return eMatrix;
+//}
 
 Teuchos::RCP<Epetra_CrsMatrix> T_to_E::matrix(const TMatrixPtr<double> & tMatrix)
 {
   using GO = TMatrix<double>::global_ordinal_type;
+  using LO = TMatrix<double>::local_ordinal_type;
   using ValuesViewHost = TMatrix<double>::nonconst_values_host_view_type;
+  using GlobalIndicesHostView = TMatrix<double>::nonconst_global_inds_host_view_type;
 
-  // convert the graph first
+  // convert the graph
   auto eGraph = graph(tMatrix->getCrsGraph());
-
+  // construct the Epetra matrix
   auto eMatrix = Teuchos::rcp(new Epetra_CrsMatrix(Copy, *eGraph));
 
-  // get some bookkeeping
   auto rowMapT = tMatrix->getRowMap();
   int numMyRows = static_cast<int>(rowMapT->getLocalNumElements());
-  auto rowGIDs  = rowMapT->getLocalElementList();
+  auto rowGIDs = rowMapT->getMyGlobalIndices();
   size_t maxEntries = tMatrix->getLocalMaxNumRowEntries();
 
   // buffers
-  std::vector<int>   eCols(maxEntries);
-  std::vector<double> vals(maxEntries);
-
-  using GlobalIndicesHostView = typename TGraph::nonconst_global_inds_host_view_type;
+  std::vector<int> eCols(maxEntries);
   GlobalIndicesHostView tCols("Tpetra graph columns host view", maxEntries);
-  
   ValuesViewHost tValues("Tpetra matrix row values", maxEntries);
   
   // copy in the values row by row
   for (int r=0; r<numMyRows; r++)
   {
-    GO gRow = rowGIDs[r];
-    size_t numRowEntries = maxEntries;
+    const GO & gRow = rowGIDs[r];
+    size_t numRowEntries = 0;
 
-    tMatrix->getGlobalRowCopy(gRow, tCols, tValues,
-                              numRowEntries);
+    tMatrix->getGlobalRowCopy(gRow, tCols, tValues, numRowEntries);
 
     for (size_t j=0; j<numRowEntries; j++)
+    {
       eCols[j] = static_cast<int>(tCols[j]);
+    }
 
     eMatrix->ReplaceGlobalValues(static_cast<int>(gRow),
-                                 (int)numRowEntries,
-                                 vals.data(),
+                                 static_cast<int>(numRowEntries),
+                                 tValues.data(),
                                  eCols.data());
   }
 
@@ -131,7 +193,7 @@ Teuchos::RCP<Epetra_CrsMatrix> T_to_E::matrix(const TMatrixPtr<double> & tMatrix
   return eMatrix;
 }
 
-Teuchos::RCP<Epetra_MultiVector> T_to_E::vector(const TVectorPtr<double> & tVector)
+Teuchos::RCP<Epetra_MultiVector> T_to_E::vector(const TVectorConstPtr<double> & tVector)
 {
   // convert the underlying map
   auto eMap         = map(tVector->getMap());

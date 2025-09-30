@@ -20,14 +20,13 @@
 
 // Tpetra includes
 #include <MatrixMarket_Tpetra.hpp>
-
-// EpetraExt includes
-#include "EpetraExt_MatrixMatrix.h"
+#include <TpetraExt_MatrixMatrix.hpp>
 
 typedef double Scalar;
 
 using namespace Camellia;
 using namespace std;
+using namespace Teuchos;
 
 enum ExactSolutionChoice {
   BroersenStevensonExample4_2,
@@ -445,7 +444,7 @@ MeshTopologyViewPtr loadMesh(string meshLoadPrefix, int refinementNumber)
 {
   ostringstream meshFileName;
   meshFileName << meshLoadPrefix << refinementNumber;
-  return MeshTopologyView::readFromFile(MPIWrapper::CommWorld(), meshFileName.str());
+  return MeshTopologyView::readFromFile(MPIWrapper::TeuchosCommWorld(), meshFileName.str());
 }
 
 void saveMesh(MeshPtr mesh, string meshSavePrefix, int refinementNumber)
@@ -1194,25 +1193,25 @@ int main(int argc, char *argv[])
     ostringstream stiffmatrixName;
     stiffmatrixName << thisRunPrefix.str() << "finalStiffness.dat";
     Teuchos::RCP<Epetra_CrsMatrix> stiffness = solution->getStiffnessMatrix();
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(stiffmatrixName.str(), E_to_T::matrix(stiffness));
+    auto tStiffness = E_to_T::matrix(stiffness);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(stiffmatrixName.str(), tStiffness);
     if (rank == 0) cout << "Wrote unpreconditioned matrix to " << stiffmatrixName.str() << endl;
     
     auto gmgSolver = getGMGSolver();
-    gmgSolver->gmgOperator()->setFineStiffnessMatrix(stiffness.get());
-    Teuchos::RCP<Epetra_CrsMatrix> op = gmgSolver->gmgOperator()->getMatrixRepresentation();
+    gmgSolver->gmgOperator()->setFineStiffnessMatrix(E_to_T::matrix(stiffness));
+    auto op = gmgSolver->gmgOperator()->getMatrixRepresentation();
     
     int maxRowSize = 0; // _P->MaxNumEntries();
     
     // compute op * stiffness
-    Epetra_CrsMatrix preconditionedStiffness(::Copy, solution->getPartitionMap(), maxRowSize);
+    auto domainMap = tStiffness->getDomainMap();
+    TMatrixPtr<double> preconditionedStiffness = Teuchos::rcp( new TMatrix<double>(domainMap, maxRowSize) );
     
-    int err = EpetraExt::MatrixMatrix::Multiply(*op, false, *stiffness, false, preconditionedStiffness);
-    if (err != 0) cout << "Error (code " << err << ") encountered during matrix-matrix multiply.\n";
+    Tpetra::MatrixMatrix::Multiply(*op, true, *tStiffness, false, *preconditionedStiffness); // calls fillComplete()
     
     ostringstream preconditionedStiffmatrixName;
     preconditionedStiffmatrixName << thisRunPrefix.str() << "finalStiffnessPreconditioned.dat";
-    auto preconditionedStiffnessPtr = Teuchos::rcp(&preconditionedStiffness, false);
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(preconditionedStiffmatrixName.str(), E_to_T::matrix(preconditionedStiffnessPtr));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(preconditionedStiffmatrixName.str(), preconditionedStiffness);
     if (rank == 0) cout << "Wrote preconditioned matrix to " << preconditionedStiffmatrixName.str() << endl;
   }
   

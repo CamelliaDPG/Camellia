@@ -37,7 +37,7 @@ public:
   static Teuchos::RCP<Epetra_CrsMatrix> matrix(const TMatrixPtr<double> & tMatrix);
 
   /// Convert a Tpetra::MultiVector<double> into an Epetra_MultiVector
-  static Teuchos::RCP<Epetra_MultiVector> vector(const TVectorPtr<double> & tVector);
+  static Teuchos::RCP<Epetra_MultiVector> vector(const TVectorConstPtr<double> & tVector);
 };
 
 } // namespace Camellia

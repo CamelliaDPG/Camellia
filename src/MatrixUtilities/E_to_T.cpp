@@ -25,6 +25,9 @@ TGraphPtr E_to_T::graph(const Epetra_CrsGraph &eGraph)
   auto eRowMap = eGraph.RowMap();
   TMapPtr tRowMap = map(eRowMap);
   
+  auto eColMap = eGraph.ColMap();
+  TMapPtr tColMap = map(eColMap);
+  
   const int numMyRows = eGraph.NumMyRows();
   
   std::vector<size_t> goIndicesPerRow(numMyRows);
@@ -33,7 +36,7 @@ TGraphPtr E_to_T::graph(const Epetra_CrsGraph &eGraph)
     goIndicesPerRow[i] = static_cast<size_t>(eGraph.NumMyIndices(i));
   }
     
-  tGraph = Teuchos::rcp(new TGraph(tRowMap, goIndicesPerRow) );
+  tGraph = Teuchos::rcp(new TGraph(tRowMap, tColMap, goIndicesPerRow) );
   
   int maxColCount = eGraph.MaxNumIndices();
   std::vector<GO> goIndicesT(maxColCount);
@@ -41,20 +44,25 @@ TGraphPtr E_to_T::graph(const Epetra_CrsGraph &eGraph)
   for (int i = 0; i < numMyRows; i++)
   {
     int numEntries = 0;
-    int* indices = nullptr;
+    int* localIndices = nullptr;
 
-    eGraph.ExtractMyRowView(i, numEntries, indices);
+    eGraph.ExtractMyRowView(i, numEntries, localIndices);
     
     for (int j=0; j<numEntries; j++)
     {
-      goIndicesT[j] = static_cast<GO>(indices[j]);
+      goIndicesT[j] = static_cast<GO>(eColMap.GID(localIndices[j]));
     }
 
     GO i_global = eGraph.RowMap().GID(i);
-    tGraph->insertGlobalIndices(i_global, numEntries, &goIndicesT[0]);
+    tGraph->insertGlobalIndices(i_global, numEntries, goIndicesT.data());
   }
 
-  tGraph->fillComplete();
+  auto eDomainMap = eGraph.DomainMap();
+  TMapPtr tDomainMap = map(eDomainMap);
+  
+  TMapPtr tRangeMap = tRowMap;
+  
+  tGraph->fillComplete(tDomainMap, tRangeMap);
   return tGraph;
 }
 
@@ -74,12 +82,11 @@ TMapPtr E_to_T::map(const Epetra_BlockMap &eMap)
   Epetra_CommPtr eComm = Teuchos::rcp(&const_cast<Epetra_Comm&>(eMap.Comm()),false);
   Teuchos_CommPtr comm = MPIWrapper::TeuchosComm(eComm);
   
-  GO* myIndicesPtr = (goMyIndices.size() > 0) ? &goMyIndices[0] : NULL;
-  TMapPtr tMap = Teuchos::rcp(new TMap(numGlobalElements, myIndicesPtr, numMyElements, 0, comm));
+  TMapPtr tMap = Teuchos::rcp(new TMap(numGlobalElements, goMyIndices.data(), numMyElements, 0, comm));
   return tMap;
 }
 
-Teuchos::RCP< TMatrix<double> > E_to_T::matrix(Teuchos::RCP<Epetra_CrsMatrix> eMatrix)
+Teuchos::RCP< TMatrix<double> > E_to_T::matrix(Teuchos::RCP<const Epetra_CrsMatrix> eMatrix)
 {
   Teuchos::RCP< TMatrix<double> > tMatrix;
   
@@ -90,6 +97,8 @@ Teuchos::RCP< TMatrix<double> > E_to_T::matrix(Teuchos::RCP<Epetra_CrsMatrix> eM
   
   tMatrix = Teuchos::rcp( new TMatrix<double>(tGraph) );
   
+  auto eColMap = eGraph.ColMap();
+  
   int numMyRows = eMatrix->NumMyRows();
   
   int maxColCount = eMatrix->MaxNumEntries();
@@ -98,24 +107,32 @@ Teuchos::RCP< TMatrix<double> > E_to_T::matrix(Teuchos::RCP<Epetra_CrsMatrix> eM
   for (int i = 0; i < numMyRows; ++i) {
     int numEntries = 0;
     double* values = nullptr;
-    int* indices = nullptr;
+    int* localIndices = nullptr;
 
-    eMatrix->ExtractMyRowView(i, numEntries, values, indices);
+    eMatrix->ExtractMyRowView(i, numEntries, values, localIndices);
     
     for (int j=0; j<numEntries; j++)
     {
-      goIndicesT[j] = static_cast<GO>(indices[j]);
+      goIndicesT[j] = static_cast<GO>(eColMap.GID(localIndices[j]));
     }
-
     GO i_global = eGraph.RowMap().GID(i);
-    tMatrix->replaceGlobalValues(i_global, numEntries, values, &goIndicesT[0]);
+    tMatrix->replaceGlobalValues(i_global, numEntries, values, goIndicesT.data());
+    
+//    {
+//      std::cout << "row " << i_global << ": ";
+//      for (int j=0; j<numEntries; j++)
+//      {
+//        std::cout << goIndicesT[j] << " --> " << values[j] << ";";
+//      }
+//      std::cout << std::endl;
+//    }
   }
   tMatrix->fillComplete();
   
   return tMatrix;
 }
 
-TVectorPtr<double> E_to_T::vector(Teuchos::RCP<Epetra_MultiVector> eVector)
+TVectorPtr<double> E_to_T::vector(Teuchos::RCP<const Epetra_MultiVector> eVector)
 {
   auto tMap = map(eVector->Map());
   

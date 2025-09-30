@@ -22,14 +22,11 @@
 #include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "SerialDenseWrapper.h"
+#include "T_to_E.hpp"
 #include "TimeLogger.h"
 
 #include <MatrixMarket_Tpetra.hpp>
-
-// EpetraExt includes
-#include "EpetraExt_MatrixMatrix.h"
-#include "EpetraExt_RowMatrixOut.h"
-#include "EpetraExt_MultiVectorOut.h"
+#include <TpetraExt_MatrixMatrix.hpp>
 
 #include "Epetra_SerialComm.h"
 
@@ -51,13 +48,14 @@
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
 
-
 using namespace Camellia;
 
 #ifdef USE_HPCTW
 extern "C" void HPM_Start(char *);
 extern "C" void HPM_Stop(char *);
 #endif
+
+using Scalar = double;
 
 GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
@@ -80,7 +78,6 @@ _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
   
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
-  _fineCoarseRolesSwapped = false; //default
 
   _hierarchicalNeighborsForSchwarz = false; // default; can be overridden later
   _dimensionForSchwarzNeighborRelationship = fineMesh->getTopology()->getDimension() - 1; // side dimension default
@@ -183,8 +180,9 @@ void GMGOperator::setClearFinestCondensedDofInterpreterAfterProlongation(bool va
   _clearFinestCondensedDofInterpreterAfterProlongation = value;
 }
 
-void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix)
+void GMGOperator::computeCoarseStiffnessMatrix(TMatrixPtr<Scalar> tFineStiffnessMatrix)
 {
+  auto fineStiffnessMatrix = T_to_E::matrix(tFineStiffnessMatrix);
   narrate("computeCoarseStiffnessMatrix");
   int globalColCount = fineStiffnessMatrix->NumGlobalCols();
   if (_P.get() == NULL)
@@ -206,146 +204,48 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 //  cout << "Writing fine stiffness to disk before setting up smoother.\n";
 //  Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/A.dat", E_to_T::matrix(fineStiffnessMatrix));
   
-  Epetra_Time coarseStiffnessTimer(Comm());
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time coarseStiffnessTimer(*eComm);
 
-  if (!_fineCoarseRolesSwapped)
+  int maxRowSize = 0; // _P->MaxNumEntries();
+  
+  // compute A * P
+  auto tMap = E_to_T::map(_finePartitionMap);
+  TMatrix<double> AP(tMap, maxRowSize);
+  
+  Tpetra::MatrixMatrix::Multiply(*tFineStiffnessMatrix, false, *_P, false, AP);
+  
+  auto domain_P = _P->getDomainMap();
+  TMatrixPtr<double> PT_A_P = Teuchos::rcp( new TMatrix<double>(domain_P, maxRowSize) );
+  
+  // compute P^T * A * P
+  Tpetra::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P); // calls fillComplete()
+    
+  auto ePT_A_P = T_to_E::matrix(PT_A_P);
+  Epetra_Map coarsePartitionMap = _coarseSolution->getPartitionMap();
+  Epetra_Import  coarseImporter(coarsePartitionMap, ePT_A_P->RowMap());
+  
+  Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness;
+  if (_coarseSolution->getZMCsAsGlobalLagrange() &&
+      (prolongationColCount() > _coarseSolution->getDofInterpreter()->globalDofCount()))
   {
-    int maxRowSize = 0; // _P->MaxNumEntries();
+    // essentially: there are some lagrange constraints applied in coarse solve --> we shouldn't use the fused import,
+    //              since this will call FillComplete()
     
-    // compute A * P
-    Epetra_CrsMatrix AP(::Copy, _finePartitionMap, maxRowSize);
-    //  Epetra_CrsMatrix AP(::Copy, fineStiffnessMatrix->RowMap(), maxRowSize);
-    
-    int err = EpetraExt::MatrixMatrix::Multiply(*fineStiffnessMatrix, false, *_P, _fineCoarseRolesSwapped, AP);
-    if (err != 0)
-    {
-      cout << "ERROR: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of A * P.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of A * P.");
-    }
-    
-    // PRETTY SURE domain_P is problematic when _fineCoarseRolesSwapped == true!!
-    // TODO: figure out the appropriate way to fix this
-    //  Epetra_Map domain_P = _fineCoarseRolesSwapped ? _P->RangeMap() : _P->DomainMap();
-    //    Epetra_Map domain_P = _coarseSolution->getPartitionMap();
-    Epetra_Map domain_P = _P->DomainMap();
-//    Epetra_Map range_P = _P->RangeMap();
-//    printMapSummary(domain_P, "_P->DomainMap()");
-//    printMapSummary(range_P, "_P->RangeMap()");
-    Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
-    
-    // compute P^T * A * P
-    err = EpetraExt::MatrixMatrix::Multiply(*_P, !_fineCoarseRolesSwapped, AP, false, *PT_A_P);
-    if (err != 0)
-    {
-      cout << "WARNING: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * (A * P).\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * (A * P).");
-    }
-    
-    PT_A_P->FillComplete();
-    
-//    string PT_A_P_path = "/tmp/PT_AP.dat";
-//    cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(PT_A_P_path, E_to_T::matrix(PT_A_P));
-    
-//    string P_path = "/tmp/P.dat";
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(P_path, E_to_T::matrix(_P));
-    
-    Epetra_Map coarsePartitionMap = _coarseSolution->getPartitionMap();
-    Epetra_Import  coarseImporter(coarsePartitionMap, PT_A_P->RowMap());
-//    { // DEBUGGING
-//      Camellia::printMapSummary(coarsePartitionMap, "coarsePartitionMap");
-//      Camellia::printMapSummary(PT_A_P->RowMap(), "PT_A_P->RowMap()");
-//    }
-    
-    Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness;
-    if (_coarseSolution->getZMCsAsGlobalLagrange() &&
-        (prolongationColCount() > _coarseSolution->getDofInterpreter()->globalDofCount()))
-    {
-      // essentially: there are some lagrange constraints applied in coarse solve --> we shouldn't use the fused import,
-      //              since this will call FillComplete()
-      
-      int numEntriesPerRow = 0; // sub-optimal, but easy
-      coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, coarsePartitionMap, numEntriesPerRow) );
-      coarseStiffness->Import(*PT_A_P,coarseImporter,::Insert);
-      _coarseSolution->setStiffnessMatrix(coarseStiffness);
-      _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
-      // now can call FillComplete()
-      coarseStiffness->FillComplete();
-    }
-    else
-    {
-      coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(*PT_A_P, coarseImporter) );
-      
-      _coarseSolution->setStiffnessMatrix(coarseStiffness);
-      _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
-    }
+    int numEntriesPerRow = 0; // sub-optimal, but easy
+    coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, coarsePartitionMap, numEntriesPerRow) );
+    coarseStiffness->Import(*ePT_A_P,coarseImporter,::Insert);
+    _coarseSolution->setStiffnessMatrix(coarseStiffness);
+    _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
+    // now can call FillComplete()
+    coarseStiffness->FillComplete();
   }
-  else // _fineCoarseRolesSwapped == true
+  else
   {
-    int maxRowSize = 0; // _P->MaxNumEntries();
+    coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(*ePT_A_P, coarseImporter) );
     
-    // compute P^T * A
-    Epetra_CrsMatrix PT_A(::Copy, _P->RowMap(), maxRowSize);
-    
-    int err = EpetraExt::MatrixMatrix::Multiply(*_P, false, *fineStiffnessMatrix, false, PT_A);
-    if (err != 0)
-    {
-      cout << "ERROR: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * A.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * A.");
-    }
-    
-    Epetra_Map domain_P = _P->RowMap(); // when _fineCoarseRolesSwapped is true, _P really refers to P^T, so the row map of _P is the domain of P.
-    Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
-    
-    // compute P^T * A * P
-    err = EpetraExt::MatrixMatrix::Multiply(PT_A, false, *_P, true, *PT_A_P); // transpose _P == P^T (since _fineCoarseRolesSwapped is true) to get P
-    if (err != 0)
-    {
-      cout << "WARNING: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of (P^T * A) * P.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of (P^T * A) * P.");
-    }
-    
-    PT_A_P->FillComplete();
-    
-    Epetra_Map coarsePartitionMap = _coarseSolution->getPartitionMap();
-    Epetra_Import  coarseImporter(coarsePartitionMap, PT_A_P->RowMap());
-    { // DEBUGGING
-      Camellia::printMapSummary(coarsePartitionMap, "coarsePartitionMap");
-      Camellia::printMapSummary(PT_A_P->RowMap(), "PT_A_P->RowMap()");
-    }
-    
-    Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness;
-    if (_coarseSolution->getZMCsAsGlobalLagrange() &&
-        (prolongationColCount() > _coarseSolution->getDofInterpreter()->globalDofCount()))
-    {
-      // essentially: there are some lagrange constraints applied in coarse solve --> we shouldn't use the fused import,
-      //              since this will call FillComplete()
-      
-      int numEntriesPerRow = 0; // sub-optimal, but easy
-      coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, coarsePartitionMap, numEntriesPerRow) );
-      coarseStiffness->Import(*PT_A_P,coarseImporter,::Insert);
-      _coarseSolution->setStiffnessMatrix(coarseStiffness);
-      _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
-      // now can call FillComplete()
-      coarseStiffness->FillComplete();
-    }
-    else
-    {
-      int numEntriesPerRow = 0; // sub-optimal, but easy
-      coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, coarsePartitionMap, numEntriesPerRow) );
-      coarseStiffness->Import(*PT_A_P,coarseImporter,::Insert);
-      _coarseSolution->setStiffnessMatrix(coarseStiffness);
-      _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
-      // now can call FillComplete()
-      coarseStiffness->FillComplete();
-
-      // fused import below isn't working in this context... (Hence I copied the lagrange implementation above)
-//      
-//      coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(*PT_A_P, coarseImporter) );
-//      
-//      _coarseSolution->setStiffnessMatrix(coarseStiffness);
-//      _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
-    }
+    _coarseSolution->setStiffnessMatrix(coarseStiffness);
+    _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
   }
 
   _timeComputeCoarseStiffnessMatrix = coarseStiffnessTimer.ElapsedTime();
@@ -354,21 +254,19 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 }
 
 // res should hold the RHS on entry
-void GMGOperator::computeResidual(const Epetra_MultiVector& Y, Epetra_MultiVector& res, Epetra_MultiVector& A_Y) const
+void GMGOperator::computeResidual(const TVector<Scalar>& Y, TVector<Scalar>& res, TVector<Scalar>& A_Y) const
 {
-  Epetra_Time timer(Comm());
-  int err = _fineStiffnessMatrix->Apply(Y, A_Y);
-  if (err != 0)
-  {
-    cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
-  }
-  res.Update(-1.0, A_Y, 1.0);
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time timer(*eComm);
+  _fineStiffnessMatrix->apply(Y, A_Y);
+  res.update(-1.0, A_Y, 1.0);
   _timeApplyFineStiffness += timer.ElapsedTime();
   if (_debugMode)
   {
     if (Teuchos::GlobalMPISession::getRank()==0) cout << "Updated residual after smoother application:\n";
-    res.Comm().Barrier();
-    cout << res;
+    res.print(std::cout);
+    Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+    res.describe(*fos, Teuchos::VERB_EXTREME);
   }
 }
 
@@ -395,7 +293,8 @@ double GMGOperator::computeSchwarzSmootherWeight()
 void GMGOperator::constructLocalCoefficientMaps()
 {
   narrate("constructLocalCoefficientMaps()");
-  Epetra_Time timer(Comm());
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time timer(*eComm);
 
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
 
@@ -478,7 +377,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     }
 
     // TODO: consider changing this to use an Epetra_Map with a single entry (given the usage below, this should be possible).
-    Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
+    Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), myGlobalIndices.data(), 0, SerialComm);
     Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
     
 //    Epetra_Map    mapOneElement(1,1,&myGlobalIndices[0], 0, SerialComm);
@@ -594,14 +493,6 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
           LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
           GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
           
-          if (_fineCoarseRolesSwapped && (coarseCellID != fineCellID))
-          {
-            // then getLocalCoefficientMap() will have gotten the wrong thing.
-            // (in fact, it's only the right thing when _fineCoarseRolesSwapped == true
-            //  if fineMapper is *identity* -- we use role-swapping to allow construction of
-            //  mapping from a "conforming" mesh to a "non-conforming" one.)
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "swapping fine and coarse roles is not supported for h-refinements");
-          }
           DofOrderingPtr coarseTrialOrdering = coarseMesh->getElementType(coarseCellID)->trialOrderPtr;
           int coarseDofCount = coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
           coarseCellCoefficients.resize(coarseDofCount);
@@ -665,32 +556,34 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
       coarseGlobalValues.resize(coarseXVectorLocal.size());
       int nnz = 0; // nonzero entries
       double tol = 1e-13; // count anything less as a zero entry
-      //      cout << "P global row " << globalRow << ": ";
+//            cout << "P global row " << globalRow << ": ";
       for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++)
       {
         if (abs(coarseXIt->second) > tol)
         {
           coarseGlobalIndices[nnz] = coarseXIt->first;
           coarseGlobalValues[nnz] = coarseXIt->second;
-          //          cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
+//                    cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
           nnz++;
         }
       }
-      //      cout << endl;
+//            cout << endl;
       if (nnz > 0)
       {
         P->InsertGlobalValues(globalRow, nnz, &coarseGlobalValues[0], &coarseGlobalIndices[0]);
-        //        cout << "Inserting values for row " << globalRow << endl;
+//                cout << "Inserting values for row " << globalRow << endl;
       }
       (*XLocal)[localID] = 0.0;
     }
   }
   
 //  cout << "Fine mesh has " << _fineMesh->numGlobalDofs() << " global dofs.\n";
-  
-  //  cout << "before FillComplete(), P has " << P->NumGlobalRows64() << " rows and " << P->NumGlobalCols64() << " columns.\n";
+//  
+//    cout << "before FillComplete(), P has " << P->NumGlobalRows64() << " rows and " << P->NumGlobalCols64() << " columns.\n";
   
   P->GlobalAssemble(coarseMap, fineMap);
+  
+//  cout << "after FillComplete(), P has " << P->NumGlobalRows64() << " rows and " << P->NumGlobalCols64() << " columns.\n";
   
   const static bool DEBUGGING = false;
   if (DEBUGGING)
@@ -761,24 +654,22 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
   return P;
 }
 
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
+TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator()
 {
-  Epetra_Time prolongationTimer(Comm());
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time prolongationTimer(*eComm);
   narrate("constructProlongationOperator");
   
-  if (! _fineCoarseRolesSwapped)
-  {
-    Epetra_Map coarseMap = _coarseSolution->getPartitionMap();
-    _P = this->constructProlongationOperator(_coarseSolution->getDofInterpreter(), _fineDofInterpreter, _useStaticCondensation,
-                                             coarseMap, _finePartitionMap, _coarseMesh, _fineMesh);
-  }
-  else
-  {
-    Epetra_Map coarseMap = _coarseSolution->getPartitionMap();
-    _P = this->constructProlongationOperator(_fineDofInterpreter, _coarseSolution->getDofInterpreter(), _useStaticCondensation,
-                                             _finePartitionMap, coarseMap, _fineMesh, _coarseMesh);
-  }
+  Epetra_Map coarseMap = _coarseSolution->getPartitionMap();
+  auto eP = this->constructProlongationOperator(_coarseSolution->getDofInterpreter(), _fineDofInterpreter, _useStaticCondensation,
+                                                coarseMap, _finePartitionMap, _coarseMesh, _fineMesh);
+  
+//  std::cout << "Epetra P has " << eP->NumGlobalRows() << " rows and " << eP->NumGlobalCols() << " columns.\n";
+  
+  _P = E_to_T::matrix(eP);
 
+//  std::cout << "Tpetra _P has " << _P->getGlobalNumRows() << " rows and " << _P->getGlobalNumCols() << " columns.\n";
+  
   _timeProlongationOperatorConstruction = prolongationTimer.ElapsedTime();
   
   ostringstream prolongationTimingReport;
@@ -942,7 +833,7 @@ MeshPtr GMGOperator::getFineMesh() const
   return _fineMesh;
 }
 
-Epetra_CrsMatrix* GMGOperator::getFineStiffnessMatrix()
+TMatrixPtr<Scalar> GMGOperator::getFineStiffnessMatrix()
 {
   return _fineStiffnessMatrix;
 }
@@ -1636,42 +1527,44 @@ Teuchos::RCP<Epetra_MultiVector> GMGOperator::getSmootherWeightVector()
   return _smootherDiagonalWeight;
 }
 
-int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
+void GMGOperator::apply(const TVector<Scalar> &tX, TVector<Scalar> &tY, Teuchos::ETransp mode, Scalar alpha, Scalar beta) const
 {
-  // Belos thinks preconditioners *are* inverses, where Aztec thinks they're forward operators.  We do the same thing regardless of which you call...
-  return ApplyInverse(X,Y);
-  //  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");}
+  TEUCHOS_TEST_FOR_EXCEPTION(alpha != 1, std::invalid_argument, "This implementation assumes alpha = 1");
+  TEUCHOS_TEST_FOR_EXCEPTION(beta != 0, std::invalid_argument, "This implementation assumes beta = 0");
+  int err = ApplyInverse(tX,tY);
+  TEUCHOS_TEST_FOR_EXCEPTION(err !=0, std::invalid_argument, "ApplyInverse() returned non-zero error code");
 }
 
-int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
+int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) const
 {
   narrate("ApplyInverse");
   //  cout << "GMGOperator::ApplyInverse.\n";
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
   
-  Epetra_Time timer(Comm());
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time timer(*eComm);
   
   if (_debugMode)
   {
-    if (printVerboseOutput) cout << "X_in:\n";
-    X_in.Comm().Barrier();
-    cout << X_in;
+    if (printVerboseOutput) std::cout << "X_in:\n";
+    Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+    X_in.describe(*fos, Teuchos::VERB_EXTREME);
   }
   
-  Epetra_MultiVector res(X_in); // Res: residual.  Starting with Y = 0, then this is just the RHS
-  Epetra_MultiVector f(X_in);   // f: the RHS.  Don't change this.
+  TVector<Scalar> res(X_in, Teuchos::Copy); // Res: residual.  Starting with Y = 0, then this is just the RHS
+  TVector<Scalar> f(X_in, Teuchos::Copy);   // f: the RHS.  Don't change this.
   
   // initialize Y (important to do this only after X_in has been copied--X and Y can be in the same location)
-  Y.PutScalar(0.0);
-  Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
+  Y.putScalar(0.0);
+  TVector<Scalar> A_Y(Y.getMap(), Y.getNumVectors());
   
   if ((_multigridStrategy == FULL_MULTIGRID_V) || (_multigridStrategy == FULL_MULTIGRID_W))
   {
     // full multigrid takes the coarse operator applied to the RHS as its initial guess
-    Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
+    TVector<Scalar> Y2(Y.getMap(), Y.getNumVectors());
     this->ApplyInverseCoarseOperator(res, Y2);
-    Y.Update(1.0, Y2, 1.0);
+    Y.update(1.0, Y2, 1.0);
     // recompute residual:
     res = f;
     computeResidual(Y,res,A_Y);
@@ -1693,17 +1586,17 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   
   if (_smootherType != NONE)
   {
-    Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors()); // B1_res: the smoother applied to res.
+    TVector<Scalar> B1_res(Y.getMap(), Y.getNumVectors()); // B1_res: the smoother applied to res.
     for (int i=0; i<_smootherApplicationCount; i++)
     {
       // if we have a smoother S, set Y = S^-1 f =: B1 * f
       ApplySmoother(res, B1_res, true); // true: apply weight on left
-      Y.Update(1.0, B1_res, 1.0);
+      Y.update(1.0, B1_res, 1.0);
       if (_debugMode)
       {
         if (printVerboseOutput) cout << "B1 * res:\n";
-        B1_res.Comm().Barrier();
-        cout << B1_res;
+        Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+        B1_res.describe(*fos, Teuchos::VERB_EXTREME);
       }
       
       if (_multigridStrategy == TWO_LEVEL)
@@ -1712,14 +1605,14 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
         {
           // then we need to average the left-application we already did with an application on the right
           ApplySmoother(res, B1_res, false); // false: apply weight on right
-          Y.Update(0.5, B1_res, 0.5); // 0.5: average
+          Y.update(0.5, B1_res, 0.5); // 0.5: average
         }
         break; // don't apply multiple times if doing two-level (no point...)
       }
       else
       {
         // compute a new residual: res := f - A*Y = res - A*Y
-        res = f;
+        Tpetra::deep_copy(res, f);
         computeResidual(Y,res,A_Y);
       }
     }
@@ -1727,18 +1620,24 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   
   for (int applicationOrdinal = 0; applicationOrdinal < numApplications; applicationOrdinal++)
   {
-    Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
+    TVector<Scalar> Y2(Y.getMap(), Y.getNumVectors());
     this->ApplyInverseCoarseOperator(res, Y2);
-    Y.Update(1.0, Y2, 1.0);
+    Y.update(1.0, Y2, 1.0);
     
     if ((_smootherType != NONE) && (_multigridStrategy != TWO_LEVEL))
     {
-      Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors());
+      TVector<Scalar> B1_res(Y.getMap(), Y.getNumVectors());
       
       for (int i=0; i<_smootherApplicationCount; i++)
       {
         // compute Y + B1 * (f - A*y)
-        res = f;
+        Tpetra::deep_copy(res, f);
+        if (_debugMode)
+        {
+          if (printVerboseOutput) cout << "res after res = f:\n";
+          Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+          res.describe(*fos, Teuchos::VERB_EXTREME);
+        }
         computeResidual(Y, res, A_Y);
         
         if (((_useSchwarzDiagonalWeight && (_smootherDiagonalWeight != Teuchos::null)))
@@ -1746,17 +1645,17 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
         {
           // then, to maintain symmetry, apply smoother twice, once with left weighting, and once with right:
           ApplySmoother(res, B1_res, true);
-          Y.Update(1.0, B1_res, 1.0);
-          res = f;
+          Y.update(1.0, B1_res, 1.0);
+          Tpetra::deep_copy(res,f);
           computeResidual(Y, res, A_Y);
           ApplySmoother(res, B1_res, false);
-          Y.Update(1.0, B1_res, 1.0);
+          Y.update(1.0, B1_res, 1.0);
         }
         else
         {
           // just apply once, on the right
           ApplySmoother(res, B1_res, false);
-          Y.Update(1.0, B1_res, 1.0);
+          Y.update(1.0, B1_res, 1.0);
         }
       }
     }
@@ -1764,8 +1663,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     if (_debugMode)
     {
       if (printVerboseOutput) cout << "Y:\n";
-      Y.Comm().Barrier();
-      cout << Y;
+      Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+      Y.describe(*fos, Teuchos::VERB_EXTREME);
     }
     if (applicationOrdinal < numApplications-1)
     {
@@ -1802,51 +1701,59 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
    then this may not work.
    */
   GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
-  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++)
+  auto YHostView = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.getGlobalLength(); fineRowIndex++)
   {
-    int LID = Y.Map().LID(fineRowIndex);
+    int LID = Y.getMap()->getLocalElement(fineRowIndex);
     if (LID != -1)
     {
-      Y[0][LID] = 0.0;
+      YHostView(0, LID) = 0.0;
     }
   }
+  Kokkos::deep_copy(Y.getLocalViewDevice(Tpetra::Access::ReadWrite), YHostView);
   
   return 0;
 }
 
 
-int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetra_MultiVector &Y) const
+int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<Scalar> &Y) const
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
 
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
+  auto tCoarseRHSVector = E_to_T::vector(coarseRHSVector);
   
+//  if (rank == 0)
+//  {
+//    std::cout << "coarseRHSVector->GlobalLength(): " << coarseRHSVector->GlobalLength() << std::endl;
+//    std::cout << "prolongationColCount(): " << prolongationColCount() << std::endl;
+//  }
   if (coarseRHSVector->GlobalLength() != prolongationColCount())
   {
     // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
   }
   
-  Epetra_Time timer(Comm());
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time timer(*eComm);
   
   narrate("multiply _P * coarseRHSVector");
   if (printVerboseOutput) cout << "calling _P->Multiply(true, res, *coarseRHSVector);\n";
   if (_debugMode)
   {
     if (rank==0) cout << "res:\n";
-    res.Comm().Barrier();
-    cout << res;
-    res.Comm().Barrier();
+    Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+    res.describe(*fos, Teuchos::VERB_EXTREME);
   }
-  _P->Multiply(!_fineCoarseRolesSwapped, res, *coarseRHSVector);
-  if (printVerboseOutput) cout << "finished _P->Multiply(!_fineCoarseRolesSwapped, X, *coarseRHSVector);\n";
+  _P->apply(res, *tCoarseRHSVector, Teuchos::TRANS, 1.0, 0.0);
+//  _P->Multiply(true, res, coarseRHSVector);
+  if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
   if (_debugMode)
   {
     if (rank==0) cout << "coarseRHSVector:\n";
-    coarseRHSVector->Comm().Barrier();
-    cout << *coarseRHSVector;
-    coarseRHSVector->Comm().Barrier();
+    Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+    tCoarseRHSVector->describe(*fos, Teuchos::VERB_EXTREME);
   }
   _timeMapFineToCoarse += timer.ElapsedTime();
   
@@ -1858,12 +1765,17 @@ int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetr
     // then we must be at a finer level than the coarsest, and the appropriate thing is to simply apply
     // our _coarseOperator
     TEUCHOS_TEST_FOR_EXCEPTION(_coarseOperator == Teuchos::null, std::invalid_argument, "GMGOperator internal error: _coarseOperator and _coarseSolver are both null");
-    _coarseOperator->ApplyInverse(*coarseRHSVector, *_coarseSolution->getLHSVector());
+    auto tLHSVector = E_to_T::vector(_coarseSolution->getLHSVector());
+    _coarseOperator->ApplyInverse(*tCoarseRHSVector, *tLHSVector);
+    auto eResult = T_to_E::vector(tLHSVector);
+    _coarseSolution->getLHSVector()->Update(1.0, *eResult, 0.0);
   }
   else if (!_haveSolvedOnCoarseMesh)
   {
     if (printVerboseOutput) cout << "solving on coarse mesh\n";
     narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false)");
+    auto eCoarseRHSVector = T_to_E::vector(tCoarseRHSVector);
+    coarseRHSVector->Update(1.0, *eCoarseRHSVector, 0.0);
     _coarseSolution->setProblem(_coarseSolver);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
     if (printVerboseOutput) cout << "finished solving on coarse mesh\n";
@@ -1873,6 +1785,8 @@ int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetr
   {
     if (printVerboseOutput) cout << "re-solving on coarse mesh\n";
     narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true)");
+    auto eCoarseRHSVector = T_to_E::vector(tCoarseRHSVector);
+    coarseRHSVector->Update(1.0, *eCoarseRHSVector, 0.0);
     _coarseSolver->setRHS(coarseRHSVector);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
     if (printVerboseOutput) cout << "finished re-solving on coarse mesh\n";
@@ -1882,44 +1796,51 @@ int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetr
   timer.ResetStartTime();
   if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
   coarseLHSVector = _coarseSolution->getLHSVector();
+  auto tCoarseLHSVector = E_to_T::vector(_coarseSolution->getLHSVector());
   
   if (_debugMode)
   {
-    if (rank==0) cout << "coarseLHSVector:\n";
-    coarseLHSVector->Comm().Barrier();
+    if (rank==0) cout << "coarseLHSVector (Epetra):\n";
     cout << *coarseLHSVector;
-    coarseLHSVector->Comm().Barrier();
+    if (rank==0) cout << "coarseLHSVector (Tpetra):\n";
+    Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+    tCoarseLHSVector->describe(*fos, Teuchos::VERB_EXTREME);
   }
   
   if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
-  if (printVerboseOutput) cout << "calling _P->Multiply(_fineCoarseRolesSwapped, *coarseLHSVector, Y)\n";
+  if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
   narrate("multiply _P * coarseLHSVector");
 
-  _P->Multiply(_fineCoarseRolesSwapped, *coarseLHSVector, Y);
-  if (printVerboseOutput) cout << "finished _P->Multiply(_fineCoarseRolesSwapped, *coarseLHSVector, Y)\n";
+  _P->apply(*tCoarseLHSVector, Y, Teuchos::NO_TRANS, 1.0, 0.0);
+//  _P->Multiply(false, tCoarseLHSVector, Y);
+  if (printVerboseOutput) cout << "finished _P->Multiply(false, *coarseLHSVector, Y)\n";
   _timeMapCoarseToFine += timer.ElapsedTime();
   
   if (_debugMode)
   {
     if (rank==0) cout << "_P * coarseLHSVector:\n";
-    Y.Comm().Barrier();
-    cout << Y;
-    Y.Comm().Barrier();
+    Teuchos::RCP<Teuchos::FancyOStream> fos = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+    Y.describe(*fos, Teuchos::VERB_EXTREME);
   }
   return 0;
 }
 
-int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector &Y, bool weightOnLeft) const
+int GMGOperator::ApplySmoother(const TVector<Scalar> &res, TVector<Scalar> &Y, bool weightOnLeft) const
 {
-  
   narrate("ApplySmoother()");
-  Epetra_Time timer(Comm());
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time timer(*eComm);
   
   int err;
 
+  auto eResPtr = T_to_E::vector(Teuchos::rcp(&res, false));
+  auto eYPtr   = T_to_E::vector(Teuchos::rcp(&Y, false));
+  auto & eRes = *eResPtr;
+  auto & eY   = *eYPtr;
+  
   if ((_smootherDiagonalWeight == Teuchos::null) || !_useSchwarzDiagonalWeight)
   {
-    err = _smoother->ApplyInverse(res, Y);
+    err = _smoother->ApplyInverse(eRes, eY);
   }
   else
   {
@@ -1929,32 +1850,36 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
 //    Comm().Barrier();
 //    cout << "res:\n";
 //    cout << res;
-    Epetra_MultiVector temp(res.Map(),res.NumVectors());
+    Epetra_MultiVector temp(eRes.Map(),eRes.NumVectors());
     if (!weightOnLeft)
-      temp.Multiply(1.0, res, *_smootherDiagonalWeight, 0.0);
+      temp.Multiply(1.0, eRes, *_smootherDiagonalWeight, 0.0);
     else
-      temp = res;
+      temp = eRes;
     
 //    cout << "temp:\n";
 //    Comm().Barrier();
 //    cout << temp;
     
-    err = _smoother->ApplyInverse(temp, Y);
+    err = _smoother->ApplyInverse(temp, eY);
 //    cout << "Y after ApplyInverse:\n";
 //    Comm().Barrier();
 //    cout << Y;
     
     if (weightOnLeft)
     {
-      temp = Y;
-      Y.Multiply(1.0, temp, *_smootherDiagonalWeight, 0.0);
+      temp = eY;
+      eY.Multiply(1.0, temp, *_smootherDiagonalWeight, 0.0);
     }
 //    cout << "Y:\n";
 //    Comm().Barrier();
 //    cout << Y;
 //    Comm().Barrier();
   }
-  Y.Scale(_smootherWeight);
+  eY.Scale(_smootherWeight);
+  
+  auto tY = E_to_T::vector(eYPtr);
+  Y.update(1.0, *tY, 0.0);
+  
   _timeApplySmoother += timer.ElapsedTime();
   
   if (err != 0)
@@ -1990,47 +1915,43 @@ bool GMGOperator::HasNormInf() const
   return false;
 }
 
-//! Returns a pointer to the Epetra_Comm communicator associated with this operator.
-const Epetra_Comm & GMGOperator::Comm() const
+//! Returns a pointer to the communicator associated with this operator.
+const Teuchos_CommPtr GMGOperator::Comm() const
 {
-  return _finePartitionMap.Comm();
+  return MPIWrapper::TeuchosComm(Teuchos::rcp(&_finePartitionMap.Comm(), false));
 }
 
-//! Returns the Epetra_Map object associated with the domain of this operator.
-const Epetra_Map & GMGOperator::OperatorDomainMap() const
+//! Returns the Map object associated with the domain of this operator.
+TMapConstPtr GMGOperator::getDomainMap() const
 {
-  return _finePartitionMap;
+  return E_to_T::map(_finePartitionMap);
 }
 
-//! Returns the Epetra_Map object associated with the range of this operator.
-const Epetra_Map & GMGOperator::OperatorRangeMap() const
+//! Returns the Map object associated with the range of this operator.
+TMapConstPtr GMGOperator::getRangeMap() const
 {
-  return _finePartitionMap;
+  return E_to_T::map(_finePartitionMap);
 }
 
 int GMGOperator::prolongationColCount() const
 {
-  return _fineCoarseRolesSwapped ? _P->NumGlobalRows() : _P->NumGlobalCols();
+  return static_cast<int>(_P->getGlobalNumCols());
 }
 
 int GMGOperator::prolongationRowCount() const
 {
-  return _fineCoarseRolesSwapped ? _P->NumGlobalCols() : _P->NumGlobalRows();
+  return static_cast<int>(_P->getGlobalNumRows());
 }
 
 TimeStatistics GMGOperator::getStatistics(double timeValue) const
 {
   TimeStatistics stats;
-  int indexBase = 0;
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_Map timeMap(numProcs,indexBase,Comm());
-  Epetra_Vector timeVector(timeMap);
-  timeVector[0] = timeValue;
-
-  int err = timeVector.Norm1( &stats.sum );
-  err = timeVector.MeanValue( &stats.mean );
-  err = timeVector.MinValue( &stats.min );
-  err = timeVector.MaxValue( &stats.max );
+  
+  auto comm = Comm();
+  stats.sum  = MPIWrapper::sum(comm, timeValue);
+  stats.mean = stats.sum / comm->getSize();
+  stats.min = MPIWrapper::min(comm, timeValue);
+  stats.max = MPIWrapper::max(comm, timeValue);
 
   return stats;
 }
@@ -2168,39 +2089,22 @@ void GMGOperator::setDebugMode(bool value)
   _debugMode = value;
 }
 
-//! When true, the roles of fine and coarse are swapped during prolongation operator construction,
-//! and the transpose of the prolongation operator is used.
-bool GMGOperator::getFineCoarseRolesSwapped() const
-{
-  return _fineCoarseRolesSwapped;
-}
-
-//! When true, the roles of fine and coarse are swapped during prolongation operator construction,
-//! and the transpose of the prolongation operator is used.
-void GMGOperator::setFineCoarseRolesSwapped(bool value)
-{
-  if (value != _fineCoarseRolesSwapped)
-  {
-    _fineCoarseRolesSwapped = value;
-    // force reconstruction of _P, if it has already been computed:
-    _P = Teuchos::null;
-  }
-}
-
-void GMGOperator::setFineStiffnessMatrix(Epetra_CrsMatrix *fineStiffness)
+void GMGOperator::setFineStiffnessMatrix(TMatrixPtr<Scalar> fineStiffness)
 {
   _fineStiffnessMatrix = fineStiffness;
+  _eFineStiffnessMatrix = T_to_E::matrix(_fineStiffnessMatrix);
   if (_multigridStrategy != SMOOTHER_ONLY)
   {
     computeCoarseStiffnessMatrix(fineStiffness);
   }
-  setUpSmoother(fineStiffness);
+  setUpSmoother(_eFineStiffnessMatrix.get());
   
   if (_coarseOperator != Teuchos::null)
   {
-    Epetra_Time coarseOperatorTimer(Comm());
+    auto eComm = MPIWrapper::EpetraComm(Comm());
+    Epetra_Time coarseOperatorTimer(*eComm);
     // then our changed coarse matrix is coarse operator's fine matrix, and we need to ask coarse operator recompute *its* coarse matrix and smoother
-    _coarseOperator->setFineStiffnessMatrix(getCoarseStiffnessMatrix().get());
+    _coarseOperator->setFineStiffnessMatrix(getCoarseStiffnessMatrix());
     _timeUpdateCoarseOperator += coarseOperatorTimer.ElapsedTime();
   }
 }
@@ -2285,15 +2189,16 @@ void GMGOperator::setSmootherWeight(double weight)
 void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 {
   narrate("setUpSmoother()");
-  Epetra_Time smootherSetupTimer(Comm());
+  auto eComm = MPIWrapper::EpetraComm(Comm());
+  Epetra_Time smootherSetupTimer(*eComm);
   
   SmootherChoice choice = _smootherType;
 
   Teuchos::ParameterList List;
-
+  
   Teuchos::RCP<Ifpack_Preconditioner> smoother;
 
-  int rank = Comm().MyPID();
+  int rank = Comm()->getRank();
   
   switch (choice)
   {
@@ -2595,9 +2500,10 @@ std::string GMGOperator::smootherString(SmootherChoice choice)
   }
 }
 
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getMatrixRepresentation()
+TMatrixPtr<double> GMGOperator::getMatrixRepresentation()
 {
-  return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*this, _finePartitionMap);
+  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*this, _finePartitionMap);
+  return E_to_T::matrix(eMatrix);
 }
 
 void GMGOperator::setUseHierarchicalNeighborsForSchwarz(bool value)
@@ -2605,7 +2511,7 @@ void GMGOperator::setUseHierarchicalNeighborsForSchwarz(bool value)
   _hierarchicalNeighborsForSchwarz = value;
 }
 
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getProlongationOperator()
+TMatrixPtr<double> GMGOperator::getProlongationOperator()
 {
   return _P;
 }
@@ -2615,14 +2521,16 @@ Teuchos::RCP<Epetra_Operator> GMGOperator::getSmoother() const
   return _smoother;
 }
 
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getSmootherAsMatrix()
+TMatrixPtr<double> GMGOperator::getSmootherAsMatrix()
 {
   narrate("getSmootherAsMatrix()");
-  return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, _finePartitionMap);
+  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, _finePartitionMap);
+  return E_to_T::matrix(eMatrix);
 }
 
-//! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getCoarseStiffnessMatrix()
+//! Returns the coarse stiffness matrix (a Tpetra CrsMatrix).
+TMatrixPtr<double> GMGOperator::getCoarseStiffnessMatrix()
 {
-  return _coarseSolution->getStiffnessMatrix();
+  auto eMatrix = _coarseSolution->getStiffnessMatrix();
+  return E_to_T::matrix(eMatrix);
 }

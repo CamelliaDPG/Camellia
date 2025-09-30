@@ -25,6 +25,12 @@
 #include "RHS.h"
 #include "SpaceTimeHeatDivFormulation.h"
 #include "StokesVGPFormulation.h"
+#include "T_to_E.hpp"
+
+#include <MatrixMarket_Tpetra.hpp>
+
+#include <Epetra_CrsMatrix.h>
+#include <Tpetra_CrsMatrix.hpp>
 
 using namespace Camellia;
 
@@ -162,8 +168,9 @@ namespace
                             fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, br);
     gmgOperator.constructProlongationOperator();
     
-    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.getProlongationOperator();
-    testEpetraMatrixIsIdentity(P, out, success);
+    auto P = gmgOperator.getProlongationOperator();
+    auto eP = T_to_E::matrix(P);
+    testEpetraMatrixIsIdentity(eP, out, success);
   }
 
   void testIdentityProlongationOperator(MeshPtr mesh, bool useStaticCondensation,
@@ -188,8 +195,9 @@ namespace
                             fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation,  br);
     gmgOperator.constructProlongationOperator();
     
-    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.getProlongationOperator();
-    testEpetraMatrixIsIdentity(P, out, success);
+    auto P = gmgOperator.getProlongationOperator();
+    auto eP = T_to_E::matrix(P);
+    testEpetraMatrixIsIdentity(eP, out, success);
   }
   
   void testIdentityProlongationOperatorUniform(FormulationChoice formChoice, int spaceDim,
@@ -503,7 +511,8 @@ namespace
     GMGOperator gmgOperator(bc,mesh,ip,fineMesh,fineSoln->getDofInterpreter(),
                             fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, br);
     
-    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.constructProlongationOperator();
+    auto tP = gmgOperator.constructProlongationOperator();
+    auto P = T_to_E::matrix(tP);
     Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
     
     fineSoln->initializeLHSVector();
@@ -692,7 +701,12 @@ namespace
     GMGOperator gmgOperator(bc,mesh,ip,fineMesh,fineSoln->getDofInterpreter(),
                             fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, br);
     
-    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.constructProlongationOperator();
+    TMatrixPtr<double> tP = gmgOperator.constructProlongationOperator();
+    Teuchos::RCP<Epetra_CrsMatrix> P = T_to_E::matrix(tP);
+    
+    TEST_EQUALITY(P->NumGlobalRows(), tP->getGlobalNumRows());
+    TEST_EQUALITY(P->NumGlobalCols(), tP->getGlobalNumCols());
+    
     Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
     
     fineSoln->initializeLHSVector();
@@ -707,7 +721,10 @@ namespace
 //    { // DEBUGGING: export to disk
 //      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
 //      int rank = Teuchos::GlobalMPISession::getRank();
-//      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
+//      if (rank==0) cout << "wrote Epetra prolongation operator matrix to /tmp/P.dat\n";
+//      
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/tP.dat", tP);
+//      if (rank==0) cout << "wrote Tpetra prolongation operator matrix to /tmp/tP.dat\n";
 //
 //      GDAMinimumRule* fineGDA = dynamic_cast<GDAMinimumRule*>(fineMesh->globalDofAssignment().get());
 //      fineGDA->printGlobalDofInfo();
