@@ -948,10 +948,8 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
       requests[rank].push_back({myRank,remoteCellID});
     }
     
-    auto epetraComm = MPIWrapper::EpetraComm(Comm);
-    
     std::vector<std::pair<int,GlobalIndexType>> requestsReceived;
-    MPIWrapper::sendDataVectors(epetraComm, requests, requestsReceived);
+    MPIWrapper::sendDataVectors(Comm, requests, requestsReceived);
     
     std::map<int,std::vector<std::pair<GlobalIndexType,GlobalIndexType>>> responsesToSend;
     std::vector<std::pair<GlobalIndexType,GlobalIndexType>> responsesReceived;
@@ -967,7 +965,7 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
         responsesToSend[remotePID].push_back({myCellID,neighborID});
       }
     }
-    MPIWrapper::sendDataVectors(epetraComm, responsesToSend, responsesReceived);
+    MPIWrapper::sendDataVectors(Comm, responsesToSend, responsesReceived);
     for (auto response : responsesReceived)
     {
       GlobalIndexType remoteCellID = response.first;

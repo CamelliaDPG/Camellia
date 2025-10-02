@@ -236,6 +236,9 @@ using TOperator = Tpetra::Operator<Scalar>;
   using HostView   = Kokkos::DynRankView<Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
   
   template<typename Scalar>
+  using HostViewManaged = Kokkos::View<Scalar*, Kokkos::HostSpace >;
+
+  template<typename Scalar>
   using ViewTraits = typename HostView<Scalar>::drvtraits;
   
   #ifndef KOKKOS_ENABLE_HIP
@@ -252,6 +255,9 @@ using TOperator = Tpetra::Operator<Scalar>;
 
   template<typename Scalar>
   using HostViewConst   = Kokkos::DynRankView<const Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
+
+  template<typename Scalar>
+  using UnmanagedHostView = Kokkos::View<Scalar*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
 }
 
 #endif

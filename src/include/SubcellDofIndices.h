@@ -307,7 +307,7 @@ namespace Camellia {
       return size;
     }
     
-    void read(const char* &dataLocation, int size)
+    void read(const char* &dataLocation, size_t size)
     {
       int timerHandle = TimeLogger::sharedInstance()->startTimer("read SubcellDofIndices");
       subcellDofIndices.clear();

@@ -18,16 +18,6 @@
 
 #include "IP.h"
 
-#include <Epetra_Map.h>
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#else
-#include "Epetra_SerialComm.h"
-#endif
-
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialDenseSolver.h"
-
 #include "Intrepid_Utils.hpp"
 #include "Intrepid_Basis.hpp"
 #include "Var.h"

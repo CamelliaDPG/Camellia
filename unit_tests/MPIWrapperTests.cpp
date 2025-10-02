@@ -102,11 +102,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( MPIWrapper, AllGatherVariable, double );
   
   TEUCHOS_UNIT_TEST(MPIWrapper, SendDataVector)
   {
-    Epetra_CommPtr Comm = MPIWrapper::CommWorld();
+    auto Comm = MPIWrapper::TeuchosCommWorld();
     
     // send the message ((char)myPID * 3) to processor (myPID + 1) % numProcs
-    int myPID = Comm->MyPID();
-    int numProcs = Comm->NumProc();
+    int myPID = Comm->getRank();
+    int numProcs = Comm->getSize();
     vector<int> recipients = {(myPID + 1) % numProcs};
     char messageToSend = (char)myPID * 3;
     vector<vector<char>> messagesToSend = {{messageToSend}};

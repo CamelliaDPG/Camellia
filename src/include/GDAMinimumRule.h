@@ -239,7 +239,7 @@ public:
   void setAllowMeshTopologyPruning(bool allowMeshTopologyPruning) override;
   bool allowMeshTopologyPruning() override;
   
-  static void distributeSubcellDofIndices(Epetra_CommPtr Comm,
+  static void distributeSubcellDofIndices(Teuchos_CommPtr Comm,
                                           const map<GlobalIndexType, SubcellDofIndices> &rankLocalCellDofIndices,
                                           const map<GlobalIndexType, PartitionIndexType> &remoteCellOwners,
                                           map<GlobalIndexType, SubcellDofIndices> &remoteCellDofIndices);

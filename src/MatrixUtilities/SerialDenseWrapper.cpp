@@ -424,7 +424,7 @@ namespace Camellia {
       auto colGidsView = A0.getColMap()->getMyGlobalIndices();
       
       using GlobalIndicesHostView = TMatrix<double>::nonconst_global_inds_host_view_type;
-      GlobalIndicesHostView tCols("Tpetra matrix columns host view", maxCols);
+      GlobalIndicesHostView tColGIDs("Tpetra matrix columns host view", maxCols);
       using ValuesViewHost = TMatrix<double>::nonconst_values_host_view_type;
       ValuesViewHost tValues("Tpetra matrix row values", maxCols);
       
@@ -434,12 +434,11 @@ namespace Camellia {
         int numCols = -1;
         size_t numRowEntries = 0;
         
-        A0.getGlobalRowCopy(gRow, tCols, tValues, numRowEntries);
+        A0.getGlobalRowCopy(gRow, tColGIDs, tValues, numRowEntries);
         
         for (int colOrdinal=0; colOrdinal < numRowEntries; colOrdinal++)
         {
-          int localColID = static_cast<int>(tCols(colOrdinal));
-          auto gCol = static_cast<int>(colGidsView(localColID));
+          auto gCol = tColGIDs(colOrdinal);
           A_fc(static_cast<int>(gRow),static_cast<int>(gCol)) = values(colOrdinal);
         }
       }

@@ -13,10 +13,6 @@
 
 #include "Teuchos_LAPACK.hpp"
 
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialDenseSolver.h"
-#include "Epetra_DataAccess.h"
-
 #include "BilinearFormUtility.h"
 #include "BasisCache.h"
 

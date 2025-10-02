@@ -18,7 +18,6 @@
 #include "Mesh.h"
 #include "MPIWrapper.h"
 
-#include "Epetra_Distributor.h"
 #include "Teuchos_GlobalMPISession.hpp"
 
 using namespace Camellia;
@@ -198,41 +197,36 @@ std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std:
     }
   }
 
-  int myRequestCount = myRequest.size();
+  size_t myRequestCount = myRequest.size();
+  size_t globalRequestCount = MPIWrapper::sum(_mesh->Comm(), myRequestCount);
   
-  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
-  
-  int globalRequestCount = MPIWrapper::sum(*epetraComm, myRequestCount);
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
-
   if (globalRequestCount > 0)
   {
-    GlobalIndexTypeToCast* myRequestPtr = NULL;
-    int *myRequestOwnersPtr = NULL;
-    if (myRequest.size() > 0)
-    {
-      myRequestPtr = &myRequest[0];
-      myRequestOwnersPtr = &myRequestOwners[0];
-    }
-    int numCellsToExport = 0;
-    GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
-    int* exportRecipients = NULL;
+    Teuchos::RCP<Tpetra::Distributor> distributor = MPIWrapper::getDistributor(_mesh->Comm());
+    
+    Teuchos::ArrayView<const GlobalIndexTypeToCast> remoteCellIDs = Teuchos::arrayViewFromVector(myRequest);
+    Teuchos::ArrayView<const int> remoteProcIDs = Teuchos::arrayViewFromVector(myRequestOwners);
+    
+    Teuchos::Array<GlobalIndexTypeToCast> cellIDsToExport;
+    Teuchos::Array<int> exportRecipients;
+    
+    distributor->createFromRecvs(remoteCellIDs, remoteProcIDs, cellIDsToExport, exportRecipients);
+    
+    size_t numCellsToExport = cellIDsToExport.size();
+    
+    const std::set<GlobalIndexType> & myCells = _mesh->globalDofAssignment()->cellsInPartition(-1);
 
-    distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
-
-    const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
-
-    vector<int> sizes(numCellsToExport);
+    vector<size_t> sizes(numCellsToExport);
     vector<GlobalIndexTypeToCast> indicesToExport;
     for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
     {
       GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
-      if (myCells->find(cellID) == myCells->end())
+      if (myCells.find(cellID) == myCells.end())
       {
         cout << "cellID " << cellID << " does not belong to rank " << rank << endl;
         ostringstream myRankDescriptor;
         myRankDescriptor << "rank " << rank << ", cellID ownership";
-        Camellia::print(myRankDescriptor.str().c_str(), *myCells);
+        Camellia::print(myRankDescriptor.str().c_str(), myCells);
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested cellID does not belong to this rank!");
       }
 
@@ -241,50 +235,34 @@ std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std:
       sizes[cellOrdinal] = indicesForCell.size();
     }
 
-    int objSize = sizeof(GlobalIndexTypeToCast) / sizeof(char);
-
-    int importLength = 0;
-    char* globalIndexData = NULL;
-    int* sizePtr = NULL;
-    char* indicesToExportPtr = NULL;
-    if (numCellsToExport > 0)
-    {
-      sizePtr = &sizes[0];
-      indicesToExportPtr = (char *) &indicesToExport[0];
-    }
-    distributor->Do(indicesToExportPtr, objSize, sizePtr, importLength, globalIndexData);
-    const char* copyFromLocation = globalIndexData;
-    int numDofsImport = importLength / objSize;
-    vector<GlobalIndexTypeToCast> globalIndicesVector(numDofsImport);
-    GlobalIndexTypeToCast* copyToLocation = &globalIndicesVector[0];
-    for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
-    {
-      memcpy(copyToLocation, copyFromLocation, objSize);
-      copyFromLocation += objSize;
-      copyToLocation++; // copyToLocation has type GlobalIndexTypeToCast*, so this moves the pointer by objSize bytes
-    }
-
-  //  { // DEBUGGING
-  //    ostringstream myRankDescriptor;
-  //    myRankDescriptor << "rank " << rank << ", requested cells";
-  //    Camellia::print(myRankDescriptor.str().c_str(), cellIDs);
-  //
-  //    myRankDescriptor.str("");
-  //    myRankDescriptor << "rank " << rank << ", exported data";
-  //    Camellia::print(myRankDescriptor.str().c_str(), indicesToExport);
-  //
-  //    cout << "On rank " << rank << ", import length = " << importLength << endl;
-  //    myRankDescriptor.str("");
-  //    myRankDescriptor << "rank " << rank << ", imported data";
-  //    Camellia::print(myRankDescriptor.str().c_str(), globalIndicesVector);
-  //  }
-
-    // debugging: introducing
-    if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
-    if( exportRecipients != 0 ) delete [] exportRecipients;
-    if (globalIndexData != 0 ) delete [] globalIndexData;
+    HostViewManaged<size_t> exportSizes("export dof indices sizes", sizes.size());
+    UnmanagedHostView<size_t> exportSizesUnmanaged(sizes.data(), sizes.size());
+    Kokkos::deep_copy(exportSizes, exportSizesUnmanaged);
     
-    dofIndicesSet.insert(globalIndicesVector.begin(),globalIndicesVector.end());
+    auto numImportCells = distributor->getTotalReceiveLength();
+    HostViewManaged<size_t> importSizes("import dof indices sizes", numImportCells);
+    
+    distributor->doPostsAndWaits(exportSizes, 1, importSizes);
+    
+    size_t totalSizeImport = 0;
+    for (int i=0; i<numImportCells; i++)
+    {
+      totalSizeImport += importSizes(i);
+    }
+    
+    UnmanagedHostView<GlobalIndexTypeToCast> exportsUnmanaged(indicesToExport.data(), indicesToExport.size());
+    HostViewManaged<GlobalIndexTypeToCast> exports("exported dof indices data", indicesToExport.size());
+    Kokkos::deep_copy(exports, exportsUnmanaged);
+    Teuchos::ArrayView<const size_t> exportSizesAV = Teuchos::arrayViewFromVector(sizes);
+    
+    HostViewManaged<GlobalIndexTypeToCast> imports("imported subcell dof indices data", totalSizeImport);
+    auto importSizesAV = Teuchos::arrayView(importSizes.data(), importSizes.size());
+    
+    distributor->doPostsAndWaits(exports, exportSizesAV, imports, importSizesAV);
+    
+    Teuchos::ArrayView<GlobalIndexTypeToCast> importsAV(imports.data(), imports.size());
+    
+    dofIndicesSet.insert(importsAV.begin(),importsAV.end());
   }
   
   return dofIndicesSet;

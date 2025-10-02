@@ -7,6 +7,7 @@
 
 #include "SolutionMoments.h"
 
+#include "Camellia_TeuchosSerializers.hpp"
 #include "doubleBasisConstruction.h"
 #include "SolutionMomentFunction.h"
 #include "TensorBasis.h"
@@ -134,7 +135,7 @@ void SolutionMoments::gatherOnRankZero()
   PartitionIndexType destinationRank = 0;
   dataToSend[destinationRank] = dataVector;
   std::vector<DataType> dataReceived;
-  MPIWrapper::sendDataVectors(MPIWrapper::EpetraComm(_configurationSpaceMesh->Comm()), dataToSend, dataReceived);
+  MPIWrapper::sendDataVectors(_configurationSpaceMesh->Comm(), dataToSend, dataReceived);
   
   auto globalActiveCellIDs = _configurationSpaceMesh->getActiveCellIDsGlobal();
   const GlobalIndexType numGlobalActiveCells = globalActiveCellIDs.size();

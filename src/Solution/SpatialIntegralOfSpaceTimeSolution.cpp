@@ -27,6 +27,145 @@
 
 using namespace Camellia;
 
+struct IntegralPart {
+  IndexType temporalCellID;
+  int basisOrdinal;
+  double integralContribution;
+};
+static_assert(std::is_trivially_copyable<IntegralPart>::value, "We want IntegralPart to be trivially copyable");
+
+namespace Teuchos {
+
+template<>
+class Serializer<int, IntegralPart> {
+public:
+  static std::size_t getRequiredBufferSize(IntegralPart const& t)
+  {
+    return sizeof(IntegralPart);
+  }
+
+  static void serialize(IntegralPart const& t,
+                        char*               buf,
+                        std::size_t         bufSize)
+  {
+    if (bufSize < sizeof(IntegralPart)) {
+      throw std::runtime_error("Serializer<IntegralPart>::serialize(): buffer too small");
+    }
+    // bit‐wise copy
+    std::memcpy(buf, &t, sizeof(IntegralPart));
+  }
+  
+  void deserialize(const int            bytes,
+                   const char           charBuffer[],
+                   const int            count,
+                   IntegralPart * const objs[]) const
+  {
+    std::memcpy(&objs, charBuffer, count*sizeof(IntegralPart));
+  }
+};
+
+//template<>
+//class SerializationTraits<int, IntegralPart> {
+//  using Ordinal = int;
+//  using T = IntegralPart;
+//public:
+//  static const bool supportsDirectSerialization = true;
+//
+//  static Ordinal fromCountToDirectBytes(const Ordinal count) {
+//    return static_cast<Ordinal>(count * sizeof(T));
+//  }
+//
+//  /** \brief Convert the pointer type to <tt>char*</tt>. */
+//  static char* convertToCharPtr( T* ptr ) {
+//    return reinterpret_cast<char*>(ptr);
+//  }
+//
+//  /** \brief Convert the pointer type to <tt>const char*</tt>. */
+//  static const char* convertToCharPtr( const T* ptr ) {
+//    return reinterpret_cast<const char*>(ptr);
+//  }
+//
+//  /** \brief Return the number of objects for <tt>bytes</tt> of storage. */
+//  static Ordinal fromDirectBytesToCount(const Ordinal bytes) {
+//    return static_cast<Ordinal>(bytes/sizeof(T));
+//  }
+//
+//  /** \brief Convert the pointer type from <tt>char*</tt>. */
+//  static T* convertFromCharPtr( char* ptr ) {
+//    return reinterpret_cast<T*>(ptr);
+//  }
+//
+//  /** \brief Convert the pointer type from <tt>char*</tt>. */
+//  static const T* convertFromCharPtr( const char* ptr ) {
+//    return reinterpret_cast<const T*>(ptr);
+//  }
+//
+//  /** \brief Return the number of bytes for <tt>count</tt> objects. */
+//  static Ordinal fromCountToIndirectBytes(const Ordinal count,
+//                                          const T buffer[]) {
+//    return fromCountToDirectBytes(count);
+//  }
+//
+//  /** \brief Serialize to an indirect <tt>char[]</tt> buffer.
+//   *
+//   * \param  count
+//   *           [in] The number of objects to serialize.
+//   * \param  buffer
+//   *           [in] The objects to serialize.
+//   * \param  bytes
+//   *           [in] Number of bytes in <tt>charBuffer[]</tt>
+//   * \param  charBuffer
+//   *           [out] Array (length <tt>bytes</tt>) containing the serialized objects.
+//   *
+//   * <b>Preconditions:</b><ul>
+//   * <li><tt>bytes==fromCountToIndirectBytes(count)</tt>
+//   * </ul>
+//   */
+//  static void serialize (const Ordinal count,
+//                         const T buffer[],
+//                         const Ordinal bytes,
+//                         char charBuffer[])
+//  {
+//    (void)count; (void)buffer; (void)bytes; (void)charBuffer;
+//    UndefinedSerializationTraits<T>::notDefined();
+//  }
+//
+//  /** \brief Return the number of objects for <tt>bytes</tt> of storage. */
+//  static Ordinal fromIndirectBytesToCount(const Ordinal bytes,
+//                                          const char charBuffer[]) {
+//    return fromDirectBytesToCount(bytes);
+//  }
+//
+//  /** \brief Deserialize from an indirect <tt>char[]</tt> buffer.
+//   *
+//   * \param  bytes
+//   *           [in] Number of bytes in <tt>charBuffer[]</tt>
+//   * \param  charBuffer
+//   *           [in] Array (length <tt>bytes</tt>) containing the serialized objects.
+//   * \param  count
+//   *           [in] The number of objects to deserialize.
+//   * \param  buffer
+//   *           [out] The deserialized objects.
+//
+//   * <b>Preconditions:</b><ul>
+//   * <li><tt>count==fromIndirectBytesToCount(bytes)</tt>
+//   * </ul>
+//   */
+//  static void deserialize (const Ordinal bytes,
+//                           const char charBuffer[],
+//                           const Ordinal count,
+//                           T buffer[])
+//  {
+//    (void)bytes; (void)charBuffer; (void)count; (void)buffer;
+//    UndefinedSerializationTraits<T>::notDefined();
+//  }
+//
+//  //@}
+//
+//};
+
+} // namespace Teuchos
+
 SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionPtr spaceTimeSoln, VarPtr fieldVar, FunctionPtr spatialWeight, int quadratureEnrichment)
 {  
   auto elemType = spaceTimeSoln->mesh()->globalDofAssignment()->getSampleElementType();
@@ -298,7 +437,7 @@ SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionP
     }
     
     std::vector<DataType> dataReceived;
-    MPIWrapper::sendDataVectors(MPIWrapper::EpetraComm(_temporalMesh->Comm()), dataToSend, dataReceived);
+    MPIWrapper::sendDataVectors(_temporalMesh->Comm(), dataToSend, dataReceived);
     
       // note that the following map logic is not maximally efficient, but it's unlikely to be a bottleneck due to the relatively small size of the data
     using std::map;

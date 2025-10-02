@@ -10,13 +10,6 @@
 //
 
 #include "Epetra_Import.h"
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#include "Epetra_MpiDistributor.h"
-#endif
-
-#include "Epetra_SerialComm.h"
-#include "Epetra_SerialDistributor.h"
 
 #include "BasisFactory.h"
 #include "Camellia_FieldContainerConversion.hpp"
@@ -1776,9 +1769,9 @@ namespace
   TEUCHOS_UNIT_TEST( GDAMinimumRule, DistributeSubcellDofIndices )
   {
     // test the static method that does the distribution
-    Epetra_CommPtr Comm = MPIWrapper::CommWorld();
-    int rank = Comm->MyPID();
-    int numProcs = Comm->NumProc();
+    Teuchos_CommPtr Comm = MPIWrapper::TeuchosCommWorld();
+    int rank = Comm->getRank();
+    int numProcs = Comm->getSize();
     
     // set up a fake example in which all dof indices are local.
     // one hexahedral element per MPI rank
@@ -1980,7 +1973,7 @@ namespace
       }
     }
     map<GlobalIndexType,double> offRankBCs;
-    MPIWrapper::sendDataMaps(MPIWrapper::EpetraComm(mesh->Comm()), bcValuesToSend, offRankBCs);
+    MPIWrapper::sendDataMaps(mesh->Comm(), bcValuesToSend, offRankBCs);
     
     // we prescribe 1 at at all the bc indices, and 0 everywhere else.
     // then we check the values on the elements.

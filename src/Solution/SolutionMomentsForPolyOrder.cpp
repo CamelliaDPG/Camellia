@@ -10,6 +10,7 @@
 #include "doubleBasisConstruction.h"
 #include "TensorBasis.h"
 
+#include "Camellia_TeuchosSerializers.hpp"
 #include "CamelliaDebugUtility.h"
 
 #include <Intrepid2_SerendipityBasis.hpp>

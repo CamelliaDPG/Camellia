@@ -326,8 +326,7 @@ void GDAMinimumRule::distributeCellGlobalDofs(const map<GlobalIndexType, Subcell
     }
   }
   map<GlobalIndexType, SubcellDofIndices> remoteCellGlobalDofs;
-  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
-  distributeSubcellDofIndices(epetraComm, myCellGlobalDofs, remoteCellOwners, remoteCellGlobalDofs);
+  distributeSubcellDofIndices(_mesh->Comm(), myCellGlobalDofs, remoteCellOwners, remoteCellGlobalDofs);
   for (GlobalIndexType cellID : remoteCellIDs)
   {
     if (remoteCellGlobalDofs.find(cellID) == remoteCellGlobalDofs.end())
@@ -386,9 +385,8 @@ void GDAMinimumRule::distributeGlobalDofOwnership(const map<GlobalIndexType, Sub
       remoteCellOwners[remoteCellID] = partitionForCell;
     }
   }
-  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
   map<GlobalIndexType, SubcellDofIndices> remotelyOwnedGlobalDofs;
-  distributeSubcellDofIndices(epetraComm, myOwnedGlobalDofs, remoteCellOwners, remotelyOwnedGlobalDofs);
+  distributeSubcellDofIndices(_mesh->Comm(), myOwnedGlobalDofs, remoteCellOwners, remotelyOwnedGlobalDofs);
   for (GlobalIndexType cellID : remoteCellIDs)
   {
     if (remotelyOwnedGlobalDofs.find(cellID) == remotelyOwnedGlobalDofs.end())
@@ -400,7 +398,7 @@ void GDAMinimumRule::distributeGlobalDofOwnership(const map<GlobalIndexType, Sub
   TimeLogger::sharedInstance()->stopTimer(timerHandle);
 }
 
-void GDAMinimumRule::distributeSubcellDofIndices(Epetra_CommPtr Comm, const map<GlobalIndexType, SubcellDofIndices> &myOwnedGlobalDofs,
+void GDAMinimumRule::distributeSubcellDofIndices(Teuchos_CommPtr Comm, const map<GlobalIndexType, SubcellDofIndices> &myOwnedGlobalDofs,
                                                  const map<GlobalIndexType, PartitionIndexType> &remoteCellOwners,
                                                  map<GlobalIndexType, SubcellDofIndices> &remotelyOwnedGlobalDofs)
 {
@@ -428,28 +426,23 @@ void GDAMinimumRule::distributeSubcellDofIndices(Epetra_CommPtr Comm, const map<
     }
   }
   
-  int myRequestCount = myRequest.size();
-  
-  int globalRequestCount = MPIWrapper::sum(*Comm, myRequestCount);
+  size_t myRequestCount = myRequest.size();
+  size_t globalRequestCount = MPIWrapper::sum(Comm, myRequestCount);
   
   if (globalRequestCount != 0)
   {
-    Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*Comm);
+    Teuchos::RCP<Tpetra::Distributor> distributor = MPIWrapper::getDistributor(Comm);
     
-    GlobalIndexTypeToCast* myRequestPtr = NULL;
-    int *myRequestOwnersPtr = NULL;
-    if (myRequest.size() > 0)
-    {
-      myRequestPtr = &myRequest[0];
-      myRequestOwnersPtr = &myRequestOwners[0];
-    }
-    int numCellsToExport = 0;
-    GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
-    int* exportRecipients = NULL;
+    Teuchos::ArrayView<const GlobalIndexTypeToCast> remoteCellIDs = Teuchos::arrayViewFromVector(myRequest);
+    Teuchos::ArrayView<const int> remoteProcIDs = Teuchos::arrayViewFromVector(myRequestOwners);
     
-    distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
+    Teuchos::Array<GlobalIndexTypeToCast> cellIDsToExport;
+    Teuchos::Array<int> exportRecipients;
     
-    vector<int> sizes(numCellsToExport);
+    distributor->createFromRecvs(remoteCellIDs, remoteProcIDs, cellIDsToExport, exportRecipients);
+    
+    size_t numCellsToExport = cellIDsToExport.size();
+    vector<size_t> sizes(numCellsToExport);
     vector<char> dataToExport;
     for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
     {
@@ -463,7 +456,7 @@ void GDAMinimumRule::distributeSubcellDofIndices(Epetra_CommPtr Comm, const map<
       int cellIDSize = sizeof(cellID);
       int dataSize = cellDofIndexInfo->dataSize();
       sizes[cellOrdinal] = cellIDSize + dataSize;
-      int startIndex = dataToExport.size();
+      size_t startIndex = dataToExport.size();
       dataToExport.resize(dataToExport.size() + sizes[cellOrdinal]);
       
       char *writeLocation = &dataToExport[startIndex];
@@ -472,35 +465,45 @@ void GDAMinimumRule::distributeSubcellDofIndices(Epetra_CommPtr Comm, const map<
       cellDofIndexInfo->write(writeLocation, dataSize);
     }
     
-    int importLength = 0;
-    char* globalData = NULL;
-    int* sizePtr = NULL;
-    char* dataToExportPtr = NULL;
-    if (numCellsToExport > 0)
+    HostViewManaged<size_t> exportSizes("export subcell dof indices sizes", sizes.size());
+    UnmanagedHostView<size_t> exportSizesUnmanaged(sizes.data(), sizes.size());
+    Kokkos::deep_copy(exportSizes, exportSizesUnmanaged);
+    
+    auto numImportCells = distributor->getTotalReceiveLength();
+    HostViewManaged<size_t> importSizes("import subcell dof indices sizes", numImportCells);
+    
+    distributor->doPostsAndWaits(exportSizes, 1, importSizes);
+    
+    size_t totalSizeImport = 0;
+    for (int i=0; i<numImportCells; i++)
     {
-      sizePtr = &sizes[0];
-      dataToExportPtr = &dataToExport[0];
+      totalSizeImport += importSizes(i);
     }
-    int objSize = sizeof(char);
-    distributor->Do(dataToExportPtr, objSize, sizePtr, importLength, globalData);
-    const char* globalDataStart = globalData;
-    const char* copyFromLocation = globalData;
+    
+    UnmanagedHostView<char> exportsUnmanaged(dataToExport.data(), dataToExport.size());
+    HostViewManaged<char> exports("exported subcell dof indices data", dataToExport.size());
+    Kokkos::deep_copy(exports, exportsUnmanaged);
+    Teuchos::ArrayView<const size_t> exportSizesAV = Teuchos::arrayViewFromVector(sizes);
+    
+    HostViewManaged<char> imports("imported subcell dof indices data", totalSizeImport);
+    auto importSizesAV = Teuchos::arrayView(importSizes.data(), importSizes.size());
+    
+    distributor->doPostsAndWaits(exports, exportSizesAV, imports, importSizesAV);
+    
+    const char* globalDataStart = imports.data();
+    const char* copyFromLocation = imports.data();
     for (int cellOrdinal=0; cellOrdinal<myRequest.size(); cellOrdinal++)
     {
       GlobalIndexType cellID;
       memcpy(&cellID, copyFromLocation, sizeof(cellID));
       copyFromLocation += sizeof(cellID);
       SubcellDofIndices subcellDofIndices;
-      int bytesRead = copyFromLocation - globalDataStart;
-      int bytesLeft = importLength - bytesRead;
+      size_t bytesRead = copyFromLocation - globalDataStart;
+      size_t bytesLeft = totalSizeImport - bytesRead;
       TEUCHOS_TEST_FOR_EXCEPTION(bytesLeft <= 0, std::invalid_argument, "Invalid read requested");
       subcellDofIndices.read(copyFromLocation, bytesLeft);
       remotelyOwnedGlobalDofs[cellID] = subcellDofIndices;
     }
-    
-    if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
-    if( exportRecipients != 0 ) delete [] exportRecipients;
-    if (globalData != 0 ) delete [] globalData;
   }
   
   TimeLogger::sharedInstance()->stopTimer(timerHandle);

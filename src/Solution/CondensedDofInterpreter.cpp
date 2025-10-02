@@ -9,9 +9,6 @@
 #include "Epetra_SerialSpdDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
-#include "Epetra_Distributor.h"
-#include "Epetra_SerialComm.h"
-
 #include "CamelliaDebugUtility.h"
 #include "GDAMinimumRule.h"
 #include "GlobalDofAssignment.h"
@@ -559,31 +556,24 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForNeighborGlobalIndic
       myRequestOwners.push_back(entry.first);
     }
   }
-  int myRequestCount = myRequest.size();
+  size_t myRequestCount = myRequest.size();
   
-  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
+  Teuchos::RCP<Tpetra::Distributor> distributor = MPIWrapper::getDistributor(_mesh->Comm());
   
-  GlobalIndexTypeToCast* myRequestPtr = NULL;
-  int *myRequestOwnersPtr = NULL;
-  if (myRequest.size() > 0)
-  {
-    myRequestPtr = &myRequest[0];
-    myRequestOwnersPtr = &myRequestOwners[0];
-  }
-  int numEntriesToExport = 0;
-  GlobalIndexTypeToCast* dofEntriesToExport = NULL;  // we are responsible for deleting the allocated arrays
-  int* exportRecipients = NULL;
+  Teuchos::ArrayView<const GlobalIndexTypeToCast> remoteDofIDs = Teuchos::arrayViewFromVector(myRequest);
+  Teuchos::ArrayView<const int> remoteProcIDs = Teuchos::arrayViewFromVector(myRequestOwners);
   
-  distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numEntriesToExport, dofEntriesToExport, exportRecipients);
+  Teuchos::Array<GlobalIndexTypeToCast> dofIDsToExport;
+  Teuchos::Array<int> exportRecipients;
   
-//  const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
+  distributor->createFromRecvs(remoteDofIDs, remoteProcIDs, dofIDsToExport, exportRecipients);
   
-  vector<int> sizes(numEntriesToExport);
+  size_t numEntriesToExport = dofIDsToExport.size();
+
   vector<GlobalIndexTypeToCast> indicesToExport;
   for (int entryOrdinal=0; entryOrdinal<numEntriesToExport; entryOrdinal++)
   {
-    GlobalIndexType interpretedDofIndex = dofEntriesToExport[entryOrdinal];
+    GlobalIndexType interpretedDofIndex = dofIDsToExport[entryOrdinal];
     if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) == _interpretedToGlobalDofIndexMap.end())
     {
       cout << "interpreted dof index " << interpretedDofIndex << " does not belong to rank " << rank << endl;
@@ -594,44 +584,28 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForNeighborGlobalIndic
     GlobalIndexType condensedGlobalIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
     indicesToExport.push_back(interpretedDofIndex);
     indicesToExport.push_back(condensedGlobalIndex);
-    sizes[entryOrdinal] = 2; // key, value
   }
   //  print("Export vector", indicesToExport);
   
+  HostViewManaged<GlobalIndexTypeToCast> exportIndices("export dof indices", indicesToExport.size());
+  UnmanagedHostView<GlobalIndexTypeToCast> exportIndicesUnmanaged(indicesToExport.data(), indicesToExport.size());
+  Kokkos::deep_copy(exportIndices, exportIndicesUnmanaged);
+  
+  auto numImportDofs = distributor->getTotalReceiveLength();
+  HostViewManaged<GlobalIndexTypeToCast> importIndices("import dof indices", numImportDofs * 2);
+  
+  distributor->doPostsAndWaits(exportIndices, 2, importIndices);
+  
   int objSize = sizeof(GlobalIndexTypeToCast) / sizeof(char);
   
-  int importLength = 0;
-  char* globalIndexData = NULL;
-  int* sizePtr = NULL;
-  char* indicesToExportPtr = NULL;
-  if (numEntriesToExport > 0)
+  for (int i=0; i<numImportDofs; i++)
   {
-    sizePtr = sizes.data();
-    indicesToExportPtr = (char *) indicesToExport.data();
-  }
-  distributor->Do(indicesToExportPtr, objSize, sizePtr, importLength, globalIndexData);
-  const char* copyFromLocation = globalIndexData;
-  int numDofsImport = importLength / objSize;
-  vector<GlobalIndexTypeToCast> globalIndicesMapVector(numDofsImport);
-  GlobalIndexTypeToCast* copyToLocation = globalIndicesMapVector.data();
-  for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
-  {
-    memcpy(copyToLocation, copyFromLocation, objSize);
-    copyFromLocation += objSize;
-    copyToLocation++; // copyToLocation has type GlobalIndexTypeToCast*, so this moves the pointer by objSize bytes
-  }
-  //  print("Import vector", globalIndicesMapVector);
-  for (int i=0; i<globalIndicesMapVector.size()/2; i++)
-  {
-    GlobalIndexType meshGlobalIndex      = globalIndicesMapVector[i*2+0];
-    GlobalIndexType condensedGlobalIndex = globalIndicesMapVector[i*2+1];
+    GlobalIndexType meshGlobalIndex      = importIndices(i*2+0);
+    GlobalIndexType condensedGlobalIndex = importIndices(i*2+1);
     _interpretedToGlobalDofIndexMap[meshGlobalIndex] = condensedGlobalIndex;
     _interpretedFluxDofIndices.insert(meshGlobalIndex);
   }
   
-  if( dofEntriesToExport != 0 ) delete [] dofEntriesToExport;
-  if( exportRecipients != 0 ) delete [] exportRecipients;
-  if (globalIndexData != 0 ) delete [] globalIndexData;
 }
 
 template <typename Scalar>
@@ -667,27 +641,22 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForOffRankCells(const 
   
   int myRequestCount = int(myRequest.size());
   
-  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
+  Teuchos::RCP<Tpetra::Distributor> distributor = MPIWrapper::getDistributor(_mesh->Comm());
   
-  GlobalIndexTypeToCast* myRequestPtr = NULL;
-  int *myRequestOwnersPtr = NULL;
-  if (myRequest.size() > 0)
-  {
-    myRequestPtr = &myRequest[0];
-    myRequestOwnersPtr = &myRequestOwners[0];
-  }
-  int numCellsToExport = 0;
-  GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
-  int* exportRecipients = NULL;
+  Teuchos::ArrayView<const GlobalIndexTypeToCast> remoteCellIDs = Teuchos::arrayViewFromVector(myRequest);
+  Teuchos::ArrayView<const int> remoteProcIDs = Teuchos::arrayViewFromVector(myRequestOwners);
   
-  distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
+  Teuchos::Array<GlobalIndexTypeToCast> cellIDsToExport;
+  Teuchos::Array<int> exportRecipients;
+  
+  distributor->createFromRecvs(remoteCellIDs, remoteProcIDs, cellIDsToExport, exportRecipients);
   
   const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
   
-  vector<int> sizes(numCellsToExport);
+  size_t numCellsToExport = cellIDsToExport.size();
+  vector<size_t> sizes(numCellsToExport);
   vector<GlobalIndexTypeToCast> indicesToExport;
-  for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
+  for (int cellOrdinal=0; cellOrdinal<cellIDsToExport.size(); cellOrdinal++)
   {
     GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
     if (myCells->find(cellID) == myCells->end())
@@ -714,43 +683,39 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForOffRankCells(const 
     sizes[cellOrdinal] = cellIndicesSize;
   }
   
-//  print("Export vector", indicesToExport);
+  HostViewManaged<size_t> exportSizes("export solution coefficient counts", sizes.size());
+  UnmanagedHostView<size_t> exportSizesUnmanaged(sizes.data(), sizes.size());
+  Kokkos::deep_copy(exportSizes, exportSizesUnmanaged);
   
-  int objSize = sizeof(GlobalIndexTypeToCast) / sizeof(char);
+  auto numImportCells = distributor->getTotalReceiveLength();
+  HostViewManaged<size_t> importSizes("import solution coefficient counts", numImportCells);
   
-  int importLength = 0;
-  char* globalIndexData = NULL;
-  int* sizePtr = NULL;
-  char* indicesToExportPtr = NULL;
-  if (numCellsToExport > 0)
+  distributor->doPostsAndWaits(exportSizes, 1, importSizes);
+  
+  size_t numDofsImport = 0;
+  for (int i=0; i<numImportCells; i++)
   {
-    sizePtr = sizes.data();
-    indicesToExportPtr = (char *) indicesToExport.data();
+    numDofsImport += importSizes(i);
   }
-  distributor->Do(indicesToExportPtr, objSize, sizePtr, importLength, globalIndexData);
-  const char* copyFromLocation = globalIndexData;
-  int numDofsImport = importLength / objSize;
-  vector<GlobalIndexTypeToCast> globalIndicesMapVector(numDofsImport);
-  GlobalIndexTypeToCast* copyToLocation = globalIndicesMapVector.data();
-  for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
-  {
-    memcpy(copyToLocation, copyFromLocation, objSize);
-    copyFromLocation += objSize;
-    copyToLocation++; // copyToLocation has type GlobalIndexTypeToCast*, so this moves the pointer by objSize bytes
-  }
-//  print("Import vector", globalIndicesMapVector);
   
-  for (int i=0; i<globalIndicesMapVector.size()/2; i++)
+  auto importSizesAV = Teuchos::arrayView(importSizes.data(), importSizes.size());
+  
+  UnmanagedHostView<GlobalIndexTypeToCast> exportsUnmanaged(indicesToExport.data(), indicesToExport.size());
+  HostViewManaged<GlobalIndexTypeToCast> exports("solution coefficients to export", indicesToExport.size());
+  Kokkos::deep_copy(exports, exportsUnmanaged);
+  
+  Teuchos::ArrayView<const size_t> exportSizesAV = Teuchos::arrayViewFromVector(sizes);
+  HostViewManaged<GlobalIndexTypeToCast> imports("solution coefficients imported", numDofsImport);
+
+  distributor->doPostsAndWaits(exports, exportSizesAV, imports, importSizesAV);
+  
+  for (int i=0; i<numDofsImport/2; i++)
   {
-    GlobalIndexType meshGlobalIndex      = globalIndicesMapVector[i*2+0];
-    GlobalIndexType condensedGlobalIndex = globalIndicesMapVector[i*2+1];
+    GlobalIndexType meshGlobalIndex      = imports(i*2+0);
+    GlobalIndexType condensedGlobalIndex = imports(i*2+1);
     _interpretedToGlobalDofIndexMap[meshGlobalIndex] = condensedGlobalIndex;
     _interpretedFluxDofIndices.insert(meshGlobalIndex);
   }
-  
-  if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
-  if( exportRecipients != 0 ) delete [] exportRecipients;
-  if (globalIndexData != 0 ) delete [] globalIndexData;
 }
 
 template <typename Scalar>

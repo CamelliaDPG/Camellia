@@ -21,13 +21,7 @@
 #endif
 
 // Epetra includes
-#include "Epetra_Distributor.h"
 #include "Epetra_Time.h"
-
-#include "Epetra_SerialDenseSolver.h"
-#include "Epetra_SerialSymDenseMatrix.h"
-#include "Epetra_SerialSpdDenseSolver.h"
-#include "Epetra_DataAccess.h"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
@@ -1933,26 +1927,21 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
     }
   }
 
-  int myRequestCount = myRequest.size();
-  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
+  size_t myRequestCount = myRequest.size();
+  Teuchos::RCP<Tpetra::Distributor> distributor = MPIWrapper::getDistributor(_mesh->Comm());
 
-  GlobalIndexTypeToCast* myRequestPtr = NULL;
-  int *myRequestOwnersPtr = NULL;
-  if (myRequest.size() > 0)
-  {
-    myRequestPtr = &myRequest[0];
-    myRequestOwnersPtr = &myRequestOwners[0];
-  }
-  int numCellsToExport = 0;
-  GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
-  int* exportRecipients = NULL;
-
-  distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
-
+  Teuchos::ArrayView<const GlobalIndexTypeToCast> remoteCellIDs = Teuchos::arrayViewFromVector(myRequest);
+  Teuchos::ArrayView<const int> remoteProcIDs = Teuchos::arrayViewFromVector(myRequestOwners);
+  
+  Teuchos::Array<GlobalIndexTypeToCast> cellIDsToExport;
+  Teuchos::Array<int> exportRecipients;
+  
+  distributor->createFromRecvs(remoteCellIDs, remoteProcIDs, cellIDsToExport, exportRecipients);
+  
   const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
   
-  vector<int> sizes(numCellsToExport,0);
+  size_t numCellsToExport = cellIDsToExport.size();
+  vector<size_t> sizes;
   vector<Scalar> dataToExport;
   
   int solutionCount;
@@ -1970,6 +1959,7 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
   
   for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
   {
+    size_t numDofsForCell = 0;
     for (int solutionOrdinal=0; solutionOrdinal < solutionCount; solutionOrdinal++)
     {
       GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
@@ -1987,28 +1977,44 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
       }
 
       const Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[solutionOrdinal][cellID];
-      sizes[cellOrdinal] += solnCoeffs.size();
+      numDofsForCell += solnCoeffs.size();
       for (int dofOrdinal=0; dofOrdinal < solnCoeffs.size(); dofOrdinal++)
       {
         dataToExport.push_back(solnCoeffs[dofOrdinal]);
       }
     }
+    sizes.push_back(numDofsForCell);
   }
+  
+  HostViewManaged<size_t> exportSizes("export solution coefficient counts", sizes.size());
+  UnmanagedHostView<size_t> exportSizesUnmanaged(sizes.data(), sizes.size());
+  Kokkos::deep_copy(exportSizes, exportSizesUnmanaged);
+  
+  auto numImportCells = distributor->getTotalReceiveLength();
+  HostViewManaged<size_t> importSizes("import solution coefficient counts", numImportCells);
+  
+  distributor->doPostsAndWaits(exportSizes, 1, importSizes);
+  
+  size_t numDofsImport = 0;
+  for (int i=0; i<numImportCells; i++)
+  {
+    numDofsImport += importSizes(i);
+  }
+  
+  auto importSizesAV = Teuchos::arrayView(importSizes.data(), importSizes.size());
+  
+  UnmanagedHostView<Scalar> exportsUnmanaged(dataToExport.data(), dataToExport.size());
+  HostViewManaged<Scalar> exports("solution coefficients to export", dataToExport.size());
+  Kokkos::deep_copy(exports, exportsUnmanaged);
+  
+  Teuchos::ArrayView<const size_t> exportSizesAV = Teuchos::arrayViewFromVector(sizes);
+  HostViewManaged<Scalar> imports("solution coefficients imported", numDofsImport);
+  
+  distributor->doPostsAndWaits(exports, exportSizesAV, imports, importSizesAV);
   
   int objSize = sizeof(Scalar) / sizeof(char);
 
-  int importLength = 0;
-  char* importedData = NULL;
-  int* sizePtr = NULL;
-  char* dataToExportPtr = NULL;
-  if (numCellsToExport > 0)
-  {
-    sizePtr = &sizes[0];
-    dataToExportPtr = (char *) &dataToExport[0];
-  }
-  distributor->Do(dataToExportPtr, objSize, sizePtr, importLength, importedData);
-  const char* copyFromLocation = importedData;
-  int numDofsImport = importLength / objSize;
+  const Scalar* copyFromLocation = imports.data();
   int dofsImported = 0;
   for (GlobalIndexType cellID : myRequest)
   {
@@ -2034,16 +2040,12 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
 
       Scalar* copyToLocation = &cellDofs[0];
       memcpy(copyToLocation, copyFromLocation, objSize * cellDofs.size());
-      copyFromLocation += objSize * cellDofs.size();
-      copyToLocation += cellDofs.size(); // copyToLocation has type Scalar*, so this moves the pointer the same # of bytes
+      copyFromLocation += cellDofs.size();
+      copyToLocation += cellDofs.size();
       dofsImported += cellDofs.size();
       replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, cellDofs);
     }
   }
-
-  if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
-  if( exportRecipients != 0 ) delete [] exportRecipients;
-  if (importedData != 0 ) delete [] importedData;
 }
 
 template <typename Scalar>

@@ -10,7 +10,6 @@
 
 #include "MPIWrapper.h"
 
-#include "Epetra_SerialDistributor.h"
 #include "Teuchos_GlobalMPISession.hpp"
 #include "Teuchos_Array.hpp"
 
@@ -185,23 +184,9 @@ bool MPIWrapper::globalOr(Teuchos_CommPtr Comm, bool value)
   return !globalAnd(Comm, !value);
 }
 
-Teuchos::RCP<Epetra_Distributor> MPIWrapper::getDistributor(const Epetra_Comm &Comm)
+Teuchos::RCP<Tpetra::Distributor> MPIWrapper::getDistributor(Teuchos_CommPtr Comm)
 {
-  const Epetra_SerialComm* serialComm = dynamic_cast<const Epetra_SerialComm*>(&Comm);
-  if (serialComm != NULL)
-  {
-    // distributor does not do the right thing for SerialComm; return null so that client code can handle appropriately.
-    return Teuchos::null;
-  }
-  
-  Teuchos::RCP<Epetra_Distributor> distributor;
-#ifdef HAVE_MPI
-  const Epetra_MpiComm* mpiComm = dynamic_cast<const Epetra_MpiComm*>(&Comm);
-  if (mpiComm != NULL)
-  {
-    distributor = Teuchos::rcp(new Epetra_MpiDistributor(*mpiComm));
-  }
-#endif
+  Teuchos::RCP<Tpetra::Distributor> distributor = Teuchos::rcp( new Tpetra::Distributor(Comm) );
   return distributor;
 }
 

@@ -27,8 +27,9 @@
 #include "Teuchos_Comm.hpp"
 
 #include "Camellia_FieldContainer.hpp"
+#include "Camellia_TeuchosSerializers.hpp"
 
-#include "Epetra_Distributor.h"
+#include <Tpetra_Distributor.hpp>
 
 namespace Camellia
 {
@@ -81,7 +82,7 @@ public:
                                 Camellia::FieldContainer<Scalar> &myValues,
                                 Camellia::FieldContainer<int> &offsets);
   
-  static Teuchos::RCP<Epetra_Distributor> getDistributor(const Epetra_Comm &Comm);
+  static Teuchos::RCP<Tpetra::Distributor> getDistributor(Teuchos_CommPtr Comm);
   
   static Epetra_CommPtr CommSerial();
   static Epetra_CommPtr CommWorld();
@@ -161,21 +162,7 @@ public:
   
   template<typename Scalar>
   static Scalar min(Teuchos_CommPtr Comm, Scalar value);
-  
-  template<typename DataType>
-  static void sendDataVectors(Epetra_CommPtr Comm, const std::vector<int> &recipients,
-                              const std::vector<std::vector<DataType>> &dataVectors,
-                              std::vector<DataType> &receivedVector);
-  template<typename DataType>
-  static void sendDataVectors(Epetra_CommPtr Comm,
-                              const std::map<int,std::vector<DataType>> &recipientDataVectors,
-                              std::vector<DataType> &receivedVector);
-  
-  template<typename KeyType, typename ValueType>
-  static void sendDataMaps(Epetra_CommPtr Comm,
-                           const std::map<int,std::map<KeyType,ValueType>> &recipientDataMaps,
-                           std::map<KeyType,ValueType> &receivedMap);
-  
+    
   template<typename DataType>
   static void sendDataVectors(Teuchos_CommPtr Comm, const std::vector<int> &recipients,
                               const std::vector<std::vector<DataType>> &dataVectors,
@@ -364,27 +351,6 @@ public:
   }
 
   template<typename KeyType, typename ValueType>
-  void MPIWrapper::sendDataMaps(Epetra_CommPtr Comm,
-                                const std::map<int,std::map<KeyType,ValueType>> &recipientDataMaps,
-                                std::map<KeyType,ValueType> &receivedMap)
-  {
-    // convert to a vector, and send that.
-    typedef std::vector<std::pair<KeyType,ValueType>> MapVector;
-    std::vector<MapVector> dataVectors;
-    std::vector<int> recipients;
-    for (auto recipientDataMapEntry : recipientDataMaps)
-    {
-      int recipient = recipientDataMapEntry.first;
-      recipients.push_back(recipient);
-      auto dataMap = &recipientDataMapEntry.second;
-      dataVectors.push_back(MapVector(dataMap->begin(),dataMap->end()));
-    }
-    MapVector receivedVector;
-    sendDataVectors(Comm,recipients,dataVectors,receivedVector);
-    receivedMap.insert(receivedVector.begin(),receivedVector.end());
-  }
-
-  template<typename KeyType, typename ValueType>
   void MPIWrapper::sendDataMaps(Teuchos_CommPtr Comm,
                                 const std::map<int,std::map<KeyType,ValueType>> &recipientDataMaps,
                                 std::map<KeyType,ValueType> &receivedMap)
@@ -406,24 +372,6 @@ public:
   }
 
   template<typename DataType>
-  void MPIWrapper::sendDataVectors(Epetra_CommPtr Comm,
-                                   const std::map<int,std::vector<DataType>> &recipientDataVectors,
-                                   std::vector<DataType> &receivedVector)
-  {
-    int numRecipients = recipientDataVectors.size();
-    std::vector<std::vector<DataType>> dataVectors(numRecipients);
-    std::vector<int> recipients(numRecipients);
-    int ordinal = 0;
-    for (auto recipientVectorEntry : recipientDataVectors)
-    {
-      recipients[ordinal] = recipientVectorEntry.first;
-      dataVectors[ordinal] = recipientVectorEntry.second;
-      ordinal++;
-    }
-    sendDataVectors(Comm,recipients,dataVectors,receivedVector);
-  }
-
-  template<typename DataType>
   void MPIWrapper::sendDataVectors(Teuchos_CommPtr Comm,
                                    const std::map<int,std::vector<DataType>> &recipientDataVectors,
                                    std::vector<DataType> &receivedVector)
@@ -442,81 +390,47 @@ public:
   }
   
   template<typename DataType>
-  void MPIWrapper::sendDataVectors(Epetra_CommPtr Comm, const std::vector<int> &recipients,
+  void MPIWrapper::sendDataVectors(Teuchos_CommPtr Comm, const std::vector<int> &recipients,
                                    const std::vector<std::vector<DataType>> &dataVectors,
                                    std::vector<DataType> &receivedVector)
   {
     // check that recipients are in numerical order:
-    int numRecipients = recipients.size();
-    for (int i=1; i<numRecipients; i++)
+    size_t numRecipients = recipients.size();
+    for (size_t i=1; i<numRecipients; i++)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(recipients[i-1] >= recipients[i], std::invalid_argument, "recipients list must be in numerical order, and populated with distinct recipients");
     }
     TEUCHOS_TEST_FOR_EXCEPTION(int(dataVectors.size()) != numRecipients, std::invalid_argument, "dataVectors and recipients list must be the same length");
     
-    Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*Comm);
+    auto distributor = MPIWrapper::getDistributor(Comm);
     
-    if (distributor == Teuchos::null)
-    {
-      // this can happen when Comm is a SerialComm object (Epetra_Distributor doesn't handle the serial case appropriately; Do() returns an error code)
-      TEUCHOS_TEST_FOR_EXCEPTION(recipients.size() > 1, std::invalid_argument, "In serial, recipients list must be empty or include exactly one (zero) entry");
-      if (recipients.size() == 1)
-      {
-        TEUCHOS_TEST_FOR_EXCEPTION(recipients[0] != 0, std::invalid_argument, "In serial, recipients list must be empty or include exactly one (zero) entry");
-        receivedVector = dataVectors[0];
-      }
-      else
-      {
-        receivedVector = std::vector<DataType>();
-      }
-      return;
-    }
-    
-    const int *recipientPtr = (numRecipients > 0) ? &recipients[0] : NULL;
-    
-    bool deterministic = true; // doesn't do anything at present, according to docs.
-    int numProcsThatWillSendToMe;
-    distributor->CreateFromSends(numRecipients, recipientPtr, deterministic, numProcsThatWillSendToMe);
-    
-    std::vector<int> lengthForEachSendProc(dataVectors.size()); // number of entries in each vector
-    int vectorOrdinal = 0;
     std::vector<DataType> packedData;
-    for (const std::vector<DataType> dataVector : dataVectors)
+    std::vector<int>      packedPIDs; // one per DataType entry
+    for (int i=0; i<recipients.size(); i++)
     {
-      lengthForEachSendProc[vectorOrdinal] = dataVector.size();
+      int pid = recipients[i];
+      const std::vector<DataType> & dataVector = dataVectors[i];
+      for (int j=0; j<dataVector.size(); j++)
+      {
+        packedPIDs.push_back(pid);
+      }
       packedData.insert(packedData.end(),dataVector.begin(),dataVector.end());
-      vectorOrdinal++;
     }
     
-    char* export_chars = (packedData.size() > 0) ? reinterpret_cast<char*>(&packedData[0]) : NULL;
-    int* lengthForEachSendProcPtr = (lengthForEachSendProc.size() > 0) ? &lengthForEachSendProc[0] : NULL;
-    char* import_chars = NULL;
-
-    int len_import_chars = 0;
-    int err = distributor->Do(export_chars, (int)sizeof(DataType), lengthForEachSendProcPtr, len_import_chars, import_chars);
+    auto pidsAV = Teuchos::arrayViewFromVector(packedPIDs);
+    distributor->createFromSends(pidsAV);
     
-    TEUCHOS_TEST_FOR_EXCEPTION(err != 0, std::invalid_argument, "Epetra_Distributor returned an error.");
+    HostViewManaged<DataType> exportView("exportView", packedData.size());
+    UnmanagedHostView<DataType> packedDataView(packedData.data(), packedData.size());
+    Kokkos::deep_copy(exportView, packedDataView);
     
-    DataType* recvd_rows = reinterpret_cast<DataType*>(import_chars);
-    int numEntriesReceived = len_import_chars/sizeof(DataType);
+    size_t totalImports = distributor->getTotalReceiveLength();
+    receivedVector.resize(totalImports);
+    HostViewManaged<DataType> importView("importView", receivedVector.size());
+    UnmanagedHostView<DataType> receivedVectorView(receivedVector.data(), receivedVector.size());
     
-    receivedVector.resize(numEntriesReceived);
-    for (int i=0; i<numEntriesReceived; i++)
-    {
-      receivedVector[i] = recvd_rows[i];
-    }
-    
-    if (import_chars != 0) delete [] import_chars;
-  }
-
-  template<typename DataType>
-  void MPIWrapper::sendDataVectors(Teuchos_CommPtr Comm, const std::vector<int> &recipients,
-                                   const std::vector<std::vector<DataType>> &dataVectors,
-                                   std::vector<DataType> &receivedVector)
-  {
-    auto epetraComm = EpetraComm(Comm);
-    // TODO: reimplement the call below using the Teuchos_CommPtr instead.
-    sendDataVectors(epetraComm, recipients, dataVectors, receivedVector);
+    distributor->doPostsAndWaits(exportView, 1, importView);
+    Kokkos::deep_copy(receivedVectorView, importView);
   }
   
   template<typename ScalarType>

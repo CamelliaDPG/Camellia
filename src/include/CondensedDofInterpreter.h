@@ -21,6 +21,7 @@
 #include "Epetra_Vector.h"
 #include "Mesh.h"
 #include "LagrangeConstraints.h"
+#include "Epetra_SerialDenseSolver.h"
 #include "Epetra_SerialDenseVector.h"
 #include "RHS.h"
 

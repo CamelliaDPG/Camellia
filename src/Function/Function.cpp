@@ -1500,79 +1500,80 @@ void TFunction<Scalar>::importDataForOffRankCells(MeshPtr mesh, const std::set<G
     }
   }
   
-  int myRequestCount = myRequest.size();
-  auto epetraComm = MPIWrapper::EpetraComm(mesh->Comm());
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
+  size_t myRequestCount = myRequest.size();
+  size_t globalRequestCount = MPIWrapper::sum(mesh->Comm(), myRequestCount);
   
-  GlobalIndexTypeToCast* myRequestPtr = NULL;
-  int *myRequestOwnersPtr = NULL;
-  if (myRequest.size() > 0)
+  if (globalRequestCount > 0)
   {
-    myRequestPtr = &myRequest[0];
-    myRequestOwnersPtr = &myRequestOwners[0];
-  }
-  int numCellsToExport = 0;
-  GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
-  int* exportRecipients = NULL;
-  
-  //    std::cout << "On rank " << rank << ", about to call CreateFromRecvs\n";
-  distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
-  
-  const std::set<GlobalIndexType>* myCells = &mesh->globalDofAssignment()->cellsInPartition(-1);
-  
-  vector<int> sizes(numCellsToExport,0);
-  vector<char> dataToExport; // bytes
-  
-  //    std::cout << "On rank " << rank << ", numCellsToExport = " << numCellsToExport << std::endl;
-  for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
-  {
-    GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
-    if (myCells->find(cellID) == myCells->end())
+    Teuchos::RCP<Tpetra::Distributor> distributor = MPIWrapper::getDistributor(mesh->Comm());
+        
+    Teuchos::ArrayView<const GlobalIndexTypeToCast> remoteCellIDs = Teuchos::arrayViewFromVector(myRequest);
+    Teuchos::ArrayView<const int> remoteProcIDs = Teuchos::arrayViewFromVector(myRequestOwners);
+    
+    Teuchos::Array<GlobalIndexTypeToCast> cellIDsToExport;
+    Teuchos::Array<int> exportRecipients;
+    
+    distributor->createFromRecvs(remoteCellIDs, remoteProcIDs, cellIDsToExport, exportRecipients);
+    
+    size_t numCellsToExport = cellIDsToExport.size();
+    
+    const std::set<GlobalIndexType> & myCells = mesh->globalDofAssignment()->cellsInPartition(-1);
+    
+    vector<size_t> sizes(numCellsToExport);
+    vector<char> dataToExport; // bytes
+    for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
     {
-      cout << "cellID " << cellID << " does not belong to rank " << rank << endl;
-      ostringstream myRankDescriptor;
-      myRankDescriptor << "rank " << rank << ", cellID ownership";
-      Camellia::print(myRankDescriptor.str().c_str(), *myCells);
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested cellID does not belong to this rank!");
+      GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
+      if (myCells.find(cellID) == myCells.end())
+      {
+        cout << "cellID " << cellID << " does not belong to rank " << rank << endl;
+        ostringstream myRankDescriptor;
+        myRankDescriptor << "rank " << rank << ", cellID ownership";
+        Camellia::print(myRankDescriptor.str().c_str(), myCells);
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested cellID does not belong to this rank!");
+      }
+      size_t dataSize = this->getCellDataSize(cellID);
+      if (dataSize == 0) continue;
+      size_t priorDataSize = dataToExport.size();
+      dataToExport.resize(priorDataSize + dataSize);
+      this->packCellData(cellID, dataToExport.data()+priorDataSize, dataSize);
+      sizes[cellOrdinal] = dataSize;
     }
-    size_t dataSize = this->getCellDataSize(cellID);
-    if (dataSize == 0) continue;
-    vector<char> cellData(dataSize);
-    this->packCellData(cellID, &cellData[0], dataSize);
-    sizes[cellOrdinal] = dataSize;
-    for (int byteOrdinal=0; byteOrdinal < dataSize; byteOrdinal++)
+    
+    HostViewManaged<size_t> exportSizes("export cell data sizes", sizes.size());
+    UnmanagedHostView<size_t> exportSizesUnmanaged(sizes.data(), sizes.size());
+    Kokkos::deep_copy(exportSizes, exportSizesUnmanaged);
+    
+    auto numImportCells = distributor->getTotalReceiveLength();
+    HostViewManaged<size_t> importSizes("import cell data sizes", numImportCells);
+    
+    distributor->doPostsAndWaits(exportSizes, 1, importSizes);
+    
+    size_t totalSizeImport = 0;
+    for (int i=0; i<numImportCells; i++)
     {
-      dataToExport.push_back(cellData[byteOrdinal]); // we could make this more efficient by resizing dataToExport and then doing a memcpy, or even resizing dataToExport and then calling packCellData(cellID, &dataToExport[offset], dataSize).  But this is a little less safe against programmer error.
+      totalSizeImport += importSizes(i);
+    }
+    
+    UnmanagedHostView<char> exportsUnmanaged(dataToExport.data(), dataToExport.size());
+    HostViewManaged<char> exports("exported cell data", dataToExport.size());
+    Kokkos::deep_copy(exports, exportsUnmanaged);
+    Teuchos::ArrayView<const size_t> exportSizesAV = Teuchos::arrayViewFromVector(sizes);
+    
+    HostViewManaged<char> imports("imported cell data", totalSizeImport);
+    auto importSizesAV = Teuchos::arrayView(importSizes.data(), importSizes.size());
+    
+    distributor->doPostsAndWaits(exports, exportSizesAV, imports, importSizesAV);
+    
+    size_t remainingBytes = totalSizeImport;
+    const char* copyFromLocation = imports.data();
+    for (GlobalIndexType cellID : myRequest)
+    {
+      size_t bytesConsumed = this->unpackCellData(cellID, copyFromLocation, remainingBytes);
+      remainingBytes -= bytesConsumed;
+      copyFromLocation += bytesConsumed;
     }
   }
-  
-  //    std::cout << "On rank " << rank << ", finished processing dataToExport.\n";
-  int objSize = sizeof(char) / sizeof(char); // i.e., 1
-  
-  int importLength = 0;
-  char* importedData = NULL;
-  int* sizePtr = NULL;
-  char* dataToExportPtr = NULL;
-  if (numCellsToExport > 0)
-  {
-    sizePtr = &sizes[0];
-    dataToExportPtr = (char *) &dataToExport[0];
-  }
-  //    std::cout << "On rank " << rank << ", about to call distributor->Do().\n";
-  distributor->Do(dataToExportPtr, objSize, sizePtr, importLength, importedData);
-  //    std::cout << "On rank " << rank << ", returned from distributor->Do().\n";
-  const char* copyFromLocation = importedData;
-  for (GlobalIndexType cellID : myRequest)
-  {
-    size_t bytesConsumed = this->unpackCellData(cellID, copyFromLocation, importLength);
-    importLength -= bytesConsumed;
-    copyFromLocation += bytesConsumed;
-  }
-  
-  //    std::cout << "On rank " << rank << ", about to delete cellIDsToExport, etc.\n";
-  if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
-  if( exportRecipients != 0 ) delete [] exportRecipients;
-  if (importedData != 0 ) delete [] importedData;
 }
 
 // added by Jesse - adaptive quadrature rules
@@ -2537,8 +2538,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
       }
     }
   }
-  Epetra_CommPtr epetraComm = MPIWrapper::EpetraComm(mesh->Comm());
-  MPIWrapper::sendDataMaps(epetraComm, recipientDataMaps, receivedMap);
+  MPIWrapper::sendDataMaps(mesh->Comm(), recipientDataMaps, receivedMap);
   // incorporate the received data into our sideL2Norms
   for (auto receivedEntry : receivedMap)
   {
