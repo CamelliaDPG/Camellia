@@ -159,11 +159,11 @@ int main(int argc, char *argv[])
 //  {
 //    cout << "2-norm condition number: " << condNumber2Norm << endl;
 //  }
-//  condNumber2Norm = SerialDenseWrapper::getMatrixConditionNumber2Norm(ipMatrix,true);
-//  cout << "2-norm condition number (ignoring zero eigenvalues): " << condNumber2Norm << endl;
+  double condNumber2Norm = SerialDenseWrapper::getMatrixConditionNumber2Norm(ipMatrix,true);
+  cout << "2-norm condition number (ignoring zero eigenvalues): " << condNumber2Norm << endl;
   
-  double condNumber1NormEst = SerialDenseWrapper::getMatrixConditionNumber(ipMatrix);
-  cout << "1-norm condition number estimate: " << condNumber1NormEst << endl;
+//  double condNumber1NormEst = SerialDenseWrapper::getMatrixConditionNumber(ipMatrix);
+//  cout << "1-norm condition number estimate: " << condNumber1NormEst << endl;
   
   ostringstream suffix;
   suffix << "_k" << polyOrder << "_deltak" << delta_k << "_" << spaceDim << "D";

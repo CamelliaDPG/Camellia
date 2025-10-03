@@ -13,6 +13,8 @@
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_DataAccess.h"
 
+#include "Teuchos_SerialDenseMatrix.hpp"
+
 #include <set>
 
 namespace Camellia
@@ -21,8 +23,8 @@ namespace Camellia
   {
   public:
     // the following made public so we can test them.  They are not intended for general use, however.
-    static Epetra_SerialDenseMatrix convertFCToSDM(const Camellia::FieldContainer<double> &A, Epetra_DataAccess CV = ::Copy);
-    static void convertSDMToFC(Camellia::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A);
+    static Teuchos::SerialDenseMatrix<int,double> convertFCToSDM(const Camellia::FieldContainer<double> &A, bool transpose=true, Teuchos::DataAccess CV = Teuchos::Copy);
+    static void convertSDMToFC(Camellia::FieldContainer<double> &A_fc, const Teuchos::SerialDenseMatrix<int,double> &A, bool transpose=true);
   public:
     // gives X = scalarA*A+scalarB*B (overwrites A)
     static void add(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A, const Camellia::FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0);
@@ -53,6 +55,24 @@ namespace Camellia
     static int getEnumeration(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc);
     
     static int getEnumeration(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
+
+    static void jacobiScaleMatrix(Camellia::FieldContainer<double> &A);
+    
+    static bool computeEquilibrationScaling(Teuchos::SerialDenseMatrix<int, double> &A,
+                                            std::vector<double> &rowScalings, std::vector<double> &colScalings);
+    
+    static bool computeEquilibrationScalingSPD(Teuchos::SerialDenseMatrix<int, double> &A_SPD,
+                                               std::vector<double> &scalings);
+    
+    static void equilibrateMatrix(Teuchos::SerialDenseMatrix<int, double> &A,
+                                  const std::vector<double> &rowScalings, const std::vector<double> &colScalings);
+    
+    static void equilibrateRHS(Teuchos::SerialDenseMatrix<int, double> &b,
+                               const std::vector<double> &rowScalings);
+    
+    static void unequilibrateLHS(Teuchos::SerialDenseMatrix<int, double> &x, const std::vector<double> &colScalings);
+    
+    static double estimate2NormConditionNumber(Camellia::FieldContainer<double> &A, bool ignoreZeroEigenvalues = true);
 
     // ! returns a lambda function that depends dynamically on the values in index, and at generation time on the dimensions of fc.  Intended to provide a faster version than either Camellia::FieldContainer or the above getEnumeration() (which should perhaps be deleted).
     static std::function<int()> getEnumerator(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc);
@@ -101,18 +121,12 @@ namespace Camellia
     static int solveSPDSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A_SPD,
                                          Camellia::FieldContainer<double> &b, bool allowOverwriteOfA = false);
     
+    //! resizes singularValuesOut to match the number of rows in A, which must be square.  Uses LAPACK::GESVD.
+    static int solveSVD(std::vector<double> &singularValuesOut, Camellia::FieldContainer<double> &A);
+    
     static void transposeMatrix(Camellia::FieldContainer<double> &A);
     
     static void transposeSquareMatrix(Camellia::FieldContainer<double> &A);
-    
-    //! Returns the reciprocal of the 1-norm condition number of the matrix in A
-    /*!
-     \param A In
-     A rank-2 Camellia::FieldContainer with equal first and second dimensions.
-     
-     \return the 1-norm condition number if successful; -1 otherwise.
-     */
-    static double getMatrixConditionNumber(Camellia::FieldContainer<double> &A);
     
     //! Returns the reciprocal of the 2-norm condition number of the matrix in A
     /*!

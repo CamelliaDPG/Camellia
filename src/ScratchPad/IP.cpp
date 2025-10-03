@@ -5,7 +5,6 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 #include "IP.h"
-#include "SerialDenseMatrixUtility.h"
 #include "SerialDenseWrapper.h"
 #include "VarFactory.h"
 #include "BasisCache.h"
@@ -321,7 +320,7 @@ double TIP<Scalar>::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCac
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     Camellia::FieldContainer<Scalar> cellIP = Camellia::FieldContainer<Scalar>(cellIP_dim,&innerProduct(cellIndex,0,0) );
-    double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(cellIP);
+    double conditionNumber = SerialDenseWrapper::estimate2NormConditionNumber(cellIP);
     maxConditionNumber = std::max(maxConditionNumber,conditionNumber);
   }
   return maxConditionNumber;

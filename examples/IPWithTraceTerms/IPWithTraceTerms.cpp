@@ -89,10 +89,10 @@ double conditionNumberForGram(CellTopoPtr cellTopo, int polyOrder, Space fs, dou
   
   ipMatrix.resize(testDofCount,testDofCount);
   
-  double condNumber1NormEst = SerialDenseWrapper::getMatrixConditionNumber(ipMatrix);
-  cout << "1-norm condition number estimate: " << condNumber1NormEst << endl;
+  double condNumber2NormEst = SerialDenseWrapper::getMatrixConditionNumber2Norm(ipMatrix);
+  cout << "2-norm condition number estimate: " << condNumber2NormEst << endl;
   
-  return condNumber1NormEst;
+  return condNumber2NormEst;
 }
 
 

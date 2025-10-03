@@ -17,7 +17,6 @@
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h" // includes print() methods
 #include "CellTopology.h"
-#include "SerialDenseMatrixUtility.h"
 #include "SerialDenseWrapper.h"
 #include "TensorBasis.h"
 
@@ -500,8 +499,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 //  cout << "rhsValues:\n" << rhsValues;
   
   weights.weights.resize(weights.fineOrdinals.size(), weights.coarseOrdinals.size());
-
-//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   
   int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   if (err != 0)
@@ -623,8 +620,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
 
   weights.weights.resize(weights.fineOrdinals.size(), weights.coarseOrdinals.size());
-
-//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   
   int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   if (err != 0)
@@ -758,8 +753,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
 
 //  cout << "lhsValues:\n" << lhsValues;
 //  cout << "rhsValues:\n" << rhsValues;
-
-//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   
   int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   if (err != 0)
@@ -886,8 +879,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
 
 //  cout << "lhsValues:\n" << lhsValues;
 //  cout << "rhsValues:\n" << rhsValues;
-
-//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   
   int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   if (err != 0)

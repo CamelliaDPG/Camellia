@@ -18,7 +18,7 @@
 #include "RefinementStrategy.h"
 
 #include "DataIO.h"
-#include "SerialDenseMatrixUtility.h"
+#include "SerialDenseWrapper.h"
 #include "MeshFactory.h"
 
 using namespace Camellia;
@@ -171,8 +171,8 @@ double HConvergenceStudy::computeJacobiPreconditionedConditionNumber(int logElem
   fileName << _globalStiffnessFilePrefix << "_" << logElements << ".dat";
   Camellia::FieldContainer<double> globalStiffnessMatrix;
   DataIO::readMatrixFromSparseDataFile(globalStiffnessMatrix, fileName.str());
-  SerialDenseMatrixUtility::jacobiScaleMatrix(globalStiffnessMatrix);
-  return SerialDenseMatrixUtility::estimate2NormConditionNumber(globalStiffnessMatrix);
+  SerialDenseWrapper::jacobiScaleMatrix(globalStiffnessMatrix);
+  return SerialDenseWrapper::estimate2NormConditionNumber(globalStiffnessMatrix);
 }
 
 void HConvergenceStudy::computeErrors()

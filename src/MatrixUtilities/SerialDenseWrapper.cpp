@@ -12,19 +12,6 @@
 #include "Camellia_FieldContainer.hpp"
 #include "Camellia_matrix.hpp"
 
-#include "Epetra_CrsMatrix.h"
-#include "Epetra_DataAccess.h"
-#include "Epetra_Import.h"
-#include "Epetra_Map.h"
-#include "Epetra_RowMatrix.h"
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialDenseVector.h"
-#include "Epetra_SerialDenseSolver.h"
-#include "Epetra_SerialDenseSVD.h"
-
-#include "Epetra_SerialSymDenseMatrix.h"
-#include "Epetra_SerialSpdDenseSolver.h"
-
 #include "Teuchos_LAPACK.hpp"
 #include "Teuchos_SerialDenseMatrix.hpp"
 #include "Teuchos_SerialDenseVector.hpp"
@@ -122,41 +109,159 @@ namespace Camellia {
     return condest;
   }
   
-  Epetra_SerialDenseMatrix SerialDenseWrapper::convertFCToSDM(const Camellia::FieldContainer<double> &A, Epetra_DataAccess CV)
+  //! Mimics what Epetra SerialDenseMatrix did.
+  bool SerialDenseWrapper::computeEquilibrationScaling(Teuchos::SerialDenseMatrix<int, double> &A,
+                                                       std::vector<double> &rowScalings, std::vector<double> &colScalings)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be a rank 2 Camellia::FieldContainer.");
-    //  FC is row major, SDM expects column major data, so the roles of rows and columns get swapped
-    // distance between rows in FC is the column length (dimension 1)
-    int n = A.dimension(0);
-    int m = A.dimension(1);
-    double *firstEntry = (double *) &A[0]; // a bit dangerous: cast away the const.  Not dangerous if we're doing Copy, of course.
-    Epetra_SerialDenseMatrix Amatrix(CV,firstEntry,m,m,n);
-    return Amatrix;
+    bool shouldEquilibrate = false;
+    
+    const int M = A.numRows();
+    const int N = A.numCols();
+    rowScalings.resize(M);
+    colScalings.resize(N);
+    
+    double ROWCND, COLCND, AMAX;
+    int INFO;
+    
+    Teuchos::LAPACK<int,double> lapack;
+    
+    lapack.GEEQU(M, N, A.values(), A.stride(),
+                 rowScalings.data(), colScalings.data(),
+                 &ROWCND, &COLCND, &AMAX, &INFO);
+    if (INFO != 0)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GEEQU returned error code " << INFO);
+    }
+    
+    const double Epetra_Overflow = 1.79E308; // Used to test if equilibration should be done.
+    const double Epetra_Underflow = 2.23E-308;
+
+    if (COLCND < 0.1 || ROWCND < 0.1 || AMAX < Epetra_Underflow || AMAX > Epetra_Overflow)
+    {
+      shouldEquilibrate = true;
+    }
+
+    return shouldEquilibrate;
   }
-  
-  void SerialDenseWrapper::convertSDMToFC(Camellia::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A)
+
+  bool SerialDenseWrapper::computeEquilibrationScalingSPD(Teuchos::SerialDenseMatrix<int, double> &A_SPD, std::vector<double> &scalings)
   {
-    int n = A.M();
-    int m = A.N();
+    const int N = A_SPD.numRows();
+    scalings.resize(N);
+        
+    double SCOND, AMAX;
+    int INFO;
+
+    Teuchos::LAPACK<int,double> lapack;
+    
+    lapack.POEQU(N, A_SPD.values(), A_SPD.stride(), scalings.data(), &SCOND, &AMAX, &INFO);
+    if (INFO != 0)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "POEQU returned error code " << INFO);
+    }
+    
+    bool shouldEquilibrate = false;
+
+    const double Epetra_Overflow = 1.79E308; // Used to test if equilibration should be done.
+    const double Epetra_Underflow = 2.23E-308;
+    
+    if (SCOND < 0.1 || AMAX < Epetra_Underflow || AMAX > Epetra_Overflow)
+    {
+      shouldEquilibrate = true;
+    }
+
+    return shouldEquilibrate;
+  }
+
+  Teuchos::SerialDenseMatrix<int, double> SerialDenseWrapper::convertFCToSDM(const Camellia::FieldContainer<double> &A, bool transpose, Teuchos::DataAccess CV)
+  {
+    bool hasAUnitDimension = (A.dimension(0) == 1) || (A.dimension(1) == 1);
+    if (!transpose)
+    {
+      // then we must make a copy, UNLESS one of the dimensions is 1
+      if (CV == Teuchos::View)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(!hasAUnitDimension, std::invalid_argument,
+                                   "Can only convert this FC with CV=Teuchos::Copy");
+      }
+    }
+    
+    if (A.rank() != 2)
+    {
+      std::cout << "A must be a rank 2 Camellia::FieldContainer\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x, A, and b must each be a rank 2 Camellia::FieldContainer!!");
+    }
+    const int A_rows = A.dimension(0);
+    const int A_cols = A.dimension(1);
+    
+    int dataStride = A_cols; // A is row-major
+    
+    int info = 0; // default return value
+    
+    Teuchos::RCP<const Camellia::FieldContainer<double>> matrixPtr; // points to either A or its transpose, depending on what we need for
+    if (!transpose && !hasAUnitDimension)
+    {
+      auto newMatrix = new FieldContainer<double>(A);
+      transposeMatrix(*newMatrix);
+      dataStride = A_rows;
+      matrixPtr = Teuchos::rcp(newMatrix);
+    }
+    else
+    {
+      matrixPtr = Teuchos::rcp(&A, false);
+      if (!transpose && hasAUnitDimension)
+      {
+        dataStride = A_rows;
+      }
+    }
+    
+    const int SDM_cols = transpose ? A_rows : A_cols;
+    const int SDM_rows = transpose ? A_cols : A_rows;
+    
+    double* data = (A_rows * A_cols > 0) ? const_cast<double*>(&(*matrixPtr)(0,0)) : NULL;
+    
+    Teuchos::SerialDenseMatrix<int, double> A_SDM(CV, data, dataStride, SDM_rows, SDM_cols);
+    return A_SDM;
+  }
+
+  void SerialDenseWrapper::convertSDMToFC(Camellia::FieldContainer<double> &A_fc, const Teuchos::SerialDenseMatrix<int, double> &A, bool transpose)
+  {
+    int m = A.numRows();
+    int n = A.numCols();
     Teuchos::Array<int> dim(2);
     dim[0] = m;
     dim[1] = n;
     const double * A_Entry = &A(0,0);
-    TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(0) != m, std::invalid_argument, "A_fc dimension 0 must match A.N()");
-    TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(1) != n, std::invalid_argument, "A_fc dimension 1 must match A.M()");
+    if (transpose)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(0) != n, std::invalid_argument, "A_fc dimension 0 must match A.N()");
+      TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(1) != m, std::invalid_argument, "A_fc dimension 1 must match A.M()");
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(0) != m, std::invalid_argument, "A_fc dimension 0 must match A.M()");
+      TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(1) != n, std::invalid_argument, "A_fc dimension 1 must match A.N()");
+    }
+    
     double * A_fc_Entry = (double*) &A_fc(0,0);
     // deep copy, respecting whatever ownership that A_fc was initialized with
     memcpy(A_fc_Entry, A_Entry, n*m*sizeof(double));
+    
+    if (!transpose)
+    {
+      A_fc.resize(A_fc.dimension(1),A_fc.dimension(0));
+      transposeMatrix(A_fc);
+    }
   }
-  
+
   // gives X = scalarA*A+scalarB*B (overwrites A)
   void SerialDenseWrapper::add(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A, const Camellia::FieldContainer<double> &B,
                                double scalarA, double scalarB)
   {
-    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
-    Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
-    AMatrix.Scale(scalarA);
-    BMatrix.Scale(scalarB);
+    auto AMatrix = convertFCToSDM(A);
+    auto BMatrix = convertFCToSDM(B);
+    AMatrix.scale(scalarA);
+    BMatrix.scale(scalarB);
     AMatrix += BMatrix;
     convertSDMToFC(X,AMatrix);
   }
@@ -398,6 +503,39 @@ namespace Camellia {
     return INFO;
   }
   
+  void SerialDenseWrapper::equilibrateMatrix(Teuchos::SerialDenseMatrix<int, double> &A,
+                                             const std::vector<double> &rowScalings, const std::vector<double> &colScalings)
+  {
+    auto M   = A.numRows();
+    auto N   = A.numCols();
+    auto LDA = A.stride();
+    double * ptr;
+    for (int j=0; j<N; j++) {
+      ptr = A.values() + j*LDA;
+      const double &s1 = colScalings[j];
+      for (int i=0; i<M; i++) {
+        *ptr = *ptr*s1*rowScalings[i];
+        ptr++;
+      }
+    }
+  }
+
+  void SerialDenseWrapper::equilibrateRHS(Teuchos::SerialDenseMatrix<int, double> &b, const std::vector<double> &rowScalings)
+  {
+    auto M     = b.numRows();
+    auto NRHS  = b.numCols();
+    auto LDB = b.stride();
+    
+    double * ptr;
+    for (int j=0; j<NRHS; j++) {
+      ptr = b.values() + j*LDB;
+      for (int i=0; i<M; i++) {
+        *ptr = *ptr*rowScalings[i];
+        ptr++;
+      }
+    }
+  }
+
   int SerialDenseWrapper::extractFCFromTMatrix(TMatrixPtr<double> A, Camellia::FieldContainer<double> &A_fc)
   {
     int myRank = A->getComm()->getRank();
@@ -581,6 +719,60 @@ namespace Camellia {
     return enumerator;
   }
   
+  void SerialDenseWrapper::jacobiScaleMatrix(Camellia::FieldContainer<double> &A)
+  {
+    int N = A.dimension(0);
+    if ((N != A.dimension(1)) || (A.rank() != 2))
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
+    }
+    for (int i=0; i<N; i++)
+    {
+      double diag = A(i,i);
+      double *val = &A(i,0);
+      if (diag == 0) diag = 1.0; // simply omit rescaling of 0 diagonal entries
+      for (int j=0; j<N; j++)
+      {
+        *val /= diag;
+        val++;
+      }
+    }
+  }
+
+  double SerialDenseWrapper::estimate2NormConditionNumber(Camellia::FieldContainer<double> &A, bool ignoreZeroEigenvalues)
+  {
+    std::vector<double> singularValues;
+    int result = solveSVD(singularValues, A);
+    
+    const int N = A.dimension(0);
+  
+    if (result == 0)
+    {
+      double maxSingularValue = singularValues[0];
+      double minSingularValue = singularValues[N-1];
+      double tol = 1e-14;
+      if (ignoreZeroEigenvalues)
+      {
+        int index = N-1;
+        while ((abs(minSingularValue) < tol) && (index > 0))
+        {
+          index--;
+          minSingularValue = singularValues[index];
+        }
+      }
+      if (maxSingularValue < tol)
+      {
+        std::cout << "maxSingularValue is zero for matrix:\n" << A;
+      }
+      return maxSingularValue / minSingularValue;
+    }
+    else
+    {
+      std::cout << "SVD failed for matrix:\n" << A;
+      return -1.0;
+    }
+  }
+
   bool SerialDenseWrapper::matrixIsSymmetric(Camellia::FieldContainer<double> &A, double relTol, double absTol)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must have rank 2");
@@ -691,13 +883,13 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "error: B_cols != X_cols");
     }
     
-    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A,::View);
-    Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B,::View);
-    Epetra_SerialDenseMatrix XMatrix = convertFCToSDM(X,::View);
+    auto ATMatrix = convertFCToSDM(A,true,Teuchos::View); // true: transpose
+    auto BTMatrix = convertFCToSDM(B,true,Teuchos::View);
+    auto XTMatrix = convertFCToSDM(X,true,Teuchos::View);
     
     // since SDMs are transposed relative to FCs, reverse the transposal
-    char transposeAMatrix = (TransposeA=='T') ? 'N' : 'T';
-    char transposeBMatrix = (TransposeB=='T') ? 'N' : 'T';
+    Teuchos::ETransp transposeAMatrix = (TransposeA=='T') ? Teuchos::NO_TRANS : Teuchos::TRANS;
+    Teuchos::ETransp transposeBMatrix = (TransposeB=='T') ? Teuchos::NO_TRANS : Teuchos::TRANS;
     
     //    std::cout << "transposeA = " << TransposeA << std::endl;
     //    std::cout << "transposeB = " << TransposeB << std::endl;
@@ -711,7 +903,7 @@ namespace Camellia {
     //    std::cout << "BMatrix.LDA() = " << BMatrix.LDA() << std::endl;
     //    std::cout << "XMatrix.LDA() = " << XMatrix.LDA() << std::endl;
     
-    int success = XMatrix.Multiply(transposeAMatrix,transposeBMatrix,ScalarAB,AMatrix,BMatrix,ScalarThis);
+    int success = XTMatrix.multiply(transposeAMatrix,transposeBMatrix,ScalarAB,ATMatrix,BTMatrix,ScalarThis);
     
     transposeMatrix(X); // SDMs are transposed relative to FCs
     //    convertSDMToFC(X,XMatrix); // not needed when using View.
@@ -891,8 +1083,6 @@ namespace Camellia {
     // solves Ax = b, where
     // A = (N,N)
     // x, b = (N, M)
-    Epetra_SerialDenseSolver solver;
-    
     int N = A.dimension(0);
     int nRHS = b.dimension(1);
     
@@ -904,41 +1094,48 @@ namespace Camellia {
       transposeMatrix(A);
     }
     
-    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
-    Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
-    Epetra_SerialDenseMatrix xVectors(N,nRHS);
+    auto AMatrix = convertFCToSDM(A, useATranspose);
+    auto bxVectors = convertFCToSDM(b);
+    Teuchos::SerialDenseMatrix<int,double> xVectors(N,nRHS);
     
-    solver.SetMatrix(AMatrix);
-    int info = solver.SetVectors(xVectors,bVectors);
-    if (info!=0)
+    std::vector<double> rowScalings, colScalings;
+    bool shouldEquilibrate = computeEquilibrationScaling(AMatrix, rowScalings, colScalings);
+    
+    if (shouldEquilibrate)
     {
-      std::cout << "solveSystem: failed to SetVectors with error " << info << std::endl;
-      return info;
+      equilibrateMatrix(AMatrix,rowScalings,colScalings);
+      equilibrateRHS(bxVectors,rowScalings);
     }
     
-    bool equilibrated = false;
-    if (solver.ShouldEquilibrate())
-    {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
-    }
+    std::vector<int> piv(N);
+    Teuchos::LAPACK<int,double> lapack;
+    int info = 0;
+    lapack.GETRF(
+      N,          // # rows
+      N,          // # cols
+      AMatrix.values(), // pointer to A(0,0)
+      AMatrix.stride(), // leading dimension (stride)
+      piv.data(),// pivot indices (1-based)
+      &info);
     
-    info = solver.Solve();
-    if (info!=0)
-    {
-      std::cout << "solveSystem: failed to solve with error " << info << std::endl;
-      return info;
-    }
+    TEUCHOS_TEST_FOR_EXCEPTION(info < 0, std::runtime_error, "GETRF: illegal argument at position " << -info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info > 0, std::runtime_error, "GETRF: U(" << info << "," << info << ") is zero; matrix is singular.");
     
-    if (equilibrated)
+    const char trans = 'N'; // no transpose
+    lapack.GETRS(
+      trans,
+      N,                 // # rows
+      nRHS,              // # cols
+      AMatrix.values(),  // LU factors from GETRF
+      AMatrix.stride(),  // leading dimension
+      piv.data(), // pivot indices
+      bxVectors.values(),  // RHS on entry, solution on exit
+      bxVectors.stride(),  // leading dimension
+      &info);
+    
+    if (shouldEquilibrate)
     {
-      int successLocal = solver.UnequilibrateLHS();
-      if (successLocal != 0)
-      {
-        std::cout << "solveSystem: unequilibration FAILED with error: " << successLocal << std::endl;
-        return successLocal;
-      }
+      unequilibrateLHS(bxVectors, colScalings);
     }
     
     // if we transposed A above, transpose it back here--leaving things as we found them
@@ -949,10 +1146,8 @@ namespace Camellia {
     
     transposeMatrix(b);
     
-    transposeMatrix(x);
-    
-    convertSDMToFC(x,xVectors);
-    
+    x.resize(x.dimension(1),x.dimension(0)); //transposeMatrix(x);
+    convertSDMToFC(x,bxVectors);
     transposeMatrix(x);
     
     return 0;
@@ -1102,7 +1297,28 @@ namespace Camellia {
     int N = A_SPD.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(N != A_SPD.dimension(1), std::invalid_argument, "A must be square!");
     
+    bool shouldEquilibrate;
+    std::vector<double> scalings;
+    
+    bool transpose = true;
+    Teuchos::DataAccess dataAccess = Teuchos::View;
+    auto AMatrix = convertFCToSDM(A_SPD, transpose, dataAccess);
+    shouldEquilibrate = computeEquilibrationScalingSPD(AMatrix, scalings);
+    
     int M = (bx.rank() == 1) ? 1 : bx.dimension(1);
+    
+    if (M != 1)
+    {
+      transposeMatrix(bx); // moves data in memory
+    }
+    
+    auto bxVectors = convertFCToSDM(bx, M != 1, dataAccess); // transpose if M != 1
+    
+    if (shouldEquilibrate)
+    {
+      equilibrateMatrix(AMatrix,scalings,scalings);
+      equilibrateRHS(bxVectors,scalings);
+    }
     
     char UPLO = 'L'; // lower-triangular
     
@@ -1118,9 +1334,19 @@ namespace Camellia {
     if (INFO != 0) result = INFO;
     
     // back-substitute
-    lapack.POTRS(UPLO, N, M, &A_SPD[0], N, &bx[0], N, &INFO);
+    lapack.POTRS(UPLO, N, M, AMatrix.values(), N, bxVectors.values(), N, &INFO);
 
+    if (shouldEquilibrate)
+    {
+      unequilibrateLHS(bxVectors, scalings);
+    }
+    
     if (INFO != 0) result = INFO;
+    
+    if (M != 1)
+    {
+      transposeMatrix(bx);
+    }
     
     return result;
   }
@@ -1128,134 +1354,73 @@ namespace Camellia {
   int SerialDenseWrapper::solveSPDSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A_SPD,
                                                     Camellia::FieldContainer<double> &b, bool allowOverwriteOfA)
   {
-    // solves Ax = b, where
-    // A = (N,N)
-    // x, b = (N,nRHS)
-    Epetra_SerialSpdDenseSolver solver;
-    
-    int N = A_SPD.dimension(0);
-    int nRHS = b.dimension(1);
-    
-    TEUCHOS_TEST_FOR_EXCEPTION(A_SPD.dimension(1) != N, std::invalid_argument, "A's first and second dimensions should match.");
-    TEUCHOS_TEST_FOR_EXCEPTION(x.dimension(1) != nRHS, std::invalid_argument, "x's second dimension should match b's second dimension (# RHSes).");
-    TEUCHOS_TEST_FOR_EXCEPTION(x.dimension(0) != N,    std::invalid_argument, "x's first dimension should match A's first and second dimension.");
-    TEUCHOS_TEST_FOR_EXCEPTION(b.dimension(0) != N,    std::invalid_argument, "b's first dimension should match A's first and second dimension.");
-    
-    int result = 0;
-    
-    Epetra_DataAccess A_dataAccess = allowOverwriteOfA ? ::View : ::Copy;
-
-    Epetra_SerialSymDenseMatrix AMatrix(A_dataAccess, &A_SPD(0,0),
-                                        N, // stride -- fc stores in row-major order (a.o.t. SDM)
-                                        N);
-
-    
-    transposeMatrix(b); // a bit lame that we need to do this...
-    Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
-    transposeMatrix(b); // restore data to be nice to caller (again, a bit lame)
-    Epetra_SerialDenseMatrix xVectors(N,nRHS);
-    
-    solver.SetMatrix(AMatrix);
-    int info = solver.SetVectors(xVectors,bVectors);
-    if (info!=0)
+    x = b;
+    if (!allowOverwriteOfA)
     {
-      result = info;
-      std::cout << "solveSPDSystemMultipleRHS: failed to SetVectors with error " << info << std::endl;
-      return result;
+      Camellia::FieldContainer<double> A_copy = A_SPD;
+      return solveSPDSystemLAPACKCholesky(x, A_copy);
     }
-    
-    if ( solver.ShouldEquilibrate() )
+    else
     {
-      solver.FactorWithEquilibration(true);
-      solver.SolveToRefinedSolution(false); // false: don't use iterative refinements...
+      return solveSPDSystemLAPACKCholesky(x, A_SPD);
     }
-    info = solver.Factor();
-    if (info != 0)
-    {
-      result = info;
-      std::cout << "solveSPDSystemMultipleRHS: Factor failed with code " << result << std::endl;
-      return result;
-    }
-    
-    info = solver.Solve();
-    
-    if (info != 0)
-    {
-      std::cout << "BilinearForm::optimalTestWeights: Solve FAILED with error: " << info << std::endl;
-      result = info;
-    }
-    
-    // we don't actually need a full transpose of x here (the data gets overwritten in the call to convertSDMToFC) -- it's enough to size x appropriately…
-    x.resize(x.dimension(1), x.dimension(0));
-    
-    convertSDMToFC(x,xVectors);
-    
-    transposeMatrix(x); // perhaps we should change the expected inputs so we don't have to do this?
-    
-    return result;
   }
   
-//  int SerialDenseWrapper::solveSPDSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A_SPD,
-//                                                    Camellia::FieldContainer<double> &b, bool allowOverwriteOfA)
-//  {
-//    // solves Ax = b, where
-//    // A = (N,N)
-//    // x, b = (N)
-//    Epetra_SerialSpdDenseSolver solver;
-//    
-//    x.resize(x.dimension(1),x.dimension(0)); // transpose without moving data (we'll overwrite) -- we'll transpose back (with data movement) below
-//    
-//    int N = A_SPD.dimension(0);
-//    int nRHS = b.dimension(1);
-//    
-//    int result = 0;
-//    
-//    Epetra_DataAccess A_dataAccess = allowOverwriteOfA ? ::View : ::Copy;
-//    
-//    Epetra_SerialSymDenseMatrix AMatrix(A_dataAccess, &A_SPD(0,0),
-//                                        N, // stride -- fc stores in row-major order (a.o.t. SDM)
-//                                        N);
-//
-//    transposeMatrix(b); // a bit lame that we need to do this...
-//    Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
-//    transposeMatrix(b); // restore data to be nice to caller (again, a bit lame)
-//    
-//    Epetra_SerialDenseMatrix xTranspose(::View, &x(0,0), N, N, nRHS);
-//    
-//    solver.SetMatrix(AMatrix);
-//    int info = solver.SetVectors(xTranspose,bVectors);
-//    if (info!=0)
-//    {
-//      result = info;
-//      std::cout << "solveSPDSystemMultipleRHS: failed to SetVectors with error " << info << std::endl;
-//      return result;
-//    }
-//    
-//    if ( solver.ShouldEquilibrate() )
-//    {
-//      solver.FactorWithEquilibration(true);
-//      solver.SolveToRefinedSolution(false); // false: don't use iterative refinements...
-//    }
-//    info = solver.Factor();
-//    if (info != 0)
-//    {
-//      result = info;
-//      std::cout << "solveSPDSystemMultipleRHS: Factor failed with code " << result << std::endl;
-//      return result;
-//    }
-//    
-//    info = solver.Solve();
-//    
-//    if (info != 0)
-//    {
-//      std::cout << "BilinearForm::optimalTestWeights: Solve FAILED with error: " << info << std::endl;
-//      result = info;
-//    }
-//    
-//    transposeMatrix(x); // perhaps we should change the expected inputs so we don't have to do this?
-//    
-//    return result;
-//  }
+  int SerialDenseWrapper::solveSVD(std::vector<double> &singularValuesOut, Camellia::FieldContainer<double> &A)
+  {
+    const int N = A.dimension(0);
+    TEUCHOS_TEST_FOR_EXCEPTION(N != A.dimension(1), std::invalid_argument, "A must be square");
+    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be rank 2");
+    
+    singularValuesOut.resize(N);
+    
+    Camellia::FieldContainer<double> A_copy = A;
+    
+    // SDM wants column-major; input is row-major
+    transposeMatrix(A_copy);
+    
+    const int &rowStride = N; // numCols
+    Teuchos::SerialDenseMatrix<int, double> M(Teuchos::View, &A_copy(0,0), rowStride, N, N);
+    
+    Teuchos::LAPACK<int,double> lapack;
+    int info = 0;
+    
+    // we only want singular values, not U or VT
+    const char jobu  = 'N';
+    const char jobvt = 'N';
+    
+    // workspace query
+    int lwork = -1;
+    double wkopt = 0.0;
+    // note: we pass nullptr (or 0) for U and VT since JOBU=JOBVT='N'
+    lapack.GESVD(jobu, jobvt,
+                 N, N,
+                 M.values(), M.stride(),
+                 singularValuesOut.data(),
+                 nullptr, 1,
+                 nullptr, 1,
+                 &wkopt, lwork,
+                 nullptr,   // iwork not used for GESVD of real
+                 &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info<0, std::runtime_error, "LAPACK GESVD workspace query failed with info="<<info);
+    
+    lwork = (int)wkopt;
+    std::vector<double> work(lwork);
+    
+    // actual SVD computation
+    lapack.GESVD(jobu, jobvt,
+                 N, N,
+                 M.values(), M.stride(),
+                 singularValuesOut.data(),
+                 nullptr, 1,
+                 nullptr, 1,
+                 work.data(), lwork,
+                 nullptr,
+                 &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info!=0, std::runtime_error, "LAPACK GESVD failed with info="<<info);
+    
+    return info;
+  }
   
   void SerialDenseWrapper::transposeMatrix(Camellia::FieldContainer<double> &A)
   {
@@ -1278,25 +1443,21 @@ namespace Camellia {
       }
     }
   }
-  
-  //! Returns the reciprocal of the 1-norm condition number of the matrix in A
-  /*!
-   \param A In
-   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
-   
-   \return the 1-norm condition number if successful; -1 otherwise.
-   */
-  double SerialDenseWrapper::getMatrixConditionNumber(Camellia::FieldContainer<double> &A)
+
+  void SerialDenseWrapper::unequilibrateLHS(Teuchos::SerialDenseMatrix<int, double> &x, const std::vector<double> &colScalings)
   {
-    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
-    Epetra_SerialDenseSolver solver;
-    solver.SetMatrix(AMatrix);
-    double invCond;
-    int result = solver.ReciprocalConditionEstimate(invCond);
-    if (result == 0) // success
-      return 1.0/invCond;
-    else // failure
-      return -1;
+    auto N    = x.numRows();
+    auto NRHS = x.numCols();
+    auto LDX  = x.stride();
+    
+    double * ptr;
+    for (int j=0; j<NRHS; j++) {
+      ptr = x.values() + j*LDX;
+      for (int i=0; i<N; i++) {
+        *ptr = *ptr*colScalings[i];
+        ptr++;
+      }
+    }
   }
   
   //! Returns the reciprocal of the 2-norm condition number of the matrix in A
@@ -1308,85 +1469,8 @@ namespace Camellia {
    */
   double SerialDenseWrapper::getMatrixConditionNumber2Norm(Camellia::FieldContainer<double> &A, bool ignoreZeroEigenvalues)
   {
-    Epetra_SerialDenseSVD svd;
-    
-    int N = A.dimension(0);
-    if ((N != A.dimension(1)) || (A.rank() != 2))
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
-    }
-    
-    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
-    
-    svd.SetMatrix(AMatrix);
-    int result = svd.Factor();
-    
-    if (result == 0)
-    {
-      // then the singular values are stored in svd.S_
-      double maxSingularValue = svd.S_[0];
-      double minSingularValue = svd.S_[N-1];
-      double tol = 1e-14;
-      if (ignoreZeroEigenvalues)
-      {
-        int index = N-1;
-        while ((abs(minSingularValue) < tol) && (index > 0))
-        {
-          index--;
-          minSingularValue = svd.S_[index];
-        }
-      }
-      if (maxSingularValue < tol)
-      {
-        //        std::cout << "maxSingularValue is zero for matrix:\n" << A;
-      }
-      std::cout << "minSingularValue: " << minSingularValue << std::endl;
-      std::cout << "maxSingularValue: " << maxSingularValue << std::endl;
-      return maxSingularValue / minSingularValue;
-    }
-    else
-    {
-      //      std::cout << "SVD failed for matrix:\n" << A;
-      return -1.0;
-    }
+    return estimate2NormConditionNumber(A, ignoreZeroEigenvalues);
   }
-  
-  // These methods for testing positive (semi)definiteness do not work.  As noted in comments below, need to do an eigenvalue solve.
-  //  //! Returns true if all the eigenvalues are greater than zero
-  //  /*!
-  //   \param A In
-  //   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
-  //
-  //   \return true if all the eigenvalues are positive; false otherwise.
-  //   */
-  //  static bool matrixIsPositiveDefinite(Camellia::FieldContainer<double> &A)
-  //  {
-  //    cout << "WARNING: matrixIsPositiveDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
-  //    /*
-  //     See:
-  //     http://www.physics.orst.edu/~rubin/nacphy/lapack/eigen.html
-  //     dsytrd - Reduces a symmetric/Hermitian matrix to real symmetric tridiagonal form by an orthogonal/unitary similarity transformation
-  //     dsteqr - Computes all eigenvalues and eigenvectors of a real	symmetric tridiagonal matrix, using the implicit QL or QR algorithm
-  //
-  //     See also:
-  //     http://www.netlib.org/lapack/lug/node70.html
-  //
-  //     */
-  //    return getMatrixConditionNumber2Norm(A, false) > 0.0;
-  //  }
-  //
-  //  //! Returns true if all the eigenvalues are greater than or equal to zero
-  //  /*!
-  //   \param A In
-  //   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
-  //
-  //   \return true if all the eigenvalues are non-negative; false otherwise.
-  //   */
-  //  static bool matrixIsPositiveSemiDefinite(Camellia::FieldContainer<double> &A)
-  //  {
-  //    cout << "WARNING: matrixIsPositiveSemiDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
-  //    return getMatrixConditionNumber2Norm(A, true) > 0.0;
-  //  }
   
   void SerialDenseWrapper::writeMatrixToMatlabFile(const std::string& filePath, Camellia::FieldContainer<double> &A)
   {

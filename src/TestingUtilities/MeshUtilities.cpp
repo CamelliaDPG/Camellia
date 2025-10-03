@@ -3,7 +3,7 @@
 //
 
 #include "MeshUtilities.h"
-#include "SerialDenseMatrixUtility.h"
+#include "SerialDenseWrapper.h"
 #include "DataIO.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
@@ -287,9 +287,8 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, boo
     // reshape:
     innerProductMatrix.resize(testDofs,testDofs);
     if (jacobiScaling)
-      SerialDenseMatrixUtility::jacobiScaleMatrix(innerProductMatrix);
-//    double conditionNumber = SerialDenseMatrixUtility::estimate1NormConditionNumber(innerProductMatrix);
-    double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(innerProductMatrix);
+      SerialDenseWrapper::jacobiScaleMatrix(innerProductMatrix);
+    double conditionNumber = SerialDenseWrapper::estimate2NormConditionNumber(innerProductMatrix);
     if (conditionNumber > myMaxConditionNumber)
     {
       myMaxConditionNumber = conditionNumber;

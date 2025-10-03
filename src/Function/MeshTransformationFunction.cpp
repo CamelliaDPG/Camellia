@@ -12,7 +12,6 @@
 #include "Element.h"
 #include "BasisFactory.h"
 #include "Intrepid_FunctionSpaceTools.hpp"
-#include "SerialDenseMatrixUtility.h"
 #include "GnuPlotUtil.h"
 #include "ParametricSurface.h"
 #include "Projector.h"
