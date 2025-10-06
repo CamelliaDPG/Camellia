@@ -27,8 +27,6 @@
 #include "Epetra_FECrsMatrix.h"
 #include "Epetra_FEVector.h"
 #include "Epetra_Operator.h"
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialDenseVector.h"
 
 #include "BasisCache.h"
 #include "DofInterpreter.h"

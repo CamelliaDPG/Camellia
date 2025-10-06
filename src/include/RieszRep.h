@@ -20,8 +20,6 @@
 #include <Epetra_Map.h>
 
 #include "Camellia_FieldContainer.hpp"
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialDenseVector.h"
 
 #include "Mesh.h"
 #include "ElementType.h"

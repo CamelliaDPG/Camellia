@@ -4,17 +4,15 @@
 
 #include "CondensedDofInterpreter.h"
 
-#include "Epetra_SerialDenseSolver.h"
-#include "Epetra_SerialSymDenseMatrix.h"
-#include "Epetra_SerialSpdDenseSolver.h"
-#include "Epetra_DataAccess.h"
-
 #include "CamelliaDebugUtility.h"
 #include "GDAMinimumRule.h"
 #include "GlobalDofAssignment.h"
 #include "MPIWrapper.h"
 #include "RHS.h"
 #include "SerialDenseWrapper.h"
+
+#include <Teuchos_DataAccess.hpp>
+#include <Teuchos_SerialSpdDenseSolver.hpp>
 
 using namespace Camellia;
 
@@ -128,8 +126,8 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Camel
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuchos::RCP<Epetra_SerialDenseSolver> &fieldSolver,
-                                                   Epetra_SerialSymDenseMatrix &FieldField, Epetra_SerialDenseMatrix &FieldFlux, Epetra_SerialDenseVector &b_field,
+void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuchos::RCP<SerialSpdDenseSolver> &fieldSolver,
+                                                   Teuchos::RCP<SerialSymDenseMatrix> &FieldField, Teuchos::RCP<SerialDenseMatrix> &FieldFlux, Teuchos::RCP<SerialDenseVector> &b_field,
                                                    Camellia::FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices)
 {
   if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
@@ -157,8 +155,8 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuch
     }
   }
   
-  Epetra_SerialDenseMatrix fluxMat;
-  Epetra_SerialDenseVector b_flux;
+  Teuchos::RCP<SerialDenseMatrix> fluxMat;
+  Teuchos::RCP<SerialDenseVector> b_flux;
   getSubmatrices(fieldIndices, fluxIndices, K, FieldField, FieldFlux, fluxMat);
   
 //  cout << "rhs for cell " << cellID << ":\n" << rhs;
@@ -170,8 +168,10 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuch
 //  cout << "b_field:\n" << b_field;
 //  cout << "b_flux:\n" << b_flux;
   
-  Epetra_SerialSpdDenseSolver* spdSolver = new Epetra_SerialSpdDenseSolver();
-  spdSolver->SetMatrix(FieldField);
+  using SerialSpdDenseSolver = Teuchos::SerialSpdDenseSolver<int, Scalar>;
+  
+  SerialSpdDenseSolver* spdSolver = new SerialSpdDenseSolver();
+  spdSolver->setMatrix(FieldField);
   
   fieldSolver = Teuchos::rcp( spdSolver );
   
@@ -180,14 +180,17 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuch
 
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<int> fluxIndices,
-    const Camellia::FieldContainer<Scalar> &K, Epetra_SerialDenseMatrix &K_field,
-    Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux)
+    const Camellia::FieldContainer<Scalar> &K, Teuchos::RCP<SerialSymDenseMatrix> &K_field,
+    Teuchos::RCP<SerialDenseMatrix> &K_coupl, Teuchos::RCP<SerialDenseMatrix> &K_flux)
 {
-  int numFieldDofs = fieldIndices.size();
-  int numFluxDofs = fluxIndices.size();
-  K_field.Reshape(numFieldDofs,numFieldDofs);
-  K_flux.Reshape(numFluxDofs,numFluxDofs);
-  K_coupl.Reshape(numFieldDofs,numFluxDofs); // upper right hand corner matrix - symmetry gets the other
+  int numFieldDofs = static_cast<int>(fieldIndices.size());
+  int numFluxDofs = static_cast<int>(fluxIndices.size());
+  K_field = Teuchos::rcp( new SerialSymDenseMatrix );
+  K_coupl = Teuchos::rcp( new SerialDenseMatrix );
+  K_flux  = Teuchos::rcp( new SerialDenseMatrix );
+  K_field->reshape(numFieldDofs);
+  K_flux->reshape(numFluxDofs,numFluxDofs);
+  K_coupl->reshape(numFieldDofs,numFluxDofs); // upper right hand corner matrix - symmetry gets the other
 
   int i,j,j_flux,j_field;
   i = 0;
@@ -200,14 +203,14 @@ void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<
     for (int fieldColIndex : fieldIndices)
     {
       //      cout << "rowInd, colInd = " << rowInd << ", " << colInd << endl;
-      K_field(i,j_field) = K(fieldRowIndex,fieldColIndex);
+      (*K_field)(i,j_field) = K(fieldRowIndex,fieldColIndex);
       j_field++;
     }
 
     // get field/flux couplings
     for (int fluxColIndex : fluxIndices)
     {
-      K_coupl(i,j_flux) = K(fieldRowIndex,fluxColIndex);
+      (*K_coupl)(i,j_flux) = K(fieldRowIndex,fluxColIndex);
       j_flux++;
     }
     i++;
@@ -220,7 +223,7 @@ void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<
     j = 0;
     for (int fluxColIndex : fluxIndices)
     {
-      K_flux(i,j) = K(fluxRowIndex,fluxColIndex);
+      (*K_flux)(i,j) = K(fluxRowIndex,fluxColIndex);
       j++;
     }
     i++;
@@ -228,28 +231,31 @@ void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const Camellia::FieldContainer<Scalar> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux)
+void CondensedDofInterpreter<Scalar>::getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const Camellia::FieldContainer<Scalar> &b,
+                                                    Teuchos::RCP<SerialDenseVector> &b_field, Teuchos::RCP<SerialDenseVector> &b_flux)
 {
 
-  int numFieldDofs = fieldIndices.size();
-  int numFluxDofs = fluxIndices.size();
-
-  b_field.Resize(numFieldDofs);
-  b_flux.Resize(numFluxDofs);
+  int numFieldDofs = static_cast<int>(fieldIndices.size());
+  int numFluxDofs  = static_cast<int>(fluxIndices.size());
+  
+  b_field = Teuchos::rcp(new SerialDenseVector);
+  b_flux = Teuchos::rcp(new SerialDenseVector);
+  b_field->resize(numFieldDofs);
+  b_flux->resize(numFluxDofs);
   set<int>::iterator dofIt;
   int i;
   i = 0;
+  Scalar *fieldPtr = b_field->values();
   for (dofIt=fieldIndices.begin(); dofIt!=fieldIndices.end(); dofIt++)
   {
     int ind = *dofIt;
-    b_field(i) = b(ind);
-    i++;
+    *fieldPtr++ = b(ind);
   }
   i = 0;
   for (dofIt=fluxIndices.begin(); dofIt!=fluxIndices.end(); dofIt++)
   {
     int ind = *dofIt;
-    b_flux(i) = b(ind);
+    (*b_flux)(i) = b(ind);
     i++;
   }
 }
@@ -415,7 +421,7 @@ std::vector<int> CondensedDofInterpreter<Scalar>::fluxIndexLookupLocalCell(Globa
 }
 
 template <typename Scalar>
-Teuchos::RCP<Epetra_SerialDenseMatrix> CondensedDofInterpreter<Scalar>::fluxToFieldMapForIterativeSolves(GlobalIndexType cellID)
+Teuchos::RCP<Teuchos::SerialDenseMatrix<int,Scalar> > CondensedDofInterpreter<Scalar>::fluxToFieldMapForIterativeSolves(GlobalIndexType cellID)
 {
   // if K_11 is the field-field part of the local stiffness matrix, and K_12 is the field-flux part,
   // return -K_11^(-1) * K_12
@@ -425,41 +431,41 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> CondensedDofInterpreter<Scalar>::fluxToFi
     
     set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
     
-    Epetra_SerialDenseVector b_field;
+    Teuchos::RCP<SerialDenseVector> b_field;
     
     Camellia::FieldContainer<Scalar> K,rhs;
     Camellia::FieldContainer<GlobalIndexType> interpretedDofIndices;
     
-    Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
-    Epetra_SerialSymDenseMatrix FieldField;
-    Epetra_SerialDenseMatrix FieldFlux;
+    Teuchos::RCP<SerialSpdDenseSolver> fieldSolver;
+    Teuchos::RCP<SerialSymDenseMatrix> FieldField;
+    Teuchos::RCP<SerialDenseMatrix> FieldFlux;
     
     getLocalData(cellID, fieldSolver, FieldField, FieldFlux, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
     
-    Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fieldIndices.size(),fluxIndices.size()) );
+    Teuchos::RCP<SerialDenseMatrix> fluxToFieldMap = Teuchos::rcp( new SerialDenseMatrix(fieldIndices.size(),fluxIndices.size()) );
 
-    fieldSolver->SetVectors(*fluxToFieldMap, FieldFlux);
+    fieldSolver->setVectors(fluxToFieldMap, FieldFlux);
     
     bool didEquilibriate = false;
-    if (fieldSolver->ShouldEquilibrate())
+    if (fieldSolver->shouldEquilibrate())
     {
-      fieldSolver->EquilibrateMatrix();
-      fieldSolver->EquilibrateRHS();
+      fieldSolver->equilibrateMatrix();
+      fieldSolver->equilibrateRHS();
       didEquilibriate = true;
     }
     
-    int err = fieldSolver->Solve();
+    int err = fieldSolver->solve();
     if (err != 0)
     {
       cout << "WARNING: in CondensedDofInterpreter, fieldSolver returned error code " << err << endl;
     }
     if (didEquilibriate)
     {
-      fieldSolver->UnequilibrateLHS();
+      fieldSolver->unequilibrateLHS();
     }
     
     // negate
-    fluxToFieldMap->Scale(-1.0);
+    fluxToFieldMap->scale(-1.0);
     
     _fluxToFieldMapForIterativeSolves[cellID] = fluxToFieldMap;
   }
@@ -1038,10 +1044,6 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID does not belong to partition, and isn't in offRankCellsToInclude");
   }
 
-//  if (cellID==14) {
-//    cout << "cellID " << cellID << endl;
-//  }
-
   Camellia::FieldContainer<Scalar> interpretedStiffnessData, interpretedLoadData;
 
   Camellia::FieldContainer<GlobalIndexType> interpretedDofIndices;
@@ -1074,12 +1076,10 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
     if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) == _interpretedToGlobalDofIndexMap.end())
     {
       fieldIndices.insert(dofOrdinal);
-//      interpretedFieldIndices.insert(interpretedDofIndex); // debugging
     }
     else
     {
       fluxIndices.insert(dofOrdinal);
-//      interpretedFluxIndices.insert(interpretedDofIndex); // debugging
     }
   }
 
@@ -1100,61 +1100,62 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
   int fieldCount = fieldIndices.size();
   int fluxCount = fluxIndices.size();
 
-  Epetra_SerialDenseMatrix D, B, K_flux;
+  Teuchos::RCP<SerialDenseMatrix> B, K_flux;
+  Teuchos::RCP<SerialSymDenseMatrix> D;
 
   getSubmatrices(fieldIndices, fluxIndices, interpretedStiffnessData, D, B, K_flux);
 
   // reduce matrix
-  Epetra_SerialDenseMatrix Bcopy = B;
-  Epetra_SerialDenseSolver solver;
+  Teuchos::RCP<SerialDenseMatrix> Bcopy = Teuchos::rcp( new SerialDenseMatrix(*B) );
+  SerialSpdDenseSolver solver;
 
-  Epetra_SerialDenseMatrix DinvB(fieldCount,fluxCount);
-  solver.SetMatrix(D);
-  solver.SetVectors(DinvB, Bcopy);
+  Teuchos::RCP<SerialDenseMatrix> DinvB = Teuchos::rcp(new SerialDenseMatrix(fieldCount,fluxCount));
+  solver.setMatrix(D);
+  solver.setVectors(DinvB, Bcopy);
   bool equilibrated = false;
-  if ( solver.ShouldEquilibrate() )
+  if ( solver.shouldEquilibrate() )
   {
-    solver.EquilibrateMatrix();
-    solver.EquilibrateRHS();
+    solver.equilibrateMatrix();
+    solver.equilibrateRHS();
     equilibrated = true;
   }
-  int err = solver.Solve();
+  int err = solver.solve();
   if (err != 0)
   {
-    cout << "CondensedDofInterpreter: Epetra_SerialDenseMatrix::Solve() returned error code " << err << endl;
+    cout << "CondensedDofInterpreter: SerialDenseMatrix::Solve() returned error code " << err << endl;
     cout << "matrix:\n" << D;
   }
   if (equilibrated)
-    solver.UnequilibrateLHS();
+    solver.unequilibrateLHS();
 
-  K_flux.Multiply('T','N',-1.0,B,DinvB,1.0); // assemble condensed matrix - A - B^T*inv(D)*B
+  K_flux->multiply(Teuchos::TRANS,Teuchos::NO_TRANS,-1.0,*B,*DinvB,1.0); // assemble condensed matrix - A - B^T*inv(D)*B
 
   // reduce vector
-  Epetra_SerialDenseVector Dinvf(fieldCount);
-  Epetra_SerialDenseVector BtDinvf(fluxCount);
-  Epetra_SerialDenseVector b_field, b_flux;
+  Teuchos::RCP<SerialDenseVector> Dinvf   = Teuchos::rcp(new SerialDenseVector(fieldCount));
+  Teuchos::RCP<SerialDenseVector> BtDinvf = Teuchos::rcp(new SerialDenseVector(fluxCount));
+  Teuchos::RCP<SerialDenseVector> b_field, b_flux;
   getSubvectors(fieldIndices, fluxIndices, interpretedLoadData, b_field, b_flux);
 
-  solver.SetVectors(Dinvf, b_field);
+  solver.setVectors(Dinvf, b_field);
   equilibrated = false;
   //    solver.SetMatrix(D);
-  if ( solver.ShouldEquilibrate() )
+  if ( solver.shouldEquilibrate() )
   {
-    solver.EquilibrateMatrix();
-    solver.EquilibrateRHS();
+    solver.equilibrateMatrix();
+    solver.equilibrateRHS();
     equilibrated = true;
   }
-  err = solver.Solve();
+  err = solver.solve();
   if (err != 0)
   {
-    cout << "CondensedDofInterpreter: Epetra_SerialDenseMatrix::Solve() returned error code " << err << endl;
+    cout << "CondensedDofInterpreter: SerialDenseMatrix::Solve() returned error code " << err << endl;
     cout << "matrix:\n" << D;
   }
 
   if (equilibrated)
-    solver.UnequilibrateLHS();
+    solver.unequilibrateLHS();
 
-  b_flux.Multiply('T','N',-1.0,B,Dinvf,1.0); // condensed RHS - f - B^T*inv(D)*g
+  b_flux->multiply(Teuchos::TRANS,Teuchos::NO_TRANS,-1.0,*B,*Dinvf,1.0); // condensed RHS - f - B^T*inv(D)*g
 
   // resize output Camellia::FieldContainers
   globalDofIndices.resize(fluxCount);
@@ -1181,10 +1182,10 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
 
   for (int i=0; i<fluxCount; i++)
   {
-    globalLoadData(i) = b_flux(i);
+    globalLoadData(i) = (*b_flux)(i);
     for (int j=0; j<fluxCount; j++)
     {
-      globalStiffnessData(i,j) = K_flux(i,j);
+      globalStiffnessData(i,j) = (*K_flux)(i,j);
     }
   }
 }
@@ -1201,14 +1202,14 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
   // get elem data and submatrix data
   set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
 
-  Epetra_SerialDenseVector b_field;
+  Teuchos::RCP<SerialDenseVector> b_field;
   
   Camellia::FieldContainer<Scalar> K,rhs;
   Camellia::FieldContainer<GlobalIndexType> interpretedDofIndices;
   
-  Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
-  Epetra_SerialDenseMatrix B;
-  Epetra_SerialSymDenseMatrix D;
+  Teuchos::RCP<SerialSpdDenseSolver> fieldSolver;
+  Teuchos::RCP<SerialDenseMatrix> B;
+  Teuchos::RCP<SerialSymDenseMatrix> D;
   if (! _skipLocalFields)
     getLocalData(cellID, fieldSolver, D, B, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
   else
@@ -1266,13 +1267,13 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
   
   if (_skipLocalFields) return; // then we are done...
   
-  Epetra_SerialDenseVector field_dofs(fieldCount);
-  Epetra_SerialDenseVector flux_dofs(fluxCount);
+  Teuchos::RCP<SerialDenseVector> field_dofs = Teuchos::rcp(new SerialDenseVector(fieldCount));
+  Teuchos::RCP<SerialDenseVector> flux_dofs  = Teuchos::rcp(new SerialDenseVector(fluxCount));
   
   int fluxOrdinal=0;
   for (set<int>::iterator fluxIt = fluxIndices.begin(); fluxIt != fluxIndices.end(); fluxIt++, fluxOrdinal++)
   {
-    flux_dofs[fluxOrdinal] = localCoefficients[*fluxIt];
+   (*flux_dofs)[fluxOrdinal] = localCoefficients[*fluxIt];
   }
   
   //  cout << "K:\n" << K;
@@ -1283,25 +1284,25 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
   //  cout << "fluxMat:\n" << fluxMat;
   //
   
-  b_field.Multiply('N','N',-1.0,B,flux_dofs,1.0);
+  b_field->multiply(Teuchos::NO_TRANS,Teuchos::NO_TRANS,-1.0,*B,*flux_dofs,1.0);
   
   // solve for field dofs
-  fieldSolver->SetVectors(field_dofs,b_field);
+  fieldSolver->setVectors(field_dofs,b_field);
   bool equilibrated = false;
-  if ( fieldSolver->ShouldEquilibrate() )
+  if ( fieldSolver->shouldEquilibrate() )
   {
-    fieldSolver->EquilibrateMatrix();
-    fieldSolver->EquilibrateRHS();
+    fieldSolver->equilibrateMatrix();
+    fieldSolver->equilibrateRHS();
     equilibrated = true;
   }
-  fieldSolver->Solve();
+  fieldSolver->solve();
   if (equilibrated)
-    fieldSolver->UnequilibrateLHS();
+    fieldSolver->unequilibrateLHS();
   
   int fieldOrdinal = 0; // index into field_dofs
   for (set<int>::iterator fieldIt = fieldIndices.begin(); fieldIt != fieldIndices.end(); fieldIt++, fieldOrdinal++)
   {
-    localCoefficients[*fieldIt] = field_dofs[fieldOrdinal];
+    localCoefficients[*fieldIt] = (*field_dofs)[fieldOrdinal];
   }
   
 //  cout << "******* b_field:\n" << b_field;

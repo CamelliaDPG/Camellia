@@ -9,10 +9,6 @@
 
 #include "Camellia_FieldContainer.hpp"
 
-#include "Epetra_RowMatrix.h"
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_DataAccess.h"
-
 #include "Teuchos_SerialDenseMatrix.hpp"
 
 #include <set>

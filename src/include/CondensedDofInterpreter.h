@@ -21,9 +21,13 @@
 #include "Epetra_Vector.h"
 #include "Mesh.h"
 #include "LagrangeConstraints.h"
-#include "Epetra_SerialDenseSolver.h"
-#include "Epetra_SerialDenseVector.h"
 #include "RHS.h"
+
+#include <Teuchos_SerialDenseMatrix.hpp>
+#include <Teuchos_SerialSymDenseMatrix.hpp>
+#include <Teuchos_SerialDenseSolver.hpp>
+#include <Teuchos_SerialSpdDenseSolver.hpp>
+#include <Teuchos_SerialDenseVector.hpp>
 
 namespace Camellia
 {
@@ -39,6 +43,11 @@ namespace Camellia
 template <typename Scalar>
 class CondensedDofInterpreter : public DofInterpreter
 {
+  using SerialDenseMatrix = Teuchos::SerialDenseMatrix<int, Scalar>;
+  using SerialDenseVector = Teuchos::SerialDenseVector<int, Scalar>;
+  using SerialSymDenseMatrix = Teuchos::SerialSymDenseMatrix<int, Scalar>;
+  using SerialDenseSolver = Teuchos::SerialDenseSolver<int, Scalar>;
+  using SerialSpdDenseSolver = Teuchos::SerialSpdDenseSolver<int, Scalar>;
 protected:
   map<GlobalIndexType, Camellia::FieldContainer<Scalar> > _localLoadVectors;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
 private:
@@ -60,7 +69,7 @@ private:
   
   map<GlobalIndexType, Camellia::FieldContainer<Scalar> > _localStiffnessMatrices; // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
   map<GlobalIndexType, Camellia::FieldContainer<GlobalIndexType> > _localInterpretedDofIndices;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
-  map<GlobalIndexType, Teuchos::RCP<Epetra_SerialDenseMatrix> > _fluxToFieldMapForIterativeSolves;
+  map<GlobalIndexType, Teuchos::RCP<SerialDenseMatrix> > _fluxToFieldMapForIterativeSolves;
   
   GlobalIndexType _myGlobalDofIndexOffset;
   GlobalIndexType _myGlobalDofIndexCount;
@@ -74,10 +83,11 @@ private:
   map<GlobalIndexType, GlobalIndexType> _interpretedToGlobalDofIndexMap; // maps from the interpreted dof indices to the new ("outer") global dof indices (we only store the ones that are seen by the local MPI rank)
 
   void getSubmatrices(set<int> fieldIndices, set<int> fluxIndices,
-                      const Camellia::FieldContainer<Scalar> &K, Epetra_SerialDenseMatrix &K_field,
-                      Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux);
+                      const Camellia::FieldContainer<Scalar> &K, Teuchos::RCP<SerialSymDenseMatrix> &K_field,
+                      Teuchos::RCP<SerialDenseMatrix> &K_coupl, Teuchos::RCP<SerialDenseMatrix> &K_flux);
 
-  void getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const Camellia::FieldContainer<Scalar> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux);
+  void getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const Camellia::FieldContainer<Scalar> &b,
+                     Teuchos::RCP<SerialDenseVector> &b_field, Teuchos::RCP<SerialDenseVector> &b_flux);
 
   void initializeGlobalDofIndices();
 
@@ -88,8 +98,8 @@ private:
                     Camellia::FieldContainer<GlobalIndexType> &interpretedDofIndices);
   
   // new version:
-  void getLocalData(GlobalIndexType cellID, Teuchos::RCP<Epetra_SerialDenseSolver> &fieldSolver,
-                    Epetra_SerialSymDenseMatrix &FieldField, Epetra_SerialDenseMatrix &FluxField, Epetra_SerialDenseVector &b_field,
+  void getLocalData(GlobalIndexType cellID, Teuchos::RCP<SerialSpdDenseSolver> &fieldSolver,
+                    Teuchos::RCP<SerialSymDenseMatrix> &FieldField, Teuchos::RCP<SerialDenseMatrix> &FluxField, Teuchos::RCP<SerialDenseVector> &b_field,
                     Camellia::FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices);
   
   bool varDofsAreUsuallyCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering) const;
@@ -110,7 +120,7 @@ public:
   // ! Returns a matrix with shape field x flux for specified cellID, which allows determination of field
   // ! coefficients from flux coefficients, under the assumption that the field portion of the RHS is 0
   // ! (a reasonable supposition when doing an iterative solve).
-  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMapForIterativeSolves(GlobalIndexType cellID);
+  Teuchos::RCP<SerialDenseMatrix> fluxToFieldMapForIterativeSolves(GlobalIndexType cellID);
   
   // ! returns row indices as found in e.g. fluxToFieldMap for the specified field ID
   std::vector<int> fieldRowIndices(GlobalIndexType cellID, int condensibleVarID);

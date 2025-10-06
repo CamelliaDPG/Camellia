@@ -40,6 +40,7 @@ struct TimeStatistics
 class GMGOperator : public TOperator<double>, public Narrator
 {
   using Scalar = double;
+  using SerialDenseMatrix = Teuchos::SerialDenseMatrix<int, Scalar>;
 public:
   enum SmootherChoice
   {
@@ -96,8 +97,8 @@ private:
   // map from trial ordering to a matrix that will "duplicate" the fluxes as dictated by conformity,
   // required for h-refinements in context of static condensation.
   // see comment in getLocalCoefficientMap() implementation
-  mutable map<DofOrdering*, Teuchos::RCP<Epetra_SerialDenseMatrix>> _fluxDuplicationMap;
-  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const;
+  mutable map<DofOrdering*, Teuchos::RCP<SerialDenseMatrix>> _fluxDuplicationMap;
+  Teuchos::RCP<SerialDenseMatrix> fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const;
 
   mutable Teuchos::RCP<BasisReconciliation> _br;
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)

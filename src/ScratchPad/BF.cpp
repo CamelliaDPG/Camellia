@@ -5,7 +5,6 @@
 #include "BF.h"
 #include "RieszRep.h"
 
-#include "BilinearFormUtility.h"
 #include "Function.h"
 #include "PreviousSolutionFunction.h"
 #include "LinearTerm.h"
@@ -154,7 +153,70 @@ namespace Camellia
   {
     applyBilinearFormData(trialValues, testValues, trialID, testID, operatorIndex, basisCache->getPhysicalCubaturePointsFC());
   }
-  
+
+  template <typename Scalar>
+  bool TBF<Scalar>::checkForZeroRowsAndColumns(std::string name, Camellia::FieldContainer<Scalar> &array,
+                                               const bool checkRows, const bool checkCols,
+                                               const bool emitConsoleWarnings)
+  {
+    // for now, only support rank 3 FCs
+    double tol = 1e-15;
+    if ( array.rank() != 3)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION( array.rank() != 3, std::invalid_argument, "checkForZeroRowsAndColumns only supports rank-3 Camellia::FieldContainers.");
+    }
+    int numCells = array.dimension(0);
+    int numRows = array.dimension(1);
+    int numCols = array.dimension(2);
+    bool zeroRowOrColFound = false;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      if (checkRows)
+      {
+        for (int i=0; i<numRows; i++)
+        {
+          bool nonZeroFound = false;
+          int j=0;
+          while ((!nonZeroFound) && (j<numCols))
+          {
+            if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
+            j++;
+          }
+          if ( ! nonZeroFound )
+          {
+            if (emitConsoleWarnings)
+            {
+              std::cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << std::endl;
+            }
+            zeroRowOrColFound = true;
+          }
+        }
+      }
+      if (checkCols)
+      {
+        for (int j=0; j<numCols; j++)
+        {
+          bool nonZeroFound = false;
+          int i=0;
+          while ((!nonZeroFound) && (i<numRows))
+          {
+            if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
+            i++;
+          }
+          if ( ! nonZeroFound )
+          {
+            if (emitConsoleWarnings)
+            {
+              std::cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
+            }
+            zeroRowOrColFound = true;
+          }
+        }
+      }
+    }
+    return !zeroRowOrColFound; // return TRUE if no zero row or col found
+  }
+
   template <typename Scalar>
   bool TBF<Scalar>::checkSymmetry(Camellia::FieldContainer<Scalar> &innerProductMatrix)
   {
@@ -633,7 +695,7 @@ namespace Camellia
         checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
         checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
       }
-      if (! BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns("TBF stiffness", stiffness, checkRows, checkCols) )
+      if (! checkForZeroRowsAndColumns("TBF stiffness", stiffness, checkRows, checkCols) )
       {
         // tell trialOrderPtr about its VarFactory, for richer output
         elemType->trialOrderPtr->setVarFactory(_varFactory, true); // true: is trial ordering
@@ -889,7 +951,7 @@ namespace Camellia
     {
       bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
       bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
-      if (! BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns("pre-stiffness", stiffness, checkRows, checkCols) )
+      if (! checkForZeroRowsAndColumns("pre-stiffness", stiffness, checkRows, checkCols) )
       {
         cout << "pre-stiffness matrix in which zero columns were found:\n";
         cout << stiffness;

@@ -9,7 +9,6 @@
 //
 //
 
-#include "Epetra_SerialDenseMatrix.h"
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Camellia.h"
@@ -174,54 +173,7 @@ namespace
     TEST_EQUALITY(initialByteCount + newBytesExpected, hostToDeviceDeepCopyRecord.bytesDeepCopied);
     TEST_EQUALITY(initialCount + 1, hostToDeviceDeepCopyRecord.deepCopyCount);
   }
-  
-  /* NVR Jan 6 2021
-     Commented out the convertSDMToFC_DataOwnership test.  It started failing, and I'm not convinced that it helps with the
-     problem it claims to; it looks to me like the issue with solveSPDSystemMultipleRHS() was solved by adding the line
-   
-        x.resize(x.dimension(1), x.dimension(0));
-     
-     I'm also not sure I understand what is meant by ownership of the data.  If there's a bug exposed by the test failure,
-     it seems likely it's in Teuchos, rather than in Camellia, and it's not clear that it's a bug that actually makes any
-     difference to us at all.
-   */
-//  TEUCHOS_UNIT_TEST( FieldContainer, convertSDMToFC_DataOwnership )
-//  {
-//    // here, we are attempting to isolate an issue in which (it appears) the optimized build
-//    // does something different with respect to data ownership during a call to solveSPDSystemMultipleRHS()
-//    // -- the optimized version does not have the final FieldContainer owning the data, even though it was
-//    // produced via a copy.  The somewhat convoluted construction below is an artifact of trying to replicate the
-//    // code path that leads to this issue.
-//    const int M = 40;
-//    const int N = 15;
-//    Epetra_SerialDenseMatrix dataSDM(M,N);
-//
-//    Teuchos::Array<int> dataDim(2);
-//    dataDim[0] = N;
-//    dataDim[1] = M;
-//
-//    Camellia::FieldContainer<double> data(1,N,M);
-//    for (int i=0; i<M; i++)
-//    {
-//      for (int j=0; j<N; j++)
-//      {
-//        dataSDM(i,j) = i*j;
-//      }
-//    }
-//    bool shouldDeepCopy = false;
-//    bool shouldOwnData = false;
-//
-//    Camellia::FieldContainer<double> dataFC(dataDim, &data(0,0,0), shouldDeepCopy, shouldOwnData); // this is the line we had to change to get things to pass.  We had been using 'false' (default) values for the latter two arguments.  I'm not entirely sure why this should matter (i.e., there may be a bug lurking in the FC construction), but the extra deep copy here probably won't hurt performance too much, and may avoid a memory leak.
-//
-//    bool ownsMemory = dataFC.getData().has_ownership();
-//    TEST_EQUALITY(ownsMemory, shouldOwnData);
-//
-//    SerialDenseWrapper::convertSDMToFC(dataFC, dataSDM);
-//
-//    ownsMemory = dataFC.getData().has_ownership();
-//    TEST_EQUALITY(ownsMemory, shouldOwnData);
-//  }
-  
+
   TEUCHOS_UNIT_TEST( FieldContainer, ViewKeptInSync )
   {
     Camellia::FieldContainer<double> testContainer(3,3,3);

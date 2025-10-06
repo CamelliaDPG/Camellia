@@ -56,6 +56,7 @@ extern "C" void HPM_Stop(char *);
 #endif
 
 using Scalar = double;
+using SerialDenseMatrix = Teuchos::SerialDenseMatrix<int,double>;
 
 GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
@@ -691,7 +692,7 @@ void GMGOperator::exportFunction()
   }
 }
 
-Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const
+Teuchos::RCP<SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const
 {
   // a null return value indicates that the operator is the identity (this happens for non-conforming ElementTypes)
  
@@ -751,7 +752,7 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseC
     Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*epetraSerialComm);
     Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
     
-    Teuchos::RCP<Epetra_SerialDenseMatrix> fluxMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fluxIndices.size(),fluxIndices.size()) );
+    Teuchos::RCP<SerialDenseMatrix> fluxMap = Teuchos::rcp( new SerialDenseMatrix(fluxIndices.size(),fluxIndices.size()) );
     
     int fluxMapColumn = 0;
     for (int fluxIndex : fluxIndices)
@@ -1016,7 +1017,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     BasisCachePtr fineBasisCache   = BasisCache::basisCacheForCell(_fineMesh, fineCellID);
     BasisCachePtr coarseBasisCache = BasisCache::basisCacheForCell(_coarseMesh, coarseCellID);
     
-    Teuchos::RCP<Epetra_SerialDenseMatrix> coarseFluxToFieldMapMatrix;
+    Teuchos::RCP<Teuchos::SerialDenseMatrix<int, Scalar> > coarseFluxToFieldMapMatrix;
     vector<int> fluxOrdinalToLocalDofIndex;
     set<int> condensibleVarIDs;
     MeshPtr coarseSingleCellMesh;
@@ -1028,12 +1029,14 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       fluxOrdinalToLocalDofIndex = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
       condensibleVarIDs = condensedDofInterpreterCoarse->condensibleVariableIDs();
 
-      Teuchos::RCP<Epetra_SerialDenseMatrix> fluxDuplicationMap = fluxDuplicationMapForCoarseCell(coarseCellID);
+      Teuchos::RCP<SerialDenseMatrix> fluxDuplicationMap = fluxDuplicationMapForCoarseCell(coarseCellID);
       if (fluxDuplicationMap != Teuchos::null)
       {
-        Teuchos::RCP<Epetra_SerialDenseMatrix> modifiedMatrix = Teuchos::rcp( new Epetra_SerialDenseMatrix(coarseFluxToFieldMapMatrix->M(),
-                                                                                                           coarseFluxToFieldMapMatrix->N()));
-        coarseFluxToFieldMapMatrix->Apply(*fluxDuplicationMap, *modifiedMatrix);
+        Teuchos::RCP<Teuchos::SerialDenseMatrix<int,Scalar>> modifiedMatrix
+        = Teuchos::rcp( new Teuchos::SerialDenseMatrix<int,Scalar>(coarseFluxToFieldMapMatrix->numRows(),
+                                                                   coarseFluxToFieldMapMatrix->numCols()));
+        // resolves to:
+        modifiedMatrix->multiply(Teuchos::NO_TRANS, Teuchos::NO_TRANS, 1, *coarseFluxToFieldMapMatrix, *fluxDuplicationMap, 0.0);
         coarseFluxToFieldMapMatrix = modifiedMatrix;
       }
       TimeLogger::sharedInstance()->stopTimer(timerHandle);
@@ -1225,7 +1228,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 //                print("weights, coarseOrdinals", weights.coarseOrdinals);
 //                cout << "weights, weights:\n" << weights.weights;
                 
-                // extract a Epetra_SerialDenseMatrix corresponding to just the varTracedID dofs
+                // extract a SerialDenseMatrix corresponding to just the varTracedID dofs
                 set<int> volumeBasisOrdinals = weights.coarseOrdinals;
                 vector<int> fieldTracedIndices = condensedDofInterpreterCoarse->fieldRowIndices(coarseCellID, varTracedID);
                 vector<int> volumeBasisOrdinalsForFields;
@@ -1239,13 +1242,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                   }
                 }
                 
-                Epetra_SerialDenseMatrix coarseFluxToFieldTraced(volumeBasisOrdinalsForFields.size(),coarseFluxToFieldMapMatrix->ColDim()); // columns here correspond to our coarse dof indices -- what we map to
+                SerialDenseMatrix coarseFluxToFieldTraced(volumeBasisOrdinalsForFields.size(),coarseFluxToFieldMapMatrix->numCols()); // columns here correspond to our coarse dof indices -- what we map to
                 
                 int reducedRowIndex = 0;
                 for (int volumeBasisOrdinal : volumeBasisOrdinalsForFields)
                 {
                   int fieldTracedIndex = fieldTracedIndices[volumeBasisOrdinal];
-                  int numCols = coarseFluxToFieldMapMatrix->ColDim();
+                  int numCols = coarseFluxToFieldMapMatrix->numCols();
                   for (int col = 0; col < numCols; col++)
                   {
                     coarseFluxToFieldTraced(reducedRowIndex,col) = (*coarseFluxToFieldMapMatrix)(fieldTracedIndex,col);
@@ -1259,11 +1262,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                   continue;
                 }
                 double *firstEntry = (double *) &weights.weights[0];
-                Epetra_SerialDenseMatrix fineBasisToCoarseFieldMatrix(::Copy,firstEntry,m,m,n);
-                fineBasisToCoarseFieldMatrix.SetUseTranspose(true); // use transpose, because SDM is column-major, while FC is row-major
+                SerialDenseMatrix fineBasisToCoarseFieldMatrix(Teuchos::Copy,firstEntry,m,m,n); // probably could do Teuchos::View here
+                SerialDenseMatrix fineBasisToCoarseFluxMatrix(weights.fineOrdinals.size(),coarseFluxToFieldTraced.numCols());
                 
-                Epetra_SerialDenseMatrix fineBasisToCoarseFluxMatrix(weights.fineOrdinals.size(),coarseFluxToFieldTraced.ColDim());
-                fineBasisToCoarseFieldMatrix.Apply(coarseFluxToFieldTraced, fineBasisToCoarseFluxMatrix);
+                // TRANS: SDM col-major, FC row-major
+                int success = fineBasisToCoarseFluxMatrix.multiply(Teuchos::TRANS,Teuchos::NO_TRANS, 1.0,
+                                                                   fineBasisToCoarseFieldMatrix, coarseFluxToFieldTraced,
+                                                                   0.0);
                 
                 vector<GlobalIndexType> coarseDofIndicesVector;
                 
@@ -1271,10 +1276,10 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 vector<unsigned> nonZeroColumnIndices;
                 map<GlobalIndexType,unsigned> columnOrdinalForCoarseDofIndex; // allows sorting by coarse dof index
                 double tol = 1e-15;
-                for (int j=0; j<fineBasisToCoarseFluxMatrix.ColDim(); j++)
+                for (int j=0; j<fineBasisToCoarseFluxMatrix.numCols(); j++)
                 {
 //                  bool nonZero = false;
-                  for (int i=0; i<fineBasisToCoarseFluxMatrix.RowDim(); i++)
+                  for (int i=0; i<fineBasisToCoarseFluxMatrix.numRows(); i++)
                   {
                     if (abs(fineBasisToCoarseFluxMatrix(i,j)) > tol)
                     {
@@ -1292,7 +1297,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                   permutedNonZeroColumnIndices.push_back(nonZeroColumnIndices[entry.second]);
                 }
                 
-                weights.weights.resize(fineBasisToCoarseFluxMatrix.RowDim(),nonZeroColumnIndices.size());
+                weights.weights.resize(fineBasisToCoarseFluxMatrix.numRows(),nonZeroColumnIndices.size());
                 for (int i=0; i<weights.weights.dimension(0); i++)
                 {
                   for (int j=0; j<weights.weights.dimension(1); j++)

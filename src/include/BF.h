@@ -90,6 +90,10 @@ public:
                                      BasisCachePtr basisCache);
   // default implementation calls BasisCache-less version
 
+  static bool checkForZeroRowsAndColumns(std::string name, Camellia::FieldContainer<Scalar> &array,
+                                         const bool checkRows = true, const bool checkCols = true,
+                                         const bool emitConsoleWarnings = true);
+  
   TBFPtr<Scalar> copy() const;
   
   // BilinearForm implementation:
