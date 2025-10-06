@@ -54,20 +54,6 @@ namespace Camellia
 
     static void jacobiScaleMatrix(Camellia::FieldContainer<double> &A);
     
-    static bool computeEquilibrationScaling(Teuchos::SerialDenseMatrix<int, double> &A,
-                                            std::vector<double> &rowScalings, std::vector<double> &colScalings);
-    
-    static bool computeEquilibrationScalingSPD(Teuchos::SerialDenseMatrix<int, double> &A_SPD,
-                                               std::vector<double> &scalings);
-    
-    static void equilibrateMatrix(Teuchos::SerialDenseMatrix<int, double> &A,
-                                  const std::vector<double> &rowScalings, const std::vector<double> &colScalings);
-    
-    static void equilibrateRHS(Teuchos::SerialDenseMatrix<int, double> &b,
-                               const std::vector<double> &rowScalings);
-    
-    static void unequilibrateLHS(Teuchos::SerialDenseMatrix<int, double> &x, const std::vector<double> &colScalings);
-    
     static double estimate2NormConditionNumber(Camellia::FieldContainer<double> &A, bool ignoreZeroEigenvalues = true);
 
     // ! returns a lambda function that depends dynamically on the values in index, and at generation time on the dimensions of fc.  Intended to provide a faster version than either Camellia::FieldContainer or the above getEnumeration() (which should perhaps be deleted).

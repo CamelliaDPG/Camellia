@@ -14,10 +14,14 @@
 
 #include "Teuchos_LAPACK.hpp"
 #include "Teuchos_SerialDenseMatrix.hpp"
-#include "Teuchos_SerialDenseVector.hpp"
+#include "Teuchos_SerialDenseSolver.hpp"
 #include "Teuchos_SerialQRDenseSolver.hpp"
+#include "Teuchos_SerialSpdDenseSolver.hpp"
+#include "Teuchos_SerialDenseVector.hpp"
 
 #include "MPIWrapper.h"
+
+using SerialDenseSolver = Teuchos::SerialDenseSolver<int,double>;
 
 namespace Camellia {
   
@@ -107,70 +111,6 @@ namespace Camellia {
       else condest = 1.0 / rcond;
     }
     return condest;
-  }
-  
-  //! Mimics what Epetra SerialDenseMatrix did.
-  bool SerialDenseWrapper::computeEquilibrationScaling(Teuchos::SerialDenseMatrix<int, double> &A,
-                                                       std::vector<double> &rowScalings, std::vector<double> &colScalings)
-  {
-    bool shouldEquilibrate = false;
-    
-    const int M = A.numRows();
-    const int N = A.numCols();
-    rowScalings.resize(M);
-    colScalings.resize(N);
-    
-    double ROWCND, COLCND, AMAX;
-    int INFO;
-    
-    Teuchos::LAPACK<int,double> lapack;
-    
-    lapack.GEEQU(M, N, A.values(), A.stride(),
-                 rowScalings.data(), colScalings.data(),
-                 &ROWCND, &COLCND, &AMAX, &INFO);
-    if (INFO != 0)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GEEQU returned error code " << INFO);
-    }
-    
-    const double Epetra_Overflow = 1.79E308; // Used to test if equilibration should be done.
-    const double Epetra_Underflow = 2.23E-308;
-
-    if (COLCND < 0.1 || ROWCND < 0.1 || AMAX < Epetra_Underflow || AMAX > Epetra_Overflow)
-    {
-      shouldEquilibrate = true;
-    }
-
-    return shouldEquilibrate;
-  }
-
-  bool SerialDenseWrapper::computeEquilibrationScalingSPD(Teuchos::SerialDenseMatrix<int, double> &A_SPD, std::vector<double> &scalings)
-  {
-    const int N = A_SPD.numRows();
-    scalings.resize(N);
-        
-    double SCOND, AMAX;
-    int INFO;
-
-    Teuchos::LAPACK<int,double> lapack;
-    
-    lapack.POEQU(N, A_SPD.values(), A_SPD.stride(), scalings.data(), &SCOND, &AMAX, &INFO);
-    if (INFO != 0)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "POEQU returned error code " << INFO);
-    }
-    
-    bool shouldEquilibrate = false;
-
-    const double Epetra_Overflow = 1.79E308; // Used to test if equilibration should be done.
-    const double Epetra_Underflow = 2.23E-308;
-    
-    if (SCOND < 0.1 || AMAX < Epetra_Underflow || AMAX > Epetra_Overflow)
-    {
-      shouldEquilibrate = true;
-    }
-
-    return shouldEquilibrate;
   }
 
   Teuchos::SerialDenseMatrix<int, double> SerialDenseWrapper::convertFCToSDM(const Camellia::FieldContainer<double> &A, bool transpose, Teuchos::DataAccess CV)
@@ -503,39 +443,6 @@ namespace Camellia {
     return INFO;
   }
   
-  void SerialDenseWrapper::equilibrateMatrix(Teuchos::SerialDenseMatrix<int, double> &A,
-                                             const std::vector<double> &rowScalings, const std::vector<double> &colScalings)
-  {
-    auto M   = A.numRows();
-    auto N   = A.numCols();
-    auto LDA = A.stride();
-    double * ptr;
-    for (int j=0; j<N; j++) {
-      ptr = A.values() + j*LDA;
-      const double &s1 = colScalings[j];
-      for (int i=0; i<M; i++) {
-        *ptr = *ptr*s1*rowScalings[i];
-        ptr++;
-      }
-    }
-  }
-
-  void SerialDenseWrapper::equilibrateRHS(Teuchos::SerialDenseMatrix<int, double> &b, const std::vector<double> &rowScalings)
-  {
-    auto M     = b.numRows();
-    auto NRHS  = b.numCols();
-    auto LDB = b.stride();
-    
-    double * ptr;
-    for (int j=0; j<NRHS; j++) {
-      ptr = b.values() + j*LDB;
-      for (int i=0; i<M; i++) {
-        *ptr = *ptr*rowScalings[i];
-        ptr++;
-      }
-    }
-  }
-
   int SerialDenseWrapper::extractFCFromTMatrix(TMatrixPtr<double> A, Camellia::FieldContainer<double> &A_fc)
   {
     int myRank = A->getComm()->getRank();
@@ -1083,11 +990,10 @@ namespace Camellia {
     // solves Ax = b, where
     // A = (N,N)
     // x, b = (N, M)
+    SerialDenseSolver solver;
+    
     int N = A.dimension(0);
     int nRHS = b.dimension(1);
-    
-    // take care of the fact that SDMs are transposed relative to FCs:
-    transposeMatrix(b);
     
     if (!useATranspose)
     {
@@ -1095,47 +1001,37 @@ namespace Camellia {
     }
     
     auto AMatrix = convertFCToSDM(A, useATranspose);
-    auto bxVectors = convertFCToSDM(b);
-    Teuchos::SerialDenseMatrix<int,double> xVectors(N,nRHS);
+    auto bxVectors = convertFCToSDM(b,false,Teuchos::Copy);
     
-    std::vector<double> rowScalings, colScalings;
-    bool shouldEquilibrate = computeEquilibrationScaling(AMatrix, rowScalings, colScalings);
+    auto AMatrixPtr   = Teuchos::rcp(&AMatrix, false);
+    auto bxVectorsPtr = Teuchos::rcp(&bxVectors, false);
     
-    if (shouldEquilibrate)
+    solver.setMatrix(AMatrixPtr);
+    solver.setVectors(bxVectorsPtr, bxVectorsPtr);
+    
+    bool equilibrated = false;
+    if (solver.shouldEquilibrate())
     {
-      equilibrateMatrix(AMatrix,rowScalings,colScalings);
-      equilibrateRHS(bxVectors,rowScalings);
+      solver.equilibrateMatrix();
+      solver.equilibrateRHS();
+      equilibrated = true;
     }
     
-    std::vector<int> piv(N);
-    Teuchos::LAPACK<int,double> lapack;
-    int info = 0;
-    lapack.GETRF(
-      N,          // # rows
-      N,          // # cols
-      AMatrix.values(), // pointer to A(0,0)
-      AMatrix.stride(), // leading dimension (stride)
-      piv.data(),// pivot indices (1-based)
-      &info);
-    
-    TEUCHOS_TEST_FOR_EXCEPTION(info < 0, std::runtime_error, "GETRF: illegal argument at position " << -info);
-    TEUCHOS_TEST_FOR_EXCEPTION(info > 0, std::runtime_error, "GETRF: U(" << info << "," << info << ") is zero; matrix is singular.");
-    
-    const char trans = 'N'; // no transpose
-    lapack.GETRS(
-      trans,
-      N,                 // # rows
-      nRHS,              // # cols
-      AMatrix.values(),  // LU factors from GETRF
-      AMatrix.stride(),  // leading dimension
-      piv.data(), // pivot indices
-      bxVectors.values(),  // RHS on entry, solution on exit
-      bxVectors.stride(),  // leading dimension
-      &info);
-    
-    if (shouldEquilibrate)
+    int info = solver.solve();
+    if (info != 0)
     {
-      unequilibrateLHS(bxVectors, colScalings);
+      std::cout << "solveSystemMultipleRHS: failed to solve with error " << info << std::endl;
+      return info;
+    }
+    
+    if (equilibrated)
+    {
+      info = solver.unequilibrateLHS();
+      if (info != 0)
+      {
+        std::cout << "solveSystemMultipleRHS: unequilibration FAILED with error: " << info << std::endl;
+        return info;
+      }
     }
     
     // if we transposed A above, transpose it back here--leaving things as we found them
@@ -1144,9 +1040,7 @@ namespace Camellia {
       transposeMatrix(A);
     }
     
-    transposeMatrix(b);
-    
-    x.resize(x.dimension(1),x.dimension(0)); //transposeMatrix(x);
+    x.resize(x.dimension(1),x.dimension(0));
     convertSDMToFC(x,bxVectors);
     transposeMatrix(x);
     
@@ -1297,28 +1191,7 @@ namespace Camellia {
     int N = A_SPD.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(N != A_SPD.dimension(1), std::invalid_argument, "A must be square!");
     
-    bool shouldEquilibrate;
-    std::vector<double> scalings;
-    
-    bool transpose = true;
-    Teuchos::DataAccess dataAccess = Teuchos::View;
-    auto AMatrix = convertFCToSDM(A_SPD, transpose, dataAccess);
-    shouldEquilibrate = computeEquilibrationScalingSPD(AMatrix, scalings);
-    
     int M = (bx.rank() == 1) ? 1 : bx.dimension(1);
-    
-    if (M != 1)
-    {
-      transposeMatrix(bx); // moves data in memory
-    }
-    
-    auto bxVectors = convertFCToSDM(bx, M != 1, dataAccess); // transpose if M != 1
-    
-    if (shouldEquilibrate)
-    {
-      equilibrateMatrix(AMatrix,scalings,scalings);
-      equilibrateRHS(bxVectors,scalings);
-    }
     
     char UPLO = 'L'; // lower-triangular
     
@@ -1334,19 +1207,9 @@ namespace Camellia {
     if (INFO != 0) result = INFO;
     
     // back-substitute
-    lapack.POTRS(UPLO, N, M, AMatrix.values(), N, bxVectors.values(), N, &INFO);
+    lapack.POTRS(UPLO, N, M, &A_SPD[0], N, &bx[0], N, &INFO);
 
-    if (shouldEquilibrate)
-    {
-      unequilibrateLHS(bxVectors, scalings);
-    }
-    
     if (INFO != 0) result = INFO;
-    
-    if (M != 1)
-    {
-      transposeMatrix(bx);
-    }
     
     return result;
   }
@@ -1354,16 +1217,63 @@ namespace Camellia {
   int SerialDenseWrapper::solveSPDSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A_SPD,
                                                     Camellia::FieldContainer<double> &b, bool allowOverwriteOfA)
   {
-    x = b;
-    if (!allowOverwriteOfA)
+    // solves Ax = b, where
+    // A = (N,N)
+    // x, b = (N, M)
+    Teuchos::SerialSpdDenseSolver<int,double> solver;
+    
+    int N = A_SPD.dimension(0);
+    int nRHS = b.dimension(1);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(A_SPD.dimension(1) != N, std::invalid_argument, "A's first and second dimensions should match.");
+    TEUCHOS_TEST_FOR_EXCEPTION(x.dimension(1) != nRHS, std::invalid_argument, "x's second dimension should match b's second dimension (# RHSes).");
+    TEUCHOS_TEST_FOR_EXCEPTION(x.dimension(0) != N,    std::invalid_argument, "x's first dimension should match A's first and second dimension.");
+    TEUCHOS_TEST_FOR_EXCEPTION(b.dimension(0) != N,    std::invalid_argument, "b's first dimension should match A's first and second dimension.");
+    
+    Teuchos::DataAccess A_dataAccess = allowOverwriteOfA ? Teuchos::View : Teuchos::Copy;
+    
+    bool upper = true;
+    const int &stride = N;
+    auto AMatrix = Teuchos::SerialSymDenseMatrix<int,double>(A_dataAccess, upper, &A_SPD[0], stride, N);
+    auto bxVectors = convertFCToSDM(b, false, Teuchos::Copy);
+    
+    auto AMatrixPtr   = Teuchos::rcp(&AMatrix, false);
+    auto bxVectorsPtr = Teuchos::rcp(&bxVectors, false);
+    
+    solver.setMatrix(AMatrixPtr);
+    int info = solver.setVectors(bxVectorsPtr,bxVectorsPtr);
+    
+    if (info != 0)
     {
-      Camellia::FieldContainer<double> A_copy = A_SPD;
-      return solveSPDSystemLAPACKCholesky(x, A_copy);
+      std::cout << "solveSPDSystemMultipleRHS: failed to SetVectors with error " << info << std::endl;
+      return info;
     }
-    else
+    
+    if (solver.shouldEquilibrate())
     {
-      return solveSPDSystemLAPACKCholesky(x, A_SPD);
+      solver.factorWithEquilibration(true);
+      solver.solveToRefinedSolution(false); // false: don't use iterative refinements...
     }
+    
+    info = solver.factor();
+    if (info != 0)
+    {
+      std::cout << "solveSPDSystemMultipleRHS: Factor failed with code " << info << std::endl;
+      return info;
+    }
+    
+    info = solver.solve();
+    
+    if (info != 0)
+    {
+      std::cout << "solveSPDSystemMultipleRHS: Solve FAILED with error: " << info << std::endl;
+    }
+    
+    x.resize(x.dimension(1),x.dimension(0));
+    convertSDMToFC(x,bxVectors);
+    transposeMatrix(x);
+    
+    return info;
   }
   
   int SerialDenseWrapper::solveSVD(std::vector<double> &singularValuesOut, Camellia::FieldContainer<double> &A)
@@ -1440,22 +1350,6 @@ namespace Camellia {
         {
           A(j,i) = A_copy(i,j);
         }
-      }
-    }
-  }
-
-  void SerialDenseWrapper::unequilibrateLHS(Teuchos::SerialDenseMatrix<int, double> &x, const std::vector<double> &colScalings)
-  {
-    auto N    = x.numRows();
-    auto NRHS = x.numCols();
-    auto LDX  = x.stride();
-    
-    double * ptr;
-    for (int j=0; j<NRHS; j++) {
-      ptr = x.values() + j*LDX;
-      for (int i=0; i<N; i++) {
-        *ptr = *ptr*colScalings[i];
-        ptr++;
       }
     }
   }
