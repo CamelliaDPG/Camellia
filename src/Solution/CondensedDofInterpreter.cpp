@@ -613,7 +613,7 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForNeighborGlobalIndic
   const char* copyFromLocation = globalIndexData;
   int numDofsImport = importLength / objSize;
   vector<GlobalIndexTypeToCast> globalIndicesMapVector(numDofsImport);
-  GlobalIndexTypeToCast* copyToLocation = &globalIndicesMapVector[0];
+  GlobalIndexTypeToCast* copyToLocation = globalIndicesMapVector.data();
   for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
   {
     memcpy(copyToLocation, copyFromLocation, objSize);
@@ -731,7 +731,7 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForOffRankCells(const 
   const char* copyFromLocation = globalIndexData;
   int numDofsImport = importLength / objSize;
   vector<GlobalIndexTypeToCast> globalIndicesMapVector(numDofsImport);
-  GlobalIndexTypeToCast* copyToLocation = &globalIndicesMapVector[0];
+  GlobalIndexTypeToCast* copyToLocation = globalIndicesMapVector.data();
   for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
   {
     memcpy(copyToLocation, copyFromLocation, objSize);

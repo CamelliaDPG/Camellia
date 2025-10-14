@@ -9,6 +9,8 @@
 
 #include "SubExtrudedCell.h"
 
+#include "GlobalDofAssignment.h"
+
 namespace Camellia
 {
   IndexType packSideEntityIndexForSubExtrudedMeshTopology(const IndexType &physicalCellIndex, const IndexType &extrusionCellIndex,

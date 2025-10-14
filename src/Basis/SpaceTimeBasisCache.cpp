@@ -138,7 +138,7 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(const Camellia::FieldContainer<double> 
 // side constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTimeBasisCache> volumeCache,
     int trialDegree, int testDegree, Intrepid2::EPolyType polyTypeForQuadrature)
-  : BasisCache(sideOrdinal, volumeCache, trialDegree, testDegree, (BasisPtr) Teuchos::null)
+  : BasisCache(sideOrdinal, volumeCache, trialDegree, testDegree)
 {
   _storeTransformedValues = _defaultStoreTransformedValues;
   

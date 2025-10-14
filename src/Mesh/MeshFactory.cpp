@@ -212,92 +212,14 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters, Teuchos_CommPt
 
   if (useMinRule)
   {
+    const bool allowPruning = false;
     MeshTopologyPtr meshTopology = quadMeshTopology(width,height,horizontalElements,verticalElements,divideIntoTriangles,x0,y0,*periodicBCs);
     return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements,
-                                  Teuchos::null, Comm) );
+                                  Teuchos::null, Comm, allowPruning) );
   }
   else
   {
-    bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
-//  cout << "periodicBCs size is " << periodicBCs->size() << endl;
-    vector<vector<double> > vertices;
-    vector< vector<IndexType> > allElementVertices;
-
-    int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
-
-    CellTopoPtr topo;
-    if (divideIntoTriangles)
-    {
-      topo = Camellia::CellTopology::triangle();
-    }
-    else
-    {
-      topo = Camellia::CellTopology::quad();
-    }
-    vector< CellTopoPtr > cellTopos(numElements, topo);
-
-    Camellia::FieldContainer<double> quadBoundaryPoints(4,2);
-    quadBoundaryPoints(0,0) = x0;
-    quadBoundaryPoints(0,1) = y0;
-    quadBoundaryPoints(1,0) = x0 + width;
-    quadBoundaryPoints(1,1) = y0;
-    quadBoundaryPoints(2,0) = x0 + width;
-    quadBoundaryPoints(2,1) = y0 + height;
-    quadBoundaryPoints(3,0) = x0;
-    quadBoundaryPoints(3,1) = y0 + height;
-    //  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
-
-    double southWest_x = quadBoundaryPoints(0,0),
-           southWest_y = quadBoundaryPoints(0,1);
-
-    double elemWidth = width / horizontalElements;
-    double elemHeight = height / verticalElements;
-
-    // set up vertices:
-    // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
-    vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-    for (int i=0; i<=horizontalElements; i++)
-    {
-      for (int j=0; j<=verticalElements; j++)
-      {
-        vertexIndices[i][j] = vertices.size();
-        vector<double> vertex(spaceDim);
-        vertex[0] = southWest_x + elemWidth*i;
-        vertex[1] = southWest_y + elemHeight*j;
-        vertices.push_back(vertex);
-      }
-    }
-
-    for (int i=0; i<horizontalElements; i++)
-    {
-      for (int j=0; j<verticalElements; j++)
-      {
-        if (!divideIntoTriangles)
-        {
-          vector<IndexType> elemVertices;
-          elemVertices.push_back(vertexIndices[i][j]);
-          elemVertices.push_back(vertexIndices[i+1][j]);
-          elemVertices.push_back(vertexIndices[i+1][j+1]);
-          elemVertices.push_back(vertexIndices[i][j+1]);
-          allElementVertices.push_back(elemVertices);
-        }
-        else
-        {
-          vector<IndexType> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
-          elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
-          elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
-          elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
-          elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
-          elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
-          elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
-
-          allElementVertices.push_back(elemVertices1);
-          allElementVertices.push_back(elemVertices2);
-        }
-      }
-    }
-
-    return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs, Comm) );
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "maximum rule no longer supported");
   }
 }
 
@@ -360,9 +282,14 @@ MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, Camellia::FieldCon
   elementVertices.push_back(cell0);
 
   map<int,int> emptyMap;
-  vector<PeriodicBCPtr> emptyPeriodicBCs;
-  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bf, H1Order, pToAddTest, true, emptyMap, emptyMap,
-                                        emptyPeriodicBCs, Comm) );
+  const bool allowPruning = false;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  
+  auto geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAddTest,
+                                         emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
   return mesh;
 }
 
@@ -374,7 +301,7 @@ MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, int pToAddTest,
 
   Teuchos::ParameterList pl;
 
-  pl.set("useMinRule", false);
+  pl.set("useMinRule", true);
   pl.set("bf",bf);
   pl.set("H1Order", H1Order);
   pl.set("delta_k", pToAddTest);
@@ -900,7 +827,16 @@ MeshPtr MeshFactory::readMesh(string filePath, TBFPtr<double> bilinearForm, int 
   }
   mshFile.close();
 
-  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  std::map<int,int> emptyMap;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  
+  auto geometry = Teuchos::rcp( new MeshGeometry(vertices, elementIndices) );
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bilinearForm, H1Order, pToAdd,
+                                         emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
   return mesh;
 }
 
@@ -946,14 +882,23 @@ MeshPtr MeshFactory::readTriangle(string filePath, TBFPtr<double> bilinearForm, 
   }
   eleFile.close();
 
-  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  std::map<int,int> emptyMap;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  
+  auto geometry = Teuchos::rcp( new MeshGeometry(vertices, elementIndices) );
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bilinearForm, H1Order, pToAdd,
+                                         emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
   return mesh;
 }
 
 MeshPtr MeshFactory::buildQuadMesh(const Camellia::FieldContainer<double> &quadBoundaryPoints,
                                    int horizontalElements, int verticalElements,
                                    TBFPtr<double> bilinearForm,
-                                   int H1Order, int pTest, bool triangulate, bool useConformingTraces,
+                                   int H1Order, int pTest, bool triangulate,
                                    map<int,int> trialOrderEnhancements,
                                    map<int,int> testOrderEnhancements)
 {
@@ -979,14 +924,13 @@ MeshPtr MeshFactory::buildQuadMesh(const Camellia::FieldContainer<double> &quadB
 
   Teuchos::ParameterList pl;
 
-  pl.set("useMinRule", false);
+  pl.set("useMinRule", true);
   pl.set("bf",bilinearForm);
   pl.set("H1Order", H1Order);
   pl.set("delta_k", pToAddTest);
   pl.set("horizontalElements", horizontalElements);
   pl.set("verticalElements", verticalElements);
   pl.set("divideIntoTriangles", triangulate);
-  pl.set("useConformingTraces", useConformingTraces);
   pl.set("trialOrderEnhancements", &trialOrderEnhancements);
   pl.set("testOrderEnhancements", &testOrderEnhancements);
   pl.set("x0",southWest_x);
@@ -1000,7 +944,7 @@ MeshPtr MeshFactory::buildQuadMesh(const Camellia::FieldContainer<double> &quadB
 MeshPtr MeshFactory::buildQuadMeshHybrid(const Camellia::FieldContainer<double> &quadBoundaryPoints,
     int horizontalElements, int verticalElements,
     TBFPtr<double> bilinearForm,
-    int H1Order, int pTest, bool useConformingTraces)
+    int H1Order, int pTest)
 {
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
@@ -1071,7 +1015,17 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const Camellia::FieldContainer<double> 
       }
     }
   }
-  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  std::map<int,int> emptyMap;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  
+  auto geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices) );
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bilinearForm, H1Order, pToAddToTest,
+                                         emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
+  return mesh;
 }
 
 void MeshFactory::quadMeshCellIDs(Camellia::FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles)
@@ -1336,9 +1290,15 @@ MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshH
                                        TBFPtr<double> bilinearForm, int H1Order, int pToAddTest)
 {
   MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, meshHeight, cylinderRadius);
-  MeshPtr mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
-                                        bilinearForm, H1Order, pToAddTest) );
-
+  
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  std::map<int,int> emptyMap;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bilinearForm, H1Order, pToAddTest,
+                                         emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
   map< pair<IndexType, IndexType>, ParametricCurvePtr > localEdgeToCurveMap = geometry->edgeToCurveMap();
   map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > globalEdgeToCurveMap(localEdgeToCurveMap.begin(),localEdgeToCurveMap.end());
   mesh->setEdgeToCurveMap(globalEdgeToCurveMap);

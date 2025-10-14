@@ -8,6 +8,7 @@
 #include "SolutionMoments.h"
 
 #include "doubleBasisConstruction.h"
+#include "GlobalDofAssignment.h"
 #include "SolutionMomentFunction.h"
 #include "TensorBasis.h"
 

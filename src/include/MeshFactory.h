@@ -59,7 +59,7 @@ public:
   static MeshPtr buildQuadMesh(const Camellia::FieldContainer<double> &quadBoundaryPoints,
                                int horizontalElements, int verticalElements,
                                TBFPtr<double> bilinearForm,
-                               int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
+                               int H1Order, int pTest, bool triangulate=false,
                                map<int,int> trialOrderEnhancements=_emptyIntIntMap,
                                map<int,int> testOrderEnhancements=_emptyIntIntMap);
 
@@ -67,7 +67,7 @@ public:
   static MeshPtr buildQuadMeshHybrid(const Camellia::FieldContainer<double> &quadBoundaryPoints,
                                      int horizontalElements, int verticalElements,
                                      TBFPtr<double> bilinearForm,
-                                     int H1Order, int pTest, bool useConformingTraces);
+                                     int H1Order, int pTest);
   
 //  static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, double v0, double vWidth, int numSubdivisions);
   

@@ -11,6 +11,7 @@
 #include "TensorBasis.h"
 
 #include "CamelliaDebugUtility.h"
+#include "GlobalDofAssignment.h"
 
 #include <Intrepid2_SerendipityBasis.hpp>
 #include <Intrepid2_TensorBasis.hpp>

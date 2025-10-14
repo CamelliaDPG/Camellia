@@ -262,12 +262,17 @@ void HConvergenceStudy::setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints>
   _lagrangeConstraints = lagrangeConstraints;
 }
 
-Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( Teuchos::RCP<MeshGeometry> geometry, int numRefinements, bool useConformingTraces )
+Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( Teuchos::RCP<MeshGeometry> geometry, int numRefinements )
 {
-  Teuchos::RCP<Mesh> mesh;
-  mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(), _bilinearForm,
-                                _H1Order, _pToAdd, useConformingTraces) );
-
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  std::map<int,int> emptyMap;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, _bilinearForm, _H1Order, _pToAdd,
+                                         emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
+  
   map< pair<IndexType,IndexType>, ParametricCurvePtr > localMap = geometry->edgeToCurveMap();
 
   map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > globalMap(localMap.begin(),localMap.end());
@@ -318,7 +323,7 @@ void HConvergenceStudy::setSolutions( vector< TSolutionPtr<double> > &solutions)
   computeErrors();
 }
 
-void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConformingTraces)
+void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry)
 {
   // TODO: refactor to make this and the straight quad mesh version share code...
   _solutions.clear();
@@ -331,7 +336,7 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
   int numElements = minNumElements;
   for (int i=_minLogElements; i<=_maxLogElements; i++)
   {
-    Teuchos::RCP<Mesh> mesh = buildMesh(geometry, i, useConformingTraces);
+    Teuchos::RCP<Mesh> mesh = buildMesh(geometry, i);
     TSolutionPtr<double> solution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
     if (_writeGlobalStiffnessToDisk)
     {
@@ -366,15 +371,15 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
   computeErrors();
 }
 
-void HConvergenceStudy::solve(const Camellia::FieldContainer<double> &quadPoints, bool useConformingTraces)
+void HConvergenceStudy::solve(const Camellia::FieldContainer<double> &quadPoints)
 {
   // empty enhancements by default
   map<int,int> trialOrderEnhancements;
   map<int,int> testOrderEnhancements;
-  this->solve(quadPoints, useConformingTraces, trialOrderEnhancements, testOrderEnhancements);
+  this->solve(quadPoints, trialOrderEnhancements, testOrderEnhancements);
 }
 
-void HConvergenceStudy::solve(const Camellia::FieldContainer<double> &quadPoints, bool useConformingTraces,
+void HConvergenceStudy::solve(const Camellia::FieldContainer<double> &quadPoints,
                               map<int,int> trialOrderEnhancements,
                               map<int,int> testOrderEnhancements)
 {
@@ -392,13 +397,13 @@ void HConvergenceStudy::solve(const Camellia::FieldContainer<double> &quadPoints
     if (! _useHybrid )
     {
       mesh = MeshFactory::buildQuadMesh(quadPoints, numElements, numElements,
-                                        _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles, useConformingTraces,
+                                        _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles,
                                         trialOrderEnhancements,testOrderEnhancements);
     }
     else
     {
       mesh = MeshFactory::buildQuadMeshHybrid(quadPoints, numElements, numElements,
-                                              _bilinearForm, _H1Order, _H1Order + _pToAdd, useConformingTraces);
+                                              _bilinearForm, _H1Order, _H1Order + _pToAdd);
     }
     TSolutionPtr<double> solution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
     if (_writeGlobalStiffnessToDisk)

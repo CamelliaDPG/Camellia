@@ -10,6 +10,8 @@
 
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
+#include "Intrepid_CubatureDirectLineGauss.hpp"
+#include "Intrepid_CubatureDirectTriDefault.hpp"
 
 #include "Intrepid2_CellTools.hpp"
 #include "Intrepid2_Cubature.hpp"
@@ -222,20 +224,15 @@ void BasisCache::createSideCaches()
   for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
   {
     BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
-    BasisPtr multiBasisIfAny;
 
     int maxTrialDegreeOnSide = _maxTrialDegree;
     if (maxDegreeBasisOnSide.get() != NULL)
     {
-      if (BasisFactory::basisFactory()->isMultiBasis(maxDegreeBasisOnSide))
-      {
-        multiBasisIfAny = maxDegreeBasisOnSide;
-      }
       maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
     }
 
     BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
-    BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree, multiBasisIfAny, _cubatureEnrichmentDegree));
+    BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree, _cubatureEnrichmentDegree));
     _basisCacheSides.push_back(sideCache);
   }
 }
@@ -506,7 +503,7 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Cam
 }
 
 // side constructor
-BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny, int cubatureEnrichmentDegree)
+BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, int cubatureEnrichmentDegree)
 {
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _isSideCache = true;
@@ -555,19 +552,6 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
       numCubPointsSide = 0;
       _cubPointsFC.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
       _cubWeightsFC.resize(numCubPointsSide);
-    }
-    
-    if ( multiBasisIfAny.get() != NULL )
-    {
-      MultiBasis<>* multiBasis = (MultiBasis<>*) multiBasisIfAny.get();
-
-      int cubatureEnrichment = (multiBasis->getDegree() < _maxTrialDegree) ? _maxTrialDegree - multiBasis->getDegree() : 0;
-      multiBasis->getCubature(_cubPointsFC, _cubWeightsFC, _maxTestDegree + cubatureEnrichment);
-      
-      _cubPoints  = FieldContainerConversion<double>::toTensorPoints(_cubPointsFC);
-      _cubWeights = FieldContainerConversion<double>::toTensorData(_cubWeightsFC);
-
-      numCubPointsSide = _cubPointsFC.dimension(0);
     }
 
     _cubPointsSideRefCellFC.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
@@ -2281,21 +2265,16 @@ BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, i
 
   int maxTestDegree = volumeCache->_maxTestDegree;
   int maxTrialDegreeOnSide = volumeCache->_maxTrialDegree;
-  BasisPtr multiBasisIfAny;
 
   if (spaceDim > 1)
   {
     BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideOrdinal];
     if (maxDegreeBasisOnSide.get() != NULL)
     {
-      if (BasisFactory::basisFactory()->isMultiBasis(maxDegreeBasisOnSide))
-      {
-        multiBasisIfAny = maxDegreeBasisOnSide;
-      }
       maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
     }
   }
-  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, volumeCache, maxTrialDegreeOnSide, maxTestDegree, multiBasisIfAny));
+  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, volumeCache, maxTrialDegreeOnSide, maxTestDegree));
   return sideCache;
 }
 

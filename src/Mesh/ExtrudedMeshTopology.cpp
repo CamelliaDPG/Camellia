@@ -11,6 +11,7 @@
 //
 
 #include "ExtrudedMeshTopology.h"
+#include "GlobalDofAssignment.h"
 
 namespace Camellia
 {

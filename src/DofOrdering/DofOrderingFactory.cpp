@@ -611,41 +611,6 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
   return BasisFactory::basisFactory()->basisPolyOrder(interiorBasis) - varIDEnhancement;
 }
 
-map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide)
-{
-  vector< BasisPtr > bases;
-  set<int> varIDs = (childTrialOrdersForSide[0].first)->getVarIDs();
-  map<int, BasisPtr> varIDsToUpgrade;
-  set<int>::iterator idIt;
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
-  {
-    int varID = *idIt;
-    bool isVolumeVar = childTrialOrdersForSide[0].first->isVolumeVar(varID);
-    if (!isVolumeVar)   // a variable that lives on the sides: we need to match basis
-    {
-      int numBases = childTrialOrdersForSide.size();
-      for (int i=numBases-1; i>=0; i-- )
-      {
-        // reverse order of bases ( valid only for 2D; in 3D we'll need a more general permutation )
-        int childSideIndex = childTrialOrdersForSide[i].second;
-        BasisPtr basis  = childTrialOrdersForSide[i].first->getBasis(varID,childSideIndex);
-        bases.push_back(basis);
-      }
-      if (bases.size() != 1)
-      {
-        BasisPtr multiBasis = BasisFactory::basisFactory()->getMultiBasis(bases);
-        varIDsToUpgrade[varID] = multiBasis;
-      }
-      else
-      {
-        varIDsToUpgrade[varID] = bases[0];
-      }
-      bases.clear();
-    }
-  }
-  return varIDsToUpgrade;
-}
-
 int DofOrderingFactory::getTestOrderEnhancement(int varID) const
 {
   auto foundEntry = _testOrderEnhancements.find(varID);
@@ -664,70 +629,17 @@ int DofOrderingFactory::getTrialOrderEnhancement(int varID) const
     return 0;
 }
 
-void DofOrderingFactory::assignMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex,
-    CellTopoPtr cellTopo,
-    vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide )
-{
-  map<int, BasisPtr> varIDsToUpgrade = getMultiBasisUpgradeMap(childTrialOrdersForSide);
-  trialOrdering = upgradeSide(trialOrdering,cellTopo,varIDsToUpgrade,sideIndex);
-}
-
-bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex)
-{
-  set<int> varIDs = trialOrdering->getVarIDs();
-  set<int>::iterator idIt;
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
-  {
-    int varID = *idIt;
-    bool isVolumeVar = trialOrdering->isVolumeVar(varID);
-    if (!isVolumeVar)   // a variable that lives on the sides
-    {
-      BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
-      // as one side basis goes, so go they all:
-      return BasisFactory::basisFactory()->isMultiBasis(basis);
-    }
-  }
-  // if we get here, we didn't really have a side...
-  return false;
-}
-
 void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, int childSideIndex,
     CellTopoPtr childTopo,
     int childIndexInParentSide, // == where in the multi-basis are we, if there is a multi-basis?
     DofOrderingPtr &parentTrialOrdering, int sideIndex,
     CellTopoPtr parentTopo)
 {
-  // basic strategy: if parent has MultiBasis on that side, then child should get a piece of that
-  //                 otherwise, we can simply use matchSides as it is...
-  if ( sideHasMultiBasis(parentTrialOrdering,sideIndex) )
+  int upgradedSide = matchSides(childTrialOrdering,childSideIndex,childTopo,
+                                parentTrialOrdering,sideIndex,parentTopo);
+  if (upgradedSide == 2)
   {
-    set<int> varIDs = parentTrialOrdering->getVarIDs();
-    map<int, BasisPtr> varIDsToUpgrade;
-    set<int>::iterator idIt;
-    for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
-    {
-      int varID = *idIt;
-      if (!parentTrialOrdering->isVolumeVar(varID))   // a variable that lives on the sides: we need to match basis
-      {
-        BasisPtr basis  = parentTrialOrdering->getBasis(varID,sideIndex);
-        if (! BasisFactory::basisFactory()->isMultiBasis(basis) )
-        {
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if one basis is multibasis, they all should be");
-        }
-        MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
-        varIDsToUpgrade[varID] = multiBasis->getSubBasis(childIndexInParentSide);
-      }
-    }
-    childTrialOrdering = upgradeSide(childTrialOrdering,childTopo,varIDsToUpgrade,childSideIndex);
-  }
-  else
-  {
-    int upgradedSide = matchSides(childTrialOrdering,childSideIndex,childTopo,
-                                  parentTrialOrdering,sideIndex,parentTopo);
-    if (upgradedSide == 2)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent should never be upgraded!");
-    }
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent should never be upgraded!");
   }
 }
 
@@ -738,7 +650,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
 {
   // upgrades the lesser-order basis
   map<int, BasisPtr > varIDsToUpgrade;
-  int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second, -1 means PatchBasis (i.e. can't matchSides w/o more Mesh info)
+  int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second
   set<int> varIDs = firstOrdering->getVarIDs();
   set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
@@ -777,7 +689,6 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
     }
   }
   // now that we know which ones to upgrade, rebuild the DofOrdering, overriding with those when needed...
-  // TODO: ? (Don't forget to worry about conforming bases...)
 
   if (orderingToUpgrade==1)
   {
@@ -995,7 +906,7 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
 }
 
 DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet,
-    int newPolyOrder, bool replacePatchBasis)
+    int newPolyOrder)
 {
   // TODO: eliminate the dependence on BasisFactory here
   bool conforming = _isConforming[dofOrdering.get()];
@@ -1012,10 +923,6 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
     for (int sideOrdinal : *sidesForVar)
     {
       BasisPtr basis = dofOrdering->getBasis(varID,sideOrdinal);
-      if (replacePatchBasis)
-      {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unexpected value replacePatchBasis = true");
-      }
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       int basisPolyOrder = BasisFactory::basisFactory()->basisPolyOrder(basis);

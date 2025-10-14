@@ -879,63 +879,6 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   return basis;
 }
 
-MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases)
-{
-  vector< Camellia::Basis<>* > key;
-  int numBases = bases.size();
-  for (int i=0; i<numBases; i++)
-  {
-    key.push_back(bases[i].get());
-  }
-  if (_multiBasesMap.find(key) != _multiBasesMap.end() )
-  {
-    return _multiBasesMap[key];
-  }
-
-  int polyOrder = 0;
-  Camellia::EFunctionSpace fs;
-  unsigned cellTopoKey;
-
-  if (numBases != 2)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
-  }
-
-  for (int i=0; i<numBases; i++)
-  {
-    if (! basisKnown(bases[i]) )
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory can only make MultiBasis from registered Basis pointers.");
-    }
-
-    polyOrder = max(polyOrder,_polyOrders[bases[i].get()]);
-    fs = _functionSpaces[bases[i].get()];
-    cellTopoKey = _cellTopoKeys[bases[i].get()];
-  }
-
-  if ((_cellTopoKeys[bases[0].get()] != shards::Line<2>::key)
-      || (_cellTopoKeys[bases[1].get()] != shards::Line<2>::key) )
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
-  }
-  int spaceDim=1, numNodesPerSubRefCell = 2;
-  Camellia::FieldContainer<double> subRefNodes(numBases,numNodesPerSubRefCell,spaceDim);
-  subRefNodes(0,0,0) = -1.0;
-  subRefNodes(0,1,0) = 0.0;
-  subRefNodes(1,0,0) = 0.0;
-  subRefNodes(1,1,0) = 1.0;
-  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  MultiBasisPtr multiBasis = Teuchos::rcp( new MultiBasis<>(bases, subRefNodes, line_2) );
-  _multiBasesMap[key] = multiBasis;
-  _multiBases.insert(multiBasis.get());
-
-  _polyOrders[multiBasis.get()] = polyOrder;
-  _functionSpaces[multiBasis.get()] = fs;
-  _cellTopoKeys[multiBasis.get()] = cellTopoKey;
-
-  return multiBasis;
-}
-
 BasisPtr BasisFactory::getNodalBasisForCellTopology(CellTopoPtr cellTopo)
 {
   if ((cellTopo->getBaseTopology()->getDimension() == 0) && (cellTopo->getDimension() > 0))
@@ -1144,21 +1087,6 @@ BasisPtr BasisFactory::addToPolyOrder(BasisPtr basis, int pToAdd)
 
 BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet)
 {
-  if (isMultiBasis(basis))
-  {
-    // for now anyway, we don't set poly order for MultiBasis
-    // (the rule now is that MultiBasis is exactly the broken neighbor's "natural" bases)
-    return basis;
-//    // set each sub-basis to pToSet:
-//    MultiBasis* mb = (MultiBasis*) basis.get();
-//    int numSubBases = mb->numSubBases();
-//    vector< BasisPtr > upgradedSubBases;
-//    for (int basisIndex=0; basisIndex<numSubBases; basisIndex++) {
-//      BasisPtr subBasis = mb->getSubBasis(basisIndex);
-//      upgradedSubBases.push_back( BasisFactory::setPolyOrder(subBasis, pToSet) );
-//    }
-//    return getMultiBasis(upgradedSubBases);
-  }
   Camellia::EFunctionSpace fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
   if (basis->isConforming())
@@ -1224,12 +1152,6 @@ bool BasisFactory::basisKnown(BasisPtr basis)
 {
   // look it up in one of our universal maps...
   return _polyOrders.find(basis.get()) != _polyOrders.end();
-}
-
-bool BasisFactory::isMultiBasis(BasisPtr basis)
-{
-  MultiBasis<>* multiBasis = dynamic_cast< MultiBasis<>*>(basis.get());
-  return multiBasis != NULL;
 }
 
 void BasisFactory::setUseEnrichedTraces( bool value )

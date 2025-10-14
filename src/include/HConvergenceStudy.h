@@ -82,8 +82,7 @@ class HConvergenceStudy
 
   TSolutionPtr<double> bestApproximation(Teuchos::RCP<Mesh> mesh);
 
-  Teuchos::RCP<Mesh> buildMesh(Teuchos::RCP<MeshGeometry> geometry, int numRefinements,
-                               bool useConformingTraces );
+  Teuchos::RCP<Mesh> buildMesh(Teuchos::RCP<MeshGeometry> geometry, int numRefinements);
 public:
   HConvergenceStudy(Teuchos::RCP<ExactSolution<double>> exactSolution,
                     BFPtr bilinearForm,
@@ -95,11 +94,11 @@ public:
   void setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setReportConditionNumber(bool value);
   void setReportRelativeErrors(bool reportRelativeErrors);
-  void solve(const Camellia::FieldContainer<double> &quadPoints, bool useConformingTraces,
+  void solve(const Camellia::FieldContainer<double> &quadPoints,
              map<int,int> trialOrderEnhancements,
              map<int,int> testOrderEnhancements);
-  void solve(const Camellia::FieldContainer<double> &quadPoints, bool useConformingTraces = true);
-  void solve(Teuchos::RCP< MeshGeometry > geometry, bool useConformingTraces=true);
+  void solve(const Camellia::FieldContainer<double> &quadPoints);
+  void solve(Teuchos::RCP< MeshGeometry > geometry);
   TSolutionPtr<double> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1, bool writeMATLABPlotData = false);
 

@@ -5,7 +5,7 @@
 //
 
 #include "DofOrdering.h"
-#include "MultiBasis.h"
+#include "BasisCache.h"
 #include "BasisFactory.h"
 #include "BasisReconciliation.h"
 
@@ -215,19 +215,7 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideOrdinal, in
                               "getDofIndex called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
   int sideIndex = INDICES_INDEX(sideOrdinal);
   
-  if (subSideIndex >= 0)
-  {
-    // then we've got a MultiBasis, and the basisDofOrdinal we have is *relative* to the subbasis
-    BasisPtr basis = getBasis(varID,sideIndex);
-    if ( ! BasisFactory::basisFactory()->isMultiBasis(basis) )
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subSideIndex >= 0 for non-MultiBasis...");
-    }
-    MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
-    //cout << "(basisDofOrdinal, subSideIndex) : (" << basisDofOrdinal << ", " << subSideIndex << ") --> ";
-    basisDofOrdinal = multiBasis->relativeToAbsoluteDofOrdinal(basisDofOrdinal,subSideIndex);
-    //cout << basisDofOrdinal << endl;
-  }
+  TEUCHOS_TEST_FOR_EXCEPTION(subSideIndex != -1, std::invalid_argument, "subSideIndex != -1, which indicates MultiBasis, which is no longer supported");
 
   auto entryIt = _indices[sideIndex].find(varID);
   if ( entryIt != _indices[sideIndex].end() )

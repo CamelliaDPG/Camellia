@@ -15,7 +15,6 @@
 
 // subclasses:
 #include "GDAMinimumRule.h"
-#include "GDAMaximumRule2D.h"
 
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
@@ -1353,14 +1352,6 @@ void GlobalDofAssignment::unregisterSolution(TSolutionPtr<double> solution)
     }
   }
   cout << "GlobalDofAssignment::unregisterSolution: Solution not found.\n";
-}
-
-// maximumRule2D provides support for legacy (MultiBasis) meshes
-GlobalDofAssignmentPtr GlobalDofAssignment::maximumRule2D(MeshPtr mesh, VarFactoryPtr varFactory,
-    DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
-    unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
-{
-  return Teuchos::rcp( new GDAMaximumRule2D(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement) );
 }
 
 GlobalDofAssignmentPtr GlobalDofAssignment::minimumRule(MeshPtr mesh, VarFactoryPtr varFactory,

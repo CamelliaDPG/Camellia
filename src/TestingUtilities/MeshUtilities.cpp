@@ -99,7 +99,19 @@ MeshPtr MeshUtilities::buildRampMesh(double rampHeight, BFPtr bilinearForm, int 
   elementVertices.push_back(el1);
   elementVertices.push_back(el2);
   int pToAdd = pTest-H1Order;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );
+  
+  map<int,int> emptyMap;
+  const bool allowPruning = false;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  
+  auto geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  
+  mesh = Teuchos::rcp( new Mesh (meshTopology, bilinearForm, H1Order, pToAdd,
+                                 emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
+  
   return mesh;
 }
 
@@ -166,7 +178,19 @@ MeshPtr MeshUtilities::buildLongRampMesh(double rampHeight, BFPtr bilinearForm, 
   elementVertices.push_back(el2);
   elementVertices.push_back(el3);
   int pToAdd = pTest-H1Order;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );
+  
+  map<int,int> emptyMap;
+  const bool allowPruning = false;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  
+  auto geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  
+  mesh = Teuchos::rcp( new Mesh (meshTopology, bilinearForm, H1Order, pToAdd,
+                                 emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
+  
   set<GlobalIndexType> cellsToRefine = mesh->getActiveCellIDsGlobal();
   mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad()); // refine all cells (we know they're quads)
   return mesh;
@@ -235,7 +259,19 @@ MeshPtr MeshUtilities::buildFrontFacingStep(BFPtr bilinearForm, int H1Order, int
   elementVertices.push_back(el2);
   elementVertices.push_back(el3);
   int pToAdd = pTest-H1Order;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );
+  
+  map<int,int> emptyMap;
+  const bool allowPruning = false;
+  MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
+  
+  auto geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
+  auto meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  auto Comm = MPIWrapper::TeuchosCommWorld();
+  
+  mesh = Teuchos::rcp( new Mesh (meshTopology, bilinearForm, H1Order, pToAdd,
+                                 emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
+  
   return mesh;
 }
 
