@@ -608,8 +608,10 @@ public:
       if (Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm) != Teuchos::null)
       {
         MPI_Comm mpiComm = *Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm)->getRawMpiComm();
-        char* myValuesCharCast = reinterpret_cast<char*>(&myValues[0]);
-        char* gatheredValuesCharCast = reinterpret_cast<char*>(&gatheredValues[0]);
+        auto myValuesPtr = (myValues.size() > 0) ? &myValues[0] : NULL;
+        char* myValuesCharCast = reinterpret_cast<char*>(myValuesPtr);
+        auto gatheredValuesPtr = (gatheredValues.size() > 0) ? &gatheredValues[0] : NULL;
+        char* gatheredValuesCharCast = reinterpret_cast<char*>(gatheredValuesPtr);
         MPI_Allgatherv(myValuesCharCast, mySize, MPI_CHAR, gatheredValuesCharCast, &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm);
       }
       else

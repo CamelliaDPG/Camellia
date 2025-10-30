@@ -49,7 +49,6 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<in
   _pToAddToTest = pToAddTest;
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
-  _enforceMBFluxContinuity = false;
   initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
@@ -72,7 +71,6 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Ord
   _pToAddToTest = pToAddTest;
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
-  _enforceMBFluxContinuity = false;
   initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
@@ -95,8 +93,6 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector
   _pToAddToTest = pToAddTest;
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
-  _enforceMBFluxContinuity = false;
-  //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
   initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
@@ -127,7 +123,6 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1
   _pToAddToTest = pToAddTest;
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
-  _enforceMBFluxContinuity = false;
   initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
@@ -143,63 +138,9 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1
   _meshTopology->setGlobalDofAssignment(_gda.get());
 }
 
-Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
-           TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
-           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs,
-           Teuchos_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
-{
-
-//  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
-  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
-  _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
-  _pToAddToTest = pToAddTest;
-
-  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
-  _enforceMBFluxContinuity = false;
-  MeshPartitionPolicyPtr partitionPolicy;
-  initializePartitionPolicyIfNull(partitionPolicy, Comm);
-
-  MeshPtr thisPtr = Teuchos::rcp(this, false);
-  _gda = Teuchos::rcp( new GDAMaximumRule2D(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
-                       partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
-  _gda->repartitionAndMigrate();
-
-  _meshTopology->setGlobalDofAssignment(_gda.get());
-
-  setBilinearForm(bilinearForm);
-  _varFactory = bilinearForm->varFactory();
-
-  _useConformingTraces = useConformingTraces;
-  _usePatchBasis = false;
-
-  // DEBUGGING: check how we did:
-  int numVertices = vertices.size();
-  for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ )
-  {
-    vector<double> vertex = _meshTopology->getVertex(vertexIndex);
-
-    IndexType assignedVertexIndex;
-    bool vertexFound = _meshTopology->getVertexIndex(vertex, assignedVertexIndex);
-
-    if (!vertexFound)
-    {
-      cout << "INTERNAL ERROR: vertex not found by vertex lookup.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "internal error");
-    }
-
-    if (assignedVertexIndex != vertexIndex)
-    {
-      cout << "INTERNAL ERROR: assigned vertex index is incorrect.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "internal error");
-    }
-  }
-
-  _boundary.setMesh(Teuchos::rcp(this,false));
-}
-
 // private constructor for use by deepCopy()
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
-           int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity)
+           int pToAddToTest, bool useConformingTraces)
 : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
@@ -208,26 +149,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> g
   _varFactory = varFactory;
   _pToAddToTest = pToAddToTest;
   _useConformingTraces = useConformingTraces;
-  _usePatchBasis = usePatchBasis;
-  _enforceMBFluxContinuity = enforceMBFluxContinuity;
-
-  _boundary.setMesh(Teuchos::rcp(this,false));
-}
-
-// deprecated private constructor for use by deepCopy()
-Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
-           int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false))
-{
-  _meshTopology = meshTopology;
-  _pToAddToTest = pToAddToTest;
-  _gda = gda;
-  _bilinearForm = bf;
-  _varFactory = bf->varFactory();
-  _pToAddToTest = pToAddToTest;
-  _useConformingTraces = useConformingTraces;
-  _usePatchBasis = usePatchBasis;
-  _enforceMBFluxContinuity = enforceMBFluxContinuity;
-
+  
   _boundary.setMesh(Teuchos::rcp(this,false));
 }
 
@@ -394,7 +316,7 @@ MeshPtr Mesh::deepCopy()
   }
   GlobalDofAssignmentPtr gdaCopy = _gda->deepCopy();
 
-  MeshPtr meshCopy = Teuchos::rcp( new Mesh(meshTopoCopy, gdaCopy, _bilinearForm, _pToAddToTest, _useConformingTraces, _usePatchBasis, _enforceMBFluxContinuity ));
+  MeshPtr meshCopy = Teuchos::rcp( new Mesh(meshTopoCopy, gdaCopy, _varFactory, _pToAddToTest, _useConformingTraces ));
   gdaCopy->setMeshAndMeshTopology(meshCopy);
   return meshCopy;
 }
@@ -606,14 +528,10 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
 
 Camellia::FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr )
 {
-  // old version (using lookup table)
-  // return dynamic_cast<GDAMaximumRule2D*>(_gda.get())->cellSideParities(elemTypePtr);
-
-  // new implementation below:
   int rank = Comm()->getRank();
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
 
-  int numCells = cellIDs.size();
+  int numCells = static_cast<int>(cellIDs.size());
   int numSides = elemTypePtr->cellTopoPtr->getSideCount();
 
   Camellia::FieldContainer<double> sideParities(numCells, numSides);
@@ -758,23 +676,6 @@ GlobalIndexType Mesh::getVertexIndex(double x, double y, double tol)
   }
 }
 
-const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& Mesh::getLocalToGlobalMap()
-{
-  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
-  if (maxRule == NULL)
-  {
-    cout << "getLocalToGlobalMap only supported for max rule.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getLocalToGlobalMap only supported for max rule.");
-  }
-  return maxRule->getLocalToGlobalMap();
-}
-
-bool Mesh::meshUsesMaximumRule()
-{
-  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
-  return (maxRule != NULL);
-}
-
 bool Mesh::meshUsesMinimumRule()
 {
   GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(_gda.get());
@@ -823,17 +724,6 @@ GlobalDofAssignmentPtr Mesh::globalDofAssignment()
 GlobalIndexType Mesh::globalDofCount()
 {
   return numGlobalDofs(); // TODO: eliminate numGlobalDofs in favor of globalDofCount
-}
-
-GlobalIndexType Mesh::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex)
-{
-  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
-  if (maxRule == NULL)
-  {
-    cout << "globalDofIndex lookup only supported for max rule.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalDofIndex lookup only supported for max rule.");
-  }
-  return maxRule->globalDofIndex(cellID, localDofIndex);
 }
 
 set<GlobalIndexType> Mesh::globalDofIndicesForCell(GlobalIndexType cellID)
@@ -929,10 +819,6 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
   }
 
   set<GlobalIndexType>::const_iterator cellIt;
-
-  // we do something slightly different for max rule because it wants to know about each cell as it
-  // gets refined.  For reasons I'm not entirely clear on.
-  bool usingMaxRule = this->meshUsesMaximumRule();
   
   GlobalIndexType nextCellID = writableMeshTopology->nextCellID();
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++)
@@ -941,22 +827,10 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
     
     writableMeshTopology->refineCell(cellID, refPattern, nextCellID);
     nextCellID += refPattern->numChildren();
-
-    // TODO: figure out what it is that breaks in GDAMaximumRule when we use didHRefine to notify about all cells together outside this loop
-    if (usingMaxRule)
-    {
-      set<GlobalIndexType> cellIDset;
-      cellIDset.insert(cellID);
-
-      _gda->didHRefine(cellIDset);
-    }
   }
   
-  if (!usingMaxRule)
-  {
-    // TODO: consider making GDA a refinementObserver, using that interface to send it the notification
-    _gda->didHRefine(cellIDs);
-  }
+  // TODO: consider making GDA a refinementObserver, using that interface to send it the notification
+  _gda->didHRefine(cellIDs);
 
   // NVR 12/10/14 the code below moved from inside the loop above, where it was doing the below one cell at a time...
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator observerIt = _registeredObservers.begin();
@@ -981,10 +855,6 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
 {
   if (cellIDs.size() == 0) return;
-  
-  bool usingMaxRule = this->meshUsesMaximumRule();
-  
-  TEUCHOS_TEST_FOR_EXCEPTION(usingMaxRule, std::invalid_argument, "hUnrefine() not supported for maximum rule");
   
   // do a sanity check that cellIDs are parents
   int myNonparentsFound = 0;
@@ -1195,17 +1065,6 @@ PartitionIndexType Mesh::partitionForGlobalDofIndex( GlobalIndexType globalDofIn
   return _gda->partitionForGlobalDofIndex(globalDofIndex);
 }
 
-GlobalIndexType Mesh::partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex )
-{
-  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
-  if (maxRule == NULL)
-  {
-    cout << "partitionLocalIndexForGlobalDofIndex only supported for max rule.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "partitionLocalIndexForGlobalDofIndex only supported for max rule.");
-  }
-  return maxRule->partitionLocalIndexForGlobalDofIndex(globalDofIndex);
-}
-
 Camellia::FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr)
 {
   int rank = Comm()->getRank();
@@ -1267,20 +1126,6 @@ Camellia::FieldContainer<double> Mesh::physicalCellNodesGlobal( Teuchos::RCP< El
 //  }
 
   return physicalCellNodes(elemTypePtr, globalCellIDs);
-}
-
-void Mesh::printLocalToGlobalMap()
-{
-  map< pair<GlobalIndexType,IndexType>, GlobalIndexType> localToGlobalMap = this->getLocalToGlobalMap();
-
-  for (map< pair<GlobalIndexType,IndexType>, GlobalIndexType>::iterator entryIt = localToGlobalMap.begin();
-       entryIt != localToGlobalMap.end(); entryIt++)
-  {
-    int cellID = entryIt->first.first;
-    int localDofIndex = entryIt->first.second;
-    int globalDofIndex = entryIt->second;
-    cout << "(" << cellID << "," << localDofIndex << ") --> " << globalDofIndex << endl;
-  }
 }
 
 void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer)
@@ -1500,42 +1345,15 @@ void Mesh::setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, 
   meshTopologyInstance->setEdgeToCurveMap(localMap, thisPtr);
 }
 
-void Mesh::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly)
-{
-  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
-  if (maxRule == NULL)
-  {
-    cout << "setElementType only supported for max rule.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "setElementType only supported for max rule.");
-  }
-  maxRule->setElementType(cellID, newType, sideUpgradeOnly);
-}
-
-void Mesh::setEnforceMultiBasisFluxContinuity( bool value )
-{
-  _enforceMBFluxContinuity = value;
-}
-
 void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy )
 {
   _gda->setPartitionPolicy(partitionPolicy, false);
   repartitionAndRebuild();
 }
 
-void Mesh::setUsePatchBasis( bool value )
-{
-  // TODO: throw an exception if we've already been refined??
-  _usePatchBasis = value;
-}
-
 double Mesh::sideParity(GlobalIndexType cellID, unsigned sideOrdinal)
 {
   return _gda->sideParity(cellID, sideOrdinal);
-}
-
-bool Mesh::usePatchBasis()
-{
-  return _usePatchBasis;
 }
 
 MeshTopologyViewPtr Mesh::getTopology()
@@ -1809,9 +1627,7 @@ void Mesh::saveToHDF5(string filename)
     hdf5.Write("Mesh", "p refinements", H5T_NATIVE_INT, pRefinementsSize, &pRefinementsVector[0]);
   }
   
-  if (meshUsesMaximumRule())
-    hdf5.Write("Mesh", "GDARule", "max");
-  else if(meshUsesMinimumRule())
+  if(meshUsesMinimumRule())
     hdf5.Write("Mesh", "GDARule", "min");
   else
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
@@ -1837,31 +1653,6 @@ MeshPtr Mesh::readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1O
   if (rank==0) cout << "Warning: Mesh::readTriangle() deprecated.  Use MeshFactory::readTriangle() instead.\n";
 
   return MeshFactory::readTriangle(filePath, bilinearForm, H1Order, pToAdd);
-}
-
-MeshPtr Mesh::buildQuadMesh(const Camellia::FieldContainer<double> &quadBoundaryPoints,
-                            int horizontalElements, int verticalElements,
-                            TBFPtr<double> bilinearForm,
-                            int H1Order, int pTest, bool triangulate, bool useConformingTraces,
-                            map<int,int> trialOrderEnhancements,
-                            map<int,int> testOrderEnhancements)
-{
-  int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) cout << "Warning: Mesh::buildQuadMesh() deprecated.  Use MeshFactory::buildQuadMesh() instead.\n";
-
-  return MeshFactory::buildQuadMesh(quadBoundaryPoints, horizontalElements, verticalElements, bilinearForm, H1Order, pTest, triangulate, useConformingTraces, trialOrderEnhancements, testOrderEnhancements);
-}
-
-MeshPtr Mesh::buildQuadMeshHybrid(const Camellia::FieldContainer<double> &quadBoundaryPoints,
-                                  int horizontalElements, int verticalElements,
-                                  TBFPtr<double> bilinearForm,
-                                  int H1Order, int pTest, bool useConformingTraces)
-{
-  int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) cout << "Warning: Mesh::buildQuadMeshHybrid() deprecated.  Use MeshFactory::buildQuadMeshHybrid() instead.\n";
-
-  return MeshFactory::buildQuadMeshHybrid(quadBoundaryPoints, horizontalElements, verticalElements, bilinearForm, \
-                                          H1Order, pTest, useConformingTraces);
 }
 
 void Mesh::quadMeshCellIDs(Camellia::FieldContainer<int> &cellIDs,

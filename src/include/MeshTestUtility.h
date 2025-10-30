@@ -28,10 +28,6 @@ class MeshTestUtility
 public:
   static bool checkLocalGlobalConsistency(MeshPtr mesh, double tol=1e-10);
 
-  // checkMeshDofConnectivities() and checkMeshConsistency() only support 2D Maximum rule meshes
-  static bool checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh2DMaximumRule);
-  static bool checkMeshConsistency(Teuchos::RCP<Mesh> mesh2DMaximumRule);
-
   // ! Method for checking consistency of all constraints in minimum-rule mesh.  Checks on present rank only (non-communicating method)
   static bool checkConstraintConsistency(MeshPtr meshMinimumRule);
   

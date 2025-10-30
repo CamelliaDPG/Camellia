@@ -8,6 +8,7 @@
 #include "PhysicalSolutionExtrusion.hpp"
 
 #include "ExtrudedMeshTopology.h"
+#include "GlobalDofAssignment.h"
 
 using namespace Camellia;
 

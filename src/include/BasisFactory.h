@@ -23,7 +23,6 @@
 
 #include "Basis.h"
 
-#include "MultiBasis.h"
 #include "VectorizedBasis.h"
 
 #include "CamelliaIntrepidExtendedTypes.h"
@@ -56,8 +55,6 @@ private:
   //  static map< Camellia::Basis<>*, int > _ranks; // allows lookup of basis rank
   map< Camellia::Basis<>*, Camellia::EFunctionSpace > _functionSpaces; // allows lookup of function spaces
   map< Camellia::Basis<>*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
-  set< Camellia::Basis<>*> _multiBases;
-  map< vector< Camellia::Basis<>* >, Camellia::MultiBasisPtr > _multiBasesMap;
   int _defaultTemporalPolyOrder;
   
   bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
@@ -92,8 +89,6 @@ public:
   BasisPtr getNodalBasisForCellTopology(CellTopoPtr cellTopo);
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
 
-  Camellia::MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
-
   BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
   BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);
 
@@ -102,7 +97,6 @@ public:
   Camellia::EFunctionSpace getBasisFunctionSpace(BasisPtr basis);
 
   bool basisKnown(BasisPtr basis);
-  bool isMultiBasis(BasisPtr basis);
 
   void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, FSE fs );
 

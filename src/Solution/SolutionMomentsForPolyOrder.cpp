@@ -12,6 +12,7 @@
 
 #include "Camellia_TeuchosSerializers.hpp"
 #include "CamelliaDebugUtility.h"
+#include "GlobalDofAssignment.h"
 
 #include <Intrepid2_SerendipityBasis.hpp>
 #include <Intrepid2_TensorBasis.hpp>

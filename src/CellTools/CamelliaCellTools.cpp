@@ -21,6 +21,9 @@
 #include "SerialDenseWrapper.h"
 #include "TensorBasis.h"
 
+#include <Intrepid_CellTools.hpp>
+#include <Intrepid_FunctionSpaceTools.hpp>
+
 #include <Intrepid2_CellTools.hpp>
 
 using namespace Camellia;

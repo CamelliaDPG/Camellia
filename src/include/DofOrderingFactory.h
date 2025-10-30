@@ -160,7 +160,7 @@ public:
   DofOrderingPtr pRefineTest(DofOrderingPtr testOrdering, CellTopoPtr cellTopo, int pToAdd = 1);
   DofOrderingPtr pRefineTrial(DofOrderingPtr trialOrdering, CellTopoPtr cellTopo, int pToAdd = 1);
 
-  DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder, bool replacePatchBasis);
+  DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder);
 
 //  DofOrderingPtr getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int,int> &oldKeysNewValues);
 
@@ -183,15 +183,10 @@ public:
                         CellTopoPtr childTopo, int childIndexInParentSide, // == where in the multi-basis are we, if there is a multi-basis?
                         DofOrderingPtr &parentTrialOrdering, int sideIndex,
                         CellTopoPtr parentTopo);
-  void assignMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex,
-                        CellTopoPtr cellTopo,
-                        vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide );
   DofOrderingPtr upgradeSide(DofOrderingPtr dofOrdering,
                              CellTopoPtr cellTopo,
                              map<int,BasisPtr> varIDsToUpgrade,
                              int sideToUpgrade);
-  map<int, BasisPtr> getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide);
-  bool sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex);
 
   //  DofOrderingPtr trialOrdering(int polyOrder, int* sidePolyOrder, const shards::CellTopology &cellTopo,
   //                                          bool conformingVertices = true);

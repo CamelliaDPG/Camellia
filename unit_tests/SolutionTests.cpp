@@ -123,7 +123,7 @@ namespace
     return mesh;
   }
   
-  void testCondensedSolveZeroMeanConstraint(bool minRule, Teuchos::FancyOStream &out, bool &success)
+  void testCondensedSolveZeroMeanConstraint(Teuchos::FancyOStream &out, bool &success)
   {
     double tol = 1e-10;
     
@@ -166,11 +166,7 @@ namespace
     int pToAdd = 2;
     
     // first, single-element mesh
-    MeshPtr mesh;
-    if (!minRule)
-      mesh = MeshUtilities::buildUnitQuadMesh(1, bf, H1Order, H1Order+pToAdd);
-    else
-      mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, 1, 1);
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, 1, 1);
     
     ////////////////////   REFINE & SOLVE   ///////////////////////
     SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -204,10 +200,7 @@ namespace
     TEST_COMPARE(abs(p_mean_condensed_soln), <, 1e-12);
     
     int numCells = 2;
-    if (!minRule)
-      mesh = MeshUtilities::buildUnitQuadMesh(numCells, bf, H1Order, H1Order+pToAdd);
-    else
-      mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, numCells, numCells);
+    mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, numCells, numCells);
     mesh->hRefine(set<GlobalIndexType>{0});
     
     solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -224,10 +217,7 @@ namespace
       cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
       
       ostringstream dir_name;
-      if (minRule)
-        dir_name << "refinedMaxRuleMeshStandardVsCondensedSolve";
-      else
-        dir_name << "refinedMinRuleMeshStandardVsCondensedSolve";
+      dir_name << "refinedMinRuleMeshStandardVsCondensedSolve";
       HDF5Exporter exporter(mesh,dir_name.str());
       VarFactoryPtr vf = bf->varFactory();
       exporter.exportSolution(solution,0);
@@ -1101,16 +1091,9 @@ namespace
     }
   }
   
-  TEUCHOS_UNIT_TEST( Solution, CondensedSolveWithZeroMeanConstraintMaxRule_Slow)
-  {
-    bool minRule = false;
-    testCondensedSolveZeroMeanConstraint(minRule, out, success);
-  }
-  
   TEUCHOS_UNIT_TEST( Solution, CondensedSolveWithZeroMeanConstraintMinRule_Slow)
   {
-    bool minRule = true;
-    testCondensedSolveZeroMeanConstraint(minRule, out, success);
+    testCondensedSolveZeroMeanConstraint(out, success);
   }
   
   void testERKTableauConvergenceRate(ERKTableauPtr tableau, const double dt_initial, Teuchos::FancyOStream &out, bool &success)

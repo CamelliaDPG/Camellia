@@ -47,8 +47,6 @@ class Mesh : public RefinementObserver, public DofInterpreter
   Teuchos::RCP<GlobalDofAssignment> _gda;
 
   int _pToAddToTest;
-  bool _enforceMBFluxContinuity = false; // default to false (the historical value)
-  bool _usePatchBasis = true; // use MultiBasis if this is false.
   bool _useConformingTraces = true; // if true, enforces vertex trace continuity
 
   TBFPtr<double> _bilinearForm;
@@ -58,11 +56,7 @@ class Mesh : public RefinementObserver, public DofInterpreter
 
   // preferred private constructor to use during deepCopy();
   Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
-       int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
-
-  // deprecated private constructor to use during deepCopy();
-  Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
-       int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
+       int pToAddToTest, bool useConformingTraces);
 
   void initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Teuchos_CommPtr Comm);
 
@@ -71,8 +65,6 @@ class Mesh : public RefinementObserver, public DofInterpreter
   map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Camellia::FieldContainer<double> &vertexCoordinates);
 
   Camellia::FieldContainer<double> physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs );
-
-  void setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly);
 
   void setNeighbor(ElementPtr elemPtr, unsigned elemSide, ElementPtr neighborPtr, unsigned neighborSide);
 
@@ -93,12 +85,6 @@ public:
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
-
-  // legacy (max rule 2D) constructor:
-  Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
-       TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
-       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >(), Teuchos_CommPtr Comm = Teuchos::null);
 
   // Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
@@ -132,17 +118,6 @@ public:
 
   static MeshPtr readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
 
-  // deprecated static constructors (use MeshFactory methods instead):
-  static MeshPtr buildQuadMesh(const Camellia::FieldContainer<double> &quadBoundaryPoints,
-                               int horizontalElements, int verticalElements,
-                               TBFPtr<double> bilinearForm,
-                               int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
-                               map<int,int> trialOrderEnhancements=_emptyIntIntMap,
-                               map<int,int> testOrderEnhancements=_emptyIntIntMap);
-  static MeshPtr buildQuadMeshHybrid(const Camellia::FieldContainer<double> &quadBoundaryPoints,
-                                     int horizontalElements, int verticalElements,
-                                     TBFPtr<double> bilinearForm,
-                                     int H1Order, int pTest, bool useConformingTraces=true);
   static void quadMeshCellIDs(Camellia::FieldContainer<int> &cellIDs,
                               int horizontalElements, int verticalElements,
                               bool useTriangles);
@@ -191,17 +166,13 @@ public:
 
   std::set<GlobalIndexType> getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal);
   
-  const map< pair<GlobalIndexType,IndexType> , GlobalIndexType>& getLocalToGlobalMap();
-  //  map< int, pair<int,int> > getGlobalToLocalMap();
-
   GlobalIndexType globalDofCount();
-  GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
   GlobalDofAssignmentPtr globalDofAssignment();
-
-  // ! Collective method.  Returns all cell IDs that are active.
-  set<GlobalIndexType> getActiveCellIDsGlobal();
+  
+  //! Collective method.  Returns all cell IDs that are active.
+  std::set<GlobalIndexType> getActiveCellIDsGlobal();
 
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideOrdinal, int &elemSideOrdinalInNeighbor);
 
@@ -249,7 +220,6 @@ public:
 
   bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const;
   
-  bool meshUsesMaximumRule();
   bool meshUsesMinimumRule();
 
   bool myCellsInclude(GlobalIndexType cellID) const;
@@ -273,7 +243,6 @@ public:
 
   PartitionIndexType partitionForCellID(GlobalIndexType cellID);
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
-  PartitionIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
 
   Camellia::FieldContainer<double> physicalCellNodes( ElementTypePtr elemType);
   Camellia::FieldContainer<double> physicalCellNodesForCell(GlobalIndexType cellID);
@@ -286,8 +255,7 @@ public:
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements, int pToAdd);
   void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements);
   void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd, bool repartitionAndRebuild = true);
-  void printLocalToGlobalMap(); // for debugging
-
+  
   void rebuildLookups();
 
   void registerObserver(Teuchos::RCP<RefinementObserver> observer);
@@ -308,15 +276,11 @@ public:
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
 
   void setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > &edgeToCurveMap);
-  void setEnforceMultiBasisFluxContinuity( bool value );
-
+  
   vector< ParametricCurvePtr > parametricEdgesForCell(GlobalIndexType cellID, bool neglectCurves=false);
 
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
 
-  void setUsePatchBasis( bool value );
-  bool usePatchBasis();
-  
   bool tensorTopologyMeansSpaceTime() const;
   void setTensorTopologyMeansSpaceTime(bool value);
 

@@ -137,12 +137,6 @@ _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
   _useSchwarzDiagonalWeight = false;
   _useSchwarzScalingWeight = true; // weight to ensure maximum eigenvalue of M*A <= 1.0, M being the Schwarz smoother.
 
-  if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) )
-  {
-    cout << "GMGOperator only supports minimum rule.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GMGOperator only supports minimum rule.");
-  }
-
   _coarseSolution->initializeLHSVector();
   _coarseSolution->initializeLoad(); // don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
 

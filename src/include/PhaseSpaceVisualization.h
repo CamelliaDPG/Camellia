@@ -8,6 +8,7 @@
 #ifndef PhaseSpaceVisualization_h
 #define PhaseSpaceVisualization_h
 
+#include "GlobalDofAssignment.h"
 #include "HDF5Exporter.h"
 #include "SolutionMoments.h"
 #include "SolutionMomentFunction.h"
