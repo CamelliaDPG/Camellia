@@ -212,14 +212,19 @@ public:
   virtual IPPtr constructVlasovInnerProduct(const bool useSumFactorizedAssembly);
   
   // field variables:
-  VarPtr f(int i=0);  // Vlasov distribution (species i)
+  virtual VarPtr f(int i=0);         // Vlasov distribution (species i)
+  std::string f_name(int i=0) const; // string label for field variable f_i for species i
   
   // traces:
-  VarPtr f_hat(int i=0); // Vlasov conforming trace (species i)
-  VarPtr t_n_hat(int i=0); // Vlasov non-conforming trace (species i)
+  virtual VarPtr f_hat(int i=0);           // Vlasov conforming trace (species i)
+  std::string f_hat_name(int i=0) const;   // string label for Vlasov conforming trace (species i)
+  
+  virtual VarPtr t_n_hat(int i=0);         // Vlasov non-conforming trace (species i)
+  std::string t_n_hat_name(int i=0) const; // string label for Vlasov non-conforming trace (species i)
   
   // test variables:
-  VarPtr w(int i=0);   // Vlasov test variable (species i)
+  virtual VarPtr w(int i=0);         // Vlasov test variable (species i)
+  std::string w_name(int i=0) const; // string label for Vlasov test variable (species i)
   
   //! Returns the BF object corresponding to the Vlasov bilinear form.
   BFPtr vlasovBF();
@@ -241,6 +246,8 @@ public:
       
   SolutionPtr vlasovSolution();
   SolutionPtr configurationSpaceSolution();
+  
+  SolutionPtr vlasovSolutionPreviousSubstep();
     
   bool hasL2Trace() const;
   
@@ -453,12 +460,10 @@ public:
   /** \brief Returns the basis family employed by the discretizations.  */
   EBasisFamily basisFamily() const;
   
-  void setUseSumFactorizedAssembly(bool useSumFactorizedAssembly);
-  
   bool useSumFactorizedAssembly() const;
   
-  /** \brief  Returns a Function representing the specified velocity-space coordinate. */
-  FunctionPtr v_i(const int zeroBasedComp) const;
+  /** \brief  Returns a Function representing the specified velocity-space coordinate.*/
+  virtual FunctionPtr v_i(const int zeroBasedComp) const;
   
   void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
                                                               double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);
