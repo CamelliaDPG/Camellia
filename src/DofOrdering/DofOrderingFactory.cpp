@@ -204,7 +204,33 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
         }
         else
         {
-          basis = BasisFactory::basisFactory()->getConformingBasis( testIDPolyOrder, sideTopo, testIDFunctionSpace );
+          std::vector<int> pVector = testIDPolyOrder;
+          if (pVector.size() > sideTopo->getTensorialDegree() + 1)
+          {
+            // we should do something here in terms of selecting the right dimensions from pVector,
+            // but for now, I'm just going to check isotropic in p, and then reduce the number of entries
+            // by one.
+            
+            int p = pVector[0];
+            for (int d=1; d<pVector.size(); d++)
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(p != pVector[d], std::invalid_argument, "this code path assumes isotropic in p right now");
+            }
+            
+            pVector.pop_back();
+          }
+          auto fsVector = testIDFunctionSpace;
+          if (fsVector.size() > sideTopo->getTensorialDegree() + 1)
+          {
+            // similar story for function spaces
+            auto fs = fsVector[0];
+            for (int d=1; d<fsVector.size(); d++)
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(fs != fsVector[d], std::invalid_argument, "this code path assumes isotropic in function space right now");
+            }
+            fsVector.pop_back();
+          }
+          basis = BasisFactory::basisFactory()->getConformingBasis( pVector, sideTopo, fsVector );
         }
         int basisRank = basis->rangeRank();
         

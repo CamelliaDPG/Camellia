@@ -775,7 +775,8 @@ Teuchos::RCP<GMGSolver> VlasovBackwardEulerFormulation::constructGMGSolver()
     meshes = vector<MeshPtr> {_vlasovSoln->mesh()};
   }
   
-  auto gmgSolver = Teuchos::rcp( new GMGSolver(_vlasovSoln, meshes, _maxIters, _cgTol, multigridStrategy,
+  auto gmgSolver = Teuchos::rcp( new GMGSolver(_vlasovSoln, meshes, _maxIters, _cgTol,
+                                               multigridStrategy, smootherChoice,
                                                Solver::getDirectSolver(true), useCondensedSolve) );
   
   gmgSolver->setSmootherType(smootherChoice);

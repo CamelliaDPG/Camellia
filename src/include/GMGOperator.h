@@ -49,6 +49,7 @@ public:
     BLOCK_SYMMETRIC_GAUSS_SEIDEL,
     IFPACK_ADDITIVE_SCHWARZ,
     CAMELLIA_ADDITIVE_SCHWARZ,
+    CHEBYSHEV,
     NONE
   };
   
@@ -117,6 +118,10 @@ private:
   int _smootherApplicationCount; // default to 1, but 2 may often be a better choice (especially when doing more than 2 levels)
   Teuchos::RCP<Epetra_MultiVector> _smootherDiagonalWeight;
   bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
+  
+  int _chebyshevDegree = 15;
+  double _chebyshevEigenAutocomputeRatio = 30.0;
+  int _chebyshevMaxEigenIterations = 10;
   
   void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
   
@@ -348,6 +353,9 @@ public:
   
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
+  
+  void setChebyshevDegree(int chebyshevDegree);
+  void setChebyshevRatio(double chebyshevRatio);
   
   //! Set the multigrid strategy: two-level (additive), V-cycle, W-cycle, or full multigrid.
   void setMultigridStrategy(MultigridStrategy choice);

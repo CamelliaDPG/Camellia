@@ -113,8 +113,11 @@ _finePartitionMap(fineSolution->getPartitionMap())
   // once we have a list of meshes, use gmgOperatorFromMeshSequence to build the operator
 }
 
-GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters,
-                     double tol, GMGOperator::MultigridStrategy multigridStrategy, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation,
+GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine,
+                     int maxIters, double tol,
+                     GMGOperator::MultigridStrategy multigridStrategy,
+                     GMGOperator::SmootherChoice smoother,
+                     Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation,
                      bool useDiagonalSchwarzWeighting) :
 Narrator("GMGSolver"),
 _finePartitionMap(fineSolution->getPartitionMap())
@@ -134,7 +137,8 @@ _finePartitionMap(fineSolution->getPartitionMap())
   
   Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation = Teuchos::rcp( new BasisReconciliation(true) );
   
-  _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, multigridStrategy, coarseSolver, useStaticCondensation,
+  _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, multigridStrategy,
+                                             smoother, coarseSolver, useStaticCondensation,
                                              useDiagonalSchwarzWeighting, sharedBasisReconciliation);
 }
 
@@ -163,9 +167,12 @@ int GMGSolver::iterationCount()
   return _iterationCount;
 }
 
-Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine, SolutionPtr fineSolution,
+Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine,
+                                                                 SolutionPtr fineSolution,
                                                                  GMGOperator::MultigridStrategy multigridStrategy,
-                                                                 SolverPtr coarseSolver, bool useStaticCondensationInCoarseSolve,
+                                                                 GMGOperator::SmootherChoice smoother,
+                                                                 SolverPtr coarseSolver,
+                                                                 bool useStaticCondensationInCoarseSolve,
                                                                  bool useDiagonalSchwarzWeighting,
                                                                  Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
 {
@@ -181,84 +188,99 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
   BCPtr zeroBCs = fineSolution->bc()->copyImposingZero();
   Epetra_Map finePartitionMap = fineSolution->getPartitionMap();
   
+  Teuchos::RCP<GMGOperator> gmgOperator;
   if (multigridStrategy == GMGOperator::SMOOTHER_ONLY)
   {
     MeshPtr mesh = meshesCoarseToFine[0];
-    return Teuchos::rcp(new GMGOperator(GMGOperator::SMOOTHER_ONLY, zeroBCs, mesh, ip, mesh, fineDofInterpreter, finePartitionMap,
-                                        useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
+    gmgOperator = Teuchos::rcp(new GMGOperator(GMGOperator::SMOOTHER_ONLY, zeroBCs, mesh, ip, mesh, fineDofInterpreter,
+                                               finePartitionMap, useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
+    gmgOperator->setSmootherType(smoother);
   }
-  
-  int cubatureEnrichmentDegree = fineSolution->cubatureEnrichmentDegree();
-  
-  // for now, leaving these two parameters as the historical defaults (1 and 1)
-  // it may be that iteration counts would remain more stable under refinements if we increased these
-  // (but our major expense is constructing prolongation operator, so this is not likely to make a big difference in runtime)
-  int coarseSmootherApplications = 1;
-  int fineSmootherApplications = 1;
-  
-  const static int SMOOTHER_OVERLAP_FOR_LOWEST_ORDER_P = 0; // new; old approach would have had 0 here...
-  
-  bool hRefinedPrevious = false; // assumption is that we do h-refinements on a coarse poly mesh, and then p refinements.
-  for (int i=meshesCoarseToFine.size()-1; i>0; i--)
+  else
   {
-    MeshPtr fineMesh = meshesCoarseToFine[i];
-    MeshPtr coarseMesh = meshesCoarseToFine[i-1];
-    if (i>1)
-    {
-      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
-                                                    useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
-    }
-    else
-    {
-      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
-                                                    coarseSolver, useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
-    }
-    coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-    coarseOperator->setUseSchwarzScalingWeight(true);
-    coarseOperator->setMultigridStrategy(multigridStrategy);
-    bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
-    coarseOperator->setUseHierarchicalNeighborsForSchwarz(false); // changed Dec. 22 2015, after tests revealed that hiarchical truncation seems to be a uniformly bad idea...
-    coarseOperator->getCoarseSolution()->setCubatureEnrichmentDegree(cubatureEnrichmentDegree);
+    int cubatureEnrichmentDegree = fineSolution->cubatureEnrichmentDegree();
     
-    int smootherOverlap;
-    if (hRefined)
-    {
-      smootherOverlap = 1;
-      coarseOperator->setUseSchwarzDiagonalWeight(useDiagonalSchwarzWeighting); // empirically, this doesn't work well for h-multigrid -- but that was with the square-root-symmetrized weight, which James Lottes says is not a good idea
-    }
-    else
-    {
-      smootherOverlap = 0;
-      coarseOperator->setUseSchwarzDiagonalWeight(useDiagonalSchwarzWeighting); // not sure which is better; use false for now
-    }
-
-    coarseOperator->setSmootherOverlap(smootherOverlap);
-    coarseOperator->setSmootherApplicationCount(coarseSmootherApplications);
+    // for now, leaving these two parameters as the historical defaults (1 and 1)
+    // it may be that iteration counts would remain more stable under refinements if we increased these
+    // (but our major expense is constructing prolongation operator, so this is not likely to make a big difference in runtime)
+    int coarseSmootherApplications = 1;
+    int fineSmootherApplications = 1;
     
-    if (finerOperator != Teuchos::null)
+    const static int SMOOTHER_OVERLAP_FOR_LOWEST_ORDER_P = 0;
+    
+    bool hRefinedPrevious = false; // assumption is that we do h-refinements on a coarse poly mesh, and then p refinements.
+    for (int i=meshesCoarseToFine.size()-1; i>0; i--)
     {
-      finerOperator->setCoarseOperator(coarseOperator);
-      if (hRefined && !hRefinedPrevious)
+      MeshPtr fineMesh = meshesCoarseToFine[i];
+      MeshPtr coarseMesh = meshesCoarseToFine[i-1];
+      if (i>1)
       {
-        // at the border between h and p refinements, use smootherOverlap of 1
-        finerOperator->setSmootherOverlap(SMOOTHER_OVERLAP_FOR_LOWEST_ORDER_P);
+        coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
+                                                      useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
       }
+      else
+      {
+        coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
+                                                      coarseSolver, useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
+      }
+      
+      if (finerOperator != Teuchos::null)
+      {
+        finerOperator->setCoarseOperator(coarseOperator);
+      }
+      else
+      {
+        finestOperator = coarseOperator;
+      }
+      
+      coarseOperator->setSmootherType(smoother);
+      
+      if (smoother == GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ)
+      {
+        coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+        coarseOperator->setUseSchwarzScalingWeight(true);
+        coarseOperator->setMultigridStrategy(multigridStrategy);
+        bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
+        coarseOperator->setUseHierarchicalNeighborsForSchwarz(false); // changed Dec. 22 2015, after tests revealed that hiarchical truncation seems to be a uniformly bad idea...
+        coarseOperator->getCoarseSolution()->setCubatureEnrichmentDegree(cubatureEnrichmentDegree);
+        
+        int smootherOverlap;
+        if (hRefined)
+        {
+          smootherOverlap = 1;
+          coarseOperator->setUseSchwarzDiagonalWeight(useDiagonalSchwarzWeighting); // empirically, this doesn't work well for h-multigrid -- but that was with the square-root-symmetrized weight, which James Lottes says is not a good idea
+        }
+        else
+        {
+          smootherOverlap = 0;
+          coarseOperator->setUseSchwarzDiagonalWeight(useDiagonalSchwarzWeighting); // not sure which is better; use false for now
+        }
+        
+        coarseOperator->setSmootherOverlap(smootherOverlap);
+        coarseOperator->setSmootherApplicationCount(coarseSmootherApplications);
+        
+        if (finerOperator != Teuchos::null)
+        {
+          if (hRefined && !hRefinedPrevious)
+          {
+            // at the border between h and p refinements, use smootherOverlap of 1
+            finerOperator->setSmootherOverlap(SMOOTHER_OVERLAP_FOR_LOWEST_ORDER_P);
+          }
+        }
+        if ((i == 1) && !hRefined)
+        {
+          coarseOperator->setSmootherOverlap(SMOOTHER_OVERLAP_FOR_LOWEST_ORDER_P);
+        }
+        hRefinedPrevious = hRefined;
+      }
+      finerOperator = coarseOperator;
+      finePartitionMap = finerOperator->getCoarseSolution()->getPartitionMap();
+      fineDofInterpreter = finerOperator->getCoarseSolution()->getDofInterpreter();
     }
-    else
-    {
-      finestOperator = coarseOperator;
-    }
-    if ((i == 1) && !hRefined)
-    {
-      coarseOperator->setSmootherOverlap(SMOOTHER_OVERLAP_FOR_LOWEST_ORDER_P);
-    }
-    finerOperator = coarseOperator;
-    finePartitionMap = finerOperator->getCoarseSolution()->getPartitionMap();
-    fineDofInterpreter = finerOperator->getCoarseSolution()->getDofInterpreter();
-    hRefinedPrevious = hRefined;
+    finestOperator->setSmootherApplicationCount(fineSmootherApplications);
+    gmgOperator = finestOperator;
   }
-  finestOperator->setSmootherApplicationCount(fineSmootherApplications);
-  return finestOperator;
+  return gmgOperator;
 }
 
 Teuchos::RCP<GMGSolver> GMGSolver::gmgSolver(SolutionPtr soln, bool useCG, double tol, int maxIters)
@@ -292,7 +314,7 @@ Teuchos::RCP<GMGSolver> GMGSolver::gmgSolver(SolutionPtr soln, bool useCG, doubl
   bool saveFactorization = true;
   auto coarseSolver = Solver::getDirectSolver(saveFactorization);
   
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(soln, prunedMeshes, maxIters, tol, GMGOperator::V_CYCLE,
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(soln, prunedMeshes, maxIters, tol, GMGOperator::V_CYCLE, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ,
                                                                  coarseSolver, soln->usesCondensedSolve(), false));
   
   gmgSolver->setAztecOutput(0);
@@ -308,7 +330,8 @@ Teuchos::RCP<GMGSolver> GMGSolver::gmgSolver(TSolutionPtr<double> fineSolution, 
                                              GMGOperator::MultigridStrategy multigridStrategy,
                                              Teuchos::RCP<Solver> coarseSolver)
 {
-  auto solver = Teuchos::rcp( new GMGSolver(fineSolution, meshesCoarseToFine, maxIters, tol, multigridStrategy,
+  auto smoother = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
+  auto solver = Teuchos::rcp( new GMGSolver(fineSolution, meshesCoarseToFine, maxIters, tol, multigridStrategy, smoother,
                                             coarseSolver, fineSolution->usesCondensedSolve()) );
   solver->setUseConjugateGradient(useConjugateGradient);
   return solver;
@@ -465,25 +488,16 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
       someCellWasRefined = false;
 
       vector<pair<GlobalIndexTypeToCast,int>> pRefinementsVector; // only store for non-zero p-refinements
+      auto coarseGDA = meshToPRefine->globalDofAssignment();
+      auto   fineGDA = fineMesh->globalDofAssignment();
       for (GlobalIndexType cellIndex : *myFineCellIndices)
       {
-        ElementTypePtr coarseElemType = meshToPRefine->getElementType(cellIndex);
-        int kForCoarseCell = coarseElemType->trialOrderPtr->maxBasisDegreeForVolume();
+        int H1OrderCoarse = coarseGDA->getH1Order(cellIndex)[0];
+        int H1OrderFine = fineGDA->getH1Order(cellIndex)[0]; // TODO: support anisotropic p…
         
-        ElementTypePtr fineElemType = fineMesh->getElementType(cellIndex);
-        int kForFineCell = fineElemType->trialOrderPtr->maxBasisDegreeForVolume();
+        int kToAdd = min(H1OrderCoarse, H1OrderFine - H1OrderCoarse);
         
-        int kToAdd;
-        if (kForCoarseCell == 0)
-        {
-          kToAdd = 1;
-        }
-        else
-        {
-          kToAdd = min(kForCoarseCell,kForFineCell - kForCoarseCell);
-        }
-        
-        if (kForCoarseCell + kToAdd < kForFineCell) // if kForCoarseCell + kToAdd == kForFineCell, then the fine mesh will do the job
+        if (H1OrderCoarse + kToAdd < H1OrderFine) // if H1OrderCoarse + kToAdd == H1OrderFine, then the fine mesh will do the job
         {
           int pRefinement = pRefinements[cellIndex] + kToAdd;
           pRefinements[cellIndex] = pRefinement;

@@ -38,6 +38,7 @@
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_PointRelaxation.h"
 #include "Ifpack_Amesos.h"
+#include "Ifpack_Chebyshev.h"
 #include "Ifpack_ILU.h"
 #include "Ifpack_IC.h"
 #include "Ifpack_Graph.h"
@@ -1139,7 +1140,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       TimeLogger::sharedInstance()->stopTimer(timerHandle);
     }
     
-    VarFactoryPtr vf = _fineMesh->bilinearForm()->varFactory();
+    VarFactoryPtr vf = _fineMesh->varFactory();
 
     typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
     map< int, BasisMap > volumeMaps;
@@ -2145,6 +2146,16 @@ std::map<string, double> GMGOperator::timingReportSumOfOperators() const
   return reportValues;
 }
 
+void GMGOperator::setChebyshevDegree(int chebyshevDegree)
+{
+  _chebyshevDegree = chebyshevDegree;
+}
+
+void GMGOperator::setChebyshevRatio(double chebyshevRatio)
+{
+  _chebyshevEigenAutocomputeRatio = chebyshevRatio;
+}
+
 void GMGOperator::setCoarseOperator(Teuchos::RCP<GMGOperator> coarseOperator)
 {
   _coarseOperator = coarseOperator;
@@ -2434,6 +2445,22 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
   }
   break;
+    case CHEBYSHEV:
+    {
+      /*
+       EigRatio_             = List.get("chebyshev: ratio eigenvalue", EigRatio_);
+       LambdaMin_            = List.get("chebyshev: min eigenvalue", LambdaMin_);
+       LambdaMax_            = List.get("chebyshev: max eigenvalue", LambdaMax_);
+       PolyDegree_           = List.get("chebyshev: degree",PolyDegree_);
+       EigMaxIters_          = List.get("chebyshev: eigenvalue max iterations",EigMaxIters_);
+       */
+//      List.set("chebyshev: eigenvalue autocompute ratio",_chebyshevEigenAutocomputeRatio); //Ifpack2?
+      List.set("chebyshev: ratio eigenvalue", _chebyshevEigenAutocomputeRatio);
+      List.set("chebyshev: eigenvalue max iterations",_chebyshevMaxEigenIterations);
+      List.set("chebyshev: degree",_chebyshevDegree);
+      smoother = Teuchos::rcp( new Ifpack_Chebyshev(fineStiffnessMatrix) );
+    }
+      break;
 
   default:
     break;
@@ -2584,6 +2611,8 @@ std::string GMGOperator::smootherString(SmootherChoice choice)
       return "Point Jacobi";
     case POINT_SYMMETRIC_GAUSS_SEIDEL:
       return "Point Symmetric Gauss-Seidel";
+    case CHEBYSHEV:
+      return "Chebyshev";
     default:
       return "Unknown smoother type";
   }

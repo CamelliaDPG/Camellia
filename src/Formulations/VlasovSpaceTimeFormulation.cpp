@@ -1266,6 +1266,7 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
     }
     
     auto gmgSolver = Teuchos::rcp( new GMGSolver(_vlasovSoln, meshes, _maxIters, _cgTol, multigridStrategy,
+                                                 smootherChoice,
                                                  Solver::getDirectSolver(true), useCondensedSolve) );
     
     gmgSolver->setSmootherType(smootherChoice);
