@@ -69,7 +69,7 @@ void AbsFunction::values(Intrepid2::Data<double, Camellia::DeviceType> data, Bas
 #endif
     return fabs(a);
   };
-  data.applyOperator(absOp);
+  applyOperator(data,absOp);
 }
 
 TFunctionPtr<double> AbsFunction::dx()

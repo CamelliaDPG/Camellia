@@ -1015,6 +1015,11 @@ SolutionPtr VlasovSpaceTimeFormulation::vlasovSolution()
   return _vlasovSoln;
 }
 
+SolutionPtr VlasovSpaceTimeFormulation::vlasovSolutionPreviousSubstep()
+{
+  return _vlasovSolnPrev;
+}
+
 vector<FunctionPtr> VlasovSpaceTimeFormulation::a(int i)
 {
   // returns the acceleration term for species i; if i == -1, returns an acceleration term that should be weighted by (q / m) for the species
@@ -1128,7 +1133,11 @@ void VlasovSpaceTimeFormulation::computeConservationDiagnostics(bool updateSolut
     
     auto H1Order = _configurationSpaceFormulation->configurationSpaceMesh()->globalDofAssignment()->getInitialH1Order();
     auto delta_k = 0; // since we're not solving, no enrichment required.  (Also, we don't have any test variables.)
-    MeshPtr conservationDiagnosticsMesh = Teuchos::rcp(new Mesh(_configurationSpaceMeshTopology, varFactory, H1Order, delta_k) );
+    
+    auto configPartitioning = MeshPartitionPolicy::inducedPartitionPolicy(_configurationSpaceFormulation->configurationSpaceMesh());
+    map<int,int> emptyMap;
+    MeshPtr conservationDiagnosticsMesh = Teuchos::rcp(new Mesh(_configurationSpaceMeshTopology, varFactory, H1Order, delta_k,
+                                                                emptyMap, emptyMap, configPartitioning) );
     
     SolutionPtr diagnosticSolution = Solution::solution(conservationDiagnosticsMesh);
     diagnosticSolution->projectOntoMesh(projectionMap);
@@ -1266,6 +1275,7 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
     }
     
     auto gmgSolver = Teuchos::rcp( new GMGSolver(_vlasovSoln, meshes, _maxIters, _cgTol, multigridStrategy,
+                                                 smootherChoice,
                                                  Solver::getDirectSolver(true), useCondensedSolve) );
     
     gmgSolver->setSmootherType(smootherChoice);
@@ -1493,13 +1503,23 @@ bool VlasovSpaceTimeFormulation::exportViz() const
 VarPtr VlasovSpaceTimeFormulation::f(int i)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->trialVar(_f_names[i]);
+  return vf->trialVar(f_name(i));
+}
+
+std::string VlasovSpaceTimeFormulation::f_name(int i) const
+{
+  return _f_names[i];
 }
 
 VarPtr VlasovSpaceTimeFormulation::f_hat(int i)
 {
   VarFactoryPtr vf = _vlasovSoln->bf()->varFactory();
-  return vf->trialVar(_f_hat_names[i]);
+  return vf->trialVar(f_hat_name(i));
+}
+
+std::string VlasovSpaceTimeFormulation::f_hat_name(int i) const
+{
+  return _f_hat_names[i];
 }
 
 int VlasovSpaceTimeFormulation::fixedPointMaxSubsteps() const
@@ -1693,7 +1713,7 @@ void VlasovSpaceTimeFormulation::initialize()
   for (int i=0; i<_velocityDim; i++)
   {
     auto & dimVertices = velocitySpaceVertices[i];
-    const int numVertices = dimVertices.size();
+    const int numVertices = static_cast<int>(dimVertices.size());
     v0.push_back(dimVertices[0]);
     vMax.push_back(dimVertices[numVertices-1]);
     
@@ -2468,7 +2488,12 @@ int VlasovSpaceTimeFormulation::slabOrdinal() const
 VarPtr VlasovSpaceTimeFormulation::w(int i)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->testVar(_w_names[i], HGRAD);
+  return vf->testVar(w_name(i), HGRAD);
+}
+
+std::string VlasovSpaceTimeFormulation::w_name(int i) const
+{
+  return _w_names[i];
 }
 
 void VlasovSpaceTimeFormulation::setUseGeometricMultigrid(bool useGeometricMultigrid)
@@ -2728,7 +2753,12 @@ vector<pair<double,double>> VlasovSpaceTimeFormulation::timeSeriesForSlabSpatial
 VarPtr VlasovSpaceTimeFormulation::t_n_hat(int i)
 {
   VarFactoryPtr vf = _vlasovBF->varFactory();
-  return vf->trialVar(_tn_hat_names[i]);
+  return vf->trialVar(t_n_hat_name(i));
+}
+
+std::string VlasovSpaceTimeFormulation::t_n_hat_name(int i) const
+{
+  return _tn_hat_names[i];
 }
 
 vector< pair<double,double> > VlasovSpaceTimeFormulation::totalEnergyTimeSeries(const double t0, const double dt, const int numValues, const int speciesOrdinal) const

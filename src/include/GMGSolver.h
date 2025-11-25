@@ -52,9 +52,13 @@ class GMGSolver : public Solver, public Narrator
 
   int solve(bool rebuildCoarseStiffness);
   
-  static Teuchos::RCP<GMGOperator> gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine, SolutionPtr fineSolution,
-                                                               GMGOperator::MultigridStrategy multigridStrategy, SolverPtr coarseSolver,
-                                                               bool useStaticCondensationInCoarseSolve, bool useDiagonalSchwarzWeighting,
+  static Teuchos::RCP<GMGOperator> gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine,
+                                                               SolutionPtr fineSolution,
+                                                               GMGOperator::MultigridStrategy multigridStrategy,
+                                                               GMGOperator::SmootherChoice smoother,
+                                                               SolverPtr coarseSolver,
+                                                               bool useStaticCondensationInCoarseSolve,
+                                                               bool useDiagonalSchwarzWeighting,
                                                                Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
@@ -64,6 +68,7 @@ public:
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);
   GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters, double tol,
             GMGOperator::MultigridStrategy multigridStrategy = GMGOperator::V_CYCLE,
+            GMGOperator::SmootherChoice smoother = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ,
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false,
             bool useDiagonalSchwarzWeighting = false);
 

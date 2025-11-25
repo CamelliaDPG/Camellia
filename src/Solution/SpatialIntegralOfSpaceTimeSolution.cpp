@@ -178,7 +178,7 @@ SpatialIntegralOfSpaceTimeSolution::SpatialIntegralOfSpaceTimeSolution(SolutionP
   using TensorBasis = Intrepid2::Basis_TensorBasis<Intrepid2Basis>;
   auto tensorBasis = dynamic_cast<TensorBasis*>(spaceTimeBasis->intrepid2Basis().get());
   
-  TEUCHOS_TEST_FOR_EXCEPTION(tensorBasis == NULL, std::invalid_argument, "Basis must be either a TensorBasis");
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorBasis == NULL, std::invalid_argument, "Basis must be a TensorBasis");
   
   BasisPtr spatialBasis, temporalBasis;
   

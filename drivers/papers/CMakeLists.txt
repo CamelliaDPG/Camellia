@@ -1,5 +1,10 @@
 project(papers)
 
+option(BUILD_RelativisticVlasovSpaceTime "Build drivers in RelativisticVlasovSpaceTime directory" ON)
+if (BUILD_RelativisticVlasovSpaceTime)
+  add_subdirectory(RelativisticVlasovSpaceTime)
+endif(BUILD_RelativisticVlasovSpaceTime)
+
 option(BUILD_VlasovPoissonBackwardEuler "Build drivers in VlasovPoissonBackwardEuler directory" ON)
 
 if (BUILD_VlasovPoissonBackwardEuler)
@@ -16,3 +21,4 @@ option(BUILD_VlasovPoissonSpaceTime "Build drivers in VlasovPoissonSpaceTime dir
 if (BUILD_VlasovPoissonSpaceTime)
   add_subdirectory(VlasovPoissonSpaceTime)
 endif(BUILD_VlasovPoissonSpaceTime)
+

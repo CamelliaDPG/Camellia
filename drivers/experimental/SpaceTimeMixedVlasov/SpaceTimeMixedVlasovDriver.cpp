@@ -127,6 +127,7 @@ int main(int argc, char *argv[])
     int numElements_v = 2;
     int meshDim = spaceDim + 1 + velocityDim;
     double beta = 1.0;
+    bool pMultigrid = false;
     
     vector<vector<double>> domainDim(meshDim,vector<double>{0.0,1.0}); // first index: spaceDim; second: 0/1 for x0, x1, etc.
     int p = 2;
@@ -367,7 +368,20 @@ int main(int argc, char *argv[])
       
       SolutionPtr soln = Solution::solution(vlasovBF, mesh, bc, rhs);
       
-      soln->solve();
+      if (pMultigrid)
+      {
+        const double gmresTol = 1e-6;
+        const int maxIters = 10000;
+        auto solver = GMGSolver::gmgSolver(soln, false, gmresTol, maxIters);
+//        solver->setSmootherType(GMGOperator::POINT_JACOBI);
+        solver->setSmootherType(GMGOperator::CHEBYSHEV);
+        solver->setAztecOutput(100);
+        soln->solve(solver);
+      }
+      else
+      {
+        soln->solve();
+      }
       
       auto K = soln->getStiffnessMatrix();
       

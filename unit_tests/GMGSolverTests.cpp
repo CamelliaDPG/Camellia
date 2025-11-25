@@ -971,7 +971,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
     auto tStiffness = E_to_T::matrix(fineSolution->getStiffnessMatrix());
     solver->gmgOperator()->setFineStiffnessMatrix(tStiffness);
 
-    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE, GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ};
+    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE, GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ, GMGOperator::CHEBYSHEV};
 
     for (GMGOperator::SmootherChoice smoother : smootherChoices)
     {

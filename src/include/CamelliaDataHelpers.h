@@ -29,6 +29,130 @@ namespace Camellia
 {
   using ordinal_type = Intrepid2::ordinal_type;
 
+  //! helper for the applyOperator() workaround below.  (The corresponding Data method is where Intrepid2::Data's bug actually lies.)
+  template<int rank, class DataType>
+  std::enable_if_t<(rank!=1) && (rank!=7), Kokkos::MDRangePolicy<typename DeviceType::execution_space,Kokkos::Rank<rank>> >
+  dataExtentRangePolicy(DataType &data)
+  {
+    using ExecutionSpace = typename DeviceType::execution_space;
+    Kokkos::Array<int,rank> startingOrdinals;
+    Kokkos::Array<int,rank> extents;
+    
+    auto underlying = data.getUnderlyingView();
+    
+    for (int d=0; d<rank; d++)
+    {
+      startingOrdinals[d] = 0;
+      extents[d] = underlying.extent_int(d);
+    }
+    auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<rank>>(startingOrdinals,extents);
+    return policy;
+  }
+
+  //! workaround for a bug in Intrepid2::Data::applyOperator.  Can/should delete this once we fix it there.
+  template<class Scalar, class DeviceType, class Operator>
+  void applyOperator(Intrepid2::Data<Scalar, DeviceType> &values, Operator &op)
+  {
+    using ExecutionSpace = typename DeviceType::execution_space;
+    auto dataRank_ = values.getUnderlyingViewRank();
+    switch (dataRank_)
+    {
+      case 1:
+      {
+        const int dataRank = 1;
+        auto view = values.template getUnderlyingView<dataRank>();
+        
+        const int dataExtent = view.extent_int(0);
+        Kokkos::RangePolicy<ExecutionSpace> policy(ExecutionSpace(),0,dataExtent);
+        Kokkos::parallel_for("apply operator in-place", policy,
+        KOKKOS_LAMBDA (const int &i0) {
+          view(i0) = op(view(i0));
+        });
+        
+      }
+      break;
+      case 2:
+      {
+        const int dataRank = 2;
+        auto policy = dataExtentRangePolicy<dataRank>(values);
+        auto view = values.template getUnderlyingView<dataRank>();
+        
+        Kokkos::parallel_for("apply operator in-place", policy,
+        KOKKOS_LAMBDA (const int &i0, const int &i1) {
+          view(i0,i1) = op(view(i0,i1));
+        });
+      }
+      break;
+      case 3:
+      {
+        const int dataRank = 3;
+        auto policy = dataExtentRangePolicy<dataRank>(values);
+        auto view = values.template getUnderlyingView<dataRank>();
+        
+        Kokkos::parallel_for("apply operator in-place", policy,
+        KOKKOS_LAMBDA (const int &i0, const int &i1, const int &i2) {
+          view(i0,i1,i2) = op(view(i0,i1,i2));
+        });
+      }
+      break;
+      case 4:
+      {
+        const int dataRank = 4;
+        auto policy = dataExtentRangePolicy<dataRank>(values);
+        auto view = values.template getUnderlyingView<dataRank>();
+        
+        Kokkos::parallel_for("apply operator in-place", policy,
+        KOKKOS_LAMBDA (const int &i0, const int &i1, const int &i2, const int &i3) {
+          view(i0,i1,i2,i3) = op(view(i0,i1,i2,i3));
+        });
+      }
+      break;
+      case 5:
+      {
+        const int dataRank = 5;
+        auto policy = dataExtentRangePolicy<dataRank>(values);
+        auto view = values.template getUnderlyingView<dataRank>();
+        
+        Kokkos::parallel_for("apply operator in-place", policy,
+        KOKKOS_LAMBDA (const int &i0, const int &i1, const int &i2, const int &i3, const int &i4) {
+          view(i0,i1,i2,i3,i4) = op(view(i0,i1,i2,i3,i4));
+        });
+      }
+      break;
+      case 6:
+      {
+        const int dataRank = 6;
+        auto policy = dataExtentRangePolicy<dataRank>(values);
+        auto view = values.template getUnderlyingView<dataRank>();
+        
+        Kokkos::parallel_for("apply operator in-place", policy,
+        KOKKOS_LAMBDA (const int &i0, const int &i1, const int &i2, const int &i3, const int &i4, const int &i5) {
+          view(i0,i1,i2,i3,i4,i5) = op(view(i0,i1,i2,i3,i4,i5));
+        });
+      }
+      break;
+      case 7:
+      {
+        const int dataRank = 7;
+        auto policy6 = dataExtentRangePolicy<6>(values);
+        auto view = values.template getUnderlyingView<dataRank>();
+        
+        const int dim_i6 = view.extent_int(6);
+        
+        Kokkos::parallel_for("apply operator in-place", policy6,
+        KOKKOS_LAMBDA (const int &i0, const int &i1, const int &i2, const int &i3, const int &i4, const int &i5) {
+          for (int i6=0; i6<dim_i6; i6++)
+          {
+            view(i0,i1,i2,i3,i4,i5,i6) = op(view(i0,i1,i2,i3,i4,i5,i6));
+          }
+        });
+      }
+      break;
+      default:
+        INTREPID2_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported data rank");
+    }
+  }
+
   //! helper method for copying host data to device data with possibly-incompatible layout (such that deep_copy is not available).
   template<class Scalar, int rank>
   void copyHostDataToDevice(Intrepid2::Data<Scalar, Camellia::DeviceType> deviceData,

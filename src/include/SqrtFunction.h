@@ -39,7 +39,7 @@ namespace Camellia {
 #endif
         return sqrt(a);
       };
-      values.applyOperator(sqrtOp);
+      applyOperator(values,sqrtOp);
     }
     void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override
     {

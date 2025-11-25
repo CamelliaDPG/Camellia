@@ -15,6 +15,7 @@
 #define Camellia_Function_h
 
 #include "AssignValue.h"
+#include "CamelliaDataHelpers.h"
 #include "CamelliaIntrepidExtendedTypes.h"
 #include "TypeDefs.h"
 

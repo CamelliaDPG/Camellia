@@ -1471,7 +1471,7 @@ void OldroydBFormulationUWReduced::solveIteratively(int maxIters, double cgTol, 
 
 //  prunedMeshes = meshes;
 
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(_solnIncrement, prunedMeshes, maxIters, cgTol, GMGOperator::V_CYCLE,
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(_solnIncrement, prunedMeshes, maxIters, cgTol, GMGOperator::V_CYCLE, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ,
                                                                   Solver::getDirectSolver(true), useCondensedSolve) );
   if (suppressSuperLUOutput)
     turnOffSuperLUDistOutput(gmgSolver);

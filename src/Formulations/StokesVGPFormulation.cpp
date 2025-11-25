@@ -1304,7 +1304,7 @@ int StokesVGPFormulation::solveIteratively(int maxIters, double cgTol, int azOut
 
 //  prunedMeshes = meshes;
 
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(_solution, prunedMeshes, maxIters, cgTol, GMGOperator::V_CYCLE,
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(_solution, prunedMeshes, maxIters, cgTol, GMGOperator::V_CYCLE, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ,
                                                                   Solver::getDirectSolver(true), useCondensedSolve) );
   if (suppressSuperLUOutput)
     turnOffSuperLUDistOutput(gmgSolver);

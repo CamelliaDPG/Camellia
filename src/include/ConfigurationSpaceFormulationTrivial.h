@@ -21,11 +21,23 @@ namespace Camellia
 :
   public ConfigurationSpaceFormulation
   {
+    std::vector<FunctionPtr> _E, _B;
+    std::vector<FunctionPtr> _E_priorTime, _B_priorTime;
+    
+    TimeDiscretizationType _timeDiscretizationType;
   public:
-    ConfigurationSpaceFormulationTrivial();
+    ConfigurationSpaceFormulationTrivial(TimeDiscretizationType timeDiscretizationType);
     
     void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) override;
         
+    void setE(std::vector<FunctionPtr> E);
+    
+    void setB(std::vector<FunctionPtr> B);
+    
+    void setE_priorTime(std::vector<FunctionPtr> E);
+    
+    void setB_priorTime(std::vector<FunctionPtr> B);
+    
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Poisson", "Gauss" are all possibilities.
     virtual std::string name() const override;
         

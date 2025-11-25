@@ -6,6 +6,9 @@ target_link_libraries(ConditionNumberTestsDriver Camellia)
 add_executable(PreconditioningTestsDriver EXCLUDE_FROM_ALL "PreconditioningTestsDriver.cpp")
 target_link_libraries(PreconditioningTestsDriver Camellia)
 
+add_executable(PreconditioningTests2025Driver EXCLUDE_FROM_ALL "PreconditioningTests2025Driver.cpp")
+target_link_libraries(PreconditioningTests2025Driver Camellia)
+
 add_executable(MultigridPreconditioningDriver "MultigridPreconditioningDriver.cpp")
 target_link_libraries(MultigridPreconditioningDriver Camellia)
 
