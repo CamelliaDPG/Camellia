@@ -407,7 +407,7 @@ namespace
     int H1Order = 2, delta_k = spaceDim;
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
-    VarPtr u = form.u(), sigma = form.sigma(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    VarPtr u = form.u(), sigma = form.sigma(0), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
     FunctionPtr u_exact;
     if (H1Order >= 3)
       u_exact = Function::xn(2); // x^2 exact solution
@@ -551,25 +551,27 @@ namespace
     int spaceDim = 2;
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
-    VarPtr u = form.u(), sigma = form.sigma(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    VarPtr u = form.u(), sigma_x = form.sigma(0), sigma_y = form.sigma(1), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
     
     int H1Order, delta_k = 1;
     
     map<int,int> trialOrderEnhancements;
     
-    FunctionPtr u_exact, sigma_exact;
+    FunctionPtr u_exact, sigma_exact_x, sigma_exact_y;
     if (simple)
     {
       H1Order = 1;
       u_exact = Function::constant(3.14159);
       FunctionPtr zero = Function::zero();
-      sigma_exact = Function::vectorize(zero, zero);
+      sigma_exact_x = zero;
+      sigma_exact_y = zero;
     }
     else
     {
       H1Order = 3;
       u_exact = Function::xn(2) + Function::yn(1);
-      sigma_exact = u_exact->grad();
+      sigma_exact_x = u_exact->dx();
+      sigma_exact_y = u_exact->dy();
     }
     
 //    if (useConformingTraces)
@@ -644,7 +646,8 @@ namespace
     
     map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[u->ID()] = u_exact;
-    exactSolnMap[sigma->ID()] = sigma_exact;
+    exactSolnMap[sigma_x->ID()] = sigma_exact_x;
+    exactSolnMap[sigma_y->ID()] = sigma_exact_y;
     
     FunctionPtr u_hat_exact   =   u_hat->termTraced()->evaluate(exactSolnMap);
     FunctionPtr sigma_n_hat_exact = sigma_n_hat->termTraced()->evaluate(exactSolnMap);

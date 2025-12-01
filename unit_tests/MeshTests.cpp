@@ -1340,7 +1340,8 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     map<int, FunctionPtr> solutionMap;
     FunctionPtr x = Function::xn();
     solutionMap[form.u()->ID()] = x;
-    solutionMap[form.sigma()->ID()] = Function::constant({1.0,0.0});
+    solutionMap[form.sigma(0)->ID()] = Function::constant(1.0);
+    solutionMap[form.sigma(1)->ID()] = Function::constant(0.0);
     solutionMap[form.u_hat()->ID()] = x * traceFxn;
     FunctionPtr n_parity = Function::normal() * Function::sideParity();
     solutionMap[form.sigma_n_hat()->ID()] = Function::constant({1.0,0.0}) * n_parity;

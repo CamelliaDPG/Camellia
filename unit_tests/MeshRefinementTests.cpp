@@ -61,7 +61,8 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
 
   // fields
   VarPtr u = pf.u();
-  VarPtr sigma = pf.sigma();
+  VarPtr sigma_x = pf.sigma(0);
+  VarPtr sigma_y = pf.sigma(1);
 
   // traces
   VarPtr u_hat = pf.u_hat();
@@ -117,23 +118,31 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
 
   solution->solve();
 
-  FunctionPtr sigma_exact = (spaceDim > 1) ? u_exact->grad() : u_exact->dx();
+  // 2D:
+  FunctionPtr sigma_exact_x = u_exact->dx();
+  FunctionPtr sigma_exact_y = u_exact->dy();
 
   FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
   map<int, FunctionPtr> sigmaMap;
-  sigmaMap[sigma->ID()] = sigma_exact;
+  sigmaMap[sigma_x->ID()] = sigma_exact_x;
+  sigmaMap[sigma_y->ID()] = sigma_exact_y;
 
   FunctionPtr sigma_n_exact = sigma_n->termTraced()->evaluate(sigmaMap);
 
-  FunctionPtr sigma_soln = Function::solution(sigma, solution);
+  FunctionPtr sigma_soln_x = Function::solution(sigma_x, solution);
+  FunctionPtr sigma_soln_y = Function::solution(sigma_y, solution);
   FunctionPtr sigma_n_soln = Function::solution(sigma_n, solution, false); // false: don't weight fluxes by parity
   FunctionPtr u_hat_soln = Function::solution(u_hat, solution);
 
-  FunctionPtr sigma_err = sigma_exact - sigma_soln;
+  FunctionPtr sigma_err_x = sigma_exact_x - sigma_soln_x;
+  FunctionPtr sigma_err_y = sigma_exact_y - sigma_soln_y;
   FunctionPtr sigma_n_err = sigma_n_exact - sigma_n_soln;
   FunctionPtr u_hat_err = u_exact * traceFxn - u_hat_soln;
 
-  double err_L2 = sigma_err->l2norm(mesh);
+  double err_L2_x = sigma_err_x->l2norm(mesh);
+  double err_L2_y = sigma_err_y->l2norm(mesh);
+  
+  double err_L2 = sqrt( err_L2_x * err_L2_x + err_L2_y * err_L2_y );
 
   double tol = 1e-12;
 
@@ -144,8 +153,13 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
     cout << "testTraceTermProjection error: sigma in initial solution (prior to projection) differs from exact solution by " << err_L2 << " in L^2 norm.\n";
     success = false;
 
-    double soln_l2 = sigma_soln->l2norm(mesh);
-    double exact_l2 = sigma_exact->l2norm(mesh);
+    double soln_l2_x  = sigma_soln_x->l2norm(mesh);
+    double soln_l2_y  = sigma_soln_y->l2norm(mesh);
+    double soln_l2    = sqrt( soln_l2_x * soln_l2_x + soln_l2_y * soln_l2_y );
+    
+    double exact_l2_x = sigma_exact_x->l2norm(mesh);
+    double exact_l2_y = sigma_exact_y->l2norm(mesh);
+    double exact_l2   = sqrt( exact_l2_x * exact_l2_x + exact_l2_y * exact_l2_y );
 
     cout << "L^2 norm of exact solution: " << exact_l2 << ", versus " << soln_l2 << " for initial solution\n";
   }
@@ -195,20 +209,15 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
     vector<string> fxnNames;
     vector< FunctionPtr > fxns;
     // fields:
-    fxnNames.push_back("sigma_exact");
-    fxns.push_back(sigma_exact);
-    fxnNames.push_back("sigma_soln");
-    fxns.push_back(sigma_soln);
-
     fxnNames.push_back("sigma_exact_x");
-    fxns.push_back(sigma_exact->x());
+    fxns.push_back(sigma_exact_x);
     fxnNames.push_back("sigma_soln_x");
-    fxns.push_back(sigma_soln->x());
+    fxns.push_back(sigma_soln_x);
 
     fxnNames.push_back("sigma_exact_y");
-    fxns.push_back(sigma_exact->y());
+    fxns.push_back(sigma_exact_y);
     fxnNames.push_back("sigma_soln_y");
-    fxns.push_back(sigma_soln->y());
+    fxns.push_back(sigma_soln_y);
     fxnExporter.exportFunction(fxns, fxnNames, 0, 10);
 
     // traces:

@@ -1731,8 +1731,10 @@ namespace
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     
     map<int, FunctionPtr> solutionMap;
-    VarPtr sigma = form.sigma();
-    solutionMap[sigma->ID()] = Function::constant({1.0,1.0});
+    VarPtr sigma_x = form.sigma(0);
+    VarPtr sigma_y = form.sigma(1);
+    solutionMap[sigma_x->ID()] = Function::constant(1.0);
+    solutionMap[sigma_y->ID()] = Function::constant(1.0);
     
     VarPtr sigma_n_hat = form.sigma_n_hat();
     FunctionPtr exactFxn = sigma_n_hat->termTraced()->evaluate(solutionMap);
@@ -1808,8 +1810,10 @@ namespace
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     
     map<int, FunctionPtr> solutionMap;
-    VarPtr sigma = form.sigma();
-    solutionMap[sigma->ID()] = Function::constant({1.0,1.0});
+    VarPtr sigma_x = form.sigma(0);
+    VarPtr sigma_y = form.sigma(1);
+    solutionMap[sigma_x->ID()] = Function::constant(1.0);
+    solutionMap[sigma_y->ID()] = Function::constant(1.0);
     
     VarPtr sigma_n_hat = form.sigma_n_hat();
     FunctionPtr exactFxn = sigma_n_hat->termTraced()->evaluate(solutionMap);
@@ -1924,8 +1928,10 @@ namespace
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     
     map<int, FunctionPtr> solutionMap;
-    VarPtr sigma = form.sigma();
-    solutionMap[sigma->ID()] = Function::constant({1.0,1.0});
+    VarPtr sigma_x = form.sigma(0);
+    VarPtr sigma_y = form.sigma(1);
+    solutionMap[sigma_x->ID()] = Function::constant(1.0);
+    solutionMap[sigma_y->ID()] = Function::constant(1.0);
 
     VarPtr sigma_n_hat = form.sigma_n_hat();
     FunctionPtr exactFxn = sigma_n_hat->termTraced()->evaluate(solutionMap);

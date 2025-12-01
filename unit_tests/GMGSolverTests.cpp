@@ -104,7 +104,14 @@ namespace
     bool useConformingTraces = false;
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
-    VarPtr u = form.u(), sigma = form.sigma(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    VarPtr u = form.u(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    
+    std::vector<VarPtr> sigma(spaceDim);
+    for (int d=0; d<spaceDim; d++)
+    {
+      sigma[d] = form.sigma(d);
+    }
+    
     //    FunctionPtr u_exact = Function::xn(2) * Function::yn(1); // x^2 y exact solution
     FunctionPtr psiExact = (spaceDim > 1) ? uExact->grad() : uExact->dx();
 
@@ -116,7 +123,10 @@ namespace
 
     map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[u->ID()] = uExact;
-    exactSolnMap[sigma->ID()] = psiExact;
+    for (int d=0; d<spaceDim; d++)
+    {
+      exactSolnMap[sigma[d]->ID()] = (spaceDim > 1) ? psiExact->spatialComponent(d+1) : psiExact;
+    }
 
     FunctionPtr u_hat_exact   =   u_hat->termTraced()->evaluate(exactSolnMap);
     FunctionPtr sigma_n_hat_exact = sigma_n_hat->termTraced()->evaluate(exactSolnMap);

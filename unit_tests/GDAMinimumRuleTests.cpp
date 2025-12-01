@@ -1221,10 +1221,6 @@ namespace
     VarPtr v = poissonForm.v();
     
     VarPtr u_hat = poissonForm.u_hat();
-    VarPtr sigma_hat = poissonForm.sigma_n_hat();
-    
-    VarPtr u = poissonForm.u();
-    VarPtr sigma = poissonForm.sigma();
     
     BFPtr bf = poissonForm.bf();
     

@@ -29,7 +29,7 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces, P
                                        bool reverseVectorVarSign)
 :
 _scalarVarName(scalarVarName),
-_vectorVarName(vectorVarName),
+_vectorVarPrefix(vectorVarName),
 _scalarTraceName(scalarTraceName),
 _vectorTraceName(vectorTraceName)
 {
@@ -39,11 +39,11 @@ _vectorTraceName(vectorTraceName)
   {
     Space tauSpace = (spaceDim > 1) ? HDIV : HGRAD;
     Space u_hat_space = useConformingTraces ? HGRAD : L2;
-    Space sigmaSpace = (spaceDim > 1) ? VECTOR_L2 : L2;
+    Space sigmaSpace = L2;
 
     // fields
     VarPtr u;
-    VarPtr sigma;
+    std::vector<VarPtr> sigma(_spaceDim);
 
     // traces
     VarPtr u_hat, sigma_n_hat;
@@ -54,7 +54,10 @@ _vectorTraceName(vectorTraceName)
 
     VarFactoryPtr vf = VarFactory::varFactory();
     u = vf->fieldVar(_scalarVarName);
-    sigma = vf->fieldVar(_vectorVarName, sigmaSpace);
+    for (int d=0; d<_spaceDim; d++)
+    {
+      sigma[d] = vf->fieldVar(_vectorVarPrefix + std::to_string(d), sigmaSpace);
+    }
 
     TFunctionPtr<double> parity = TFunction<double>::sideParity();
     
@@ -66,9 +69,17 @@ _vectorTraceName(vectorTraceName)
     TFunctionPtr<double> n = TFunction<double>::normal();
 
     if (spaceDim > 1)
-      sigma_n_hat = vf->fluxVar(_vectorTraceName, sigma * (n * parity));
+    {
+      LinearTermPtr sigma_n;
+      for (int d=0; d<_spaceDim; d++)
+      {
+        FunctionPtr n_d = n->spatialComponent(d+1);
+        sigma_n = sigma_n + sigma[d] * n_d;
+      }
+      sigma_n_hat = vf->fluxVar(_vectorTraceName, sigma_n * parity);
+    }
     else
-      sigma_n_hat = vf->fluxVar(_vectorTraceName, sigma * (Function::normal_1D() * parity));
+      sigma_n_hat = vf->fluxVar(_vectorTraceName, sigma[0] * (Function::normal_1D() * parity));
 
     v = vf->testVar(S_V, HGRAD);
     tau = vf->testVar(S_TAU, tauSpace);
@@ -81,19 +92,26 @@ _vectorTraceName(vectorTraceName)
     {
       // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
       _poissonBF->addTerm(u, tau->dx());
-      _poissonBF->addTerm(sigmaDefWeight * sigma, tau);
+      _poissonBF->addTerm(sigmaDefWeight * sigma[0], tau);
       _poissonBF->addTerm(-u_hat, tau);
 
-      _poissonBF->addTerm(-sigma, v->dx());
+      _poissonBF->addTerm(-sigma[0], v->dx());
       _poissonBF->addTerm(sigma_n_hat, v);
     }
     else
     {
       _poissonBF->addTerm(u, tau->div());
-      _poissonBF->addTerm(sigmaDefWeight * sigma, tau);
+      for (int d=0; d<_spaceDim; d++)
+      {
+        _poissonBF->addTerm(sigmaDefWeight * sigma[d], tau->spatialComponent(d+1));
+      }
       _poissonBF->addTerm(-u_hat, tau->dot_normal());
 
-      _poissonBF->addTerm(-sigma, v->grad());
+      
+      for (int d=0; d<_spaceDim; d++)
+      {
+        _poissonBF->addTerm(-sigma[d], v->di(d+1));
+      }
       _poissonBF->addTerm(sigma_n_hat, v);
     }
   }
@@ -161,10 +179,10 @@ VarPtr PoissonFormulation::u()
   return vf->fieldVar(_scalarVarName);
 }
 
-VarPtr PoissonFormulation::sigma()
+VarPtr PoissonFormulation::sigma(const int &d)
 {
   VarFactoryPtr vf = _poissonBF->varFactory();
-  return vf->fieldVar(_vectorVarName);
+  return vf->fieldVar(_vectorVarPrefix + std::to_string(d));
 }
 
 // traces:
