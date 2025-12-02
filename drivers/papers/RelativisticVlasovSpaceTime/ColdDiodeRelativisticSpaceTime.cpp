@@ -1430,14 +1430,14 @@ int main(int argc, char *argv[])
             std::cout << "\n********************************************************************************\n";
             std::cout << "Time slab " << timeSlabOrdinal << ", ";
             std::cout << "solution after refinement " << refinementNumber << ": relative error " << energyError / f_norm * 100.0 << "%" << std::endl;
-            if (errorTargetMet)
+            if (errorTargetMet && (refinementNumber < maxRefinements))
             {
               std::cout << "Energy error target met; will perform one more solve with tightened tolerances.\n";
             }
             std::cout << "********************************************************************************\n\n";
           }
           
-          if (errorTargetMet)
+          if (errorTargetMet && (refinementNumber < maxRefinements))
           {
             form->setIterativeSolveTolerances(cgTols);
             form->setIterativeSolveMaxIterations(iterativeSolveMaxIters);
