@@ -808,7 +808,7 @@ int main(int argc, char *argv[])
     form->setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
     //    form->setIterativeSolveTolerance(iterativeSolveTolerance);
     std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
-    if (maxSubsteps > 3)
+    if ((maxSubsteps > 3) && !useAdaptivity) // for adaptive solves, after the 0 refinement, we'll already be pretty close to the right solution, and looser tolerances will tend to push us away.  Not worth it to special-case the 0 refinement, I think.  So we only use the looser CG tolerances below for non-adaptive solves.
     {
       // use looser tolerances for the first couple steps
       cgTols[0] = iterativeSolveTolerance * 10000.0;
@@ -818,7 +818,7 @@ int main(int argc, char *argv[])
     form->setIterativeSolveMaxIterations(iterativeSolveMaxIters);
     
     std::vector<double> cgTolsCoarse(coarseMaxSubsteps,coarseIterativeSolveTolerance);
-    if (coarseMaxSubsteps > 3)
+    if ((coarseMaxSubsteps > 3) && !useAdaptivity) // for adaptive solves, after the 0 refinement, we'll already be pretty close to the right solution, and looser tolerances will tend to push us away.  Not worth it to special-case the 0 refinement, I think.  So we only use the looser CG tolerances below for non-adaptive solves.
     {
       // use looser tolerances for the first couple steps
       cgTolsCoarse[0] = coarseIterativeSolveTolerance * 100.0;
