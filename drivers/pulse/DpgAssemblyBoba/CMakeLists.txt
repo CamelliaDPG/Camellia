@@ -15,6 +15,7 @@ add_executable(VlasovAssemblyBobaDriver
 target_link_libraries(VlasovAssemblyBobaDriver
   Camellia
 )
+target_compile_features(VlasovAssemblyBobaDriver PRIVATE cxx_std_20)
 
 add_executable(VlasovAssemblyBobaTimer
   ../SpaceTimeMixedVlasovBoba/SpaceTimeMixedVlasovSetup.cpp
@@ -30,6 +31,7 @@ add_executable(VlasovAssemblyBobaTimer
 target_link_libraries(VlasovAssemblyBobaTimer
   Camellia
 )
+target_compile_features(VlasovAssemblyBobaTimer PRIVATE cxx_std_20)
 
 configure_file(readTtVector.m readTtVector.m COPYONLY)
 configure_file(readTtMatrix.m readTtMatrix.m COPYONLY)
