@@ -103,21 +103,21 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   // block rhs and expected exact lhs
   //
 
-  boba::block_vector<host_tt_vector<3>, vlasov_vars::size> rhs;
+  boba::block_vector<host_tt_vector<3>> rhs(vlasov_vars::size);
   rhs(vlasov_vars::test)    = c_fun->getDiscretization(  test_basis, mesh);
   rhs(vlasov_vars::trace_x) = zero_fun->getDiscretization(tracex_basis, mesh);
   rhs(vlasov_vars::trace_t) = zero_fun->getDiscretization(tracet_basis, mesh);
   rhs(vlasov_vars::trace_v) = zero_fun->getDiscretization(tracev_basis, mesh);
   rhs(vlasov_vars::field)   = zero_fun->getDiscretization( field_basis, mesh);
-  rhs.savetxt("rhs", ".dat");
+//  rhs.savetxt("rhs", ".dat");
 
-  boba::block_vector<host_tt_vector<3>, vlasov_vars::size> exact_soln;
+  boba::block_vector<host_tt_vector<3>> exact_soln(vlasov_vars::size);
   exact_soln(vlasov_vars::test)    = zero_fun->getBasisExpansion(  test_basis, mesh);
   exact_soln(vlasov_vars::trace_x) =  tnx_fun->getBasisExpansion(tracex_basis, mesh);
   exact_soln(vlasov_vars::trace_t) =  tnt_fun->getBasisExpansion(tracet_basis, mesh);
   exact_soln(vlasov_vars::trace_v) =  tnv_fun->getBasisExpansion(tracev_basis, mesh);
   exact_soln(vlasov_vars::field)   =    f_fun->getBasisExpansion( field_basis, mesh);
-  exact_soln.savetxt("exact_soln", ".dat");
+//  exact_soln.savetxt("exact_soln", ".dat");
 
   //
   // block linear system
@@ -128,7 +128,7 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
                                              t_min, t_max, nt,
                                              v_min, v_max, nv,
                                              p, dp);
-  stiffness.savetxt("stiffness", ".dat");
+//  stiffness.savetxt("stiffness", ".dat");
 
   //
   // verification
@@ -174,8 +174,7 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   //
 
   if (solve) {
-    boba::krylov<boba::block_operator<host_tt_matrix<3>, vlasov_vars::size, vlasov_vars::size>,
-                 boba::block_vector<host_tt_vector<3>, vlasov_vars::size>> solver(krylov_outer, krylov_inner, krylov_tol);
+    boba::krylov<boba::block_operator<host_tt_matrix<3>>, boba::block_vector<host_tt_vector<3>>> solver(krylov_outer, krylov_inner, krylov_tol);
     solver.method = boba::krylov_methods::flexible_gmres;
     solver.verbose = true;
 
@@ -197,7 +196,7 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
     }
     std::cout << std::endl;
 
-    soln.savetxt("soln", ".dat");
+//    soln.savetxt("soln", ".dat");
   }
 }
 
