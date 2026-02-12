@@ -23,7 +23,7 @@ struct vlasov_vars {
 // p                                   Polynomial order for field variables
 // dp                                  Polynomial order enrichment for test variables
 //
-boba::block_operator<host_tt_matrix<3>, vlasov_vars::size, vlasov_vars::size>
+boba::block_operator<host_tt_matrix<3>>
 construct_vlasov_matrices(Camellia::BasisPtr test_basis, Camellia::BasisPtr trace_basis, Camellia::BasisPtr field_basis,
                           const double &x_min, const double &x_max, const size_t &nx,
                           const double &t_min, const double &t_max, const size_t &nt,

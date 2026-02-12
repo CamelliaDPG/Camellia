@@ -4,7 +4,7 @@
 #include "global_assembly.hpp"
 
 // basis keys: w = test, f = field, t = trace
-boba::block_operator<host_tt_matrix<3>, vlasov_vars::size, vlasov_vars::size>
+boba::block_operator<host_tt_matrix<3>>
 construct_vlasov_matrices(Camellia::BasisPtr w_basis, Camellia::BasisPtr t_basis, Camellia::BasisPtr f_basis,
                           const double &x_min, const double &x_max, const size_t &nx,
                           const double &t_min, const double &t_max, const size_t &nt,
@@ -134,7 +134,7 @@ construct_vlasov_matrices(Camellia::BasisPtr w_basis, Camellia::BasisPtr t_basis
 
   timer.tic();
 
-  boba::block_operator<host_tt_matrix<3>, vlasov_vars::size, vlasov_vars::size> stiffness;
+  boba::block_operator<host_tt_matrix<3>> stiffness(vlasov_vars::size, vlasov_vars::size);
 
   stiffness({vlasov_vars::test,    vlasov_vars::test   }) = gram;
   stiffness({vlasov_vars::test,    vlasov_vars::trace_x}) = bilinear_x;
