@@ -54,9 +54,9 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   // basis
   //
 
-  auto field_basis_1d = newBasis1d(Camellia::L2,         p     );
-  auto trace_basis_1d = newBasis1d(Camellia::L2,         p + 1 );
-  auto test_basis_1d  = newBasis1d(Camellia::HGRAD_DISC, p + dp);
+  auto field_basis_1d = newBasis1d(Camellia::L2,    p     );
+  auto trace_basis_1d = newBasis1d(Camellia::L2,    p + 1 );
+  auto test_basis_1d  = newBasis1d(Camellia::HGRAD, p + dp);
 
   auto   test_basis = newBasisNd<3>({ test_basis_1d,  test_basis_1d,  test_basis_1d});
   auto tracex_basis = newBasisNd<3>({ Teuchos::null, trace_basis_1d, trace_basis_1d});
