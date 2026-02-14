@@ -99,7 +99,10 @@ global_trace_assembly_1d(const size_t &nb, const size_t &nx, const bc_kind_1d &b
   const size_t start = truncate_left  ?      1 :  0;
   const size_t stop  = truncate_right ? nx - 1 : nx;
 
-  host_matrix output({nx * nb, stop + 1 - start});
+  const size_t numTraces = stop + 1 - start;
+  const size_t numCols   = std::max<size_t>(1, numTraces);
+  
+  host_matrix output({nx * nb, numCols});
   output.fill_with_zeros();
 
   auto output_view = output.view();

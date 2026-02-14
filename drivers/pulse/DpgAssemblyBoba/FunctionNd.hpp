@@ -116,7 +116,7 @@ private:
         // obtain basis nodes
         //
 
-        const std::size_t numBasis = basis1d->getCardinality();
+        const int numBasis = basis1d->getCardinality();
         Intrepid::FieldContainer<double, 0> basisNodes(numBasis, 1);
         basis1d->getDofCoords(basisNodes);
 
@@ -159,8 +159,12 @@ private:
 
         const std::size_t numElement = mesh1d->getNumElement();
 
+        // TODO: relax the hard-coded BCs-applied-on-all-domain-boundaries thing.
+        const std::size_t nTrace     = (numElement >= 1) ? (numElement - 1) : 0;
+        const std::size_t nTraceCols = std::max<std::size_t>(1, nTrace);
+        
         // for now, hard-coding zero Dirichlet boundary condition
-        std::vector<double> points(numElement - 1);
+        std::vector<double> points(nTrace);
         for (std::size_t elementId = 1; elementId < numElement; ++elementId) {
           points[elementId - 1] = mesh1d->getElementLeftPoint(elementId);
         }
@@ -172,12 +176,18 @@ private:
         for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
-          discretization[termId][dimId].resize(numElement - 1);
+          discretization[termId][dimId].resize(nTraceCols);
           auto discretizationView = discretization[termId][dimId].view();
 
-          for (std::size_t boundaryId = 0; boundaryId < numElement - 1; ++boundaryId) {
+          for (std::size_t boundaryId = 0; boundaryId < nTrace; ++boundaryId) {
             discretizationView(boundaryId) = (*func)(points[boundaryId]);
           }
+          
+          // pad dummy trace dofs with 0s.
+          for (std::size_t boundaryId = nTrace; boundaryId < nTraceCols; ++boundaryId) {
+            discretizationView(boundaryId) = 0.0;
+          }
+
         }
       }
     }
@@ -214,8 +224,8 @@ private:
 
         auto basisValues = basis1d->allocateBasisValues(cubaturePoints, Intrepid2::OPERATOR_VALUE);
         basis1d->getValues(basisValues, cubaturePoints, Intrepid2::OPERATOR_VALUE);
-
-        const std::size_t numBasis = basisValues.extent(0);
+        
+        const int numBasis = basisValues.extent_int(0);
 
         //
         // determine shifts and scalings for element points
@@ -259,8 +269,11 @@ private:
         // determine element boundaries
         //
 
+        // TODO: relax the hard-coded BCs-applied-on-all-domain-boundaries thing.
         const std::size_t numElement = mesh1d->getNumElement();
-
+        const std::size_t nTrace     = (numElement >= 1) ? (numElement - 1) : 0;
+        const std::size_t nTraceCols = std::max<std::size_t>(1, nTrace);
+        
         // for now, hard-coding zero Dirichlet boundary condition
         std::vector<double> points(numElement - 1);
         for (std::size_t elementId = 1; elementId < numElement; ++elementId) {
@@ -270,15 +283,19 @@ private:
         //
         // evaluate function at element boundaries
         //
-
+        
         for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
-          discretization[termId][dimId].resize(numElement - 1);
+          discretization[termId][dimId].resize(nTraceCols);
           auto discretizationView = discretization[termId][dimId].view();
 
-          for (std::size_t boundaryId = 0; boundaryId < numElement - 1; ++boundaryId) {
+          for (std::size_t boundaryId = 0; boundaryId < nTrace; ++boundaryId) {
             discretizationView(boundaryId) = (*func)(points[boundaryId]);
+          }
+          // pad dummy trace dofs with 0s.
+          for (std::size_t boundaryId = nTrace; boundaryId < nTraceCols; ++boundaryId) {
+            discretizationView(boundaryId) = 0.0;
           }
         }
       }
@@ -297,8 +314,16 @@ private:
       for (std::size_t dimId = 0; dimId < numDim; ++dimId) {
         auto basis1d = basis->getComponent(dimId);
         auto mesh1d = mesh->getComponent(dimId);
-        sizes[dimId] = (basis1d != Teuchos::null) ? (basis1d->getCardinality() * mesh1d->getNumElement())
-                                                  : (mesh1d->getNumElement() - 1); // for now, hard-coding zero Dirichlet boundary condition
+        if (basis1d != Teuchos::null)
+        {
+          sizes[dimId] = basis1d->getCardinality() * mesh1d->getNumElement();
+        }
+        else
+        {
+          // TODO: relax the hardcoded assumption that BCs are always imposed at both ends.
+          auto numTraces = mesh1d->getNumElement() - 1;
+          sizes[dimId] = std::max<size_t>(1, numTraces); // disallow zero sizes.
+        }
       }
 
       output.setup(sizes);
