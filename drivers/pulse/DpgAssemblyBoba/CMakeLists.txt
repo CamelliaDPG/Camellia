@@ -3,6 +3,7 @@ project(DpgAssemblyBobaDriver)
 message("Adding executables for DpgAssemblyBobaDriver.")
 
 add_executable(VlasovAssemblyBobaDriver
+  assembly_verification.cpp
   boba_types.hpp
   reference_integrals_1d.hpp
   reference_integrals_1d.cpp

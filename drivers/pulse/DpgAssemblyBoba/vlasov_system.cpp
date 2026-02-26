@@ -120,7 +120,7 @@ construct_vlasov_matrices(Camellia::BasisPtr w_basis, Camellia::BasisPtr t_basis
     boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_dw_w,  int_t_w_dw,  int_v_vw_w }) +
     boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_dw_dw, int_t_w_w,   int_v_vw_vw}) +
     boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_dw_w,  int_t_w_w,   int_v_vw_dw}) +
-    boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_w_w,   int_t_w_dw,  int_t_dw_w }) +
+    boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_w_w,   int_t_w_dw,  int_v_dw_w }) +
     boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_w_dw,  int_t_w_w,   int_v_dw_vw}) +
     boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_w_w,   int_t_w_w,   int_v_dw_dw}) +
     boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_w_w,   int_t_w_w,   int_v_w_w  });

@@ -11,12 +11,15 @@
 #include "BasisNd.hpp"
 #include "Function1d.hpp"
 #include "MeshNd.hpp"
+#include "Projection1d.hpp"
 
 template <std::size_t numDim>
 class FunctionNd;
 
 template <std::size_t N>
 using FunctionNdPtr = Teuchos::RCP<FunctionNd<N>>;
+
+using namespace Camellia;
 
 // multivariate function as sum of tensor products of univariate functions
 template <std::size_t numDim>
@@ -99,10 +102,27 @@ public:
     boba_assert(basis != Teuchos::null, "basis pointer must be non-null");
     boba_assert(mesh != Teuchos::null, "mesh pointer must be non-null");
     auto discretization = computeDiscretization(basis, mesh);
+    
+    if (numTerm_ > 0) {
+      std::cout << "DEBUG getDiscretization dim0 term0 first entry = "
+                << discretization[0][0].view()(0) << std::endl;
+    }
+    
     return getTtRepresentation(discretization, basis, mesh);
   }
 
 private:
+  void fill_element_coeffs_1d(boba::vector<boba::execution_space::CPU,double,std::size_t>& out,
+                              std::size_t elementId,
+                              int numBasis,
+                              const std::vector<double>& coeffs)
+  {
+    auto outView = out.view();
+    for (int i = 0; i < numBasis; ++i) {
+      outView(i + elementId * (std::size_t)numBasis) = coeffs[(std::size_t)i];
+    }
+  }
+  
   std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>>
   computeBasisExpansion(BasisNdPtr<numDim> basis, MeshNdPtr<numDim> mesh) {
     std::vector<boba::Array<boba::vector<boba::execution_space::CPU, double, std::size_t>, numDim>> discretization(numTerm_);
@@ -112,42 +132,25 @@ private:
       auto mesh1d = mesh->getComponent(dimId);
 
       if (basis1d != Teuchos::null) {
-        //
-        // obtain basis nodes
-        //
-
         const int numBasis = basis1d->getCardinality();
-        Intrepid::FieldContainer<double, 0> basisNodes(numBasis, 1);
-        basis1d->getDofCoords(basisNodes);
-
-        //
-        // determine shifts and scalings for element points
-        //
-
         const std::size_t numElement = mesh1d->getNumElement();
-
-        std::vector<double> shifts(numElement);
-        std::vector<double> scales(numElement);
-        for (std::size_t elementId = 0; elementId < numElement; ++elementId) {
-          shifts[elementId] = mesh1d->getElementMidpoint(elementId);
-          scales[elementId] = 0.5 * mesh1d->getElementLength(elementId);
-        }
-
-        //
-        // evaluate function at basis nodes
-        //
 
         for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
           discretization[termId][dimId].resize(numElement * numBasis);
-          auto discretizationView = discretization[termId][dimId].view();
+          auto & discretizationVector = discretization[termId][dimId];
 
           for (std::size_t elementId = 0; elementId < numElement; ++elementId) {
-            for (std::size_t basisId = 0; basisId < numBasis; ++basisId) {
-              const int j = static_cast<int>(basisId);
-              discretizationView(basisId + elementId * numBasis) = (*func)(shifts[elementId] + scales[elementId] * basisNodes(j, 0));
-            }
+            const double xL = mesh1d->getElementLeftPoint(elementId);
+            const double h  = mesh1d->getElementLength(elementId);
+
+            // project onto basis on this element
+            auto coeffs = Projection1d::project_onto_1d_basis_ref(basis1d,
+                                                                  [&](double x){ return (*func)(x); },
+                                                                  xL, h);
+
+            fill_element_coeffs_1d(discretizationVector, elementId, numBasis, coeffs);
           }
         }
       } else {
@@ -204,62 +207,26 @@ private:
       auto mesh1d = mesh->getComponent(dimId);
 
       if (basis1d != Teuchos::null) {
-        //
-        // construct cubature
-        //
-
-        const int cubatureDegree = 2 * basis1d->getDegree(); // making an assumption here...
-
-        auto cubature = Camellia::CubatureFactory().create(Camellia::CellTopology::line(), cubatureDegree);
-
-        auto cubaturePoints = cubature->allocateCubaturePoints();
-        auto cubatureWeights = cubature->allocateCubatureWeights();
-        cubature->getCubature(cubaturePoints, cubatureWeights);
-
-        const std::size_t numCubature = cubaturePoints.extent(0);
-
-        //
-        // evaluate basis at cubature points
-        //
-
-        auto basisValues = basis1d->allocateBasisValues(cubaturePoints, Intrepid2::OPERATOR_VALUE);
-        basis1d->getValues(basisValues, cubaturePoints, Intrepid2::OPERATOR_VALUE);
-        
-        const int numBasis = basisValues.extent_int(0);
-
-        //
-        // determine shifts and scalings for element points
-        //
-
+        const int numBasis = basis1d->getCardinality();
         const std::size_t numElement = mesh1d->getNumElement();
-
-        std::vector<double> shifts(numElement);
-        std::vector<double> scales(numElement);
-        for (std::size_t elementId = 0; elementId < numElement; ++elementId) {
-          shifts[elementId] = mesh1d->getElementMidpoint(elementId);
-          scales[elementId] = 0.5 * mesh1d->getElementLength(elementId);
-        }
-
-        //
-        // compute coefficients through integration/quadrature
-        //
 
         for (std::size_t termId = 0; termId < numTerm_; ++termId) {
           auto func = terms_[termId][dimId];
 
           discretization[termId][dimId].resize(numElement * numBasis);
-          auto discretizationView = discretization[termId][dimId].view();
+          auto & discretizationVector = discretization[termId][dimId];
 
           for (std::size_t elementId = 0; elementId < numElement; ++elementId) {
-            for (std::size_t basisId = 0; basisId < numBasis; ++basisId) {
-              double value = 0.0;
-              for (std::size_t cubatureId = 0; cubatureId < numCubature; ++cubatureId) {
-                const int j = static_cast<int>(basisId);
-                const int k = static_cast<int>(cubatureId);
-                value += basisValues(j, k) * (*func)(shifts[elementId] + scales[elementId] * cubaturePoints(k, 0)) * scales[elementId] * cubatureWeights(k);
-              }
-              discretizationView(basisId + elementId * numBasis) = value;
-            }
+            const double xL = mesh1d->getElementLeftPoint(elementId);
+            const double h  = mesh1d->getElementLength(elementId);
+
+            
+            auto moments = Projection1d::moments_onto_1d_basis_phys(
+                             basis1d,
+                             [&](double x){ return (*func)(x); },
+                             xL, h);
+
+            fill_element_coeffs_1d(discretizationVector, elementId, numBasis, moments);
           }
         }
       } else {

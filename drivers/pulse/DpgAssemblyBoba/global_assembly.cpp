@@ -40,7 +40,7 @@ global_field_assembly_1d(const host_tensor<2> &input_x0,
   host_matrix output({nx * nrow, nx * ncol});
   output.fill_with_zeros();
 
-  const auto input_x0_xiew = input_x0.view();
+  const auto input_x0_view = input_x0.view();
   const auto input_x1_view = input_x1.view();
 
   auto output_view = output.view();
@@ -49,7 +49,7 @@ global_field_assembly_1d(const host_tensor<2> &input_x0,
     for (size_t icol = 0; icol < ncol; ++icol) {
       for (size_t irow = 0; irow < nrow; ++irow) {
         output_view({iv * nrow + irow, iv * ncol + icol}) = scale * (0.5 *   dx * input_x1_view({irow, icol}) +
-                                                                           xmid * input_x0_xiew({irow, icol}));
+                                                                           xmid * input_x0_view({irow, icol}));
       }
     }
   }
@@ -108,10 +108,10 @@ global_trace_assembly_1d(const size_t &nb, const size_t &nx, const bc_kind_1d &b
   auto output_view = output.view();
   for (size_t ix = 0; ix < nx; ++ix) {
     if (!(truncate_left && ix == 0)) {
-      output_view({ix * nb, ix - start}) = -1.0;
+      output_view({ix * nb, ix - start}) = -1.0; // Note that the first index assumes that the vertex dofs in the test basis are the first and last dofs.  I'm not sure if that is always true for the H^1 bases (maybe it is).  It's definitely not true for the hierarchical L^2 basis, which doesn't even have vertex dofs; the whole basis can be nonzero at the vertices.
     }
     if (!(truncate_right && ix + 1 == nx)) {
-      output_view({ix * nb + nb - 1, ix + 1 - start}) =  1.0;
+      output_view({ix * nb + nb - 1, ix + 1 - start}) =  1.0; // Note that the first index assumes that the vertex dofs in the test basis are the first and last dofs.  I'm not sure if that is always true.
     }
   }
 
