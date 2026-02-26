@@ -1,5 +1,42 @@
 #include "global_assembly.hpp"
 
+#include "Teuchos_TestForException.hpp"
+
+namespace {
+  std::pair<int,int> lineEndpointDofOrdinals(Camellia::BasisPtr basis)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(basis == Teuchos::null, std::invalid_argument,
+                               "lineEndpointDofOrdinals: basis is null");
+
+    auto i2Basis = basis->intrepid2Basis();
+    TEUCHOS_TEST_FOR_EXCEPTION(i2Basis == Teuchos::null, std::invalid_argument,
+                               "lineEndpointDofOrdinals: intrepid2Basis() returned null");
+
+    const int N = i2Basis->getCardinality();
+
+    int left  = -1; // vertex 0
+    int right = -1; // vertex 1
+
+    for (int bfOrdinal = 0; bfOrdinal < N; ++bfOrdinal)
+    {
+      // Tag layout: [subcellDim, subcellOrd, dofOrdOnSubcell, totalDofsOnSubcell]
+      auto tag = i2Basis->getDofTag(bfOrdinal);
+
+      const int subcellDim       = tag[0];
+      const int subcellOrd       = tag[1];
+      const int dofOrdOnSubcell  = tag[2];
+
+      if ((subcellDim == 0) && (dofOrdOnSubcell == 0))
+      {
+        if (subcellOrd == 0) left  = bfOrdinal;
+        if (subcellOrd == 1) right = bfOrdinal;
+      }
+    }
+
+    return {left, right};
+  }
+}
+
 host_matrix
 global_field_assembly_1d(const host_tensor<2> &input_x0,
                          const size_t &nx, const double &x_min, const double &x_max,
@@ -92,7 +129,13 @@ global_field_assembly_1d(const host_tensor<2> &input_x0,
 }
 
 host_matrix
-global_trace_assembly_1d(const size_t &nb, const size_t &nx, const bc_kind_1d &bc) {
+global_trace_assembly_1d(Camellia::BasisPtr w_basis, const size_t &nx, const bc_kind_1d &bc)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(w_basis == Teuchos::null, std::invalid_argument,
+                             "global_trace_assembly_1d: w_basis is null");
+
+  const size_t nb = w_basis->getCardinality();
+
   const bool truncate_left  = (bc == bc_kind_1d::both || bc == bc_kind_1d::left );
   const bool truncate_right = (bc == bc_kind_1d::both || bc == bc_kind_1d::right);
 
@@ -101,17 +144,31 @@ global_trace_assembly_1d(const size_t &nb, const size_t &nx, const bc_kind_1d &b
 
   const size_t numTraces = stop + 1 - start;
   const size_t numCols   = std::max<size_t>(1, numTraces);
-  
+
+  // Determine which basis ordinals correspond to the left/right endpoints on the line
+  auto [leftOrd, rightOrd] = lineEndpointDofOrdinals(w_basis);
+
+  TEUCHOS_TEST_FOR_EXCEPTION(leftOrd < 0 || rightOrd < 0, std::invalid_argument,
+                             "global_trace_assembly_1d: could not find endpoint (vertex) dof ordinals "
+                             "for the provided basis. This routine requires a basis with vertex dofs "
+                             "(e.g., HGRAD on a line).");
+
+  TEUCHOS_TEST_FOR_EXCEPTION((size_t)leftOrd >= nb || (size_t)rightOrd >= nb, std::logic_error,
+                             "global_trace_assembly_1d: endpoint dof ordinal out of range.");
+
   host_matrix output({nx * nb, numCols});
   output.fill_with_zeros();
 
   auto output_view = output.view();
-  for (size_t ix = 0; ix < nx; ++ix) {
-    if (!(truncate_left && ix == 0)) {
-      output_view({ix * nb, ix - start}) = -1.0; // Note that the first index assumes that the vertex dofs in the test basis are the first and last dofs.  I'm not sure if that is always true for the H^1 bases (maybe it is).  It's definitely not true for the hierarchical L^2 basis, which doesn't even have vertex dofs; the whole basis can be nonzero at the vertices.
+  for (size_t ix = 0; ix < nx; ++ix)
+  {
+    if (!(truncate_left && ix == 0))
+    {
+      output_view({ix * nb + (size_t)leftOrd, ix - start}) = -1.0;
     }
-    if (!(truncate_right && ix + 1 == nx)) {
-      output_view({ix * nb + nb - 1, ix + 1 - start}) =  1.0; // Note that the first index assumes that the vertex dofs in the test basis are the first and last dofs.  I'm not sure if that is always true.
+    if (!(truncate_right && ix + 1 == nx))
+    {
+      output_view({ix * nb + (size_t)rightOrd, ix + 1 - start}) =  1.0;
     }
   }
 

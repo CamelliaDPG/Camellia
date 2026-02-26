@@ -91,9 +91,9 @@ construct_vlasov_matrices(Camellia::BasisPtr w_basis, Camellia::BasisPtr t_basis
 
   timer.tic();
 
-  auto eval_x_w = global_trace_assembly_1d(w_basis->getCardinality(), nx);
-  auto eval_t_w = global_trace_assembly_1d(w_basis->getCardinality(), nt);
-  auto eval_v_w = global_trace_assembly_1d(w_basis->getCardinality(), nv);
+  auto eval_x_w = global_trace_assembly_1d(w_basis, nx);
+  auto eval_t_w = global_trace_assembly_1d(w_basis, nt);
+  auto eval_v_w = global_trace_assembly_1d(w_basis, nv);
 
   auto bilinear_x = boba::make_ttm_from_matrices<3, host_space, double, size_t>({ eval_x_w, int_t_w_t, int_v_w_t});
   auto bilinear_t = boba::make_ttm_from_matrices<3, host_space, double, size_t>({int_x_w_t,  eval_t_w, int_v_w_t});

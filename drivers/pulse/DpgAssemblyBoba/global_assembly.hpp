@@ -3,6 +3,8 @@
 
 #include "boba_types.hpp"
 
+#include "Camellia.h"
+
 enum class bc_kind_1d {
   none,
   left,
@@ -65,12 +67,12 @@ global_field_assembly_1d(const host_tensor<2> &input_x0,
 // Global assembly of (w, f_hat)-type terms over 1D, where f_hat is a trace
 // variable defined over element boundary points
 //
-// nb  Number of basis functions for the test variable w
+// w_basis  basis for test variable w
 // nx  Number of elements
 // bc  Dirichlet boundary condition type to apply; for now, basically drops the
 //     corresponding DOFs
 //
 host_matrix
-global_trace_assembly_1d(const size_t &nb, const size_t &nx, const bc_kind_1d &bc = bc_kind_1d::both);
+global_trace_assembly_1d(Camellia::BasisPtr w_basis, const size_t &nx, const bc_kind_1d &bc = bc_kind_1d::both);
 
 #endif

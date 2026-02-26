@@ -9,7 +9,7 @@ using Basis1dPtr = Camellia::BasisPtr;
 
 inline Basis1dPtr newBasis1d(Camellia::Space space, std::size_t h1Order) {
   static auto cellTopo = Camellia::CellTopology::line();
-  static auto basisFamily = Camellia::BasisFamily::nodalBasisFamily();
+  static auto basisFamily = Camellia::BasisFamily::hierarchicalBasisFamily();
   return basisFamily->getBasis(cellTopo, Camellia::efsForSpace(space), h1Order);
 }
 
