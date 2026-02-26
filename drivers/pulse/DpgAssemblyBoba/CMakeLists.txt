@@ -34,5 +34,17 @@ target_link_libraries(VlasovAssemblyBobaTimer
 )
 target_compile_features(VlasovAssemblyBobaTimer PRIVATE cxx_std_20)
 
+message("Adding Teuchos unit tests for DpgAssemblyBoba.")
+add_executable(DPGBobaAssemblyTests
+  ../../../unit_tests/Teuchos_StandardParallelUnitTestMain.cpp
+  DPGBobaAssemblyTests.cpp
+  assembly_verification.cpp
+  reference_integrals_1d.cpp
+  global_assembly.cpp
+)
+target_link_libraries(DPGBobaAssemblyTests Camellia)
+target_compile_features(DPGBobaAssemblyTests PRIVATE cxx_std_20)
+
+
 configure_file(readTtVector.m readTtVector.m COPYONLY)
 configure_file(readTtMatrix.m readTtMatrix.m COPYONLY)

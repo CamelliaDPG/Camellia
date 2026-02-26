@@ -103,11 +103,6 @@ public:
     boba_assert(mesh != Teuchos::null, "mesh pointer must be non-null");
     auto discretization = computeDiscretization(basis, mesh);
     
-    if (numTerm_ > 0) {
-      std::cout << "DEBUG getDiscretization dim0 term0 first entry = "
-                << discretization[0][0].view()(0) << std::endl;
-    }
-    
     return getTtRepresentation(discretization, basis, mesh);
   }
 

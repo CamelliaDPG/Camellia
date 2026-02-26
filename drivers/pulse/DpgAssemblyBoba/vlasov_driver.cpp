@@ -232,49 +232,6 @@ compare_ref_mixed_mass_matrices(Camellia::BasisPtr w_basis,
             << "  I2     ("<<maxi<<","<<maxj<<") = " << Mi({maxi,maxj}) << "\n";
 }
 
-void print_endpoint_basis_ordinals(Camellia::BasisPtr w_basis)
-{
-  using ExecSpace = Kokkos::DefaultExecutionSpace;
-  using Scalar = double;
-  using DRV = Kokkos::DynRankView<Scalar, Kokkos::LayoutRight, ExecSpace>;
-
-  const int N = w_basis->getCardinality();
-
-  // Build TensorPoints on device from a DynRankView
-  DRV ptsView("ptsView", 2, 1);
-  auto ptsHost = Kokkos::create_mirror_view(ptsView);
-  ptsHost(0,0) = -1.0;
-  ptsHost(1,0) =  1.0;
-  Kokkos::deep_copy(ptsView, ptsHost);
-
-  // Construct TensorPoints wrapper (this is the step you mentioned)
-  Intrepid2::TensorPoints<Scalar, ExecSpace> pts(ptsView);
-
-  auto vals = w_basis->allocateBasisValues(pts, Intrepid2::OPERATOR_VALUE);
-
-  // Fill vals
-  w_basis->getValues(vals, pts, Intrepid2::OPERATOR_VALUE);
-
-  auto valsHost = vals; // assume we're not on device for now
-
-  std::cout << "Endpoint basis values: N=" << N << "\n";
-  int leftMaxI = -1, rightMaxI = -1;
-  double leftMax = 0.0, rightMax = 0.0;
-
-  for (int i = 0; i < N; ++i)
-  {
-    const double vL = valsHost(i,0);
-    const double vR = valsHost(i,1);
-    std::cout << "  i=" << i << "  phi(-1)=" << vL << "  phi(+1)=" << vR << "\n";
-
-    if (std::fabs(vL) > leftMax)  { leftMax  = std::fabs(vL); leftMaxI  = i; }
-    if (std::fabs(vR) > rightMax) { rightMax = std::fabs(vR); rightMaxI = i; }
-  }
-
-  std::cout << "  max |phi(-1)| at i=" << leftMaxI  << " val=" << leftMax  << "\n"
-            << "  max |phi(+1)| at i=" << rightMaxI << " val=" << rightMax << "\n";
-}
-
 //
 // Assemble and solve for the Vlasov system with known E = 1:
 //
@@ -318,34 +275,6 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   auto field_basis_1d = newBasis1d(Camellia::L2,    p     );
   auto trace_basis_1d = newBasis1d(Camellia::L2,    p + 1 );
   auto test_basis_1d  = newBasis1d(Camellia::HGRAD, p + dp);
-
-  {
-    compare_ref_mass_matrices(field_basis_1d);
-    compare_ref_mass_matrices(test_basis_1d);
-    compare_ref_mass_matrices(trace_basis_1d);
-    
-    compare_ref_mixed_mass_matrices(test_basis_1d, trace_basis_1d);
-    compare_ref_mixed_mass_matrices(test_basis_1d, field_basis_1d);
-    
-    // pick the 1D bases used in v-direction in your operator:
-    auto w_basis_1d = test_basis_1d;   // same as in construct_vlasov_matrices()
-    auto f_basis_1d = field_basis_1d;
-
-    test_global_field_assembly_v_weighted(w_basis_1d, f_basis_1d, nv, v_min, v_max);
-    
-    test_1d_mass_consistency(field_basis_1d, /*ne=*/8, 0.0, 1.0);
-    
-    print_endpoint_basis_ordinals(w_basis_1d);
-    
-    test_1d_trace_coupling_consistency(test_basis_1d, trace_basis_1d, /*ne=*/8, 0.0, 1.0);
-    
-    test_1d_trace_coupling_consistency(test_basis_1d, trace_basis_1d, /*ne=*/8, -0.5, 0.5);
-    
-    test_boba_tt_vector_ordering();
-    test_boba_ttm_mode_action();
-    
-    test_1d_moments_vs_coeffs(test_basis_1d);
-  }
   
   auto   test_basis = newBasisNd<3>({ test_basis_1d,  test_basis_1d,  test_basis_1d});
   auto tracex_basis = newBasisNd<3>({ Teuchos::null, trace_basis_1d, trace_basis_1d});
@@ -353,20 +282,6 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   auto tracev_basis = newBasisNd<3>({trace_basis_1d, trace_basis_1d,  Teuchos::null});
   auto  field_basis = newBasisNd<3>({field_basis_1d, field_basis_1d, field_basis_1d});
 
-  auto one_1d = newConstant1d(1.0);
-  auto one_3d = newFunctionNd<3>({one_1d, one_1d, one_1d});
-
-  auto rhs1 = one_3d->getDiscretization(test_basis, mesh);    // should be moments (nonzero)
-  auto exp1 = one_3d->getBasisExpansion(test_basis, mesh);    // coefficients (also nonzero, but different)
-
-  std::cout << "DEBUG one_3d discretization sizes=" << rhs1.sizes()
-            << " ranks=" << rhs1.ranks_string()
-            << " norm=" << rhs1.norm_frobenius() << "\n";
-
-  std::cout << "DEBUG one_3d expansion      sizes=" << exp1.sizes()
-            << " ranks=" << exp1.ranks_string()
-            << " norm=" << exp1.norm_frobenius() << "\n";
-  
   //
   // functions
   //
@@ -539,30 +454,6 @@ int main(int argc, char **argv) {
   Teuchos::CommandLineProcessor cmdp(false,  // don't throw exceptions
                                      true);  // return errors for unrecognized options
 
-  {
-    // pick a basis to test
-    std::size_t p = 3;
-    auto basis1d = newBasis1d(Camellia::L2, p);
-    
-    // Call the test (choose any element)
-    // f(x) = a + b x, element [xL, xL+h]
-    double a  = 0.7;
-    double b  = -1.3;
-    double xL = 0.2;
-    double h  = 0.5;
-    
-    test_reproduce_line(basis1d, a, b, xL, h);
-  }
-  
-  {
-    auto basis1d = newBasis1d(Camellia::L2, 4); // degree >= 3
-
-    double a=0.1, b=-0.7, c=2.0, d=-1.5;
-    double xL=0.2, h=0.5;
-
-    test_reproduce_cubic(basis1d, a,b,c,d, xL,h);
-  }
-  
   {
     int    nx    = 2;
     int    nt    = 2;

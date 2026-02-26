@@ -3,6 +3,7 @@
 
 #include "Camellia.h"
 #include "boba_types.hpp"
+#include <functional>
 
 host_matrix assemble_mass_bruteforce(Camellia::BasisPtr basis,
                                      std::size_t ne,
@@ -37,6 +38,13 @@ assemble_mixed_rhs_bruteforce(Camellia::BasisPtr w_basis,
                               double x_max,
                               const std::function<double(double)>& g,
                               int cubatureDegree = -1);
+
+host_vector assemble_rhs_bruteforce(Camellia::BasisPtr basis,
+                                   std::size_t ne,
+                                   double x_min,
+                                   double x_max,
+                                   const std::function<double(double)>& f,
+                                   int cubatureDegree = -1);
 
 host_vector
 matvec_dense(const host_matrix& A, const host_vector& x);
