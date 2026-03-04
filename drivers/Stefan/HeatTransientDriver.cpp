@@ -6,7 +6,10 @@
 //
 //  Created by Stefan Henneking on 11/14/19.
 //
+//  Revised by Nate Roberts 3/4/26 (minimally, to get things running again on development-2.0 branch of Camellia).
 //
+
+#include "Camellia.h"
 
 #include "ExpFunction.h"
 #include "GDAMinimumRule.h"
@@ -17,6 +20,8 @@
 #include "RHS.h"
 #include "Solution.h"
 #include "TrigFunctions.h"
+
+#include "Teuchos_Time.hpp"
 
 using namespace Camellia;
 using namespace std;
@@ -312,12 +317,17 @@ void runSolve(vector<vector<double>> domainDim, int numElements, double dt, doub
   if (rank==0) cout << "          time step  = " << dt << endl;
   if (rank==0) cout << "number of time steps = " << numTimeSteps << endl;
   
+  Teuchos::RCP<Teuchos::Time> stepTimer =
+      Teuchos::TimeMonitor::getNewCounter("HeatTransientDriver: solve step");
   // TODO: update neighbor function in every iteration
   for (int timeStepNumber = 0; timeStepNumber < numTimeSteps; timeStepNumber++)
   {
     t_prev->setValue(timeStepNumber*dt);
     t->setValue((timeStepNumber+1)*dt); // update forcing term, exact solution to current time step
-    Epetra_Time timer(*mesh->Comm());
+    
+    stepTimer->reset();
+    stepTimer->start();
+    
     if (fieldImplicit && fixedPointScheme) {
       double tol = 1.0e-5; int kmax = 50;
       for (int k = 0; k < kmax; k++) {
@@ -333,7 +343,8 @@ void runSolve(vector<vector<double>> domainDim, int numElements, double dt, doub
     } else {
       soln->solve();
     }
-    double solveTime = timer.ElapsedTime();
+    stepTimer->stop();
+    double solveTime = stepTimer->totalElapsedTime();
     if (rank == 0 && (timeStepNumber%10==0 || (fieldImplicit && fixedPointScheme)))
     { cout << setw(3) << timeStepNumber << " Solved in " << solveTime << " seconds.\n"; }
     soln_prev->setSolution(soln); // update previous solution to current time step
@@ -424,85 +435,90 @@ int main(int argc, char *argv[])
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
-  int spaceDim = 2;
-  int numElements = 4; // in each dimension
-  vector<vector<double>> domainDim(spaceDim,vector<double>{0.0,1.0}); // first index: spaceDim; second: 0/1 for x0, x1, etc.
-  int polyOrder = 3;
-  int deltaP = spaceDim;
-  string normChoiceString = "Graph"; // "ManualGraph" is the alternative
-  string formulationChoiceString = "Ultraweak"; // "Primal","Galerkin" the alternatives
-  string problemChoiceString = "Manufactured"; // "Unit Forcing" the alternative
-  double dt = sqrt(1.0/numElements)/20.0; // Follows Führer and Heuer: dt = sqrt(h)/20, unit square
-  double finalTime = 0.1; // Follows Führer and Heuer: T = 0.1
-  double theta = 1.0; // time-stepping method parameter (default: 1.0=Backward Euler)
-  bool vis = false;
-  bool runAll = false;
-  
-  cmdp.setOption("norm", &normChoiceString);
-  cmdp.setOption("formulation", &formulationChoiceString);
-  cmdp.setOption("problem", &problemChoiceString);
-  cmdp.setOption("meshWidth", &numElements);
-  cmdp.setOption("polyOrder", &polyOrder);
-  cmdp.setOption("deltaP", &deltaP);
-  cmdp.setOption("dt", &dt);
-  cmdp.setOption("T", &finalTime);
-  cmdp.setOption("theta", &theta);
-  cmdp.setOption("vis", "novis", &vis);
-  cmdp.setOption("runAll", "runOne", &runAll);
-  cmdp.setOption("x0", &domainDim[0][0] );
-  cmdp.setOption("x1", &domainDim[0][1] );
-  cmdp.setOption("y0", &domainDim[1][0] );
-  cmdp.setOption("y1", &domainDim[1][1] );
-  
-  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  Kokkos::initialize(argc, argv); // initialize Kokkos
   {
-#ifdef HAVE_MPI
-    MPI_Finalize();
-#endif
-    return -1;
-  }
-  //dt = sqrt(1.0/numElements)/20.0; // ToFu
-  //dt = pow(1.0/numElements,2)/2.0; // CFL
-  
-  NormChoice normChoice;
-  if      (normChoiceString == "ManualGraph") normChoice = MANUAL_GRAPH_NORM;
-  else if (normChoiceString == "Graph"      ) normChoice = GRAPH_NORM;
-  else
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized norm choice");
-  }
-  
-  FormulationChoice formulationChoice;
-  if      (formulationChoiceString == "Ultraweak" ) formulationChoice = ULTRAWEAK;
-  else if (formulationChoiceString == "Primal"    ) formulationChoice = PRIMAL;
-  else if (formulationChoiceString == "Galerkin"  ) formulationChoice = GALERKIN;
-  else
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized formulation choice");
-  }
-  
-  ProblemChoice problemChoice;
-  if (problemChoiceString == "Manufactured") problemChoice = SINUSOIDAL_MANUFACTURED;
-  else
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized problem choice");
-  }
-
-  if (!runAll) {
-    runSolve(domainDim, numElements, dt, finalTime, theta, polyOrder, deltaP, problemChoice, formulationChoice, normChoice, vis);
-  }
-  else {
-    vector<int> elementCounts = {1,2,4,8,16,32}; // should update dt correspondingly
-    vector<NormChoice> normChoices = {GRAPH_NORM, MANUAL_GRAPH_NORM};
-    for (int numElements : elementCounts)
+    int spaceDim = 2;
+    int numElements = 4; // in each dimension
+    vector<vector<double>> domainDim(spaceDim,vector<double>{0.0,1.0}); // first index: spaceDim; second: 0/1 for x0, x1, etc.
+    int polyOrder = 3;
+    int deltaP = spaceDim;
+    string normChoiceString = "Graph"; // "ManualGraph" is the alternative
+    string formulationChoiceString = "Ultraweak"; // "Primal","Galerkin" the alternatives
+    string problemChoiceString = "Manufactured"; // "Unit Forcing" the alternative
+    double dt = sqrt(1.0/numElements)/20.0; // Follows Führer and Heuer: dt = sqrt(h)/20, unit square
+    double finalTime = 0.1; // Follows Führer and Heuer: T = 0.1
+    double theta = 1.0; // time-stepping method parameter (default: 1.0=Backward Euler)
+    bool vis = false;
+    bool runAll = false;
+    
+    cmdp.setOption("norm", &normChoiceString);
+    cmdp.setOption("formulation", &formulationChoiceString);
+    cmdp.setOption("problem", &problemChoiceString);
+    cmdp.setOption("meshWidth", &numElements);
+    cmdp.setOption("polyOrder", &polyOrder);
+    cmdp.setOption("deltaP", &deltaP);
+    cmdp.setOption("dt", &dt);
+    cmdp.setOption("T", &finalTime);
+    cmdp.setOption("theta", &theta);
+    cmdp.setOption("vis", "novis", &vis);
+    cmdp.setOption("runAll", "runOne", &runAll);
+    cmdp.setOption("x0", &domainDim[0][0] );
+    cmdp.setOption("x1", &domainDim[0][1] );
+    cmdp.setOption("y0", &domainDim[1][0] );
+    cmdp.setOption("y1", &domainDim[1][1] );
+    
+    if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
-      cout << "*************** mesh width " << numElements << " *******************\n";
-      for (NormChoice normChoice : normChoices)
+#ifdef HAVE_MPI
+      MPI_Finalize();
+#endif
+      return -1;
+    }
+    //dt = sqrt(1.0/numElements)/20.0; // ToFu
+    //dt = pow(1.0/numElements,2)/2.0; // CFL
+    
+    NormChoice normChoice;
+    if      (normChoiceString == "ManualGraph") normChoice = MANUAL_GRAPH_NORM;
+    else if (normChoiceString == "Graph"      ) normChoice = GRAPH_NORM;
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized norm choice");
+    }
+    
+    FormulationChoice formulationChoice;
+    if      (formulationChoiceString == "Ultraweak" ) formulationChoice = ULTRAWEAK;
+    else if (formulationChoiceString == "Primal"    ) formulationChoice = PRIMAL;
+    else if (formulationChoiceString == "Galerkin"  ) formulationChoice = GALERKIN;
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized formulation choice");
+    }
+    
+    ProblemChoice problemChoice;
+    if (problemChoiceString == "Manufactured") problemChoice = SINUSOIDAL_MANUFACTURED;
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized problem choice");
+    }
+    
+    if (!runAll) {
+      runSolve(domainDim, numElements, dt, finalTime, theta, polyOrder, deltaP, problemChoice, formulationChoice, normChoice, vis);
+    }
+    else {
+      vector<int> elementCounts = {1,2,4,8,16,32}; // should update dt correspondingly
+      vector<NormChoice> normChoices = {GRAPH_NORM, MANUAL_GRAPH_NORM};
+      for (int numElements : elementCounts)
       {
-        runSolve(domainDim, numElements, dt, finalTime, theta, polyOrder, deltaP, problemChoice, formulationChoice, normChoice, vis);
+        cout << "*************** mesh width " << numElements << " *******************\n";
+        for (NormChoice normChoice : normChoices)
+        {
+          runSolve(domainDim, numElements, dt, finalTime, theta, polyOrder, deltaP, problemChoice, formulationChoice, normChoice, vis);
+        }
       }
     }
   }
+  
+  Camellia::finalize(false); // false: don't print allocation report
   
   return 0;
 }
