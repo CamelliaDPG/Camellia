@@ -1109,7 +1109,8 @@ template<typename Scalar>
 void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
                                  bool applyCubatureWeights, bool naturalBoundaryTermsOnly)
 {
-  int sideIndex = basisCache->getSideIndex();
+  int sideIndex    = basisCache->getSideIndex();
+  bool isSideCache = basisCache->isSideCache(); // in some circumstances, we can have a volume cache that has side information.  If so, isSideCache will be false, but sideIndex will be different from -1.
 
   int valuesRankExpected = _rank + 3; // 3 for scalar, 4 for vector, etc.
   TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
@@ -1168,7 +1169,7 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
       else
       {
         // on sides, we use volume coords for test and field values
-        bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+        bool useVolumeCoords = isSideCache && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
         basisValues = basisCache->getTransformedValues(basis, ls.second->op(), useVolumeCoords);
       }
 
@@ -1179,13 +1180,13 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
           if (applyCubatureWeights)
           {
             // on sides, we use volume coords for test and field values
-            bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+            bool useVolumeCoords = isSideCache && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
             basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op(), useVolumeCoords);
           }
           else
           {
             // on sides, we use volume coords for test and field values
-            bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+            bool useVolumeCoords = isSideCache && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
             basisValues = basisCache->getTransformedValues(basis, ls.second->op(), useVolumeCoords);
           }
         }

@@ -107,7 +107,7 @@ public:
   static void computeSideMeasure(Camellia::FieldContainer<double> & weightedMeasure, const Camellia::FieldContainer<double> &cellJacobian, const Camellia::FieldContainer<double> &cubWeights,
                                  int sideOrdinal, CellTopoPtr parentCell);
 
-  static void getUnitSideNormals(Camellia::FieldContainer<double> &unitSideNormals, int sideOrdinal, const Camellia::FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell);
+  static void getUnitSideNormals(Camellia::FieldContainer<double> &unitSideNormals, Camellia::FieldContainer<double> &normalScaling, int sideOrdinal, const Camellia::FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell);
 
   /** \brief  Computes constant normal vectors to sides of reference cells.  Generalizes Intrepid's CellTools<double>'s version of the same method to apply to Camellia CellTopology parent cells (the present implementation calls Intrepid's method for some of the base shards topologies).  This allows treatment of some cells that are not 2D or 3D (1D and 4D in particular are supported).  The documentation below is largely copied from Intrepid's documentation.
 

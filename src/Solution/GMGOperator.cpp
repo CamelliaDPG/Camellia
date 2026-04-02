@@ -1241,20 +1241,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned coarseSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
                 
-                SubBasisReconciliationWeights weights;
+                SubBasisReconciliationWeights weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, varTracedID, sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, ancestor->topology(), spaceDim, coarseBasis, fineDomainCache, coarseBasisCache);
                 
-                if (coarseBasis->functionSpace() == fineBasis->functionSpace())
-                {
-                  // then we can compute basis weights in reference space, and cache them
-                  weights = _br->constrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                 sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-                                                                 ancestor->topology(),
-                                                                 spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
-                }
-                else
-                {
-                  weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, varTracedID, sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, ancestor->topology(), spaceDim, coarseBasis, fineDomainCache, coarseBasisCache);
-                }
                 // Now: Zero out weights on fine dofs that are
                 // - *not* interior to the coarse domain, or
                 // - on interior subcells that are not owned by the child cell.
@@ -1296,22 +1284,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned volumeSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
                 
-                SubBasisReconciliationWeights weights;
-                if (volumeBasis->functionSpace() == fineBasis->functionSpace())
-                {
-                  // then we can compute basis weights in reference space, and cache them
-                  weights = _br->constrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                 sideDim, fineBasis,
-                                                                 fineSubcellOrdinalInFineDomain, refBranch,
-                                                                 sideOrdinal, volumeTopo,
-                                                                 spaceDim, volumeBasis, volumeSubcellOrdinal,
-                                                                 volumeDomainOrdinal, volumeSubcellPermutation);
-                }
-                else
-                {
-                  weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, varTracedID, sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, ancestor->topology(), spaceDim, volumeBasis, fineDomainCache, coarseBasisCache);
-                }
-                
+                SubBasisReconciliationWeights weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, varTracedID, sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, ancestor->topology(), spaceDim, volumeBasis, fineDomainCache, coarseBasisCache);
                 weights = BasisReconciliation::filterOutZeroRowsAndColumns(weights);
                 
                 // we may have filtered out all the fine dofs; if so, we can continue

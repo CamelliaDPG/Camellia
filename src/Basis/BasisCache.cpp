@@ -471,30 +471,6 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Cam
   _sideNormalsSpaceTime = sideNormalsSpaceTime;
   _cellSideParities = cellSideParities;
   
-//  // the assumption is that if you're using this constructor, the volume points provided are already in reference space
-//  // so that the transformations are all identities
-//  int cellDim = _cellTopo->getDimension(); // for space-time, cellDim = _spaceDim + 1
-//  _cellJacobianFC.resize(numCells, numPoints, cellDim, cellDim);
-//  _cellJacobInvFC.resize(numCells, numPoints, cellDim, cellDim);
-//  _cellJacobDetFC.resize(numCells, numPoints);
-//  _cellJacobianFC.initialize(0.0);
-//  _cellJacobInvFC.initialize(0.0);
-//  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-//  {
-//    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-//    {
-//      for (int d=0; d<cellDim; d++)
-//      {
-//        _cellJacobianFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
-//        _cellJacobInvFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
-//      }
-//    }
-//  }
-//
-//  _cellJacobDetFC.initialize(1.0);
-//  _cellJacobianIsValid = true;
-//  _cellJacobianInverseIsValid = true;
-//  _cellJacobianDeterminantIsValid = true;
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
   _cellJacobianDeterminantIsValid = false;
@@ -872,6 +848,12 @@ void BasisCache::discardPhysicalNodeInfo()
   _sideNormalsIsValid = false;
 }
 
+const Camellia::FieldContainer<double> & BasisCache::getNormalScaling()
+{
+  if (!_sideNormalsIsValid) determineSideNormals();
+  return _normalScaling;
+}
+
 Camellia::FieldContainer<double> & BasisCache::getWeightedMeasures()
 {
   if (!_weightedMeasureIsValid) recomputeMeasures();
@@ -1239,7 +1221,7 @@ BasisCachePtr BasisCache::getVolumeBasisCache()
 
 bool BasisCache::isSideCache()
 {
-  return _sideIndex >= 0;
+  return _isSideCache;
 }
 
 int BasisCache::getSideIndex() const
@@ -1454,9 +1436,22 @@ const Camellia::FieldContainer<double> & BasisCache::getSideNormalsSpaceTime()
   return _sideNormalsSpaceTime;
 }
 
+void BasisCache::setSideIndex(int sideOrdinal)
+{
+  _sideIndex = sideOrdinal;
+}
+
 void BasisCache::setSideNormals(Camellia::FieldContainer<double> &sideNormals)
 {
   _sideNormals = sideNormals;
+  _sideNormalsIsValid = true;
+}
+
+void BasisCache::setSideNormals(Camellia::FieldContainer<double> &sideNormals,
+                                Camellia::FieldContainer<double> &sideNormalsSpaceTime)
+{
+  _sideNormals          = sideNormals;
+  _sideNormalsSpaceTime = sideNormalsSpaceTime;
   _sideNormalsIsValid = true;
 }
 
@@ -1712,7 +1707,7 @@ void BasisCache::setPhysicalCellNodes(const Camellia::FieldContainer<double> &ph
   }
   else if (! isSideCache() && ! createSideCacheToo )
   {
-    // then we have side caches whose values are going to be stale: we should delete these
+    // then we might have side caches whose values are going to be stale: we should delete these
     _basisCacheSides.clear();
   }
 }
@@ -2163,23 +2158,22 @@ void BasisCache::determineSideNormals()
   if ( isSideCache() )
   {
     int numPoints = _cubPointsSideRefCellFC.dimension(0);
+    _normalScaling.resize(_numCells, numPoints);
     if (_cellTopo->getDimension() > 1)
     {
-      Camellia::FieldContainer<double> normalLengths(_numCells, numPoints);
-      
       if (_cellTopo->getTensorialDegree() == 0)
       {
         // recompute sideNormals
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
         Intrepid::CellTools<double>::getPhysicalSideNormals(_sideNormals, getJacobian(), _sideIndex, _cellTopo->getShardsTopology());
         // make unit length
-        Intrepid::RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, Intrepid::NORM_TWO);
-        Intrepid::FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+        Intrepid::RealSpaceTools<double>::vectorNorm(_normalScaling, _sideNormals, Intrepid::NORM_TWO);
+        Intrepid::FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, _normalScaling, _sideNormals, true);
       }
       else
       {
         _sideNormalsSpaceTime.resize(_numCells, numPoints, _cellTopo->getDimension());
-        CamelliaCellTools::getUnitSideNormals(_sideNormalsSpaceTime, _sideIndex, getJacobian(), _cellTopo);
+        CamelliaCellTools::getUnitSideNormals(_sideNormalsSpaceTime, _normalScaling, _sideIndex, getJacobian(), _cellTopo);
         
         // next, extract the pure-spatial part of the normal (this might not be unit length)
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
@@ -2207,6 +2201,7 @@ void BasisCache::determineSideNormals()
         for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
         {
           _sideNormals(cellOrdinal,ptOrdinal,0) = (x_this > x_other) ? 1 : -1;
+          _normalScaling(cellOrdinal,ptOrdinal) = 1.0;
         }
       }
       if (_spaceDim == 0)

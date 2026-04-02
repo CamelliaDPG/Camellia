@@ -321,6 +321,9 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
       fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
         break;
       case Camellia::FUNCTION_SPACE_HVOL:
+        // TODO: guard against transforming HVOL on sides, as we do in the version that accepts a BasisCache…
+        // For now, we throw an exception, so that callers can add guards.
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "Need to check that we're not evaluating on a side");
         fst::HVOLtransformVALUE<double>(*transformedValues, cellJacobianDet, *referenceValues);
       break;
     default:
@@ -464,9 +467,9 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
                                                            BasisCache* basisCache)
 {
   using fst = Intrepid::FunctionSpaceTools;
-  //  int numCells = cellJacobian.dimension(0);
   
-  int spaceDim = basisCache->getSpaceDim(); // changed 3-21-16
+  int spaceDim = basisCache->getSpaceDim();
+  int meshDim  = basisCache->cellTopology()->getDimension();
   
   int componentOfInterest;
   Camellia::EFunctionSpace fs = basis->functionSpace();
@@ -502,7 +505,22 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
           fst::HDIVtransformVALUE<double>(*transformedValues,basisCache->getJacobian(),basisCache->getJacobianDet(),*referenceValues);
           break;
         case Camellia::FUNCTION_SPACE_HVOL:
-          fst::HVOLtransformVALUE<double>(*transformedValues, basisCache->getJacobianDet(), *referenceValues);
+          if (basisCache->isSideCache() && (basis->domainTopology()->getDimension() < meshDim))
+          {
+            // For side integration of HVOL skeleton basis, we assume HVOL values mean H(div) dot normal
+            // The transform can be found by dividing by the length of the physical normal
+            // you get when you map a unit normal from reference space:
+            //    || det J J^-T n_ref ||
+            // This quantity is stored by side BasisCache in _normalScaling.
+            
+            const auto & normalScaling = basisCache->getNormalScaling();
+            Intrepid::ArrayTools::scalarMultiplyDataField<double>(*transformedValues, normalScaling, *referenceValues,
+                                                                  /* reciprocal = */true);
+          }
+          else
+          {
+            fst::HVOLtransformVALUE<double>(*transformedValues, basisCache->getJacobianDet(), *referenceValues);
+          }
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");

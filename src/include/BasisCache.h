@@ -87,6 +87,7 @@ private:
   Camellia::FieldContainer<double> _cubPointsSideRefCellFC; // _cubPoints is the one in the side coordinates; this one in volume coords
   Camellia::FieldContainer<double> _sideNormals;
   Camellia::FieldContainer<double> _sideNormalsSpaceTime; // for space-time CellTopologies, a copy of _sideNormals that includes the temporal component
+  Camellia::FieldContainer<double> _normalScaling; // for Piola on side BasisCache: dividing by these values will map from sigma dot n in ref space to sigma dot n in physical space.  Allows geometrically consistent mapping of DPG fluxes.
 
   CellTopoPtr _cellTopo;
 
@@ -303,12 +304,15 @@ public:
    */
   const Camellia::FieldContainer<double> & getSideNormals();
   void setSideNormals(Camellia::FieldContainer<double> &sideNormals);
+  void setSideNormals(Camellia::FieldContainer<double> &sideNormals, Camellia::FieldContainer<double> &sideNormalsSpaceTime);
   void setCellSideParities(const Camellia::FieldContainer<double> &cellSideParities);
+  const Camellia::FieldContainer<double> & getNormalScaling();
 
   /** \brief  Returns an Camellia::FieldContainer<double> populated with the full space-time side normals; dimensions are (C,P,D).  For non-tensor-product topologies, throws an exception.
    */
   const Camellia::FieldContainer<double> & getSideNormalsSpaceTime();
 
+  void setSideIndex(int sideOrdinal);
   int getSideIndex() const; // -1 if not sideCache
 
   virtual int getSpaceDim();

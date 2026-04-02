@@ -1172,7 +1172,7 @@ void runTestCases(const ProblemChoice problem, const GMGOperator::SmootherChoice
     
     // test cases are 4-tuples: (p, overlap, chebyshevDegree, iterationCount)
     const int c = -1; // unused chebyshevDegree
-    std::vector< std::tuple<int,int,int,int> > testCases {{2,0,c,157},{2,1,c,29},{3,0,c,223},{3,1,c,34}};
+    std::vector< std::tuple<int,int,int,int> > testCases {{2,0,c,178},{2,1,c,34},{3,0,c,253},{3,1,c,38}};
     runTestCases(problem, smoother, testCases, success, out);
   }
 
@@ -1183,7 +1183,7 @@ void runTestCases(const ProblemChoice problem, const GMGOperator::SmootherChoice
     
     // test cases are 4-tuples: (p, overlap, chebyshev degree, iterationCount)
     const int o = -1; // unused overlap
-    std::vector< std::tuple<int,int,int,int> > testCases {{2,o,8,108},{2,o,16,74},{3,o,8,140},{3,o,16,104}};
+    std::vector< std::tuple<int,int,int,int> > testCases {{2,o,8,117},{2,o,16,73},{3,o,8,150},{3,o,16,108}};
     runTestCases(problem, smoother, testCases, success, out);
   }
 } // namespace

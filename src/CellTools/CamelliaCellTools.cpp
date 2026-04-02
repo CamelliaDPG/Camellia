@@ -323,11 +323,13 @@ int CamelliaCellTools::getSideCount(const shards::CellTopology &cellTopo)
   return (cellTopo.getDimension() > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
 }
 
-void CamelliaCellTools::getUnitSideNormals(Camellia::FieldContainer<double> &unitSideNormals, int sideOrdinal, const Camellia::FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell)
+void CamelliaCellTools::getUnitSideNormals(Camellia::FieldContainer<double> &unitSideNormals, Camellia::FieldContainer<double> &normalScaling, int sideOrdinal, const Camellia::FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell)
 {
   int numCells = unitSideNormals.dimension(0);
   int numPoints = unitSideNormals.dimension(1);
   int spaceDim = unitSideNormals.dimension(2);
+  
+  normalScaling.resize(numCells, numPoints);
 
   if (spaceDim==0)
   {
@@ -346,15 +348,15 @@ void CamelliaCellTools::getUnitSideNormals(Camellia::FieldContainer<double> &uni
         double jacobianDirection = (inCellJacobian(cellOrdinal,ptOrdinal,spaceDim-1,spaceDim-1) > 0) ? 1.0 : -1.0;
         double normal = refSpaceNormal * jacobianDirection;
         unitSideNormals(cellOrdinal,ptOrdinal,0) = normal;
+        normalScaling(cellOrdinal,ptOrdinal) = 1.0;
       }
     }
   }
   else if (parentCell->getTensorialDegree() == 0)
   {
     Intrepid::CellTools<double>::getPhysicalSideNormals(unitSideNormals, inCellJacobian, sideOrdinal, parentCell->getShardsTopology());      // make unit length
-    Camellia::FieldContainer<double> normalLengths(numCells, numPoints);
-    Intrepid::RealSpaceTools<double>::vectorNorm(normalLengths, unitSideNormals, Intrepid::NORM_TWO);
-    Intrepid::FunctionSpaceTools::scalarMultiplyDataData<double>(unitSideNormals, normalLengths, unitSideNormals, true); // true: divide
+    Intrepid::RealSpaceTools<double>::vectorNorm(normalScaling, unitSideNormals, Intrepid::NORM_TWO);
+    Intrepid::FunctionSpaceTools::scalarMultiplyDataData<double>(unitSideNormals, normalScaling, unitSideNormals, true); // true: divide
   }
   else
   {
@@ -388,7 +390,7 @@ void CamelliaCellTools::getUnitSideNormals(Camellia::FieldContainer<double> &uni
           temporalCellJacobianAbs(cellOrdinal,ptOrdinal) = abs(inCellJacobian(cellOrdinal,ptOrdinal,spaceDim-1,spaceDim-1));
         }
       }
-      CamelliaCellTools::getUnitSideNormals(spaceUnitSideNormals, spatialSideOrdinal, spatialCellJacobian, spaceTopo);
+      CamelliaCellTools::getUnitSideNormals(spaceUnitSideNormals, normalScaling, spatialSideOrdinal, spatialCellJacobian, spaceTopo);
       unitSideNormals.initialize(0);
       for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
       {
@@ -414,6 +416,7 @@ void CamelliaCellTools::getUnitSideNormals(Camellia::FieldContainer<double> &uni
           double jacobianDirection = (inCellJacobian(cellOrdinal,ptOrdinal,spaceDim-1,spaceDim-1) > 0) ? 1.0 : -1.0;
           double temporalNormal = refSpaceNormal * jacobianDirection;
           unitSideNormals(cellOrdinal,ptOrdinal,spaceDim-1) = temporalNormal;
+          normalScaling(cellOrdinal,ptOrdinal) = 1.0;
         }
       }
     }
