@@ -3513,21 +3513,24 @@ void GDAMinimumRule::rebuildLookups()
 
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
 
-  // Here, we check and warn if mesh must be 1-irregular but isn't.
-  // (Need to examine variables to see if there are any that require reconciliation for d < sideDim; otherwise we can do without 1-irregularity.)
-  int irregularity = _mesh->irregularity();
-  if (irregularity > 1)
+  if (d_min < spaceDim - 1)
   {
-    // this is only supported if only face continuity is required -- i.e. d_min == spaceDim - 1
-    if (d_min != spaceDim - 1)
+    // Here, we check and warn if mesh must be 1-irregular but isn't.
+    // (Need to examine variables to see if there are any that require reconciliation for d < sideDim; otherwise we can do without 1-irregularity.)
+    int irregularity = _mesh->irregularity();
+    if (irregularity > 1)
     {
-      cout << "ERROR: " << spaceDim << "D mesh is " << irregularity << "-irregular, but min continuity dimension is " << d_min << ".\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(d_min != spaceDim - 1, std::invalid_argument, "Mesh irregularity > 1 is only supported when only face continuity is required");
+      // this is only supported if only face continuity is required -- i.e. d_min < spaceDim - 1
+      if (d_min < spaceDim - 1)
+      {
+        cout << "ERROR: " << spaceDim << "D mesh is " << irregularity << "-irregular, but min continuity dimension is " << d_min << ".\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(d_min != spaceDim - 1, std::invalid_argument, "Mesh irregularity > 1 is only supported when only face continuity is required");
+      }
     }
-  }
-  else
-  {
-//    cout << "Mesh is " << irregularity << "-irregular.\n";
+    else
+    {
+      //    cout << "Mesh is " << irregularity << "-irregular.\n";
+    }
   }
   
   map<GlobalIndexType, SubcellDofIndices> myCellDofIndices;

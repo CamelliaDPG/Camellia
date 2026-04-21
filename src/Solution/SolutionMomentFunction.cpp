@@ -187,6 +187,44 @@ namespace Camellia
         }
       });
     }
+    else if (underlyingViewRank == 4)
+    {
+      auto view = values.getUnderlyingView<4>();
+      Kokkos::deep_copy(view, 0.0); // initialize
+
+      const int numPoint0 = view.extent_int(1);
+      const int numPoint1 = view.extent_int(2);
+      const int numPoint2 = view.extent_int(3);
+
+      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<4>>(
+        {0,0,0,0},
+        {view.extent(0), view.extent(1), view.extent(2), view.extent(3)}
+      );
+      using array_index_type = Kokkos::MDRangePolicy<Kokkos::Rank<4>>::array_index_type;
+
+      Kokkos::parallel_for("SolutionMomentFunction_values", policy,
+      KOKKOS_LAMBDA (const array_index_type &physicalCellOrdinalInBasisCache,
+                     const array_index_type &pointOrdinal0,
+                     const array_index_type &pointOrdinal1,
+                     const array_index_type &pointOrdinal2)
+      {
+        const int &cellOrdinal = physicalCellOrdinalLookup(physicalCellOrdinalInBasisCache);
+
+        int pointOrdinal;
+        TensorIndices::setTensorOrdinal(pointOrdinal, pointOrdinal0, numPoint0, pointOrdinal1, numPoint1, pointOrdinal2);
+
+        for (int dof = 0; dof < numDofs; dof++)
+        {
+          double weight = spatialBasisCoefficients(cellOrdinal,dof);
+          const double & basisValue = dv_transformedValues(physicalCellOrdinalInBasisCache,dof,pointOrdinal);
+          view(physicalCellOrdinalInBasisCache,pointOrdinal0,pointOrdinal1,pointOrdinal2) += basisValue * weight;
+        }
+      });
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported underlyingViewRank");
+    }
     transformedValues->checkinDeviceView(false); // false: don't copy back to host (has not changed)
     SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(physicalCellOrdinalLookup);
   }

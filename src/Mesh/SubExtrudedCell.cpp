@@ -168,10 +168,11 @@ namespace Camellia
       const auto & physicalNeighborCellIndex = physicalNeighborInfo.first;
       if (physicalNeighborCellIndex != -1)
       {
-        auto extrudedNeighborTopo = CellTopology::cellTopology(_physicalMeshTopo->getCell(physicalNeighborCellIndex)->topology(),1);
+        auto physicalNeighborTopo = _physicalMeshTopo->getCell(physicalNeighborCellIndex)->topology();
+        auto extrudedNeighborTopo = CellTopology::cellTopology(physicalNeighborTopo,1);
         const auto & mySideOrdinalInPhysicalNeighbor = physicalNeighborInfo.second;
         
-        const unsigned mySideOrdinalInExtrudedNeighbor = extrudedNeighborTopo->getExtrudedSideOrdinal(mySideOrdinalInPhysicalNeighbor);
+        const unsigned mySideOrdinalInExtrudedNeighbor = extrudedNeighborTopo->getExtrudedSubcellOrdinal(physicalNeighborTopo->getDimension()-1, mySideOrdinalInPhysicalNeighbor);
         
         IndexType extrudedNeighborCellIndex = SubExtrudedMeshTopology::getCompositeCellIndex(physicalNeighborCellIndex, _extrusionCellIndex);
         

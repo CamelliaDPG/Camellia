@@ -139,4 +139,169 @@ namespace Camellia
     
     f->checkinValuesData(data_actual);
   }
+
+  void testScalarFunctionDataPathMatchesViewPath(FunctionPtr f, BasisCachePtr basisCache, const double &tol, Teuchos::FancyOStream &out, bool &success)
+  {
+    using Scalar = double;
+    using ViewType = Camellia::DeviceView<Scalar>;
+
+    TEUCHOS_TEST_FOR_EXCEPTION(f->rank() != 0, std::invalid_argument,
+                               "testScalarFunctionDataPathMatchesViewPath only supports scalar functions");
+
+    auto data_actual = f->checkoutValuesData(basisCache);
+    f->values(data_actual, basisCache);
+
+    const int numCells  = basisCache->numCells();
+    const int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
+
+    Camellia::FieldContainer<Scalar> valuesFC(numCells, numPoints);
+    f->values(valuesFC, basisCache);
+    auto fcView = valuesFC.checkoutDeviceView(true); // true: deep_copy from host
+
+    auto tensorPoints = basisCache->getPhysicalCubaturePoints();
+    const int numPointComponents = tensorPoints.numTensorComponents();
+
+    switch (numPointComponents)
+    {
+      case 1:
+      {
+        // if data rank is 2, compare directly
+        TEUCHOS_TEST_FOR_EXCEPTION(data_actual.rank() != 2, std::invalid_argument, "Unexpected Data rank for 1-component tensor points");
+        Intrepid2::testFloatingEquality2(fcView, data_actual, tol, tol, out, success, "view path", "data path");
+      }
+      break;
+
+      case 2:
+      {
+        using ViewInterpreter = ViewCollapseDimensions<Scalar,ViewType,3,1,2>; // (C,P0,P1) --> (C,P)
+        static_assert(Intrepid2::supports_rank<ViewInterpreter, 3>::value, "ViewInterpreter should support rank 3");
+
+        Kokkos::Array<int,2> pointComponentBounds;
+        for (int r=0; r<2; r++)
+        {
+          const auto & pointComponent = tensorPoints.getTensorComponent(r);
+          pointComponentBounds[r] = pointComponent.extent_int(1);
+        }
+
+        if (data_actual.rank() == 3)
+        {
+          ViewInterpreter interpretedView(fcView, pointComponentBounds);
+          Intrepid2::testFloatingEquality3(interpretedView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(data_actual.rank() != 2, std::invalid_argument, "Unexpected Data rank for 2-component tensor points");
+          Intrepid2::testFloatingEquality2(fcView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+      }
+      break;
+
+      case 3:
+      {
+        using ViewInterpreter = ViewCollapseDimensions<Scalar,ViewType,4,1,3>; // (C,P0,P1,P2) --> (C,P)
+        static_assert(Intrepid2::supports_rank<ViewInterpreter, 4>::value, "ViewInterpreter should support rank 4");
+
+        Kokkos::Array<int,3> pointComponentBounds;
+        for (int r=0; r<3; r++)
+        {
+          const auto & pointComponent = tensorPoints.getTensorComponent(r);
+          pointComponentBounds[r] = pointComponent.extent_int(1);
+        }
+
+        if (data_actual.rank() == 4)
+        {
+          ViewInterpreter interpretedView(fcView, pointComponentBounds);
+          Intrepid2::testFloatingEquality4(interpretedView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(data_actual.rank() != 2, std::invalid_argument, "Unexpected Data rank for 3-component tensor points");
+          Intrepid2::testFloatingEquality2(fcView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+      }
+      break;
+
+      case 4:
+      {
+        using ViewInterpreter = ViewCollapseDimensions<Scalar,ViewType,5,1,4>; // (C,P0,P1,P2,P3) --> (C,P)
+        static_assert(Intrepid2::supports_rank<ViewInterpreter, 5>::value, "ViewInterpreter should support rank 5");
+
+        Kokkos::Array<int,4> pointComponentBounds;
+        for (int r=0; r<4; r++)
+        {
+          const auto & pointComponent = tensorPoints.getTensorComponent(r);
+          pointComponentBounds[r] = pointComponent.extent_int(1);
+        }
+
+        if (data_actual.rank() == 5)
+        {
+          ViewInterpreter interpretedView(fcView, pointComponentBounds);
+          Intrepid2::testFloatingEquality5(interpretedView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(data_actual.rank() != 2, std::invalid_argument, "Unexpected Data rank for 4-component tensor points");
+          Intrepid2::testFloatingEquality2(fcView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+      }
+      break;
+
+      case 5:
+      {
+        using ViewInterpreter = ViewCollapseDimensions<Scalar,ViewType,6,1,5>; // (C,P0,P1,P2,P3,P4) --> (C,P)
+        static_assert(Intrepid2::supports_rank<ViewInterpreter, 6>::value, "ViewInterpreter should support rank 6");
+
+        Kokkos::Array<int,5> pointComponentBounds;
+        for (int r=0; r<5; r++)
+        {
+          const auto & pointComponent = tensorPoints.getTensorComponent(r);
+          pointComponentBounds[r] = pointComponent.extent_int(1);
+        }
+
+        if (data_actual.rank() == 6)
+        {
+          ViewInterpreter interpretedView(fcView, pointComponentBounds);
+          Intrepid2::testFloatingEquality6(interpretedView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(data_actual.rank() != 2, std::invalid_argument, "Unexpected Data rank for 5-component tensor points");
+          Intrepid2::testFloatingEquality2(fcView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+      }
+      break;
+
+      case 6:
+      {
+        using ViewInterpreter = ViewCollapseDimensions<Scalar,ViewType,7,1,6>; // (C,P0,P1,P2,P3,P4,P5) --> (C,P)
+        static_assert(Intrepid2::supports_rank<ViewInterpreter, 7>::value, "ViewInterpreter should support rank 7");
+
+        Kokkos::Array<int,6> pointComponentBounds;
+        for (int r=0; r<6; r++)
+        {
+          const auto & pointComponent = tensorPoints.getTensorComponent(r);
+          pointComponentBounds[r] = pointComponent.extent_int(1);
+        }
+
+        if (data_actual.rank() == 7)
+        {
+          ViewInterpreter interpretedView(fcView, pointComponentBounds);
+          Intrepid2::testFloatingEquality7(interpretedView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(data_actual.rank() != 2, std::invalid_argument, "Unexpected Data rank for 6-component tensor points");
+          Intrepid2::testFloatingEquality2(fcView, data_actual, tol, tol, out, success, "view path", "data path");
+        }
+      }
+      break;
+
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                                   "Unsupported number of tensor point components in testScalarFunctionDataPathMatchesViewPath");
+    }
+
+    valuesFC.checkinDeviceView(false); // false: don't deep copy back to host
+    f->checkinValuesData(data_actual);
+  }
 } // namespace Camellia

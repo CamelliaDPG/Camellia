@@ -519,5 +519,7 @@ namespace Camellia
   void testFunctionDataPathMatchesViewPath1V(FunctionPtr f, BasisCachePtr basisCache1V, const double &tol, Teuchos::FancyOStream &out, bool &success);
   void testFunctionDataPathMatchesViewPath1T1V(FunctionPtr f, BasisCachePtr basisCache1V, const double &tol, Teuchos::FancyOStream &out, bool &success);
   void testFunctionDataPathMatchesViewPath3V(FunctionPtr f, BasisCachePtr basisCache3V, const double &tol, Teuchos::FancyOStream &out, bool &success);
+
+  void testScalarFunctionDataPathMatchesViewPath(FunctionPtr f, BasisCachePtr basisCache, const double &tol, Teuchos::FancyOStream &out, bool &success);
 } // namespace Camellia
 #endif  // CAMELLIA_DATA_HELPERS_HPP

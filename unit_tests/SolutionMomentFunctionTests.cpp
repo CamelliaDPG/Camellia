@@ -17,6 +17,7 @@
 #include "CamelliaTestingHelpers.h"
 #include "ExtrudedMeshTopology.h"
 #include "MaxwellianFunction.h"
+#include "MonomialFunctions.h"
 #include "SolutionMoments.h"
 #include "SolutionMomentFunction.h"
 #include "SubExtrudedMeshTopology.h"
@@ -272,6 +273,7 @@ namespace
     else
     {
       const double relativeError = error / expectedL2;
+      errorMeetsTol = (relativeError <= tol);
       TEST_COMPARE(relativeError, <=, tol);
     }
     
@@ -758,6 +760,62 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
               f, expectedMoments, maxMoment, refine, tol, out, success, extrusionOrigin, extrusionExtent, extrusionMeshWidth);
 }
 
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtrudedMesh )
+{
+  const int numPhysicalDims  = 1;
+  const int numExtrusionDims = 2;
+  const int survivingExtrusionDim = 0; // x,vx survive
+  const bool useSpaceTime    = true;
+  const bool useSerendipity  = false;
+  const int polyOrder = 2;
+  const int delta_k   = 0;
+
+  std::vector<int> H1Order(1 + numExtrusionDims + 1, polyOrder + 1); // +1 for time
+
+  auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
+
+  VarFactoryPtr vf = VarFactory::varFactory();
+  auto f = vf->fieldVar("f");
+  auto v = vf->testVar("v", HGRAD);
+
+  if (useSerendipity)
+  {
+    f->setBasisFamily(BasisFamily::serendipityBasisFamily());
+  }
+
+  BFPtr bf = BF::bf(vf);
+
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
+
+  std::vector<int> physicalH1Order{polyOrder + 1};
+
+  MeshTopologyViewPtr extrudedPhysicalMeshTopology =
+    Teuchos::rcp(new SubExtrudedMeshTopology(meshTopo, survivingExtrusionDim));
+
+  MeshPtr physicalMesh =
+    MeshFactory::minRuleMesh(extrudedPhysicalMeshTopology, bf, physicalH1Order, delta_k, comm, allowPruning);
+
+  // Project a phase-space function that yields a nontrivial moment function.
+  SolutionPtr soln = Solution::solution(mesh);
+  FunctionPtr phaseSpaceFxn = Function::xn(1) * MonomialFunction::xi_n(3,2); // x * vy^2
+
+  std::map<int, FunctionPtr> functionMap;
+  functionMap[f->ID()] = phaseSpaceFxn;
+  soln->projectOntoMesh(functionMap);
+
+  const int maxMomentNumber = 0;
+  SolutionMoments solnMoments(maxMomentNumber, soln, f, physicalMesh, survivingExtrusionDim);
+  solnMoments.update();
+
+  FunctionPtr momentFxn = solnMoments.solutionMomentFunction(0); // integral over vy
+
+  const IndexType cellID = 0;
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, cellID);
+
+  testScalarFunctionDataPathMatchesViewPath(momentFxn, basisCache, 1e-14, out, success);
+}
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
   {

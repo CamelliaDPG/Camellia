@@ -27,6 +27,11 @@ namespace Camellia
     {
       tensorOrdinal = spatialOrdinal + spatialCardinality * extrusionFieldOrdinal;
     }
+  
+    KOKKOS_INLINE_FUNCTION void setTensorOrdinal(int &tensorOrdinal, const int &spatialOrdinal, const int &spatialCardinality, const int &extrusionFieldOrdinal1, const int &extrusionCardinality1, const int &extrusionFieldOrdinal2)
+    {
+      tensorOrdinal = spatialOrdinal + spatialCardinality * (extrusionFieldOrdinal1 + extrusionCardinality1 * extrusionFieldOrdinal2);
+    }
 
     KOKKOS_INLINE_FUNCTION void setTensorOrdinal(int &tensorOrdinal, const Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> &componentOrdinals,
                                                  const Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> &componentCardinalities,
