@@ -45,6 +45,42 @@
 #include <Intrepid2_TensorArgumentIterator.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
 
+namespace
+{
+  class SideRestriction : public Camellia::TFunction<double>
+  {
+    std::vector<int> _sidesToMatch;
+  public:
+    SideRestriction(std::vector<int> sidesToMatch)
+    :
+    TFunction<double>("SideRestriction",0),
+    _sidesToMatch(sidesToMatch)
+    {}
+    
+    bool boundaryValueOnly() override
+    {
+      return true;
+    }
+    
+    using TFunction<double>::values;
+    void values(Camellia::FieldContainer<double> &values, Camellia::BasisCachePtr basisCache) override
+    {
+      const int sideOrdinal = basisCache->getSideIndex();
+      bool sideMatches = false;
+      for (auto sideToMatch : _sidesToMatch)
+      {
+        if (sideToMatch == sideOrdinal)
+        {
+          sideMatches = true;
+          break;
+        }
+      }
+      const double value = sideMatches ? 1.0 : 0.0;
+      values.initialize(value);
+    }
+  };
+}
+
 namespace Camellia
 {
   std::map<std::string,int> callsToFunctionsWithoutDevicePathImplementations;
@@ -594,13 +630,10 @@ TFunctionPtr<Scalar> TFunction<Scalar>::op(TFunctionPtr<Scalar> f, Camellia::EOp
   case Camellia::OP_VALUE:
       return f;
     case Camellia::OP_DX:
-    case Camellia::OP_DI1:
       return f->dx();
     case Camellia::OP_DY:
-    case Camellia::OP_DI2:
       return f->dy();
     case Camellia::OP_DZ:
-    case Camellia::OP_DI3:
       return f->dz();
     case Camellia::OP_DXDX:
       return f->dx()->dx();
@@ -626,6 +659,17 @@ TFunctionPtr<Scalar> TFunction<Scalar>::op(TFunctionPtr<Scalar> f, Camellia::EOp
       return f->div();
     case Camellia::OP_DOT_NORMAL:
       return f * TFunction<Scalar>::normal();
+    case Camellia::OP_DI1:
+    case Camellia::OP_DI2:
+    case Camellia::OP_DI3:
+    case Camellia::OP_DI4:
+    case Camellia::OP_DI5:
+    case Camellia::OP_DI6:
+    case Camellia::OP_DI7:
+    {
+      const int i = (op - OP_D1 + 1); // 1-based
+      return f->di(i);
+    }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
   }
@@ -874,6 +918,12 @@ size_t TFunction<Scalar>::getCellDataSize(GlobalIndexType cellID)
     }
   }
   return getCellDataSize(members, cellID);
+}
+
+template<typename Scalar>
+TFunctionPtr<double> TFunction<Scalar>::localSideCharacteristic(std::vector<int> &sidesToMatch)
+{
+  return Teuchos::rcp( new SideRestriction(sidesToMatch) );
 }
 
 template <typename Scalar>

@@ -146,6 +146,7 @@ namespace Camellia
      *  \param  thisSideOrdinal      [in]  - sideOrdinal in this cell topology.
      */
 //      unsigned getTemporalComponentSideOrdinal(unsigned thisSideOrdinal);
+    
     /** \brief  Mapping from this CellTopology's side ordinal of dimension d-1 to the corresponding
      *          side ordinal in one of the tensorial component nodes; that is, if
      *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,

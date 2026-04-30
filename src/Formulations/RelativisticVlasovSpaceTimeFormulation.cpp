@@ -28,11 +28,13 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                vector<double> velocityVertices_z,
                                                                                const int H1Order, const int delta_k,
                                                                                const int numUniformRefinements,
+                                                                               const TestSpaceInnerProduct testSpaceIP,
                                                                                const double testSpaceL2Weight,
                                                                                const EBasisFamily &basisFamily,
                                                                                const int maxMomentNumberForDriver)
 :
 _c(c),
+_testSpaceInnerProduct(testSpaceIP),
 _testSpaceL2Weight(testSpaceL2Weight),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
@@ -71,22 +73,33 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const 
   {
     VarPtr w = this->w(i);
     
-    LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
-    for (int d=0; d<spaceDim; d++)
+    if (_testSpaceInnerProduct == Graph)
     {
-      auto  v_d    = v_i(d);
-      auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
-      f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+      LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
+      for (int d=0; d<spaceDim; d++)
+      {
+        auto  v_d    = v_i(d);
+        auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
+        f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+      }
+      for (int vd=0; vd<velocityDim; vd++)
+      {
+        auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
+        f_term = f_term - a[vd] * dw_dv_vd;
+      }
+      ip->addTerm(f_term);
+      
+      LinearTermPtr stabilization_term = sqrt(_testSpaceL2Weight) * w;
+      ip->addTerm(stabilization_term);
     }
-    for (int vd=0; vd<velocityDim; vd++)
+    else if (_testSpaceInnerProduct == L2)
     {
-      auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
-      f_term = f_term - a[vd] * dw_dv_vd;
+      ip->addTerm(w);
     }
-    ip->addTerm(f_term);
-    
-    LinearTermPtr stabilization_term = sqrt(_testSpaceL2Weight) * w;
-    ip->addTerm(stabilization_term);
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported test space inner product selection");
+    }
   }
   
   return ip;
@@ -200,7 +213,9 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
   
   auto nextSlabForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(_c, q(), m(), configurationSpaceFormulation(), rootSpatialMeshTopology,
                                                                               temporalVertices, velocitySpaceVertices_x(), velocitySpaceVertices_y(), velocitySpaceVertices_z(),
-                                                                              H1Order(), delta_k(), numUniformRefinements(), _testSpaceL2Weight, basisFamily()));
+                                                                              H1Order(), delta_k(), numUniformRefinements(),
+                                                                              _testSpaceInnerProduct, _testSpaceL2Weight,
+                                                                              basisFamily()));
   
   configureNextSlab(nextSlabForm);
   

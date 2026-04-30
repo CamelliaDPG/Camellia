@@ -62,13 +62,17 @@ namespace {
     for (int i=0; i<velocityDim; i++)
     {
       auto vComp     = vxCompIndexOneBased + i;
-      lhsAtExactSoln = lhsAtExactSoln + ((q / TEST_M) * E_soln_vector[i] * f_exact)->di(vComp);
+      if (i < E_soln_vector.size()) // if 1D2V, e.g., modeling assumption is that E_y = 0.
+      {
+        lhsAtExactSoln = lhsAtExactSoln + ((q / TEST_M) * E_soln_vector[i] * f_exact)->di(vComp);
+      }
     }
     return lhsAtExactSoln * w;
   }
 
   Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T1V(const int xElements, const int tElements, const int vElements,
-                                                                const int H1Order, const bool usePeriodicBCs, double q,
+                                                                const int H1Order, const bool useGradedSpatialMesh,
+                                                                const bool usePeriodicBCs, double q,
                                                                 const EBasisFamily &basisFamily, const bool useMimeticDPG,
                                                                 const int delta_k = 2)
   {
@@ -85,7 +89,16 @@ namespace {
     
     Teuchos::RCP<ConfigurationSpaceFormulationPoisson> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q, eps0, SPACE_TIME) );
     
-    MeshTopologyPtr spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements, usePeriodicBCs);
+    MeshTopologyPtr spatialMeshTopo;
+    if (useGradedSpatialMesh)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(usePeriodicBCs, std::invalid_argument, "periodic BCs not supported for geometric graded meshes");
+      spatialMeshTopo = MeshFactory::geometricGradedIntervalMeshTopology(x0, x0+xWidth, xElements);
+    }
+    else
+    {
+      spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements, usePeriodicBCs);
+    }
     
     std::vector<double> temporalVertices(tElements + 1);
     for (int i=0; i<=tElements; i++)
@@ -103,6 +116,87 @@ namespace {
     
     std::vector<double> velocitySpaceVertices_y; // empty
     std::vector<double> velocitySpaceVertices_z; // empty
+    
+    Teuchos::RCP<VlasovSpaceTimeFormulation> form;
+    if (!useMimeticDPG)
+    {
+      form = Teuchos::rcp(new VlasovSpaceTimeFormulation(q, m, configForm, spatialMeshTopo,
+                                                         temporalVertices,
+                                                         velocitySpaceVertices_x,
+                                                         velocitySpaceVertices_y,
+                                                         velocitySpaceVertices_z,
+                                                         H1Order, delta_k,
+                                                         numUniformRefinements,
+                                                         basisFamily) );
+    }
+    else
+    {
+      form = Teuchos::rcp(new MimeticVlasovSpaceTimeFormulation(q, m, configForm, spatialMeshTopo,
+                                                                temporalVertices,
+                                                                velocitySpaceVertices_x,
+                                                                velocitySpaceVertices_y,
+                                                                velocitySpaceVertices_z,
+                                                                H1Order, delta_k,
+                                                                numUniformRefinements,
+                                                                basisFamily) );
+    }
+    return form;
+  }
+
+  Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const int xElements,  const int tElements,
+                                                                const int vxElements, const int vyElements,
+                                                                const int H1Order, const bool useGradedSpatialMesh,
+                                                                const bool usePeriodicBCs, double q,
+                                                                const EBasisFamily &basisFamily, const bool useMimeticDPG,
+                                                                const int delta_k = 2)
+  {
+    double eps0    = TEST_EPS0;
+    double m       = TEST_M;
+    double x0      = TEST_X0;
+    double xWidth  = TEST_XWIDTH;
+    double t0      = TEST_T0;
+    double tWidth  = TEST_TWIDTH;
+    double vx0     = TEST_V0;
+    double vxWidth = TEST_VWIDTH;
+    double vy0     = TEST_V0;
+    double vyWidth = TEST_VWIDTH;
+    
+    const int numUniformRefinements = 0;
+    
+    Teuchos::RCP<ConfigurationSpaceFormulationPoisson> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(q, eps0, SPACE_TIME) );
+    
+    MeshTopologyPtr spatialMeshTopo;
+    if (useGradedSpatialMesh)
+    {
+      spatialMeshTopo = MeshFactory::geometricGradedIntervalMeshTopology(x0, x0+xWidth, xElements);
+    }
+    else
+    {
+      spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements, usePeriodicBCs);
+    }
+    
+    std::vector<double> temporalVertices(tElements + 1);
+    for (int i=0; i<=tElements; i++)
+    {
+      const double t = double(i) / double(tElements) * tWidth + t0;
+      temporalVertices[i] = t;
+    }
+    
+    std::vector<double> velocitySpaceVertices_x(vxElements+1);
+    for (int i=0; i<=vxElements; i++)
+    {
+      const double vx = double(i) / double(vxElements) * vxWidth + vx0;
+      velocitySpaceVertices_x[i] = vx;
+    }
+    
+    std::vector<double> velocitySpaceVertices_y(vyElements+1);
+    for (int i=0; i<=vyElements; i++)
+    {
+      const double vy = double(i) / double(vyElements) * vyWidth + vy0;
+      velocitySpaceVertices_y[i] = vy;
+    }
+    
+    std::vector<double> velocitySpaceVertices_z; // empty -- 1D2V
     
     Teuchos::RCP<VlasovSpaceTimeFormulation> form;
     if (!useMimeticDPG)
@@ -164,6 +258,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
                             const double q,
                             const int H1Order, const int xElements, const int tElements, const int vElements,
                             std::vector<std::vector<GlobalIndexType> > refinementSequence,
+                            const bool useGradedSpatialMesh,
                             const bool overrideVlasovBCs,
                             const EBasisFamily &basisFamily,
                             const bool useMimeticDPG,
@@ -173,7 +268,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 {
   const bool usePeriodicBCs = false;
   
-  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
   
   form->setUseGeometricMultigrid(true);
   form->setIterativeSolveTolerance(1e-15);
@@ -301,8 +396,10 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
     std::ostringstream poissonVizPath;
     poissonVizPath << vizPrefix << "_PurePoisson";
     
+    auto density = form->solutionMoments(0)->solutionMomentFunction(0);
+    
     auto poissonViz = Teuchos::rcp(new HDF5Exporter(form->configurationSpaceMesh(), poissonVizPath.str(), "/tmp"));
-    poissonViz->exportSolution(form->configurationSpaceSolution(), std::vector<FunctionPtr> {E_soln-E_exact, E_exact, VE_soln-VE_exact, VE_exact}, std::vector<string>{"E err", "E exact", "V_E err", "V_E exact"});
+    poissonViz->exportSolution(form->configurationSpaceSolution(), std::vector<FunctionPtr> {E_soln-E_exact, E_exact, VE_soln-VE_exact, VE_exact, density}, std::vector<string>{"E err", "E exact", "V_E err", "V_E exact", "density"});
   }
 
   form->solve();
@@ -377,6 +474,7 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
 void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
                             const double q,
                             const int H1Order, const int xElements, const int tElements, const int vElements,
+                            const bool useGradedSpatialMesh,
                             const bool overrideVlasovBCs,
                             const EBasisFamily &basisFamily,
                             const bool useMimeticDPG,
@@ -387,15 +485,260 @@ void patchTestVlasovPoisson(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPt
   std::vector<std::vector<GlobalIndexType> > refinementSequence;
   patchTestVlasovPoisson(f_exact, E_exact, VE_exact,
                          q, H1Order, xElements, tElements, vElements, refinementSequence,
-                         overrideVlasovBCs, basisFamily, useMimeticDPG,
+                         useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG,
                          tol, out, success,
                          outputViz, vizPrefix);
+}
+
+void patchTestVlasovPoisson1D2V(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
+                                const double q,
+                                const int H1Order, const int xElements, const int tElements,
+                                const int vxElements, const int vyElements,
+                                std::vector<std::vector<GlobalIndexType> > refinementSequence,
+                                const bool useGradedSpatialMesh,
+                                const bool overrideVlasovBCs,
+                                const EBasisFamily &basisFamily,
+                                const bool useMimeticDPG,
+                                const double tol,
+                                Teuchos::FancyOStream &out, bool &success,
+                                const bool outputViz, const string vizPrefix)
+{
+  const bool usePeriodicBCs = false;
+  
+  auto form = getFormulation1D1T2V(xElements, tElements, vxElements, vyElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+  
+  form->setUseGeometricMultigrid(true);
+  form->setIterativeSolveTolerance(1e-15);
+//    form->setIterativeSolveOutputLevel(10);
+  form->setFixedPointMaxSubsteps(5);
+  form->setFixedPointMinSubsteps(2);
+  
+  FunctionPtr vx = form->v_i(0);
+  
+  auto vlasovSoln = form->vlasovSolution();
+  
+  auto poissonForm = form->configurationSpaceFormulation();
+  auto poissonSoln = form->configurationSpaceSolution();
+  FunctionPtr E_soln = Function::solution(poissonForm->E_fieldVar(0), poissonSoln);
+  FunctionPtr f_soln = Function::solution(form->f(), vlasovSoln);
+  
+  vlasovSoln->rhs()->addTerm(vlasovRHSForExactSoln(form, f_exact, E_exact, q));
+  
+  form->setInitialAndInflowConditions(f_exact, f_exact);
+  
+  SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
+  SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
+  
+  const bool restrictSideSetsToBoundary = !usePeriodicBCs; // for periodic BCs, the config mesh region will *not* be on a mesh boundary
+  auto xLeftRightTag = form->createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, restrictSideSetsToBoundary);
+  auto VE_traceVar = form->VE_configurationSpaceTrace();
+  form->addConfigurationSpaceBC(xLeftRightTag, VE_traceVar, VE_exact);
+  
+  if (overrideVlasovBCs)
+  {
+    auto vlasovBC = BC::bc();
+    VarPtr traceVar = form->t_n_hat();
+    
+    const int initialTimeTag = form->tagVlasovInitialTime();
+    
+    vlasovBC->addDirichlet(traceVar, initialTimeTag, -f_exact); // minus sign thanks to outward normal on temporal interface
+    
+    const int VX_COMPONENT = 0, VY_COMPONENT = 1;
+    
+    const int minxVelocityTag = form->tagVlasovMinVelocity(VX_COMPONENT);
+    const int maxxVelocityTag = form->tagVlasovMaxVelocity(VX_COMPONENT);
+    
+    const int minyVelocityTag = form->tagVlasovMinVelocity(VY_COMPONENT);
+    const int maxyVelocityTag = form->tagVlasovMaxVelocity(VY_COMPONENT);
+    
+    vlasovBC->addDirichlet(traceVar, minxVelocityTag, -f_exact * (q/TEST_M) * E_exact); // outward normal is negative
+    vlasovBC->addDirichlet(traceVar, maxxVelocityTag,  f_exact * (q/TEST_M) * E_exact); // outward normal is positive
+    
+    auto zero = Function::zero();
+    vlasovBC->addDirichlet(traceVar, minyVelocityTag, zero); // outward normal is negative
+    vlasovBC->addDirichlet(traceVar, maxyVelocityTag, zero); // outward normal is positive
+    
+    const int inflowTag = form->tagVlasovSpatialInflow();
+    
+    FunctionPtr n = Function::normal();
+    
+    FunctionPtr traceValue = f_exact * vx * n->x(); // 1D inflow -> only see the x normal part; n_y is 0 everywhere on the mesh.
+    vlasovBC->addDirichlet(traceVar, inflowTag,  traceValue);
+    vlasovSoln->setBC(vlasovBC);
+  }
+  
+  auto cellTopo = CellTopology::cellTopology(CellTopology::line(), 2);
+  auto vlasovMesh  = vlasovSoln->mesh();
+  auto poissonMesh = poissonSoln->mesh();
+  for (const auto &cellsToRefine : refinementSequence)
+  {
+    auto refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+    vlasovMesh->hRefine(cellsToRefine, refPattern, false); // false: don't rebuild yet (wait for 1-irregularity enforcement)
+    vlasovMesh->enforceOneIrregularity(true);
+    
+    poissonMesh->repartitionAndRebuild();
+  }
+  
+  const double m    = TEST_M;
+  
+  FunctionPtr sgn = Function::sideParity();
+  FunctionPtr n   = Function::normal();
+  FunctionPtr tn_0 = f_exact * (vx * n->x() + n->y() + (q/m) * E_exact * n->z()) * sgn; // n->y() means n_t
+  
+  // to do the "pure" Poisson solve, we do need to have an f solution defined, since that enters the RHS
+  std::map<int, FunctionPtr> initialGuess_Vlasov; // project the exact field solution onto the mesh
+  initialGuess_Vlasov[form->f()->ID()] = f_exact;
+  initialGuess_Vlasov[form->t_n_hat()->ID()] = tn_0;
+  vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
+  
+  // check that tn_0 can be represented on the mesh, at least to within tol
+  FunctionPtr tn_soln = Function::solution(form->t_n_hat(), vlasovSoln, false);
+  FunctionPtr tn_err = tn_0 - tn_soln;
+  double tn_projection_err = tn_err->l2norm(vlasovSoln->mesh());
+  double tn_soln_magnitude = tn_soln->l2norm(vlasovSoln->mesh());
+  out << "tn_soln_magnitude = " << tn_soln_magnitude << std::endl;
+  TEST_COMPARE(tn_projection_err, <=, tol * tn_soln_magnitude);
+  
+  if (outputViz)
+  {
+    std::ostringstream vlasovVizPath;
+    vlasovVizPath << vizPrefix << "_VlasovProjection";
+    auto vlasovViz = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovVizPath.str(), "/tmp"));
+    vlasovViz->exportSolution(form->vlasovSolution(), std::vector<FunctionPtr> {f_soln-f_exact, f_exact, tn_soln-tn_0, tn_0}, std::vector<string>{"f err", "f exact", "t_n err", "t_n exact"});
+  }
+  
+  // now, project again, this time with a zero t_n
+  //  {
+  //    // DEBUGGING: do we move from correct solution if we start there?
+  //    out << "NOTE: projecting exact tn_hat onto solution -- for iterative solver, this is cheating.\n";
+  //    initialGuess_Vlasov[form->t_n_hat()->ID()] = tn_0;
+  //  }
+  initialGuess_Vlasov[form->t_n_hat()->ID()] = Function::zero();
+  vlasovSoln->projectOntoMesh(initialGuess_Vlasov);
+
+//  form->setExportViz(true); // DEBUGGING
+//  form->configurationSpaceFormulation()->setExportViz(true); // DEBUGGING
+  form->configurationSpaceFormulation()->solve(true); // true: ensure that SolutionMomentFunction is properly set with the value that we just projected.
+
+  out << "Checking E_soln after pure Poisson solve.\n";
+  double E_soln_magnitude = E_soln->l2norm(poissonSoln->mesh());
+  double E_err_l2 = (E_soln-E_exact)->l2norm(poissonSoln->mesh());
+
+  TEST_COMPARE(E_err_l2, <=, tol * E_soln_magnitude);
+  
+  out << "Checking VE_soln after pure Poisson solve.\n";
+  
+  FunctionPtr VE_soln = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), poissonSoln);
+  double VE_soln_magnitude = VE_soln->l2norm(poissonSoln->mesh());
+  double VE_err_l2 = (VE_soln-VE_exact)->l2norm(poissonSoln->mesh());
+
+  TEST_COMPARE(VE_err_l2, <=, tol * VE_soln_magnitude);
+  
+  if (outputViz)
+  {
+    std::ostringstream poissonVizPath;
+    poissonVizPath << vizPrefix << "_PurePoisson";
+    
+    auto density = form->solutionMoments(0)->solutionMomentFunction(0);
+    
+    auto poissonViz = Teuchos::rcp(new HDF5Exporter(form->configurationSpaceMesh(), poissonVizPath.str(), "/tmp"));
+    poissonViz->exportSolution(form->configurationSpaceSolution(), std::vector<FunctionPtr> {E_soln-E_exact, E_exact, VE_soln-VE_exact, VE_exact, density}, std::vector<string>{"E err", "E exact", "V_E err", "V_E exact", "density"});
+  }
+
+  form->solve();
+
+//    if (outputViz)
+//    {
+//      std::ostringstream vizPath;
+//      vizPath << vizPrefix << "_Vlasov";
+//      auto vlasovViz = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vizPath.str(), "/tmp"));
+//      vlasovViz->exportSolution(form->vlasovSolution());
+//    }
+  
+  out << "Comparing f0 with f_soln after Vlasov-Poisson solve.\n";
+  double f_soln_magnitude = f_soln->l2norm(vlasovSoln->mesh());
+  double f_err_l2 = (f_soln-f_exact)->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(f_err_l2, <=, tol * f_soln_magnitude);
+  
+  out << "Checking E_soln after Vlasov-Poisson solve.\n";
+  E_soln_magnitude = E_soln->l2norm(poissonSoln->mesh());
+  E_err_l2 = (E_soln-E_exact)->l2norm(poissonSoln->mesh());
+  
+  TEST_COMPARE(E_err_l2, <=, tol * E_soln_magnitude);
+  
+  out << "Checking VE_soln after Vlasov-Poisson solve.\n";
+  VE_soln_magnitude = VE_soln->l2norm(poissonSoln->mesh());
+  VE_err_l2 = (VE_soln-VE_exact)->l2norm(poissonSoln->mesh());
+  
+  TEST_COMPARE(VE_err_l2, <=, tol * VE_soln_magnitude);
+
+  out << "Comparing tn_0 with t_n_soln after Vlasov-Poisson solve.\n";
+
+  const int time_comp_zero_based = form->configurationSpaceMesh()->getDimension() - 1; // time is last dimension of Poisson mesh
+  SpatialFilterPtr initialTimeFilter = SpatialFilter::matchingComponent(time_comp_zero_based, TEST_T0);
+
+  double tn_err_overall = tn_err->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(tn_err_overall, <=, tol * tn_soln_magnitude);
+
+  out << "Comparing initial-time BC with solution (checking initial time imposition).\n";
+  auto initialTime_tn_err = SpatiallyFilteredFunction<double>::spatiallyFilteredFunction(tn_err, initialTimeFilter);
+  double timeBC_err = initialTime_tn_err->l2norm(vlasovSoln->mesh());
+  auto initialTime_tn_soln = SpatiallyFilteredFunction<double>::spatiallyFilteredFunction(tn_soln, initialTimeFilter);
+  double initialTime_tn_magnitude = initialTime_tn_soln->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(timeBC_err, <=, tol * initialTime_tn_magnitude);
+  
+  TEST_ASSERT(tn_0->boundaryValueOnly() || tn_0->isZero()); // if zero, we allow it not to claim to be boundary-only.  (This is an artifact of the logic regarding Function products: zero times anything is zero, and we don't retain the boundary-valuedness in the zero result.  We could fix this, but it's not a high priority.)
+  TEST_ASSERT(tn_soln->boundaryValueOnly());
+
+  tn_soln_magnitude = tn_0->l2norm(vlasovSoln->mesh());
+  double tn_err_l2 = (tn_soln-tn_0)->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(tn_err_l2, <=, tol * tn_soln_magnitude);
+  
+  out << "Checking f_soln.\n";
+  f_soln_magnitude = f_exact->l2norm(vlasovSoln->mesh());
+  f_err_l2 = (f_soln-f_exact)->l2norm(vlasovSoln->mesh());
+  TEST_COMPARE(f_err_l2, <=, tol * f_soln_magnitude);
+  
+  if (outputViz)
+  {
+    std::ostringstream vlasovVizPath;
+    vlasovVizPath << vizPrefix << "_Vlasov";
+    auto vlasovViz = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovVizPath.str(), "/tmp"));
+    vlasovViz->exportSolution(form->vlasovSolution(), std::vector<FunctionPtr> {f_soln-f_exact, f_exact, tn_soln-tn_0, tn_0}, std::vector<string>{"f err", "f exact", "t_n err", "t_n exact"});
+    
+    std::ostringstream poissonVizPath;
+    poissonVizPath << vizPrefix << "_Poisson";
+    
+    auto poissonViz = Teuchos::rcp(new HDF5Exporter(form->configurationSpaceMesh(), poissonVizPath.str(), "/tmp"));
+    poissonViz->exportSolution(form->configurationSpaceSolution(), std::vector<FunctionPtr> {E_soln-E_exact, E_exact, VE_soln-VE_exact, VE_exact}, std::vector<string>{"E err", "E exact", "V_E err", "V_E exact"});
+  }
+}
+
+void patchTestVlasovPoisson1D2V(FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
+                                const double q,
+                                const int H1Order, const int xElements, const int tElements,
+                                const int vxElements, const int vyElements,
+                                const bool useGradedSpatialMesh,
+                                const bool overrideVlasovBCs,
+                                const EBasisFamily &basisFamily,
+                                const bool useMimeticDPG,
+                                const double tol,
+                                Teuchos::FancyOStream &out, bool &success,
+                                const bool outputViz=false, const string vizPrefix="")
+{
+  std::vector<std::vector<GlobalIndexType> > refinementSequence;
+  patchTestVlasovPoisson1D2V(f_exact, E_exact, VE_exact,
+                             q, H1Order, xElements, tElements, vxElements, vyElements, refinementSequence,
+                             useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG,
+                             tol, out, success,
+                             outputViz, vizPrefix);
 }
 
 void patchTestTimeSlab(const bool refineOnSecondSlab,
                        FunctionPtr f_exact, FunctionPtr E_exact, FunctionPtr VE_exact,
                        const double q,
                        const int H1Order, const int xElements, const int tElements, const int vElements,
+                       const bool useGradedSpatialMesh,
                        const bool overrideVlasovBCs,
                        const EBasisFamily &basisFamily,
                        const bool useMimeticDPG,
@@ -405,7 +748,7 @@ void patchTestTimeSlab(const bool refineOnSecondSlab,
 {
   const bool usePeriodicBCs = false;
   
-  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
   
   form->setUseGeometricMultigrid(true);
   form->setIterativeSolveTolerance(1e-15);
@@ -639,7 +982,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
                               const bool outputViz=false, const string vizPrefix="")
 {
   bool refineOnSecondSlab = true;
-  patchTestTimeSlab(refineOnSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+  const bool useGradedSpatialMesh = false;
+  patchTestTimeSlab(refineOnSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
 }
 
 
@@ -662,8 +1006,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool useMimeticDPG       = false;
     
     const bool usePeriodicBCs = true;
+    const bool useGradedSpatialMesh = false;
     
-    auto initialSlab = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto initialSlab = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
    
     auto initialVlasovSoln = initialSlab->vlasovSolution();
     
@@ -762,8 +1107,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     FunctionPtr  E_exact = Function::zero();
         
     const bool usePeriodicBCs = true;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
    
     form->setInitialAndInflowConditions(f_exact, f_exact);
     
@@ -870,8 +1216,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const std::string vizPrefix = "TwoStreamTest";
     
     const bool usePeriodicBCs = true;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
     
     form->setUseGeometricMultigrid(true);
     form->setIterativeSolveTolerance(1e-8);
@@ -1041,7 +1388,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG  = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG, delta_k);
+    const bool useGradedSpatialMesh = false;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG, delta_k);
     
     auto sfIP = form->constructVlasovInnerProduct(true);
     auto ip   = form->constructVlasovInnerProduct(false);
@@ -1094,8 +1443,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const double m = 1.0;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG  = false;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
     
     auto vx = form->v_i(0);
     // note that E_exact and f_exact are *not* compatible solutions; E is not a solution to Poisson loaded with the zeroth moment of f.
@@ -1168,8 +1518,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     FunctionPtr  E_exact = Function::zero();
         
     const bool usePeriodicBCs = true;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
    
     form->setInitialAndInflowConditions(f_exact, f_exact);
     
@@ -1231,9 +1582,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTestTimeSlab_f_xv2_E_zero )
@@ -1258,11 +1610,12 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     const double tol = 1e-12;
     
     bool refineSecondSlab = false;
     
-    patchTestTimeSlab(refineSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+    patchTestTimeSlab(refineSecondSlab, f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTestRefinedTimeSlab_f_xv2_E_zero )
@@ -1314,9 +1667,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_zero_E_1 )
@@ -1336,9 +1690,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_zero_E_1_Serendipity )
@@ -1358,9 +1713,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     const double tol = 1e-12;
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+    patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear )
@@ -1387,7 +1743,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
+    const bool useGradedSpatialMesh = false;
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear_Serendipity )
@@ -1414,7 +1771,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
     const bool useMimeticDPG     = false;
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
+    const bool useGradedSpatialMesh = false;
+    
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic )
@@ -1438,10 +1797,73 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+                           out, success, outputViz, testPrefix);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic_UseGradedSpatialMesh )
+  {
+    const double q      = TEST_Q;
+    const double eps0   = TEST_EPS0;
+    
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr t = Function::yn(1); // time is second dimension --> y
+
+    const double vWidth = TEST_VWIDTH;
+    FunctionPtr f_exact = t * x/vWidth - t * (TEST_X0 + TEST_XWIDTH) / (2.0 * vWidth); // chosen to have zero integral on the phase-space domain
+    
+    FunctionPtr E_exact = (q/eps0) * (x * x / 2.0 - ((TEST_X0 + TEST_XWIDTH) / 2.0) * x) * t;
+    FunctionPtr V_E = -(q/eps0) * (x * x * x / 6.0 - ((TEST_X0 + TEST_XWIDTH) / 4.0) * x * x) * t;
+
+    const int xElements = 3;
+    const int tElements = 1;
+    const int vElements = 2; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
+    const double tol = 1e-12;
+    
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
+    const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = true;
+    
+    const bool outputViz = true;
+    const std::string testPrefix = "PatchTest_f_linear_E_quadratic_gradedSpatial";
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+                           out, success, outputViz, testPrefix);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic_UseGradedSpatialMesh_1D2V )
+  {
+    const double q      = TEST_Q;
+    const double eps0   = TEST_EPS0;
+    
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr t = Function::yn(1); // time is second dimension --> y
+    const double vWidth2 = TEST_VWIDTH * TEST_VWIDTH; // vWidth squared because 2V
+    FunctionPtr f_exact = t * x/vWidth2 - t * (TEST_X0 + TEST_XWIDTH) / (2.0 * vWidth2); // chosen to have zero integral on the phase-space domain
+    
+    FunctionPtr E_exact = (q/eps0) * (x * x / 2.0 - ((TEST_X0 + TEST_XWIDTH) / 2.0) * x) * t;
+    FunctionPtr V_E = -(q/eps0) * (x * x * x / 6.0 - ((TEST_X0 + TEST_XWIDTH) / 4.0) * x * x) * t;
+
+    const int xElements = 3;
+    const int tElements = 1;
+    const int vxElements = 2; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int vyElements = 2; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
+    const double tol = 1e-12;
+    
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
+    const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = true;
+    
+    const bool outputViz = false;
+    const std::string testPrefix = "PatchTest_f_linear_E_quadratic_gradedSpatial";
+    patchTestVlasovPoisson1D2V(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vxElements, vyElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 
@@ -1466,12 +1888,44 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
     const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     
     const bool outputViz = true;
     const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic_Serendipity_UseGradedSpatialMesh )
+  {
+    const double q      = TEST_Q;
+    const double eps0   = TEST_EPS0;
+    
+    FunctionPtr x = Function::xn(1);
+    const double vWidth = TEST_VWIDTH;
+    FunctionPtr f_exact = x/vWidth - (TEST_X0 + TEST_XWIDTH) / (2.0 * vWidth); // chosen to have zero integral on the phase-space domain
+    
+    FunctionPtr E_exact = (q/eps0) * (x * x / 2.0 - ((TEST_X0 + TEST_XWIDTH) / 2.0) * x);
+    FunctionPtr V_E = -(q/eps0) * (x * x * x / 6.0 - ((TEST_X0 + TEST_XWIDTH) / 4.0) * x * x);
+
+    const int xElements = 3;
+    const int tElements = 1;
+    const int vElements = 4; // it's important that v have a cell interface at v=0; otherwise, BCs will not be correctly applied…
+    const int H1Order   = 4; // cubic L^2 functions; allows exact representation of f0 * E0, required for trace solution
+    const double tol = 1e-12;
+    
+    const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
+    const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = true;
+    
+    const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
+    
+    const bool outputViz = true;
+    const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+                           out, success, outputViz, testPrefix);
+  }
+
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic_refined )
   {
@@ -1515,7 +1969,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
 //    refinementSequence.push_back({866,948,950,2912,2914,2928,3424,3426,3432,3434,3438,3440,3442,3444,3446,3448,3450,3452,3454,3456,3458,3460,3462,3464,3466,3468,3470,3472,3474,3476,3478,3480,3482,3484,3486,3488,3490,3496,3498,3504,3506,3508,3510,3512,3514,3516,3518,3520,3522,3528,3530,3536,3538,3540,3542,3544,3546,3548,3550,3552,3554,3560,3562,3568,3570,3572,3574,3576,3578,3580,3582,3584,3586,3592,3594,3598,3600,3602,3604,3606,3608,3610,3612,3614,3616,3618,3620,3622,3628,3630,3636,3638,3682,3684,3686,3688,3690,3692,3694});
 //    refinementSequence.push_back({3428,3430,3436,3534,3556,3558,3564,3566,3588,3590,3596,3624,3680,3752,3754,3758,3760,3762,3768,3770,3776,3778,3780,3782,3788,3790,3796,3798,3804,3806,3812,3814,3820,3822,3828,3830,3832,3834,3840,3842,3844,3846,3848,3850,3852,3854,3856,3858,3862,3864,3866,3868,3870,3872,3874,3876,3878,3880,3882,3884,3886,3888,3890,3892,3894,3896,3898,3900,3902,3904,3906,3908,3910,3912,3914,3916,3918,3920,3922,3924,3926,3928,3930,3932,3934,3936,3938,3940,3942,3944,3946,3948,3950,3952,3954,3956,3958,3960,3962,3964,3966,3968,3970,3972,3974,3976,3978,3980,3982,3984,3986,3988,3990,3992,3994,3996,3998,4000,4002,4004,4006,4008,4010,4012,4014,4016,4018,4020,4022,4024,4026,4028,4030,4032,4034,4040,4042,4048,4050,4056,4058,4062,4064,4066,4068,4070,4072,4074,4076,4078,4080,4082,4084,4086,4088,4090,4092,4094,4096,4098,4100,4102,4104,4106,4108,4110,4112,4114,4116,4118,4120,4122,4124,4126,4128,4130,4132,4134,4136,4138,4140,4142,4144,4146,4148,4150,4152,4154,4156,4158,4160,4162,4164,4166,4168,4170,4172,4174,4176,4178,4180,4182,4184,4186,4188,4190,4192,4194,4196,4198,4200,4202,4204,4206,4208,4210,4212,4214,4216,4218,4220,4222,4224,4226,4228,4230,4232,4234,4236,4238,4240,4242,4244,4246,4248,4250,4252,4254,4256,4258,4260,4262,4264,4266,4268,4270,4272,4274,4276,4278,4280,4282,4284,4286,4288,4290,4292,4294,4296,4298,4300,4302,4304,4306,4308,4310,4312,4314,4316,4318,4320,4322,4324,4326,4328,4330,4332,4334,4336,4338,4340,4342,4344,4346,4348,4350,4352,4354,4356,4360,4362,4364,4366,4368,4370,4372,4374,4376,4378,4380,4382,4384,4386,4388,4390,4392,4394,4396,4398,4400,4402,4404,4406,4408,4410,4412,4414,4416,4418,4420,4422,4428,4430,4436,4438,4440,4442,4444,4446,4448,4450,4452,4454,4456,4458,4460,4462,4464,4466,4468,4470,4472,4474,4476,4478,4484,4486,4488,4490,4502,4506,4508,4512,4514,4516,4518,4520,4522,4524,4526,4528,4530,4532,4534,4536,4538,4540,4542,4584,4586,4628,4630});
     
-    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, refinementSequence, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+    const bool useGradedSpatialMesh = false;
+    
+    patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, refinementSequence, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                            out, success, outputViz, testPrefix);
   }
 
@@ -1543,9 +1999,10 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool useMimeticDPG  = false;
     
     const double tol = 1e-13;
+    const bool useGradedSpatialMesh = false;
     
-    auto serendipityForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, BASIS_FAMILY_SERENDIPITY,  useMimeticDPG);
-    auto fullTensorForm  = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, BASIS_FAMILY_HIERARCHICAL, useMimeticDPG);
+    auto serendipityForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, BASIS_FAMILY_SERENDIPITY,  useMimeticDPG);
+    auto fullTensorForm  = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, BASIS_FAMILY_HIERARCHICAL, useMimeticDPG);
     
     auto serendipityIP = serendipityForm->vlasovSolution()->ip();
     auto fullTensorIP  = fullTensorForm->vlasovSolution()->ip();
@@ -1788,8 +2245,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool usePeriodicBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1847,8 +2305,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool usePeriodicBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL; // should not affect test in any way
     const bool useMimeticDPG     = false;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1913,8 +2372,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool usePeriodicBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL; // should not affect test in any way
     const bool useMimeticDPG  = false;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();
@@ -1972,8 +2432,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool usePeriodicBCs = false;
     const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL; // should not affect test in any way
     const bool useMimeticDPG  = false;
+    const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
 
     auto vlasovSoln = form->vlasovSolution();
     auto vlasovMeshTopo = vlasovSoln->mesh()->getTopology()->baseMeshTopology();

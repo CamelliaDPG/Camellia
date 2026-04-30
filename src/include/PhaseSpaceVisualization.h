@@ -34,9 +34,7 @@ namespace Camellia {
       }
       const int physicalDim = extrudedMeshTopo->physicalMeshTopology()->getDimension();
       _numExtrusionDims = extrudedMeshTopo->numExtrusionDimensions();
-      
-      TEUCHOS_TEST_FOR_EXCEPTION(physicalDim != 1, std::invalid_argument, "physicalDim > 1 not yet supported");
-      
+            
       Teuchos::RCP<ExtrudedMeshTopology> extrudedMeshTopoRCP = Teuchos::rcp(extrudedMeshTopo,false); // weak pointer
       
       std::vector<std::string> v_comp_str {"vx","vy","vz"};
@@ -83,12 +81,12 @@ namespace Camellia {
       }
     }
     
-    void exportTimeStep(double timeVal)
+    void exportTimeStep(double timeVal, unsigned int defaultNum1DPts=4)
     {
       for (int d=0; d<_numExtrusionDims; d++)
       {
         _solutionMoments[d]->update();
-        _exporters[d]->exportFunction(_solutionMomentFunctions[d], _names[d], timeVal);
+        _exporters[d]->exportFunction(_solutionMomentFunctions[d], _names[d], timeVal, defaultNum1DPts);
       }
       // DEBUGGING
 //      _exporters[0]->exportFunction(Function::constant(1.0), "ONE", timeVal);

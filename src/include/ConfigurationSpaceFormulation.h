@@ -90,14 +90,20 @@ namespace Camellia
     //! returns the specified component of the electric field at prior timeas a Function, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
     virtual FunctionPtr E_i_priorTime(int zeroBasedComp) = 0;
 
-    //! returns the field variable corresponding  to specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
-    virtual VarPtr B_fieldVar(int zeroBasedComp);
+    //! returns the field variable corresponding  to specified component of the vector potential A, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for A_x, 1 for A_y, 2 for A_z.
+    virtual VarPtr A_fieldVar(int zeroBasedComp);
     
     //! returns the field variable corresponding  to specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for B_x, 1 for B_y, 2 for B_z.
+    virtual VarPtr B_fieldVar(int zeroBasedComp);
+    
+    //! returns the field variable corresponding  to specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for E_x, 1 for E_y, 2 for E_z.
     virtual VarPtr E_fieldVar(int zeroBasedComp);
     
     //! returns the field variable corresponding to the electric potential, if any.
     virtual VarPtr VE_fieldVar();
+    
+    //! returns the trace variable corresponding to the specified component of vector potential A.  Defined for Maxwell; default implementation returns null.
+    virtual VarPtr A_hat(int zeroBasedComp);
     
     //! returns the trace variable corresponding to the specified E component.  Defined in 1D for Poisson and Maxwell; defined in higher dimensions for Maxwell.  See En_hat().
     virtual VarPtr E_hat(int zeroBasedComp);

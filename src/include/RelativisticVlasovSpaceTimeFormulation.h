@@ -22,9 +22,16 @@ namespace Camellia
 
 class RelativisticVlasovSpaceTimeFormulation : public VlasovSpaceTimeFormulation
 {
+public:
+  enum TestSpaceInnerProduct
+  {
+    Graph,
+    L2
+  };
 protected:
   const double _c; // speed of light.  Must be consistent with the momentum discretization
   const double _testSpaceL2Weight; // weight for "stabilization term" in graph norm.
+  const TestSpaceInnerProduct _testSpaceInnerProduct;
 public:
   RelativisticVlasovSpaceTimeFormulation(const double c, const double q, const double m,
                                          Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -35,7 +42,8 @@ public:
                                          std::vector<double> momentumSpaceVertices_z,
                                          const int H1Order, const int delta_k,
                                          const int numUniformRefinements,
-                                         const double testSpaceL2Weight,
+                                         const TestSpaceInnerProduct = L2,
+                                         const double testSpaceL2Weight = 1.0,
                                          const EBasisFamily &basisFamily = BASIS_FAMILY_HIERARCHICAL,
                                          const int maxMomentNumberForDriver = 0);
   

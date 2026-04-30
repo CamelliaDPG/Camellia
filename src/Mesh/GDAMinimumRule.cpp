@@ -3520,7 +3520,7 @@ void GDAMinimumRule::rebuildLookups()
     int irregularity = _mesh->irregularity();
     if (irregularity > 1)
     {
-      // this is only supported if only face continuity is required -- i.e. d_min < spaceDim - 1
+      // this is only supported if only face continuity is required -- i.e. d_min >= spaceDim - 1
       if (d_min < spaceDim - 1)
       {
         cout << "ERROR: " << spaceDim << "D mesh is " << irregularity << "-irregular, but min continuity dimension is " << d_min << ".\n";

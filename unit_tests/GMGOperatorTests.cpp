@@ -26,6 +26,8 @@
 #include "SpaceTimeHeatDivFormulation.h"
 #include "StokesVGPFormulation.h"
 
+#include <MatrixMarket_Tpetra.hpp>
+
 using namespace Camellia;
 
 namespace

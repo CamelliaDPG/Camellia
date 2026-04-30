@@ -3134,6 +3134,8 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
   BasisCachePtr volumeBasisCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, createSideCache);
   BasisCachePtr volumeBasisCacheBR = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, createSideCache); // BR: for passing in to BasisReconciliation
   BasisCachePtr coarseDomainCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, false);
+  
+  Camellia::FieldContainer<double> coarseCellNodes = coarseDomainCache->getPhysicalCellNodes();
 
   for (int i=0; i< refinementBranches.size(); i++)
   {
@@ -3177,12 +3179,6 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
 
       volumeBasisCache->setRefCellPointsFC(pointsCoarseVolume);
 
-      int oneCell = 1;
-      Camellia::FieldContainer<double> fakeParities(oneCell,volumeTopo->getSideCount());
-      fakeParities.initialize(1.0);
-      BasisCachePtr fakeSideCoarseCache = BasisCache::fakeSideCache(traceSideOrdinal, coarseDomainCache, pointsCoarseVolume,
-                                          traceBasisCache->getSideNormals(), fakeParities);
-
       int fineSubcellOrdinalInFineDomain = 0; // since the side *is* both domain and subcell, it's necessarily ordinal 0 in the domain
       SubBasisReconciliationWeights weights;
       if (traceBasis->functionSpace() == volumeBasis->functionSpace())
@@ -3210,8 +3206,21 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
       // fine basis is the line basis (the trace); coarse is the quad basis (the field)
       double tol = 1e-14; // for floating equality
 
+      int oneCell = 1;
+      const int numSides = coarseDomainCache->cellTopology()->getSideCount();
+      Camellia::FieldContainer<double> cellSideParities(oneCell, numSides);
+      cellSideParities.initialize(1.0);
+
+      Camellia::FieldContainer<double> fineSideNormals = traceBasisCache->getSideNormals();
+
+      coarseDomainCache->setCellSideParities(cellSideParities);
+      coarseDomainCache->setSideNormals(fineSideNormals);
+      coarseDomainCache->setSideIndex(traceBasisCache->getSideIndex());
+      coarseDomainCache->setPhysicalCellNodes(coarseCellNodes, {0}, false);
+      coarseDomainCache->setRefCellPointsFC(pointsCoarseVolume);
+      
       Camellia::FieldContainer<double> coarseValuesExpected(oneCell,volumeBasis->getCardinality(),numPoints);
-      traceVar->termTraced()->values(coarseValuesExpected, fieldVar->ID(), volumeBasis, fakeSideCoarseCache);
+      traceVar->termTraced()->values(coarseValuesExpected, fieldVar->ID(), volumeBasis, coarseDomainCache);
 
       out << "\ncoarseValuesExpected:\n" << coarseValuesExpected;
 

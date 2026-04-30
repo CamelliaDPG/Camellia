@@ -26,6 +26,8 @@ namespace Camellia
   public:
     SolutionMomentFunction(SolutionMoments &solutionMoments, const int &momentEntryOrdinal);
     
+    int momentEntryOrdinal() const { return _momentEntryOrdinal; }
+    
     using TFunction<double>::values;
     void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
     void values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache) override;

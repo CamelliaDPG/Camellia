@@ -204,8 +204,20 @@ _basisReconciliation(true) // true: cache results
   _extrudedSpatialBasis = _spatialBasis;
   if (_survivingExtrusionDimension != -1)
   {
-    const int componentCardinality = _extrusionBases[_survivingExtrusionDimension]->getCardinality();
-    _extrudedSpatialBasis = intrepid2TensorBasis(_extrudedSpatialBasis,_extrusionBases[_survivingExtrusionDimension]);
+    _extrudedSpatialBasis = intrepid2TensorBasis(_extrudedSpatialBasis, _extrusionBases[_survivingExtrusionDimension]);
+
+    auto phaseBasisIntrepid2 = _phaseSpaceBasis->intrepid2Basis();
+    auto phaseSerendipityBasis = dynamic_cast<SerendipityBasis*>(phaseBasisIntrepid2.get());
+    if (phaseSerendipityBasis != NULL)
+    {
+      auto extrudedTensorBasis = _extrudedSpatialBasis->intrepid2Basis();
+      auto serendipityExtrudedBasis = Teuchos::rcp(new SerendipityBasis(extrudedTensorBasis));
+      ::Camellia::EFunctionSpace fs = fromIntrepid2FunctionSpace(serendipityExtrudedBasis->getFunctionSpace());
+      _extrudedSpatialBasis = Teuchos::rcp(new Intrepid2BasisWrapper<>(serendipityExtrudedBasis,
+                                                                       serendipityExtrudedBasis->getDomainDimension(),
+                                                                       0,
+                                                                       fs));
+    }
   }
   
   for (int extrusionOrdinal=0; extrusionOrdinal<_numExtrusionDimensions; extrusionOrdinal++)
@@ -452,6 +464,10 @@ void SolutionMomentsForPolyOrder::update()
     Kokkos::parallel_for("integrate over phase space", extrudedSpatialUnfilteredBasisCardinality,
     KOKKOS_LAMBDA (const int extrudedSpatialBasisOrdinal) {
       Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> phaseFieldOrdinalComponents;
+      for (int i=0; i<numExtrusionDimensions+1; i++)
+      {
+        phaseFieldOrdinalComponents[i] = 0;
+      }
       int remainingExtrudedSpatialBasisOrdinal = extrudedSpatialBasisOrdinal;
       extractNextComponentOrdinal(phaseFieldOrdinalComponents[0], remainingExtrudedSpatialBasisOrdinal, componentBasisCardinalities[0]);
       if (survivingExtrusionDimension != -1)
@@ -687,11 +703,24 @@ void SolutionMomentsForPolyOrder::update()
             {
               int fineTensorOrdinal;
               setTensorOrdinal(fineTensorOrdinal, spatialFineOrdinal, spatialCardinality, extrusionFineOrdinal);
+
+              int fineOrdinal = fineTensorOrdinal;
+              if (reverseSpatialMap.size() != 0)
+              {
+                fineOrdinal = reverseSpatialMap(fineTensorOrdinal);
+              }
+
               for (int extrusionCoarseOrdinal=0; extrusionCoarseOrdinal<extrusionCardinality; extrusionCoarseOrdinal++)
               {
                 int coarseTensorOrdinal;
                 setTensorOrdinal(coarseTensorOrdinal, spatialCoarseOrdinal, spatialCardinality, extrusionCoarseOrdinal);
-                
+
+                int coarseOrdinal = coarseTensorOrdinal;
+                if (reverseSpatialMap.size() != 0)
+                {
+                  coarseOrdinal = reverseSpatialMap(coarseTensorOrdinal);
+                }
+
                 double extrusionWeight;
                 if (extrusionBasisWeights.isIdentity)
                 {
@@ -701,11 +730,14 @@ void SolutionMomentsForPolyOrder::update()
                 {
                   extrusionWeight = extrusionBasisWeights.weights(extrusionFineOrdinal,extrusionCoarseOrdinal);
                 }
-                if (extrusionWeight != 0.0)
+
+                if ((extrusionWeight != 0.0) && (fineOrdinal >= 0) && (coarseOrdinal >= 0))
                 {
                   for (int momentEntryOrdinal=0; momentEntryOrdinal < numMomentEntries; momentEntryOrdinal++)
                   {
-                    activePhysicalCellContributionFC(fineTensorOrdinal, momentEntryOrdinal) += spatialWeight * extrusionWeight * coarsePhysicalCellContributionsFC(coarseTensorOrdinal, momentEntryOrdinal);
+                    activePhysicalCellContributionFC(fineOrdinal, momentEntryOrdinal) +=
+                      spatialWeight * extrusionWeight *
+                      coarsePhysicalCellContributionsFC(coarseOrdinal, momentEntryOrdinal);
                   }
                 }
               }

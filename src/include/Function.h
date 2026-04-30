@@ -316,6 +316,9 @@ public:
   // ! Square root of the specified function.
   static TFunctionPtr<Scalar> sqrtFunction(TFunctionPtr<Scalar> f);
 
+  //! returns a mesh-dependent function defined on the mesh skeleton that is 1 when the side ordinal is contained in the provided list; 0 otherwise.
+  static TFunctionPtr<double> localSideCharacteristic(std::vector<int> &sidesToMatch);
+  
   static TFunctionPtr<double> meshSideSetCharacteristic(const std::string &tagName, int sideSetTag); // 1 on specified side set; 0 elsewhere
   
   static TFunctionPtr<double> meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere

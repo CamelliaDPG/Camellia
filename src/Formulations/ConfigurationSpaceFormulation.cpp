@@ -8,6 +8,8 @@
 #include "ConfigurationSpaceFormulation.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
 
+#include "GlobalDofAssignment.h"
+
 using namespace Camellia;
 
 ConfigurationSpaceFormulation::ConfigurationSpaceFormulation(const EBasisFamily basisFamily)
@@ -28,6 +30,16 @@ void ConfigurationSpaceFormulation::copySolutionToPrevious()
 void ConfigurationSpaceFormulation::copySolutionToPriorTime()
 {
   _configurationSolnPriorTime->setSolution(_configurationSoln);
+}
+
+VarPtr ConfigurationSpaceFormulation::A_fieldVar(int zeroBasedComp)
+{
+  return Teuchos::null;
+}
+
+VarPtr ConfigurationSpaceFormulation::A_hat(int zeroBasedComp)
+{
+  return Teuchos::null;
 }
 
 VarPtr ConfigurationSpaceFormulation::B_fieldVar(int zeroBasedComp)

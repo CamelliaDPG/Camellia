@@ -653,8 +653,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   SubBasisReconciliationWeights weights;
   
   // TODO: add an implementation that accepts a basisCache for computing coarserBasisValues (replaces coarseDomainCache, below)
-  TEUCHOS_TEST_FOR_EXCEPTION(finerBasis->functionSpace() != coarserBasis->functionSpace(), std::invalid_argument,
-                             "Fine basis and coarse basis must agree on function space if we want to compute constrained weights in reference space (otherwise we need to compute them in physical space).");
   
   vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
   vector<int> coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, 0);

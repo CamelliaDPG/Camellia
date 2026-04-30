@@ -1644,39 +1644,44 @@ void VlasovSpaceTimeFormulation::initialize()
   const int indexOffsetTimeZeroBased     = indexOffsetTimeOneBased - 1;
   const int indexOffsetVelocityZeroBased = indexOffsetVelocityOneBased - 1;
   
+  int velocityDim = this->velocityDim();
+  std::vector<int> velocityComponentMap;
+  switch (velocityDim)
+  {
+    case 1: velocityComponentMap = std::vector<int>{0}; break;
+    case 2: velocityComponentMap = std::vector<int>{0,2}; break;   // 2V: retain x,z components of velocity
+    case 3: velocityComponentMap = std::vector<int>{0,1,2}; break;
+  }
+  
   // initialize acceleration term, _a
   {
-    int velocityDim = this->velocityDim();
-    std::vector<FunctionPtr> v(velocityDim);
+    std::vector<FunctionPtr> v3(3, Function::zero());
     for (int i=0; i<velocityDim; i++)
     {
-      v.push_back(this->v_i(i));
+      int phys = velocityComponentMap[i];
+      v3[phys] = this->v_i(i);
     }
     _a = std::vector<FunctionPtr>(velocityDim); // this gets dotted with grad_v of f (in the strong form)
     
-    std::vector<FunctionPtr> E(3,Function::zero());
-    std::vector<FunctionPtr> B(3,Function::zero());
-    
-    for (int i=0; i<velocityDim; i++)
+    std::vector<FunctionPtr> E3(3, Function::zero());
+    std::vector<FunctionPtr> B3(3, Function::zero());
+    for (int phys=0; phys<3; phys++)
     {
-      E[i] = _configurationSpaceFormulation->E_i(i);
-      B[i] = _configurationSpaceFormulation->B_i(i);
+      E3[phys] = _configurationSpaceFormulation->E_i(phys);
+      B3[phys] = _configurationSpaceFormulation->B_i(phys);
     }
     
-    // we only include the v_cross_B term for 3V case
-    // TODO: determine whether v_cross_B ever makes sense for 1V or 2V cases; if so, add something here.
-    std::vector<FunctionPtr> v_cross_B(3,Function::zero());
-    if (velocityDim == 3)
-    {
-      v_cross_B[0] = v[1] * B[2] - v[2] * B[1];
-      v_cross_B[1] = v[2] * B[0] - v[0] * B[2];
-      v_cross_B[2] = v[0] * B[1] - v[1] * B[0];
-    }
+    std::vector<FunctionPtr> v_cross_B(3, Function::zero());
+    v_cross_B[0] = v3[1] * B3[2] - v3[2] * B3[1];
+    v_cross_B[1] = v3[2] * B3[0] - v3[0] * B3[2];
+    v_cross_B[2] = v3[0] * B3[1] - v3[1] * B3[0];
     
     auto extraAcceleration = _configurationSpaceFormulation->extraAcceleration();
+    _a = std::vector<FunctionPtr>(velocityDim);
     for (int i=0; i<velocityDim; i++)
     {
-      _a[i] = E[i] + v_cross_B[i] + extraAcceleration[i]; // q/m weight is applied based on the species within the a() implementation.
+      int phys = velocityComponentMap[i];
+      _a[i] = E3[phys] + v_cross_B[phys] + extraAcceleration[i];
     }
   }
   
@@ -1694,8 +1699,6 @@ void VlasovSpaceTimeFormulation::initialize()
     
     _fDiff[i] = _fSoln[i] - f_solnPrev;
   }
-  
-  
     
   auto vlasovRHS = RHS::rhs();
   _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
@@ -2088,7 +2091,7 @@ void VlasovSpaceTimeFormulation::solve()
       
     const std::string directoryPath = "/tmp";
     
-    vlasovViz = Teuchos::rcp(new HDF5Exporter(this->vlasovMesh(), vlasovSS.str(), directoryPath));
+    if (this->vlasovMesh()->getDimension() <= 3) vlasovViz = Teuchos::rcp(new HDF5Exporter(this->vlasovMesh(), vlasovSS.str(), directoryPath));
     configurationViz = Teuchos::rcp(new HDF5Exporter (_configurationSpaceFormulation->configurationSpaceMesh(), configurationSS.str(), directoryPath) );
     solveNumber++;
   }
@@ -2114,6 +2117,9 @@ void VlasovSpaceTimeFormulation::solve()
       if (_cgTols.size() > 0) // then we should have one per substep
       {
         gmgSolver->setTolerance(_cgTols[substepOrdinal]);
+      }
+      {
+//        gmgSolver->gmgOperator()->setDebugMode(true);
       }
       _vlasovSoln->solve(gmgSolver);
       substepIterationCounts[substepOrdinal] = gmgSolver->iterationCount();
@@ -2177,7 +2183,7 @@ void VlasovSpaceTimeFormulation::solve()
     if (_exportViz)
     {
       configurationViz->exportSolution(_configurationSpaceFormulation->solution(),substepOrdinal);
-      vlasovViz->exportSolution(vlasovSolution(),substepOrdinal);
+      if (vlasovViz != Teuchos::null) vlasovViz->exportSolution(vlasovSolution(),substepOrdinal);
     }
   }
   
