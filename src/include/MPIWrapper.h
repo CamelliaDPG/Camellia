@@ -561,7 +561,7 @@ public:
     {
       const Epetra_MpiComm* mpiComm = dynamic_cast<const Epetra_MpiComm*>(&Comm);
       TEUCHOS_TEST_FOR_EXCEPTION(mpiComm == NULL, std::invalid_argument, "numProcs > 1, but Comm is not of type Epetra_MpiComm");
-      MPI_Allgatherv(reinterpret_cast<char*>(&myValues[0]), mySize, MPI_CHAR, reinterpret_cast<char*>(&gatheredValues[0]), &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm->Comm());
+      MPI_Allgatherv(reinterpret_cast<char*>(&myValues[0]), mySize, MPI_CHAR, reinterpret_cast<char*>(gatheredValues.data()), valuesSizes.data(), offsets.data(), MPI_CHAR, mpiComm->Comm());
     }
     else
     {
@@ -646,8 +646,8 @@ public:
       if (Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm) != Teuchos::null)
       {
         MPI_Comm mpiComm = *Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm)->getRawMpiComm();
-        char* myPtr = (myValues.size() > 0) ? reinterpret_cast<char*>(&myValues[0]) : NULL;
-        MPI_Allgatherv(myPtr, mySize, MPI_CHAR, reinterpret_cast<char*>(&gatheredValues[0]), &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm);
+        char* myPtr = reinterpret_cast<char*>(myValues.data());
+        MPI_Allgatherv(myPtr, mySize, MPI_CHAR, reinterpret_cast<char*>(gatheredValues.data()), valuesSizes.data(), offsets.data(), MPI_CHAR, mpiComm);
       }
       else
       {
@@ -698,7 +698,7 @@ public:
         char* myValuesCharCast = reinterpret_cast<char*>(myValuesPtr);
         auto gatheredValuesPtr = (gatheredValues.size() > 0) ? &gatheredValues[0] : NULL;
         char* gatheredValuesCharCast = reinterpret_cast<char*>(gatheredValuesPtr);
-        MPI_Allgatherv(myValuesCharCast, mySize, MPI_CHAR, gatheredValuesCharCast, &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm);
+        MPI_Allgatherv(myValuesCharCast, mySize, MPI_CHAR, gatheredValuesCharCast, valuesSizes.data(), &offsets[0], MPI_CHAR, mpiComm);
       }
       else
       {

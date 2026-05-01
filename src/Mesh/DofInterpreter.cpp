@@ -245,18 +245,13 @@ std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std:
 
     int importLength = 0;
     char* globalIndexData = NULL;
-    int* sizePtr = NULL;
-    char* indicesToExportPtr = NULL;
-    if (numCellsToExport > 0)
-    {
-      sizePtr = &sizes[0];
-      indicesToExportPtr = (char *) &indicesToExport[0];
-    }
+    int* sizePtr = sizes.data();
+    char* indicesToExportPtr = (char*) indicesToExport.data();
     distributor->Do(indicesToExportPtr, objSize, sizePtr, importLength, globalIndexData);
     const char* copyFromLocation = globalIndexData;
     int numDofsImport = importLength / objSize;
     vector<GlobalIndexTypeToCast> globalIndicesVector(numDofsImport);
-    GlobalIndexTypeToCast* copyToLocation = &globalIndicesVector[0];
+    GlobalIndexTypeToCast* copyToLocation = globalIndicesVector.data();
     for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++)
     {
       memcpy(copyToLocation, copyFromLocation, objSize);

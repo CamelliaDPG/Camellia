@@ -473,7 +473,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     }
 
     // TODO: consider changing this to use an Epetra_Map with a single entry (given the usage below, this should be possible).
-    Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
+    Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), myGlobalIndices.data(), 0, SerialComm);
     Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
     
 //    Epetra_Map    mapOneElement(1,1,&myGlobalIndices[0], 0, SerialComm);

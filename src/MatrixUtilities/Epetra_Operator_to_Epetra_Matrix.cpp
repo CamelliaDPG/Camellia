@@ -55,7 +55,7 @@ Teuchos::RCP<Epetra_CrsMatrix> Epetra_Operator_to_Epetra_Matrix::constructInvers
       }
     }
 
-    matrix->InsertGlobalValues(rowIndex, values.size(), &values[0], &indices[0]);
+    matrix->InsertGlobalValues(rowIndex, values.size(), values.data(), indices.data());
   }
 
   matrix->GlobalAssemble();
