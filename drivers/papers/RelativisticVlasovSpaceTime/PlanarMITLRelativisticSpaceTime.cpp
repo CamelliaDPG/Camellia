@@ -1118,7 +1118,11 @@ int main(int argc, char *argv[])
         
         auto configMesh = form->configurationSpaceMesh();
         FunctionPtr E_soln = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
-        double E_left = E_soln->evaluate(configMesh, x0, t0 + tWidth * (timeSlabOrdinal+1)); // when called with mesh arg, evaluate() locates the owning rank, evaluates there, and then MPI-communicates the result to all (without mesh arg, it will silently get a wrong (0.0) answer on some ranks!)
+        
+        // Evaluate just inside the slab end, rather than exactly at t1(), to avoid
+        // floating-point / point-location boundary ambiguity at the time-slab boundary.
+        const double tEval = std::nextafter(form->t1(), form->t0());
+        double E_left = E_soln->evaluate(configMesh, x0, tEval); // when called with mesh arg, evaluate() locates the owning rank, evaluates there, and then MPI-communicates the result to all (without mesh arg, it will silently get a wrong (0.0) answer on some ranks!)
         
 //        {
 //          // DEBUGGING:

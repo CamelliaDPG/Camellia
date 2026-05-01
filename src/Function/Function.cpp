@@ -722,6 +722,15 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
   }
+  {
+    // verify that we have exactly one cell that matches, across all MPI ranks
+    int myMatchingCell = (cellIDs[0] != -1) ? 1 : 0;
+    int matchingCellCount = MPIWrapper::sum(myMatchingCell);
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount == 0, std::invalid_argument,
+                               "No matching cells found");
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount > 1, std::invalid_argument,
+                               "Extra matching cells found");
+  }
   Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
   return MPIWrapper::sum(value);
 }
@@ -748,6 +757,15 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y)
   if (cellIDs.size() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
+  }
+  {
+    // verify that we have exactly one cell that matches, across all MPI ranks
+    int myMatchingCell = (cellIDs[0] != -1) ? 1 : 0;
+    int matchingCellCount = MPIWrapper::sum(myMatchingCell);
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount == 0, std::invalid_argument,
+                               "No matching cells found");
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount > 1, std::invalid_argument,
+                               "Extra matching cells found");
   }
   Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
   return MPIWrapper::sum(value);
@@ -776,6 +794,15 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
   if (cellIDs.size() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
+  }
+  {
+    // verify that we have exactly one cell that matches, across all MPI ranks
+    int myMatchingCell = (cellIDs[0] != -1) ? 1 : 0;
+    int matchingCellCount = MPIWrapper::sum(myMatchingCell);
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount == 0, std::invalid_argument,
+                               "No matching cells found");
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount > 1, std::invalid_argument,
+                               "Extra matching cells found");
   }
   Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
   return MPIWrapper::sum(value);
