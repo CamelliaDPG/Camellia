@@ -311,7 +311,7 @@ void CellDataMigration::packGeometryData(Mesh *mesh, GlobalIndexType cellID, cha
       int numSubcells = subcellOrdinals.size();
       memcpy(dataLocation, &numSubcells, sizeof(numSubcells));
       dataLocation += sizeof(numSubcells);
-      memcpy(dataLocation, &subcellOrdinals[0], sizeof(unsigned)*numSubcells);
+      memcpy(dataLocation, subcellOrdinals.data(), sizeof(unsigned)*numSubcells);
       dataLocation += sizeof(unsigned)*numSubcells;
     }
   }

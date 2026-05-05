@@ -936,7 +936,7 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(Ba
   unsigned domainDimension = finerBasis->domainTopology()->getDimension();
   unsigned sideDimension = domainDimension - 1;
 
-  return constrainedWeights(sideDimension, finerBasis, finerBasisSideOrdinal, volumeRefinements, coarserBasis, finerBasisSideOrdinal, vertexNodePermutation);
+  return constrainedWeights(sideDimension, finerBasis, finerBasisSideOrdinal, volumeRefinements, coarserBasis, coarserBasisSideOrdinal, vertexNodePermutation);
 }
 
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(unsigned subcellDimension,
