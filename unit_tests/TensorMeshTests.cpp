@@ -124,4 +124,24 @@ TEUCHOS_UNIT_TEST( TensorMesh, RejectDuplicateTrialOrTestName )
   tensorMesh.addTrialDiscretization(disc0);
   TEST_THROW(tensorMesh.addTrialDiscretization(disc1), std::invalid_argument);
 }
+
+TEUCHOS_UNIT_TEST( TensorMesh, CreateDofLayout )
+{
+  auto topology = makeSimpleTensorTopology();
+  auto factory = TensorVarFactory::factory();
+  auto basisFamily = BasisFamily::hierarchicalBasisFamily();
+  TensorMesh tensorMesh(topology, factory, basisFamily, 1, 1);
+
+  auto trialVar = makeFieldTensorVar("u");
+  auto testVar = trialVar->copyWithNewName("v");
+  auto trialDisc = Teuchos::rcp(new TensorVarDiscretization(trialVar, Teuchos::null, std::vector<int>{0,0}));
+  auto testDisc = Teuchos::rcp(new TensorVarDiscretization(testVar, Teuchos::null, std::vector<int>{0,0}));
+
+  tensorMesh.addTrialDiscretization(trialDisc);
+  tensorMesh.addTestDiscretization(testDisc);
+
+  auto dofLayout = tensorMesh.createDofLayout();
+  TEST_ASSERT(dofLayout != Teuchos::null);
+  TEST_EQUALITY(dofLayout->tensorMesh().get(), &tensorMesh);
+}
 }

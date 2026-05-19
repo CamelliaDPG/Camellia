@@ -1,4 +1,5 @@
 #include "TensorMesh.h"
+#include "TensorDofLayout.h"
 
 #include <stdexcept>
 
@@ -168,4 +169,11 @@ int TensorMesh::effectivePolyOrder(const TensorVarDiscretizationPtr &discretizat
   const int topologyP = componentTopo->cellPolyOrder(cellID);
   const int delta = effectivePolyOrderDelta(discretization, componentOrdinal, isTest);
   return topologyP + _defaultPolyOrder + delta;
+}
+
+TensorDofLayoutPtr TensorMesh::createDofLayout() const
+{
+  // TensorDofLayout stores a non-owning RCP back to this TensorMesh. The const_cast here is used
+  // only to satisfy that existing pointer type; the layout construction path is logically const.
+  return Teuchos::rcp(new TensorDofLayout(Teuchos::rcp(const_cast<TensorMesh*>(this), false)));
 }

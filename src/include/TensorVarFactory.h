@@ -12,6 +12,13 @@ namespace Camellia
   class TensorVarFactory;
   using TensorVarFactoryPtr = Teuchos::RCP<TensorVarFactory>;
 
+  /**
+   *  \brief Tensor-native registration and lookup object for TensorVar instances.
+   *
+   *  This class plays a role analogous in spirit to VarFactory, but for tensor-native
+   *  variable descriptors. It is intentionally lightweight: registration by name,
+   *  lookup by name, and enumeration of the registered TensorVar objects.
+   */
   class TensorVarFactory
   {
     std::map<std::string, TensorVarPtr> _tensorVars;

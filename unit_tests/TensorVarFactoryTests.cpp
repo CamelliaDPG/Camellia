@@ -31,4 +31,19 @@ TEUCHOS_UNIT_TEST( TensorVarFactory, RejectDuplicateName )
   factory.addTensorVar(tensorVar0);
   TEST_THROW(factory.addTensorVar(tensorVar1), std::invalid_argument);
 }
+
+TEUCHOS_UNIT_TEST( TensorVarFactory, DistinctCopiedNamesCanCoexist )
+{
+  TensorVarFactory factory;
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, "u_x", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  auto trialVar = Teuchos::rcp(new TensorVar("u", TENSOR_FIELD, std::vector<VarPtr>{vx}));
+  auto testVar = trialVar->copyWithNewName("v");
+
+  factory.addTensorVar(trialVar);
+  factory.addTensorVar(testVar);
+
+  TEST_ASSERT(factory.hasTensorVar("u"));
+  TEST_ASSERT(factory.hasTensorVar("v"));
+  TEST_EQUALITY(factory.tensorVars().size(), 2);
+}
 }

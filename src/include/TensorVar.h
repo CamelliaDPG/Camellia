@@ -14,12 +14,29 @@ namespace Camellia
   class TensorVar;
   using TensorVarPtr = Teuchos::RCP<TensorVar>;
 
+  /**
+   *  \brief High-level tensor-native variable category.
+   *
+   *  At the tensor-native discretization layer, the primary distinction is between
+   *  volumetric variables (fields) and skeleton variables (traces). Flux semantics
+   *  are expected to be recovered later in the bilinear-form/operator layer through
+   *  trace semantics together with side-parity weighting.
+   */
   enum TensorVarKind
   {
     TENSOR_FIELD,
     TENSOR_TRACE
   };
 
+  /**
+   *  \brief Tensor-native variable descriptor built as an adaptor around per-component Var semantics.
+   *
+   *  TensorVar is intentionally neutral with respect to trial versus test usage.
+   *  Trial/test distinctions are handled by TensorMesh registration rather than by
+   *  the variable object itself. The object stores a common tensor-level name and a
+   *  per-component collection of legacy Var descriptors whose semantics are adapted
+   *  into the tensor-native layer.
+   */
   class TensorVar
   {
     std::string _name;
@@ -39,6 +56,12 @@ namespace Camellia
     VarPtr componentVar(int componentOrdinal) const;
     const std::vector<VarPtr> &componentVars() const;
 
+    /**
+     *  \brief Return a copy of this TensorVar with a different tensor-level name.
+     *
+     *  This supports the intended pattern in which trial and test variables may have
+     *  matching discretization choices while still remaining semantically distinct by name.
+     */
     TensorVarPtr copyWithNewName(const std::string &newName) const;
   };
 

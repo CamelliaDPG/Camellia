@@ -11,6 +11,13 @@ namespace Camellia
   class TensorVarDiscretization;
   using TensorVarDiscretizationPtr = Teuchos::RCP<TensorVarDiscretization>;
 
+  /**
+   *  \brief Per-variable, per-component discretization metadata for the tensor-native path.
+   *
+   *  This object stores the discretization choices attached to a TensorVar, rather than
+   *  topology state. In the current implementation, it carries an optional basis-family
+   *  override together with one polynomial-order delta per tensor component.
+   */
   class TensorVarDiscretization
   {
     TensorVarPtr _tensorVar;
