@@ -9,8 +9,9 @@ using namespace Camellia;
 TensorGatherScatter::TensorGatherScatter(TensorMeshPtr tensorMesh,
                                          TensorDofLayoutPtr tensorDofLayout,
                                          TensorSpaceRole role,
-                                         const std::string &varName)
-: _tensorMesh(tensorMesh), _tensorDofLayout(tensorDofLayout), _role(role), _varName(varName),
+                                         const std::string &varName,
+                                         TensorLocalOrdering ordering)
+: _tensorMesh(tensorMesh), _tensorDofLayout(tensorDofLayout), _role(role), _varName(varName), _ordering(ordering),
   _variableLayout(tensorDofLayout->layout(varName, role))
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_tensorMesh == Teuchos::null, std::invalid_argument,
@@ -39,6 +40,11 @@ const std::string &TensorGatherScatter::varName() const
   return _varName;
 }
 
+TensorLocalOrdering TensorGatherScatter::ordering() const
+{
+  return _ordering;
+}
+
 const TensorDofLayout::VariableLayout &TensorGatherScatter::variableLayout() const
 {
   return _variableLayout;
@@ -46,7 +52,7 @@ const TensorDofLayout::VariableLayout &TensorGatherScatter::variableLayout() con
 
 IndexType TensorGatherScatter::localDofCount() const
 {
-  return _variableLayout.totalDofs();
+  return _tensorDofLayout->localDofCount(_varName, _role, _ordering);
 }
 
 void TensorGatherScatter::scatterLocalToGlobal(const std::vector<double> &localCoefficients,

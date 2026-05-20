@@ -2,11 +2,39 @@
 #include "Basis.h"
 #include "Var.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "Teuchos_TestForException.hpp"
 
 using namespace Camellia;
+
+namespace
+{
+  std::vector<std::vector<int>> enumerateComponentOrdinalsByCellOrdering(const TensorDofLayout::VariableLayout &layout)
+  {
+    const int componentCount = layout.componentCount();
+    std::vector<std::vector<int>> tuples;
+    std::vector<int> current(componentCount, 0);
+
+    std::function<void(int)> recurse = [&](int componentOrdinal)
+    {
+      if (componentOrdinal < 0)
+      {
+        tuples.push_back(current);
+        return;
+      }
+      for (int basisOrdinal=0; basisOrdinal<layout.componentCardinality(componentOrdinal); basisOrdinal++)
+      {
+        current[componentOrdinal] = basisOrdinal;
+        recurse(componentOrdinal - 1);
+      }
+    };
+
+    recurse(componentCount - 1);
+    return tuples;
+  }
+}
 
 TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const TensorVarDiscretizationPtr &discretization, TensorSpaceRole role) const
 {
@@ -110,21 +138,112 @@ std::vector<TensorDofLayout::VariableLayout> TensorDofLayout::testLayouts() cons
   return layouts;
 }
 
-IndexType TensorDofLayout::localDofOrdinal(const std::string &name,
-                                           TensorSpaceRole role,
-                                           const std::vector<int> &componentBasisOrdinals) const
+IndexType TensorDofLayout::variableLocalDofOrdinal(const std::string &name,
+                                                   TensorSpaceRole role,
+                                                   const std::vector<int> &componentBasisOrdinals) const
 {
   const auto &varLayout = layout(name, role);
   TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(componentBasisOrdinals.size()) != varLayout.componentCount(), std::invalid_argument,
-                             "TensorDofLayout::localDofOrdinal requires one component basis ordinal per component.");
+                             "TensorDofLayout::variableLocalDofOrdinal requires one component basis ordinal per component.");
 
   IndexType ordinal = 0;
   for (int d=0; d<varLayout.componentCount(); d++)
   {
     const int basisOrdinal = componentBasisOrdinals[d];
     TEUCHOS_TEST_FOR_EXCEPTION((basisOrdinal < 0) || (basisOrdinal >= varLayout.componentCardinality(d)), std::invalid_argument,
-                               "TensorDofLayout::localDofOrdinal basis ordinal out of range.");
+                               "TensorDofLayout::variableLocalDofOrdinal basis ordinal out of range.");
     ordinal += basisOrdinal * varLayout.componentStride(d);
   }
   return ordinal;
+}
+
+IndexType TensorDofLayout::cellLocalDofOrdinal(const std::string &name,
+                                               TensorSpaceRole role,
+                                               const std::vector<int> &componentBasisOrdinals) const
+{
+  const auto &varLayout = layout(name, role);
+  const auto tuples = enumerateComponentOrdinalsByCellOrdering(varLayout);
+  for (IndexType ordinal=0; ordinal<static_cast<IndexType>(tuples.size()); ordinal++)
+  {
+    if (tuples[ordinal] == componentBasisOrdinals) return ordinal;
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                             "TensorDofLayout::cellLocalDofOrdinal basis ordinal tuple out of range.");
+}
+
+IndexType TensorDofLayout::localDofCount(const std::string &name,
+                                         TensorSpaceRole role,
+                                         TensorLocalOrdering ordering) const
+{
+  const auto &varLayout = layout(name, role);
+  (void) ordering;
+  return varLayout.totalDofs();
+}
+
+IndexType TensorDofLayout::localDofOrdinal(const std::string &name,
+                                           TensorSpaceRole role,
+                                           const std::vector<int> &componentBasisOrdinals) const
+{
+  return variableLocalDofOrdinal(name, role, componentBasisOrdinals);
+}
+
+IndexType TensorDofLayout::localDofOrdinal(const std::string &name,
+                                           TensorSpaceRole role,
+                                           TensorLocalOrdering ordering,
+                                           const std::vector<int> &componentBasisOrdinals) const
+{
+  if (ordering == TENSOR_VARIABLE_ORDERING)
+  {
+    return variableLocalDofOrdinal(name, role, componentBasisOrdinals);
+  }
+  else
+  {
+    return cellLocalDofOrdinal(name, role, componentBasisOrdinals);
+  }
+}
+
+void TensorDofLayout::decodeVariableLocalDofOrdinal(const std::string &name,
+                                                    TensorSpaceRole role,
+                                                    IndexType ordinal,
+                                                    std::vector<int> &componentBasisOrdinals) const
+{
+  const auto &varLayout = layout(name, role);
+  TEUCHOS_TEST_FOR_EXCEPTION((ordinal < 0) || (ordinal >= varLayout.totalDofs()), std::invalid_argument,
+                             "TensorDofLayout::decodeVariableLocalDofOrdinal ordinal out of range.");
+
+  componentBasisOrdinals.assign(varLayout.componentCount(), 0);
+  for (int d=varLayout.componentCount()-1; d>=0; d--)
+  {
+    const IndexType stride = varLayout.componentStride(d);
+    const int cardinality = varLayout.componentCardinality(d);
+    componentBasisOrdinals[d] = static_cast<int>((ordinal / stride) % cardinality);
+  }
+}
+
+void TensorDofLayout::decodeCellLocalDofOrdinal(const std::string &name,
+                                                TensorSpaceRole role,
+                                                IndexType ordinal,
+                                                std::vector<int> &componentBasisOrdinals) const
+{
+  const auto &varLayout = layout(name, role);
+  TEUCHOS_TEST_FOR_EXCEPTION((ordinal < 0) || (ordinal >= varLayout.totalDofs()), std::invalid_argument,
+                             "TensorDofLayout::decodeCellLocalDofOrdinal ordinal out of range.");
+  const auto tuples = enumerateComponentOrdinalsByCellOrdering(varLayout);
+  componentBasisOrdinals = tuples[ordinal];
+}
+
+void TensorDofLayout::decodeLocalDofOrdinal(const std::string &name,
+                                            TensorSpaceRole role,
+                                            TensorLocalOrdering ordering,
+                                            IndexType ordinal,
+                                            std::vector<int> &componentBasisOrdinals) const
+{
+  if (ordering == TENSOR_VARIABLE_ORDERING)
+  {
+    decodeVariableLocalDofOrdinal(name, role, ordinal, componentBasisOrdinals);
+  }
+  else
+  {
+    decodeCellLocalDofOrdinal(name, role, ordinal, componentBasisOrdinals);
+  }
 }

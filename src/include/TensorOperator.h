@@ -42,7 +42,8 @@ namespace Camellia
    *  \brief Abstract realized tensor-native operator.
    *
    *  This is the realized side of the descriptor/realization split introduced in issue #298.
-   *  The initial concrete implementation will be matrix-free-first and flat-buffer-first.
+   *  The current concrete implementation remains matrix-free-first while allowing explicit
+   *  local coefficient ordering choices in the realization path.
    */
   class TensorOperator
   {

@@ -101,6 +101,17 @@ TEUCHOS_UNIT_TEST( TensorGatherScatter, GatherGlobalToLocalUsesFlatOffset )
   }
 }
 
+TEUCHOS_UNIT_TEST( TensorGatherScatter, VariableAndCellOrderingsHaveSameLocalDofCount )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorGatherScatter variableGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u", TENSOR_VARIABLE_ORDERING);
+  TensorGatherScatter cellGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u", TENSOR_CELL_ORDERING);
+
+  TEST_EQUALITY(variableGS.localDofCount(), cellGS.localDofCount());
+  TEST_EQUALITY(variableGS.localDofCount(), dofLayout->layout("u", TENSOR_TRIAL_SPACE).totalDofs());
+}
+
 TEUCHOS_UNIT_TEST( TensorGatherScatter, TrialAndTestCanHaveDifferentLocalDofCounts )
 {
   auto tensorMesh = makeTensorMeshForGatherScatterTests();

@@ -58,7 +58,7 @@ TEUCHOS_UNIT_TEST( TensorDofLayout, TrialAndTestLayoutsHaveExpectedComponentCoun
   TEST_ASSERT(vLayout.totalDofs() > 0);
 }
 
-TEUCHOS_UNIT_TEST( TensorDofLayout, LowerIndexedComponentsVaryFastestInLocalOrdinal )
+TEUCHOS_UNIT_TEST( TensorDofLayout, LowerIndexedComponentsVaryFastestInVariableOrdering )
 {
   auto tensorMesh = makeTensorMeshForLayoutTests();
   TensorDofLayout layout(tensorMesh);
@@ -84,11 +84,71 @@ TEUCHOS_UNIT_TEST( TensorDofLayout, TestEnrichmentAffectsTestLayoutCardinality )
   TEST_ASSERT(vLayout.componentCardinality(1) >= uLayout.componentCardinality(1));
 }
 
+TEUCHOS_UNIT_TEST( TensorDofLayout, VariableAndCellOrderingsHaveSameLocalDofCount )
+{
+  auto tensorMesh = makeTensorMeshForLayoutTests();
+  TensorDofLayout layout(tensorMesh);
+
+  const auto &uLayout = layout.layout("u", TENSOR_TRIAL_SPACE);
+  TEST_EQUALITY(layout.localDofCount("u", TENSOR_TRIAL_SPACE, TENSOR_VARIABLE_ORDERING), uLayout.totalDofs());
+  TEST_EQUALITY(layout.localDofCount("u", TENSOR_TRIAL_SPACE, TENSOR_CELL_ORDERING), uLayout.totalDofs());
+}
+
+TEUCHOS_UNIT_TEST( TensorDofLayout, VariableOrderingMatchesLegacyLocalOrdinalBehavior )
+{
+  auto tensorMesh = makeTensorMeshForLayoutTests();
+  TensorDofLayout layout(tensorMesh);
+
+  TEST_EQUALITY(layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, {0,0}),
+                layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_VARIABLE_ORDERING, {0,0}));
+  TEST_EQUALITY(layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, {1,0}),
+                layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_VARIABLE_ORDERING, {1,0}));
+  TEST_EQUALITY(layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, {0,1}),
+                layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_VARIABLE_ORDERING, {0,1}));
+}
+
+TEUCHOS_UNIT_TEST( TensorDofLayout, VariableAndCellOrderingsAreInvertible )
+{
+  auto tensorMesh = makeTensorMeshForLayoutTests();
+  TensorDofLayout layout(tensorMesh);
+  const auto &uLayout = layout.layout("u", TENSOR_TRIAL_SPACE);
+
+  std::vector<int> tupleVariable, tupleCell;
+  for (IndexType ordinal=0; ordinal<uLayout.totalDofs(); ordinal++)
+  {
+    layout.decodeLocalDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_VARIABLE_ORDERING, ordinal, tupleVariable);
+    layout.decodeLocalDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_CELL_ORDERING, ordinal, tupleCell);
+
+    TEST_EQUALITY(layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_VARIABLE_ORDERING, tupleVariable), ordinal);
+    TEST_EQUALITY(layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_CELL_ORDERING, tupleCell), ordinal);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorDofLayout, CellOrderingDecodeProducesValidComponentOrdinals )
+{
+  auto tensorMesh = makeTensorMeshForLayoutTests();
+  TensorDofLayout layout(tensorMesh);
+  const auto &uLayout = layout.layout("u", TENSOR_TRIAL_SPACE);
+
+  std::vector<int> tuple;
+  for (IndexType ordinal=0; ordinal<uLayout.totalDofs(); ordinal++)
+  {
+    layout.decodeLocalDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_CELL_ORDERING, ordinal, tuple);
+    TEST_EQUALITY(static_cast<int>(tuple.size()), uLayout.componentCount());
+    for (int d=0; d<uLayout.componentCount(); d++)
+    {
+      TEST_ASSERT(tuple[d] >= 0);
+      TEST_ASSERT(tuple[d] < uLayout.componentCardinality(d));
+    }
+  }
+}
+
 TEUCHOS_UNIT_TEST( TensorDofLayout, RejectWrongNumberOfComponentBasisOrdinals )
 {
   auto tensorMesh = makeTensorMeshForLayoutTests();
   TensorDofLayout layout(tensorMesh);
 
   TEST_THROW(layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, {0}), std::invalid_argument);
+  TEST_THROW(layout.localDofOrdinal("u", TENSOR_TRIAL_SPACE, TENSOR_CELL_ORDERING, {0}), std::invalid_argument);
 }
 }

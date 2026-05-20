@@ -5,12 +5,52 @@
 #include "TensorBilinearFormBuilder.h"
 #include "TensorDofLayout.h"
 #include "TensorMesh.h"
+#include "Basis.h"
+#include "BasisFamily.h"
+#include "CamelliaIntrepidExtendedTypes.h"
+#include "CamelliaTestingHelpers.h"
+#include "CubatureFactory.h"
+#include "Intrepid2_CubatureDirectLineGauss.hpp"
 #include "Var.h"
 
 using namespace Camellia;
 
 namespace
 {
+struct LineQuadratureRule
+{
+  std::vector<double> points;
+  std::vector<double> weights;
+};
+
+LineQuadratureRule lineQuadratureFromCubatureFactory(int exactnessDegree)
+{
+  CubatureFactory cubFactory;
+  auto cubature = cubFactory.create(CellTopology::line(), exactnessDegree);
+  
+  const int pointCount = cubature->getNumPoints();
+  auto points = cubature->allocateCubaturePoints();
+  auto weights = cubature->allocateCubatureWeights();
+  
+  cubature->getCubature(points, weights);
+  
+  auto pointsView  = points.getTensorComponent(0);
+  auto weightsView = weights.getTensorComponent(0).getUnderlyingView(); // 1D: just one component
+
+  auto pointsHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), pointsView);
+  auto weightsHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), weightsView);
+
+  LineQuadratureRule rule;
+  rule.points.resize(pointCount);
+  rule.weights.resize(pointCount);
+  for (int p=0; p<pointCount; p++)
+  {
+    rule.points[p] = pointsHost(p,0);
+    rule.weights[p] = weightsHost(p);
+  }
+  return rule;
+}
+
 TensorVarPtr makeFieldTensorVar(const std::string &name)
 {
   VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
@@ -18,9 +58,11 @@ TensorVarPtr makeFieldTensorVar(const std::string &name)
   return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{vx, vt}));
 }
 
-TensorMeshPtr makeTensorMeshForOperatorTests()
+TensorMeshPtr makeTensorMeshForOperatorTests(bool nonuniformFirstComponent = false)
 {
-  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component0 = nonuniformFirstComponent
+      ? Teuchos::rcp(new ComponentMeshTopology1D({0.0, 2.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2))
+      : Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
   auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 3));
   auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1}));
   auto factory = TensorVarFactory::factory();
@@ -40,6 +82,239 @@ TensorBilinearFormPtr makeSimpleBilinearFormForOperatorTests()
                                    TensorComponentOperatorDescriptor::valueOnly(2),
                                    TensorFunction::constant(1.0)));
   return form;
+}
+
+struct BasisData1D
+{
+  BasisPtr basis;
+  std::vector<double> refPoints;
+  std::vector<double> refWeights;
+  std::vector<double> values;      // (field,point)
+  std::vector<double> derivatives; // (field,point)
+  int fieldCount = 0;
+  int pointCount = 0;
+};
+
+int quadratureDegreeForComponent(int trialPolyOrder,
+                                 int testPolyOrder,
+                                 bool trialDerivative,
+                                 bool testDerivative)
+{
+  int degree = trialPolyOrder + testPolyOrder;
+  if (trialDerivative) degree -= 1;
+  if (testDerivative) degree -= 1;
+  return std::max(1, degree + 1);
+}
+
+BasisData1D buildBasisDataForComponent(const TensorMeshPtr &tensorMesh,
+                                       const TensorVarDiscretizationPtr &discretization,
+                                       int componentOrdinal,
+                                       bool isTest,
+                                       const ComponentCellID1D &cellID,
+                                       const std::vector<double> &quadraturePoints)
+{
+  BasisData1D basisData;
+  auto basisFamily = tensorMesh->effectiveBasisFamily(discretization);
+  VarPtr componentVar = discretization->tensorVar()->componentVar(componentOrdinal);
+  const int polyOrder = tensorMesh->effectivePolyOrder(discretization, cellID, componentOrdinal, isTest);
+  basisData.basis = basisFamily->getBasis(CellTopology::line(), efsForSpace(componentVar->space()), polyOrder);
+
+  basisData.refPoints = quadraturePoints;
+  basisData.fieldCount = basisData.basis->getCardinality();
+  basisData.pointCount = static_cast<int>(quadraturePoints.size());
+  basisData.values.assign(basisData.fieldCount * basisData.pointCount, 0.0);
+  basisData.derivatives.assign(basisData.fieldCount * basisData.pointCount, 0.0);
+
+  Camellia::FieldContainer<double> refPointContainer(basisData.pointCount, 1);
+  for (int p=0; p<basisData.pointCount; p++)
+  {
+    refPointContainer(p,0) = quadraturePoints[p];
+  }
+
+  Camellia::FieldContainer<double> basisValues(basisData.fieldCount, basisData.pointCount);
+  basisData.basis->getValues(basisValues, refPointContainer, OP_VALUE);
+  for (int f=0; f<basisData.fieldCount; f++)
+  {
+    for (int p=0; p<basisData.pointCount; p++)
+    {
+      basisData.values[f * basisData.pointCount + p] = basisValues(f,p);
+    }
+  }
+
+  Camellia::FieldContainer<double> basisDerivatives(basisData.fieldCount, basisData.pointCount, 1);
+  basisData.basis->getValues(basisDerivatives, refPointContainer, OP_GRAD);
+  for (int f=0; f<basisData.fieldCount; f++)
+  {
+    for (int p=0; p<basisData.pointCount; p++)
+    {
+      basisData.derivatives[f * basisData.pointCount + p] = basisDerivatives(f,p,0);
+    }
+  }
+
+  return basisData;
+}
+
+double basisEvaluationAtPoint(const std::vector<int> &componentBasisOrdinals,
+                              const std::vector<BasisData1D> &basisData,
+                              const TensorComponentOperatorDescriptor &descriptor,
+                              const std::vector<int> &pointOrdinals,
+                              const std::vector<double> &derivativeScales)
+{
+  double value = 1.0;
+  const int componentCount = descriptor.componentCount();
+  for (int d=0; d<componentCount; d++)
+  {
+    const int basisOrdinal = componentBasisOrdinals[d];
+    const int pointOrdinal = pointOrdinals[d];
+    const int flatIndex = basisOrdinal * basisData[d].pointCount + pointOrdinal;
+    if (descriptor.takesDerivativeInComponent(d))
+    {
+      value *= basisData[d].derivatives[flatIndex] * derivativeScales[d];
+    }
+    else
+    {
+      value *= basisData[d].values[flatIndex];
+    }
+  }
+  return value;
+}
+
+std::vector<double> applyReferenceOperator(const TensorMeshPtr &tensorMesh,
+                                           const TensorDofLayoutPtr &dofLayout,
+                                           const TensorBilinearFormPtr &form,
+                                           const std::string &trialVarName,
+                                           const std::string &testVarName,
+                                           const std::vector<double> &input)
+{
+  auto trialDiscretization = tensorMesh->trialDiscretization(trialVarName);
+  auto testDiscretization  = tensorMesh->testDiscretization(testVarName);
+  const auto &domainLayout = dofLayout->layout(trialVarName, TENSOR_TRIAL_SPACE);
+  const auto &rangeLayout  = dofLayout->layout(testVarName,  TENSOR_TEST_SPACE);
+  const auto &activeCellTuples = tensorMesh->topology()->activeCellTuples();
+
+  std::vector<double> output(rangeLayout.totalDofs(), 0.0);
+
+  for (const auto &term : form->terms())
+  {
+    if (term.trialVar()->name() != trialVarName) continue;
+    if (term.testVar()->name()  != testVarName) continue;
+
+    const int componentCount = term.componentCount();
+    std::vector<int> trialBasisOrdinals(componentCount, 0);
+    std::vector<int> testBasisOrdinals(componentCount, 0);
+    std::vector<int> pointOrdinals(componentCount, 0);
+
+    for (const auto &cellTuple : activeCellTuples)
+    {
+      std::vector<BasisData1D> trialBasisData(componentCount);
+      std::vector<BasisData1D> testBasisData(componentCount);
+      std::vector<int> pointCounts(componentCount, 0);
+      std::vector<std::vector<double>> refPoints(componentCount);
+      std::vector<std::vector<double>> refWeights(componentCount);
+      std::vector<double> measureScales(componentCount, 1.0);
+      std::vector<double> derivativeScales(componentCount, 1.0);
+      std::vector<double> cellLeft(componentCount, 0.0);
+      std::vector<double> cellWidth(componentCount, 1.0);
+
+      for (int d=0; d<componentCount; d++)
+      {
+        const int trialPolyOrder = tensorMesh->effectivePolyOrder(trialDiscretization, cellTuple[d], d, false);
+        const int testPolyOrder  = tensorMesh->effectivePolyOrder(testDiscretization,  cellTuple[d], d, true);
+        const bool trialDerivative = term.trialOperator().takesDerivativeInComponent(d);
+        const bool testDerivative  = term.testOperator().takesDerivativeInComponent(d);
+        const int quadratureDegree = quadratureDegreeForComponent(trialPolyOrder, testPolyOrder,
+                                                                  trialDerivative, testDerivative);
+        LineQuadratureRule quadrature = lineQuadratureFromCubatureFactory(quadratureDegree);
+        refPoints[d] = quadrature.points;
+        refWeights[d] = quadrature.weights;
+        pointCounts[d] = static_cast<int>(quadrature.points.size());
+
+        trialBasisData[d] = buildBasisDataForComponent(tensorMesh, trialDiscretization, d, false, cellTuple[d], refPoints[d]);
+        testBasisData[d]  = buildBasisDataForComponent(tensorMesh, testDiscretization,  d, true,  cellTuple[d], refPoints[d]);
+
+        auto componentTopo = tensorMesh->topology()->componentMeshTopology(d);
+        cellLeft[d] = componentTopo->cellLeft(cellTuple[d]);
+        cellWidth[d] = componentTopo->cellWidth(cellTuple[d]);
+        measureScales[d] = 0.5 * cellWidth[d];
+        derivativeScales[d] = 2.0 / cellWidth[d];
+      }
+
+      int tensorPointCount = 1;
+      for (int d=0; d<componentCount; d++) tensorPointCount *= pointCounts[d];
+
+      TensorFunction::PointView physicalPoints("reference-physical-points", tensorPointCount, componentCount);
+      auto physicalPointsHost = Kokkos::create_mirror_view(physicalPoints);
+      std::vector<double> quadratureWeights(tensorPointCount, 1.0);
+
+      for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
+      {
+        int workingOrdinal = flatPointOrdinal;
+        double weight = 1.0;
+        for (int d=0; d<componentCount; d++)
+        {
+          pointOrdinals[d] = workingOrdinal % pointCounts[d];
+          workingOrdinal /= pointCounts[d];
+          const double xi = refPoints[d][pointOrdinals[d]];
+          const double xPhysical = cellLeft[d] + 0.5 * (xi + 1.0) * cellWidth[d];
+          physicalPointsHost(flatPointOrdinal, d) = xPhysical;
+          weight *= refWeights[d][pointOrdinals[d]] * measureScales[d];
+        }
+        quadratureWeights[flatPointOrdinal] = weight;
+      }
+      Kokkos::deep_copy(physicalPoints, physicalPointsHost);
+
+      TensorFunction::ValueView coefficientValues("reference-coefficient-values", tensorPointCount);
+      term.coefficient()->values(physicalPoints, coefficientValues);
+      auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
+
+      std::vector<std::vector<double>> matrix(rangeLayout.totalDofs(), std::vector<double>(domainLayout.totalDofs(), 0.0));
+
+      for (IndexType j=0; j<domainLayout.totalDofs(); j++)
+      {
+        dofLayout->decodeLocalDofOrdinal(trialVarName, TENSOR_TRIAL_SPACE, TENSOR_VARIABLE_ORDERING, j, trialBasisOrdinals);
+        for (IndexType i=0; i<rangeLayout.totalDofs(); i++)
+        {
+          dofLayout->decodeLocalDofOrdinal(testVarName, TENSOR_TEST_SPACE, TENSOR_VARIABLE_ORDERING, i, testBasisOrdinals);
+          double entry = 0.0;
+          for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
+          {
+            int workingOrdinal = flatPointOrdinal;
+            for (int d=0; d<componentCount; d++)
+            {
+              pointOrdinals[d] = workingOrdinal % pointCounts[d];
+              workingOrdinal /= pointCounts[d];
+            }
+            const double trialValue = basisEvaluationAtPoint(trialBasisOrdinals, trialBasisData, term.trialOperator(), pointOrdinals, derivativeScales);
+            const double testValue  = basisEvaluationAtPoint(testBasisOrdinals,  testBasisData,  term.testOperator(),  pointOrdinals, derivativeScales);
+            entry += quadratureWeights[flatPointOrdinal] * coefficientValuesHost(flatPointOrdinal) * trialValue * testValue;
+          }
+          matrix[i][j] += entry;
+        }
+      }
+
+      for (IndexType i=0; i<rangeLayout.totalDofs(); i++)
+      {
+        for (IndexType j=0; j<domainLayout.totalDofs(); j++)
+        {
+          output[i] += matrix[i][j] * input[j];
+        }
+      }
+    }
+  }
+
+  return output;
+}
+
+void compareVectors(const std::vector<double> &actual,
+                    const std::vector<double> &expected,
+                    Teuchos::FancyOStream &out,
+                    bool &success,
+                    double relTol = 1e-12,
+                    double absTol = 1e-15)
+{
+  TEST_EQUALITY(actual.size(), expected.size());
+  
+  TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO( actual, expected, relTol, absTol );
 }
 
 TEUCHOS_UNIT_TEST( TensorOperator, StandardMatrixFreePipelineContainsExpectedStages )
@@ -66,6 +341,21 @@ TEUCHOS_UNIT_TEST( TensorOperator, MatrixFreeFactoryBuildsOperatorForSupportedIn
   TEST_EQUALITY(op->backend(), TENSOR_OPERATOR_BACKEND_MATRIX_FREE);
   TEST_EQUALITY(op->domainVarName(), "u");
   TEST_EQUALITY(op->rangeVarName(),  "v");
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, DomainAndRangeSizesMatchVariableLocalTensorSpace )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = makeSimpleBilinearFormForOperatorTests();
+  MatrixFreeTensorOperatorFactory factory;
+
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  TEST_EQUALITY(op->domainSize(), dofLayout->layout("u", TENSOR_TRIAL_SPACE).totalDofs());
+  TEST_EQUALITY(op->rangeSize(),  dofLayout->layout("v", TENSOR_TEST_SPACE).totalDofs());
 }
 
 TEUCHOS_UNIT_TEST( TensorOperator, ApplyProducesExpectedSizedOutput )
@@ -109,6 +399,108 @@ TEUCHOS_UNIT_TEST( TensorOperator, ApplyProducesNonzeroOutputForSimpleVolumeTerm
   TEST_ASSERT(someNonzero);
 }
 
+TEUCHOS_UNIT_TEST( TensorOperator, ValueValueConstantApplyMatchesExplicitReference )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = makeSimpleBilinearFormForOperatorTests();
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 1.0 + 0.25 * i;
+
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+
+  compareVectors(actual, expected, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, DerivativeValueConstantApplyMatchesExplicitReference )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto form = Teuchos::rcp(new TensorBilinearForm("derivative-value"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                   makeFieldTensorVar("v"),
+                                   TensorComponentOperatorDescriptor::singleDerivative(2, 0),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::constant(1.0)));
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.5 + 0.5 * i;
+
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+
+  compareVectors(actual, expected, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, ValueValueCoordinateCoefficientApplyMatchesExplicitReference )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto form = Teuchos::rcp(new TensorBilinearForm("coordinate-mass"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                   makeFieldTensorVar("v"),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::componentCoordinate(0)));
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = (i % 2 == 0) ? 1.0 : -0.5;
+
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+
+  compareVectors(actual, expected, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, DerivativeDerivativeCoordinateCoefficientApplyMatchesExplicitReference )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  TensorBilinearFormBuilder builder("builder-realization");
+  auto form = builder.addDerivativeDerivativeTerm(makeFieldTensorVar("u"),
+                                                  makeFieldTensorVar("v"),
+                                                  0,
+                                                  0,
+                                                  TensorFunction::componentCoordinate(1))
+                     .build();
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.25 * (i + 1);
+
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+
+  compareVectors(actual, expected, out, success);
+}
+
 TEUCHOS_UNIT_TEST( TensorOperator, DerivativeMetadataChangesApplyWeighting )
 {
   auto tensorMesh = makeTensorMeshForOperatorTests();
@@ -146,6 +538,83 @@ TEUCHOS_UNIT_TEST( TensorOperator, DerivativeMetadataChangesApplyWeighting )
   for (size_t i=0; i<outputValue.size(); i++)
   {
     if (outputValue[i] != outputDerivative[i]) differs = true;
+  }
+  TEST_ASSERT(differs);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, CoordinateCoefficientChangesApplyResult )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto formConstant = Teuchos::rcp(new TensorBilinearForm("constant"));
+  formConstant->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                           makeFieldTensorVar("v"),
+                                           TensorComponentOperatorDescriptor::valueOnly(2),
+                                           TensorComponentOperatorDescriptor::valueOnly(2),
+                                           TensorFunction::constant(1.0)));
+
+  auto formCoordinate = Teuchos::rcp(new TensorBilinearForm("coordinate"));
+  formCoordinate->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                             makeFieldTensorVar("v"),
+                                             TensorComponentOperatorDescriptor::valueOnly(2),
+                                             TensorComponentOperatorDescriptor::valueOnly(2),
+                                             TensorFunction::componentCoordinate(0)));
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto opConstant = factory.build(tensorMesh, dofLayout, formConstant,
+                                  TENSOR_TRIAL_SPACE, "u",
+                                  TENSOR_TEST_SPACE,  "v");
+  auto opCoordinate = factory.build(tensorMesh, dofLayout, formCoordinate,
+                                    TENSOR_TRIAL_SPACE, "u",
+                                    TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(opConstant->domainSize(), 1.0);
+  std::vector<double> outputConstant, outputCoordinate;
+  opConstant->apply(input, outputConstant);
+  opCoordinate->apply(input, outputCoordinate);
+
+  TEST_EQUALITY(outputConstant.size(), outputCoordinate.size());
+  bool differs = false;
+  for (size_t i=0; i<outputConstant.size(); i++)
+  {
+    if (outputConstant[i] != outputCoordinate[i]) differs = true;
+  }
+  TEST_ASSERT(differs);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, DistinctTrialCoefficientPatternsProduceDistinctOutputs )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto derivativeForm = Teuchos::rcp(new TensorBilinearForm("derivative"));
+  derivativeForm->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                             makeFieldTensorVar("v"),
+                                             TensorComponentOperatorDescriptor::singleDerivative(2, 0),
+                                             TensorComponentOperatorDescriptor::valueOnly(2),
+                                             TensorFunction::constant(1.0)));
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, derivativeForm,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> inputA(op->domainSize(), 0.0);
+  std::vector<double> inputB(op->domainSize(), 0.0);
+  TEST_ASSERT(op->domainSize() >= 2);
+  inputA[0] = 1.0;
+  inputB[1] = 1.0;
+
+  std::vector<double> outputA, outputB;
+  op->apply(inputA, outputA);
+  op->apply(inputB, outputB);
+
+  TEST_EQUALITY(outputA.size(), outputB.size());
+  bool differs = false;
+  for (size_t i=0; i<outputA.size(); i++)
+  {
+    if (outputA[i] != outputB[i]) differs = true;
   }
   TEST_ASSERT(differs);
 }

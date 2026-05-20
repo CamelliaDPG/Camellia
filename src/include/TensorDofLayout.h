@@ -22,12 +22,26 @@ namespace Camellia
   };
 
   /**
+   *  \brief Explicit local coefficient ordering choices for tensor-native vectors.
+   *
+   *  These orderings are two views/flattenings of the same local coefficient space.
+   *  TENSOR_VARIABLE_ORDERING follows the tensor-variable-local component-stride ordering.
+   *  TENSOR_CELL_ORDERING follows a more traditional FE-style traversal order intended to expose
+   *  cell-centric locality without changing the underlying local vector size.
+   */
+  enum TensorLocalOrdering
+  {
+    TENSOR_VARIABLE_ORDERING,
+    TENSOR_CELL_ORDERING
+  };
+
+  /**
    *  \brief Explicit tensor-native local layout abstraction.
    *
    *  TensorDofLayout provides local coefficient-layout metadata derived from TensorMesh.
    *  It is intentionally local in scope: it defines component cardinalities, component strides,
    *  and deterministic local ordinal maps for registered trial/test discretizations, but does
-   *  not attempt to provide global numbering or gather/scatter behavior.
+   *  not attempt to provide global numbering or assembled operator behavior.
    */
   class TensorDofLayout
   {
@@ -36,7 +50,8 @@ namespace Camellia
      *  \brief Concrete local-layout metadata for one registered tensor variable.
      *
      *  The current implementation stores one cardinality per component, one stride per component,
-     *  and the resulting tensor-product local dof count. Lower-indexed components vary fastest.
+     *  and the resulting tensor-product local dof count for a single variable-local block.
+     *  Lower-indexed components vary fastest.
      */
     struct VariableLayout
     {
@@ -85,9 +100,42 @@ namespace Camellia
     std::vector<VariableLayout> trialLayouts() const;
     std::vector<VariableLayout> testLayouts() const;
 
+    IndexType variableLocalDofOrdinal(const std::string &name,
+                                      TensorSpaceRole role,
+                                      const std::vector<int> &componentBasisOrdinals) const;
+
+    IndexType cellLocalDofOrdinal(const std::string &name,
+                                  TensorSpaceRole role,
+                                  const std::vector<int> &componentBasisOrdinals) const;
+
+    IndexType localDofCount(const std::string &name,
+                            TensorSpaceRole role,
+                            TensorLocalOrdering ordering) const;
+
     IndexType localDofOrdinal(const std::string &name,
                               TensorSpaceRole role,
                               const std::vector<int> &componentBasisOrdinals) const;
+
+    IndexType localDofOrdinal(const std::string &name,
+                              TensorSpaceRole role,
+                              TensorLocalOrdering ordering,
+                              const std::vector<int> &componentBasisOrdinals) const;
+
+    void decodeVariableLocalDofOrdinal(const std::string &name,
+                                       TensorSpaceRole role,
+                                       IndexType ordinal,
+                                       std::vector<int> &componentBasisOrdinals) const;
+
+    void decodeCellLocalDofOrdinal(const std::string &name,
+                                   TensorSpaceRole role,
+                                   IndexType ordinal,
+                                   std::vector<int> &componentBasisOrdinals) const;
+
+    void decodeLocalDofOrdinal(const std::string &name,
+                               TensorSpaceRole role,
+                               TensorLocalOrdering ordering,
+                               IndexType ordinal,
+                               std::vector<int> &componentBasisOrdinals) const;
   };
 }
 
