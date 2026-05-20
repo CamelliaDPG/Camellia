@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "TensorMesh.h"
+#include "TensorDofLayout.h"
 #include "Var.h"
 
 using namespace Camellia;
