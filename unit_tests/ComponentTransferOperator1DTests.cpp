@@ -104,4 +104,20 @@ TEUCHOS_UNIT_TEST( ComponentTransferOperator1D, TestRoleConstructionSupported )
   TEST_EQUALITY(op.role(), TENSOR_TEST_SPACE);
   TEST_EQUALITY(op.varName(), "v");
 }
+
+TEUCHOS_UNIT_TEST( ComponentTransferOperator1D, ProlongationAndRestrictionExposeOppositeOrientations )
+{
+  auto coarseMesh = makeSingleComponentTensorMesh(1, 0, 1, { ActiveLeafSet1D({{0,0}}) });
+  auto fineMesh   = makeSingleComponentTensorMesh(1, 0, 1, { ActiveLeafSet1D({{1,0}, {1,1}}) });
+  auto coarseLayout = coarseMesh->createDofLayout();
+  auto fineLayout   = fineMesh->createDofLayout();
+
+  ComponentTransferOperator1D prolong(coarseMesh, fineMesh, coarseLayout, fineLayout,
+                                      TENSOR_TRIAL_SPACE, "u", 0, COMPONENT_PROLONGATION);
+  ComponentTransferOperator1D restrictOp(coarseMesh, fineMesh, coarseLayout, fineLayout,
+                                         TENSOR_TRIAL_SPACE, "u", 0, COMPONENT_RESTRICTION);
+
+  TEST_EQUALITY(prolong.rowCount(), restrictOp.colCount());
+  TEST_EQUALITY(prolong.colCount(), restrictOp.rowCount());
+}
 }

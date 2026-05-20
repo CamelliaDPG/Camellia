@@ -21,12 +21,21 @@ namespace Camellia
    *  \brief Explicit componentwise 1D transfer abstraction for the tensor-native path.
    *
    *  This class provides the first componentwise transfer layer above the current topology and
-   *  discretization/runtime metadata. It supports both h- and p-transfer in one spatial/auxiliary
-   *  component and is intended to serve as the building block for later tensor-product transfer composition.
+   *  discretization/runtime metadata. It supports both h- and p-transfer in one component and
+   *  is intended to serve as a building block for later tensor-product transfer composition.
    *
-   *  The current implementation is per-variable, role-aware, and local-layout-driven. It exposes a flat local
-   *  operator matrix representation for the selected variable/component pair, with prolongation and transpose-based
-   *  restriction semantics in the initial model.
+   *  The current implementation is:
+   *  \begin{itemize}
+   *    \item per-variable,
+   *    \item role-aware,
+   *    \item local-layout-driven,
+   *    \item and matrix-explicit in a flat local operator form.
+   *  \end{itemize}
+   *
+   *  The p-transfer path uses the available hierarchical basis prolongation support. The h-transfer path
+   *  currently uses the present dyadic parent/child structure together with the current local layout model.
+   *  Restriction starts from transpose/averaging-style semantics in this first draft but is not intended to
+   *  freeze later design choices.
    */
   class ComponentTransferOperator1D
   {

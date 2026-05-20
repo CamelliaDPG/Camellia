@@ -5,6 +5,7 @@
 #include "Basis.h"
 #include "BasisFamily.h"
 #include "Intrepid2_HierarchicalBasisProlongator.hpp"
+#include "TypeDefs.h"
 #include "Var.h"
 #include "Teuchos_TestForException.hpp"
 
@@ -153,9 +154,8 @@ void ComponentTransferOperator1D::buildPTransferOperatorMatrix()
   auto coarseBasis = basisFamily->getBasis(CellTopology::line(), efsForSpace(coarseVar->space()), coarseP);
   auto fineBasis   = basisFamily->getBasis(CellTopology::line(), efsForSpace(fineVar->space()), fineP);
 
-  using DeviceType = DefaultTestDeviceType;
   using Scalar = double;
-  auto prolongator = Intrepid2::HierarchicalBasisProlongator<DeviceType, Scalar>(coarseBasis, fineBasis);
+  auto prolongator = Intrepid2::HierarchicalBasisProlongator<DeviceType, Scalar>(coarseBasis->intrepid2Basis(), fineBasis->intrepid2Basis());
 
   const int coarseCardinality = coarseBasis->getCardinality();
   const int fineCardinality   = fineBasis->getCardinality();

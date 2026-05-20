@@ -13,13 +13,16 @@ namespace Camellia
   /**
    *  \brief Explicit tensor-native per-variable gather/scatter abstraction.
    *
-   *  This class is the first local/global data-motion operator layer above TensorMesh and TensorDofLayout.
-   *  It is intentionally per-variable in the current implementation and is parameterized by TensorSpaceRole
-   *  rather than split into separate trial and test class families.
+   *  TensorGatherScatter is the first local/global data-motion operator layer above TensorMesh and
+   *  TensorDofLayout. The current implementation is intentionally modest in scope:
+   *  \begin{itemize}
+   *    \item it is per-variable rather than block-composed across all registered variables,
+   *    \item it is parameterized by TensorSpaceRole rather than split into separate trial/test classes,
+   *    \item and it is flat-buffer-first rather than Tpetra-centric.
+   *  \end{itemize}
    *
-   *  The current implementation is flat-vector-first and local-layout-driven. It uses raw container data
-   *  rather than making Tpetra part of the core abstraction, but the API is intended to leave room for
-   *  later adapters or wrappers.
+   *  The role of this object is to make local/global movement explicit while leaving room for later
+   *  adapters and richer vector/container abstractions.
    */
   class TensorGatherScatter
   {
@@ -43,10 +46,19 @@ namespace Camellia
 
     IndexType localDofCount() const;
 
+    /**
+     *  \brief Scatter one local variable block into a flat global buffer.
+     *
+     *  In the present first draft, the scatter uses a simple offset-based placement into the target buffer.
+     *  Later issues may add richer global indexing and adapter layers on top of this abstraction.
+     */
     void scatterLocalToGlobal(const std::vector<double> &localCoefficients,
                               std::vector<double> &globalCoefficients,
                               IndexType globalOffset = 0) const;
 
+    /**
+     *  \brief Gather one local variable block from a flat global buffer.
+     */
     void gatherGlobalToLocal(const std::vector<double> &globalCoefficients,
                              std::vector<double> &localCoefficients,
                              IndexType globalOffset = 0) const;
