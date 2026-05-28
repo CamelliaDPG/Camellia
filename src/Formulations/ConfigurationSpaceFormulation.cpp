@@ -17,6 +17,38 @@ ConfigurationSpaceFormulation::ConfigurationSpaceFormulation(const EBasisFamily 
 _basisFamily(basisFamily)
 {}
 
+ConfigurationSpaceFormulation::~ConfigurationSpaceFormulation()
+{
+  if (_configurationSoln != Teuchos::null)
+  {
+    _configurationSoln->setRHS(Teuchos::null);
+    _configurationSoln->setBC(Teuchos::null);
+    if (_configurationSoln->mesh() != Teuchos::null)
+    {
+      _configurationSoln->mesh()->unregisterSolution(_configurationSoln);
+    }
+    _configurationSoln = Teuchos::null;
+  }
+
+  if (_configurationSolnPrev != Teuchos::null)
+  {
+    if (_configurationSolnPrev->mesh() != Teuchos::null)
+    {
+      _configurationSolnPrev->mesh()->unregisterSolution(_configurationSolnPrev);
+    }
+    _configurationSolnPrev = Teuchos::null;
+  }
+
+  if (_configurationSolnPriorTime != Teuchos::null)
+  {
+    if (_configurationSolnPriorTime->mesh() != Teuchos::null)
+    {
+      _configurationSolnPriorTime->mesh()->unregisterSolution(_configurationSolnPriorTime);
+    }
+    _configurationSolnPriorTime = Teuchos::null;
+  }
+}
+
 EBasisFamily ConfigurationSpaceFormulation::basisFamily() const
 {
   return _basisFamily;
@@ -190,6 +222,11 @@ void ConfigurationSpaceFormulation::setDimensions(int spaceDim, int velocityDim)
 void ConfigurationSpaceFormulation::setExtraAcceleration(std::vector<FunctionPtr> extraAcceleration)
 {
   _extraAcceleration = extraAcceleration;
+}
+
+void ConfigurationSpaceFormulation::setCurrentSources(FunctionPtr rho, FunctionPtr Jx, FunctionPtr Jy, FunctionPtr Jz)
+{
+  // default: no-op; only formulations that consume explicit current sources should override
 }
 
 void ConfigurationSpaceFormulation::setExportViz(bool exportViz, const std::string outputDir)

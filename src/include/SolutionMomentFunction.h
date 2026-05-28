@@ -32,6 +32,26 @@ namespace Camellia
     void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
     void values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   };
+
+  class RelativisticFirstMomentFunction : public TFunction<double>
+  {
+    // Non-owning references are intentional here: these functions may be retained inside RHS terms for
+    // configuration-space solves, and strong ownership would unnecessarily retain the phase-space solution
+    // / mesh graph and its associated topology/observer objects.
+    SolutionPtr _phaseSpaceSolution;
+    VarPtr _fieldVar;
+    MeshPtr _configurationSpaceMesh;
+    double _c;
+    int _velocityComponent;
+  public:
+    RelativisticFirstMomentFunction(SolutionPtr phaseSpaceSolution, VarPtr fieldVar,
+                                    MeshPtr configurationSpaceMesh, double c,
+                                    int velocityComponent);
+
+    using TFunction<double>::values;
+    void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
+    void values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  };
 }
 
 #endif /* SolutionMomentFunction_h */

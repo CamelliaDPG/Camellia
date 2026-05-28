@@ -9,7 +9,10 @@
 
 #include "MimeticVlasovSpaceTimeFormulation.h"
 #include "VlasovSpaceTimeFormulation.h"
+#include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
+#include "ConfigurationSpaceFormulationMaxwell1D2V.h"
+#include "MeshTools.h"
 
 #include "BF.h"
 #include "MaxwellianFunction.h"
@@ -2484,6 +2487,147 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, SumFactorizedGramAssembly )
   {
     testSumFactorizedGramAssembly(out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticMaxwell1D2V_ZeroCurrentSymmetry )
+  {
+    const double q = TEST_Q;
+    const double m = TEST_M;
+    const double c = 2.0;
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vxElements = 1;
+    const int vyElements = 1;
+    const int H1Order = 2;
+    const int delta_k = 1;
+    const int numUniformRefinements = 0;
+    const bool usePeriodicBCs = false;
+    const bool useGradedSpatialMesh = false;
+
+    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(TEST_X0, TEST_X0 + TEST_XWIDTH, xElements, usePeriodicBCs);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(TEST_T0, TEST_TWIDTH, tElements);
+    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vxElements);
+    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
+    std::vector<double> velocitySpaceVertices_z;
+
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
+                                                                           configForm,
+                                                                           spatialMeshTopo,
+                                                                           temporalVertices,
+                                                                           velocitySpaceVertices_x,
+                                                                           velocitySpaceVertices_y,
+                                                                           velocitySpaceVertices_z,
+                                                                           H1Order, delta_k,
+                                                                           numUniformRefinements));
+
+    SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
+    SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
+    const bool restrictSideSetsToBoundary = true;
+    auto xLeftRightTag = relForm->createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, restrictSideSetsToBoundary);
+    relForm->addConfigurationSpaceBC(xLeftRightTag, relForm->VE_configurationSpaceTrace(), Function::zero());
+    relForm->addConfigurationSpaceBC(xLeftRightTag, configForm->A_hat(1), Function::zero());
+    relForm->addConfigurationSpaceBC(relForm->tagConfigurationInitialTime(), configForm->E_hat(0), Function::zero());
+
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr t = Function::yn(1);
+    FunctionPtr ux = MonomialFunction::xi_n(2, 1); // 1D1T2V => coords are x,t,ux,uy
+    FunctionPtr uy = MonomialFunction::xi_n(3, 1);
+    FunctionPtr f_exact = x * t * ux * uy;
+
+    relForm->setInitialAndInflowConditions(f_exact, f_exact);
+
+    std::map<int,FunctionPtr> projectionMap;
+    projectionMap[relForm->f()->ID()] = f_exact;
+    relForm->vlasovSolution()->projectOntoMesh(projectionMap);
+
+    relForm->configurationSpaceSolve();
+
+    auto configSoln = relForm->configurationSpaceSolution();
+    auto configMesh = relForm->configurationSpaceMesh();
+    FunctionPtr Ex = Function::solution(configForm->E_fieldVar(0), configSoln);
+    FunctionPtr By = Function::solution(configForm->B_fieldVar(1), configSoln);
+    FunctionPtr phi = Function::solution(configForm->VE_fieldVar(), configSoln);
+    FunctionPtr A = Function::solution(configForm->A_fieldVar(1), configSoln);
+
+    const double tol = 1e-10;
+    TEST_COMPARE(Ex->l2norm(configMesh), <=, tol);
+    TEST_COMPARE(By->l2norm(configMesh), <=, tol);
+    TEST_COMPARE(phi->l2norm(configMesh), <=, tol);
+    TEST_COMPARE(A->l2norm(configMesh), <=, tol);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticMaxwell1D2V_ZeroCurrentSymmetry_HangingNodeRefined )
+  {
+    const double q = TEST_Q;
+    const double m = TEST_M;
+    const double c = 2.0;
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vxElements = 1;
+    const int vyElements = 1;
+    const int H1Order = 2;
+    const int delta_k = 1;
+    const int numUniformRefinements = 0;
+    const bool usePeriodicBCs = false;
+
+    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(TEST_X0, TEST_X0 + TEST_XWIDTH, xElements, usePeriodicBCs);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(TEST_T0, TEST_TWIDTH, tElements);
+    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vxElements);
+    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
+    std::vector<double> velocitySpaceVertices_z;
+
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
+                                                                           configForm,
+                                                                           spatialMeshTopo,
+                                                                           temporalVertices,
+                                                                           velocitySpaceVertices_x,
+                                                                           velocitySpaceVertices_y,
+                                                                           velocitySpaceVertices_z,
+                                                                           H1Order, delta_k,
+                                                                           numUniformRefinements));
+
+    SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
+    SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
+    const bool restrictSideSetsToBoundary = true;
+    auto xLeftRightTag = relForm->createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, restrictSideSetsToBoundary);
+    relForm->addConfigurationSpaceBC(xLeftRightTag, relForm->VE_configurationSpaceTrace(), Function::zero());
+    relForm->addConfigurationSpaceBC(xLeftRightTag, configForm->A_hat(1), Function::zero());
+    relForm->addConfigurationSpaceBC(relForm->tagConfigurationInitialTime(), configForm->E_hat(0), Function::zero());
+
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr t = Function::yn(1);
+    FunctionPtr ux = MonomialFunction::xi_n(2, 1);
+    FunctionPtr uy = MonomialFunction::xi_n(3, 1);
+    FunctionPtr f_exact = x * t * ux * uy;
+
+    relForm->setInitialAndInflowConditions(f_exact, f_exact);
+
+    std::map<int,FunctionPtr> projectionMap;
+    projectionMap[relForm->f()->ID()] = f_exact;
+    relForm->vlasovSolution()->projectOntoMesh(projectionMap);
+
+    std::set<GlobalIndexType> oneCell{*relForm->vlasovMesh()->getActiveCellIDsGlobal().begin()};
+    relForm->vlasovMesh()->hRefine(oneCell);
+
+    // Reproject after refinement so the refined active mesh still represents the intended analytic phase-space function.
+    relForm->vlasovSolution()->projectOntoMesh(projectionMap);
+
+    relForm->configurationSpaceSolve();
+
+    auto configSoln = relForm->configurationSpaceSolution();
+    auto configMesh = relForm->configurationSpaceMesh();
+    FunctionPtr Ex = Function::solution(configForm->E_fieldVar(0), configSoln);
+    FunctionPtr By = Function::solution(configForm->B_fieldVar(1), configSoln);
+    FunctionPtr phi = Function::solution(configForm->VE_fieldVar(), configSoln);
+    FunctionPtr A = Function::solution(configForm->A_fieldVar(1), configSoln);
+
+    const double tol = 1e-10;
+    TEST_COMPARE(Ex->l2norm(configMesh), <=, tol);
+    TEST_COMPARE(By->l2norm(configMesh), <=, tol);
+    TEST_COMPARE(phi->l2norm(configMesh), <=, tol);
+    TEST_COMPARE(A->l2norm(configMesh), <=, tol);
   }
 
 // include tests against MimeticVlasovSpaceTimeFormulation in this compilation block:

@@ -1580,10 +1580,11 @@ void TFunction<Scalar>::importDataForOffRankCells(MeshPtr mesh, const std::set<G
   int myRequestCount = myRequest.size();
   auto epetraComm = MPIWrapper::EpetraComm(mesh->Comm());
   Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*epetraComm);
+  size_t globalRequestCount = MPIWrapper::sum(mesh->Comm(), myRequestCount);
   
   GlobalIndexTypeToCast* myRequestPtr = NULL;
   int *myRequestOwnersPtr = NULL;
-  if (myRequest.size() > 0)
+  if (globalRequestCount > 0)
   {
     myRequestPtr = &myRequest[0];
     myRequestOwnersPtr = &myRequestOwners[0];

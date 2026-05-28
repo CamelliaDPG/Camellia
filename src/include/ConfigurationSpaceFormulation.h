@@ -38,6 +38,7 @@ namespace Camellia
     std::string _vizOutputDir = "/tmp";
   public:
     ConfigurationSpaceFormulation(const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL);
+    virtual ~ConfigurationSpaceFormulation();
     
     //! Create the configuration-space mesh based on the provided space-time MeshTopology.
     virtual void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) = 0;
@@ -137,6 +138,9 @@ namespace Camellia
     
     //! Perform MPI communication, etc. to ensure that the B_i, E_i function values for a given configuration-space cell are available on each MPI rank that has a corresponding phase-space cell.
     virtual void updateConfigurationSpaceFunctions() = 0;
+    
+    //! Optional hook for formulations that want current-like source terms supplied explicitly rather than inferred directly from raw SolutionMoments.
+    virtual void setCurrentSources(FunctionPtr rho, FunctionPtr Jx, FunctionPtr Jy, FunctionPtr Jz);
     
     /** \brief Returns the basis family employed by the discretizations.  */
     EBasisFamily basisFamily() const;

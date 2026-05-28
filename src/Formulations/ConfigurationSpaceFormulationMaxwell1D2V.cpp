@@ -342,6 +342,15 @@ int ConfigurationSpaceFormulationMaxwell1D2V::maxMomentNumber()
   return 1;
 }
 
+void ConfigurationSpaceFormulationMaxwell1D2V::setCurrentSources(FunctionPtr rho, FunctionPtr Jx, FunctionPtr Jy, FunctionPtr Jz)
+{
+  auto rhs = RHS::rhs();
+  rhs->addTerm(rho * w_rho());
+  rhs->addTerm(-Jx / _eps0 * w_Jx());
+  rhs->addTerm( Jz / _eps0 * w_Jz());
+  _configurationSoln->setRHS(rhs);
+}
+
 void ConfigurationSpaceFormulationMaxwell1D2V::setRHSForTesting(FunctionPtr rho_over_eps0,
                                                                 FunctionPtr Jx_over_eps0,
                                                                 FunctionPtr Jz_over_eps0)

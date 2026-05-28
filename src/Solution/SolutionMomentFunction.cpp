@@ -13,6 +13,8 @@
 #include "SolutionMomentFunction.h"
 
 #include "Camellia_TensorIndices.h"
+#include "MonomialFunctions.h"
+#include "Solution.h"
 
 namespace
 {
@@ -145,7 +147,7 @@ namespace Camellia
         for (int dof = 0; dof < numDofs; dof++)
         {
           double weight = spatialBasisCoefficients(cellOrdinal,dof);
-          const double & basisValue = dv_transformedValues(physicalCellOrdinalInBasisCache,dof,pointOrdinal); //basisValues(dof,pointOrdinal);
+          const double & basisValue = dv_transformedValues(physicalCellOrdinalInBasisCache,dof,pointOrdinal);
           view(physicalCellOrdinalInBasisCache,pointOrdinal) += basisValue * weight;
         }
       });
@@ -162,11 +164,6 @@ namespace Camellia
       
       TEUCHOS_TEST_FOR_EXCEPTION(basisValues.numTensorDataFamilies() != 1, std::invalid_argument, "basisValues has unexpected number of TensorData families");
       
-//      auto tensorBasisValues = basisValues.tensorData();
-//
-//      auto spatialValues   = basisValues.tensorData().getTensorComponent(0);
-//      auto extrusionValues = basisValues.tensorData().getTensorComponent(1);
-      
       Kokkos::parallel_for("SolutionMomentFunction_values", policy,
       KOKKOS_LAMBDA (const array_index_type &physicalCellOrdinalInBasisCache, const array_index_type &physicalPointOrdinal, const array_index_type &extrusionPointOrdinal)
       {
@@ -176,13 +173,7 @@ namespace Camellia
           double weight = spatialBasisCoefficients(cellOrdinal,dof);
           int pointOrdinal;
           TensorIndices::setTensorOrdinal(pointOrdinal, physicalPointOrdinal, numPhysicalPoints, extrusionPointOrdinal);
-          const double & basisValue = dv_transformedValues(physicalCellOrdinalInBasisCache,dof,pointOrdinal); //basisValues(dof,pointOrdinal);
-//          const int fieldIndex = 0;
-//          const long long spatialFieldOrdinal   = tensorBasisValues.getTensorComponentIndex(0, fieldIndex, dof);
-//          const long long extrusionFieldOrdinal = tensorBasisValues.getTensorComponentIndex(1, fieldIndex, dof);
-//          const double & spatialBasisValue   = spatialValues(spatialFieldOrdinal,physicalPointOrdinal);
-//          const double & extrusionBasisValue = extrusionValues(extrusionFieldOrdinal,extrusionPointOrdinal);
-//          view(physicalCellOrdinalInBasisCache,physicalPointOrdinal,extrusionPointOrdinal) += spatialBasisValue * extrusionBasisValue * weight;
+          const double & basisValue = dv_transformedValues(physicalCellOrdinalInBasisCache,dof,pointOrdinal);
           view(physicalCellOrdinalInBasisCache,physicalPointOrdinal,extrusionPointOrdinal) += basisValue * weight;
         }
       });
@@ -233,8 +224,6 @@ namespace Camellia
   {
     TEUCHOS_FUNC_TIME_MONITOR("SolutionMomentFunction values()");
    
-    // this implementation adapted from BasisSumFunction
-    
     BasisPtr extrudedSpatialBasis = _solutionMoments.extrudedSpatialBasis();
     
     const int numDofs = extrudedSpatialBasis->getCardinality();
@@ -244,15 +233,11 @@ namespace Camellia
     bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
 
     constFCPtr transformedValues = basisCache->getTransformedValues(extrudedSpatialBasis, OP_VALUE, useCubPointsSideRefCell);
-    
-    // transformedValues has dimensions (C,F,P,[D,D])
-    // therefore, the rank of the sum is transformedValues->rank() - 3
     int rank = transformedValues->rank() - 3;
     TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
     auto dv_transformedValues = transformedValues->checkoutDeviceView();
     
     auto allSpatialBasisCoefficients  = _solutionMoments.getSpatialBasisCoefficients();
-    
     auto spatialBasisCoefficients  = Kokkos::subview(allSpatialBasisCoefficients, _momentEntryOrdinal, Kokkos::ALL(), Kokkos::ALL());
     auto physicalCellIDs           = _solutionMoments.physicalCellIDs();
     
@@ -274,7 +259,6 @@ namespace Camellia
       TEUCHOS_TEST_FOR_EXCEPTION(notFound,std::invalid_argument,"cellID not found");
       
       int cellOrdinal = matchingEntry - physicalCellIDs.begin();
-      
       cellOrdinalLookupHost(basisCacheCellOrdinal) = cellOrdinal;
       basisCacheCellOrdinal++;
     }
@@ -282,8 +266,7 @@ namespace Camellia
     
     if (modType == ASSIGN)
     {
-      Kokkos::deep_copy(values, 0.0); // initialize
-      // Note: values.rank() <= 6, because values.rank < transformedValues.rank
+      Kokkos::deep_copy(values, 0.0);
       using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
       Kokkos::parallel_for("SolutionMomentFunction_values", FieldContainer<double>::getMDRangePolicy6(values),
       KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
@@ -300,8 +283,7 @@ namespace Camellia
     else
     {
       auto basisSumValues = FieldContainer<double>::getDeviceView(values);
-      Kokkos::deep_copy(basisSumValues, 0.0); // initialize
-      // Note: values.rank() <= 6, because values.rank < transformedValues.rank
+      Kokkos::deep_copy(basisSumValues, 0.0);
       using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
       Kokkos::parallel_for("SolutionMomentFunction_values", FieldContainer<double>::getMDRangePolicy6(basisSumValues),
       KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
@@ -325,8 +307,166 @@ namespace Camellia
       });
       Allocation<double>::recordDeviceViewDeallocation(basisSumValues);
     }
-    transformedValues->checkinDeviceView(false); // false: don't copy back to host (has not changed)
+    transformedValues->checkinDeviceView(false);
     SharedScratchStorage<IndexType>::sharedScratchStorage().checkinScratchStorage(physicalCellOrdinalLookup);
+  }
+
+  RelativisticFirstMomentFunction::RelativisticFirstMomentFunction(SolutionMoments* drivingMoments,
+                                                                   SolutionPtr phaseSpaceSolution, VarPtr fieldVar,
+                                                                   MeshPtr configurationSpaceMesh, double c,
+                                                                   int velocityComponent)
+  :
+  TFunction<double>("RelativisticFirstMomentFunction"),
+  _drivingMoments(drivingMoments),
+  _phaseSpaceSolution(Teuchos::rcp(phaseSpaceSolution.get(), false)),
+  _fieldVar(fieldVar),
+  _configurationSpaceMesh(Teuchos::rcp(configurationSpaceMesh.get(), false)),
+  _c(c),
+  _velocityComponent(velocityComponent)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_drivingMoments == nullptr, std::invalid_argument, "drivingMoments may not be null");
+    TEUCHOS_TEST_FOR_EXCEPTION(_phaseSpaceSolution == Teuchos::null, std::invalid_argument, "phase-space solution is null");
+    TEUCHOS_TEST_FOR_EXCEPTION(_configurationSpaceMesh == Teuchos::null, std::invalid_argument, "configuration-space mesh is null");
+
+    MeshPtr phaseSpaceMesh = _phaseSpaceSolution->mesh();
+    const int configDim = _configurationSpaceMesh->getDimension();
+    const int phaseDim = phaseSpaceMesh->getDimension();
+    const int velocityDim = phaseDim - configDim;
+    TEUCHOS_TEST_FOR_EXCEPTION((_velocityComponent < 0) || (_velocityComponent >= velocityDim), std::invalid_argument,
+                               "velocity component out of range");
+
+    const int velocityStartComponent = configDim;
+    FunctionPtr u_i = MonomialFunction::xi_n(velocityStartComponent + _velocityComponent, 1);
+    FunctionPtr uSquared = Function::zero();
+    for (int d=0; d<velocityDim; d++)
+    {
+      auto u_d = MonomialFunction::xi_n(velocityStartComponent + d, 1);
+      uSquared = uSquared + u_d * u_d;
+    }
+    FunctionPtr gamma = Function::sqrtFunction(1.0 + uSquared / (_c * _c));
+    _weightedF = Function::solution(_fieldVar, _phaseSpaceSolution) * (u_i / gamma);
+
+    _weightedSolution = Solution::solution(phaseSpaceMesh);
+    _weightedMoments = Teuchos::rcp(new SolutionMoments(0, _weightedSolution, _fieldVar, _configurationSpaceMesh, -1));
+
+    if (velocityDim == 1)      _zeroMomentFunction = _weightedMoments->solutionMomentFunction(0);
+    else if (velocityDim == 2) _zeroMomentFunction = _weightedMoments->solutionMomentFunction(0,0);
+    else if (velocityDim == 3) _zeroMomentFunction = _weightedMoments->solutionMomentFunction(0,0,0);
+    else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension in RelativisticFirstMomentFunction");
+
+    _drivingMoments->registerUpdateListener(this);
+    update();
+  }
+
+  RelativisticFirstMomentFunction::~RelativisticFirstMomentFunction()
+  {
+    if (_drivingMoments != nullptr)
+    {
+      _drivingMoments->unregisterUpdateListener(this);
+    }
+
+    // Explicitly clear the weighted state before global Camellia teardown so that the
+    // owned weighted SolutionMoments object is destroyed in time to check its shared
+    // scratch storage back in.
+    _zeroMomentFunction = Teuchos::null;
+    _weightedMoments = Teuchos::null;
+    _weightedSolution = Teuchos::null;
+    _weightedF = Teuchos::null;
+    _drivingMoments = nullptr;
+  }
+
+  void RelativisticFirstMomentFunction::update()
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_weightedSolution == Teuchos::null, std::invalid_argument, "weighted solution is null");
+    TEUCHOS_TEST_FOR_EXCEPTION(_weightedMoments == Teuchos::null, std::invalid_argument, "weighted moments is null");
+    TEUCHOS_TEST_FOR_EXCEPTION(_weightedF == Teuchos::null, std::invalid_argument, "weighted function is null");
+
+    std::map<int, FunctionPtr> projectionMap;
+    projectionMap[_fieldVar->ID()] = _weightedF;
+    _weightedSolution->projectOntoMesh(projectionMap);
+    _weightedMoments->update();
+    _hasBeenUpdated = true;
+  }
+
+  void RelativisticFirstMomentFunction::values(Intrepid2::Data<double, Camellia::DeviceType> data, BasisCachePtr basisCache)
+  {
+    TEUCHOS_FUNC_TIME_MONITOR("RelativisticFirstMomentFunction values(Data,BasisCachePtr)");
+
+    const int functionRank = this->rank();
+    TEUCHOS_TEST_FOR_EXCEPTION(functionRank != 0, std::invalid_argument,
+                               "RelativisticFirstMomentFunction is expected to be scalar-valued");
+
+    const int numCells = basisCache->getPhysicalCubaturePoints().extent_int(0);
+    const int numPoints = basisCache->getPhysicalCubaturePoints().extent_int(1);
+
+    std::vector<int> viewDims {numCells, numPoints};
+    auto valuesView = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(
+      viewDims, "RelativisticFirstMomentFunction::values(Data,...) scratch view"
+    );
+
+    this->values(valuesView, ASSIGN, basisCache);
+
+    const int numPointComponents = data.rank() - functionRank - 1;
+    Kokkos::Array<int,Intrepid2::Parameters::MaxTensorComponents> pointBoundsArray;
+    for (int d=0; d<numPointComponents; d++)
+    {
+      pointBoundsArray[d] = data.extent_int(d + 1);
+    }
+    for (int d=numPointComponents; d<Intrepid2::Parameters::MaxTensorComponents; d++)
+    {
+      pointBoundsArray[d] = 1;
+    }
+
+    auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(valuesView);
+    Kokkos::parallel_for("RelativisticFirstMomentFunction copy DeviceView to Data", rangePolicy,
+    KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointOrdinal)
+    {
+      Intrepid2::TensorArgumentIterator pi(pointBoundsArray);
+      pi.setEnumerationIndex(pointOrdinal);
+
+      const int MAX_ARGS = Intrepid2::Parameters::MaxTensorComponents;
+      Kokkos::Array<int,MAX_ARGS> dataArgs;
+      for (int d=0; d<MAX_ARGS; d++)
+      {
+        dataArgs[d] = 0;
+      }
+      dataArgs[0] = cellOrdinal;
+      for (int d=1; d<numPointComponents+1; d++)
+      {
+        dataArgs[d] = pi.argument(d-1);
+      }
+
+      double* data_entry;
+      switch (numPointComponents + 1)
+      {
+        case 1: data_entry = &data.getWritableEntry(dataArgs[0]); break;
+        case 2: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1]); break;
+        case 3: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2]); break;
+        case 4: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3]); break;
+        case 5: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4]); break;
+        case 6: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5]); break;
+        case 7: data_entry = &data.getWritableEntry(dataArgs[0],dataArgs[1],dataArgs[2],dataArgs[3],dataArgs[4],dataArgs[5],dataArgs[6]); break;
+        default: INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE(true, std::invalid_argument, "unsupported numPointComponents in RelativisticFirstMomentFunction::values(Data,...)");
+      }
+
+      *data_entry = valuesView(cellOrdinal,pointOrdinal);
+    });
+
+    SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(valuesView);
+  }
+
+  void RelativisticFirstMomentFunction::values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_phaseSpaceSolution == Teuchos::null, std::invalid_argument, "phase-space solution is null");
+    TEUCHOS_TEST_FOR_EXCEPTION(_configurationSpaceMesh == Teuchos::null, std::invalid_argument, "configuration-space mesh is null");
+    TEUCHOS_TEST_FOR_EXCEPTION(basisCache->mesh().get() != _configurationSpaceMesh.get(), std::invalid_argument,
+                               "RelativisticFirstMomentFunction must be evaluated on its configuration-space mesh");
+    TEUCHOS_TEST_FOR_EXCEPTION(!_hasBeenUpdated, std::invalid_argument,
+                               "RelativisticFirstMomentFunction values() called before the driving SolutionMoments update initialized weighted moments");
+    TEUCHOS_TEST_FOR_EXCEPTION(_zeroMomentFunction == Teuchos::null, std::invalid_argument,
+                               "zero moment function is null");
+
+    _zeroMomentFunction->values(values, modType, basisCache);
   }
 
 } // namespace Camellia

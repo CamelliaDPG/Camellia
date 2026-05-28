@@ -14,6 +14,7 @@
 #include "AbsFunction.h"
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
+#include "SolutionMomentFunction.h"
 
 using namespace Camellia;
 using std::vector;
@@ -229,4 +230,70 @@ FunctionPtr RelativisticVlasovSpaceTimeFormulation::v_i(const int zeroBasedComp)
   
   FunctionPtr gammaFxn = gamma();
   return ux / gammaFxn;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::relativisticFirstMoment(const int zeroBasedVelocityComponent, const int speciesOrdinal)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((speciesOrdinal < 0) || (speciesOrdinal >= numSpecies()), std::invalid_argument,
+                             "species ordinal out of range");
+  std::pair<int,int> key{zeroBasedVelocityComponent, speciesOrdinal};
+  auto cached = _relativisticFirstMomentFunctions.find(key);
+  if (cached != _relativisticFirstMomentFunctions.end())
+  {
+    return cached->second;
+  }
+
+  auto drivingMoments = solutionMoments(speciesOrdinal);
+  auto firstMoment = Teuchos::rcp(new RelativisticFirstMomentFunction(drivingMoments.get(),
+                                                                      vlasovSolution(), f(speciesOrdinal),
+                                                                      configurationSpaceMesh(), _c,
+                                                                      zeroBasedVelocityComponent));
+  _relativisticFirstMomentFunctions[key] = firstMoment;
+  return firstMoment;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentX() const
+{
+  auto nonConstThis = const_cast<RelativisticVlasovSpaceTimeFormulation*>(this);
+  FunctionPtr Jx = Function::zero();
+  for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+  {
+    Jx = Jx + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(0, speciesOrdinal);
+  }
+  return Jx;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentY() const
+{
+  if (velocityDim() < 2) return Function::zero();
+  auto nonConstThis = const_cast<RelativisticVlasovSpaceTimeFormulation*>(this);
+  FunctionPtr Jy = Function::zero();
+  for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+  {
+    Jy = Jy + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(1, speciesOrdinal);
+  }
+  return Jy;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentZ() const
+{
+  auto nonConstThis = const_cast<RelativisticVlasovSpaceTimeFormulation*>(this);
+  FunctionPtr Jz = Function::zero();
+  if (velocityDim() == 2)
+  {
+    for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+    {
+      Jz = Jz + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(1, speciesOrdinal);
+    }
+    return Jz;
+  }
+  else if (velocityDim() >= 3)
+  {
+    for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+    {
+      Jz = Jz + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(2, speciesOrdinal);
+    }
+    return Jz;
+  }
+  return Function::zero();
 }

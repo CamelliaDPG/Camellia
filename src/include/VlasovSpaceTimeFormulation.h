@@ -465,6 +465,12 @@ public:
   /** \brief  Returns a Function representing the specified velocity-space coordinate.*/
   virtual FunctionPtr v_i(const int zeroBasedComp) const;
   
+  //! Current-source helper used by Maxwell-like configuration-space formulations; default implementation uses raw first moments.
+  virtual FunctionPtr currentDensity() const;
+  virtual FunctionPtr currentX() const;
+  virtual FunctionPtr currentY() const;
+  virtual FunctionPtr currentZ() const;
+  
   void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
                                                               double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);
 };

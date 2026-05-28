@@ -20,6 +20,7 @@
 #include "MaxwellianFunction.h"
 #include "MonomialFunctions.h"
 #include "PhaseSpaceVisualization.h"
+#include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "SolutionMoments.h"
 #include "SolutionMomentFunction.h"
 #include "SubExtrudedMeshTopology.h"
@@ -829,10 +830,13 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
 
   FunctionPtr momentFxn = solnMoments.solutionMomentFunction(0); // integral over vy
 
-  const IndexType cellID = 0;
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, cellID);
-
-  testScalarFunctionDataPathMatchesViewPath(momentFxn, basisCache, 1e-14, out, success);
+  const auto & myCells = physicalMesh->cellIDsInPartition();
+  if (!myCells.empty())
+  {
+    const IndexType cellID = *myCells.begin();
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, cellID);
+    testScalarFunctionDataPathMatchesViewPath(momentFxn, basisCache, 1e-14, out, success);
+  }
 }
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
@@ -1537,7 +1541,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
     
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, pCoarsen, tol, out, success);
   }
-
+  
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V )
   {
     const int numPhysicalDims  = 1;
@@ -1755,7 +1759,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xvx2_1D1T2V_Serendipity )
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xvx2vy_1D1T2V_Serendipity )
   {
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 2;
@@ -2833,4 +2837,120 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
       }
     }
   }
+void testRelativisticFirstMomentZeroBySymmetry(const int numPhysicalDims, const int numVelocityDims,
+                                               const bool useSpaceTime, const bool refine,
+                                               const bool createHangingNodes,
+                                               const int velocityComponentToMeasure,
+                                               const int oddComponentInF,
+                                               Teuchos::FancyOStream &out, bool &success)
+{
+  const int delta_k = 0;
+  const int polyOrder = 2;
+  const bool allowPruning = false;
+  const double c = 2.0;
+
+  int numTimeDimensions = useSpaceTime ? 1 : 0;
+  std::vector<int> H1Order(1 + numVelocityDims + numTimeDimensions, polyOrder + 1);
+  auto meshTopo = makeTestMeshTopology(numPhysicalDims, numVelocityDims, useSpaceTime,
+                                       -2.0, 4.0, 1);
+
+  VarFactoryPtr vf = VarFactory::varFactory();
+  auto f = vf->fieldVar("f");
+  auto v = vf->testVar("v", HGRAD);
+  BFPtr bf = BF::bf(vf);
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
+  MeshPtr phaseMesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
+
+  std::vector<int> physicalH1Order{polyOrder + 1};
+  MeshPtr configMesh = MeshFactory::minRuleMesh(meshTopo->physicalMeshTopology(), bf, physicalH1Order, delta_k, comm, allowPruning);
+  PhysicalMeshUpdater::registerForUpdates(phaseMesh, configMesh);
+
+  if (refine)
+  {
+    if (createHangingNodes)
+    {
+      std::set<GlobalIndexType> oneCell{*phaseMesh->getActiveCellIDsGlobal().begin()};
+      phaseMesh->hRefine(oneCell);
+    }
+    else
+    {
+      std::set<GlobalIndexType> allCells = phaseMesh->getActiveCellIDsGlobal();
+      phaseMesh->hRefine(allCells);
+    }
+  }
+
+  const int configDim = numPhysicalDims + (useSpaceTime ? 1 : 0);
+  FunctionPtr xFactor = Function::constant(1.0);
+  if (numPhysicalDims > 0)
+  {
+    xFactor = Function::xn(1);
+  }
+  if (useSpaceTime)
+  {
+    xFactor = xFactor * Function::yn(1);
+  }
+
+  FunctionPtr oddVelocity = MonomialFunction::xi_n(configDim + oddComponentInF, 1);
+  FunctionPtr phaseSpaceF = xFactor * oddVelocity;
+
+  SolutionPtr phaseSolution = Solution::solution(phaseMesh);
+  std::map<int, FunctionPtr> phaseMap;
+  phaseMap[f->ID()] = phaseSpaceF;
+  phaseSolution->projectOntoMesh(phaseMap);
+
+  auto drivingMoments = Teuchos::rcp(new SolutionMoments(0, phaseSolution, f, configMesh, -1));
+  FunctionPtr momentFxn = Teuchos::rcp(new RelativisticFirstMomentFunction(drivingMoments.get(), phaseSolution, f, configMesh, c, velocityComponentToMeasure));
+  drivingMoments->update();
+
+  const double error = momentFxn->l2norm(configMesh);
+  const double tol = 1e-12;
+  out << "Relativistic symmetry test error = " << error << std::endl;
+  TEST_COMPARE(error, <=, tol);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vx_Unrefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, false, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vx_UniformRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vy_Unrefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, false, false, 1, 0, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vy_UniformRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, false, 1, 0, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D3V_ZeroBySymmetry )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 3, false, false, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_2D2V_ZeroBySymmetry )
+{
+  testRelativisticFirstMomentZeroBySymmetry(2, 2, false, false, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_3D3V_ZeroBySymmetry )
+{
+  testRelativisticFirstMomentZeroBySymmetry(3, 3, false, false, false, 2, 0, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vx_HangingNodeRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, true, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vy_HangingNodeRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, true, 1, 0, out, success);
+}
+
 } // end anonymous namespace

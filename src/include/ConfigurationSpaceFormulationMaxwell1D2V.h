@@ -80,6 +80,9 @@ namespace Camellia
     //! maximum moment number (starting from 0 for the unweighted integral over velocity space) required by the ConfigurationSpaceFormulation.
     virtual int maxMomentNumber() override;
     
+    //! Allows the owning formulation to provide explicit charge/current source functions.
+    virtual void setCurrentSources(FunctionPtr rho, FunctionPtr Jx, FunctionPtr Jy, FunctionPtr Jz) override;
+    
     //! Perform MPI communication, etc. to ensure that the B_i, E_i function values for a given configuration-space cell are available on each MPI rank that has a corresponding phase-space cell.
     virtual void updateConfigurationSpaceFunctions() override;
     

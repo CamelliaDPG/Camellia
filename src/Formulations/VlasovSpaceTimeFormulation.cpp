@@ -11,6 +11,7 @@
 
 #include "VlasovSpaceTimeFormulation.h"
 #include "CamelliaMemoryTools.h"
+#include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
 #include "ExtrudedMeshTopology.h"
@@ -683,6 +684,22 @@ namespace
     }
   };
 
+  void applyExplicitCurrentSourcesIfSupported(VlasovSpaceTimeFormulation &form)
+  {
+    auto configurationFormulation = form.configurationSpaceFormulation();
+    auto maxwell1D2V = Teuchos::rcp_dynamic_cast<ConfigurationSpaceFormulationMaxwell1D2V>(configurationFormulation);
+    if (maxwell1D2V == Teuchos::null)
+    {
+      return;
+    }
+
+    FunctionPtr rho = form.currentDensity();
+    FunctionPtr Jx  = form.currentX();
+    FunctionPtr Jy  = form.currentY();
+    FunctionPtr Jz  = form.currentZ();
+    maxwell1D2V->setCurrentSources(rho, Jx, Jy, Jz);
+  }
+
   class VlasovSpaceTimeIP : public TIP<double>
   {
     vector<FunctionPtr> _acceleration;
@@ -1224,8 +1241,12 @@ void VlasovSpaceTimeFormulation::configurationSpaceSolve()
     double n0;
     if (_enforceQuasiNeutrality)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies > 1, std::invalid_argument, "quasi-neutrality enforcement assumes single species");
-      FunctionPtr zeroMoment   = _solutionMoments[0]->solutionMomentFunction(0);
+      // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
+      FunctionPtr zeroMoment;
+      if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
+      else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
+      else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
+      else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
       auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
       const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
       const double f_integral  = zeroMoment->integrate(configurationMesh);
@@ -1237,6 +1258,9 @@ void VlasovSpaceTimeFormulation::configurationSpaceSolve()
     }
     _n0->setValue(n0);
   }
+
+  applyExplicitCurrentSourcesIfSupported(*this);
+
   _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
 }
@@ -2133,7 +2157,11 @@ void VlasovSpaceTimeFormulation::solve()
       if (_enforceQuasiNeutrality)
       {
         // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
-        FunctionPtr zeroMoment   = _solutionMoments[0]->solutionMomentFunction(0);
+        FunctionPtr zeroMoment;
+        if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
+        else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
+        else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
+        else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
         auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
         const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
         const double f_integral  = zeroMoment->integrate(configurationMesh);
@@ -2145,6 +2173,7 @@ void VlasovSpaceTimeFormulation::solve()
       }
       _n0->setValue(n0);
     }
+    applyExplicitCurrentSourcesIfSupported(*this);
     _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
     _configurationSpaceFormulation->updateConfigurationSpaceFunctions(); // update/MPI-communicate (Poisson/Maxwell) values to make available for phase-space solution
     
@@ -2808,6 +2837,42 @@ FunctionPtr VlasovSpaceTimeFormulation::v_i(int compZeroBased) const
 {
   int vx_component_zero_based = _spaceDim + 1; // plus 1 for temporal dimension
   return MonomialFunction::xi_n(vx_component_zero_based + compZeroBased, 1);
+}
+
+FunctionPtr VlasovSpaceTimeFormulation::currentDensity() const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies != 1, std::invalid_argument, "currentDensity() currently assumes single-species use");
+  FunctionPtr n0 = _n0;
+  if (_velocityDim == 1)      return _q[0] * (_solutionMoments[0]->solutionMomentFunction(0) - n0);
+  else if (_velocityDim == 2) return _q[0] * (_solutionMoments[0]->solutionMomentFunction(0,0) - n0);
+  else if (_velocityDim == 3) return _q[0] * (_solutionMoments[0]->solutionMomentFunction(0,0,0) - n0);
+  else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
+}
+
+FunctionPtr VlasovSpaceTimeFormulation::currentX() const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies != 1, std::invalid_argument, "currentX() currently assumes single-species use");
+  if (_velocityDim == 1)      return _q[0] * _solutionMoments[0]->solutionMomentFunction(1);
+  else if (_velocityDim == 2) return _q[0] * _solutionMoments[0]->solutionMomentFunction(1,0);
+  else if (_velocityDim == 3) return _q[0] * _solutionMoments[0]->solutionMomentFunction(1,0,0);
+  else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
+}
+
+FunctionPtr VlasovSpaceTimeFormulation::currentY() const
+{
+  if (_spaceDim < 2) return Function::zero();
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies != 1, std::invalid_argument, "currentY() currently assumes single-species use");
+  if (_velocityDim == 2)      return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,1);
+  else if (_velocityDim == 3) return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,1,0);
+  else return Function::zero();
+}
+
+FunctionPtr VlasovSpaceTimeFormulation::currentZ() const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies != 1, std::invalid_argument, "currentZ() currently assumes single-species use");
+  if (_velocityDim == 3) return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,0,1);
+  else if (_velocityDim == 2) return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,1);
+  else return Function::zero();
 }
 
 VarPtr VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()
