@@ -223,6 +223,22 @@ int SolutionMoments::localCellOrdinal(const IndexType &cellID) const
   }
 }
 
+void SolutionMoments::registerUpdateListener(SolutionMomentsUpdateListener* listener)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(listener == nullptr, std::invalid_argument, "listener may not be null");
+  auto existing = std::find(_updateListeners.begin(), _updateListeners.end(), listener);
+  if (existing == _updateListeners.end())
+  {
+    _updateListeners.push_back(listener);
+  }
+}
+
+void SolutionMoments::unregisterUpdateListener(SolutionMomentsUpdateListener* listener)
+{
+  auto newEnd = std::remove(_updateListeners.begin(), _updateListeners.end(), listener);
+  _updateListeners.erase(newEnd, _updateListeners.end());
+}
+
 int SolutionMoments::maxMomentNumber() const
 {
   return _maxMomentNumber;
@@ -403,6 +419,12 @@ void SolutionMoments::update()
         _physicalMeshProlongators[prolongatorKey]->apply(_spatialBasisCoefficients, momentsForDeltaP->getSpatialBasisCoefficients(), sumInto);
       }
     }
+  }
+  
+  for (auto listener : _updateListeners)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(listener == nullptr, std::invalid_argument, "registered SolutionMoments update listener is null");
+    listener->update();
   }
 }
 

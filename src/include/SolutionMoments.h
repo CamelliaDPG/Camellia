@@ -15,7 +15,14 @@
 
 namespace Camellia
 {
-  class SolutionMoments
+  class SolutionMomentsUpdateListener
+  {
+  public:
+    virtual ~SolutionMomentsUpdateListener() {}
+    virtual void update() = 0;
+  };
+
+  class SolutionMoments : public SolutionMomentsUpdateListener
   {
     using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
     using Prolongator = Intrepid2::HierarchicalBasisProlongator<DeviceType,double,double>;
@@ -46,6 +53,7 @@ namespace Camellia
     std::map<std::pair<int,int>,Teuchos::RCP<Prolongator>> _physicalMeshProlongators; // keys are deltaP values relative to initialH1Order[0] of the physicalMesh, for {coarse basis, fine basis}.  (Fine basis being the actual physical-mesh basis.)
     
     std::map<int,Teuchos::RCP<SolutionMomentsForPolyOrder> > _momentsForDeltaP; // keys are deltaP values
+    std::vector<SolutionMomentsUpdateListener*> _updateListeners; // non-owning
   public:
     SolutionMoments(const int &maxMomentNumber, SolutionPtr phaseSpaceSoln, VarPtr fieldVar, MeshPtr physicalMesh,
                     int survivingExtrusionDimension = -1);
@@ -82,8 +90,14 @@ namespace Camellia
     
     MeshPtr phaseSpaceMesh();
     
+    //! Register a non-owning listener to be notified whenever this SolutionMoments object updates.
+    void registerUpdateListener(SolutionMomentsUpdateListener* listener);
+    
+    //! Unregister a previously registered non-owning listener.
+    void unregisterUpdateListener(SolutionMomentsUpdateListener* listener);
+    
     //! recomputes all moments on (extruded) spatial mesh.  MPI collective method.
-    void update();
+    void update() override;
     
     int maxMomentNumber() const;
     int numMomentEntries() const;
