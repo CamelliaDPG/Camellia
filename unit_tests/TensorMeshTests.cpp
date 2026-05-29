@@ -15,6 +15,13 @@ TensorVarPtr makeFieldTensorVar(const std::string &name)
   return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{vx, vt}));
 }
 
+TensorVarPtr makeTraceTensorVar(const std::string &name, int traceComponentOrdinal)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt}, traceComponentOrdinal));
+}
+
 Teuchos::RCP<TensorMeshTopology> makeSimpleTensorTopology()
 {
   auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
@@ -94,6 +101,55 @@ TEUCHOS_UNIT_TEST( TensorMesh, EffectivePolyOrderCombinesDefaultsDeltasAndTopolo
   TEST_EQUALITY(tensorMesh.effectivePolyOrder(trialDisc, cellT, 1, false), 3 + 1 + 1);
   TEST_EQUALITY(tensorMesh.effectivePolyOrder(testDisc, cellX, 0, true), 2 + 1 + 1 + 2);
   TEST_EQUALITY(tensorMesh.effectivePolyOrder(testDisc, cellT, 1, true), 3 + 1 + 0 + 2);
+}
+
+TEUCHOS_UNIT_TEST( TensorMesh, TraceDiscretizationsCanBeRegistered )
+{
+  auto topology = makeSimpleTensorTopology();
+  auto factory = TensorVarFactory::factory();
+  auto basisFamily = BasisFamily::hierarchicalBasisFamily();
+  TensorMesh tensorMesh(topology, factory, basisFamily, 1, 1);
+
+  auto trialVar = makeTraceTensorVar("uhat", 0);
+  auto testVar = makeTraceTensorVar("vhat", 1);
+
+  auto trialDisc = Teuchos::rcp(new TensorVarDiscretization(trialVar, Teuchos::null, std::vector<int>{0,1}));
+  auto testDisc = Teuchos::rcp(new TensorVarDiscretization(testVar, Teuchos::null, std::vector<int>{1,0}));
+
+  tensorMesh.addTrialDiscretization(trialDisc);
+  tensorMesh.addTestDiscretization(testDisc);
+
+  TEST_ASSERT(tensorMesh.hasTrialVar("uhat"));
+  TEST_ASSERT(tensorMesh.hasTestVar("vhat"));
+  TEST_EQUALITY(tensorMesh.trialDiscretization("uhat")->tensorVar()->traceComponentOrdinal(), 0);
+  TEST_EQUALITY(tensorMesh.testDiscretization("vhat")->tensorVar()->traceComponentOrdinal(), 1);
+}
+
+TEUCHOS_UNIT_TEST( TensorMesh, CreateDofLayoutForTraceVariables )
+{
+  auto topology = makeSimpleTensorTopology();
+  auto factory = TensorVarFactory::factory();
+  auto basisFamily = BasisFamily::hierarchicalBasisFamily();
+  TensorMesh tensorMesh(topology, factory, basisFamily, 1, 1);
+
+  auto trialVar = makeTraceTensorVar("uhat", 0);
+  auto testVar = makeTraceTensorVar("vhat", 1);
+  auto trialDisc = Teuchos::rcp(new TensorVarDiscretization(trialVar, Teuchos::null, std::vector<int>{0,0}));
+  auto testDisc = Teuchos::rcp(new TensorVarDiscretization(testVar, Teuchos::null, std::vector<int>{0,0}));
+
+  tensorMesh.addTrialDiscretization(trialDisc);
+  tensorMesh.addTestDiscretization(testDisc);
+
+  auto dofLayout = tensorMesh.createDofLayout();
+  TEST_ASSERT(dofLayout != Teuchos::null);
+
+  const auto &uhatLayout = dofLayout->layout("uhat", TENSOR_TRIAL_SPACE);
+  const auto &vhatLayout = dofLayout->layout("vhat", TENSOR_TEST_SPACE);
+
+  TEST_ASSERT(uhatLayout.isTraceSupportComponent(0));
+  TEST_ASSERT(vhatLayout.isTraceSupportComponent(1));
+  TEST_EQUALITY(uhatLayout.componentCardinality(0), topology->componentMeshTopology(0)->vertexCount());
+  TEST_EQUALITY(vhatLayout.componentCardinality(1), topology->componentMeshTopology(1)->vertexCount());
 }
 
 TEUCHOS_UNIT_TEST( TensorMesh, RejectRankMismatchBetweenDiscretizationAndTopology )

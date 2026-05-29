@@ -171,7 +171,6 @@ bool TensorMeshTopology::isBoundarySide(const TensorSide &side) const
     const auto &incidentCell = componentTopo->activeCells()[incidentCellOrdinal];
     if (incidentCell == componentCell) continue;
 
-    // same root and sharing the selected endpoint means this is a neighbor candidate across the side.
     if (incidentCell.rootOrdinal() == componentCell.rootOrdinal())
     {
       sameRootNeighborFound = true;
@@ -180,9 +179,6 @@ bool TensorMeshTopology::isBoundarySide(const TensorSide &side) const
   }
 
   if (sameRootNeighborFound) return false;
-
-  // For nonperiodic topologies, the remaining case is a boundary endpoint.
-  // For periodic topologies, current ComponentMeshTopology1D periodicity is state-only, so this remains a conservative topology-side interpretation for now.
   return true;
 }
 
@@ -263,4 +259,72 @@ TensorMeshTopology TensorMeshTopology::slice(const std::map<int, IndexType> &fix
   }
 
   return TensorMeshTopology(retainedComponents, slicedTuples, retainedOriginalOrdinals);
+}
+
+std::vector<int> TensorMeshTopology::retainedComponentOrdinalsForSkeleton(int orthogonalComponentOrdinal) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((orthogonalComponentOrdinal < 0) || (orthogonalComponentOrdinal >= componentCount()), std::invalid_argument,
+                             "TensorMeshTopology::retainedComponentOrdinalsForSkeleton received an invalid component ordinal.");
+
+  std::vector<int> retainedOrdinals;
+  retainedOrdinals.reserve(componentCount() - 1);
+  for (int d=0; d<componentCount(); d++)
+  {
+    if (d != orthogonalComponentOrdinal)
+    {
+      retainedOrdinals.push_back(d);
+    }
+  }
+  return retainedOrdinals;
+}
+
+TensorMeshTopology::TensorSkeleton TensorMeshTopology::tensorSkeleton(int orthogonalComponentOrdinal) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((orthogonalComponentOrdinal < 0) || (orthogonalComponentOrdinal >= componentCount()), std::invalid_argument,
+                             "TensorMeshTopology::tensorSkeleton received an invalid component ordinal.");
+  TEUCHOS_TEST_FOR_EXCEPTION(componentCount() < 2, std::invalid_argument,
+                             "TensorMeshTopology::tensorSkeleton requires at least two tensor components.");
+
+  const auto componentTopo = _components[orthogonalComponentOrdinal];
+  std::vector<IndexType> vertexOrdinals(componentTopo->vertexCount());
+  for (IndexType vertexOrdinal=0; vertexOrdinal<componentTopo->vertexCount(); vertexOrdinal++)
+  {
+    vertexOrdinals[vertexOrdinal] = vertexOrdinal;
+  }
+
+  const auto retainedOrdinals = retainedComponentOrdinalsForSkeleton(orthogonalComponentOrdinal);
+  std::vector<TensorSkeletonEntity> entities;
+
+  for (IndexType vertexOrdinal=0; vertexOrdinal<componentTopo->vertexCount(); vertexOrdinal++)
+  {
+    // The current tensor-native skeleton semantics are slice-based: for each active vertex in the
+    // orthogonal component, we enumerate the retained active-cell tuples in the corresponding
+    // vertex-fixed slice. As a result, an interior component vertex may contribute multiple tensor
+    // skeleton entities, one for each incident retained tuple, whereas a boundary vertex typically
+    // contributes fewer. This is the intended structural support model for issue #300 and leaves a
+    // direct path to later trace-term realization on lower-dimensional tensor-product domains.
+    TensorMeshTopology sliceTopo = slice({{orthogonalComponentOrdinal, vertexOrdinal}});
+    for (const auto &retainedTuple : sliceTopo.activeCellTuples())
+    {
+      entities.push_back(TensorSkeletonEntity(orthogonalComponentOrdinal, vertexOrdinal, retainedTuple));
+    }
+  }
+
+  return TensorSkeleton(orthogonalComponentOrdinal, retainedOrdinals, vertexOrdinals, entities);
+}
+
+bool TensorMeshTopology::isBoundarySkeletonEntity(const TensorSkeletonEntity &entity) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((entity.orthogonalComponentOrdinal() < 0) || (entity.orthogonalComponentOrdinal() >= componentCount()), std::invalid_argument,
+                             "TensorMeshTopology::isBoundarySkeletonEntity received an invalid orthogonal component ordinal.");
+
+  const auto componentTopo = _components[entity.orthogonalComponentOrdinal()];
+  const IndexType vertexOrdinal = entity.vertexOrdinal();
+  TEUCHOS_TEST_FOR_EXCEPTION((vertexOrdinal < 0) || (vertexOrdinal >= componentTopo->vertexCount()), std::invalid_argument,
+                             "TensorMeshTopology::isBoundarySkeletonEntity received an invalid vertex ordinal.");
+
+  const IndexType begin = componentTopo->vertexToCellOffsetHost(vertexOrdinal);
+  const IndexType end   = componentTopo->vertexToCellOffsetHost(vertexOrdinal + 1);
+  const IndexType incidentCellCount = end - begin;
+  return incidentCellCount <= 1;
 }

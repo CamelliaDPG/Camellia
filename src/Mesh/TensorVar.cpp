@@ -33,10 +33,26 @@ void TensorVar::validateConstructorInputs() const
                                  "TensorVar with kind TENSOR_TRACE requires component Vars of TRACE or FLUX type.");
     }
   }
+
+  if (_kind == TENSOR_FIELD)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_traceComponentOrdinal != -1, std::invalid_argument,
+                               "TensorVar field variables must not carry a trace component ordinal.");
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_traceComponentOrdinal < 0, std::invalid_argument,
+                               "TensorVar trace variables require an explicit trace component ordinal.");
+    TEUCHOS_TEST_FOR_EXCEPTION(_traceComponentOrdinal >= static_cast<int>(_componentVars.size()), std::invalid_argument,
+                               "TensorVar trace component ordinal out of range.");
+  }
 }
 
-TensorVar::TensorVar(const std::string &name, TensorVarKind kind, const std::vector<VarPtr> &componentVars)
-: _name(name), _kind(kind), _componentVars(componentVars)
+TensorVar::TensorVar(const std::string &name,
+                     TensorVarKind kind,
+                     const std::vector<VarPtr> &componentVars,
+                     int traceComponentOrdinal)
+: _name(name), _kind(kind), _componentVars(componentVars), _traceComponentOrdinal(traceComponentOrdinal)
 {
   validateConstructorInputs();
 }
@@ -59,6 +75,20 @@ bool TensorVar::isField() const
 bool TensorVar::isTrace() const
 {
   return _kind == TENSOR_TRACE;
+}
+
+bool TensorVar::hasTraceComponentOrdinal() const
+{
+  return _traceComponentOrdinal >= 0;
+}
+
+int TensorVar::traceComponentOrdinal() const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!isTrace(), std::invalid_argument,
+                             "TensorVar::traceComponentOrdinal is only valid for trace variables.");
+  TEUCHOS_TEST_FOR_EXCEPTION(_traceComponentOrdinal < 0, std::invalid_argument,
+                             "TensorVar::traceComponentOrdinal requires a valid trace component ordinal.");
+  return _traceComponentOrdinal;
 }
 
 int TensorVar::componentCount() const
@@ -86,5 +116,5 @@ TensorVarPtr TensorVar::copyWithNewName(const std::string &newName) const
     VarPtr copiedVar = Teuchos::rcp(new Var(*oldVar));
     copiedComponentVars.push_back(copiedVar);
   }
-  return Teuchos::rcp(new TensorVar(newName, _kind, copiedComponentVars));
+  return Teuchos::rcp(new TensorVar(newName, _kind, copiedComponentVars, _traceComponentOrdinal));
 }

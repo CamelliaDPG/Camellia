@@ -3,6 +3,7 @@
 #include "Var.h"
 
 #include <algorithm>
+#include <functional>
 #include <stdexcept>
 
 #include "Teuchos_TestForException.hpp"
@@ -41,6 +42,11 @@ TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const Tenso
   const int componentCount = discretization->componentCount();
   std::vector<int> componentCardinalities(componentCount, 0);
   std::vector<IndexType> componentStrides(componentCount, 1);
+  std::vector<TensorComponentSupportKind> componentSupportKinds(componentCount, TENSOR_VOLUME_BASIS_SUPPORT);
+
+  const auto tensorVar = discretization->tensorVar();
+  const bool isTrace = tensorVar->isTrace();
+  const int traceComponentOrdinal = tensorVar->hasTraceComponentOrdinal() ? tensorVar->traceComponentOrdinal() : -1;
 
   for (int d=0; d<componentCount; d++)
   {
@@ -49,12 +55,26 @@ TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const Tenso
     TEUCHOS_TEST_FOR_EXCEPTION(activeCells.empty(), std::invalid_argument,
                                "TensorDofLayout requires at least one active cell in each component topology.");
 
-    const ComponentCellID1D &sampleCell = activeCells[0];
-    const int effectivePolyOrder = _tensorMesh->effectivePolyOrder(discretization, sampleCell, d, role == TENSOR_TEST_SPACE);
-    const auto var = discretization->tensorVar()->componentVar(d);
-    auto basisFamily = _tensorMesh->effectiveBasisFamily(discretization);
-    auto basis = basisFamily->getBasis(CellTopology::line(), efsForSpace(var->space()), effectivePolyOrder);
-    componentCardinalities[d] = basis->getCardinality();
+    if (isTrace && (d == traceComponentOrdinal))
+    {
+      componentSupportKinds[d] = TENSOR_TRACE_SKELETON_SUPPORT;
+      // For issue #300, the distinguished trace component contributes a skeleton-support extent
+      // rather than a volume basis cardinality. In the present implementation we use the active
+      // component-vertex extent as the trace-local support factor. This gives a coherent first
+      // ordinal/layout interpretation while leaving room for later trace-basis and side-local
+      // operator realization work to refine how those support entities are used numerically.
+      componentCardinalities[d] = componentTopo->vertexCount();
+    }
+    else
+    {
+      const ComponentCellID1D &sampleCell = activeCells[0];
+      const int effectivePolyOrder = _tensorMesh->effectivePolyOrder(discretization, sampleCell, d, role == TENSOR_TEST_SPACE);
+      const auto var = tensorVar->componentVar(d);
+      auto basisFamily = _tensorMesh->effectiveBasisFamily(discretization);
+      auto basis = basisFamily->getBasis(CellTopology::line(), efsForSpace(var->space()), effectivePolyOrder);
+      componentCardinalities[d] = basis->getCardinality();
+      componentSupportKinds[d] = TENSOR_VOLUME_BASIS_SUPPORT;
+    }
   }
 
   IndexType runningStride = 1;
@@ -64,7 +84,8 @@ TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const Tenso
     runningStride *= componentCardinalities[d];
   }
 
-  return VariableLayout(discretization->tensorVar()->name(), role, componentCardinalities, componentStrides, runningStride);
+  return VariableLayout(discretization->tensorVar()->name(), role, componentCardinalities, componentStrides,
+                        componentSupportKinds, traceComponentOrdinal, runningStride);
 }
 
 TensorDofLayout::TensorDofLayout(TensorMeshPtr tensorMesh)

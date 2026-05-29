@@ -216,6 +216,102 @@ TEUCHOS_UNIT_TEST( TensorMeshTopology, SlicedFlattenUnflattenRoundTrip )
   }
 }
 
+TEUCHOS_UNIT_TEST( TensorMeshTopology, TensorSkeletonEntityCountMatchesSliceBasedSemantics )
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 2.0}, { ActiveLeafSet1D({{1,0}, {2,2}, {2,3}}) }));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-1.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }));
+
+  TensorMeshTopology tensorTopo({component0, component1, component2});
+  auto skeleton = tensorTopo.tensorSkeleton(1);
+
+  TEST_EQUALITY(skeleton.orthogonalComponentOrdinal(), 1);
+  TEST_EQUALITY(skeleton.retainedComponentCount(), 2);
+  TEST_EQUALITY(skeleton.retainedComponentOrdinals()[0], 0);
+  TEST_EQUALITY(skeleton.retainedComponentOrdinals()[1], 2);
+  TEST_EQUALITY(static_cast<IndexType>(skeleton.vertexOrdinals().size()), component1->vertexCount());
+
+  IndexType expectedEntityCount = 0;
+  for (IndexType vertexOrdinal=0; vertexOrdinal<component1->vertexCount(); vertexOrdinal++)
+  {
+    auto sliceTopo = tensorTopo.slice({{1, vertexOrdinal}});
+    expectedEntityCount += sliceTopo.activeCellCount();
+  }
+  TEST_EQUALITY(skeleton.entityCount(), expectedEntityCount);
+}
+
+TEUCHOS_UNIT_TEST( TensorMeshTopology, TensorSkeletonOrderingUsesLowerIndexedRetainedComponentsFastestWithinVertex )
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-1.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }));
+
+  TensorMeshTopology tensorTopo({component0, component1, component2});
+  auto skeleton = tensorTopo.tensorSkeleton(1);
+
+  TEST_EQUALITY(skeleton.entityCount(), 8);
+  TEST_EQUALITY(skeleton.entity(0).vertexOrdinal(), 0);
+  TEST_EQUALITY(skeleton.entity(0).retainedCellTuple()[0], ComponentCellID1D(0,1,0));
+  TEST_EQUALITY(skeleton.entity(0).retainedCellTuple()[1], ComponentCellID1D(0,1,0));
+
+  TEST_EQUALITY(skeleton.entity(1).vertexOrdinal(), 0);
+  TEST_EQUALITY(skeleton.entity(1).retainedCellTuple()[0], ComponentCellID1D(0,1,1));
+  TEST_EQUALITY(skeleton.entity(1).retainedCellTuple()[1], ComponentCellID1D(0,1,0));
+
+  TEST_EQUALITY(skeleton.entity(2).vertexOrdinal(), 0);
+  TEST_EQUALITY(skeleton.entity(2).retainedCellTuple()[0], ComponentCellID1D(0,1,0));
+  TEST_EQUALITY(skeleton.entity(2).retainedCellTuple()[1], ComponentCellID1D(0,1,1));
+}
+
+TEUCHOS_UNIT_TEST( TensorMeshTopology, TensorSkeletonAgreesWithSliceAtEachVertex )
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 2.0}, { ActiveLeafSet1D({{1,0}, {2,2}, {2,3}}) }));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-1.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }));
+
+  TensorMeshTopology tensorTopo({component0, component1, component2});
+  auto skeleton = tensorTopo.tensorSkeleton(1);
+
+  std::map<IndexType, int> entitiesPerVertex;
+  for (const auto &entity : skeleton.entities())
+  {
+    entitiesPerVertex[entity.vertexOrdinal()]++;
+  }
+
+  for (IndexType vertexOrdinal=0; vertexOrdinal<component1->vertexCount(); vertexOrdinal++)
+  {
+    auto sliceTopo = tensorTopo.slice({{1,vertexOrdinal}});
+    TEST_EQUALITY(entitiesPerVertex[vertexOrdinal], static_cast<int>(sliceTopo.activeCellCount()));
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorMeshTopology, TensorSkeletonBoundaryClassificationMatchesVertexIncidence )
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }));
+
+  TensorMeshTopology tensorTopo({component0, component1});
+  auto skeleton = tensorTopo.tensorSkeleton(1);
+
+  bool foundBoundary = false;
+  bool foundInterior = false;
+  for (const auto &entity : skeleton.entities())
+  {
+    if (entity.vertexOrdinal() == 0 || entity.vertexOrdinal() == component1->vertexCount() - 1)
+    {
+      TEST_ASSERT(tensorTopo.isBoundarySkeletonEntity(entity));
+      foundBoundary = true;
+    }
+    else
+    {
+      TEST_ASSERT(!tensorTopo.isBoundarySkeletonEntity(entity));
+      foundInterior = true;
+    }
+  }
+  TEST_ASSERT(foundBoundary);
+  TEST_ASSERT(foundInterior);
+}
+
 TEUCHOS_UNIT_TEST( TensorMeshTopology, RejectEmptyComponentList )
 {
   TEST_THROW(TensorMeshTopology({}), std::invalid_argument);
@@ -240,5 +336,13 @@ TEUCHOS_UNIT_TEST( TensorMeshTopology, RejectFixingAllComponents )
   auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }));
   TensorMeshTopology tensorTopo({component0, component1});
   TEST_THROW(tensorTopo.slice({{0,0},{1,0}}), std::invalid_argument);
+}
+
+TEUCHOS_UNIT_TEST( TensorMeshTopology, RejectTensorSkeletonForInvalidComponentOrdinal )
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }));
+  TensorMeshTopology tensorTopo({component0, component1});
+  TEST_THROW(tensorTopo.tensorSkeleton(2), std::invalid_argument);
 }
 }

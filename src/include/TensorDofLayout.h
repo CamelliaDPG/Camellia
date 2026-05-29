@@ -36,6 +36,19 @@ namespace Camellia
   };
 
   /**
+   *  \brief Per-component support classification for tensor-native local coefficient factors.
+   *
+   *  Volume variables use basis cardinality factors in every component. Trace variables use a
+   *  distinguished skeleton-support factor in one component and basis-cardinality factors in the
+   *  remaining components.
+   */
+  enum TensorComponentSupportKind
+  {
+    TENSOR_VOLUME_BASIS_SUPPORT,
+    TENSOR_TRACE_SKELETON_SUPPORT
+  };
+
+  /**
    *  \brief Explicit tensor-native local layout abstraction.
    *
    *  TensorDofLayout provides local coefficient-layout metadata derived from TensorMesh.
@@ -49,9 +62,9 @@ namespace Camellia
     /**
      *  \brief Concrete local-layout metadata for one registered tensor variable.
      *
-     *  The current implementation stores one cardinality per component, one stride per component,
-     *  and the resulting tensor-product local dof count for a single variable-local block.
-     *  Lower-indexed components vary fastest.
+     *  The current implementation stores one extent per component, one stride per component,
+     *  per-component support-kind metadata, and the resulting tensor-product local dof count for
+     *  a single variable-local block. Lower-indexed components vary fastest.
      */
     struct VariableLayout
     {
@@ -59,6 +72,8 @@ namespace Camellia
       TensorSpaceRole _role;
       std::vector<int> _componentCardinalities;
       std::vector<IndexType> _componentStrides;
+      std::vector<TensorComponentSupportKind> _componentSupportKinds;
+      int _traceComponentOrdinal = -1;
       IndexType _totalDofs = 0;
 
       VariableLayout() = default;
@@ -66,20 +81,33 @@ namespace Camellia
                      TensorSpaceRole role,
                      const std::vector<int> &componentCardinalities,
                      const std::vector<IndexType> &componentStrides,
+                     const std::vector<TensorComponentSupportKind> &componentSupportKinds,
+                     int traceComponentOrdinal,
                      IndexType totalDofs)
       : _name(name), _role(role), _componentCardinalities(componentCardinalities),
-        _componentStrides(componentStrides), _totalDofs(totalDofs) {}
+        _componentStrides(componentStrides), _componentSupportKinds(componentSupportKinds),
+        _traceComponentOrdinal(traceComponentOrdinal), _totalDofs(totalDofs) {}
 
       const std::string &name() const { return _name; }
       TensorSpaceRole role() const { return _role; }
       int componentCount() const { return static_cast<int>(_componentCardinalities.size()); }
       int componentCardinality(int componentOrdinal) const { return _componentCardinalities[componentOrdinal]; }
       IndexType componentStride(int componentOrdinal) const { return _componentStrides[componentOrdinal]; }
+      TensorComponentSupportKind componentSupportKind(int componentOrdinal) const { return _componentSupportKinds[componentOrdinal]; }
+      bool isTraceSupportComponent(int componentOrdinal) const { return componentSupportKind(componentOrdinal) == TENSOR_TRACE_SKELETON_SUPPORT; }
+      bool hasTraceComponentOrdinal() const { return _traceComponentOrdinal >= 0; }
+      int traceComponentOrdinal() const { return _traceComponentOrdinal; }
       IndexType totalDofs() const { return _totalDofs; }
 
       bool operator==(const VariableLayout &other) const
       {
-        return (_name == other._name) && (_role == other._role) && (_componentCardinalities == other._componentCardinalities) && (_componentStrides == other._componentStrides) && (_totalDofs == other._totalDofs);
+        return (_name == other._name)
+            && (_role == other._role)
+            && (_componentCardinalities == other._componentCardinalities)
+            && (_componentStrides == other._componentStrides)
+            && (_componentSupportKinds == other._componentSupportKinds)
+            && (_traceComponentOrdinal == other._traceComponentOrdinal)
+            && (_totalDofs == other._totalDofs);
       }
     };
 

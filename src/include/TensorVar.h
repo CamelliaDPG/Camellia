@@ -36,21 +36,33 @@ namespace Camellia
    *  the variable object itself. The object stores a common tensor-level name and a
    *  per-component collection of legacy Var descriptors whose semantics are adapted
    *  into the tensor-native layer.
+   *
+   *  For trace variables, the current tensor-native interpretation is additionally
+   *  dimension-specific: a trace variable is associated with one distinguished tensor
+   *  component ordinal, and its support is understood to live on the tensor-product
+   *  skeleton orthogonal to that component.
    */
   class TensorVar
   {
     std::string _name;
     TensorVarKind _kind;
     std::vector<VarPtr> _componentVars;
+    int _traceComponentOrdinal = -1;
 
     void validateConstructorInputs() const;
   public:
-    TensorVar(const std::string &name, TensorVarKind kind, const std::vector<VarPtr> &componentVars);
+    TensorVar(const std::string &name,
+              TensorVarKind kind,
+              const std::vector<VarPtr> &componentVars,
+              int traceComponentOrdinal = -1);
 
     const std::string &name() const;
     TensorVarKind kind() const;
     bool isField() const;
     bool isTrace() const;
+
+    bool hasTraceComponentOrdinal() const;
+    int traceComponentOrdinal() const;
 
     int componentCount() const;
     VarPtr componentVar(int componentOrdinal) const;
@@ -69,6 +81,10 @@ namespace Camellia
   {
     os << "TensorVar(name=" << tensorVar.name() << ",kind=";
     os << (tensorVar.kind() == TENSOR_FIELD ? "FIELD" : "TRACE");
+    if (tensorVar.hasTraceComponentOrdinal())
+    {
+      os << ",traceComponent=" << tensorVar.traceComponentOrdinal();
+    }
     os << ",components=" << tensorVar.componentCount() << ")";
     return os;
   }
