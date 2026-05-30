@@ -244,7 +244,8 @@ namespace Camellia
   }
   
   // ETI
-  template class Allocation<double>;  // for now, we only support double, int, bool.  Could add support for long long, complex, float, etc.
+  template class Allocation<double>;  // for now, we only support double, int, bool, long long.  Could add support for complex, float, etc.
   template class Allocation<int>;
   template class Allocation<bool>;
+  template class Allocation<long long>;
 } // namespace Camellia

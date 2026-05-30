@@ -203,11 +203,11 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
     globalCellsToRefineVector[myCellOrdinalOffset + i] = myCellsToHRefine[i];
   }
   vector<GlobalIndexTypeToCast> gatheredCellsToRefineVector(numCellsToHRefine, 0);
-  Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, numCellsToHRefine, &globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0]);
+  Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, static_cast<int>(numCellsToHRefine), &globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0]);
   vector<GlobalIndexType> cellsToRefine(gatheredCellsToRefineVector.begin(),gatheredCellsToRefineVector.end());;
   
-  GlobalIndexTypeToCast myNumCellsToPRefine = GlobalIndexTypeToCast(myCellsToPRefine.size());
-  GlobalIndexTypeToCast numCellsToPRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToPRefine);
+  int myNumCellsToPRefine = static_cast<int>(myCellsToPRefine.size());
+  int numCellsToPRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToPRefine);
   
   vector<GlobalIndexType> cellsToPRefine;
   if (numCellsToPRefine > 0)
@@ -221,7 +221,7 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
       globalCellsToPRefineVector[myCellOrdinalOffset + i] = myCellsToPRefine[i];
     }
     vector<GlobalIndexTypeToCast> gatheredCellsToPRefineVector(numCellsToPRefine, 0);
-    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, numCellsToPRefine, &globalCellsToPRefineVector[0], &gatheredCellsToPRefineVector[0]);
+    Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, static_cast<int>(numCellsToPRefine), &globalCellsToPRefineVector[0], &gatheredCellsToPRefineVector[0]);
     vector<GlobalIndexType> cellsToPRefine(gatheredCellsToPRefineVector.begin(),gatheredCellsToPRefineVector.end());
   }
   

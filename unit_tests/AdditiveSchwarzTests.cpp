@@ -43,7 +43,7 @@ namespace
     soln->initializeStiffnessAndLoad();
     soln->populateStiffnessAndLoad();
     
-    Teuchos::RCP<Epetra_RowMatrix> stiffness = soln->getStiffnessMatrix();
+    auto stiffness = soln->getStiffnessMatrix();
     bool useHierarchicalNeighbors = false;
     int dimensionForSchwarzNeighbors = spaceDim - 1; // always face neighbors, for us
     

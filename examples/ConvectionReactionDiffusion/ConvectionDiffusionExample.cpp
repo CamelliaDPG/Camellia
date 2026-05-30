@@ -882,7 +882,7 @@ int main(int argc, char *argv[])
       }
       else
       {
-        gmgSolver->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+        gmgSolver->setSmootherType(GMGOperator::DEFAULT_ADDITIVE_SCHWARZ);
       }
       
       if (useGMRESForDPG)

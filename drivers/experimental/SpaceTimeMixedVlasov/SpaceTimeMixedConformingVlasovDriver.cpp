@@ -95,7 +95,7 @@ subMatrixAndSubVector(const Epetra_CrsMatrix& originalMatrix, const Epetra_FEVec
     
     for (int j = 0; j < numEntries; ++j) {
       auto col_lid = indices[j];
-      auto col = originalColMap.GID(col_lid);
+      auto col = originalColMap.GID64(col_lid);
       if (allRowsToKeep.find(col) != allRowsToKeep.end())
       {
         subMatrix.InsertGlobalValues(row, 1, &values[j], &col);

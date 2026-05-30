@@ -11,16 +11,17 @@
 
 #include "GMGOperator.h"
 
-#include "AdditiveSchwarz.h"
 #include "BasisFactory.h"
 #include "DofOrdering.h"
 #include "GlobalDofAssignment.h"
 #include "BasisSumFunction.h"
 #include "CamelliaCellTools.h"
+#include "CamelliaDebugUtility.h"
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
 #include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
+#include "OverlappingRowMatrix.h"
 #include "SerialDenseWrapper.h"
 #include "T_to_E.hpp"
 #include "TimeLogger.h"
@@ -30,24 +31,13 @@
 
 #include "Epetra_SerialComm.h"
 
-#include "Ifpack_BlockRelaxation.h"
-#include "Ifpack_SparseContainer.h"
-#include "Ifpack_AdditiveSchwarz.h"
-#include "Ifpack_PointRelaxation.h"
-#include "Ifpack_Amesos.h"
-#include "Ifpack_Chebyshev.h"
-#include "Ifpack_ILU.h"
-#include "Ifpack_IC.h"
-#include "Ifpack_Graph.h"
-#include "Ifpack_Graph_Epetra_CrsGraph.h"
-#include "Ifpack_Graph_Epetra_RowMatrix.h"
-
-#include "Ifpack_AdditiveSchwarz.h"
-#include "Ifpack_BlockRelaxation.h"
-#include "Ifpack_Graph_Epetra_RowMatrix.h"
-#include "Ifpack_DenseContainer.h"
+#include <Ifpack2_AdditiveSchwarz.hpp>
+#include <Ifpack2_BlockRelaxation.hpp>
+#include <Ifpack2_Factory.hpp>
+#include <Ifpack2_Preconditioner.hpp>
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
+#include "Tpetra_Operator_to_Tpetra_Matrix.h"
 
 using namespace Camellia;
 
@@ -58,6 +48,324 @@ extern "C" void HPM_Stop(char *);
 
 using Scalar = double;
 using SerialDenseMatrix = Teuchos::SerialDenseMatrix<int,double>;
+
+namespace {
+// TODO: move everything in this (anonymous namespace) block to some more appropriate location (AdditiveSchwarzHelpers?)
+
+std::set<GlobalIndexType> overlappingCells(GlobalIndexType cellID, MeshPtr mesh,
+                                           int overlapLevel, bool hierarchical,
+                                           int dimensionForNeighborRelation)
+{
+  set<GlobalIndexType> cells = {cellID};
+  
+  std::set<GlobalIndexType> lastNeighbors = cells;
+  for (int overlap = 0 ; overlap < overlapLevel ; ++overlap)
+  {
+    std::set<GlobalIndexType> cellNeighbors;
+    for (GlobalIndexType neighborCellID : lastNeighbors)
+    {
+      CellPtr cell = mesh->getTopology()->getCell(neighborCellID);
+      // if dimensionForNeighborRelation < 0, then use sideDim.
+      int sideDim = cell->topology()->getDimension() - 1;
+      if (dimensionForNeighborRelation < 0) dimensionForNeighborRelation = sideDim;
+      
+      set<GlobalIndexType> thisCellNeighbors = cell->getActiveNeighborIndices(dimensionForNeighborRelation, mesh->getTopology());
+      cellNeighbors.insert(thisCellNeighbors.begin(),thisCellNeighbors.end());
+    }
+    cells.insert(cellNeighbors.begin(), cellNeighbors.end());
+    lastNeighbors = cellNeighbors;
+  }
+  if (hierarchical)
+  {
+    // get ancestors up to overlap level above our cells:
+    std::set<GlobalIndexType> ancestors = {cellID};
+    for (int overlap = 0 ; overlap < overlapLevel ; ++overlap)
+    {
+      std::set<GlobalIndexType> previousAncestors = ancestors;
+      ancestors.clear();
+      for (std::set<GlobalIndexType>::iterator cellIDIt = previousAncestors.begin(); cellIDIt != previousAncestors.end();
+           cellIDIt++)
+      {
+        GlobalIndexType cellID = *cellIDIt;
+        CellPtr cell = mesh->getTopology()->getCell(cellID);
+        if (cell->getParent() == Teuchos::null)
+        {
+          ancestors.insert(cellID);
+        }
+        else
+        {
+          ancestors.insert(cell->getParent()->cellIndex());
+        }
+      }
+      previousAncestors = ancestors;
+    }
+    // now, get all the descendants in ancestors:
+    set<GlobalIndexType> descendantCells;
+    for (std::set<GlobalIndexType>::iterator cellIDIt = ancestors.begin(); cellIDIt != ancestors.end();
+         cellIDIt++)
+    {
+      GlobalIndexType cellID = *cellIDIt;
+      CellPtr cell = mesh->getTopology()->getCell(cellID);
+      std::set<GlobalIndexType> descendants = cell->getDescendants(mesh->getTopology());
+      descendantCells.insert(descendants.begin(),descendants.end());
+    }
+    // finally, INTERSECT with the allCells given by standard neighbor thing
+    set<GlobalIndexType> neighborCells = cells;
+    cells.clear();
+    for (GlobalIndexType descendantCell : descendantCells)
+    {
+      if (neighborCells.find(descendantCell) != neighborCells.end())
+      {
+        cells.insert(descendantCell);
+      }
+    }
+  }
+//  print("cells",cells);
+  return cells;
+}
+
+std::set<GlobalIndexType> overlappingCells(const std::set<GlobalIndexType> &cellIDs, MeshPtr mesh,
+                                           int overlapLevel, bool hierarchical,
+                                           int dimensionForNeighborRelation)
+{
+  set<GlobalIndexType> cellsInOverlap = cellIDs;
+  for (GlobalIndexType cellID : cellIDs)
+  {
+    std::set<GlobalIndexType> cellHalo = overlappingCells(cellID, mesh, overlapLevel,
+                                                          hierarchical, dimensionForNeighborRelation);
+    cellsInOverlap.insert(cellHalo.begin(), cellHalo.end());
+  }
+  return cellsInOverlap;
+}
+
+int MaxGlobalOverlapSideNeighborCount(MeshPtr mesh, int overlap, bool hierarchical, int dimForNeighborRelationship)
+{
+  const set<GlobalIndexType>* myCellIndices = &mesh->cellIDsInPartition();
+  Teuchos_CommPtr Comm = mesh->Comm();
+  
+  int localMaxNeighbors = 0;
+  MeshTopologyViewPtr meshTopo = mesh->getTopology();
+  
+  int overlapNeighborRelationshipDimension = meshTopo->getDimension() - 1; // side dimension
+  set<GlobalIndexType> remoteCells;
+  
+  // first: which neighbors are remote? (we assume that overlap region itself is locally known)
+  for (GlobalIndexType cellIndex : *myCellIndices)
+  {
+    set<GlobalIndexType> subdomainCellsAndNeighbors = OverlappingRowMatrix::overlappingCells(cellIndex, mesh, overlap,
+                                                                                             hierarchical,
+                                                                                             dimForNeighborRelationship);
+    for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
+    {
+      if (!mesh->myCellsInclude(subdomainCellIndex))
+      {
+        remoteCells.insert(subdomainCellIndex);
+      }
+    }
+  }
+  
+  // second: issue requests to owners for their list of neighbors
+  // this is a fairly quick-and-dirty implementation; could be reworked to reduce redundant data sent
+  std::map<GlobalIndexType,std::vector<GlobalIndexType>> remoteCellNeighbors;
+  
+  int myRank = Comm->getRank();
+  std::map<int,std::vector<std::pair<int,GlobalIndexType>>> requests; // owning PID -> (myPID, cell whose neighbor lists we want)
+  for (GlobalIndexType remoteCellID : remoteCells)
+  {
+    int rank = mesh->partitionForCellID(remoteCellID);
+    requests[rank].push_back({myRank,remoteCellID});
+  }
+  
+  std::vector<std::pair<int,GlobalIndexType>> requestsReceived;
+  MPIWrapper::sendDataVectors(Comm, requests, requestsReceived);
+  
+  std::map<int,std::vector<std::pair<GlobalIndexType,GlobalIndexType>>> responsesToSend;
+  std::vector<std::pair<GlobalIndexType,GlobalIndexType>> responsesReceived;
+  for (auto request : requestsReceived)
+  {
+    int remotePID = request.first;
+    GlobalIndexType myCellID = request.second;
+    TEUCHOS_TEST_FOR_EXCEPTION(!mesh->myCellsInclude(myCellID),std::invalid_argument, "request received for non-owned cellID");
+    CellPtr myCell = meshTopo->getCell(myCellID);
+    std::set<GlobalIndexType> neighborIDs = myCell->getActiveNeighborIndices(meshTopo);
+    for (GlobalIndexType neighborID : neighborIDs)
+    {
+      responsesToSend[remotePID].push_back({myCellID,neighborID});
+    }
+  }
+  MPIWrapper::sendDataVectors(Comm, responsesToSend, responsesReceived);
+  for (auto response : responsesReceived)
+  {
+    GlobalIndexType remoteCellID = response.first;
+    GlobalIndexType neighborID = response.second;
+    remoteCellNeighbors[remoteCellID].push_back(neighborID);
+  }
+  
+  // third: count
+  for (GlobalIndexType cellIndex : *myCellIndices)
+  {
+    set<GlobalIndexType> subdomainCellsAndNeighbors = OverlappingRowMatrix::overlappingCells(cellIndex, mesh, overlap,
+                                                                                             hierarchical,
+                                                                                             dimForNeighborRelationship);
+    set<GlobalIndexType> subdomainNeighbors;
+    for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
+    {
+      if (mesh->myCellsInclude(subdomainCellIndex))
+      {
+        CellPtr subdomainCell = meshTopo->getCell(subdomainCellIndex);
+        
+        set<IndexType> cellNeighbors = subdomainCell->getActiveNeighborIndices(overlapNeighborRelationshipDimension, meshTopo);
+        subdomainNeighbors.insert(cellNeighbors.begin(),cellNeighbors.end());
+      }
+      else
+      {
+        auto remoteEntry = remoteCellNeighbors.find(subdomainCellIndex);
+        TEUCHOS_TEST_FOR_EXCEPTION(remoteEntry == remoteCellNeighbors.end(), std::invalid_argument, "Remote cell not found during send/receive");
+        subdomainNeighbors.insert(remoteEntry->second.begin(), remoteEntry->second.end());
+      }
+    }
+    
+    subdomainCellsAndNeighbors.insert(subdomainNeighbors.begin(),subdomainNeighbors.end());
+    localMaxNeighbors = max(localMaxNeighbors,(int)subdomainCellsAndNeighbors.size());
+  }
+  
+  
+  int globalMaxNeighbors;
+  Teuchos::reduceAll(*Comm, Teuchos::REDUCE_MAX, 1, &localMaxNeighbors, &globalMaxNeighbors);
+  return globalMaxNeighbors;
+}
+
+// TODO: move this somewhere appropriate, maybe to AdditiveSchwarz
+
+using LO = TMatrix<double>::local_ordinal_type;
+using GO = TMatrix<double>::global_ordinal_type;
+using Node = TMatrix<double>::node_type;
+// Note: this Ifpack2::OverlappingRowMatrix implementation is currently coming from
+// Nathan V. Roberts' Trilinos fork/branch:
+//   https://github.com/CamelliaDPG/Trilinos.git
+//   branch: fixes-for-camellia
+// This is already an accepted dependency of the target Camellia branch.
+using OverlappingRowMatrix = Ifpack2::OverlappingRowMatrix< TRowMatrix<double> >;
+
+using AdditiveSchwarzDetails = GMGOperator::AdditiveSchwarzDetails;
+
+AdditiveSchwarzDetails
+getAdditiveSchwarzDetails(MeshPtr mesh, int overlapLevel, bool hierarchical, int dimensionForNeighborRelationship,
+                          Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMatrixPtr<double> A)
+{
+  using Node = TMatrix<double>::node_type;
+  
+  GO numGlobalRows = A->getGlobalNumRows();
+  
+  std::set<GO> gidsThisRank; // all the GIDs locally visible in the overlapping row matrix
+  
+  std::vector< std::set<GO> > partsGlobalOrdinals; // one part per local cell -- start with GIDs; will map to LIDs below
+  
+  set<GlobalIndexType> myCellIDs = mesh->cellIDsInPartition(); // we want a domain identified with each cell
+  
+  map<GlobalIndexType,set<GlobalIndexType>> overlapCellsForCell; // key: cell; value: the cells in its overlap region
+  set<GlobalIndexType> allCellsOfInterestToMe;
+  
+  // find the overlap region for each cell.
+  for (GlobalIndexType cellID : myCellIDs)
+  {
+    set<GlobalIndexType> cellsInOverlap = overlappingCells(cellID, mesh, overlapLevel, hierarchical,
+                                                           dimensionForNeighborRelationship);
+    overlapCellsForCell[cellID] = cellsInOverlap;
+    allCellsOfInterestToMe.insert(cellsInOverlap.begin(), cellsInOverlap.end());
+  }
+  
+  // find the global indices that belong to each cell within the overlap regions
+  map<GlobalIndexType,set<GlobalIndexType>> globalIndicesForCells; // key: cell; value: globalDofIndices
+  globalIndicesForCells = fineDofInterpreter->importGlobalIndicesMap(allCellsOfInterestToMe);
+  
+  for (GlobalIndexType cellID : myCellIDs)
+  {
+    set<GO> globalDofIndices; // global dof indices for the overlap region
+    set<GlobalIndexType> cellsInOverlap = overlapCellsForCell[cellID];
+    
+    for (GlobalIndexType overlapCell : cellsInOverlap)
+    {
+      globalDofIndices.insert(globalIndicesForCells[overlapCell].begin(), globalIndicesForCells[overlapCell].end());
+    }
+    partsGlobalOrdinals.push_back(globalDofIndices);
+    gidsThisRank.insert(globalDofIndices.begin(),globalDofIndices.end());
+  }
+  
+  Teuchos::Array<GO> externalGIDsThisRank;
+  {
+    auto rowMap = A->getRowMap();
+    for (auto gid : gidsThisRank)
+    {
+      if (rowMap->getLocalElement(gid) == Teuchos::OrdinalTraits<LO>::invalid())
+      {
+        // external (ghost) GID
+        externalGIDsThisRank.push_back(gid);
+      }
+    }
+  }
+  
+  // a little unfortunate that we construct this twice: once here, and once within Ifpack2::AdditiveSchwarz
+  Teuchos::RCP<OverlappingRowMatrix> overlapMatrix = Teuchos::rcp(new OverlappingRowMatrix(A, externalGIDsThisRank));
+  
+  auto overlapMap = overlapMatrix->getRowMap();
+  Teuchos::Array<GO> overlapMapGlobalOrdinals;
+  {
+    auto overlapMapGIDsView = overlapMap->getMyGlobalIndices();
+    overlapMapGlobalOrdinals.reserve(overlapMapGIDsView.size());
+    for (size_t i = 0; i < overlapMapGIDsView.size(); i++)
+    {
+      overlapMapGlobalOrdinals.push_back(overlapMapGIDsView[i]);
+    }
+  }
+  Teuchos::Array<Teuchos::ArrayRCP<LO> > partsLocalOrdinals; // one per (local) cell
+  std::vector<int> localIncidenceCounts(overlapMap->getLocalNumElements(), 0);
+  for (auto gidSet : partsGlobalOrdinals)
+  {
+    const size_t numIDs = gidSet.size();
+    std::vector<LO> lidVector(numIDs);
+    Teuchos::ArrayRCP<LO> array(numIDs);
+    size_t lidOrdinal = 0;
+    for (const auto &gid : gidSet)
+    {
+      LO lid = overlapMap->getLocalElement(gid);
+      TEUCHOS_TEST_FOR_EXCEPTION(lid == Teuchos::OrdinalTraits<LO>::invalid(), std::invalid_argument,
+                                 "getAdditiveSchwarzDetails(): overlap-map LID not found for GID " << gid);
+      lidVector[lidOrdinal] = lid;
+      array[lidOrdinal++] = lid;
+      localIncidenceCounts[lid]++;
+    }
+    partsLocalOrdinals.push_back(array);
+    size_t cellOrdinal = partsLocalOrdinals.size() - 1;
+    std::cout << "cell ordinal " << cellOrdinal << " has " << array.size() << " rows in its partition.\n";
+    Camellia::print("row LIDs", lidVector);
+  }
+  
+  AdditiveSchwarzDetails details;
+  details.externalGIDsThisRank = externalGIDsThisRank;
+  details.partsLocalOrdinals = partsLocalOrdinals;
+  details.overlapMapGlobalOrdinals = overlapMapGlobalOrdinals;
+  details.localIncidenceCounts = localIncidenceCounts;
+  return details;
+}
+
+} // anonymous namespace
+
+// TODO: change this to be CAMELLIA_ADDITIVE_SCHWARZ, if and when the Ifpack2-compatible version of that is implemented
+GMGOperator::AdditiveSchwarzDetails
+GMGOperator::getAdditiveSchwarzDetailsForTests(MeshPtr mesh,
+                                               int overlapLevel,
+                                               bool hierarchical,
+                                               int dimensionForNeighborRelationship,
+                                               Teuchos::RCP<DofInterpreter> fineDofInterpreter,
+                                               TMatrixPtr<Scalar> A)
+{
+  return getAdditiveSchwarzDetails(mesh, overlapLevel, hierarchical,
+                                   dimensionForNeighborRelationship,
+                                   fineDofInterpreter, A);
+}
+
+GMGOperator::SmootherChoice GMGOperator::DEFAULT_ADDITIVE_SCHWARZ = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
 
 GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
@@ -95,7 +403,6 @@ _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
   _multigridStrategy = multigridStrategy;
 
   _levelOfFill = 2;
-  _fillRatio = 5.0;
   _smootherWeight = 1.0;
 
   clearTimings();
@@ -133,7 +440,7 @@ _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
   _coarseSolver = coarseSolver;
   _haveSolvedOnCoarseMesh = false;
 
-  setSmootherType(CAMELLIA_ADDITIVE_SCHWARZ); // default
+  setSmootherType(DEFAULT_ADDITIVE_SCHWARZ);
   _smootherOverlap = 0;
   _useSchwarzDiagonalWeight = false;
   _useSchwarzScalingWeight = true; // weight to ensure maximum eigenvalue of M*A <= 1.0, M being the Schwarz smoother.
@@ -180,7 +487,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(TMatrixPtr<Scalar> tFineStiffness
 {
   auto fineStiffnessMatrix = T_to_E::matrix(tFineStiffnessMatrix);
   narrate("computeCoarseStiffnessMatrix");
-  int globalColCount = fineStiffnessMatrix->NumGlobalCols();
+  int globalColCount = fineStiffnessMatrix->NumGlobalCols64();
   if (_P.get() == NULL)
   {
     constructProlongationOperator();
@@ -277,9 +584,9 @@ double GMGOperator::computeSchwarzSmootherWeight()
   // Conjecture: rho(E) is bounded above by the maximum side count of an element plus 1.
   // Based on results in Smith et al., I *think* that we can bound the maximum eigenvalue of S*A by 1 + rho(E)
   
-  int globalMaxNeighbors = AdditiveSchwarz<Ifpack_Amesos>::MaxGlobalOverlapSideNeighborCount(_fineMesh, _smootherOverlap,
-                                                                                             _hierarchicalNeighborsForSchwarz,
-                                                                                             _dimensionForSchwarzNeighborRelationship);
+  int globalMaxNeighbors = MaxGlobalOverlapSideNeighborCount(_fineMesh, _smootherOverlap,
+                                                             _hierarchicalNeighborsForSchwarz,
+                                                             _dimensionForSchwarzNeighborRelationship);
   
   double weight = 1.0 / (globalMaxNeighbors + 1); // aiming for a weight that guarantees max eig of weight * S * A is 1.0
   
@@ -345,13 +652,14 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
   {
     Epetra_SerialComm SerialComm; // rank-local map
     
-    GlobalIndexTypeToCast* myGlobalIndicesPtr;
+    using GO = TMap::global_ordinal_type;
+    GO* myGlobalIndicesPtr;
     eFineMap->MyGlobalElementsPtr(*&myGlobalIndicesPtr);
     
-    map<GlobalIndexTypeToCast, set<GlobalIndexType> > cellsForGlobalDofOrdinal;
-    vector<GlobalIndexTypeToCast> myGlobalIndices(eFineMap->NumMyElements());
+    map<GO, set<GlobalIndexType> > cellsForGlobalDofOrdinal;
+    vector<GO> myGlobalIndices(eFineMap->NumMyElements());
     {
-      set<GlobalIndexTypeToCast> globalIndicesForRank;
+      set<GO> globalIndicesForRank;
       for  (int i=0; i<eFineMap->NumMyElements(); i++)
       {
         globalIndicesForRank.insert(myGlobalIndicesPtr[i]);
@@ -376,14 +684,15 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
 
     // TODO: consider changing this to use an Epetra_Map with a single entry (given the usage below, this should be possible).
     Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), myGlobalIndices.data(), 0, SerialComm);
-    Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
+    Teuchos::RCP<Epetra_Vector> eXLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
+    auto tXLocal = E_to_T::vector(eXLocal);
     
 //    Epetra_Map    mapOneElement(1,1,&myGlobalIndices[0], 0, SerialComm);
 //    Teuchos::RCP<Epetra_Vector> oneElementVector = Teuchos::rcp( new Epetra_Vector(mapOneElement) );
 //    (*oneElementVector)[0] = 1.0;
     
     // to (possibly) reduce the cost of allocating these containers, declare them outside and resize inside as needed
-    Camellia::FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices;
+    Camellia::FieldContainer<GO> coarseGlobalIndices;
     Camellia::FieldContainer<double> coarseGlobalValues;
     Camellia::FieldContainer<double> coarseCellCoefficients;
     Camellia::FieldContainer<double> mappedCoarseCellCoefficients;
@@ -392,11 +701,15 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     Camellia::FieldContainer<double> fineCellCoefficients;
     Camellia::FieldContainer<double> basisCoefficients;
     
+    auto XLocalViewHost = tXLocal->getLocalViewHost(Tpetra::Access::ReadWrite);
+    
+    const int vectorOrdinal = 0;
+    
     for (int localID=0; localID < eFineMap->NumMyElements(); localID++)
     {
-      GlobalIndexTypeToCast globalRow = eFineMap->GID(localID);
-      map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
-      (*XLocal)[localID] = 1.0;
+      auto globalRow = eFineMap->GID64(localID);
+      map<GO, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
+      XLocalViewHost(localID, vectorOrdinal) = 1.0;
       
       if (globalRow >= firstFineConstraintRowIndex)
       {
@@ -407,8 +720,8 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
         //       (even element-wise ones, like local conservation), probably simply weighting by relative element
         //       volume will be fine.  But we need a bit more information here; we don't have access to the fine Solution's
         //       Lagrange constraints on the present interface.
-        int offset = globalRow - firstFineConstraintRowIndex;
-        GlobalIndexType coarseGlobalRow = firstCoarseConstraintRowIndex + offset;
+        GO offset = globalRow - firstFineConstraintRowIndex;
+        GO coarseGlobalRow = firstCoarseConstraintRowIndex + offset;
         coarseXVectorLocal[coarseGlobalRow] = 1.0;
       }
       else
@@ -436,7 +749,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
            lookup tables and at worst we could do a brute force search through the lookup table for the fine cell.
            But in fact the brute force search wouldn't likely be much/any cheaper than variablesWithNonZeroEntries() below.)
            */
-          fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellCoefficients, *XLocal);
+          fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellCoefficients, tXLocal);
           
 //          cout << "fineCellCoefficients:\n" << fineCellCoefficients;
           
@@ -555,12 +868,12 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
       int nnz = 0; // nonzero entries
       double tol = 1e-13; // count anything less as a zero entry
 //            cout << "P global row " << globalRow << ": ";
-      for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++)
+      for (auto & entry : coarseXVectorLocal)
       {
-        if (abs(coarseXIt->second) > tol)
+        if (abs(entry.second) > tol)
         {
-          coarseGlobalIndices[nnz] = coarseXIt->first;
-          coarseGlobalValues[nnz] = coarseXIt->second;
+          coarseGlobalIndices[nnz] = entry.first;
+          coarseGlobalValues[nnz] = entry.second;
 //                    cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
           nnz++;
         }
@@ -571,7 +884,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
         P->InsertGlobalValues(globalRow, nnz, &coarseGlobalValues[0], &coarseGlobalIndices[0]);
 //                cout << "Inserting values for row " << globalRow << endl;
       }
-      (*XLocal)[localID] = 0.0;
+      XLocalViewHost(localID, vectorOrdinal) = 0.0;
     }
   }
   
@@ -628,7 +941,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
       for (int colLID=0; colLID<numDomainElements; colLID++)
       {
         if (localGID[colLID]) continue;
-        int GID = eCoarseMap->GID(colLID);
+        auto GID = eCoarseMap->GID64(colLID);
         cout << GID << " ";
       }
       cout << endl;
@@ -1525,7 +1838,7 @@ GMGOperator::SmootherChoice GMGOperator::getSmootherType()
   return _smootherType;
 }
 
-Teuchos::RCP<Epetra_MultiVector> GMGOperator::getSmootherWeightVector()
+Teuchos::RCP< Tpetra::Vector<double> > GMGOperator::getSmootherWeightVector()
 {
   return _smootherDiagonalWeight;
 }
@@ -1834,62 +2147,31 @@ int GMGOperator::ApplySmoother(const TVector<Scalar> &res, TVector<Scalar> &Y, b
   auto eComm = MPIWrapper::EpetraComm(Comm());
   Epetra_Time timer(*eComm);
   
-  int err;
-
-  auto eResPtr = T_to_E::vector(Teuchos::rcp(&res, false));
-  auto eYPtr   = T_to_E::vector(Teuchos::rcp(&Y, false));
-  auto & eRes = *eResPtr;
-  auto & eY   = *eYPtr;
-  
   if ((_smootherDiagonalWeight == Teuchos::null) || !_useSchwarzDiagonalWeight)
   {
-    err = _smoother->ApplyInverse(eRes, eY);
+    _smoother->apply(res, Y);
   }
   else
   {
-//    cout << "_smootherDiagonalWeight:\n";
-//    Comm().Barrier();
-//    cout << *_smootherDiagonalWeight;
-//    Comm().Barrier();
-//    cout << "res:\n";
-//    cout << res;
-    Epetra_MultiVector temp(eRes.Map(),eRes.NumVectors());
+    TVector<double> temp(res.getMap(),res.getNumVectors());
     if (!weightOnLeft)
-      temp.Multiply(1.0, eRes, *_smootherDiagonalWeight, 0.0);
+      temp.elementWiseMultiply(1.0, *_smootherDiagonalWeight, res, 0.0);
     else
-      temp = eRes;
-    
-//    cout << "temp:\n";
-//    Comm().Barrier();
-//    cout << temp;
-    
-    err = _smoother->ApplyInverse(temp, eY);
-//    cout << "Y after ApplyInverse:\n";
-//    Comm().Barrier();
-//    cout << Y;
+      temp = res;
+        
+    _smoother->apply(temp, Y);
     
     if (weightOnLeft)
     {
-      temp = eY;
-      eY.Multiply(1.0, temp, *_smootherDiagonalWeight, 0.0);
+      temp = Y;
+      Y.elementWiseMultiply(1.0, *_smootherDiagonalWeight, temp, 0.0);
     }
-//    cout << "Y:\n";
-//    Comm().Barrier();
-//    cout << Y;
-//    Comm().Barrier();
   }
-  eY.Scale(_smootherWeight);
-  
-  auto tY = E_to_T::vector(eYPtr);
-  Y.update(1.0, *tY, 0.0);
-  
+  Y.scale(_smootherWeight);
+    
   _timeApplySmoother += timer.ElapsedTime();
   
-  if (err != 0)
-  {
-    cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
-  }
-  return err;
+  return 0;
 }
 
 double GMGOperator::NormInf() const
@@ -2110,7 +2392,7 @@ void GMGOperator::setFineStiffnessMatrix(TMatrixPtr<Scalar> fineStiffness)
   {
     computeCoarseStiffnessMatrix(fineStiffness);
   }
-  setUpSmoother(_eFineStiffnessMatrix.get());
+  setUpSmoother(fineStiffness);
   
   if (_coarseOperator != Teuchos::null)
   {
@@ -2199,17 +2481,24 @@ void GMGOperator::setSmootherWeight(double weight)
   }
 }
 
-void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
+void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
 {
   narrate("setUpSmoother()");
   auto eComm = MPIWrapper::EpetraComm(Comm());
   Epetra_Time smootherSetupTimer(*eComm);
   
+  using RowMatrix = Tpetra::RowMatrix<Scalar>;
+  
   SmootherChoice choice = _smootherType;
 
+  using BlockRelaxation = Ifpack2::BlockRelaxation< RowMatrix >;
+  
   Teuchos::ParameterList List;
   
-  Teuchos::RCP<Ifpack_Preconditioner> smoother;
+  Teuchos::RCP< Ifpack2::Preconditioner<Scalar> > smoother;
+  bool useILUTFallbackForDegenerateLocalCase = false;
+  bool bypassCustomOuterPartitioningForDegenerateCase = false;
+  std::string schwarzInnerPrecName = "Block Relaxation";
 
   int rank = Comm()->getRank();
   
@@ -2221,38 +2510,35 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
   case POINT_JACOBI:
   {
     List.set("relaxation: type", "Jacobi");
-    smoother = Teuchos::rcp(new Ifpack_PointRelaxation(fineStiffnessMatrix) );
+    List.set("relaxation: sweeps", 1);
+    smoother = Ifpack2::Factory::create< RowMatrix >("RELAXATION", fineStiffnessMatrix);
   }
   break;
   case POINT_SYMMETRIC_GAUSS_SEIDEL:
   {
-    List.set("relaxation: type", "symmetric Gauss-Seidel");
-    smoother = Teuchos::rcp(new Ifpack_PointRelaxation(fineStiffnessMatrix) );
+    List.set("relaxation: type", "Symmetric Gauss-Seidel");
+    smoother = Teuchos::rcp(new BlockRelaxation(fineStiffnessMatrix) );
   }
   break;
   case BLOCK_JACOBI:
   {
-    // TODO: work out how we're supposed to specify partitioning scheme.
-    //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Block Gauss-Seidel smoother not yet supported.");
-
-    smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
+    smoother = Teuchos::rcp(new BlockRelaxation(fineStiffnessMatrix) );
     Teuchos::ParameterList List;
-    // TODO: work out what the various parameters do, and how they should depend on the problem...
     int overlapBlocks = _smootherOverlap;
     int sweeps = 2;
     int localParts = 4;
 
-    List.set("relaxation: type", "Jacobi");
-    List.set("relaxation: sweeps", sweeps);
-    List.set("amesos: solver type", "Amesos_Klu");
+    List.set("block relaxation: type", "Jacobi");
+    List.set("block relaxation: sweeps", sweeps);
+    List.set("Amesos2: Solver", "KLU2");
 
-    List.set("partitioner: overlap", overlapBlocks);
+    List.set("partitioner: overlap level", overlapBlocks);
 #ifdef HAVE_IFPACK_METIS
     // use METIS to create the blocks. This requires --enable-ifpack-metis.
     // If METIS is not installed, the user may select "linear".
     List.set("partitioner: type", "metis");
 #else
-    // or a simple greedy algorithm is METIS is not enabled
+    // or a simple greedy algorithm if METIS is not enabled
     List.set("partitioner: type", "greedy");
 #endif
     // defines here the number of local blocks. If 1,
@@ -2263,12 +2549,8 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
   break;
   case BLOCK_SYMMETRIC_GAUSS_SEIDEL:
   {
-    // TODO: work out how we're supposed to specify partitioning scheme.
-//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Block Gauss-Seidel smoother not yet supported.");
-
-    smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
+    smoother = Teuchos::rcp(new BlockRelaxation(fineStiffnessMatrix) );
     Teuchos::ParameterList List;
-    // TODO: work out what the various parameters do, and how they should depend on the problem...
     int overlapBlocks = _smootherOverlap;
     int sweeps = 2;
     int localParts = 4;
@@ -2277,7 +2559,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     List.set("relaxation: sweeps", sweeps);
     List.set("amesos: solver type", "Amesos_Klu"); // default
 
-    List.set("partitioner: overlap", overlapBlocks);
+    List.set("partitioner: overlap level", overlapBlocks);
 #ifdef HAVE_IFPACK_METIS
     // use METIS to create the blocks. This requires --enable-ifpack-metis.
     // If METIS is not installed, the user may select "linear".
@@ -2295,71 +2577,134 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
   case IFPACK_ADDITIVE_SCHWARZ:
   case CAMELLIA_ADDITIVE_SCHWARZ:
   {
-//      cout << "Using additive Schwarz smoother.\n";
-    int OverlapLevel = _smootherOverlap;
-
-//    List.set("amesos: solver type", "Amesos_Lapack");
+    auto overlapElementsAndPartition = getAdditiveSchwarzDetails(_fineMesh, _smootherOverlap, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship, _fineDofInterpreter, _fineStiffnessMatrix);
     
-    if (choice==IFPACK_ADDITIVE_SCHWARZ)
+    smoother = Ifpack2::Factory::create<RowMatrix>("Schwarz", _fineStiffnessMatrix);
+
     {
-      switch (_schwarzBlockFactorizationType)
+      const int myRank = Comm()->getRank();
+      const size_t baseLocalRowCount = _fineStiffnessMatrix->getRowMap()->getLocalNumElements();
+      const size_t overlapRowCount = overlapElementsAndPartition.overlapMapGlobalOrdinals.size();
+      const auto &parts = overlapElementsAndPartition.partsLocalOrdinals;
+      const auto &incidenceCounts = overlapElementsAndPartition.localIncidenceCounts;
+      bool badPartitionStructure = false;
+      bool partsOverlapInLIDSpace = false;
+      bool allIncidenceCountsAreOne = true;
+      size_t minPartSize = parts.empty() ? 0 : std::numeric_limits<size_t>::max();
+      size_t maxPartSize = 0;
+      size_t totalPartSize = 0;
+      std::map<LO,int> lidUseCounts;
+      int minIncidence = incidenceCounts.empty() ? 0 : std::numeric_limits<int>::max();
+      int maxIncidence = 0;
+      for (int count : incidenceCounts)
       {
-        case Direct:
+        minIncidence = std::min(minIncidence, count);
+        maxIncidence = std::max(maxIncidence, count);
+        if (count != 1)
         {
-          Ifpack_AdditiveSchwarz<Ifpack_Amesos>* ifpackSmoother = new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel);
-          smoother = Teuchos::rcp( ifpackSmoother );
+          allIncidenceCountsAreOne = false;
         }
-        break;
-      case ILU:
+      }
+
+      std::ostringstream diag;
+      diag << "GMGOperator::setUpSmoother(): rank " << myRank
+           << ", baseLocalRowCount = " << baseLocalRowCount
+           << ", overlapRowCount = " << overlapRowCount
+           << ", numParts = " << parts.size() << "\n";
+      for (size_t p = 0; p < parts.size(); p++)
+      {
+        auto part = parts[p];
+        const size_t partSize = static_cast<size_t>(part.size());
+        minPartSize = std::min(minPartSize, partSize);
+        maxPartSize = std::max(maxPartSize, partSize);
+        totalPartSize += partSize;
+        diag << "  part " << p << " size = " << part.size() << ": ";
+        if (part.size() == 0)
         {
-          Ifpack_AdditiveSchwarz<Ifpack_ILU>* ifpackSmoother = new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel);
-          smoother = Teuchos::rcp( ifpackSmoother );
-          List.set("fact: level-of-fill", _levelOfFill);
+          badPartitionStructure = true;
+          diag << "<empty>";
         }
-        break;
-      case IC:
+        for (size_t i = 0; i < part.size(); i++)
         {
-          Ifpack_AdditiveSchwarz<Ifpack_IC>* ifpackSmoother = new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel);
-          smoother = Teuchos::rcp( ifpackSmoother );
-          List.set("fact: ict level-of-fill", _fillRatio);
+          LO lid = part[i];
+          diag << lid << " ";
+          lidUseCounts[lid]++;
+          if (lidUseCounts[lid] > 1)
+          {
+            partsOverlapInLIDSpace = true;
+          }
+          if (lid == Teuchos::OrdinalTraits<LO>::invalid())
+          {
+            badPartitionStructure = true;
+            diag << "[invalid] ";
+          }
+          else if ((lid < 0) || (static_cast<size_t>(lid) >= overlapRowCount))
+          {
+            badPartitionStructure = true;
+            diag << "[out-of-range] ";
+          }
         }
-        break;
-      default:
-        break;
+        diag << "\n";
+      }
+      diag << "  part-size summary: min=" << minPartSize
+           << ", max=" << maxPartSize
+           << ", avg=" << (parts.empty() ? 0.0 : double(totalPartSize) / double(parts.size())) << "\n";
+      diag << "  partsOverlapInLIDSpace = " << (partsOverlapInLIDSpace ? "true" : "false") << "\n";
+      diag << "  incidence summary: min=" << minIncidence << ", max=" << maxIncidence << "\n";
+      diag << "  allIncidenceCountsAreOne = " << (allIncidenceCountsAreOne ? "true" : "false") << "\n";
+
+      if (badPartitionStructure)
+      {
+        std::cerr << diag.str();
+      }
+      else if (myRank == 0)
+      {
+        std::cout << diag.str();
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(badPartitionStructure, std::invalid_argument,
+                                 "GMGOperator::setUpSmoother(): invalid user partition structure detected before Ifpack2 Schwarz initialization; see stderr diagnostics for details");
+
+      useILUTFallbackForDegenerateLocalCase = (parts.size() == 1) && (!partsOverlapInLIDSpace) && allIncidenceCountsAreOne;
+      bypassCustomOuterPartitioningForDegenerateCase = useILUTFallbackForDegenerateLocalCase;
+      if (useILUTFallbackForDegenerateLocalCase)
+      {
+        schwarzInnerPrecName = "ILUT";
+      }
+      if (useILUTFallbackForDegenerateLocalCase && (myRank == 0))
+      {
+        std::cout << "GMGOperator::setUpSmoother(): using ILUT fallback for degenerate single-part local Schwarz case.\n";
+        std::cout << "GMGOperator::setUpSmoother(): NOTE: this regime has a single user part, no overlap reuse in LID space, and all incidence counts equal to one; if Ifpack2 still routes through BlockRelaxation here, a later workaround may need to bypass custom partitioning entirely for this narrow case.\n";
       }
     }
-    else
+    
+    if (!bypassCustomOuterPartitioningForDegenerateCase)
     {
-      switch (_schwarzBlockFactorizationType)
-      {
-      case Direct:
-        {
-          Camellia::AdditiveSchwarz<Ifpack_Amesos>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship);
-          smoother = Teuchos::rcp( camelliaSmoother );
-        }
-        break;
-      case ILU:
-        {
-          Camellia::AdditiveSchwarz<Ifpack_ILU>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship);
-          List.set("fact: level-of-fill", _levelOfFill);
-          smoother = Teuchos::rcp( camelliaSmoother );
-        }
-        break;
-      case IC:
-        {
-          Camellia::AdditiveSchwarz<Ifpack_IC>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship);
-          List.set("fact: ict level-of-fill", _fillRatio);
-          smoother = Teuchos::rcp( camelliaSmoother );
-        }
-        break;
-      }
+      List.set("schwarz: combine mode", "Add");
+      List.set("schwarz: overlap elements", overlapElementsAndPartition.externalGIDsThisRank);
+      List.set("partitioner: type", "user");
+      List.set("partitioner: parts", overlapElementsAndPartition.partsLocalOrdinals);
+    }
+    else if (rank == 0)
+    {
+      std::cout << "GMGOperator::setUpSmoother(): bypassing custom outer Schwarz partitioning for degenerate single-part local case.\n";
     }
 
-    List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
+    Teuchos::ParameterList innerPreconditionerParameters;
+    // Important: the outer Schwarz layer already uses the custom per-cell overlapping user partition in the general case.
+    // Passing the same overlapping partition into the inner preconditioner a second time was shown to be harmful.
+    // In the narrow degenerate single-part local case, the custom outer partitioning no longer adds mathematical value,
+    // and the current Ifpack2 path still routes into fragile BlockRelaxation structure extraction.  We therefore bypass
+    // the custom outer partitioning entirely there.
+    
+    List.set("schwarz: inner preconditioner parameters", innerPreconditionerParameters);
+    List.set("schwarz: inner preconditioner name", schwarzInnerPrecName);
+    
+    List.set("schwarz: combine mode", "Add");
   }
   break;
     case CHEBYSHEV:
     {
+      smoother = Ifpack2::Factory::create<RowMatrix>("CHEBYSHEV", fineStiffnessMatrix);
       /*
        EigRatio_             = List.get("chebyshev: ratio eigenvalue", EigRatio_);
        LambdaMin_            = List.get("chebyshev: min eigenvalue", LambdaMin_);
@@ -2371,7 +2716,6 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
       List.set("chebyshev: ratio eigenvalue", _chebyshevEigenAutocomputeRatio);
       List.set("chebyshev: eigenvalue max iterations",_chebyshevMaxEigenIterations);
       List.set("chebyshev: degree",_chebyshevDegree);
-      smoother = Teuchos::rcp( new Ifpack_Chebyshev(fineStiffnessMatrix) );
     }
       break;
 
@@ -2379,91 +2723,77 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     break;
   }
 
-  int err = smoother->SetParameters(List);
-  if (err != 0)
-  {
-    cout << "WARNING: In GMGOperator, smoother->SetParameters() returned with err " << err << endl;
-  }
+  smoother->setParameters(List);
 
+  if ((choice == CAMELLIA_ADDITIVE_SCHWARZ) || (choice == IFPACK_ADDITIVE_SCHWARZ))
+  {
+    const int myRank = Comm()->getRank();
+    if (myRank == 0)
+    {
+      std::cout << "GMGOperator::setUpSmoother(): pre-initialize Schwarz parameter summary\n";
+      std::cout << "  requested inner preconditioner name = "
+                << schwarzInnerPrecName << "\n";
+      std::cout << "  outer partitioner type = "
+                << List.get<std::string>("partitioner: type", "<unset>") << "\n";
+      if (List.isParameter("schwarz: overlap elements"))
+      {
+        auto overlapElements = List.get<Teuchos::Array<GO>>("schwarz: overlap elements");
+        std::cout << "  schwarz: overlap elements count = " << overlapElements.size() << "\n";
+      }
+      if (List.isParameter("partitioner: parts"))
+      {
+        auto parts = List.get<Teuchos::Array<Teuchos::ArrayRCP<LO>>>("partitioner: parts");
+        std::cout << "  partitioner: parts count = " << parts.size() << "\n";
+      }
+      std::cout << "  custom outer partitioning bypassed = "
+                << (bypassCustomOuterPartitioningForDegenerateCase ? "true" : "false")
+                << "\n";
+    }
+  }
+  
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  if (rank == 0) {
 //    cout << "Smoother info:\n";
 //    cout << *smoother;
 //  }
 
-  err = smoother->Initialize();
-  if (err != 0)
-  {
-    cout << "WARNING: In GMGOperator, smoother->Initialize() returned with err " << err << endl;
-  }
-  err = smoother->Compute();
-
-  int myLevel = getOperatorLevel();
-  if (err != 0)
-  {
-    cout << "WARNING: In GMGOperator (level " << myLevel << "), smoother->Compute() returned with err = " << err << endl;
-  }
+  smoother->initialize();
+  smoother->compute();
 
   if ((choice == CAMELLIA_ADDITIVE_SCHWARZ) && _useSchwarzDiagonalWeight)
   {
-    // setup weight vector:
-    const Epetra_Map* rangeMap = NULL;
-    vector<int> myIncidenceCounts;
-    switch (_schwarzBlockFactorizationType)
-    {
-      case Direct:
-      {
-        Camellia::AdditiveSchwarz<Ifpack_Amesos>* camelliaSmoother = dynamic_cast<Camellia::AdditiveSchwarz<Ifpack_Amesos>*>(smoother.get());
-        rangeMap = &camelliaSmoother->OverlapMap();
-        myIncidenceCounts = camelliaSmoother->LocalIncidenceCounts();
-      }
-        break;
-      case ILU:
-      {
-        Camellia::AdditiveSchwarz<Ifpack_ILU>* camelliaSmoother = dynamic_cast<Camellia::AdditiveSchwarz<Ifpack_ILU>*>(smoother.get());
-        rangeMap = &camelliaSmoother->OverlapMap();
-        myIncidenceCounts = camelliaSmoother->LocalIncidenceCounts();
-      }
-        break;
-      case IC:
-      {
-        Camellia::AdditiveSchwarz<Ifpack_IC>* camelliaSmoother = dynamic_cast<Camellia::AdditiveSchwarz<Ifpack_IC>*>(smoother.get());
-        rangeMap = &camelliaSmoother->OverlapMap();
-        myIncidenceCounts = camelliaSmoother->LocalIncidenceCounts();
-      }
-        break;
-    }
-    
-    Epetra_FEVector multiplicities(fineStiffnessMatrix->RowMap(),1);
-    vector<GlobalIndexTypeToCast> overlappingEntries(rangeMap->NumMyElements());
-    rangeMap->MyGlobalElements(&overlappingEntries[0]);
+    auto overlapDetails = getAdditiveSchwarzDetails(_fineMesh, _smootherOverlap,
+                                                    _hierarchicalNeighborsForSchwarz,
+                                                    _dimensionForSchwarzNeighborRelationship,
+                                                    _fineDofInterpreter,
+                                                    _fineStiffnessMatrix);
 
-    vector<double> myOverlappingValues(myIncidenceCounts.begin(),myIncidenceCounts.end());
-    multiplicities.SumIntoGlobalValues(myOverlappingValues.size(), &overlappingEntries[0], &myOverlappingValues[0]);
+    auto ownedMap = fineStiffnessMatrix->getRowMap();
+    auto eOwnedMap = T_to_E::map(ownedMap);
+    Epetra_FEVector multiplicities(*eOwnedMap, 1);
+
+    const auto & overlappingEntries = overlapDetails.overlapMapGlobalOrdinals;
+
+    TEUCHOS_TEST_FOR_EXCEPTION(overlapDetails.localIncidenceCounts.size() != overlappingEntries.size(),
+                               std::invalid_argument,
+                               "GMGOperator::setUpSmoother(): local incidence count size does not match overlap-map GID count");
+
+    std::vector<double> myOverlappingValues(overlapDetails.localIncidenceCounts.begin(), overlapDetails.localIncidenceCounts.end());
+    multiplicities.SumIntoGlobalValues(static_cast<int>(myOverlappingValues.size()),
+                                       overlappingEntries.getRawPtr(),
+                                       myOverlappingValues.data());
     multiplicities.GlobalAssemble();
-    
-    double maxMultiplicity = 0;
-    multiplicities.MaxValue(&maxMultiplicity);
-    if (_useSchwarzScalingWeight)
+
+    _smootherDiagonalWeight = Teuchos::rcp(new Tpetra::Vector<Scalar>(ownedMap));
+    auto weightView = _smootherDiagonalWeight->getLocalViewHost(Tpetra::Access::ReadWrite);
+    const size_t numMyElements = ownedMap->getLocalNumElements();
+    for (size_t lid = 0; lid < numMyElements; lid++)
     {
-      _smootherWeight = 1.0 / (2 + maxMultiplicity);
-//      if (rank == 0) cout << "Set _smootherWeight to 1/" << (int) (2 + maxMultiplicity) << endl;
+      const double value = multiplicities[0][static_cast<int>(lid)];
+      TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument,
+                                 "GMGOperator::setUpSmoother(): multiplicity value should never be 0");
+      weightView(lid,0) = 1.0 / value;
     }
-    
-    if (_useSchwarzDiagonalWeight)
-    {
-      _smootherDiagonalWeight = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
-      GlobalIndexTypeToCast numMyElements = fineStiffnessMatrix->RowMap().NumMyElements();
-      for (int LID=0; LID < numMyElements; LID++)
-      {
-        double value = multiplicities[0][LID];
-        TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument, "internal error: value should never be 0");
-        (*_smootherDiagonalWeight)[0][LID] = 1.0/value;
-      }
-    }
-    // debugging:
-//    printMapSummary(*rangeMap, "Schwarz matrix range map");
-//    cout << *_smootherWeight_sqrt;
   }
   
   if (_useSchwarzScalingWeight && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ)))
@@ -2548,7 +2878,7 @@ TMatrixPtr<double> GMGOperator::getProlongationOperator()
   return _P;
 }
 
-Teuchos::RCP<Epetra_Operator> GMGOperator::getSmoother() const
+Teuchos::RCP< Tpetra::Operator<double> > GMGOperator::getSmoother() const
 {
   return _smoother;
 }
@@ -2556,9 +2886,8 @@ Teuchos::RCP<Epetra_Operator> GMGOperator::getSmoother() const
 TMatrixPtr<double> GMGOperator::getSmootherAsMatrix()
 {
   narrate("getSmootherAsMatrix()");
-  auto eMap    = T_to_E::map(_finePartitionMap);
-  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, *eMap);
-  return E_to_T::matrix(eMatrix);
+  auto tMatrix = Tpetra_Operator_to_Tpetra_Matrix::constructInverseMatrix(_smoother, _finePartitionMap);
+  return tMatrix;
 }
 
 //! Returns the coarse stiffness matrix (a Tpetra CrsMatrix).

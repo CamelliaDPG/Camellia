@@ -22,18 +22,7 @@
 #include <Epetra_Time.h>
 #include <Epetra_CrsMatrix.h>
 #include <Epetra_MultiVector.h>
-
-// Might need these later
-// #include <Teuchos_ScalarTraits.hpp>
-// #include <Teuchos_RCP.hpp>
-// #include <Teuchos_GlobalMPISession.hpp>
-// #include <Teuchos_oblackholestream.hpp>
-// #include <Teuchos_Tuple.hpp>
-// #include <Teuchos_VerboseObject.hpp>
-// #include <Tpetra_DefaultPlatform.hpp>
-// #include <Tpetra_Map.hpp>
-// #include <Tpetra_MultiVector.hpp>
-// #include <Tpetra_CrsMatrix.hpp>
+#include <E_to_T.hpp>
 
 #include "Amesos_config.h"
 #include "Amesos2.hpp"
@@ -47,54 +36,55 @@ template <typename Scalar>
 class TSolver
 {
 protected:
-  Teuchos::RCP<Epetra_CrsMatrix> _stiffnessMatrix;
-  Teuchos::RCP<Epetra_MultiVector> _lhs;
-  Teuchos::RCP<Epetra_MultiVector> _rhs;
-
-  TMatrixPtr<Scalar> _stiffnessMatrix2;
-  TVectorPtr<Scalar> _lhs2;
-  TVectorPtr<Scalar> _rhs2;
+  TMatrixPtr<Scalar> _stiffnessMatrix;
+  TVectorPtr<Scalar> _lhs;
+  TVectorPtr<Scalar> _rhs;
 public:
   virtual ~TSolver() {}
+  
+  TVectorPtr<Scalar> lhs()
+  {
+    return _lhs;
+  }
   virtual void setProblem(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix, Teuchos::RCP<Epetra_MultiVector> lhs, Teuchos::RCP<Epetra_MultiVector> rhs)
   {
-    _stiffnessMatrix = stiffnessMatrix;
-    _lhs = lhs;
-    _rhs = rhs;
+    _stiffnessMatrix = E_to_T::matrix(stiffnessMatrix);
+    _lhs = E_to_T::vector(lhs);
+    _rhs = E_to_T::vector(rhs);
     stiffnessMatrixChanged();
   }
   virtual void setProblem(TMatrixPtr<Scalar> stiffnessMatrix, TVectorPtr<Scalar> lhs, TVectorPtr<Scalar> rhs)
   {
-    _stiffnessMatrix2 = stiffnessMatrix;
-    _lhs2 = lhs;
-    _rhs2 = rhs;
+    _stiffnessMatrix = stiffnessMatrix;
+    _lhs = lhs;
+    _rhs = rhs;
     stiffnessMatrixChanged();
   }
   virtual void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix)
   {
-    _stiffnessMatrix = stiffnessMatrix;
+    _stiffnessMatrix = E_to_T::matrix(stiffnessMatrix);
     stiffnessMatrixChanged();
   }
   virtual void setStiffnessMatrix(TMatrixPtr<Scalar> stiffnessMatrix)
   {
-    _stiffnessMatrix2 = stiffnessMatrix;
+    _stiffnessMatrix = stiffnessMatrix;
     stiffnessMatrixChanged();
   }
   virtual void setLHS(Teuchos::RCP<Epetra_MultiVector> lhs)
   {
-    _lhs = lhs;
+    _lhs = E_to_T::vector(lhs);
   }
   virtual void setLHS2(TVectorPtr<Scalar> lhs)
   {
-    _lhs2 = lhs;
+    _lhs = lhs;
   }
   virtual void setRHS(Teuchos::RCP<Epetra_MultiVector> rhs)
   {
-    _rhs = rhs;
+    _rhs = E_to_T::vector(rhs);
   }
   virtual void setRHS2(TVectorPtr<Scalar> rhs)
   {
-    _rhs2 = rhs;
+    _rhs = rhs;
   }
   virtual void stiffnessMatrixChanged()
   {
@@ -153,7 +143,7 @@ class TAmesos2Solver : public TSolver<Scalar>
 {
   bool _saveFactorization;
   std::string _solverString;
-  Teuchos::RCP<Amesos2::Solver<Epetra_CrsMatrix,Epetra_MultiVector> > _savedSolver;
+  Teuchos::RCP<Amesos2::Solver< TMatrix<Scalar>,TVector<Scalar> > > _savedSolver;
 public:
   // Solver options available: klu superlu_dist superlu_mt superlu pardisomkl lapack amesos2_cholmod
   // May require specific instructions while building Trilinos
@@ -165,13 +155,13 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(this->_rhs.get() == NULL, std::invalid_argument, "rhs is unset.");
     if (!_saveFactorization)
     {
-      Teuchos::RCP<Amesos2::Solver<Epetra_CrsMatrix,Epetra_MultiVector> > solver
-        = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, this->_stiffnessMatrix, this->_lhs, this->_rhs);
+      Teuchos::RCP<Amesos2::Solver<TMatrix<Scalar>,TVector<Scalar> > > solver
+        = Amesos2::create< TMatrix<Scalar>,TVector<Scalar> >(_solverString, this->_stiffnessMatrix, this->_lhs, this->_rhs);
       solver->solve();
     }
     else
     {
-      _savedSolver = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, this->_stiffnessMatrix, this->_lhs, this->_rhs);
+      _savedSolver = Amesos2::create< TMatrix<Scalar>,TVector<Scalar> >(_solverString, this->_stiffnessMatrix, this->_lhs, this->_rhs);
       _savedSolver->solve();
     }
     return 0;

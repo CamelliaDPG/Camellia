@@ -21,6 +21,8 @@ TGraphPtr E_to_T::graph(const Epetra_CrsGraph &eGraph)
 {
   TGraphPtr tGraph;
   using GO = TMatrix<double>::global_ordinal_type;
+  // we are assuming both Tpetra and Epetra were built with 64-bit global ordinals:
+  static_assert(sizeof(GO) == sizeof(long long));
   
   auto eRowMap = eGraph.RowMap();
   TMapPtr tRowMap = map(eRowMap);
@@ -50,10 +52,10 @@ TGraphPtr E_to_T::graph(const Epetra_CrsGraph &eGraph)
     
     for (int j=0; j<numEntries; j++)
     {
-      goIndicesT[j] = static_cast<GO>(eColMap.GID(localIndices[j]));
+      goIndicesT[j] = static_cast<GO>(eColMap.GID64(localIndices[j]));
     }
 
-    GO i_global = eGraph.RowMap().GID(i);
+    GO i_global = eGraph.RowMap().GID64(i);
     tGraph->insertGlobalIndices(i_global, numEntries, goIndicesT.data());
   }
 
@@ -76,11 +78,11 @@ TMapPtr E_to_T::map(const Epetra_BlockMap &eMap)
   std::vector<GO> goMyIndices(numMyElements);
   for (int i=0; i<numMyElements; i++)
   {
-    goMyIndices[i] = static_cast<GO>(eMap.GID(i));
+    goMyIndices[i] = static_cast<GO>(eMap.GID64(i));
   }
   
   Epetra_CommPtr eComm = Teuchos::rcp(&const_cast<Epetra_Comm&>(eMap.Comm()),false);
-  Teuchos_CommPtr comm = MPIWrapper::TeuchosComm(eComm);
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosComm(eComm); // NOTE: this is a collective call!
   
   TMapPtr tMap = Teuchos::rcp(new TMap(numGlobalElements, goMyIndices.data(), numMyElements, 0, comm));
   return tMap;
@@ -113,9 +115,9 @@ Teuchos::RCP< TMatrix<double> > E_to_T::matrix(Teuchos::RCP<const Epetra_CrsMatr
     
     for (int j=0; j<numEntries; j++)
     {
-      goIndicesT[j] = static_cast<GO>(eColMap.GID(localIndices[j]));
+      goIndicesT[j] = static_cast<GO>(eColMap.GID64(localIndices[j]));
     }
-    GO i_global = eGraph.RowMap().GID(i);
+    GO i_global = eGraph.RowMap().GID64(i);
     tMatrix->replaceGlobalValues(i_global, numEntries, values, goIndicesT.data());
     
 //    {

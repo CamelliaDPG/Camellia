@@ -193,15 +193,15 @@ namespace
         
         auto trialOrdering = mesh->getElementType(myCellID)->trialOrderPtr;
         
-        map<int,double> expectedRowValues;
+        map<GlobalIndexTypeToCast,double> expectedRowValues;
         
         for (int sideOrdinal=0; sideOrdinal<2; sideOrdinal++) // 1D
         {
           set<GlobalIndexType> dofsForSide = soln->getDofInterpreter()->getGlobalDofIndices(myCellID, uHat->ID(), sideOrdinal);
           // sanity check: there should be exactly one dof
           TEST_ASSERT(dofsForSide.size() == 1);
-          GlobalIndexType dofForSide = *dofsForSide.begin();
-          int LIDForDof = colMap.LID(dofForSide);
+          GlobalIndexTypeToCast dofForSide = *dofsForSide.begin();
+          auto LIDForDof = colMap.LID(dofForSide);
           double normal = (sideOrdinal==0) ? -1.0 : 1.0; // normal is -1.0 for sideOrdinal 0; 1.0 for 1
           double sideParity = soln->mesh()->parityForSide(myCellID, sideOrdinal);
           double expectedValue = normal * sideParity;

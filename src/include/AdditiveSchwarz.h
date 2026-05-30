@@ -55,6 +55,7 @@
 #include "LocalFilter.h"
 #include "Mesh.h"
 #include "MPIWrapper.h"
+#include "T_to_E.hpp"
 #include "TypeDefs.h"
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
@@ -159,7 +160,7 @@ public:
    * dimensionForNeighborRelationship - (In) what dimension is used to determine neighbor relationship: 0 for vertex neighbors, d-1 for side neighbors, etc.
    *
    */
-  AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
+  AdditiveSchwarz(Epetra_CrsMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
                   bool hierarchical, int dimensionForNeighborRelationship);
 
   //! Destructor
@@ -419,7 +420,7 @@ protected:
   int dimensionForNeighborRelationship_;
 
   //! Pointers to the matrix to be preconditioned.
-  Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
+  Teuchos::RCP<const Epetra_CrsMatrix> Matrix_;
   //! Pointers to the overlapping matrix.
   Teuchos::RCP<OverlappingRowMatrix> OverlappingMatrix_;
   //! Localized version of Matrix_ or OverlappingMatrix_.
@@ -484,7 +485,7 @@ protected:
 //==============================================================================
 template<typename T>
 AdditiveSchwarz<T>::
-AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
+AdditiveSchwarz(Epetra_CrsMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
                 Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical,
                 int dimensionForNeighborRelationship) :
   mesh_(mesh),
@@ -509,9 +510,13 @@ AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
   ComputeFlops_(0.0),
   ApplyInverseFlops_(0.0)
 {
+  // hack for now: convert to Tpetra matrix and back, which should get us 64-bit Epetra maps.
+  
   // Construct a reference-counted pointer with the input matrix; don't manage the memory.
   Matrix_ = Teuchos::rcp( Matrix_in, false );
-
+  auto tMatrix = E_to_T::matrix(Matrix_);
+  Matrix_ = T_to_E::matrix(tMatrix);
+    
 //  if (Matrix_->Comm().NumProc() == 1)
 //    OverlapLevel_ = 0;
 
@@ -527,7 +532,8 @@ AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
 template<typename T>
 int AdditiveSchwarz<T>::Setup()
 {
-
+  using GO = TMatrix<double>::global_ordinal_type;
+  
   Epetra_RowMatrix* MatrixPtr;
 
   try
@@ -568,7 +574,7 @@ int AdditiveSchwarz<T>::Setup()
       vector<int> localRows;
       for (GlobalIndexType globalDofIndex : globalDofIndices)
       {
-        localRows.push_back(OverlapMap().LID((GlobalIndexTypeToCast)globalDofIndex));
+        localRows.push_back(OverlapMap().LID(static_cast<GO>(globalDofIndex)));
       }
       
       Teuchos::RCP<LocalFilter> localizedMatrix;
@@ -683,7 +689,8 @@ int AdditiveSchwarz<T>::Initialize()
   // compute the overlapping matrix if necessary
   if (IsOverlapping_)
   {
-    OverlappingMatrix_ = Teuchos::rcp( new OverlappingRowMatrix(Matrix_, OverlapLevel_, mesh_, dofInterpreter_, hierarchical_) );
+    auto tMatrix = E_to_T::matrix(Matrix_);
+    OverlappingMatrix_ = Teuchos::rcp( new OverlappingRowMatrix(tMatrix, OverlapLevel_, mesh_, dofInterpreter_, hierarchical_) );
 
     if (OverlappingMatrix_ == Teuchos::null)
     {
@@ -891,16 +898,19 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
   template<typename T>
   int AdditiveSchwarz<T>::MaxGlobalIncidenceCount() const
   {
+    using GO = TMap::global_ordinal_type;
+    
     // setup weight vector:
     const Epetra_Map* rangeMap = &OverlapMap();
     const vector<int>* myIncidenceCounts = &_localIncidenceCounts;
     
-    Epetra_FEVector multiplicities(Matrix_->OperatorRangeMap(),1);
-    vector<GlobalIndexTypeToCast> overlappingEntries(rangeMap->NumMyElements());
-    rangeMap->MyGlobalElements(&overlappingEntries[0]);
+    auto operatorRangeMap = Matrix_->OperatorRangeMap();
+    Epetra_FEVector multiplicities(operatorRangeMap,1);
+    vector<GO> overlappingEntries(rangeMap->NumMyElements());
+    rangeMap->MyGlobalElements(overlappingEntries.data());
     
     vector<double> myOverlappingValues(myIncidenceCounts->begin(),myIncidenceCounts->end());
-    multiplicities.SumIntoGlobalValues(myOverlappingValues.size(), &overlappingEntries[0], &myOverlappingValues[0]);
+    multiplicities.SumIntoGlobalValues(myOverlappingValues.size(), overlappingEntries.data(), myOverlappingValues.data());
     multiplicities.GlobalAssemble();
     
     double maxMultiplicity = 0;
@@ -1074,7 +1084,7 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 
     std::vector<int> subdomainRows = localFilter->LIDsInOriginalMatrix();
     
-    Epetra_Map    localMap(subdomainRows.size(), subdomainRows.size(), &subdomainRows[0], 0, SerialComm);
+    Epetra_Map    localMap(subdomainRows.size(), subdomainRows.size(), subdomainRows.data(), 0, SerialComm);
     
     Epetra_MultiVector localX(localMap, NumVectors);
     Epetra_MultiVector localY(localMap, NumVectors);

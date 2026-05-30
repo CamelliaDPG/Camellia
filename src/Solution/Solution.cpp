@@ -26,7 +26,8 @@
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
-#include "ml_epetra_utils.h"
+#include "Epetra_Export.h"
+#include "Epetra_IntVector.h"
 //#include "ml_common.h"
 #include "ml_epetra_preconditioner.h"
 
@@ -81,6 +82,88 @@ void TSolution<Scalar>::setCubatureEnrichmentDegree(int value)
 
 static const int MAX_BATCH_SIZE_IN_BYTES = 128*1024*1024; // 128 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
+
+namespace {
+  //! adapted from ML_Epetra::LocalRowstoColumns
+  Epetra_IntVector * LocalRowstoColumns(int *Rows, int numRows,const Epetra_CrsMatrix & Matrix){
+    const Epetra_Map & ColMap = Matrix.ColMap();
+    int indexBase = ColMap.IndexBase();
+    Epetra_Map* mapPtr = 0;
+
+    if(Matrix.RowMap().GlobalIndicesInt())
+      mapPtr = new Epetra_Map((int) Matrix.NumGlobalCols(),indexBase,Matrix.Comm());
+    else if(Matrix.RowMap().GlobalIndicesLongLong())
+      mapPtr = new Epetra_Map(Matrix.NumGlobalCols64(),indexBase,Matrix.Comm());
+    else
+      assert(false);
+
+    Epetra_Map& globalMap = *mapPtr;
+
+    // create the exporter from this proc's column map to global 1-1 column map
+    Epetra_Export Exporter(ColMap,globalMap);
+
+    // create a vector of global column indices that we will export to
+    Epetra_IntVector globColsToZero(globalMap);
+    // create a vector of local column indices that we will export from
+    Epetra_IntVector *myColsToZero= new Epetra_IntVector(ColMap);
+    myColsToZero->PutValue(0);
+
+    // flag all local columns corresponding to the local rows specified
+    for (int i=0; i < numRows; i++)
+      (*myColsToZero)[Matrix.LCID(Matrix.GRID64(Rows[i]))]=1;
+
+    // export to the global column map
+    globColsToZero.Export(*myColsToZero,Exporter,Add);
+    // now import from the global column map to the local column map
+    myColsToZero->Import(globColsToZero,Exporter,Insert);
+
+    delete mapPtr;
+
+    return myColsToZero;
+  }/*end LocalRowstoColumns*/
+
+  //! adapted from ML_Epetra::Apply_OAZToMatrix().
+  void Apply_OAZToMatrix(int *dirichletRows, int numBCRows, const Epetra_CrsMatrix & Matrix)
+  {
+    /* This function does row/column ones-and-zeros on a matrix, given the
+       rows/columns to nuke.
+       Input:
+           Matrix             matrix
+       Output:
+           Grad               matrix with Dirichlet rows/columns OAZ'd.
+
+       Comments: The graph of Matrix is unchanged.
+    */
+
+    int numEntries,grid;
+    double *vals;
+    int *cols;
+
+    /* Find the local column numbers to nuke */
+    Epetra_IntVector *dirichletColumns=LocalRowstoColumns(dirichletRows,numBCRows,Matrix);
+
+    /* Zero the columns */
+    for (int i=0; i < Matrix.NumMyRows(); i++) {
+      Matrix.ExtractMyRowView(i,numEntries,vals,cols);
+      for (int j=0; j < numEntries; j++)
+        if ((*dirichletColumns)[ cols[j] ] > 0)
+          vals[j] = 0.0;
+    }/*end for*/
+
+
+    /* Zero the rows, add ones to diagonal */
+    for (int i=0; i < numBCRows; i++) {
+      Matrix.ExtractMyRowView(dirichletRows[i],numEntries,vals,cols);
+      grid=Matrix.GRID64(dirichletRows[i]);
+      for (int j=0; j < numEntries; j++)
+        if(grid==Matrix.GCID64(cols[j])) vals[j]=1.0;
+        else vals[j] = 0.0;
+    }/*end for*/
+
+    delete dirichletColumns;
+  }/*end Apply_OAZToMatrix*/
+
+} // end anonymous namespace
 
 // copy constructor:
 template <typename Scalar>
@@ -812,12 +895,13 @@ void TSolution<Scalar>::applyDGJumpTerms()
               
               // now, we compute four integrals (test, trial) and insert into global stiffness
               // define a lambda function for insertion
-              auto insertValues = [stiffnessMatrix] (vector<int> &rowDofOrdinals, vector<int> &colDofOrdinals,
+              auto insertValues = [stiffnessMatrix] (vector<GlobalIndexTypeToCast> &rowDofOrdinals,
+                                                     vector<GlobalIndexTypeToCast> &colDofOrdinals,
                                                      Intrepid::FieldContainer<double> &values) -> void
               {
                 // values container is (cell, test, trial)
-                int rowCount = rowDofOrdinals.size();
-                int colCount = colDofOrdinals.size();
+                auto rowCount = rowDofOrdinals.size();
+                auto colCount = colDofOrdinals.size();
                 
                 //        stiffnessMatrix->InsertGlobalValues(rowCount,&rowDofOrdinals[0],colCount,&colDofOrdinals[0],&values(0,0,0),
                 //                                            Epetra_FECrsMatrix::ROW_MAJOR); // COL_MAJOR is the right thing, actually, but for some reason does not work...
@@ -1026,7 +1110,8 @@ int TSolution<Scalar>::solve(bool useMumps)
 #else
   solver = Teuchos::rcp(new TAmesos2Solver<Scalar>(false, "klu"));
 #endif
-  return solve(solver);
+  int result = solve(solver);
+  return result;
 }
 
 template <typename Scalar>
@@ -1109,6 +1194,8 @@ void TSolution<Scalar>::invalidateCachedBasisCoefficientsForFields()
 template <typename Scalar>
 void TSolution<Scalar>::populateStiffnessAndLoad()
 {
+  using GO = TMap::global_ordinal_type;
+  
   TEUCHOS_FUNC_TIME_MONITOR("Solution::populateStiffnessAndLoad");
   narrate("populateStiffnessAndLoad()");
   Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
@@ -1570,6 +1657,8 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
 
   timer.ResetStartTime();
 
+  setProblem(solver); // while we have Epetra matrices and vectors, we need to call this to give solver a chance to create a fresh Tpetra copy…
+  
   int solveSuccess;
   if (!callResolveInsteadOfSolve)
   {
@@ -1591,8 +1680,15 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
     }
   }
 
-  if (_solutionStage != Teuchos::null)
+  auto e_lhs = T_to_E::vector(solver->lhs());
+  if (_solutionStage == Teuchos::null)
   {
+    // replace values in our Epetra _lhsVector with those computed (in a Tpetra vector) by solver.
+    _lhsVector->Update(1.0, *e_lhs, 0.0);
+  }
+  else
+  {
+    _lhsVectorCurrentStage->Update(1.0, *e_lhs, 0.0);
     // copy from current-stage LHS into full LHS
     const int numRHSes = _lhsVectorCurrentStage->NumVectors();
     const int solnStage = _solutionStage->getStage();
@@ -1835,6 +1931,9 @@ void TSolution<Scalar>::importSolution()
   solnCoeff.Import(*lhsVector, solnImporter, Insert);
 //  cout << "on rank " << rank << ", returned from Import\n";
 
+  auto eSolnCoeff = Teuchos::rcp(&solnCoeff, false);
+  auto tSolnCoeff = E_to_T::vector(eSolnCoeff);
+  
   // copy the dof coefficients into our data structure
   for (GlobalIndexType cellID : *myCellIDs)
   {
@@ -1844,13 +1943,13 @@ void TSolution<Scalar>::importSolution()
       const int lhsOrdinal = 0;
       const int solutionOrdinal = solutionOrdinalOffset+lhsOrdinal;
       Camellia::FieldContainer<Scalar> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
+      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,tSolnCoeff);
       replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, cellDofs);
     }
     else
     {
       Camellia::FieldContainer<Scalar> cellDofs(numLHSes,_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
+      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,tSolnCoeff);
       int numDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
       for (int lhsOrdinal=0; lhsOrdinal<numLHSes; lhsOrdinal++)
       {
@@ -2310,11 +2409,11 @@ void TSolution<Scalar>::imposeBCs()
   }
   if (numBCs == 0)
   {
-    ML_Epetra::Apply_OAZToMatrix(NULL, 0, *_globalStiffMatrix);
+    Apply_OAZToMatrix(NULL, 0, *_globalStiffMatrix);
   }
   else
   {
-    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices[0], numBCs, *_globalStiffMatrix);
+    Apply_OAZToMatrix(bcLocalIndices.data(), numBCs, *_globalStiffMatrix);
   }
 }
 
@@ -2359,9 +2458,9 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
       }
     }
 
-    GlobalIndexTypeToCast zmcIndex;
+    long long zmcIndex;
     if (rank==0)
-      zmcIndex = partMap.GID(localRowIndex);
+      zmcIndex = partMap.GID64(localRowIndex);
     else
       zmcIndex = 0;
 
@@ -3684,6 +3783,8 @@ template <typename Scalar>
 void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex,
                                                int solutionOrdinal)
 {
+  using GO = TMap::global_ordinal_type;
+  
   TEUCHOS_TEST_FOR_EXCEPTION(solutionOrdinal < 0, std::invalid_argument, "solutionOrdinal may not be negative!");
   TEUCHOS_TEST_FOR_EXCEPTION(solutionOrdinal >= _solutionForCellID.size(), std::invalid_argument, "solutionOrdinal is out of range");
   ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
@@ -3723,7 +3824,7 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
 
       for (int i=0; i<globalCoefficients.size(); i++)
       {
-        _lhsVector->ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndices[i], solutionOrdinal, globalCoefficients[i]);
+        _lhsVector->ReplaceGlobalValue(static_cast<GO>(globalDofIndices[i]), solutionOrdinal, globalCoefficients[i]);
       }
     }
   }
@@ -4012,8 +4113,9 @@ Epetra_Map TSolution<Scalar>::getPartitionMap_Epetra()
 //Epetra_Map TSolution<Scalar>::getPartitionMapSolutionDofsOnly()   // omits lagrange multipliers, ZMCs, etc.
 //{
 //  Epetra_Map partMapWithZMC = getPartitionMap_Epetra();
-//  vector<int> myGlobalIndices(partMapWithZMC.NumMyElements());
-//  partMapWithZMC.MyGlobalElements(&myGlobalIndices[0]);
+//  using GO = TMap::global_ordinal_type;
+//  vector<GO> myGlobalIndices(partMapWithZMC.NumMyElements());
+//  partMapWithZMC.MyGlobalElements64(&myGlobalIndices[0]);
 //  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
 //  vector<int> myGlobalDofs;
 //  for (vector<int>::iterator myEntry = myGlobalIndices.begin(); myEntry != myGlobalIndices.end(); myEntry++)
@@ -4032,6 +4134,8 @@ template <typename Scalar>
 Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
     int zeroMeanConstraintsSize, const Epetra_Comm* Comm )
 {
+  using GO = TMap::global_ordinal_type;
+  
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
   const set<GlobalIndexType>* cellIDsInPartition = &_mesh->globalDofAssignment()->cellsInPartition(rank);
   IndexType numMyElements = cellIDsInPartition->size();
@@ -4045,22 +4149,14 @@ Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Globa
   // - zero-mean constraints
 
   // determine the local dofs we have, and what their global indices are:
-  int localDofsSize = myGlobalIndicesSet.size() + numElementLagrange;
+  int localDofsSize = static_cast<int>(myGlobalIndicesSet.size() + numElementLagrange);
   if (rank == 0)
   {
     // global Lagrange and zero-mean constraints belong to rank 0
     localDofsSize += zeroMeanConstraintsSize + numGlobalLagrange;
   }
 
-  GlobalIndexTypeToCast *myGlobalIndices;
-  if (localDofsSize!=0)
-  {
-    myGlobalIndices = new GlobalIndexTypeToCast[ localDofsSize ];
-  }
-  else
-  {
-    myGlobalIndices = NULL;
-  }
+  std::vector<GO> myGlobalIndices(localDofsSize);
 
   // copy from set object into the allocated array
   GlobalIndexType offset = 0;
@@ -4068,8 +4164,8 @@ Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Globa
   {
     myGlobalIndices[offset++] = myGlobalIndex;
   }
-  GlobalIndexType cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
-  GlobalIndexType globalIndex = cellOffset + numGlobalDofs;
+  GO cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
+  GO globalIndex = cellOffset + numGlobalDofs;
   for (int elemLagrangeIndex=0; elemLagrangeIndex<_lagrangeConstraints->numElementConstraints(); elemLagrangeIndex++)
   {
     for (IndexType cellIndex=0; cellIndex<numMyElements; cellIndex++)
@@ -4098,7 +4194,7 @@ Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Globa
 
   int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
 
-  int indexBase = 0;
+  GO indexBase = 0;
   //cout << "process " << rank << " about to construct partMap.\n";
   //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
 //  cout << "process " << rank << " about to construct partMap; totalRows = " << totalRows;
@@ -4107,13 +4203,9 @@ Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Globa
 //  cout << "num element Lagrange GlobalDofIndices: " << globalNumElementLagrange << endl;
 //  cout << "num global Lagrange GlobalDofIndices:  " << numGlobalLagrange << endl;
 //  cout << "num zero mean constraints:             " << zeroMeanConstraintsSize << endl;
-  Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices, indexBase, *Comm);
+  Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices.data(), indexBase, *Comm);
 //  cout << "On rank " << rank << ", constructed partMap with " << partMap.NumGlobalElements() << " global elements.\n";
 
-  if (localDofsSize!=0)
-  {
-    delete[] myGlobalIndices;
-  }
   return partMap;
 }
 
@@ -4134,8 +4226,9 @@ MapPtr TSolution<Scalar>::getPartitionMap2()
 
 // MapPtr TSolution<Scalar>::getPartitionMapSolutionDofsOnly2() { // omits lagrange multipliers, ZMCs, etc.
 //   MapPtr partMapWithZMC = getPartitionMap2();
-//   vector<int> myGlobalIndices(partMapWithZMC.NumMyElements());
-//   partMapWithZMC.MyGlobalElements(&myGlobalIndices[0]);
+//   using GO = TMap::global_ordinal_type;
+//   vector<GO> myGlobalIndices(partMapWithZMC.NumMyElements());
+//   partMapWithZMC.MyGlobalElements64(&myGlobalIndices[0]);
 //   GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
 //   vector<int> myGlobalDofs;
 //   for (vector<int>::iterator myEntry = myGlobalIndices.begin(); myEntry != myGlobalIndices.end(); myEntry++) {

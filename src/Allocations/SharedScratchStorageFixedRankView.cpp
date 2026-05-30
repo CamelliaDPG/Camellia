@@ -167,7 +167,7 @@ namespace Camellia
     return _hitCount;
   }
   
-  template class SharedScratchStorageFixedRankView<double, 1>;  // for now, we only support double, int, bool.  Could add support for long long, complex, float, etc.
+  template class SharedScratchStorageFixedRankView<double, 1>;  // for now, we only support double, int, bool, long long.  Could add support for complex, float, etc.
   template class SharedScratchStorageFixedRankView<double, 2>;
   template class SharedScratchStorageFixedRankView<double, 3>;
   template class SharedScratchStorageFixedRankView<double, 4>;
@@ -190,4 +190,12 @@ namespace Camellia
   template class SharedScratchStorageFixedRankView<bool, 5>;
   template class SharedScratchStorageFixedRankView<bool, 6>;
   template class SharedScratchStorageFixedRankView<bool, 7>;
+
+  template class SharedScratchStorageFixedRankView<long long, 1>;
+  template class SharedScratchStorageFixedRankView<long long, 2>;
+  template class SharedScratchStorageFixedRankView<long long, 3>;
+  template class SharedScratchStorageFixedRankView<long long, 4>;
+  template class SharedScratchStorageFixedRankView<long long, 5>;
+  template class SharedScratchStorageFixedRankView<long long, 6>;
+  template class SharedScratchStorageFixedRankView<long long, 7>;
 } // namespace Camellia

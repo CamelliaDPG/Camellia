@@ -587,47 +587,22 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camelli
 
   if (globalCoefficients.NumVectors() == 1)
   {
-    bool useFieldContainer = false;
-    
-    if (useFieldContainer)
+    Epetra_BlockMap partMap = globalCoefficients.Map();
+    map<GlobalIndexType,double> globalCoefficientsToMap;
+    for (int i=0; i<globalIndexVector->size(); i++)
     {
-      Camellia::FieldContainer<double> globalCoefficientsFC(globalIndexVector->size());
-      Epetra_BlockMap partMap = globalCoefficients.Map();
-      for (int i=0; i<globalIndexVector->size(); i++)
+      GlobalIndexTypeToCast globalIndex = (*globalIndexVector)[i];
+      int localIndex = partMap.LID(globalIndex);
+      if (localIndex != -1)
       {
-        GlobalIndexTypeToCast globalIndex = (*globalIndexVector)[i];
-        int localIndex = partMap.LID(globalIndex);
-        if (localIndex != -1)
+        if (globalCoefficients[0][localIndex] != 0.0)
         {
-          globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
-        }
-        else
-        {
-          // non-local coefficient: ignore
-          globalCoefficientsFC[i] = 0;
+          globalCoefficientsToMap[globalIndex] = globalCoefficients[0][localIndex];
         }
       }
-      localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
     }
-    else
-    {
-      Epetra_BlockMap partMap = globalCoefficients.Map();
-      map<GlobalIndexType,double> globalCoefficientsToMap;
-      for (int i=0; i<globalIndexVector->size(); i++)
-      {
-        GlobalIndexTypeToCast globalIndex = (*globalIndexVector)[i];
-        int localIndex = partMap.LID(globalIndex);
-        if (localIndex != -1)
-        {
-          if (globalCoefficients[0][localIndex] != 0.0)
-          {
-            globalCoefficientsToMap[globalIndex] = globalCoefficients[0][localIndex];
-          }
-        }
-      }
 //      if (globalCoefficientsToMap.size() == 0) cout << "***********************  Empty globalCoefficientsToMap **************************\n";
-      dofMapper->mapGlobalCoefficients(globalCoefficientsToMap, localCoefficients);
-    }
+    dofMapper->mapGlobalCoefficients(globalCoefficientsToMap, localCoefficients);
   }
   else
   {
@@ -667,70 +642,51 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camelli
 //  cout << " to localData:\n " << localDofs;
 }
 
-template <typename Scalar>
-void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients)
+void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
+                                                 const TVectorPtr<double> globalCoefficients)
 {
-  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::interpretGlobalCoefficients2");
+  using Scalar = double;
+  using GO = TMap::global_ordinal_type;
+  
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::interpretGlobalCoefficients(Tpetra)");
   LocalDofMapperPtr dofMapper = getDofMapper(cellID);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
-
-  // DEBUGGING
-//  if (cellID==4) {
-//    cout << "interpretGlobalData, mapping report for cell " << cellID << ":\n";
-//    dofMapper->printMappingReport();
-//  }
-
-  if (globalCoefficients->getNumVectors() == 1)
+  
+  auto gcView = globalCoefficients->getLocalViewHost(Tpetra::Access::ReadOnly);
+  const int numVectors = static_cast<int>(globalCoefficients->getNumVectors());
+  for (int vectorOrdinal=0; vectorOrdinal < numVectors; vectorOrdinal++)
   {
-    // TODO: Test whether this is actually correct
-    Teuchos::ArrayRCP<Scalar> globalCoefficientsArray = globalCoefficients->getDataNonConst(globalIndexVector.size());
-    Camellia::FieldContainer<Scalar> globalCoefficientsFC(globalIndexVector.size());
-    Teuchos::ArrayView<Scalar> arrayView = globalCoefficientsArray.view(0,globalIndexVector.size());
-    globalCoefficientsFC.setValues(arrayView);
-    // ConstMapPtr partMap = globalCoefficients->getMap();
-    // for (int i=0; i<globalIndexVector.size(); i++) {
-    //   GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
-    //   int localIndex = partMap->getLocalElement(globalIndex);
-    //   if (localIndex != Teuchos::OrdinalTraits<IndexType>::invalid()) {
-    //     globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
-    //   } else {
-    //     // non-local coefficient: ignore
-    //     globalCoefficientsFC[i] = 0;
-    //   }
-    // }
-    localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
+    auto partMap = globalCoefficients->getMap();
+    map<GlobalIndexType,double> globalCoefficientsToMap;
+    for (const auto & globalIndex : globalIndexVector)
+    {
+      int localIndex = partMap->getLocalElement(static_cast<GO>(globalIndex));
+      if (localIndex != -1)
+      {
+        if (gcView(localIndex,vectorOrdinal) != 0.0)
+        {
+          globalCoefficientsToMap[globalIndex] = gcView(localIndex,vectorOrdinal);
+        }
+      }
+    }
+    if (numVectors == 1)
+    {
+      dofMapper->mapGlobalCoefficients(globalCoefficientsToMap, localCoefficients);
+    }
+    else
+    {
+      const int numLocalCoefficients = static_cast<int>(globalCoefficientsToMap.size());
+      Camellia::FieldContainer<double> localCoefficientsForVectorOrdinal(numLocalCoefficients);
+      
+      dofMapper->mapGlobalCoefficients(globalCoefficientsToMap, localCoefficientsForVectorOrdinal);
+      
+      for (int i=0; i<numLocalCoefficients; i++)
+      {
+        localCoefficients(vectorOrdinal,i) = localCoefficientsForVectorOrdinal(i);
+      }
+    }
   }
-  else
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "InterpretGlobalCoefficients not implemented for more than one vector");
-    // Teuchos::ArrayRCP<Teuchos::ArrayRCP<Scalar>> globalCoefficients2DArray = globalCoefficients->get2dViewNonConst(globalIndexVector.size());
-    // Camellia::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.numVectors(), globalIndexVector.size());
-    // for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.numVectors(); vectorOrdinal++) {
-    //   Teuchos::ArrayRCP<Scalar> globalCoefficientsArray = globalCoefficients2DArray[vectorOrdinal];
-    //   Teuchos::ArrayView<Scalar> arrayView = globalCoefficientsArray.view(0,globalIndexVector.size());
-    //   globalCoefficientsFC.setValues(arrayView);
-    // }
-    //   Camellia::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
-    //   Epetra_BlockMap partMap = globalCoefficients.Map();
-    //   for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
-    //     for (int i=0; i<globalIndexVector.size(); i++) {
-    //       GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
-    //       int localIndex = partMap.LID(globalIndex);
-    //       if (localIndex != -1) {
-    //         globalCoefficientsFC(vectorOrdinal,i) = globalCoefficients[vectorOrdinal][localIndex];
-    //       } else {
-    //         // non-local coefficient: ignore
-    //         globalCoefficientsFC(vectorOrdinal,i) = 0;
-    //       }
-    //     }
-    // }
-    // localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
-  }
-//  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
-//  cout << " to localData:\n " << localDofs;
 }
-
-template void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients);
 
 void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
                                         Camellia::FieldContainer<double> &globalData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)

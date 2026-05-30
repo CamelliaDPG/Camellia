@@ -131,7 +131,7 @@ void DoerflerRefinementStrategy::refineAndUnrefine(bool unrefine, bool printToCo
     globalCellsToRefineVector[myCellOrdinalOffset + i] = myCellsToHRefine[i];
   }
   vector<GlobalIndexTypeToCast> gatheredCellsToRefineVector(numCellsToHRefine, 0);
-  Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, numCellsToHRefine, &globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0]);
+  Teuchos::reduceAll(*mesh->Comm(), Teuchos::REDUCE_SUM, static_cast<int>(numCellsToHRefine), &globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0]);
 
   vector<GlobalIndexType> cellsToRefine(gatheredCellsToRefineVector.begin(),gatheredCellsToRefineVector.end());;
   
@@ -141,7 +141,7 @@ void DoerflerRefinementStrategy::refineAndUnrefine(bool unrefine, bool printToCo
   vector<GlobalIndexType> cellsToPRefine;
   if (numCellsToPRefine > 0)
   {
-    myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), myNumCellsToPRefine);
+    myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), static_cast<int>(myNumCellsToPRefine));
     myCellOrdinalOffset -= myNumCellsToPRefine;
 
     vector<GlobalIndexTypeToCast> gatheredCellsToPRefineVector(numCellsToPRefine, 0);

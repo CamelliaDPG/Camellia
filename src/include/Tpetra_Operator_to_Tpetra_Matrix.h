@@ -31,7 +31,7 @@ class Tpetra_Operator_to_Tpetra_Matrix
 public:
   //! Belos at least considers the preconditioner operators provided to it to be approximations of the inverse.  What we implement here just naively constructs
   //! an explicitly stored matrix from a possibly implicitly specified operator.  This is based on the Epetra_Operator_to_Epetra_Matrix class.
-  static Teuchos::RCP<TMatrix<double> > constructInverseMatrix(const Tpetra::Operator<double> &op, const Tpetra::Map<> &map);
+  static Teuchos::RCP<TMatrix<double> > constructInverseMatrix(const Teuchos::RCP<Tpetra::Operator<double> > op, TMapPtr map);
 };
 }
 

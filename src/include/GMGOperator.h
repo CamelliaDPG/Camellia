@@ -41,7 +41,19 @@ class GMGOperator : public TOperator<double>, public Narrator
 {
   using Scalar = double;
   using SerialDenseMatrix = Teuchos::SerialDenseMatrix<int, Scalar>;
+  
+  using LO = TMatrix<double>::local_ordinal_type;
+  using GO = TMatrix<double>::global_ordinal_type;
+  using Node = TMatrix<double>::node_type;
+  using Import = Tpetra::Import<LO,GO,Node>;
 public:
+  struct AdditiveSchwarzDetails
+  {
+    Teuchos::Array<GO> externalGIDsThisRank;
+    Teuchos::Array<Teuchos::ArrayRCP<LO>> partsLocalOrdinals;
+    Teuchos::Array<GO> overlapMapGlobalOrdinals;
+    std::vector<int> localIncidenceCounts;
+  };
   enum SmootherChoice
   {
     POINT_JACOBI,
@@ -49,10 +61,12 @@ public:
     BLOCK_JACOBI,
     BLOCK_SYMMETRIC_GAUSS_SEIDEL,
     IFPACK_ADDITIVE_SCHWARZ,
-    CAMELLIA_ADDITIVE_SCHWARZ,
+    CAMELLIA_ADDITIVE_SCHWARZ,  // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
     CHEBYSHEV,
     NONE
   };
+  
+  static SmootherChoice DEFAULT_ADDITIVE_SCHWARZ; // initialized in GMGOperator.cpp
   
   enum SmootherApplicationType
   {
@@ -87,7 +101,7 @@ private:
   
   MeshPtr _fineMesh, _coarseMesh;
   TMapPtr _finePartitionMap;
-
+  
   BCPtr _bc;
 
   TimeStatistics getStatistics(double timeValue) const;
@@ -115,10 +129,11 @@ private:
   MultigridStrategy _multigridStrategy;
   TMatrixPtr<double> _P; // prolongation operator
 
-  Teuchos::RCP<Epetra_Operator> _smoother;
+  Teuchos::RCP<Tpetra::Operator<Scalar> > _smoother;
+//  Teuchos::RCP<Epetra_Operator> _smoother;
   double _smootherWeight;
   int _smootherApplicationCount; // default to 1, but 2 may often be a better choice (especially when doing more than 2 levels)
-  Teuchos::RCP<Epetra_MultiVector> _smootherDiagonalWeight;
+  Teuchos::RCP<Tpetra::Vector<Scalar> > _smootherDiagonalWeight;
   bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
   
   int _chebyshevDegree = 15;
@@ -147,7 +162,7 @@ public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
 
-  void setUpSmoother(Epetra_CrsMatrix* fineStiffnessMatrix);
+  void setUpSmoother(TMatrixPtr<Scalar> fineStiffnessMatrix);
 public:
   //! @name Destructor
   //@{
@@ -333,7 +348,7 @@ public:
   // ! When set to true, will scale using the inverse of the maximum eigenvalue of the Schwarz smoother times the fine matrix.  Currently only supported for CAMELLIA_ADDITIVE_SCHWARZ smoothers.
   void setUseSchwarzScalingWeight(bool value);
   
-  Teuchos::RCP<Epetra_Operator> getSmoother() const;
+  Teuchos::RCP< Tpetra::Operator<double> > getSmoother() const;
   
   SmootherChoice getSmootherType();
   
@@ -349,7 +364,7 @@ public:
   void setSmootherWeight(double weight);
 
   // ! smoother weight vector (used for Camellia additive Schwarz; may be null in other cases)
-  Teuchos::RCP<Epetra_MultiVector> getSmootherWeightVector();
+  Teuchos::RCP<Tpetra::Vector<Scalar> > getSmootherWeightVector();
   
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
@@ -366,6 +381,13 @@ public:
   void setUseHierarchicalNeighborsForSchwarz(bool value);
   //@}
 
+  static AdditiveSchwarzDetails getAdditiveSchwarzDetailsForTests(MeshPtr mesh,
+                                                                  int overlapLevel,
+                                                                  bool hierarchical,
+                                                                  int dimensionForNeighborRelationship,
+                                                                  Teuchos::RCP<DofInterpreter> fineDofInterpreter,
+                                                                  TMatrixPtr<Scalar> A);
+  
   //! Returns the fine mesh
   MeshPtr getFineMesh() const;
   

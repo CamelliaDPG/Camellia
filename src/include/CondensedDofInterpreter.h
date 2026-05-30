@@ -103,6 +103,11 @@ private:
                     Camellia::FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices);
   
   bool varDofsAreUsuallyCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering) const;
+  
+  // private version with common code to support both E and T versions
+  template<typename ViewType>
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localDofs,
+                                   TMapConstPtr map, ViewType globalDofs);
 public:
   CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Scalar> ip, TRHSPtr<Scalar> rhs, TBCPtr<Scalar> bc,
                           LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude,
@@ -151,6 +156,8 @@ public:
                                        Camellia::FieldContainer<Scalar> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
 
   void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localDofs, const Epetra_MultiVector &globalDofs);
+  
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localDofs, const TVectorPtr<Scalar> globalDofs);
 
   bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const;
   

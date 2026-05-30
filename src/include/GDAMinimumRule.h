@@ -226,9 +226,10 @@ public:
                                        Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) override;
   void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
                                    const Epetra_MultiVector &globalCoefficients) override;
-  template <typename Scalar>
-  void interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients,
-                                    const TVectorPtr<Scalar> globalCoefficients);
+  
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
+                                   const TVectorPtr<double> globalCoefficients) override;
+  
   IndexType localDofCount() override; // local to the MPI node
 
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) override;

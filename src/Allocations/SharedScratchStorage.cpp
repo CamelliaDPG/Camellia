@@ -252,9 +252,10 @@ namespace Camellia
     return ssStorageRCP;
   }
   
-  template class SharedScratchStorage<double>;  // for now, we only support double, int, bool.  Could add support for long long, complex, float, etc.
+  template class SharedScratchStorage<double>;  // for now, we only support double, int, bool, long long.  Could add support for complex, float, etc.
   template class SharedScratchStorage<int>;
   template class SharedScratchStorage<bool>;
+  template class SharedScratchStorage<long long>;
   
   void clearSharedScratchStorage()
   {

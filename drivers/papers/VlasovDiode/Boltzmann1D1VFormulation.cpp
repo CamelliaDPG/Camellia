@@ -762,8 +762,7 @@ Teuchos::RCP<GMGSolver> Boltzmann1D1VFormulation::constructGMGSolver()
 
   auto multigridStrategy = GMGOperator::V_CYCLE;
 //    auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
-//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
-  GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ; // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
+    GMGOperator::SmootherChoice smootherChoice = GMGOperator::DEFAULT_ADDITIVE_SCHWARZ; // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL; // as configured, this is very slow; I think it's treating all data on an MPI rank as a block…
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
   vector<MeshPtr> meshes;
@@ -777,7 +776,7 @@ Teuchos::RCP<GMGSolver> Boltzmann1D1VFormulation::constructGMGSolver()
     meshes = vector<MeshPtr> {_boltzmannSoln->mesh()};
   }
   
-  auto gmgSolver = Teuchos::rcp( new GMGSolver(_boltzmannSoln, meshes, _maxIters, _cgTol, multigridStrategy,
+  auto gmgSolver = Teuchos::rcp( new GMGSolver(_boltzmannSoln, meshes, _maxIters, _cgTol, multigridStrategy, GMGOperator::DEFAULT_ADDITIVE_SCHWARZ,
                                                Solver::getDirectSolver(true), useCondensedSolve) );
   
   gmgSolver->setSmootherType(smootherChoice);

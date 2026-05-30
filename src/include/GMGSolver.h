@@ -68,7 +68,7 @@ public:
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);
   GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters, double tol,
             GMGOperator::MultigridStrategy multigridStrategy = GMGOperator::V_CYCLE,
-            GMGOperator::SmootherChoice smoother = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ,
+            GMGOperator::SmootherChoice smoother = GMGOperator::DEFAULT_ADDITIVE_SCHWARZ,
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false,
             bool useDiagonalSchwarzWeighting = false);
 

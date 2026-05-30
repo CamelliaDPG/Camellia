@@ -28,8 +28,8 @@ using namespace Camellia;
 
 Epetra_Map mapFromBlockMap(Teuchos::RCP<Epetra_BlockMap> blockMap)
 {
-  return Epetra_Map(blockMap->NumGlobalElements(), blockMap->NumMyElements(),
-                    blockMap->MyGlobalElements(), blockMap->IndexBase(),
+  return Epetra_Map(blockMap->NumGlobalElements64(), blockMap->NumMyElements(),
+                    blockMap->MyGlobalElements64(), blockMap->IndexBase(),
                     blockMap->Comm());
 }
 
@@ -132,14 +132,14 @@ Teuchos::RCP<Epetra_CrsMatrix> Epetra_Operator_to_Epetra_Matrix::constructInvers
   int numEntriesPerRow = 0;
   Teuchos::RCP<Epetra_FECrsMatrix> matrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, map, numEntriesPerRow));
 
-  int numRows = map.NumGlobalElements();
+  auto numRows = map.NumGlobalElements64();
 
   Epetra_Vector X(map);
   Epetra_Vector Y(map);
 
   double tol = 1e-15; // values below this will be considered 0
 
-  for (int rowIndex=0; rowIndex<numRows; rowIndex++)
+  for (long long rowIndex=0; rowIndex<numRows; rowIndex++)
   {
     int lid = map.LID(rowIndex);
     if (lid != -1)
@@ -153,13 +153,13 @@ Teuchos::RCP<Epetra_CrsMatrix> Epetra_Operator_to_Epetra_Matrix::constructInvers
     }
 
     std::vector<double> values;
-    std::vector<int> indices;
+    std::vector<long long> indices;
     for (int i=0; i<map.NumMyElements(); i++)
     {
       if (abs(Y[i]) > tol)
       {
         values.push_back(Y[i]);
-        indices.push_back(map.GID(i));
+        indices.push_back(map.GID64(i));
       }
     }
 

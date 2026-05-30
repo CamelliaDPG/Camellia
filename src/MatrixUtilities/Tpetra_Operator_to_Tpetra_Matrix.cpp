@@ -16,12 +16,13 @@
 
 namespace Camellia
 {
-Teuchos::RCP<TMatrix<double> > Tpetra_Operator_to_Tpetra_Matrix::constructInverseMatrix(const Tpetra::Operator<double> &op, const Tpetra::Map<> &map)
+TMatrixPtr<double> Tpetra_Operator_to_Tpetra_Matrix::constructInverseMatrix(const Teuchos::RCP<Tpetra::Operator<double> > op, TMapPtr map)
 {
-  Teuchos::RCP<TMatrix<double> > matrix;
-  
-//  int numEntriesPerRow = 0;
-//  Teuchos::RCP<Tpetra_FECrsMatrix> matrix = Teuchos::rcp(new Tpetra_FECrsMatrix(::Copy, map, numEntriesPerRow));
+  int numEntriesPerRow = 0;
+  using LO   = TMatrix<double>::local_ordinal_type;
+  using GO   = TMatrix<double>::global_ordinal_type;
+  using Node = TMatrix<double>::node_type;
+  TMatrixPtr<double> matrix = Tpetra::createCrsMatrix<double,LO,GO,Node>(map, numEntriesPerRow);
 //
 //  int numRows = map.NumGlobalElements();
 //

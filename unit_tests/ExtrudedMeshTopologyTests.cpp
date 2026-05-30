@@ -10,6 +10,7 @@
 //
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "E_to_T.hpp"
 #include "ExtrudedMeshTopology.h"
 #include "MeshFactory.h"
 #include "MeshTestUtility.h"
@@ -255,20 +256,31 @@ namespace
     
     {
       // check neighbor agreement for standard
-      Epetra_MultiVector *lhsVector = solnStandard->getGlobalCoefficients();
       Epetra_SerialComm Comm;
-      auto partMap = solnStandard->getPartitionMap();
-      auto ePartMap = T_to_E::map(partMap);
-
+      
       // Import solution onto current processor
-      GlobalIndexTypeToCast numNodesGlobal = standardMesh->numGlobalDofs();
-      GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
-      Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      Epetra_Import  solnImporter(solnMap, *ePartMap);
-      Epetra_Vector  solnCoeff(solnMap);
-      solnCoeff.Import(*lhsVector, solnImporter, Insert);
+      auto partMap = solnStandard->getPartitionMap();
+      using GO = TMap::global_ordinal_type;
+      using LO = TMap::local_ordinal_type;
+      using MultiVector = TVector<double>;
+      using Node = MultiVector::node_type;
+      
+      GO numNodesGlobal = standardMesh->numGlobalDofs();
+      LO numMyNodes = numNodesGlobal;
+      Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
+      auto tSolnMap = E_to_T::map(eSolnMap);
+      
+      Tpetra::Import<LO,GO,Node> importer (tSolnMap, partMap); // source, destination
+      
+      Epetra_MultiVector *lhsVector = solnStandard->getGlobalCoefficients();
+      auto eLHSVector = Teuchos::rcp(lhsVector,false);
+      auto tLHSVector = E_to_T::vector(eLHSVector);
+      
+      const int numVectors = 1;
+      auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );
+      tSolnCoeff->doImport(*tLHSVector, importer, Tpetra::INSERT);
 
-      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(standardMesh, solnCoeff))
+      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(standardMesh, tSolnCoeff))
       {
         cout << "GDAMinimumRuleTests failure: for standard 2D Poisson mesh (after solve), neighboring bases do not agree on sides." << endl;
         success = false;
@@ -278,18 +290,31 @@ namespace
       // check neighbor agreement for extruded
       Epetra_MultiVector *lhsVector = solnExtruded->getGlobalCoefficients();
       Epetra_SerialComm Comm;
-      auto partMap = solnExtruded->getPartitionMap();
-      auto ePartMap = T_to_E::map(partMap);
-
+      
       // Import solution onto current processor
-      GlobalIndexTypeToCast numNodesGlobal = extrudedMesh->numGlobalDofs();
-      GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
-      Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      Epetra_Import  solnImporter(solnMap, *ePartMap);
-      Epetra_Vector  solnCoeff(solnMap);
-      solnCoeff.Import(*lhsVector, solnImporter, Insert);
+      auto partMap = solnExtruded->getPartitionMap();
+      using GO = TMap::global_ordinal_type;
+      using LO = TMap::local_ordinal_type;
+      using MultiVector = TVector<double>;
+      using Node = MultiVector::node_type;
+      
+      // Import solution onto current processor
+      GO numNodesGlobal = extrudedMesh->numGlobalDofs();
+      LO numMyNodes = static_cast<LO>(numNodesGlobal);
+      
+      Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
+      auto tSolnMap = E_to_T::map(eSolnMap);
+      
+      Tpetra::Import<LO,GO,Node> importer (tSolnMap, partMap); // source, destination
+      
+      auto eLHSVector = Teuchos::rcp(lhsVector,false);
+      auto tLHSVector = E_to_T::vector(eLHSVector);
+      
+      const int numVectors = 1;
+      auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );
+      tSolnCoeff->doImport(*tLHSVector, importer, Tpetra::INSERT);
 
-      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(extrudedMesh, solnCoeff))
+      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(extrudedMesh, tSolnCoeff))
       {
         cout << "GDAMinimumRuleTests failure: for extruded 2D Poisson mesh (after solve), neighboring bases do not agree on sides." << endl;
         success = false;

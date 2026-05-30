@@ -181,8 +181,7 @@ public:
                                                Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
                                            const Epetra_MultiVector &globalCoefficients) = 0;
-  // template <typename Scalar>
-  //   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients) = 0;
+  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients) = 0;
 
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
 

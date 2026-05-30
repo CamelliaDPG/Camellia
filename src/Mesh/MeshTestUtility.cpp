@@ -10,6 +10,7 @@
 #include "Camellia_FieldContainerConversion.hpp"
 #include "CamelliaCellTools.h"
 #include "CubatureFactory.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 
 #include "Epetra_SerialComm.h"
@@ -372,11 +373,13 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh)
   {
     testSolutionCoefficients[i] =  0.1 * i;
   }
+  auto eTestSolutionCoefficients = Teuchos::rcp(&testSolutionCoefficients, false);
+  auto tTestSolutionCoefficients = E_to_T::vector(eTestSolutionCoefficients);
 
-  return neighborBasesAgreeOnSides(mesh, testSolutionCoefficients);
+  return neighborBasesAgreeOnSides(mesh, tTestSolutionCoefficients);
 }
 
-bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients)
+bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, TVectorPtr<double> globalSolutionCoefficients)
 {
   bool success = true;
   MeshTopologyViewPtr meshTopo = mesh->getTopology();

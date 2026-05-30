@@ -187,12 +187,14 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
   // Here, phi = xy solves it.
 
   FunctionPtr phi_exact = x * y;
-  FunctionPtr psi_exact = Function::vectorize(-u2, u1);
+  FunctionPtr psi_exact_x = -u2;
+  FunctionPtr psi_exact_y =  u1;
 
   map<int, FunctionPtr> exactMap;
   // fields:
   exactMap[form.streamFormulation().u()->ID()] = phi_exact;
-  exactMap[form.streamFormulation().sigma()->ID()] = psi_exact;
+  exactMap[form.streamFormulation().sigma(0)->ID()] = psi_exact_x;
+  exactMap[form.streamFormulation().sigma(1)->ID()] = psi_exact_y;
 
   VarPtr phi_hat = form.streamFormulation().u_hat();
   VarPtr psi_n_hat = form.streamFormulation().sigma_n_hat();

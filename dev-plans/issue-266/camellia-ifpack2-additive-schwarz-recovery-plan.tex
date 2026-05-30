@@ -1,0 +1,250 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\title{Development Plan: Recovering the Ifpack2 User-Partitioner Camellia Additive Schwarz Path}
+\author{Nathan V. Roberts / AI-assisted implementation plan}
+\date{May 26, 2026}
+
+\begin{document}
+\maketitle
+
+\section{Objective}
+The objective of this effort is to recover and complete the committed branch direction for \texttt{CAMELLIA\_ADDITIVE\_SCHWARZ} in the Tpetra/Ifpack2 migration, while staying as close as practical to the existing committed design. The intended production behavior remains:
+\begin{itemize}
+  \item one additive Schwarz subdomain per owned cell,
+  \item each subdomain containing that cell plus its minimal halo/overlap region,
+  \item implementation based on stock Ifpack2 infrastructure where possible,
+  \item initial priority on validating and fixing the committed \texttt{PreconditioningTests.cpp} path before re-enabling GMG-level use.
+\end{itemize}
+
+\section{Current Understanding}
+The committed branch does \emph{not} primarily center on the uncommitted \texttt{Camellia\_AdditiveSchwarz\_decl.hpp} and \texttt{Camellia\_AdditiveSchwarz\_def.hpp} prototype. Instead, the main branch direction is encoded in:
+
+A practical dependency note is important here: the currently working \texttt{Ifpack2::OverlappingRowMatrix} used by this effort is not yet in main Trilinos, but rather in Nathan V. Roberts' Trilinos fork:
+\begin{itemize}
+  \item repository: \url{https://github.com/CamelliaDPG/Trilinos.git}
+  \item branch: \texttt{fixes-for-camellia}
+\end{itemize}
+This does not block merge into the target Camellia branch, because that branch already relies on changes from the same Trilinos fork/branch.
+\begin{itemize}
+  \item \texttt{src/Solution/GMGOperator.cpp},
+  \item \texttt{src/include/GMGOperator.h},
+  \item \texttt{unit\_tests/PreconditioningTests.cpp},
+  \item \texttt{unit\_tests/GMGSolverTests.cpp},
+  \item \texttt{unit\_tests/GMGOperatorTests.cpp},
+  \item and supporting Tpetra migration code such as \texttt{OverlappingRowMatrix} and \texttt{Tpetra\_Operator\_to\_Tpetra\_Matrix}.
+\end{itemize}
+
+The committed design in \texttt{GMGOperator.cpp} is:
+\begin{enumerate}
+  \item compute a Camellia-specific overlapping row set for this rank,
+  \item compute a user-specified collection of local parts, one per owned cell,
+  \item instantiate stock Ifpack2 Schwarz,
+  \item provide:
+  \begin{itemize}
+    \item \texttt{"schwarz: overlap elements"},
+    \item \texttt{"partitioner: type" = "user"},
+    \item \texttt{"partitioner: parts" = partsLocalOrdinals},
+  \end{itemize}
+  \item and then select an inner preconditioner for the Schwarz-local problem.
+\end{enumerate}
+
+A major result of the recovery work is that the outer overlap+user-partitioner mechanism itself is viable. However, the final branch-wide choice of inner solver is still not fully stabilized. In particular, duplicated inner use of the same user partition was shown to be harmful, \texttt{Block Relaxation} remains the best observed choice for the targeted problem-level additive Schwarz preconditioning tests, but that same choice still crashes in at least one small multirank \texttt{GMGSolver} identity case.
+
+The existing production code does \emph{not} yet re-enable the full Camellia additive Schwarz path, because the diagonal/incidence weighting section currently throws an exception indicating that the Ifpack2 version is still unimplemented.
+
+\section{Primary Technical Hypothesis}
+The leading hypothesis is that the current mechanism based on:
+\begin{itemize}
+  \item explicit overlap rows via \texttt{"schwarz: overlap elements"}, and
+  \item user partition data via \texttt{"partitioner: parts"}
+\end{itemize}
+is only partially appropriate for the desired Camellia semantics.
+
+More specifically, the likely issue is that Camellia wants \emph{overlapping element-centered subdomains}, whereas the Ifpack2 user partitioner / block-relaxation interface may fundamentally expect a \emph{partition} of local rows, or at least semantics closer to disjoint block ownership than to additive Schwarz subdomains that reuse the same local row in multiple blocks.
+
+If this hypothesis is correct, then the current committed direction remains conceptually close to the target but is mechanically mismatched at the block-definition level.
+
+\section{Evidence Supporting the Hypothesis}
+The strongest evidence comes from \texttt{unit\_tests/PreconditioningTests.cpp}.
+
+\subsection{Toy custom Schwarz test}
+\texttt{testCustomAdditiveSchwarz(...)} constructs a hand-checkable matrix and manually computes the expected additive Schwarz action, then compares that against the Ifpack2-based operator. This indicates that the branch was already focused on validating operator semantics, not merely successful construction.
+
+\subsection{Parallel/serial agreement test}
+\texttt{testCustomAdditiveSchwarzBiggerOverlapParallelSerialAgreement2Ranks(...)} contains an explicit comment describing an MPI-only pathology in which the first row of the apparent inverse operator becomes populated incorrectly in parallel. This strongly suggests that the branch hit a semantic mismatch in overlap/block treatment rather than a simple API wiring bug.
+
+\subsection{GMG-level disablement}
+\texttt{unit\_tests/GMGSolverTests.cpp} explicitly disables \texttt{CAMELLIA\_ADDITIVE\_SCHWARZ} in the SPD/smoother test loop, which is consistent with a partially completed or currently incorrect implementation path.
+
+\section{Constraints}
+This implementation effort should obey the following constraints.
+\begin{enumerate}[label=\arabic*.]
+  \item Stay close to the committed branch design if at all possible.
+  \item Treat the uncommitted \texttt{Camellia\_AdditiveSchwarz\_*} files as exploratory scratch, not the primary implementation path.
+  \item Prioritize existing \texttt{PreconditioningTests.cpp} validation before re-enabling GMG smoother tests.
+  \item Use Ifpack2/Tpetra-native mechanisms where they are actually compatible with the target semantics.
+  \item Avoid introducing a large architectural pivot unless the existing tests and code strongly force that conclusion.
+\end{enumerate}
+
+\section{Implementation Strategy}
+The work should proceed in phases.
+
+\subsection{Phase 1: Validate the current mechanism at the operator-test level}
+The first task is to determine whether the committed user-partitioner path can, in principle, represent the desired overlapping element-centered Schwarz action.
+
+This phase should focus on:
+\begin{itemize}
+  \item understanding the exact semantics of \texttt{Ifpack2::AdditiveSchwarz} for:
+  \begin{itemize}
+    \item \texttt{"schwarz: overlap elements"},
+    \item \texttt{"partitioner: parts"},
+    \item and interaction with \texttt{Block Relaxation},
+  \end{itemize}
+  \item inspecting the toy tests in \texttt{PreconditioningTests.cpp},
+  \item identifying whether the current code is using the inner partitioner in a way that duplicates or conflicts with outer Schwarz behavior,
+  \item determining whether the supplied parts are assumed to be disjoint, overlapping, or otherwise constrained by Ifpack2 internals.
+\end{itemize}
+
+Expected outcome of Phase 1:
+\begin{itemize}
+  \item either the mechanism is validated as fundamentally sound and only needs a corrective implementation fix,
+  \item or the mechanism is shown to be semantically insufficient for overlapping cell-centered subdomains.
+\end{itemize}
+
+\subsection{Phase 2: Make the toy/operator tests authoritative}
+Before changing GMG production behavior further, tighten the dedicated preconditioning tests so they clearly establish the intended semantics.
+
+This phase may include:
+\begin{itemize}
+  \item improving diagnostics in the existing custom additive Schwarz tests,
+  \item adding explicit checks for whether the user parts overlap in local ordinal space,
+  \item comparing serial and parallel operator actions on targeted basis vectors,
+  \item possibly instrumenting overlap-map and parts construction to print or verify exact row reuse patterns.
+\end{itemize}
+
+The goal is that these tests become the decisive signal for whether the current Ifpack2 strategy is semantically correct.
+
+\subsection{Phase 3A: If the current mechanism is sound, repair it locally}
+If Phase 1 shows that the committed approach should work in principle, then repair the implementation while preserving the current architecture.
+
+Likely work items include:
+\begin{itemize}
+  \item verifying that the local ordinal parts are computed on the exact overlap map used by the Ifpack2 Schwarz instance,
+  \item checking whether the current explicit overlap matrix helper construction matches the one used internally by Ifpack2,
+  \item ensuring the inner preconditioner parameters are not unintentionally redefining block semantics in a conflicting way,
+  \item validating combine-mode behavior and whether \texttt{Add} is actually the correct production mode for the desired operator.
+\end{itemize}
+
+\subsection{Phase 3B: If the current mechanism is not sound, apply the smallest viable pivot}
+If Phase 1 shows that \texttt{"partitioner: parts"} cannot faithfully represent overlapping cell-centered subdomains, then the smallest practical pivot should be chosen.
+
+The preferred pivot should still remain close to the committed branch direction. Candidates include:
+\begin{itemize}
+  \item continuing to use explicit overlap row construction,
+  \item but ceasing to rely on user partitioning to encode overlapping subdomains,
+  \item and instead introducing a thin Camellia-side layer that restores correct overlapping-subdomain application semantics while still using Tpetra/Ifpack2 building blocks where possible.
+\end{itemize}
+
+This would still be preferable to reviving the uncommitted scratch prototype wholesale, unless that becomes unavoidable.
+
+\section{Production Integration Plan}
+Assuming Phase 1--3 succeed, the next steps are:
+\begin{enumerate}
+  \item restore a correct production implementation for the \texttt{CAMELLIA\_ADDITIVE\_SCHWARZ} smoother path in \texttt{GMGOperator.cpp},
+  \item port or reintroduce the Camellia-specific incidence/multiplicity weighting logic,
+  \item remove the unconditional exception currently thrown for the diagonal weighting path,
+  \item re-enable the disabled GMG smoother tests in \texttt{GMGSolverTests.cpp}.
+\end{enumerate}
+
+\section{Specific Files Expected to Change}
+Primary files likely to change are:
+\begin{itemize}
+  \item \texttt{src/Solution/GMGOperator.cpp}
+  \item \texttt{src/include/GMGOperator.h}
+  \item \texttt{unit\_tests/PreconditioningTests.cpp}
+  \item \texttt{unit\_tests/GMGSolverTests.cpp}
+  \item possibly \texttt{unit\_tests/GMGOperatorTests.cpp}
+  \item possibly \texttt{src/include/OverlappingRowMatrix.h} and/or \texttt{src/Solution/OverlappingRowMatrix.cpp}
+  \item possibly \texttt{src/include/Tpetra\_Operator\_to\_Tpetra\_Matrix.h} and \texttt{src/MatrixUtilities/Tpetra\_Operator\_to\_Tpetra\_Matrix.cpp} if operator materialization needs improvement for diagnostics.
+\end{itemize}
+
+The uncommitted files:
+\begin{itemize}
+  \item \texttt{src/include/Camellia\_AdditiveSchwarz\_decl.hpp}
+  \item \texttt{src/include/Camellia\_AdditiveSchwarz\_def.hpp}
+\end{itemize}
+should remain out of scope for the initial implementation unless the committed path is shown to be unsalvageable.
+
+\section{Validation Strategy}
+Validation should proceed in increasing scope.
+
+\subsection{Step 1: Toy/operator tests}
+Focus first on:
+\begin{itemize}
+  \item \texttt{Preconditioning\_CustomAdditiveSchwarzSerial}
+  \item \texttt{Preconditioning\_CustomAdditiveSchwarzMPI}
+  \item \texttt{Preconditioning\_CustomAdditiveSchwarzBiggerOverlapParallelSerialAgreement2Ranks}
+\end{itemize}
+These should become the first gate for correctness.
+
+\subsection{Step 2: Problem-level smoother agreement}
+Then validate:
+\begin{itemize}
+  \item the problem-level preconditioning tests that use \texttt{CAMELLIA\_ADDITIVE\_SCHWARZ},
+  \item serial/parallel smoother comparison behavior,
+  \item operator extraction behavior where used.
+\end{itemize}
+
+\subsection{Step 3: GMG re-enablement}
+Finally:
+\begin{itemize}
+  \item re-enable the \texttt{CAMELLIA\_ADDITIVE\_SCHWARZ} entries in \texttt{GMGSolverTests.cpp},
+  \item verify GMG SPD expectations where applicable,
+  \item confirm that production smoother setup no longer throws the current unimplemented exception.
+\end{itemize}
+
+\section{Known Risks}
+\begin{itemize}
+  \item The outer Ifpack2 overlap+user-partitioner mechanism appears viable, but the final branch-wide inner-solver choice for the Schwarz-local problem is still unresolved.
+  \item \texttt{Block Relaxation} remains fragile in at least one small multirank \texttt{GMGSolver} identity case, even after removing duplicated inner user partitioning.
+  \item A more solver-like inner choice such as \texttt{ILUT} may avoid some crashes, but can substantially weaken the problem-level additive Schwarz preconditioning behavior.
+  \item The current Tpetra operator-to-matrix helper is effectively a stub and may need real implementation for diagnostics.
+  \item Reintroducing incidence-based diagonal weighting may require additional overlap bookkeeping beyond what the current committed path preserves.
+\end{itemize}
+
+\section{Bounded Unknowns}
+The most important remaining bounded unknown is:
+\begin{quote}
+What is the robust branch-wide inner-solver policy for the Schwarz-local problem, once the outer Ifpack2 overlap+user-partitioner mechanism has been accepted as viable?
+\end{quote}
+
+The work so far has substantially narrowed the uncertainty. The outer overlap/user-partitioner path has passing focused custom MPI tests, and a direct overlap-membership test now verifies that the produced parts match the intended halo dof sets in the tested case. The remaining uncertainty is therefore no longer about whether the outer mechanism can represent the intended subdomains, but about which inner solver policy is robust across both problem-level preconditioning tests and small multirank \texttt{GMGSolver} identity cases.
+
+\section{Stop-and-Ask Conditions}
+Implementation should stop and ask for direction only if one of the following occurs:
+\begin{enumerate}
+  \item additional project files become necessary and are not available,
+  \item the smallest viable fix requires a significant architectural deviation from the committed branch direction.
+\end{enumerate}
+
+Otherwise, implementation should proceed autonomously.
+
+\section{Immediate Next Action}
+The immediate next action is to work from the committed \texttt{PreconditioningTests.cpp} path and determine whether the current use of:
+\begin{itemize}
+  \item explicit overlap rows, and
+  \item \texttt{"partitioner: parts"}
+\end{itemize}
+can correctly encode overlapping cell-centered Schwarz subdomains.
+
+That answer should drive the rest of the implementation.
+
+\end{document}

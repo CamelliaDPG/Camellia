@@ -197,7 +197,11 @@ namespace
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
     VarPtr u = poissonForm.u();
     VarPtr u_hat = poissonForm.u_hat();
-    VarPtr sigma = poissonForm.sigma();
+    std::vector<VarPtr> sigma(spaceDim);
+    for (int d=0; d<spaceDim; d++)
+    {
+      sigma[d] = poissonForm.sigma(d);
+    }
     VarPtr sigma_n_hat = poissonForm.sigma_n_hat();
     
     const bool weightFluxesByParity = false; // should not matter
@@ -205,14 +209,25 @@ namespace
     const int solutionStage = 0;
     auto u_influence           = Function::solution(u,           soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
     auto u_hat_influence       = Function::solution(u_hat,       soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
-    auto sigma_influence       = Function::solution(sigma,       soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
+    std::vector<FunctionPtr> sigma_influence(spaceDim);
+    for (int d=0; d<spaceDim; d++)
+    {
+      sigma_influence[d] = Function::solution(sigma[d], soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
+    }
+    
     auto sigma_n_hat_influence = Function::solution(sigma_n_hat, soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
     // u_influence should be zero; test this:
     auto u_err_L2 = u_influence->l2norm(soln_TwoRHS->mesh());
     TEST_COMPARE(u_err_L2, <, tol);
     auto u_hat_err_L2 = u_hat_influence->l2norm(soln_TwoRHS->mesh());
     TEST_COMPARE(u_hat_err_L2, <, tol);
-    auto sigma_err_L2 = sigma_influence->l2norm(soln_TwoRHS->mesh());
+    double sigma_err_L2_squared = 0.0;
+    for (int d=0; d<spaceDim; d++)
+    {
+      double sigma_err_L2_d = sigma_influence[d]->l2norm(soln_TwoRHS->mesh());
+      sigma_err_L2_squared += sigma_err_L2_d * sigma_err_L2_d;
+    }
+    double sigma_err_L2 = sqrt( sigma_err_L2_squared );
     TEST_COMPARE(sigma_err_L2, <, tol);
     auto sigma_n_hat_err_L2 = sigma_n_hat_influence->l2norm(soln_TwoRHS->mesh());
     TEST_COMPARE(sigma_n_hat_err_L2, <, tol);

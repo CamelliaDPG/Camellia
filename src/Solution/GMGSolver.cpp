@@ -209,7 +209,6 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     
     const static int SMOOTHER_OVERLAP_FOR_LOWEST_ORDER_P = 0;
     
-    bool hRefinedPrevious = false; // assumption is that we do h-refinements on a coarse poly mesh, and then p refinements.
     for (int i=meshesCoarseToFine.size()-1; i>0; i--)
     {
       MeshPtr fineMesh = meshesCoarseToFine[i];
@@ -224,6 +223,14 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
         coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
                                                       coarseSolver, useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
       }
+      coarseOperator->setSmootherType(GMGOperator::DEFAULT_ADDITIVE_SCHWARZ);
+      coarseOperator->setUseSchwarzScalingWeight(true);
+      coarseOperator->setMultigridStrategy(multigridStrategy);
+      bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
+      coarseOperator->setUseHierarchicalNeighborsForSchwarz(false); // changed Dec. 22 2015, after tests revealed that hiarchical truncation seems to be a uniformly bad idea...
+      coarseOperator->getCoarseSolution()->setCubatureEnrichmentDegree(cubatureEnrichmentDegree);
+      
+      bool hRefinedPrevious = false; // assumption is that we do h-refinements on a coarse poly mesh, and then p refinements.
       
       if (finerOperator != Teuchos::null)
       {
@@ -315,7 +322,7 @@ Teuchos::RCP<GMGSolver> GMGSolver::gmgSolver(SolutionPtr soln, bool useCG, doubl
   bool saveFactorization = true;
   auto coarseSolver = Solver::getDirectSolver(saveFactorization);
   
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(soln, prunedMeshes, maxIters, tol, GMGOperator::V_CYCLE, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ,
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(soln, prunedMeshes, maxIters, tol, GMGOperator::V_CYCLE, GMGOperator::DEFAULT_ADDITIVE_SCHWARZ,
                                                                  coarseSolver, soln->usesCondensedSolve(), false));
   
   gmgSolver->setAztecOutput(0);
@@ -575,17 +582,14 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   using OP = TOperator<Scalar>;
   typedef Belos::LinearProblem<Scalar, MV, OP> BelosProblem;
   typedef RCP<BelosProblem> BelosProblemPtr;
-  auto tStiffness = E_to_T::matrix(_stiffnessMatrix);
-  auto t_lhs = E_to_T::vector(_lhs);
-  auto t_rhs = E_to_T::vector(_rhs);
-  BelosProblemPtr problem = rcp( new BelosProblem(tStiffness, t_lhs, t_rhs) );
+  BelosProblemPtr problem = rcp( new BelosProblem(_stiffnessMatrix, _lhs, _rhs) );
   
   Belos::SolverFactory<Scalar, MV, OP> factory;
   RCP<Belos::SolverManager<Scalar, MV, OP> > solver;
   
   if (buildCoarseStiffness)
   {
-    _gmgOperator->setFineStiffnessMatrix(tStiffness);
+    _gmgOperator->setFineStiffnessMatrix(_stiffnessMatrix);
   }
   
   RCP<ParameterList> solverParams = parameterList();
@@ -649,7 +653,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     {
       cout << "Writing system matrix to " << path.str() << endl;
     }
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), tStiffness);
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(path.str(), _stiffnessMatrix);
   }
   
 //    cout << "NOTE: setting user convergence status test.\n";
@@ -685,9 +689,6 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   _iterationCount = solver->getNumIters();
   
   _iterationCountLog.push_back(_iterationCount);
-
-  auto e_lhs = T_to_E::vector(t_lhs);
-  _lhs->Update(1.0, *e_lhs, 0.0);
   
   return solveResult;
 }

@@ -82,6 +82,8 @@ public:
                                                Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
 
   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs) = 0;
+  
+  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localDofs, const TVectorPtr<double> globalDofs) = 0;
 
   //!! Returns the global dof indices for the cell.  Only guaranteed to provide correct values for cells that belong to the local partition.
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;

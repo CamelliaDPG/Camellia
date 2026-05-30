@@ -972,6 +972,11 @@ void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldCo
   _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
 }
 
+void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients)
+{
+  _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
+}
+
 void Mesh::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
     Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {

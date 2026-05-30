@@ -70,15 +70,15 @@ namespace
   {
     int myRowCount = P->Map().NumMyElements();
     
-    GlobalIndexTypeToCast globalEntryCount = P->Map().NumGlobalElements();
-    Camellia::FieldContainer<GlobalIndexTypeToCast> colIndices(globalEntryCount);
+    int globalEntryCount = static_cast<int>(P->Map().NumGlobalElements64());
+    Camellia::FieldContainer<int> colIndices(globalEntryCount); // local indices
     Camellia::FieldContainer<double> colValues(globalEntryCount);
     
 //    printMapSummary(P->Map(), "P->Map()");
     
     for (int localRowIndex=0; localRowIndex<myRowCount; localRowIndex++)
     {
-      GlobalIndexTypeToCast globalRowIndex = P->Map().GID(localRowIndex);
+      GlobalIndexTypeToCast globalRowIndex = P->Map().GID64(localRowIndex);
       int numEntries;
       P->ExtractMyRowCopy(localRowIndex, globalEntryCount, numEntries, &colValues(0), &colIndices(0));
       bool diagEntryFound = false;
@@ -88,7 +88,7 @@ namespace
       for (int colEntryOrdinal=0; colEntryOrdinal<numEntries; colEntryOrdinal++)
       {
         GlobalIndexTypeToCast localColIndex = colIndices(colEntryOrdinal);
-        GlobalIndexTypeToCast globalColIndex = P->DomainMap().GID(localColIndex);
+        GlobalIndexTypeToCast globalColIndex = P->DomainMap().GID64(localColIndex);
         double expectedValue;
         double actualValue = colValues(colEntryOrdinal);
         if (globalColIndex != globalRowIndex)
@@ -415,7 +415,7 @@ namespace
     int H1Order = 2, delta_k = spaceDim;
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
-    VarPtr u = form.u(), sigma = form.sigma(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    VarPtr u = form.u(), sigma = form.sigma(0), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
     FunctionPtr u_exact;
     if (H1Order >= 3)
       u_exact = Function::xn(2); // x^2 exact solution
@@ -560,25 +560,27 @@ namespace
     int spaceDim = 2;
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
-    VarPtr u = form.u(), sigma = form.sigma(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    VarPtr u = form.u(), sigma_x = form.sigma(0), sigma_y = form.sigma(1), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
     
     int H1Order, delta_k = 1;
     
     map<int,int> trialOrderEnhancements;
     
-    FunctionPtr u_exact, sigma_exact;
+    FunctionPtr u_exact, sigma_exact_x, sigma_exact_y;
     if (simple)
     {
       H1Order = 1;
       u_exact = Function::constant(3.14159);
       FunctionPtr zero = Function::zero();
-      sigma_exact = Function::vectorize(zero, zero);
+      sigma_exact_x = zero;
+      sigma_exact_y = zero;
     }
     else
     {
       H1Order = 3;
       u_exact = Function::xn(2) + Function::yn(1);
-      sigma_exact = u_exact->grad();
+      sigma_exact_x = u_exact->dx();
+      sigma_exact_y = u_exact->dy();
     }
     
 //    if (useConformingTraces)
@@ -653,7 +655,8 @@ namespace
     
     map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[u->ID()] = u_exact;
-    exactSolnMap[sigma->ID()] = sigma_exact;
+    exactSolnMap[sigma_x->ID()] = sigma_exact_x;
+    exactSolnMap[sigma_y->ID()] = sigma_exact_y;
     
     FunctionPtr u_hat_exact   =   u_hat->termTraced()->evaluate(exactSolnMap);
     FunctionPtr sigma_n_hat_exact = sigma_n_hat->termTraced()->evaluate(exactSolnMap);
@@ -704,8 +707,8 @@ namespace
     TMatrixPtr<double> tP = gmgOperator.constructProlongationOperator();
     Teuchos::RCP<Epetra_CrsMatrix> P = T_to_E::matrix(tP);
     
-    TEST_EQUALITY(P->NumGlobalRows(), tP->getGlobalNumRows());
-    TEST_EQUALITY(P->NumGlobalCols(), tP->getGlobalNumCols());
+    TEST_EQUALITY(P->NumGlobalRows64(), tP->getGlobalNumRows());
+    TEST_EQUALITY(P->NumGlobalCols64(), tP->getGlobalNumCols());
     
     Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
     

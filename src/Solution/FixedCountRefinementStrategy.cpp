@@ -98,7 +98,7 @@ void FixedCountRefinementStrategy::refineAndUnrefine(bool unrefine, bool printTo
   GlobalIndexTypeToCast myNumCellsToHRefine = myCellsToHRefine.size();
   GlobalIndexTypeToCast numCellsToHRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToHRefine);
   
-  GlobalIndexTypeToCast myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), myNumCellsToHRefine);
+  GlobalIndexTypeToCast myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), static_cast<int>(myNumCellsToHRefine));
   myCellOrdinalOffset -= myNumCellsToHRefine;
   
   vector<GlobalIndexTypeToCast> gatheredCellsToRefineVector(numCellsToHRefine, 0);
@@ -116,7 +116,7 @@ void FixedCountRefinementStrategy::refineAndUnrefine(bool unrefine, bool printTo
   vector<GlobalIndexType> cellsToPRefine;
   if (numCellsToPRefine > 0)
   {
-    myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), myNumCellsToPRefine);
+    myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), static_cast<int>(myNumCellsToPRefine));
     myCellOrdinalOffset -= myNumCellsToPRefine;
 
     vector<GlobalIndexTypeToCast> gatheredCellsToPRefineVector(numCellsToPRefine, 0);

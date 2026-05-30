@@ -38,7 +38,9 @@ public:
   static bool fcsAgree(const Camellia::FieldContainer<double> &fc1, const Camellia::FieldContainer<double> &fc2, double tol, double &maxDiff); // redundant with / copied from TestSuite::fcsAgree()
   static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh);
 
-  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients);
+//  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients);
+  
+  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, TVectorPtr<double> globalSolutionCoefficients);
 };
 }
 

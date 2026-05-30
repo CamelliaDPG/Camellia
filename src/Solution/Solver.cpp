@@ -81,7 +81,7 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
     prunedMeshes.push_back(meshesCoarseToFine[meshesCoarseToFine.size()-2]);
     prunedMeshes.push_back(meshesCoarseToFine[meshesCoarseToFine.size()-1]);
     
-    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(fineSolution, prunedMeshes, maxIterations, residualTolerance, GMGOperator::V_CYCLE, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ,
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(fineSolution, prunedMeshes, maxIterations, residualTolerance, GMGOperator::V_CYCLE, GMGOperator::DEFAULT_ADDITIVE_SCHWARZ,
                                                                    coarseSolver, fineSolution->usesCondensedSolve(), false));
     
     gmgSolver->setAztecOutput(0);

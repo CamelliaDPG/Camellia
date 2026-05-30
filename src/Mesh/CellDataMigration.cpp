@@ -24,9 +24,9 @@ typedef pair<LabeledRefinementBranch, vector<vector<double>> > RootedLabeledRefi
 
 // TODO: move READ_ADVANCE and WRITE_ADVANCE into Camellia_Serialization.h or something like that
 #define READ_ADVANCE(dataLocation,variable) readAndAdvance(&variable,dataLocation,sizeof(variable))
-#define READ_ADVANCE_ARRAY(dataLocation,array) if (array.size() > 0) readAndAdvance(&array[0],dataLocation,sizeof(array[0])*array.size())
+#define READ_ADVANCE_ARRAY(dataLocation,array) if (array.size() > 0) readAndAdvance(array.data(),dataLocation,sizeof(array[0])*array.size())
 #define WRITE_ADVANCE(dataLocation,variable) writeAndAdvance(dataLocation,&variable,sizeof(variable))
-#define WRITE_ADVANCE_ARRAY(dataLocation,array) if (array.size() > 0) writeAndAdvance(dataLocation,&array[0],sizeof(array[0])*array.size())
+#define WRITE_ADVANCE_ARRAY(dataLocation,array) if (array.size() > 0) writeAndAdvance(dataLocation,array.data(),sizeof(array[0])*array.size())
 
 std::vector<std::pair<std::pair<GlobalIndexType,bool>,Camellia::FieldContainer<double>>> CellDataMigration::solutionCoefficients;
 
@@ -311,7 +311,7 @@ void CellDataMigration::packGeometryData(Mesh *mesh, GlobalIndexType cellID, cha
       int numSubcells = subcellOrdinals.size();
       memcpy(dataLocation, &numSubcells, sizeof(numSubcells));
       dataLocation += sizeof(numSubcells);
-      memcpy(dataLocation, &subcellOrdinals[0], sizeof(unsigned)*numSubcells);
+      memcpy(dataLocation, subcellOrdinals.data(), sizeof(unsigned)*numSubcells);
       dataLocation += sizeof(unsigned)*numSubcells;
     }
   }
@@ -366,7 +366,10 @@ void CellDataMigration::packSolutionData(Mesh *mesh, GlobalIndexType cellID, boo
       //    cout << localDofs << " ";
       dataLocation += sizeof(localDofs);
       
-      memcpy(dataLocation, &(*solnCoeffs)[0], localDofs * sizeof(double));
+      if (localDofs > 0)
+      {
+        memcpy(dataLocation, &(*solnCoeffs)[0], localDofs * sizeof(double));
+      }
       // the dofs themselves
       dataLocation += localDofs * sizeof(double);
       //    for (int j=0; j<solnCoeffs->size(); j++) {
@@ -677,7 +680,10 @@ void CellDataMigration::unpackSolutionData(Mesh* mesh, GlobalIndexType cellID, c
       }
       
       Camellia::FieldContainer<double> solnCoeffs(localDofs);
-      memcpy(&solnCoeffs[0], dataLocation, localDofs * sizeof(double));
+      if (localDofs > 0)
+      {
+        memcpy(&solnCoeffs[0], dataLocation, localDofs * sizeof(double));
+      }
       // the dofs themselves
       dataLocation += localDofs * sizeof(double);
       
@@ -790,7 +796,7 @@ int CellDataMigration::getGeometryDataSize(const MeshGeometryInfo &geometryInfo)
   
   int numMyCellIDs = geometryInfo.myCellIDs.size();
   dataSize += sizeof(numMyCellIDs);
-  dataSize += sizeof(GlobalIndexTypeToCast) * numMyCellIDs;
+  dataSize += sizeof(GlobalIndexType) * numMyCellIDs;
   
   // TODO: treat periodic BCs
   return dataSize;

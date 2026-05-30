@@ -135,7 +135,7 @@ public:
       std::vector<char> valuesCopy = values; // it appears this copy is necessary
       
       MPI_Comm raw_MpiComm = mpiComm->Comm();
-      MPI_Allreduce(&valuesCopy[0], &values[0], values.size(), MPI_CHAR, MPI_SUM, raw_MpiComm);
+      MPI_Allreduce(valuesCopy.data(), values.data(), values.size(), MPI_CHAR, MPI_SUM, raw_MpiComm);
     }
 #else
 #endif
@@ -224,7 +224,7 @@ public:
     {
       int byteCount = myValues.size() * sizeof(Scalar);
       MPI_Comm mpiComm = *Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm)->getRawMpiComm();
-      MPI_Allgather(&myValues[0], byteCount, MPI_BYTE, &allValues[0], byteCount, MPI_BYTE, mpiComm);
+      MPI_Allgather(myValues.data(), byteCount, MPI_BYTE, allValues.data(), byteCount, MPI_BYTE, mpiComm);
     }
     else
     {
@@ -257,13 +257,12 @@ public:
       int byteCount = myValues.size() * sizeof(Scalar);
       const Epetra_MpiComm* mpiComm = dynamic_cast<const Epetra_MpiComm*>(&Comm);
       TEUCHOS_TEST_FOR_EXCEPTION(mpiComm == NULL, std::invalid_argument, "numProcs > 1, but Comm is not of type Epetra_MpiComm");
-      MPI_Allgather(&myValues[0], byteCount, MPI_BYTE, &allValues[0], byteCount, MPI_BYTE, mpiComm->Comm());
+      MPI_Allgather(myValues.data(), byteCount, MPI_BYTE, allValues.data(), byteCount, MPI_BYTE, mpiComm->Comm());
     }
     else
     {
       allValues = myValues;
     }
-//    Comm.GatherAll(&myValues[0], &allValues[0], allValues.size()/numProcs);
 #else
 #endif
   }
@@ -283,7 +282,7 @@ public:
   void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, std::vector<ScalarType> &values)
   {
     std::vector<ScalarType> valuesCopy = values; // it appears this copy is necessary
-    Comm.SumAll(&valuesCopy[0], &values[0], values.size());
+    Comm.SumAll(valuesCopy.data(), values.data(), values.size());
   }
   
   //! sum values entry-wise across all processors in Comm
@@ -298,7 +297,7 @@ public:
   void MPIWrapper::entryWiseSum(Teuchos_CommPtr Comm, std::vector<ScalarType> &values)
   {
     std::vector<ScalarType> valuesCopy = values; // it appears this copy is necessary
-    Teuchos::reduceAll(*Comm, Teuchos::REDUCE_SUM, static_cast<int>(values.size()), &valuesCopy[0], &values[0]);
+    Teuchos::reduceAll(*Comm, Teuchos::REDUCE_SUM, static_cast<int>(values.size()), valuesCopy.data(), values.data());
   }
   
   //! sum values entry-wise across all processors in Comm
@@ -475,7 +474,7 @@ public:
     {
       const Epetra_MpiComm* mpiComm = dynamic_cast<const Epetra_MpiComm*>(&Comm);
       TEUCHOS_TEST_FOR_EXCEPTION(mpiComm == NULL, std::invalid_argument, "numProcs > 1, but Comm is not of type Epetra_MpiComm");
-      MPI_Allgatherv(reinterpret_cast<char*>(&myValues[0]), mySize, MPI_CHAR, reinterpret_cast<char*>(&gatheredValues[0]), &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm->Comm());
+      MPI_Allgatherv(reinterpret_cast<char*>(myValues.data()), mySize, MPI_CHAR, reinterpret_cast<char*>(&gatheredValues[0]), &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm->Comm());
     }
     else
     {

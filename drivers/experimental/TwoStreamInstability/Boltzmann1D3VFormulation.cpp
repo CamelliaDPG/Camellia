@@ -879,8 +879,9 @@ void Boltzmann1D3VFormulation::takeTimeStep()
 
     //    auto multigridStrategy = GMGOperator::V_CYCLE;
     auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
+    GMGOperator::SmootherChoice smootherChoice = GMGOperator::DEFAULT_ADDITIVE_SCHWARZ;
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
-    GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
+//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL; // as configured, this is very slow; I think it's treating all data on an MPI rank as a block…
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
     vector<MeshPtr> meshes;

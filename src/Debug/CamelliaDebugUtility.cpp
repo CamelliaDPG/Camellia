@@ -368,7 +368,7 @@ namespace Camellia
     cout << "On rank " << rank << ", " << mapName << " has " << map.NumMyElements() << " of " << map.NumGlobalElements() << " global elements: ";
     for (int elementOrdinal=0; elementOrdinal<map.NumMyElements(); elementOrdinal++)
     {
-      cout << "{ " << elementOrdinal << " -> " << map.GID(elementOrdinal) << " }";
+      cout << "{ " << elementOrdinal << " -> " << map.GID64(elementOrdinal) << " }";
       if (elementOrdinal != map.NumMyElements() - 1)
       {
         cout << ", ";

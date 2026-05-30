@@ -29,15 +29,15 @@ Teuchos::RCP<Epetra_Map> T_to_E::map(const TMapConstPtr & tMap)
 
   // pull out the list of local GIDs
   auto gidsView = tMap->getMyGlobalIndices();
-  std::vector<int> myGIDs(numLocalRows);
+  std::vector<GO> myGIDs(numLocalRows);
   for (int i=0; i<numLocalRows; i++)
-    myGIDs[i] = static_cast<int>(gidsView[i]);
+    myGIDs[i] = static_cast<GO>(gidsView[i]);
 
   // convert Teuchos::Comm -> Epetra_Comm
   Teuchos::RCP<const Teuchos::Comm<int>> tComm = tMap->getComm();
   Epetra_CommPtr eComm = MPIWrapper::EpetraComm(tComm);
   
-  auto eMap = Teuchos::rcp(new Epetra_Map(static_cast<int>(numGlobalRows),
+  auto eMap = Teuchos::rcp(new Epetra_Map(static_cast<GO>(numGlobalRows),
                                           numLocalRows,
                                           myGIDs.data(),
                                           0,
@@ -58,14 +58,14 @@ Teuchos::RCP<Epetra_CrsGraph> T_to_E::graph(const TGraphConstPtr & tGraph)
     new Epetra_CrsGraph( Copy,
                          *eRowMap,
                          *eColMap,
-                         static_cast<int>(maxEntries),
+                         static_cast<GO>(maxEntries),
                          /*staticProfile=*/false ) );
 
   int numMyRows   = static_cast<int>(tGraph->getRowMap()->getLocalNumElements());
   auto rowGIDs    = tGraph->getRowMap()->getLocalElementList();
   using GlobalIndicesHostView = typename TGraph::nonconst_global_inds_host_view_type;
   GlobalIndicesHostView tCols("Tpetra graph columns host view", maxEntries);
-  std::vector<int> eCols(maxEntries);
+  std::vector<GO> eCols(maxEntries);
 
   for (int r=0; r<numMyRows; r++)
   {
@@ -73,10 +73,10 @@ Teuchos::RCP<Epetra_CrsGraph> T_to_E::graph(const TGraphConstPtr & tGraph)
     size_t numEntries = maxEntries;
     tGraph->getGlobalRowCopy(row, tCols, numEntries);
     for (size_t j=0; j<numEntries; j++)
-      eCols[j] = static_cast<int>(tCols(j));
+      eCols[j] = static_cast<GO>(tCols(j));
 
-    epGraph->InsertGlobalIndices( static_cast<int>(row),
-                                  static_cast<int>(numEntries),
+    epGraph->InsertGlobalIndices( static_cast<GO>(row),
+                                  static_cast<GO>(numEntries),
                                   eCols.data() );
   }
   
@@ -166,7 +166,7 @@ Teuchos::RCP<Epetra_CrsMatrix> T_to_E::matrix(const TMatrixPtr<double> & tMatrix
   size_t maxEntries = tMatrix->getLocalMaxNumRowEntries();
 
   // buffers
-  std::vector<int> eCols(maxEntries);
+  std::vector<GO> eCols(maxEntries);
   GlobalIndicesHostView tCols("Tpetra graph columns host view", maxEntries);
   ValuesViewHost tValues("Tpetra matrix row values", maxEntries);
   
@@ -180,11 +180,11 @@ Teuchos::RCP<Epetra_CrsMatrix> T_to_E::matrix(const TMatrixPtr<double> & tMatrix
 
     for (size_t j=0; j<numRowEntries; j++)
     {
-      eCols[j] = static_cast<int>(tCols[j]);
+      eCols[j] = static_cast<GO>(tCols[j]);
     }
 
-    eMatrix->ReplaceGlobalValues(static_cast<int>(gRow),
-                                 static_cast<int>(numRowEntries),
+    eMatrix->ReplaceGlobalValues(static_cast<GO>(gRow),
+                                 static_cast<GO>(numRowEntries),
                                  tValues.data(),
                                  eCols.data());
   }

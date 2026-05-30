@@ -45,7 +45,7 @@ private:
   static const string S_TAU;
   
   std::string _scalarVarName;
-  std::string _vectorVarName;
+  std::string _vectorVarPrefix;
   std::string _scalarTraceName;
   std::string _vectorTraceName;
 public:
@@ -60,7 +60,9 @@ public:
 
   // field variables:
   VarPtr u();
-  VarPtr sigma();
+  
+  //! i: 0-based component.  Max is d-1, for spatial dimension d.
+  VarPtr sigma(const int &i);
 
   // traces:
   VarPtr sigma_n_hat();

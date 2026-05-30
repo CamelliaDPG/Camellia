@@ -116,6 +116,7 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Ca
                                                 Epetra_MultiVector &globalCoefficients, int columnOrdinal)
 {
   // TODO: make this method call the one above, which takes an STL map as argument.
+  using GO = TMap::global_ordinal_type;
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
   Camellia::FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++)
@@ -139,7 +140,7 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Ca
       for (int i=0; i<fittedGlobalCoefficients.size(); i++)
       {
         GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
-        globalCoefficients.ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndex, columnOrdinal, fittedGlobalCoefficients[i]); // for globalDofIndex not owned by this rank, doesn't do anything...
+        globalCoefficients.ReplaceGlobalValue(static_cast<GO>(globalDofIndex), columnOrdinal, fittedGlobalCoefficients[i]); // for globalDofIndex not owned by this rank, doesn't do anything...
         //        cout << "global coefficient " << globalDofIndex << " = " << fittedGlobalCoefficients[i] << endl;
       }
     }

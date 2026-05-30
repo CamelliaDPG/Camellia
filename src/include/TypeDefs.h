@@ -46,7 +46,6 @@ namespace Camellia
 typedef int IndexType;
 typedef int GlobalIndexType;
 typedef int PartitionIndexType; // for partition numbering
-typedef int GlobalIndexTypeToCast; // for constructing Epetra_Maps, etc.  (these like either int or long long)
   
 // MOAB-compatible definitions:
 #define DIRICHLET_SET_TAG_NAME   "DIRICHLET_SET" // identical to MOAB's DIRICHLET_SET_TAG_NAME
@@ -204,7 +203,11 @@ typedef Teuchos::RCP< const Tpetra::Map<> > ConstMapPtr;
 template <typename Scalar>
 using TMatrix = Tpetra::CrsMatrix<Scalar>;
 template <typename Scalar>
+using TRowMatrix = Tpetra::RowMatrix<Scalar>;
+template <typename Scalar>
 using TMatrixPtr = Teuchos::RCP< TMatrix<Scalar> >;
+template <typename Scalar>
+using TRowMatrixPtr = Teuchos::RCP< TRowMatrix<Scalar> >;
 using TGraph = TMatrix<double>::crs_graph_type;
 using TGraphPtr = Teuchos::RCP< TGraph >;
 using TGraphConstPtr = Teuchos::RCP< const TGraph >;
@@ -258,6 +261,8 @@ using TOperator = Tpetra::Operator<Scalar>;
 
   template<typename Scalar>
   using UnmanagedHostView = Kokkos::View<Scalar*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
+
+  using GlobalIndexTypeToCast = TMap::global_ordinal_type; // for constructing Epetra_Maps, etc.  (these like either int or long long)
 }
 
 #endif

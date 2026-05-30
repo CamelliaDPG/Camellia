@@ -4010,7 +4010,7 @@ set<IndexType> MeshTopology::getRootCellIndicesGlobal() const
     allRootCellIDs[myEntryOrdinal + myEntryOffset] = ownedRootCells[myEntryOrdinal];
   }
   vector<GlobalIndexTypeToCast> gatheredRootCellIDs(globalRootCellCount);
-  Teuchos::reduceAll(*Comm(), Teuchos::REDUCE_SUM, globalRootCellCount, &allRootCellIDs[0], &gatheredRootCellIDs[0]);
+  Teuchos::reduceAll(*Comm(), Teuchos::REDUCE_SUM, static_cast<int>(globalRootCellCount), &allRootCellIDs[0], &gatheredRootCellIDs[0]);
   
   set<IndexType> allRootSet(gatheredRootCellIDs.begin(),gatheredRootCellIDs.end());
   TEUCHOS_TEST_FOR_EXCEPTION(allRootSet.size() != globalRootCellCount, std::invalid_argument, "Internal error: some root cell indices appear to have been doubly claimed.");

@@ -270,7 +270,7 @@ void MeshTransferFunction::rebuildMaps()
   // One question is how to deal with the fact that corresponding cells in original and new mesh
   // may belong to different ranks.  In such a case, values() will be called with data (that is, physical
   // points and cell IDs) corresponding to newMesh.  It seems that the most general approach will be to
-  // do a round of MPI communication (via Epetra_MpiDistributor) to get appropriate data to the owner
+  // do a round of MPI communication (using Tpetra::Distributor) to get appropriate data to the owner
   // of the corresponding cell on originalMesh.  Then each rank will translate the data to originalMesh
   // (possibly by appropriate permutations of the reference points), create a corresponding BasisCache,
   // and compute values.  Finally, another round of MPI communication will send the data back to the requestor.

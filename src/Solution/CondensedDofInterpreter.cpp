@@ -5,6 +5,7 @@
 #include "CondensedDofInterpreter.h"
 
 #include "CamelliaDebugUtility.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GlobalDofAssignment.h"
 #include "MPIWrapper.h"
@@ -611,7 +612,6 @@ void CondensedDofInterpreter<Scalar>::importInterpretedMapForNeighborGlobalIndic
     _interpretedToGlobalDofIndexMap[meshGlobalIndex] = condensedGlobalIndex;
     _interpretedFluxDofIndices.insert(meshGlobalIndex);
   }
-  
 }
 
 template <typename Scalar>
@@ -1190,11 +1190,15 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
   }
 }
 
-// new version:
+//! called by both the Epetra_MultiVector and the TVector argumented interpretGlobalCoefficients()
 template <typename Scalar>
+template <typename ViewType>
 void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients,
-                                                                  const Epetra_MultiVector &globalCoefficients)
+                                                                  TMapConstPtr map, ViewType globalDofs)
 {
+  using GO = TMap::global_ordinal_type;
+  auto globalDofsHost = Kokkos::create_mirror_view_and_copy(HostMemorySpace(), globalDofs);
+  
   // here, globalCoefficients correspond to *flux* dofs
   
 //  cout << "CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients for cell " << cellID << endl;
@@ -1229,7 +1233,7 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
     if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) != _interpretedToGlobalDofIndexMap.end())
     {
       GlobalIndexTypeToCast globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
-      int lID_global = globalCoefficients.Map().LID(globalDofIndex);
+      int lID_global = map->getLocalElement(globalDofIndex);
       if (lID_global != -1)
       {
         interpretedDofIndicesPresent[numPresent++] = interpretedDofIndex;
@@ -1251,10 +1255,11 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
     if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) != _interpretedToGlobalDofIndexMap.end())
     {
       GlobalIndexTypeToCast globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
-      int lID_global = globalCoefficients.Map().LID(globalDofIndex);
+      auto lID_global = map->getLocalElement(globalDofIndex);
       if (lID_global != -1)
       {
-        interpretedCoefficients[0][lID_interpreted] = globalCoefficients[0][lID_global];
+        const int vectorOrdinal = 0;
+        interpretedCoefficients[0][lID_interpreted] = globalDofsHost(lID_global,vectorOrdinal);
       }
     }
   }
@@ -1309,6 +1314,46 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
 //  cout << "******* flux_dofs:\n" << flux_dofs;
 //  cout << "field_dofs:\n" << field_dofs;
 //  cout << "localCoefficients:\n" << localCoefficients;
+
+}
+
+template <typename Scalar>
+void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients,
+                                                                  const Epetra_MultiVector &globalCoefficients)
+{
+  // because creating a TeuchosComm from an Epetra_Comm requires an MPI collective, and this method is semantically MPI-local,
+  // the E_to_T::map() call in the commented-out code below will not work.  There are workarounds we could employ, but it seems
+  // simpler just to use this to push us away from Epetra usage in anything that calls CondensedDofInterpreter::interpretGlobalCoefficients().
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CondensedDofInterpreter does not support Epetra version of interpretGlobalCoefficients");
+  
+  /*const int numVectors = 1;
+  const int numLIDs = globalCoefficients.MyLength();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(numVectors != globalCoefficients.NumVectors(), std::invalid_argument, "This implementation assumes a single vector");
+  DeviceView<Scalar> globalDofs("interpretGlobalCoefficients globalDofs", numLIDs, numVectors);
+  auto globalDofsHost = Kokkos::create_mirror_view(HostMemorySpace(), globalDofs);
+  
+  for (int vectorOrdinal=0; vectorOrdinal<numVectors; vectorOrdinal++)
+  {
+    for (int lid=0; lid<numLIDs; lid++)
+    {
+      globalDofsHost(lid,vectorOrdinal) = globalCoefficients[vectorOrdinal][lid];
+    }
+  }
+  
+  Kokkos::deep_copy(globalDofs, globalDofsHost);
+  auto tMap = E_to_T::map(globalCoefficients.Map());
+  interpretGlobalCoefficients(cellID, localCoefficients, tMap, globalDofs);*/
+}
+
+template <typename Scalar>
+void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients,
+                                                                  const TVectorPtr<Scalar> globalCoefficients)
+{
+  auto globalDofs = globalCoefficients->getLocalViewDevice(Tpetra::Access::ReadOnly);
+  auto map = globalCoefficients->getMap();
+  interpretGlobalCoefficients(cellID, localCoefficients, map, globalDofs);
 }
 
 template <typename Scalar>

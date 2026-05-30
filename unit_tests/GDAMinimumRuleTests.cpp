@@ -16,6 +16,7 @@
 #include "CamelliaCellTools.h"
 #include "CamelliaTestingHelpers.h"
 #include "CubatureFactory.h"
+#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
@@ -296,20 +297,31 @@ namespace
     TEST_EQUALITY(solveSuccess, 0);
     
     Epetra_SerialComm Comm;
-    auto partMap = soln->getPartitionMap();
-    auto ePartMap = T_to_E::map(partMap);
     
     // Import solution onto current processor
-    GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
-    GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
-    Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-    Epetra_Import  solnImporter(solnMap, *ePartMap);
-    Epetra_Vector  solnCoeff(solnMap);
+    auto partMap = soln->getPartitionMap();
+    using GO = TMap::global_ordinal_type;
+    using LO = TMap::local_ordinal_type;
+    using MultiVector = TVector<double>;
+    using Node = MultiVector::node_type;
+    
+    GO numNodesGlobal = mesh->numGlobalDofs();
+    LO numMyNodes = static_cast<LO>(numNodesGlobal);
+    Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
+    auto tSolnMap = E_to_T::map(eSolnMap);
+    
+    Tpetra::Import<LO,GO,Node> importer (tSolnMap, partMap); // source, destination
+    
     Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
-    solnCoeff.Import(*lhsVector, solnImporter, Insert);
+    auto eLHSVector = Teuchos::rcp(lhsVector,false);
+    auto tLHSVector = E_to_T::vector(eLHSVector);
+    
+    const int numVectors = 1;
+    auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );
+    tSolnCoeff->doImport(*tLHSVector, importer, Tpetra::INSERT);
     
 // TODO: work out whether MeshTestUtility::neighborBasesAgreeOnSides() is valid on CG meshes
-    if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff))
+    if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, tSolnCoeff))
     {
       cout << "GDAMinimumRuleTests failure: for 1-irregular 2D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
       success = false;
@@ -1216,10 +1228,6 @@ namespace
     VarPtr v = poissonForm.v();
     
     VarPtr u_hat = poissonForm.u_hat();
-    VarPtr sigma_hat = poissonForm.sigma_n_hat();
-    
-    VarPtr u = poissonForm.u();
-    VarPtr sigma = poissonForm.sigma();
     
     BFPtr bf = poissonForm.bf();
     
@@ -2426,18 +2434,29 @@ namespace
       
       Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
       Epetra_SerialComm Comm;
-      auto partMap = soln->getPartitionMap();
-      auto ePartMap = T_to_E::map(partMap);
       
       // Import solution onto current processor
-      GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
-      GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
-      Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      Epetra_Import  solnImporter(solnMap, *ePartMap);
-      Epetra_Vector  solnCoeff(solnMap);
-      solnCoeff.Import(*lhsVector, solnImporter, Insert);
+      auto partMap = soln->getPartitionMap();
+      using GO = TMap::global_ordinal_type;
+      using LO = TMap::local_ordinal_type;
+      using MultiVector = TVector<double>;
+      using Node = MultiVector::node_type;
       
-      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff))
+      GO numNodesGlobal = mesh->numGlobalDofs();
+      LO numMyNodes = static_cast<LO>(numNodesGlobal);
+      Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
+      auto tSolnMap = E_to_T::map(eSolnMap);
+      
+      Tpetra::Import<LO,GO,Node> importer (tSolnMap, partMap); // source, destination
+      
+      auto eLHSVector = Teuchos::rcp(lhsVector,false);
+      auto tLHSVector = E_to_T::vector(eLHSVector);
+      
+      const int numVectors = 1;
+      auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );
+      tSolnCoeff->doImport(*tLHSVector, importer, Tpetra::INSERT);
+      
+      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, tSolnCoeff))
       {
         cout << "GDAMinimumRuleTests failure: for" << irregularity << "-irregular 3D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
         success = false;

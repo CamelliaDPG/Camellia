@@ -23,8 +23,11 @@
 //@HEADER
 */
 
-#include "Ifpack_ConfigDefs.h"
 #include "OverlappingRowMatrix.h"
+
+#include "E_to_T.hpp"
+#include "T_to_E.hpp"
+
 #include "Epetra_RowMatrix.h"
 #include "Epetra_Map.h"
 #include "Epetra_CrsMatrix.h"
@@ -36,8 +39,6 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
-#include "Ifpack_LocalFilter.h"
-
 #include "Epetra_SerialComm.h"
 
 #include <MatrixMarket_Tpetra.hpp>
@@ -45,6 +46,8 @@
 using namespace Teuchos;
 
 using namespace Camellia;
+
+using Scalar = double;
 
 // ======================================================================
 template<typename int_type>
@@ -72,7 +75,7 @@ void OverlappingRowMatrix::BuildMap(const set<GlobalIndexType> &rowIndices)
   
   for (GlobalIndexType globalDofIndex : rowIndices)
   {
-    if (A().RowMatrixRowMap().LID((GlobalIndexTypeToCast)globalDofIndex) == -1)
+    if (Matrix_->getRowMap()->getLocalElement(globalDofIndex) == -1)
     {
       typename std::vector<int_type>::iterator pos = find(ExtElements.begin(),ExtElements.end(),globalDofIndex);
       if (pos == ExtElements.end())
@@ -92,25 +95,35 @@ void OverlappingRowMatrix::BuildMap(const set<GlobalIndexType> &rowIndices)
   // build the map containing all the nodes (original
   // matrix + extended matrix)
   std::vector<int_type> list(NumMyRowsA_ + ExtElements.size());
-  for (int i = 0 ; i < NumMyRowsA_ ; ++i)
-    list[i] = (int_type) A().RowMatrixRowMap().GID64(i);
+  auto A_ptr = A();
+  auto A_rowMap = A_ptr->RowMatrixRowMap();
+  for (int i = 0 ; i < NumMyRowsA_; ++i)
+    list[i] = (int_type) A_rowMap.GID64(i);
   for (int i = 0 ; i < (int)ExtElements.size() ; ++i)
     list[i + NumMyRowsA_] = ExtElements[i];
   
   const int_type *listptr = NULL;
   if ( ! list.empty() ) listptr = &list[0];
   {
-    Map_ = rcp( new Epetra_Map((int_type) -1, NumMyRowsA_ + ExtElements.size(),
+    eMap_ = rcp( new Epetra_Map((int_type) -1, NumMyRowsA_ + ExtElements.size(),
                                listptr, 0, Comm()) );
+    Map_  = E_to_T::map(*eMap_);
+    
+    /*
+         auto unknownGlobalElementCount = Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid();
+         
+         Map_ = Teuchos::rcp(new TMap(unknownGlobalElementCount, listptr, NumMyRowsA_ + ExtElements.size(), 0, Matrix_->getComm()));
+
+     */
   }
   
   // now build the map corresponding to all the external nodes
-  // (with respect to A().RowMatrixRowMap().
+  // (with respect to A()->RowMatrixRowMap().
   {
     const int_type * extelsptr = NULL;
     if ( ! ExtElements.empty() ) extelsptr = &ExtElements[0];
     ExtMap_ = rcp( new Epetra_Map((int_type) -1,ExtElements.size(),
-                                  extelsptr,0,A().Comm()) );
+                                  extelsptr,0,Comm()) );
   }
   
   rowIndices_ = rowIndices;
@@ -127,6 +140,8 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexTy
   // in ColMap, but not in RowMap
   const Epetra_Map *RowMap;
   const Epetra_Map *ColMap;
+  
+  auto eA = A();
 
   std::vector<int_type> ExtElements;
 
@@ -139,8 +154,8 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexTy
     }
     else
     {
-      RowMap = &(A().RowMatrixRowMap());
-      ColMap = &(A().RowMatrixColMap());
+      RowMap = &(eA->RowMatrixRowMap());
+      ColMap = &(eA->RowMatrixColMap());
     }
 
     int size = ColMap->NumMyElements() - RowMap->NumMyElements();
@@ -148,13 +163,15 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexTy
     std::vector<int_type> list(size);
 
     int count = 0;
+    
+    auto A_rowMap = eA->RowMatrixRowMap();
 
     // define the set of rows that are in ColMap but not in RowMap
     for (int i = 0 ; i < ColMap->NumMyElements() ; ++i)
     {
       int_type GID = (int_type) ColMap->GID64(i);
       if (filterByRowIndices && (globalDofIndices.find(GID) == globalDofIndices.end())) continue;
-      if (A().RowMatrixRowMap().LID(GID) == -1)
+      if (A_rowMap.LID(GID) == -1)
       {
         typename std::vector<int_type>::iterator pos = find(ExtElements.begin(),ExtElements.end(),GID);
         if (pos == ExtElements.end())
@@ -172,17 +189,17 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexTy
 
     TmpMatrix = rcp( new Epetra_CrsMatrix(::Copy,*TmpMap,0) );
 
-    TmpImporter = rcp( new Epetra_Import(*TmpMap,A().RowMatrixRowMap()) );
+    TmpImporter = rcp( new Epetra_Import(*TmpMap,eA->RowMatrixRowMap()) );
 
-    TmpMatrix->Import(A(),*TmpImporter,Insert);
-    TmpMatrix->FillComplete(A().OperatorDomainMap(),*TmpMap);
+    TmpMatrix->Import(*eA,*TmpImporter,Insert);
+    TmpMatrix->FillComplete(eA->OperatorDomainMap(),*TmpMap);
   }
 
   // build the map containing all the nodes (original
   // matrix + extended matrix)
   std::vector<int_type> list(NumMyRowsA_ + ExtElements.size());
   for (int i = 0 ; i < NumMyRowsA_ ; ++i)
-    list[i] = (int_type) A().RowMatrixRowMap().GID64(i);
+    list[i] = (int_type) eA->RowMatrixRowMap().GID64(i);
   for (int i = 0 ; i < (int)ExtElements.size() ; ++i)
     list[i + NumMyRowsA_] = ExtElements[i];
 
@@ -211,19 +228,20 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexTy
   const int_type *listptr = NULL;
   if ( ! list.empty() ) listptr = &list[0];
   {
-    Map_ = rcp( new Epetra_Map((int_type) -1, NumMyRowsA_ + ExtElements.size(),
-                               listptr, 0, Comm()) );
+    auto eMap = rcp( new Epetra_Map((int_type) -1, NumMyRowsA_ + ExtElements.size(),
+                                    listptr, 0, Comm()) );
+    Map_ = E_to_T::map(*eMap);
   }
 
 //  cout << "On rank " << rank << ", ExtElements.size() = " << ExtElements.size() << endl;
 
   // now build the map corresponding to all the external nodes
-  // (with respect to A().RowMatrixRowMap().
+  // (with respect to A()->RowMatrixRowMap().
   {
     const int_type * extelsptr = NULL;
     if ( ! ExtElements.empty() ) extelsptr = &ExtElements[0];
     ExtMap_ = rcp( new Epetra_Map((int_type) -1,ExtElements.size(),
-                                  extelsptr,0,A().Comm()) );
+                                  extelsptr,0,Comm()) );
   }
 
   if (filterByRowIndices)
@@ -332,50 +350,46 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
 }
 
 OverlappingRowMatrix::
-OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
+OverlappingRowMatrix(const TMatrixPtr<double> Matrix_in, int OverlapLevel_in,
                      const std::set<GlobalIndexType> &rowIndicesForThisRank) :
   Matrix_(Matrix_in),
   OverlapLevel_(OverlapLevel_in)
 {
-  NumMyRowsA_ = A().NumMyRows();
+  _eComm = MPIWrapper::EpetraComm(Matrix_->getComm());
+  _eMatrix = T_to_E::matrix(Matrix_);
+  
+  NumMyRowsA_ = Matrix_->getLocalNumRows();
 
   // construct the external matrix
 
-#ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
-  if(A().RowMatrixRowMap().GlobalIndicesInt())
-  {
-    BuildMap<int>(OverlapLevel_in, rowIndicesForThisRank);
-  }
-  else
-#endif
-#ifndef EPETRA_NO_64BIT_GLOBAL_INDICES
-    if(A().RowMatrixRowMap().GlobalIndicesLongLong())
-    {
-      BuildMap<long long>(OverlapLevel_in, rowIndicesForThisRank);
-    }
-    else
-#endif
-      throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
+  using go_type = TMatrix<double>::global_ordinal_type;
+  BuildMap<go_type>(OverlapLevel_in, rowIndicesForThisRank);
 
-  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*Map_,0) );
+  eMap_ = T_to_E::map(Map_);
+  
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*eMap_,0) );
 
-  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) );
-  ExtMatrix_->Import(A(),*ExtImporter_,Insert);
-  ExtMatrix_->FillComplete(A().OperatorDomainMap(),*Map_);
+  auto A_ptr = A();
+  auto A_rowMap = A_ptr->RowMatrixRowMap();
+  
+  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A_rowMap) );
+  
+  ExtMatrix_->Import(*A_ptr,*ExtImporter_,Insert);
+  ExtMatrix_->FillComplete(A_ptr->OperatorDomainMap(),*eMap_);
 
-  Importer_ = rcp( new Epetra_Import(*Map_,A().RowMatrixRowMap()) );
+  Importer_ = rcp( new Epetra_Import(*eMap_,A_rowMap) );
 
   // fix indices for overlapping matrix
   NumMyRowsB_ = B().NumMyRows();
   NumMyRows_ = NumMyRowsA_ + NumMyRowsB_;
   NumMyCols_ = NumMyRows_;
 
-  NumMyDiagonals_ = A().NumMyDiagonals() + B().NumMyDiagonals();
+  NumMyDiagonals_ = A_ptr->NumMyDiagonals() + B().NumMyDiagonals();
 
-  NumMyNonzeros_ = A().NumMyNonzeros() + B().NumMyNonzeros();
+  NumMyNonzeros_ = A_ptr->NumMyNonzeros() + B().NumMyNonzeros();
   long long NumMyNonzeros_tmp = NumMyNonzeros_;
   Comm().SumAll(&NumMyNonzeros_tmp,&NumGlobalNonzeros_,1);
-  MaxNumEntries_ = A().MaxNumEntries();
+  MaxNumEntries_ = A_ptr->MaxNumEntries();
   
   if (MaxNumEntries_ < B().MaxNumEntries())
     MaxNumEntries_ = B().MaxNumEntries();
@@ -383,53 +397,47 @@ OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int 
 
 //! Constructor for an exact match to IfPack_OverlappingMatrix's behavior.
 OverlappingRowMatrix::
-OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in) :
+OverlappingRowMatrix(const TMatrixPtr<double> Matrix_in, int OverlapLevel_in) :
   Matrix_(Matrix_in),
   OverlapLevel_(OverlapLevel_in)
 {
+  _eComm = MPIWrapper::EpetraComm(Matrix_->getComm());
+  _eMatrix = T_to_E::matrix(Matrix_);
+  
   // nothing to do as well with one process
   if (Comm().NumProc() == 1)
-    IFPACK_CHK_ERRV(-1);
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported");
+  }
 
-  NumMyRowsA_ = A().NumMyRows();
+  auto A_ptr = A();
+  
+  NumMyRowsA_ = A_ptr->NumMyRows();
 
   // construct the external matrix
+  using go_type = TMatrix<double>::global_ordinal_type;
+  BuildMap<go_type>(OverlapLevel_in);
 
-#ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
-  if(A().RowMatrixRowMap().GlobalIndicesInt())
-  {
-    BuildMap<int>(OverlapLevel_in);
-  }
-  else
-#endif
-#ifndef EPETRA_NO_64BIT_GLOBAL_INDICES
-    if(A().RowMatrixRowMap().GlobalIndicesLongLong())
-    {
-      BuildMap<long long>(OverlapLevel_in);
-    }
-    else
-#endif
-      throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
+  eMap_ = T_to_E::map(Map_);
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*eMap_,0) );
 
-  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*Map_,0) );
+  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A_ptr->RowMatrixRowMap()) );
+  ExtMatrix_->Import(*A_ptr,*ExtImporter_,Insert);
+  ExtMatrix_->FillComplete(A_ptr->OperatorDomainMap(),*eMap_);
 
-  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) );
-  ExtMatrix_->Import(A(),*ExtImporter_,Insert);
-  ExtMatrix_->FillComplete(A().OperatorDomainMap(),*Map_);
-
-  Importer_ = rcp( new Epetra_Import(*Map_,A().RowMatrixRowMap()) );
+  Importer_ = rcp( new Epetra_Import(*eMap_,A_ptr->RowMatrixRowMap()) );
 
   // fix indices for overlapping matrix
   NumMyRowsB_ = B().NumMyRows();
   NumMyRows_ = NumMyRowsA_ + NumMyRowsB_;
   NumMyCols_ = NumMyRows_;
 
-  NumMyDiagonals_ = A().NumMyDiagonals() + B().NumMyDiagonals();
+  NumMyDiagonals_ = A_ptr->NumMyDiagonals() + B().NumMyDiagonals();
 
-  NumMyNonzeros_ = A().NumMyNonzeros() + B().NumMyNonzeros();
+  NumMyNonzeros_ = A_ptr->NumMyNonzeros() + B().NumMyNonzeros();
   long long NumMyNonzeros_tmp = NumMyNonzeros_;
   Comm().SumAll(&NumMyNonzeros_tmp,&NumGlobalNonzeros_,1);
-  MaxNumEntries_ = A().MaxNumEntries();
+  MaxNumEntries_ = A_ptr->MaxNumEntries();
 
   if (MaxNumEntries_ < B().MaxNumEntries())
     MaxNumEntries_ = B().MaxNumEntries();
@@ -438,136 +446,46 @@ OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int 
 // ======================================================================
 // Constructor for the case of one core per subdomain (the only case supported by this Camellia version)
 OverlappingRowMatrix::
-OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
+OverlappingRowMatrix(const TMatrixPtr<double> Matrix_in,
                      int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
                      bool hierachical)  :
   Matrix_(Matrix_in),
   OverlapLevel_(OverlapLevel_in)
 {
-  NumMyRowsA_ = A().NumMyRows();
+  _eComm = MPIWrapper::EpetraComm(Matrix_->getComm());
+  _eMatrix = T_to_E::matrix(Matrix_);
+  
+  auto A_ptr = A();
+  
+  NumMyRowsA_ = A_ptr->NumMyRows();
 
   // construct the external matrix
+  using go_type = TMatrix<double>::global_ordinal_type;
+  BuildMap<go_type>(OverlapLevel_in, mesh, dofInterpreter, hierachical);
 
-#ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
-  if(A().RowMatrixRowMap().GlobalIndicesInt())
-  {
-    BuildMap<int>(OverlapLevel_in, mesh, dofInterpreter, hierachical);
-  }
-  else
-#endif
-#ifndef EPETRA_NO_64BIT_GLOBAL_INDICES
-    if(A().RowMatrixRowMap().GlobalIndicesLongLong())
-    {
-      BuildMap<long long>(OverlapLevel_in, mesh, dofInterpreter, hierachical);
-    }
-    else
-#endif
-      throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
+  eMap_ = T_to_E::map(Map_);
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*eMap_,0) );
 
-  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*Map_,0) );
+  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A_ptr->RowMatrixRowMap()) );
+  ExtMatrix_->Import(*A_ptr,*ExtImporter_,Insert);
+  ExtMatrix_->FillComplete(A_ptr->OperatorDomainMap(),*eMap_);
 
-  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) );
-  ExtMatrix_->Import(A(),*ExtImporter_,Insert);
-  ExtMatrix_->FillComplete(A().OperatorDomainMap(),*Map_);
-
-  Importer_ = rcp( new Epetra_Import(*Map_,A().RowMatrixRowMap()) );
+  Importer_ = rcp( new Epetra_Import(*eMap_,A_ptr->RowMatrixRowMap()) );
 
   // fix indices for overlapping matrix
   NumMyRowsB_ = B().NumMyRows();
   NumMyRows_ = NumMyRowsA_ + NumMyRowsB_;
   NumMyCols_ = NumMyRows_;
 
-  NumMyDiagonals_ = A().NumMyDiagonals() + B().NumMyDiagonals();
+  NumMyDiagonals_ = A_ptr->NumMyDiagonals() + B().NumMyDiagonals();
 
-  NumMyNonzeros_ = A().NumMyNonzeros() + B().NumMyNonzeros();
+  NumMyNonzeros_ = A_ptr->NumMyNonzeros() + B().NumMyNonzeros();
   long long NumMyNonzeros_tmp = NumMyNonzeros_;
   Comm().SumAll(&NumMyNonzeros_tmp,&NumGlobalNonzeros_,1);
-  MaxNumEntries_ = A().MaxNumEntries();
+  MaxNumEntries_ = A_ptr->MaxNumEntries();
 
   if (MaxNumEntries_ < B().MaxNumEntries())
     MaxNumEntries_ = B().MaxNumEntries();
-  
-//  { // DEBUGGING
-//
-//    int rank = Teuchos::GlobalMPISession::getRank();
-//
-//    auto A_epetra = Teuchos::rcp(&A(), false);
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("A.dat", E_to_T::matrix(A_epetra));
-//    printMapSummary(*ExtMap_, "ExtMap_");
-//    printMapSummary(*Map_, "Map_");
-//
-//    cout << "On rank " << rank << ", ExtImporter_->NumSameIDs = " << ExtImporter_->NumSameIDs() << endl;
-//    cout << "On rank " << rank << ", ExtImporter_->NumRemoteIDs = " << ExtImporter_->NumRemoteIDs() << endl;
-//
-//    cout << "On rank " << rank << ", Importer_->NumSameIDs = " << Importer_->NumSameIDs() << endl;
-//    cout << "On rank " << rank << ", Importer_->NumRemoteIDs = " << Importer_->NumRemoteIDs() << endl;
-//    cout << "OverlappingRowMatrix outputting on rank " << rank << endl;
-//
-//    if ((rank==3) && (NumMyRows_==11)) {
-//      Epetra_SerialComm SerialComm;
-//      Epetra_Map    localMap(NumMyRows_, 0, SerialComm);
-//
-////      Epetra_CrsMatrix localMatrix(Copy, localMap, NumMyRows_);
-//
-//      int nnz;
-//      for (int row=0; row < NumMyRows_; row++) {
-//        int numEntries;
-//        this->NumMyRowEntries(row, numEntries);
-//
-//        vector<double> rowValues(numEntries);
-//        vector<GlobalIndexTypeToCast> indices(numEntries);
-//
-//        ExtractMyRowCopy(row, rowValues.size(), nnz, &rowValues[0], &indices[0]);
-//        ostringstream rowLabel;
-//        rowLabel << "rank " << rank << ", row " << row;
-//
-//        Camellia::print(rowLabel.str().c_str(), rowValues);
-//        rowLabel.str("");
-//        rowLabel << "rank " << rank << ", row " << row << ", local indices";
-//        Camellia::print(rowLabel.str().c_str(), indices);
-//
-//        vector<GlobalIndexTypeToCast> globalIndices(indices.size());
-//        for (int col=0; col<indices.size(); col++) {
-//          GlobalIndexTypeToCast colLID = indices[col];
-//          GlobalIndexTypeToCast colGID;
-////          if (row < NumMyRowsA_) {
-////            colGID = Matrix_->RowMatrixColMap().GID(colLID);
-////          } else {
-//            colGID = this->RowMatrixColMap().GID(colLID);
-////          }
-//          globalIndices[col] = colGID;
-//        }
-//
-//        rowLabel.str("");
-//        rowLabel << "rank " << rank << ", row " << row << ", global indices";
-//        Camellia::print(rowLabel.str().c_str(), globalIndices);
-//
-////        localMatrix.InsertGlobalValues(row, nnz, &rowValues[0], &indices[0]);
-//      }
-////      cout << "Calling localMatrix.FillComplete().\n";
-////      localMatrix.FillComplete();
-////      cout << "writing localMatrix to file.\n";
-//    auto localMatrixPtr = Teuchos::rcp(&localMatrix, false);
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/rank3_local.dat", E_to_T::matrix(localMatrixPtr));
-//    }
-//
-////    Teuchos::RCP<const Epetra_RowMatrix> this_A = Teuchos::rcp( &this->A(), false );
-////    Teuchos::RCP<const Epetra_RowMatrix> A = Teuchos::rcp( new Ifpack_LocalFilter( this_A ) );
-////    Teuchos::RCP<const Epetra_RowMatrix> this_B = Teuchos::rcp( ExtMatrix_.get(), false );
-////    Teuchos::RCP<const Epetra_RowMatrix> B = Teuchos::rcp( new Ifpack_LocalFilter( this_B ) );
-////
-////    cout << "On rank " << rank << ", B->NumMyRows() = " << B->NumMyRows() << endl;
-////    cout << "On rank " << rank << ", B->NumMyCols() = " << B->NumMyCols() << endl;
-////
-////    ostringstream rankLabel;
-////    rankLabel << "/tmp/B_" << rank << ".dat";
-//    auto BPtr = Teuchos::rcp(&B, false);
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(rankLabel.str(), E_to_T::matrix(BPtr));
-////
-////    rankLabel.str("");
-////    rankLabel << "/tmp/A_" << rank << ".dat";
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(rankLabel.str(), E_to_T::matrix(A));
-//  }
 }
 
 // ======================================================================
@@ -575,7 +493,7 @@ int OverlappingRowMatrix::
 NumMyRowEntries(int MyRow, int & NumEntries) const
 {
   if (MyRow < NumMyRowsA_)
-    return(A().NumMyRowEntries(MyRow,NumEntries));
+    return(A()->NumMyRowEntries(MyRow,NumEntries));
   else
     return(B().NumMyRowEntries(MyRow - NumMyRowsA_, NumEntries));
 }
@@ -588,13 +506,15 @@ ExtractMyRowCopy(int MyRow, int Length, int & NumEntries, double *Values,
   int ierr;
   if (MyRow < NumMyRowsA_)
   {
-    ierr = A().ExtractMyRowCopy(MyRow,Length,NumEntries,Values,Indices);
+    auto A_ptr = A();
+    
+    ierr = A_ptr->ExtractMyRowCopy(MyRow,Length,NumEntries,Values,Indices);
     // pretty sure we need to remap Indices here, like so:
     int offset = 0; // for when we delete entries
     for (int i=0; i<NumEntries; i++)
     {
       int lid_A = Indices[i];
-      GlobalIndexTypeToCast gid_A = A().RowMatrixColMap().GID(lid_A);
+      auto gid_A = A_ptr->RowMatrixColMap().GID64(lid_A);
       if (gid_A==-1)
       {
         cout << "Error: lid_A not found in A's column map!\n";
@@ -626,14 +546,14 @@ ExtractMyRowCopy(int MyRow, int Length, int & NumEntries, double *Values,
     ierr = B().ExtractMyRowCopy(MyRow - NumMyRowsA_,Length,NumEntries,
                                 Values,Indices);
 
-  IFPACK_RETURN(ierr);
+  return ierr;
 }
 
 // ======================================================================
 int OverlappingRowMatrix::
 ExtractDiagonalCopy(Epetra_Vector & Diagonal) const
 {
-  IFPACK_CHK_ERR(-1);
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented");
 }
 
 
@@ -650,6 +570,8 @@ Multiply(bool TransA, const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
   std::vector<double> Val(MaxNumEntries_);
 
   Y.PutScalar(0.0);
+  
+  auto A_ptr = A();
 
   // matvec with A (local rows)
   for (int i = 0 ; i < NumMyRowsA_ ; ++i)
@@ -657,8 +579,9 @@ Multiply(bool TransA, const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     for (int k = 0 ; k < NumVectors ; ++k)
     {
       int Nnz;
-      IFPACK_CHK_ERR(A().ExtractMyRowCopy(i,MaxNumEntries_,Nnz,
-                                          &Val[0], &Ind[0]));
+      int info = A_ptr->ExtractMyRowCopy(i,MaxNumEntries_,Nnz,
+                                         &Val[0], &Ind[0]);
+      TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::invalid_argument, "ExtractMyRowCopy() failed with value " << info);
       for (int j = 0 ; j < Nnz ; ++j)
       {
         Y[k][i] += Val[j] * X[k][Ind[j]];
@@ -672,8 +595,9 @@ Multiply(bool TransA, const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     for (int k = 0 ; k < NumVectors ; ++k)
     {
       int Nnz;
-      IFPACK_CHK_ERR(B().ExtractMyRowCopy(i,MaxNumEntries_,Nnz,
-                                          &Val[0], &Ind[0]));
+      int info = B().ExtractMyRowCopy(i,MaxNumEntries_,Nnz,
+                                      &Val[0], &Ind[0]);
+      TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::invalid_argument, "ExtractMyRowCopy() failed with value " << info);
       for (int j = 0 ; j < Nnz ; ++j)
       {
         Y[k][i + NumMyRowsA_] += Val[j] * X[k][Ind[j]];
@@ -687,7 +611,8 @@ Multiply(bool TransA, const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 int OverlappingRowMatrix::
 Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 {
-  IFPACK_CHK_ERR(Multiply(UseTranspose(),X,Y));
+  int info = Multiply(UseTranspose(),X,Y);
+  TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::invalid_argument, "Multiply() failed with value " << info);
   return(0);
 }
 
@@ -695,18 +620,18 @@ Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 int OverlappingRowMatrix::
 ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 {
-  IFPACK_CHK_ERR(-1);
+  return -1;
 }
 
 // ======================================================================
-Epetra_RowMatrix& OverlappingRowMatrix::B() const
+Epetra_CrsMatrix& OverlappingRowMatrix::B() const
 {
   return(*ExtMatrix_);
 }
 // ======================================================================
 const Epetra_BlockMap& OverlappingRowMatrix::Map() const
 {
-  return(*Map_);
+  return(*eMap_);
 }
 
 // ======================================================================

@@ -307,7 +307,7 @@ namespace
     
     Teuchos::RCP<DofInterpreter> dofInterpreter = soln->getDofInterpreter();
     
-    Teuchos::RCP<Epetra_RowMatrix> stiffness = soln->getStiffnessMatrix();
+    auto stiffness = soln->getStiffnessMatrix();
     
     set<GlobalIndexType> myCells = mesh->cellIDsInPartition();
 //    print("myCells", myCells);
@@ -344,7 +344,8 @@ namespace
       //          Camellia::print(description.str().c_str(), expectedGlobalDofIndices);
       //        }
       
-      OverlappingRowMatrix rowMatrix(stiffness, overlap, mesh, dofInterpreter, hierarchical);
+      auto tStiffness = E_to_T::matrix(stiffness);
+      OverlappingRowMatrix rowMatrix(tStiffness, overlap, mesh, dofInterpreter, hierarchical);
       set<GlobalIndexType> actualGlobalDofIndices = rowMatrix.RowIndices();
       
       TEST_EQUALITY(expectedGlobalDofIndices.size(), actualGlobalDofIndices.size());
@@ -461,11 +462,13 @@ namespace
     
     int rank = Teuchos::GlobalMPISession::getRank();
     
-    int n = 16;
-    Camellia::FieldContainer<double> denseMatrix(n,n);
+    using GO = TMap::global_ordinal_type;
+    GO n = 16;
+    Camellia::FieldContainer<double> denseMatrix(static_cast<int>(n),static_cast<int>(n));
     double value = 0;
     // fill with arbitrary data, taking care to give each entry a unique value, to maximize chances of detecting failure
-    Camellia::FieldContainer<int> allColumnIndices(n);
+    using GO = TMatrix<double>::global_ordinal_type;
+    Camellia::FieldContainer<GO> allColumnIndices(static_cast<int>(n));
     for (int i=0; i<n; i++)
     {
       allColumnIndices(i) = i;
@@ -491,7 +494,7 @@ namespace
     Teuchos::RCP<Epetra_CrsMatrix> matrix = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, map, n));
     for (int LID=0; LID<map.NumMyElements(); LID++)
     {
-      int GID = map.GID(LID);
+      auto GID = map.GID64(LID);
       matrix->InsertGlobalValues(GID, n, &denseMatrix(GID,0), &allColumnIndices(0));
       myGlobalDofs.insert(GID);
     }
@@ -502,10 +505,10 @@ namespace
     // sanity check for this test: make sure that entries in matrix match denseMatrix
     for (int LID=0; LID<map.NumMyElements(); LID++)
     {
-      int GID = map.GID(LID);
+      auto GID = map.GID64(LID);
       Camellia::FieldContainer<double> rowData(n);
       int numEntries;
-      Camellia::FieldContainer<int> indices(n);
+      Camellia::FieldContainer<GO> indices(n);
       matrix->ExtractGlobalRowCopy(GID, n, numEntries, &rowData(0), &indices(0));
       TEST_EQUALITY(n, numEntries); // row should be full
       for (int j=0; j<numEntries; j++)
@@ -532,10 +535,11 @@ namespace
       overlapDistributions.push_back(dist3);
     }
     
+    auto tMatrix = E_to_T::matrix(matrix);
     int maxOverlapLevel = 1;
     for (set<GlobalIndexType> myRowIndices : overlapDistributions)
     {
-      OverlappingRowMatrix overlapMatrix(matrix, maxOverlapLevel, myRowIndices);
+      OverlappingRowMatrix overlapMatrix(tMatrix, maxOverlapLevel, myRowIndices);
       
       int expectedLocalRowCount = myRowIndices.size();
       int actualLocalRowCount = overlapMatrix.Map().NumMyElements();
@@ -544,7 +548,7 @@ namespace
       
       for (int localRowOrdinal=0; localRowOrdinal < actualLocalRowCount; localRowOrdinal++)
       {
-        GlobalIndexType row = overlapMatrix.Map().GID(localRowOrdinal);
+        auto row = overlapMatrix.Map().GID64(localRowOrdinal);
         Camellia::FieldContainer<double> rowData(n);
         int numEntries;
         Camellia::FieldContainer<int> indices(n);
@@ -554,8 +558,8 @@ namespace
         {
           for (int j=0; j<numEntries; j++)
           {
-            int col_lid = indices(j);
-            int colIndex = overlapMatrix.RowMatrixColMap().GID(col_lid);
+            auto col_lid = indices(j);
+            auto colIndex = overlapMatrix.RowMatrixColMap().GID64(col_lid);
             TEST_FLOATING_EQUALITY(rowData(j), denseMatrix(row,colIndex), floatingTol);
           }
         }

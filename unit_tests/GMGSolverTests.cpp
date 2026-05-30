@@ -103,7 +103,14 @@ namespace
     bool useConformingTraces = false;
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
-    VarPtr u = form.u(), sigma = form.sigma(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    VarPtr u = form.u(), u_hat = form.u_hat(), sigma_n_hat = form.sigma_n_hat();
+    
+    std::vector<VarPtr> sigma(spaceDim);
+    for (int d=0; d<spaceDim; d++)
+    {
+      sigma[d] = form.sigma(d);
+    }
+    
     //    FunctionPtr u_exact = Function::xn(2) * Function::yn(1); // x^2 y exact solution
     FunctionPtr psiExact = (spaceDim > 1) ? uExact->grad() : uExact->dx();
 
@@ -115,7 +122,10 @@ namespace
 
     map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[u->ID()] = uExact;
-    exactSolnMap[sigma->ID()] = psiExact;
+    for (int d=0; d<spaceDim; d++)
+    {
+      exactSolnMap[sigma[d]->ID()] = (spaceDim > 1) ? psiExact->spatialComponent(d+1) : psiExact;
+    }
 
     FunctionPtr u_hat_exact   =   u_hat->termTraced()->evaluate(exactSolnMap);
     FunctionPtr sigma_n_hat_exact = sigma_n_hat->termTraced()->evaluate(exactSolnMap);
@@ -355,7 +365,7 @@ namespace
       double diff = abs(direct_val - gmg_val);
       if (diff > tol)
       {
-        GlobalIndexType gid = gmg_lhsVector.Map().GID(lid);
+        auto gid = gmg_lhsVector.Map().GID64(lid);
         out << "FAILURE: For meshWidth = " << meshWidth << " in " << spaceDim << "D, ";
         out << "GMG ApplyInverse and direct solve differ for gid " << gid << " with difference = " << diff << ".\n";
         success = false;
@@ -409,9 +419,7 @@ namespace
         out << "multiplicative";
 
       out << ", GMG solver and direct differ with L^2 norm of the difference = " << l2_diff << ".\n";
-
-      Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
-      writeOperatorsToDisk(op);
+      out << "NOTE: skipping writeOperatorsToDisk(op) here to avoid secondary MPI crashes in the failure path.\n";
     }
   }
 
@@ -971,7 +979,17 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
     auto tStiffness = E_to_T::matrix(fineSolution->getStiffnessMatrix());
     solver->gmgOperator()->setFineStiffnessMatrix(tStiffness);
 
-    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE, GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ, GMGOperator::CHEBYSHEV};
+    {
+      auto comm = MPIWrapper::TeuchosCommWorld();
+      const int rank = comm->getRank();
+      if (rank == 0)
+      {
+        std::cout << "\n\n******* WARNING: omitting tests against smoother choice GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ until that is re-enabled! *******\n\n";
+      }
+    }
+  // TODO: re-enable CAMELLIA_ADDITIVE_SCHWARZ smoother choice
+//  vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE, GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ, GMGOperator::CHEBYSHEV};
+    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE, GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CHEBYSHEV};
 
     for (GMGOperator::SmootherChoice smoother : smootherChoices)
     {

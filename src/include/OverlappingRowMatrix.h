@@ -26,19 +26,11 @@
 #ifndef CAMELLIA_OVERLAPPINGROWMATRIX_H
 #define CAMELLIA_OVERLAPPINGROWMATRIX_H
 
-#include "Ifpack_ConfigDefs.h"
 #include "Epetra_RowMatrix.h"
 #include "Epetra_CombineMode.h"
 #include "Teuchos_RCP.hpp"
 #include "Epetra_Import.h"
 #include "Epetra_Map.h"
-#ifdef HAVE_IFPACK_PARALLEL_SUBDOMAIN_SOLVERS
-#include "Epetra_IntVector.h"
-#else
-# ifdef IFPACK_NODE_AWARE_CODE
-# include "Epetra_IntVector.h"
-# endif
-#endif
 
 class Epetra_Map;
 class Epetra_BlockMap;
@@ -73,33 +65,42 @@ class Epetra_Comm;
  of its parent).  Two-level overlap extends this to all descendants of its
  grandparent, etc.
 
- \author Nathan V. Roberts, ALCF.  Based on IfPack_OverlappingRowMatrix.
+ \author Nathan V. Roberts, Sandia.  Based on IfPack_OverlappingRowMatrix.
 
- \date Last modified on 26-Mar-2015.
+ \date Last modified on 08-Oct-2025.
  */
 
 // Camellia includes:
-#include "Mesh.h"
 #include "DofInterpreter.h"
+#include "Mesh.h"
+#include "MPIWrapper.h"
+#include "T_to_E.hpp"
+#include "TypeDefs.h"
 
 namespace Camellia
 {
 
-class OverlappingRowMatrix : public virtual Epetra_RowMatrix
+class OverlappingRowMatrix : public virtual Epetra_RowMatrix //, TRowMatrix<double>
 {
+  using Scalar = double;
+  
+  Epetra_CommPtr _eComm;
+  Teuchos::RCP<const Epetra_CrsMatrix> _eMatrix;
 
 public:
 
-  //@{ Constructors/Destructors
+  //! Constructor for an exact match to IfPack_OverlappingMatrix's behavior.
+  OverlappingRowMatrix(const Teuchos::RCP<const Epetra_CrsMatrix>& Matrix_in, int OverlapLevel_in);
+  
   //! Constructor for mesh-based overlap levels, hierarchical and otherwise.
-  OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in,
+  OverlappingRowMatrix(const TMatrixPtr<double> Matrix_in,
                        int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
                        bool hierarchical = false);
-  OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
+  OverlappingRowMatrix(const TMatrixPtr<double> Matrix_in, int OverlapLevel_in,
                        const std::set<GlobalIndexType> &rowIndicesForThisRank);
-
+  
   //! Constructor for an exact match to IfPack_OverlappingMatrix's behavior.
-  OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in);
+  OverlappingRowMatrix(const TMatrixPtr<double>, int OverlapLevel_in);
   ~OverlappingRowMatrix() {};
   //@}
 
@@ -168,7 +169,7 @@ public:
   virtual int Solve(bool Upper, bool Trans, bool UnitDiagonal, const Epetra_MultiVector& X,
                     Epetra_MultiVector& Y) const
   {
-    IFPACK_RETURN(-1); // not implemented
+    return -1; // not implemented
   }
 
   virtual int Apply(const Epetra_MultiVector& X,
@@ -179,26 +180,26 @@ public:
   //! Computes the sum of absolute values of the rows of the Epetra_RowMatrix, results returned in x (NOT IMPLEMENTED).
   virtual int InvRowSums(Epetra_Vector& x) const
   {
-    IFPACK_RETURN(-1); // not implemented
+    return -1; // not implemented
   }
 
   //! Scales the Epetra_RowMatrix on the left with a Epetra_Vector x (NOT IMPLEMENTED).
   virtual int LeftScale(const Epetra_Vector& x)
   {
-    IFPACK_RETURN(-1); // not implemented
+    return -1; // not implemented
   }
 
   //! Computes the sum of absolute values of the columns of the Epetra_RowMatrix, results returned in x (NOT IMPLEMENTED).
   virtual int InvColSums(Epetra_Vector& x) const
   {
-    IFPACK_RETURN(-1); // not implemented
+    return -1; // not implemented
   }
 
 
   //! Scales the Epetra_RowMatrix on the right with a Epetra_Vector x (NOT IMPLEMENTED).
   virtual int RightScale(const Epetra_Vector& x)
   {
-    IFPACK_RETURN(-1); // not implemented
+    return -1; // not implemented
   }
 
   //@}
@@ -217,7 +218,7 @@ public:
      */
   virtual double NormInf() const
   {
-    return(A().NormInf());
+    return(_eMatrix->NormInf());
   }
 
   //! Returns the one norm of the global matrix.
@@ -226,14 +227,14 @@ public:
      */
   virtual double NormOne() const
   {
-    return(A().NormOne());
+    return(_eMatrix->NormOne());
   }
 
 #ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
   //! Returns the number of nonzero entries in the global matrix.
   virtual int NumGlobalNonzeros() const
   {
-    if(A().RowMatrixRowMap().GlobalIndicesInt())
+    if(_eMatrix->RowMatrixRowMap().GlobalIndicesInt())
       return (int) NumGlobalNonzeros_;
     else
       throw "OverlappingRowMatrix::NumGlobalNonzeros: Global indices not int";
@@ -242,19 +243,19 @@ public:
   //! Returns the number of global matrix rows.
   virtual int NumGlobalRows() const
   {
-    return(A().NumGlobalRows());
+    return(_eMatrix->NumGlobalRows());
   }
 
   //! Returns the number of global matrix columns.
   virtual int NumGlobalCols() const
   {
-    return(A().NumGlobalCols());
+    return(_eMatrix->NumGlobalCols());
   }
 
   //! Returns the number of global nonzero diagonal entries, based on global row/column index comparisons.
   virtual int NumGlobalDiagonals() const
   {
-    return(A().NumGlobalDiagonals());
+    return(_eMatrix->NumGlobalDiagonals());
   }
 #endif
   //! Returns the number of nonzero entries in the global matrix.
@@ -266,19 +267,19 @@ public:
   //! Returns the number of global matrix rows.
   virtual long long NumGlobalRows64() const
   {
-    return(A().NumGlobalRows64());
+    return(_eMatrix->NumGlobalRows64());
   }
 
   //! Returns the number of global matrix columns.
   virtual long long NumGlobalCols64() const
   {
-    return(A().NumGlobalCols64());
+    return(_eMatrix->NumGlobalCols64());
   }
 
   //! Returns the number of global nonzero diagonal entries, based on global row/column index comparisons.
   virtual long long NumGlobalDiagonals64() const
   {
-    return(A().NumGlobalDiagonals64());
+    return(_eMatrix->NumGlobalDiagonals64());
   }
 
   //! Returns the number of nonzero entries in the calling processor's portion of the matrix.
@@ -308,26 +309,26 @@ public:
   //! If matrix is lower triangular in local index space, this query returns true, otherwise it returns false.
   virtual bool LowerTriangular() const
   {
-    return(A().LowerTriangular());
+    return(_eMatrix->LowerTriangular());
   }
 
   //! If matrix is upper triangular in local index space, this query returns true, otherwise it returns false.
   virtual bool UpperTriangular() const
   {
-    return(A().UpperTriangular());
+    return(_eMatrix->UpperTriangular());
   }
 
   //! Returns the Epetra_Map object associated with the rows of this matrix.
   virtual const Epetra_Map & RowMatrixRowMap() const
   {
-    return(*Map_);
+    return(*eMap_);
   }
 
   //! Returns the Epetra_Map object associated with the columns of this matrix.
   virtual const Epetra_Map & RowMatrixColMap() const
   {
-//    return A().RowMatrixColMap();
-    return(*Map_);
+//    return _eMatrix->RowMatrixColMap();
+    return(*eMap_);
   }
 
   //! Returns the Epetra_Import object that contains the import operations for distributed operations.
@@ -342,7 +343,7 @@ public:
   //! Sets ownership.
   int SetOwnership(bool ownership)
   {
-    IFPACK_RETURN(-1);
+    return -1;
   }
 
   //! Sets use transpose (not implemented).
@@ -361,25 +362,25 @@ public:
   //! Returns true if the \e this object can provide an approximate Inf-norm, false otherwise.
   bool HasNormInf() const
   {
-    return(A().HasNormInf());
+    return(_eMatrix->HasNormInf());
   }
 
   //! Returns a pointer to the Epetra_Comm communicator associated with this operator.
   const Epetra_Comm & Comm() const
   {
-    return(A().Comm());
+    return *_eComm;
   }
 
   //! Returns the Epetra_Map object associated with the domain of this operator.
   const Epetra_Map & OperatorDomainMap() const
   {
-    return(*Map_);
+    return(*eMap_);
   }
 
   //! Returns the Epetra_Map object associated with the range of this operator.
   const Epetra_Map & OperatorRangeMap() const
   {
-    return(*Map_);
+    return(*eMap_);
   }
   //@}
 
@@ -415,20 +416,14 @@ public:
   static std::set<GlobalIndexType> overlappingCells(const std::set<GlobalIndexType> &cellIDs, MeshPtr mesh, int overlapLevel, bool hierarchical, int dimensionForNeighborRelation);
   
 private:
-  inline const Epetra_RowMatrix& A() const
+  inline Teuchos::RCP<const Epetra_CrsMatrix> A() const
   {
-    return(*Matrix_);
+    return _eMatrix;
   }
 
-  inline Epetra_RowMatrix& B() const;
-
-
-  // Camellia additions:
-//    MeshPtr mesh_;
-//    Teuchos::RCP<DofInterpreter> dofInterpreter_;
-
-  set<GlobalIndexType> rowIndices_; // for this rank
-  // end of Camellia additions
+  inline Epetra_CrsMatrix& B() const;
+  
+  std::set<GlobalIndexType> rowIndices_;
 
   int NumMyRows_;
   int NumMyCols_;
@@ -443,13 +438,26 @@ private:
 
   bool UseTranspose_;
 
-  Teuchos::RCP<const Epetra_Map> Map_;
+  Teuchos::RCP<const Epetra_Map> eMap_;
   Teuchos::RCP<const Epetra_Import> Importer_;
 
-  Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
+  using   LO = TMatrix<Scalar>::local_ordinal_type;
+  using   GO = TMatrix<Scalar>::global_ordinal_type;
+  using Node = TMatrix<Scalar>::node_type;
+  
+  TMapPtr Map_;
+  Teuchos::RCP<Tpetra::Import<LO,GO,Node> > tImporter_;
+  
+//  Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
   Teuchos::RCP<Epetra_CrsMatrix> ExtMatrix_;
   Teuchos::RCP<Epetra_Map> ExtMap_;
   Teuchos::RCP<Epetra_Import> ExtImporter_;
+  
+  TMatrixPtr<Scalar> Matrix_; // Tpetra copy of Matrix_
+  TMatrixPtr<Scalar> tExtMatrix_;
+  TMapPtr tExtMap_;
+  
+  Teuchos::RCP<Tpetra::Import<LO,GO,Node> > tExtImporter_;
 
   int OverlapLevel_;
   string Label_;
