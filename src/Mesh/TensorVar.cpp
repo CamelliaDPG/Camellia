@@ -77,6 +77,34 @@ bool TensorVar::isTrace() const
   return _kind == TENSOR_TRACE;
 }
 
+bool TensorVar::hasFluxLikeComponentVar() const
+{
+  for (const auto &componentVar : _componentVars)
+  {
+    if ((componentVar != Teuchos::null) && (componentVar->varType() == FLUX)) return true;
+  }
+  return false;
+}
+
+bool TensorVar::hasTraceLikeComponentVar() const
+{
+  for (const auto &componentVar : _componentVars)
+  {
+    if ((componentVar != Teuchos::null) && (componentVar->varType() == TRACE)) return true;
+  }
+  return false;
+}
+
+bool TensorVar::isFluxLikeTrace() const
+{
+  return isTrace() && hasFluxLikeComponentVar();
+}
+
+bool TensorVar::isValueTrace() const
+{
+  return isTrace() && hasTraceLikeComponentVar() && !hasFluxLikeComponentVar();
+}
+
 bool TensorVar::hasTraceComponentOrdinal() const
 {
   return _traceComponentOrdinal >= 0;

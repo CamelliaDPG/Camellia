@@ -278,6 +278,23 @@ std::vector<int> TensorMeshTopology::retainedComponentOrdinalsForSkeleton(int or
   return retainedOrdinals;
 }
 
+bool TensorMeshTopology::componentHasUniformActiveCellPolyOrder(int componentOrdinal) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((componentOrdinal < 0) || (componentOrdinal >= componentCount()), std::invalid_argument,
+                             "TensorMeshTopology::componentHasUniformActiveCellPolyOrder received an invalid component ordinal.");
+
+  const auto componentTopo = _components[componentOrdinal];
+  const auto &activeCells = componentTopo->activeCells();
+  if (activeCells.empty()) return true;
+
+  const int referenceP = componentTopo->cellPolyOrder(activeCells[0]);
+  for (const auto &cellID : activeCells)
+  {
+    if (componentTopo->cellPolyOrder(cellID) != referenceP) return false;
+  }
+  return true;
+}
+
 TensorMeshTopology::TensorSkeleton TensorMeshTopology::tensorSkeleton(int orthogonalComponentOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION((orthogonalComponentOrdinal < 0) || (orthogonalComponentOrdinal >= componentCount()), std::invalid_argument,

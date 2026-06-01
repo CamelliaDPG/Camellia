@@ -58,15 +58,18 @@ TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const Tenso
     if (isTrace && (d == traceComponentOrdinal))
     {
       componentSupportKinds[d] = TENSOR_TRACE_SKELETON_SUPPORT;
-      // For issue #300, the distinguished trace component contributes a skeleton-support extent
-      // rather than a volume basis cardinality. In the present implementation we use the active
-      // component-vertex extent as the trace-local support factor. This gives a coherent first
-      // ordinal/layout interpretation while leaving room for later trace-basis and side-local
-      // operator realization work to refine how those support entities are used numerically.
-      componentCardinalities[d] = componentTopo->vertexCount();
+      // TensorDofLayout is intended to represent a local coefficient-space layout. For a trace
+      // variable, the distinguished trace component therefore contributes one local skeleton-support
+      // slot rather than a component-global active-vertex count. The actual orthogonal support
+      // location is identified later by the skeleton entity used in trace-aware realization.
+      componentCardinalities[d] = 1;
     }
     else
     {
+      // The present tensor-local layout assumes that active cells in a given component share one
+      // representative basis cardinality for the registered variable/role. This is consistent with the
+      // current flat variable-local tensor coefficient model, but it is not yet a general p-nonuniform
+      // layout mechanism.
       const ComponentCellID1D &sampleCell = activeCells[0];
       const int effectivePolyOrder = _tensorMesh->effectivePolyOrder(discretization, sampleCell, d, role == TENSOR_TEST_SPACE);
       const auto var = tensorVar->componentVar(d);

@@ -61,6 +61,32 @@ TEUCHOS_UNIT_TEST( TensorVar, CopyWithNewName )
   TEST_ASSERT(copied->componentVar(1) != vt);
 }
 
+TEUCHOS_UNIT_TEST( TensorVar, ValueTraceSemanticHelpersRecognizeTraceButNotFlux )
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, "fhat_x", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, "fhat_t", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+
+  TensorVar tensorVar("fhat", TENSOR_TRACE, {vx, vt}, 0);
+
+  TEST_ASSERT(tensorVar.isTrace());
+  TEST_ASSERT(tensorVar.hasTraceLikeComponentVar());
+  TEST_ASSERT(!tensorVar.hasFluxLikeComponentVar());
+  TEST_ASSERT(tensorVar.isValueTrace());
+  TEST_ASSERT(!tensorVar.isFluxLikeTrace());
+}
+
+TEUCHOS_UNIT_TEST( TensorVar, FluxTraceSemanticHelpersRecognizeFluxLikeTrace )
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, "sigmahat_x", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  TensorVar tensorVar("sigmahat", TENSOR_TRACE, {vx}, 0);
+
+  TEST_ASSERT(tensorVar.isTrace());
+  TEST_ASSERT(tensorVar.hasFluxLikeComponentVar());
+  TEST_ASSERT(!tensorVar.hasTraceLikeComponentVar());
+  TEST_ASSERT(tensorVar.isFluxLikeTrace());
+  TEST_ASSERT(!tensorVar.isValueTrace());
+}
+
 TEUCHOS_UNIT_TEST( TensorVar, CopyWithNewNamePreservesTraceComponentOrdinal )
 {
   VarPtr vx = Teuchos::rcp(new Var(0, 0, "fhat_x", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));

@@ -18,6 +18,13 @@ TensorVarPtr makeFieldTensorVar(const std::string &name)
   return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{vx, vt}));
 }
 
+TensorVarPtr makeTraceTensorVar(const std::string &name, int traceComponentOrdinal)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt}, traceComponentOrdinal));
+}
+
 TensorMeshPtr makeTensorMeshForBilinearFormTests()
 {
   auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
@@ -28,9 +35,11 @@ TensorMeshPtr makeTensorMeshForBilinearFormTests()
 
   auto trialVar = makeFieldTensorVar("u");
   auto testVar  = makeFieldTensorVar("v");
+  auto traceVar = makeTraceTensorVar("uhat", 0);
 
   tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(trialVar, Teuchos::null, std::vector<int>{0,0})));
   tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(testVar,  Teuchos::null, std::vector<int>{0,0})));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(traceVar, Teuchos::null, std::vector<int>{0,0})));
   return tensorMesh;
 }
 
@@ -121,6 +130,24 @@ TEUCHOS_UNIT_TEST( TensorBilinearForm, MatrixFreeFactoryAcceptsSupportedDescript
   MatrixFreeTensorOperatorFactory factory;
   TEST_ASSERT(factory.canBuild(tensorMesh, dofLayout, form,
                                TENSOR_TRIAL_SPACE, "u",
+                               TENSOR_TEST_SPACE, "v"));
+}
+
+TEUCHOS_UNIT_TEST( TensorBilinearForm, MatrixFreeFactoryAcceptsSupportedMixedVolumeTraceBoundaryTerms )
+{
+  auto tensorMesh = makeTensorMeshForBilinearFormTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("trace-boundary-term"));
+  form->addTerm(TensorBilinearTerm(makeTraceTensorVar("uhat", 0),
+                                   makeFieldTensorVar("v"),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::constant(1.0),
+                                   TENSOR_BILINEAR_TERM_BOUNDARY));
+
+  MatrixFreeTensorOperatorFactory factory;
+  TEST_ASSERT(factory.canBuild(tensorMesh, dofLayout, form,
+                               TENSOR_TRIAL_SPACE, "uhat",
                                TENSOR_TEST_SPACE, "v"));
 }
 

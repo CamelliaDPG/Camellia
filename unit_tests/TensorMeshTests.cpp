@@ -148,8 +148,10 @@ TEUCHOS_UNIT_TEST( TensorMesh, CreateDofLayoutForTraceVariables )
 
   TEST_ASSERT(uhatLayout.isTraceSupportComponent(0));
   TEST_ASSERT(vhatLayout.isTraceSupportComponent(1));
-  TEST_EQUALITY(uhatLayout.componentCardinality(0), topology->componentMeshTopology(0)->vertexCount());
-  TEST_EQUALITY(vhatLayout.componentCardinality(1), topology->componentMeshTopology(1)->vertexCount());
+  TEST_EQUALITY(uhatLayout.componentCardinality(0), 1);
+  TEST_EQUALITY(vhatLayout.componentCardinality(1), 1);
+  TEST_ASSERT(topology->componentMeshTopology(0)->vertexCount() > 1);
+  TEST_ASSERT(topology->componentMeshTopology(1)->vertexCount() > 1);
 }
 
 TEUCHOS_UNIT_TEST( TensorMesh, RejectRankMismatchBetweenDiscretizationAndTopology )

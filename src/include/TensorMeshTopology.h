@@ -119,6 +119,7 @@ namespace Camellia
     TensorMeshTopology slice(const std::map<int, IndexType> &fixedComponentVertices) const;
 
     std::vector<int> retainedComponentOrdinalsForSkeleton(int orthogonalComponentOrdinal) const;
+    bool componentHasUniformActiveCellPolyOrder(int componentOrdinal) const;
     TensorSkeleton tensorSkeleton(int orthogonalComponentOrdinal) const;
     bool isBoundarySkeletonEntity(const TensorSkeletonEntity &entity) const;
   };

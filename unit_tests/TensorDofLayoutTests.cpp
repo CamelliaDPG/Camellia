@@ -183,7 +183,7 @@ TEUCHOS_UNIT_TEST( TensorDofLayout, TraceLayoutMarksSupportKindsAndTraceComponen
   TEST_EQUALITY(uhatLayout.componentSupportKind(1), TENSOR_VOLUME_BASIS_SUPPORT);
 }
 
-TEUCHOS_UNIT_TEST( TensorDofLayout, TraceLayoutUsesVertexExtentInTraceComponent )
+TEUCHOS_UNIT_TEST( TensorDofLayout, TraceLayoutUsesLocalSupportExtentInTraceComponent )
 {
   auto tensorMesh = makeTensorMeshForTraceLayoutTests();
   TensorDofLayout layout(tensorMesh);
@@ -192,14 +192,14 @@ TEUCHOS_UNIT_TEST( TensorDofLayout, TraceLayoutUsesVertexExtentInTraceComponent 
   auto component0 = tensorMesh->topology()->componentMeshTopology(0);
   auto component1 = tensorMesh->topology()->componentMeshTopology(1);
 
-  TEST_EQUALITY(uhatLayout.componentCardinality(0), component0->vertexCount());
+  TEST_EQUALITY(uhatLayout.componentCardinality(0), 1);
   TEST_ASSERT(uhatLayout.componentCardinality(1) > 0);
   TEST_EQUALITY(uhatLayout.totalDofs(), static_cast<IndexType>(uhatLayout.componentCardinality(0)) * uhatLayout.componentCardinality(1));
-  TEST_ASSERT(uhatLayout.componentCardinality(0) != component0->activeCellCount());
+  TEST_ASSERT(component0->vertexCount() > 1);
   TEST_ASSERT(component1->activeCellCount() > 0);
 }
 
-TEUCHOS_UNIT_TEST( TensorDofLayout, TraceTestLayoutUsesVertexExtentInItsOwnTraceComponent )
+TEUCHOS_UNIT_TEST( TensorDofLayout, TraceTestLayoutUsesLocalSupportExtentInItsOwnTraceComponent )
 {
   auto tensorMesh = makeTensorMeshForTraceLayoutTests();
   TensorDofLayout layout(tensorMesh);
@@ -210,7 +210,8 @@ TEUCHOS_UNIT_TEST( TensorDofLayout, TraceTestLayoutUsesVertexExtentInItsOwnTrace
   TEST_ASSERT(vhatLayout.hasTraceComponentOrdinal());
   TEST_EQUALITY(vhatLayout.traceComponentOrdinal(), 1);
   TEST_ASSERT(vhatLayout.isTraceSupportComponent(1));
-  TEST_EQUALITY(vhatLayout.componentCardinality(1), component1->vertexCount());
+  TEST_EQUALITY(vhatLayout.componentCardinality(1), 1);
+  TEST_ASSERT(component1->vertexCount() > 1);
 }
 
 TEUCHOS_UNIT_TEST( TensorDofLayout, TraceVariableAndCellOrderingsAreInvertible )

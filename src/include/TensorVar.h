@@ -60,6 +60,10 @@ namespace Camellia
     TensorVarKind kind() const;
     bool isField() const;
     bool isTrace() const;
+    bool hasFluxLikeComponentVar() const;
+    bool hasTraceLikeComponentVar() const;
+    bool isFluxLikeTrace() const;
+    bool isValueTrace() const;
 
     bool hasTraceComponentOrdinal() const;
     int traceComponentOrdinal() const;
