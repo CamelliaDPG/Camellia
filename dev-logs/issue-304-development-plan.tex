@@ -1,0 +1,259 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\geometry{margin=1in}
+
+\title{Issue \#304 Development Plan: Generalize Tensor-Native Trace-Aware Local Operator Realization for p-Nonuniform Retained Components}
+\author{Nathan V. Roberts (AI-generated)}
+\date{June 1, 2026}
+
+\begin{document}
+\maketitle
+
+\section{Summary}
+
+In this issue, we plan to extend the tensor-native trace-aware local matrix-free realization path established in \#302, with the primary goal of handling retained-component \(p\)-nonuniform situations \emph{correctly}. The most important point is that this issue should not force broader support merely because the originally generated text suggested it. Based on the clarified intent, the next honest step is to improve the retained-component realization story for trace-aware boundary application, broaden support across more \(p\) layouts, and add focused correctness tests and cleanup.
+
+At the same time, we intend to preserve the semantic correction established in \#302:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{TensorDofLayout} remains a \emph{local} dof layout,
+  \item the distinguished trace component contributes local support extent \(1\), and
+  \item the actual orthogonal trace-support location is carried by the \texttt{TensorSkeletonEntity} used during trace-aware realization.
+\end{itemize}
+
+Just as importantly, we do \emph{not} plan to treat derivative-bearing trace-aware boundary terms as a target for this issue. The present user guidance is that derivatives of trace variables are not expected to arise naturally, and derivatives on the volumetric side of a mixed \((\text{volume},\text{trace})\) pair are likewise not an important motivating use case. Accordingly, the issue text for \#304 should be revised to reflect the actual intended scope.
+
+\section{Revised issue scope}
+
+The generated \#304 text currently overreaches in one important respect: it suggests derivative-bearing trace-aware boundary-term support as a natural next target. We do not plan to follow that direction in this issue.
+
+Instead, the revised scope should be understood as follows.
+
+\subsection{Primary goal}
+
+Handle retained-component \(p\)-nonuniform trace-aware boundary realization \emph{correctly}, rather than continuing to reject it wholesale.
+
+\subsection{Secondary goals}
+
+\begin{itemize}[leftmargin=*]
+  \item Broaden support across more retained-component \(p\) layouts within the existing non-derivative mixed volume/trace boundary subset.
+  \item Clean up the current trace-aware helper structure as needed to keep the implementation maintainable.
+  \item Add focused correctness tests, especially for the new \(p\)-nonuniform behavior.
+\end{itemize}
+
+\subsection{Explicit non-goal for this issue}
+
+Do \emph{not} expand \#304 to include derivative-bearing trace-aware boundary terms unless later implementation reveals a very small and obviously correct extension that falls out for free. In the planned work, such terms remain out of scope and should continue to be rejected explicitly.
+
+\section{Current implementation state}
+
+From \#302, the current matrix-free boundary path already provides:
+\begin{itemize}[leftmargin=*]
+  \item mixed value-trace boundary application,
+  \item mixed flux-trace boundary application with simple parity,
+  \item lower-dimensional quadrature and physical-point generation on tensor skeleton entities,
+  \item explicit rejection of unsupported derivative-bearing boundary terms, and
+  \item explicit rejection of retained-component \(p\)-nonuniform situations.
+\end{itemize}
+
+The key reason for the last rejection is that the current boundary path assumes a flat local coefficient model whose retained-component basis cardinalities are taken from a representative active cell. That is acceptable in the current \(p\)-uniform setting, but it is not a general realization story for retained-component \(p\)-nonuniform topologies.
+
+\section{Design direction}
+
+\subsection{1. Preserve the local-layout semantics from \#302}
+
+We do not plan to revisit the corrected trace-layout semantics. In particular, we will continue to treat:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{TensorDofLayout} as a local coefficient-space descriptor,
+  \item the distinguished trace component as contributing extent \(1\), and
+  \item \texttt{TensorSkeletonEntity} as the carrier of orthogonal support location.
+\end{itemize}
+
+This means that the next \(p\)-nonuniform strategy should \emph{not} reintroduce any component-global trace-support indexing into \texttt{TensorDofLayout}.
+
+\subsection{2. Preferred \(p\)-nonuniform strategy}
+
+The preferred target for this issue is a broader redesign at the operator-realization level rather than a superficial relaxation of the current rejection logic. Concretely, the most honest next step appears to be an \emph{envelope-style retained-component local layout interpretation together with entity-local admissibility logic}.
+
+The intended idea is:
+\begin{itemize}[leftmargin=*]
+  \item for a given registered variable and role, compute retained-component local cardinalities using the \emph{maximum effective basis cardinality} over active cells in each relevant component,
+  \item keep the resulting local vector space flat and compatible with the existing gather/scatter model,
+  \item but, during trace-aware realization, only use basis ordinals that are actually admissible for the incident retained cells of the current skeleton entity,
+  \item treating higher envelope ordinals as inactive for lower-\(p\) incident cells.
+\end{itemize}
+
+This is not a fully general redesign of the entire tensor-local infrastructure, but it is a serious step toward a coherent \(p\)-nonuniform realization story while preserving the corrected local semantics from \#302.
+
+\subsection{3. Why this strategy is preferable here}
+
+This direction has several advantages for the present issue.
+
+\begin{itemize}[leftmargin=*]
+  \item It preserves the current flat-buffer gather/scatter and operator interface.
+  \item It localizes the new complexity mostly to layout construction and trace-aware admissibility/evaluation logic.
+  \item It allows representative retained-component \(p\)-nonuniform support without requiring a full entity-local public layout abstraction immediately.
+  \item It remains consistent with the notion that \texttt{TensorDofLayout} describes a local coefficient space rather than a global trace-support geometry.
+\end{itemize}
+
+The main cost is that the local coefficient space may contain envelope ordinals that are inactive for some entities. That is acceptable as long as the realization logic treats those ordinals honestly and the tests make the semantics explicit.
+
+\section{Planned implementation work}
+
+\subsection{A. Revise issue \#304 text to match the actual target}
+
+Before or alongside code changes, we should revise the issue wording conceptually so that it reflects the intended scope:
+\begin{itemize}[leftmargin=*]
+  \item remove derivative-bearing trace-term support as a planned deliverable,
+  \item make retained-component \(p\)-nonuniform correctness the primary target,
+  \item describe broader \(p\)-layout support, tests, and cleanup as the main secondary goals.
+\end{itemize}
+
+This does not necessarily require modifying the issue file in the repository immediately, but the development report and resulting implementation should clearly reflect the revised scope.
+
+\subsection{B. Extend local-layout construction for honest \(p\)-nonuniform support}
+
+We expect to revise \texttt{TensorDofLayout::buildVariableLayout()} so that non-trace components no longer assume a single representative active cell when determining component cardinality.
+
+The intended new behavior is:
+\begin{itemize}[leftmargin=*]
+  \item for each component, inspect the active cells of the component topology,
+  \item compute the effective polynomial order for the registered discretization and role on each active cell,
+  \item obtain the corresponding basis cardinality,
+  \item and use the maximum such cardinality as the component-local envelope extent.
+\end{itemize}
+
+For trace variables, the distinguished trace component should still contribute extent \(1\).
+
+This change may affect both trial and test layouts, and it should be implemented carefully enough that \(p\)-uniform cases preserve their existing behavior.
+
+\subsection{C. Add explicit admissibility logic for boundary entities}
+
+Once the local layout uses envelope cardinalities, the trace-aware operator path must avoid using basis ordinals that are not valid on a given retained cell.
+
+We therefore plan to add or revise helper logic in \texttt{TensorOperator.cpp} so that, for each boundary skeleton entity:
+\begin{itemize}[leftmargin=*]
+  \item admissibility is checked against the actual incident retained cell tuple,
+  \item retained-component basis ordinals above the actual local cardinality for that cell are skipped,
+  \item orthogonal volume-side endpoint evaluation remains unchanged in semantics,
+  \item and trace-side distinguished-component handling remains the local-extent-\(1\) model from \#302.
+\end{itemize}
+
+This should replace the current blanket rejection of retained-component \(p\)-nonuniform situations.
+
+\subsection{D. Keep unsupported derivative-bearing boundary terms rejected}
+
+We plan to preserve explicit rejection of derivative-bearing boundary terms. The relevant factory and operator validation paths should continue to reject such terms clearly.
+
+Depending on how the cleanup falls out, we may make that rejection logic more explicit or better organized, but not broader in support.
+
+\subsection{E. Cleanup of trace-aware helper structure}
+
+The trace-aware boundary logic in \texttt{TensorOperator.cpp} has grown naturally from the first \#302 vertical slice. As part of \#304, it would be reasonable to factor some of the following into cleaner helper routines if that materially improves maintainability:
+\begin{itemize}[leftmargin=*]
+  \item retained-component cardinality/admissibility queries,
+  \item boundary-entity-local basis-data construction,
+  \item trace-aware local basis evaluation,
+  \item and any repeated logic for mapping retained component ordinals to actual incident cells.
+\end{itemize}
+
+The cleanup should remain modest and should be driven by clarity rather than by large architectural refactoring.
+
+\section{Likely files to modify}
+
+We currently expect the main implementation work to involve the following files.
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{src/Mesh/TensorDofLayout.cpp}
+  \item \texttt{src/include/TensorDofLayout.h}
+  \item \texttt{src/Problem/TensorOperator.cpp}
+  \item possibly \texttt{src/include/TensorOperatorFactory.h} or descriptor-side comments if the accepted/rejected subset wording is tightened
+  \item \texttt{unit\_tests/TensorDofLayoutTests.cpp}
+  \item \texttt{unit\_tests/TensorMeshTests.cpp}
+  \item \texttt{unit\_tests/TensorGatherScatterTests.cpp}
+  \item \texttt{unit\_tests/TensorOperatorTests.cpp}
+  \item possibly \texttt{unit\_tests/TensorBilinearFormTests.cpp} if descriptor/factory acceptance tests need minor adjustment or expansion
+\end{itemize}
+
+We do not currently expect public-facing API expansion beyond what is necessary to support the improved local-layout semantics and operator-side handling.
+
+\section{Testing strategy}
+
+The tests are an important part of this issue, because the main new behavior is semantic as much as mechanical.
+
+\subsection{1. Local-layout tests}
+
+We should add focused tests verifying that:
+\begin{itemize}[leftmargin=*]
+  \item in \(p\)-nonuniform component topologies, non-trace component cardinalities use the maximum effective local basis extent rather than a representative-cell extent,
+  \item trace variables still use local support extent \(1\) in the distinguished trace component,
+  \item existing \(p\)-uniform layout expectations remain unchanged.
+\end{itemize}
+
+\subsection{2. Gather/scatter compatibility tests}
+
+Because the local vector size may grow to the envelope cardinality in \(p\)-nonuniform cases, we should confirm that flat-buffer gather/scatter remains valid and size-consistent.
+
+These tests do not need global-topology sophistication; they mainly need to confirm that the local coefficient space remains coherent.
+
+\subsection{3. Trace-aware operator correctness tests}
+
+The most important tests should cover representative retained-component \(p\)-nonuniform mixed boundary cases.
+
+The intended pattern is to construct small tensor-native examples in which:
+\begin{itemize}[leftmargin=*]
+  \item the retained component has two or more active cells with differing polynomial order,
+  \item a supported non-derivative mixed volume/trace boundary term is realized,
+  \item the matrix-free operator action is compared against an explicit reference action that mirrors the same admissibility logic,
+  \item and previously rejected cases now succeed with correct output.
+\end{itemize}
+
+We should also continue to test that derivative-bearing unsupported boundary cases are still rejected.
+
+\subsection{4. Regression tests for existing \#302 subset}
+
+The existing value-trace and flux-trace boundary tests should continue to pass. If any of them rely implicitly on representative-cell cardinality assumptions, they may need small updates or additional coverage.
+
+\section{Risks and watch points}
+
+The main technical risks are as follows.
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Accidentally reintroducing global semantics into local layout.} We should avoid any temptation to encode skeleton-support location into \texttt{TensorDofLayout}.
+  \item \textbf{Envelope size without admissibility filtering.} If local layout cardinalities are broadened but operator-side admissibility is not handled carefully, the realization may silently use invalid basis ordinals on lower-\(p\) cells.
+  \item \textbf{Reference-test mismatch.} The explicit-reference boundary operator tests will need to mirror the new admissibility logic honestly, or they will cease to be meaningful.
+  \item \textbf{Over-expanding scope.} The issue text currently tempts a move toward derivative-bearing boundary support. We should resist that unless it falls out trivially and safely.
+\end{itemize}
+
+\section{Implementation sequence}
+
+A reasonable implementation sequence is:
+\begin{enumerate}[leftmargin=*]
+  \item revise the conceptual issue scope and comments to reflect the intended target,
+  \item extend \texttt{TensorDofLayout} to compute envelope cardinalities for non-trace components,
+  \item add or revise helper logic in \texttt{TensorOperator.cpp} for boundary-entity-local admissibility,
+  \item remove the blanket retained-component \(p\)-nonuniform rejection in favor of correct handling,
+  \item update/add layout and gather/scatter tests,
+  \item add focused \(p\)-nonuniform trace-aware boundary correctness tests,
+  \item run the tensor-native test subset and stabilize any resulting regressions,
+  \item and finally prepare the development report to reflect the actual implemented behavior.
+\end{enumerate}
+
+\section{Expected outcome}
+
+If the implementation proceeds as planned, the final outcome of \#304 should be:
+\begin{itemize}[leftmargin=*]
+  \item retained-component \(p\)-nonuniform trace-aware boundary application handled correctly for a representative honest subset,
+  \item broader support across retained-component \(p\) layouts without changing the corrected local trace-layout semantics from \#302,
+  \item continued explicit rejection of unsupported derivative-bearing boundary terms,
+  \item and focused tests that make the new behavior and limitations clear.
+\end{itemize}
+
+This would be a meaningful next step in the tensor-native trace-aware realization path: not a maximal generalization, but a more honest and more capable one.
+
+\end{document}
