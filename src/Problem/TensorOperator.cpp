@@ -28,8 +28,8 @@ namespace
   struct BasisData1D
   {
     BasisPtr basis;
-    std::vector<double> valuesAtQuadrature;      // flattened as (field, point)
-    std::vector<double> derivativesAtQuadrature; // flattened as (field, point)
+    std::vector<double> valuesAtQuadrature;
+    std::vector<double> derivativesAtQuadrature;
     int fieldCount = 0;
     int pointCount = 0;
   };
@@ -158,7 +158,7 @@ namespace
                                 const std::vector<BasisData1D> &basisData,
                                 const TensorComponentOperatorDescriptor &descriptor,
                                 const std::vector<int> &pointOrdinals,
-                                const std::vector<double> &derivativeScales) 
+                                const std::vector<double> &derivativeScales)
   {
     double value = 1.0;
     const int componentCount = descriptor.componentCount();
@@ -202,7 +202,7 @@ namespace
   void validateSupportedBoundaryTermAgainstCurrentSemantics(const TensorBilinearTerm &term)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(!termIsSupportedTraceAwareBoundaryTerm(term), std::invalid_argument,
-                               "MatrixFreeTensorOperator encountered an unsupported trace-aware boundary term. The current implementation supports only a first mixed volume/trace boundary subset with no derivative action on either side, using trace-support selection in the distinguished trace component and lower-dimensional basis action in the retained components.");
+                               "MatrixFreeTensorOperator encountered an unsupported trace-aware boundary term. The current implementation supports only a mixed volume/trace boundary subset with no derivative action on either side, using trace-support selection in the distinguished trace component and lower-dimensional basis action in the retained components.");
 
     const bool trialTraceLike = tensorVarIsTraceLike(term.trialVar());
     const bool testTraceLike  = tensorVarIsTraceLike(term.testVar());
@@ -238,6 +238,10 @@ namespace
     TensorGatherScatter _domainGatherScatter;
     TensorGatherScatter _rangeGatherScatter;
     TensorApplyPipelineDescription _pipeline;
+    TensorDofLayout::VariableLayout _domainLayout;
+    TensorDofLayout::VariableLayout _rangeLayout;
+    TensorFactorSpaceShape _ambientDomainShape;
+    TensorFactorSpaceShape _ambientRangeShape;
 
     void validateInputVector(const std::vector<double> &input) const
     {
@@ -245,48 +249,34 @@ namespace
                                  "MatrixFreeTensorOperator::apply input size does not match domain size.");
     }
 
-    void decodeDomainOrdinal(IndexType ordinal, std::vector<int> &componentBasisOrdinals) const
+    void decodeDomainOrdinal(IndexType ordinal,
+                             std::vector<int> &componentBasisOrdinals) const
     {
-      _tensorDofLayout->decodeLocalDofOrdinal(_domainVarName, _domainRole, _domainOrdering, ordinal, componentBasisOrdinals);
+      _tensorDofLayout->decodeLocalDofOrdinal(_domainLayout,
+                                              _ambientDomainShape,
+                                              _domainOrdering,
+                                              ordinal,
+                                              componentBasisOrdinals);
     }
 
-    void decodeRangeOrdinal(IndexType ordinal, std::vector<int> &componentBasisOrdinals) const
+    void decodeRangeOrdinal(IndexType ordinal,
+                            std::vector<int> &componentBasisOrdinals) const
     {
-      _tensorDofLayout->decodeLocalDofOrdinal(_rangeVarName, _rangeRole, _rangeOrdering, ordinal, componentBasisOrdinals);
+      _tensorDofLayout->decodeLocalDofOrdinal(_rangeLayout,
+                                              _ambientRangeShape,
+                                              _rangeOrdering,
+                                              ordinal,
+                                              componentBasisOrdinals);
     }
 
-    void validateBoundaryTermRetainedComponentUniformity(const TensorBilinearTerm &term) const
+    bool componentBasisOrdinalsAreAdmissibleForShape(const std::vector<int> &componentBasisOrdinals,
+                                                     const TensorFactorSpaceShape &shape) const
     {
-      const int orthogonalComponentOrdinal = supportedBoundaryOrthogonalComponentOrdinal(term);
-      const auto retainedComponents = _tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(orthogonalComponentOrdinal);
-      for (int retainedComponentOrdinal : retainedComponents)
+      TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(componentBasisOrdinals.size()) != shape.componentCount(), std::invalid_argument,
+                                 "MatrixFreeTensorOperator::componentBasisOrdinalsAreAdmissibleForShape rank mismatch.");
+      for (int d=0; d<shape.componentCount(); d++)
       {
-        TEUCHOS_TEST_FOR_EXCEPTION(!_tensorMesh->topology()->componentHasUniformActiveCellPolyOrder(retainedComponentOrdinal),
-                                   std::invalid_argument,
-                                   "MatrixFreeTensorOperator trace-aware boundary realization currently requires p-uniform active cells in each retained component. The present TensorDofLayout and flat local tensor coefficient model do not yet support general p-nonuniform trace-local realization.");
-      }
-    }
-
-    bool componentBasisOrdinalsAreAdmissibleForBoundaryEntity(const TensorVarPtr &tensorVar,
-                                                              const std::vector<int> &componentBasisOrdinals,
-                                                              const std::vector<BasisData1D> &basisData,
-                                                              const TraceEntityGeometryData &geometryData) const
-    {
-      const int componentCount = static_cast<int>(componentBasisOrdinals.size());
-      for (int d=0; d<componentCount; d++)
-      {
-        if (tensorVarIsTraceLike(tensorVar) && (d == tensorVar->traceComponentOrdinal()))
-        {
-          continue;
-        }
-
-        if (d == geometryData.orthogonalComponentOrdinal)
-        {
-          continue;
-        }
-
-        const int basisOrdinal = componentBasisOrdinals[d];
-        if ((basisOrdinal < 0) || (basisOrdinal >= basisData[d].fieldCount)) return false;
+        if ((componentBasisOrdinals[d] < 0) || (componentBasisOrdinals[d] >= shape.componentCardinality(d))) return false;
       }
       return true;
     }
@@ -463,6 +453,7 @@ namespace
                                             const std::vector<int> &pointOrdinals,
                                             const TensorMeshTopology::TensorSkeletonEntity &entity) const
     {
+      (void) entity;
       double value = 1.0;
       const int componentCount = descriptor.componentCount();
 
@@ -497,8 +488,6 @@ namespace
     {
       auto trialDiscretization = _tensorMesh->trialDiscretization(_domainVarName);
       auto testDiscretization  = _tensorMesh->testDiscretization(_rangeVarName);
-      const auto &domainLayout = _tensorDofLayout->layout(_domainVarName, _domainRole);
-      const auto &rangeLayout  = _tensorDofLayout->layout(_rangeVarName,  _rangeRole);
       const auto &activeCellTuples = _tensorMesh->topology()->activeCellTuples();
       const int componentCount = term.componentCount();
 
@@ -508,6 +497,10 @@ namespace
 
       for (const auto &cellTuple : activeCellTuples)
       {
+        auto localContext = _tensorDofLayout->volumeContext(_domainVarName, _rangeVarName, cellTuple);
+        const auto &trialShape = localContext.trialShape();
+        const auto &testShape  = localContext.testShape();
+
         std::vector<BasisData1D> trialBasisData(componentCount);
         std::vector<BasisData1D> testBasisData(componentCount);
         std::vector<int> pointCounts(componentCount, 0);
@@ -571,9 +564,11 @@ namespace
         auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
 
         std::vector<double> trialPointValues(tensorPointCount, 0.0);
-        for (IndexType localTrialOrdinal=0; localTrialOrdinal<domainLayout.totalDofs(); localTrialOrdinal++)
+        for (IndexType localTrialOrdinal=0; localTrialOrdinal<_ambientDomainShape.totalDofs(); localTrialOrdinal++)
         {
           decodeDomainOrdinal(localTrialOrdinal, trialBasisOrdinals);
+          if (!componentBasisOrdinalsAreAdmissibleForShape(trialBasisOrdinals, trialShape)) continue;
+
           const double trialCoefficient = localInput[localTrialOrdinal];
           if (trialCoefficient == 0.0) continue;
 
@@ -594,9 +589,10 @@ namespace
           }
         }
 
-        for (IndexType localTestOrdinal=0; localTestOrdinal<rangeLayout.totalDofs(); localTestOrdinal++)
+        for (IndexType localTestOrdinal=0; localTestOrdinal<_ambientRangeShape.totalDofs(); localTestOrdinal++)
         {
           decodeRangeOrdinal(localTestOrdinal, testBasisOrdinals);
+          if (!componentBasisOrdinalsAreAdmissibleForShape(testBasisOrdinals, testShape)) continue;
 
           double contribution = 0.0;
           for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
@@ -627,12 +623,9 @@ namespace
                            std::vector<double> &localOutput) const
     {
       validateSupportedBoundaryTermAgainstCurrentSemantics(term);
-      validateBoundaryTermRetainedComponentUniformity(term);
 
       auto trialDiscretization = _tensorMesh->trialDiscretization(_domainVarName);
       auto testDiscretization  = _tensorMesh->testDiscretization(_rangeVarName);
-      const auto &domainLayout = _tensorDofLayout->layout(_domainVarName, _domainRole);
-      const auto &rangeLayout  = _tensorDofLayout->layout(_rangeVarName,  _rangeRole);
 
       const int orthogonalComponentOrdinal = supportedBoundaryOrthogonalComponentOrdinal(term);
       auto skeleton = _tensorMesh->topology()->tensorSkeleton(orthogonalComponentOrdinal);
@@ -643,6 +636,10 @@ namespace
 
       for (const auto &entity : skeleton.entities())
       {
+        auto localContext = _tensorDofLayout->skeletonContext(_domainVarName, _rangeVarName, entity);
+        const auto &trialShape = localContext.trialShape();
+        const auto &testShape  = localContext.testShape();
+
         TraceEntityGeometryData geometryData = buildTraceEntityGeometryData(entity,
                                                                            term,
                                                                            trialDiscretization,
@@ -676,13 +673,10 @@ namespace
         }
 
         std::vector<double> trialPointValues(geometryData.tensorPointCount, 0.0);
-        for (IndexType localTrialOrdinal=0; localTrialOrdinal<domainLayout.totalDofs(); localTrialOrdinal++)
+        for (IndexType localTrialOrdinal=0; localTrialOrdinal<_ambientDomainShape.totalDofs(); localTrialOrdinal++)
         {
           decodeDomainOrdinal(localTrialOrdinal, trialBasisOrdinals);
-          if (!componentBasisOrdinalsAreAdmissibleForBoundaryEntity(term.trialVar(),
-                                                                    trialBasisOrdinals,
-                                                                    trialBasisData,
-                                                                    geometryData)) continue;
+          if (!componentBasisOrdinalsAreAdmissibleForShape(trialBasisOrdinals, trialShape)) continue;
 
           const double trialCoefficient = localInput[localTrialOrdinal];
           if (trialCoefficient == 0.0) continue;
@@ -709,13 +703,10 @@ namespace
           }
         }
 
-        for (IndexType localTestOrdinal=0; localTestOrdinal<rangeLayout.totalDofs(); localTestOrdinal++)
+        for (IndexType localTestOrdinal=0; localTestOrdinal<_ambientRangeShape.totalDofs(); localTestOrdinal++)
         {
           decodeRangeOrdinal(localTestOrdinal, testBasisOrdinals);
-          if (!componentBasisOrdinalsAreAdmissibleForBoundaryEntity(term.testVar(),
-                                                                    testBasisOrdinals,
-                                                                    testBasisData,
-                                                                    geometryData)) continue;
+          if (!componentBasisOrdinalsAreAdmissibleForShape(testBasisOrdinals, testShape)) continue;
 
           double contribution = 0.0;
 
@@ -788,7 +779,11 @@ namespace
       _rangeOrdering(rangeOrdering),
       _domainGatherScatter(tensorMesh, tensorDofLayout, domainRole, domainVarName, domainOrdering),
       _rangeGatherScatter(tensorMesh, tensorDofLayout, rangeRole, rangeVarName, rangeOrdering),
-      _pipeline(TensorApplyPipelineDescription::standardMatrixFreePipeline())
+      _pipeline(TensorApplyPipelineDescription::standardMatrixFreePipeline()),
+      _domainLayout(tensorDofLayout->layout(domainVarName, domainRole)),
+      _rangeLayout(tensorDofLayout->layout(rangeVarName, rangeRole)),
+      _ambientDomainShape(tensorDofLayout->ambientShape(domainVarName, domainRole)),
+      _ambientRangeShape(tensorDofLayout->ambientShape(rangeVarName, rangeRole))
     {
       TEUCHOS_TEST_FOR_EXCEPTION(_tensorMesh == Teuchos::null, std::invalid_argument,
                                  "MatrixFreeTensorOperator requires a non-null TensorMesh.");
@@ -841,12 +836,12 @@ namespace
 
     IndexType domainSize() const override
     {
-      return _domainGatherScatter.localDofCount();
+      return _domainGatherScatter.localDofCount(_ambientDomainShape);
     }
 
     IndexType rangeSize() const override
     {
-      return _rangeGatherScatter.localDofCount();
+      return _rangeGatherScatter.localDofCount(_ambientRangeShape);
     }
 
     TensorApplyPipelineDescription pipelineDescription() const override
@@ -860,7 +855,7 @@ namespace
       validateInputVector(input);
 
       std::vector<double> localInput;
-      _domainGatherScatter.gatherGlobalToLocal(input, localInput, 0);
+      _domainGatherScatter.gatherGlobalToLocal(input, _ambientDomainShape, localInput, 0);
 
       std::vector<double> localOutput(rangeSize(), 0.0);
       for (const auto &term : _bilinearForm->terms())
@@ -874,7 +869,7 @@ namespace
       }
 
       output.assign(rangeSize(), 0.0);
-      _rangeGatherScatter.scatterLocalToGlobal(localOutput, output, 0);
+      _rangeGatherScatter.scatterLocalToGlobal(localOutput, _ambientRangeShape, output, 0);
     }
   };
 }

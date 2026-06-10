@@ -11,12 +11,10 @@ namespace Camellia
   using TensorGatherScatterPtr = Teuchos::RCP<TensorGatherScatter>;
 
   /**
-   *  \brief Explicit tensor-native per-variable gather/scatter abstraction.
+   *  \brief Tensor-native coefficient movement helper parameterized by exact local factor-space shape.
    *
-   *  TensorGatherScatter is the first local/global data-motion operator layer above TensorMesh and
-   *  TensorDofLayout. The current implementation supports both variable-centric and cell-centric
-   *  local coefficient orderings as same-size alternate flattenings of the same local vector space,
-   *  while remaining flat-buffer-first rather than Tpetra-centric.
+   *  TensorGatherScatter no longer treats a variable as having one exact fixed local block.  Instead,
+   *  it provides flat-buffer movement for a supplied exact local factor-space shape.
    */
   class TensorGatherScatter
   {
@@ -41,13 +39,15 @@ namespace Camellia
     TensorLocalOrdering ordering() const;
     const TensorDofLayout::VariableLayout &variableLayout() const;
 
-    IndexType localDofCount() const;
+    IndexType localDofCount(const TensorFactorSpaceShape &shape) const;
 
     void scatterLocalToGlobal(const std::vector<double> &localCoefficients,
+                              const TensorFactorSpaceShape &shape,
                               std::vector<double> &globalCoefficients,
                               IndexType globalOffset = 0) const;
 
     void gatherGlobalToLocal(const std::vector<double> &globalCoefficients,
+                             const TensorFactorSpaceShape &shape,
                              std::vector<double> &localCoefficients,
                              IndexType globalOffset = 0) const;
   };

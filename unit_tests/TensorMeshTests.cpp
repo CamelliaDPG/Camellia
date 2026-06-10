@@ -148,10 +148,34 @@ TEUCHOS_UNIT_TEST( TensorMesh, CreateDofLayoutForTraceVariables )
 
   TEST_ASSERT(uhatLayout.isTraceSupportComponent(0));
   TEST_ASSERT(vhatLayout.isTraceSupportComponent(1));
-  TEST_EQUALITY(uhatLayout.componentCardinality(0), 1);
-  TEST_EQUALITY(vhatLayout.componentCardinality(1), 1);
-  TEST_ASSERT(topology->componentMeshTopology(0)->vertexCount() > 1);
-  TEST_ASSERT(topology->componentMeshTopology(1)->vertexCount() > 1);
+
+  auto skeleton0 = topology->tensorSkeleton(0);
+  auto skeleton1 = topology->tensorSkeleton(1);
+  auto context0 = dofLayout->skeletonContext("uhat", "vhat", skeleton0.entity(0));
+  auto context1 = dofLayout->skeletonContext("uhat", "vhat", skeleton1.entity(0));
+
+  TEST_EQUALITY(context0.trialShape().componentCardinality(0), 1);
+  TEST_EQUALITY(context1.testShape().componentCardinality(1), 1);
+}
+
+TEUCHOS_UNIT_TEST( TensorMesh, ExactVolumeContextVariesNaturallyWithPNonuniformTopology )
+{
+  auto topology = makeSimpleTensorTopology();
+  topology->componentMeshTopology(0)->setCellPolyOrder(ComponentCellID1D(0,1,1), 3);
+  auto factory = TensorVarFactory::factory();
+  auto basisFamily = BasisFamily::hierarchicalBasisFamily();
+  TensorMesh tensorMesh(topology, factory, basisFamily, 1, 1);
+
+  auto trialVar = makeFieldTensorVar("u");
+  auto testVar = trialVar->copyWithNewName("v");
+  tensorMesh.addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(trialVar, Teuchos::null, std::vector<int>{0,0})));
+  tensorMesh.addTestDiscretization(Teuchos::rcp(new TensorVarDiscretization(testVar, Teuchos::null, std::vector<int>{0,0})));
+
+  auto dofLayout = tensorMesh.createDofLayout();
+  auto context0 = dofLayout->volumeContext("u", "v", topology->tensorCellTuple(0));
+  auto context1 = dofLayout->volumeContext("u", "v", topology->tensorCellTuple(1));
+
+  TEST_ASSERT(context1.trialShape().componentCardinality(0) > context0.trialShape().componentCardinality(0));
 }
 
 TEUCHOS_UNIT_TEST( TensorMesh, RejectRankMismatchBetweenDiscretizationAndTopology )

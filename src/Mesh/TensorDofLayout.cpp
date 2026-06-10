@@ -12,9 +12,21 @@ using namespace Camellia;
 
 namespace
 {
-  std::vector<std::vector<int>> enumerateComponentOrdinalsByCellOrdering(const TensorDofLayout::VariableLayout &layout)
+  TensorFactorSpaceShape makeFactorSpaceShapeFromCardinalities(const std::vector<int> &componentCardinalities)
   {
-    const int componentCount = layout.componentCount();
+    std::vector<IndexType> componentStrides(componentCardinalities.size(), 1);
+    IndexType runningStride = 1;
+    for (int d=0; d<static_cast<int>(componentCardinalities.size()); d++)
+    {
+      componentStrides[d] = runningStride;
+      runningStride *= componentCardinalities[d];
+    }
+    return TensorFactorSpaceShape(componentCardinalities, componentStrides, runningStride);
+  }
+
+  std::vector<std::vector<int>> enumerateComponentOrdinalsByCellOrdering(const TensorFactorSpaceShape &shape)
+  {
+    const int componentCount = shape.componentCount();
     std::vector<std::vector<int>> tuples;
     std::vector<int> current(componentCount, 0);
 
@@ -25,7 +37,7 @@ namespace
         tuples.push_back(current);
         return;
       }
-      for (int basisOrdinal=0; basisOrdinal<layout.componentCardinality(componentOrdinal); basisOrdinal++)
+      for (int basisOrdinal=0; basisOrdinal<shape.componentCardinality(componentOrdinal); basisOrdinal++)
       {
         current[componentOrdinal] = basisOrdinal;
         recurse(componentOrdinal - 1);
@@ -37,11 +49,10 @@ namespace
   }
 }
 
-TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const TensorVarDiscretizationPtr &discretization, TensorSpaceRole role) const
+TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const TensorVarDiscretizationPtr &discretization,
+                                                                     TensorSpaceRole role) const
 {
   const int componentCount = discretization->componentCount();
-  std::vector<int> componentCardinalities(componentCount, 0);
-  std::vector<IndexType> componentStrides(componentCount, 1);
   std::vector<TensorComponentSupportKind> componentSupportKinds(componentCount, TENSOR_VOLUME_BASIS_SUPPORT);
 
   const auto tensorVar = discretization->tensorVar();
@@ -50,45 +61,120 @@ TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const Tenso
 
   for (int d=0; d<componentCount; d++)
   {
-    auto componentTopo = _tensorMesh->topology()->componentMeshTopology(d);
-    const auto &activeCells = componentTopo->activeCells();
-    TEUCHOS_TEST_FOR_EXCEPTION(activeCells.empty(), std::invalid_argument,
-                               "TensorDofLayout requires at least one active cell in each component topology.");
-
     if (isTrace && (d == traceComponentOrdinal))
     {
       componentSupportKinds[d] = TENSOR_TRACE_SKELETON_SUPPORT;
-      // TensorDofLayout is intended to represent a local coefficient-space layout. For a trace
-      // variable, the distinguished trace component therefore contributes one local skeleton-support
-      // slot rather than a component-global active-vertex count. The actual orthogonal support
-      // location is identified later by the skeleton entity used in trace-aware realization.
-      componentCardinalities[d] = 1;
     }
     else
     {
-      // The present tensor-local layout assumes that active cells in a given component share one
-      // representative basis cardinality for the registered variable/role. This is consistent with the
-      // current flat variable-local tensor coefficient model, but it is not yet a general p-nonuniform
-      // layout mechanism.
-      const ComponentCellID1D &sampleCell = activeCells[0];
-      const int effectivePolyOrder = _tensorMesh->effectivePolyOrder(discretization, sampleCell, d, role == TENSOR_TEST_SPACE);
-      const auto var = tensorVar->componentVar(d);
-      auto basisFamily = _tensorMesh->effectiveBasisFamily(discretization);
-      auto basis = basisFamily->getBasis(CellTopology::line(), efsForSpace(var->space()), effectivePolyOrder);
-      componentCardinalities[d] = basis->getCardinality();
       componentSupportKinds[d] = TENSOR_VOLUME_BASIS_SUPPORT;
     }
   }
 
-  IndexType runningStride = 1;
+  return VariableLayout(discretization->tensorVar()->name(),
+                        role,
+                        componentCount,
+                        componentSupportKinds,
+                        traceComponentOrdinal);
+}
+
+TensorFactorSpaceShape TensorDofLayout::buildFactorSpaceShape(const TensorVarDiscretizationPtr &discretization,
+                                                              TensorSpaceRole role,
+                                                              const std::vector<ComponentCellID1D> &componentCells,
+                                                              int orthogonalTraceComponentOrdinal,
+                                                              const std::vector<int> &traceSupportComponentOrdinals) const
+{
+  const int componentCount = discretization->componentCount();
+  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(componentCells.size()) != componentCount, std::invalid_argument,
+                             "TensorDofLayout::buildFactorSpaceShape requires one component cell per tensor component.");
+
+  const auto tensorVar = discretization->tensorVar();
+  const bool isTrace = tensorVar->isTrace();
+  const int traceComponentOrdinal = tensorVar->hasTraceComponentOrdinal() ? tensorVar->traceComponentOrdinal() : -1;
+
+  std::vector<int> componentCardinalities(componentCount, 0);
+
   for (int d=0; d<componentCount; d++)
   {
-    componentStrides[d] = runningStride;
-    runningStride *= componentCardinalities[d];
+    const bool traceSupportHere = std::find(traceSupportComponentOrdinals.begin(),
+                                            traceSupportComponentOrdinals.end(),
+                                            d) != traceSupportComponentOrdinals.end();
+
+    if (traceSupportHere)
+    {
+      componentCardinalities[d] = 1;
+      continue;
+    }
+
+    if (isTrace && (d == traceComponentOrdinal) && (orthogonalTraceComponentOrdinal < 0))
+    {
+      componentCardinalities[d] = 1;
+      continue;
+    }
+
+    const int effectivePolyOrder = _tensorMesh->effectivePolyOrder(discretization,
+                                                                   componentCells[d],
+                                                                   d,
+                                                                   role == TENSOR_TEST_SPACE);
+    const auto var = tensorVar->componentVar(d);
+    auto basisFamily = _tensorMesh->effectiveBasisFamily(discretization);
+    auto basis = basisFamily->getBasis(CellTopology::line(), efsForSpace(var->space()), effectivePolyOrder);
+    componentCardinalities[d] = basis->getCardinality();
   }
 
-  return VariableLayout(discretization->tensorVar()->name(), role, componentCardinalities, componentStrides,
-                        componentSupportKinds, traceComponentOrdinal, runningStride);
+  return makeFactorSpaceShapeFromCardinalities(componentCardinalities);
+}
+
+TensorFactorSpaceShape TensorDofLayout::buildAmbientShape(const std::string &name,
+                                                          TensorSpaceRole role) const
+{
+  const auto &variableLayout = layout(name, role);
+  const int componentCount = variableLayout.componentCount();
+  std::vector<int> maxima(componentCount, 0);
+
+  if (_tensorMesh->topology()->activeCellTuples().empty())
+  {
+    return makeFactorSpaceShapeFromCardinalities(std::vector<int>(componentCount, 0));
+  }
+
+  for (const auto &cellTuple : _tensorMesh->topology()->activeCellTuples())
+  {
+    auto shape = factorSpaceShape(name, role, cellTuple);
+    for (int d=0; d<componentCount; d++)
+    {
+      maxima[d] = std::max(maxima[d], shape.componentCardinality(d));
+    }
+  }
+
+  if (variableLayout.hasTraceComponentOrdinal())
+  {
+    maxima[variableLayout.traceComponentOrdinal()] = 1;
+
+    auto skeleton = _tensorMesh->topology()->tensorSkeleton(variableLayout.traceComponentOrdinal());
+    for (const auto &entity : skeleton.entities())
+    {
+      auto shape = factorSpaceShape(name,
+                                    role,
+                                    entity.retainedCellTuple().empty() ? std::vector<ComponentCellID1D>(componentCount) : [&]() {
+                                      std::vector<ComponentCellID1D> componentCells(componentCount);
+                                      auto orthogonalTopo = _tensorMesh->topology()->componentMeshTopology(variableLayout.traceComponentOrdinal());
+                                      const IndexType begin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
+                                      const ComponentCellID1D &incidentOrthogonalCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(begin)];
+                                      for (int d=0; d<componentCount; d++) componentCells[d] = incidentOrthogonalCell;
+                                      const auto retainedOrdinals = _tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(variableLayout.traceComponentOrdinal());
+                                      for (size_t r=0; r<retainedOrdinals.size(); r++) componentCells[retainedOrdinals[r]] = entity.retainedCellTuple()[r];
+                                      return componentCells;
+                                    }(),
+                                    variableLayout.traceComponentOrdinal(),
+                                    {variableLayout.traceComponentOrdinal()});
+      for (int d=0; d<componentCount; d++)
+      {
+        maxima[d] = std::max(maxima[d], shape.componentCardinality(d));
+      }
+    }
+  }
+
+  return makeFactorSpaceShapeFromCardinalities(maxima);
 }
 
 TensorDofLayout::TensorDofLayout(TensorMeshPtr tensorMesh)
@@ -162,31 +248,121 @@ std::vector<TensorDofLayout::VariableLayout> TensorDofLayout::testLayouts() cons
   return layouts;
 }
 
-IndexType TensorDofLayout::variableLocalDofOrdinal(const std::string &name,
-                                                   TensorSpaceRole role,
+TensorFactorSpaceShape TensorDofLayout::factorSpaceShape(const std::string &name,
+                                                         TensorSpaceRole role,
+                                                         const std::vector<ComponentCellID1D> &componentCells,
+                                                         int orthogonalTraceComponentOrdinal,
+                                                         const std::vector<int> &traceSupportComponentOrdinals) const
+{
+  const auto discretization = (role == TENSOR_TRIAL_SPACE)
+      ? _tensorMesh->trialDiscretization(name)
+      : _tensorMesh->testDiscretization(name);
+  return buildFactorSpaceShape(discretization,
+                               role,
+                               componentCells,
+                               orthogonalTraceComponentOrdinal,
+                               traceSupportComponentOrdinals);
+}
+
+TensorFactorSpaceShape TensorDofLayout::ambientShape(const std::string &name,
+                                                     TensorSpaceRole role) const
+{
+  return buildAmbientShape(name, role);
+}
+
+TensorLocalVolumeContext TensorDofLayout::volumeContext(const std::string &trialVarName,
+                                                        const std::string &testVarName,
+                                                        const TensorMeshTopology::TensorCellTuple &cellTuple) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!_tensorMesh->topology()->containsTensorCell(cellTuple), std::invalid_argument,
+                             "TensorDofLayout::volumeContext requires a tensor cell tuple in the topology.");
+
+  auto trialShape = factorSpaceShape(trialVarName, TENSOR_TRIAL_SPACE, cellTuple);
+  auto testShape  = factorSpaceShape(testVarName,  TENSOR_TEST_SPACE,  cellTuple);
+  return TensorLocalVolumeContext(cellTuple, trialShape, testShape);
+}
+
+TensorLocalSkeletonContext TensorDofLayout::skeletonContext(const std::string &trialVarName,
+                                                            const std::string &testVarName,
+                                                            const TensorMeshTopology::TensorSkeletonEntity &entity) const
+{
+  const int componentCount = _tensorMesh->topology()->componentCount();
+  std::vector<ComponentCellID1D> trialCells(componentCount);
+  std::vector<ComponentCellID1D> testCells(componentCount);
+
+  const int orthogonalComponentOrdinal = entity.orthogonalComponentOrdinal();
+  const auto retainedOrdinals = _tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(orthogonalComponentOrdinal);
+
+  auto orthogonalTopo = _tensorMesh->topology()->componentMeshTopology(orthogonalComponentOrdinal);
+  const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
+  const IndexType incidentEnd   = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal() + 1);
+  TEUCHOS_TEST_FOR_EXCEPTION(incidentBegin >= incidentEnd, std::logic_error,
+                             "TensorDofLayout::skeletonContext expected at least one incident orthogonal-component cell.");
+  const ComponentCellID1D &incidentOrthogonalCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
+
+  for (int d=0; d<componentCount; d++)
+  {
+    trialCells[d] = incidentOrthogonalCell;
+    testCells[d]  = incidentOrthogonalCell;
+  }
+  for (size_t retainedOrdinal=0; retainedOrdinal<retainedOrdinals.size(); retainedOrdinal++)
+  {
+    const int d = retainedOrdinals[retainedOrdinal];
+    trialCells[d] = entity.retainedCellTuple()[retainedOrdinal];
+    testCells[d]  = entity.retainedCellTuple()[retainedOrdinal];
+  }
+
+  std::vector<int> trialTraceSupportOrdinals;
+  std::vector<int> testTraceSupportOrdinals;
+  auto trialLayout = layout(trialVarName, TENSOR_TRIAL_SPACE);
+  auto testLayout  = layout(testVarName,  TENSOR_TEST_SPACE);
+  if (trialLayout.hasTraceComponentOrdinal()) trialTraceSupportOrdinals.push_back(trialLayout.traceComponentOrdinal());
+  if (testLayout.hasTraceComponentOrdinal())  testTraceSupportOrdinals.push_back(testLayout.traceComponentOrdinal());
+
+  auto trialShape = factorSpaceShape(trialVarName,
+                                     TENSOR_TRIAL_SPACE,
+                                     trialCells,
+                                     orthogonalComponentOrdinal,
+                                     trialTraceSupportOrdinals);
+  auto testShape  = factorSpaceShape(testVarName,
+                                     TENSOR_TEST_SPACE,
+                                     testCells,
+                                     orthogonalComponentOrdinal,
+                                     testTraceSupportOrdinals);
+
+  return TensorLocalSkeletonContext(entity, trialShape, testShape);
+}
+
+IndexType TensorDofLayout::variableLocalDofOrdinal(const VariableLayout &layout,
+                                                   const TensorFactorSpaceShape &shape,
                                                    const std::vector<int> &componentBasisOrdinals) const
 {
-  const auto &varLayout = layout(name, role);
-  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(componentBasisOrdinals.size()) != varLayout.componentCount(), std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(componentBasisOrdinals.size()) != layout.componentCount(), std::invalid_argument,
                              "TensorDofLayout::variableLocalDofOrdinal requires one component basis ordinal per component.");
+  TEUCHOS_TEST_FOR_EXCEPTION(shape.componentCount() != layout.componentCount(), std::invalid_argument,
+                             "TensorDofLayout::variableLocalDofOrdinal shape rank must match layout rank.");
 
   IndexType ordinal = 0;
-  for (int d=0; d<varLayout.componentCount(); d++)
+  for (int d=0; d<layout.componentCount(); d++)
   {
     const int basisOrdinal = componentBasisOrdinals[d];
-    TEUCHOS_TEST_FOR_EXCEPTION((basisOrdinal < 0) || (basisOrdinal >= varLayout.componentCardinality(d)), std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION((basisOrdinal < 0) || (basisOrdinal >= shape.componentCardinality(d)), std::invalid_argument,
                                "TensorDofLayout::variableLocalDofOrdinal basis ordinal out of range.");
-    ordinal += basisOrdinal * varLayout.componentStride(d);
+    ordinal += basisOrdinal * shape.componentStride(d);
   }
   return ordinal;
 }
 
-IndexType TensorDofLayout::cellLocalDofOrdinal(const std::string &name,
-                                               TensorSpaceRole role,
+IndexType TensorDofLayout::cellLocalDofOrdinal(const VariableLayout &layout,
+                                               const TensorFactorSpaceShape &shape,
                                                const std::vector<int> &componentBasisOrdinals) const
 {
-  const auto &varLayout = layout(name, role);
-  const auto tuples = enumerateComponentOrdinalsByCellOrdering(varLayout);
+  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(componentBasisOrdinals.size()) != layout.componentCount(), std::invalid_argument,
+                             "TensorDofLayout::cellLocalDofOrdinal requires one component basis ordinal per component.");
+  TEUCHOS_TEST_FOR_EXCEPTION(shape.componentCount() != layout.componentCount(), std::invalid_argument,
+                             "TensorDofLayout::cellLocalDofOrdinal shape rank must match layout rank.");
+
+  const auto tuples = enumerateComponentOrdinalsByCellOrdering(shape);
   for (IndexType ordinal=0; ordinal<static_cast<IndexType>(tuples.size()); ordinal++)
   {
     if (tuples[ordinal] == componentBasisOrdinals) return ordinal;
@@ -195,79 +371,79 @@ IndexType TensorDofLayout::cellLocalDofOrdinal(const std::string &name,
                              "TensorDofLayout::cellLocalDofOrdinal basis ordinal tuple out of range.");
 }
 
-IndexType TensorDofLayout::localDofCount(const std::string &name,
-                                         TensorSpaceRole role,
+IndexType TensorDofLayout::localDofCount(const TensorFactorSpaceShape &shape,
                                          TensorLocalOrdering ordering) const
 {
-  const auto &varLayout = layout(name, role);
   (void) ordering;
-  return varLayout.totalDofs();
+  return shape.totalDofs();
 }
 
-IndexType TensorDofLayout::localDofOrdinal(const std::string &name,
-                                           TensorSpaceRole role,
+IndexType TensorDofLayout::localDofOrdinal(const VariableLayout &layout,
+                                           const TensorFactorSpaceShape &shape,
                                            const std::vector<int> &componentBasisOrdinals) const
 {
-  return variableLocalDofOrdinal(name, role, componentBasisOrdinals);
+  return variableLocalDofOrdinal(layout, shape, componentBasisOrdinals);
 }
 
-IndexType TensorDofLayout::localDofOrdinal(const std::string &name,
-                                           TensorSpaceRole role,
+IndexType TensorDofLayout::localDofOrdinal(const VariableLayout &layout,
+                                           const TensorFactorSpaceShape &shape,
                                            TensorLocalOrdering ordering,
                                            const std::vector<int> &componentBasisOrdinals) const
 {
   if (ordering == TENSOR_VARIABLE_ORDERING)
   {
-    return variableLocalDofOrdinal(name, role, componentBasisOrdinals);
+    return variableLocalDofOrdinal(layout, shape, componentBasisOrdinals);
   }
   else
   {
-    return cellLocalDofOrdinal(name, role, componentBasisOrdinals);
+    return cellLocalDofOrdinal(layout, shape, componentBasisOrdinals);
   }
 }
 
-void TensorDofLayout::decodeVariableLocalDofOrdinal(const std::string &name,
-                                                    TensorSpaceRole role,
+void TensorDofLayout::decodeVariableLocalDofOrdinal(const VariableLayout &layout,
+                                                    const TensorFactorSpaceShape &shape,
                                                     IndexType ordinal,
                                                     std::vector<int> &componentBasisOrdinals) const
 {
-  const auto &varLayout = layout(name, role);
-  TEUCHOS_TEST_FOR_EXCEPTION((ordinal < 0) || (ordinal >= varLayout.totalDofs()), std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION(shape.componentCount() != layout.componentCount(), std::invalid_argument,
+                             "TensorDofLayout::decodeVariableLocalDofOrdinal shape rank must match layout rank.");
+  TEUCHOS_TEST_FOR_EXCEPTION((ordinal < 0) || (ordinal >= shape.totalDofs()), std::invalid_argument,
                              "TensorDofLayout::decodeVariableLocalDofOrdinal ordinal out of range.");
 
-  componentBasisOrdinals.assign(varLayout.componentCount(), 0);
-  for (int d=varLayout.componentCount()-1; d>=0; d--)
+  componentBasisOrdinals.assign(layout.componentCount(), 0);
+  for (int d=layout.componentCount()-1; d>=0; d--)
   {
-    const IndexType stride = varLayout.componentStride(d);
-    const int cardinality = varLayout.componentCardinality(d);
+    const IndexType stride = shape.componentStride(d);
+    const int cardinality = shape.componentCardinality(d);
     componentBasisOrdinals[d] = static_cast<int>((ordinal / stride) % cardinality);
   }
 }
 
-void TensorDofLayout::decodeCellLocalDofOrdinal(const std::string &name,
-                                                TensorSpaceRole role,
+void TensorDofLayout::decodeCellLocalDofOrdinal(const VariableLayout &layout,
+                                                const TensorFactorSpaceShape &shape,
                                                 IndexType ordinal,
                                                 std::vector<int> &componentBasisOrdinals) const
 {
-  const auto &varLayout = layout(name, role);
-  TEUCHOS_TEST_FOR_EXCEPTION((ordinal < 0) || (ordinal >= varLayout.totalDofs()), std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION(shape.componentCount() != layout.componentCount(), std::invalid_argument,
+                             "TensorDofLayout::decodeCellLocalDofOrdinal shape rank must match layout rank.");
+  TEUCHOS_TEST_FOR_EXCEPTION((ordinal < 0) || (ordinal >= shape.totalDofs()), std::invalid_argument,
                              "TensorDofLayout::decodeCellLocalDofOrdinal ordinal out of range.");
-  const auto tuples = enumerateComponentOrdinalsByCellOrdering(varLayout);
+  const auto tuples = enumerateComponentOrdinalsByCellOrdering(shape);
   componentBasisOrdinals = tuples[ordinal];
 }
 
-void TensorDofLayout::decodeLocalDofOrdinal(const std::string &name,
-                                            TensorSpaceRole role,
+void TensorDofLayout::decodeLocalDofOrdinal(const VariableLayout &layout,
+                                            const TensorFactorSpaceShape &shape,
                                             TensorLocalOrdering ordering,
                                             IndexType ordinal,
                                             std::vector<int> &componentBasisOrdinals) const
 {
   if (ordering == TENSOR_VARIABLE_ORDERING)
   {
-    decodeVariableLocalDofOrdinal(name, role, ordinal, componentBasisOrdinals);
+    decodeVariableLocalDofOrdinal(layout, shape, ordinal, componentBasisOrdinals);
   }
   else
   {
-    decodeCellLocalDofOrdinal(name, role, ordinal, componentBasisOrdinals);
+    decodeCellLocalDofOrdinal(layout, shape, ordinal, componentBasisOrdinals);
   }
 }

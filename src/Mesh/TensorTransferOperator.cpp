@@ -77,22 +77,14 @@ ComponentTransferOperator1DPtr TensorTransferOperator::componentTransfer(int com
 
 IndexType TensorTransferOperator::rowCount() const
 {
-  IndexType result = 1;
-  for (const auto &componentTransfer : _componentTransfers)
-  {
-    result *= componentTransfer->rowCount();
-  }
-  return result;
+  const auto shape = _fineLayout->ambientShape(_varName, _role);
+  return shape.totalDofs();
 }
 
 IndexType TensorTransferOperator::colCount() const
 {
-  IndexType result = 1;
-  for (const auto &componentTransfer : _componentTransfers)
-  {
-    result *= componentTransfer->colCount();
-  }
-  return result;
+  const auto shape = _coarseLayout->ambientShape(_varName, _role);
+  return shape.totalDofs();
 }
 
 void TensorTransferOperator::apply(const std::vector<double> &input,
@@ -102,15 +94,16 @@ void TensorTransferOperator::apply(const std::vector<double> &input,
                              "TensorTransferOperator::apply input vector size does not match operator column count.");
 
   output.assign(rowCount(), 0.0);
-  const auto &varLayout = (_role == TENSOR_TRIAL_SPACE) ? _coarseLayout->layout(_varName, _role) : _fineLayout->layout(_varName, _role);
-  (void)varLayout;
 
+  const auto coarseShape = _coarseLayout->ambientShape(_varName, _role);
+  const auto fineShape   = _fineLayout->ambientShape(_varName, _role);
   const int dims = componentCount();
+
   std::vector<IndexType> coarseStrides(dims,1), fineStrides(dims,1);
   for (int d=1; d<dims; d++)
   {
-    coarseStrides[d] = coarseStrides[d-1] * _componentTransfers[d-1]->colCount();
-    fineStrides[d]   = fineStrides[d-1]   * _componentTransfers[d-1]->rowCount();
+    coarseStrides[d] = coarseStrides[d-1] * coarseShape.componentCardinality(d-1);
+    fineStrides[d]   = fineStrides[d-1]   * fineShape.componentCardinality(d-1);
   }
 
   for (IndexType fineOrdinal=0; fineOrdinal<rowCount(); fineOrdinal++)

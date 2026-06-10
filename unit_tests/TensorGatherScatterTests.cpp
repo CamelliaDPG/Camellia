@@ -75,112 +75,138 @@ TEUCHOS_UNIT_TEST( TensorGatherScatter, ConstructTrialAndTestGatherScatter )
   TEST_EQUALITY(testGS.varName(), "v");
 }
 
-TEUCHOS_UNIT_TEST( TensorGatherScatter, LocalDofCountMatchesLayout )
+TEUCHOS_UNIT_TEST( TensorGatherScatter, LocalDofCountMatchesSuppliedShape )
 {
   auto tensorMesh = makeTensorMeshForGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto shape = dofLayout->factorSpaceShape("u", TENSOR_TRIAL_SPACE, cellTuple);
 
   TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
-  TEST_EQUALITY(trialGS.localDofCount(), dofLayout->layout("u", TENSOR_TRIAL_SPACE).totalDofs());
+  TEST_EQUALITY(trialGS.localDofCount(shape), shape.totalDofs());
 }
 
-TEUCHOS_UNIT_TEST( TensorGatherScatter, ScatterLocalToGlobalUsesFlatOffset )
+TEUCHOS_UNIT_TEST( TensorGatherScatter, ScatterLocalToGlobalUsesFlatOffsetForExactShape )
 {
   auto tensorMesh = makeTensorMeshForGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto shape = dofLayout->factorSpaceShape("u", TENSOR_TRIAL_SPACE, cellTuple);
   TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
 
-  std::vector<double> local(trialGS.localDofCount(), 1.0);
-  std::vector<double> global(trialGS.localDofCount() + 3, 0.0);
+  std::vector<double> local(trialGS.localDofCount(shape), 1.0);
+  std::vector<double> global(trialGS.localDofCount(shape) + 3, 0.0);
 
-  trialGS.scatterLocalToGlobal(local, global, 3);
+  trialGS.scatterLocalToGlobal(local, shape, global, 3);
 
   for (IndexType i=0; i<3; i++)
   {
     TEST_EQUALITY(global[i], 0.0);
   }
-  for (IndexType i=0; i<trialGS.localDofCount(); i++)
+  for (IndexType i=0; i<trialGS.localDofCount(shape); i++)
   {
     TEST_EQUALITY(global[3+i], 1.0);
   }
 }
 
-TEUCHOS_UNIT_TEST( TensorGatherScatter, GatherGlobalToLocalUsesFlatOffset )
+TEUCHOS_UNIT_TEST( TensorGatherScatter, GatherGlobalToLocalUsesFlatOffsetForExactShape )
 {
   auto tensorMesh = makeTensorMeshForGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto shape = dofLayout->factorSpaceShape("v", TENSOR_TEST_SPACE, cellTuple);
   TensorGatherScatter testGS(tensorMesh, dofLayout, TENSOR_TEST_SPACE, "v");
 
-  std::vector<double> global(testGS.localDofCount() + 2, 0.0);
-  for (IndexType i=0; i<testGS.localDofCount(); i++)
+  std::vector<double> global(testGS.localDofCount(shape) + 2, 0.0);
+  for (IndexType i=0; i<testGS.localDofCount(shape); i++)
   {
     global[2+i] = static_cast<double>(i + 1);
   }
 
   std::vector<double> local;
-  testGS.gatherGlobalToLocal(global, local, 2);
+  testGS.gatherGlobalToLocal(global, shape, local, 2);
 
-  TEST_EQUALITY(local.size(), testGS.localDofCount());
-  for (IndexType i=0; i<testGS.localDofCount(); i++)
+  TEST_EQUALITY(local.size(), testGS.localDofCount(shape));
+  for (IndexType i=0; i<testGS.localDofCount(shape); i++)
   {
     TEST_EQUALITY(local[i], static_cast<double>(i + 1));
   }
 }
 
-TEUCHOS_UNIT_TEST( TensorGatherScatter, VariableAndCellOrderingsHaveSameLocalDofCount )
+TEUCHOS_UNIT_TEST( TensorGatherScatter, VariableAndCellOrderingsHaveSameLocalDofCountForExactShape )
 {
   auto tensorMesh = makeTensorMeshForGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto shape = dofLayout->factorSpaceShape("u", TENSOR_TRIAL_SPACE, cellTuple);
   TensorGatherScatter variableGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u", TENSOR_VARIABLE_ORDERING);
   TensorGatherScatter cellGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u", TENSOR_CELL_ORDERING);
 
-  TEST_EQUALITY(variableGS.localDofCount(), cellGS.localDofCount());
-  TEST_EQUALITY(variableGS.localDofCount(), dofLayout->layout("u", TENSOR_TRIAL_SPACE).totalDofs());
+  TEST_EQUALITY(variableGS.localDofCount(shape), cellGS.localDofCount(shape));
+  TEST_EQUALITY(variableGS.localDofCount(shape), shape.totalDofs());
 }
 
-TEUCHOS_UNIT_TEST( TensorGatherScatter, TraceVariableLocalDofCountMatchesTraceLayout )
+TEUCHOS_UNIT_TEST( TensorGatherScatter, TraceVariableLocalDofCountMatchesSkeletonShape )
 {
   auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
+  auto context = dofLayout->skeletonContext("uhat", "vhat", skeleton.entity(0));
   TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
-  TensorGatherScatter testGS(tensorMesh, dofLayout, TENSOR_TEST_SPACE, "vhat");
 
-  TEST_EQUALITY(trialGS.localDofCount(), dofLayout->layout("uhat", TENSOR_TRIAL_SPACE).totalDofs());
-  TEST_EQUALITY(testGS.localDofCount(), dofLayout->layout("vhat", TENSOR_TEST_SPACE).totalDofs());
+  TEST_EQUALITY(trialGS.localDofCount(context.trialShape()), context.trialShape().totalDofs());
 }
 
-TEUCHOS_UNIT_TEST( TensorGatherScatter, TraceVariableScatterAndGatherRemainFlatBufferCompatible )
+TEUCHOS_UNIT_TEST( TensorGatherScatter, TraceVariableScatterAndGatherRemainFlatBufferCompatibleForSkeletonShape )
 {
   auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
+  auto context = dofLayout->skeletonContext("uhat", "vhat", skeleton.entity(0));
   TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
 
-  std::vector<double> local(trialGS.localDofCount(), 0.0);
-  for (IndexType i=0; i<trialGS.localDofCount(); i++)
+  std::vector<double> local(trialGS.localDofCount(context.trialShape()), 0.0);
+  for (IndexType i=0; i<trialGS.localDofCount(context.trialShape()); i++)
   {
     local[i] = static_cast<double>(2 * i + 1);
   }
 
-  std::vector<double> global(trialGS.localDofCount() + 4, 0.0);
-  trialGS.scatterLocalToGlobal(local, global, 4);
+  std::vector<double> global(trialGS.localDofCount(context.trialShape()) + 4, 0.0);
+  trialGS.scatterLocalToGlobal(local, context.trialShape(), global, 4);
 
   std::vector<double> gathered;
-  trialGS.gatherGlobalToLocal(global, gathered, 4);
+  trialGS.gatherGlobalToLocal(global, context.trialShape(), gathered, 4);
 
   TEST_EQUALITY(gathered.size(), local.size());
-  for (IndexType i=0; i<trialGS.localDofCount(); i++)
+  for (IndexType i=0; i<trialGS.localDofCount(context.trialShape()); i++)
   {
     TEST_EQUALITY(gathered[i], local[i]);
   }
 }
 
-TEUCHOS_UNIT_TEST( TensorGatherScatter, TrialAndTestCanHaveDifferentLocalDofCounts )
+TEUCHOS_UNIT_TEST( TensorGatherScatter, PNonuniformContextsNaturallyHaveDifferentExactLocalDofCounts )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests();
+  auto component0 = tensorMesh->topology()->componentMeshTopology(0);
+  component0->setCellPolyOrder(ComponentCellID1D(0,1,1), component0->cellPolyOrder(ComponentCellID1D(0,1,1)) + 1);
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto context0 = dofLayout->volumeContext("u", "v", tensorMesh->topology()->tensorCellTuple(0));
+  auto context1 = dofLayout->volumeContext("u", "v", tensorMesh->topology()->tensorCellTuple(1));
+
+  TEST_ASSERT(context1.trialShape().totalDofs() > context0.trialShape().totalDofs());
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, TrialAndTestCanHaveDifferentExactLocalDofCounts )
 {
   auto tensorMesh = makeTensorMeshForGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto trialShape = dofLayout->factorSpaceShape("u", TENSOR_TRIAL_SPACE, cellTuple);
+  auto testShape = dofLayout->factorSpaceShape("v", TENSOR_TEST_SPACE, cellTuple);
   TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
   TensorGatherScatter testGS(tensorMesh, dofLayout, TENSOR_TEST_SPACE, "v");
 
-  TEST_ASSERT(testGS.localDofCount() >= trialGS.localDofCount());
+  TEST_ASSERT(testGS.localDofCount(testShape) >= trialGS.localDofCount(trialShape));
 }
 }
