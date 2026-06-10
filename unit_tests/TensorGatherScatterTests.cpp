@@ -1,8 +1,10 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "TensorGatherScatter.h"
+#include "TensorCoefficientMap.h"
 #include "TensorDofLayout.h"
 #include "TensorMesh.h"
+#include "Basis.h"
 #include "Var.h"
 
 using namespace Camellia;
@@ -51,7 +53,7 @@ TensorMeshPtr makeTensorMeshForTraceGatherScatterTests()
   auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 2));
 
   auto trialVar = makeTraceTensorVar("uhat", 0);
-  auto testVar = makeTraceTensorVar("vhat", 1);
+  auto testVar = makeFieldTensorVar("v");
 
   auto trialDisc = Teuchos::rcp(new TensorVarDiscretization(trialVar, Teuchos::null, std::vector<int>{0,1}));
   auto testDisc = Teuchos::rcp(new TensorVarDiscretization(testVar, Teuchos::null, std::vector<int>{1,0}));
@@ -151,7 +153,7 @@ TEUCHOS_UNIT_TEST( TensorGatherScatter, TraceVariableLocalDofCountMatchesSkeleto
   auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
   auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
-  auto context = dofLayout->skeletonContext("uhat", "vhat", skeleton.entity(0));
+  auto context = dofLayout->skeletonContext("uhat", "v", skeleton.entity(0));
   TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
 
   TEST_EQUALITY(trialGS.localDofCount(context.trialShape()), context.trialShape().totalDofs());
@@ -162,7 +164,7 @@ TEUCHOS_UNIT_TEST( TensorGatherScatter, TraceVariableScatterAndGatherRemainFlatB
   auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
   auto dofLayout = tensorMesh->createDofLayout();
   auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
-  auto context = dofLayout->skeletonContext("uhat", "vhat", skeleton.entity(0));
+  auto context = dofLayout->skeletonContext("uhat", "v", skeleton.entity(0));
   TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
 
   std::vector<double> local(trialGS.localDofCount(context.trialShape()), 0.0);
@@ -208,5 +210,191 @@ TEUCHOS_UNIT_TEST( TensorGatherScatter, TrialAndTestCanHaveDifferentExactLocalDo
   TensorGatherScatter testGS(tensorMesh, dofLayout, TENSOR_TEST_SPACE, "v");
 
   TEST_ASSERT(testGS.localDofCount(testShape) >= trialGS.localDofCount(trialShape));
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, ExplicitCoefficientMapProvidesNonAmbientContainerCount )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
+
+  TEST_ASSERT(trialGS.coefficientCount() > 0);
+  TEST_ASSERT(trialGS.coefficientCount() >= trialGS.localDofCount(dofLayout->factorSpaceShape("u", TENSOR_TRIAL_SPACE,
+                                                                                              tensorMesh->topology()->tensorCellTuple(0))));
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, LazyVolumeLocalOrdinalToGlobalIndexMatchesIndexVectorHelper )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto indices = coeffMap.indicesForVolumeCell(cellTuple);
+
+  for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(indices.size()); localOrdinal++)
+  {
+    TEST_EQUALITY(coeffMap.globalIndexForVolumeLocalOrdinal(cellTuple, localOrdinal), indices[localOrdinal]);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, VolumeCoefficientCountMatchesProductOfComponentFactorSizes )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
+
+  IndexType expectedCount = 1;
+  auto trialDisc = tensorMesh->trialDiscretization("u");
+  for (int d=0; d<tensorMesh->topology()->componentCount(); d++)
+  {
+    auto componentTopo = tensorMesh->topology()->componentMeshTopology(d);
+    IndexType componentFactorSize = 0;
+    for (const auto &cellID : componentTopo->activeCells())
+    {
+      const int polyOrder = tensorMesh->effectivePolyOrder(trialDisc, cellID, d, false);
+      auto basisFamily = tensorMesh->effectiveBasisFamily(trialDisc);
+      auto componentVar = trialDisc->tensorVar()->componentVar(d);
+      auto basis = basisFamily->getBasis(CellTopology::line(), efsForSpace(componentVar->space()), polyOrder);
+      componentFactorSize += basis->getCardinality();
+    }
+    expectedCount *= componentFactorSize;
+  }
+
+  TEST_EQUALITY(coeffMap.coefficientCount(), expectedCount);
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, TraceSkeletonEntitiesSharingSupportShareCoefficientIndices )
+{
+  auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
+  auto retainedComponent = tensorMesh->topology()->componentMeshTopology(0);
+  retainedComponent->refineCell(ComponentCellID1D(0,1,0));
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
+
+  bool foundSharedVertexWithDistinctEntities = false;
+  for (IndexType i=0; i<skeleton.entityCount(); i++)
+  {
+    for (IndexType j=i+1; j<skeleton.entityCount(); j++)
+    {
+      const auto &entityI = skeleton.entity(i);
+      const auto &entityJ = skeleton.entity(j);
+      if (entityI.vertexOrdinal() != entityJ.vertexOrdinal()) continue;
+      if (entityI.retainedCellTuple() == entityJ.retainedCellTuple()) continue;
+
+      auto indicesI = coeffMap.indicesForSkeletonEntity(entityI);
+      auto indicesJ = coeffMap.indicesForSkeletonEntity(entityJ);
+      TEST_EQUALITY(indicesI.size(), indicesJ.size());
+      for (IndexType k=0; k<static_cast<IndexType>(indicesI.size()); k++)
+      {
+        TEST_EQUALITY(indicesI[k], indicesJ[k]);
+      }
+      foundSharedVertexWithDistinctEntities = true;
+      break;
+    }
+    if (foundSharedVertexWithDistinctEntities) break;
+  }
+  if (!foundSharedVertexWithDistinctEntities)
+  {
+    TEST_ASSERT(skeleton.entityCount() > 0);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, LazyTraceLocalOrdinalToGlobalIndexMatchesIndexVectorHelper )
+{
+  auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
+  TEST_ASSERT(skeleton.entityCount() > 0);
+  auto entity = skeleton.entity(0);
+  auto indices = coeffMap.indicesForSkeletonEntity(entity);
+
+  for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(indices.size()); localOrdinal++)
+  {
+    TEST_EQUALITY(coeffMap.globalIndexForSkeletonLocalOrdinal(entity, localOrdinal), indices[localOrdinal]);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, VolumeTraversalGlobalIndexMatchesLegacyScalarHelper )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto traversal = coeffMap.volumeTraversal(cellTuple);
+
+  TEST_EQUALITY(traversal.localDofCount(), dofLayout->factorSpaceShape("u", TENSOR_TRIAL_SPACE, cellTuple).totalDofs());
+  for (IndexType localOrdinal=0; localOrdinal<traversal.localDofCount(); localOrdinal++)
+  {
+    TEST_EQUALITY(traversal.globalIndexForLocalOrdinal(localOrdinal, dofLayout),
+                  coeffMap.globalIndexForVolumeLocalOrdinal(cellTuple, localOrdinal));
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, SkeletonTraversalGlobalIndexMatchesLegacyScalarHelper )
+{
+  auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
+  TEST_ASSERT(skeleton.entityCount() > 0);
+  auto entity = skeleton.entity(0);
+  auto traversal = coeffMap.skeletonTraversal(entity);
+
+  TEST_EQUALITY(traversal.localDofCount(), dofLayout->skeletonContext("uhat", "v", entity).trialShape().totalDofs());
+  for (IndexType localOrdinal=0; localOrdinal<traversal.localDofCount(); localOrdinal++)
+  {
+    TEST_EQUALITY(traversal.globalIndexForLocalOrdinal(localOrdinal, dofLayout),
+                  coeffMap.globalIndexForSkeletonLocalOrdinal(entity, localOrdinal));
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, TraversalAwareVolumeGatherScatterMatchesExplicitIndexHelper )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto shape = dofLayout->factorSpaceShape("u", TENSOR_TRIAL_SPACE, cellTuple);
+
+  std::vector<double> local(shape.totalDofs(), 0.0);
+  for (IndexType i=0; i<shape.totalDofs(); i++) local[i] = static_cast<double>(i + 3);
+
+  std::vector<double> global(trialGS.coefficientCount(), 0.0);
+  trialGS.scatterLocalToVolumeCell(local, cellTuple, global);
+
+  std::vector<double> gathered;
+  trialGS.gatherVolumeCellToLocal(global, cellTuple, gathered);
+  TEST_EQUALITY(gathered.size(), local.size());
+  for (IndexType i=0; i<static_cast<IndexType>(local.size()); i++)
+  {
+    TEST_EQUALITY(gathered[i], local[i]);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, TraversalAwareSkeletonGatherScatterMatchesExplicitIndexHelper )
+{
+  auto tensorMesh = makeTensorMeshForTraceGatherScatterTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorGatherScatter trialGS(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "uhat");
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(0);
+  TEST_ASSERT(skeleton.entityCount() > 0);
+  auto entity = skeleton.entity(0);
+  auto shape = dofLayout->skeletonContext("uhat", "v", entity).trialShape();
+
+  std::vector<double> local(shape.totalDofs(), 0.0);
+  for (IndexType i=0; i<shape.totalDofs(); i++) local[i] = static_cast<double>(2 * i + 5);
+
+  std::vector<double> global(trialGS.coefficientCount(), 0.0);
+  trialGS.scatterLocalToSkeletonEntity(local, entity, global);
+
+  std::vector<double> gathered;
+  trialGS.gatherSkeletonEntityToLocal(global, entity, gathered);
+  TEST_EQUALITY(gathered.size(), local.size());
+  for (IndexType i=0; i<static_cast<IndexType>(local.size()); i++)
+  {
+    TEST_EQUALITY(gathered[i], local[i]);
+  }
 }
 }

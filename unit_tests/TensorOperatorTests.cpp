@@ -3,6 +3,7 @@
 #include "TensorOperatorFactory.h"
 #include "TensorBilinearForm.h"
 #include "TensorBilinearFormBuilder.h"
+#include "TensorCoefficientMap.h"
 #include "TensorDofLayout.h"
 #include "TensorMesh.h"
 #include "Basis.h"
@@ -306,15 +307,15 @@ std::vector<double> applyReferenceOperator(const TensorMeshPtr &tensorMesh,
                                            const std::string &testVarName,
                                            const std::vector<double> &input)
 {
+  TensorCoefficientMap domainMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, trialVarName);
+  TensorCoefficientMap rangeMap (tensorMesh, dofLayout, TENSOR_TEST_SPACE,  testVarName);
   auto trialDiscretization = tensorMesh->trialDiscretization(trialVarName);
   auto testDiscretization  = tensorMesh->testDiscretization(testVarName);
   const auto &domainLayout = dofLayout->layout(trialVarName, TENSOR_TRIAL_SPACE);
   const auto &rangeLayout  = dofLayout->layout(testVarName,  TENSOR_TEST_SPACE);
   const auto &activeCellTuples = tensorMesh->topology()->activeCellTuples();
-  auto ambientDomainShape = buildAmbientShape(tensorMesh, dofLayout, trialVarName, TENSOR_TRIAL_SPACE);
-  auto ambientRangeShape  = buildAmbientShape(tensorMesh, dofLayout, testVarName,  TENSOR_TEST_SPACE);
 
-  std::vector<double> output(ambientRangeShape.totalDofs(), 0.0);
+  std::vector<double> output(rangeMap.coefficientCount(), 0.0);
 
   for (const auto &term : form->terms())
   {
@@ -332,6 +333,8 @@ std::vector<double> applyReferenceOperator(const TensorMeshPtr &tensorMesh,
       auto context = dofLayout->volumeContext(trialVarName, testVarName, cellTuple);
       const auto &trialShape = context.trialShape();
       const auto &testShape  = context.testShape();
+      const auto trialIndices = domainMap.indicesForVolumeCell(cellTuple);
+      const auto testIndices  = rangeMap.indicesForVolumeCell(cellTuple);
 
       std::vector<BasisData1D> trialBasisData(componentCount);
       std::vector<BasisData1D> testBasisData(componentCount);
@@ -395,11 +398,10 @@ std::vector<double> applyReferenceOperator(const TensorMeshPtr &tensorMesh,
       auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
 
       std::vector<double> trialPointValues(tensorPointCount, 0.0);
-      for (IndexType j=0; j<ambientDomainShape.totalDofs(); j++)
+      for (IndexType j=0; j<trialShape.totalDofs(); j++)
       {
-        dofLayout->decodeLocalDofOrdinal(domainLayout, ambientDomainShape, TENSOR_VARIABLE_ORDERING, j, trialBasisOrdinals);
-        if (!componentBasisOrdinalsAreAdmissibleForShape(trialBasisOrdinals, trialShape)) continue;
-        const double coeff = input[j];
+        dofLayout->decodeLocalDofOrdinal(domainLayout, trialShape, TENSOR_VARIABLE_ORDERING, j, trialBasisOrdinals);
+        const double coeff = input[trialIndices[j]];
         if (coeff == 0.0) continue;
         for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
         {
@@ -414,10 +416,9 @@ std::vector<double> applyReferenceOperator(const TensorMeshPtr &tensorMesh,
         }
       }
 
-      for (IndexType i=0; i<ambientRangeShape.totalDofs(); i++)
+      for (IndexType i=0; i<testShape.totalDofs(); i++)
       {
-        dofLayout->decodeLocalDofOrdinal(rangeLayout, ambientRangeShape, TENSOR_VARIABLE_ORDERING, i, testBasisOrdinals);
-        if (!componentBasisOrdinalsAreAdmissibleForShape(testBasisOrdinals, testShape)) continue;
+        dofLayout->decodeLocalDofOrdinal(rangeLayout, testShape, TENSOR_VARIABLE_ORDERING, i, testBasisOrdinals);
         double contribution = 0.0;
         for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
         {
@@ -430,7 +431,7 @@ std::vector<double> applyReferenceOperator(const TensorMeshPtr &tensorMesh,
           const double testValue  = basisEvaluationAtPoint(testBasisOrdinals,  testBasisData,  term.testOperator(),  pointOrdinals, derivativeScales);
           contribution += quadratureWeights[flatPointOrdinal] * coefficientValuesHost(flatPointOrdinal) * trialPointValues[flatPointOrdinal] * testValue;
         }
-        output[i] += contribution;
+        output[testIndices[i]] += contribution;
       }
     }
   }
@@ -445,14 +446,14 @@ std::vector<double> applyReferenceBoundaryOperator(const TensorMeshPtr &tensorMe
                                                    const std::string &testVarName,
                                                    const std::vector<double> &input)
 {
+  TensorCoefficientMap domainMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, trialVarName);
+  TensorCoefficientMap rangeMap (tensorMesh, dofLayout, TENSOR_TEST_SPACE,  testVarName);
   auto trialDiscretization = tensorMesh->trialDiscretization(trialVarName);
   auto testDiscretization  = tensorMesh->testDiscretization(testVarName);
   const auto &domainLayout = dofLayout->layout(trialVarName, TENSOR_TRIAL_SPACE);
   const auto &rangeLayout  = dofLayout->layout(testVarName,  TENSOR_TEST_SPACE);
-  auto ambientDomainShape = buildAmbientShape(tensorMesh, dofLayout, trialVarName, TENSOR_TRIAL_SPACE);
-  auto ambientRangeShape  = buildAmbientShape(tensorMesh, dofLayout, testVarName,  TENSOR_TEST_SPACE);
 
-  std::vector<double> output(ambientRangeShape.totalDofs(), 0.0);
+  std::vector<double> output(rangeMap.coefficientCount(), 0.0);
 
   for (const auto &term : form->terms())
   {
@@ -501,6 +502,19 @@ std::vector<double> applyReferenceBoundaryOperator(const TensorMeshPtr &tensorMe
                                  "Reference boundary operator expected at least one incident orthogonal-component cell for the requested skeleton vertex.");
       const ComponentCellID1D &incidentOrthogonalCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
       const double orthRefCoord = orthogonalReferenceCoordinate(tensorMesh, orthogonalComponentOrdinal, incidentOrthogonalCell, entity.vertexOrdinal());
+
+      std::vector<ComponentCellID1D> componentCells(componentCount, incidentOrthogonalCell);
+      for (size_t retainedOrdinal=0; retainedOrdinal<retainedComponents.size(); retainedOrdinal++)
+      {
+        componentCells[retainedComponents[retainedOrdinal]] = entity.retainedCellTuple()[retainedOrdinal];
+      }
+
+      const auto trialIndices = term.trialVar()->isTrace()
+          ? domainMap.indicesForSkeletonEntity(entity)
+          : domainMap.indicesForVolumeCell(componentCells);
+      const auto testIndices = term.testVar()->isTrace()
+          ? rangeMap.indicesForSkeletonEntity(entity)
+          : rangeMap.indicesForVolumeCell(componentCells);
 
       if (!term.trialVar()->isTrace())
       {
@@ -594,12 +608,11 @@ std::vector<double> applyReferenceBoundaryOperator(const TensorMeshPtr &tensorMe
       }
 
       std::vector<double> trialPointValues(tensorPointCount, 0.0);
-      for (IndexType j=0; j<ambientDomainShape.totalDofs(); j++)
+      for (IndexType j=0; j<trialShape.totalDofs(); j++)
       {
-        dofLayout->decodeLocalDofOrdinal(domainLayout, ambientDomainShape, TENSOR_VARIABLE_ORDERING, j, trialBasisOrdinals);
-        if (!componentBasisOrdinalsAreAdmissibleForShape(trialBasisOrdinals, trialShape)) continue;
+        dofLayout->decodeLocalDofOrdinal(domainLayout, trialShape, TENSOR_VARIABLE_ORDERING, j, trialBasisOrdinals);
 
-        const double coeff = input[j];
+        const double coeff = input[trialIndices[j]];
         if (coeff == 0.0) continue;
 
         for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
@@ -624,10 +637,9 @@ std::vector<double> applyReferenceBoundaryOperator(const TensorMeshPtr &tensorMe
         }
       }
 
-      for (IndexType i=0; i<ambientRangeShape.totalDofs(); i++)
+      for (IndexType i=0; i<testShape.totalDofs(); i++)
       {
-        dofLayout->decodeLocalDofOrdinal(rangeLayout, ambientRangeShape, TENSOR_VARIABLE_ORDERING, i, testBasisOrdinals);
-        if (!componentBasisOrdinalsAreAdmissibleForShape(testBasisOrdinals, testShape)) continue;
+        dofLayout->decodeLocalDofOrdinal(rangeLayout, testShape, TENSOR_VARIABLE_ORDERING, i, testBasisOrdinals);
 
         double contribution = 0.0;
         for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
@@ -653,7 +665,7 @@ std::vector<double> applyReferenceBoundaryOperator(const TensorMeshPtr &tensorMe
                           * trialPointValues[flatPointOrdinal]
                           * (testParity * testValue);
         }
-        output[i] += contribution;
+        output[testIndices[i]] += contribution;
       }
     }
   }
@@ -698,7 +710,7 @@ TEUCHOS_UNIT_TEST( TensorOperator, MatrixFreeFactoryBuildsOperatorForSupportedIn
   TEST_EQUALITY(op->rangeVarName(),  "v");
 }
 
-TEUCHOS_UNIT_TEST( TensorOperator, DomainAndRangeSizesMatchAmbientTensorSpaceUsedByCurrentGlobalInterface )
+TEUCHOS_UNIT_TEST( TensorOperator, DomainAndRangeSizesMatchExplicitCoefficientContainerInterface )
 {
   auto tensorMesh = makeTensorMeshForOperatorTests();
   auto dofLayout = tensorMesh->createDofLayout();
@@ -711,6 +723,24 @@ TEUCHOS_UNIT_TEST( TensorOperator, DomainAndRangeSizesMatchAmbientTensorSpaceUse
 
   TEST_ASSERT(op->domainSize() > 0);
   TEST_ASSERT(op->rangeSize() > 0);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, VolumeTraversalBasedIndexingMatchesReferenceCoefficientContainerSemantics )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
+
+  for (const auto &cellTuple : tensorMesh->topology()->activeCellTuples())
+  {
+    auto traversal = coeffMap.volumeTraversal(cellTuple);
+    auto indices = coeffMap.indicesForVolumeCell(cellTuple);
+    TEST_EQUALITY(traversal.localDofCount(), static_cast<IndexType>(indices.size()));
+    for (IndexType localOrdinal=0; localOrdinal<traversal.localDofCount(); localOrdinal++)
+    {
+      TEST_EQUALITY(traversal.globalIndexForLocalOrdinal(localOrdinal, dofLayout), indices[localOrdinal]);
+    }
+  }
 }
 
 TEUCHOS_UNIT_TEST( TensorOperator, ApplyProducesExpectedSizedOutput )

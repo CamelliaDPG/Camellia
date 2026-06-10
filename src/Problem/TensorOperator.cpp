@@ -12,6 +12,7 @@
 #include "CubatureFactory.h"
 #include "Intrepid2_CubatureDirectLineGauss.hpp"
 #include "TensorFunction.h"
+#include "TensorCoefficientMap.h"
 #include "Var.h"
 #include "Teuchos_TestForException.hpp"
 
@@ -482,6 +483,58 @@ namespace
       return value;
     }
 
+    TensorCoefficientTraversal domainTraversalForCell(const TensorMeshTopology::TensorCellTuple &cellTuple) const
+    {
+      return _domainGatherScatter.coefficientMap().volumeTraversal(cellTuple);
+    }
+
+    TensorCoefficientTraversal rangeTraversalForCell(const TensorMeshTopology::TensorCellTuple &cellTuple) const
+    {
+      return _rangeGatherScatter.coefficientMap().volumeTraversal(cellTuple);
+    }
+
+    TensorCoefficientTraversal domainTraversalForSkeletonEntity(const TensorMeshTopology::TensorSkeletonEntity &entity) const
+    {
+      auto domainVar = _tensorMesh->tensorVarFactory()->tensorVar(_domainVarName);
+      if (tensorVarIsTraceLike(domainVar))
+      {
+        return _domainGatherScatter.coefficientMap().skeletonTraversal(entity);
+      }
+
+      const int componentCount = _tensorMesh->topology()->componentCount();
+      std::vector<ComponentCellID1D> componentCells(componentCount);
+      auto orthogonalTopo = _tensorMesh->topology()->componentMeshTopology(entity.orthogonalComponentOrdinal());
+      const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
+      TEUCHOS_TEST_FOR_EXCEPTION(incidentBegin >= orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal() + 1), std::logic_error,
+                                 "MatrixFreeTensorOperator expected at least one incident orthogonal-component cell for domain coefficient lookup.");
+      const ComponentCellID1D &incidentCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
+      for (int d=0; d<componentCount; d++) componentCells[d] = incidentCell;
+      const auto retainedOrdinals = _tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(entity.orthogonalComponentOrdinal());
+      for (size_t r=0; r<retainedOrdinals.size(); r++) componentCells[retainedOrdinals[r]] = entity.retainedCellTuple()[r];
+      return _domainGatherScatter.coefficientMap().volumeTraversal(componentCells);
+    }
+
+    TensorCoefficientTraversal rangeTraversalForSkeletonEntity(const TensorMeshTopology::TensorSkeletonEntity &entity) const
+    {
+      auto rangeVar = _tensorMesh->tensorVarFactory()->tensorVar(_rangeVarName);
+      if (tensorVarIsTraceLike(rangeVar))
+      {
+        return _rangeGatherScatter.coefficientMap().skeletonTraversal(entity);
+      }
+
+      const int componentCount = _tensorMesh->topology()->componentCount();
+      std::vector<ComponentCellID1D> componentCells(componentCount);
+      auto orthogonalTopo = _tensorMesh->topology()->componentMeshTopology(entity.orthogonalComponentOrdinal());
+      const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
+      TEUCHOS_TEST_FOR_EXCEPTION(incidentBegin >= orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal() + 1), std::logic_error,
+                                 "MatrixFreeTensorOperator expected at least one incident orthogonal-component cell for range coefficient lookup.");
+      const ComponentCellID1D &incidentCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
+      for (int d=0; d<componentCount; d++) componentCells[d] = incidentCell;
+      const auto retainedOrdinals = _tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(entity.orthogonalComponentOrdinal());
+      for (size_t r=0; r<retainedOrdinals.size(); r++) componentCells[retainedOrdinals[r]] = entity.retainedCellTuple()[r];
+      return _rangeGatherScatter.coefficientMap().volumeTraversal(componentCells);
+    }
+
     void applyVolumeTerm(const TensorBilinearTerm &term,
                          const std::vector<double> &localInput,
                          std::vector<double> &localOutput) const
@@ -500,6 +553,8 @@ namespace
         auto localContext = _tensorDofLayout->volumeContext(_domainVarName, _rangeVarName, cellTuple);
         const auto &trialShape = localContext.trialShape();
         const auto &testShape  = localContext.testShape();
+        const auto trialTraversal = domainTraversalForCell(cellTuple);
+        const auto testTraversal  = rangeTraversalForCell(cellTuple);
 
         std::vector<BasisData1D> trialBasisData(componentCount);
         std::vector<BasisData1D> testBasisData(componentCount);
@@ -564,12 +619,11 @@ namespace
         auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
 
         std::vector<double> trialPointValues(tensorPointCount, 0.0);
-        for (IndexType localTrialOrdinal=0; localTrialOrdinal<_ambientDomainShape.totalDofs(); localTrialOrdinal++)
+        for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
         {
-          decodeDomainOrdinal(localTrialOrdinal, trialBasisOrdinals);
-          if (!componentBasisOrdinalsAreAdmissibleForShape(trialBasisOrdinals, trialShape)) continue;
+          _tensorDofLayout->decodeLocalDofOrdinal(_domainLayout, trialShape, _domainOrdering, localTrialOrdinal, trialBasisOrdinals);
 
-          const double trialCoefficient = localInput[localTrialOrdinal];
+          const double trialCoefficient = localInput[trialTraversal.globalIndexForLocalOrdinal(localTrialOrdinal, _tensorDofLayout)];
           if (trialCoefficient == 0.0) continue;
 
           for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
@@ -589,10 +643,9 @@ namespace
           }
         }
 
-        for (IndexType localTestOrdinal=0; localTestOrdinal<_ambientRangeShape.totalDofs(); localTestOrdinal++)
+        for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
         {
-          decodeRangeOrdinal(localTestOrdinal, testBasisOrdinals);
-          if (!componentBasisOrdinalsAreAdmissibleForShape(testBasisOrdinals, testShape)) continue;
+          _tensorDofLayout->decodeLocalDofOrdinal(_rangeLayout, testShape, _rangeOrdering, localTestOrdinal, testBasisOrdinals);
 
           double contribution = 0.0;
           for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
@@ -613,7 +666,7 @@ namespace
                             * trialPointValues[flatPointOrdinal]
                             * testValue;
           }
-          localOutput[localTestOrdinal] += contribution;
+          localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, _tensorDofLayout)] += contribution;
         }
       }
     }
@@ -639,6 +692,8 @@ namespace
         auto localContext = _tensorDofLayout->skeletonContext(_domainVarName, _rangeVarName, entity);
         const auto &trialShape = localContext.trialShape();
         const auto &testShape  = localContext.testShape();
+        const auto trialTraversal = domainTraversalForSkeletonEntity(entity);
+        const auto testTraversal  = rangeTraversalForSkeletonEntity(entity);
 
         TraceEntityGeometryData geometryData = buildTraceEntityGeometryData(entity,
                                                                            term,
@@ -673,12 +728,11 @@ namespace
         }
 
         std::vector<double> trialPointValues(geometryData.tensorPointCount, 0.0);
-        for (IndexType localTrialOrdinal=0; localTrialOrdinal<_ambientDomainShape.totalDofs(); localTrialOrdinal++)
+        for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
         {
-          decodeDomainOrdinal(localTrialOrdinal, trialBasisOrdinals);
-          if (!componentBasisOrdinalsAreAdmissibleForShape(trialBasisOrdinals, trialShape)) continue;
+          _tensorDofLayout->decodeLocalDofOrdinal(_domainLayout, trialShape, _domainOrdering, localTrialOrdinal, trialBasisOrdinals);
 
-          const double trialCoefficient = localInput[localTrialOrdinal];
+          const double trialCoefficient = localInput[trialTraversal.globalIndexForLocalOrdinal(localTrialOrdinal, _tensorDofLayout)];
           if (trialCoefficient == 0.0) continue;
 
           for (int flatPointOrdinal=0; flatPointOrdinal<geometryData.tensorPointCount; flatPointOrdinal++)
@@ -703,10 +757,9 @@ namespace
           }
         }
 
-        for (IndexType localTestOrdinal=0; localTestOrdinal<_ambientRangeShape.totalDofs(); localTestOrdinal++)
+        for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
         {
-          decodeRangeOrdinal(localTestOrdinal, testBasisOrdinals);
-          if (!componentBasisOrdinalsAreAdmissibleForShape(testBasisOrdinals, testShape)) continue;
+          _tensorDofLayout->decodeLocalDofOrdinal(_rangeLayout, testShape, _rangeOrdering, localTestOrdinal, testBasisOrdinals);
 
           double contribution = 0.0;
 
@@ -734,7 +787,7 @@ namespace
                             * trialPointValues[flatPointOrdinal]
                             * (testParity * testValue);
           }
-          localOutput[localTestOrdinal] += contribution;
+          localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, _tensorDofLayout)] += contribution;
         }
       }
     }
@@ -836,12 +889,12 @@ namespace
 
     IndexType domainSize() const override
     {
-      return _domainGatherScatter.localDofCount(_ambientDomainShape);
+      return _domainGatherScatter.coefficientCount();
     }
 
     IndexType rangeSize() const override
     {
-      return _rangeGatherScatter.localDofCount(_ambientRangeShape);
+      return _rangeGatherScatter.coefficientCount();
     }
 
     TensorApplyPipelineDescription pipelineDescription() const override
@@ -854,8 +907,7 @@ namespace
     {
       validateInputVector(input);
 
-      std::vector<double> localInput;
-      _domainGatherScatter.gatherGlobalToLocal(input, _ambientDomainShape, localInput, 0);
+      const std::vector<double> &localInput = input;
 
       std::vector<double> localOutput(rangeSize(), 0.0);
       for (const auto &term : _bilinearForm->terms())
@@ -868,8 +920,7 @@ namespace
         }
       }
 
-      output.assign(rangeSize(), 0.0);
-      _rangeGatherScatter.scatterLocalToGlobal(localOutput, _ambientRangeShape, output, 0);
+      output = localOutput;
     }
   };
 }

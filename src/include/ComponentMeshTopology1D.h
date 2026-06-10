@@ -62,6 +62,7 @@ namespace Camellia
     const std::vector<ComponentCellID1D> &activeCellsForVertex(IndexType vertexIndex) const;
 
     bool containsCell(const ComponentCellID1D &cellID) const;
+    IndexType activeCellOrdinal(const ComponentCellID1D &cellID) const;
 
     int cellPolyOrder(const ComponentCellID1D &cellID) const;
     void setCellPolyOrder(const ComponentCellID1D &cellID, int polyOrder);

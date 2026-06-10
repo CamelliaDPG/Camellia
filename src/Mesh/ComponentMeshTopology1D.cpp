@@ -253,6 +253,14 @@ bool ComponentMeshTopology1D::containsCell(const ComponentCellID1D &cellID) cons
   return false;
 }
 
+IndexType ComponentMeshTopology1D::activeCellOrdinal(const ComponentCellID1D &cellID) const
+{
+  auto entry = _activeCellOrdinals.find(cellID);
+  TEUCHOS_TEST_FOR_EXCEPTION(entry == _activeCellOrdinals.end(), std::invalid_argument,
+                             "ComponentMeshTopology1D::activeCellOrdinal requires an active cell in the topology.");
+  return entry->second;
+}
+
 int ComponentMeshTopology1D::cellPolyOrder(const ComponentCellID1D &cellID) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!containsCell(cellID), std::invalid_argument,

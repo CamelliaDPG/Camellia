@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "TensorCoefficientMap.h"
 #include "Teuchos_TestForException.hpp"
 
 using namespace Camellia;
@@ -77,14 +78,14 @@ ComponentTransferOperator1DPtr TensorTransferOperator::componentTransfer(int com
 
 IndexType TensorTransferOperator::rowCount() const
 {
-  const auto shape = _fineLayout->ambientShape(_varName, _role);
-  return shape.totalDofs();
+  TensorCoefficientMap fineCoeffMap(_fineMesh, _fineLayout, _role, _varName);
+  return fineCoeffMap.coefficientCount();
 }
 
 IndexType TensorTransferOperator::colCount() const
 {
-  const auto shape = _coarseLayout->ambientShape(_varName, _role);
-  return shape.totalDofs();
+  TensorCoefficientMap coarseCoeffMap(_coarseMesh, _coarseLayout, _role, _varName);
+  return coarseCoeffMap.coefficientCount();
 }
 
 void TensorTransferOperator::apply(const std::vector<double> &input,
@@ -93,10 +94,9 @@ void TensorTransferOperator::apply(const std::vector<double> &input,
   TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(input.size()) != colCount(), std::invalid_argument,
                              "TensorTransferOperator::apply input vector size does not match operator column count.");
 
-  output.assign(rowCount(), 0.0);
-
   const auto coarseShape = _coarseLayout->ambientShape(_varName, _role);
   const auto fineShape   = _fineLayout->ambientShape(_varName, _role);
+  output.assign(fineShape.totalDofs(), 0.0);
   const int dims = componentCount();
 
   std::vector<IndexType> coarseStrides(dims,1), fineStrides(dims,1);
@@ -106,7 +106,7 @@ void TensorTransferOperator::apply(const std::vector<double> &input,
     fineStrides[d]   = fineStrides[d-1]   * fineShape.componentCardinality(d-1);
   }
 
-  for (IndexType fineOrdinal=0; fineOrdinal<rowCount(); fineOrdinal++)
+  for (IndexType fineOrdinal=0; fineOrdinal<fineShape.totalDofs(); fineOrdinal++)
   {
     std::vector<IndexType> fineComponentOrdinals(dims,0);
     IndexType remainder = fineOrdinal;
@@ -116,7 +116,7 @@ void TensorTransferOperator::apply(const std::vector<double> &input,
       remainder %= fineStrides[d];
     }
 
-    for (IndexType coarseOrdinal=0; coarseOrdinal<colCount(); coarseOrdinal++)
+    for (IndexType coarseOrdinal=0; coarseOrdinal<coarseShape.totalDofs(); coarseOrdinal++)
     {
       std::vector<IndexType> coarseComponentOrdinals(dims,0);
       IndexType coarseRemainder = coarseOrdinal;

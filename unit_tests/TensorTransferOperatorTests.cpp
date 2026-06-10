@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "TensorTransferOperator.h"
+#include "TensorCoefficientMap.h"
 #include "TensorDofLayout.h"
 #include "TensorMesh.h"
 #include "Var.h"
@@ -64,7 +65,7 @@ TEUCHOS_UNIT_TEST( TensorTransferOperator, LowerIndexedComponentsVaryFastestInTe
   std::vector<double> output;
   op.apply(input, output);
 
-  TEST_EQUALITY(output.size(), op.rowCount());
+  TEST_EQUALITY(output.size(), fineLayout->ambientShape("u", TENSOR_TRIAL_SPACE).totalDofs());
   bool someNonzero = false;
   for (double value : output)
   {
@@ -133,6 +134,22 @@ TEUCHOS_UNIT_TEST( TensorTransferOperator, ApplyProducesExpectedSizedOutput )
   std::vector<double> output;
   op.apply(input, output);
 
-  TEST_EQUALITY(output.size(), op.rowCount());
+  TEST_EQUALITY(output.size(), fineLayout->ambientShape("u", TENSOR_TRIAL_SPACE).totalDofs());
+}
+
+TEUCHOS_UNIT_TEST( TensorTransferOperator, RowAndColumnCountsMatchExplicitCoefficientContainers )
+{
+  auto coarseMesh = makeTensorMeshForTransferTests({ ActiveLeafSet1D({{0,0}}) }, { ActiveLeafSet1D({{0,0}}) }, 1);
+  auto fineMesh   = makeTensorMeshForTransferTests({ ActiveLeafSet1D({{1,0}, {1,1}}) }, { ActiveLeafSet1D({{1,0}, {1,1}}) }, 1);
+  auto coarseLayout = coarseMesh->createDofLayout();
+  auto fineLayout   = fineMesh->createDofLayout();
+
+  TensorTransferOperator op(coarseMesh, fineMesh, coarseLayout, fineLayout,
+                            TENSOR_TRIAL_SPACE, "u", COMPONENT_PROLONGATION);
+  TensorCoefficientMap coarseCoeffMap(coarseMesh, coarseLayout, TENSOR_TRIAL_SPACE, "u");
+  TensorCoefficientMap fineCoeffMap(fineMesh, fineLayout, TENSOR_TRIAL_SPACE, "u");
+
+  TEST_EQUALITY(op.colCount(), coarseCoeffMap.coefficientCount());
+  TEST_EQUALITY(op.rowCount(), fineCoeffMap.coefficientCount());
 }
 }
