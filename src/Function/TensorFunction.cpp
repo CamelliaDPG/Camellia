@@ -564,6 +564,31 @@ TensorFunctionPtr TensorFunction::componentCoordinate(int componentOrdinal)
   return Teuchos::rcp(new ComponentCoordinateTensorFunction(componentOrdinal));
 }
 
+TensorFunctionPtr TensorFunction::centeredMaxwellian1D(int velocityComponentOrdinal,
+                                                       double density,
+                                                       double mean,
+                                                       double temperature)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(velocityComponentOrdinal < 0, std::invalid_argument,
+                             "TensorFunction::centeredMaxwellian1D requires nonnegative velocity component ordinal.");
+  TEUCHOS_TEST_FOR_EXCEPTION(temperature <= 0.0, std::invalid_argument,
+                             "TensorFunction::centeredMaxwellian1D requires positive temperature.");
+
+  const double normalization = density / std::sqrt(2.0 * M_PI * temperature);
+  auto v = TensorFunction::componentCoordinate(velocityComponentOrdinal);
+  auto centered = v + TensorFunction::constant(-mean);
+  auto exponent = TensorFunction::constant(-0.5 / temperature) * centered * centered;
+  return TensorFunction::constant(normalization) * exp(exponent);
+}
+
+TensorFunctionPtr TensorFunction::shiftedMaxwellian1D(int velocityComponentOrdinal,
+                                                      double density,
+                                                      double shift,
+                                                      double temperature)
+{
+  return centeredMaxwellian1D(velocityComponentOrdinal, density, shift, temperature);
+}
+
 TensorFunctionPtr TensorFunction::withDependencySource(TensorFunctionPtr f,
                                                        const TensorFunctionDependencySource &dependencySource)
 {

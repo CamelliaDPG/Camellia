@@ -1,0 +1,359 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\title{Issue \#308 Development Plan\\
+Prototype First End-to-End 1X1T1V Tensor-Native Matrix-Free Operator Path}
+\author{}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+
+\section{Objective}
+
+The purpose of issue \#308 is to implement the first genuinely end-to-end tensor-native prototype for the mixed ultraweak Vlasov DPG formulation in the setting of one spatial dimension, one temporal dimension, and one velocity dimension.
+
+At the conclusion of \#307, the tensor-native stack already has most of the local and operator-side substrate needed for such a prototype. In particular, we now have:
+\begin{itemize}[leftmargin=2em]
+\item tensor-native topology and discretization support,
+\item a tensor-native coefficient/function layer,
+\item a descriptor-side tensor bilinear-form layer,
+\item finite-element-aware matrix-free volume realization,
+\item trace discretization and tensor-skeleton support,
+\item representative trace-aware local operator realization,
+\item and explicit coefficient indexing / traversal support that no longer treats one ambient variable-level tensor block as the primary operator-side carrier.
+\end{itemize}
+
+What we do \emph{not} yet have is a first coherent formulation-level tensor-native Vlasov path that uses those pieces together. We also do not yet have a real MPI-distributed coefficient ownership / communication implementation in the tensor-native operator path. The aim of this issue is therefore to move from infrastructure to the first true vertical slice.
+
+More specifically, the intended outcome is:
+\begin{quote}
+A first tensor-native 1X1T1V mixed ultraweak Vlasov prototype that supports representative volume and trace terms, tensor-native coefficient dependencies of the needed kinds, a modest GMRES-style manufactured-solution or patch-style solve, selected comparison against the current path, and a first real MPI-distributed coefficient management story.
+\end{quote}
+
+\section{Mathematical target}
+
+The intended formulation is the mixed ultraweak Vlasov DPG formulation described in the attached ``Getting Started with DPG'' note, specialized to the 1X1T1V setting.
+
+In particular, the representative bilinear-form structure should include the terms
+\[
+\langle \widehat{t}_n, w \rangle_{\partial K}
+-
+(v f, \partial_x w)_K
+-
+(f, \partial_t w)_K
+-
+(E f, \partial_v w)_K.
+\]
+
+Here:
+\begin{itemize}[leftmargin=2em]
+\item \(f(x,t,v)\) is the volume trial field,
+\item \(\widehat{t}_n\) is the trace / skeleton trial variable,
+\item and \(w\) is the test variable.
+\end{itemize}
+
+The coefficient structure is equally important. The first prototype should explicitly exercise the following cases:
+\begin{itemize}[leftmargin=2em]
+\item \(v\) as a coefficient depending only on the velocity component,
+\item \(E(x,t)\) as a coefficient depending only on the spatial/time components,
+\item and a Maxwellian-like coefficient depending only on the velocity component.
+\end{itemize}
+
+The issue is not intended to reproduce all of the current legacy Vlasov machinery in one step. Rather, the goal is to implement a first tensor-native path that is faithful to the mixed ultraweak formulation structure and sufficiently complete to support a small solve and meaningful correctness checks.
+
+\section{Design interpretation after clarification}
+
+Several scope decisions are particularly important here.
+
+\begin{enumerate}[leftmargin=2em]
+\item \textbf{This issue is stronger than an operator-only vertical slice.} The requested end state includes a small GMRES-style solve, not just matrix-free operator application.
+
+\item \textbf{Trace terms are required, not optional.} A volume-only prototype would be too weak for the intended formulation target.
+
+\item \textbf{The comparison story is dual.} Tensor-native explicit references should remain the primary validation anchor, but we should also include a modest selected comparison against the current path.
+
+\item \textbf{The coefficient layer must demonstrate the relevant dependency patterns explicitly.} In particular, we should not hide the intended 1X1T1V coefficient structure behind ad hoc test-only logic.
+
+\item \textbf{MPI-distributed coefficient management is part of the issue.} Issue \#307 prepared the abstraction boundary for this, but did not yet implement true distributed ownership or communication.
+\end{enumerate}
+
+The final point deserves emphasis. The present tensor-native path is MPI-shaped in certain interface respects, and the tests run under MPI, but there is not yet a real distributed coefficient ownership / communication layer for tensor-native operator use. Since all component meshes in the present issue are one-dimensional, this is a natural point at which to add a deliberately modest but genuine first implementation.
+
+\section{Guiding design principle}
+
+The main principle for this issue should be the following:
+
+\begin{quote}
+The first 1X1T1V tensor-native Vlasov prototype should remain formulation-faithful and tensor-native throughout, while introducing only the minimum additional helper and distributed-coefficient machinery needed for a coherent end-to-end path.
+\end{quote}
+
+Equivalently:
+\begin{itemize}[leftmargin=2em]
+\item we should not collapse back to legacy formulation or legacy global-layout assumptions in order to obtain the first solve,
+\item we should not over-design a full future distributed algebra layer before the first distributed prototype is needed,
+\item and we should keep the first vertical slice narrow enough that its correctness can be tested explicitly and understood clearly.
+\end{itemize}
+
+\section{Scope and intended end state}
+
+By the end of this issue, we want all of the following to be true.
+
+\begin{enumerate}[leftmargin=2em]
+\item There exists a concrete tensor-native 1X1T1V prototype problem setup for the mixed ultraweak Vlasov formulation.
+
+\item The tensor-native bilinear-form / operator stack can represent and realize the representative term set
+\[
+\langle \widehat{t}_n, w \rangle_{\partial K}
+-
+(v f, \partial_x w)_K
+-
+(f, \partial_t w)_K
+-
+(E f, \partial_v w)_K.
+\]
+
+\item A modest tensor-native Maxwellian helper family exists and is used in the prototype tests or setup.
+
+\item The tensor-native coefficient layer is exercised explicitly for
+\begin{itemize}[leftmargin=2em]
+\item single-component dependence,
+\item subset-of-components dependence,
+\item and the physically motivated 1X1T1V coefficient patterns of the prototype.
+\end{itemize}
+
+\item The tensor-native path supports a small GMRES-style solve on a manufactured-solution or patch-style problem.
+
+\item The tensor-native operator / coefficient path has a first real MPI-distributed ownership and communication implementation sufficient for representative distributed tests.
+
+\item Focused tests compare the tensor-native realization both against explicit tensor-native references and against selected quantities from the current path.
+\end{enumerate}
+
+At the same time, the issue should remain bounded. We are \emph{not} trying to solve all larger follow-on directions here.
+
+\section{Explicit non-goals}
+
+The following should be treated as out of scope for this issue:
+\begin{itemize}[leftmargin=2em]
+\item PAMatrix realization,
+\item filtered or subset tensor hierarchy support,
+\item full time-slab orchestration,
+\item and a full reimplementation of the current placeholder transfer-apply path.
+\end{itemize}
+
+Similarly, while the issue should add a first distributed coefficient path, it should do so in a simple, 1D-component-friendly form rather than attempting to settle all future distributed design questions.
+
+\section{Proposed implementation strategy}
+
+\subsection{Step 1: Introduce a small tensor-native Vlasov prototype helper layer for tests}
+
+A first practical need is readability. The current tensor-native substrate is flexible enough that tests can already construct representative volume and trace setups, but without additional structure the resulting issue would likely become hard to read and harder to extend.
+
+We should therefore add a small helper layer, probably test-oriented, for tasks such as:
+\begin{itemize}[leftmargin=2em]
+\item constructing a standard 1X1T1V tensor mesh,
+\item registering the representative volume trial variable, trace trial variable, and test variable,
+\item constructing the representative mixed ultraweak bilinear-form terms,
+\item building standard coefficient functions such as \(v(v)\), \(E(x,t)\), and Maxwellians,
+\item and assembling a modest manufactured-solution or patch-style reference problem.
+\end{itemize}
+
+This should remain lightweight. The point is not to add a full new formulation layer, but to keep the issue itself legible and to prepare a natural scaffold for whatever follows next.
+
+\subsection{Step 2: Extend the coefficient layer with a Maxwellian helper family}
+
+The issue explicitly calls for a Maxwellian function definition. The most natural interpretation is a modest helper family inside or immediately adjacent to the tensor-native coefficient layer.
+
+A good minimum target is:
+\begin{itemize}[leftmargin=2em]
+\item centered Maxwellian in one velocity dimension,
+\item shifted Maxwellian in one velocity dimension,
+\item and explicit parameters representing amplitude/density and temperature/variance-like scale.
+\end{itemize}
+
+The implementation may remain concretely 1V in substance, but the helper interface should be shaped so that extension to multiple velocity dimensions later remains natural rather than awkward.
+
+\subsection{Step 3: Represent the first formulation-faithful Vlasov term subset cleanly}
+
+The present matrix-free tensor operator can already realize representative volume and trace-aware terms, but the first Vlasov vertical slice should make the intended mixed ultraweak structure more direct.
+
+This likely means either:
+\begin{itemize}[leftmargin=2em]
+\item adding a few small convenience builders around the existing bilinear-form descriptors, or
+\item extending the current tests/helpers so that the intended derivative-on-test and trace terms are constructed in a clearer and more formulation-facing way.
+\end{itemize}
+
+The main requirement is that the resulting prototype not look like an arbitrary collection of unrelated low-level terms. It should read clearly as the 1X1T1V mixed ultraweak Vlasov subset.
+
+\subsection{Step 4: Add a first distributed tensor-native coefficient ownership / communication layer}
+
+This is likely the most architecturally significant new work in the issue.
+
+Issue \#307 already introduced:
+\begin{itemize}[leftmargin=2em]
+\item \texttt{TensorCoefficientMap},
+\item \texttt{TensorCoefficientTraversal},
+\item and traversal-aware gather/scatter entry points.
+\end{itemize}
+
+The next natural step is to use those traversal semantics for the first actual distributed coefficient-management path. Since the present prototype uses only one-dimensional component meshes, we should keep the first ownership model simple and structured. The expected shape is something like:
+\begin{itemize}[leftmargin=2em]
+\item contiguous owned coefficient portions per component factor,
+\item induced tensor-product ownership for tensor-native coefficient containers,
+\item explicit owned and nonowned-needed coefficient sets for local operator traversals,
+\item import of nonowned needed coefficients prior to apply,
+\item and corresponding scatter or accumulation semantics for outputs where needed.
+\end{itemize}
+
+The implementation should be real enough that distributed tests can exercise it meaningfully, but not so ambitious that it becomes a major distributed-algebra redesign.
+
+\subsection{Step 5: Add the first small GMRES-style solve path}
+
+The issue requires a small solve, and the user specifically suggested a GMRES-style solve on a manufactured-solution or patch-style problem.
+
+The most natural interpretation is not a full legacy-style solve workflow, but rather:
+\begin{itemize}[leftmargin=2em]
+\item a modest realized operator representing the first 1X1T1V mixed ultraweak prototype,
+\item a manufactured or patch-style target problem chosen so that expected behavior is controllable,
+\item and a small GMRES-style solve over the tensor-native coefficient container story.
+\end{itemize}
+
+The solve should be strong enough to demonstrate that the path is genuinely end-to-end, but modest enough that correctness can still be pinned down in unit-test style.
+
+\subsection{Step 6: Validate against both explicit reference and selected current-path behavior}
+
+The tensor-native explicit-reference tests should remain the primary anchor because they make it easy to isolate operator-level and realization-level correctness.
+
+However, the issue also calls for a selected comparison against the current path. The most likely useful target is a narrow 1X1T1V case that mirrors a simplified version of the current Vlasov formulation behavior closely enough to compare either:
+\begin{itemize}[leftmargin=2em]
+\item operator actions,
+\item solve outputs,
+\item or a small set of carefully chosen observables.
+\end{itemize}
+
+It is not necessary that this comparison become a full legacy-driver clone. A modest but concrete comparison should be enough for the issue.
+
+\section{Files and subsystems likely involved}
+
+The exact file list may evolve, but we should expect work at least in the following subsystems.
+
+\subsection{Likely existing tensor-native files to modify}
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{src/include/TensorFunction.h}
+\item \texttt{src/include/TensorBilinearForm.h}
+\item \texttt{src/include/TensorBilinearFormBuilder.h}
+\item \texttt{src/include/TensorGatherScatter.h}
+\item \texttt{src/include/TensorCoefficientMap.h}
+\item \texttt{src/include/TensorCoefficientTraversal.h}
+\item \texttt{src/include/TensorOperator.h}
+\item \texttt{src/Problem/TensorBilinearForm.cpp}
+\item \texttt{src/Problem/TensorBilinearFormBuilder.cpp}
+\item \texttt{src/Problem/TensorOperator.cpp}
+\item \texttt{src/Mesh/TensorGatherScatter.cpp}
+\item \texttt{src/Mesh/TensorCoefficientMap.cpp}
+\item \texttt{src/Mesh/TensorCoefficientTraversal.cpp}
+\end{itemize}
+
+\subsection{Likely test files to extend}
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{unit\_tests/TensorOperatorTests.cpp}
+\item \texttt{unit\_tests/TensorGatherScatterTests.cpp}
+\item likely one or more new focused tensor-native Vlasov prototype test files, if readability warrants it.
+\end{itemize}
+
+\subsection{Likely reference files to consult}
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{src/Formulations/VlasovSpaceTimeFormulation.cpp}
+\item \texttt{drivers/papers/VlasovPoissonSpaceTime/LandauSpaceTime.cpp}
+\item the attached ``Getting Started with DPG'' note.
+\end{itemize}
+
+\section{Validation strategy}
+
+The validation strategy should be incremental and multi-layered.
+
+\subsection{1. Coefficient-layer validation}
+
+Add focused tests for:
+\begin{itemize}[leftmargin=2em]
+\item centered and shifted Maxwellian helper behavior,
+\item velocity-only dependency,
+\item space-time-only dependency,
+\item and any relevant composed coefficient metadata needed for the prototype.
+\end{itemize}
+
+\subsection{2. Operator-level explicit reference validation}
+
+Extend the current operator-reference style so that the representative 1X1T1V mixed ultraweak term subset is checked against explicit reference actions. This should likely include:
+\begin{itemize}[leftmargin=2em]
+\item time-derivative contribution,
+\item spatial streaming contribution,
+\item velocity-derivative acceleration contribution,
+\item and representative trace contribution.
+\end{itemize}
+
+\subsection{3. Distributed coefficient-path validation}
+
+Add MPI-aware tests that are substantive, not merely rank-tolerant. In particular, we should verify that:
+\begin{itemize}[leftmargin=2em]
+\item owned coefficient counts are correct,
+\item imports of nonowned needed coefficients are correct,
+\item distributed traversal/gather/apply behavior agrees with the single-process reference semantics,
+\item and representative distributed solves or applies produce the expected results.
+\end{itemize}
+
+\subsection{4. Small solve validation}
+
+The manufactured-solution or patch-style solve should be checked against a known reference answer or against expected residual/error tolerances. Since this is a first prototype, the solve target should be chosen for clarity rather than physical richness.
+
+\subsection{5. Selected current-path comparison}
+
+Add at least one modest comparison against the current path. The comparison may be narrower than the tensor-native explicit-reference tests, but it should be specific enough to support confidence that the tensor-native prototype is not merely internally self-consistent.
+
+\section{Main risks and pressure points}
+
+The main implementation risks appear to be the following.
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{The first distributed coefficient layer may be easy to over-design.} We should remain disciplined and implement the simplest ownership / communication model that genuinely works for the 1X1T1V prototype.
+
+\item \textbf{The first solve path may tempt us into recreating too much legacy solver structure.} The issue does not require that. A modest GMRES-style solve is the right target.
+
+\item \textbf{Trace semantics remain subtle.} The current slice-based tensor skeleton is appropriate for realization, but boundary-tag semantics and coefficient-sharing semantics must remain coherent as we move into a more formulation-facing prototype.
+
+\item \textbf{Current-path comparison can easily expand in scope.} We should keep that comparison selective and carefully bounded.
+\end{itemize}
+
+\section{Conditions that would force a stop-and-ask event}
+
+Under the present workflow, we should stop and ask only if one of the following occurs:
+\begin{itemize}[leftmargin=2em]
+\item additional required files or project context turn out to be missing,
+\item or the implementation appears to require a substantially larger architectural deviation than the clarified issue scope supports.
+\end{itemize}
+
+At present, neither condition appears active. The available code and design notes appear sufficient to begin implementation planning and, after the issue text and this report are accepted, to proceed into autonomous implementation.
+
+\section{Planned outcome}
+
+If the issue proceeds as intended, the main result will be:
+\begin{itemize}[leftmargin=2em]
+\item a first end-to-end tensor-native 1X1T1V mixed ultraweak Vlasov prototype,
+\item representative realized volume and trace terms in the current tensor-native matrix-free operator stack,
+\item a modest tensor-native Maxwellian helper family,
+\item a first genuine MPI-distributed coefficient ownership / communication path for tensor-native operator use,
+\item a small GMRES-style manufactured-solution or patch-style solve,
+\item and focused correctness tests that compare against both explicit tensor-native references and selected current-path behavior.
+\end{itemize}
+
+The architectural significance of this issue is that it should turn the existing tensor-native substrate into the first real formulation-level path, while also forcing the first actual distributed coefficient-management implementation. This makes it a natural bridge between the present infrastructure work and whatever broader tensor-native formulation, multigrid, and performance work follows.
+
+\end{document}

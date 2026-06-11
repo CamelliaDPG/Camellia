@@ -13,6 +13,10 @@
 #include "CubatureFactory.h"
 #include "Intrepid2_CubatureDirectLineGauss.hpp"
 #include "Var.h"
+#include "VlasovSpaceTimeFormulation.h"
+
+#include <cmath>
+#include <numeric>
 
 using namespace Camellia;
 
@@ -73,6 +77,30 @@ TensorVarPtr makeFluxTensorVar(const std::string &name, int traceComponentOrdina
   return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt}, traceComponentOrdinal));
 }
 
+TensorVarPtr makeFieldTensorVar1X1T1V(const std::string &name)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{vx, vt, vv}));
+}
+
+TensorVarPtr makeTraceTensorVar1X1T1V(const std::string &name, int traceComponentOrdinal)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt, vv}, traceComponentOrdinal));
+}
+
+TensorVarPtr makeFluxTensorVar1X1T1V(const std::string &name, int traceComponentOrdinal)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt, vv}, traceComponentOrdinal));
+}
+
 TensorMeshPtr makeTensorMeshForOperatorTests(bool nonuniformFirstComponent = false)
 {
   auto component0 = nonuniformFirstComponent
@@ -97,6 +125,31 @@ TensorMeshPtr makeTensorMeshForTraceOperatorTests(bool nonuniformFirstComponent 
   return tensorMesh;
 }
 
+TensorMeshPtr makeTensorMeshForOperatorTests1X1T1V(bool nonuniformVelocityComponent = false)
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto component2 = nonuniformVelocityComponent
+      ? Teuchos::rcp(new ComponentMeshTopology1D({-2.0, 2.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 3))
+      : Teuchos::rcp(new ComponentMeshTopology1D({-2.0, 2.0}, { ActiveLeafSet1D({{0,0}}) }, false, 3));
+
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 1));
+
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar1X1T1V("f"), Teuchos::null, std::vector<int>{0,0,0})));
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar1X1T1V("w"), Teuchos::null, std::vector<int>{0,0,0})));
+  return tensorMesh;
+}
+
+TensorMeshPtr makeTensorMeshForTraceOperatorTests1X1T1V(bool nonuniformVelocityComponent = false)
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests1X1T1V(nonuniformVelocityComponent);
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFluxTensorVar1X1T1V("tn", 1), Teuchos::null, std::vector<int>{0,0,0})));
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeTraceTensorVar1X1T1V("what", 1), Teuchos::null, std::vector<int>{0,0,0})));
+  return tensorMesh;
+}
+
 TensorBilinearFormPtr makeSimpleBilinearFormForOperatorTests()
 {
   auto form = Teuchos::rcp(new TensorBilinearForm("simple"));
@@ -105,6 +158,33 @@ TensorBilinearFormPtr makeSimpleBilinearFormForOperatorTests()
                                    TensorComponentOperatorDescriptor::valueOnly(2),
                                    TensorComponentOperatorDescriptor::valueOnly(2),
                                    TensorFunction::constant(1.0)));
+  return form;
+}
+
+TensorBilinearFormPtr makeVlasovLikeBilinearForm1X1T1V()
+{
+  auto form = Teuchos::rcp(new TensorBilinearForm("vlasov-1x1t1v"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar1X1T1V("f"),
+                                   makeFieldTensorVar1X1T1V("w"),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::singleDerivative(3, 0),
+                                   TensorFunction::constant(-1.0) * TensorFunction::componentCoordinate(2)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar1X1T1V("f"),
+                                   makeFieldTensorVar1X1T1V("w"),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::singleDerivative(3, 1),
+                                   TensorFunction::constant(-1.0)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar1X1T1V("f"),
+                                   makeFieldTensorVar1X1T1V("w"),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::singleDerivative(3, 2),
+                                   TensorFunction::constant(-1.0) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
+  form->addTerm(TensorBilinearTerm(makeFluxTensorVar1X1T1V("tn", 1),
+                                   makeFieldTensorVar1X1T1V("w"),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorFunction::constant(1.0),
+                                   TENSOR_BILINEAR_TERM_BOUNDARY));
   return form;
 }
 
@@ -684,6 +764,105 @@ void compareVectors(const std::vector<double> &actual,
   TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO( actual, expected, relTol, absTol );
 }
 
+double dotProduct(const std::vector<double> &a, const std::vector<double> &b)
+{
+  double result = 0.0;
+  for (size_t i=0; i<a.size(); i++)
+  {
+    result += a[i] * b[i];
+  }
+  return result;
+}
+
+double vectorL2Norm(const std::vector<double> &a)
+{
+  return std::sqrt(dotProduct(a, a));
+}
+
+std::vector<std::vector<double>> operatorColumnImages(const TensorOperatorPtr &op)
+{
+  std::vector<std::vector<double>> columns(op->domainSize());
+  for (IndexType j=0; j<op->domainSize(); j++)
+  {
+    std::vector<double> basisVector(op->domainSize(), 0.0);
+    basisVector[j] = 1.0;
+    op->apply(basisVector, columns[j]);
+  }
+  return columns;
+}
+
+std::vector<std::vector<double>> buildDenseNormalMatrix(const std::vector<std::vector<double>> &columnImages)
+{
+  const IndexType domainSize = static_cast<IndexType>(columnImages.size());
+  std::vector<std::vector<double>> ata(domainSize, std::vector<double>(domainSize, 0.0));
+  for (IndexType i=0; i<domainSize; i++)
+  {
+    for (IndexType j=0; j<domainSize; j++)
+    {
+      ata[i][j] = dotProduct(columnImages[i], columnImages[j]);
+    }
+  }
+  return ata;
+}
+
+std::vector<double> buildDenseNormalRhs(const std::vector<std::vector<double>> &columnImages,
+                                        const std::vector<double> &rhs)
+{
+  std::vector<double> atb(columnImages.size(), 0.0);
+  for (IndexType j=0; j<static_cast<IndexType>(columnImages.size()); j++)
+  {
+    atb[j] = dotProduct(columnImages[j], rhs);
+  }
+  return atb;
+}
+
+std::vector<double> solveDenseLinearSystem(std::vector<std::vector<double>> A,
+                                           std::vector<double> b)
+{
+  const int n = static_cast<int>(b.size());
+  for (int k=0; k<n; k++)
+  {
+    int pivotRow = k;
+    double pivotAbs = std::abs(A[k][k]);
+    for (int i=k+1; i<n; i++)
+    {
+      const double entryAbs = std::abs(A[i][k]);
+      if (entryAbs > pivotAbs)
+      {
+        pivotAbs = entryAbs;
+        pivotRow = i;
+      }
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(pivotAbs < 1e-14, std::invalid_argument,
+                               "solveDenseLinearSystem encountered a numerically singular system.");
+    if (pivotRow != k)
+    {
+      std::swap(A[k], A[pivotRow]);
+      std::swap(b[k], b[pivotRow]);
+    }
+
+    const double pivot = A[k][k];
+    for (int j=k; j<n; j++)
+    {
+      A[k][j] /= pivot;
+    }
+    b[k] /= pivot;
+
+    for (int i=0; i<n; i++)
+    {
+      if (i == k) continue;
+      const double factor = A[i][k];
+      if (factor == 0.0) continue;
+      for (int j=k; j<n; j++)
+      {
+        A[i][j] -= factor * A[k][j];
+      }
+      b[i] -= factor * b[k];
+    }
+  }
+  return b;
+}
+
 TEUCHOS_UNIT_TEST( TensorOperator, StandardMatrixFreePipelineContainsExpectedStages )
 {
   auto pipeline = TensorApplyPipelineDescription::standardMatrixFreePipeline();
@@ -1182,5 +1361,129 @@ TEUCHOS_UNIT_TEST( TensorOperator, TraceAwareBoundaryOperatorSupportsPNonuniform
   auto expected = applyReferenceBoundaryOperator(tensorMesh, dofLayout, form, "uhat", "v", input);
 
   compareVectors(actual, expected, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, MixedUltraweakVlasov1X1T1VApplyMatchesExplicitReference )
+{
+  auto tensorMesh = makeTensorMeshForTraceOperatorTests1X1T1V(false);
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto form = makeVlasovLikeBilinearForm1X1T1V();
+
+  MatrixFreeTensorOperatorFactory factory;
+
+  auto volumeOp = factory.build(tensorMesh, dofLayout, form,
+                                TENSOR_TRIAL_SPACE, "f",
+                                TENSOR_TEST_SPACE,  "w");
+  auto traceOp = factory.build(tensorMesh, dofLayout, form,
+                               TENSOR_TRIAL_SPACE, "tn",
+                               TENSOR_TEST_SPACE,  "w");
+
+  std::vector<double> fieldInput(volumeOp->domainSize(), 0.0);
+  for (IndexType i=0; i<volumeOp->domainSize(); i++) fieldInput[i] = 0.25 + 0.1 * i;
+
+  std::vector<double> traceInput(traceOp->domainSize(), 0.0);
+  for (IndexType i=0; i<traceOp->domainSize(); i++) traceInput[i] = -0.5 + 0.2 * i;
+
+  std::vector<double> actualVolume, actualTrace;
+  volumeOp->apply(fieldInput, actualVolume);
+  traceOp->apply(traceInput, actualTrace);
+
+  auto expectedVolume = applyReferenceOperator(tensorMesh, dofLayout, form, "f", "w", fieldInput);
+  auto expectedTrace  = applyReferenceBoundaryOperator(tensorMesh, dofLayout, form, "tn", "w", traceInput);
+
+  compareVectors(actualVolume, expectedVolume, out, success, 1e-11, 1e-14);
+  compareVectors(actualTrace, expectedTrace, out, success, 1e-11, 1e-14);
+
+  std::vector<double> combinedActual(actualVolume.size(), 0.0);
+  std::vector<double> combinedExpected(expectedVolume.size(), 0.0);
+  TEST_EQUALITY(combinedActual.size(), actualTrace.size());
+  for (size_t i=0; i<combinedActual.size(); i++)
+  {
+    combinedActual[i] = actualVolume[i] + actualTrace[i];
+    combinedExpected[i] = expectedVolume[i] + expectedTrace[i];
+  }
+  compareVectors(combinedActual, combinedExpected, out, success, 1e-11, 1e-14);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, ManufacturedPatchSolveForVlasovLike1X1T1VFieldOperatorRecoversTrialCoefficients )
+{
+  auto tensorMesh = makeTensorMeshForTraceOperatorTests1X1T1V(false);
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = makeVlasovLikeBilinearForm1X1T1V();
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto volumeOp = factory.build(tensorMesh, dofLayout, form,
+                                TENSOR_TRIAL_SPACE, "f",
+                                TENSOR_TEST_SPACE,  "w");
+
+  std::vector<double> manufactured(volumeOp->domainSize(), 0.0);
+  for (IndexType i=0; i<volumeOp->domainSize(); i++)
+  {
+    manufactured[i] = ((i % 3) == 0) ? 1.0 : (((i % 3) == 1) ? -0.25 : 0.5);
+  }
+
+  std::vector<double> rhs;
+  volumeOp->apply(manufactured, rhs);
+
+  auto columnImages = operatorColumnImages(volumeOp);
+  auto denseNormalMatrix = buildDenseNormalMatrix(columnImages);
+  auto denseNormalRhs = buildDenseNormalRhs(columnImages, rhs);
+  auto recovered = solveDenseLinearSystem(denseNormalMatrix, denseNormalRhs);
+
+  compareVectors(recovered, manufactured, out, success, 1e-10, 1e-12);
+
+  std::vector<double> recoveredResidual;
+  volumeOp->apply(recovered, recoveredResidual);
+  for (size_t i=0; i<recoveredResidual.size(); i++)
+  {
+    recoveredResidual[i] -= rhs[i];
+  }
+  TEST_ASSERT(vectorL2Norm(recoveredResidual) < 1e-10);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, VlasovLike1X1T1VPrototypeMatchesLegacyRepresentativeTermStructure )
+{
+  auto form = makeVlasovLikeBilinearForm1X1T1V();
+
+  TEST_EQUALITY(form->termCount(), 4);
+  TEST_EQUALITY(form->term(0).trialVar()->name(), "f");
+  TEST_EQUALITY(form->term(0).testVar()->name(),  "w");
+  TEST_EQUALITY(form->term(3).trialVar()->name(), "tn");
+
+  TEST_ASSERT(form->term(0).testOperator().takesDerivativeInComponent(0));
+  TEST_ASSERT(form->term(1).testOperator().takesDerivativeInComponent(1));
+  TEST_ASSERT(form->term(2).testOperator().takesDerivativeInComponent(2));
+  TEST_ASSERT(form->term(3).isBoundaryTerm());
+
+  TEST_ASSERT(form->term(0).coefficient()->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(form->term(1).coefficient()->dependencyScope().isEmpty());
+  TEST_ASSERT(form->term(2).coefficient()->dependencyScope().dependsOnComponent(0));
+  TEST_ASSERT(form->term(2).coefficient()->dependencyScope().dependsOnComponent(1));
+  TEST_ASSERT(!form->term(2).coefficient()->dependencyScope().dependsOnComponent(2));
+
+  TEST_ASSERT(form->term(0).coefficient()->displayString().find("x_2") != std::string::npos);
+  TEST_ASSERT(form->term(2).coefficient()->displayString().find("x_0") != std::string::npos);
+  TEST_ASSERT(form->term(2).coefficient()->displayString().find("x_1") != std::string::npos);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, MaxwellianHelperFitsRepresentative1X1T1VCoefficientStory )
+{
+  auto maxwellian = TensorFunction::shiftedMaxwellian1D(2, 1.0, 0.25, 0.5);
+  auto streamingWeight = TensorFunction::componentCoordinate(2) * maxwellian;
+  auto accelerationWeight = (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1)) * maxwellian;
+
+  TEST_ASSERT(streamingWeight->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(!streamingWeight->dependencyScope().dependsOnComponent(0));
+  TEST_ASSERT(!streamingWeight->dependencyScope().dependsOnComponent(1));
+
+  TEST_ASSERT(accelerationWeight->dependencyScope().dependsOnComponent(0));
+  TEST_ASSERT(accelerationWeight->dependencyScope().dependsOnComponent(1));
+  TEST_ASSERT(accelerationWeight->dependencyScope().dependsOnComponent(2));
+
+  std::vector<double> zeroVelocityPoint{0.0, 0.0, 0.0};
+  std::vector<double> shiftedPoint{0.5, -0.25, 0.75};
+  TEST_ASSERT(streamingWeight->value(zeroVelocityPoint) == 0.0);
+  TEST_ASSERT(accelerationWeight->value(shiftedPoint) != 0.0);
 }
 }

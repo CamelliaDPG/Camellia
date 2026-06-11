@@ -105,6 +105,19 @@ namespace Camellia
 
     std::vector<IndexType> indicesForVolumeCell(const TensorMeshTopology::TensorCellTuple &cellTuple) const;
     std::vector<IndexType> indicesForSkeletonEntity(const TensorMeshTopology::TensorSkeletonEntity &entity) const;
+
+    std::vector<IndexType> ownedIndicesForRank(int rankOrdinal, int rankCount) const;
+    std::pair<IndexType,IndexType> ownedRangeForRank(int rankOrdinal, int rankCount) const;
+
+    std::vector<IndexType> neededIndicesForVolumeCell(const TensorMeshTopology::TensorCellTuple &cellTuple,
+                                                      int rankOrdinal,
+                                                      int rankCount) const;
+    std::vector<IndexType> neededIndicesForSkeletonEntity(const TensorMeshTopology::TensorSkeletonEntity &entity,
+                                                          int rankOrdinal,
+                                                          int rankCount) const;
+    std::vector<IndexType> nonownedNeededIndices(const TensorCoefficientTraversal &traversal,
+                                                 int rankOrdinal,
+                                                 int rankCount) const;
   };
 }
 

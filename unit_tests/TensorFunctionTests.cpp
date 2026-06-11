@@ -2,6 +2,8 @@
 
 #include "TensorFunction.h"
 
+#include <cmath>
+
 using namespace Camellia;
 
 namespace
@@ -217,5 +219,37 @@ TEUCHOS_UNIT_TEST( TensorFunction, UnaryCompositionPreservesDependencySources )
   TEST_ASSERT(g->hasSolutionDependencies());
   TEST_EQUALITY(g->dependencySources().size(), 1);
   TEST_EQUALITY(g->dependencySources()[0], TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, "E"));
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, CenteredMaxwellianDependsOnlyOnVelocityComponent )
+{
+  auto maxwellian = TensorFunction::centeredMaxwellian1D(2, 1.0, 0.0, 1.0);
+  TEST_ASSERT(maxwellian->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(!maxwellian->dependencyScope().dependsOnComponent(0));
+  TEST_ASSERT(!maxwellian->dependencyScope().dependsOnComponent(1));
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, CenteredMaxwellianEvaluatesExpectedValue )
+{
+  auto maxwellian = TensorFunction::centeredMaxwellian1D(2, 2.0, 0.5, 4.0);
+  std::vector<double> coords{1.0, -3.0, 0.5};
+  const double expected = 2.0 / std::sqrt(2.0 * M_PI * 4.0);
+  TEST_FLOATING_EQUALITY(maxwellian->value(coords), expected, 1e-14);
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, ShiftedMaxwellianIsCenteredAtRequestedShift )
+{
+  auto maxwellian = TensorFunction::shiftedMaxwellian1D(2, 1.0, 1.25, 0.5);
+  std::vector<double> atCenter{0.0, 0.0, 1.25};
+  std::vector<double> offCenter{0.0, 0.0, 1.75};
+  TEST_ASSERT(maxwellian->value(atCenter) > maxwellian->value(offCenter));
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, MaxwellianDerivativeVanishesAtCenter )
+{
+  auto maxwellian = TensorFunction::centeredMaxwellian1D(2, 1.0, -0.5, 1.0);
+  auto derivative = maxwellian->derivativeFunction(2);
+  std::vector<double> atCenter{0.0, 0.0, -0.5};
+  TEST_FLOATING_EQUALITY(derivative->value(atCenter), 0.0, 1e-12);
 }
 }

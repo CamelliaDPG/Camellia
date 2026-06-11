@@ -153,3 +153,33 @@ std::vector<TensorCoefficientBlock> TensorCoefficientTraversal::fastestComponent
   }
   return blocks;
 }
+
+bool TensorCoefficientTraversal::isContiguous() const
+{
+  if (localDofCount() <= 1) return true;
+  if (_shape.componentCount() == 0) return true;
+  return hasFastestComponentContiguousRuns() && (_shape.componentCardinality(0) == localDofCount());
+}
+
+std::vector<TensorCoefficientBlock> TensorCoefficientTraversal::contiguousBlocks(const TensorDofLayoutPtr &tensorDofLayout) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorDofLayout == Teuchos::null, std::invalid_argument,
+                             "TensorCoefficientTraversal::contiguousBlocks requires a non-null TensorDofLayout.");
+  if (localDofCount() == 0) return {};
+  if (isContiguous())
+  {
+    return {TensorCoefficientBlock(globalIndexForLocalOrdinal(0, tensorDofLayout), 1, localDofCount())};
+  }
+  if (hasFastestComponentContiguousRuns())
+  {
+    return fastestComponentBlocks(tensorDofLayout);
+  }
+
+  std::vector<TensorCoefficientBlock> blocks;
+  blocks.reserve(static_cast<size_t>(localDofCount()));
+  for (IndexType localOrdinal=0; localOrdinal<localDofCount(); localOrdinal++)
+  {
+    blocks.push_back(TensorCoefficientBlock(globalIndexForLocalOrdinal(localOrdinal, tensorDofLayout), 1, 1));
+  }
+  return blocks;
+}

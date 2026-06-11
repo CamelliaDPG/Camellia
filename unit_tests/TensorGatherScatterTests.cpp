@@ -25,6 +25,22 @@ TensorVarPtr makeTraceTensorVar(const std::string &name, int traceComponentOrdin
   return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt}, traceComponentOrdinal));
 }
 
+TensorVarPtr makeFieldTensorVar1X1T1V(const std::string &name)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{vx, vt, vv}));
+}
+
+TensorVarPtr makeFluxTraceTensorVar1X1T1V(const std::string &name, int traceComponentOrdinal)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt, vv}, traceComponentOrdinal));
+}
+
 TensorMeshPtr makeTensorMeshForGatherScatterTests()
 {
   auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
@@ -60,6 +76,25 @@ TensorMeshPtr makeTensorMeshForTraceGatherScatterTests()
 
   tensorMesh->addTrialDiscretization(trialDisc);
   tensorMesh->addTestDiscretization(testDisc);
+  return tensorMesh;
+}
+
+TensorMeshPtr makeTensorMeshForGatherScatterTests1X1T1V()
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-2.0, 2.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 3));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 1));
+
+  auto fieldVar = makeFieldTensorVar1X1T1V("f");
+  auto traceVar = makeFluxTraceTensorVar1X1T1V("tn", 1);
+  auto testVar = makeFieldTensorVar1X1T1V("w");
+
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(fieldVar, Teuchos::null, std::vector<int>{0,0,0})));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(traceVar, Teuchos::null, std::vector<int>{0,0,0})));
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(testVar,  Teuchos::null, std::vector<int>{0,0,0})));
   return tensorMesh;
 }
 
@@ -395,6 +430,151 @@ TEUCHOS_UNIT_TEST( TensorGatherScatter, TraversalAwareSkeletonGatherScatterMatch
   for (IndexType i=0; i<static_cast<IndexType>(local.size()); i++)
   {
     TEST_EQUALITY(gathered[i], local[i]);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, OwnedRangesPartition1X1T1VFieldCoefficientContainer )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests1X1T1V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "f");
+
+  const int rankCount = 4;
+  IndexType ownedTotal = 0;
+  IndexType previousEnd = 0;
+  for (int rankOrdinal=0; rankOrdinal<rankCount; rankOrdinal++)
+  {
+    auto ownedRange = coeffMap.ownedRangeForRank(rankOrdinal, rankCount);
+    TEST_ASSERT(ownedRange.first <= ownedRange.second);
+    TEST_EQUALITY(ownedRange.first, previousEnd);
+    previousEnd = ownedRange.second;
+    ownedTotal += ownedRange.second - ownedRange.first;
+
+    auto ownedIndices = coeffMap.ownedIndicesForRank(rankOrdinal, rankCount);
+    TEST_EQUALITY(static_cast<IndexType>(ownedIndices.size()), ownedRange.second - ownedRange.first);
+    for (IndexType i=0; i<static_cast<IndexType>(ownedIndices.size()); i++)
+    {
+      TEST_EQUALITY(ownedIndices[i], ownedRange.first + i);
+    }
+  }
+  TEST_EQUALITY(previousEnd, coeffMap.coefficientCount());
+  TEST_EQUALITY(ownedTotal, coeffMap.coefficientCount());
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, VolumeTraversalProducesContiguousBlocksFor1X1T1VFieldCell )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests1X1T1V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "f");
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto traversal = coeffMap.volumeTraversal(cellTuple);
+
+  TEST_ASSERT(traversal.hasFastestComponentContiguousRuns());
+  auto blocks = traversal.contiguousBlocks(dofLayout);
+  TEST_ASSERT(!blocks.empty());
+
+  IndexType covered = 0;
+  for (const auto &block : blocks)
+  {
+    TEST_ASSERT(block.count() > 0);
+    TEST_ASSERT(block.isContiguous());
+    covered += block.count();
+  }
+  TEST_EQUALITY(covered, traversal.localDofCount());
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, SkeletonTraversalProducesContiguousBlocksFor1X1T1VTraceEntity )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests1X1T1V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "tn");
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(1);
+  TEST_ASSERT(skeleton.entityCount() > 0);
+  auto traversal = coeffMap.skeletonTraversal(skeleton.entity(0));
+
+  TEST_ASSERT(traversal.hasFastestComponentContiguousRuns());
+  auto blocks = traversal.contiguousBlocks(dofLayout);
+  TEST_ASSERT(!blocks.empty());
+
+  IndexType covered = 0;
+  for (const auto &block : blocks)
+  {
+    TEST_ASSERT(block.count() > 0);
+    TEST_ASSERT(block.isContiguous());
+    covered += block.count();
+  }
+  TEST_EQUALITY(covered, traversal.localDofCount());
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, VolumeTraversalNeededIndicesExcludeOwnedEntriesForRepresentativeRank )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests1X1T1V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "f");
+
+  const int rankCount = 4;
+  const int rankOrdinal = 1;
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto needed = coeffMap.neededIndicesForVolumeCell(cellTuple, rankOrdinal, rankCount);
+  auto ownedRange = coeffMap.ownedRangeForRank(rankOrdinal, rankCount);
+
+  std::set<IndexType> seen;
+  for (IndexType index : needed)
+  {
+    TEST_ASSERT((index < ownedRange.first) || (index >= ownedRange.second));
+    TEST_ASSERT(seen.insert(index).second);
+  }
+
+  auto traversal = coeffMap.volumeTraversal(cellTuple);
+  bool foundOwned = false;
+  bool foundNonowned = false;
+  for (IndexType localOrdinal=0; localOrdinal<traversal.localDofCount(); localOrdinal++)
+  {
+    IndexType globalIndex = traversal.globalIndexForLocalOrdinal(localOrdinal, dofLayout);
+    const bool owned = (ownedRange.first <= globalIndex) && (globalIndex < ownedRange.second);
+    foundOwned = foundOwned || owned;
+    foundNonowned = foundNonowned || !owned;
+  }
+  TEST_ASSERT(foundOwned);
+  TEST_ASSERT(foundNonowned);
+}
+
+TEUCHOS_UNIT_TEST( TensorGatherScatter, SkeletonTraversalNeededIndicesExcludeOwnedEntriesForRepresentativeRank )
+{
+  auto tensorMesh = makeTensorMeshForGatherScatterTests1X1T1V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorCoefficientMap coeffMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "tn");
+
+  const int rankCount = 4;
+  const int rankOrdinal = 2;
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(1);
+  TEST_ASSERT(skeleton.entityCount() > 0);
+  auto entity = skeleton.entity(0);
+  auto needed = coeffMap.neededIndicesForSkeletonEntity(entity, rankOrdinal, rankCount);
+  auto ownedRange = coeffMap.ownedRangeForRank(rankOrdinal, rankCount);
+
+  std::set<IndexType> seen;
+  for (IndexType index : needed)
+  {
+    TEST_ASSERT((index < ownedRange.first) || (index >= ownedRange.second));
+    TEST_ASSERT(seen.insert(index).second);
+  }
+
+  auto traversal = coeffMap.skeletonTraversal(entity);
+  bool foundOwned = false;
+  bool foundNonowned = false;
+  for (IndexType localOrdinal=0; localOrdinal<traversal.localDofCount(); localOrdinal++)
+  {
+    IndexType globalIndex = traversal.globalIndexForLocalOrdinal(localOrdinal, dofLayout);
+    const bool owned = (ownedRange.first <= globalIndex) && (globalIndex < ownedRange.second);
+    foundOwned = foundOwned || owned;
+    foundNonowned = foundNonowned || !owned;
+  }
+  TEST_ASSERT(foundNonowned || traversal.localDofCount() == 0);
+  TEST_EQUALITY(static_cast<IndexType>(needed.size()), foundNonowned ? static_cast<IndexType>(seen.size()) : 0);
+  if (!foundOwned)
+  {
+    TEST_ASSERT(!needed.empty() || traversal.localDofCount() == 0);
   }
 }
 }

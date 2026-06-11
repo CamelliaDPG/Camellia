@@ -81,6 +81,8 @@ namespace Camellia
 
     bool hasFastestComponentContiguousRuns() const;
     std::vector<TensorCoefficientBlock> fastestComponentBlocks(const TensorDofLayoutPtr &tensorDofLayout) const;
+    bool isContiguous() const;
+    std::vector<TensorCoefficientBlock> contiguousBlocks(const TensorDofLayoutPtr &tensorDofLayout) const;
   };
 }
 

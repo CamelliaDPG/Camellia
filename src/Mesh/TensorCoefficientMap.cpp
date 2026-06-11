@@ -437,3 +437,62 @@ std::vector<IndexType> TensorCoefficientMap::indicesForSkeletonEntity(const Tens
 {
   return skeletonTraversal(entity).globalIndices(_tensorDofLayout);
 }
+
+std::pair<IndexType,IndexType> TensorCoefficientMap::ownedRangeForRank(int rankOrdinal, int rankCount) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(rankCount <= 0, std::invalid_argument,
+                             "TensorCoefficientMap::ownedRangeForRank requires positive rank count.");
+  TEUCHOS_TEST_FOR_EXCEPTION((rankOrdinal < 0) || (rankOrdinal >= rankCount), std::invalid_argument,
+                             "TensorCoefficientMap::ownedRangeForRank rank ordinal out of range.");
+
+  const IndexType baseCount = _coefficientCount / rankCount;
+  const IndexType remainder = _coefficientCount % rankCount;
+  const IndexType begin = rankOrdinal * baseCount + std::min<IndexType>(rankOrdinal, remainder);
+  const IndexType ownedCount = baseCount + ((rankOrdinal < remainder) ? 1 : 0);
+  return {begin, begin + ownedCount};
+}
+
+std::vector<IndexType> TensorCoefficientMap::ownedIndicesForRank(int rankOrdinal, int rankCount) const
+{
+  auto ownedRange = ownedRangeForRank(rankOrdinal, rankCount);
+  std::vector<IndexType> indices;
+  indices.reserve(static_cast<size_t>(ownedRange.second - ownedRange.first));
+  for (IndexType i=ownedRange.first; i<ownedRange.second; i++)
+  {
+    indices.push_back(i);
+  }
+  return indices;
+}
+
+std::vector<IndexType> TensorCoefficientMap::nonownedNeededIndices(const TensorCoefficientTraversal &traversal,
+                                                                   int rankOrdinal,
+                                                                   int rankCount) const
+{
+  auto ownedRange = ownedRangeForRank(rankOrdinal, rankCount);
+  std::vector<IndexType> needed;
+  std::set<IndexType> seen;
+  for (IndexType localOrdinal=0; localOrdinal<traversal.localDofCount(); localOrdinal++)
+  {
+    const IndexType globalIndex = traversal.globalIndexForLocalOrdinal(localOrdinal, _tensorDofLayout);
+    const bool owned = (ownedRange.first <= globalIndex) && (globalIndex < ownedRange.second);
+    if (!owned && seen.insert(globalIndex).second)
+    {
+      needed.push_back(globalIndex);
+    }
+  }
+  return needed;
+}
+
+std::vector<IndexType> TensorCoefficientMap::neededIndicesForVolumeCell(const TensorMeshTopology::TensorCellTuple &cellTuple,
+                                                                        int rankOrdinal,
+                                                                        int rankCount) const
+{
+  return nonownedNeededIndices(volumeTraversal(cellTuple), rankOrdinal, rankCount);
+}
+
+std::vector<IndexType> TensorCoefficientMap::neededIndicesForSkeletonEntity(const TensorMeshTopology::TensorSkeletonEntity &entity,
+                                                                            int rankOrdinal,
+                                                                            int rankCount) const
+{
+  return nonownedNeededIndices(skeletonTraversal(entity), rankOrdinal, rankCount);
+}

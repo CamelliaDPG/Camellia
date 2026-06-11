@@ -25,6 +25,22 @@ TensorVarPtr makeTraceTensorVar(const std::string &name, int traceComponentOrdin
   return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt}, traceComponentOrdinal));
 }
 
+TensorVarPtr makeFieldTensorVar1X1T1V(const std::string &name)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{vx, vt, vv}));
+}
+
+TensorVarPtr makeFluxTraceTensorVar1X1T1V(const std::string &name, int traceComponentOrdinal)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt, vv}, traceComponentOrdinal));
+}
+
 TensorMeshPtr makeTensorMeshForBilinearFormTests()
 {
   auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
@@ -185,5 +201,46 @@ TEUCHOS_UNIT_TEST( TensorBilinearForm, AggregateBackendSupportReflectsAllTerms )
 
   TEST_ASSERT(form->allTermsSupport(TENSOR_OPERATOR_BACKEND_MATRIX_FREE));
   TEST_ASSERT(!form->allTermsSupport(TENSOR_OPERATOR_BACKEND_PAMATRIX));
+}
+
+TEUCHOS_UNIT_TEST( TensorBilinearForm, VlasovLike1X1T1VTermsExposeExpectedDependencyScopes )
+{
+  auto f = makeFieldTensorVar1X1T1V("f");
+  auto w = makeFieldTensorVar1X1T1V("w");
+  auto tn = makeFluxTraceTensorVar1X1T1V("tn", 0);
+
+  auto timeDerivative = TensorBilinearTerm(f,
+                                           w,
+                                           TensorComponentOperatorDescriptor::valueOnly(3),
+                                           TensorComponentOperatorDescriptor::singleDerivative(3, 1),
+                                           TensorFunction::constant(-1.0));
+
+  auto streaming = TensorBilinearTerm(f,
+                                      w,
+                                      TensorComponentOperatorDescriptor::valueOnly(3),
+                                      TensorComponentOperatorDescriptor::singleDerivative(3, 0),
+                                      TensorFunction::componentCoordinate(2));
+
+  auto acceleration = TensorBilinearTerm(f,
+                                         w,
+                                         TensorComponentOperatorDescriptor::valueOnly(3),
+                                         TensorComponentOperatorDescriptor::singleDerivative(3, 2),
+                                         TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1));
+
+  auto trace = TensorBilinearTerm(tn,
+                                  w,
+                                  TensorComponentOperatorDescriptor::valueOnly(3),
+                                  TensorComponentOperatorDescriptor::valueOnly(3),
+                                  TensorFunction::constant(1.0),
+                                  TENSOR_BILINEAR_TERM_BOUNDARY);
+
+  TEST_ASSERT(timeDerivative.testOperator().takesDerivativeInComponent(1));
+  TEST_ASSERT(streaming.coefficient()->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(!streaming.coefficient()->dependencyScope().dependsOnComponent(0));
+  TEST_ASSERT(acceleration.coefficient()->dependencyScope().dependsOnComponent(0));
+  TEST_ASSERT(acceleration.coefficient()->dependencyScope().dependsOnComponent(1));
+  TEST_ASSERT(!acceleration.coefficient()->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(trace.isBoundaryTerm());
+  TEST_EQUALITY(trace.trialVar()->traceComponentOrdinal(), 0);
 }
 }

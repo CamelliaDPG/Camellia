@@ -181,6 +181,14 @@ namespace Camellia
 
     static TensorFunctionPtr constant(double value);
     static TensorFunctionPtr componentCoordinate(int componentOrdinal);
+    static TensorFunctionPtr centeredMaxwellian1D(int velocityComponentOrdinal,
+                                                  double density,
+                                                  double mean,
+                                                  double temperature);
+    static TensorFunctionPtr shiftedMaxwellian1D(int velocityComponentOrdinal,
+                                                 double density,
+                                                 double shift,
+                                                 double temperature);
     static TensorFunctionPtr withDependencySource(TensorFunctionPtr f,
                                                   const TensorFunctionDependencySource &dependencySource);
     static TensorFunctionPtr unary(TensorUnaryFunctionType unaryType, TensorFunctionPtr arg);

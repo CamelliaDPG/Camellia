@@ -7,6 +7,14 @@ using namespace Camellia;
 
 namespace
 {
+TensorVar makeField1X1T1V(const std::string &name)
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, name + "_x", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, name + "_t", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, name + "_v", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  return TensorVar(name, TENSOR_FIELD, {vx, vt, vv});
+}
+
 TEUCHOS_UNIT_TEST( TensorVar, ConstructFieldTensorVar )
 {
   VarPtr vx = Teuchos::rcp(new Var(0, 0, "f_x", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
@@ -98,6 +106,40 @@ TEUCHOS_UNIT_TEST( TensorVar, CopyWithNewNamePreservesTraceComponentOrdinal )
   TEST_ASSERT(copied->isTrace());
   TEST_ASSERT(copied->hasTraceComponentOrdinal());
   TEST_EQUALITY(copied->traceComponentOrdinal(), 1);
+}
+
+TEUCHOS_UNIT_TEST( TensorVar, ConstructFieldTensorVarFor1X1T1V )
+{
+  auto tensorVar = makeField1X1T1V("f");
+  TEST_ASSERT(tensorVar.isField());
+  TEST_EQUALITY(tensorVar.componentCount(), 3);
+  TEST_EQUALITY(tensorVar.componentVar(0)->space(), L2);
+  TEST_EQUALITY(tensorVar.componentVar(1)->space(), L2);
+  TEST_EQUALITY(tensorVar.componentVar(2)->space(), L2);
+}
+
+TEUCHOS_UNIT_TEST( TensorVar, ConstructTraceTensorVarFor1X1T1VTemporalTrace )
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, "that_x", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, "that_t", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, "that_v", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+
+  TensorVar tensorVar("that", TENSOR_TRACE, {vx, vt, vv}, 1);
+  TEST_ASSERT(tensorVar.isTrace());
+  TEST_EQUALITY(tensorVar.traceComponentOrdinal(), 1);
+  TEST_ASSERT(tensorVar.isValueTrace());
+}
+
+TEUCHOS_UNIT_TEST( TensorVar, ConstructFluxTraceTensorVarFor1X1T1VSpatialTrace )
+{
+  VarPtr vx = Teuchos::rcp(new Var(0, 0, "tn_x", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt = Teuchos::rcp(new Var(1, 0, "tn_t", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vv = Teuchos::rcp(new Var(2, 0, "tn_v", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS));
+
+  TensorVar tensorVar("tn", TENSOR_TRACE, {vx, vt, vv}, 0);
+  TEST_ASSERT(tensorVar.isTrace());
+  TEST_EQUALITY(tensorVar.traceComponentOrdinal(), 0);
+  TEST_ASSERT(tensorVar.isFluxLikeTrace());
 }
 
 TEUCHOS_UNIT_TEST( TensorVar, RejectMismatchedFieldKind )
