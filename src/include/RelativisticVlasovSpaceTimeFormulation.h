@@ -25,8 +25,8 @@ class RelativisticVlasovSpaceTimeFormulation : public VlasovSpaceTimeFormulation
 public:
   enum TestSpaceInnerProduct
   {
-    Graph,
-    L2
+    GraphTestSpaceInnerProduct,
+    L2TestSpaceInnerProduct
   };
 protected:
   const double _c; // speed of light.  Must be consistent with the momentum discretization
@@ -49,10 +49,11 @@ public:
                                          std::vector<double> momentumSpaceVertices_z,
                                          const int H1Order, const int delta_k,
                                          const int numUniformRefinements,
-                                         const TestSpaceInnerProduct = L2,
+                                         const TestSpaceInnerProduct = L2TestSpaceInnerProduct,
                                          const double testSpaceL2Weight = 1.0,
                                          const EBasisFamily &basisFamily = BASIS_FAMILY_HIERARCHICAL,
-                                         const int maxMomentNumberForDriver = 0);
+                                         const int maxMomentNumberForDriver = 0,
+                                         const bool enforcePositivity = false);
   
   //! called during initialization of Vlasov Solution objects.  Subclasses must define a distribution field variable (f) with name VlasovSpaceTimeFormulation::S_F, a trace variable (t_n) with name VlasovSpaceTimeFormulation::S_T_N_HAT.  The former is used for moment computations, conservation diagnostics, and convergence criteria for the fixed-point iteration; the latter is used for boundary condition imposition.
   VarFactoryPtr constructVlasovVarFactory() override;

@@ -77,7 +77,8 @@ namespace {
                                                                 const int H1Order, const bool useGradedSpatialMesh,
                                                                 const bool usePeriodicBCs, double q,
                                                                 const EBasisFamily &basisFamily, const bool useMimeticDPG,
-                                                                const int delta_k = 2)
+                                                                const int delta_k = 2,
+                                                                const bool enforcePositivity = false)
   {
     // these constants correspond to what we will be testing in the two-stream instability.  They should not affect this test, except maybe by introducing a little roundoff error here or there.
     double eps0   = TEST_EPS0;
@@ -130,7 +131,8 @@ namespace {
                                                          velocitySpaceVertices_z,
                                                          H1Order, delta_k,
                                                          numUniformRefinements,
-                                                         basisFamily) );
+                                                         basisFamily,
+                                                         0, false, enforcePositivity) );
     }
     else
     {
@@ -151,7 +153,8 @@ namespace {
                                                                 const int H1Order, const bool useGradedSpatialMesh,
                                                                 const bool usePeriodicBCs, double q,
                                                                 const EBasisFamily &basisFamily, const bool useMimeticDPG,
-                                                                const int delta_k = 2)
+                                                                const int delta_k = 2,
+                                                                const bool enforcePositivity = false)
   {
     double eps0    = TEST_EPS0;
     double m       = TEST_M;
@@ -211,7 +214,8 @@ namespace {
                                                          velocitySpaceVertices_z,
                                                          H1Order, delta_k,
                                                          numUniformRefinements,
-                                                         basisFamily) );
+                                                         basisFamily,
+                                                         0, false, enforcePositivity) );
     }
     else
     {
@@ -1091,7 +1095,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     }
   }
 
-  void testNextTimeSlab(const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success)
+  void testNextTimeSlab(const bool useMimeticDPG, Teuchos::FancyOStream &out, bool &success,
+                        const bool enforcePositivity = false)
   {
     // sets up a formulation, but does not solve.  Checks that the new slab is created, has the right number
     // of elements, and that it copies settings (intended to include all the settings we want to be be copied).
@@ -1112,9 +1117,20 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     const bool usePeriodicBCs = true;
     const bool useGradedSpatialMesh = false;
     
-    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+    const int delta_k = 2;
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG,
+                                      delta_k, enforcePositivity);
    
+    TEST_EQUALITY(enforcePositivity, form->enforcePositivity());
     form->setInitialAndInflowConditions(f_exact, f_exact);
+    if (enforcePositivity)
+    {
+      form->setProximalGalerkinParameters(2.0, 1.0);
+    }
+    if (enforcePositivity)
+    {
+      form->setProximalGalerkinParameters(2.0, 1.0);
+    }
     
     bool useGeometricMultigrid = true;
     double cgTol = 1e-6 / 100.0;
@@ -1167,6 +1183,13 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     TEST_EQUALITY(maxIters,               nextSlab->iterativeSolveMaxIterations());
     TEST_EQUALITY(exportViz,              nextSlab->exportViz());
     TEST_EQUALITY(vizDir,                 nextSlab->vizOutputDir());
+    TEST_EQUALITY(enforcePositivity,      nextSlab->enforcePositivity());
+    if (enforcePositivity)
+    {
+      TEST_ASSERT(nextSlab->psi() != Teuchos::null);
+      TEST_ASSERT(nextSlab->phi() != Teuchos::null);
+      TEST_ASSERT(nextSlab->proximalGalerkinAlpha() != Teuchos::null);
+    }
     
     auto nextSlabCGTols = nextSlab->iterativeSolveTolerances();
     TEST_EQUALITY(cgTols.size(), nextSlabCGTols.size());
@@ -1432,6 +1455,161 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
   {
     bool useMimeticDPG = false;
     testNextTimeSlab(useMimeticDPG, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PositivityPreservationNextTimeSlab )
+  {
+    bool useMimeticDPG = false;
+    bool enforcePositivity = true;
+    testNextTimeSlab(useMimeticDPG, out, success, enforcePositivity);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PositivityPreservationAPI )
+  {
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vElements = 2;
+    const int H1Order   = 2;
+    const int delta_k   = 1;
+    
+    const bool usePeriodicBCs = true;
+    const bool useGradedSpatialMesh = false;
+    const bool useMimeticDPG = false;
+    const double q = 1.0;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
+    
+    auto defaultForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order,
+                                            useGradedSpatialMesh, usePeriodicBCs, q,
+                                            basisFamily, useMimeticDPG, delta_k);
+    TEST_EQUALITY(false, defaultForm->enforcePositivity());
+    
+    const bool enforcePositivity = true;
+    auto positiveForm = getFormulation1D1T1V(xElements, tElements, vElements, H1Order,
+                                             useGradedSpatialMesh, usePeriodicBCs, q,
+                                             basisFamily, useMimeticDPG, delta_k,
+                                             enforcePositivity);
+    TEST_EQUALITY(true, positiveForm->enforcePositivity());
+    
+    TEST_ASSERT(positiveForm->psi() != Teuchos::null);
+    TEST_ASSERT(positiveForm->phi() != Teuchos::null);
+    TEST_ASSERT(positiveForm->proximalGalerkinAlpha() != Teuchos::null);
+    
+    positiveForm->setProximalGalerkinParameters(2.0, 1.0);
+    TEST_ASSERT(positiveForm->proximalGalerkinAlpha() != Teuchos::null);
+    
+    auto trialVars = positiveForm->vlasovBF()->varFactory()->trialVars();
+    auto testVars  = positiveForm->vlasovBF()->varFactory()->testVars();
+    TEST_ASSERT(trialVars.find(positiveForm->psi()->ID()) != trialVars.end());
+    TEST_ASSERT(testVars.find(positiveForm->phi()->ID()) != testVars.end());
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PositivityPreservationTinySolve )
+  {
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vElements = 2;
+    const int H1Order   = 2;
+    const int delta_k   = 1;
+    
+    const bool usePeriodicBCs = true;
+    const bool useGradedSpatialMesh = false;
+    const bool useMimeticDPG = false;
+    const double q = 1.0;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
+    const bool enforcePositivity = true;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order,
+                                      useGradedSpatialMesh, usePeriodicBCs, q,
+                                      basisFamily, useMimeticDPG, delta_k,
+                                      enforcePositivity);
+    
+    form->setFixedPointMinSubsteps(1);
+    form->setFixedPointMaxSubsteps(1);
+    form->setFixedPointTolerance(1.0);
+    form->setProximalGalerkinParameters(1.0, 1.0);
+    
+    FunctionPtr f0 = Function::constant(1.0);
+    form->setInitialAndInflowConditions(f0, f0);
+    
+    SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
+    SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
+    const bool restrictSideSetsToBoundary = !usePeriodicBCs; // for periodic BCs, the config mesh region will *not* be on a mesh boundary
+    auto xLeftRightTag = form->createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, restrictSideSetsToBoundary);
+    auto VE_traceVar = form->VE_configurationSpaceTrace();
+    form->addConfigurationSpaceBC(xLeftRightTag, VE_traceVar, Function::zero());
+    
+    TEST_NOTHROW(form->solve());
+    
+    TEST_COMPARE(form->vlasovMesh()->getActiveCellIDsGlobal().size(), >, 0);
+    auto myCells = form->vlasovMesh()->cellIDsInPartition();
+    // In MPI runs, a rank may legitimately own no active Vlasov cells.  Such ranks simply
+    // have no local limiter diagnostics to check.
+    for (auto cellID : myCells)
+    {
+      const double theta = form->fluxLimitingWeightForCell(cellID, 0);
+      const double expPsi = form->expPsiForCell(cellID, 0);
+      const double thetaSpecies0Compatibility = form->fluxLimitingWeightForCell(cellID);
+      const double expPsiSpecies0Compatibility = form->expPsiForCell(cellID);
+      
+      TEST_ASSERT(theta == theta);   // not NaN
+      TEST_ASSERT(expPsi == expPsi); // not NaN
+      TEST_COMPARE(theta, >=, 0.0);
+      TEST_COMPARE(theta, <=, 1.0);
+      TEST_COMPARE(expPsi, >, 0.0);
+      TEST_EQUALITY(theta, thetaSpecies0Compatibility);
+      TEST_EQUALITY(expPsi, expPsiSpecies0Compatibility);
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, PositivityPreservationLimiterRegression )
+  {
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vElements = 2;
+    const int H1Order   = 2;
+    const int delta_k   = 1;
+    
+    const bool usePeriodicBCs = true;
+    const bool useGradedSpatialMesh = false;
+    const bool useMimeticDPG = false;
+    const double q = 1.0;
+    const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
+    const bool enforcePositivity = true;
+    
+    auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order,
+                                      useGradedSpatialMesh, usePeriodicBCs, q,
+                                      basisFamily, useMimeticDPG, delta_k,
+                                      enforcePositivity);
+    
+    FunctionPtr f0 = Function::constant(1.0);
+    form->setInitialAndInflowConditions(f0, f0);
+    
+    std::map<int,FunctionPtr> projectionMap;
+    projectionMap[form->f()->ID()]   = Function::constant(-0.5);
+    projectionMap[form->psi()->ID()] = Function::zero(); // exp(psi) = 1
+    form->vlasovSolution()->projectOntoMesh(projectionMap);
+    
+    TEST_NOTHROW(form->applyPositivityLimiter());
+    
+    TEST_COMPARE(form->vlasovMesh()->getActiveCellIDsGlobal().size(), >, 0);
+    auto myCells = form->vlasovMesh()->cellIDsInPartition();
+    // In MPI runs, a rank may legitimately own no active Vlasov cells.  Such ranks simply
+    // have no local limiter diagnostics to check.
+    for (auto cellID : myCells)
+    {
+      const double theta = form->fluxLimitingWeightForCell(cellID, 0);
+      const double expPsi = form->expPsiForCell(cellID, 0);
+      const double thetaSpecies0Compatibility = form->fluxLimitingWeightForCell(cellID);
+      const double expPsiSpecies0Compatibility = form->expPsiForCell(cellID);
+      
+      TEST_ASSERT(theta == theta);   // not NaN
+      TEST_ASSERT(expPsi == expPsi); // not NaN
+      TEST_COMPARE(theta, >=, 0.0);
+      TEST_COMPARE(theta, <, 1.0);
+      TEST_COMPARE(expPsi, >, 0.0);
+      TEST_EQUALITY(theta, thetaSpecies0Compatibility);
+      TEST_EQUALITY(expPsi, expPsiSpecies0Compatibility);
+    }
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LocalConservationDiagnostics )
@@ -2555,6 +2733,130 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     TEST_COMPARE(By->l2norm(configMesh), <=, tol);
     TEST_COMPARE(phi->l2norm(configMesh), <=, tol);
     TEST_COMPARE(A->l2norm(configMesh), <=, tol);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticPositivityPreservationAPI )
+  {
+    const double q = TEST_Q;
+    const double m = TEST_M;
+    const double c = 2.0;
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vxElements = 1;
+    const int vyElements = 1;
+    const int H1Order = 2;
+    const int delta_k = 1;
+    const int numUniformRefinements = 0;
+    const bool usePeriodicBCs = false;
+    const bool enforcePositivity = true;
+
+    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(TEST_X0, TEST_X0 + TEST_XWIDTH, xElements, usePeriodicBCs);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(TEST_T0, TEST_TWIDTH, tElements);
+    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vxElements);
+    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
+    std::vector<double> velocitySpaceVertices_z;
+
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto L2TestSpaceInnerProduct = RelativisticVlasovSpaceTimeFormulation::L2TestSpaceInnerProduct;
+    auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
+                                                                           configForm,
+                                                                           spatialMeshTopo,
+                                                                           temporalVertices,
+                                                                           velocitySpaceVertices_x,
+                                                                           velocitySpaceVertices_y,
+                                                                           velocitySpaceVertices_z,
+                                                                           H1Order, delta_k,
+                                                                           numUniformRefinements,
+                                                                           L2TestSpaceInnerProduct, 1.0, BASIS_FAMILY_HIERARCHICAL,
+                                                                           0, enforcePositivity));
+    
+    TEST_EQUALITY(true, relForm->enforcePositivity());
+    TEST_ASSERT(relForm->psi() != Teuchos::null);
+    TEST_ASSERT(relForm->phi() != Teuchos::null);
+    TEST_ASSERT(relForm->proximalGalerkinAlpha() != Teuchos::null);
+    
+    auto trialVars = relForm->vlasovBF()->varFactory()->trialVars();
+    auto testVars  = relForm->vlasovBF()->varFactory()->testVars();
+    TEST_ASSERT(trialVars.find(relForm->psi()->ID()) != trialVars.end());
+    TEST_ASSERT(testVars.find(relForm->phi()->ID()) != testVars.end());
+    
+    // This is intentionally only an API/variable-construction smoke test.  nextTimeSlab()
+    // transfers temporal-trace coefficients from a populated previous slab; calling it here before
+    // a solve or trace initialization can fail for reasons unrelated to positivity-preservation setup.
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticPositivityPreservationTinySolve )
+  {
+    const double q = TEST_Q;
+    const double m = TEST_M;
+    const double c = 2.0;
+    const int xElements = 1;
+    const int tElements = 1;
+    const int vxElements = 1;
+    const int vyElements = 1;
+    const int H1Order = 2;
+    const int delta_k = 1;
+    const int numUniformRefinements = 0;
+    const bool usePeriodicBCs = false;
+    const bool enforcePositivity = true;
+
+    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(TEST_X0, TEST_X0 + TEST_XWIDTH, xElements, usePeriodicBCs);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(TEST_T0, TEST_TWIDTH, tElements);
+    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vxElements);
+    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
+    std::vector<double> velocitySpaceVertices_z;
+
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto L2TestSpaceInnerProduct = RelativisticVlasovSpaceTimeFormulation::L2TestSpaceInnerProduct;
+    auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
+                                                                           configForm,
+                                                                           spatialMeshTopo,
+                                                                           temporalVertices,
+                                                                           velocitySpaceVertices_x,
+                                                                           velocitySpaceVertices_y,
+                                                                           velocitySpaceVertices_z,
+                                                                           H1Order, delta_k,
+                                                                           numUniformRefinements,
+                                                                           L2TestSpaceInnerProduct, 1.0, BASIS_FAMILY_HIERARCHICAL,
+                                                                           0, enforcePositivity));
+    
+    relForm->setFixedPointMinSubsteps(1);
+    relForm->setFixedPointMaxSubsteps(1);
+    relForm->setFixedPointTolerance(1.0);
+    relForm->setProximalGalerkinParameters(1.0, 1.0);
+    
+    SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(TEST_X0);
+    SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(TEST_X0 + TEST_XWIDTH);
+    const bool restrictSideSetsToBoundary = true;
+    auto xLeftRightTag = relForm->createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, restrictSideSetsToBoundary);
+    relForm->addConfigurationSpaceBC(xLeftRightTag, relForm->VE_configurationSpaceTrace(), Function::zero());
+    relForm->addConfigurationSpaceBC(xLeftRightTag, configForm->A_hat(1), Function::zero());
+    relForm->addConfigurationSpaceBC(relForm->tagConfigurationInitialTime(), configForm->E_hat(0), Function::zero());
+    
+    FunctionPtr f0 = Function::constant(1.0);
+    relForm->setInitialAndInflowConditions(f0, f0);
+    
+    TEST_NOTHROW(relForm->solve());
+    
+    TEST_COMPARE(relForm->vlasovMesh()->getActiveCellIDsGlobal().size(), >, 0);
+    auto myCells = relForm->vlasovMesh()->cellIDsInPartition();
+    // In MPI runs, a rank may legitimately own no active Vlasov cells.  Such ranks simply
+    // have no local limiter diagnostics to check.
+    for (auto cellID : myCells)
+    {
+      const double theta = relForm->fluxLimitingWeightForCell(cellID, 0);
+      const double expPsi = relForm->expPsiForCell(cellID, 0);
+      const double thetaSpecies0Compatibility = relForm->fluxLimitingWeightForCell(cellID);
+      const double expPsiSpecies0Compatibility = relForm->expPsiForCell(cellID);
+      
+      TEST_ASSERT(theta == theta);   // not NaN
+      TEST_ASSERT(expPsi == expPsi); // not NaN
+      TEST_COMPARE(theta, >=, 0.0);
+      TEST_COMPARE(theta, <=, 1.0);
+      TEST_COMPARE(expPsi, >, 0.0);
+      TEST_EQUALITY(theta, thetaSpecies0Compatibility);
+      TEST_EQUALITY(expPsi, expPsiSpecies0Compatibility);
+    }
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticMaxwell1D2V_ZeroCurrentSymmetry_HangingNodeRefined )

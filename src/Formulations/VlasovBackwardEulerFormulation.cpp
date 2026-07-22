@@ -831,9 +831,14 @@ VarPtr VlasovBackwardEulerFormulation::E_configurationSpaceTrace(const int zeroB
   return _configurationSpaceFormulation->E_hat(zeroBasedComp);
 }
 
+double VlasovBackwardEulerFormulation::expPsiForCell(GlobalIndexType cellID, int speciesOrdinal)
+{
+  return _expPsiForCell[std::make_pair(cellID, speciesOrdinal)];
+}
+
 double VlasovBackwardEulerFormulation::expPsiForCell(GlobalIndexType cellID)
 {
-  return _expPsiForCell[cellID]; // TODO: support multiple species here
+  return expPsiForCell(cellID, 0);
 }
 
 VarPtr VlasovBackwardEulerFormulation::f(int speciesOrdinal)
@@ -853,6 +858,7 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
   const int rank = MPIWrapper::CommWorld()->MyPID();
   
   _fluxLimitingWeightForCell.clear();
+  _expPsiForCell.clear();
   
   Teuchos::RCP<GMGSolver> gmgSolver;
   
@@ -1029,8 +1035,8 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
 //            std::cout << "theta for cell " << cellID << ": " << theta << std::endl;
 //          }
           
-          _fluxLimitingWeightForCell[cellID] = theta;
-          _expPsiForCell[cellID] = exp_psi_value;
+          _fluxLimitingWeightForCell[std::make_pair(cellID, i)] = theta;
+          _expPsiForCell[std::make_pair(cellID, i)] = exp_psi_value;
           
           Projector<double>::projectFunctionOntoBasis(basisCoefficients, theta * f + (1-theta) * exp_psi_value, fBasis, basisCache);
           
@@ -1143,9 +1149,14 @@ void VlasovBackwardEulerFormulation::finishTimeStep()
   _t->setValue(_t->getConstantValue() + _dt->getConstantValue());
 }
 
+double VlasovBackwardEulerFormulation::fluxLimitingWeightForCell(GlobalIndexType cellID, int speciesOrdinal)
+{
+  return _fluxLimitingWeightForCell[std::make_pair(cellID, speciesOrdinal)];
+}
+
 double VlasovBackwardEulerFormulation::fluxLimitingWeightForCell(GlobalIndexType cellID)
 {
-  return _fluxLimitingWeightForCell[cellID];
+  return fluxLimitingWeightForCell(cellID, 0);
 }
 
 Teuchos::RCP<GMGSolver> VlasovBackwardEulerFormulation::gmgSolver()

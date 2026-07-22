@@ -24,6 +24,7 @@
 #include "ParameterFunction.h"
 #include "PhysicalSolutionExtrusion.hpp"
 #include "PreviousSolutionFunction.h"
+#include "Projector.h"
 #include "RefinementStrategy.h"
 #include "RHS.h"
 #include "SimpleSolutionFunction.h"
@@ -48,6 +49,9 @@ const string VlasovSpaceTimeFormulation::S_F = "f";
 
 const string VlasovSpaceTimeFormulation::S_F_HAT = "\\widehat{f}";
 const string VlasovSpaceTimeFormulation::S_T_N_HAT = "\\widehat{t}_n";
+
+const string VlasovSpaceTimeFormulation::S_PSI = "\\psi";
+const string VlasovSpaceTimeFormulation::S_PHI = "\\phi";
 
 const string VlasovSpaceTimeFormulation::S_W = "w";
 
@@ -930,7 +934,8 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        const int numUniformRefinements,
                                                        const EBasisFamily basisFamily,
                                                        const int maxMomentNumberForDriver,
-                                                       const bool deferInitialization)
+                                                       const bool deferInitialization,
+                                                       const bool enforcePositivity)
 :
 VlasovSpaceTimeFormulation(vector<double>{q}, vector<double>{m}, vector<string>{""},
                            configurationSpaceFormulation,
@@ -943,7 +948,8 @@ VlasovSpaceTimeFormulation(vector<double>{q}, vector<double>{m}, vector<string>{
                            numUniformRefinements,
                            basisFamily,
                            maxMomentNumberForDriver,
-                           deferInitialization)
+                           deferInitialization,
+                           enforcePositivity)
 {}
 
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(std::vector<double> q, std::vector<double> m, vector<string> speciesLabels,
@@ -957,13 +963,15 @@ VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(std::vector<double> q, st
                                                        const int numUniformRefinements,
                                                        const EBasisFamily basisFamily,
                                                        const int maxMomentNumberForDriver,
-                                                       const bool deferInitialization)
+                                                       const bool deferInitialization,
+                                                       const bool enforcePositivity)
 :
 _spaceDim(spatialMeshTopology->getDimension()),
 _basisFamily(basisFamily),
 _H1Order(H1Order),
 _delta_k(delta_k),
 _maxMomentNumberForDriver(maxMomentNumberForDriver),
+_enforcePositivity(enforcePositivity),
 _configurationSpaceFormulation(configurationSpaceFormulation),
 _numSpecies(q.size()),
 _q(q),
@@ -1007,6 +1015,9 @@ _numUniformRefinements(numUniformRefinements)
   _w_names.resize(_numSpecies);
   _tn_hat_names.resize(_numSpecies,"");
   _f_hat_names.resize(_numSpecies, "");
+  _psi_names.resize(_numSpecies, "");
+  _phi_names.resize(_numSpecies, "");
+  _expPsiSoln.resize(_numSpecies, Teuchos::null);
   
   for (int i=0; i<_numSpecies; i++)
   {
@@ -1014,6 +1025,8 @@ _numUniformRefinements(numUniformRefinements)
     _f_names[i]      = S_F + suffix;
     _w_names[i]      = S_W + suffix;
     _tn_hat_names[i] = S_T_N_HAT + suffix;
+    _psi_names[i]    = S_PSI + suffix;
+    _phi_names[i]    = S_PHI + suffix;
   }
   
   if (!deferInitialization)
@@ -1336,11 +1349,22 @@ VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
   
   BasisFamilyPtr basisFamily = BasisFamily::basisFamily(_basisFamily);
   
+  if (_enforcePositivity)
+  {
+    initializeProximalGalerkinAlpha();
+  }
+  
   for (int i=0; i<_numSpecies; i++)
   {
     VarPtr f_i = vlasovVF->fieldVar(_f_names[i]);            // distribution function (field variable)
     VarPtr w_i = vlasovVF->testVar(_w_names[i], HGRAD);      // test function w; lies in HGRAD of the whole space-time phase space
     VarPtr t_n_hat_i = vlasovVF->fluxVar(_tn_hat_names[i]); // t_n_hat: L^2 (non-conforming) trace
+    
+    if (_enforcePositivity)
+    {
+      VarPtr psi_i = vlasovVF->fieldVar(_psi_names[i], CONSTANT_SCALAR); // element-wise constant latent positivity field on the full phase-space-time cell, including time
+      VarPtr phi_i = vlasovVF->testVar(_phi_names[i], L2);               // latent positivity test function
+    }
   }
   
   vlasovVF->setTrialBasisFamily(basisFamily);
@@ -1379,6 +1403,10 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   nextSlabForm->setIterativeSolveTolerances(_cgTols);
   nextSlabForm->setUseGeometricMultigrid(_useGeometricMultigrid);
   nextSlabForm->setEnforceQuasiNeutrality(_enforceQuasiNeutrality);
+  if (_enforcePositivity)
+  {
+    nextSlabForm->setProximalGalerkinParameters(_alpha0, _alphaMultiplier);
+  }
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
@@ -1408,13 +1436,13 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   std::vector<FunctionPtr>  f0_next(_numSpecies);
   for (int i=0; i<_numSpecies; i++)
   {
-    VarPtr tn = this->t_n_hat(i);
+    VarPtr tn_next = nextSlabForm->t_n_hat(i);
     bool weightFluxesBySideParity = false; // should not matter: boundary parity is 1
     SolutionPtr thisSlabVlasovSoln = this->vlasovSolution();
     
     // use a weak pointer because the solution will have this reference as part of its own BCs, which would result in a ref-counted pointer cycle.
     SolutionPtr nextSlabVlasovSolnWeakPtr = Teuchos::rcp(nextSlabForm->vlasovSolution().get(), false);
-    FunctionPtr tnFxnNextSlab = Teuchos::rcp( new SimpleSolutionFunction<double>(tn, nextSlabVlasovSolnWeakPtr, weightFluxesBySideParity) );
+    FunctionPtr tnFxnNextSlab = Teuchos::rcp( new SimpleSolutionFunction<double>(tn_next, nextSlabVlasovSolnWeakPtr, weightFluxesBySideParity) );
     f0_next[i] = -tnFxnNextSlab; // at temporal inflow, the normal in "tn" is negative, so f = - tn.
   }
   
@@ -1458,17 +1486,21 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
     
     for (int i=0; i<_numSpecies; i++)
     {
-      VarPtr tn = this->t_n_hat(i);
+      VarPtr tn_current = this->t_n_hat(i);
+      VarPtr tn_next    = nextSlabForm->t_n_hat(i);
       
-      int basisCardinality = nextVlasovMesh->getElementType(nextCellID)->trialOrderPtr->getBasisCardinality(tn->ID(), nextSideIndex);
-      FieldContainer<double> coefficients(basisCardinality);
-      _vlasovSoln->solnCoeffsForCellID(coefficients, currentCellID, tn->ID(), currentSideIndex);
+      int currentBasisCardinality = thisSlabVlasovMesh->getElementType(currentCellID)->trialOrderPtr->getBasisCardinality(tn_current->ID(), currentSideIndex);
+      int nextBasisCardinality    = nextVlasovMesh->getElementType(nextCellID)->trialOrderPtr->getBasisCardinality(tn_next->ID(), nextSideIndex);
+      TEUCHOS_TEST_FOR_EXCEPTION(currentBasisCardinality != nextBasisCardinality, std::invalid_argument, "Temporal trace basis cardinalities do not match between slabs.");
+      
+      FieldContainer<double> coefficients(nextBasisCardinality);
+      _vlasovSoln->solnCoeffsForCellID(coefficients, currentCellID, tn_current->ID(), currentSideIndex);
       // because tn has an outward-facing normal included, we need to reverse the sign of the coefficients for the cell in the next slab
-      for (int i=0; i<basisCardinality; i++)
+      for (int i=0; i<nextBasisCardinality; i++)
       {
         coefficients[i] *= -1;
       }
-      nextVlasovSoln->setSolnCoeffsForCellID(coefficients, nextCellID, tn->ID(), nextSideIndex);
+      nextVlasovSoln->setSolnCoeffsForCellID(coefficients, nextCellID, tn_next->ID(), nextSideIndex);
     }
   }
   
@@ -1546,6 +1578,28 @@ std::string VlasovSpaceTimeFormulation::f_hat_name(int i) const
   return _f_hat_names[i];
 }
 
+VarPtr VlasovSpaceTimeFormulation::psi(int i)
+{
+  VarFactoryPtr vf = _vlasovBF->varFactory();
+  return vf->trialVar(psi_name(i));
+}
+
+std::string VlasovSpaceTimeFormulation::psi_name(int i) const
+{
+  return _psi_names[i];
+}
+
+VarPtr VlasovSpaceTimeFormulation::phi(int i)
+{
+  VarFactoryPtr vf = _vlasovBF->varFactory();
+  return vf->testVar(phi_name(i));
+}
+
+std::string VlasovSpaceTimeFormulation::phi_name(int i) const
+{
+  return _phi_names[i];
+}
+
 int VlasovSpaceTimeFormulation::fixedPointMaxSubsteps() const
 {
   return _maxSubsteps;
@@ -1563,6 +1617,51 @@ double VlasovSpaceTimeFormulation::fixedPointTolerance() const
 
 bool VlasovSpaceTimeFormulation::hasL2Trace() const {
   return true;
+}
+
+bool VlasovSpaceTimeFormulation::enforcePositivity() const
+{
+  return _enforcePositivity;
+}
+
+void VlasovSpaceTimeFormulation::initializeProximalGalerkinAlpha()
+{
+  _alphaPG = ParameterFunction::parameterFunction(_alpha0);
+}
+
+FunctionPtr VlasovSpaceTimeFormulation::proximalGalerkinAlpha() const
+{
+  return _alphaPG;
+}
+
+double VlasovSpaceTimeFormulation::expPsiForCell(GlobalIndexType cellID, int speciesOrdinal)
+{
+  return _expPsiForCell[std::make_pair(cellID, speciesOrdinal)];
+}
+
+double VlasovSpaceTimeFormulation::expPsiForCell(GlobalIndexType cellID)
+{
+  return expPsiForCell(cellID, 0);
+}
+
+double VlasovSpaceTimeFormulation::fluxLimitingWeightForCell(GlobalIndexType cellID, int speciesOrdinal)
+{
+  return _fluxLimitingWeightForCell[std::make_pair(cellID, speciesOrdinal)];
+}
+
+double VlasovSpaceTimeFormulation::fluxLimitingWeightForCell(GlobalIndexType cellID)
+{
+  return fluxLimitingWeightForCell(cellID, 0);
+}
+
+void VlasovSpaceTimeFormulation::setProximalGalerkinParameters(double alpha0, double alphaMultiplier)
+{
+  _alpha0 = alpha0;
+  _alphaMultiplier = alphaMultiplier;
+  if (_alphaPG != Teuchos::null)
+  {
+    _alphaPG->setValue(_alpha0);
+  }
 }
 
 int VlasovSpaceTimeFormulation::H1Order() const
@@ -1722,9 +1821,30 @@ void VlasovSpaceTimeFormulation::initialize()
     FunctionPtr f_solnPrev = Function::solution(f[i], vlasovSolnPrevWeakPtr);
     
     _fDiff[i] = _fSoln[i] - f_solnPrev;
+    
+    if (_enforcePositivity)
+    {
+      vlasovSolnWeakPtr->setPolyTypeForQuadrature(Intrepid2::POLYTYPE_GAUSS_LOBATTO);
+      _expPsiSoln[i] = Exp<double>::exp(Function::solution(this->psi(i), vlasovSolnWeakPtr));
+    }
   }
     
   auto vlasovRHS = RHS::rhs();
+  if (_enforcePositivity)
+  {
+    FunctionPtr alphaPG = _alphaPG;
+    for (int i=0; i<_numSpecies; i++)
+    {
+      VarPtr psi = this->psi(i);
+      VarPtr phi = this->phi(i);
+      VarPtr w = this->w(i);
+      FunctionPtr psi_solnPrev = Function::solution(psi, vlasovSolnPrevWeakPtr);
+      FunctionPtr exp_psi = Exp<double>::exp(psi_solnPrev);
+      
+      vlasovRHS->addTerm((psi_solnPrev / alphaPG) * w);
+      vlasovRHS->addTerm((exp_psi - psi_solnPrev * exp_psi) * phi);
+    }
+  }
   _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
     
   IPPtr vlasovTestNorm = this->constructVlasovInnerProduct(_useSumFactorizedAssembly);
@@ -1847,6 +1967,19 @@ void VlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr vlasovBF)
     VarPtr w = this->w(i);
     VarPtr t_n_hat = this->t_n_hat(i);
     
+    if (_enforcePositivity)
+    {
+      VarPtr psi = this->psi(i);
+      VarPtr phi = this->phi(i);
+      FunctionPtr alphaPG = _alphaPG;
+      auto vlasovSolnPrevWeakPtr = Teuchos::rcp(_vlasovSolnPrev.get(), false);
+      FunctionPtr psi_solnPrev = Function::solution(psi, vlasovSolnPrevWeakPtr);
+      FunctionPtr exp_psi = Exp<double>::exp(psi_solnPrev);
+      
+      vlasovBF->addTerm(psi / alphaPG, w);
+      vlasovBF->addTerm(f - exp_psi * psi, phi);
+    }
+    
     for (int d=0; d<spaceDim; d++)
     {
       vlasovBF->addTerm( -v[d] * f, w->di(indexOffsetSpaceOneBased + d));  // dx_d
@@ -1928,7 +2061,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   
   auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _speciesLabels, _configurationSpaceFormulation, rootSpatialMeshTopology,
                                                                   temporalVertices, _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z,
-                                                                  _H1Order, _delta_k, _numUniformRefinements, _basisFamily));
+                                                                  _H1Order, _delta_k, _numUniformRefinements, _basisFamily,
+                                                                  _maxMomentNumberForDriver, false, _enforcePositivity));
   
   configureNextSlab(nextSlabForm);
   
@@ -2092,6 +2226,108 @@ void VlasovSpaceTimeFormulation::setIterativeSolveTolerances(const std::vector<d
   _cgTols = cgTols;
 }
 
+void VlasovSpaceTimeFormulation::applyPositivityLimiter()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!_enforcePositivity, std::invalid_argument, "applyPositivityLimiter() requires enforcePositivity=true");
+  
+  // set f = theta_K f + (1-theta_K) * exp(psi)
+  // Use one value of theta per species per full space-time phase-space cell.
+  // The latent psi variable is constant on the full phase-space-time cell, including the time dimension.
+  // Positivity preservation applies only to Vlasov distribution variables; configuration-space fields are unchanged.
+  // This is local to the MPI rank owning the cell; no communication is required.
+  const auto & myCellIDs = _vlasovSoln->mesh()->cellIDsInPartition();
+  
+  for (const auto & cellID : myCellIDs)
+  {
+    auto basisCache = BasisCache::basisCacheForCell(_vlasovSoln->mesh(), cellID, false, 0, Intrepid2::POLYTYPE_GAUSS_LOBATTO);
+    auto f_values   = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(_fSoln[0],      basisCache);
+    auto psi_values = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(_expPsiSoln[0], basisCache);
+    
+    // We assume all species use a common basis for f and psi.
+    auto trialDofOrdering = _vlasovSoln->mesh()->getElementType(cellID)->trialOrderPtr;
+    auto fBasis = trialDofOrdering->getBasis(this->f(0)->ID());
+    const int basisCardinality = fBasis->getCardinality();
+    FieldContainer<double> basisCoefficients(1, basisCardinality); // (C,F)
+    
+    auto psiBasis = trialDofOrdering->getBasis(this->psi(0)->ID());
+    TEUCHOS_TEST_FOR_EXCEPTION(psiBasis->getCardinality() != 1, std::invalid_argument, "This implementation assumes constant basis for psi");
+    FieldContainer<double> psiBasisCoefficients(1, psiBasis->getCardinality()); // (C,F)
+    
+    auto allCoefficientsForCell = _vlasovSoln->allCoefficientsForCellID(cellID);
+    
+    // First impose bounds on psi to avoid FPEs and extremely large/small exponentials.
+    const double PSI_MIN = -40;
+    const double PSI_MAX =  20;
+    for (int i=0; i<_numSpecies; i++)
+    {
+      auto psi_soln = Function::solution(this->psi(i), _vlasovSoln);
+      psi_soln->values(psi_values, ASSIGN, basisCache);
+      
+      double psi_value;
+      Kokkos::Min<double> minPsi(psi_value);
+      
+      int numPoints = psi_values.extent_int(1);
+      Kokkos::parallel_reduce("VlasovSpaceTimeFormulation flux limiting, setting psi floor", numPoints,
+      KOKKOS_LAMBDA (const int &pointOrdinal, double& intermediatePsi)
+      {
+        const auto & psi_value_point = psi_values(0,pointOrdinal);
+        intermediatePsi = std::min(psi_value_point, intermediatePsi);
+      }, minPsi);
+      
+      psi_value = std::max(PSI_MIN, psi_value);
+      psi_value = std::min(PSI_MAX, psi_value);
+      
+      Projector<double>::projectFunctionOntoBasis(psiBasisCoefficients, Function::constant(psi_value), psiBasis, basisCache);
+      const double exp_psi_value = exp(psi_value);
+      
+      const int psi_ID = this->psi(i)->ID();
+      for (int dofOrdinal=0; dofOrdinal < psiBasis->getCardinality(); dofOrdinal++)
+      {
+        const int localDofIndex = trialDofOrdering->getDofIndex(psi_ID, dofOrdinal);
+        const auto & projected_psi_coefficient = psiBasisCoefficients(0, dofOrdinal);
+        allCoefficientsForCell(localDofIndex) = projected_psi_coefficient;
+      }
+      
+      double theta = 1.0;
+      auto & f = _fSoln[i];
+      f->values(f_values, ASSIGN, basisCache);
+      
+      Kokkos::Min<double> minTheta(theta);
+      
+      numPoints = f_values.extent_int(1);
+      Kokkos::parallel_reduce("VlasovSpaceTimeFormulation flux limiting, theta determination", numPoints,
+      KOKKOS_LAMBDA (const int &pointOrdinal, double& intermediateTheta)
+      {
+        double theta_pt = 1.0;
+        const auto & f_value = f_values(0,pointOrdinal);
+        
+        if (f_value < 0)
+        {
+          theta_pt = 1.0 - f_value / (f_value - exp_psi_value);
+        }
+        intermediateTheta = std::min(theta_pt, intermediateTheta);
+      }, minTheta);
+      
+      _fluxLimitingWeightForCell[std::make_pair(cellID, i)] = theta;
+      _expPsiForCell[std::make_pair(cellID, i)] = exp_psi_value;
+      
+      Projector<double>::projectFunctionOntoBasis(basisCoefficients, theta * f + (1.0-theta) * exp_psi_value, fBasis, basisCache);
+      
+      const int f_ID = this->f(i)->ID();
+      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
+      {
+        const int localDofIndex = trialDofOrdering->getDofIndex(f_ID, dofOrdinal);
+        allCoefficientsForCell(localDofIndex) = basisCoefficients(0, dofOrdinal);
+      }
+    }
+    
+    _vlasovSoln->setSolnCoeffsForCellID(allCoefficientsForCell, cellID);
+    
+    SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(f_values);
+    SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(psi_values);
+  }
+}
+
 void VlasovSpaceTimeFormulation::solve()
 {
   const int rank = MPIWrapper::CommWorld()->MyPID();
@@ -2123,8 +2359,24 @@ void VlasovSpaceTimeFormulation::solve()
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  
+  if (_enforcePositivity)
+  {
+    _fluxLimitingWeightForCell.clear();
+    _expPsiForCell.clear();
+  }
+  
+  double alpha = _alpha0;
+  const int alphaUpdateFrequency = 4; // let alpha stay same for this many substeps
+  std::vector<double> prior_fRelDiffs(alphaUpdateFrequency, std::numeric_limits<double>::max());
+  
   for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
   {
+    if (_enforcePositivity)
+    {
+      _alphaPG->setValue(alpha);
+    }
+    
     if (rank == 0)
     {
       std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << _maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
@@ -2148,6 +2400,12 @@ void VlasovSpaceTimeFormulation::solve()
       _vlasovSoln->solve(gmgSolver);
       substepIterationCounts[substepOrdinal] = gmgSolver->iterationCount();
     }
+    
+    if (_enforcePositivity)
+    {
+      applyPositivityLimiter();
+    }
+    
     for (auto & solnMoments : _solutionMoments)
     {
       solnMoments->update();
@@ -2198,6 +2456,51 @@ void VlasovSpaceTimeFormulation::solve()
       if (rank == 0)
       {
         std::cout << "Substep " << substepOrdinal+1 << ", relative L^2 norm of difference in f: " << fRelDiff << std::endl;
+      }
+      
+      if (_enforcePositivity)
+      {
+        const double alphaMin = 1e-8;
+        const double alphaMax = 1e8;
+        // adjust alpha for next substep:
+        if (_alphaMultiplier > 0)
+        {
+          alpha *= _alphaMultiplier;
+        }
+        else if (prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)] != std::numeric_limits<double>::max())
+        {
+          const double fRelDiff_previous = prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)];
+          const double relativeChange = (fRelDiff_previous - fRelDiff) / std::max(fRelDiff, fRelDiff_previous);
+          
+          if (std::abs(relativeChange) < 1e-1)
+          {
+            // stagnated: increase alpha
+            if (alpha != alphaMax)
+            {
+              alpha = std::min(2.0 * alpha, alphaMax);
+              // ensure that we won't adjust alpha for at least alphaUpdateFrequency steps:
+              prior_fRelDiffs = std::vector<double>(alphaUpdateFrequency, std::numeric_limits<double>::max());
+            }
+            if (rank == 0) std::cout << "stagnated: alpha: " << alpha << std::endl;
+          }
+          else if (relativeChange < 0)
+          {
+            // diverging: decrease alpha
+            if (alpha != alphaMin)
+            {
+              alpha = std::max(0.25 * alpha, alphaMin);
+              // ensure that we won't adjust alpha for at least alphaUpdateFrequency steps:
+              prior_fRelDiffs = std::vector<double>(alphaUpdateFrequency, std::numeric_limits<double>::max());
+            }
+            if (rank == 0) std::cout << "diverging: alpha: " << alpha << std::endl;
+          }
+          else
+          {
+            // converging rapidly enough: leave alpha alone
+            if (rank == 0) std::cout << "converging: alpha: " << alpha << std::endl;
+          }
+        }
+        prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)] = fRelDiff;
       }
       
       if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1))
@@ -2251,6 +2554,30 @@ void VlasovSpaceTimeFormulation::setInitialConditions(vector<FunctionPtr> f0)
   }
   
   _vlasovSoln->setBC(vlasovBC);
+  
+  if (_enforcePositivity)
+  {
+    std::map<int, FunctionPtr> projectionMap;
+    for (int speciesOrdinal=0; speciesOrdinal<_numSpecies; speciesOrdinal++)
+    {
+      FunctionPtr psi0;
+      if (f0[speciesOrdinal]->isZero() || f0[speciesOrdinal]->boundaryValueOnly())
+      {
+        // For next-slab setup, f0 may be derived from the temporal trace t_n_hat and therefore
+        // be boundary-only.  psi is a cell-interior latent field, so avoid evaluating log() of
+        // a flux/boundary-only function over cell interiors; use the same safe floor used for zero data.
+        psi0 = Function::constant(-40);
+      }
+      else
+      {
+        psi0 = Teuchos::rcp( new Ln<double>(f0[speciesOrdinal]) );
+      }
+      projectionMap[this->psi(speciesOrdinal)->ID()] = psi0;
+    }
+    const int solutionOrdinal = 0;
+    _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
+    _vlasovSolnPrev->setSolution(_vlasovSoln);
+  }
   
   double n0;
   if (_enforceQuasiNeutrality)
@@ -2392,6 +2719,30 @@ void VlasovSpaceTimeFormulation::setInitialAndInflowConditions(vector<FunctionPt
   }
 
   _vlasovSoln->setBC(vlasovBC);
+  
+  if (_enforcePositivity)
+  {
+    std::map<int, FunctionPtr> projectionMap;
+    for (int speciesOrdinal=0; speciesOrdinal<_numSpecies; speciesOrdinal++)
+    {
+      FunctionPtr psi0;
+      if (f0[speciesOrdinal]->isZero() || f0[speciesOrdinal]->boundaryValueOnly())
+      {
+        // For next-slab setup, f0 may be derived from the temporal trace t_n_hat and therefore
+        // be boundary-only.  psi is a cell-interior latent field, so avoid evaluating log() of
+        // a flux/boundary-only function over cell interiors; use the same safe floor used for zero data.
+        psi0 = Function::constant(-40);
+      }
+      else
+      {
+        psi0 = Teuchos::rcp( new Ln<double>(f0[speciesOrdinal]) );
+      }
+      projectionMap[this->psi(speciesOrdinal)->ID()] = psi0;
+    }
+    const int solutionOrdinal = 0;
+    _vlasovSoln->projectOntoMesh(projectionMap, solutionOrdinal);
+    _vlasovSolnPrev->setSolution(_vlasovSoln);
+  }
   
   double n0;
   if (_enforceQuasiNeutrality)

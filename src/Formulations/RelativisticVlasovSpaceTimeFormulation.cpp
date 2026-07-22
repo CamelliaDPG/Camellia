@@ -32,7 +32,8 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const TestSpaceInnerProduct testSpaceIP,
                                                                                const double testSpaceL2Weight,
                                                                                const EBasisFamily &basisFamily,
-                                                                               const int maxMomentNumberForDriver)
+                                                                               const int maxMomentNumberForDriver,
+                                                                               const bool enforcePositivity)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
@@ -46,7 +47,8 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            numUniformRefinements,
                            basisFamily,
                            maxMomentNumberForDriver,
-                           true) // true: defer initialization; we call it below.
+                           true, // true: defer initialization; we call initialize() below.
+                           enforcePositivity)
 {
   this->_useSumFactorizedAssembly = false; // set base class's flag: we don't (yet) support sum-factorized assembly here.
   this->initialize();
@@ -74,7 +76,7 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const 
   {
     VarPtr w = this->w(i);
     
-    if (_testSpaceInnerProduct == Graph)
+    if (_testSpaceInnerProduct == GraphTestSpaceInnerProduct)
     {
       LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
       for (int d=0; d<spaceDim; d++)
@@ -93,13 +95,19 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const 
       LinearTermPtr stabilization_term = sqrt(_testSpaceL2Weight) * w;
       ip->addTerm(stabilization_term);
     }
-    else if (_testSpaceInnerProduct == L2)
+    else if (_testSpaceInnerProduct == L2TestSpaceInnerProduct)
     {
       ip->addTerm(w);
     }
     else
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported test space inner product selection");
+    }
+    
+    if (this->enforcePositivity())
+    {
+      VarPtr phi = this->phi(i);
+      ip->addTerm(phi);
     }
   }
   
@@ -112,6 +120,11 @@ VarFactoryPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovVarFactory(
   
   BasisFamilyPtr basisFamily = BasisFamily::basisFamily(this->basisFamily());
   
+  if (this->enforcePositivity())
+  {
+    this->initializeProximalGalerkinAlpha();
+  }
+  
   const int numSpecies = this->numSpecies();
   std::vector<VarPtr> f(numSpecies);
   std::vector<VarPtr> w(numSpecies);
@@ -122,6 +135,12 @@ VarFactoryPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovVarFactory(
     f[i] = vlasovVF->fieldVar(this->f_name(i));
     w[i] = vlasovVF->testVar(this->w_name(i), HGRAD);
     t_n_hat[i] = vlasovVF->fluxVar(this->t_n_hat_name(i));
+    
+    if (this->enforcePositivity())
+    {
+      VarPtr psi_i = vlasovVF->fieldVar(this->psi_name(i), CONSTANT_SCALAR); // element-wise constant latent positivity field on the full phase-space-time cell, including time
+      VarPtr phi_i = vlasovVF->testVar(this->phi_name(i), L2);               // latent positivity test function
+    }
   }
   
   vlasovVF->setTrialBasisFamily(basisFamily);
@@ -186,6 +205,19 @@ void RelativisticVlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr 
     // test
     VarPtr w = this->w(i);
     
+    if (this->enforcePositivity())
+    {
+      VarPtr psi = this->psi(i);
+      VarPtr phi = this->phi(i);
+      FunctionPtr alphaPG = this->proximalGalerkinAlpha();
+      auto vlasovSolnPrevWeakPtr = Teuchos::rcp(this->vlasovSolutionPreviousSubstep().get(), false);
+      FunctionPtr psi_solnPrev = Function::solution(psi, vlasovSolnPrevWeakPtr);
+      FunctionPtr exp_psi = Exp<double>::exp(psi_solnPrev);
+      
+      vlasovBF->addTerm(psi / alphaPG, w);
+      vlasovBF->addTerm(f - exp_psi * psi, phi);
+    }
+    
     for (int d=0; d<spaceDim; d++)
     {
       vlasovBF->addTerm( -v[d] * f, w->di(indexOffsetSpaceOneBased + d));  // dx_d
@@ -216,7 +248,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               temporalVertices, velocitySpaceVertices_x(), velocitySpaceVertices_y(), velocitySpaceVertices_z(),
                                                                               H1Order(), delta_k(), numUniformRefinements(),
                                                                               _testSpaceInnerProduct, _testSpaceL2Weight,
-                                                                              basisFamily()));
+                                                                              basisFamily(),
+                                                                              0, this->enforcePositivity()));
   
   configureNextSlab(nextSlabForm);
   
