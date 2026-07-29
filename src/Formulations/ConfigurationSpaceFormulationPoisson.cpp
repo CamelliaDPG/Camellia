@@ -236,6 +236,14 @@ std::string ConfigurationSpaceFormulationPoisson::name() const
   return "Poisson";
 }
 
+Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulationPoisson::newInstance() const
+{
+  auto instance = Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(_q, _eps0, _timeDiscretizationType));
+  instance->setExtraAcceleration(_extraAcceleration);
+  instance->setExportViz(_exportViz, _vizOutputDir);
+  return instance;
+}
+
 FunctionPtr ConfigurationSpaceFormulationPoisson::B_i(int zeroBasedComp)
 {
   return Function::zero();

@@ -82,6 +82,9 @@ public:
    supported mesh class is determined by tests rather than by a hard no-hanging-node restriction.
    */
   FunctionPtr relativisticFirstMoment(const int zeroBasedVelocityComponent, const int speciesOrdinal);
+  FunctionPtr relativisticFirstMoment(const int zeroBasedVelocityComponent, const int speciesOrdinal,
+                                      SolutionMoments* drivingMoments,
+                                      SolutionPtr phaseSpaceSolution);
   
   FunctionPtr currentX() const override;
   FunctionPtr currentY() const override;

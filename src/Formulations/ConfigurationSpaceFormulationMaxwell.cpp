@@ -241,6 +241,14 @@ std::string ConfigurationSpaceFormulationMaxwell::name() const
   return "Maxwell";
 }
 
+Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulationMaxwell::newInstance() const
+{
+  auto instance = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell(_q, _eps0, _mu0));
+  instance->setExtraAcceleration(_extraAcceleration);
+  instance->setExportViz(_exportViz, _vizOutputDir);
+  return instance;
+}
+
 FunctionPtr ConfigurationSpaceFormulationMaxwell::B_i(int zeroBasedComp)
 {
   return Function::zero();

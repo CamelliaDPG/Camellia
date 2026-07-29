@@ -2059,7 +2059,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> VlasovSpaceTimeFormulation::nextTimeSla
   // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
   auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(_spatialMeshTopology);
   
-  auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _speciesLabels, _configurationSpaceFormulation, rootSpatialMeshTopology,
+  auto nextConfigurationFormulation = _configurationSpaceFormulation->newInstance();
+  auto nextSlabForm = Teuchos::rcp(new VlasovSpaceTimeFormulation(_q, _m, _speciesLabels, nextConfigurationFormulation, rootSpatialMeshTopology,
                                                                   temporalVertices, _velocitySpaceVertices_x, _velocitySpaceVertices_y, _velocitySpaceVertices_z,
                                                                   _H1Order, _delta_k, _numUniformRefinements, _basisFamily,
                                                                   _maxMomentNumberForDriver, false, _enforcePositivity));

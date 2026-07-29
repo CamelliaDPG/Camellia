@@ -52,6 +52,9 @@ namespace Camellia
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Poisson", "Gauss" are all possibilities.
     virtual std::string name() const = 0;
     
+    //! Returns a fresh formulation instance of the same concrete type, carrying persistent formulation parameters but not slab-specific mesh/solution state.
+    virtual Teuchos::RCP<ConfigurationSpaceFormulation> newInstance() const = 0;
+    
     //! should be called by subclass during initialization: specify the configuration
     void setConfigurationSolution(SolutionPtr configurationSolution);
     

@@ -7,6 +7,7 @@
 #include "AbsFunction.h"
 #include "BasisSumFunction.h"
 #include "CamelliaDataHelpers.h"
+#include "CamelliaMemoryTools.h"
 #include "ConfigurationSpaceFormulation.h"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
@@ -383,7 +384,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const bool useGradedSpatialMesh,
                                                               const int numUniformRefinements)
 {
-  Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0, SPACE_TIME) );
+  Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
   MeshTopologyPtr spatialMeshTopo;
   if (useGradedSpatialMesh)
@@ -553,11 +554,13 @@ int main(int argc, char *argv[])
     const double permeability     = 4 * M_PI * 1.e-7;                                         // permeability of free space (mu_0)
     const double D                = 0.01;
     const double c                = 2.997924580e8;
-    const double V                = 1.e6; // gap voltage
+    double V                      = 1.e6; // gap voltage
     double J_initial = 1e10;
     
     double W                      = 1e4;                                                      // beam intensity in [eV] -- copied from cold diode problem; may want a different value, though Lau et al. seem to suggest the precise number does not matter too much.
     cmdp.setOption("W", &W, "beam intensity [eV]");
+    
+    cmdp.setOption("V", &V, "gap voltage [V]");
     
     cmdp.setOption("J", &J_initial, "current density [A/m^2] at inflow");
     
@@ -701,7 +704,7 @@ int main(int argc, char *argv[])
     }
     
     using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
-    const TestIP testIP = useL2TestSpace ? TestIP::L2 : TestIP::Graph;
+    const TestIP testIP = useL2TestSpace ? TestIP::L2TestSpaceInnerProduct : TestIP::GraphTestSpaceInnerProduct;
     
     if (maxRefinementsFinalSlab < 0)
     {
@@ -1018,14 +1021,35 @@ int main(int argc, char *argv[])
     FunctionPtr potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
     
     auto density    = solutionMoments->solutionMomentFunction(0,0);
-    auto momentum   = solutionMoments->solutionMomentFunction(1,0); // x momentum
-    auto momentum_y = solutionMoments->solutionMomentFunction(0,1); // y momentum (should be 0)
+    auto momentum   = solutionMoments->solutionMomentFunction(1,0); // x proper velocity moment
+    auto momentum_z = solutionMoments->solutionMomentFunction(0,1); // second retained component moment; in 1D2V this is z
     
     auto velocity   = momentum   / density;
-    auto velocity_y = momentum_y / density;
+    auto velocity_z = momentum_z / density;
+    
+    auto relativisticForm = Teuchos::rcp_dynamic_cast<RelativisticVlasovSpaceTimeFormulation>(form);
+    TEUCHOS_TEST_FOR_EXCEPTION(relativisticForm == Teuchos::null, std::invalid_argument, "Expected RelativisticVlasovSpaceTimeFormulation in PlanarMITLRelativisticSpaceTime");
+    auto Jx = relativisticForm->currentX();
+    auto Jz = relativisticForm->currentZ();
+    auto vx_rel_mean = Jx / (q * density);
+    auto vz_rel_mean = Jz / (q * density);
     
     const int speciesOrdinal = 0;
     auto f_soln = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+    auto f_positive = Function::max(f_soln, Function::constant(0.0));
+    auto f_positive_soln = Solution::solution(form->vlasovMesh());
+    {
+      std::map<int,FunctionPtr> projectionMap;
+      projectionMap[form->f(speciesOrdinal)->ID()] = f_positive;
+      f_positive_soln->projectOntoMesh(projectionMap);
+    }
+    auto positiveMoments = Teuchos::rcp(new SolutionMoments(maxMomentNumber, f_positive_soln, form->f(speciesOrdinal), form->configurationSpaceMesh()));
+    positiveMoments->update();
+    auto density_positive = positiveMoments->solutionMomentFunction(0,0);
+    auto vx_rel_positive_moment = relativisticForm->relativisticFirstMoment(0, speciesOrdinal, positiveMoments.get(), f_positive_soln);
+    auto vz_rel_positive_moment = relativisticForm->relativisticFirstMoment(1, speciesOrdinal, positiveMoments.get(), f_positive_soln);
+    auto vx_rel_mean_clipped = vx_rel_positive_moment / density_positive;
+    auto vz_rel_mean_clipped = vz_rel_positive_moment / density_positive;
         
     if (!useAdaptivity)
     {
@@ -1061,6 +1085,12 @@ int main(int argc, char *argv[])
         
         form->solve();
         
+        if (rank == 0)
+        {
+          double memoryHWM_GB = memoryHighWaterMarkInGigabytes();
+          std::cout << "Time slab " << timeSlabOrdinal << ", memory HWM: " << memoryHWM_GB << " GB\n";
+        }
+        
         {
           int quadratureEnrichment = 5;
           const double f_min = f_soln->minimumValue(form->vlasovMesh(), quadratureEnrichment);
@@ -1079,6 +1109,7 @@ int main(int argc, char *argv[])
         }
         
         solutionMoments->update();
+        positiveMoments->update();
         
         if (rank == 0)
         {
@@ -1101,7 +1132,7 @@ int main(int argc, char *argv[])
           int num1DPoints = 20; // hardcoded, fine resolution for now.
           //            maxwellVizSlab->exportSolution(form->configurationSpaceSolution(),{density}, {"n_e"}, vizTimeValue, num1DPoints);
           //            maxwellVizSlab->exportSolution(form->configurationSpaceSolution());
-          maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_y,cellIDFunction}, {"n_e","vx","vy","cell ID (Maxwell)"}, vizTimeValue, num1DPoints);
+          maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_z,Jx,Jz,vx_rel_mean,vz_rel_mean,vx_rel_mean_clipped,vz_rel_mean_clipped,cellIDFunction}, {"n_e","ux_mean","uz_mean_raw","Jx","Jz","vx_rel_mean_signed","vz_rel_mean_signed","vx_rel_mean_clipped","vz_rel_mean_clipped","cell ID (Maxwell)"}, vizTimeValue, num1DPoints);
           //            vlasovVizSlab->exportSolution(form->vlasovSolution(), {cellIDFunction}, {"cell ID (Vlasov)"});
           
           const bool exportVlasov = false; // PhaseSpaceVisualization is not working in 1D1T2V -- unclear where the issue lies.
@@ -1146,6 +1177,8 @@ int main(int argc, char *argv[])
           // shift and scale so that ratio will be 1 at upperThreshold, and 0 at lower
           ratio = (ratio - lowerThreshold) / (upperThreshold - lowerThreshold);
         }
+        // DEBUGGING: for now, we turn off tapering by setting ratio to 1.0
+        ratio = 1.0;
         double n = n0 * ratio;
         
         fM_u0->set_n(n);
@@ -1169,6 +1202,27 @@ int main(int argc, char *argv[])
           }
         }
         
+        // clear solution-backed diagnostic functions before advancing slabs to avoid stale listener / solution lifetimes
+        Jx = Teuchos::null;
+        Jz = Teuchos::null;
+        vx_rel_mean = Teuchos::null;
+        vz_rel_mean = Teuchos::null;
+        vx_rel_mean_clipped = Teuchos::null;
+        vz_rel_mean_clipped = Teuchos::null;
+        vx_rel_positive_moment = Teuchos::null;
+        vz_rel_positive_moment = Teuchos::null;
+        density_positive = Teuchos::null;
+        positiveMoments = Teuchos::null;
+        f_positive_soln = Teuchos::null;
+        f_positive = Teuchos::null;
+        density = Teuchos::null;
+        momentum = Teuchos::null;
+        momentum_z = Teuchos::null;
+        velocity = Teuchos::null;
+        velocity_z = Teuchos::null;
+        potential = Teuchos::null;
+        f_soln = Teuchos::null;
+
         // next time slab
         form = form->nextTimeSlab(tWidth, tElements);
         
@@ -1180,13 +1234,34 @@ int main(int argc, char *argv[])
           potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
           
           density    = solutionMoments->solutionMomentFunction(0,0);
-          momentum   = solutionMoments->solutionMomentFunction(1,0); // x momentum
-          momentum_y = solutionMoments->solutionMomentFunction(0,1);
+          momentum   = solutionMoments->solutionMomentFunction(1,0); // x proper-velocity moment
+          momentum_z = solutionMoments->solutionMomentFunction(0,1); // second retained component; z in 1D2V
           
-          velocity   = momentum   / density; // x velocity
-          velocity_y = momentum_y / density;
+          velocity   = momentum   / density; // x raw moment ratio
+          velocity_z = momentum_z / density;
+          
+          relativisticForm = Teuchos::rcp_dynamic_cast<RelativisticVlasovSpaceTimeFormulation>(form);
+          TEUCHOS_TEST_FOR_EXCEPTION(relativisticForm == Teuchos::null, std::invalid_argument, "Expected RelativisticVlasovSpaceTimeFormulation in PlanarMITLRelativisticSpaceTime");
+          Jx = relativisticForm->currentX();
+          Jz = relativisticForm->currentZ();
+          vx_rel_mean = Jx / (q * density);
+          vz_rel_mean = Jz / (q * density);
           
           f_soln = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+          f_positive = Function::max(f_soln, Function::constant(0.0));
+          f_positive_soln = Solution::solution(form->vlasovMesh());
+          {
+            std::map<int,FunctionPtr> projectionMap;
+            projectionMap[form->f(speciesOrdinal)->ID()] = f_positive;
+            f_positive_soln->projectOntoMesh(projectionMap);
+          }
+          positiveMoments = Teuchos::rcp(new SolutionMoments(maxMomentNumber, f_positive_soln, form->f(speciesOrdinal), form->configurationSpaceMesh()));
+          positiveMoments->update();
+          density_positive = positiveMoments->solutionMomentFunction(0,0);
+          vx_rel_positive_moment = relativisticForm->relativisticFirstMoment(0, speciesOrdinal, positiveMoments.get(), f_positive_soln);
+          vz_rel_positive_moment = relativisticForm->relativisticFirstMoment(1, speciesOrdinal, positiveMoments.get(), f_positive_soln);
+          vx_rel_mean_clipped = vx_rel_positive_moment / density_positive;
+          vz_rel_mean_clipped = vz_rel_positive_moment / density_positive;
         }
       }
     }
@@ -1285,7 +1360,14 @@ int main(int argc, char *argv[])
           
           form->solve();
           
+          if (rank == 0)
+          {
+            double memoryHWM_GB = memoryHighWaterMarkInGigabytes();
+            std::cout << "Time slab " << timeSlabOrdinal << ", refinement " << refinementNumber << ", memory HWM (rank 0): " << memoryHWM_GB << " GB\n";
+          }
+          
           solutionMoments->update();
+          positiveMoments->update();
           
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
           
@@ -1359,7 +1441,7 @@ int main(int argc, char *argv[])
                     
           if (saveViz)
           {
-            maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_y,cellIDFunction}, {"n_e","vx","vy","cell ID (Maxwell)"}, refinementNumber);
+            maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_z,Jx,Jz,vx_rel_mean,vz_rel_mean,vx_rel_mean_clipped,vz_rel_mean_clipped,cellIDFunction}, {"n_e","ux_mean","uz_mean_raw","Jx","Jz","vx_rel_mean_signed","vz_rel_mean_signed","vx_rel_mean_clipped","vz_rel_mean_clipped","cell ID (Maxwell)"}, refinementNumber);
             if (exportVlasov)
             {
               vlasovVizSlab->exportTimeStep(refinementNumber);
@@ -1394,7 +1476,7 @@ int main(int argc, char *argv[])
               
               const int refNumber = 0; // "time" for ParaView
               const int defaultNum1DPoints = 2 * H1Order;
-              maxwellVizSlabFinalRef->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_y,cellIDFunction}, {"n_e","vx","vy","cell ID (Maxwell)"}, refNumber, defaultNum1DPoints);
+              maxwellVizSlabFinalRef->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_z,Jx,Jz,vx_rel_mean,vz_rel_mean,vx_rel_mean_clipped,vz_rel_mean_clipped,cellIDFunction}, {"n_e","ux_mean","uz_mean_raw","Jx","Jz","vx_rel_mean_signed","vz_rel_mean_signed","vx_rel_mean_clipped","vz_rel_mean_clipped","cell ID (Maxwell)"}, refNumber, defaultNum1DPoints);
               
               if (exportVlasov)
               {
@@ -1407,6 +1489,27 @@ int main(int argc, char *argv[])
         
         if (timeSlabOrdinal < numTimeSlabs - 1)
         {
+          // clear solution-backed diagnostic functions before advancing slabs to avoid stale listener / solution lifetimes
+          Jx = Teuchos::null;
+          Jz = Teuchos::null;
+          vx_rel_mean = Teuchos::null;
+          vz_rel_mean = Teuchos::null;
+          vx_rel_mean_clipped = Teuchos::null;
+          vz_rel_mean_clipped = Teuchos::null;
+          vx_rel_positive_moment = Teuchos::null;
+          vz_rel_positive_moment = Teuchos::null;
+          density_positive = Teuchos::null;
+          positiveMoments = Teuchos::null;
+          f_positive_soln = Teuchos::null;
+          f_positive = Teuchos::null;
+          density = Teuchos::null;
+          momentum = Teuchos::null;
+          momentum_z = Teuchos::null;
+          velocity = Teuchos::null;
+          velocity_z = Teuchos::null;
+          potential = Teuchos::null;
+          f_soln = Teuchos::null;
+
           // next time slab
           form = form->nextTimeSlab(tWidth, tElements);
           
@@ -1418,13 +1521,34 @@ int main(int argc, char *argv[])
             potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
             
             density    = solutionMoments->solutionMomentFunction(0,0);
-            momentum   = solutionMoments->solutionMomentFunction(1,0); // x momentum
-            momentum_y = solutionMoments->solutionMomentFunction(0,1);
+            momentum   = solutionMoments->solutionMomentFunction(1,0); // x proper-velocity moment
+            momentum_z = solutionMoments->solutionMomentFunction(0,1); // second retained component; z in 1D2V
             
-            velocity   = momentum   / density; // x velocity
-            velocity_y = momentum_y / density;
+            velocity   = momentum   / density; // x raw moment ratio
+            velocity_z = momentum_z / density;
+            
+            relativisticForm = Teuchos::rcp_dynamic_cast<RelativisticVlasovSpaceTimeFormulation>(form);
+            TEUCHOS_TEST_FOR_EXCEPTION(relativisticForm == Teuchos::null, std::invalid_argument, "Expected RelativisticVlasovSpaceTimeFormulation in PlanarMITLRelativisticSpaceTime");
+            Jx = relativisticForm->currentX();
+            Jz = relativisticForm->currentZ();
+            vx_rel_mean = Jx / (q * density);
+            vz_rel_mean = Jz / (q * density);
             
             f_soln = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+            f_positive = Function::max(f_soln, Function::constant(0.0));
+            f_positive_soln = Solution::solution(form->vlasovMesh());
+            {
+              std::map<int,FunctionPtr> projectionMap;
+              projectionMap[form->f(speciesOrdinal)->ID()] = f_positive;
+              f_positive_soln->projectOntoMesh(projectionMap);
+            }
+            positiveMoments = Teuchos::rcp(new SolutionMoments(maxMomentNumber, f_positive_soln, form->f(speciesOrdinal), form->configurationSpaceMesh()));
+            positiveMoments->update();
+            density_positive = positiveMoments->solutionMomentFunction(0,0);
+            vx_rel_positive_moment = relativisticForm->relativisticFirstMoment(0, speciesOrdinal, positiveMoments.get(), f_positive_soln);
+            vz_rel_positive_moment = relativisticForm->relativisticFirstMoment(1, speciesOrdinal, positiveMoments.get(), f_positive_soln);
+            vx_rel_mean_clipped = vx_rel_positive_moment / density_positive;
+            vz_rel_mean_clipped = vz_rel_positive_moment / density_positive;
             
             bcFunctionsToResolve = bcFunctions(form, f_leftInflow);
           }

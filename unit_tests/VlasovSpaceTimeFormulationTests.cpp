@@ -2688,7 +2688,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
     std::vector<double> velocitySpaceVertices_z;
 
-    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0));
     auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
                                                                            configForm,
                                                                            spatialMeshTopo,
@@ -2756,7 +2756,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
     std::vector<double> velocitySpaceVertices_z;
 
-    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0));
     auto L2TestSpaceInnerProduct = RelativisticVlasovSpaceTimeFormulation::L2TestSpaceInnerProduct;
     auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
                                                                            configForm,
@@ -2806,7 +2806,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
     std::vector<double> velocitySpaceVertices_z;
 
-    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0));
     auto L2TestSpaceInnerProduct = RelativisticVlasovSpaceTimeFormulation::L2TestSpaceInnerProduct;
     auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
                                                                            configForm,
@@ -2879,7 +2879,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(TEST_V0, TEST_VWIDTH, vyElements);
     std::vector<double> velocitySpaceVertices_z;
 
-    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0, 1.0));
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, TEST_EPS0));
     auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m,
                                                                            configForm,
                                                                            spatialMeshTopo,

@@ -7,6 +7,7 @@
 
 #include "SolutionMoments.h"
 
+#include "SolutionMomentFunction.h"
 #include "doubleBasisConstruction.h"
 #include "GlobalDofAssignment.h"
 #include "SolutionMomentFunction.h"
@@ -499,6 +500,17 @@ void SolutionMoments::valuesForAllMoments(DeviceView<double> values, BasisCacheP
 
 SolutionMoments::~SolutionMoments()
 {
+  for (auto *listener : _updateListeners)
+  {
+    if (listener == nullptr) continue;
+    auto relativisticListener = dynamic_cast<RelativisticFirstMomentFunction*>(listener);
+    if (relativisticListener != nullptr)
+    {
+      relativisticListener->detachFromDrivingMoments();
+    }
+  }
+  _updateListeners.clear();
+
   if (_spatialBasisCoefficientsHasBeenCheckedOut)
   {
     SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(_spatialBasisCoefficients);

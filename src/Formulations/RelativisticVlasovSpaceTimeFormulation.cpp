@@ -244,7 +244,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
   // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
   auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(spatialMeshTopology());
   
-  auto nextSlabForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(_c, q(), m(), configurationSpaceFormulation(), rootSpatialMeshTopology,
+  auto nextConfigurationFormulation = configurationSpaceFormulation()->newInstance();
+  auto nextSlabForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(_c, q(), m(), nextConfigurationFormulation, rootSpatialMeshTopology,
                                                                               temporalVertices, velocitySpaceVertices_x(), velocitySpaceVertices_y(), velocitySpaceVertices_z(),
                                                                               H1Order(), delta_k(), numUniformRefinements(),
                                                                               _testSpaceInnerProduct, _testSpaceL2Weight,
@@ -283,6 +284,24 @@ FunctionPtr RelativisticVlasovSpaceTimeFormulation::relativisticFirstMoment(cons
                                                                       zeroBasedVelocityComponent));
   _relativisticFirstMomentFunctions[key] = firstMoment;
   return firstMoment;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::relativisticFirstMoment(const int zeroBasedVelocityComponent,
+                                                                            const int speciesOrdinal,
+                                                                            SolutionMoments* drivingMoments,
+                                                                            SolutionPtr phaseSpaceSolution)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((speciesOrdinal < 0) || (speciesOrdinal >= numSpecies()), std::invalid_argument,
+                             "species ordinal out of range");
+  TEUCHOS_TEST_FOR_EXCEPTION(drivingMoments == nullptr, std::invalid_argument,
+                             "drivingMoments may not be null");
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
+                             "phaseSpaceSolution may not be null");
+
+  return Teuchos::rcp(new RelativisticFirstMomentFunction(drivingMoments,
+                                                          phaseSpaceSolution, f(speciesOrdinal),
+                                                          configurationSpaceMesh(), _c,
+                                                          zeroBasedVelocityComponent));
 }
 
 FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentX() const

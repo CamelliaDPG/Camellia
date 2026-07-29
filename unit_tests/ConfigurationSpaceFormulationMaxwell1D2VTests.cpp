@@ -122,8 +122,8 @@ MaxwellErrors computeMaxwellManufacturedErrors(const MaxwellMS &ms,
 
   // --- create Maxwell configuration formulation
   // q is unused for RHS-for-testing; eps0 appears only through your manufacturing (rhoOverEps0 etc.)
-  double q = 1.0, eps0 = 1.0, mu0 = 1.0;
-  auto maxwell = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0, mu0));
+  double q = 1.0, eps0 = 1.0;
+  auto maxwell = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0));
   maxwell->initializeMesh(configTopo, H1Order, delta_k);
 
   MeshPtr configMesh = maxwell->configurationSpaceMesh();
@@ -213,6 +213,45 @@ MaxwellErrors computeMaxwellManufacturedErrors(const MaxwellMS &ms,
   return errors;
 }
 
+double maxwellDiscreteConsistencyEnergy(const MaxwellMS &ms,
+                                        int H1Order, int delta_k,
+                                        int numXElems, int numTElems,
+                                        double x0, double x1,
+                                        double t0, double t1)
+{
+  std::vector<double> xDimensions = {x1 - x0};
+  std::vector<int>    xElemCounts = {numXElems};
+  std::vector<double> xOrigin     = {x0};
+
+  MeshTopologyPtr spatialTopo = MeshFactory::rectilinearMeshTopology(xDimensions, xElemCounts, xOrigin);
+  std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(t0, t1 - t0, numTElems);
+
+  MeshTopologyPtr configTopo = MeshFactory::extrudedMeshTopology(spatialTopo, {temporalVertices});
+
+  double q = 1.0, eps0 = 1.0;
+  auto maxwell = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0));
+  maxwell->initializeMesh(configTopo, H1Order, delta_k);
+
+  SolutionPtr soln = maxwell->solution();
+
+  maxwell->setRHSForTesting(ms.rhoOverEps0, ms.JxOverEps0, ms.JzOverEps0);
+
+  std::map<int,FunctionPtr> proj;
+  proj[maxwell->E_fieldVar(0)->ID()] = ms.ExExact;
+  proj[maxwell->B_fieldVar(1)->ID()] = ms.ByExact;
+  proj[maxwell->VE_fieldVar()->ID()] = ms.phiExact;
+  proj[maxwell->A_fieldVar(1)->ID()] = ms.AExact;
+
+  proj[maxwell->E_hat(0)->ID()] = ms.ExExact;
+  proj[maxwell->B_hat(1)->ID()] = ms.ByExact;
+  proj[maxwell->VE_hat()->ID()] = ms.phiExact;
+  proj[maxwell->A_hat(1)->ID()] = ms.AExact;
+
+  soln->projectOntoMesh(proj);
+  soln->clearComputedResiduals();
+  return soln->energyErrorTotal();
+}
+
 void testMaxwellManufactured(const MaxwellMS &ms,
                              int H1Order, int delta_k,
                              int numXElems, int numTElems,
@@ -252,8 +291,8 @@ void testMaxwellDiscreteConsistency(const MaxwellMS &ms,
 
   // --- create Maxwell configuration formulation
   // q is unused for RHS-for-testing; eps0 appears only through your manufacturing (rhoOverEps0 etc.)
-  double q = 1.0, eps0 = 1.0, mu0 = 1.0;
-  auto maxwell = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0, mu0));
+  double q = 1.0, eps0 = 1.0;
+  auto maxwell = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0));
   maxwell->initializeMesh(configTopo, H1Order, delta_k);
 
   MeshPtr configMesh = maxwell->configurationSpaceMesh();
@@ -357,7 +396,7 @@ MaxwellMS ms_poly_mixed_nonzeroAll(double t0)
 
   // RHS (already divided by eps0)
   ms.rhoOverEps0 = Function::constant(1.0);
-  ms.JxOverEps0  = Function::constant(1.0);
+  ms.JxOverEps0  = Function::constant(-1.0);
   ms.JzOverEps0  = Function::constant(1.0);
 
   // Minimal BCs:
@@ -389,7 +428,7 @@ MaxwellMS ms_time_only(double omega)
   ms.ByExact = Function::zero();
   ms.AExact  = Function::zero();
 
-  ms.JxOverEps0  = omega * cos(omega * t);
+  ms.JxOverEps0  = -omega * cos(omega * t);
   ms.rhoOverEps0 = Function::zero();
   ms.JzOverEps0  = Function::zero();
 
@@ -457,7 +496,7 @@ MaxwellMS ms_poly_time_linear_nonzeroJx(double t0)
   ms.ByExact = Function::zero();
   ms.AExact  = Function::zero();
 
-  ms.JxOverEps0  = Function::constant(1.0);
+  ms.JxOverEps0  = Function::constant(-1.0);
   ms.rhoOverEps0 = Function::zero();
   ms.JzOverEps0  = Function::zero();
 
@@ -566,6 +605,24 @@ TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationMaxwell1D2V, DiscreteConsistency_
                                  /*tolEnergy=*/1e-12, out, success);
 }
 
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationMaxwell1D2V, DiscreteConsistency_PolyMixed_JxSignMatters)
+{
+  auto msExpected = ms_poly_mixed_nonzeroAll(/*t0=*/0.0);
+  auto msOpposite = msExpected;
+  msOpposite.JxOverEps0 = -msOpposite.JxOverEps0;
+
+  const double energyExpected =
+    maxwellDiscreteConsistencyEnergy(msExpected, 3, 1, 2, 2, -1.0, 1.0, 0.0, 1.0);
+  const double energyOpposite =
+    maxwellDiscreteConsistencyEnergy(msOpposite, 3, 1, 2, 2, -1.0, 1.0, 0.0, 1.0);
+
+  out << "energyExpected = " << energyExpected << "\n";
+  out << "energyOpposite = " << energyOpposite << "\n";
+
+  TEST_COMPARE(energyExpected, <, 1e-12);
+  TEST_COMPARE(energyOpposite, >, 1e-8);
+}
+
 TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationMaxwell1D2V, DiscreteConsistency_PolyTimeLinear)
 {
   // E=t, phi=-x t, Jx=1
@@ -579,6 +636,39 @@ TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationMaxwell1D2V, DiscreteConsistency_
                                  -1.0, 1.0, useGradedSpatialMesh,
                                  0.0, 1.0,
                                  /*tolEnergy=*/1e-12, out, success);
+}
+
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationMaxwell1D2V, DiscreteConsistency_PolyTimeLinear_JxSignMatters)
+{
+  auto msExpected = ms_poly_time_linear_nonzeroJx(/*t0=*/0.0);
+  auto msOpposite = msExpected;
+  msOpposite.JxOverEps0 = -msOpposite.JxOverEps0;
+
+  const int H1Order = 2;
+  const int delta_k = 1;
+  const int numXElems = 2;
+  const int numTElems = 2;
+  const double x0 = -1.0, x1 = 1.0;
+  const double t0 = 0.0,  t1 = 1.0;
+
+  const double energyExpected =
+    maxwellDiscreteConsistencyEnergy(msExpected,
+                                     H1Order, delta_k,
+                                     numXElems, numTElems,
+                                     x0, x1, t0, t1);
+
+  const double energyOpposite =
+    maxwellDiscreteConsistencyEnergy(msOpposite,
+                                     H1Order, delta_k,
+                                     numXElems, numTElems,
+                                     x0, x1, t0, t1);
+
+  out << "energyExpected = " << energyExpected << "\n";
+  out << "energyOpposite = " << energyOpposite << "\n";
+
+  TEST_COMPARE(energyExpected, <, 1e-12);
+  TEST_COMPARE(energyOpposite, >, 1e-8);
+  TEST_COMPARE(energyOpposite, >, 1e4 * energyExpected);
 }
 
 TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationMaxwell1D2V, DiscreteConsistency_PolyMagneticQuadratic_NonzeroJz)

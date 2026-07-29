@@ -32,17 +32,16 @@ const string ConfigurationSpaceFormulationMaxwell1D2V::S_W_RHO = "\\tau_{\\rho}"
 const string ConfigurationSpaceFormulationMaxwell1D2V::S_TAU_A   = "\\tau_{A}";
 const string ConfigurationSpaceFormulationMaxwell1D2V::S_TAU_PHI = "\\tau_{\\phi}";
 
-ConfigurationSpaceFormulationMaxwell1D2V::ConfigurationSpaceFormulationMaxwell1D2V(const std::vector<double> &q, const double eps0, const double mu0)
+ConfigurationSpaceFormulationMaxwell1D2V::ConfigurationSpaceFormulationMaxwell1D2V(const std::vector<double> &q, const double eps0)
 :
 ConfigurationSpaceFormulation(),
 _q(q),
-_eps0(eps0),
-_mu0(mu0)
+_eps0(eps0)
 {}
 
-ConfigurationSpaceFormulationMaxwell1D2V::ConfigurationSpaceFormulationMaxwell1D2V(const double &q, const double eps0, const double mu0)
+ConfigurationSpaceFormulationMaxwell1D2V::ConfigurationSpaceFormulationMaxwell1D2V(const double &q, const double eps0)
 :
-ConfigurationSpaceFormulationMaxwell1D2V(std::vector<double>{q},eps0,mu0)
+ConfigurationSpaceFormulationMaxwell1D2V(std::vector<double>{q},eps0)
 {}
 
 void ConfigurationSpaceFormulationMaxwell1D2V::initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k)
@@ -88,7 +87,7 @@ void ConfigurationSpaceFormulationMaxwell1D2V::initializeMesh(MeshTopologyPtr me
   phi = maxwellVF->fieldVarSpaceTime(S_PHI, L2, L2);
   A  = maxwellVF->fieldVarSpaceTime(S_A, ESpace, L2);
 
-  // we define these as fluxes rather than traces because fluxes include any explicit normals in the trace integrals, and Camellia will add a side parity for fluxes to account for an implicit normal in the variable definition.
+  // we define these as *traces*; this means that for trace terms in the bilinear form, we need to include normals.
   Ex_hat = maxwellVF->traceVarSpaceTime(S_EX_HAT, Ex, E_hat_space, L2); // L2 in space and time
   By_hat = maxwellVF->traceVarSpaceOnly(S_BY_HAT, By, B_hat_space, L2); // L2 in space
   phi_hat = maxwellVF->traceVarSpaceOnly(S_PHI_HAT, phi, L2);
@@ -211,6 +210,14 @@ void ConfigurationSpaceFormulationMaxwell1D2V::initializeMesh(MeshTopologyPtr me
 std::string ConfigurationSpaceFormulationMaxwell1D2V::name() const
 {
   return "Maxwell1D2V";
+}
+
+Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulationMaxwell1D2V::newInstance() const
+{
+  auto instance = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(_q, _eps0));
+  instance->setExtraAcceleration(_extraAcceleration);
+  instance->setExportViz(_exportViz, _vizOutputDir);
+  return instance;
 }
 
 VarPtr ConfigurationSpaceFormulationMaxwell1D2V::A_fieldVar(int zeroBasedComp)
@@ -357,7 +364,7 @@ void ConfigurationSpaceFormulationMaxwell1D2V::setRHSForTesting(FunctionPtr rho_
 {
   auto rhs = RHS::rhs();
   rhs->addTerm(rho_over_eps0 * w_rho());
-  rhs->addTerm(Jx_over_eps0  * w_Jx());
+  rhs->addTerm(-Jx_over_eps0  * w_Jx());
   rhs->addTerm(Jz_over_eps0  * w_Jz());
   _configurationSoln->setRHS(rhs);
 }

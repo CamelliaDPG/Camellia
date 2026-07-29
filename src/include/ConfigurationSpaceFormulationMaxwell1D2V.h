@@ -23,7 +23,6 @@ namespace Camellia
   {
     std::vector<double> _q;
     double _eps0; // permittivity
-    double _mu0;  // permeability
     int _spaceDim;
     
     BFPtr _maxwellBF;
@@ -54,9 +53,9 @@ namespace Camellia
     static const string S_TAU_PHI; // test variable for equation defining electric potential phi
   public:
     //! one entry in q per species
-    ConfigurationSpaceFormulationMaxwell1D2V(const std::vector<double> &q, const double eps0, const double mu0);
+    ConfigurationSpaceFormulationMaxwell1D2V(const std::vector<double> &q, const double eps0);
     
-    ConfigurationSpaceFormulationMaxwell1D2V(const double &q, const double eps0, const double mu0);
+    ConfigurationSpaceFormulationMaxwell1D2V(const double &q, const double eps0);
 
     void initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k) override;
     
@@ -64,6 +63,7 @@ namespace Camellia
     
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Maxwell", "Gauss" are all possibilities.
     virtual std::string name() const override;
+    virtual Teuchos::RCP<ConfigurationSpaceFormulation> newInstance() const override;
         
     //! returns the specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for B_x, 1 for B_y, 2 for B_z.
     virtual FunctionPtr B_i(int zeroBasedComp) override;

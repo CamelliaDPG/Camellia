@@ -358,6 +358,11 @@ namespace Camellia
     update();
   }
 
+  void RelativisticFirstMomentFunction::detachFromDrivingMoments()
+  {
+    _drivingMoments = nullptr;
+  }
+
   RelativisticFirstMomentFunction::~RelativisticFirstMomentFunction()
   {
     if (_drivingMoments != nullptr)

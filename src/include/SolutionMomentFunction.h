@@ -56,6 +56,7 @@ namespace Camellia
                                     int velocityComponent);
     ~RelativisticFirstMomentFunction();
 
+    void detachFromDrivingMoments();
     void update() override;
 
     using TFunction<double>::values;
