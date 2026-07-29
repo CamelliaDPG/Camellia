@@ -35,6 +35,13 @@
 
 using namespace Camellia;
 
+namespace
+{
+  bool gEnforcePositivity = false;
+  double gProximalGalerkinAlpha0 = 1.0;
+  double gProximalGalerkinAlphaMultiplier = 1.0;
+}
+
 class Maxwellian1T2V : public TFunction<double>
 {
   Teuchos::RCP<ParameterFunction> _ux, _uy, _sigma, _n;
@@ -432,7 +439,14 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  numUniformRefinements,
                                                                  testIP,
                                                                  L2WeightGraph,
-                                                                 basisFamily));
+                                                                 basisFamily,
+                                                                 0,
+                                                                 gEnforcePositivity));
+  if (gEnforcePositivity)
+  {
+    form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
+  }
+  
   return form;
 }
 
@@ -692,6 +706,13 @@ int main(int argc, char *argv[])
     cmdp.setOption("coarseMaxSubsteps",   &coarseMaxSubsteps);
     cmdp.setOption("coarseFixedPointTol", &coarseFixedPointTol);
 
+    cmdp.setOption("enforcePositivity", "noEnforcePositivity", &gEnforcePositivity,
+                   "Use proximal Galerkin positivity enforcement for the Vlasov unknown.");
+    cmdp.setOption("proximalGalerkinAlpha0", &gProximalGalerkinAlpha0,
+                   "Initial alpha parameter for proximal Galerkin positivity enforcement.");
+    cmdp.setOption("proximalGalerkinAlphaMultiplier", &gProximalGalerkinAlphaMultiplier,
+                   "Alpha multiplier for proximal Galerkin positivity enforcement between slabs.");
+
     double bcResolutionTolerance = 1e-1;  // only applies if doing an adaptive solve
     cmdp.setOption("bcResolutionTolerance", &bcResolutionTolerance);
     
@@ -713,6 +734,16 @@ int main(int argc, char *argv[])
     if (relErrorTargetFinalSlab < 0)
     {
       relErrorTargetFinalSlab = relErrorTarget;
+    }
+    
+    if (rank == 0)
+    {
+      std::cout << "Proximal Galerkin positivity enforcement: " << (gEnforcePositivity ? "enabled" : "disabled") << "\n";
+      if (gEnforcePositivity)
+      {
+        std::cout << "  proximalGalerkinAlpha0 = " << gProximalGalerkinAlpha0 << "\n";
+        std::cout << "  proximalGalerkinAlphaMultiplier = " << gProximalGalerkinAlphaMultiplier << "\n";
+      }
     }
     
     // scalings found in Lau et al. eqns (1.1) - (1.10)
