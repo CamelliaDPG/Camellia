@@ -76,6 +76,11 @@ namespace Camellia
   _momentEntryOrdinal(momentEntryOrdinal)
   {}
 
+  void SolutionMomentFunction::importCellData(std::vector<GlobalIndexType> cellIDs)
+  {
+    _solutionMoments.importCellData(cellIDs);
+  }
+
   void SolutionMomentFunction::values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
   {
     TEUCHOS_FUNC_TIME_MONITOR("SolutionMomentFunction values(Data,BasisCachePtr)");

@@ -100,6 +100,140 @@ BasisPtr SolutionMoments::extrudedSpatialBasis()
   return _highestOrderExtrudedSpatialBasis;
 }
 
+void SolutionMoments::importCellData(std::vector<GlobalIndexType> configurationSpaceCellIDs)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_configurationSpaceMesh == Teuchos::null, std::invalid_argument, "SolutionMoments::importCellData() requires a non-null configuration-space mesh");
+  
+  const int rank = _configurationSpaceMesh->Comm()->getRank();
+  
+  std::sort(configurationSpaceCellIDs.begin(), configurationSpaceCellIDs.end());
+  configurationSpaceCellIDs.erase(std::unique(configurationSpaceCellIDs.begin(), configurationSpaceCellIDs.end()), configurationSpaceCellIDs.end());
+  
+  using RequestType = std::pair<IndexType,int>;          // (configurationSpaceCellID, requestingRank)
+  using DataType    = std::tuple<IndexType,int,int,double>; // (configurationSpaceCellID,momentEntryOrdinal,spatialBasisOrdinal,value)
+  
+  // Collect requests only for cells that are not already available locally.  Use
+  // a collective all-gather for the request phase so every rank participates and
+  // every owning rank can see requests for its cells.  Coefficient data are still
+  // sent only from owning ranks to ranks that actually need them below.
+  std::vector<RequestType> myRequests;
+  for (const auto &cellID : configurationSpaceCellIDs)
+  {
+    if (localCellOrdinal(cellID) == -1)
+    {
+      const int ownerRank = _configurationSpaceMesh->partitionForCellID(cellID);
+      TEUCHOS_TEST_FOR_EXCEPTION((ownerRank < 0) || (ownerRank >= _configurationSpaceMesh->Comm()->getSize()), std::invalid_argument, "SolutionMoments::importCellData() could not determine a valid owning rank for a requested cell");
+      myRequests.push_back(std::make_pair(cellID,rank));
+    }
+  }
+  
+  std::vector<RequestType> requestsReceived;
+  std::vector<int> requestOffsets;
+  MPIWrapper::allGatherVariable(_configurationSpaceMesh->Comm(), requestsReceived, myRequests, requestOffsets);
+  
+  auto spatialBasisCoefficientsHost = Kokkos::create_mirror_view(_spatialBasisCoefficients);
+  Kokkos::deep_copy(spatialBasisCoefficientsHost,_spatialBasisCoefficients);
+  
+  const int numMomentEntries = _spatialBasisCoefficients.extent_int(0);
+  const int basisCardinality = _spatialBasisCoefficients.extent_int(2);
+  
+  std::map<int,std::vector<DataType>> dataToSend;
+  for (const auto &request : requestsReceived)
+  {
+    const IndexType &cellID       = request.first;
+    const int &requestingRank     = request.second;
+    const int ownerRank           = _configurationSpaceMesh->partitionForCellID(cellID);
+    if (ownerRank != rank)
+    {
+      continue;
+    }
+    
+    const int cellOrdinal         = localCellOrdinal(cellID);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(cellOrdinal == -1, std::invalid_argument, "SolutionMoments::importCellData() received a request for a cell that is not available on the owning rank");
+    
+    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
+    {
+      for (int momentOrdinal=0; momentOrdinal<numMomentEntries; momentOrdinal++)
+      {
+        const double &value = spatialBasisCoefficientsHost(momentOrdinal,cellOrdinal,basisOrdinal);
+        dataToSend[requestingRank].push_back(std::make_tuple(cellID,momentOrdinal,basisOrdinal,value));
+      }
+    }
+  }
+  
+  std::vector<DataType> dataReceived;
+  MPIWrapper::sendDataVectors(MPIWrapper::EpetraComm(_configurationSpaceMesh->Comm()), dataToSend, dataReceived);
+  
+  if (dataReceived.size() == 0)
+  {
+    return;
+  }
+  
+  std::vector<IndexType> newPhysicalCellIDs = _physicalCellIDs;
+  for (const DataType &dataEntry : dataReceived)
+  {
+    using std::get;
+    const IndexType &cellID = get<0>(dataEntry);
+    auto matchingEntry = std::lower_bound(newPhysicalCellIDs.begin(), newPhysicalCellIDs.end(), cellID);
+    if ((matchingEntry == newPhysicalCellIDs.end()) || (*matchingEntry != cellID))
+    {
+      newPhysicalCellIDs.insert(matchingEntry, cellID);
+    }
+  }
+  
+  if (newPhysicalCellIDs.size() == _physicalCellIDs.size())
+  {
+    return;
+  }
+  
+  std::vector<int> spatialBasisCoefficientsDims {numMomentEntries, static_cast<int>(newPhysicalCellIDs.size()), basisCardinality};
+  auto newSpatialBasisCoefficients = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(spatialBasisCoefficientsDims, "SolutionMomentFunction imported spatial basis coefficients");
+  auto newSpatialBasisCoefficientsHost = Kokkos::create_mirror_view(newSpatialBasisCoefficients);
+  Kokkos::deep_copy(newSpatialBasisCoefficientsHost,0.0);
+  
+  for (int oldCellOrdinal=0; oldCellOrdinal<_physicalCellIDs.size(); oldCellOrdinal++)
+  {
+    const IndexType &cellID = _physicalCellIDs[oldCellOrdinal];
+    auto matchingEntry = std::lower_bound(newPhysicalCellIDs.begin(), newPhysicalCellIDs.end(), cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION((matchingEntry == newPhysicalCellIDs.end()) || (*matchingEntry != cellID), std::invalid_argument, "existing SolutionMoments cell disappeared during import");
+    const int newCellOrdinal = matchingEntry - newPhysicalCellIDs.begin();
+    
+    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
+    {
+      for (int momentOrdinal=0; momentOrdinal<numMomentEntries; momentOrdinal++)
+      {
+        newSpatialBasisCoefficientsHost(momentOrdinal,newCellOrdinal,basisOrdinal) = spatialBasisCoefficientsHost(momentOrdinal,oldCellOrdinal,basisOrdinal);
+      }
+    }
+  }
+  
+  for (const DataType &dataEntry : dataReceived)
+  {
+    using std::get;
+    const IndexType & cellID              = get<0>(dataEntry);
+    const int &momentEntryOrdinal        = get<1>(dataEntry);
+    const int &spatialBasisOrdinal       = get<2>(dataEntry);
+    const double &value                  = get<3>(dataEntry);
+    
+    auto matchingEntry = std::lower_bound(newPhysicalCellIDs.begin(), newPhysicalCellIDs.end(), cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION((matchingEntry == newPhysicalCellIDs.end()) || (*matchingEntry != cellID), std::invalid_argument, "imported SolutionMoments cell was not added to the local cell list");
+    const int newCellOrdinal = matchingEntry - newPhysicalCellIDs.begin();
+    
+    newSpatialBasisCoefficientsHost(momentEntryOrdinal,newCellOrdinal,spatialBasisOrdinal) = value;
+  }
+  
+  Kokkos::deep_copy(newSpatialBasisCoefficients,newSpatialBasisCoefficientsHost);
+  
+  if (_spatialBasisCoefficientsHasBeenCheckedOut)
+  {
+    SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(_spatialBasisCoefficients);
+  }
+  _spatialBasisCoefficients = newSpatialBasisCoefficients;
+  _spatialBasisCoefficientsHasBeenCheckedOut = true;
+  _physicalCellIDs = newPhysicalCellIDs;
+}
+
 void SolutionMoments::gatherOnRankZero()
 {
   const int rank = _configurationSpaceMesh->Comm()->getRank();
@@ -212,7 +346,7 @@ Camellia::DeviceView<double> SolutionMoments::getSpatialBasisCoefficients()
 int SolutionMoments::localCellOrdinal(const IndexType &cellID) const
 {
   auto matchingEntry = std::lower_bound(_physicalCellIDs.begin(), _physicalCellIDs.end(), cellID);
-  if (matchingEntry == _physicalCellIDs.end())
+  if ((matchingEntry == _physicalCellIDs.end()) || (*matchingEntry != cellID))
   {
     // cellID not found
     return -1;

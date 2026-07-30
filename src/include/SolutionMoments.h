@@ -61,6 +61,15 @@ namespace Camellia
     //! Sends all data to MPI rank 0.  Call update() first to ensure that the data sent is up to date.
     void gatherOnRankZero();
     
+    //! Import moment coefficient data needed to evaluate on the specified configuration-space cells.
+    //!
+    //! The cell IDs passed here are configuration-space cell IDs, i.e. cell IDs in mesh().
+    //! This is a collective MPI method.  Call update() first to ensure the owned-cell moment
+    //! coefficients are current before importing off-rank cell data.  The implementation
+    //! imports only requested cells not already available locally, using mesh().partitionForCellID()
+    //! to route requests to owning ranks; previously imported cells are retained until update().
+    void importCellData(std::vector<GlobalIndexType> configurationSpaceCellIDs);
+    
     //! 1V variant
     FunctionPtr solutionMomentFunction(const int &xMoment);
     
