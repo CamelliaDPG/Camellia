@@ -1,5 +1,0 @@
-#!/bin/bash
-
-ROOT=$(dirname $(realpath $0))
-
-cmake --build $ROOT/camellia-build --target all -j8

@@ -4,6 +4,7 @@ ROOT=$(dirname $(realpath $0))
 
 OPENMPI_ROOT=$ROOT/openmpi
 TRILINOS_ROOT=$ROOT/trilinos
+BOBA_ROOT=$(realpath $ROOT/../../tpl/BoBa/install/BOBA_cpu)
 
 SRC=$(realpath $ROOT/../..)
 
@@ -16,6 +17,7 @@ cmake \
     -D CMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -D CMAKE_INSTALL_PREFIX=$ROOT/camellia \
     -D TRILINOS_PATH=$TRILINOS_ROOT \
+    -D BOBA_ROOT=$BOBA_ROOT \
     -D BUILD_EXPERIMENTAL_DRIVERS=ON \
     -D BUILD_PRECONDITIONING_DRIVERS=ON \
     -B $ROOT/camellia-build \

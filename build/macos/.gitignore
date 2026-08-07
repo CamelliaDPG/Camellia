@@ -18,5 +18,7 @@
 !trilinos-do-build
 !trilinos-do-install
 
+!boba-do-build
+
 !camellia-do-configure
 !camellia-do-build

@@ -34,9 +34,21 @@ First, build and install the dependencies:
 ./build/macos/trilinos-do-install
 ```
 
-Finally, build Camellia:
+Next, build and install boba:
+
+```sh
+./build/macos/boba-do-build
+```
+
+Finally, build Camellia with BOBA:
 
 ```sh
 ./build/macos/camellia-do-configure
 ./build/macos/camellia-do-build
 ```
+
+To test the library was created correctly, build the space-time
+mixed-formulation Poisson driver with BOBA support: go to the
+`./build/macos/camellia-build/drivers/pulse/SpaceTimeMixedPoissonBoba`
+directory, and run `make`. The compilation will emit a lot of warnings, but
+should finish without errors.

@@ -1,17 +1,9 @@
 /*
 
 !.gitignore
+
 !README.md
-
-!hdf5-do-download
-!hdf5-do-configure
-!hdf5-do-build
-!hdf5-do-install
-
-!trilinos-do-download
-!trilinos-do-configure
-!trilinos-do-build
-!trilinos-do-install
-
-!camellia-do-configure
-!camellia-do-build
+!modules.sh
+!download.sh
+!build.sh
+!clean.sh

@@ -4,6 +4,7 @@ ROOT=$(dirname $(realpath $0))
 #MPI_ROOT=/opt/cray/pe/mpich/8.1.31/ofi/crayclang/18.0
 MPI_ROOT=/usr/tce/packages/cray-mpich/cray-mpich-8.1.31-rocmcc-6.3.1-cce-18.0.1h-magic/
 TRILINOS_ROOT=$ROOT/trilinos
+BOBA_ROOT=$(realpath $ROOT/../../tpl/BoBa/install/BOBA_hip300)
 
 SRC=$(realpath $ROOT/../..)
 
@@ -19,6 +20,8 @@ cmake \
     -D CMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -D CMAKE_INSTALL_PREFIX=$ROOT/camellia \
     -D TRILINOS_PATH=$TRILINOS_ROOT \
+    -D BOBA_ROOT=$BOBA_ROOT \
+    -D BOBA_DIR=$BOBA_ROOT/share/boba/cmake \
     -D BUILD_EXPERIMENTAL_DRIVERS=ON \
     -D BUILD_PRECONDITIONING_DRIVERS=ON \
     -D ENABLE_HIP=On \
