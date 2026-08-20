@@ -9,7 +9,8 @@ construct_vlasov_matrices(Camellia::BasisPtr w_basis, Camellia::BasisPtr t_basis
                           const double &x_min, const double &x_max, const size_t &nx,
                           const double &t_min, const double &t_max, const size_t &nt,
                           const double &v_min, const double &v_max, const size_t &nv,
-                          const size_t &p, const size_t &dp) {
+                          const size_t &p, const size_t &dp,
+                          const TestSpaceNorm &test_space_norm) {
   boba::TicToc<::boba::tictoc_units::milliseconds> timer;
 
   //
@@ -113,18 +114,22 @@ construct_vlasov_matrices(Camellia::BasisPtr w_basis, Camellia::BasisPtr t_basis
   auto int_v_vw_w  = int_v_w_vw.transpose();
   auto int_v_vw_dw = int_v_dw_vw.transpose();
 
-  auto gram =
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_dw_dw, int_v_w_w  }) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_dw,  int_t_dw_w,  int_v_w_vw }) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_dw_w,  int_v_w_dw }) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_dw_w,  int_t_w_dw,  int_v_vw_w }) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_dw_dw, int_t_w_w,   int_v_vw_vw}) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_dw_w,  int_t_w_w,   int_v_vw_dw}) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_w_dw,  int_t_dw_w }) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_dw,  int_t_w_w,   int_v_dw_vw}) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_w_w,   int_v_dw_dw}) +
-    boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_w_w,   int_v_w_w  });
-  gram.round();
+  auto gram = boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_w_w,   int_v_w_w  });
+
+  if (test_space_norm == TestSpaceNorm::L2) {
+    // L2 norm has no additional term
+  } else if (test_space_norm == TestSpaceNorm::GRAPH) {
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_dw_dw, int_v_w_w  });
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_dw,  int_t_dw_w,  int_v_w_vw });
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_dw_w,  int_v_w_dw });
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_dw_w,  int_t_w_dw,  int_v_vw_w });
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_dw_dw, int_t_w_w,   int_v_vw_vw});
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_dw_w,  int_t_w_w,   int_v_vw_dw});
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_w_dw,  int_t_dw_w });
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_dw,  int_t_w_w,   int_v_dw_vw});
+    gram += boba::make_ttm_from_matrices<3, host_space, double>({int_x_w_w,   int_t_w_w,   int_v_dw_dw});
+    gram.round();
+  }
 
   auto timing_gram = timer.toc();
 

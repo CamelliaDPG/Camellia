@@ -11,6 +11,7 @@
 #include "Var.h"
 
 #include "boba_types.hpp"
+#include "schur_solver.hpp"
 #include "vlasov_system.hpp"
 
 //
@@ -124,8 +125,30 @@ soln_discretization_1d(const double &x_min, const double &x_max, const size_t &n
 // f(x, t, v) = (x - x^2) (t - t^2) (1 - 4 v^2)
 //
 void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, const size_t &p, const size_t &dp,
-                       const bool &solve,
-                       const size_t &krylov_outer, const size_t &krylov_inner, const double &krylov_tol) {
+                       const std::string &test_space_norm_str,
+                       const bool solve_schur,
+                       const dpg_boba::SchurSolveOptions &schur_options) {
+  boba::TicToc<boba::tictoc_units::milliseconds> timer;
+
+  std::string file_prefix;
+  {
+    std::ostringstream stream;
+    stream << "vlasov_system_nx_" << nx << "_nt_" << nt << "_nv_" << nv << "_p_" << p << "_dp_" << dp << "_"
+           << test_space_norm_str << "_norm_";
+    file_prefix = stream.str();
+  }
+
+  TestSpaceNorm test_space_norm = TestSpaceNorm::GRAPH;
+  if (test_space_norm_str == "graph") {
+    // do nothing
+  } else if (test_space_norm_str == "L2") {
+    test_space_norm = TestSpaceNorm::L2;
+  } else {
+    boba_error("unknown test space norm");
+  }
+
+  timer.tic();
+
   const double x_min =  0.0;
   const double x_max =  1.0;
   const double t_min =  0.0;
@@ -144,7 +167,8 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
                                              x_min, x_max, nx,
                                              t_min, t_max, nt,
                                              v_min, v_max, nv,
-                                             p, dp);
+                                             p, dp,
+                                             test_space_norm);
 
   auto   fx_fun = [](const double &x) { return x - x * x; };
   auto  dfx_fun = [](const double &x) { return 1.0 - 2.0 * x; };
@@ -178,6 +202,10 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   rhs(vlasov_vars::trace_v) = zero_tt_vector<3>(stiffness({vlasov_vars::test, vlasov_vars::trace_v}).core_cols());
   rhs(vlasov_vars::field)   = zero_tt_vector<3>(stiffness({vlasov_vars::test, vlasov_vars::field  }).core_cols());
 
+  auto assembly_timing = timer.toc();
+
+  boba::write_to_hdf5_file(stiffness, file_prefix + "stiffness.h5", "stiffness");
+  boba::write_to_hdf5_file(rhs, file_prefix + "rhs.h5", "rhs");
 
   auto fx_bdy = soln_discretization_1d(x_min, x_max, nx,   fx_fun);
   auto ft_bdy = soln_discretization_1d(t_min, t_max, nt,   ft_fun);
@@ -202,6 +230,7 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   exact_soln(vlasov_vars::trace_t) = boba::make_tt_from_vectors<3, host_space, double>({  fx_trace,     ft_bdy,   fv_trace});
   exact_soln(vlasov_vars::trace_v) = boba::make_tt_from_vectors<3, host_space, double>({  fx_trace,   ft_trace,     fv_bdy});
   exact_soln(vlasov_vars::field)   = boba::make_tt_from_vectors<3, host_space, double>({  fx_field,   ft_field,   fv_field});
+  boba::write_to_hdf5_file(exact_soln, file_prefix + "soln.h5", "soln");
 
 
   auto exact_residual = rhs - stiffness * exact_soln;
@@ -211,31 +240,23 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
   }
   std::cout << std::endl;
 
-  if (solve) {
-    boba::Krylov<boba::BlockOperator<host_tt_matrix<3>>,
-                 boba::BlockVector<host_tt_vector<3>>> solver(krylov_outer, krylov_inner, krylov_tol);
-    solver.method = boba::KrylovMethods::flexible_gmres;
-    solver.verbose = true;
+  timer.tic();
 
-    solver.set_matrix(stiffness);
-
-    auto guess = rhs;
-    guess.fill_with_zeros();
-
-    auto soln = rhs;
-    soln.fill_with_zeros();
-
-    solver.solve(rhs, guess, soln);
-
-    std::cout << "solution" << std::endl;
-    for (size_t i = 0; i < vlasov_vars::size; ++i) {
-      std::cout << "  soln[" << i << "]" << std::endl
-                << "    cols  = " << soln(i).sizes() << std::endl
-                << "    ranks = " << soln(i).ranks_string() << std::endl;
+  if (solve_schur) {
+    if (test_space_norm != TestSpaceNorm::L2) {
+      boba_error("The integrated Schur solve currently supports only --test_space_norm=L2.");
     }
-    std::cout << std::endl;
-
+    const int schur_status = dpg_boba::solve_compressed_schur_system(stiffness, exact_soln, rhs, schur_options);
+    if (schur_status != 0) {
+      boba_error("Integrated Schur solve failed.");
+    }
   }
+
+  auto solver_timing = timer.toc();
+
+  std::cout << "timing " << std::endl
+            << "  assembly: " << assembly_timing << " " << timer.units_string << std::endl
+            << "  solver: " << solver_timing << " " << timer.units_string << std::endl << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -245,31 +266,43 @@ int main(int argc, char **argv) {
                                      true);  // return errors for unrecognized options
 
   {
-    int    nx    = 2;
-    int    nt    = 2;
-    int    nv    = 2;
-    int    p     = 3;
-    int    dp    = 2;
-    bool   solve = false;
-    int    outer = 5;
-    int    inner = 250;
-    double tol   = 1.0e-03;
+    int         nx              = 2;
+    int         nt              = 2;
+    int         nv              = 2;
+    int         p               = 3;
+    int         dp              = 2;
+    std::string test_space_norm = "graph";
+    bool        solve_schur     = false;
+    dpg_boba::SchurSolveOptions schur_options;
+    int         amen_max_sweeps     = static_cast<int>(schur_options.amen_max_sweeps);
+    int         amen_minimum_sweeps = static_cast<int>(schur_options.amen_minimum_sweeps);
+    int         amen_kickrank       = static_cast<int>(schur_options.amen_kickrank);
 
-    cmdp.setOption("nx",                  &nx,    "number of elements along x dimension");
-    cmdp.setOption("nt",                  &nt,    "number of elements along t dimension");
-    cmdp.setOption("nv",                  &nv,    "number of elements along v dimension");
-    cmdp.setOption("p",                   &p,     "basis order for field variables");
-    cmdp.setOption("dp",                  &dp,    "basis order enrichment for test variables");
-    cmdp.setOption("solve", "dont-solve", &solve, "whether to run TT solver");
-    cmdp.setOption("outer",               &outer, "number of Krylov outer iterations");
-    cmdp.setOption("inner",               &inner, "number of Krylov inner iterations");
-    cmdp.setOption("tol",                 &tol,   "Krylov convergence tolerance");
+    cmdp.setOption("nx",              &nx,              "number of elements along x dimension");
+    cmdp.setOption("nt",              &nt,              "number of elements along t dimension");
+    cmdp.setOption("nv",              &nv,              "number of elements along v dimension");
+    cmdp.setOption("p",               &p,               "basis order for field variables");
+    cmdp.setOption("dp",              &dp,              "basis order enrichment for test variables");
+    cmdp.setOption("test_space_norm", &test_space_norm, "test space norm choice (graph or L2)");
+    cmdp.setOption("solve_schur",     "skip_schur",    &solve_schur, "solve the in-memory compressed L2 Schur system after assembly");
+    cmdp.setOption("schur_method", &schur_options.method, "Schur solve method: block_amen or exact");
+    cmdp.setOption("schur_tolerance", &schur_options.linear_tolerance, "relative tolerance for the compressed Schur solve");
+    cmdp.setOption("svd_relative_tolerance", &schur_options.relative_tolerance, "relative SVD tolerance used during compressed Schur operations");
+    cmdp.setOption("svd_absolute_tolerance", &schur_options.absolute_tolerance, "absolute SVD tolerance used during compressed Schur operations");
+    cmdp.setOption("amen_max_sweeps", &amen_max_sweeps, "maximum block AMEN sweeps");
+    cmdp.setOption("amen_minimum_sweeps", &amen_minimum_sweeps, "minimum block AMEN sweeps before convergence");
+    cmdp.setOption("amen_kickrank", &amen_kickrank, "block AMEN enrichment kick rank");
+    cmdp.setOption("amen_exact_initial_guess", "amen_zero_initial_guess", &schur_options.amen_exact_initial_guess, "use exact multiplier blocks as the AMEN initial guess");
+    cmdp.setOption("gram_inverse", &schur_options.gram_inverse, "Gram inverse strategy; current L2 path supports corewise");
 
     if (cmdp.parse(argc, argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
       return -1;
     }
+    schur_options.amen_max_sweeps = static_cast<size_t>(amen_max_sweeps);
+    schur_options.amen_minimum_sweeps = static_cast<size_t>(amen_minimum_sweeps);
+    schur_options.amen_kickrank = static_cast<size_t>(amen_kickrank);
 
-    vlasov_test_solve(nx, nt, nv, p, dp, solve, outer, inner, tol);
+    vlasov_test_solve(nx, nt, nv, p, dp, test_space_norm, solve_schur, schur_options);
   }
 
   Camellia::finalize(false);

@@ -5,6 +5,11 @@
 
 #include "boba_types.hpp"
 
+enum class TestSpaceNorm {
+  GRAPH,
+  L2
+};
+
 struct vlasov_vars {
   static constexpr size_t test    = 0;
   static constexpr size_t trace_x = 1;
@@ -28,6 +33,7 @@ construct_vlasov_matrices(Camellia::BasisPtr test_basis, Camellia::BasisPtr trac
                           const double &x_min, const double &x_max, const size_t &nx,
                           const double &t_min, const double &t_max, const size_t &nt,
                           const double &v_min, const double &v_max, const size_t &nv,
-                          const size_t &p, const size_t &dp);
+                          const size_t &p, const size_t &dp,
+                          const TestSpaceNorm &test_space_norm = TestSpaceNorm::GRAPH);
 
 #endif

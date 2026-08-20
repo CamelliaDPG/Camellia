@@ -8,6 +8,7 @@ add_executable(VlasovAssemblyBobaDriver
   reference_integrals_1d.cpp
   global_assembly.hpp
   global_assembly.cpp
+  schur_solver.hpp
   vlasov_system.hpp
   vlasov_system.cpp
   vlasov_driver.cpp
