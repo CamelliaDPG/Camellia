@@ -115,14 +115,14 @@ soln_discretization_1d(const double &x_min, const double &x_max, const size_t &n
 //
 // with
 //
-// c(x, t, v) = (x - x^2) (1 - 2 t) (1 - 4 v^2) +
-//              (1 - 2 x) (t - t^2) (v - 4 v^3) +
-//              (x - x^2) (t - t^2) (-8v)
+// c(x, t, v) = pi sin(pi x) cos(pi t) cos(pi v) +
+//              pi cos(pi x) sin(pi t) v cos(pi v) -
+//              pi sin(pi x) sin(pi t) sin(pi v)
 //
 // and imposing zero Dirichlet boundary condition, which corresponds to the
 // exact solution
 //
-// f(x, t, v) = (x - x^2) (t - t^2) (1 - 4 v^2)
+// f(x, t, v) = sin(pi x) sin(pi t) cos(pi v)
 //
 void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, const size_t &p, const size_t &dp,
                        const std::string &test_space_norm_str,
@@ -170,18 +170,20 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
                                              p, dp,
                                              test_space_norm);
 
-  auto   fx_fun = [](const double &x) { return x - x * x; };
-  auto  dfx_fun = [](const double &x) { return 1.0 - 2.0 * x; };
-  auto   ft_fun = [](const double &t) { return t - t * t; };
-  auto  dft_fun = [](const double &t) { return 1.0 - 2.0 * t; };
-  auto   fv_fun = [](const double &v) { return 1.0 - 4.0 * v * v; };
-  auto  dfv_fun = [](const double &v) { return -8.0 * v; };
-  auto v_fv_fun = [](const double &v) { return v - 4.0 * v * v * v; };
+  const double PI = 4.0 * std::atan(1.0);
 
-  auto   fx = rhs_discretization_1d(test_basis, x_min, x_max, nx,  fx_fun);
-  auto  dfx = rhs_discretization_1d(test_basis, x_min, x_max, nx, dfx_fun);
-  auto   ft = rhs_discretization_1d(test_basis, t_min, t_max, nt,  ft_fun);
-  auto  dft = rhs_discretization_1d(test_basis, t_min, t_max, nt, dft_fun);
+  auto   fx_fun = [&PI](const double &x) { return       std::sin(PI * x); };
+  auto  dfx_fun = [&PI](const double &x) { return  PI * std::cos(PI * x); };
+  auto   ft_fun = [&PI](const double &t) { return       std::sin(PI * t); };
+  auto  dft_fun = [&PI](const double &t) { return  PI * std::cos(PI * t); };
+  auto   fv_fun = [&PI](const double &v) { return       std::cos(PI * v); };
+  auto  dfv_fun = [&PI](const double &v) { return -PI * std::sin(PI * v); };
+  auto v_fv_fun = [&PI](const double &v) { return   v * std::cos(PI * v); };
+
+  auto   fx = rhs_discretization_1d(test_basis, x_min, x_max, nx,   fx_fun);
+  auto  dfx = rhs_discretization_1d(test_basis, x_min, x_max, nx,  dfx_fun);
+  auto   ft = rhs_discretization_1d(test_basis, t_min, t_max, nt,   ft_fun);
+  auto  dft = rhs_discretization_1d(test_basis, t_min, t_max, nt,  dft_fun);
   auto   fv = rhs_discretization_1d(test_basis, v_min, v_max, nv,   fv_fun);
   auto  dfv = rhs_discretization_1d(test_basis, v_min, v_max, nv,  dfv_fun);
   auto v_fv = rhs_discretization_1d(test_basis, v_min, v_max, nv, v_fv_fun);
