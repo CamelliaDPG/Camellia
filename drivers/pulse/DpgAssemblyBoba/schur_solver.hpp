@@ -92,6 +92,7 @@ inline void print_tt_summary(const std::string &label, const vector_t &vector)
             << " svd_rel=" << vector.svd_tolerance_relative
             << " svd_abs=" << vector.svd_tolerance_absolute
             << " ranks=" << vector.ranks_string()
+            << " frobenius_norm=" << ::boba::norm_frobenius(vector)
             << "\n" << std::flush;
 }
 
@@ -102,6 +103,7 @@ inline void print_block_vector_summary(const std::string &label, const block_vec
             << " full_size=" << vector.get_full_size()
             << " stored=" << vector.get_number_elements()
             << " compression=" << vector.compression_rate()
+            << " frobenius_norm=" << ::boba::norm_frobenius(vector)
             << "\n";
   for(size_t block = 0; block < vector.block_size; block++)
   {
@@ -274,6 +276,10 @@ inline int solve_compressed_schur_system(
   }
   print_block_vector_summary("Initial lambda diagnostics", lambda_initial);
 
+  auto exact_residual = schur_rhs - schur_ttm * exact_lambda;
+  exact_residual.round();
+  print_block_vector_summary("Exact residual diagnostics", exact_residual);
+
   const auto exact_schur_residual = schur_ttm * exact_lambda - schur_rhs;
   const auto exact_schur_residual_norm = ::boba::norm_frobenius(exact_schur_residual);
   const auto schur_rhs_norm = ::boba::norm_frobenius(schur_rhs);
@@ -316,9 +322,18 @@ inline int solve_compressed_schur_system(
   set_svd_tolerances(lambda_solution, options.relative_tolerance, options.absolute_tolerance);
   print_block_vector_summary("Lambda solution diagnostics", lambda_solution);
 
+  for (size_t block = 0; block < lambda_solution.block_size; block++)
+  {
+    lambda_solution(block).round();
+  }
+  print_block_vector_summary("Lambda solution diagnostics after round", lambda_solution);
+
   const auto schur_residual = schur_ttm * lambda_solution - schur_rhs;
   const auto lambda_error = lambda_solution - exact_lambda;
   const auto schur_residual_norm = ::boba::norm_frobenius(schur_residual);
+  print_block_vector_summary("Schur residual diagnostics", schur_residual);
+  print_block_vector_summary("Schur solution error diagnostics", lambda_error);
+  print_block_vector_summary("exact Schur solution diagnostics", exact_lambda);
   std::cout << "relative_schur_residual=" << schur_residual_norm / schur_rhs_norm << "\n";
   std::cout << "schur_residual_norm=" << schur_residual_norm << "\n";
   std::cout << "lambda_error_norm=" << ::boba::norm_frobenius(lambda_error) << "\n";
@@ -347,9 +362,11 @@ inline int solve_compressed_schur_system(
   std::cout << "relative_full_residual="
             << ::boba::norm_frobenius(full_residual) / ::boba::norm_frobenius(rhs)
             << "\n";
-  std::cout << "relative_field_component_error="
-            << ::boba::norm_frobenius(full_solution(lambda_solution.block_size) - lambda_solution(lambda_solution.block_size - 1)) / ::boba::norm_frobenius(full_solution(lambda_solution.block_size))
-            << "\n";
+  for (size_t block = 0; block < lambda_solution.block_size; block++) {
+    std::cout << "relative_solution_error(" << block << ")="
+              << ::boba::norm_frobenius(exact_solution(block + 1) - lambda_solution(block)) / ::boba::norm_frobenius(exact_solution(block + 1))
+              << "\n";
+  }
 
   return 0;
 }
