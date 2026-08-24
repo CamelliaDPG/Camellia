@@ -19,8 +19,6 @@ All runs below used `--test_space_norm=L2 --solve_schur` and report:
 - `relative_schur_residual`, `relative_full_residual`
 - field block compression + TT ranks (block(4) in “Full solution diagnostics”)
 
-Compression below means BoBa’s `compression_rate()` as printed by the driver (`compression=`), i.e. `full_size / stored`.
-
 | nx nt nv | p dp | schur_method | svd tol (rel=abs) | relative_schur_residual | relative_full_residual | field compression | field ranks |
 |---:|---:|---|---:|---:|---:|---:|---|
 | 2 2 2 | 3 2 | block_amen | 1e-12 | ~1e-8 | ~1e-8 | 0.75  | ( 1, 6, 6, 1 ) |
@@ -95,16 +93,30 @@ This dense baseline is only feasible for the small cases (e.g. Schur size 408 fo
 
 ## Rank vs residual reality check (default p=3,dp=2)
 
-Even though the manufactured *continuous* solution is low rank, the *discrete* Schur solution for `p=3,dp=2` is not.
+The continuous manufactured field is separable, and its sampled/interpolated finite-element coefficients remain separable. This does **not** imply that the discrete DPG solution is separable.
 
-Why this happens (in this driver):
+For the small dense baseline (`nx=nt=nv=2`, L2 norm), the table compares the driver’s projected `exact_soln` with the true dense-discrete solution. TT ranks use a relative singular-value cutoff of `1e-10`; the direct ranks are unchanged at `1e-8`. Compression is `full_size / TT_stored_size`, using the listed ranks.
 
-- The “exact solution” is separable in `(x,t,v)`, and the driver builds a rank-1 `exact_soln` by construction (outer products of 1D discretizations). But `exact_residual_norm[0]` is not zero for the discrete system, so the true *discrete* solution differs from that rank-1 ansatz.
-- Solving a linear system generally destroys separability: even if the operator and RHS are low-rank TT objects, the inverse is not. Here the Schur operator includes `G^{-1}` and products like `B G^{-1} B^T`, which mix dimensions and typically require higher TT ranks in `λ` to represent accurately.
+| variable | tensor shape | projected compression | projected TT ranks | `||direct-projected|| / ||projected||` | direct compression | direct TT ranks |
+|---|---:|---:|---:|---:|---:|---:|
+| error representation / test | 12×12×12 | 48.00 | (1,1,1,1)* | — | 0.857 | (1,12,12,1) |
+| trace_x | 1×8×8 | 3.765 | (1,1,1,1) | 4.14e-2 | 0.496 | (1,1,8,1) |
+| trace_t | 8×1×8 | 3.765 | (1,1,1,1) | 2.95e-2 | 0.800 | (1,4,4,1) |
+| trace_v | 8×8×1 | 3.765 | (1,1,1,1) | 2.91e-2 | 0.985 | (1,4,1,1) |
+| field | 6×6×6 | 12.00 | (1,1,1,1) | 4.03e-2 | 0.750 | (1,6,6,1) |
 
-From TT-SVD rank estimates of the dense-direct Schur solution (rel_tol ~1e-12, order-3 per block):
+`*` The projected error variable is mathematically zero (rank 0); BoBa stores a zero TT with structural ranks `(1,1,1,1)`. If instead we hold the projected rank-1 trial variables fixed and compute their residual representation,
 
-- trace_x: ~8, trace_t: ~4, trace_v: ~4, field: ~6 (i.e., ranks comparable to what AMEn returns).
-- Forcing ranks down near 1–2 by truncation makes the Schur residual large (e.g. field ranks ~2–3 gives `relative_schur_residual ~ 0.2`).
+`e_proj = G^{-1}(f - B^T lambda_proj)`,
 
-So, for “low-rank (1–2) *and* low residual”, lowering discretization order (e.g. `p=1,dp=0`) is effective; for `p=3,dp=2`, low residual requires higher ranks.
+then `e_proj` already has ranks `(1,6,9,1)` (compression 2.087). The actual dense-discrete error representation has ranks `(1,12,12,1)`. Thus the high error-variable rank is caused by the discrete residual, not by projecting the zero exact error variable.
+
+Why the discrete ranks are high:
+
+- The driver uses nodal interpolation for the field and traces, not the DPG minimum-residual projection. Since sine and cosine are not in the polynomial trial spaces, the interpolated rank-1 state does not satisfy the assembled equations. In this baseline its relative Schur residual is `3.15`, while the direct solve reaches about `1e-12`.
+- The required correction is small in solution norm (roughly 3–4% in each physical block) but is not separable. For example, the field correction has ranks `(1,6,6,1)`. Adding a small full-rank correction to a dominant rank-1 tensor still gives a full-rank tensor.
+- For the L2 path, `G^{-1}` is itself a rank-1 Kronecker operator, so it is not the main source of rank growth. The mixing comes from the transport operator: `B` is a sum of the `f_t`, `v f_x`, and `f_v` Kronecker terms, and the Schur operator `B G^{-1} B^T` contains their cross-products. Its inverse is not separable; the `v f_x` term in particular couples the x and v modes, and all field/trace blocks are coupled through the shared test space.
+- The Schur system is sensitive to small modes (`cond(S) ≈ 4.2e5` here). The direct field’s non-leading unfolding singular values extend down to about `8e-6` relative to the largest, yet removing them noticeably increases the equation residual. This explains why a visually/energetically near-rank-1 solution can require rank 6 to meet a tight residual target.
+- Some asymmetric trace ranks come directly from tensor shape: with two elements there is only one interior face in the trace-normal direction. Hence trace_x has first internal rank 1 and trace_v has second internal rank 1, while their other interfaces can still be high rank.
+
+Therefore AMEn’s high ranks at `p=3,dp=2` agree with the intrinsic ranks of the direct discrete solution; they are not primarily a failure of AMEn or an overly strict `1e-12` SVD tolerance. Rank 1–2 is attainable only by accepting a larger residual or changing the discretization (for example `p=1,dp=0`).
