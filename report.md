@@ -97,7 +97,7 @@ The continuous manufactured field is separable, and its sampled/interpolated fin
 
 For the small dense baseline (`nx=nt=nv=2`, L2 norm), the table compares the driver’s projected `exact_soln` with the true dense-discrete solution. TT ranks use a relative singular-value cutoff of `1e-10`; the direct ranks are unchanged at `1e-8`. Compression is `full_size / TT_stored_size`, using the listed ranks.
 
-| variable | tensor shape | projected compression | projected TT ranks | `||direct-projected|| / ||projected||` | direct compression | direct TT ranks |
+| variable | tensor shape | projected compression | projected TT ranks | relative correction norm | direct compression | direct TT ranks |
 |---|---:|---:|---:|---:|---:|---:|
 | error representation / test | 12×12×12 | 48.00 | (1,1,1,1)* | — | 0.857 | (1,12,12,1) |
 | trace_x | 1×8×8 | 3.765 | (1,1,1,1) | 4.14e-2 | 0.496 | (1,1,8,1) |
