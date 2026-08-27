@@ -639,7 +639,7 @@ int main(int argc, char *argv[])
           fCoefficients(myCellID, dofOrdinal) = fDofs(dofOrdinal);
         }
       }
-      MPIWrapper::entryWiseSum(*form->vlasovMesh()->Comm(), fCoefficients);
+      MPIWrapper::entryWiseSum(form->vlasovMesh()->Comm(), fCoefficients);
       
       if (inputDir.length() > 0)
       {
