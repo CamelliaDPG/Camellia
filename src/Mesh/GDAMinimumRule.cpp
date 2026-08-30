@@ -11,6 +11,8 @@
 
 #include "GDAMinimumRule.h"
 
+#include "Teuchos_OrdinalTraits.hpp"
+
 #include "BasisFactory.h"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
@@ -646,6 +648,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camelli
                                                  const TVectorPtr<double> globalCoefficients)
 {
   using Scalar = double;
+  using LO = TMap::local_ordinal_type;
   using GO = TMap::global_ordinal_type;
   
   TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::interpretGlobalCoefficients(Tpetra)");
@@ -654,14 +657,15 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camelli
   
   auto gcView = globalCoefficients->getLocalViewHost(Tpetra::Access::ReadOnly);
   const int numVectors = static_cast<int>(globalCoefficients->getNumVectors());
+  auto partMap = globalCoefficients->getMap();
+  const LO invalidLID = Teuchos::OrdinalTraits<LO>::invalid();
   for (int vectorOrdinal=0; vectorOrdinal < numVectors; vectorOrdinal++)
   {
-    auto partMap = globalCoefficients->getMap();
     map<GlobalIndexType,double> globalCoefficientsToMap;
     for (const auto & globalIndex : globalIndexVector)
     {
-      int localIndex = partMap->getLocalElement(static_cast<GO>(globalIndex));
-      if (localIndex != -1)
+      const LO localIndex = partMap->getLocalElement(static_cast<GO>(globalIndex));
+      if (localIndex != invalidLID)
       {
         if (gcView(localIndex,vectorOrdinal) != 0.0)
         {

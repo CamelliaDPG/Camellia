@@ -21,10 +21,13 @@
 // MPI includes
 #ifdef HAVE_MPI
 #include "Epetra_MpiComm.h"
+#include "Teuchos_DefaultMpiComm.hpp"
 #endif
 
 #include "Epetra_SerialComm.h"
 #include "Teuchos_Comm.hpp"
+
+#include <limits>
 
 #include "Camellia_FieldContainer.hpp"
 #include "Camellia_TeuchosSerializers.hpp"
@@ -393,43 +396,71 @@ public:
                                    const std::vector<std::vector<DataType>> &dataVectors,
                                    std::vector<DataType> &receivedVector)
   {
+    const int numProcs = Comm->getSize();
+
     // check that recipients are in numerical order:
     size_t numRecipients = recipients.size();
     for (size_t i=1; i<numRecipients; i++)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(recipients[i-1] >= recipients[i], std::invalid_argument, "recipients list must be in numerical order, and populated with distinct recipients");
     }
-    TEUCHOS_TEST_FOR_EXCEPTION(int(dataVectors.size()) != numRecipients, std::invalid_argument, "dataVectors and recipients list must be the same length");
-    
-    auto distributor = MPIWrapper::getDistributor(Comm);
-    
+    TEUCHOS_TEST_FOR_EXCEPTION(dataVectors.size() != numRecipients, std::invalid_argument, "dataVectors and recipients list must be the same length");
+
+    receivedVector.clear();
+
     std::vector<DataType> packedData;
-    std::vector<int>      packedPIDs; // one per DataType entry
-    for (int i=0; i<recipients.size(); i++)
+    std::vector<int> sendCountsBytes(numProcs, 0);
+    for (size_t i=0; i<numRecipients; i++)
     {
-      int pid = recipients[i];
+      const int pid = recipients[i];
+      TEUCHOS_TEST_FOR_EXCEPTION((pid < 0) || (pid >= numProcs), std::invalid_argument, "recipient PID is out of range");
+
       const std::vector<DataType> & dataVector = dataVectors[i];
-      for (int j=0; j<dataVector.size(); j++)
-      {
-        packedPIDs.push_back(pid);
-      }
-      packedData.insert(packedData.end(),dataVector.begin(),dataVector.end());
+      const size_t byteCount = dataVector.size() * sizeof(DataType);
+      TEUCHOS_TEST_FOR_EXCEPTION(byteCount > static_cast<size_t>(std::numeric_limits<int>::max()), std::invalid_argument, "MPIWrapper::sendDataVectors(): message is too large for MPI int counts");
+      sendCountsBytes[pid] = static_cast<int>(byteCount);
+      packedData.insert(packedData.end(), dataVector.begin(), dataVector.end());
     }
-    
-    auto pidsAV = Teuchos::arrayViewFromVector(packedPIDs);
-    distributor->createFromSends(pidsAV);
-    
-    HostViewManaged<DataType> exportView("exportView", packedData.size());
-    UnmanagedHostView<DataType> packedDataView(packedData.data(), packedData.size());
-    Kokkos::deep_copy(exportView, packedDataView);
-    
-    size_t totalImports = distributor->getTotalReceiveLength();
-    receivedVector.resize(totalImports);
-    HostViewManaged<DataType> importView("importView", receivedVector.size());
-    UnmanagedHostView<DataType> receivedVectorView(receivedVector.data(), receivedVector.size());
-    
-    distributor->doPostsAndWaits(exportView, 1, importView);
-    Kokkos::deep_copy(receivedVectorView, importView);
+
+    if (numProcs == 1)
+    {
+      receivedVector = packedData;
+      return;
+    }
+
+#ifdef HAVE_MPI
+    auto mpiComm = Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int>>(Comm);
+    TEUCHOS_TEST_FOR_EXCEPTION(mpiComm.is_null(), std::invalid_argument, "MPIWrapper::sendDataVectors(): communicator has more than one rank but is not a Teuchos::MpiComm");
+    MPI_Comm rawMpiComm = *mpiComm->getRawMpiComm();
+
+    std::vector<int> recvCountsBytes(numProcs, 0);
+    MPI_Alltoall(sendCountsBytes.data(), 1, MPI_INT, recvCountsBytes.data(), 1, MPI_INT, rawMpiComm);
+
+    std::vector<int> sendDisplacementsBytes(numProcs, 0);
+    std::vector<int> recvDisplacementsBytes(numProcs, 0);
+    int totalSendBytes = 0;
+    int totalReceiveBytes = 0;
+    for (int pid=0; pid<numProcs; pid++)
+    {
+      sendDisplacementsBytes[pid] = totalSendBytes;
+      recvDisplacementsBytes[pid] = totalReceiveBytes;
+      totalSendBytes += sendCountsBytes[pid];
+      totalReceiveBytes += recvCountsBytes[pid];
+    }
+
+    TEUCHOS_TEST_FOR_EXCEPTION((totalSendBytes % static_cast<int>(sizeof(DataType))) != 0, std::logic_error, "MPIWrapper::sendDataVectors(): internal send byte count is not an integral number of DataType entries");
+    TEUCHOS_TEST_FOR_EXCEPTION((totalReceiveBytes % static_cast<int>(sizeof(DataType))) != 0, std::logic_error, "MPIWrapper::sendDataVectors(): received byte count is not an integral number of DataType entries");
+
+    receivedVector.resize(static_cast<size_t>(totalReceiveBytes) / sizeof(DataType));
+
+    void *sendBuffer = packedData.empty() ? NULL : static_cast<void*>(packedData.data());
+    void *recvBuffer = receivedVector.empty() ? NULL : static_cast<void*>(receivedVector.data());
+    MPI_Alltoallv(sendBuffer, sendCountsBytes.data(), sendDisplacementsBytes.data(), MPI_BYTE,
+                  recvBuffer, recvCountsBytes.data(), recvDisplacementsBytes.data(), MPI_BYTE,
+                  rawMpiComm);
+#else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MPIWrapper::sendDataVectors(): MPI support is required for communicators with more than one rank");
+#endif
   }
   
   template<typename ScalarType>

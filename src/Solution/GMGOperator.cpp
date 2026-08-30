@@ -38,6 +38,7 @@
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
 #include "Tpetra_Operator_to_Tpetra_Matrix.h"
+#include "TpetraCamelliaAdditiveSchwarz.h"
 
 using namespace Camellia;
 
@@ -319,12 +320,14 @@ getAdditiveSchwarzDetails(MeshPtr mesh, int overlapLevel, bool hierarchical, int
     }
   }
   Teuchos::Array<Teuchos::ArrayRCP<LO> > partsLocalOrdinals; // one per (local) cell
+  Teuchos::Array<Teuchos::ArrayRCP<GO> > partsGlobalOrdinalsForIfpack2; // same blocks, expressed as GIDs for Ifpack2::UserPartitioner
   std::vector<int> localIncidenceCounts(overlapMap->getLocalNumElements(), 0);
   for (auto gidSet : partsGlobalOrdinals)
   {
     const size_t numIDs = gidSet.size();
     std::vector<LO> lidVector(numIDs);
     Teuchos::ArrayRCP<LO> array(numIDs);
+    Teuchos::ArrayRCP<GO> globalArray(numIDs);
     size_t lidOrdinal = 0;
     for (const auto &gid : gidSet)
     {
@@ -332,18 +335,22 @@ getAdditiveSchwarzDetails(MeshPtr mesh, int overlapLevel, bool hierarchical, int
       TEUCHOS_TEST_FOR_EXCEPTION(lid == Teuchos::OrdinalTraits<LO>::invalid(), std::invalid_argument,
                                  "getAdditiveSchwarzDetails(): overlap-map LID not found for GID " << gid);
       lidVector[lidOrdinal] = lid;
-      array[lidOrdinal++] = lid;
+      array[lidOrdinal] = lid;
+      globalArray[lidOrdinal] = gid;
+      lidOrdinal++;
       localIncidenceCounts[lid]++;
     }
     partsLocalOrdinals.push_back(array);
-    size_t cellOrdinal = partsLocalOrdinals.size() - 1;
-    std::cout << "cell ordinal " << cellOrdinal << " has " << array.size() << " rows in its partition.\n";
-    Camellia::print("row LIDs", lidVector);
+    partsGlobalOrdinalsForIfpack2.push_back(globalArray);
+//    size_t cellOrdinal = partsLocalOrdinals.size() - 1;
+//    std::cout << "cell ordinal " << cellOrdinal << " has " << array.size() << " rows in its partition.\n";
+//    Camellia::print("row LIDs", lidVector);
   }
   
   AdditiveSchwarzDetails details;
   details.externalGIDsThisRank = externalGIDsThisRank;
   details.partsLocalOrdinals = partsLocalOrdinals;
+  details.partsGlobalOrdinals = partsGlobalOrdinalsForIfpack2;
   details.overlapMapGlobalOrdinals = overlapMapGlobalOrdinals;
   details.localIncidenceCounts = localIncidenceCounts;
   return details;
@@ -365,7 +372,7 @@ GMGOperator::getAdditiveSchwarzDetailsForTests(MeshPtr mesh,
                                    fineDofInterpreter, A);
 }
 
-GMGOperator::SmootherChoice GMGOperator::DEFAULT_ADDITIVE_SCHWARZ = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
+GMGOperator::SmootherChoice GMGOperator::DEFAULT_ADDITIVE_SCHWARZ = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
 
 GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, TMapPtr finePartitionMap,
@@ -2023,7 +2030,7 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
     int LID = Y.getMap()->getLocalElement(fineRowIndex);
     if (LID != -1)
     {
-      YHostView(0, LID) = 0.0;
+      YHostView(LID, 0) = 0.0;
     }
   }
   Kokkos::deep_copy(Y.getLocalViewDevice(Tpetra::Access::ReadWrite), YHostView);
@@ -2495,7 +2502,7 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
   
   Teuchos::ParameterList List;
   
-  Teuchos::RCP< Ifpack2::Preconditioner<Scalar> > smoother;
+  Teuchos::RCP< Tpetra::Operator<Scalar> > smoother;
   bool useILUTFallbackForDegenerateLocalCase = false;
   bool bypassCustomOuterPartitioningForDegenerateCase = false;
   std::string schwarzInnerPrecName = "Block Relaxation";
@@ -2575,131 +2582,45 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
   }
   break;
   case IFPACK_ADDITIVE_SCHWARZ:
+  {
+    smoother = Ifpack2::Factory::create<RowMatrix>("Schwarz", fineStiffnessMatrix);
+
+    // Match the legacy Epetra Ifpack_AdditiveSchwarz setup more closely.
+    // Overlapped additive Schwarz corrections should be accumulated rather
+    // than inserted/overwritten, which is also important for the symmetry
+    // checks in the GMG matrix-representation tests.
+    List.set("schwarz: combine mode", "Add");
+
+    // Ifpack2's non-overlapping MPI path is fragile for the very small,
+    // degenerate distributions used by some GMGSolver tests on many ranks.
+    // Use the ordinary overlapping Schwarz path in parallel when Camellia's
+    // requested overlap is zero.
+    const int overlapLevel = (_smootherOverlap == 0 && Comm()->getSize() > 1) ? 1 : _smootherOverlap;
+    List.set("schwarz: overlap level", overlapLevel);
+
+    List.set("subdomain solver name", "BLOCK_RELAXATION");
+    Teuchos::ParameterList &subdomainSolverParameters = List.sublist("subdomain solver parameters");
+    subdomainSolverParameters.set("relaxation: type", "Jacobi");
+    subdomainSolverParameters.set("relaxation: sweeps", 1);
+    subdomainSolverParameters.set("relaxation: container", "Dense");
+    subdomainSolverParameters.set("partitioner: type", "linear");
+    subdomainSolverParameters.set("partitioner: local parts", 1);
+  }
+  break;
   case CAMELLIA_ADDITIVE_SCHWARZ:
   {
-    auto overlapElementsAndPartition = getAdditiveSchwarzDetails(_fineMesh, _smootherOverlap, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship, _fineDofInterpreter, _fineStiffnessMatrix);
-    
-    smoother = Ifpack2::Factory::create<RowMatrix>("Schwarz", _fineStiffnessMatrix);
+    using LocalOrdinal = typename TMatrix<Scalar>::local_ordinal_type;
+    using GlobalOrdinal = typename TMatrix<Scalar>::global_ordinal_type;
+    using Node = typename TMatrix<Scalar>::node_type;
+    using TpetraSchwarz = Camellia::TpetraCamelliaAdditiveSchwarz<Scalar, LocalOrdinal, GlobalOrdinal, Node>;
 
-    {
-      const int myRank = Comm()->getRank();
-      const size_t baseLocalRowCount = _fineStiffnessMatrix->getRowMap()->getLocalNumElements();
-      const size_t overlapRowCount = overlapElementsAndPartition.overlapMapGlobalOrdinals.size();
-      const auto &parts = overlapElementsAndPartition.partsLocalOrdinals;
-      const auto &incidenceCounts = overlapElementsAndPartition.localIncidenceCounts;
-      bool badPartitionStructure = false;
-      bool partsOverlapInLIDSpace = false;
-      bool allIncidenceCountsAreOne = true;
-      size_t minPartSize = parts.empty() ? 0 : std::numeric_limits<size_t>::max();
-      size_t maxPartSize = 0;
-      size_t totalPartSize = 0;
-      std::map<LO,int> lidUseCounts;
-      int minIncidence = incidenceCounts.empty() ? 0 : std::numeric_limits<int>::max();
-      int maxIncidence = 0;
-      for (int count : incidenceCounts)
-      {
-        minIncidence = std::min(minIncidence, count);
-        maxIncidence = std::max(maxIncidence, count);
-        if (count != 1)
-        {
-          allIncidenceCountsAreOne = false;
-        }
-      }
-
-      std::ostringstream diag;
-      diag << "GMGOperator::setUpSmoother(): rank " << myRank
-           << ", baseLocalRowCount = " << baseLocalRowCount
-           << ", overlapRowCount = " << overlapRowCount
-           << ", numParts = " << parts.size() << "\n";
-      for (size_t p = 0; p < parts.size(); p++)
-      {
-        auto part = parts[p];
-        const size_t partSize = static_cast<size_t>(part.size());
-        minPartSize = std::min(minPartSize, partSize);
-        maxPartSize = std::max(maxPartSize, partSize);
-        totalPartSize += partSize;
-        diag << "  part " << p << " size = " << part.size() << ": ";
-        if (part.size() == 0)
-        {
-          badPartitionStructure = true;
-          diag << "<empty>";
-        }
-        for (size_t i = 0; i < part.size(); i++)
-        {
-          LO lid = part[i];
-          diag << lid << " ";
-          lidUseCounts[lid]++;
-          if (lidUseCounts[lid] > 1)
-          {
-            partsOverlapInLIDSpace = true;
-          }
-          if (lid == Teuchos::OrdinalTraits<LO>::invalid())
-          {
-            badPartitionStructure = true;
-            diag << "[invalid] ";
-          }
-          else if ((lid < 0) || (static_cast<size_t>(lid) >= overlapRowCount))
-          {
-            badPartitionStructure = true;
-            diag << "[out-of-range] ";
-          }
-        }
-        diag << "\n";
-      }
-      diag << "  part-size summary: min=" << minPartSize
-           << ", max=" << maxPartSize
-           << ", avg=" << (parts.empty() ? 0.0 : double(totalPartSize) / double(parts.size())) << "\n";
-      diag << "  partsOverlapInLIDSpace = " << (partsOverlapInLIDSpace ? "true" : "false") << "\n";
-      diag << "  incidence summary: min=" << minIncidence << ", max=" << maxIncidence << "\n";
-      diag << "  allIncidenceCountsAreOne = " << (allIncidenceCountsAreOne ? "true" : "false") << "\n";
-
-      if (badPartitionStructure)
-      {
-        std::cerr << diag.str();
-      }
-      else if (myRank == 0)
-      {
-        std::cout << diag.str();
-      }
-      TEUCHOS_TEST_FOR_EXCEPTION(badPartitionStructure, std::invalid_argument,
-                                 "GMGOperator::setUpSmoother(): invalid user partition structure detected before Ifpack2 Schwarz initialization; see stderr diagnostics for details");
-
-      useILUTFallbackForDegenerateLocalCase = (parts.size() == 1) && (!partsOverlapInLIDSpace) && allIncidenceCountsAreOne;
-      bypassCustomOuterPartitioningForDegenerateCase = useILUTFallbackForDegenerateLocalCase;
-      if (useILUTFallbackForDegenerateLocalCase)
-      {
-        schwarzInnerPrecName = "ILUT";
-      }
-      if (useILUTFallbackForDegenerateLocalCase && (myRank == 0))
-      {
-        std::cout << "GMGOperator::setUpSmoother(): using ILUT fallback for degenerate single-part local Schwarz case.\n";
-        std::cout << "GMGOperator::setUpSmoother(): NOTE: this regime has a single user part, no overlap reuse in LID space, and all incidence counts equal to one; if Ifpack2 still routes through BlockRelaxation here, a later workaround may need to bypass custom partitioning entirely for this narrow case.\n";
-      }
-    }
-    
-    if (!bypassCustomOuterPartitioningForDegenerateCase)
-    {
-      List.set("schwarz: combine mode", "Add");
-      List.set("schwarz: overlap elements", overlapElementsAndPartition.externalGIDsThisRank);
-      List.set("partitioner: type", "user");
-      List.set("partitioner: parts", overlapElementsAndPartition.partsLocalOrdinals);
-    }
-    else if (rank == 0)
-    {
-      std::cout << "GMGOperator::setUpSmoother(): bypassing custom outer Schwarz partitioning for degenerate single-part local case.\n";
-    }
-
-    Teuchos::ParameterList innerPreconditionerParameters;
-    // Important: the outer Schwarz layer already uses the custom per-cell overlapping user partition in the general case.
-    // Passing the same overlapping partition into the inner preconditioner a second time was shown to be harmful.
-    // In the narrow degenerate single-part local case, the custom outer partitioning no longer adds mathematical value,
-    // and the current Ifpack2 path still routes into fragile BlockRelaxation structure extraction.  We therefore bypass
-    // the custom outer partitioning entirely there.
-    
-    List.set("schwarz: inner preconditioner parameters", innerPreconditionerParameters);
-    List.set("schwarz: inner preconditioner name", schwarzInnerPrecName);
-    
-    List.set("schwarz: combine mode", "Add");
+    smoother = Teuchos::rcp(new TpetraSchwarz(fineStiffnessMatrix,
+                                              _smootherOverlap,
+                                              _fineMesh,
+                                              _fineDofInterpreter,
+                                              _hierarchicalNeighborsForSchwarz,
+                                              _dimensionForSchwarzNeighborRelationship));
+    schwarzInnerPrecName = "Tpetra Camellia additive Schwarz";
   }
   break;
     case CHEBYSHEV:
@@ -2723,33 +2644,20 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
     break;
   }
 
-  smoother->setParameters(List);
-
-  if ((choice == CAMELLIA_ADDITIVE_SCHWARZ) || (choice == IFPACK_ADDITIVE_SCHWARZ))
+  auto ifpack2Smoother = Teuchos::rcp_dynamic_cast< Ifpack2::Preconditioner<Scalar> >(smoother);
+  if (!ifpack2Smoother.is_null())
   {
-    const int myRank = Comm()->getRank();
-    if (myRank == 0)
-    {
-      std::cout << "GMGOperator::setUpSmoother(): pre-initialize Schwarz parameter summary\n";
-      std::cout << "  requested inner preconditioner name = "
-                << schwarzInnerPrecName << "\n";
-      std::cout << "  outer partitioner type = "
-                << List.get<std::string>("partitioner: type", "<unset>") << "\n";
-      if (List.isParameter("schwarz: overlap elements"))
-      {
-        auto overlapElements = List.get<Teuchos::Array<GO>>("schwarz: overlap elements");
-        std::cout << "  schwarz: overlap elements count = " << overlapElements.size() << "\n";
-      }
-      if (List.isParameter("partitioner: parts"))
-      {
-        auto parts = List.get<Teuchos::Array<Teuchos::ArrayRCP<LO>>>("partitioner: parts");
-        std::cout << "  partitioner: parts count = " << parts.size() << "\n";
-      }
-      std::cout << "  custom outer partitioning bypassed = "
-                << (bypassCustomOuterPartitioningForDegenerateCase ? "true" : "false")
-                << "\n";
-    }
+    ifpack2Smoother->setParameters(List);
   }
+
+//  if (choice == CAMELLIA_ADDITIVE_SCHWARZ)
+//  {
+//    const int myRank = Comm()->getRank();
+//    if (myRank == 0)
+//    {
+//      std::cout << "GMGOperator::setUpSmoother(): using Tpetra-native Camellia additive Schwarz smoother\n";
+//    }
+//  }
   
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  if (rank == 0) {
@@ -2757,69 +2665,57 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
 //    cout << *smoother;
 //  }
 
-  smoother->initialize();
-  smoother->compute();
+  if (!ifpack2Smoother.is_null())
+  {
+    ifpack2Smoother->initialize();
+    ifpack2Smoother->compute();
+  }
 
   if ((choice == CAMELLIA_ADDITIVE_SCHWARZ) && _useSchwarzDiagonalWeight)
   {
-    auto overlapDetails = getAdditiveSchwarzDetails(_fineMesh, _smootherOverlap,
-                                                    _hierarchicalNeighborsForSchwarz,
-                                                    _dimensionForSchwarzNeighborRelationship,
-                                                    _fineDofInterpreter,
-                                                    _fineStiffnessMatrix);
+    using LocalOrdinal = typename TMatrix<Scalar>::local_ordinal_type;
+    using GlobalOrdinal = typename TMatrix<Scalar>::global_ordinal_type;
+    using Node = typename TMatrix<Scalar>::node_type;
+    using TpetraSchwarz = Camellia::TpetraCamelliaAdditiveSchwarz<Scalar, LocalOrdinal, GlobalOrdinal, Node>;
 
+    auto tpetraSmoother = Teuchos::rcp_dynamic_cast<TpetraSchwarz>(smoother);
+    TEUCHOS_TEST_FOR_EXCEPTION(tpetraSmoother.is_null(), std::invalid_argument,
+                               "GMGOperator::setUpSmoother(): CAMELLIA_ADDITIVE_SCHWARZ expected a TpetraCamelliaAdditiveSchwarz smoother");
+
+    const auto &incidenceCounts = tpetraSmoother->getLocalIncidenceCounts();
+    auto overlapMap = tpetraSmoother->getOverlapMap();
     auto ownedMap = fineStiffnessMatrix->getRowMap();
-    auto eOwnedMap = T_to_E::map(ownedMap);
-    Epetra_FEVector multiplicities(*eOwnedMap, 1);
 
-    const auto & overlappingEntries = overlapDetails.overlapMapGlobalOrdinals;
+    Tpetra::Vector<Scalar, LocalOrdinal, GlobalOrdinal, Node> overlapCounts(overlapMap);
+    TEUCHOS_TEST_FOR_EXCEPTION(incidenceCounts.size() != overlapMap->getLocalNumElements(), std::invalid_argument,
+                               "GMGOperator::setUpSmoother(): local incidence count size does not match overlap-map row count");
+    {
+      auto overlapCountsView = overlapCounts.getLocalViewHost(Tpetra::Access::ReadWrite);
+      for (size_t i = 0; i < incidenceCounts.size(); ++i)
+      {
+        overlapCountsView(i, 0) = static_cast<Scalar>(incidenceCounts[i]);
+      }
+    }
 
-    TEUCHOS_TEST_FOR_EXCEPTION(overlapDetails.localIncidenceCounts.size() != overlappingEntries.size(),
-                               std::invalid_argument,
-                               "GMGOperator::setUpSmoother(): local incidence count size does not match overlap-map GID count");
+    Tpetra::Export<LocalOrdinal, GlobalOrdinal, Node> exporter(overlapMap, ownedMap);
+    _smootherDiagonalWeight = Teuchos::rcp(new Tpetra::Vector<Scalar, LocalOrdinal, GlobalOrdinal, Node>(ownedMap));
+    _smootherDiagonalWeight->putScalar(0.0);
+    _smootherDiagonalWeight->doExport(overlapCounts, exporter, Tpetra::ADD);
 
-    std::vector<double> myOverlappingValues(overlapDetails.localIncidenceCounts.begin(), overlapDetails.localIncidenceCounts.end());
-    multiplicities.SumIntoGlobalValues(static_cast<int>(myOverlappingValues.size()),
-                                       overlappingEntries.getRawPtr(),
-                                       myOverlappingValues.data());
-    multiplicities.GlobalAssemble();
-
-    _smootherDiagonalWeight = Teuchos::rcp(new Tpetra::Vector<Scalar>(ownedMap));
     auto weightView = _smootherDiagonalWeight->getLocalViewHost(Tpetra::Access::ReadWrite);
     const size_t numMyElements = ownedMap->getLocalNumElements();
     for (size_t lid = 0; lid < numMyElements; lid++)
     {
-      const double value = multiplicities[0][static_cast<int>(lid)];
-      TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument,
+      const Scalar value = weightView(lid, 0);
+      TEUCHOS_TEST_FOR_EXCEPTION(value == Scalar(0), std::invalid_argument,
                                  "GMGOperator::setUpSmoother(): multiplicity value should never be 0");
-      weightView(lid,0) = 1.0 / value;
+      weightView(lid, 0) = Scalar(1) / value;
     }
   }
   
-  if (_useSchwarzScalingWeight && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ)))
+  if (_useSchwarzScalingWeight && (_smootherType == CAMELLIA_ADDITIVE_SCHWARZ))
   {
-    // (For IfPack, this weight may not be exactly correct, but it's probably kinda close.  Likely we will deprecate support for
-    // IFPACK_ADDITIVE_SCHWARZ soon.)
-    
-//    double oldWeight = _smootherWeight;
-    
     _smootherWeight = computeSchwarzSmootherWeight();
-    if (rank == 0)
-    {
-//      int inverse = 1.0 / _smootherWeight;
-//      cout << "Set _smootherWeight to 1/" << inverse << endl;
-    }
-    
-//    int rank = Teuchos::GlobalMPISession::getRank();
-//    static bool haveWarned = false;
-//    if (!haveWarned && (rank==0))
-//    {
-//      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the subdomain connectivity matrix and some results in Smith et al.";
-//      cout << " First _smootherWeight value: " << _smootherWeight << " (previous weight was " << oldWeight << ").\n";
-//      haveWarned = true;
-//    }
-    // DEBUGGING
-//    cout << "_smootherWeight value: " << _smootherWeight << " (previous weight was " << oldWeight << ").\n";
   }
   
   _smoother = smoother;
@@ -2863,9 +2759,8 @@ std::string GMGOperator::smootherString(SmootherChoice choice)
 
 TMatrixPtr<double> GMGOperator::getMatrixRepresentation()
 {
-  auto eMap    = T_to_E::map(_finePartitionMap);
-  auto eMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*this, *eMap);
-  return E_to_T::matrix(eMatrix);
+  Teuchos::RCP<TOperator<double> > op = Teuchos::rcp(static_cast<TOperator<double> *>(this), false);
+  return Tpetra_Operator_to_Tpetra_Matrix::constructInverseMatrix(op, _finePartitionMap);
 }
 
 void GMGOperator::setUseHierarchicalNeighborsForSchwarz(bool value)

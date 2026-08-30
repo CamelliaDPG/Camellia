@@ -310,7 +310,7 @@ namespace
     Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
     auto tSolnMap = E_to_T::map(eSolnMap);
     
-    Tpetra::Import<LO,GO,Node> importer (tSolnMap, partMap); // source, destination
+    Tpetra::Import<LO,GO,Node> importer (partMap, tSolnMap); // source, destination
     
     Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
     auto eLHSVector = Teuchos::rcp(lhsVector,false);
@@ -2447,7 +2447,7 @@ namespace
       Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
       auto tSolnMap = E_to_T::map(eSolnMap);
       
-      Tpetra::Import<LO,GO,Node> importer (tSolnMap, partMap); // source, destination
+      Tpetra::Import<LO,GO,Node> importer (partMap, tSolnMap); // source, destination
       
       auto eLHSVector = Teuchos::rcp(lhsVector,false);
       auto tLHSVector = E_to_T::vector(eLHSVector);

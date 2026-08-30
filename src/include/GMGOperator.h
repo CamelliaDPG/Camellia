@@ -51,6 +51,7 @@ public:
   {
     Teuchos::Array<GO> externalGIDsThisRank;
     Teuchos::Array<Teuchos::ArrayRCP<LO>> partsLocalOrdinals;
+    Teuchos::Array<Teuchos::ArrayRCP<GO>> partsGlobalOrdinals;
     Teuchos::Array<GO> overlapMapGlobalOrdinals;
     std::vector<int> localIncidenceCounts;
   };

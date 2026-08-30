@@ -100,7 +100,7 @@ int main( int argc, char* argv[] )
   }
 
   int rank = comm->getRank();
-  bool printAllocationReport = (rank == 0);
+  bool printAllocationReport = false; // (rank == 0);
   
   Camellia::finalize(printAllocationReport);
   Kokkos::finalize();
