@@ -29,6 +29,7 @@ class Cone_U0 : public SimpleFunction<double>
   bool _usePeriodicData; // if true, for x > 0.5 we set x = x-1; similarly for y
 public:
   Cone_U0(double x0 = 0, double y0 = 0.25, double r = 0.1, double h = 1.0, bool usePeriodicData = true)
+  : SimpleFunction<double>("Cone_U0", 3)
   {
     _x0 = x0;
     _y0 = y0;
@@ -94,6 +95,14 @@ public:
       inflow = false; // not a boundary point at all...
     }
     return inflow;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
+  {
+    const int numPoints = points.extent(0);
+    for (int i=0; i<numPoints; i++)
+    {
+      pointsMatch(i) = matchesPoint(points(i,0), points(i,1), points(i,2));
+    }
   }
 };
 

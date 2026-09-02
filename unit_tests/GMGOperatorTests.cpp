@@ -14,7 +14,6 @@
 #include "CamelliaDebugUtility.h"
 #include "CamelliaTestingHelpers.h"
 //#include "ConvectionDiffusionReactionFormulation.h"
-#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GMGOperator.h"
 #include "MeshFactory.h"
@@ -25,11 +24,9 @@
 #include "RHS.h"
 #include "SpaceTimeHeatDivFormulation.h"
 #include "StokesVGPFormulation.h"
-#include "T_to_E.hpp"
 
 #include <MatrixMarket_Tpetra.hpp>
 
-#include <Epetra_CrsMatrix.h>
 #include <Tpetra_CrsMatrix.hpp>
 
 using namespace Camellia;
@@ -66,29 +63,24 @@ namespace
     return gmgOperator.computeSchwarzSmootherWeight();
   }
   
-  void testEpetraMatrixIsIdentity(Teuchos::RCP<Epetra_CrsMatrix> P, Teuchos::FancyOStream &out, bool &success)
+  void testTpetraMatrixIsIdentity(TMatrixPtr<double> P, Teuchos::FancyOStream &out, bool &success)
   {
-    int myRowCount = P->Map().NumMyElements();
+    size_t myRowCount = P->getLocalNumRows();
     
-    int globalEntryCount = static_cast<int>(P->Map().NumGlobalElements64());
-    Camellia::FieldContainer<int> colIndices(globalEntryCount); // local indices
-    Camellia::FieldContainer<double> colValues(globalEntryCount);
-    
-//    printMapSummary(P->Map(), "P->Map()");
-    
-    for (int localRowIndex=0; localRowIndex<myRowCount; localRowIndex++)
+    for (size_t localRowIndex=0; localRowIndex<myRowCount; localRowIndex++)
     {
-      GlobalIndexTypeToCast globalRowIndex = P->Map().GID64(localRowIndex);
-      int numEntries;
-      P->ExtractMyRowCopy(localRowIndex, globalEntryCount, numEntries, &colValues(0), &colIndices(0));
+      GlobalIndexTypeToCast globalRowIndex = P->getRowMap()->getGlobalElement(localRowIndex);
+      typename TMatrix<double>::local_inds_host_view_type colIndices;
+      typename TMatrix<double>::values_host_view_type colValues;
+      P->getLocalRowView(localRowIndex, colIndices, colValues);
       bool diagEntryFound = false;
       
       double oneTol=1e-12;
       double zeroTol=1e-10; // how small the off-diagonal entries should be
-      for (int colEntryOrdinal=0; colEntryOrdinal<numEntries; colEntryOrdinal++)
+      for (size_t colEntryOrdinal=0; colEntryOrdinal<colIndices.extent(0); colEntryOrdinal++)
       {
-        GlobalIndexTypeToCast localColIndex = colIndices(colEntryOrdinal);
-        GlobalIndexTypeToCast globalColIndex = P->DomainMap().GID64(localColIndex);
+        auto localColIndex = colIndices(colEntryOrdinal);
+        GlobalIndexTypeToCast globalColIndex = P->getColMap()->getGlobalElement(localColIndex);
         double expectedValue;
         double actualValue = colValues(colEntryOrdinal);
         if (globalColIndex != globalRowIndex)
@@ -118,13 +110,13 @@ namespace
       {
         int rank = Teuchos::GlobalMPISession::getRank();
         out << "on rank " << rank << ", no diagonal entry found for global row " << globalRowIndex;
-        out << " (num col entries: " << numEntries << ")\n";
+        out << " (num col entries: " << colIndices.extent(0) << ")\n";
         success = false;
       }
     }
     
 //    { // DEBUGGING: export to disk
-//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", P);
 //      int rank = Teuchos::GlobalMPISession::getRank();
 //      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 //    }
@@ -169,8 +161,7 @@ namespace
     gmgOperator.constructProlongationOperator();
     
     auto P = gmgOperator.getProlongationOperator();
-    auto eP = T_to_E::matrix(P);
-    testEpetraMatrixIsIdentity(eP, out, success);
+    testTpetraMatrixIsIdentity(P, out, success);
   }
 
   void testIdentityProlongationOperator(MeshPtr mesh, bool useStaticCondensation,
@@ -196,8 +187,7 @@ namespace
     gmgOperator.constructProlongationOperator();
     
     auto P = gmgOperator.getProlongationOperator();
-    auto eP = T_to_E::matrix(P);
-    testEpetraMatrixIsIdentity(eP, out, success);
+    testTpetraMatrixIsIdentity(P, out, success);
   }
   
   void testIdentityProlongationOperatorUniform(FormulationChoice formChoice, int spaceDim,
@@ -289,7 +279,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GMGOperator, IdentityProlongationOperatorUniform_StokesCondensed2D )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     bool useConformingTraces = false;
     bool useStaticCondensation = true;
@@ -481,7 +471,7 @@ namespace
       {
         out << "Error for cell " << entry.first << ": " << entry.second << endl;
       }
-      out << *coarseSoln->getLHSVector();
+      coarseSoln->getLHSVector()->describe(out, Teuchos::VERB_DEFAULT);
     }
     
     SolutionPtr fineSoln = Solution::solution(fineMesh);
@@ -512,16 +502,16 @@ namespace
                             fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, br);
     
     auto tP = gmgOperator.constructProlongationOperator();
-    auto P = T_to_E::matrix(tP);
-    Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
+    auto coarseSolutionVector = coarseSoln->getLHSVector();
     
     fineSoln->initializeLHSVector();
-    fineSoln->getLHSVector()->PutScalar(0); // set a 0 global solution
+    auto fineSolutionVector = fineSoln->getLHSVector();
+    fineSolutionVector->putScalar(0); // set a 0 global solution
     
     fineSoln->importSolution();      // imports the 0 solution onto each cell
     fineSoln->clearComputedResiduals();
     
-    P->Multiply(false, *coarseSolutionVector, *fineSoln->getLHSVector());
+    tP->apply(*coarseSolutionVector, *fineSolutionVector);
     
 //    cout << "coarseSolutionVector:\n"  << *coarseSolutionVector;
 //    cout << "P * coarseSolutionVector:\n"  << *fineSoln->getLHSVector();
@@ -540,7 +530,7 @@ namespace
     }
 
 //    { // DEBUGGING: export to disk
-//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", tP);
 //      int rank = Teuchos::GlobalMPISession::getRank();
 //      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 //      
@@ -705,26 +695,26 @@ namespace
                             fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, br);
     
     TMatrixPtr<double> tP = gmgOperator.constructProlongationOperator();
-    Teuchos::RCP<Epetra_CrsMatrix> P = T_to_E::matrix(tP);
     
-    TEST_EQUALITY(P->NumGlobalRows64(), tP->getGlobalNumRows());
-    TEST_EQUALITY(P->NumGlobalCols64(), tP->getGlobalNumCols());
+    TEST_EQUALITY(tP->getGlobalNumRows(), tP->getRangeMap()->getGlobalNumElements());
+    TEST_EQUALITY(tP->getGlobalNumCols(), tP->getDomainMap()->getGlobalNumElements());
     
-    Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
+    auto coarseSolutionVector = coarseSoln->getLHSVector();
     
     fineSoln->initializeLHSVector();
-    fineSoln->getLHSVector()->PutScalar(0); // set a 0 global solution
+    auto fineSolutionVector = fineSoln->getLHSVector();
+    fineSolutionVector->putScalar(0); // set a 0 global solution
     fineSoln->importSolution();      // imports the 0 solution onto each cell
     fineSoln->clearComputedResiduals();
     
-    P->Multiply(false, *coarseSolutionVector, *fineSoln->getLHSVector());
+    tP->apply(*coarseSolutionVector, *fineSolutionVector);
     
     fineSoln->importSolution();
     
 //    { // DEBUGGING: export to disk
-//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", tP);
 //      int rank = Teuchos::GlobalMPISession::getRank();
-//      if (rank==0) cout << "wrote Epetra prolongation operator matrix to /tmp/P.dat\n";
+//      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
 //      
 //      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/tP.dat", tP);
 //      if (rank==0) cout << "wrote Tpetra prolongation operator matrix to /tmp/tP.dat\n";
@@ -857,11 +847,11 @@ namespace
 //                            fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
 //    gmgOperator.setFineCoarseRolesSwapped(true);
 //    
-//    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.constructProlongationOperator();
-//    Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
+//    auto P = gmgOperator.constructProlongationOperator();
+//    auto coarseSolutionVector = coarseSoln->getLHSVector();
 //    
 //    cout << "Outputting P to file.\n";
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", E_to_T::matrix(P));
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/P.dat", P);
 //    
 //    fineSoln->projectOntoMesh(exactSolnMap);
 //    coarseSoln->initializeLHSVector();
@@ -940,14 +930,14 @@ namespace
   
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLineStandardSolve )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     bool useStaticCondensation = false;
     testProlongationOperatorLine(useStaticCondensation, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLineCondensedSolve )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     
     bool useStaticCondensation = true;
     testProlongationOperatorLine(useStaticCondensation, out, success);
@@ -1200,7 +1190,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveTwoLevelNonconforming )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     bool simple = true;
     bool useStaticCondensation = false;
     bool useConformingTraces = false;
@@ -1213,7 +1203,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveTwoLevelHangingNodesNonconforming )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     bool simple = true;
     bool useStaticCondensation = false;
     bool useConformingTraces = false;

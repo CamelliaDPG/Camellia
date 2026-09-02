@@ -13,7 +13,7 @@ class LidVelocity : public SimpleFunction<double>
 public:
   LidVelocity(double eps)
   :
-  SimpleFunction<double>("ch03-StokesCavity-LidVelocity")
+  SimpleFunction<double>("ch03-StokesCavity-LidVelocity", 2)
   {
     _eps = eps;
   }

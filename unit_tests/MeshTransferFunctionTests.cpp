@@ -219,7 +219,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMap)
 
 TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMapUnderRefinement)
 {
-  MPIWrapper::CommWorld()->Barrier();
+  MPIWrapper::TeuchosCommWorld()->barrier();
 
   // test to check that the cell mapping is correctly updated when the newMesh is refined
 
@@ -415,7 +415,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMapUnderRefinement)
 
 TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
 {
-  MPIWrapper::CommWorld()->Barrier();
+  MPIWrapper::TeuchosCommWorld()->barrier();
   
   // test to check that functions are correctly valued
 
@@ -553,7 +553,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
 
 TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
 {
-  MPIWrapper::CommWorld()->Barrier();
+  MPIWrapper::TeuchosCommWorld()->barrier();
   // test to check that functions are correctly valued
 
   // try with some functions that vary on the interface
@@ -571,10 +571,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
 
   // then try with some arbitrarily permuted cell numberings
 
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
-#endif
+  MPIWrapper::TeuchosCommWorld()->barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
   // test to check that the cell mapping is correctly updated when the newMesh is refined
 
   // (may be worth checking that things are updated correctly when originalMesh is refined,
@@ -715,10 +712,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithHangingNodes)
 
   // then try with some arbitrarily permuted cell numberings
 
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
-#endif
+  MPIWrapper::TeuchosCommWorld()->barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
   // test to check that the cell mapping is correctly updated when the newMesh is refined
 
   // (may be worth checking that things are updated correctly when originalMesh is refined,

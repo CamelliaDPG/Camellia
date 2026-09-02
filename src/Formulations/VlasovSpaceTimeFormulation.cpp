@@ -38,6 +38,8 @@
 #include "Intrepid2_IntegrationTools.hpp"
 #include "Intrepid2_NodalBasisFamily.hpp"
 
+#include <chrono>
+
 using namespace Camellia;
 
 using std::string;
@@ -720,7 +722,15 @@ namespace
       TEUCHOS_TEST_FOR_EXCEPTION(dofOrdering->getVarIDs().size() != 1, std::invalid_argument, "Unexpected number of test variables");
       auto wID = *dofOrdering->getVarIDs().begin();
       
-      Epetra_Time timer(*MPIWrapper::CommSerial());
+      auto timerStart = std::chrono::steady_clock::now();
+      auto elapsedTime = [&timerStart]()
+      {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - timerStart).count();
+      };
+      auto resetTimer = [&timerStart]()
+      {
+        timerStart = std::chrono::steady_clock::now();
+      };
       
       // evaluate acceleration at quadrature points
       // we could speed this up for Poisson by only evaluating at physical points
@@ -786,18 +796,18 @@ namespace
       auto & integralDataValueValue = _integralDataValueValue[integralDataKey];
 //      auto integralDataValueValue = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisValues, cellMeasures, transformedBasisValues);
       
-      double time_block1 = timer.ElapsedTime();
-      timer.ResetStartTime();
+      double time_block1 = elapsedTime();
+      resetTimer();
       
       double coreIntegrationTime = 0;
       
       double flopEstimateValueValue = 0;
       bool sumInto = false;
       // (w1, w2)
-      timer.ResetStartTime();
+      resetTimer();
       Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataValueValue, transformedBasisValues, cellMeasures, transformedBasisValues, sumInto, &flopEstimateValueValue);
-      coreIntegrationTime = timer.ElapsedTime();
-      timer.ResetStartTime();
+      coreIntegrationTime = elapsedTime();
+      resetTimer();
       
       // (v \cdot grad_x w1 + d/dt w1 + a \cdot grad_v w1, v \cdot grad_x w2 + d/dt w2 + a \cdot grad_v w2)
       // allocate container for [v 1 a], with shape (C,P,D)
@@ -848,15 +858,15 @@ namespace
       }
       auto & integralDataGradGrad = _integralDataGradGrad[integralDataKey];
 //      auto integralDataGradGrad = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisGradients, cellMeasures, transformedBasisGradients);
-      double time_block2 = timer.ElapsedTime();
-      timer.ResetStartTime();
+      double time_block2 = elapsedTime();
+      resetTimer();
       
       sumInto = false;
       double flopEstimateGradGrad = 0;
-      timer.ResetStartTime();
+      resetTimer();
       Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataGradGrad, transformedBasisGradients, cellMeasures, transformedBasisGradients, sumInto, &flopEstimateGradGrad);
-      coreIntegrationTime += timer.ElapsedTime();
-      timer.ResetStartTime();
+      coreIntegrationTime += elapsedTime();
+      resetTimer();
 //      std::cout << "flop estimate for (value, value): " << flopEstimateValueValue << std::endl;
 //      std::cout << "flop estimate for ( grad,  grad): " << flopEstimateGradGrad   << std::endl;
 
@@ -869,8 +879,8 @@ namespace
         ipView(cellOrdinal,i,j) = integralDataValueValue(cellOrdinal,i,j) + integralDataGradGrad(cellOrdinal,i,j);
       });
       Kokkos::fence();
-      double time_block3 = timer.ElapsedTime();
-      timer.ResetStartTime();
+      double time_block3 = elapsedTime();
+      resetTimer();
       
       innerProduct.checkinDeviceView(true); // true: deep copy to host.  If we could guarantee that caller wouldn't try to access on host, we could eliminate this.  But we can't, and probably shouldn't until we've changed the method signature here to have a DeviceView passed in.  Basically the contract for Camellia::FieldContainer is that it should always be accessible on host.
 
@@ -886,7 +896,7 @@ namespace
       scratchStorage.checkinScratchStorage(gradientWeightsView);
       scratchStorage.checkinScratchStorage(transformVectorView);
       
-      double time_block4 = timer.ElapsedTime();
+      double time_block4 = elapsedTime();
       
       if (_gramAssemblyTimingCallback)
       {
@@ -1941,7 +1951,7 @@ void VlasovSpaceTimeFormulation::recordElementwiseConservationDiagnostics(int sp
   auto trialFunctional = _vlasovBF->trialFunctional(testFunction); // the BF evaluated at the test function
   
 //  { // DEBUGGING
-//    if (MPIWrapper::CommWorld()->MyPID() == 0)
+//    if (MPIWrapper::TeuchosCommWorld()->getRank() == 0)
 //    {
 //      std::cout << "Conservation diagnostic: " << trialFunctional->displayString() << std::endl;
 //    }
@@ -1995,9 +2005,9 @@ void VlasovSpaceTimeFormulation::recordElementwiseConservationDiagnostics(int sp
   localMaximum[myCellIDWithMax] = myMaxFailure;
   
   const int numEntries = 1;
-  const int maxGatherCount = MPIWrapper::CommWorld()->NumProc();
+  const int maxGatherCount = MPIWrapper::TeuchosCommWorld()->getSize();
   
-  auto actualGreatestEntries = MPIGlobalMinMax::globalMaximums(MPIWrapper::CommWorld(), localMaximum, numEntries, maxGatherCount);
+  auto actualGreatestEntries = MPIGlobalMinMax::globalMaximums(MPIWrapper::TeuchosCommWorld(), localMaximum, numEntries, maxGatherCount);
   
   IndexType globalMaxFailureCellID = actualGreatestEntries.begin()->first;
   double globalMaxFailure = actualGreatestEntries.begin()->second;
@@ -2066,7 +2076,7 @@ void VlasovSpaceTimeFormulation::setIterativeSolveTolerances(const std::vector<d
 
 void VlasovSpaceTimeFormulation::solve()
 {
-  const int rank = MPIWrapper::CommWorld()->MyPID();
+  const int rank = MPIWrapper::TeuchosCommWorld()->getRank();
   
   Teuchos::RCP<GMGSolver> gmgSolver;
   

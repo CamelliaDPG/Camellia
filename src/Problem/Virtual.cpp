@@ -11,9 +11,10 @@
 
 #include "Virtual.h"
 #include "BF.h"
-#include "Epetra_Time.h"
 
 #include "DofOrderingFactory.h"
+
+#include <chrono>
 #include "SerialDenseWrapper.h"
 
 #include "BasisCache.h"
@@ -34,14 +35,7 @@ public:
                                           RHSPtr rhs, BasisCachePtr basisCache) {
     double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
     
-#ifdef HAVE_MPI
-    Epetra_MpiComm Comm(MPI_COMM_WORLD);
-    //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-    Epetra_SerialComm Comm;
-#endif
-    
-    Epetra_Time timer(Comm);
+    auto timerStart = std::chrono::steady_clock::now();
     
     // localStiffness should have dim. (numCells, numTrialFields, numTrialFields)
     MeshPtr mesh = basisCache->mesh();
@@ -134,7 +128,7 @@ public:
     int numTestTraceDofs = testTraceIndex;
     int numTestDofs = numTestTraceDofs + numTestInteriorDofs;
     
-    timer.ResetStartTime();
+    timerStart = std::chrono::steady_clock::now();
     
     bool printTimings = true;
     
@@ -327,10 +321,10 @@ public:
       }
     }
     
-    testMatrixAssemblyTime += timer.ElapsedTime();
+    testMatrixAssemblyTime += std::chrono::duration<double>(std::chrono::steady_clock::now() - timerStart).count();
     //      cout << "ipMatrix:\n" << ipMatrix;
     
-    timer.ResetStartTime();
+    timerStart = std::chrono::steady_clock::now();
     
     cout << "NOTE: we do not yet enforce continuity on the trace test space.\n"; // I *think* this is fine, but I'm not dead certain -- we do of course in the end enforce continuity in GDAMinimumRule
     
@@ -445,7 +439,7 @@ public:
       }
     }
     
-    testMatrixInversionTime += timer.ElapsedTime();
+    testMatrixInversionTime += std::chrono::duration<double>(std::chrono::steady_clock::now() - timerStart).count();
     //      cout << "optTestCoeffs:\n" << optTestCoeffs;
     
     if (printTimings) {

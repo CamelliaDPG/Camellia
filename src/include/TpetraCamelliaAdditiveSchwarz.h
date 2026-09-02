@@ -9,6 +9,7 @@
 
 #include "DofInterpreter.h"
 #include "Mesh.h"
+#include "MPIWrapper.h"
 #include "TypeDefs.h"
 
 #include <Ifpack2_BlockRelaxation.hpp>
@@ -81,6 +82,7 @@ private:
   bool initialized_ = false;
   bool computed_ = false;
 
+public:
   static std::set<GlobalIndexType> overlappingCells(GlobalIndexType cellID, MeshPtr mesh, int overlapLevel, bool hierarchical, int dimensionForNeighborRelation)
   {
     std::set<GlobalIndexType> cells = {cellID};
@@ -130,6 +132,7 @@ private:
     return cells;
   }
 
+private:
   Teuchos::RCP<const row_matrix_type> overlapRowMatrix() const
   {
     Teuchos::RCP<const row_matrix_type> rowMatrix = Teuchos::rcp_implicit_cast<const row_matrix_type>(A_);
@@ -207,6 +210,97 @@ public:
   {
     initialize();
     compute();
+  }
+
+  static int MaxGlobalOverlapSideNeighborCount(MeshPtr mesh, int overlap, bool hierarchical, int dimForNeighborRelationship)
+  {
+    const std::set<GlobalIndexType> &myCellIndices = mesh->cellIDsInPartition();
+    Teuchos_CommPtr comm = mesh->Comm();
+
+    int localMaxNeighbors = 0;
+    MeshTopologyViewPtr meshTopo = mesh->getTopology();
+
+    const int overlapNeighborRelationshipDimension = meshTopo->getDimension() - 1;
+    std::set<GlobalIndexType> remoteCells;
+
+    for (GlobalIndexType cellIndex : myCellIndices)
+    {
+      std::set<GlobalIndexType> subdomainCellsAndNeighbors = overlappingCells(cellIndex, mesh, overlap, hierarchical,
+                                                                               dimForNeighborRelationship);
+      for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
+      {
+        if (!mesh->myCellsInclude(subdomainCellIndex)) remoteCells.insert(subdomainCellIndex);
+      }
+    }
+
+    std::map<GlobalIndexType, std::vector<GlobalIndexType>> remoteCellNeighbors;
+
+    int myRank = comm->getRank();
+    std::map<int, std::vector<std::pair<int, GlobalIndexType>>> requests;
+    for (GlobalIndexType remoteCellID : remoteCells)
+    {
+      int rank = mesh->partitionForCellID(remoteCellID);
+      requests[rank].push_back({myRank, remoteCellID});
+    }
+
+    std::vector<std::pair<int, GlobalIndexType>> requestsReceived;
+    MPIWrapper::sendDataVectors(comm, requests, requestsReceived);
+
+    std::map<int, std::vector<std::pair<GlobalIndexType, GlobalIndexType>>> responsesToSend;
+    std::vector<std::pair<GlobalIndexType, GlobalIndexType>> responsesReceived;
+    for (auto request : requestsReceived)
+    {
+      int remotePID = request.first;
+      GlobalIndexType myCellID = request.second;
+      TEUCHOS_TEST_FOR_EXCEPTION(!mesh->myCellsInclude(myCellID), std::invalid_argument, "request received for non-owned cellID");
+      CellPtr myCell = meshTopo->getCell(myCellID);
+      std::set<GlobalIndexType> neighborIDs = myCell->getActiveNeighborIndices(meshTopo);
+      for (GlobalIndexType neighborID : neighborIDs)
+      {
+        responsesToSend[remotePID].push_back({myCellID, neighborID});
+      }
+    }
+    MPIWrapper::sendDataVectors(comm, responsesToSend, responsesReceived);
+    for (auto response : responsesReceived)
+    {
+      GlobalIndexType remoteCellID = response.first;
+      GlobalIndexType neighborID = response.second;
+      remoteCellNeighbors[remoteCellID].push_back(neighborID);
+    }
+
+    for (GlobalIndexType cellIndex : myCellIndices)
+    {
+      std::set<GlobalIndexType> subdomainCellsAndNeighbors = overlappingCells(cellIndex, mesh, overlap, hierarchical,
+                                                                               dimForNeighborRelationship);
+      std::set<GlobalIndexType> subdomainNeighbors;
+      for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
+      {
+        if (mesh->myCellsInclude(subdomainCellIndex))
+        {
+          CellPtr subdomainCell = meshTopo->getCell(subdomainCellIndex);
+          std::set<GlobalIndexType> cellNeighbors = subdomainCell->getActiveNeighborIndices(overlapNeighborRelationshipDimension, meshTopo);
+          subdomainNeighbors.insert(cellNeighbors.begin(), cellNeighbors.end());
+        }
+        else
+        {
+          auto remoteEntry = remoteCellNeighbors.find(subdomainCellIndex);
+          TEUCHOS_TEST_FOR_EXCEPTION(remoteEntry == remoteCellNeighbors.end(), std::invalid_argument, "Remote cell not found during send/receive");
+          subdomainNeighbors.insert(remoteEntry->second.begin(), remoteEntry->second.end());
+        }
+      }
+
+      subdomainCellsAndNeighbors.insert(subdomainNeighbors.begin(), subdomainNeighbors.end());
+      localMaxNeighbors = std::max(localMaxNeighbors, static_cast<int>(subdomainCellsAndNeighbors.size()));
+    }
+
+    int globalMaxNeighbors = 0;
+    Teuchos::reduceAll(*comm, Teuchos::REDUCE_MAX, 1, &localMaxNeighbors, &globalMaxNeighbors);
+    return globalMaxNeighbors;
+  }
+
+  int getMaxGlobalOverlapSideNeighborCount() const
+  {
+    return MaxGlobalOverlapSideNeighborCount(mesh_, overlapLevel_, hierarchical_, dimensionForNeighborRelationship_);
   }
 
   void initialize()

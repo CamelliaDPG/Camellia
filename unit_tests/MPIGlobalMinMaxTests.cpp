@@ -121,20 +121,19 @@ namespace
 
   TEUCHOS_UNIT_TEST( MPIGlobalMinMax, GlobalMaximum )
   {
-    auto comm = MPIWrapper::CommWorld();
+    auto comm = MPIWrapper::TeuchosCommWorld();
     
     auto globalEntries = globalData();
     int numEntries = globalEntries.size() / 10;
     
     auto expectedGreatestEntries = greatestEntries(numEntries, globalEntries);
     
-    auto myEntries = myData(comm->MyPID(), comm->NumProc());
+    auto myEntries = myData(comm->getRank(), comm->getSize());
     
     // sanity check on myData(): make sure that the sum of local entry counts equals globalEntries.size()
     int localCount = myEntries.size();
     out << "localCount: " << localCount << endl;
-    int globalCount = 0;
-    comm->SumAll(&localCount, &globalCount, 1);
+    int globalCount = MPIWrapper::sum(comm, localCount);
     TEST_EQUALITY(globalEntries.size(), globalCount);
     
     const int maxGatherCount = numEntries * 4;
@@ -153,20 +152,19 @@ namespace
         
   TEUCHOS_UNIT_TEST( MPIGlobalMinMax, GlobalMinimum )
   {
-    auto comm = MPIWrapper::CommWorld();
+    auto comm = MPIWrapper::TeuchosCommWorld();
     
     auto globalEntries = globalData();
     int numEntries = globalEntries.size() / 10;
     
     auto expectedLeastEntries = leastEntries(numEntries, globalEntries);
     
-    auto myEntries = myData(comm->MyPID(), comm->NumProc());
+    auto myEntries = myData(comm->getRank(), comm->getSize());
     
     // sanity check on myData(): make sure that the sum of local entry counts equals globalEntries.size()
     int localCount = myEntries.size();
     out << "localCount: " << localCount << endl;
-    int globalCount = 0;
-    comm->SumAll(&localCount, &globalCount, 1);
+    int globalCount = MPIWrapper::sum(comm, localCount);
     TEST_EQUALITY(globalEntries.size(), globalCount);
     
     const int maxGatherCount = numEntries * 4;

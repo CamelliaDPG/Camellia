@@ -15,13 +15,12 @@
 #ifndef Camellia_TimeLogger_h
 #define Camellia_TimeLogger_h
 
+#include <chrono>
 #include <map>
 #include <string>
 #include <vector>
 
 #include "Teuchos_RCP.hpp"
-
-class Epetra_Time;
 
 namespace Camellia {
   class TimeLogger
@@ -29,7 +28,7 @@ namespace Camellia {
     static Teuchos::RCP<TimeLogger> _sharedInstance;
   
     std::vector<std::string> _timerNames;
-    std::vector<Teuchos::RCP<Epetra_Time>> _timers;
+    std::vector<std::chrono::steady_clock::time_point> _timers;
     std::vector<int> _inactiveTimerHandles;
     std::map<std::string,double> _totalTimes;
   public:

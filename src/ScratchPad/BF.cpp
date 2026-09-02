@@ -17,6 +17,7 @@
 #include "Teuchos_BLAS.hpp"
 #include "Teuchos_LAPACK.hpp"
 
+#include <chrono>
 #include <iostream>
 #include <sstream>
 
@@ -24,6 +25,31 @@ using namespace std;
 
 namespace Camellia
 {
+  namespace
+  {
+    class WallTimer
+    {
+      using Clock = std::chrono::steady_clock;
+      Clock::time_point _start;
+
+    public:
+      WallTimer()
+      {
+        ResetStartTime();
+      }
+
+      void ResetStartTime()
+      {
+        _start = Clock::now();
+      }
+
+      double ElapsedTime() const
+      {
+        return std::chrono::duration<double>(Clock::now() - _start).count();
+      }
+    };
+  }
+
   template <typename Scalar>
   TBFPtr<Scalar> TBF<Scalar>::bf(VarFactoryPtr &vf)
   {
@@ -1239,7 +1265,7 @@ namespace Camellia
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
     double rhsDeterminationTime = 0;
     
-    Epetra_Time timer(*MPIWrapper::CommSerial());
+    WallTimer timer;
     bool printTimings = false;
 
     if (! _useSubgridMeshForOptimalTestSolve)
@@ -1314,7 +1340,7 @@ namespace Camellia
         int numTestDofs = testOrder->totalDofs();
         int numTrialDofs = trialOrder->totalDofs();
         
-        Epetra_Time timer(*MPIWrapper::CommSerial());
+        WallTimer timer;
         
         double timeG, timeB, timeT, timeK; // time to compute Gram matrix, the right-hand side B, time to solve GT = B, and time to compute K = B^T T.
         
@@ -1426,7 +1452,7 @@ namespace Camellia
     else
     {
       // 1. set up a (serial) Mesh for IP.  Ultimately, can/should cache these (one per ElementType), and simply relabel the vertices
-      // 2. set up a SerialComm-based dof Epetra_Map (Tpetra_Map?), and create FECrsMatrix and RHSVector
+      // 2. set up a rank-local Tpetra map, and create the stiffness matrix and RHS vector
       // 3. Fill both LHS and RHS using appropriate LinearTerms.
       // 4. Solve.  (Direct solver to start, but ultimately, I want to try GMG.  Can reuse the prolongation operator, too.)
       // 5. Compute the local stiffness matrix and RHS.
@@ -1492,7 +1518,7 @@ namespace Camellia
     int numTestDofs = testOrdering->totalDofs();
     int numTrialDofs = trialOrdering->totalDofs();
     
-    Epetra_Time timer(*MPIWrapper::CommSerial());
+    WallTimer timer;
     
     double timeG, timeB, timeT, timeK; // time to compute Gram matrix, the right-hand side B, time to solve GT = B, and time to compute K = B^T T.
     

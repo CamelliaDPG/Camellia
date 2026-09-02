@@ -2,15 +2,11 @@ project(Drivers)
 
 option(BUILD_BRENDAN_DRIVERS "Build drivers in Brendan directory" OFF)
 option(BUILD_CONVECTION_DRIVERS "Build drivers in Convection directory" OFF)
-option(BUILD_DPGTESTS_DRIVER "Build DPGTests driver" OFF)
 option(BUILD_EXPERIMENTAL_DRIVERS "Build drivers in experimental directory" OFF)
 option(BUILD_PAPERS_DRIVERS "Build drivers in papers directory" ON)
 option(BUILD_PERFORMANCE_TEST_DRIVERS "Build drivers in performance directory" ON)
 option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" OFF)
 option(BUILD_STEFAN_DRIVERS "Build drivers in Stefan directory" ON)
-
-# Include headers from DPGTests for some drivers
-include_directories(DPGTests)
 
 # Add each driver
 #add_subdirectory(Burgers)
@@ -27,13 +23,6 @@ if (BUILD_CONVECTION_DRIVERS)
 else()
   MESSAGE("Not setting up makefiles for drivers in drivers/Convection, because BUILD_CONVECTION_DRIVERS is OFF.")  
 endif(BUILD_CONVECTION_DRIVERS)
-
-if (BUILD_DPGTESTS_DRIVER)
-  add_subdirectory(DPGTests)
-  MESSAGE("Setting up makefile for legacy DPGTests driver in drivers/DPGTests, because BUILD_DPGTESTS_DRIVER is ON.")
-else()
-  MESSAGE("Not setting up makefile for legacy DPGTests driver in drivers/DPGTests, because BUILD_DPGTESTS_DRIVER is OFF.")  
-endif(BUILD_DPGTESTS_DRIVER)
 
 if (BUILD_PAPERS_DRIVERS)
   MESSAGE("Setting up makefiles for drivers in drivers/papers, because BUILD_PAPERS_DRIVERS is ON.")

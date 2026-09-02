@@ -109,14 +109,16 @@ namespace
     auto lhs_OneRHS = soln_OneRHS->getLHSVector();
     auto lhs_TwoRHS = soln_TwoRHS->getLHSVector(); // the first column of this should match the first column of lhs_OneRHS
     
-    int localLength = lhs_OneRHS->MyLength();
-    TEST_EQUALITY(localLength, lhs_TwoRHS->MyLength()); // the value distribution across MPI should also match
+    int localLength = lhs_OneRHS->getLocalLength();
+    TEST_EQUALITY(localLength, lhs_TwoRHS->getLocalLength()); // the value distribution across MPI should also match
+    auto lhsOneView = lhs_OneRHS->getLocalViewHost(Tpetra::Access::ReadOnly);
+    auto lhsTwoView = lhs_TwoRHS->getLocalViewHost(Tpetra::Access::ReadOnly);
     
     // we take advantage of the fact that the value distribution should match here
     for (int i=0; i<localLength; i++)
     {
-      auto oneRHSValue = (*lhs_OneRHS)[0][i];
-      auto twoRHSValue = (*lhs_TwoRHS)[0][i];
+      auto oneRHSValue = lhsOneView(i,0);
+      auto twoRHSValue = lhsTwoView(i,0);
       // also use tol as a ceiling for rounding to zero:
       if ((abs(oneRHSValue) < tol) && ((abs(twoRHSValue) < tol)))
       {
@@ -254,17 +256,18 @@ namespace
     // we'll do some higher-level tests below, but to start with, we'll check that the solution coefficients match
     soln_TwoRHS->initializeLHSVector();
     auto lhs_TwoRHS = soln_TwoRHS->getLHSVector(); // the first column of this should match the first column of lhs_OneRHS
-    lhs_TwoRHS->PutScalar(1.0); // puts 1.0 in each entry
+    lhs_TwoRHS->putScalar(1.0); // puts 1.0 in each entry
     
     const int numRefinements = 2;
     for (int refinementNumber=0; refinementNumber<=numRefinements; refinementNumber++)
     {
 //      cout << "Rank " << rank << ", starting refinement " << refinementNumber << endl;
-      int localLength = lhs_TwoRHS->MyLength();
+      int localLength = lhs_TwoRHS->getLocalLength();
+      auto lhsView = lhs_TwoRHS->getLocalViewHost(Tpetra::Access::ReadOnly);
       for (int i=0; i<localLength; i++)
       {
-        auto firstValue  = (*lhs_TwoRHS)[0][i];
-        auto secondValue = (*lhs_TwoRHS)[1][i];
+        auto firstValue  = lhsView(i,0);
+        auto secondValue = lhsView(i,1);
         // also use tol as a ceiling for rounding to zero:
         if ((abs(firstValue) < tol) && ((abs(secondValue) < tol)))
         {

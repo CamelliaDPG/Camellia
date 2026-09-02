@@ -225,9 +225,6 @@ public:
                                        Camellia::FieldContainer<double> &globalCoefficients,
                                        Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) override;
   void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
-                                   const Epetra_MultiVector &globalCoefficients) override;
-  
-  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
                                    const TVectorPtr<double> globalCoefficients) override;
   
   IndexType localDofCount() override; // local to the MPI node

@@ -82,7 +82,7 @@ public:
       double cellError = measureEntry.second;
       localMax = max(localMax,cellError);
     }
-    _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+    globalMax = MPIWrapper::max(_mesh->Comm(), localMax);
   }
 };
 
@@ -127,7 +127,7 @@ public:
       double cellError = measureEntry.second;
       localMax = max(localMax,cellError);
     }
-    _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+    globalMax = MPIWrapper::max(_mesh->Comm(), localMax);
   }
 };
 
@@ -135,17 +135,12 @@ public:
 int main(int argc, char *argv[])
 {
 
-#ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
+  auto Comm = MPIWrapper::CommWorld();
 
   int commRank = Teuchos::GlobalMPISession::getRank();
 
-  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+  Comm->Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
@@ -274,9 +269,10 @@ int main(int argc, char *argv[])
 
 
   //////////////////////  DECLARE TRIAL FUNCTIONS //////////////////////
-  VarPtr u, sigma, u_hat, sigma_n_hat;
+  VarPtr u, sigma1, sigma2, u_hat, sigma_n_hat;
   u           = form.u();
-  sigma       = form.sigma();
+  sigma1      = form.sigma(1);
+  sigma2      = form.sigma(2);
   u_hat       = form.u_hat(); 
   sigma_n_hat = form.sigma_n_hat();
 
@@ -517,9 +513,8 @@ int main(int argc, char *argv[])
 
     // compute error rep function / influence function
     bool excludeBoundaryTerms = false;
-    const int solutionOrdinal = 1; // solution corresponding to second RHS
     LinearTermPtr residual = rhs()->linearTerm() - bf->testFunctional(soln,excludeBoundaryTerms);
-    LinearTermPtr influence = bf->testFunctional(soln,excludeBoundaryTerms,solutionOrdinal);
+    LinearTermPtr influence = bf->testFunctional(soln,excludeBoundaryTerms,INFLUENCE_SOLUTION);
     RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
     RieszRepPtr dualSoln = Teuchos::rcp(new RieszRep(mesh, ip, influence));
     rieszResidual->computeRieszRep();
@@ -539,7 +534,7 @@ int main(int argc, char *argv[])
 
     // compute error in DPG solution
     FunctionPtr soln_u = Function::solution(u, soln);
-    FunctionPtr soln_sigma = Function::solution(sigma, soln);
+    FunctionPtr soln_sigma = Function::vectorize(Function::solution(sigma1, soln), Function::solution(sigma2, soln));
     FunctionPtr e_u   = u_exact - soln_u;
     FunctionPtr e_sigma_x = u_exact->dx() - soln_sigma->x();
     FunctionPtr e_sigma_y = u_exact->dy() - soln_sigma->y();
@@ -570,7 +565,7 @@ int main(int argc, char *argv[])
     map<int, FunctionPtr > opDualSoln = bf()->applyAdjointOperatorDPGstar(dualSoln);
 
     FunctionPtr res1_2 = opDualSoln[u->ID()] - g_u;
-    FunctionPtr res2_2 = opDualSoln[sigma->ID()];
+    FunctionPtr res2_2 = Function::vectorize(opDualSoln[sigma1->ID()], opDualSoln[sigma2->ID()]);
 
     FunctionPtr dualSolnResidualFunction = res1_2*res1_2 + res2_2*res2_2;
 
@@ -618,8 +613,8 @@ int main(int argc, char *argv[])
       jump_tau += jump_tau_tmp;
       jumpMap_total[cellID] = jump_v_tmp + jump_tau_tmp;
     }
-    jump_v = MPIWrapper::sum(*mesh->Comm(), jump_v);
-    jump_tau = MPIWrapper::sum(*mesh->Comm(), jump_tau);
+    jump_v = MPIWrapper::sum(mesh->Comm(), jump_v);
+    jump_tau = MPIWrapper::sum(mesh->Comm(), jump_tau);
 
     // double dualSolnResidual = sqrt(dualSolnResidualFunction->l1norm(mesh, cubatureDegreeEnrichment));
     double dualSolnResidual = sqrt(dualSolnResidualFunction->l1norm(mesh, cubatureDegreeEnrichment) + jump_v + jump_tau);

@@ -61,7 +61,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( MPIWrapper, AllGatherVariable, Scalar )
 
   Camellia::FieldContainer<Scalar> allValues;
   Camellia::FieldContainer<int> offsets;
-  MPIWrapper::allGatherVariable(*MPIWrapper::CommWorld(),allValues,myValues,offsets);
+  MPIWrapper::allGatherVariable(MPIWrapper::TeuchosCommWorld(),allValues,myValues,offsets);
 
   TEST_COMPARE_ARRAYS(expectedOffsets, offsets);
 
@@ -90,7 +90,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( MPIWrapper, AllGatherVariable, double );
       expectedGatheredValues.push_back({i,value});
     }
     vector<int> offsets;
-    MPIWrapper::allGatherVariable(*MPIWrapper::CommWorld(),gatheredValues,myValues,offsets);
+    MPIWrapper::allGatherVariable(MPIWrapper::TeuchosCommWorld(),gatheredValues,myValues,offsets);
     std::sort(gatheredValues.begin(), gatheredValues.end());
     
     for (int i=0; i<expectedGatheredValues.size(); i++)

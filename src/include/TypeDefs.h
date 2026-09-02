@@ -20,13 +20,6 @@
 #include <Tpetra_MultiVector.hpp>
 #include <Tpetra_CrsMatrix.hpp>
 
-// Epetra includes
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#else
-#include "Epetra_SerialComm.h"
-#endif
-
 namespace Intrepid
 {
   template<class Scalar, int ArrayTypeId>
@@ -53,7 +46,6 @@ typedef int PartitionIndexType; // for partition numbering
 #define NEUMANN_SET_TAG_NAME   "NEUMANN_SET"
 typedef unsigned long EntityHandle; // identical to MOAB's EntityHandle type.  We define our own because we don't want to require MOAB, at least not yet.
   
-  typedef Teuchos::RCP<const Epetra_Comm> Epetra_CommPtr;
   typedef Teuchos::RCP<const Teuchos::Comm<int>> Teuchos_CommPtr;
 
 // Camellia forward declarations and typedefs
@@ -262,7 +254,7 @@ using TOperator = Tpetra::Operator<Scalar>;
   template<typename Scalar>
   using UnmanagedHostView = Kokkos::View<Scalar*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
 
-  using GlobalIndexTypeToCast = TMap::global_ordinal_type; // for constructing Epetra_Maps, etc.  (these like either int or long long)
+  using GlobalIndexTypeToCast = TMap::global_ordinal_type; // for constructing Tpetra maps, etc.
 }
 
 #endif

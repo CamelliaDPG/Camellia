@@ -209,7 +209,22 @@ endif(ENABLE_MOAB)
 
 
 # Find all library source files
-FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp" "${CAMELLIA_SOURCE_DIR}/include/*.h" "${CAMELLIA_SOURCE_DIR}/include/*.hpp")
+FILE(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS "${CAMELLIA_SOURCE_DIR}/*.cpp" "${CAMELLIA_SOURCE_DIR}/include/*.h" "${CAMELLIA_SOURCE_DIR}/include/*.hpp")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "E_to_T\\.cpp$|T_to_E\\.cpp$|Epetra_Operator_to_Epetra_Matrix\\.cpp$|OverlappingRowMatrix\\.cpp$")
+list(REMOVE_ITEM LIB_SOURCES
+  "${CAMELLIA_SOURCE_DIR}/MatrixUtilities/E_to_T.cpp"
+  "${CAMELLIA_SOURCE_DIR}/MatrixUtilities/T_to_E.cpp"
+  "${CAMELLIA_SOURCE_DIR}/MatrixUtilities/Epetra_Operator_to_Epetra_Matrix.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/${CAMELLIA_SOURCE_DIR}/MatrixUtilities/E_to_T.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/${CAMELLIA_SOURCE_DIR}/MatrixUtilities/T_to_E.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/${CAMELLIA_SOURCE_DIR}/MatrixUtilities/Epetra_Operator_to_Epetra_Matrix.cpp"
+)
+set_source_files_properties(
+  "${CMAKE_CURRENT_SOURCE_DIR}/${CAMELLIA_SOURCE_DIR}/MatrixUtilities/E_to_T.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/${CAMELLIA_SOURCE_DIR}/MatrixUtilities/T_to_E.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/${CAMELLIA_SOURCE_DIR}/MatrixUtilities/Epetra_Operator_to_Epetra_Matrix.cpp"
+  PROPERTIES GENERATED TRUE HEADER_FILE_ONLY TRUE
+)
 set(HEADERS 
   ${CAMELLIA_SOURCE_DIR}/include
 )
@@ -240,7 +255,8 @@ link_libraries(
  ${ADDITIONAL_LIBRARIES}
 )
 
-FILE(GLOB ALL_HEADER_FILES "${HEADERS}/*.h" "${HEADERS}/*.hpp")
+FILE(GLOB ALL_HEADER_FILES CONFIGURE_DEPENDS "${HEADERS}/*.h" "${HEADERS}/*.hpp")
+list(FILTER ALL_HEADER_FILES EXCLUDE REGEX "AdditiveSchwarz\\.h$|OverlappingRowMatrix\\.h$|E_to_T\\.hpp$|T_to_E\\.hpp$|Epetra_Operator_to_Epetra_Matrix\\.h$")
 install (TARGETS Camellia DESTINATION lib)
 install (FILES ${ALL_HEADER_FILES} DESTINATION include/Camellia)
 

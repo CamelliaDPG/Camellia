@@ -10,14 +10,13 @@
 //
 #include "Teuchos_UnitTestHarness.hpp"
 
-#include "E_to_T.hpp"
 #include "ExtrudedMeshTopology.h"
 #include "MeshFactory.h"
 #include "MeshTestUtility.h"
+#include "MPIWrapper.h"
 #include "PoissonFormulation.h"
-#include "T_to_E.hpp"
 
-#include "Epetra_Import.h"
+#include <Tpetra_Import.hpp>
 
 using namespace Camellia;
 
@@ -256,8 +255,6 @@ namespace
     
     {
       // check neighbor agreement for standard
-      Epetra_SerialComm Comm;
-      
       // Import solution onto current processor
       auto partMap = solnStandard->getPartitionMap();
       using GO = TMap::global_ordinal_type;
@@ -266,15 +263,11 @@ namespace
       using Node = MultiVector::node_type;
       
       GO numNodesGlobal = standardMesh->numGlobalDofs();
-      LO numMyNodes = numNodesGlobal;
-      Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      auto tSolnMap = E_to_T::map(eSolnMap);
+      auto tSolnMap = Teuchos::rcp(new TMap(static_cast<Tpetra::global_size_t>(numNodesGlobal), static_cast<GO>(0), MPIWrapper::TeuchosCommSerial()));
       
       Tpetra::Import<LO,GO,Node> importer (partMap, tSolnMap); // source, destination
       
-      Epetra_MultiVector *lhsVector = solnStandard->getGlobalCoefficients();
-      auto eLHSVector = Teuchos::rcp(lhsVector,false);
-      auto tLHSVector = E_to_T::vector(eLHSVector);
+      auto tLHSVector = solnStandard->getGlobalCoefficients();
       
       const int numVectors = 1;
       auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );
@@ -288,9 +281,6 @@ namespace
     }
     {
       // check neighbor agreement for extruded
-      Epetra_MultiVector *lhsVector = solnExtruded->getGlobalCoefficients();
-      Epetra_SerialComm Comm;
-      
       // Import solution onto current processor
       auto partMap = solnExtruded->getPartitionMap();
       using GO = TMap::global_ordinal_type;
@@ -300,15 +290,11 @@ namespace
       
       // Import solution onto current processor
       GO numNodesGlobal = extrudedMesh->numGlobalDofs();
-      LO numMyNodes = static_cast<LO>(numNodesGlobal);
-      
-      Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      auto tSolnMap = E_to_T::map(eSolnMap);
+      auto tSolnMap = Teuchos::rcp(new TMap(static_cast<Tpetra::global_size_t>(numNodesGlobal), static_cast<GO>(0), MPIWrapper::TeuchosCommSerial()));
       
       Tpetra::Import<LO,GO,Node> importer (partMap, tSolnMap); // source, destination
       
-      auto eLHSVector = Teuchos::rcp(lhsVector,false);
-      auto tLHSVector = E_to_T::vector(eLHSVector);
+      auto tLHSVector = solnExtruded->getGlobalCoefficients();
       
       const int numVectors = 1;
       auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );

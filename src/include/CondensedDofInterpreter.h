@@ -18,7 +18,6 @@
 #include "BC.h"
 #include "DofInterpreter.h"
 #include "Camellia_FieldContainer.hpp"
-#include "Epetra_Vector.h"
 #include "Mesh.h"
 #include "LagrangeConstraints.h"
 #include "RHS.h"
@@ -150,13 +149,11 @@ public:
                           Camellia::FieldContainer<Scalar> &globalStiffnessData, Camellia::FieldContainer<Scalar> &globalLoadData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
 
   using DofInterpreter::interpretLocalCoefficients;
-  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localCoefficients, Epetra_MultiVector &globalCoefficients, int columnOrdinal);
+  void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localCoefficients, TVectorPtr<Scalar> globalCoefficients, int columnOrdinal);
 
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<Scalar> &basisCoefficients,
                                        Camellia::FieldContainer<Scalar> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
 
-  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localDofs, const Epetra_MultiVector &globalDofs);
-  
   void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localDofs, const TVectorPtr<Scalar> globalDofs);
 
   bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const;

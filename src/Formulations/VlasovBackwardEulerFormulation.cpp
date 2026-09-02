@@ -849,7 +849,7 @@ VarPtr VlasovBackwardEulerFormulation::f_hat(int speciesOrdinal)
 
 void VlasovBackwardEulerFormulation::finishTimeStep()
 {
-  const int rank = MPIWrapper::CommWorld()->MyPID();
+  const int rank = MPIWrapper::TeuchosCommWorld()->getRank();
   
   _fluxLimitingWeightForCell.clear();
   
@@ -1282,7 +1282,7 @@ void VlasovBackwardEulerFormulation::reconstructGMGSolver()
 
 void VlasovBackwardEulerFormulation::saveCheckpoint(const std::string &checkpointDir)
 {
-  const int rank = MPIWrapper::CommWorld()->MyPID();
+  const int rank = MPIWrapper::TeuchosCommWorld()->getRank();
   if (rank == 0)
   {
     // ensure directory exists
@@ -1458,7 +1458,7 @@ void VlasovBackwardEulerFormulation::startTimeStep()
 //  {
 //    // DEBUGGING
 //    double E_extruded_norm = _configurationSpaceFormulation->E_i(0)->l2norm(_vlasovSoln->mesh());
-//    const int rank = MPIWrapper::CommWorld()->MyPID();
+//    const int rank = MPIWrapper::TeuchosCommWorld()->getRank();
 //
 //    if (rank == 0)
 //    {

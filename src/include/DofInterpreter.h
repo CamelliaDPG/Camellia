@@ -28,7 +28,6 @@
 #include "TypeDefs.h"
 
 #include "Camellia_FieldContainer.hpp"
-#include "Epetra_Vector.h"
 
 #include <set>
 
@@ -68,11 +67,6 @@ public:
   virtual void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localStiffnessData, const Camellia::FieldContainer<double> &localLoadData,
                                   Camellia::FieldContainer<double> &globalStiffnessData, Camellia::FieldContainer<double> &globalLoadData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
   
-  //!! Determines global coefficients corresponding to the provided local coefficients; in the case of minimum-rule meshes, this will be computed using a least-squares fit.  If some of the corresponding global coefficients are off-rank in globalCoefficients, these will be ignored.  (See the version of interpretLocalCoefficients that takes an STL map for an alternative that will include all global coefficients, regardless of data distribution.)
-  //!! columnOrdinal specifies into which column in the globalCoefficients Multi-Vector the result should be stored.
-  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
-                                          Epetra_MultiVector &globalCoefficients, int columnOrdinal);
-  
   //!! Determines global coefficients corresponding to the provided local coefficients; in the case of minimum-rule meshes, this will be computed using a least-squares fit.
   virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
                                           std::map<GlobalIndexType,double> &fittedGlobalCoefficients,
@@ -81,8 +75,6 @@ public:
   virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
                                                Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
 
-  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs) = 0;
-  
   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localDofs, const TVectorPtr<double> globalDofs) = 0;
 
   //!! Returns the global dof indices for the cell.  Only guaranteed to provide correct values for cells that belong to the local partition.

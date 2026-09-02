@@ -25,8 +25,6 @@
 
 #include "DofInterpreter.h"
 
-#include "Epetra_Map.h"
-
 namespace Camellia
 {
 class Boundary

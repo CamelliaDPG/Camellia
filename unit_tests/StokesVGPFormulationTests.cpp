@@ -13,7 +13,6 @@
 
 #include "StokesVGPFormulation.h"
 
-#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
@@ -216,7 +215,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
 
   TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_2D_SpaceTime_Slow )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     vector<double> dimensions(spaceDim,2.0); // 2x2 square domain
     vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
@@ -522,7 +521,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
   
   TEUCHOS_UNIT_TEST( StokesVGPFormulation, RefineMesh_Slow )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     
     int spaceDim = 2;
     bool useConformingTraces = true;
@@ -679,7 +678,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
 //    // this test imitates an issue found in the "wild" -- expected to fail on 4 MPI ranks, but succeed on 3
 //    // the only test here is whether we can run to completion without generating an exception...
 //    
-//    MPIWrapper::CommWorld()->Barrier();
+//    MPIWrapper::TeuchosCommWorld()->barrier();
 //    
 //    int spaceDim = 2;
 //    bool useConformingTraces = true;
@@ -778,14 +777,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 
   loadedForm.initializeSolution(savePrefix,fieldPolyOrder,delta_k);
 
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  
-  Comm.Barrier(); // Barrier to make sure that everyone is done with the files before we delete them
+  MPIWrapper::TeuchosCommWorld()->barrier(); // Barrier to make sure that everyone is done with the files before we delete them
   
   int rank = Teuchos::GlobalMPISession::getRank();
   
@@ -875,9 +867,9 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
         solution->initializeStiffnessAndLoad();
         solution->populateStiffnessAndLoad();
         
-        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
+        auto A = solution->getStiffnessMatrix();
         string fileName = "/tmp/A.dat";
-        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, E_to_T::matrix(A));
+        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, A);
       }
       cout << "bf:\n";
       spaceTimeForm.bf()->printTrialTestInteractions();
@@ -975,9 +967,9 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 //        solution->initializeStiffnessAndLoad();
 //        solution->populateStiffnessAndLoad();
 //        
-//        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
+//        auto A = solution->getStiffnessMatrix();
 //        string fileName = "/tmp/A.dat";
-//        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, E_to_T::matrix(A));
+//        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, A);
 //      }
 //      cout << "bf:\n";
 //      spaceTimeForm.bf()->printTrialTestInteractions();
@@ -1069,9 +1061,9 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 //        solution->initializeStiffnessAndLoad();
 //        solution->populateStiffnessAndLoad();
 //        
-//        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
+//        auto A = solution->getStiffnessMatrix();
 //        string fileName = "/tmp/A.dat";
-//        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, E_to_T::matrix(A));
+//        Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fileName, A);
 //      }
 //      cout << "bf:\n";
 //      spaceTimeForm.bf()->printTrialTestInteractions();

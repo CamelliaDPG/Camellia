@@ -131,7 +131,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( Constraint, PoissonSimpleElementConstraint )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 1;
     int H1Order = 1, delta_k=1;
     bool useConformingTraces = true;
@@ -171,14 +171,12 @@ namespace
     auto stiffness = soln->getStiffnessMatrix();
     auto load = soln->getRHSVector();
     
-    Epetra_FECrsMatrix* feMatrix = dynamic_cast<Epetra_FECrsMatrix*>( stiffness.get() );
-    feMatrix->GlobalAssemble();
+    size_t myMaxEntries = stiffness->getLocalMaxNumRowEntries();
+    TMatrix<double>::nonconst_values_host_view_type myEntries("constraint row values", myMaxEntries);
+    TMatrix<double>::nonconst_global_inds_host_view_type myGIDs("constraint row GIDs", myMaxEntries);
     
-    int myMaxEntries = feMatrix->MaxNumEntries();
-    vector<double> myEntries(myMaxEntries); // storage
-    vector<int> myLIDs(myMaxEntries);
-    
-    auto colMap = feMatrix->ColMap();
+    auto colMap = stiffness->getColMap();
+    auto loadView = load->getLocalViewHost(Tpetra::Access::ReadOnly);
     
     auto & myCellIDs = mesh->cellIDsInPartition();
     Camellia::print(out, "myCellIDs", myCellIDs);
@@ -201,38 +199,34 @@ namespace
           // sanity check: there should be exactly one dof
           TEST_ASSERT(dofsForSide.size() == 1);
           GlobalIndexTypeToCast dofForSide = *dofsForSide.begin();
-          auto LIDForDof = colMap.LID(dofForSide);
+          auto GIDForDof = static_cast<TMap::global_ordinal_type>(dofForSide);
           double normal = (sideOrdinal==0) ? -1.0 : 1.0; // normal is -1.0 for sideOrdinal 0; 1.0 for 1
           double sideParity = soln->mesh()->parityForSide(myCellID, sideOrdinal);
           double expectedValue = normal * sideParity;
-          expectedRowValues[LIDForDof] = expectedValue;
-          out << "set expected value for LID " << LIDForDof << " to " << expectedValue << endl;
+          expectedRowValues[GIDForDof] = expectedValue;
+          out << "set expected value for GID " << GIDForDof << " to " << expectedValue << endl;
         }
         
-        int entryCount;
-        feMatrix->NumMyRowEntries(LID, entryCount);
-        
-        // the row for LID in the feMatrix should be 0s, except for the u_hat dofs.
+        // the row for GID in the stiffness matrix should be 0s, except for the u_hat dofs.
         // for these, it should be the integral of that dof over the element (boundary)
-        int entriesExtracted;
-        feMatrix->ExtractMyRowCopy(LID, entryCount, entriesExtracted, &myEntries[0], &myLIDs[0]);
+        size_t entriesExtracted = 0;
+        stiffness->getGlobalRowCopy(static_cast<TMap::global_ordinal_type>(GID), myGIDs, myEntries, entriesExtracted);
         
         //        cout << "entry for cell " << myCellID << ":\n";
-        for (int i=0; i<entriesExtracted; i++)
+        for (size_t i=0; i<entriesExtracted; i++)
         {
-          //          cout << "LID " << myLIDs[i] << ": " << myEntries[i] << endl;
-          int LID = myLIDs[i];
-          out << "LID = " << LID << endl;
+          auto entryGID = myGIDs(i);
+          out << "GID = " << entryGID << endl;
           double expectedValue = 0.0;
-          if (expectedRowValues.find(LID) != expectedRowValues.end())
+          if (expectedRowValues.find(entryGID) != expectedRowValues.end())
           {
-            expectedValue = expectedRowValues[LID];
+            expectedValue = expectedRowValues[entryGID];
           }
-          TEST_FLOATING_EQUALITY(expectedValue, myEntries[i], tol);
+          TEST_FLOATING_EQUALITY(expectedValue, myEntries(i), tol);
         }
         
         int solutionOrdinal = 0;
-        double rhsValue = (*(*load)(solutionOrdinal))[LID];
+        double rhsValue = loadView(LID, solutionOrdinal);
         //        cout << "Value: " << rhsValue << endl;
         
         double expectedRHSValue = h; // integral of 1 over element
@@ -246,7 +240,7 @@ namespace
 //    // just about any solution that is not exact will not by itself
 //    // be locally conservative.  So we use the Cockburn/Kanschat solution
 //    // to test our enforcement via element Lagrange constraints
-//    MPIWrapper::CommWorld()->Barrier();
+//    MPIWrapper::TeuchosCommWorld()->barrier();
 //    
 //    bool conformingTraces = true;
 //    int spaceDim = 2;

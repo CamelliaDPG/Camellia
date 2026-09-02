@@ -967,11 +967,6 @@ void Mesh::initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPoli
   }
 }
 
-void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients)
-{
-  _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
-}
-
 void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients)
 {
   _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
@@ -1296,7 +1291,7 @@ void Mesh::rebuildLookups()
 int Mesh::rowSizeUpperBound()
 {
   // includes multiplicity
-  static const int MAX_SIZE_TO_PRESCRIBE = 100; // the below is a significant over-estimate.  Eventually, we want something more precise, that will analyze the BF to determine which variables actually talk to each other, and perhaps even provide a precise per-row count to the Epetra_CrsMatrix.  For now, we just cap the estimate.  (On construction, Epetra_CrsMatrix appears to be allocating the row size provided for every row, which is also wasteful.)
+  static const int MAX_SIZE_TO_PRESCRIBE = 100; // the below is a significant over-estimate.  Eventually, we want something more precise, that will analyze the BF to determine which variables actually talk to each other, and perhaps even provide a precise per-row count.  For now, we just cap the estimate.
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
   int maxRowSize = 0;
   PartitionIndexType partitionCount = _gda->getPartitionCount();

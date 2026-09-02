@@ -23,6 +23,7 @@
 #include "HDF5Exporter.h"
 #include "MeshTestUtility.h"
 #include "RefinementStrategy.h"
+#include "MPIWrapper.h"
 
 using namespace Camellia;
 
@@ -43,17 +44,12 @@ vector<double> makeVertex(double v0, double v1, double v2)
 int main(int argc, char *argv[])
 {
 
-#ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
+  auto Comm = MPIWrapper::CommWorld();
 
   int commRank = Teuchos::GlobalMPISession::getRank();
 
-  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+  Comm->Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 

@@ -12,7 +12,6 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "CamelliaDebugUtility.h"
-#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GnuPlotUtil.h"
 #include "GMGSolver.h"
@@ -23,7 +22,6 @@
 #include "SerialDenseWrapper.h"
 #include "Solution.h"
 #include "SuperLUDistSolver.h"
-#include "T_to_E.hpp"
 
 #include <MatrixMarket_Tpetra.hpp>
 
@@ -289,50 +287,50 @@ namespace
     exactPoissonSolution->initializeLHSVector();
     exactPoissonSolution->initializeStiffnessAndLoad();
     exactPoissonSolution->populateStiffnessAndLoad();
-    Teuchos::RCP<Epetra_MultiVector> rhsVector = exactPoissonSolution->getRHSVector();
+    auto rhsVector = exactPoissonSolution->getRHSVector();
     // since I'm not totally sure that the KluSolver won't clobber the rhsVector, make a copy:
-    Epetra_MultiVector rhsVectorCopy(*rhsVector);
+    TVector<double> rhsVectorCopy(*rhsVector, Teuchos::Copy);
     
     // because valgrind is complaining that SuperLU_Dist is doing some incorrect reads here, we
     // replace with KLU.
     SolverPtr solver = Solver::getSolver(Solver::KLU, false);
     exactPoissonSolution->solve(solver);
-    Teuchos::RCP<Epetra_MultiVector> lhsVector = exactPoissonSolution->getLHSVector();
+    auto lhsVector = exactPoissonSolution->getLHSVector();
 
     // since we may change the RHS vector below, let's make a copy and use that
-    Epetra_MultiVector rhsVectorCopy2(rhsVectorCopy);
+    TVector<double> rhsVectorCopy2(rhsVectorCopy, Teuchos::Copy);
 
     auto A = exactPoissonSolution->getStiffnessMatrix();
 
-    const Epetra_Map* map = &A->RowMatrixRowMap();
-
-    Teuchos::RCP<Epetra_Vector> diagA = Teuchos::rcp( new Epetra_Vector(*map) );
-    A->ExtractDiagonalCopy(*diagA);
+    using TpetraVector = Tpetra::Vector<double>;
+    Teuchos::RCP<TpetraVector> diagA = Teuchos::rcp(new TpetraVector(A->getRowMap()));
+    A->getLocalDiagCopy(*diagA);
 
 //    gmgSolver->gmgOperator()->setStiffnessDiagonal(diagA);
 
-    Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
-    Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
-    diagA_inv->Reciprocal(*diagA);
-    if (map->NumMyElements() > 0)
+    Teuchos::RCP<TpetraVector> diagA_inv = Teuchos::rcp(new TpetraVector(A->getRowMap()));
+    Teuchos::RCP<TpetraVector> diagA_sqrt_inv = Teuchos::rcp(new TpetraVector(A->getRowMap()));
+    diagA_inv->reciprocal(*diagA);
+    auto diagView = diagA->getLocalViewHost(Tpetra::Access::ReadOnly);
+    auto diagSqrtInvView = diagA_sqrt_inv->getLocalViewHost(Tpetra::Access::ReadWrite);
+    auto map = A->getRowMap();
+    int diagNumLIDs = map->getLocalNumElements();
+    for (int lid = 0; lid < diagNumLIDs; lid++)
     {
-      for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++)
-      {
-        (*diagA_sqrt_inv)[lid] = 1.0 / sqrt((*diagA)[lid]);
-      }
+      diagSqrtInvView(lid,0) = 1.0 / sqrt(diagView(lid,0));
     }
-    Teuchos::RCP<Epetra_Vector> diagA_sqrt = Teuchos::rcp( new Epetra_Vector(*map, 1) );
-    diagA_sqrt->Reciprocal(*diagA_sqrt_inv);
+    Teuchos::RCP<TpetraVector> diagA_sqrt = Teuchos::rcp(new TpetraVector(A->getRowMap()));
+    diagA_sqrt->reciprocal(*diagA_sqrt_inv);
 
     // determine the expected value
     // if smoother applied before coarse solve, then we expect exact agreement between direct solution and iterative.
     // If smoother is not applied before coarse solve and not after (i.e. a strict two-level operator),  then we expect iterative = exact + D^-1 b
     // If smoother is not applied before coarse solve but is applied after,  then we expect iterative = exact + D^-1 b - D^-1 A D^-1 b
-    Epetra_MultiVector directValue(*lhsVector); // x
+    TVector<double> directValue(*lhsVector, Teuchos::Copy); // x
     if (smootherApplicationType == GMGOperator::ADDITIVE)
     {
       // x + D^-1 b
-      directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
+      directValue.elementWiseMultiply(1.0, *diagA_inv, rhsVectorCopy2, 1.0);
     }
 //    else
 //    {
@@ -344,11 +342,11 @@ namespace
 
     gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
 
-    auto tDirectValue    = E_to_T::vector(Teuchos::rcp(&directValue, false));
-    auto tRHSVectorCopy2 = E_to_T::vector(Teuchos::rcp(&rhsVectorCopy2, false));
+    auto tDirectValue    = Teuchos::rcp(&directValue, false);
+    auto tRHSVectorCopy2 = Teuchos::rcp(&rhsVectorCopy2, false);
     auto tGMG_lhsVector  = Teuchos::rcp(new TVector<double>(tRHSVectorCopy2->getMap(), tRHSVectorCopy2->getNumVectors()));
 //    gmgSolver->gmgOperator()->setDebugMode(true);
-    gmgSolver->gmgOperator()->setFineStiffnessMatrix(E_to_T::matrix(A));
+    gmgSolver->gmgOperator()->setFineStiffnessMatrix(A);
     gmgSolver->gmgOperator()->setSmootherApplicationType(smootherApplicationType);
     gmgSolver->gmgOperator()->ApplyInverse(*tRHSVectorCopy2, *tGMG_lhsVector);
 
@@ -552,7 +550,7 @@ namespace
 
   TEUCHOS_UNIT_TEST( GMGSolver, MeshesForMultigrid)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 1;
     bool useConformingTraces = true;
     PoissonFormulation form(spaceDim, useConformingTraces);
@@ -621,7 +619,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GMGSolver, UniformIdentity_1D_Slow)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 1;
     bool useConformingTraces = false;
 
@@ -673,7 +671,7 @@ namespace
 
   TEUCHOS_UNIT_TEST( GMGSolver, RefinedIdentity_2D_Slow)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     bool useConformingTraces = false;
 
     vector<bool> staticCondensationChoices = {false, true};
@@ -975,7 +973,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
     fineSolution->initializeLHSVector();
     fineSolution->initializeStiffnessAndLoad();
     fineSolution->populateStiffnessAndLoad();
-    auto tStiffness = E_to_T::matrix(fineSolution->getStiffnessMatrix());
+    auto tStiffness = fineSolution->getStiffnessMatrix();
     solver->gmgOperator()->setFineStiffnessMatrix(tStiffness);
 
     // The legacy Ifpack2 additive Schwarz path still trips an Ifpack2 localMap_
@@ -1011,7 +1009,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
 
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_1D_h )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 1;
     GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
     GridType gridType = TwoGrid_h;
@@ -1085,7 +1083,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_Triangles_p_multiplicative )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
     GridType gridType = TwoGridTriangles_p;
@@ -1094,7 +1092,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_Triangles_h_multiplicative )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
     GridType gridType = TwoGridTriangles_h;
@@ -1196,42 +1194,19 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
 //    fineSolution->initializeLHSVector();
 //    fineSolution->initializeStiffnessAndLoad();
 //    fineSolution->populateStiffnessAndLoad();
-//    op->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix().get());
+//    op->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix());
 //
 //    if (op->getSmootherType() != GMGOperator::NONE)
 //    {
 //      auto smoother = op->getSmootherAsMatrix();
-//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/smoother.dat", E_to_T::matrix(smoother));
+//      Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile("/tmp/smoother.dat", smoother);
 //      if (rank==0) cout << "wrote smoother matrix to /tmp/smoother.dat\n";
 //    }
 //
 //    string fineStiffnessLocation = "/tmp/A.dat";
-//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fineStiffnessLocation, E_to_T::matrix(op->getFineStiffnessMatrix()));
+//    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(fineStiffnessLocation, op->getFineStiffnessMatrix());
 //    if (rank==0) cout << "wrote fine stiffness matrix to " << fineStiffnessLocation << endl;
 //
-//    int GID = 0;
-//    cout << "setting up fine vector for testing, with global ordinal " << GID << " --> 1";
-//    op->setDebugMode(true);
-//
-//    Epetra_MultiVector v(P->RowMatrixRowMap(), 1);
-//    int lid = v.Map().LID(GID);
-//    if (lid != -1)
-//    {
-//      v[0][lid] = 1.0;
-//    }
-//    Epetra_MultiVector y(P->RowMatrixRowMap(), 1);
-//    op->ApplyInverse(v, y);
-//    cout << "y:\n";
-//    y.Comm().Barrier();
-//    cout << y;
-//    y.Comm().Barrier();
-//
-//    opMatrix->Apply(v, y);
-//    cout << "y from opMatrix:\n";
-//    y.Comm().Barrier();
-//    cout << y;
-//    y.Comm().Barrier();
-//  }
 
   // for the moment, disabling the tests below.  They do pass (at least when doing two-level) in the sense of achieving the required tolerance, but I'd like to
   // get clearer on what exactly I am testing with them.

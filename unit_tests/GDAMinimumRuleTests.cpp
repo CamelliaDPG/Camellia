@@ -9,14 +9,11 @@
 //
 //
 
-#include "Epetra_Import.h"
-
 #include "BasisFactory.h"
 #include "Camellia_FieldContainerConversion.hpp"
 #include "CamelliaCellTools.h"
 #include "CamelliaTestingHelpers.h"
 #include "CubatureFactory.h"
-#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
@@ -29,9 +26,10 @@
 #include "Solution.h"
 #include "SpaceTimeHeatDivFormulation.h"
 #include "StokesVGPFormulation.h"
-#include "T_to_E.hpp"
 #include "TypeDefs.h"
 #include "VarFactory.h"
+
+#include <Tpetra_Import.hpp>
 
 using namespace Camellia;
 
@@ -296,8 +294,6 @@ namespace
     
     TEST_EQUALITY(solveSuccess, 0);
     
-    Epetra_SerialComm Comm;
-    
     // Import solution onto current processor
     auto partMap = soln->getPartitionMap();
     using GO = TMap::global_ordinal_type;
@@ -306,15 +302,11 @@ namespace
     using Node = MultiVector::node_type;
     
     GO numNodesGlobal = mesh->numGlobalDofs();
-    LO numMyNodes = static_cast<LO>(numNodesGlobal);
-    Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
-    auto tSolnMap = E_to_T::map(eSolnMap);
+    auto tSolnMap = Teuchos::rcp(new TMap(static_cast<Tpetra::global_size_t>(numNodesGlobal), static_cast<GO>(0), MPIWrapper::TeuchosCommSerial()));
     
     Tpetra::Import<LO,GO,Node> importer (partMap, tSolnMap); // source, destination
     
-    Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
-    auto eLHSVector = Teuchos::rcp(lhsVector,false);
-    auto tLHSVector = E_to_T::vector(eLHSVector);
+    auto tLHSVector = soln->getGlobalCoefficients();
     
     const int numVectors = 1;
     auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );
@@ -1505,7 +1497,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode1Irregular_Slow)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     int H1Order = 2;
     int irregularity = 1;
@@ -1516,7 +1508,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DTrianglesHangingNode1Irregular_Slow)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
 
     int spaceDim = 2;
     int H1Order = 2;
@@ -1598,7 +1590,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode2Irregular_Slow)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     int H1Order = 2;
     int irregularity = 2;
@@ -1688,7 +1680,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, DofCoordsAgreePoisson3DUniformRefinedMesh_Slow)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 3;
     int elementWidth = 1;
     int H1Order = 3;
@@ -1725,7 +1717,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode2Irregular_Slow)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int irregularity = 2;
     int spaceDim = 3;
     int H1Order = 1;
@@ -1757,7 +1749,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DHangingNode2Irregular )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int irregularity = 2;
     int spaceDim = 3;
     int H1Order = 1;
@@ -1942,7 +1934,7 @@ namespace
 
   TEUCHOS_UNIT_TEST( GDAMinimumRule, InterpretGlobalBasisCoefficientsUltraweakConforming_Triangles )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     bool useConformingTraces = true;
     bool useTriangles = true;
@@ -1986,28 +1978,33 @@ namespace
     // we prescribe 1 at at all the bc indices, and 0 everywhere else.
     // then we check the values on the elements.
     
-    Epetra_BlockMap partMap = soln->getLHSVector()->Map();
     auto lhsVector = soln->getLHSVector();
+    auto lhsMap = lhsVector->getMap();
+    using GO = TMap::global_ordinal_type;
     
-    vector<GlobalIndexTypeToCast> bcGlobalIndices(bcGlobalIndicesFC.size());
+    vector<GO> bcGlobalIndices(bcGlobalIndicesFC.size());
     for (int i=0; i<bcGlobalIndicesFC.size(); i++)
     {
-      bcGlobalIndices[i] = bcGlobalIndicesFC[i];
+      bcGlobalIndices[i] = static_cast<GO>(bcGlobalIndicesFC[i]);
       out << "Imposing \"BC\" at global index " << bcGlobalIndices[i] << endl;
     }
     
-    if (bcGlobalValuesFC.size() > 0)
+    for (int i=0; i<bcGlobalValuesFC.size(); i++)
     {
-      lhsVector->ReplaceGlobalValues(bcGlobalValuesFC.size(), &bcGlobalIndices[0], &bcGlobalValuesFC[0]);
+      if (lhsMap->isNodeGlobalElement(bcGlobalIndices[i]))
+      {
+        lhsVector->replaceGlobalValue(bcGlobalIndices[i], 0, bcGlobalValuesFC[i]);
+      }
     }
     for (auto offRankEntry : offRankBCs)
     {
-      GlobalIndexType globalIndex = offRankEntry.first;
+      GO globalIndex = static_cast<GO>(offRankEntry.first);
       double value = offRankEntry.second;
-      int LID = lhsVector->Map().LID((GlobalIndexTypeToCast)globalIndex);
-      (*lhsVector)[0][LID] = value;
+      if (lhsMap->isNodeGlobalElement(globalIndex))
+      {
+        lhsVector->replaceGlobalValue(globalIndex, 0, value);
+      }
     }
-    lhsVector->GlobalAssemble();
     
     soln->importSolution();
     // for each of my cells, find vertices on the mesh boundary.
@@ -2143,13 +2140,16 @@ namespace
       TEST_EQUALITY(globalIndices.size(), 1);
       int vertexGlobalDofIndex = *globalIndices.begin();
      
-      Epetra_SerialComm SerialComm; // rank-local map
-      Epetra_Map    localXMap(1, 1, &vertexGlobalDofIndex, 0, SerialComm);
-      Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
-      (*XLocal)[0] = 1.0;
+      using GO = TMap::global_ordinal_type;
+      Teuchos::Array<GO> localXGIDs(1, static_cast<GO>(vertexGlobalDofIndex));
+      TMapPtr localXMap = Teuchos::rcp(new TMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+                                                localXGIDs(), 0, MPIWrapper::TeuchosCommSerial()));
+      TVectorPtr<double> XLocal = Teuchos::rcp(new TVector<double>(localXMap, 1));
+      auto XLocalView = XLocal->getLocalViewHost(Tpetra::Access::ReadWrite);
+      XLocalView(0,0) = 1.0;
       
       Camellia::FieldContainer<double> localCoefficients;
-      minRule->interpretGlobalCoefficients(cellID, localCoefficients, *XLocal);
+      minRule->interpretGlobalCoefficients(cellID, localCoefficients, XLocal);
       
       DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
       BasisPtr basis = trialOrder->getBasis(u_hat->ID(), cellSideOrdinal);
@@ -2174,7 +2174,7 @@ namespace
         if (globalDofIndices[i] == vertexGlobalDofIndex)
         {
           foundVertexDofIndex = true;
-          TEST_FLOATING_EQUALITY(globalCoefficients[i], (*XLocal)[0], tol);
+          TEST_FLOATING_EQUALITY(globalCoefficients[i], XLocalView(0,0), tol);
         }
         else
         {
@@ -2366,7 +2366,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson2DContinuousGalerkinHangingNode_Slow )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     testSolvePoissonContinuousGalerkinHangingNode(spaceDim, out, success);
   }
@@ -2432,9 +2432,6 @@ namespace
       
       //    cout << irregularity << "-irregular 3D poisson w/hanging node solved.  About to check solution continuities.\n";
       
-      Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
-      Epetra_SerialComm Comm;
-      
       // Import solution onto current processor
       auto partMap = soln->getPartitionMap();
       using GO = TMap::global_ordinal_type;
@@ -2443,14 +2440,11 @@ namespace
       using Node = MultiVector::node_type;
       
       GO numNodesGlobal = mesh->numGlobalDofs();
-      LO numMyNodes = static_cast<LO>(numNodesGlobal);
-      Epetra_Map eSolnMap(numNodesGlobal, numMyNodes, 0, Comm);
-      auto tSolnMap = E_to_T::map(eSolnMap);
+      auto tSolnMap = Teuchos::rcp(new TMap(static_cast<Tpetra::global_size_t>(numNodesGlobal), static_cast<GO>(0), MPIWrapper::TeuchosCommSerial()));
       
       Tpetra::Import<LO,GO,Node> importer (partMap, tSolnMap); // source, destination
       
-      auto eLHSVector = Teuchos::rcp(lhsVector,false);
-      auto tLHSVector = E_to_T::vector(eLHSVector);
+      auto tLHSVector = soln->getGlobalCoefficients();
       
       const int numVectors = 1;
       auto tSolnCoeff = Teuchos::rcp(new MultiVector(tSolnMap, numVectors) );

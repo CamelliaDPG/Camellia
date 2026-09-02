@@ -11,6 +11,7 @@
 #include "RHS.h"
 #include "Solution.h"
 #include "TrigFunctions.h"
+#include "Teuchos_Time.hpp"
 
 using namespace Camellia;
 using namespace std;
@@ -159,7 +160,8 @@ void runSolve(vector<vector<double>> domainDim, int numElements, double dt, doub
     VarFactoryPtr vf_L2 = bf->varFactory()->getBubnovFactory(VarFactory::BUBNOV_TRIAL);
     BFPtr bf_L2 = BF::bf(vf_L2);
     bf_L2->addTerm(form.u(), form.u());
-    bf_L2->addTerm(form.sigma(),form.sigma());
+    bf_L2->addTerm(form.sigma(1),form.sigma(1));
+    bf_L2->addTerm(form.sigma(2),form.sigma(2));
     bf_L2->addTerm(form.u_hat(), form.u_hat());
     bf_L2->addTerm(form.sigma_n_hat(), form.sigma_n_hat());
     
@@ -206,9 +208,10 @@ void runSolve(vector<vector<double>> domainDim, int numElements, double dt, doub
   
   for (int timeStepNumber = 0; timeStepNumber < numTimeSteps; timeStepNumber++)
   {
-    Epetra_Time timer(*mesh->Comm());
+    Teuchos::Time timer("Heat solve timer", false);
+    timer.start();
     solution->solve();
-    double solveTime = timer.ElapsedTime();
+    double solveTime = timer.stop();
     
     if (rank == 0)
       cout << "Solved in " << solveTime << " seconds.\n";
@@ -227,7 +230,8 @@ void runSolve(vector<vector<double>> domainDim, int numElements, double dt, doub
     exactSolutionMap[form.u()->ID()] = u_exact;
     exactSolutionMap[form.u_hat()->ID()] = u_exact;
     FunctionPtr sigma_exact = u_exact->grad();
-    exactSolutionMap[form.sigma()->ID()] = sigma_exact;
+    exactSolutionMap[form.sigma(1)->ID()] = sigma_exact->x();
+    exactSolutionMap[form.sigma(2)->ID()] = sigma_exact->y();
     FunctionPtr n = Function::normal();
     FunctionPtr sgn = Function::sideParity();
     exactSolutionMap[form.sigma_n_hat()->ID()] = sigma_exact * n * sgn;

@@ -158,9 +158,6 @@ public:
 
   vector<double> getCellCentroid(GlobalIndexType cellID);
 
-  // commented out because unused
-  //Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm);
-
   ElementPtr getElement(GlobalIndexType cellID);
   ElementTypePtr getElementType(GlobalIndexType cellID);
 
@@ -210,7 +207,6 @@ public:
   // ! For curvilinear geometry, call this after mesh initialization.
   void initializeTransformationFunction();
   
-  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
   void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients);
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
                                        Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);

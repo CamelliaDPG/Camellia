@@ -1035,7 +1035,7 @@ void OldroydBFormulationUW::clearSolutionIncrement()
 {
   _solnIncrement->clear(); // only clears the local cell coefficients, not the global solution vector
   if (_solnIncrement->getLHSVector().get() != NULL)
-    _solnIncrement->getLHSVector()->PutScalar(0); // this clears global solution vector
+    _solnIncrement->getLHSVector()->putScalar(0); // this clears global solution vector
   _solnIncrement->clearComputedResiduals();
 }
 

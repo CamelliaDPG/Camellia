@@ -1962,8 +1962,7 @@ Scalar TFunction<Scalar>::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDe
     }
   }
   
-  auto epetraComm = MPIWrapper::EpetraComm(mesh->Comm());
-  return MPIWrapper::sum(*epetraComm, integral);
+  return MPIWrapper::sum(mesh->Comm(), integral);
 }
 
 template <typename Scalar>
@@ -2018,8 +2017,6 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
    with finer quadrature, in the case of a locally refined mesh.
    */
   
-    
-//  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(mesh->Comm());
   
   MeshTopologyViewPtr meshTopo = mesh->getTopology();
   const set<GlobalIndexType> & activeCellIDs = meshTopo->getLocallyKnownActiveCellIndices();

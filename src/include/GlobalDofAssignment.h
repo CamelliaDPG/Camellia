@@ -27,11 +27,7 @@
 
 #include "ElementTypeFactory.h"
 
-#include "Epetra_Vector.h"
-
 #include "DofInterpreter.h"
-
-#include "Epetra_Map.h"
 
 namespace Camellia
 {
@@ -169,9 +165,6 @@ public:
                                   Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
   
   using DofInterpreter::interpretLocalCoefficients;
-  void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
-                                  Epetra_MultiVector &globalCoefficients, int columnOrdinal);
-  
   template <typename Scalar>
   void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localCoefficients,
                                   TVectorPtr<Scalar> globalCoefficients, int columnOrdinal);
@@ -179,8 +172,6 @@ public:
                                                const Camellia::FieldContainer<double> &basisCoefficients,
                                                Camellia::FieldContainer<double> &globalCoefficients,
                                                Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
-                                           const Epetra_MultiVector &globalCoefficients) = 0;
   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients) = 0;
 
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;

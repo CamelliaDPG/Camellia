@@ -10,9 +10,6 @@
 
 #include "TimeLogger.h"
 
-#include "MPIWrapper.h"
-
-#include "Epetra_Time.h"
 #include "Teuchos_RCP.hpp"
 
 using namespace Camellia;
@@ -47,24 +44,22 @@ void TimeLogger::createTimeEntry(const std::string &timerName)
 
 int TimeLogger::startTimer(const std::string &timerName)
 {
-  Teuchos::RCP<Epetra_Time> timer;
   int handle;
+  const auto startTime = std::chrono::steady_clock::now();
   if (_inactiveTimerHandles.size() > 0)
   {
     handle = _inactiveTimerHandles[_inactiveTimerHandles.size()-1];
     _inactiveTimerHandles.pop_back();
     
-    timer = _timers[handle];
+    _timers[handle] = startTime;
     _timerNames[handle] = timerName;
   }
   else
   {
-    timer = Teuchos::rcp( new Epetra_Time(*MPIWrapper::CommSerial()) );
     handle = _timers.size();
-    _timers.push_back(timer);
+    _timers.push_back(startTime);
     _timerNames.push_back(timerName);
   }
-  timer->ResetStartTime();
   return handle;
 }
 
@@ -77,7 +72,8 @@ void TimeLogger::stopTimer(int timerHandle)
   TEUCHOS_TEST_FOR_EXCEPTION(foundEntry != _inactiveTimerHandles.end(), std::invalid_argument, "stopTimer() called with timerHandle for inactive timer.");
   
   std::string timerName = _timerNames[timerHandle];
-  _totalTimes[timerName] += _timers[timerHandle]->ElapsedTime();
+  auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - _timers[timerHandle]).count();
+  _totalTimes[timerName] += elapsed;
   _inactiveTimerHandles.push_back(timerHandle);
   std::sort(_inactiveTimerHandles.begin(), _inactiveTimerHandles.end());
 }

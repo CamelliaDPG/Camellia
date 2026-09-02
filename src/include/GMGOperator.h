@@ -18,7 +18,6 @@
 #include "Solution.h"
 #include "Solver.h"
 
-#include "Ifpack_Preconditioner.h"
 #include "Tpetra_Operator.hpp"
 #include <map>
 
@@ -120,7 +119,6 @@ private:
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
 
   TMatrixPtr<Scalar> _fineStiffnessMatrix;
-  Teuchos::RCP<Epetra_CrsMatrix> _eFineStiffnessMatrix;
   
   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeComputeCoarseStiffnessMatrix, _timeProlongationOperatorConstruction,
       _timeSetUpSmoother, _timeUpdateCoarseOperator, _timeApplyFineStiffness, _timeApplySmoother; // totals over the life of the object
@@ -131,7 +129,6 @@ private:
   TMatrixPtr<double> _P; // prolongation operator
 
   Teuchos::RCP<Tpetra::Operator<Scalar> > _smoother;
-//  Teuchos::RCP<Epetra_Operator> _smoother;
   double _smootherWeight;
   int _smootherApplicationCount; // default to 1, but 2 may often be a better choice (especially when doing more than 2 levels)
   Teuchos::RCP<Tpetra::Vector<Scalar> > _smootherDiagonalWeight;
@@ -144,11 +141,11 @@ private:
   void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
   
   // ! private method; allows us to swap the fine and coarse roles in certain circumstances.
-  Teuchos::RCP<Epetra_FECrsMatrix> constructProlongationOperator(Teuchos::RCP<DofInterpreter> coarseDofInterpreter,
-                                                                 Teuchos::RCP<DofInterpreter> fineDofInterpreter,
-                                                                 bool useStaticCondensation,
-                                                                 TMapPtr coarseMap, TMapPtr fineMap,
-                                                                 MeshPtr coarseMesh, MeshPtr fineMesh);
+  TMatrixPtr<Scalar> constructProlongationOperator(Teuchos::RCP<DofInterpreter> coarseDofInterpreter,
+                                                   Teuchos::RCP<DofInterpreter> fineDofInterpreter,
+                                                   bool useStaticCondensation,
+                                                   TMapPtr coarseMap, TMapPtr fineMap,
+                                                   MeshPtr coarseMesh, MeshPtr fineMesh);
   
   int prolongationRowCount() const;
   int prolongationColCount() const;
@@ -258,7 +255,7 @@ public:
    */
   int ApplyInverseCoarseOperator(const TVector<Scalar> &X, TVector<Scalar> &Y) const;
 
-  //! Returns the result of a Epetra_Operator inverse applied to an Epetra_MultiVector X in Y.
+  //! Returns the result of this Tpetra operator inverse applied to X in Y.
   /*!
    \param In
    X - A Tpetra MultiVector of dimension NumVectors to multiply with matrix.
@@ -271,7 +268,7 @@ public:
    */
   int ApplyInverse(const TVector<Scalar> &X, TVector<Scalar> &Y) const;
 
-  //! Returns the result of the smoother, using any scalar or vector weights that are set, applied to a Epetra_MultiVector X in Y.
+  //! Returns the result of the smoother, using any scalar or vector weights that are set, applied to a Tpetra MultiVector X in Y.
   /*!
    \param In
    X - A Tpetra MultiVector of dimension NumVectors to multiply with matrix.
@@ -372,6 +369,7 @@ public:
   
   void setChebyshevDegree(int chebyshevDegree);
   void setChebyshevRatio(double chebyshevRatio);
+  void setChebyshevMaxEigenIterations(int maxEigenIterations);
   
   //! Set the multigrid strategy: two-level (additive), V-cycle, W-cycle, or full multigrid.
   void setMultigridStrategy(MultigridStrategy choice);

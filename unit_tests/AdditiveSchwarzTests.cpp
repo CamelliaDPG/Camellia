@@ -11,10 +11,6 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
-#include "Ifpack_Amesos.h"
-
-#include "AdditiveSchwarz.h"
-#include "E_to_T.hpp"
 #include "Mesh.h"
 #include "MeshFactory.h"
 #include "MPIWrapper.h"
@@ -28,7 +24,12 @@ using namespace Camellia;
 
 namespace
 {
-  Teuchos::RCP<AdditiveSchwarz<Ifpack_Amesos>> getSchwarzOp(SolutionPtr &soln, MeshTopologyPtr meshTopo, int overlapLevel, bool conformingTraces)
+  using LocalOrdinal = typename TMatrix<double>::local_ordinal_type;
+  using GlobalOrdinal = typename TMatrix<double>::global_ordinal_type;
+  using Node = typename TMatrix<double>::node_type;
+  using TpetraSchwarz = TpetraCamelliaAdditiveSchwarz<double, LocalOrdinal, GlobalOrdinal, Node>;
+
+  Teuchos::RCP<TpetraSchwarz> getSchwarzOp(SolutionPtr &soln, MeshTopologyPtr meshTopo, int overlapLevel, bool conformingTraces)
   {
     int spaceDim = meshTopo->getDimension();
     PoissonFormulation form(spaceDim, conformingTraces);
@@ -45,12 +46,12 @@ namespace
     soln->initializeStiffnessAndLoad();
     soln->populateStiffnessAndLoad();
     
-    auto stiffness = soln->getStiffnessMatrix();
+    auto tpetraStiffness = soln->getStiffnessMatrix();
     bool useHierarchicalNeighbors = false;
     int dimensionForSchwarzNeighbors = spaceDim - 1; // always face neighbors, for us
     
-    auto schwarzOp = Teuchos::rcp( new AdditiveSchwarz<Ifpack_Amesos>(stiffness.get(), overlapLevel, mesh, mesh,
-                                                                      useHierarchicalNeighbors, dimensionForSchwarzNeighbors));
+    auto schwarzOp = Teuchos::rcp(new TpetraSchwarz(tpetraStiffness, overlapLevel, mesh, mesh,
+                                                    useHierarchicalNeighbors, dimensionForSchwarzNeighbors));
     return schwarzOp;
   }
   
@@ -62,54 +63,16 @@ namespace
     MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, meshWidths);
     
     SolutionPtr soln; // keep reference so that stiffness matrix doesn't get deleted
-    Teuchos::RCP<AdditiveSchwarz<Ifpack_Amesos>> schwarzOp = getSchwarzOp(soln, meshTopo, overlapLevel, conformingTraces);
+    Teuchos::RCP<TpetraSchwarz> schwarzOp = getSchwarzOp(soln, meshTopo, overlapLevel, conformingTraces);
     
-    schwarzOp->Compute();
+    schwarzOp->compute();
     
-//    cout << "Max incidence count: " << schwarzOp->MaxGlobalIncidenceCount() << endl;
-//    cout << "Max neighbor count:  " << schwarzOp->MaxGlobalOverlapSideNeighborCount() << endl;
+//    cout << "Max incidence count: " << schwarzOp->getMaxGlobalIncidenceCount() << endl;
+//    cout << "Max neighbor count:  " << schwarzOp->getMaxGlobalOverlapSideNeighborCount() << endl;
     
-    TEST_EQUALITY(schwarzOp->MaxGlobalIncidenceCount(), expectedIncidenceCount);
+    TEST_EQUALITY(schwarzOp->getMaxGlobalIncidenceCount(), expectedIncidenceCount);
   }
 
-  void testTpetraIncidenceCountingMatchesLegacy(vector<int> meshWidths, bool conformingTraces, int overlapLevel,
-                                                Teuchos::FancyOStream &out, bool &success)
-  {
-    int spaceDim = meshWidths.size();
-    vector<double> dimensions(spaceDim,1);
-    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, meshWidths);
-
-    PoissonFormulation form(spaceDim, conformingTraces);
-    int delta_k = 1;
-    Teuchos_CommPtr Comm = MPIWrapper::TeuchosCommWorld();
-    int H1Order = 1;
-    MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, form.bf(), H1Order, delta_k, Comm);
-
-    BCPtr bc = BC::bc();
-    RHSPtr rhs = RHS::rhs();
-    SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.bf()->graphNorm());
-
-    soln->initializeStiffnessAndLoad();
-    soln->populateStiffnessAndLoad();
-
-    auto stiffness = soln->getStiffnessMatrix();
-    bool useHierarchicalNeighbors = false;
-    int dimensionForSchwarzNeighbors = spaceDim - 1;
-
-    auto legacySchwarz = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(stiffness.get(), overlapLevel, mesh, mesh,
-                                                                         useHierarchicalNeighbors, dimensionForSchwarzNeighbors));
-    legacySchwarz->Compute();
-
-    auto tpetraStiffness = E_to_T::matrix(stiffness);
-    using LocalOrdinal = typename TMatrix<double>::local_ordinal_type;
-    using GlobalOrdinal = typename TMatrix<double>::global_ordinal_type;
-    using Node = typename TMatrix<double>::node_type;
-    using TpetraSchwarz = TpetraCamelliaAdditiveSchwarz<double, LocalOrdinal, GlobalOrdinal, Node>;
-    auto tpetraSchwarz = Teuchos::rcp(new TpetraSchwarz(tpetraStiffness, overlapLevel, mesh, mesh,
-                                                        useHierarchicalNeighbors, dimensionForSchwarzNeighbors));
-
-    TEST_EQUALITY(tpetraSchwarz->getMaxGlobalIncidenceCount(), legacySchwarz->MaxGlobalIncidenceCount());
-  }
   
   void testOverlapNeighborCounting(vector<int> meshWidths, bool conformingTraces, int overlapLevel, int expectedNeighborCount,
                                    Teuchos::FancyOStream &out, bool &success)
@@ -126,8 +89,8 @@ namespace
     bool useHierarchicalNeighbors = false;
     int dimensionForSchwarzNeighbors = spaceDim - 1; // always face neighbors, for us
     
-    int count = AdditiveSchwarz<Ifpack_Amesos>::MaxGlobalOverlapSideNeighborCount(mesh, overlapLevel, useHierarchicalNeighbors,
-                                                                                  dimensionForSchwarzNeighbors);
+    int count = TpetraSchwarz::MaxGlobalOverlapSideNeighborCount(mesh, overlapLevel, useHierarchicalNeighbors,
+                                                                 dimensionForSchwarzNeighbors);
     
     TEST_EQUALITY(count, expectedNeighborCount);
   }
@@ -165,13 +128,6 @@ namespace
     testIncidenceCounting(meshWidths, conformingTraces, overlapLevel, expectedIncidenceCount, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( AdditiveSchwarz, TpetraIncidenceCountingMatchesLegacy )
-  {
-    testTpetraIncidenceCountingMatchesLegacy({2,2}, true, 0, out, success);
-    testTpetraIncidenceCountingMatchesLegacy({2,2}, false, 0, out, success);
-    testTpetraIncidenceCountingMatchesLegacy({4,4}, true, 1, out, success);
-    testTpetraIncidenceCountingMatchesLegacy({4,4}, false, 1, out, success);
-  }
 
   TEUCHOS_UNIT_TEST( AdditiveSchwarz, NeighborCountingZeroOverlap )
   {

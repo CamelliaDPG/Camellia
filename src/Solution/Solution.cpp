@@ -20,16 +20,10 @@
 #endif
 #endif
 
-// Epetra includes
-#include "Epetra_Time.h"
+#include <chrono>
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
-
-#include "Epetra_Export.h"
-#include "Epetra_IntVector.h"
-//#include "ml_common.h"
-#include "ml_epetra_preconditioner.h"
 
 #include <stdlib.h>
 
@@ -44,7 +38,6 @@
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
-#include "E_to_T.hpp"
 #include "Function.h"
 #include "IP.h"
 #include "GlobalDofAssignment.h"
@@ -58,13 +51,38 @@
 #include "SerialDenseWrapper.h"
 #include "SolutionStage.h"
 #include "Solver.h"
-#include "T_to_E.hpp"
 #include "TimeLogger.h"
 #include "Var.h"
 
 #include <MatrixMarket_Tpetra.hpp>
+#include <Tpetra_Import.hpp>
 
 using namespace Camellia;
+
+namespace
+{
+class WallTimer
+{
+  using Clock = std::chrono::steady_clock;
+  Clock::time_point _start;
+
+public:
+  WallTimer()
+  {
+    ResetStartTime();
+  }
+
+  void ResetStartTime()
+  {
+    _start = Clock::now();
+  }
+
+  double ElapsedTime() const
+  {
+    return std::chrono::duration<double>(Clock::now() - _start).count();
+  }
+};
+}
 
 const static string SOLVER_TIMER_STRING = "time spent in linear solver";
 
@@ -84,84 +102,68 @@ static const int MAX_BATCH_SIZE_IN_BYTES = 128*1024*1024; // 128 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
 
 namespace {
-  //! adapted from ML_Epetra::LocalRowstoColumns
-  Epetra_IntVector * LocalRowstoColumns(int *Rows, int numRows,const Epetra_CrsMatrix & Matrix){
-    const Epetra_Map & ColMap = Matrix.ColMap();
-    int indexBase = ColMap.IndexBase();
-    Epetra_Map* mapPtr = 0;
-
-    if(Matrix.RowMap().GlobalIndicesInt())
-      mapPtr = new Epetra_Map((int) Matrix.NumGlobalCols(),indexBase,Matrix.Comm());
-    else if(Matrix.RowMap().GlobalIndicesLongLong())
-      mapPtr = new Epetra_Map(Matrix.NumGlobalCols64(),indexBase,Matrix.Comm());
-    else
-      assert(false);
-
-    Epetra_Map& globalMap = *mapPtr;
-
-    // create the exporter from this proc's column map to global 1-1 column map
-    Epetra_Export Exporter(ColMap,globalMap);
-
-    // create a vector of global column indices that we will export to
-    Epetra_IntVector globColsToZero(globalMap);
-    // create a vector of local column indices that we will export from
-    Epetra_IntVector *myColsToZero= new Epetra_IntVector(ColMap);
-    myColsToZero->PutValue(0);
-
-    // flag all local columns corresponding to the local rows specified
-    for (int i=0; i < numRows; i++)
-      (*myColsToZero)[Matrix.LCID(Matrix.GRID64(Rows[i]))]=1;
-
-    // export to the global column map
-    globColsToZero.Export(*myColsToZero,Exporter,Add);
-    // now import from the global column map to the local column map
-    myColsToZero->Import(globColsToZero,Exporter,Insert);
-
-    delete mapPtr;
-
-    return myColsToZero;
-  }/*end LocalRowstoColumns*/
-
-  //! adapted from ML_Epetra::Apply_OAZToMatrix().
-  void Apply_OAZToMatrix(int *dirichletRows, int numBCRows, const Epetra_CrsMatrix & Matrix)
+  template <typename Scalar>
+  void Apply_OAZToMatrix(const std::set<typename TMatrix<Scalar>::global_ordinal_type> &dirichletRows,
+                          const std::set<typename TMatrix<Scalar>::global_ordinal_type> &dirichletCols,
+                          TMatrixPtr<Scalar> &matrix)
   {
-    /* This function does row/column ones-and-zeros on a matrix, given the
-       rows/columns to nuke.
-       Input:
-           Matrix             matrix
-       Output:
-           Grad               matrix with Dirichlet rows/columns OAZ'd.
+    using GO = typename TMatrix<Scalar>::global_ordinal_type;
+    using ValuesViewHost = typename TMatrix<Scalar>::nonconst_values_host_view_type;
+    using GlobalIndicesHostView = typename TMatrix<Scalar>::nonconst_global_inds_host_view_type;
 
-       Comments: The graph of Matrix is unchanged.
-    */
+    if (matrix == Teuchos::null) return;
 
-    int numEntries,grid;
-    double *vals;
-    int *cols;
+    auto oldMatrix = matrix;
+    auto rowMap    = oldMatrix->getRowMap();
+    auto domainMap = oldMatrix->getDomainMap();
+    auto rangeMap  = oldMatrix->getRangeMap();
 
-    /* Find the local column numbers to nuke */
-    Epetra_IntVector *dirichletColumns=LocalRowstoColumns(dirichletRows,numBCRows,Matrix);
+    const size_t maxEntries = oldMatrix->getLocalMaxNumRowEntries() + 1;
+    auto newMatrix = Teuchos::rcp(new TMatrix<Scalar>(rowMap, maxEntries));
 
-    /* Zero the columns */
-    for (int i=0; i < Matrix.NumMyRows(); i++) {
-      Matrix.ExtractMyRowView(i,numEntries,vals,cols);
-      for (int j=0; j < numEntries; j++)
-        if ((*dirichletColumns)[ cols[j] ] > 0)
-          vals[j] = 0.0;
-    }/*end for*/
+    GlobalIndicesHostView oldCols("Tpetra OAZ old column gids", maxEntries);
+    ValuesViewHost oldVals("Tpetra OAZ old values", maxEntries);
 
+    const size_t numLocalRows = rowMap->getLocalNumElements();
+    for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
+    {
+      GO rowGID = rowMap->getGlobalElement(localRowOrdinal);
+      bool isDirichletRow = (dirichletRows.find(rowGID) != dirichletRows.end());
 
-    /* Zero the rows, add ones to diagonal */
-    for (int i=0; i < numBCRows; i++) {
-      Matrix.ExtractMyRowView(dirichletRows[i],numEntries,vals,cols);
-      grid=Matrix.GRID64(dirichletRows[i]);
-      for (int j=0; j < numEntries; j++)
-        if(grid==Matrix.GCID64(cols[j])) vals[j]=1.0;
-        else vals[j] = 0.0;
-    }/*end for*/
+      if (isDirichletRow)
+      {
+        Teuchos::Array<GO> cols(1, rowGID);
+        Teuchos::Array<Scalar> vals(1, Scalar(1.0));
+        newMatrix->insertGlobalValues(rowGID, cols(), vals());
+      }
+      else
+      {
+        size_t numRowEntries = 0;
+        oldMatrix->getGlobalRowCopy(rowGID, oldCols, oldVals, numRowEntries);
 
-    delete dirichletColumns;
-  }/*end Apply_OAZToMatrix*/
+        Teuchos::Array<GO> cols;
+        Teuchos::Array<Scalar> vals;
+        cols.reserve(numRowEntries);
+        vals.reserve(numRowEntries);
+        for (size_t entryOrdinal=0; entryOrdinal<numRowEntries; entryOrdinal++)
+        {
+          GO colGID = oldCols(entryOrdinal);
+          if (dirichletCols.find(colGID) == dirichletCols.end())
+          {
+            cols.push_back(colGID);
+            vals.push_back(oldVals(entryOrdinal));
+          }
+        }
+        if (cols.size() > 0)
+        {
+          newMatrix->insertGlobalValues(rowGID, cols(), vals());
+        }
+      }
+    }
+
+    newMatrix->fillComplete(domainMap, rangeMap);
+    matrix = newMatrix;
+  }
 
 } // end anonymous namespace
 
@@ -332,6 +334,9 @@ void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln,
   
   TEUCHOS_TEST_FOR_EXCEPTION(myLHSCount != otherLHSCount, std::invalid_argument, "Added solutions must have the same number of components.  Right now, this means that they must agree in whether they have a goal-oriented RHS or not.")
   
+  // in case otherSoln has a distinct mesh partitioning, import data for this's cells that is off-rank in otherSoln
+  otherSoln->importSolutionForOffRankCells(myCellIDs);
+  
   for (int solutionOrdinal=0; solutionOrdinal < myLHSCount; solutionOrdinal++)
   {
     for (GlobalIndexType cellID : myCellIDs)
@@ -401,6 +406,9 @@ void TSolution<Scalar>::addReplaceSolution(Teuchos::RCP< TSolution<Scalar> > oth
   
   TEUCHOS_TEST_FOR_EXCEPTION(myLHSCount != otherLHSCount, std::invalid_argument, "Added solutions must have the same number of components.  Right now, this means that they must agree in whether they have a goal-oriented RHS or not.")
   
+  // in case otherSoln has a distinct mesh partitioning, import data for this's cells that is off-rank in otherSoln
+  otherSoln->importSolutionForOffRankCells(myCellIDs);
+  
   for (int solutionOrdinal=0; solutionOrdinal < myLHSCount; solutionOrdinal++)
   {
     for (GlobalIndexType cellID : myCellIDs)
@@ -451,6 +459,8 @@ void TSolution<Scalar>::addReplaceSolution(Teuchos::RCP< TSolution<Scalar> > oth
   }
   
   setGlobalSolutionFromCellLocalCoefficients();
+  // _lhsVector will ignore non-local dofs; now we sync those:
+  importSolution();
   
   clearComputedResiduals();
   invalidateCachedBasisCoefficientsForFields();
@@ -480,16 +490,10 @@ void TSolution<Scalar>::applyDGJumpTerms()
    with finer quadrature, in the case of a locally refined mesh.
    */
   
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  int numProcs = Comm->NumProc();
+  Teuchos_CommPtr Comm = _mesh->Comm();
+  int numProcs = Comm->getSize();
   
-  int indexBase = 0;
-  
-  Epetra_Map timeMap(numProcs,indexBase,*Comm);
-  
-  Epetra_Time timer(*Comm);
-  
-  Epetra_FECrsMatrix* stiffnessMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
+  WallTimer timer;
   
   MeshTopologyViewPtr meshTopo = _mesh->getTopology();
   set<GlobalIndexType> activeCellIDs = meshTopo->getLocallyKnownActiveCellIndices();
@@ -895,18 +899,18 @@ void TSolution<Scalar>::applyDGJumpTerms()
               
               // now, we compute four integrals (test, trial) and insert into global stiffness
               // define a lambda function for insertion
-              auto insertValues = [stiffnessMatrix] (vector<GlobalIndexTypeToCast> &rowDofOrdinals,
-                                                     vector<GlobalIndexTypeToCast> &colDofOrdinals,
-                                                     Intrepid::FieldContainer<double> &values) -> void
+              auto insertValues = [this] (vector<GlobalIndexTypeToCast> &rowDofOrdinals,
+                                                           vector<GlobalIndexTypeToCast> &colDofOrdinals,
+                                                           Intrepid::FieldContainer<double> &values) -> void
               {
+                using GO = typename TMatrix<Scalar>::global_ordinal_type;
+
                 // values container is (cell, test, trial)
                 auto rowCount = rowDofOrdinals.size();
                 auto colCount = colDofOrdinals.size();
                 
-                //        stiffnessMatrix->InsertGlobalValues(rowCount,&rowDofOrdinals[0],colCount,&colDofOrdinals[0],&values(0,0,0),
-                //                                            Epetra_FECrsMatrix::ROW_MAJOR); // COL_MAJOR is the right thing, actually, but for some reason does not work...
-                
-                // because I don't trust Epetra in terms of the format, let's insert values one at a time
+                // Insert values one at a time; FieldContainer rows correspond to trial variables,
+                // columns to test variables, which is transposed relative to the stiffness matrix.
                 for (int i=0; i<rowCount; i++)
                 {
                   for (int j=0; j<colCount; j++)
@@ -917,7 +921,9 @@ void TSolution<Scalar>::applyDGJumpTerms()
                     {
                       //              cout << "Inserting (" << rowDofOrdinals[i] << "," << colDofOrdinals[j] << ") = ";
                       //              cout << values(0,i,j) << endl;
-                      stiffnessMatrix->InsertGlobalValues(1,&rowDofOrdinals[i],1,&colDofOrdinals[j],&values(0,i,j));
+                      Teuchos::Array<GO> col(1, static_cast<GO>(colDofOrdinals[j]));
+                      Teuchos::Array<Scalar> val(1, static_cast<Scalar>(values(0,i,j)));
+                      _globalStiffMatrix->insertGlobalValues(static_cast<GO>(rowDofOrdinals[i]), col(), val());
                     }
                   }
                 }
@@ -972,17 +978,12 @@ void TSolution<Scalar>::applyDGJumpTerms()
     }
   }
   
-  Epetra_Vector timeApplyJumpVector(timeMap);
- 
   double timeApplyDGJumpTerms = timer.ElapsedTime();
   //  cout << "Done computing local matrices" << endl;
-  Epetra_Vector timeApplyJumpTermsVector(timeMap);
-  timeApplyJumpTermsVector[0] = timeApplyDGJumpTerms;
-  
-  int err = timeApplyJumpTermsVector.Norm1( &_totalTimeApplyJumpTerms );
-  err = timeApplyJumpTermsVector.MeanValue( &_meanTimeApplyJumpTerms );
-  err = timeApplyJumpTermsVector.MinValue( &_minTimeApplyJumpTerms );
-  err = timeApplyJumpTermsVector.MaxValue( &_maxTimeApplyJumpTerms );
+  _totalTimeApplyJumpTerms = MPIWrapper::sum(Comm, timeApplyDGJumpTerms);
+  _meanTimeApplyJumpTerms = _totalTimeApplyJumpTerms / numProcs;
+  _minTimeApplyJumpTerms = MPIWrapper::min(Comm, timeApplyDGJumpTerms);
+  _maxTimeApplyJumpTerms = MPIWrapper::max(Comm, timeApplyDGJumpTerms);
 }
 
 template <typename Scalar>
@@ -1118,7 +1119,8 @@ template <typename Scalar>
 void TSolution<Scalar>::setSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln)
 {
   _solutionForCellID = vector< map< GlobalIndexType, Camellia::FieldContainer<Scalar> > >(otherSoln->solutionForCellID());
-  _lhsVector = Teuchos::rcp( new Epetra_FEVector(*otherSoln->getLHSVector()) );
+  TEUCHOS_TEST_FOR_EXCEPTION(otherSoln->getLHSVector() == Teuchos::null, std::invalid_argument, "Solution::setSolution(): source Solution has null Tpetra LHS vector");
+  _lhsVector = Teuchos::rcp( new TVector<Scalar>(*otherSoln->getLHSVector(), Teuchos::Copy) );
   clearComputedResiduals();
   invalidateCachedBasisCoefficientsForFields();
 }
@@ -1126,17 +1128,19 @@ void TSolution<Scalar>::setSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln)
 template <typename Scalar>
 void TSolution<Scalar>::initializeLHSVector()
 {
-  Epetra_Map partMap = getPartitionMap_Epetra();
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we
   // may or may not have a goal-oriented RHS (the latter only makes sense, for now, anyway,
   // if we have a DPG formulation).
   
+  auto partMap = getPartitionMap();
   int numSolutions = this->numSolutions();
-  _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,numSolutions,true));
+  _lhsVector = Teuchos::rcp(new TVector<Scalar>(partMap, numSolutions));
+  _lhsVector->putScalar(Scalar(0.0));
     
   const int numRHSes = (_goalOrientedRHS == Teuchos::null) ? 1 : 2;
-  _lhsVectorCurrentStage = Teuchos::rcp(new Epetra_FEVector(partMap,numRHSes,true));
+  _lhsVectorCurrentStage = Teuchos::rcp(new TVector<Scalar>(partMap, numRHSes));
+  _lhsVectorCurrentStage->putScalar(Scalar(0.0));
 
   setGlobalSolutionFromCellLocalCoefficients();
   clearComputedResiduals();
@@ -1147,8 +1151,6 @@ template <typename Scalar>
 void TSolution<Scalar>::initializeLoad()
 {
   narrate("initializeLoad");
-  Epetra_Map partMap = getPartitionMap_Epetra();
-
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we
   // may or may not have a goal-oriented RHS (the latter only makes sense, for now, anyway,
@@ -1156,21 +1158,18 @@ void TSolution<Scalar>::initializeLoad()
   
   int numSolutions = this->numSolutions();
   
-  _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap, numSolutions));
+  _rhsVector = Teuchos::rcp(new TVector<Scalar>(getPartitionMap(), numSolutions));
+  _rhsVector->putScalar(Scalar(0.0));
 }
 
 template <typename Scalar>
 void TSolution<Scalar>::initializeStiffnessAndLoad()
 {
   narrate("initializeStiffnessAndLoad");
-  Epetra_Map partMap = getPartitionMap_Epetra();
+  auto tPartMap = getPartitionMap();
+  const size_t maxTpetraRowSize = tPartMap->getGlobalNumElements();
   
-//  int maxRowSize = _mesh->rowSizeUpperBound();
-  int maxRowSize = 0; // will cause more mallocs during insertion into the CrsMatrix, but will minimize the amount of memory allocated now.
-  
-  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
-  
-//  cout << "_globalStiffMatrix has " << _globalStiffMatrix->NumGlobalRows() << " global rows, and " << _globalStiffMatrix->NumGlobalCols() << " global cols.\n";
+  _globalStiffMatrix = Teuchos::rcp(new TMatrix<Scalar>(tPartMap, maxTpetraRowSize));
   
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we
@@ -1181,7 +1180,8 @@ void TSolution<Scalar>::initializeStiffnessAndLoad()
   // each Runge-Kutta stage.
   
   int numRHSes = (_goalOrientedRHS == Teuchos::null) ? 1 : 2;
-  _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap, numRHSes));
+  _rhsVector = Teuchos::rcp(new TVector<Scalar>(getPartitionMap(), numRHSes));
+  _rhsVector->putScalar(Scalar(0.0));
 }
 
 template <typename Scalar>
@@ -1198,29 +1198,38 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   
   TEUCHOS_FUNC_TIME_MONITOR("Solution::populateStiffnessAndLoad");
   narrate("populateStiffnessAndLoad()");
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  int rank = Comm->MyPID();
-  int numProcs = Comm->NumProc();
+  Teuchos_CommPtr Comm = _mesh->Comm();
+  int rank = Comm->getRank();
+  int numProcs = Comm->getSize();
 
-  Epetra_FECrsMatrix* globalStiffness = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
-
-  if (globalStiffness == NULL)
-  {
-    cout << "Error: Solution::populateStiffnessAndLoad() requires that _globalStiffMatrix be an Epetra_FECrsMatrix\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "populateStiffnessAndLoad() requires that _globalStiffMatrix be an Epetra_FECrsMatrix");
-  }
+  TEUCHOS_TEST_FOR_EXCEPTION(_globalStiffMatrix == Teuchos::null, std::invalid_argument, "populateStiffnessAndLoad() requires that _globalStiffMatrix be initialized");
+  TEUCHOS_TEST_FOR_EXCEPTION(_rhsVector == Teuchos::null, std::invalid_argument, "populateStiffnessAndLoad() requires that _rhsVector be initialized");
 
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-  Epetra_Map partMap = getPartitionMap_Epetra();
+
+  auto tRHSMap = _rhsVector->getMap();
+  const size_t numTpetraRHSes = _rhsVector->getNumVectors();
+  std::vector<std::map<int,std::vector<std::pair<GlobalIndexType,Scalar>>>> rhsValuesToSend(numTpetraRHSes);
+  auto sumIntoTpetraRHS = [&](GlobalIndexType globalIndex, size_t rhsOrdinal, Scalar value)
+  {
+    GO globalIndexT = static_cast<GO>(globalIndex);
+    if (tRHSMap->isNodeGlobalElement(globalIndexT))
+    {
+      _rhsVector->sumIntoGlobalValue(globalIndexT, rhsOrdinal, value);
+    }
+    else
+    {
+      int owner = _dofInterpreter->partitionForGlobalDofIndex(globalIndex);
+      rhsValuesToSend[rhsOrdinal][owner].push_back(std::make_pair(globalIndex,value));
+    }
+  };
 
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
 
   //cout << "process " << rank << " about to loop over elementTypes.\n";
-  int indexBase = 0;
-  Epetra_Map timeMap(numProcs,indexBase,*Comm);
-  Epetra_Time timer(*Comm);
-  Epetra_Time subTimer(*Comm);
+  WallTimer timer;
+  WallTimer subTimer;
 
   double localStiffnessInterpretationTime = 0, filterApplicationTime = 0;
 
@@ -1321,8 +1330,6 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 
       Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
 
-      Camellia::FieldContainer<GlobalIndexTypeToCast> globalDofIndicesCast;
-
       Teuchos::Array<int> localStiffnessDim(2,numTrialDofs);
       Teuchos::Array<int> localRHSDim(1,numTrialDofs);
 
@@ -1343,26 +1350,39 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 
         _dofInterpreter->interpretLocalData(cellID, cellStiffness, cellRHS, interpretedStiffness, interpretedRHS, globalDofIndices);
 
-        // cast whatever the global index type is to a type that Epetra supports
-        globalDofIndices.dimensions(dim);
-        globalDofIndicesCast.resize(dim);
-
+        Teuchos::Array<GO> globalDofIndicesT(globalDofIndices.size());
         for (int dofOrdinal = 0; dofOrdinal < globalDofIndices.size(); dofOrdinal++)
         {
-          globalDofIndicesCast[dofOrdinal] = globalDofIndices[dofOrdinal];
+          globalDofIndicesT[dofOrdinal] = static_cast<GO>(globalDofIndices[dofOrdinal]);
         }
 
-        globalStiffness->InsertGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),
-                                            globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedStiffness[0]);
+        for (int rowOrdinal=0; rowOrdinal<globalDofIndices.size(); rowOrdinal++)
+        {
+          Teuchos::Array<Scalar> rowValues(globalDofIndices.size());
+          for (int colOrdinal=0; colOrdinal<globalDofIndices.size(); colOrdinal++)
+          {
+            // Preserve the effective orientation of the old Epetra_FECrsMatrix bulk insertion
+            // from the raw FieldContainer buffer when assembling one Tpetra row at a time.
+            rowValues[colOrdinal] = interpretedStiffness(colOrdinal,rowOrdinal);
+          }
+          _globalStiffMatrix->insertGlobalValues(globalDofIndicesT[rowOrdinal], globalDofIndicesT(), rowValues());
+        }
+
         const int STANDARD_RHS_INDEX = 0; // to distinguish from the "goal-oriented" index...
-        _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0],STANDARD_RHS_INDEX);
+        for (int dofOrdinal=0; dofOrdinal<globalDofIndices.size(); dofOrdinal++)
+        {
+          sumIntoTpetraRHS(globalDofIndices[dofOrdinal], STANDARD_RHS_INDEX, interpretedRHS[dofOrdinal]);
+        }
         
         if (_goalOrientedRHS != Teuchos::null)
         {
           Camellia::FieldContainer<Scalar> cellGoalOrientedRHS(localRHSDim,&goalOrientedRHSValues(cellIndex,0)); // shallow copy
           _dofInterpreter->interpretLocalData(cellID, cellGoalOrientedRHS, interpretedRHS, globalDofIndices);
           const int GOAL_ORIENTED_RHS_INDEX = 1;
-          _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0],GOAL_ORIENTED_RHS_INDEX);
+          for (int dofOrdinal=0; dofOrdinal<globalDofIndices.size(); dofOrdinal++)
+          {
+            sumIntoTpetraRHS(globalDofIndices[dofOrdinal], GOAL_ORIENTED_RHS_INDEX, interpretedRHS[dofOrdinal]);
+          }
         }
       }
       TimeLogger::sharedInstance()->stopTimer(interpretLocalDataTimerHandle);
@@ -1370,6 +1390,21 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
       startCellIndexForBatch += numCells;
     }
   }
+
+  for (size_t rhsOrdinal=0; rhsOrdinal<numTpetraRHSes; rhsOrdinal++)
+  {
+    std::vector<std::pair<GlobalIndexType,Scalar>> receivedValues;
+    MPIWrapper::sendDataVectors(_mesh->TeuchosComm(), rhsValuesToSend[rhsOrdinal], receivedValues);
+    for (auto entry : receivedValues)
+    {
+      GO globalIndexT = static_cast<GO>(entry.first);
+      if (tRHSMap->isNodeGlobalElement(globalIndexT))
+      {
+        _rhsVector->sumIntoGlobalValue(globalIndexT, rhsOrdinal, entry.second);
+      }
+    }
+  }
+
   {
     /*    cout << "testMatrixAssemblyTime: " << testMatrixAssemblyTime << " seconds.\n";
         cout << "testMatrixInversionTime: " << testMatrixInversionTime << " seconds.\n";
@@ -1382,9 +1417,6 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   TimeLogger::sharedInstance()->stopTimer(localStiffnessTimerHandle);
   double timeLocalStiffness = timer.ElapsedTime();
   //  cout << "Done computing local matrices" << endl;
-  Epetra_Vector timeLocalStiffnessVector(timeMap);
-  timeLocalStiffnessVector[0] = timeLocalStiffness;
-  
   int localRowIndex = myGlobalIndicesSet.size(); // starts where the dofs left off
 
   // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
@@ -1453,8 +1485,14 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
           nonzeroValues(nnz) = 1.0; // just put a 1 in the diagonal to avoid singular matrix
         }
         // insert row:
-        globalStiffness->InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
-                                            &nonzeroValues(0));
+        Teuchos::Array<GO> tCols(nnz+1);
+        Teuchos::Array<Scalar> tVals(nnz+1);
+        for (int entryOrdinal=0; entryOrdinal<nnz+1; entryOrdinal++)
+        {
+          tCols[entryOrdinal] = static_cast<GO>(globalDofIndices(entryOrdinal));
+          tVals[entryOrdinal] = nonzeroValues(entryOrdinal);
+        }
+        _globalStiffMatrix->insertGlobalValues(static_cast<GO>(globalRowIndex), tCols(), tVals());
 //        cout << "On rank " << rank << ", inserting row " << globalRowIndex << " (";
 //        for (int i=0; i<=nnz; i++)
 //        {
@@ -1464,10 +1502,17 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 //        }
 //        cout << ")\n";
         // insert column:
-        globalStiffness->InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
-                                            &nonzeroValues(0));
+        Teuchos::Array<GO> tCol(1, static_cast<GO>(globalRowIndex));
+        for (int entryOrdinal=0; entryOrdinal<nnz+1; entryOrdinal++)
+        {
+          Teuchos::Array<Scalar> tVal(1, nonzeroValues(entryOrdinal));
+          _globalStiffMatrix->insertGlobalValues(static_cast<GO>(globalDofIndices(entryOrdinal)), tCol(), tVal());
+        }
 //        cout << "cell ID " << cellID << ", adding Lagrange RHS value at global index " << globalRowIndex << " = " << rhs(cellIndex) << endl;
-        _rhsVector->ReplaceGlobalValues(1,&globalRowIndex,&rhs(cellIndex));
+        if (_rhsVector->getMap()->isNodeGlobalElement(static_cast<GO>(globalRowIndex)))
+        {
+          _rhsVector->replaceGlobalValue(static_cast<GO>(globalRowIndex), 0, rhs(cellIndex));
+        }
 
         localRowIndex++;
       }
@@ -1500,7 +1545,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   {
     TEUCHOS_TEST_FOR_EXCEPTION(_zmcsAsRankOneUpdate, std::invalid_argument, "_zmcsAsRankOneUpdate is not supported.  It's too slow!");
     // NOTE: this code remains here as reference only; it's quite inefficient because it creates a lot of fill-in for A
-    // we may want to implement the same idea, but with a separate Epetra_Operator that simply stores the vector and the weight
+    // we may want to implement the same idea, but with a separate Tpetra::Operator that simply stores the vector and the weight
 //    for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++)
 //    {
 //      int trialID = *trialIt;
@@ -1551,16 +1596,12 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   }
   // end of ZMC imposition
 
-  Comm->Barrier();  // for cleaner time measurements, let everyone else catch up before calling ResetStartTime() and GlobalAssemble()
+  Comm->barrier();  // for cleaner time measurements, let everyone else catch up before calling ResetStartTime() and GlobalAssemble()
   timer.ResetStartTime();
 
-  _rhsVector->GlobalAssemble();
-
-  globalStiffness->GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
+  _globalStiffMatrix->fillComplete();
 
   double timeGlobalAssembly = timer.ElapsedTime();
-  Epetra_Vector timeGlobalAssemblyVector(timeMap);
-  timeGlobalAssemblyVector[0] = timeGlobalAssembly;
 
   // determine and impose BCs
 
@@ -1569,10 +1610,6 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   imposeBCs();
   
   double timeBCImposition = timer.ElapsedTime();
-  Epetra_Vector timeBCImpositionVector(timeMap);
-  timeBCImpositionVector[0] = timeBCImposition;
-
-  _rhsVector->GlobalAssemble();
 
   if (_writeRHSToMatrixMarketFile)
   {
@@ -1580,43 +1617,42 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
     {
       cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
     }
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeDenseFile(_rhsFilePath, E_to_T::vector(_rhsVector));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeDenseFile(_rhsFilePath, _rhsVector);
   }
 
   // Dump matrices to disk
   if (_writeMatrixToMatrixMarketFile)
   {
-    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(_matrixFilePath, E_to_T::matrix(_globalStiffMatrix));
+    Tpetra::MatrixMarket::Writer<TMatrix<double> >::writeSparseFile(_matrixFilePath, _globalStiffMatrix);
   }
 
-  int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.Norm1( &_totalTimeGlobalAssembly );
-  err = timeBCImpositionVector.Norm1( &_totalTimeBCImposition );
+  _totalTimeLocalStiffness = MPIWrapper::sum(Comm, timeLocalStiffness);
+  _totalTimeGlobalAssembly = MPIWrapper::sum(Comm, timeGlobalAssembly);
+  _totalTimeBCImposition = MPIWrapper::sum(Comm, timeBCImposition);
 
-  err = timeLocalStiffnessVector.MeanValue( &_meanTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.MeanValue( &_meanTimeGlobalAssembly );
-  err = timeBCImpositionVector.MeanValue( &_meanTimeBCImposition );
+  _meanTimeLocalStiffness = _totalTimeLocalStiffness / numProcs;
+  _meanTimeGlobalAssembly = _totalTimeGlobalAssembly / numProcs;
+  _meanTimeBCImposition = _totalTimeBCImposition / numProcs;
 
-  err = timeLocalStiffnessVector.MinValue( &_minTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.MinValue( &_minTimeGlobalAssembly );
-  err = timeBCImpositionVector.MinValue( &_minTimeBCImposition );
+  _minTimeLocalStiffness = MPIWrapper::min(Comm, timeLocalStiffness);
+  _minTimeGlobalAssembly = MPIWrapper::min(Comm, timeGlobalAssembly);
+  _minTimeBCImposition = MPIWrapper::min(Comm, timeBCImposition);
 
-  err = timeLocalStiffnessVector.MaxValue( &_maxTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.MaxValue( &_maxTimeGlobalAssembly );
-  err = timeBCImpositionVector.MaxValue( &_maxTimeBCImposition );
+  _maxTimeLocalStiffness = MPIWrapper::max(Comm, timeLocalStiffness);
+  _maxTimeGlobalAssembly = MPIWrapper::max(Comm, timeGlobalAssembly);
+  _maxTimeBCImposition = MPIWrapper::max(Comm, timeBCImposition);
 }
 
 template <typename Scalar>
 void TSolution<Scalar>::setProblem(TSolverPtr<Scalar> solver)
 {
-  if (_solutionStage == Teuchos::null)
-  {
-    solver->setProblem(_globalStiffMatrix, _lhsVector, _rhsVector);
-  }
-  else
-  {
-    solver->setProblem(_globalStiffMatrix, _lhsVectorCurrentStage, _rhsVector);
-  }
+  TVectorPtr<Scalar> lhsVector = (_solutionStage == Teuchos::null) ? _lhsVector : _lhsVectorCurrentStage;
+
+  TEUCHOS_TEST_FOR_EXCEPTION(_globalStiffMatrix == Teuchos::null, std::invalid_argument, "Solution::setProblem(): Tpetra stiffness matrix is null");
+  TEUCHOS_TEST_FOR_EXCEPTION(lhsVector == Teuchos::null, std::invalid_argument, "Solution::setProblem(): Tpetra LHS vector is null");
+  TEUCHOS_TEST_FOR_EXCEPTION(_rhsVector == Teuchos::null, std::invalid_argument, "Solution::setProblem(): Tpetra RHS vector is null");
+
+  solver->setProblem(_globalStiffMatrix, lhsVector, _rhsVector);
 }
 
 template <typename Scalar>
@@ -1625,39 +1661,35 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
   TEUCHOS_FUNC_TIME_MONITOR("Solution::solveWithPrepopulatedStiffnessAndLoad");
   narrate("solveWithPrepopulatedStiffnessAndLoad()");
   
-  Teuchos::RCP<Epetra_FEVector> lhsVector;
-  if (_solutionStage == Teuchos::null)
+  if (_solutionStage != Teuchos::null)
   {
-    lhsVector = _lhsVector;
-  }
-  else
-  {
-    lhsVector = _lhsVectorCurrentStage;
+    TEUCHOS_TEST_FOR_EXCEPTION(_lhsVector == Teuchos::null, std::invalid_argument, "Solution::solveWithPrepopulatedStiffnessAndLoad(): full Tpetra LHS vector is null");
+    TEUCHOS_TEST_FOR_EXCEPTION(_lhsVectorCurrentStage == Teuchos::null, std::invalid_argument, "Solution::solveWithPrepopulatedStiffnessAndLoad(): current-stage Tpetra LHS vector is null");
     // copy from full LHS into current-stage LHS
     // (this is only useful for setting an initial guess in an iterative solve)
-    const int numRHSes = _lhsVectorCurrentStage->NumVectors();
+    const int numRHSes = static_cast<int>(_lhsVectorCurrentStage->getNumVectors());
     const int solnStage = _solutionStage->getStage();
     for (int rhsOrdinal=0; rhsOrdinal<numRHSes; rhsOrdinal++)
     {
       SolutionComponent solutionComponent = (rhsOrdinal == 0) ? STANDARD_SOLUTION : INFLUENCE_SOLUTION;
       const int ordinalInFullLHS = solutionOrdinal(solutionComponent, solnStage);
-      (*_lhsVectorCurrentStage)(rhsOrdinal)->Update(1.0, *(*_lhsVector)(ordinalInFullLHS), 0.0);
+      auto stageVector = _lhsVectorCurrentStage->getVectorNonConst(rhsOrdinal);
+      auto fullVector  = _lhsVector->getVector(ordinalInFullLHS);
+      stageVector->update(Scalar(1.0), *fullVector, Scalar(0.0));
     }
   }
 
   int timerHandle = TimeLogger::sharedInstance()->startTimer(SOLVER_TIMER_STRING);
   
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  int rank = Comm->MyPID();
-  int numProcs = Comm->NumProc();
+  Teuchos_CommPtr Comm = _mesh->Comm();
+  int rank = Comm->getRank();
+  int numProcs = Comm->getSize();
 
-  int indexBase = 0;
-  Epetra_Map timeMap(numProcs,indexBase,*Comm);
-  Epetra_Time timer(*Comm);
+  WallTimer timer;
 
   timer.ResetStartTime();
 
-  setProblem(solver); // while we have Epetra matrices and vectors, we need to call this to give solver a chance to create a fresh Tpetra copy…
+  setProblem(solver); // provide the solver with the current Tpetra matrix and vectors
   
   int solveSuccess;
   if (!callResolveInsteadOfSolve)
@@ -1680,36 +1712,36 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
     }
   }
 
-  auto e_lhs = T_to_E::vector(solver->lhs());
+  auto t_lhs = solver->lhs();
+  TEUCHOS_TEST_FOR_EXCEPTION(t_lhs == Teuchos::null, std::invalid_argument, "Solution::solveWithPrepopulatedStiffnessAndLoad(): solver LHS is null");
   if (_solutionStage == Teuchos::null)
   {
-    // replace values in our Epetra _lhsVector with those computed (in a Tpetra vector) by solver.
-    _lhsVector->Update(1.0, *e_lhs, 0.0);
+    // Treat the Tpetra vector as authoritative for the non-staged solve path.
+    _lhsVector = t_lhs;
   }
   else
   {
-    _lhsVectorCurrentStage->Update(1.0, *e_lhs, 0.0);
+    _lhsVectorCurrentStage = t_lhs;
     // copy from current-stage LHS into full LHS
-    const int numRHSes = _lhsVectorCurrentStage->NumVectors();
+    const int numRHSes = static_cast<int>(_lhsVectorCurrentStage->getNumVectors());
     const int solnStage = _solutionStage->getStage();
     for (int rhsOrdinal=0; rhsOrdinal<numRHSes; rhsOrdinal++)
     {
       SolutionComponent solutionComponent = (rhsOrdinal == 0) ? STANDARD_SOLUTION : INFLUENCE_SOLUTION;
       const int ordinalInFullLHS = solutionOrdinal(solutionComponent, solnStage);
-      (*_lhsVector)(ordinalInFullLHS)->Update(1.0, *(*_lhsVectorCurrentStage)(rhsOrdinal), 0.0);
+      auto fullVector  = _lhsVector->getVectorNonConst(ordinalInFullLHS);
+      auto stageVector = _lhsVectorCurrentStage->getVector(rhsOrdinal);
+      fullVector->update(Scalar(1.0), *stageVector, Scalar(0.0));
     }
   }
   
   TimeLogger::sharedInstance()->stopTimer(timerHandle);
   
   double timeSolve = timer.ElapsedTime();
-  Epetra_Vector timeSolveVector(timeMap);
-  timeSolveVector[0] = timeSolve;
-
-  int err = timeSolveVector.Norm1( &_totalTimeSolve );
-  err = timeSolveVector.MeanValue( &_meanTimeSolve );
-  err = timeSolveVector.MinValue( &_minTimeSolve );
-  err = timeSolveVector.MaxValue( &_maxTimeSolve );
+  _totalTimeSolve = MPIWrapper::sum(Comm, timeSolve);
+  _meanTimeSolve = _totalTimeSolve / numProcs;
+  _minTimeSolve = MPIWrapper::min(Comm, timeSolve);
+  _maxTimeSolve = MPIWrapper::max(Comm, timeSolve);
 
   return solveSuccess;
 }
@@ -1778,19 +1810,19 @@ int TSolution<Scalar>::solve(TSolverPtr<Scalar> solver)
   if (_solutionStage != Teuchos::null)
   {
     // use the b_i weights from tableau to update the 0/1 solutions in _lhsVector and _solutionForCellID
-    const int numRHSes = _rhsVector->NumVectors();
+    const int numRHSes = static_cast<int>(_rhsVector->getNumVectors());
     for (int finalSolutionOrdinal=0; finalSolutionOrdinal<numRHSes; finalSolutionOrdinal++)
     {
       SolutionComponent solutionComponent = (finalSolutionOrdinal == 0) ? STANDARD_SOLUTION : INFLUENCE_SOLUTION;
-      auto finalSolnVector = (*_lhsVector)(finalSolutionOrdinal);
+      auto finalSolnVector = _lhsVector->getVectorNonConst(finalSolutionOrdinal);
       auto & finalSolnCellCoefficients = _solutionForCellID[finalSolutionOrdinal];
       for (int stageOrdinal=1; stageOrdinal<=numStages; stageOrdinal++)
       {
         const int i = stageOrdinal - 1; // stageOrdinal is 1-based
         const int stageSolutionOrdinal = solutionOrdinal(solutionComponent, stageOrdinal);
-        auto stageSolnVector = (*_lhsVector)(stageSolutionOrdinal);
+        auto stageSolnVector = _lhsVector->getVector(stageSolutionOrdinal);
         const double b_i = tableau->b(i);
-        finalSolnVector->Update(b_i, *stageSolnVector, 1.0); // finalSolnVector += b_i * stageSolnVector
+        finalSolnVector->update(static_cast<Scalar>(b_i), *stageSolnVector, Scalar(1.0)); // finalSolnVector += b_i * stageSolnVector
         auto & stageSolnCellCoefficients = _solutionForCellID[stageSolutionOrdinal];
         for (auto & entry : stageSolnCellCoefficients)
         {
@@ -1887,11 +1919,25 @@ template <typename Scalar>
 void TSolution<Scalar>::importSolution()
 {
   TEUCHOS_FUNC_TIME_MONITOR("Solution::importSolution");
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  Epetra_Time timer(*Comm);
+  using LO = TMap::local_ordinal_type;
+  using GO = TMap::global_ordinal_type;
+  using Node = TMap::node_type;
 
-  auto lhsVector = (_solutionStage == Teuchos::null) ? _lhsVector : _lhsVectorCurrentStage;
-  const int numLHSes = lhsVector->NumVectors();
+  WallTimer timer;
+
+  TVectorPtr<Scalar> lhsVector;
+  if (_solutionStage == Teuchos::null)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_lhsVector == Teuchos::null, std::invalid_argument, "Solution::importSolution(): Tpetra LHS vector is null");
+    lhsVector = _lhsVector;
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_lhsVectorCurrentStage == Teuchos::null, std::invalid_argument, "Solution::importSolution(): current-stage Tpetra LHS vector is null");
+    lhsVector = _lhsVectorCurrentStage;
+  }
+
+  const int numLHSes = static_cast<int>(lhsVector->getNumVectors());
   int solutionOrdinalOffset = 0;
   if (_solutionStage != Teuchos::null)
   {
@@ -1912,27 +1958,23 @@ void TSolution<Scalar>::importSolution()
   }
 
 //  cout << "on rank " << rank << ", about to create myDofs container of size "<< globalDofIndicesForMyCells.size() << "\n";
-  const int myDofCount = static_cast<int>(globalDofIndicesForMyCells.size());
-  GlobalIndexTypeToCast myDofs[std::max(myDofCount,1)];
-  GlobalIndexTypeToCast* myDof = (myDofCount > 0) ? &myDofs[0] : NULL;
+  std::vector<GO> myDofs;
+  myDofs.reserve(globalDofIndicesForMyCells.size());
   for (GlobalIndexType globalDof : globalDofIndicesForMyCells)
   {
-    *myDof = static_cast<GlobalIndexTypeToCast>(globalDof);
-    myDof++;
+    myDofs.push_back(static_cast<GO>(globalDof));
   }
 //  cout << "on rank " << rank << ", about to create myCellsMap\n";
-  Epetra_Map     myCellsMap = Epetra_Map(-1, myDofCount, myDofs, 0, *Comm); // 0: IndexBase
+  TMapPtr myCellsMap = Teuchos::rcp(new TMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+                                             Teuchos::arrayViewFromVector(myDofs), 0, _mesh->TeuchosComm()));
 
-  // Import solution onto current processor
-  Epetra_Map partMap = getPartitionMap_Epetra();
-  Epetra_Import  solnImporter(myCellsMap, partMap);
-  Epetra_MultiVector  solnCoeff(myCellsMap, lhsVector->NumVectors());
+  // Import solution onto current processor.  Tpetra::Import takes source, target maps.
+  TMapPtr partMap = getPartitionMap();
+  Tpetra::Import<LO,GO,Node> solnImporter(partMap, myCellsMap);
+  TVectorPtr<Scalar> solnCoeff = Teuchos::rcp(new TVector<Scalar>(myCellsMap, lhsVector->getNumVectors()));
 //  cout << "on rank " << rank << ", about to Import\n";
-  solnCoeff.Import(*lhsVector, solnImporter, Insert);
+  solnCoeff->doImport(*lhsVector, solnImporter, Tpetra::REPLACE);
 //  cout << "on rank " << rank << ", returned from Import\n";
-
-  auto eSolnCoeff = Teuchos::rcp(&solnCoeff, false);
-  auto tSolnCoeff = E_to_T::vector(eSolnCoeff);
   
   // copy the dof coefficients into our data structure
   for (GlobalIndexType cellID : *myCellIDs)
@@ -1943,13 +1985,13 @@ void TSolution<Scalar>::importSolution()
       const int lhsOrdinal = 0;
       const int solutionOrdinal = solutionOrdinalOffset+lhsOrdinal;
       Camellia::FieldContainer<Scalar> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,tSolnCoeff);
+      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
       replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, cellDofs);
     }
     else
     {
       Camellia::FieldContainer<Scalar> cellDofs(numLHSes,_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,tSolnCoeff);
+      _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
       int numDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
       for (int lhsOrdinal=0; lhsOrdinal<numLHSes; lhsOrdinal++)
       {
@@ -1967,23 +2009,19 @@ void TSolution<Scalar>::importSolution()
 //  cout << "on rank " << rank << ", finished interpretation\n";
   double timeDistributeSolution = timer.ElapsedTime();
 
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
-  int indexBase = 0;
-  Epetra_Map timeMap(numProcs,indexBase,*Comm);
-  Epetra_Vector timeDistributeSolutionVector(timeMap);
-  timeDistributeSolutionVector[0] = timeDistributeSolution;
-
-  int err = timeDistributeSolutionVector.Norm1( &_totalTimeDistributeSolution );
-  err = timeDistributeSolutionVector.MeanValue( &_meanTimeDistributeSolution );
-  err = timeDistributeSolutionVector.MinValue( &_minTimeDistributeSolution );
-  err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
+  Teuchos_CommPtr teuchosComm = _mesh->Comm();
+  int numProcs = teuchosComm->getSize();
+  _totalTimeDistributeSolution = MPIWrapper::sum(teuchosComm, timeDistributeSolution);
+  _meanTimeDistributeSolution = _totalTimeDistributeSolution / numProcs;
+  _minTimeDistributeSolution = MPIWrapper::min(teuchosComm, timeDistributeSolution);
+  _maxTimeDistributeSolution = MPIWrapper::max(teuchosComm, timeDistributeSolution);
 }
 
 template <typename Scalar>
 void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndexType> &cellIDs)
 {
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  int rank = Comm->MyPID();
+  Teuchos_CommPtr Comm = _mesh->Comm();
+  int rank = Comm->getRank();
 
   // we require that all the cellIDs be locally known in terms of the geometry
   // (for distributed MeshTopology, this basically means that we only allow importing
@@ -2150,26 +2188,30 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
 template <typename Scalar>
 void TSolution<Scalar>::importGlobalSolution()
 {
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  Epetra_Time timer(*Comm);
+  using LO = TMap::local_ordinal_type;
+  using GO = TMap::global_ordinal_type;
+  using Node = TMap::node_type;
+
+  Teuchos_CommPtr Comm = _mesh->Comm();
+  WallTimer timer;
 
   GlobalIndexType globalDofCount = _mesh->globalDofAssignment()->globalDofCount();
 
-  GlobalIndexTypeToCast myDofs[globalDofCount];
-  GlobalIndexTypeToCast* myDof = (globalDofCount > 0) ? &myDofs[0] : NULL;
+  std::vector<GO> myDofs;
+  myDofs.reserve(globalDofCount);
   for (GlobalIndexType dofIndex = 0; dofIndex < globalDofCount; dofIndex++)
   {
-    *myDof = dofIndex;
-    myDof++;
+    myDofs.push_back(static_cast<GO>(dofIndex));
   }
 
-  Epetra_Map     myCellsMap(-1, globalDofCount, myDofs, 0, *Comm);
+  TMapPtr myCellsMap = Teuchos::rcp(new TMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+                                             Teuchos::arrayViewFromVector(myDofs), 0, _mesh->TeuchosComm()));
 
   // Import global solution onto each processor
-  Epetra_Map partMap = getPartitionMap_Epetra();
-  Epetra_Import  solnImporter(myCellsMap, partMap);
-  Epetra_Vector  solnCoeff(myCellsMap);
-  solnCoeff.Import(*_lhsVector, solnImporter, Insert);
+  TMapPtr partMap = getPartitionMap();
+  Tpetra::Import<LO,GO,Node> solnImporter(partMap, myCellsMap);
+  TVectorPtr<Scalar> solnCoeff = Teuchos::rcp(new TVector<Scalar>(myCellsMap, _lhsVector->getNumVectors()));
+  solnCoeff->doImport(*_lhsVector, solnImporter, Tpetra::REPLACE);
 
   int solutionCount = this->numSolutions();
   
@@ -2201,16 +2243,12 @@ void TSolution<Scalar>::importGlobalSolution()
   }
   double timeDistributeSolution = timer.ElapsedTime();
 
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
-  int indexBase = 0;
-  Epetra_Map timeMap(numProcs,indexBase,*Comm);
-  Epetra_Vector timeDistributeSolutionVector(timeMap);
-  timeDistributeSolutionVector[0] = timeDistributeSolution;
-
-  int err = timeDistributeSolutionVector.Norm1( &_totalTimeDistributeSolution );
-  err = timeDistributeSolutionVector.MeanValue( &_meanTimeDistributeSolution );
-  err = timeDistributeSolutionVector.MinValue( &_minTimeDistributeSolution );
-  err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
+  Teuchos_CommPtr teuchosComm = _mesh->Comm();
+  int numProcs = teuchosComm->getSize();
+  _totalTimeDistributeSolution = MPIWrapper::sum(teuchosComm, timeDistributeSolution);
+  _meanTimeDistributeSolution = _totalTimeDistributeSolution / numProcs;
+  _minTimeDistributeSolution = MPIWrapper::min(teuchosComm, timeDistributeSolution);
+  _maxTimeDistributeSolution = MPIWrapper::max(teuchosComm, timeDistributeSolution);
 }
 
 template <typename Scalar>
@@ -2232,8 +2270,6 @@ void TSolution<Scalar>::imposeBCs()
   TEUCHOS_FUNC_TIME_MONITOR("Solution::imposeBCs");
   narrate("imposeBCs()");
   int rank = _mesh->Comm()->getRank();
-
-  Epetra_Map partMap = getPartitionMap_Epetra();
 
   Camellia::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
   Camellia::FieldContainer<double> bcGlobalValuesFC;
@@ -2348,32 +2384,55 @@ void TSolution<Scalar>::imposeBCs()
 //      }
 //    }
     bcGlobalIndices[i_adjusted] = bcsToImposeThisRank[i].first;
-    bcGlobalValues[i_adjusted] = bcsToImposeThisRank[i].second;
+    bcGlobalValues[i_adjusted] = value;
     i_adjusted++;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(numBCs != i_adjusted, std::invalid_argument, "internal error: numBCs != i_adjusted");
   
-  Epetra_MultiVector v(partMap,_rhsVector->NumVectors());
-  v.PutScalar(0.0);
-  const int firstSolutionOrdinal = 0, goalSolutionOrdinal = 1;
-  const int numSolutions = this->numSolutions();
-  for (int i = 0; i < numBCs; i++)
+  using GO = typename TMatrix<Scalar>::global_ordinal_type;
+
+  std::set<GO> tpetraBCLocalRows;
+  std::set<GO> tpetraBCGlobalCols;
+  if ((_globalStiffMatrix != Teuchos::null) && (_rhsVector != Teuchos::null))
   {
-    v.ReplaceGlobalValue(bcGlobalIndices[i], firstSolutionOrdinal, bcGlobalValues[i]);
-    if (numSolutions > 1)
+    std::vector<GlobalIndexType> localBCGlobalIndices(bcGlobalIndices.begin(), bcGlobalIndices.end());
+    for (GlobalIndexType globalIndex : localBCGlobalIndices)
     {
-      // impose homogeneous constraints for the solution corresponding to goal RHS
-      v.ReplaceGlobalValue(bcGlobalIndices[i], goalSolutionOrdinal, 0.0);
+      tpetraBCLocalRows.insert(static_cast<GO>(globalIndex));
+    }
+
+    std::vector<GlobalIndexType> allBCGlobalIndices;
+    std::vector<int> offsets;
+    MPIWrapper::allGatherVariable(_mesh->TeuchosComm(), allBCGlobalIndices, localBCGlobalIndices, offsets);
+    for (GlobalIndexType globalIndex : allBCGlobalIndices)
+    {
+      tpetraBCGlobalCols.insert(static_cast<GO>(globalIndex));
     }
   }
+
+  const int firstSolutionOrdinal = 0, goalSolutionOrdinal = 1;
+  const int numSolutions = this->numSolutions();
   
   _bcDofCount = MPIWrapper::sum(this->mesh()->Comm(), GlobalIndexType(numBCs));
   
-  Epetra_MultiVector rhsDirichlet(partMap,_rhsVector->NumVectors());
-  _globalStiffMatrix->Apply(v,rhsDirichlet);
-  
-  // Update right-hand side
-  _rhsVector->Update(-1.0,rhsDirichlet,1.0);
+  TVector<Scalar> v2(_rhsVector->getMap(), _rhsVector->getNumVectors());
+  v2.putScalar(Scalar(0.0));
+  for (int i=0; i<numBCs; i++)
+  {
+    GO globalIndex = static_cast<GO>(bcGlobalIndices[i]);
+    if (_rhsVector->getMap()->isNodeGlobalElement(globalIndex))
+    {
+      v2.replaceGlobalValue(globalIndex, firstSolutionOrdinal, bcGlobalValues[i]);
+      if (numSolutions > 1)
+      {
+        v2.replaceGlobalValue(globalIndex, goalSolutionOrdinal, Scalar(0.0));
+      }
+    }
+  }
+
+  TVector<Scalar> rhsDirichlet2(_rhsVector->getMap(), _rhsVector->getNumVectors());
+  _globalStiffMatrix->apply(v2, rhsDirichlet2, Teuchos::NO_TRANS, Scalar(1.0), Scalar(0.0));
+  _rhsVector->update(Scalar(-1.0), rhsDirichlet2, Scalar(1.0));
   
   if (numBCs == 0)
   {
@@ -2381,40 +2440,32 @@ void TSolution<Scalar>::imposeBCs()
   }
   else
   {
-    int err = _rhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndices[0],&bcGlobalValues[0]);
-    if (err != 0)
+    auto rhsMap = _rhsVector->getMap();
+    auto lhsMap = _lhsVector->getMap();
+    for (int i=0; i<numBCs; i++)
     {
-      cout << "Error code " << err << " returned by rhsVector.ReplaceGlobalValues()\n";
-    }
-    err = _lhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndices[0],&bcGlobalValues[0],firstSolutionOrdinal);
-    if (err != 0)
-    {
-      cout << "Error code " << err << " returned by lhsVector.ReplaceGlobalValues()\n";
-    }
-    if (numSolutions > 1)
-    {
-      err = _lhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndices[0],&goalBCValues[0],goalSolutionOrdinal);
-    }
-    if (err != 0)
-    {
-      cout << "Error code " << err << " returned by lhsVector.ReplaceGlobalValues()\n";
+      GO globalIndex = static_cast<GO>(bcGlobalIndices[i]);
+      if (rhsMap->isNodeGlobalElement(globalIndex))
+      {
+        _rhsVector->replaceGlobalValue(globalIndex, firstSolutionOrdinal, bcGlobalValues[i]);
+        if (numSolutions > 1)
+        {
+          _rhsVector->replaceGlobalValue(globalIndex, goalSolutionOrdinal, goalBCValues[i]);
+        }
+      }
+      if (lhsMap->isNodeGlobalElement(globalIndex))
+      {
+        _lhsVector->replaceGlobalValue(globalIndex, firstSolutionOrdinal, bcGlobalValues[i]);
+        if (numSolutions > 1)
+        {
+          _lhsVector->replaceGlobalValue(globalIndex, goalSolutionOrdinal, goalBCValues[i]);
+        }
+      }
     }
   }
   // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
-  //  and add one to diagonal.
-  std::vector<int> bcLocalIndices(numBCs);
-  for (int i=0; i<numBCs; i++)
-  {
-    bcLocalIndices[i] = _globalStiffMatrix->LRID(bcGlobalIndices[i]);
-  }
-  if (numBCs == 0)
-  {
-    Apply_OAZToMatrix(NULL, 0, *_globalStiffMatrix);
-  }
-  else
-  {
-    Apply_OAZToMatrix(bcLocalIndices.data(), numBCs, *_globalStiffMatrix);
-  }
+  // and add one to diagonal.
+  Apply_OAZToMatrix(tpetraBCLocalRows, tpetraBCGlobalCols, _globalStiffMatrix);
 }
 
 template <typename Scalar>
@@ -2430,101 +2481,95 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "imposeZMCsUsingLagrange called when _zmcsAsRankOneUpdate is true!");
   }
 
-  Epetra_Map partMap = getPartitionMap_Epetra();
-
-  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-  int localRowIndex = myGlobalIndicesSet.size();
-  int numLocalActiveElements = _mesh->globalDofAssignment()->cellsInPartition(rank).size();
-  localRowIndex += numLocalActiveElements * _lagrangeConstraints->numElementConstraints() + _lagrangeConstraints->numGlobalConstraints();
-
-//  Epetra_FECrsMatrix* globalStiffness = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
-//  if (globalStiffness==NULL) {
-//
-//  }
-
-  // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
-  for (int trialID : zeroMeanConstraints)
+  if (_globalStiffMatrix != Teuchos::null)
   {
-    // sample an element to make sure that the basis used for trialID is nodal
-    // (this is assumed in our imposition mechanism)
-    if (_mesh->cellIDsInPartition().size() > 0)
+    using GO = typename TMatrix<Scalar>::global_ordinal_type;
+
+    set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
+    int localRowIndex = myGlobalIndicesSet.size();
+    int numLocalActiveElements = _mesh->globalDofAssignment()->cellsInPartition(rank).size();
+    localRowIndex += numLocalActiveElements * _lagrangeConstraints->numElementConstraints() + _lagrangeConstraints->numGlobalConstraints();
+
+    // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
+    for (int trialID : zeroMeanConstraints)
     {
-      GlobalIndexType myFirstActiveCellID = *_mesh->cellIDsInPartition().begin();
-      ElementTypePtr elemTypePtr = _mesh->getElementType(myFirstActiveCellID);
-      BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-      if (!trialBasis->isNodal())
+      // sample an element to make sure that the basis used for trialID is nodal
+      // (this is assumed in our imposition mechanism)
+      if (_mesh->cellIDsInPartition().size() > 0)
       {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
-      }
-    }
-
-    long long zmcIndex;
-    if (rank==0)
-      zmcIndex = partMap.GID64(localRowIndex);
-    else
-      zmcIndex = 0;
-
-    zmcIndex = MPIWrapper::sum(_mesh->Comm(),zmcIndex);
-
-    if (_zmcsAsLagrangeMultipliers)
-    {
-      //    cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-      Camellia::FieldContainer<Scalar> basisIntegrals;
-      Camellia::FieldContainer<GlobalIndexTypeToCast> globalIndices;
-      integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
-
-      Camellia::FieldContainer<int> offsets;
-      Camellia::FieldContainer<Scalar> allBasisIntegrals;
-      MPIWrapper::allGatherVariable(_mesh->Comm(),allBasisIntegrals,basisIntegrals,offsets);
-
-//      if (rank==0) cout << "allBasisIntegrals:\n" << allBasisIntegrals;
-
-      Camellia::FieldContainer<GlobalIndexTypeToCast> allGlobalIndices;
-      MPIWrapper::allGatherVariable(_mesh->Comm(),allGlobalIndices,globalIndices,offsets);
-
-//      if (rank==0) cout << "allGlobalIndices:\n" << allGlobalIndices;
-
-      if ((rank == 0) && (allBasisIntegrals.size() > 0))
-      {
-        // insert the row at zmcIndex with the gathered basis integrals
-        _globalStiffMatrix->InsertGlobalValues(zmcIndex,allBasisIntegrals.size(),&allBasisIntegrals(0),&allGlobalIndices(0));
-//        cout << "Inserted globalValues for row " << zmcIndex << "; values:\n" << allBasisIntegrals << "indices:\n" << allGlobalIndices;
-      }
-
-      // here, we increase the size of the system to accommodate the zmc...
-      if (basisIntegrals.size() > 0)
-      {
-        // insert column:
-        for (int valueOrdinal=0; valueOrdinal<basisIntegrals.size(); valueOrdinal++)
+        GlobalIndexType myFirstActiveCellID = *_mesh->cellIDsInPartition().begin();
+        ElementTypePtr elemTypePtr = _mesh->getElementType(myFirstActiveCellID);
+        BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+        if (!trialBasis->isNodal())
         {
-//          cout << "Inserting globalValues for (" << globalIndices(valueOrdinal)  << "," << zmcIndex << ") = " << basisIntegrals(valueOrdinal) << endl;
-          _globalStiffMatrix->InsertGlobalValues(globalIndices(valueOrdinal),1,&basisIntegrals(valueOrdinal),&zmcIndex);
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
+        }
+      }
+
+      long long zmcIndex;
+      if (rank==0)
+        zmcIndex = _globalStiffMatrix->getRowMap()->getGlobalElement(localRowIndex);
+      else
+        zmcIndex = 0;
+
+      zmcIndex = MPIWrapper::sum(_mesh->Comm(),zmcIndex);
+
+      if (_zmcsAsLagrangeMultipliers)
+      {
+        Camellia::FieldContainer<Scalar> basisIntegrals;
+        Camellia::FieldContainer<GlobalIndexTypeToCast> globalIndices;
+        integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
+
+        Camellia::FieldContainer<int> offsets;
+        Camellia::FieldContainer<Scalar> allBasisIntegrals;
+        MPIWrapper::allGatherVariable(_mesh->Comm(),allBasisIntegrals,basisIntegrals,offsets);
+
+        Camellia::FieldContainer<GlobalIndexTypeToCast> allGlobalIndices;
+        MPIWrapper::allGatherVariable(_mesh->Comm(),allGlobalIndices,globalIndices,offsets);
+
+        if ((rank == 0) && (allBasisIntegrals.size() > 0))
+        {
+          Teuchos::Array<GO> cols(allGlobalIndices.size());
+          for (int i=0; i<allGlobalIndices.size(); i++) cols[i] = allGlobalIndices(i);
+          Teuchos::Array<Scalar> vals(allBasisIntegrals.size());
+          for (int i=0; i<allBasisIntegrals.size(); i++) vals[i] = allBasisIntegrals(i);
+          _globalStiffMatrix->insertGlobalValues(static_cast<GO>(zmcIndex), cols(), vals());
         }
 
-        // old, FECrsMatrix version below:
-//        globalStiffness->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
-//        // insert column:
-//        globalStiffness->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-      }
+        // here, we increase the size of the system to accommodate the zmc...
+        if (basisIntegrals.size() > 0)
+        {
+          // insert column:
+          for (int valueOrdinal=0; valueOrdinal<basisIntegrals.size(); valueOrdinal++)
+          {
+            Teuchos::Array<GO> col(1, static_cast<GO>(zmcIndex));
+            Teuchos::Array<Scalar> val(1, basisIntegrals(valueOrdinal));
+            _globalStiffMatrix->insertGlobalValues(static_cast<GO>(globalIndices(valueOrdinal)), col(), val());
+          }
+        }
 
-      //      cout << "in zmc, diagonal entry: " << rho << endl;
-      //rho /= numValues;
-      if (rank==0)   // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
-      {
-        Scalar rho_entry = - 1.0 / _zmcRho;
-        _globalStiffMatrix->InsertGlobalValues(zmcIndex,1,&rho_entry,&zmcIndex);
+        if (rank==0)   // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
+        {
+          Scalar rho_entry = - 1.0 / _zmcRho;
+          Teuchos::Array<GO> col(1, static_cast<GO>(zmcIndex));
+          Teuchos::Array<Scalar> val(1, rho_entry);
+          _globalStiffMatrix->insertGlobalValues(static_cast<GO>(zmcIndex), col(), val());
+        }
       }
-    }
-    else
-    {
-      // put ones in the diagonal on rank 0
-      if (rank==0)   // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
+      else
       {
-        Scalar one = 1.0;
-        _globalStiffMatrix->InsertGlobalValues(zmcIndex,1,&one,&zmcIndex);
+        // put ones in the diagonal on rank 0
+        if (rank==0)   // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
+        {
+          Scalar one = 1.0;
+          Teuchos::Array<GO> col(1, static_cast<GO>(zmcIndex));
+          Teuchos::Array<Scalar> val(1, one);
+          _globalStiffMatrix->insertGlobalValues(static_cast<GO>(zmcIndex), col(), val());
+        }
       }
+      if (rank==0) localRowIndex++;
     }
-    if (rank==0) localRowIndex++;
+    return;
   }
   // end of ZMC imposition
 }
@@ -2545,10 +2590,7 @@ template <typename Scalar>
 void TSolution<Scalar>::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter)
 {
   _dofInterpreter = dofInterpreter;
-//  Epetra_Map map = getPartitionMap();
-//  Teuchos::RCP<Epetra_Map> mapPtr = Teuchos::rcp( new Epetra_Map(map) ); // copy map to RCP
-//  _mesh->boundary().setDofInterpreter(_dofInterpreter.get(), mapPtr);
-  // TODO: notice that the above call to Boundary::setDofInterpreter() will cause incompatibilities if two solutions share
+  // TODO: notice that a Boundary::setDofInterpreter() call here would cause incompatibilities if two solutions share
   //       a mesh but not a dof interpreter.  This basically only would come up in standard cases if one solution has
   //       had setUseCondensedSolve(true) called, and the other has not.  Not too likely to arise in production code, but
   //       this did come up in the tests in SolutionTests.  In any case, it indicates a poor design; the BC enforcement code
@@ -2558,15 +2600,9 @@ void TSolution<Scalar>::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterp
 }
 
 template <typename Scalar>
-Epetra_MultiVector* TSolution<Scalar>::getGlobalCoefficients()
+TVectorPtr<Scalar> TSolution<Scalar>::getGlobalCoefficients()
 {
-  return (*_lhsVector)(0);
-}
-
-template <typename Scalar>
-TVectorPtr<Scalar> TSolution<Scalar>::getGlobalCoefficients2()
-{
-  return _lhsVector2;
+  return _lhsVector;
 }
 
 template <typename Scalar>
@@ -2719,28 +2755,16 @@ double TSolution<Scalar>::meshMeasure()
 template <typename Scalar>
 double TSolution<Scalar>::InfNormOfSolutionGlobal(int trialID)
 {
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  int numProcs = Comm->NumProc();
-
-  int indexBase = 0;
-  Epetra_Map procMap(numProcs,indexBase,*Comm);
+  Teuchos_CommPtr Comm = _mesh->Comm();
   double localInfNorm = InfNormOfSolution(trialID);
-  Epetra_Vector infNormVector(procMap);
-  infNormVector[0] = localInfNorm;
-  double globalInfNorm;
-  int errCode = infNormVector.NormInf( &globalInfNorm );
-  if (errCode!=0)
-  {
-    cout << "Error in infNormOfSolutionGlobal, errCode = " << errCode << endl;
-  }
-  return globalInfNorm;
+  return MPIWrapper::max(Comm, localInfNorm);
 }
 
 template <typename Scalar>
 double TSolution<Scalar>::InfNormOfSolution(int trialID)
 {
-  Epetra_CommPtr Comm = MPIWrapper::EpetraComm(_mesh->Comm());
-  int rank = Comm->MyPID();
+  Teuchos_CommPtr Comm = _mesh->Comm();
+  int rank = Comm->getRank();
   
   double value = 0.0;
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
@@ -2807,15 +2831,9 @@ Teuchos::RCP<LagrangeConstraints> TSolution<Scalar>::lagrangeConstraints() const
 }
 
 template <typename Scalar>
-Teuchos::RCP<Epetra_FEVector> TSolution<Scalar>::getLHSVector()
+TVectorPtr<Scalar> TSolution<Scalar>::getLHSVector()
 {
   return _lhsVector;
-}
-
-template <typename Scalar>
-TVectorPtr<Scalar> TSolution<Scalar>::getLHSVector2()
-{
-  return _lhsVector2;
 }
 
 template <typename Scalar>
@@ -3019,27 +3037,15 @@ void TSolution<Scalar>::discardInactiveCellCoefficients()
 }
 
 template <typename Scalar>
-Teuchos::RCP<Epetra_FEVector> TSolution<Scalar>::getRHSVector()
+TVectorPtr<Scalar> TSolution<Scalar>::getRHSVector()
 {
   return _rhsVector;
 }
 
 template <typename Scalar>
-TVectorPtr<Scalar> TSolution<Scalar>::getRHSVector2()
-{
-  return _rhsVector2;
-}
-
-template <typename Scalar>
-Teuchos::RCP<Epetra_CrsMatrix> TSolution<Scalar>::getStiffnessMatrix()
+TMatrixPtr<Scalar> TSolution<Scalar>::getStiffnessMatrix()
 {
   return _globalStiffMatrix;
-}
-
-template <typename Scalar>
-TMatrixPtr<Scalar> TSolution<Scalar>::getStiffnessMatrix2()
-{
-  return _globalStiffMatrix2;
 }
 
 template <typename Scalar>
@@ -3055,19 +3061,10 @@ void TSolution<Scalar>::setIdentifier(const std::string &solutionIdentifier)
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness)
+void TSolution<Scalar>::setStiffnessMatrix(TMatrixPtr<Scalar> stiffness)
 {
   narrate("setStiffnessMatrix()");
-//  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
   _globalStiffMatrix = stiffness;
-}
-
-template <typename Scalar>
-void TSolution<Scalar>::setStiffnessMatrix2(TMatrixPtr<Scalar> stiffness)
-{
-  narrate("setStiffnessMatrix2()");
-//  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
-  _globalStiffMatrix2 = stiffness;
 }
 
 template <typename Scalar>
@@ -3775,7 +3772,15 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
   replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, solnCoeffsToSet);
   if (_lhsVector != Teuchos::null)
   {
-    _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID,solnCoeffsToSet,*_lhsVector,solutionOrdinal);
+    auto condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<Scalar>*>(_dofInterpreter.get());
+    if (condensedDofInterpreter != NULL)
+    {
+      condensedDofInterpreter->interpretLocalCoefficients(cellID, solnCoeffsToSet, _lhsVector, solutionOrdinal);
+    }
+    else
+    {
+      _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID, solnCoeffsToSet, _lhsVector, solutionOrdinal);
+    }
   }
 }
 
@@ -3822,9 +3827,14 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
       Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
       _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideIndex, solnCoeffsToSet, globalCoefficients, globalDofIndices);
 
+      auto globalMap = _lhsVector->getMap();
       for (int i=0; i<globalCoefficients.size(); i++)
       {
-        _lhsVector->ReplaceGlobalValue(static_cast<GO>(globalDofIndices[i]), solutionOrdinal, globalCoefficients[i]);
+        GO globalDofIndex = static_cast<GO>(globalDofIndices[i]);
+        if (globalMap->isNodeGlobalElement(globalDofIndex))
+        {
+          _lhsVector->replaceGlobalValue(globalDofIndex, solutionOrdinal, globalCoefficients[i]);
+        }
       }
     }
   }
@@ -3896,7 +3906,7 @@ void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool red
 
   setDofInterpreter(dofInterpreter);
 
-  solve(globalSolver);
+  this->solve(globalSolver);
 
   setDofInterpreter(oldDofInterpreter);
 }
@@ -4088,129 +4098,7 @@ int TSolution<Scalar>::solutionOrdinal(SolutionComponent solutionComponent, int 
 }
 
 template <typename Scalar>
-TMapPtr TSolution<Scalar>::getPartitionMap()
-{
-  Epetra_Map partMap = getPartitionMap_Epetra();
-  return E_to_T::map(partMap);
-}
-
-template <typename Scalar>
-Epetra_Map TSolution<Scalar>::getPartitionMap_Epetra()
-{
-  int rank = _mesh->Comm()->getRank();
-  auto epetraComm = MPIWrapper::EpetraComm(_mesh->Comm());
-
-  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
-  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
-  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-  int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : static_cast<int>(zeroMeanConstraints.size());
-
-  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,epetraComm.get());
-  return partMap;
-}
-
-//template <typename Scalar>
-//Epetra_Map TSolution<Scalar>::getPartitionMapSolutionDofsOnly()   // omits lagrange multipliers, ZMCs, etc.
-//{
-//  Epetra_Map partMapWithZMC = getPartitionMap_Epetra();
-//  using GO = TMap::global_ordinal_type;
-//  vector<GO> myGlobalIndices(partMapWithZMC.NumMyElements());
-//  partMapWithZMC.MyGlobalElements64(&myGlobalIndices[0]);
-//  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
-//  vector<int> myGlobalDofs;
-//  for (vector<int>::iterator myEntry = myGlobalIndices.begin(); myEntry != myGlobalIndices.end(); myEntry++)
-//  {
-//    if (*myEntry < numGlobalDofs)
-//    {
-//      myGlobalDofs.push_back(*myEntry);
-//    }
-//  }
-//  int indexBase = 0;
-//  Epetra_Map partMap(numGlobalDofs, myGlobalDofs.size(), &myGlobalDofs[0], indexBase, partMapWithZMC.Comm());
-//  return partMap;
-//}
-
-template <typename Scalar>
-Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
-    int zeroMeanConstraintsSize, const Epetra_Comm* Comm )
-{
-  using GO = TMap::global_ordinal_type;
-  
-  int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
-  const set<GlobalIndexType>* cellIDsInPartition = &_mesh->globalDofAssignment()->cellsInPartition(rank);
-  IndexType numMyElements = cellIDsInPartition->size();
-  int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
-  int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
-
-  // ordering is:
-  // - regular dofs
-  // - element lagrange
-  // - global lagrange
-  // - zero-mean constraints
-
-  // determine the local dofs we have, and what their global indices are:
-  int localDofsSize = static_cast<int>(myGlobalIndicesSet.size() + numElementLagrange);
-  if (rank == 0)
-  {
-    // global Lagrange and zero-mean constraints belong to rank 0
-    localDofsSize += zeroMeanConstraintsSize + numGlobalLagrange;
-  }
-
-  std::vector<GO> myGlobalIndices(localDofsSize);
-
-  // copy from set object into the allocated array
-  GlobalIndexType offset = 0;
-  for (GlobalIndexType myGlobalIndex : myGlobalIndicesSet)
-  {
-    myGlobalIndices[offset++] = myGlobalIndex;
-  }
-  GO cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
-  GO globalIndex = cellOffset + numGlobalDofs;
-  for (int elemLagrangeIndex=0; elemLagrangeIndex<_lagrangeConstraints->numElementConstraints(); elemLagrangeIndex++)
-  {
-    for (IndexType cellIndex=0; cellIndex<numMyElements; cellIndex++)
-    {
-      myGlobalIndices[offset++] = globalIndex++;
-    }
-  }
-
-  if ( rank == 0 )
-  {
-    // set up the zmcs and global Lagrange constraints, which come at the end...
-    for (int i=0; i<numGlobalLagrange; i++)
-    {
-      myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange;
-    }
-    for (int i=0; i<zeroMeanConstraintsSize; i++)
-    {
-      myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange + numGlobalLagrange;
-    }
-  }
-
-  if (offset != localDofsSize)
-  {
-    cout << "WARNING: Apparent internal error in TSolution<Scalar>::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
-  }
-
-  int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
-
-  GO indexBase = 0;
-  //cout << "process " << rank << " about to construct partMap.\n";
-  //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-//  cout << "process " << rank << " about to construct partMap; totalRows = " << totalRows;
-//  cout << "; localDofsSize = " << localDofsSize << ".\n";
-//  cout << "num regular GlobalDofIndices:          " << numGlobalDofs << endl;
-//  cout << "num element Lagrange GlobalDofIndices: " << globalNumElementLagrange << endl;
-//  cout << "num global Lagrange GlobalDofIndices:  " << numGlobalLagrange << endl;
-//  cout << "num zero mean constraints:             " << zeroMeanConstraintsSize << endl;
-  Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices.data(), indexBase, *Comm);
-//  cout << "On rank " << rank << ", constructed partMap with " << partMap.NumGlobalElements() << " global elements.\n";
-
-  return partMap;
-}
-
-template <typename Scalar>
-MapPtr TSolution<Scalar>::getPartitionMap2()
+MapPtr TSolution<Scalar>::getPartitionMap()
 {
   Teuchos_CommPtr Comm = _mesh->TeuchosComm();
   int rank = Comm->getRank();
@@ -4220,12 +4108,12 @@ MapPtr TSolution<Scalar>::getPartitionMap2()
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
 
-  MapPtr partMap = getPartitionMap2(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,Comm);
+  MapPtr partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,Comm);
   return partMap;
 }
 
 // MapPtr TSolution<Scalar>::getPartitionMapSolutionDofsOnly2() { // omits lagrange multipliers, ZMCs, etc.
-//   MapPtr partMapWithZMC = getPartitionMap2();
+//   MapPtr partMapWithZMC = getPartitionMap();
 //   using GO = TMap::global_ordinal_type;
 //   vector<GO> myGlobalIndices(partMapWithZMC.NumMyElements());
 //   partMapWithZMC.MyGlobalElements64(&myGlobalIndices[0]);
@@ -4242,15 +4130,15 @@ MapPtr TSolution<Scalar>::getPartitionMap2()
 // }
 
 template <typename Scalar>
-MapPtr TSolution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
+MapPtr TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
     int zeroMeanConstraintsSize, Teuchos_CommPtr Comm )
 {
   using LO = ::Tpetra::Details::DefaultTypes::local_ordinal_type;
   using GO = ::Tpetra::Details::DefaultTypes::global_ordinal_type;
   
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
-  vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
-  LO numMyElements = elements.size();
+  const set<GlobalIndexType>* cellIDsInPartition = &_mesh->globalDofAssignment()->cellsInPartition(rank);
+  LO numMyElements = static_cast<LO>(cellIDsInPartition->size());
   int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
   int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
 
@@ -4424,6 +4312,8 @@ void TSolution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &f
   {
     projectOntoCell(functionMap,cellID,sideOrdinal,solutionOrdinal);
   }
+
+
 }
 
 template <typename Scalar>
@@ -4912,9 +4802,9 @@ void TSolution<Scalar>::saveToHDF5(string filename)
     // then we'll save the zero solution.
     initializeLHSVector();
   }
-  auto tpetraVector = E_to_T::vector(_lhsVector);
+  TVectorPtr<Scalar> tpetraVector = _lhsVector;
   
-  // For now anyway, we write in exactly the format that EpetraExt did.
+  // Keep the existing on-disk vector format for compatibility.
   std::string GroupName = "Solution";
   hdf5.Write(GroupName, tpetraVector, false); // false: don't write transpose
   
@@ -4935,14 +4825,9 @@ void TSolution<Scalar>::loadFromHDF5(string filename)
   hdf5.Open(filename, H5F_ACC_RDONLY);
   
   auto tVector = hdf5.ReadMultiVector("Solution", partMap);
+  _lhsVector = tVector;
 
   hdf5.Close();
-  
-  // convert to Epetra vector
-  auto eVector = T_to_E::vector(tVector);
-  // import into our FEVector
-  Epetra_Import  solnImporter(_lhsVector->Map(), eVector->Map());
-  _lhsVector->Import(*eVector, solnImporter, Insert);
   
   importSolution();
 }
@@ -4980,7 +4865,7 @@ void TSolution<Scalar>::setGlobalSolutionFromCellLocalCoefficients()
     return; // initializeLHSVector() calls setGlobalSolutionFromCellLocalCoefficients(), so return now to avoid redundant execution of the below.
   }
 
-  _lhsVector->PutScalar(0);
+  _lhsVector->putScalar(0.0);
 
   // set initial _lhsVector (initial guess for iterative solvers)
   // when we have a tableau defined, we only set the first component (and second if goal-oriented RHS defined)
@@ -4995,7 +4880,15 @@ void TSolution<Scalar>::setGlobalSolutionFromCellLocalCoefficients()
         int localTrialDofCount = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
         if (localTrialDofCount == _solutionForCellID[solutionOrdinal][cellID].size())   // guard against cases when solutions not registered with their meshes have their meshes p-refined beneath them.  In such a case, we'll just ignore the previous solution coefficients on the cell.
         {
-          _dofInterpreter->interpretLocalCoefficients(cellID, _solutionForCellID[solutionOrdinal][cellID], *_lhsVector, solutionOrdinal);
+          auto condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<Scalar>*>(_dofInterpreter.get());
+          if (condensedDofInterpreter != NULL)
+          {
+            condensedDofInterpreter->interpretLocalCoefficients(cellID, _solutionForCellID[solutionOrdinal][cellID], _lhsVector, solutionOrdinal);
+          }
+          else
+          {
+            _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID, _solutionForCellID[solutionOrdinal][cellID], _lhsVector, solutionOrdinal);
+          }
         }
       }
     }

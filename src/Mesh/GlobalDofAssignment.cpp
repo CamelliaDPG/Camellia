@@ -958,39 +958,6 @@ int GlobalDofAssignment::getTestOrderEnrichment()
   return _testOrderEnhancement;
 }
 
-void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
-                                                     Epetra_MultiVector &globalCoefficients, int columnOrdinal)
-{
-  DofOrderingPtr trialOrder = elementType(cellID)->trialOrderPtr;
-  Camellia::FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
-  for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++)
-  {
-    int trialID = *trialIDIt;
-    const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(trialID);
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
-    {
-      int sideOrdinal = *sideIt;
-      int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
-      basisCoefficients.resize(basisCardinality);
-      vector<int> localDofIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
-      for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
-      {
-        int localDofIndex = localDofIndices[basisOrdinal];
-        basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
-      }
-      Camellia::FieldContainer<double> fittedGlobalCoefficients;
-      Camellia::FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
-      interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
-      for (int i=0; i<fittedGlobalCoefficients.size(); i++)
-      {
-        GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
-        globalCoefficients.ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndex, columnOrdinal, fittedGlobalCoefficients[i]); // for globalDofIndex not owned by this rank, doesn't do anything...
-//        cout << "global coefficient " << globalDofIndex << " = " << fittedGlobalCoefficients[i] << endl;
-      }
-    }
-  }
-}
-
 template <typename Scalar>
 void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localCoefficients,
                                                      TVectorPtr<Scalar> globalCoefficients, int columnOrdinal)
@@ -1015,10 +982,14 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
       Camellia::FieldContainer<Scalar> fittedGlobalCoefficients;
       Camellia::FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
       interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
+      auto globalMap = globalCoefficients->getMap();
       for (int i=0; i<fittedGlobalCoefficients.size(); i++)
       {
         GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
-        globalCoefficients->replaceGlobalValue(globalDofIndex, columnOrdinal, fittedGlobalCoefficients[i]); // for globalDofIndex not owned by this rank, doesn't do anything...
+        if (globalMap->isNodeGlobalElement(globalDofIndex))
+        {
+          globalCoefficients->replaceGlobalValue(globalDofIndex, columnOrdinal, fittedGlobalCoefficients[i]);
+        }
       }
     }
   }

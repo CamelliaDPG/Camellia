@@ -32,6 +32,7 @@
 #include "RieszRep.h"
 #include "BasisFactory.h"
 #include "GnuPlotUtil.h"
+#include "MPIWrapper.h"
 
 
 #include "CamelliaDebugUtility.h"
@@ -46,6 +47,14 @@ public:
   {
     double tol = 1e-14;
     return (abs(y-1.0) < tol);
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
+  {
+    const int numPoints = points.extent(0);
+    for (int i=0; i<numPoints; i++)
+    {
+      pointsMatch(i) = matchesPoint(points(i,0), points(i,1));
+    }
   }
 };
 
@@ -98,6 +107,14 @@ public:
     }
     else {
       return ( sqrt(x*x+y*y) < _radius+tol );
+    }
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
+  {
+    const int numPoints = points.extent(0);
+    for (int i=0; i<numPoints; i++)
+    {
+      pointsMatch(i) = matchesPoint(points(i,0), points(i,1));
     }
   }
 };
@@ -153,12 +170,20 @@ public:
     double tol = 5e-10; // be generous b/c dealing with parametric curve
     return (sqrt(x*x+y*y) < _radius+tol);
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
+  {
+    const int numPoints = points.extent(0);
+    for (int i=0; i<numPoints; i++)
+    {
+      pointsMatch(i) = matchesPoint(points(i,0), points(i,1));
+    }
+  }
 };
 
 class RampBoundaryFunction_U1 : public SimpleFunction<double> {
   double _eps; // ramp width
 public:
-  RampBoundaryFunction_U1(double eps) {
+  RampBoundaryFunction_U1(double eps) : SimpleFunction<double>("RampBoundaryFunction_U1", 2) {
     _eps = eps;
   }
   double value(double x, double y) {
@@ -177,7 +202,7 @@ public:
 class ParabolicInflowFunction_U1 : public SimpleFunction<double> {
   double _height; // height of channel
 public:
-  ParabolicInflowFunction_U1(double height) {
+  ParabolicInflowFunction_U1(double height) : SimpleFunction<double>("ParabolicInflowFunction_U1", 2) {
     _height = height;
   }
   double value(double x, double y) {
@@ -194,7 +219,7 @@ class ParabolicInflowFunction_Tun : public SimpleFunction<double> {
   double _muP; // polymeric viscosity
   double _lambda; // relaxation time
 public:
-  ParabolicInflowFunction_Tun(double height, double muP, double lambda, int i, int j) {
+  ParabolicInflowFunction_Tun(double height, double muP, double lambda, int i, int j) : SimpleFunction<double>("ParabolicInflowFunction_Tun", 2) {
     _i = i;
     _j = j;
     _height = height;
@@ -279,7 +304,7 @@ public:
       double cellError = measureEntry.second;
       localMax = max(localMax,cellError);
     }
-    _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+    globalMax = MPIWrapper::max(_mesh->Comm(), localMax);
 
     // add loop through elements to refine elements on the cylinder boundary
     for (auto entry : *rankLocalEnergyError)
@@ -302,17 +327,12 @@ public:
 int main(int argc, char *argv[])
 {
 
-#ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
+  auto Comm = MPIWrapper::CommWorld();
 
   int commRank = Teuchos::GlobalMPISession::getRank();
 
-  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+  Comm->Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
@@ -818,7 +838,7 @@ int main(int argc, char *argv[])
         // }
         while (meshSequence[0]->numGlobalDofs() < 100000 && meshSequence.size() > 2)
           meshSequence.erase(meshSequence.begin());
-        gmgSolver = Teuchos::rcp(new GMGSolver(solutionIncrement, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
+        gmgSolver = Teuchos::rcp(new GMGSolver(solutionIncrement, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, GMGOperator::DEFAULT_ADDITIVE_SCHWARZ, coarseSolver, useCondensedSolve));
         gmgSolver->setUseConjugateGradient(useConjugateGradient);
         int azOutput = 20; // print residual every 20 CG iterations
         gmgSolver->setAztecOutput(azOutput);

@@ -10,10 +10,8 @@
 #include "Camellia_FieldContainerConversion.hpp"
 #include "CamelliaCellTools.h"
 #include "CubatureFactory.h"
-#include "E_to_T.hpp"
 #include "GDAMinimumRule.h"
-
-#include "Epetra_SerialComm.h"
+#include "MPIWrapper.h"
 
 using namespace Camellia;
 using namespace std;
@@ -120,12 +118,13 @@ bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol)
   Camellia::FieldContainer<double> globalCoefficientsActual(numGlobalDofs);
   Camellia::FieldContainer<double> localCoefficients;
 
-  Epetra_SerialComm Comm;
-  Epetra_BlockMap map(numGlobalDofs, 1, 0, Comm);
-  Epetra_Vector globalCoefficientsVector(map);
+  using GO = TMap::global_ordinal_type;
+  TMapPtr map = Teuchos::rcp(new TMap(static_cast<Tpetra::global_size_t>(numGlobalDofs), static_cast<GO>(0), MPIWrapper::TeuchosCommSerial()));
+  TVectorPtr<double> globalCoefficientsVector = Teuchos::rcp(new TVector<double>(map, 1));
+  auto globalCoefficientsVectorView = globalCoefficientsVector->getLocalViewHost(Tpetra::Access::ReadWrite);
   for (int i=0; i<numGlobalDofs; i++)
   {
-    globalCoefficientsVector[i] = globalCoefficients(i);
+    globalCoefficientsVectorView(i,0) = globalCoefficients(i);
   }
 
   for (GlobalIndexType cellID : cellIDs)
@@ -365,18 +364,17 @@ bool MeshTestUtility::fcsAgree(const Camellia::FieldContainer<double> &fc1, cons
 
 bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh)
 {
+  using GO = TMap::global_ordinal_type;
   int numGlobalDofs = mesh->globalDofCount();
-  Epetra_SerialComm Comm;
-  Epetra_BlockMap map(numGlobalDofs, 1, 0, Comm);
-  Epetra_Vector testSolutionCoefficients(map);
+  TMapPtr map = Teuchos::rcp(new TMap(static_cast<Tpetra::global_size_t>(numGlobalDofs), static_cast<GO>(0), MPIWrapper::TeuchosCommSerial()));
+  TVectorPtr<double> testSolutionCoefficients = Teuchos::rcp(new TVector<double>(map, 1));
+  auto testSolutionCoefficientsView = testSolutionCoefficients->getLocalViewHost(Tpetra::Access::ReadWrite);
   for (int i=0; i<numGlobalDofs; i++)
   {
-    testSolutionCoefficients[i] =  0.1 * i;
+    testSolutionCoefficientsView(i,0) =  0.1 * i;
   }
-  auto eTestSolutionCoefficients = Teuchos::rcp(&testSolutionCoefficients, false);
-  auto tTestSolutionCoefficients = E_to_T::vector(eTestSolutionCoefficients);
 
-  return neighborBasesAgreeOnSides(mesh, tTestSolutionCoefficients);
+  return neighborBasesAgreeOnSides(mesh, testSolutionCoefficients);
 }
 
 bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, TVectorPtr<double> globalSolutionCoefficients)

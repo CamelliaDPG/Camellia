@@ -47,6 +47,14 @@ public:
     double tol = 1e-14;
     return (abs(y-1.0) < tol);
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
+  {
+    const int numPoints = points.extent(0);
+    for (int i=0; i<numPoints; i++)
+    {
+      pointsMatch(i) = matchesPoint(points(i,0), points(i,1));
+    }
+  }
 };
 
 class CylinderBoundary : public SpatialFilter
@@ -68,6 +76,14 @@ public:
     }
     else {
       return ( sqrt(x*x+y*y) < _radius+tol );
+    }
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
+  {
+    const int numPoints = points.extent(0);
+    for (int i=0; i<numPoints; i++)
+    {
+      pointsMatch(i) = matchesPoint(points(i,0), points(i,1));
     }
   }
 };
@@ -102,12 +118,20 @@ public:
     double tol = 5e-10; // be generous b/c dealing with parametric curve
     return (sqrt(x*x+y*y) < _radius+tol);
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
+  {
+    const int numPoints = points.extent(0);
+    for (int i=0; i<numPoints; i++)
+    {
+      pointsMatch(i) = matchesPoint(points(i,0), points(i,1));
+    }
+  }
 };
 
 class RampBoundaryFunction_U1 : public SimpleFunction<double> {
   double _eps; // ramp width
 public:
-  RampBoundaryFunction_U1(double eps) {
+  RampBoundaryFunction_U1(double eps) : SimpleFunction<double>("RampBoundaryFunction_U1", 2) {
     _eps = eps;
   }
   double value(double x, double y) {
@@ -128,7 +152,7 @@ class ParabolicInflowFunction_U1 : public SimpleFunction<double> {
 public:
   ParabolicInflowFunction_U1(double height)
   : 
-  SimpleFunction<double>("ParabolicInflowFunction_U1")
+  SimpleFunction<double>("ParabolicInflowFunction_U1", 2)
   {
     _height = height;
   }
@@ -145,7 +169,7 @@ class ParabolicInflowFunction_Tun : public SimpleFunction<double> {
 public:
   ParabolicInflowFunction_Tun(double height, double muP, double lambda, int i, int j)
   : 
-  SimpleFunction<double>("ParabolicInflowFunction_Tun")
+  SimpleFunction<double>("ParabolicInflowFunction_Tun", 2)
   {
     _i = i;
     _j = j;
@@ -207,7 +231,7 @@ public:
       double cellError = measureEntry.second;
       localMax = max(localMax,cellError);
     }
-    _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+    globalMax = MPIWrapper::max(_mesh->Comm(), localMax);
 
     // add loop through elements to refine elements on the cylinder boundary
     for (auto entry : *rankLocalEnergyError)
@@ -267,7 +291,7 @@ public:
       double cellError = measureEntry.second;
       localMax = max(localMax,cellError);
     }
-    _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+    globalMax = MPIWrapper::max(_mesh->Comm(), localMax);
   }
 };
 
@@ -307,9 +331,9 @@ public:
     double globalResidualSquared;
     double globalDualResidualSquared;
     double globalCombinedResidualSquared;
-    _mesh->Comm()->SumAll(&localResidualSquared, &globalResidualSquared, 1);
-    _mesh->Comm()->SumAll(&localDualResidualSquared, &globalDualResidualSquared, 1);
-    _mesh->Comm()->SumAll(&localCombinedResidualSquared, &globalCombinedResidualSquared, 1);
+    globalResidualSquared = MPIWrapper::sum(_mesh->Comm(), localResidualSquared);
+    globalDualResidualSquared = MPIWrapper::sum(_mesh->Comm(), localDualResidualSquared);
+    globalCombinedResidualSquared = MPIWrapper::sum(_mesh->Comm(), localCombinedResidualSquared);
 
     _localErrorMeasures.clear();
     for (auto entry : *rankLocalEnergyError)
@@ -328,7 +352,7 @@ public:
       double cellError = measureEntry.second;
       localMax = max(localMax,cellError);
     }
-    _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+    globalMax = MPIWrapper::max(_mesh->Comm(), localMax);
   }
 };
 
@@ -336,17 +360,12 @@ public:
 int main(int argc, char *argv[])
 {
 
-#ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
+  auto Comm = MPIWrapper::CommWorld();
 
   int commRank = Teuchos::GlobalMPISession::getRank();
 
-  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+  Comm->Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
@@ -877,7 +896,7 @@ int main(int argc, char *argv[])
           localMax_jumpT = max(localMax_jumpT,jumpMap_T[cellID]);
         }
         double globalMax_jumpT;
-        mesh->Comm()->MaxAll(&localMax_jumpT, &globalMax_jumpT, 1);
+        globalMax_jumpT = MPIWrapper::max(mesh->Comm(), localMax_jumpT);
 
 
 
@@ -904,10 +923,8 @@ int main(int argc, char *argv[])
         // isotropic h-ref
         GlobalIndexTypeToCast numCellsToHRefine = 0;
         GlobalIndexTypeToCast myNumCellsToHRefine = myCellsToHRefine.size();
-        mesh->Comm()->SumAll(&myNumCellsToHRefine, &numCellsToHRefine, 1);
-        GlobalIndexTypeToCast myCellOrdinalOffset = 0;
-        mesh->Comm()->ScanSum(&myNumCellsToHRefine, &myCellOrdinalOffset, 1);
-        myCellOrdinalOffset -= myNumCellsToHRefine;
+        numCellsToHRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToHRefine);
+        GlobalIndexTypeToCast myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), static_cast<int>(myNumCellsToHRefine)) - myNumCellsToHRefine;
         
         vector<GlobalIndexTypeToCast> globalCellsToHRefineVector(numCellsToHRefine, 0);
         for (int i=0; i<myNumCellsToHRefine; i++)
@@ -915,17 +932,16 @@ int main(int argc, char *argv[])
           globalCellsToHRefineVector[myCellOrdinalOffset + i] = myCellsToHRefine[i];
         }
         vector<GlobalIndexTypeToCast> gatheredCellsToHRefineVector(numCellsToHRefine, 0);
-        mesh->Comm()->SumAll(&globalCellsToHRefineVector[0], &gatheredCellsToHRefineVector[0], numCellsToHRefine);
+        MPIWrapper::entryWiseSum(mesh->Comm(), globalCellsToHRefineVector);
+        gatheredCellsToHRefineVector = globalCellsToHRefineVector;
 
         vector<GlobalIndexType> cellsToHRefine(gatheredCellsToHRefineVector.begin(),gatheredCellsToHRefineVector.end());;
 
         // anisotropic (x) h-ref
         GlobalIndexTypeToCast numCellsToHxRefine = 0;
         GlobalIndexTypeToCast myNumCellsToHxRefine = myCellsToHxRefine.size();
-        mesh->Comm()->SumAll(&myNumCellsToHxRefine, &numCellsToHxRefine, 1);
-        myCellOrdinalOffset = 0;
-        mesh->Comm()->ScanSum(&myNumCellsToHxRefine, &myCellOrdinalOffset, 1);
-        myCellOrdinalOffset -= myNumCellsToHxRefine;
+        numCellsToHxRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToHxRefine);
+        myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), static_cast<int>(myNumCellsToHxRefine)) - myNumCellsToHxRefine;
         
         vector<GlobalIndexTypeToCast> globalCellsToHxRefineVector(numCellsToHxRefine, 0);
         for (int i=0; i<myNumCellsToHxRefine; i++)
@@ -933,17 +949,16 @@ int main(int argc, char *argv[])
           globalCellsToHxRefineVector[myCellOrdinalOffset + i] = myCellsToHxRefine[i];
         }
         vector<GlobalIndexTypeToCast> gatheredCellsToHxRefineVector(numCellsToHxRefine, 0);
-        mesh->Comm()->SumAll(&globalCellsToHxRefineVector[0], &gatheredCellsToHxRefineVector[0], numCellsToHxRefine);
+        MPIWrapper::entryWiseSum(mesh->Comm(), globalCellsToHxRefineVector);
+        gatheredCellsToHxRefineVector = globalCellsToHxRefineVector;
 
         vector<GlobalIndexType> cellsToHxRefine(gatheredCellsToHxRefineVector.begin(),gatheredCellsToHxRefineVector.end());;
 
         // anisotropic (y) h-ref
         GlobalIndexTypeToCast numCellsToHyRefine = 0;
         GlobalIndexTypeToCast myNumCellsToHyRefine = myCellsToHyRefine.size();
-        mesh->Comm()->SumAll(&myNumCellsToHyRefine, &numCellsToHyRefine, 1);
-        myCellOrdinalOffset = 0;
-        mesh->Comm()->ScanSum(&myNumCellsToHyRefine, &myCellOrdinalOffset, 1);
-        myCellOrdinalOffset -= myNumCellsToHyRefine;
+        numCellsToHyRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToHyRefine);
+        myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), static_cast<int>(myNumCellsToHyRefine)) - myNumCellsToHyRefine;
         
         vector<GlobalIndexTypeToCast> globalCellsToHyRefineVector(numCellsToHyRefine, 0);
         for (int i=0; i<myNumCellsToHyRefine; i++)
@@ -951,21 +966,20 @@ int main(int argc, char *argv[])
           globalCellsToHyRefineVector[myCellOrdinalOffset + i] = myCellsToHyRefine[i];
         }
         vector<GlobalIndexTypeToCast> gatheredCellsToHyRefineVector(numCellsToHyRefine, 0);
-        mesh->Comm()->SumAll(&globalCellsToHyRefineVector[0], &gatheredCellsToHyRefineVector[0], numCellsToHyRefine);
+        MPIWrapper::entryWiseSum(mesh->Comm(), globalCellsToHyRefineVector);
+        gatheredCellsToHyRefineVector = globalCellsToHyRefineVector;
 
         vector<GlobalIndexType> cellsToHyRefine(gatheredCellsToHyRefineVector.begin(),gatheredCellsToHyRefineVector.end());;
         
         GlobalIndexTypeToCast numCellsToPRefine = 0;
         GlobalIndexTypeToCast myNumCellsToPRefine = myCellsToPRefine.size();
-        mesh->Comm()->SumAll(&myNumCellsToPRefine, &numCellsToPRefine, 1);
+        numCellsToPRefine = MPIWrapper::sum(mesh->Comm(), myNumCellsToPRefine);
 
         // isotropic p-ref
         vector<GlobalIndexType> cellsToPRefine;
         if (numCellsToPRefine > 0)
         {
-          myCellOrdinalOffset = 0;
-          mesh->Comm()->ScanSum(&myNumCellsToPRefine, &myCellOrdinalOffset, 1);
-          myCellOrdinalOffset -= myNumCellsToPRefine;
+          myCellOrdinalOffset = MPIWrapper::scanSum(mesh->Comm(), static_cast<int>(myNumCellsToPRefine)) - myNumCellsToPRefine;
 
           vector<GlobalIndexTypeToCast> globalCellsToPRefineVector(numCellsToPRefine, 0);
           for (int i=0; i<myNumCellsToPRefine; i++)
@@ -973,7 +987,8 @@ int main(int argc, char *argv[])
             globalCellsToPRefineVector[myCellOrdinalOffset + i] = myCellsToPRefine[i];
           }
           vector<GlobalIndexTypeToCast> gatheredCellsToPRefineVector(numCellsToPRefine, 0);
-          mesh->Comm()->SumAll(&globalCellsToPRefineVector[0], &gatheredCellsToPRefineVector[0], numCellsToPRefine);
+          MPIWrapper::entryWiseSum(mesh->Comm(), globalCellsToPRefineVector);
+          gatheredCellsToPRefineVector = globalCellsToPRefineVector;
 
           cellsToPRefine = vector<GlobalIndexType>(gatheredCellsToPRefineVector.begin(),gatheredCellsToPRefineVector.end());
         }
@@ -1048,8 +1063,7 @@ int main(int argc, char *argv[])
 
         // construct DPG* solution
         bool excludeBoundaryTerms = false;
-        const int solutionOrdinal = 1; // solution corresponding to second RHS
-        LinearTermPtr influence = form.bf()->testFunctional(solutionIncrement,excludeBoundaryTerms,solutionOrdinal);
+        LinearTermPtr influence = form.bf()->testFunctional(solutionIncrement,excludeBoundaryTerms);
         RieszRepPtr dualSoln = Teuchos::rcp(new RieszRep(mesh, form.bf()->graphNorm(), influence));
         dualSoln->computeRieszRep();
 
@@ -1194,13 +1208,13 @@ int main(int argc, char *argv[])
           else
             jumpMap_total[cellID] = 0.0;
         }
-        jump_v1 = sqrt(MPIWrapper::sum(*mesh->Comm(), jump_v1));
-        jump_v2 = sqrt(MPIWrapper::sum(*mesh->Comm(), jump_v2));
-        jump_M1 = sqrt(MPIWrapper::sum(*mesh->Comm(), jump_M1));
-        jump_M2 = sqrt(MPIWrapper::sum(*mesh->Comm(), jump_M2));
-        jump_S11 = sqrt(MPIWrapper::sum(*mesh->Comm(), jump_S11));
-        jump_S12 = sqrt(MPIWrapper::sum(*mesh->Comm(), jump_S12));
-        jump_S22 = sqrt(MPIWrapper::sum(*mesh->Comm(), jump_S22));
+        jump_v1 = sqrt(MPIWrapper::sum(mesh->Comm(), jump_v1));
+        jump_v2 = sqrt(MPIWrapper::sum(mesh->Comm(), jump_v2));
+        jump_M1 = sqrt(MPIWrapper::sum(mesh->Comm(), jump_M1));
+        jump_M2 = sqrt(MPIWrapper::sum(mesh->Comm(), jump_M2));
+        jump_S11 = sqrt(MPIWrapper::sum(mesh->Comm(), jump_S11));
+        jump_S12 = sqrt(MPIWrapper::sum(mesh->Comm(), jump_S12));
+        jump_S22 = sqrt(MPIWrapper::sum(mesh->Comm(), jump_S22));
 
         // print outputs
         double dualSolnRes = sqrt(dualSolnResFxn->l1norm(mesh, cubatureDegreeEnrichment));

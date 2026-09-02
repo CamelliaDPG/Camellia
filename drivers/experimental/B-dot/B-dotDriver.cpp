@@ -561,7 +561,7 @@ void performRefinements(double & lastRefinementMaxElementError, VlasovBackwardEu
   if (doUnrefinements)
   {
     // for now, print refinement info to console on rank 0.
-    const bool printToConsole = form.vlasovMesh()->Comm()->MyPID() == 0;
+    const bool printToConsole = form.vlasovMesh()->Comm()->getRank() == 0;
     unrefinementStrategy->setRelativeErrorThreshold(1.1); // ensure that we only do unrefinements
     int maxUnrefinementSteps = 15; // In case we end up unable to unrefine to maxElements for some reason, cap the number of unrefinements
     int numUnrefinementStepsTaken = 0;
@@ -601,7 +601,7 @@ void performRefinements(double & lastRefinementMaxElementError, VlasovBackwardEu
   }
   
   // for now, print refinement info to console on rank 0.
-  const bool printToConsole = form.vlasovMesh()->Comm()->MyPID() == 0;
+  const bool printToConsole = form.vlasovMesh()->Comm()->getRank() == 0;
   refStrategy->refineAndUnrefine(false, printToConsole); // false: don't unrefine
   
   // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).

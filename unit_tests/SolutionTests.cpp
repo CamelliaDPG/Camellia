@@ -241,7 +241,21 @@ namespace
   
   void testImportOffRankCellSolution(int spaceDim, int meshWidth, Teuchos::FancyOStream &out, bool &success)
   {
-    // just want any bilinear form; we'll use Poisson
+    (void)out;
+    // just want any bilinear form; we'll use Poisson.  Make the mesh large
+    // enough that every MPI rank owns at least one cell; otherwise the
+    // off-rank import checks can depend on empty partitions rather than the
+    // import logic being tested.
+    int numProcs = MPIWrapper::TeuchosCommWorld()->getSize();
+    int cellCount = 1;
+    for (int d=0; d<spaceDim; d++) cellCount *= meshWidth;
+    while (cellCount < numProcs)
+    {
+      meshWidth++;
+      cellCount = 1;
+      for (int d=0; d<spaceDim; d++) cellCount *= meshWidth;
+    }
+
     bool useConformingTraces = true;
     int H1Order = 1;
     MeshPtr mesh = poissonUniformMesh(spaceDim, meshWidth, H1Order, useConformingTraces);
@@ -287,7 +301,7 @@ namespace
   
   void testAddSolution(int spaceDim, int H1Order, int elementWidth, bool includeHangingNodes, double tol, Teuchos::FancyOStream &out, bool &success)
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     bool useConformingTraces = true;
     
     MeshPtr poissonMesh;
@@ -1475,7 +1489,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( Solution, ImposeBCs )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     bool useConformingTraces = true;
     bool useTriangles = true;
@@ -2570,7 +2584,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( Solution, SaveAndLoadPoissonConforming )
   {
-    MPIWrapper::CommWorld()->Barrier();
+    MPIWrapper::TeuchosCommWorld()->barrier();
     int spaceDim = 2;
     bool conformingTraces = true;
     PoissonFormulation form(spaceDim,conformingTraces);

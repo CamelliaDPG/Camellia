@@ -20,8 +20,6 @@
 #include <BelosSolverFactory.hpp>
 #include <BelosSolverFactory_Tpetra.hpp>
 
-#include "E_to_T.hpp"
-#include "T_to_E.hpp"
 #include "MatrixMarket_Tpetra.hpp"
 
 #include <Teuchos_ParameterList.hpp>

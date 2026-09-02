@@ -10,7 +10,6 @@
 //
 #include "Teuchos_UnitTestHarness.hpp"
 
-#include "AdditiveSchwarz.h"
 #include "BasisFactory.h"
 #include "CamelliaDebugUtility.h"
 #include "ConfigurationSpaceFormulationTrivial.h"
@@ -25,6 +24,7 @@
 #include "NavierStokesVGPFormulation.h"
 #include "RefinementStrategy.h"
 #include "Solver.h"
+#include "TpetraCamelliaAdditiveSchwarz.h"
 #include "TrigFunctions.h"
 #include "TypeDefs.h"
 #include "VlasovSpaceTimeFormulation.h"
@@ -33,6 +33,8 @@
 #include <Ifpack2_BlockRelaxation.hpp>
 #include <Ifpack2_Factory.hpp>
 #include <Ifpack2_Preconditioner.hpp>
+
+#include <chrono>
 
 
 using namespace Camellia;
@@ -126,7 +128,8 @@ namespace
                                               bool useStaticCondensation, bool hOnly, bool useHierarchicalNeighborsForSchwarz,
                                               int H1Order_coarse, bool jumpToCoarsePolyOrder,
                                               Solver::SolverChoice coarseSolverChoice, int cgMaxIterations, double cgTol,
-                                              double smootherWeight)
+                                              double smootherWeight, int chebyshevMaxEigenIterations = 10,
+                                              bool computeConditionNumberEstimate = true)
   {
     int rank = Teuchos::GlobalMPISession::getRank();
     Teuchos::ParameterList pl;
@@ -164,10 +167,11 @@ namespace
     
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setUseConjugateGradient(true);
-    gmgSolver->setComputeConditionNumberEstimate(true);
+    gmgSolver->setComputeConditionNumberEstimate(computeConditionNumberEstimate);
     gmgSolver->gmgOperator()->setSchwarzFactorizationType(schwarzBlockFactorization);
     gmgSolver->gmgOperator()->setChebyshevDegree(chebyshevDegree);
     gmgSolver->gmgOperator()->setChebyshevRatio(chebyshevRatio);
+    gmgSolver->gmgOperator()->setChebyshevMaxEigenIterations(chebyshevMaxEigenIterations);
     gmgSolver->gmgOperator()->setSmootherType(smootherType);
     gmgSolver->gmgOperator()->setSmootherOverlap(schwarzOverlap);
     gmgSolver->gmgOperator()->setMultigridStrategy(Camellia::GMGOperator::V_CYCLE);
@@ -904,7 +908,8 @@ namespace
            bool reportTimings, double &solveTime, double &error, bool reportEnergyError, int numCellsRootMesh,
            bool hOnly, bool useHierarchicalNeighborsForSchwarz, bool useZeroMeanConstraints,
            double smootherWeight,
-           bool enhanceFieldsForH1TracesWhenConforming, double graphNormBeta)
+           bool enhanceFieldsForH1TracesWhenConforming, double graphNormBeta,
+           int chebyshevMaxEigenIterations = 10, bool computeConditionNumberEstimate = true)
   {
     int rank = Teuchos::GlobalMPISession::getRank();
     if (H1Order_coarse == -1)
@@ -943,13 +948,7 @@ namespace
       exit(1);
     }
     
-  #ifdef HAVE_MPI
-    Epetra_MpiComm epetraComm(MPI_COMM_WORLD);
-    //cout << "rank: " << rank << " of " << numProcs << endl;
-  #else
-    Epetra_SerialComm epetraComm;
-  #endif
-    Epetra_Time initializationTimer(epetraComm);
+    auto initializationStart = std::chrono::steady_clock::now();
 
     SolutionPtr solution;
     MeshPtr k0Mesh;
@@ -973,12 +972,12 @@ namespace
       out << "coarse mesh has " << coarseElements << " active elements and " << coarseDofs << " degrees of freedom.\n";
     }
 
-    double initializationTime = initializationTimer.ElapsedTime();
+    double initializationTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - initializationStart).count();
     int numCoarseGlobalDofs = k0Mesh->numGlobalDofs();
     int numFineGlobalDofs = solution->mesh()->numGlobalDofs();
     
     // to be fairer to preconditioners whose construction is cheap, we include construction time in the solve time (this is a change, made 7-7-15)
-    Epetra_Time solveTimer(epetraComm);
+    auto solveStart = std::chrono::steady_clock::now();
     
     Teuchos::RCP<Solver> solver = initializeGMGSolver(solution, AztecOutputLevel, smootherType,
                                                       schwarzOverlap, dimensionForSchwarzNeighbors,
@@ -987,7 +986,8 @@ namespace
                                                       useStaticCondensation, hOnly, useHierarchicalNeighborsForSchwarz,
                                                       H1Order_coarse, jumpToCoarsePolyOrder, coarseSolverChoice,
                                                       cgMaxIterations, cgTol,
-                                                      smootherWeight);
+                                                      smootherWeight, chebyshevMaxEigenIterations,
+                                                      computeConditionNumberEstimate);
     
     int result;
     
@@ -1001,7 +1001,7 @@ namespace
       result = navierStokesFormFine->solveAndAccumulate(); // second step has non-zero background flow (implying variable coefficients)
     }
 
-    solveTime = solveTimer.ElapsedTime();
+    solveTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - solveStart).count();
 
     if (result == 0)
     {
@@ -1144,13 +1144,6 @@ Teuchos::RCP< Tpetra::Operator<double> > constructGMGOperator(Teuchos::FancyOStr
     exit(1);
   }
   
-#ifdef HAVE_MPI
-  Epetra_MpiComm EpetraComm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-  Epetra_Time initializationTimer(EpetraComm);
-  
   SolutionPtr solution;
   MeshPtr k0Mesh;
   IPPtr graphNorm;
@@ -1185,8 +1178,7 @@ Teuchos::RCP< Tpetra::Operator<double> > constructGMGOperator(Teuchos::FancyOStr
   solution->applyDGJumpTerms();
   solution->populateStiffnessAndLoad();
   
-  auto eStiffnessMatrix = solution->getStiffnessMatrix();
-  auto tStiffnessMatrix = E_to_T::matrix(eStiffnessMatrix);
+  auto tStiffnessMatrix = solution->getStiffnessMatrix();
   gmgOp->setFineStiffnessMatrix(tStiffnessMatrix);
   
   return gmgOp;
@@ -1479,7 +1471,7 @@ void testAdditiveSchwarzPartMembershipAgainstExpectedHalo(bool &success, Teuchos
   solution->initializeLHSVector();
   solution->initializeStiffnessAndLoad();
   solution->populateStiffnessAndLoad();
-  auto tStiffness = E_to_T::matrix(solution->getStiffnessMatrix());
+  auto tStiffness = solution->getStiffnessMatrix();
 
   const int overlapLevel = 1;
   const int neighborDim = spaceDim - 1;
@@ -1512,11 +1504,11 @@ void testAdditiveSchwarzPartMembershipAgainstExpectedHalo(bool &success, Teuchos
     auto myCellIDs = solution->mesh()->cellIDsInPartition();
     for (GlobalIndexType cellID : myCellIDs)
     {
-      std::set<GlobalIndexType> cellsInOverlap = OverlappingRowMatrix::overlappingCells(cellID,
-                                                                                        solution->mesh(),
-                                                                                        overlapLevel,
-                                                                                        false,
-                                                                                        neighborDim);
+      std::set<GlobalIndexType> cellsInOverlap = TpetraCamelliaAdditiveSchwarz<>::overlappingCells(cellID,
+                                                                                                    solution->mesh(),
+                                                                                                    overlapLevel,
+                                                                                                    false,
+                                                                                                    neighborDim);
       std::set<GO> expectedGIDs;
       for (GlobalIndexType overlapCell : cellsInOverlap)
       {
@@ -1545,7 +1537,9 @@ void testAdditiveSchwarzPartMembershipAgainstExpectedHalo(bool &success, Teuchos
 void runTestCases3D(const ProblemChoice problem, const GMGOperator::SmootherChoice smoother,
                     std::vector< std::tuple<int,int,int,int> > &testCases,
                     bool &success, Teuchos::FancyOStream &out,
-                    bool assertOnFailure = true) // test cases are 4-tuples: (p, overlap, chebyshevDegree, iterationCount)
+                    bool assertOnFailure = true,
+                    int chebyshevMaxEigenIterations = 10,
+                    bool computeConditionNumberEstimate = true) // test cases are 4-tuples: (p, overlap, chebyshevDegree, iterationCount)
 {
   const int spaceDim = 3;
   const int numCells = 3;
@@ -1615,7 +1609,8 @@ void runTestCases3D(const ProblemChoice problem, const GMGOperator::SmootherChoi
           reportTimings, solveTime, error, reportEnergyError, numCellsRootMesh,
           hOnly, useHierarchicalNeighborsForSchwarz, useZeroMeanConstraints,
           smootherWeight,
-          enhanceFieldsForH1TracesWhenConforming, graphNormBeta);
+          enhanceFieldsForH1TracesWhenConforming, graphNormBeta,
+          chebyshevMaxEigenIterations, computeConditionNumberEstimate);
     }
     catch (std::exception &e)
     {
@@ -1750,7 +1745,9 @@ void runTestCases1D(const ProblemChoice problem, const GMGOperator::SmootherChoi
     // test cases are 4-tuples: (p, overlap, chebyshev degree, iterationCount)
     const int o = -1; // unused overlap
     std::vector< std::tuple<int,int,int,int> > testCases {{2,o,8,15},{2,o,16,10}}; // for p=3, seeing some CG non-positivity failures for e.g. 16 MPI ranks, so not testing those cases.  Belos's CG implementation is too intolerant!!
-    runTestCases3D(problem, smoother, testCases, success, out);
+    const int chebyshevMaxEigenIterations = 50;
+    const bool computeConditionNumberEstimate = false;
+    runTestCases3D(problem, smoother, testCases, success, out, true, chebyshevMaxEigenIterations, computeConditionNumberEstimate);
   }
 
   TEUCHOS_UNIT_TEST( Preconditioning, PoissonAdditiveSchwarz1D )

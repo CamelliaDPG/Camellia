@@ -20,14 +20,6 @@
 
 #include "Camellia_FieldContainer.hpp"
 
-// Epetra includes
-#include <Epetra_Map.h>
-
-#include "Epetra_Comm.h"
-#include "Epetra_FECrsMatrix.h"
-#include "Epetra_FEVector.h"
-#include "Epetra_Operator.h"
-
 #include "BasisCache.h"
 #include "DofInterpreter.h"
 #include "ElementType.h"
@@ -86,14 +78,10 @@ private:
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
-  Teuchos::RCP<Epetra_CrsMatrix> _globalStiffMatrix;
-  Teuchos::RCP<Epetra_FEVector> _rhsVector;
-  Teuchos::RCP<Epetra_FEVector> _lhsVector; // 1 or 2 wide for steady; for RK schemes, this is numStages + 1 wide (assuming no goal-oriented RHS)
-  Teuchos::RCP<Epetra_FEVector> _lhsVectorCurrentStage; // for RK schemes, this is 1 wide (assuming no goal-oriented RHS)
-
-  TMatrixPtr<Scalar> _globalStiffMatrix2;
-  TVectorPtr<Scalar> _rhsVector2;
-  TVectorPtr<Scalar> _lhsVector2;
+  TMatrixPtr<Scalar> _globalStiffMatrix;
+  TVectorPtr<Scalar> _rhsVector;
+  TVectorPtr<Scalar> _lhsVector; // 1 or 2 wide for steady; for RK schemes, this is numStages + 1 wide (assuming no goal-oriented RHS)
+  TVectorPtr<Scalar> _lhsVectorCurrentStage; // for RK schemes, this is numRHSes wide for the active stage
 
   bool _residualsComputed;
   bool _energyErrorComputed;
@@ -151,7 +139,6 @@ private:
   int _cachedCellBasisCoefficientsForFieldsSolutionOrdinal = -2; // which solution ordinal do they correspond to?
   void invalidateCachedBasisCoefficientsForFields();
   
-  Epetra_Map getPartitionMap_Epetra();
 protected:
   RHSPtr rhsWithoutTableauModification() const;
 public:
@@ -175,15 +162,10 @@ public:
   void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
 
   TMapPtr getPartitionMap();
-  Epetra_Map getPartitionMap(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
-                             GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, const Epetra_Comm* Comm );
-
-  MapPtr getPartitionMap2();
-  MapPtr getPartitionMap2(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
+  TMapPtr getPartitionMap(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
                           GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Teuchos_CommPtr Comm );
 
-  Epetra_MultiVector* getGlobalCoefficients();
-  TVectorPtr<Scalar> getGlobalCoefficients2();
+  TVectorPtr<Scalar> getGlobalCoefficients();
 
   bool cellHasCoefficientsAssigned(GlobalIndexType cellID, int solutionOrdinal=0);
   void clearComputedResiduals();
@@ -343,16 +325,11 @@ public:
   // ! is for goal-oriented adaptivity (hence the name), but more generally this belongs to the DPG* method.
   void setGoalOrientedRHS( LinearTermPtr ltTrial );
 
-  Teuchos::RCP<Epetra_CrsMatrix> getStiffnessMatrix();
-  TMatrixPtr<Scalar> getStiffnessMatrix2();
-  void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness);
-  void setStiffnessMatrix2(TMatrixPtr<Scalar> stiffness);
+  TMatrixPtr<Scalar> getStiffnessMatrix();
+  void setStiffnessMatrix(TMatrixPtr<Scalar> stiffness);
 
-  Teuchos::RCP<Epetra_FEVector> getRHSVector();
-  Teuchos::RCP<Epetra_FEVector> getLHSVector();
-
-  TVectorPtr<Scalar> getRHSVector2();
-  TVectorPtr<Scalar> getLHSVector2();
+  TVectorPtr<Scalar> getRHSVector();
+  TVectorPtr<Scalar> getLHSVector();
 
   void setIP( TIPPtr<Scalar>);
 
