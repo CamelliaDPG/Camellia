@@ -4,10 +4,9 @@
 // This code is derived from source governed by the license LICENSE-DPGTrilinos in the licenses directory.
 //
 
-// Intrepid includes
 #include "Camellia_FieldContainer.hpp"
 #include "Camellia_FieldContainerConversion.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 
 #include "Amesos_Klu.h"
 #include "Amesos.h"
@@ -813,13 +812,13 @@ void TSolution<Scalar>::applyDGJumpTerms()
               numNeighborTestFields = neighborGlobalDofs_test.size();
               
               // weight u_values containers using cubature weights defined in cellBasisCacheSide:
-              Intrepid::FunctionSpaceTools::multiplyMeasure<double>(trial_values, cellBasisCacheSide->getWeightedMeasures(), trial_values);
-              Intrepid::FunctionSpaceTools::multiplyMeasure<double>(neighbor_trial_values, cellBasisCacheSide->getWeightedMeasures(), neighbor_trial_values);
+              Camellia::FunctionSpaceTools::multiplyMeasure<double>(trial_values, cellBasisCacheSide->getWeightedMeasures(), trial_values);
+              Camellia::FunctionSpaceTools::multiplyMeasure<double>(neighbor_trial_values, cellBasisCacheSide->getWeightedMeasures(), neighbor_trial_values);
               
               // now, we compute four integrals (test, trial) and insert into global stiffness
               // define a lambda function for insertion
               auto insertValues = [stiffnessMatrix] (vector<int> &rowDofOrdinals, vector<int> &colDofOrdinals,
-                                                     Intrepid::FieldContainer<double> &values) -> void
+                                                     Camellia::FieldContainer<double> &values) -> void
               {
                 // values container is (cell, test, trial)
                 int rowCount = rowDofOrdinals.size();
@@ -854,37 +853,32 @@ void TSolution<Scalar>::applyDGJumpTerms()
                 return false;
               };
               
-              Intrepid::FieldContainer<double> &test_values_intrepid           = test_values;
-              Intrepid::FieldContainer<double> &trial_values_intrepid          = trial_values;
-              Intrepid::FieldContainer<double> &neighbor_test_values_intrepid  = neighbor_test_values;
-              Intrepid::FieldContainer<double> &neighbor_trial_values_intrepid = neighbor_trial_values;
-              // the casts above are important to let FunctionSpaceTools::integrate invoke BLAS
+              // Camellia::FunctionSpaceTools::integrate is BLAS-backed for FieldContainer inputs.
               if (hasNonzeros(test_values,0) && hasNonzeros(trial_values,0))
               {
-                Intrepid::FieldContainer<double> integralValues_me_me(numCells,numTestFields,numTrialFields);
-                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,test_values_intrepid,trial_values_intrepid,Intrepid::COMP_BLAS);
+                Camellia::FieldContainer<double> integralValues_me_me(numCells,numTestFields,numTrialFields);
+                Camellia::FunctionSpaceTools::integrate<double>(integralValues_me_me, test_values, trial_values);
                 insertValues(myGlobalDofs_trial,myGlobalDofs_test,integralValues_me_me);
               }
               
               if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(trial_values,0))
               {
-                Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborTestFields,numTrialFields);
-                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_test_values_intrepid,trial_values_intrepid,Intrepid::COMP_BLAS);
+                Camellia::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborTestFields,numTrialFields);
+                Camellia::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me, neighbor_test_values, trial_values);
                 insertValues(neighborGlobalDofs_test,myGlobalDofs_trial,integralValues_neighbor_me);
               }
               
               if (hasNonzeros(test_values,0) && hasNonzeros(neighbor_trial_values,0))
               {
-                Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numTestFields,numNeighborTrialFields);
-                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,test_values_intrepid,neighbor_trial_values_intrepid,Intrepid::COMP_BLAS);
+                Camellia::FieldContainer<double> integralValues_me_neighbor(numCells,numTestFields,numNeighborTrialFields);
+                Camellia::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor, test_values, neighbor_trial_values);
                 insertValues(myGlobalDofs_test,neighborGlobalDofs_trial,integralValues_me_neighbor);
               }
               
               if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(neighbor_trial_values,0))
               {
-                Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborTestFields,numNeighborTrialFields);
-                Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_test_values_intrepid,neighbor_trial_values_intrepid,
-                                                                Intrepid::COMP_BLAS);
+                Camellia::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborTestFields,numNeighborTrialFields);
+                Camellia::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor, neighbor_test_values, neighbor_trial_values);
                 insertValues(neighborGlobalDofs_test,neighborGlobalDofs_trial,integralValues_neighbor_neighbor);
               }
             }

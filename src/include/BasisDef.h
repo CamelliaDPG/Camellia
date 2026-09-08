@@ -15,8 +15,6 @@
 //
 #include "Teuchos_TestForException.hpp"
 
-#include "Intrepid_Basis.hpp"
-
 #include <Intrepid2_TensorBasis.hpp>
 
 #include "Camellia_KokkosHelpers.h"
@@ -31,7 +29,7 @@ Basis<Scalar,ArrayScalar>::Basis()
 }
 
 template<class Scalar, class ArrayScalar>
-Intrepid2::BasisValues<Scalar,Camellia::DeviceType> Basis<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> points,
+Intrepid2::BasisValues<Scalar,Camellia::DeviceType> Basis<Scalar,ArrayScalar>::allocateBasisValues( const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> &points,
                                                                                                              const Intrepid2::EOperator op) const
 {
   // base implementation throws exception; Intrepid2BasisWrapper overrides
@@ -39,8 +37,8 @@ Intrepid2::BasisValues<Scalar,Camellia::DeviceType> Basis<Scalar,ArrayScalar>::a
 }
 
 template<class Scalar, class ArrayScalar>
-void Basis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,Camellia::DeviceType> outputValues,
-                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>  inputPoints,
+void Basis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,Camellia::DeviceType> &outputValues,
+                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>  &inputPoints,
                                           const Intrepid2::EOperator op ) const
 {
   // base implementation throws exception; Intrepid2BasisWrapper overrides
@@ -646,133 +644,7 @@ bool Basis<Scalar,ArrayScalar>::supportsOperator(::Camellia::EOperator &op) cons
   return standardIntrepidOperator;
 }
 
-template<class Scalar, class ArrayScalar>
-bool IntrepidBasisWrapper<Scalar,ArrayScalar>::isConforming() const
-{
-  return true;
-}
-
-template<class Scalar, class ArrayScalar>
-bool IntrepidBasisWrapper<Scalar,ArrayScalar>::isNodal() const
-{
-  return true;
-}
-
-template<class Scalar, class ArrayScalar>
-IntrepidBasisWrapper<Scalar,ArrayScalar>::IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis,
-    int rangeDimension, int rangeRank,
-    Camellia::EFunctionSpace fs)
-{
-  _intrepidBasis = intrepidBasis;
-  this->_rangeDimension = rangeDimension;
-  this->_rangeRank = rangeRank;
-  this->_functionSpace = fs;
-  this->_basisCardinality = _intrepidBasis->getCardinality();
-  this->_basisDegree = _intrepidBasis->getDegree();
-  this->_domainTopology = CellTopology::cellTopology( _intrepidBasis->getBaseCellTopology() );
-
-  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
-  
-  if (isDiscontinuous)
-  {
-    bool upgradeHVOL = true;
-    Camellia::EFunctionSpace continuousFS = Camellia::continuousSpaceForDiscontinuous(fs,upgradeHVOL);
-    this->_continuousBasis = Teuchos::rcp( new IntrepidBasisWrapper(intrepidBasis, rangeDimension,
-                                                                    rangeRank, continuousFS));
-  }
-}
-
-template<class Scalar, class ArrayScalar>
-void IntrepidBasisWrapper<Scalar,ArrayScalar>::initializeTags() const
-{
-  // we leave tag initialization to the _intrepidBasis object, but we'll keep a copy ourselves:
-  this->_tagToOrdinal = _intrepidBasis->getDofOrdinalData();
-  this->_ordinalToTag = _intrepidBasis->getAllDofTags();
-
-  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
-
-  // if this is an L^2 basis (potentially wrapping a non-L^2 Intrepid basis--to date, Intrepid doesn't have any L^2 bases, so we usually use H^1 of one lower degree for L^2),
-  // then we should rework the data structures a bit...
-  if (isDiscontinuous)
-  {
-    std::vector<int> tag(4);
-    int domainDimension = this->domainTopology()->getDimension();
-    this->_ordinalToTag = std::vector< std::vector<int> >(this->_basisCardinality);
-    this->_tagToOrdinal = std::vector<std::vector<std::vector<int> > >(domainDimension + 1);
-    for (int d=0; d<=domainDimension; d++)
-    {
-      int subcellCount = this->domainTopology()->getSubcellCount(d);
-      this->_tagToOrdinal[d].resize(subcellCount);
-    }
-    this->_tagToOrdinal[domainDimension] = std::vector<std::vector<int> >(1);
-    this->_tagToOrdinal[domainDimension][0] = std::vector<int>(this->_basisCardinality);
-
-//    for (int d=0; d<this->_tagToOrdinal.size(); d++)
-//    {
-//      for (int subcOrd=0; subcOrd < this->_tagToOrdinal[d].size(); subcOrd++)
-//      {
-//        for (int subcDofOrd=0; subcDofOrd< this->_tagToOrdinal[d][subcOrd].size(); subcDofOrd++)
-//        {
-//          this->_tagToOrdinal[d][subcOrd][subcDofOrd] = -1;
-//        }
-//      }
-//    }
-
-    for (int dofOrdinal = 0; dofOrdinal < this->_basisCardinality; dofOrdinal++)
-    {
-      tag[0] = domainDimension; // dimension of the subcell
-      tag[1] = 0; // subcell ordinal
-      tag[2] = dofOrdinal; // ordinal of the dof relative to subcell
-      tag[3] = this->_basisCardinality; // total # of dofs associated with subcell
-      this->_ordinalToTag[dofOrdinal] = tag;
-      this->_tagToOrdinal[domainDimension][0][dofOrdinal] = dofOrdinal;
-    }
-  }
-}
-
-template<class Scalar, class ArrayScalar>
-Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > IntrepidBasisWrapper<Scalar,ArrayScalar>::intrepidBasis()
-{
-  return _intrepidBasis;
-}
-  
-  template<class Scalar, class ArrayScalar>
-  void IntrepidBasisWrapper<Scalar, ArrayScalar>::getDofCoords(ArrayScalar & DofCoords) const
-  {
-    Intrepid::DofCoordsInterface<ArrayScalar>* dofCoordsImplementor = dynamic_cast<Intrepid::DofCoordsInterface<ArrayScalar>*>(this->_intrepidBasis.get());
-    if (dofCoordsImplementor != NULL)
-    {
-      dofCoordsImplementor->getDofCoords(DofCoords);
-    }
-    else
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getDofCoords not implemented by basis!");
-    }
-  }
-
-  template<class Scalar, class ArrayScalar>
-  std::set<int> IntrepidBasisWrapper<Scalar,ArrayScalar>::dofOrdinalsForSide(int sideOrdinal) const
-  {
-    if (this->_continuousBasis == Teuchos::null)
-    {
-      return this->Basis<Scalar,ArrayScalar>::dofOrdinalsForSide(sideOrdinal);
-    }
-    else
-    {
-      return this->_continuousBasis->dofOrdinalsForSide(sideOrdinal);
-    }
-  }
-  
-template<class Scalar, class ArrayScalar>
-void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const
-{
-  this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
-  const bool convertible = ((operatorType >= OP_VALUE) && (operatorType <= OP_D10));
-  TEUCHOS_TEST_FOR_EXCEPTION(!convertible, std::invalid_argument, "operator is not int the valid range for Intrepid");
-  
-  const Intrepid::EOperator intrepidOp = static_cast<Intrepid::EOperator>(operatorType);
-  return _intrepidBasis->getValues(values,refPoints,intrepidOp);
-}
+// IntrepidBasisWrapper method definitions removed; use Intrepid2BasisWrapper.
 
 template<class Scalar, class ArrayScalar>
 bool Intrepid2BasisWrapper<Scalar,ArrayScalar>::isConforming() const
@@ -977,21 +849,21 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
   refPointsCamellia.checkinDeviceView(false); // false: don't deep copy from device to host
   valuesCamellia.checkinDeviceView(true);     // true: do deep copy from device to host
   
-  // finally, copy back to the Intrepid FieldContainer that was passed in:
+  // finally, copy back to the FieldContainer that was passed in:
   values = valuesCamellia;
 }
 
 template<class Scalar, class ArrayScalar>
 Intrepid2::BasisValues<Scalar,Camellia::DeviceType>
-Intrepid2BasisWrapper<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> points,
+Intrepid2BasisWrapper<Scalar,ArrayScalar>::allocateBasisValues( const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> &points,
                                                                 const Intrepid2::EOperator op) const
 {
   return _intrepid2Basis->allocateBasisValues(points,op);
 }
 
 template<class Scalar, class ArrayScalar>
-void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(Intrepid2::BasisValues<Scalar,Camellia::DeviceType> outputValues,
-                                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> inputPoints,
+void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(Intrepid2::BasisValues<Scalar,Camellia::DeviceType> &outputValues,
+                                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> &inputPoints,
                                                           const Intrepid2::EOperator op) const
 {
   _intrepid2Basis->getValues(outputValues,inputPoints,op);

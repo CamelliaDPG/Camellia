@@ -10,8 +10,7 @@
 
 #include "doubleBasisConstruction.h"
 
-#include "Basis_HVOL_QUAD_C0_FEM.hpp"
-#include "Basis_HVOL_TRI_C0_FEM.hpp"
+#include <Intrepid2_HVOL_QUAD_Cn_FEM.hpp>
 
 #include "VectorizedBasis.h"
 
@@ -29,7 +28,7 @@
 
 using namespace Camellia;
 
-using ArrayScalar = Intrepid::FieldContainer<double>;
+using ArrayScalar = Camellia::FieldContainer<double>;
 
 BasisFactory::BasisFactory()
 {
@@ -255,7 +254,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         else
         {
           bool conformingFalse = false;
-          basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
+          basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, ArrayScalar >(polyOrder,conformingFalse) );
         }
         //}
         break;
@@ -268,7 +267,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         else
         {
           bool conformingFalse = false;
-          basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
+          basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, ArrayScalar >(polyOrder,conformingFalse) );
         }
         break;
       case Camellia::FUNCTION_SPACE_HDIV_FREE:
@@ -296,8 +295,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
           }
         break;
       case(Camellia::FUNCTION_SPACE_REAL_SCALAR):
-          // TODO: replace this with an Intrepid2-derived basis.
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >()),
+          basis = Teuchos::rcp( new Intrepid2BasisWrapper<>(Teuchos::rcp( new Intrepid2::Basis_HVOL_QUAD_Cn_FEM<Camellia::DeviceType, double, double >(0,Intrepid2::POINTTYPE_WARPBLEND)),
                               spaceDim, scalarRank, fs)
                             ) ;
         break;
@@ -314,11 +312,11 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
       switch(fs)
       {
       case Camellia::FUNCTION_SPACE_HGRAD:
-          TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
+          TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid2::Basis_HGRAD_TRI_Cn_FEM");
           basis = intrepid2TriHGRAD(polyOrder);
           break;
       case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-          TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
+          TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid2::Basis_HGRAD_TRI_Cn_FEM");
           basis = intrepid2TriHGRAD_DISC(polyOrder);
           break;
       case Camellia::FUNCTION_SPACE_HDIV:
@@ -569,7 +567,7 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
               else
               {
                 bool conformingTrue = true;
-                basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+                basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, ArrayScalar >(polyOrder,conformingTrue) );
               }
               //}
               break;
@@ -582,14 +580,14 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
               else
               {
                 bool conformingTrue = true;
-                basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+                basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, ArrayScalar >(polyOrder,conformingTrue) );
               }
               break;
             case Camellia::FUNCTION_SPACE_HDIV_FREE:
             {
               bool conformingTrue = true;
               bool divFreeTrue = true;
-              basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue,divFreeTrue) );
+              basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, ArrayScalar >(polyOrder,conformingTrue,divFreeTrue) );
             }
             break;
             case Camellia::FUNCTION_SPACE_HCURL:
@@ -602,7 +600,7 @@ BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, Ce
                 basis =  intrepid2QuadHVOL(polyOrder-1);
               break;
             case Camellia::FUNCTION_SPACE_REAL_SCALAR:
-                basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >()),
+                basis = Teuchos::rcp( new Intrepid2BasisWrapper<>(Teuchos::rcp( new Intrepid2::Basis_HVOL_QUAD_Cn_FEM<Camellia::DeviceType, double, double >(0,Intrepid2::POINTTYPE_WARPBLEND)),
                                     spaceDim, scalarRank, fs)
                                   ) ;
               break;
@@ -810,7 +808,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         if (_useLobattoForQuadHGRAD)
         {
           bool conformingTrue = true;
-          basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+          basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, ArrayScalar >(polyOrder,conformingTrue) );
         }
         else
         {
@@ -822,7 +820,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         if (_useLobattoForQuadHDIV)
         {
           bool conformingTrue = true;
-          basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+          basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, ArrayScalar >(polyOrder,conformingTrue) );
         }
         else
         {
@@ -833,7 +831,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
       {
         bool conformingTrue = true;
         bool divFreeTrue = true;
-        basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue,divFreeTrue) );
+        basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, ArrayScalar >(polyOrder,conformingTrue,divFreeTrue) );
       }
       break;
       default:
@@ -901,7 +899,7 @@ BasisPtr BasisFactory::getNodalBasisForCellTopology(CellTopoPtr cellTopo)
     {
       BasisPtr lineNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(shards::Line<2>::key);
       
-      typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+      typedef Camellia::TensorBasis<double, ArrayScalar > TensorBasis;
       
       BasisPtr nodalBasis = shardsNodalBasis;
 //      bool rangeDimensionIsSum = true;
@@ -987,7 +985,7 @@ BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey)
          // These extended topologies are not used for mapping purposes
          case shards::Quadrilateral<8>::key:
          TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
-         ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
+         ">>> ERROR (Intrepid2::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
          break;
          
          // Base and Extended Line, Beam and Shell topologies
@@ -1002,7 +1000,7 @@ BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey)
          case shards::ShellQuadrilateral<8>::key:
          case shards::ShellQuadrilateral<9>::key:
          TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
-         ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
+         ">>> ERROR (Intrepid2::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
          break;*/
       default:
         TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument,

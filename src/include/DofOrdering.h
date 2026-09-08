@@ -9,8 +9,6 @@
 #ifndef DOF_ORDERING
 #define DOF_ORDERING
 
-// Intrepid includes
-#include "Intrepid_Basis.hpp"
 #include "Camellia_FieldContainer.hpp"
 
 // Shards includes
@@ -139,6 +137,8 @@ public:
   // ! Returns vector containing (varID,vector<sideOrdinal>) entries corresponding to variables with nonzero coefficients in the provided container
   vector<pair<int,vector<int>>> variablesWithNonZeroEntries(const Camellia::FieldContainer<double> &localCoefficients, double tol = 0.0) const;
 };
+
+std::ostream& operator << (std::ostream& os, const DofOrdering& dofOrdering);
 }
 
 inline bool operator==(const Camellia::DofOrdering& lhs, const Camellia::DofOrdering& rhs)
@@ -255,7 +255,5 @@ inline bool operator<(const Camellia::DofOrdering& lhs, const Camellia::DofOrder
   return false; // no differences found: lhs == rhs.
 }
 
-
-std::ostream& operator << (std::ostream& os, const Camellia::DofOrdering& dofOrdering);
 
 #endif

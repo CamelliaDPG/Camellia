@@ -108,7 +108,7 @@ TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scala
 }
 
 template<class Scalar, class ArrayScalar>
-Intrepid2::BasisValues<Scalar,Camellia::DeviceType> TensorBasis<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> points,
+Intrepid2::BasisValues<Scalar,Camellia::DeviceType> TensorBasis<Scalar,ArrayScalar>::allocateBasisValues( const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> &points,
                                                                                                              const Intrepid2::EOperator op) const
 {
   // for the moment, we only support the simplest case: VALUE operators, on scalar tensorial components
@@ -150,8 +150,8 @@ Intrepid2::BasisValues<Scalar,Camellia::DeviceType> TensorBasis<Scalar,ArrayScal
 }
 
 template<class Scalar, class ArrayScalar>
-void TensorBasis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,Camellia::DeviceType> outputValues,
-                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>  inputPoints,
+void TensorBasis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,Camellia::DeviceType> &outputValues,
+                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>  &inputPoints,
                                           const Intrepid2::EOperator op ) const
 {
   // for the moment, we only support the simplest case: VALUE operators, on scalar tensorial components
@@ -800,7 +800,7 @@ void TensorBasis<Scalar,ArrayScalar>::initializeTags() const
   }
 
   // call basis-independent method (declared in IntrepidUtil.hpp) to set up the data structures
-  Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
+  Camellia::setOrdinalTagData(this -> _tagToOrdinal,
                               this -> _ordinalToTag,
                               &(tags[0]),
                               this -> getCardinality(),

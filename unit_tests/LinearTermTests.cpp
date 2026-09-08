@@ -425,7 +425,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
     auto trueTemporalBasis = vBasisTrue->intrepid2TensorBasisComponents()[1];
 
     // we need to allow the faux basis to compute gradient on the way to OP_DY (aka OP_DT)
-    typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+    typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
     Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(trueSpatialBasis, trueTemporalBasis, true) );
     BasisPtr vBasisFaux = tensorBasis;
     // set up a DofOrdering for v for both true and faux:

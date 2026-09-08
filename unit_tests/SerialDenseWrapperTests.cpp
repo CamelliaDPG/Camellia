@@ -13,9 +13,9 @@
 
 #include "SerialDenseWrapper.h"
 
-#include "Intrepid_CellTools.hpp"
 #include "Camellia_FieldContainer.hpp"
 
+#include <Intrepid2_CellTools.hpp>
 #include <Teuchos_BLAS.hpp>
 
 using namespace Camellia;
@@ -105,8 +105,14 @@ namespace
       Camellia::FieldContainer<double> expectedDetValues(numCells,numPoints);
       Camellia::FieldContainer<double> expectedOutInverses(numCells,numPoints,spaceDim,spaceDim);
       
-      Intrepid::CellTools<double>::setJacobianDet(expectedDetValues, jacobianData);
-      Intrepid::CellTools<double>::setJacobianInv(expectedOutInverses, jacobianData );
+      auto expectedDetValuesView   = expectedDetValues.checkoutDeviceView(false);
+      auto expectedOutInversesView = expectedOutInverses.checkoutDeviceView(false);
+      auto jacobianDataView        = jacobianData.checkoutDeviceView(true);
+      Intrepid2::CellTools<Camellia::DeviceType>::setJacobianDet(expectedDetValuesView, jacobianDataView);
+      Intrepid2::CellTools<Camellia::DeviceType>::setJacobianInv(expectedOutInversesView, jacobianDataView);
+      jacobianData.checkinDeviceView(false);
+      expectedDetValues.checkinDeviceView(true);
+      expectedOutInverses.checkinDeviceView(true);
       
       SerialDenseWrapper::roundZeros(expectedOutInverses, 1e-14);
       SerialDenseWrapper::roundZeros(outInverses, 1e-14);

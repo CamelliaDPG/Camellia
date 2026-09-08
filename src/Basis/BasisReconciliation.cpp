@@ -21,8 +21,7 @@
 #include "SerialDenseWrapper.h"
 #include "TensorBasis.h"
 
-#include "Intrepid_FunctionSpaceTools.hpp"
-#include "Intrepid_DefaultCubatureFactory.hpp"
+#include "Camellia_Integrate.hpp"
 
 using namespace Camellia;
 
@@ -482,15 +481,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   Camellia::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   Camellia::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
   
-  Intrepid::FieldContainer<double> &lhsValuesIntrepid                       = lhsValues;
-  Intrepid::FieldContainer<double> &rhsValuesIntrepid                       = rhsValues;
-  Intrepid::FieldContainer<double> &coarserBasisValuesFilteredIntrepid      = coarserBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredIntrepid         = fineBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredWeightedIntrepid = fineBasisValuesFilteredWeighted;
-  
-  // the casts above are important to let FunctionSpaceTools invoke BLAS
-  Intrepid::FunctionSpaceTools::integrate<double>(lhsValuesIntrepid,fineBasisValuesFilteredIntrepid,fineBasisValuesFilteredWeightedIntrepid,Intrepid::COMP_BLAS);
-  Intrepid::FunctionSpaceTools::integrate<double>(rhsValuesIntrepid,fineBasisValuesFilteredWeightedIntrepid,coarserBasisValuesFilteredIntrepid,Intrepid::COMP_BLAS);
+  // Use Camellia::FieldContainer directly.  The generic FunctionSpaceTools overload wraps
+  // array-like containers without requiring an Intrepid FieldContainer alias.
+  Camellia::FunctionSpaceTools::integrate<double>(lhsValues, fineBasisValuesFiltered, fineBasisValuesFilteredWeighted);
+  Camellia::FunctionSpaceTools::integrate<double>(rhsValues, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered);
 
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -608,15 +602,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   Camellia::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   Camellia::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
 
-  Intrepid::FieldContainer<double> &lhsValuesIntrepid                       = lhsValues;
-  Intrepid::FieldContainer<double> &rhsValuesIntrepid                       = rhsValues;
-  Intrepid::FieldContainer<double> &coarserBasisValuesFilteredIntrepid      = coarserBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredIntrepid         = fineBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredWeightedIntrepid = fineBasisValuesFilteredWeighted;
-  
-  // the casts above are important to let FunctionSpaceTools invoke BLAS
-  Intrepid::FunctionSpaceTools::integrate<double>(lhsValuesIntrepid,fineBasisValuesFilteredIntrepid,fineBasisValuesFilteredWeightedIntrepid,Intrepid::COMP_BLAS);
-  Intrepid::FunctionSpaceTools::integrate<double>(rhsValuesIntrepid,fineBasisValuesFilteredWeightedIntrepid,coarserBasisValuesFilteredIntrepid,Intrepid::COMP_BLAS);
+  // Use Camellia::FieldContainer directly.  The generic FunctionSpaceTools overload wraps
+  // array-like containers without requiring an Intrepid FieldContainer alias.
+  Camellia::FunctionSpaceTools::integrate<double>(lhsValues, fineBasisValuesFiltered, fineBasisValuesFilteredWeighted);
+  Camellia::FunctionSpaceTools::integrate<double>(rhsValues, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered);
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -739,15 +728,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   Camellia::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   Camellia::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
 
-  Intrepid::FieldContainer<double> &lhsValuesIntrepid                       = lhsValues;
-  Intrepid::FieldContainer<double> &rhsValuesIntrepid                       = rhsValues;
-  Intrepid::FieldContainer<double> &coarserBasisValuesFilteredIntrepid      = coarserBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredIntrepid         = fineBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredWeightedIntrepid = fineBasisValuesFilteredWeighted;
-  
-  // the casts above are important to let FunctionSpaceTools invoke BLAS
-  Intrepid::FunctionSpaceTools::integrate<double>(lhsValuesIntrepid,fineBasisValuesFilteredIntrepid,fineBasisValuesFilteredWeightedIntrepid,Intrepid::COMP_BLAS);
-  Intrepid::FunctionSpaceTools::integrate<double>(rhsValuesIntrepid,fineBasisValuesFilteredWeightedIntrepid,coarserBasisValuesFilteredIntrepid,Intrepid::COMP_BLAS);
+  // Use Camellia::FieldContainer directly.  The generic FunctionSpaceTools overload wraps
+  // array-like containers without requiring an Intrepid FieldContainer alias.
+  Camellia::FunctionSpaceTools::integrate<double>(lhsValues, fineBasisValuesFiltered, fineBasisValuesFilteredWeighted);
+  Camellia::FunctionSpaceTools::integrate<double>(rhsValues, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered);
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -872,15 +856,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   Camellia::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   Camellia::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
 
-  Intrepid::FieldContainer<double> &lhsValuesIntrepid                       = lhsValues;
-  Intrepid::FieldContainer<double> &rhsValuesIntrepid                       = rhsValues;
-  Intrepid::FieldContainer<double> &coarserBasisValuesFilteredIntrepid      = coarserBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredIntrepid         = fineBasisValuesFiltered;
-  Intrepid::FieldContainer<double> &fineBasisValuesFilteredWeightedIntrepid = fineBasisValuesFilteredWeighted;
-  
-  // the casts above are important to let FunctionSpaceTools invoke BLAS
-  Intrepid::FunctionSpaceTools::integrate<double>(lhsValuesIntrepid,fineBasisValuesFilteredIntrepid,fineBasisValuesFilteredWeightedIntrepid,Intrepid::COMP_BLAS);
-  Intrepid::FunctionSpaceTools::integrate<double>(rhsValuesIntrepid,fineBasisValuesFilteredWeightedIntrepid,coarserBasisValuesFilteredIntrepid,Intrepid::COMP_BLAS);
+  // Use Camellia::FieldContainer directly.  The generic FunctionSpaceTools overload wraps
+  // array-like containers without requiring an Intrepid FieldContainer alias.
+  Camellia::FunctionSpaceTools::integrate<double>(lhsValues, fineBasisValuesFiltered, fineBasisValuesFilteredWeighted);
+  Camellia::FunctionSpaceTools::integrate<double>(rhsValues, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered);
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -1425,7 +1404,7 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
 
   if (fs == FUNCTION_SPACE_UNKNOWN)
   {
-    typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+    typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
     TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(basis.get());
 
     if (tensorBasis != NULL)

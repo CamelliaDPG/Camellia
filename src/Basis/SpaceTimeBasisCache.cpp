@@ -8,7 +8,7 @@
 //
 //
 
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 
 #include "SpaceTimeBasisCache.h"
 #include "TensorBasis.h"
@@ -249,8 +249,8 @@ constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensor
     int fieldIndex, int pointIndex,
     constFCPtr spatialValues,
     constFCPtr temporalValues,
-    Intrepid::EOperator spaceOpForSizing,
-    Intrepid::EOperator timeOpForSizing) const
+    Camellia::EOperator spaceOpForSizing,
+    Camellia::EOperator timeOpForSizing) const
 {
   Teuchos::Array<int> spatialValuesDim(spatialValues->rank()), temporalValuesDim(temporalValues->rank());
   spatialValues->dimensions(spatialValuesDim);
@@ -267,7 +267,7 @@ constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensor
 
   Camellia::FieldContainer<double>* tensorValues = new Camellia::FieldContainer<double>(spaceTimeValuesDim);
 
-  vector< Intrepid::FieldContainer<double> > componentValues;
+  vector< Camellia::FieldContainer<double> > componentValues;
   // not sure there's a clean way to avoid copying the spatial/temporal values here, but it's only a temporary copy
   // (really, we probably shouldn't be storing the tensor product values, which will take significantly more memory)
   componentValues.push_back(*spatialValues);
@@ -559,7 +559,7 @@ constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op
   BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
   BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
 
-  Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
+  Camellia::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
   Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
 
   constFCPtr spatialValues = _spatialCache->getValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
@@ -654,7 +654,7 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
 //    }
 //  }
 
-  Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
+  Camellia::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
 
   Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
 
@@ -690,7 +690,7 @@ constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Cam
   Teuchos::Array<int> dimensions;
   unWeightedValues->dimensions(dimensions);
   Teuchos::RCP< Camellia::FieldContainer<double> > weightedValues = Teuchos::rcp( new Camellia::FieldContainer<double>(dimensions) );
-  Intrepid::FunctionSpaceTools::multiplyMeasure<double>(*weightedValues, this->getWeightedMeasures(), *unWeightedValues);
+  Camellia::FunctionSpaceTools::multiplyMeasure<double>(*weightedValues, this->getWeightedMeasures(), *unWeightedValues);
   return weightedValues;
 }
 
@@ -780,27 +780,27 @@ Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op)
   }
 }
 
-Intrepid::EOperator SpaceTimeBasisCache::spaceOpForSizing(Camellia::EOperator op)
+Camellia::EOperator SpaceTimeBasisCache::spaceOpForSizing(Camellia::EOperator op)
 {
-  // idea here is to return an Intrepid::EOperator that has the same effect on Camellia::FieldContainer sizing (really, the
+  // idea here is to return an Camellia::EOperator that has the same effect on Camellia::FieldContainer sizing (really, the
   // rank of the value) as the Camellia::EOperator provided.
   switch (op)
   {
   // rank-increasing:
   case OP_GRAD:
-    return Intrepid::OPERATOR_GRAD;
+    return Camellia::OP_GRAD;
   // rank-decreasing:
   case OP_DIV:
   case OP_X:
   case OP_Y:
   case OP_Z:
-    return Intrepid::OPERATOR_DIV;
+    return Camellia::OP_DIV;
   // rank-switching (0 to 1, 1 to 0) in 2D, rank-preserving in 3D:
   case OP_CURL:
-    return Intrepid::OPERATOR_CURL;
+    return Camellia::OP_CURL;
   // rank-preserving:
   default:
-    return Intrepid::OPERATOR_VALUE;
+    return Camellia::OP_VALUE;
   }
 }
 
@@ -818,8 +818,8 @@ Camellia::EOperator SpaceTimeBasisCache::timeOp(Camellia::EOperator op)
   }
 }
 
-Intrepid::EOperator SpaceTimeBasisCache::timeOpForSizing(Camellia::EOperator op)
+Camellia::EOperator SpaceTimeBasisCache::timeOpForSizing(Camellia::EOperator op)
 {
   // we do not support any rank-increasing or rank-decreasing operations in time.
-  return Intrepid::OPERATOR_VALUE;
+  return Camellia::OP_VALUE;
 }

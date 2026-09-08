@@ -19,7 +19,6 @@
 #include "IP.h"
 #include "Function.h"
 
-#include "Intrepid_Basis.hpp"
 #include "RHS.h"
 #include "BC.h"
 

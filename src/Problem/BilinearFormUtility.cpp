@@ -7,8 +7,6 @@
 #include "BasisFactory.h"
 #include "IP.h"
 
-// Intrepid includes
-#include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Camellia_FieldContainer.hpp"
 
 #include "Teuchos_LAPACK.hpp"
@@ -258,8 +256,6 @@ void BilinearFormUtility<Scalar>::computeStiffnessMatrix(Camellia::FieldContaine
 
   // physicalCellNodes: the nodal points for the element(s) with topology cellTopo
   //                 The dimensions are (numCells, numNodesPerElement, spaceDimension)
-  Intrepid::DefaultCubatureFactory<double>  cubFactory;
-
   int maxTestDegree = testOrdering->maxBasisDegree();
 
   bool createSideCachesToo = true;
@@ -281,8 +277,6 @@ void BilinearFormUtility<Scalar>::computeRHS(Camellia::FieldContainer<Scalar> &r
 
   // physicalCellNodes: the nodal points for the element(s) with topology cellTopo
   //                 The dimensions are (numCells, numNodesPerElement, spaceDimension)
-  Intrepid::DefaultCubatureFactory<double>  cubFactory;
-
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = 2*cubDegreeTest;
 

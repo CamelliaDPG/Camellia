@@ -18,9 +18,6 @@
 
 #include "Shards_CellTopology.hpp"
 
-#include "Intrepid_DefaultCubatureFactory.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
-
 #include "Camellia_FieldContainer.hpp"
 #include "Camellia_FieldContainerConversion.hpp"
 // Teuchos includes

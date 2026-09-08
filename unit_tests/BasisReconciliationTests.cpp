@@ -403,7 +403,7 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
 {
   // copied from DPGTests's BasisReconciliationTests
 
-  static BasisReconciliation br; // static: harden the tests by sharing BasisReconciliation cache across all tests that call this method.  This is perhaps a little ugly from a debugging point of view.
+  BasisReconciliation br; // avoid static cached FieldContainers being destroyed after Kokkos::finalize()
 
   RefinementBranch sideRefinements = determineSideRefinements(volumeRefinements, fineAncestralSideIndex);
 

@@ -20,7 +20,7 @@
 
 namespace Camellia
 {
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class LegendreHVOL_QuadBasis;
+template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class LegendreHVOL_QuadBasis;
 template<class Scalar, class ArrayScalar> class LegendreHVOL_QuadBasis : public Basis<Scalar,ArrayScalar>
 {
 protected:

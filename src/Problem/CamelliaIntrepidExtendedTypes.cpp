@@ -39,6 +39,47 @@ static const std::string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 
 using namespace Camellia;
 
+void Camellia::setOrdinalTagData(std::vector<std::vector<std::vector<int> > > &tagToOrdinal,
+                                 std::vector<std::vector<int> > &ordinalToTag,
+                                 const int *tags,
+                                 const int basisCard,
+                                 const int tagSize,
+                                 const int posScDim,
+                                 const int posScOrd,
+                                 const int posDfOrd)
+{
+  ordinalToTag.resize(basisCard);
+  int maxScDim = 0;
+  int maxScOrd = 0;
+  int maxDfOrd = 0;
+  for (int dofOrd=0; dofOrd<basisCard; dofOrd++)
+  {
+    const int *tag = tags + dofOrd * tagSize;
+    ordinalToTag[dofOrd].assign(tag, tag + tagSize);
+    maxScDim = std::max(maxScDim, tag[posScDim]);
+    maxScOrd = std::max(maxScOrd, tag[posScOrd]);
+    maxDfOrd = std::max(maxDfOrd, tag[posDfOrd]);
+  }
+
+  tagToOrdinal.assign(maxScDim + 1, std::vector<std::vector<int> >());
+  for (int dofOrd=0; dofOrd<basisCard; dofOrd++)
+  {
+    const int *tag = tags + dofOrd * tagSize;
+    const int scDim = tag[posScDim];
+    const int scOrd = tag[posScOrd];
+    const int dfOrd = tag[posDfOrd];
+    if (static_cast<int>(tagToOrdinal[scDim].size()) <= scOrd)
+    {
+      tagToOrdinal[scDim].resize(scOrd + 1);
+    }
+    if (static_cast<int>(tagToOrdinal[scDim][scOrd].size()) <= dfOrd)
+    {
+      tagToOrdinal[scDim][scOrd].resize(dfOrd + 1, -1);
+    }
+    tagToOrdinal[scDim][scOrd][dfOrd] = dofOrd;
+  }
+}
+
 bool Camellia::functionSpaceIsVectorized(EFunctionSpace fs)
 {
   return (FUNCTION_SPACE_VECTOR_HGRAD == fs)

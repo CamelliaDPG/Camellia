@@ -75,11 +75,17 @@ void ConstantScalarFunction<Scalar>::values(typename Camellia::FieldContainer<Sc
   else
   {
     auto value = this->value();
-    auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy2(values);
+    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
+    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy6(values);
     Kokkos::parallel_for("ConstantScalarFunction mod assignment", rangePolicy,
-    KOKKOS_LAMBDA (const int i0, const int i1) {
-      auto & entry = values(i0, i1);
-      assignValue(entry, modType, value);
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                   const array_index_type i3, const array_index_type i4, const array_index_type i5) {
+      for (int i6 = 0; i6 < dim6; i6++)
+      {
+        auto & entry = values.access(i0, i1, i2, i3, i4, i5, i6);
+        assignValue(entry, modType, value);
+      }
     });
   }
 }
@@ -89,7 +95,7 @@ void ConstantScalarFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldC
 {
   const bool copyFromHost = (modType != ASSIGN);
   auto dv = values.checkoutDeviceView(copyFromHost);
-  const int dim6 = dv.extent_int(6);
+  const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
   
   auto value = this->value();
   using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
@@ -126,14 +132,54 @@ void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Camellia::FieldC
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
-  // we don't actually care about the shape of basisValues--just use the FunctionValues versions:
-  scalarMultiplyFunctionValues(basisValues,basisCache);
+  (void)basisCache;
+
+  const Scalar value = this->value();
+  if (value == 1.0)
+  {
+    return;
+  }
+
+  const bool overwritesValues = (value == 0.0);
+  auto dv = basisValues.checkoutDeviceView(!overwritesValues);
+
+  if (overwritesValues)
+  {
+    Kokkos::deep_copy(dv, 0.0);
+  }
+  else
+  {
+    auto data = dv.data();
+    const int entryCount = basisValues.size();
+    Kokkos::parallel_for("ConstantScalarFunction_scalarMultiplyBasisValues", entryCount,
+    KOKKOS_LAMBDA (const int i)
+    {
+      data[i] *= value;
+    });
+  }
+  basisValues.checkinDeviceView(true);
 }
 
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
-  scalarDivideFunctionValues(basisValues,basisCache);
+  (void)basisCache;
+
+  const Scalar value = this->value();
+  if (value == 1.0)
+  {
+    return;
+  }
+
+  auto dv = basisValues.checkoutDeviceView();
+  auto data = dv.data();
+  const int entryCount = basisValues.size();
+  Kokkos::parallel_for("ConstantScalarFunction_scalarDivideBasisValues", entryCount,
+  KOKKOS_LAMBDA (const int i)
+  {
+    data[i] /= value;
+  });
+  basisValues.checkinDeviceView(true);
 }
 
 template <typename Scalar>

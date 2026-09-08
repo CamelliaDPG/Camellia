@@ -4,8 +4,6 @@
 // This code is derived from source governed by the license LICENSE-DPGTrilinos in the licenses directory.
 //
 
-#include "Intrepid_PointTools.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
 #include "BasisFactory.h"

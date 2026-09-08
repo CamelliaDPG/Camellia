@@ -30,8 +30,8 @@ class SpaceTimeBasisCache : public BasisCache
   Camellia::EOperator spaceOp(Camellia::EOperator op);
   Camellia::EOperator timeOp(Camellia::EOperator op);
 
-  Intrepid::EOperator spaceOpForSizing(Camellia::EOperator op);
-  Intrepid::EOperator timeOpForSizing(Camellia::EOperator op);
+  Camellia::EOperator spaceOpForSizing(Camellia::EOperator op);
+  Camellia::EOperator timeOpForSizing(Camellia::EOperator op);
 
   void getSpaceTimeCubatureDegrees(ElementTypePtr spaceTimeType, int &spaceCubature, int &timeCubature);
   //  void getSpaceTimeElementTypes(ElementTypePtr spaceTimeType, ElementTypePtr &spaceType, ElementTypePtr &timeType);
@@ -40,8 +40,8 @@ class SpaceTimeBasisCache : public BasisCache
                                   int fieldIndex, int pointIndex,
                                   constFCPtr spatialValues,
                                   constFCPtr temporalValues,
-                                  Intrepid::EOperator spaceOp,
-                                  Intrepid::EOperator timeOp) const;
+                                  Camellia::EOperator spaceOp,
+                                  Camellia::EOperator timeOp) const;
   void getReferencePointComponents(const Camellia::FieldContainer<double> &tensorRefPoints,
                                    Camellia::FieldContainer<double> &spaceRefPoints,
                                    Camellia::FieldContainer<double> &timeRefPoints);

@@ -9,6 +9,7 @@
 
 #include <set>
 #include <string>
+#include <vector>
 
 
 #include <Intrepid2_Types.hpp>
@@ -112,6 +113,15 @@ namespace Camellia
 
   const std::string & operatorName(EOperator op);
   int operatorRank(EOperator op, EFunctionSpace fs);
+
+  void setOrdinalTagData(std::vector<std::vector<std::vector<int> > >   &tagToOrdinal,
+                         std::vector<std::vector<int> >                 &ordinalToTag,
+                         const int                                      *tags,
+                         const int                                      basisCard,
+                         const int                                      tagSize,
+                         const int                                      posScDim,
+                         const int                                      posScOrd,
+                         const int                                      posDfOrd);
 }
 
 #endif

@@ -9,8 +9,6 @@
 #include "Projector.h"
 #include "BasisSumFunction.h"
 
-#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
-
 using namespace Camellia;
 
 class LinearInterpolatingSurface : public ParametricSurface

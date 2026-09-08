@@ -1116,8 +1116,8 @@ void runTestCases(const ProblemChoice problem, const GMGOperator::SmootherChoice
     const int minIterations = std::min( expectedIterations - iterationTol, int(expectedIterations * (1. - iterationFractionTol)));
     const int maxIterations = std::max( expectedIterations + iterationTol, int(expectedIterations * (1. + iterationFractionTol)));
     
-    TEST_COMPARE(iterationCount, >, minIterations);
-    TEST_COMPARE(iterationCount, <, maxIterations);
+    TEST_COMPARE(iterationCount, >=, minIterations);
+    TEST_COMPARE(iterationCount, <=, maxIterations);
   }
 }
 

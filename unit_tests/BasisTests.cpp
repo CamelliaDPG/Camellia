@@ -11,20 +11,9 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestHelpers.hpp"
+#include "Teuchos_LAPACK.hpp"
 
 #include "Basis.h"
-#include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
-
-#include "Intrepid_HDIV_TET_In_FEM.hpp"
-
-#include "Intrepid_HGRAD_TRI_Cn_FEM_ORTH.hpp"
-#include "Intrepid_HDIV_TRI_In_FEM.hpp"
-
-#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
-#include "Intrepid_HDIV_QUAD_In_FEM.hpp"
-
-#include "Intrepid_HGRAD_HEX_Cn_FEM.hpp"
-#include "Intrepid_HDIV_HEX_In_FEM.hpp"
 
 #include "doubleBasisConstruction.h"
 #include "CamelliaCellTools.h"
@@ -182,22 +171,18 @@ TEUCHOS_UNIT_TEST( Basis, DofOrdinalsAssigned_PointBasis )
   testBasisAllDofOrdinalsAssignedToSubcells(pointBasis, out, success);
 }
 
-// Define the templated unit test.
-TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( Basis, ScalarPolynomialBasisUnisolvence, ScalarPolynomialBasisType )
+void testScalarPolynomialBasisUnisolvence(BasisPtr basis, Teuchos::FancyOStream &out, bool &success)
 {
-  int polyOrder = 1;
-  ScalarPolynomialBasisType basis(polyOrder, Intrepid::POINTTYPE_SPECTRAL);
+  CellTopoPtr cellTopo = basis->domainTopology();
 
-  shards::CellTopology cellTopo = basis.getBaseCellTopology();
+  Camellia::FieldContainer<double> dofCoords(basis->getCardinality(), cellTopo->getDimension());
+  basis->getDofCoords(dofCoords);
 
-  Camellia::FieldContainer<double> dofCoords(basis.getCardinality(), cellTopo.getDimension());
-  basis.getDofCoords(dofCoords);
+  Camellia::FieldContainer<double> valuesAtNodes(basis->getCardinality(), dofCoords.dimension(0)); // (F, P)
 
-  Camellia::FieldContainer<double> valuesAtNodes(basis.getCardinality(), dofCoords.dimension(0)); // (F, P)
+  basis->getValues(valuesAtNodes, dofCoords, OP_VALUE);
 
-  basis.getValues(valuesAtNodes, dofCoords, Intrepid::OPERATOR_VALUE);
-
-  for (int basisOrdinal=0; basisOrdinal < basis.getCardinality(); basisOrdinal++)
+  for (int basisOrdinal=0; basisOrdinal < basis->getCardinality(); basisOrdinal++)
   {
     for (int nodeOrdinal=0; nodeOrdinal < dofCoords.dimension(0); nodeOrdinal++)
     {
@@ -213,24 +198,20 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( Basis, ScalarPolynomialBasisUnisolvence, Scal
   }
 }
 
-//
-// Instantiate the unit test for various values of RealType.
-//
-// Typedefs to work around Bug 5757 (TYPE values cannot have spaces).
-  using ArrayScalar = ::Intrepid::FieldContainer<double>;
-  using HGRAD_LINE_TYPE = ::Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, ArrayScalar >;
-  
-  using HGRAD_QUAD_TYPE = ::Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, ArrayScalar >;
-  using HDIV_QUAD_TYPE  = ::Intrepid::Basis_HDIV_QUAD_In_FEM <double, ArrayScalar >;
+TEUCHOS_UNIT_TEST( Basis, ScalarPolynomialBasisUnisolvence_HGRAD_LINE )
+{
+  testScalarPolynomialBasisUnisolvence(intrepid2LineHGRAD(1), out, success);
+}
 
-  using HGRAD_HEX_TYPE  = ::Intrepid::Basis_HGRAD_HEX_Cn_FEM<double, ArrayScalar >;
-  using HDIV_HEX_TYPE   = ::Intrepid::Basis_HDIV_HEX_In_FEM <double, ArrayScalar >;
+TEUCHOS_UNIT_TEST( Basis, ScalarPolynomialBasisUnisolvence_HGRAD_QUAD )
+{
+  testScalarPolynomialBasisUnisolvence(intrepid2QuadHGRAD(1), out, success);
+}
 
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, HGRAD_LINE_TYPE )
-
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, HGRAD_QUAD_TYPE )
-
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, HGRAD_HEX_TYPE )
+TEUCHOS_UNIT_TEST( Basis, ScalarPolynomialBasisUnisolvence_HGRAD_HEX )
+{
+  testScalarPolynomialBasisUnisolvence(intrepid2HexHGRAD(1), out, success);
+}
 
   TEUCHOS_UNIT_TEST( Basis, HDIV_Triangle_L2_Eigenvalues )
   {
@@ -265,7 +246,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
     int polyOrder = 5;
     int scalarRank = 0;
     int spaceDim = 2;
-    BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, ArrayScalar >( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM_ORTH<double, ArrayScalar >(polyOrder)), spaceDim, scalarRank, fs) );
+    BasisPtr basis = intrepid2TriHGRAD(polyOrder);
     
     VarFactoryPtr vf = VarFactory::varFactory();
     VarPtr H1Var = vf->testVar("v", HGRAD);
@@ -279,7 +260,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
     int polyOrder = 5;
     int vectorRank = 1;
     int spaceDim = 2;
-    BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, ArrayScalar >( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, ArrayScalar >(polyOrder, Intrepid::POINTTYPE_EQUISPACED)), spaceDim, vectorRank, fs) );
+    BasisPtr basis = intrepid2TriHDIV(polyOrder);
     
     VarFactoryPtr vf = VarFactory::varFactory();
     VarPtr H1Var = vf->testVar("v", HDIV);
@@ -297,7 +278,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
     int polyOrder = 5;
     int vectorRank = 1;
     int spaceDim = 2;
-    BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, ArrayScalar >( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, ArrayScalar >(polyOrder, Intrepid::POINTTYPE_WARPBLEND)), spaceDim, vectorRank, fs) );
+    BasisPtr basis = intrepid2TriHDIV(polyOrder);
     
     VarFactoryPtr vf = VarFactory::varFactory();
     VarPtr H1Var = vf->testVar("v", HDIV);
@@ -320,7 +301,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
 
     for (int polyOrder=1; polyOrder<7; polyOrder++)
     {
-      BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, ArrayScalar >( Teuchos::rcp( new Intrepid::Basis_HDIV_TET_In_FEM<double, ArrayScalar >(polyOrder, Intrepid::POINTTYPE_WARPBLEND)), spaceDim, vectorRank, fs) );
+      BasisPtr basis = intrepid2TetHDIV(polyOrder);
       
       testBasisL2Eigenvalues(H1Var, basis, polyOrder, out, success);
     }

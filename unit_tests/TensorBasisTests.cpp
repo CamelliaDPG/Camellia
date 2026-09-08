@@ -14,12 +14,6 @@
 
 #include "Camellia_FieldContainer.hpp"
 
-#include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
-#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
-#include "Intrepid_HDIV_QUAD_In_FEM.hpp"
-#include "Intrepid_HGRAD_HEX_Cn_FEM.hpp"
-#include "Intrepid_HDIV_HEX_In_FEM.hpp"
-
 #include "doubleBasisConstruction.h"
 #include "Basis.h"
 #include "BasisCache.h"
@@ -208,7 +202,7 @@ void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, int
   BasisPtr lineBasis = basisFactory->getBasis(timeH1Order, line, timeFS);
   BasisPtr spaceBasis = basisFactory->getBasis(spaceH1Order, spaceTopo, Camellia::FUNCTION_SPACE_HGRAD);
 
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, lineBasis) );
 
   // sanity check: tensorBasis should have cardinality = spaceBasis->getCardinality() * lineBasis->getCardinality()
@@ -322,7 +316,7 @@ void testTensorBasisFillsFieldContainer(BasisPtr spatialBasis, BasisPtr temporal
   FC tensorPoints = tensorPointsForDimension(spaceDim);
   FC myValues;
   Camellia::EOperator op = OP_VALUE;
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, temporalBasis) );
 
   sizeFCForBasisValues(myValues, tensorBasis, tensorPoints.dimension(0), op);
@@ -350,7 +344,7 @@ void testTensorBasisValuesAreTensorProduct(BasisPtr spatialBasis, BasisPtr timeB
   int numTimePoints = temporalPoints.dimension(0);
   int numTensorPoints = tensorPoints.dimension(0);
 
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
   FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValues;
   ::Camellia::EOperator op = OP_VALUE;
@@ -561,7 +555,7 @@ TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues )
     int numTimePoints = temporalPoints.dimension(0);
     int numTensorPoints = tensorPoints.dimension(0);
 
-    typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+    typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
     Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
     FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValuesExpected, tensorValuesActual;
     ::Camellia::EOperator op = OP_VALUE;
@@ -578,7 +572,7 @@ TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues )
     out << "temporalValues:\n" << temporalValues;
 
     sizeFCForBasisValues(tensorValuesActual, tensorBasis, numTensorPoints, op);
-    vector< Intrepid::FieldContainer<double> > componentValues(2);
+    vector< Camellia::FieldContainer<double> > componentValues(2);
     componentValues[0] = spatialValues;
     componentValues[1] = temporalValues;
 
@@ -601,7 +595,7 @@ TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisFieldOrderingAgreesWithTensorTopology
 
   BasisPtr basis = basisFactory->getBasis(H1Order, line, Camellia::FUNCTION_SPACE_HGRAD);
 
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basis, basis) );
 
   int tensorialDegree = 1;
@@ -639,7 +633,7 @@ TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisPointOrderingAgreesWithTensorTopology
   BasisPtr spaceBasis = basisFactory->getBasis(H1Order, spaceTopo, Camellia::FUNCTION_SPACE_HGRAD);
   BasisPtr timeBasis = basisFactory->getBasis(H1Order, timeTopo, Camellia::FUNCTION_SPACE_HGRAD);
 
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, timeBasis) );
 
   int tensorialDegree = 1;

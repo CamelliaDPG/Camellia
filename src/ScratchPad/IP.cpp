@@ -2,7 +2,7 @@
 // © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
 
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 
 #include "IP.h"
 #include "SerialDenseMatrixUtility.h"
@@ -186,15 +186,11 @@ void TIP<Scalar>::computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &in
           applyInnerProductData(innerProductDataAppliedToTest1, innerProductDataAppliedToTest2,
                                 testID1, testID2, operatorIndex, basisCache);
 
-          Intrepid::FieldContainer<double> &innerProductDataAppliedToTest1Intrepid   = innerProductDataAppliedToTest1;
-          Intrepid::FieldContainer<double> &innerProductDataAppliedToTest2Intrepid   = innerProductDataAppliedToTest2;
-          Intrepid::FieldContainer<double> &miniMatrixIntrepid                       = miniMatrix;
-          
-          // the casts above are important to let FunctionSpaceTools invoke BLAS
-          Intrepid::FunctionSpaceTools::integrate<Scalar>(miniMatrixIntrepid,
-                                                          innerProductDataAppliedToTest1Intrepid,
-                                                          innerProductDataAppliedToTest2Intrepid,
-                                                          Intrepid::COMP_BLAS);
+          // Use Camellia::FieldContainer directly.  The generic FunctionSpaceTools overload wraps
+          // array-like containers without requiring Intrepid::FieldContainer aliases.
+          Camellia::FunctionSpaceTools::integrate<Scalar>(miniMatrix,
+                                                          innerProductDataAppliedToTest1,
+                                                          innerProductDataAppliedToTest2);
           
           int test1DofOffset = dofOrdering->getDofIndex(testID1,0);
           int test2DofOffset = dofOrdering->getDofIndex(testID2,0);

@@ -252,7 +252,7 @@ void VectorizedBasis<Scalar,ArrayScalar>::initializeTags() const
   }
 
   // call basis-independent method (declared in IntrepidUtil.hpp) to set up the data structures
-  Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
+  Camellia::setOrdinalTagData(this -> _tagToOrdinal,
                               this -> _ordinalToTag,
                               &(tags[0]),
                               this -> getCardinality(),

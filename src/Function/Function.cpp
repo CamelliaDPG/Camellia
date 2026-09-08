@@ -3017,17 +3017,75 @@ void TFunction<Scalar>::scalarModifyFunctionValues(typename FieldContainer<Scala
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::parallel_for("scalarModifyFunctionValues", FieldContainer<Scalar>::getMDRangePolicy6(dv),
-  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
+  switch (dv.rank())
   {
-    Scalar scalarValue = dv_scalar(i0,i1);
-    for (int i6 = 0; i6 < dim6; i6++)
+    case 2:
     {
-      assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank2", FieldContainer<Scalar>::getMDRangePolicy2(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
+      {
+        assignValue(dv(i0,i1),valueModType,dv_scalar(i0,i1));
+      });
+      break;
     }
-  });
+    case 3:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank3", FieldContainer<Scalar>::getMDRangePolicy3(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2)
+      {
+        assignValue(dv(i0,i1,i2),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    case 4:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<4> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank4", FieldContainer<Scalar>::getMDRangePolicy4(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3)
+      {
+        assignValue(dv(i0,i1,i2,i3),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    case 5:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<5> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank5", FieldContainer<Scalar>::getMDRangePolicy5(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3, const array_index_type i4)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    case 6:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank6", FieldContainer<Scalar>::getMDRangePolicy6(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4,i5),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    default:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank7", FieldContainer<Scalar>::getMDRangePolicy6(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        Scalar scalarValue = dv_scalar(i0,i1);
+        for (int i6 = 0; i6 < dim6; i6++)
+        {
+          assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+        }
+      });
+      break;
+    }
+  }
   Allocation<Scalar>::checkinDeviceView(dv_scalar);
 }
 
@@ -3061,17 +3119,65 @@ void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double>
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::parallel_for("scalarModifyBasisValues", values.getMDRangePolicy6(),
-  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
+  switch (dv.rank())
   {
-    Scalar scalarValue = dv_scalar(i0,i2);
-    for (int i6 = 0; i6 < dim6; i6++)
+    case 3:
     {
-      assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank3", FieldContainer<double>::getMDRangePolicy3(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2)
+      {
+        assignValue(dv(i0,i1,i2),valueModType,dv_scalar(i0,i2));
+      });
+      break;
     }
-  });
+    case 4:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<4> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank4", FieldContainer<double>::getMDRangePolicy4(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3)
+      {
+        assignValue(dv(i0,i1,i2,i3),valueModType,dv_scalar(i0,i2));
+      });
+      break;
+    }
+    case 5:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<5> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank5", FieldContainer<double>::getMDRangePolicy5(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3, const array_index_type i4)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4),valueModType,dv_scalar(i0,i2));
+      });
+      break;
+    }
+    case 6:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank6", FieldContainer<double>::getMDRangePolicy6(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4,i5),valueModType,dv_scalar(i0,i2));
+      });
+      break;
+    }
+    default:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank7", values.getMDRangePolicy6(),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        Scalar scalarValue = dv_scalar(i0,i2);
+        for (int i6 = 0; i6 < dim6; i6++)
+        {
+          assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+        }
+      });
+      break;
+    }
+  }
   Allocation<Scalar>::checkinDeviceView(dv_scalar);
   values.checkinDeviceView(true);
 }

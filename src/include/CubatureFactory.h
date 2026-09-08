@@ -25,7 +25,6 @@
  \date Last modified on 11-Dec-2014.
  */
 
-// Intrepid includes:
 #include "Intrepid2_DefaultCubatureFactory.hpp"
 
 // Camellia includes:

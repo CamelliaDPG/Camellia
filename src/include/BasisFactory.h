@@ -11,8 +11,6 @@
 
 #include "TypeDefs.h"
 
-// Intrepid includes
-#include "Intrepid_Basis.hpp"
 #include "Camellia_FieldContainer.hpp"
 
 // Shards includes

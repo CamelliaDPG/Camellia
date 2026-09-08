@@ -104,8 +104,7 @@ namespace {
   {
     const int thisTag = nextConfigTag++;
     
-    const int spaceDim = 1;
-    const int sideDim = spaceDim; // space-time configuration-space mesh has dimension spaceDim + 1; sides have dimension _spaceDim
+    const int sideDim = configurationSpaceMeshTopology->getDimension() - 1;
     auto matchingSideSet = configurationSpaceMeshTopology->createEntitySet();
     std::vector<IndexType> matchingSideIndices = restrictToBoundary ? configurationSpaceMeshTopology->getBoundarySidesThatMatch(regionToMatch)
                                                                     : configurationSpaceMeshTopology->getSidesThatMatch        (regionToMatch);
@@ -202,6 +201,7 @@ namespace {
     // Compute the error
     double E_soln_magnitude = E_soln->l2norm(mesh);
     double E_err_l2 = (E_soln - E_exact)->l2norm(mesh);
+    out << "Poisson E magnitude: " << E_soln_magnitude << "; E error: " << E_err_l2 << std::endl;
 
     // Check the error
     const double tol = 1e-12;
@@ -222,6 +222,22 @@ namespace {
       exporter->exportSolution(soln, std::vector<FunctionPtr>{E_soln - E_exact, E_exact}, std::vector<std::string>{"E err", "E exact"});
     }
   }
+
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, ManufacturedFunctionDerivatives) {
+  const double tol = 1e-14;
+
+  auto linearE = manufacturedSolution_LinearE();
+  TEST_FLOATING_EQUALITY(linearE.E_exact->evaluate(0.25), 0.5, tol);
+  TEST_FLOATING_EQUALITY(linearE.E_exact->evaluate(0.75), 1.5, tol);
+  TEST_FLOATING_EQUALITY(linearE.E_exact->dx()->evaluate(0.25), 2.0, tol);
+  TEST_FLOATING_EQUALITY(linearE.E_exact->dx()->evaluate(0.75), 2.0, tol);
+
+  auto quadraticE = manufacturedSolution_QuadraticE();
+  TEST_FLOATING_EQUALITY(quadraticE.E_exact->evaluate(0.25), -0.3125, tol);
+  TEST_FLOATING_EQUALITY(quadraticE.E_exact->evaluate(0.75), 0.1875, tol);
+  TEST_FLOATING_EQUALITY(quadraticE.E_exact->dx()->evaluate(0.25), -0.5, tol);
+  TEST_FLOATING_EQUALITY(quadraticE.E_exact->dx()->evaluate(0.75), 2.5, tol);
+}
 
 TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveZeroE) {
   const bool useNonUniformSpatialMesh = false;
@@ -265,6 +281,20 @@ TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveConstantENonUniform
   testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
 }
 
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveConstantESpaceOnly) {
+  const bool useNonUniformSpatialMesh = false;
+  const bool spaceTime = false;
+  auto manufacturedSoln = manufacturedSolution_ConstantE();
+  testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
+}
+
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveConstantENonUniformMeshSpaceOnly) {
+  const bool useNonUniformSpatialMesh = true;
+  const bool spaceTime = false;
+  auto manufacturedSoln = manufacturedSolution_ConstantE();
+  testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
+}
+
 TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveLinearE) {
   const bool useNonUniformSpatialMesh = false;
   const bool spaceTime = true;
@@ -279,6 +309,20 @@ TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveLinearENonUniformMe
   testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
 }
 
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveLinearESpaceOnly) {
+  const bool useNonUniformSpatialMesh = false;
+  const bool spaceTime = false;
+  auto manufacturedSoln = manufacturedSolution_LinearE();
+  testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
+}
+
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveLinearENonUniformMeshSpaceOnly) {
+  const bool useNonUniformSpatialMesh = true;
+  const bool spaceTime = false;
+  auto manufacturedSoln = manufacturedSolution_LinearE();
+  testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
+}
+
 TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveQuadraticE) {
   const bool useNonUniformSpatialMesh = false;
   const bool spaceTime = true;
@@ -289,6 +333,20 @@ TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveQuadraticE) {
 TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveQuadraticENonUniformMesh) {
   const bool useNonUniformSpatialMesh = true;
   const bool spaceTime = true;
+  auto manufacturedSoln = manufacturedSolution_QuadraticE();
+  testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
+}
+
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveQuadraticESpaceOnly) {
+  const bool useNonUniformSpatialMesh = false;
+  const bool spaceTime = false;
+  auto manufacturedSoln = manufacturedSolution_QuadraticE();
+  testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
+}
+
+TEUCHOS_UNIT_TEST(ConfigurationSpaceFormulationPoisson, SolveQuadraticENonUniformMeshSpaceOnly) {
+  const bool useNonUniformSpatialMesh = true;
+  const bool spaceTime = false;
   auto manufacturedSoln = manufacturedSolution_QuadraticE();
   testPoissonSolve(manufacturedSoln, useNonUniformSpatialMesh, spaceTime, out, success);
 }

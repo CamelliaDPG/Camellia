@@ -8,7 +8,7 @@
 #include "BasisCache.h"
 #include "DofOrdering.h"
 
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 
 #include "CamelliaCellTools.h"
 
@@ -125,15 +125,9 @@ void PenaltyMethodFilter::filter(Camellia::FieldContainer<double> &localStiffnes
           // integrate the transformed values, add them to the relevant trial/testTrialID dof combos
           Camellia::FieldContainer<double> unweightedPenaltyMatrix(numCells,numDofs1,numDofs2);
           
-          Intrepid::FieldContainer<double> &unweightedPenaltyMatrixIntrepid     = unweightedPenaltyMatrix;
-          Intrepid::FieldContainer<double> &trialValuesCopyIntrepid             = trialValuesCopy;
-          Intrepid::FieldContainer<double> &testTrialValuesWeightedCopyIntrepid = testTrialValuesWeightedCopy;
-          
-          // the casts above are important to let FunctionSpaceTools invoke BLAS
-          Intrepid::FunctionSpaceTools::integrate<double>(unweightedPenaltyMatrixIntrepid,
-                                                          trialValuesCopyIntrepid,
-                                                          testTrialValuesWeightedCopyIntrepid,
-                                                          Intrepid::COMP_BLAS);
+          Camellia::FunctionSpaceTools::integrate<double>(unweightedPenaltyMatrix,
+                                                          trialValuesCopy,
+                                                          testTrialValuesWeightedCopy);
 
           for (int cellIndex=0; cellIndex<numCells; cellIndex++)
           {
@@ -154,15 +148,9 @@ void PenaltyMethodFilter::filter(Camellia::FieldContainer<double> &localStiffnes
         // set penalty load
         Camellia::FieldContainer<double> unweightedRHSVector(numCells,numDofs2);
         
-        Intrepid::FieldContainer<double> &unweightedRHSVectorIntrepid         = unweightedRHSVector;
-        Intrepid::FieldContainer<double> &constrValuesIntrepid                = constrValues;
-        Intrepid::FieldContainer<double> &testTrialValuesWeightedCopyIntrepid = testTrialValuesWeightedCopy;
-        
-        // the casts above are important to let FunctionSpaceTools invoke BLAS
-        Intrepid::FunctionSpaceTools::integrate<double>(unweightedRHSVectorIntrepid,
-                                                        constrValuesIntrepid,
-                                                        testTrialValuesWeightedCopyIntrepid,
-                                                        Intrepid::COMP_BLAS);
+        Camellia::FunctionSpaceTools::integrate<double>(unweightedRHSVector,
+                                                        constrValues,
+                                                        testTrialValuesWeightedCopy);
         
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
         {

@@ -8,18 +8,15 @@
 
 #include "TypeDefs.h"
 
-#include "Intrepid_CellTools.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
-#include "Intrepid_CubatureDirectLineGauss.hpp"
-#include "Intrepid_CubatureDirectTriDefault.hpp"
-
 #include "Intrepid2_CellTools.hpp"
 #include "Intrepid2_Cubature.hpp"
+#include "Intrepid2_Types.hpp"
 
 #include "BasisCache.h"
 #include "BasisFactory.h"
 #include "BasisEvaluation.h"
 #include "Camellia_FieldContainerConversion.hpp"
+#include "Camellia_Integrate.hpp"
 #include "CamelliaCellTools.h"
 #include "CubatureFactory.h"
 #include "doubleBasisConstruction.h"
@@ -36,7 +33,7 @@
 using namespace std;
 using namespace Camellia;
 
-using fst = Intrepid::FunctionSpaceTools;
+namespace fst = Camellia::FunctionSpaceTools;
 
 const static bool CACHE_TRANSFORMED_VALUES = false; // save some memory by not caching these
 
@@ -52,11 +49,11 @@ int boundDegreeToMaxCubatureForCellTopo(int degree, CellTopoPtr cellTopo)
   const bool triOrExtrudedTri   = baseKey == shards::Triangle<3>::key;
   if (lineOrExtrudedLine)
   {
-    return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
+    return min(Intrepid2::Parameters::MaxCubatureDegreeEdge, degree);
   }
   else if (triOrExtrudedTri)
   {
-    return min(INTREPID_CUBATURE_TRI_DEFAULT_MAX, degree);
+    return min(Intrepid2::Parameters::MaxCubatureDegreeTri, degree);
   }
   else
   {
@@ -783,7 +780,7 @@ bool BasisCache::neglectHessian() const
      This does *NOT* mean that the mixed derivative terms in the Hessian (e.g. d^2/(dx dy))
      are zero, and for computing arbitrary second-order derivatives we would need to take these
      into account even for the straight-edge case.  But for computing the "diagonal" terms in
-     Intrepid::OPERATOR_D2 (like d^2/dx^2) that contribute the Laplacian, all we need is those same diagonal
+     Intrepid2::OPERATOR_D2 (like d^2/dx^2) that contribute the Laplacian, all we need is those same diagonal
      terms in the Hessian.  For the straight-edge case these are zero.
      
      Right now we don't support transformations of basis values for mixed derivative terms, which
@@ -954,11 +951,8 @@ BasisCache::getValues(BasisPtr intrepid2Basis, Intrepid2::EOperator op, bool use
     const auto &points = useCubPointsSideRefCell ? _cubPointsSideRefCell : _cubPoints;
     TEUCHOS_TEST_FOR_EXCEPTION(!points.isValid(), std::logic_error, "points container is not valid!");
     
-    auto result = BasisEvaluation::getValues(basisAsIntrepid2, op, points);
-    pair< pair< Camellia::Basis<>*, Intrepid2::EOperator>, Intrepid2::BasisValues<double,DeviceType> > resultEntry {key, result};
-    _knownValues.insert(resultEntry);
-//    _knownValues[key] = result; // TODO: submit Intrepid2 PR with default constructor for BasisValues — that will allow use to write this instead of the more complex thing above.
-    return _knownValues[key];
+    auto insertResult = _knownValues.emplace(key, BasisEvaluation::getValues(basisAsIntrepid2, op, points));
+    return insertResult.first->second;
   }
 }
 
@@ -1053,7 +1047,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
     bool vectorizedBasis = functionSpaceIsVectorized(fs);
     if ( (vectorizedBasis) && (relatedOp == OP_VALUE))
     {
-      VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<double, Intrepid::FieldContainer<double> > *) basis.get(), false );
+      VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<double, Camellia::FieldContainer<double> > *) basis.get(), false );
       BasisPtr componentBasis = vectorBasis->getComponentBasis();
       constFCPtr componentReferenceValuesTransformed = getTransformedValues(componentBasis, Camellia::OP_VALUE,
           useCubPointsSideRefCell);
@@ -1070,9 +1064,8 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
         TEUCHOS_TEST_FOR_EXCEPTION(!standardIntrepidOperator, std::invalid_argument, "relatedOp must be known to Intrepid2");
         
         Intrepid2::EOperator intrepid2Op = static_cast<Intrepid2::EOperator>(relatedOp);
-        auto basisValues = getValues(basis,intrepid2Op,useCubPointsSideRefCell);
-        auto convertedBasisValues = FieldContainerConversion<double>::fromBasisValues(basisValues);
-        referenceValues = Teuchos::rcp(new FieldContainer<double>(convertedBasisValues));
+        const auto &basisValues = getValues(basis,intrepid2Op,useCubPointsSideRefCell);
+        referenceValues = FieldContainerConversion<double>::fromBasisValuesRCP(basisValues);
       }
       else
       {
@@ -1256,7 +1249,37 @@ Camellia::FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(c
   }
 
   Camellia::FieldContainer<double> refCellPoints(numPoints,spaceDim);
-  Intrepid::CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo->getShardsTopology(),cellIndex);
+  Camellia::FieldContainer<double> refCellPointsWithCellDim(1,numPoints,spaceDim);
+  Camellia::FieldContainer<double> physicalPointsWithCellDim(1,numPoints,spaceDim);
+  Camellia::FieldContainer<double> physicalCellNodesForCell(1,_physicalCellNodes.dimension(1),_physicalCellNodes.dimension(2));
+  for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+  {
+    for (int d=0; d<spaceDim; d++)
+    {
+      physicalPointsWithCellDim(0,pointOrdinal,d) = physicalPoints(pointOrdinal,d);
+    }
+  }
+  for (int nodeOrdinal=0; nodeOrdinal<_physicalCellNodes.dimension(1); nodeOrdinal++)
+  {
+    for (int d=0; d<_physicalCellNodes.dimension(2); d++)
+    {
+      physicalCellNodesForCell(0,nodeOrdinal,d) = _physicalCellNodes(cellIndex,nodeOrdinal,d);
+    }
+  }
+  auto refCellPointsView      = refCellPointsWithCellDim.checkoutDeviceView(false);
+  auto physicalPointsView     = physicalPointsWithCellDim.checkoutDeviceView();
+  auto physicalCellNodesView  = physicalCellNodesForCell.checkoutDeviceView();
+  Intrepid2::CellTools<DeviceType>::mapToReferenceFrame(refCellPointsView,physicalPointsView,physicalCellNodesView,_cellTopo->getShardsTopology());
+  physicalCellNodesForCell.checkinDeviceView(false);
+  physicalPointsWithCellDim.checkinDeviceView(false);
+  refCellPointsWithCellDim.checkinDeviceView(true);
+  for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+  {
+    for (int d=0; d<spaceDim; d++)
+    {
+      refCellPoints(pointOrdinal,d) = refCellPointsWithCellDim(0,pointOrdinal,d);
+    }
+  }
   return refCellPoints;
 }
 
@@ -2165,10 +2188,7 @@ void BasisCache::determineSideNormals()
       {
         // recompute sideNormals
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
-        Intrepid::CellTools<double>::getPhysicalSideNormals(_sideNormals, getJacobian(), _sideIndex, _cellTopo->getShardsTopology());
-        // make unit length
-        Intrepid::RealSpaceTools<double>::vectorNorm(_normalScaling, _sideNormals, Intrepid::NORM_TWO);
-        Intrepid::FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, _normalScaling, _sideNormals, true);
+        CamelliaCellTools::getUnitSideNormals(_sideNormals, _normalScaling, _sideIndex, getJacobian(), _cellTopo);
       }
       else
       {

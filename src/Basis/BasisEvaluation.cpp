@@ -18,47 +18,133 @@
 #include "BasisCache.h"
 #include "BasisFactory.h"
 
-#include "Intrepid_CellTools.hpp"
-#include "Intrepid_DefaultCubatureFactory.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 
 #include <Intrepid2_SerendipityBasis.hpp>
 #include <Intrepid2_TensorBasis.hpp>
 
 using namespace Camellia;
 
-void getD2_ij_FromMultiplicities(int &i, int &j, const Teuchos::Array<int> &multiplicities)
+namespace
 {
-  bool i_assigned = false;
-  for (int k=0; k<multiplicities.size(); k++)
+  int getDkEnumeration(const int xMult, const int yMult = -1, const int zMult = -1)
   {
-    if (multiplicities[k] == 2)
+    if (yMult < 0 && zMult < 0)
     {
-      i = k;
-      j = k;
-      return;
+      return 0;
     }
-    else if (multiplicities[k] == 1)
+    else if (zMult < 0)
     {
-      if (! i_assigned)
+      return yMult;
+    }
+    else
+    {
+      const int order = xMult + yMult + zMult;
+      int enumeration = zMult;
+      const int iend = order - xMult + 1;
+      for (int i=0; i<iend; i++)
       {
-        i = k;
-        i_assigned = true;
+        enumeration += i;
       }
-      else
-      {
-        j = k;
-        return;
-      }
+      return enumeration;
     }
   }
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i,j not identified from multiplicities...")
+  
+  int getDkCardinality(const Camellia::EOperator operatorType, const int spaceDim)
+  {
+    const int derivativeOrder = operatorType - Camellia::OP_D1 + 1;
+    TEUCHOS_TEST_FOR_EXCEPTION((derivativeOrder < 1) || (derivativeOrder > 10), std::invalid_argument, "operator type Dk required for getDkCardinality");
+    switch (spaceDim)
+    {
+      case 1:
+        return 1;
+      case 2:
+        return derivativeOrder + 1;
+      case 3:
+        return (derivativeOrder + 1) * (derivativeOrder + 2) / 2;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid space dimension for getDkCardinality");
+    }
+  }
+  
+  void getD2_ij_FromDkOrdinal(int &i, int &j, const int dkOrdinal, const int spaceDim)
+  {
+    switch (spaceDim)
+    {
+      case 1:
+        TEUCHOS_TEST_FOR_EXCEPTION(dkOrdinal != getDkEnumeration(2), std::invalid_argument, "Invalid D2 ordinal for spaceDim 1.");
+        i = 0;
+        j = 0;
+        return;
+      case 2:
+        if (dkOrdinal == getDkEnumeration(2,0))
+        {
+          i = 0;
+          j = 0;
+          return;
+        }
+        if (dkOrdinal == getDkEnumeration(1,1))
+        {
+          i = 0;
+          j = 1;
+          return;
+        }
+        if (dkOrdinal == getDkEnumeration(0,2))
+        {
+          i = 1;
+          j = 1;
+          return;
+        }
+        break;
+      case 3:
+        if (dkOrdinal == getDkEnumeration(2,0,0))
+        {
+          i = 0;
+          j = 0;
+          return;
+        }
+        if (dkOrdinal == getDkEnumeration(1,1,0))
+        {
+          i = 0;
+          j = 1;
+          return;
+        }
+        if (dkOrdinal == getDkEnumeration(1,0,1))
+        {
+          i = 0;
+          j = 2;
+          return;
+        }
+        if (dkOrdinal == getDkEnumeration(0,2,0))
+        {
+          i = 1;
+          j = 1;
+          return;
+        }
+        if (dkOrdinal == getDkEnumeration(0,1,1))
+        {
+          i = 1;
+          j = 2;
+          return;
+        }
+        if (dkOrdinal == getDkEnumeration(0,0,2))
+        {
+          i = 2;
+          j = 2;
+          return;
+        }
+        break;
+      default:
+        break;
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i,j not identified from D2 ordinal...")
+  }
 }
 
 //! Intrepid2-style getValues()
 Intrepid2::BasisValues<double,DeviceType>
 BasisEvaluation::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
-                           const Intrepid2::TensorPoints<double,DeviceType> inputPoints)
+                           const Intrepid2::TensorPoints<double,DeviceType> &inputPoints)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!inputPoints.isValid(), std::invalid_argument, "inputPoints must be a valid container!");
   
@@ -143,9 +229,8 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
   bool relatedOpIsDkOperator = (relatedOp >= Camellia::OP_D1) && (relatedOp <= Camellia::OP_D10);
   if (relatedOpIsDkOperator)
   {
-    // for this range, the enumeration values for Camellia, Intrepid are the same:
-    Intrepid::EOperator intrepidOp = static_cast<Intrepid::EOperator>(relatedOp);
-    opCardinality = Intrepid::getDkCardinality(intrepidOp, spaceDim);
+    // for this range, the enumeration values for Camellia and Intrepid2 are the same:
+    opCardinality = getDkCardinality(relatedOp, spaceDim);
   }
   
   if ((Camellia::EOperator)relatedOp != op)
@@ -274,7 +359,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
                                                            const Camellia::FieldContainer<double> &cellJacobianInv,
                                                            const Camellia::FieldContainer<double> &cellJacobianDet)
 {
-  using fst = Intrepid::FunctionSpaceTools;
+  namespace fst = Camellia::FunctionSpaceTools;
 //  int numCells = cellJacobian.dimension(0);
   
 //  int spaceDim = basis->domainTopology()->getDimension(); // changed 2/18/15
@@ -466,7 +551,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
                                                            constFCPtr referenceValues, int numCells,
                                                            BasisCache* basisCache)
 {
-  using fst = Intrepid::FunctionSpaceTools;
+  namespace fst = Camellia::FunctionSpaceTools;
   
   int spaceDim = basisCache->getSpaceDim();
   int meshDim  = basisCache->cellTopology()->getDimension();
@@ -514,7 +599,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
             // This quantity is stored by side BasisCache in _normalScaling.
             
             const auto & normalScaling = basisCache->getNormalScaling();
-            Intrepid::ArrayTools::scalarMultiplyDataField<double>(*transformedValues, normalScaling, *referenceValues,
+            Camellia::FunctionSpaceTools::scalarMultiplyDataField<double>(*transformedValues, normalScaling, *referenceValues,
                                                                   /* reciprocal = */true);
           }
           else
@@ -695,10 +780,13 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         transformedValues->initialize(0.0);
         int basisCardinality = basis->getCardinality();
         
-        Teuchos::Array<int> multiplicities(spaceDim);
-        Teuchos::Array<int> multiplicitiesTransformed(spaceDim);
-        int dkCardinality = Intrepid::getDkCardinality(Intrepid::OPERATOR_D2, spaceDim);
+        int dkCardinality = getDkCardinality(Camellia::OP_D2, spaceDim);
         int numPoints = referenceValues->dimension(1);
+        Teuchos::Array<int> dk_i(dkCardinality), dk_j(dkCardinality);
+        for (int dkOrdinal=0; dkOrdinal<dkCardinality; dkOrdinal++)
+        {
+          getD2_ij_FromDkOrdinal(dk_i[dkOrdinal], dk_j[dkOrdinal], dkOrdinal, spaceDim);
+        }
         
         for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
         {
@@ -711,17 +799,15 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
               for (int dkOrdinal=0; dkOrdinal<dkCardinality; dkOrdinal++) // ref values dkOrdinal
               {
                 double refValue = (*referenceValues)(fieldOrdinal,pointOrdinal,dkOrdinal) * detWeight;
-                Intrepid::getDkMultiplicities(multiplicities, dkOrdinal, Intrepid::OPERATOR_D2, spaceDim);
-                int k,l; // ref space coordinate directions for refValue (columns in J_inv)
-                getD2_ij_FromMultiplicities(k,l,multiplicities);
+                const int k = dk_i[dkOrdinal]; // ref space coordinate directions for refValue (columns in J_inv)
+                const int l = dk_j[dkOrdinal];
                 
                 for (int dkOrdinalTransformed=0; dkOrdinalTransformed<dkCardinality; dkOrdinalTransformed++) // physical values dkOrdinal
                 {
-                  Intrepid::getDkMultiplicities(multiplicitiesTransformed, dkOrdinalTransformed, Intrepid::OPERATOR_D2, spaceDim);
-                  int i,j; // physical space coordinate directions for refValue (rows in J_inv)
-                  getD2_ij_FromMultiplicities(i,j,multiplicitiesTransformed);
-                  const double & J_inv_ik = J_inv(cellOrdinal,pointOrdinal,i,k);
-                  const double & J_inv_jl = J_inv(cellOrdinal,pointOrdinal,j,l);
+                  const int i = dk_i[dkOrdinalTransformed]; // physical space coordinate directions for refValue (rows in J_inv)
+                  const int j = dk_j[dkOrdinalTransformed];
+                  const double J_inv_ik = J_inv(cellOrdinal,pointOrdinal,i,k);
+                  const double J_inv_jl = J_inv(cellOrdinal,pointOrdinal,j,l);
                   (*transformedValues)(cellOrdinal,fieldOrdinal,pointOrdinal,dkOrdinalTransformed) += refValue * J_inv_ik * J_inv_jl;
                 }
               }
@@ -855,7 +941,7 @@ Camellia::EOperator BasisEvaluation::relatedOperator(BasisPtr basis, Camellia::E
     {
       if (op==OP_DXDX)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(2);
+        componentOfInterest = getDkEnumeration(2);
       }
       else
       {
@@ -866,15 +952,15 @@ Camellia::EOperator BasisEvaluation::relatedOperator(BasisPtr basis, Camellia::E
     {
       if (op==OP_DXDX)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(2,0);
+        componentOfInterest = getDkEnumeration(2,0);
       }
       else if (op==OP_DXDY)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(1,1);
+        componentOfInterest = getDkEnumeration(1,1);
       }
       else if (op==OP_DYDY)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(0,2);
+        componentOfInterest = getDkEnumeration(0,2);
       }
       else
       {
@@ -885,27 +971,27 @@ Camellia::EOperator BasisEvaluation::relatedOperator(BasisPtr basis, Camellia::E
     {
       if (op==OP_DXDX)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(2,0,0);
+        componentOfInterest = getDkEnumeration(2,0,0);
       }
       else if (op==OP_DXDY)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(1,1,0);
+        componentOfInterest = getDkEnumeration(1,1,0);
       }
       else if (op==OP_DXDZ)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(1,0,1);
+        componentOfInterest = getDkEnumeration(1,0,1);
       }
       else if (op==OP_DYDY)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(0,2,0);
+        componentOfInterest = getDkEnumeration(0,2,0);
       }
       else if (op==OP_DYDZ)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(0,1,1);
+        componentOfInterest = getDkEnumeration(0,1,1);
       }
       else if (op==OP_DZDZ)
       {
-        componentOfInterest = Intrepid::getDkEnumeration(0,0,2);
+        componentOfInterest = getDkEnumeration(0,0,2);
       }
       else
       {
@@ -973,18 +1059,18 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
     vector<int> dkEnumeration(spaceDim);
     if (spaceDim == 1)
     {
-      dkEnumeration[0] = Intrepid::getDkEnumeration(2);
+      dkEnumeration[0] = getDkEnumeration(2);
     }
     else if (spaceDim == 2)
     {
-      dkEnumeration[0] = Intrepid::getDkEnumeration(2,0);
-      dkEnumeration[1] = Intrepid::getDkEnumeration(0,2);
+      dkEnumeration[0] = getDkEnumeration(2,0);
+      dkEnumeration[1] = getDkEnumeration(0,2);
     }
     else if (spaceDim == 3)
     {
-      dkEnumeration[0] = Intrepid::getDkEnumeration(2,0,0);
-      dkEnumeration[1] = Intrepid::getDkEnumeration(0,2,0);
-      dkEnumeration[2] = Intrepid::getDkEnumeration(0,0,2);
+      dkEnumeration[0] = getDkEnumeration(2,0,0);
+      dkEnumeration[1] = getDkEnumeration(0,2,0);
+      dkEnumeration[2] = getDkEnumeration(0,0,2);
     }
     for (int comp : dkEnumeration)
     {

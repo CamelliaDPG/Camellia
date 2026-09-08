@@ -33,8 +33,8 @@ using namespace std;
 
 namespace Camellia
 {
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class PointBasis;
-template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Intrepid2BasisWrapper<>
+template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class PointBasis;
+template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Intrepid2BasisWrapper<Scalar, ArrayScalar>
 {
 public:
   PointBasis();
@@ -42,7 +42,7 @@ public:
   static Teuchos::RCP< PointBasis<Scalar,ArrayScalar> > pointBasis();
 };
 
-typedef Teuchos::RCP< PointBasis<> > PointBasisPtr;
+typedef Teuchos::RCP< PointBasis<double, Camellia::FieldContainer<double> > > PointBasisPtr;
 }
 
 #include "PointBasisDef.h"

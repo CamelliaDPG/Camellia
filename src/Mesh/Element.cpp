@@ -6,7 +6,6 @@
 
 #include "Element.h"
 
-#include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 #include "Mesh.h"
 
@@ -48,7 +47,7 @@ void Element::getSidePointsInNeighborRefCoords(Camellia::FieldContainer<double> 
   nodesInNeighborRef(0,0,0) = 1.0;
   nodesInNeighborRef(0,1,0) = -1.0;
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  Intrepid::CellTools<double>::mapToPhysicalFrame(neighborRefPoints,refPoints,nodesInNeighborRef,line_2,0);
+  CamelliaCellTools::mapToPhysicalFrame(neighborRefPoints,refPoints,nodesInNeighborRef,CellTopology::cellTopology(line_2),0);
 }
 
 void Element::getSidePointsInParentRefCoords(Camellia::FieldContainer<double> &parentRefPoints, int sideIndex,
@@ -105,7 +104,7 @@ void Element::getSidePointsInParentRefCoords(Camellia::FieldContainer<double> &p
   }
 
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  Intrepid::CellTools<double>::mapToPhysicalFrame(parentRefPoints,childRefPoints,childEdgeNodesInParentRef,line_2,0);
+  CamelliaCellTools::mapToPhysicalFrame(parentRefPoints,childRefPoints,childEdgeNodesInParentRef,CellTopology::cellTopology(line_2),0);
 }
 
 ElementPtr Element::getParent()

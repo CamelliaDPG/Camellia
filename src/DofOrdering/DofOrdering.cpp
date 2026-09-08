@@ -561,6 +561,8 @@ void DofOrdering::setVarFactory(VarFactoryPtr varFactory, bool isTrialOrdering)
   _isTrialOrdering = isTrialOrdering;
 }
 
+namespace Camellia
+{
 std::ostream& operator << (std::ostream& os, const DofOrdering& dofOrdering)
 {
   // Save the format state of the original ostream os.
@@ -652,4 +654,5 @@ std::ostream& operator << (std::ostream& os, const DofOrdering& dofOrdering)
   os.copyfmt(oldFormatState);
 
   return os;
+}
 }

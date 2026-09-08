@@ -614,7 +614,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunction )
   for (int cellID : myCellIDs)
   {
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
-    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+    Camellia::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
     bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
     if (hasUnitSolution) solnCoefficients.initialize(1.0 * coefficient_scaling);
     else                 solnCoefficients.initialize(0.0 * coefficient_scaling); // this will give all variables a constant 1.0 value
@@ -813,7 +813,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
   for (int cellID : myCellIDs)
   {
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
-    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+    Camellia::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
     bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
     if (hasUnitSolution)
     {
@@ -946,7 +946,7 @@ TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
   for (int cellID : myCellIDs)
   {
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
-    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+    Camellia::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
     bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
     if (hasUnitSolution) solnCoefficients.initialize(1.0 * coefficient_scaling);
     else                 solnCoefficients.initialize(0.0 * coefficient_scaling); // this will give all variables a constant 1.0 value
@@ -1258,6 +1258,61 @@ TEUCHOS_UNIT_TEST( Function, ScalarModifyBasisValues )
   for (int i = 0; i < dim0*dim1*dim2; i++) {
     TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul[i],tol);
     TEST_FLOATING_EQUALITY(expectedValueDivide  ,fc_div[i],tol);
+  }
+
+  auto fc_mul_rank4 = FieldContainer<double>(dim0,dim1,dim2,3);
+  auto fc_div_rank4 = FieldContainer<double>(dim0,dim1,dim2,3);
+  fc_mul_rank4.initialize(2.0);
+  fc_div_rank4.initialize(2.0);
+  f4->scalarMultiplyBasisValues(fc_mul_rank4, nullBasisCache);
+  f4->scalarDivideBasisValues  (fc_div_rank4, nullBasisCache);
+
+  for (int i = 0; i < fc_mul_rank4.size(); i++) {
+    TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul_rank4[i],tol);
+    TEST_FLOATING_EQUALITY(expectedValueDivide  ,fc_div_rank4[i],tol);
+  }
+}
+
+TEUCHOS_UNIT_TEST( Function, ConstantScalarModifyBasisValues )
+{
+  auto f2 = TFunction<double>::constant(2.0);
+  auto f4 = TFunction<double>::constant(4.0);
+  BasisCachePtr nullBasisCache;
+
+  double expectedValueMultiply = 8.0;
+  double expectedValueDivide   = 0.5;
+  double tol = 1.0e-14;
+
+  {
+    const int dim0 = 5, dim1 = 2, dim2 = 3;
+    auto fc_mul = FieldContainer<double>(dim0,dim1,dim2);
+    auto fc_div = FieldContainer<double>(dim0,dim1,dim2);
+
+    fc_mul.initialize(2.0);
+    fc_div.initialize(2.0);
+    f4->scalarMultiplyBasisValues(fc_mul, nullBasisCache);
+    f4->scalarDivideBasisValues  (fc_div, nullBasisCache);
+
+    for (int i = 0; i < fc_mul.size(); i++) {
+      TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul[i],tol);
+      TEST_FLOATING_EQUALITY(expectedValueDivide  ,fc_div[i],tol);
+    }
+  }
+
+  {
+    const int dim0 = 3, dim1 = 2, dim2 = 4, dim3 = 2;
+    auto fc_mul = FieldContainer<double>(dim0,dim1,dim2,dim3);
+    auto fc_div = FieldContainer<double>(dim0,dim1,dim2,dim3);
+
+    fc_mul.initialize(2.0);
+    fc_div.initialize(2.0);
+    f4->scalarMultiplyBasisValues(fc_mul, nullBasisCache);
+    f4->scalarDivideBasisValues  (fc_div, nullBasisCache);
+
+    for (int i = 0; i < fc_mul.size(); i++) {
+      TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul[i],tol);
+      TEST_FLOATING_EQUALITY(expectedValueDivide  ,fc_div[i],tol);
+    }
   }
 }
 
