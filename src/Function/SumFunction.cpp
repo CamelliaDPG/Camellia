@@ -82,7 +82,7 @@ std::vector<Intrepid2::DimensionInfo> SumFunction<Scalar>::valuesDataDims(BasisC
 }
 
 template <typename Scalar>
-void SumFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache)
+void SumFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> &values, BasisCachePtr basisCache)
 {
   auto f1Data = _f1->checkoutValuesData(basisCache);
   auto f2Data = _f2->checkoutValuesData(basisCache);

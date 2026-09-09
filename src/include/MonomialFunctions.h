@@ -78,7 +78,7 @@ public:
   
   using TFunction<double>::values;
   void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-  void values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache) override;
+  void values(Intrepid2::Data<double, DeviceType> &values, BasisCachePtr basisCache) override;
   
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;

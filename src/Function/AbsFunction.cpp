@@ -56,7 +56,7 @@ void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, Va
   SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(dv);
 }
 
-void AbsFunction::values(Intrepid2::Data<double, Camellia::DeviceType> data, BasisCachePtr basisCache)
+void AbsFunction::values(Intrepid2::Data<double, Camellia::DeviceType> &data, BasisCachePtr basisCache)
 {
   _f->values(data, basisCache);
   

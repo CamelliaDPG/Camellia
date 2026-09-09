@@ -23,7 +23,7 @@ string SideParityFunction::displayString()
   return "sgn(n)";
 }
 
-void SideParityFunction::values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr sideBasisCache)
+void SideParityFunction::values(Intrepid2::Data<double, DeviceType> &values, BasisCachePtr sideBasisCache)
 {
   const int sideOrdinal = sideBasisCache->getSideIndex();
   TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinal == -1, std::invalid_argument, "non-sideBasisCache passed into SideParityFunction");

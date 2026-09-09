@@ -30,7 +30,7 @@ public:
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   
   std::vector<Intrepid2::DimensionInfo> valuesDataDims(BasisCachePtr basisCache) override;
-  void values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
+  void values(Intrepid2::Data<Scalar, Camellia::DeviceType> &values, BasisCachePtr basisCache) override;
   
   TFunctionPtr<Scalar> x() override;
   TFunctionPtr<Scalar> y() override;

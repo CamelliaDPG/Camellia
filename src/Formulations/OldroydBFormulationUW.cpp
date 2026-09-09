@@ -2062,7 +2062,7 @@ void OldroydBFormulationUW::turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmg
     gmgOperator = gmgOperator->getCoarseOperator();
   }
   SolverPtr coarseSolver = gmgOperator->getCoarseSolver();
-#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+#if defined(HAVE_AMESOS2_SUPERLUDIST)
   SuperLUDistSolver* superLUSolver = dynamic_cast<SuperLUDistSolver*>(coarseSolver.get());
   if (superLUSolver)
   {

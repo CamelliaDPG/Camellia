@@ -29,7 +29,7 @@ namespace Camellia {
     }
     ~SqrtFunction() {}
     using TFunction<Scalar>::values;
-    void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override
+    void values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache) override
     {
       _f->values(values, basisCache);
       auto sqrtOp = KOKKOS_LAMBDA(const double &a) -> double

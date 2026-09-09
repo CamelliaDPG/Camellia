@@ -113,7 +113,7 @@ std::vector<Intrepid2::DimensionInfo> ParameterFunction::valuesDataDims(BasisCac
   return _fxn->valuesDataDims(basisCache);
 }
 
-void ParameterFunction::values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+void ParameterFunction::values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache)
 {
   _fxn->values(values, basisCache);
 }

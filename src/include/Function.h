@@ -281,7 +281,7 @@ public:
   void checkinValuesData(const Intrepid2::Data<Scalar, Camellia::DeviceType> &data);
   
   //! For optimal performance, subclasses should override this method, especially if their values are constant with respect to some dimensions; we can often take advantage of this to reduce data redundancy.
-  virtual void values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache);
+  virtual void values(Intrepid2::Data<Scalar, Camellia::DeviceType> &values, BasisCachePtr basisCache);
   
   //! For scalar Functions, this defaults to 0 (and subclasses need not/should not override).  For higher-rank Functions, this is the number of components that are defined (beyond which all components, in a higher-dimensional setting, can be assumed to be zero).  A -1 return indicates that the number of components defined is not determined prior to specification of the number of dimensions (as happens for UnitNormalFunction).
   virtual int numVectorComponents() const;

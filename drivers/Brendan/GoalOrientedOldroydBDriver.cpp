@@ -424,7 +424,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("errorIndicator", &errorIndicator, "Energy,CylinderBoundary,GoalOrientedDragCoeff");
   cmdp.setOption("enforceLocalConservation", "noLocalConservation", &enforceLocalConservation, "enforce local conservation principles at the element level");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
-  cmdp.setOption("solver", &solverChoice, "KLU, SuperLUDist, MUMPS, Pardiso");
+  cmdp.setOption("solver", &solverChoice, "KLU, SuperLUDist, MUMPS");
   cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
@@ -670,14 +670,11 @@ int main(int argc, char *argv[])
     Solver::printAvailableSolversReport();
   map<string, SolverPtr> solvers;
   solvers["KLU"] = Solver::getSolver(Solver::KLU, true);
-#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+#if defined(HAVE_AMESOS2_SUPERLUDIST)
   solvers["SuperLUDist"] = Solver::getSolver(Solver::SuperLUDist, true);
 #endif
-#if defined(HAVE_AMESOS_MUMPS) && defined(HAVE_MPI)
+#if defined(HAVE_AMESOS2_MUMPS) && defined(HAVE_MPI)
   solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
-#endif
-#ifdef HAVE_AMESOS_PARDISO_MKL
-  solvers["Pardiso"] = Solver::getSolver(Solver::Pardiso, true);
 #endif
 
   // choose local normal equation matrix calculation algorithm

@@ -53,7 +53,7 @@ std::vector<Intrepid2::DimensionInfo> ConstantScalarFunction<Scalar>::valuesData
 }
 
 template <typename Scalar>
-void ConstantScalarFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache)
+void ConstantScalarFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> &values, BasisCachePtr basisCache)
 {
   auto underlyingView1 = values.template getUnderlyingView<1>();
   

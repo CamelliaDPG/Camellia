@@ -65,7 +65,7 @@ namespace
     }
     
     // Data-arg values()
-    void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override
+    void values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache) override
     {
       if (! _overrideValuesWithDataArg)
       {

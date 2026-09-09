@@ -8,7 +8,6 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "SuperLUDistSolver.h"
-#include "PardisoSolver.h"
 
 using namespace Camellia;
 
@@ -17,14 +16,11 @@ void TSolver<Scalar>::printAvailableSolversReport()
 {
   cout << "Available solvers:\n";
   cout << solverChoiceString(KLU) << endl;
-#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+#if defined(HAVE_AMESOS2_SUPERLUDIST)
   cout << solverChoiceString(SuperLUDist) << endl;
 #endif
-#ifdef HAVE_AMESOS_MUMPS
+#ifdef HAVE_AMESOS2_MUMPS
   cout << solverChoiceString(MUMPS) << endl;
-#endif
-#ifdef HAVE_AMESOS_PARDISO_MKL
-  cout << solverChoiceString(Pardiso) << endl;
 #endif
 //  cout << solverChoiceString(GMG) << endl;
 }
@@ -38,19 +34,14 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
   {
   case KLU:
     return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "klu") );
-#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+#if defined(HAVE_AMESOS2_SUPERLUDIST)
   case SuperLUDist:
     return Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
 //    return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "superlu_dist") );
 #endif
-#ifdef HAVE_AMESOS_MUMPS
+#ifdef HAVE_AMESOS2_MUMPS
   case MUMPS:
     return Teuchos::rcp( new MumpsSolver(saveFactorization) );
-#endif
-#ifdef HAVE_AMESOS_PARDISO_MKL
-  case Pardiso:
-    return Teuchos::rcp( new PardisoSolver(saveFactorization) );
-    // return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "pardisomkl") );
 #endif
       
   case GMG:
@@ -97,12 +88,10 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
 
 template <typename Scalar>
 TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization) {
-#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+#if defined(HAVE_AMESOS2_SUPERLUDIST)
   return TSolver<Scalar>::getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
-#elif defined(HAVE_AMESOS_MUMPS)
+#elif defined(HAVE_AMESOS2_MUMPS)
   return TSolver<Scalar>::getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
-#elif defined(HAVE_AMESOS_PARDISO_MKL)
-  return TSolver<Scalar>::getSolver(TSolver<Scalar>::Pardiso, saveFactorization);
 #else
   return TSolver<Scalar>::getSolver(TSolver<Scalar>::KLU, saveFactorization);
 #endif

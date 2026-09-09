@@ -148,7 +148,7 @@ std::vector<Intrepid2::DimensionInfo> QuotientFunction<Scalar>::valuesDataDims(B
 }
 
 template <typename Scalar>
-void QuotientFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache)
+void QuotientFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> &values, BasisCachePtr basisCache)
 {
   auto fData       = _f->checkoutValuesData(basisCache);
   auto divisorData = _scalarDivisor->checkoutValuesData(basisCache);

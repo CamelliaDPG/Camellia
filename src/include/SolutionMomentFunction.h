@@ -31,7 +31,7 @@ namespace Camellia
     void importCellData(std::vector<GlobalIndexType> cellIDs) override;
     
     using TFunction<double>::values;
-    void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
+    void values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache) override;
     void values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   };
 
@@ -62,7 +62,7 @@ namespace Camellia
     void update() override;
 
     using TFunction<double>::values;
-    void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
+    void values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache) override;
     void values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   };
 }

@@ -40,7 +40,7 @@ namespace Camellia
     void updateValues();
     
     using TFunction<double>::values;
-    void values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache) override;
+    void values(Intrepid2::Data<double, DeviceType> &values, BasisCachePtr basisCache) override;
     
     bool boundaryValueOnly() override;
   };

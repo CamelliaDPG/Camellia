@@ -92,7 +92,7 @@ void PhysicalSolutionExtrusion::updateValues()
   }
 }
 
-void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache)
+void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> &values, BasisCachePtr basisCache)
 {
   // We only support fully tensor-product cubature points (non-trivial PhysicalTensorPoints)
   

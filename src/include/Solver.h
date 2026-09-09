@@ -78,7 +78,6 @@ public:
     KLU,
     SuperLUDist,
     MUMPS,
-    Pardiso,
     GMG
   };
   
@@ -96,7 +95,6 @@ public:
     if (choiceString=="KLU") return KLU;
     if (choiceString=="SuperLUDist") return SuperLUDist;
     if (choiceString=="MUMPS") return MUMPS;
-    if (choiceString=="Pardiso") return Pardiso;
     if (choiceString=="GMG") return GMG;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choiceString not recognized!");
   }
@@ -105,7 +103,6 @@ public:
     if (choice==KLU) return "KLU";
     if (choice==SuperLUDist) return "SuperLUDist";
     if (choice==MUMPS) return "MUMPS";
-    if (choice==Pardiso) return "Pardiso";
     if (choice==GMG) return "GMG";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choice not recognized!");
   }
@@ -120,7 +117,7 @@ class TAmesos2Solver : public TSolver<Scalar>
   std::string _solverString;
   Teuchos::RCP<Amesos2::Solver< TMatrix<Scalar>,TVector<Scalar> > > _savedSolver;
 public:
-  // Solver options available: klu superlu_dist superlu_mt superlu pardisomkl lapack amesos2_cholmod
+  // Solver options available: klu superlu_dist superlu_mt superlu lapack amesos2_cholmod
   // May require specific instructions while building Trilinos
   TAmesos2Solver(bool saveFactorization = false, std::string solverString="klu"): _saveFactorization(saveFactorization), _solverString(solverString) {}
   int solve()

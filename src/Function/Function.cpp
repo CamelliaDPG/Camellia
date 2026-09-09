@@ -3589,7 +3589,7 @@ TFunctionPtr<double> TFunction<Scalar>::tn(int n)
 }
 
 template <typename Scalar>
-void TFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> data, BasisCachePtr basisCache)
+void TFunction<Scalar>::values(Intrepid2::Data<Scalar, Camellia::DeviceType> &data, BasisCachePtr basisCache)
 {
   // default base (Function) class implementation.
   // This is not optimal, but it's probably not too bad as a basic, default implementation

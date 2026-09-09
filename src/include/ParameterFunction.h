@@ -54,7 +54,7 @@ public:
   std::vector<Intrepid2::DimensionInfo> valuesDataDims(BasisCachePtr basisCache) override;
   
   using TFunction<double>::values;
-  void values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
+  void values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache) override;
   
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly() override;

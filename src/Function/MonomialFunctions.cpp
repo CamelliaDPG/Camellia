@@ -305,7 +305,7 @@ void MonomialFunction::values(typename Camellia::FieldContainer<double>::DeviceV
   points.checkinDeviceView(true);
 }
 
-void MonomialFunction::values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache)
+void MonomialFunction::values(Intrepid2::Data<double, DeviceType> &values, BasisCachePtr basisCache)
 {
   if (_n==0)
   {

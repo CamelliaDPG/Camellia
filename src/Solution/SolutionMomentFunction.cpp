@@ -81,7 +81,7 @@ namespace Camellia
     _solutionMoments.importCellData(cellIDs);
   }
 
-  void SolutionMomentFunction::values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+  void SolutionMomentFunction::values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache)
   {
     TEUCHOS_FUNC_TIME_MONITOR("SolutionMomentFunction values(Data,BasisCachePtr)");
    
@@ -398,7 +398,7 @@ namespace Camellia
     _hasBeenUpdated = true;
   }
 
-  void RelativisticFirstMomentFunction::values(Intrepid2::Data<double, Camellia::DeviceType> data, BasisCachePtr basisCache)
+  void RelativisticFirstMomentFunction::values(Intrepid2::Data<double, Camellia::DeviceType> &data, BasisCachePtr basisCache)
   {
     TEUCHOS_FUNC_TIME_MONITOR("RelativisticFirstMomentFunction values(Data,BasisCachePtr)");
 

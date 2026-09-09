@@ -235,7 +235,7 @@ Cos_ax::Cos_ax(double a, double b)
   _b = b;
 }
 
-void Cos_ax::values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+void Cos_ax::values(Intrepid2::Data<double, Camellia::DeviceType> &values, BasisCachePtr basisCache)
 {
   auto xPoints = basisCache->getPhysicalCubaturePoints().getTensorComponent(0); // xPoints might have more coordinates than just x, but it will certainly have x in the first entry
   

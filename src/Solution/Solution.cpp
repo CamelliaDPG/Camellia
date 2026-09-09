@@ -8,17 +8,6 @@
 #include "Camellia_FieldContainerConversion.hpp"
 #include "Camellia_Integrate.hpp"
 
-#include "Amesos_Klu.h"
-#include "Amesos.h"
-#include "Amesos_Utils.h"
-
-// only use MUMPS when we have MPI
-#ifdef HAVE_MPI
-#ifdef HAVE_AMESOS_MUMPS
-#include "Amesos_Mumps.h"
-#endif
-#endif
-
 #include <chrono>
 
 // Shards includes
@@ -1093,7 +1082,7 @@ template <typename Scalar>
 int TSolution<Scalar>::solve(bool useMumps)
 {
   TSolverPtr<Scalar> solver;
-#ifdef HAVE_AMESOS_MUMPS
+#ifdef HAVE_AMESOS2_MUMPS
   if (useMumps)
   {
     solver = Teuchos::rcp(new MumpsSolver());
