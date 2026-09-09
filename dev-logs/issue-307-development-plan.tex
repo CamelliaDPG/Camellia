@@ -1,0 +1,334 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\title{Issue \#307 Development Plan\\
+Remove the Remaining Ambient Variable-Level Interface from Tensor-Native Operator and Transfer Realization}
+\author{}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+
+\section{Objective}
+
+The purpose of issue \#307 was to remove the remaining dependence of the tensor-native operator, gather/scatter, and transfer layers on an \emph{ambient variable-level flat tensor block} as the primary coefficient carrier.
+
+After issue \#305, the exact local factor-space semantics were already corrected:
+\begin{itemize}[leftmargin=2em]
+\item \texttt{TensorDofLayout} describes indexing conventions rather than exact local spaces,
+\item exact local shapes come from volume and skeleton contexts,
+\item and local matrix-free realization uses those exact shapes honestly.
+\end{itemize}
+
+What remained at the start of \#307 was the global/operator/transfer-facing interface.  In particular, that interface still relied substantially on:
+\begin{itemize}[leftmargin=2em]
+\item \texttt{ambientShape(...)} queries,
+\item flat offset-based gather/scatter,
+\item fixed operator input/output sizes derived from one ambient variable block,
+\item and transfer composition built from the same ambient block semantics.
+\end{itemize}
+
+The implemented work under \#307 replaced that remaining ambient interface as the \emph{primary operator-side coefficient carrier} with an explicit tensor-native coefficient-indexing story.  The final implementation now provides:
+\begin{itemize}[leftmargin=2em]
+\item \texttt{TensorCoefficientMap} as the explicit coefficient-indexing layer,
+\item explicit coefficient-container counts for realized operators and transfer metadata,
+\item trace coefficient sharing semantics keyed to underlying trace support,
+\item a component-factorized and lazy indexing implementation rather than an eager tensor-entity/global-key map,
+\item \texttt{TensorCoefficientTraversal} as a compact per-entity traversal descriptor,
+\item traversal-aware gather/scatter support,
+\item and traversal/scalar coefficient access in the realized matrix-free tensor operator.
+\end{itemize}
+
+At the same time, the present implementation preserves a compatibility boundary in transfer apply: transfer row/column metadata now uses the explicit coefficient-container interface, but the current placeholder tensor-product transfer apply path still operates internally on the ambient tensor-product compatibility container.
+
+\section{Design interpretation after clarification}
+
+The most important clarification for this issue is that the redesign is \emph{not} merely local or single-process in spirit.  Even if the initial test coverage remains single-rank, the intended abstraction should already be shaped for MPI-distributed tensor-native discretization.
+
+The target ownership model is:
+\begin{itemize}[leftmargin=2em]
+\item each MPI process owns a contiguous portion of each component mesh,
+\item and therefore owns a corresponding structured portion of the tensor mesh.
+\end{itemize}
+
+This does \emph{not} require that the present implementation solve a full distributed parallel numbering problem in one step, but it does require that the new abstractions be compatible with such a direction rather than secretly encoding a process-local-only worldview.
+
+A second crucial clarification concerns traces.  The current tensor skeleton is slice-based, and that is acceptable as a \emph{realization carrier}.  However, for coefficient indexing, the intended mathematical semantics are different:
+\begin{itemize}[leftmargin=2em]
+\item multiple tensor skeleton entities may ``see'' the same trace support location,
+\item but there should be only one global coefficient associated with that trace degree of freedom.
+\end{itemize}
+
+Thus, the redesign should distinguish carefully between:
+\begin{itemize}[leftmargin=2em]
+\item tensor skeleton entities used for lower-dimensional integration and boundary realization, and
+\item global coefficient entities used for trace coefficient ownership and movement.
+\end{itemize}
+
+This is likely the first place where the current slice-based structural model will need a coefficient-side correction.
+
+\section{Guiding design principle}
+
+The intended principle for this issue is the following:
+
+\begin{quote}
+Exact local realization should continue to be driven by tensor cell tuples and tensor skeleton entities, while global coefficient movement should be driven by explicit ownership-aware coefficient index sets rather than by one ambient per-variable tensor block.
+\end{quote}
+
+Equivalently:
+\begin{itemize}[leftmargin=2em]
+\item local realization contexts determine \emph{which local basis tuples are admissible},
+\item but coefficient movement should determine \emph{which global coefficients participate in that entity},
+\item and these should be related by explicit index maps rather than by offsetting into a single variable-level ambient flat vector.
+\end{itemize}
+
+\section{Scope and intended end state}
+
+By the end of this issue, we want the following to be true:
+
+\begin{enumerate}[leftmargin=2em]
+\item Realized operators no longer depend primarily on \texttt{TensorDofLayout::ambientShape(...)} for their coefficient interface.
+\item Gather/scatter is no longer fundamentally flat-offset-based for operator use; instead, it works through explicit index lists associated with the current realized entity.
+\item Transfer uses the same redesigned coefficient-indexing story rather than tensor-product composition over one ambient variable block.
+\item \texttt{TensorOperator::domainSize()} and \texttt{rangeSize()} remain available, but are understood as sizes of the new coefficient-indexed container interface rather than as sizes of an ambient variable-local tensor envelope.
+\item The resulting design is shaped so that MPI-aware ownership and indexing can be expressed naturally, even if current tests remain single-rank.
+\end{enumerate}
+
+We do \emph{not} require complete removal of every ambient-shape helper from the codebase.  Such helpers may remain as secondary compatibility utilities where they are still useful internally.  The key requirement is that they cease to define the primary operator/transfer/gather-scatter semantics.
+
+\section{Primary architectural correction}
+
+This issue appears to require a new explicit coefficient-indexing layer.
+
+The likely role of that layer is to answer questions such as:
+\begin{itemize}[leftmargin=2em]
+\item Which global coefficient indices belong to this trial variable on this tensor cell tuple?
+\item Which global coefficient indices belong to this trace variable on this tensor skeleton realization entity?
+\item Which of those trace coefficients are shared across multiple slice-based skeleton entities because they correspond to the same underlying trace support location?
+\item What is the total owned/global coefficient count for a variable in a given role?
+\end{itemize}
+
+The exact naming may vary, but conceptually we need something like a tensor-native global coefficient map.
+
+\section{Trace-specific design correction}
+
+A particularly important part of this issue is to avoid confusing:
+\begin{itemize}[leftmargin=2em]
+\item \emph{skeleton realization entities}, and
+\item \emph{trace coefficient entities}.
+\end{itemize}
+
+The current slice-based tensor skeleton semantics are still useful:
+\begin{itemize}[leftmargin=2em]
+\item they tell us where lower-dimensional boundary integration occurs,
+\item they distinguish retained-component cell tuples incident on a chosen orthogonal component vertex,
+\item and they support the existing trace-aware local apply path.
+\end{itemize}
+
+However, coefficient ownership should not duplicate trace coefficients merely because several such realization entities touch the same underlying trace support location.
+
+The intended correction is therefore:
+\begin{itemize}[leftmargin=2em]
+\item keep slice-based tensor skeleton entities as the geometric carriers for boundary realization,
+\item but define trace coefficient indexing in terms of a more merged support notion,
+\item likely keyed by the distinguished trace-component support location together with retained-component basis structure,
+\item so that multiple realization entities may map to the same global trace coefficient indices where mathematically appropriate.
+\end{itemize}
+
+We should expect the first implementation of this to be modest and explicit rather than fully abstracted in the most general possible form.
+
+\section{Implemented strategy and resulting architecture}
+
+The implementation proceeded in two distinct internal stages: an initial explicit coefficient-indexing pass, followed by a corrective redesign that removed the remaining eager tensor-entity expansion from the new indexing layer.
+
+\subsection{Step 1: Explicit coefficient indexing support}
+
+The first major step was the introduction of \texttt{TensorCoefficientMap} as the explicit tensor-native coefficient-indexing abstraction.
+
+The earliest version of that abstraction provided explicit per-entity global index lists, which was already a substantial improvement over ambient per-variable tensor blocks.  However, that first design still expanded tensor cells and tensor skeleton entities too eagerly.  During the same issue, that design was corrected.
+
+The resulting implementation is now intentionally \emph{component-factorized and lazy}.  In particular:
+\begin{itemize}[leftmargin=2em]
+\item for volume variables, global coefficient indices are derived from per-component active-cell / local-basis coordinates,
+\item for trace variables, the distinguished trace component contributes a support-vertex coordinate while retained components contribute per-cell / local-basis coordinates,
+\item coefficient counts are derived from component-factor sizes rather than from one ambient variable-level tensor block,
+\item and trace coefficient sharing is enforced naturally through trace-support coordinates, so that multiple slice-based tensor skeleton entities may map to the same underlying trace coefficients.
+\end{itemize}
+
+Thus, the implemented coefficient map no longer stores eager tensor-cell-expanded or tensor-skeleton-expanded global maps as its primary representation.
+
+\subsection{Step 2: Gather/scatter redesign}
+
+\texttt{TensorGatherScatter} was redesigned so that the operator-facing tensor-native path no longer depends primarily on flat offset-based ambient-block movement.
+
+The implemented work provides:
+\begin{itemize}[leftmargin=2em]
+\item explicit global-index-list gather/scatter,
+\item compatibility shape+offset helpers retained only as shims,
+\item entity-aware gather/scatter for tensor cell tuples and tensor skeleton entities,
+\item and traversal-aware gather/scatter through \texttt{TensorCoefficientTraversal}.
+\end{itemize}
+
+This means that coefficient movement can now be driven either by explicit indices or by a traversal description of one realized tensor entity, rather than by one flat per-variable ambient block.
+
+\subsection{Step 3: Traversal support and operator migration}
+
+A further refinement beyond the initial explicit index-list story was the introduction of \texttt{TensorCoefficientTraversal}.
+
+This object provides a compact descriptor of the coefficient-access pattern for one realized tensor entity.  It records:
+\begin{itemize}[leftmargin=2em]
+\item the exact local factor-space shape,
+\item component-factor base coordinates,
+\item component strides in the global coefficient container,
+\item and, for trace traversals, the distinguished trace-support substitution information.
+\end{itemize}
+
+\texttt{TensorCoefficientMap} now produces:
+\begin{itemize}[leftmargin=2em]
+\item volume traversals for tensor cell tuples,
+\item and skeleton traversals for tensor skeleton entities.
+\end{itemize}
+
+The realized matrix-free tensor operator was then migrated beyond explicit per-entity index vectors.  In particular, it now uses traversal/scalar coefficient access directly in:
+\begin{itemize}[leftmargin=2em]
+\item the volume apply path,
+\item and the trace-aware boundary apply path.
+\end{itemize}
+
+The local finite-element-aware integration logic from \#299/\#302/\#304/\#305 remains the same in substance.  What changed was the coefficient-access interface surrounding it.
+
+The old vector-returning helper methods remain available, but they are now compatibility wrappers implemented through traversal/scalar indexing rather than through eager global maps.
+
+\subsection{Step 4: Transfer redesign boundary reached}
+
+\texttt{TensorTransferOperator} was partially migrated to the new coefficient-container semantics.
+
+In particular, the implementation now reports:
+\begin{itemize}[leftmargin=2em]
+\item transfer row counts, and
+\item transfer column counts
+\end{itemize}
+through explicit coefficient-container counts derived from \texttt{TensorCoefficientMap}.
+
+However, the present placeholder tensor-product transfer \texttt{apply()} path still operates internally on the ambient tensor-product compatibility container.  This was left intentionally as a compatibility boundary because:
+\begin{itemize}[leftmargin=2em]
+\item the current component-transfer realization remains mathematically modest,
+\item the current transfer apply path is still a placeholder tensor-product composition,
+\item and a fully traversal-/block-aware transfer apply path is better treated as a follow-on rather than silently folded into this issue.
+\end{itemize}
+
+Thus, the metadata/interface part of the transfer redesign was completed here, while the internal traversal-/block-aware transfer realization remains future work.
+
+\subsection{Step 5: Tests and semantic updates}
+
+The tests were updated so that they no longer encode ambient tensor-block sizing as the intended tensor-native semantics.
+
+The final test coverage added under this issue now includes checks for:
+\begin{itemize}[leftmargin=2em]
+\item explicit coefficient-container counts,
+\item lazy scalar local-ordinal-to-global-index behavior,
+\item traversal/scalar indexing consistency with vector helper semantics,
+\item traversal-aware gather/scatter for both volume and skeleton entities,
+\item operator sizing and apply behavior against the explicit coefficient-container interface,
+\item transfer metadata sizing against the same explicit coefficient-container interface,
+\item and trace coefficient sharing semantics for slice-based skeleton entities touching the same trace support.
+\end{itemize}
+
+\section{Files and subsystems actually involved}
+
+The implemented work touched the following main files and subsystems:
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{src/include/TensorDofLayout.h}
+\item \texttt{src/Mesh/TensorDofLayout.cpp}
+\item \texttt{src/include/TensorCoefficientMap.h}
+\item \texttt{src/Mesh/TensorCoefficientMap.cpp}
+\item \texttt{src/include/TensorCoefficientTraversal.h}
+\item \texttt{src/Mesh/TensorCoefficientTraversal.cpp}
+\item \texttt{src/include/TensorGatherScatter.h}
+\item \texttt{src/Mesh/TensorGatherScatter.cpp}
+\item \texttt{src/include/TensorOperator.h}
+\item \texttt{src/Problem/TensorOperator.cpp}
+\item \texttt{src/include/TensorTransferOperator.h}
+\item \texttt{src/Mesh/TensorTransferOperator.cpp}
+\item \texttt{src/include/ComponentTransferOperator1D.h}
+\item \texttt{src/Mesh/ComponentTransferOperator1D.cpp}
+\item \texttt{src/include/ComponentMeshTopology1D.h}
+\item \texttt{src/Mesh/ComponentMeshTopology1D.cpp}
+\item unit tests for layout, gather/scatter, operator, transfer, tensor mesh, and tensor topology.
+\end{itemize}
+
+The main new header/implementation pairs added during this work were:
+\begin{itemize}[leftmargin=2em]
+\item \texttt{TensorCoefficientMap.h/.cpp}
+\item \texttt{TensorCoefficientTraversal.h/.cpp}
+\end{itemize}
+
+\section{Validation strategy actually used}
+
+The validation strategy remained incremental and test-driven throughout the implementation.
+
+In practice, the work proceeded roughly in this order:
+\begin{enumerate}[leftmargin=2em]
+\item add tests for explicit coefficient-container counts and lazy scalar local-ordinal-to-global-index behavior,
+\item add tests for trace coefficient sharing semantics,
+\item migrate gather/scatter and operator sizing to the explicit coefficient-container interface,
+\item update the explicit-reference operator tests so that they compare against the new coefficient-indexing semantics rather than ambient tensor-block semantics,
+\item refine the coefficient map from an eager explicit-entity expansion to a component-factorized and lazy implementation,
+\item add traversal-specific regression tests,
+\item migrate the realized operator from explicit per-entity index vectors to traversal/scalar coefficient access,
+\item align transfer metadata sizing with the same explicit coefficient-container story,
+\item and then run the broader tensor-native test subset, including the MPI test run on \texttt{--group=Tensor*}.
+\end{enumerate}
+
+The operator correctness tests in \texttt{TensorOperatorTests.cpp} remained a key validation anchor.  Those tests now compare realized operator application against an explicit reference that follows the new coefficient-indexing semantics.  Additional focused tests in \texttt{TensorGatherScatterTests.cpp} now pin traversal/scalar indexing behavior and traversal-aware gather/scatter consistency directly.
+
+\section{Remaining risks and pressure points}
+
+The main remaining risks after the implemented work are as follows.
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{The current traversal layer is still scalar/traversal-oriented rather than yet fully block-/range-aware.} This is the right next structural step, but it has not yet been pushed into explicit contiguous-range or strided-block packaging for MPI-aware communication.
+\item \textbf{Transfer and operator remain at slightly different maturity levels.} Operator application now uses traversal/scalar coefficient access directly, whereas transfer currently uses the explicit coefficient-container story mainly at the metadata level and still retains an ambient compatibility path internally in \texttt{apply()}.
+\item \textbf{MPI-aware ownership has been shaped but not implemented.} The current component-factorized and traversal-oriented design is meant to support contiguous componentwise ownership later, but the present tests still operate on flat coefficient containers without a full distributed coefficient-management layer.
+\item \textbf{Component-factorized indexing still depends on the current component-topology capabilities.} This is now dramatically better than eager tensor-entity expansion, but additional follow-on work may still be useful if we later want stronger block/range decomposition or ownership-aware traversal partitioning.
+\end{itemize}
+
+\section{Conditions that would force a stop-and-ask event}
+
+Under the present workflow, we should stop and ask only if:
+\begin{itemize}[leftmargin=2em]
+\item additional required files or implementation context turn out to be missing, or
+\item the trace coefficient semantics appear to require a substantially larger architectural correction than the present issue description supports.
+\end{itemize}
+
+At present, we do \emph{not} appear to be blocked by missing files, and the design direction seems coherent enough to begin implementation.
+
+\section{Implemented outcome}
+
+The implemented outcome of \#307 is now:
+\begin{itemize}[leftmargin=2em]
+\item a tensor-native coefficient-indexing layer that replaces the ambient variable-level block as the primary operator-side coefficient carrier,
+\item a component-factorized and lazy \texttt{TensorCoefficientMap} implementation,
+\item traversal-aware gather/scatter in addition to explicit index-list movement,
+\item realized operator application that now uses traversal/scalar coefficient access directly while retaining the exact local-context semantics established in \#305,
+\item transfer row/column metadata aligned with the same explicit coefficient-container story,
+\item and updated tests/documentation reflecting the corrected separation among exact local factor-space realization, global coefficient indexing/movement, and per-entity traversal structure.
+\end{itemize}
+
+The main architectural result is that the tensor-native stack now distinguishes four roles more clearly than before:
+\begin{itemize}[leftmargin=2em]
+\item geometric realization entities,
+\item exact local factor spaces,
+\item global coefficient indexing and movement,
+\item and the traversal structure of one realized tensor entity through that coefficient space.
+\end{itemize}
+
+The most natural follow-on beyond the present implementation is to use that traversal structure more directly for range-/block-aware gather/scatter and eventual MPI-aware ownership/communication based on contiguous componentwise index blocks.
+
+\end{document}

@@ -20,14 +20,9 @@
 #include <Tpetra_MultiVector.hpp>
 #include <Tpetra_CrsMatrix.hpp>
 
-namespace Intrepid
-{
-  template<class Scalar, int ArrayTypeId>
-  class FieldContainer;
-} // namespace Intrepid
-
 namespace Camellia
 {
+
   //! SolutionComponent is used to distinguish between the usual solution and the influence (goal-oriented) solution.
   enum SolutionComponent : short
   {
@@ -72,6 +67,8 @@ class SpatialFilter;
 class Var;
 class VarFactory;
 // templates
+template<class Scalar, int ArrayTypeId>
+class FieldContainer;
 template<class Scalar, class ArrayScalar>
 class Basis;
 template <typename Scalar=double>
@@ -97,7 +94,7 @@ class TSolver;
 template<class Scalar, class ArrayScalar>
 class VectorizedBasis;
 
-typedef Teuchos::RCP< Camellia::Basis<double, Intrepid::FieldContainer<double,0> > > BasisPtr;
+typedef Teuchos::RCP< Camellia::Basis<double, Camellia::FieldContainer<double,0> > > BasisPtr;
 typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
 typedef Teuchos::RCP<Cell> CellPtr;
@@ -119,7 +116,7 @@ typedef Teuchos::RCP<SolutionStage> SolutionStagePtr;
 typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 typedef Teuchos::RCP<Var> VarPtr;
 typedef Teuchos::RCP<VarFactory> VarFactoryPtr;
-typedef Teuchos::RCP<VectorizedBasis< double, Intrepid::FieldContainer<double,0> > > VectorBasisPtr;
+typedef Teuchos::RCP<VectorizedBasis< double, Camellia::FieldContainer<double,0> > > VectorBasisPtr;
   
   typedef Teuchos::RCP<const MeshTopology> ConstMeshTopologyPtr;
   typedef Teuchos::RCP<const MeshTopologyView> ConstMeshTopologyViewPtr;

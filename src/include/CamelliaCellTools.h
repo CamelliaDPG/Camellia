@@ -19,6 +19,8 @@
 
 #include "Shards_CellTopology.hpp"
 
+#include <Intrepid2_Types.hpp>
+
 #include "Mesh.h"
 #include "MeshTopologyView.h"
 
@@ -35,7 +37,7 @@ public:
 
   static CellTopoPtrLegacy cellTopoForKey(unsigned key);
 
-  /** \brief  Checks if a point belongs to a reference cell. Adapted from Intrepid::CellTools::checkPointInclusion.
+  /** \brief  Checks if a point belongs to a reference cell. Adapted from Intrepid2::CellTools::checkPointInclusion.
    
    Requires cell topology with a reference cell.
    
@@ -48,12 +50,12 @@ public:
   static int checkPointInclusion(const double*                 point,
                                  const int                     pointDim,
                                  CellTopoPtr                   cellTopo,
-                                 const double &                threshold = Intrepid::INTREPID_THRESHOLD);
+                                 const double &                threshold = Intrepid2::threshold<double>());
   
   // clears static maps that are lazily populated in response to calls to CamelliaCellTools
   static void clearStaticMaps();
   
-  /** \brief  Variation on Intrepid Intrepid::FunctionSpaceTools computeEdgeMeasure and computeFaceMeasure;
+  /** \brief  Variation on Intrepid2::FunctionSpaceTools computeEdgeMeasure and computeFaceMeasure;
    intended to support Camellia CellTopology generally, though unlike computeEdgeMeasure we here
    assume that the subcell over which we integrate is of dimension (d-1) for a d-dimensional parent cell.
    Note that this initial implementation does require orthogonality of the transformations in space and
@@ -86,11 +88,11 @@ public:
    Cubature rules on reference faces are defined by a two-step process:
    \li     A cubature rule is defined on the parametrization domain \e R of the face
    (\e R is the standard 2-simplex {(0,0),(1,0),(0,1)} or the standard 2-cube [-1,1] X [-1,1]).
-   \li     The points are mapped to a reference face using Intrepid::CellTools::mapToReferenceSubcell
+   \li     The points are mapped to a reference face using Intrepid2::CellTools::mapToReferenceSubcell
 
    \remark
-   See Intrepid::CellTools::setJacobian for computation of \e DF and
-   Intrepid::CellTools::setJacobianDet for computation of its determinant.
+   See Intrepid2::CellTools::setJacobian for computation of \e DF and
+   Intrepid2::CellTools::setJacobianDet for computation of its determinant.
 
    \code
    C - num. integration domains                     dim0 in all input containers
@@ -107,7 +109,7 @@ public:
   static void computeSideMeasure(Camellia::FieldContainer<double> & weightedMeasure, const Camellia::FieldContainer<double> &cellJacobian, const Camellia::FieldContainer<double> &cubWeights,
                                  int sideOrdinal, CellTopoPtr parentCell);
 
-  static void getUnitSideNormals(Camellia::FieldContainer<double> &unitSideNormals, int sideOrdinal, const Camellia::FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell);
+  static void getUnitSideNormals(Camellia::FieldContainer<double> &unitSideNormals, Camellia::FieldContainer<double> &normalScaling, int sideOrdinal, const Camellia::FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell);
 
   /** \brief  Computes constant normal vectors to sides of reference cells.  Generalizes Intrepid's CellTools<double>'s version of the same method to apply to Camellia CellTopology parent cells (the present implementation calls Intrepid's method for some of the base shards topologies).  This allows treatment of some cells that are not 2D or 3D (1D and 4D in particular are supported).  The documentation below is largely copied from Intrepid's documentation.
 
@@ -167,7 +169,7 @@ public:
 
   static int getSideCount(const shards::CellTopology &cellTopo); // unlike shards itself, defines vertices as sides for Line topo
 
-  /** \brief Generalization of Intrepid::CellTools method; computes subcell parameterizations for subcells up to dimension d-1 for a parent cell of dimension d. (documentation below copied from that in Intrepid::CellTools).  The intent is to support any Camellia::CellTopology that has a reference cell (as of this writing, all supported topologies have reference cells).  The implementation does make the assumption that the mapping from (d-1)-dimensional reference space to d-dimensional reference space is affine.  (Intrepid's implementation is limited to 1D and 2D subcells of 2D and 3D cells.)
+  /** \brief Generalization of Intrepid2::CellTools method; computes subcell parameterizations for subcells up to dimension d-1 for a parent cell of dimension d. (documentation below copied from that in Intrepid2::CellTools).  The intent is to support any Camellia::CellTopology that has a reference cell (as of this writing, all supported topologies have reference cells).  The implementation does make the assumption that the mapping from (d-1)-dimensional reference space to d-dimensional reference space is affine.  (Intrepid's implementation is limited to 1D and 2D subcells of 2D and 3D cells.)
 
    Returns array with the coefficients of the parametrization maps for the edges or faces
    of a reference cell topology.

@@ -22,7 +22,7 @@
 
 namespace Camellia
 {
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class LegendreHVOL_LineBasis;
+template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class LegendreHVOL_LineBasis;
 template<class Scalar, class ArrayScalar> class LegendreHVOL_LineBasis : public Basis<Scalar,ArrayScalar>
 {
 protected:

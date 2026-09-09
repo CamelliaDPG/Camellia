@@ -67,6 +67,18 @@ std::string ConfigurationSpaceFormulationTrivial::name() const
   return "Trivial";
 }
 
+Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulationTrivial::newInstance() const
+{
+  auto instance = Teuchos::rcp(new ConfigurationSpaceFormulationTrivial(_timeDiscretizationType));
+  instance->setE(_E);
+  instance->setB(_B);
+  instance->setE_priorTime(_E_priorTime);
+  instance->setB_priorTime(_B_priorTime);
+  instance->setExtraAcceleration(_extraAcceleration);
+  instance->setExportViz(_exportViz, _vizOutputDir);
+  return instance;
+}
+
 FunctionPtr ConfigurationSpaceFormulationTrivial::B_i_priorTime(int zeroBasedComp)
 {
   if (zeroBasedComp >= _B_priorTime.size())

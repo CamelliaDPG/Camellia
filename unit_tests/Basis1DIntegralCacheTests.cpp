@@ -22,9 +22,6 @@
 #include "SerialDenseWrapper.h"
 #include "Solution.h"
 
-#include "Intrepid_CellTools.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
-
 #include <Intrepid2_TestUtils.hpp>
 
 #include "Basis1DIntegralCache.hpp"

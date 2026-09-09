@@ -73,7 +73,7 @@ void testConstantBasisSpaceTime(CellTopoPtr spaceTopo, bool testSides, Teuchos::
   int timeH1Order = timePolyOrder + 1;
   BasisPtr timeBasis = basisFactory->getBasis(timeH1Order, CellTopology::line(), Camellia::FUNCTION_SPACE_HGRAD);
 
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, timeBasis) );
 
   Camellia::FieldContainer<double> basisCoefficients(tensorBasis->getCardinality());

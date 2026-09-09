@@ -14,3 +14,8 @@ MESSAGE("Adding executable for LandauRelativisticSpaceTime.")
 add_executable( LandauRelativisticSpaceTime "LandauRelativisticSpaceTime.cpp" )
 
 target_link_libraries( LandauRelativisticSpaceTime Camellia )
+
+MESSAGE("Adding executable for PlanarMITLRelativisticSpaceTime.")
+add_executable( PlanarMITLRelativisticSpaceTime "PlanarMITLRelativisticSpaceTime.cpp" )
+
+target_link_libraries( PlanarMITLRelativisticSpaceTime Camellia )

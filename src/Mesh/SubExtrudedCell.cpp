@@ -146,6 +146,7 @@ namespace Camellia
      *  \param  thisSideOrdinal      [in]  - sideOrdinal in this cell topology.
      */
 //      unsigned getTemporalComponentSideOrdinal(unsigned thisSideOrdinal);
+    
     /** \brief  Mapping from this CellTopology's side ordinal of dimension d-1 to the corresponding
      *          side ordinal in one of the tensorial component nodes; that is, if
      *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
@@ -168,10 +169,11 @@ namespace Camellia
       const auto & physicalNeighborCellIndex = physicalNeighborInfo.first;
       if (physicalNeighborCellIndex != -1)
       {
-        auto extrudedNeighborTopo = CellTopology::cellTopology(_physicalMeshTopo->getCell(physicalNeighborCellIndex)->topology(),1);
+        auto physicalNeighborTopo = _physicalMeshTopo->getCell(physicalNeighborCellIndex)->topology();
+        auto extrudedNeighborTopo = CellTopology::cellTopology(physicalNeighborTopo,1);
         const auto & mySideOrdinalInPhysicalNeighbor = physicalNeighborInfo.second;
         
-        const unsigned mySideOrdinalInExtrudedNeighbor = extrudedNeighborTopo->getExtrudedSideOrdinal(mySideOrdinalInPhysicalNeighbor);
+        const unsigned mySideOrdinalInExtrudedNeighbor = extrudedNeighborTopo->getExtrudedSubcellOrdinal(physicalNeighborTopo->getDimension()-1, mySideOrdinalInPhysicalNeighbor);
         
         IndexType extrudedNeighborCellIndex = SubExtrudedMeshTopology::getCompositeCellIndex(physicalNeighborCellIndex, _extrusionCellIndex);
         

@@ -516,26 +516,7 @@ namespace Camellia {
     }
   }
   
-  int SerialDenseWrapper::getEnumeration(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc)
-  {
-    switch (fc.rank())
-    {
-      case 0:
-        return 0;
-      case 1:
-        return index[0];
-      case 2:
-        return index[0] * fc.dimension(1) + index[1];
-      case 3:
-        return (index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2];
-      case 4:
-        return ((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3];
-      case 5:
-        return (((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3]) * fc.dimension(4) + index[4];
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled Camellia::FieldContainer rank.");
-    }
-  }
+  // Intrepid FieldContainer overload removed; use the Camellia::FieldContainer overload below.
   
   int SerialDenseWrapper::getEnumeration(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc)
   {

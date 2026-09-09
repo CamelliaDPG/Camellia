@@ -1,0 +1,15 @@
+#!/bin/bash
+
+ROOT=$(dirname $(realpath $0))
+
+SRC=$(realpath $ROOT/../../tpl/BoBa)
+
+STARTDIR=$(pwd)
+
+cd $SRC
+python3 boba_builder.py --boba \
+    --camp On --RAJA On --umpire On --Adiak On --fmt On --Caliper Off \
+    --examples Off --tests Off --mpi Off --hip On \
+    --recipe $SRC/recipes/boba_build_tuolumne.json
+
+cd $STARTDIR

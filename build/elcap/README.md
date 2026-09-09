@@ -3,16 +3,18 @@
 This set of instructions aims to build Camellia on CZ Tuolumne using minimal
 dependencies:
 
-The following instructions assume you are inside the root Camellia directory.
-Otherwise, please adjust the paths to the scripts accordingly.
+The following instructions assume you are inside the root Camellia directory. 
+Otherwise, please adjust the paths to the scripts
+accordingly.
 
 Download the dependencies:
 ```sh
 ./build/elcap/hdf5-do-download
 ./build/elcap/trilinos-do-download
+# TODO ./build/elcap/boba-do-download
 ```
 
-Build and install the dependencies, then build camellia
+Install the dependencies, then build camellia:
 ```sh
 # hdf5
 ./build/elcap/hdf5-do-configure
@@ -22,6 +24,8 @@ Build and install the dependencies, then build camellia
 ./build/elcap/trilinos-do-configure
 ./build/elcap/trilinos-do-build
 ./build/elcap/trilinos-do-install
+# boba
+./build/elcap/boba-do-build
 # camellia
 ./build/elcap/camellia-do-configure  # fails here
 ./build/elcap/camellia-do-build

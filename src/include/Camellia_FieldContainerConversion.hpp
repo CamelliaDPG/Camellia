@@ -42,41 +42,51 @@ namespace Camellia {
     using DynRankView   = Kokkos::DynRankView<Scalar,DeviceType>;
   private:
     template<class ViewLikeContainer, int rank>
-    static Camellia::FieldContainer<Scalar, 0> fromDeviceContainerWithRank(ViewLikeContainer &viewLikeContainer)
+    static Teuchos::RCP< Camellia::FieldContainer<Scalar, 0> > fromDeviceContainerWithRankRCP(const ViewLikeContainer &viewLikeContainer)
     {
-      using FunctorIterator = Intrepid2::FunctorIterator<ViewLikeContainer,Scalar,rank>;
-      using DeviceView      = Camellia::DeviceView<Scalar>;
-      using ViewIterator    = Intrepid2::ViewIterator<DeviceView,Scalar>;
+      using DeviceView = Camellia::DeviceView<Scalar>;
       Teuchos::Array<int> dimensions(rank);
       for (int d=0; d<rank; d++)
       {
         dimensions[d] = viewLikeContainer.extent_int(d);
       }
-      Camellia::FieldContainer<Scalar, 0> fc(dimensions);
+      Teuchos::RCP< Camellia::FieldContainer<Scalar, 0> > fc = Teuchos::rcp(new Camellia::FieldContainer<Scalar, 0>(dimensions, false));
       
-      auto deviceView = fc.checkoutDeviceView(false); // false: don't deep copy from host
+      auto deviceView = fc->checkoutDeviceView(false); // false: don't deep copy from host; deepCopy overwrites all entries
       
       deepCopy<rank,DeviceView,ViewLikeContainer>(deviceView, viewLikeContainer);
-      fc.checkinDeviceView(true); // true: do deep copy to host
+      fc->checkinDeviceView(true); // true: do deep copy to host
       return fc;
+    }
+
+    template<class ViewLikeContainer, int rank>
+    static Camellia::FieldContainer<Scalar, 0> fromDeviceContainerWithRank(const ViewLikeContainer &viewLikeContainer)
+    {
+      return *fromDeviceContainerWithRankRCP<ViewLikeContainer,rank>(viewLikeContainer);
     }
     
     template<class ViewLikeContainer>
-    static Camellia::FieldContainer<Scalar, 0> fromDeviceContainer(ViewLikeContainer &viewLikeContainer)
+    static Teuchos::RCP< Camellia::FieldContainer<Scalar, 0> > fromDeviceContainerRCP(const ViewLikeContainer &viewLikeContainer)
     {
       const int rank = Intrepid2::getFunctorRank(viewLikeContainer);
       switch (rank)
       {
-        case 1: return fromDeviceContainerWithRank<ViewLikeContainer,1>(viewLikeContainer);
-        case 2: return fromDeviceContainerWithRank<ViewLikeContainer,2>(viewLikeContainer);
-        case 3: return fromDeviceContainerWithRank<ViewLikeContainer,3>(viewLikeContainer);
-        case 4: return fromDeviceContainerWithRank<ViewLikeContainer,4>(viewLikeContainer);
-        case 5: return fromDeviceContainerWithRank<ViewLikeContainer,5>(viewLikeContainer);
-        case 6: return fromDeviceContainerWithRank<ViewLikeContainer,6>(viewLikeContainer);
-        case 7: return fromDeviceContainerWithRank<ViewLikeContainer,7>(viewLikeContainer);
+        case 1: return fromDeviceContainerWithRankRCP<ViewLikeContainer,1>(viewLikeContainer);
+        case 2: return fromDeviceContainerWithRankRCP<ViewLikeContainer,2>(viewLikeContainer);
+        case 3: return fromDeviceContainerWithRankRCP<ViewLikeContainer,3>(viewLikeContainer);
+        case 4: return fromDeviceContainerWithRankRCP<ViewLikeContainer,4>(viewLikeContainer);
+        case 5: return fromDeviceContainerWithRankRCP<ViewLikeContainer,5>(viewLikeContainer);
+        case 6: return fromDeviceContainerWithRankRCP<ViewLikeContainer,6>(viewLikeContainer);
+        case 7: return fromDeviceContainerWithRankRCP<ViewLikeContainer,7>(viewLikeContainer);
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
       }
+    }
+    
+    template<class ViewLikeContainer>
+    static Camellia::FieldContainer<Scalar, 0> fromDeviceContainer(const ViewLikeContainer &viewLikeContainer)
+    {
+      return *fromDeviceContainerRCP<ViewLikeContainer>(viewLikeContainer);
     }
   public:
     static Camellia::FieldContainer<Scalar, 0> fromData(Data &data)
@@ -153,24 +163,29 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
     }
     
-    static Camellia::FieldContainer<Scalar, 0> fromBasisValues(BasisValues &basisValues)
+    static Teuchos::RCP< Camellia::FieldContainer<Scalar, 0> > fromBasisValuesRCP(const BasisValues &basisValues)
     {
       // BasisValues can be rank 2, 3, or 4 (though 4 does not actually come up in Camellia's usage)
       const int rank = Intrepid2::getFunctorRank(basisValues);
       if (rank == 2)
       {
-        return fromDeviceContainerWithRank<BasisValues,2>(basisValues);
+        return fromDeviceContainerWithRankRCP<BasisValues,2>(basisValues);
       }
       else if (rank == 3)
       {
-        return fromDeviceContainerWithRank<BasisValues,3>(basisValues);
+        return fromDeviceContainerWithRankRCP<BasisValues,3>(basisValues);
       }
       else if (rank == 4)
       {
-        return fromDeviceContainerWithRank<BasisValues,4>(basisValues);
+        return fromDeviceContainerWithRankRCP<BasisValues,4>(basisValues);
       }
       std::cout << "FieldContainerConversion::fromBasisValues(): Encountered unsupported BasisValues rank = " << rank << std::endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
+    }
+
+    static Camellia::FieldContainer<Scalar, 0> fromBasisValues(const BasisValues &basisValues)
+    {
+      return *fromBasisValuesRCP(basisValues);
     }
     
     static Camellia::FieldContainer<Scalar, 0> fromTensorPoints(const TensorPoints &tensorPoints)

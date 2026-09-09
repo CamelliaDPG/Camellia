@@ -38,7 +38,7 @@ namespace Camellia {
     }
 
     ArrayScalar legendreValues(n+1), legendreDerivatives(n+1);
-    Legendre<>::values(legendreValues,legendreDerivatives, x,n);
+    Legendre<Scalar,ArrayScalar>::values(legendreValues,legendreDerivatives, x,n);
 
     double factor = 1 - x*x;
     for (int i=2; i<=n; i++) {
@@ -73,7 +73,7 @@ namespace Camellia {
     }
 
     ArrayScalar legendreValues(n+1), legendreDerivatives(n+1);
-    Legendre<>::values(legendreValues,legendreDerivatives, x,n);
+    Legendre<Scalar,ArrayScalar>::values(legendreValues,legendreDerivatives, x,n);
 
     double factor = 1 - x*x;
     for (int i=2; i<=n; i++) {

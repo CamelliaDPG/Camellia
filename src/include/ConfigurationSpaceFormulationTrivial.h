@@ -40,6 +40,7 @@ namespace Camellia
     
     //! Returns a name distinguishing this configuration-space formulation from others.  "Maxwell", "Poisson", "Gauss" are all possibilities.
     virtual std::string name() const override;
+    virtual Teuchos::RCP<ConfigurationSpaceFormulation> newInstance() const override;
         
     //! returns the specified component of the magnetic field, extruded if necessary to the phase mesh.  Argument is zero-based: 0 for B_x, 1 for B_y, 2 for B_z.
     virtual FunctionPtr B_i(int zeroBasedComp) override;

@@ -12,7 +12,7 @@
 #include "TimeLogger.h"
 #include "VarFactory.h"
 
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 
 #include "Teuchos_BLAS.hpp"
 #include "Teuchos_LAPACK.hpp"
@@ -838,16 +838,13 @@ namespace Camellia
             this->applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
                                         trialID,testID,operatorIndex,basisCache);
             
-            Intrepid::FieldContainer<double> &miniStiffnessIntrepid                    = miniStiffness;
-            Intrepid::FieldContainer<double> &materialDataAppliedToTestValuesIntrepid  = materialDataAppliedToTestValues;
-            Intrepid::FieldContainer<double> &materialDataAppliedToTrialValuesIntrepid = materialDataAppliedToTrialValues;
   
-            // the casts above are important to let FunctionSpaceTools invoke BLAS
+            // Use Camellia::FieldContainer directly; the generic FunctionSpaceTools overload
+            // wraps array-like containers without requiring Intrepid::FieldContainer aliases.
             //integrate:
-            Intrepid::FunctionSpaceTools::integrate<Scalar>(miniStiffnessIntrepid,
-                                                            materialDataAppliedToTestValuesIntrepid,
-                                                            materialDataAppliedToTrialValuesIntrepid,
-                                                            Intrepid::COMP_BLAS);
+            Camellia::FunctionSpaceTools::integrate<Scalar>(miniStiffness,
+                                                            materialDataAppliedToTestValues,
+                                                            materialDataAppliedToTrialValues);
             // place in the appropriate spot in the element-stiffness matrix
             // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
             
@@ -939,16 +936,13 @@ namespace Camellia
               this->applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
                                           trialID,testID,operatorIndex,basisCache);
               
-              Intrepid::FieldContainer<double> &miniStiffnessIntrepid                    = miniStiffness;
-              Intrepid::FieldContainer<double> &materialDataAppliedToTestValuesIntrepid  = materialDataAppliedToTestValues;
-              Intrepid::FieldContainer<double> &materialDataAppliedToTrialValuesIntrepid = materialDataAppliedToTrialValues;
               
-              // the casts above are important to let FunctionSpaceTools invoke BLAS
+              // Use Camellia::FieldContainer directly; the generic FunctionSpaceTools overload
+              // wraps array-like containers without requiring Intrepid::FieldContainer aliases.
               //   d. Sum up (integrate) and place in stiffness matrix according to DofOrdering indices
-              Intrepid::FunctionSpaceTools::integrate<Scalar>(miniStiffnessIntrepid,
-                                                              materialDataAppliedToTestValuesIntrepid,
-                                                              materialDataAppliedToTrialValuesIntrepid,
-                                                              Intrepid::COMP_BLAS);
+              Camellia::FunctionSpaceTools::integrate<Scalar>(miniStiffness,
+                                                              materialDataAppliedToTestValues,
+                                                              materialDataAppliedToTrialValues);
 
               //checkForZeroRowsAndColumns("side miniStiffness for pre-stiffness", miniStiffness);
               

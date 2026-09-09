@@ -42,6 +42,32 @@ MeshTopologyPtr MeshFactory::extrudedMeshTopology(MeshTopologyPtr baseMeshTopolo
   return Teuchos::rcp(new ExtrudedMeshTopology(baseMeshTopology,extrusionVertices));
 }
 
+MeshTopologyPtr MeshFactory::geometricGradedIntervalMeshTopology(double xLeft, double xRight, int numElements)
+{
+  if (numElements < 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(numElements < 1, std::invalid_argument, "N must be >= 1.");
+  }
+  else if (numElements == 1)
+  {
+    return MeshFactory::intervalMeshTopology(std::vector<double>{xLeft,xRight});
+  }
+  
+  const int m = numElements - 1;   // number of intervals
+  const double L = xRight - xLeft; // total length (can be negative)
+
+  std::set<double> verticesSet {xLeft, xRight};
+  for (int i=2; i<=numElements; i++)
+  {
+    double midpoint = (xLeft + xRight) / 2.0;
+    verticesSet.insert(midpoint);
+    xRight = midpoint;
+  }
+  
+  std::vector<double> vertices(verticesSet.begin(), verticesSet.end());
+  
+  return MeshFactory::intervalMeshTopology(vertices);
+}
+
 MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Teuchos_CommPtr Comm)
 {
   if (Comm == Teuchos::null)

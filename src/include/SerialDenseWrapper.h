@@ -47,10 +47,8 @@ namespace Camellia
                            Camellia::FieldContainer<double> &eigvectors, // if empty, skips eigvector determination
                            bool computeRight); // if computeRight = false, will compute left eigenvectors.
     
-    // ! provides an implementation of getEnumeration that uses std::vector<int> instead.  In the context of debugging, Teuchos::Array<int>, which is what Intrepid::FieldContainer uses, can be prohibitively slow.
+    // ! provides an implementation of getEnumeration that uses std::vector<int> instead.
     static int getEnumeration(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc);
-    
-    static int getEnumeration(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
 
     static void jacobiScaleMatrix(Camellia::FieldContainer<double> &A);
     

@@ -90,17 +90,11 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
   
   if (spaceTime)
   {
-    if (_spaceDim > 1)
-      VE_hat = poissonVF->traceVarSpaceOnly(S_VE_HAT, VE, L2);
-    else
-      VE_hat = poissonVF->fluxVarSpaceOnly(S_VE_HAT, VE * (Function::normal_1D() * parity), L2); // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
+    VE_hat = poissonVF->traceVarSpaceOnly(S_VE_HAT, VE, L2);
   }
   else
   {
-    if (_spaceDim > 1)
-      VE_hat = poissonVF->traceVar(S_VE_HAT, VE, L2);
-    else
-      VE_hat = poissonVF->fluxVar(S_VE_HAT, VE * (Function::normal_1D() * parity), L2); // for spaceDim==1, the "normal" component is in the flux-ness of u_hat (it's a plus or minus 1)
+    VE_hat = poissonVF->traceVar(S_VE_HAT, VE, L2);
   }
   
   if (_spaceDim > 1)
@@ -155,10 +149,10 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
   
   if (_spaceDim==1)
   {
-    // for spaceDim==1, the "normal" component is in the flux-ness of VE_hat (it's a plus or minus 1)
+    auto nx = n->spatialComponent(1); // 1-based argument for spatialComponent()
     _poissonBF->addTerm(VE, tau_Poisson->di(1));
     _poissonBF->addTerm( -Ex, tau_Poisson);
-    _poissonBF->addTerm(-VE_hat, tau_Poisson);
+    _poissonBF->addTerm(-VE_hat, tau_Poisson * nx);
 
     _poissonBF->addTerm(-Ex, v_Poisson->di(1));
     _poissonBF->addTerm(E_hat, v_Poisson);
@@ -240,6 +234,14 @@ void ConfigurationSpaceFormulationPoisson::initializeMesh(MeshTopologyPtr meshTo
 std::string ConfigurationSpaceFormulationPoisson::name() const
 {
   return "Poisson";
+}
+
+Teuchos::RCP<ConfigurationSpaceFormulation> ConfigurationSpaceFormulationPoisson::newInstance() const
+{
+  auto instance = Teuchos::rcp(new ConfigurationSpaceFormulationPoisson(_q, _eps0, _timeDiscretizationType));
+  instance->setExtraAcceleration(_extraAcceleration);
+  instance->setExportViz(_exportViz, _vizOutputDir);
+  return instance;
 }
 
 FunctionPtr ConfigurationSpaceFormulationPoisson::B_i(int zeroBasedComp)
@@ -337,13 +339,17 @@ void ConfigurationSpaceFormulationPoisson::setMoments(std::vector< Teuchos::RCP<
   auto v_Poisson  = this->v(); // test function (maybe not the best name!)
   
   FunctionPtr rho = Function::zero();
-  
+    
   for (int i=0; i<numSpecies; i++)
   {
     auto moments_i = _fMoments[i];
     const double & q_i = _q[i];
   
-    FunctionPtr velocityIntegral = moments_i->solutionMomentFunction(0);
+    FunctionPtr velocityIntegral;
+    if      (_velocityDim == 1) velocityIntegral = moments_i->solutionMomentFunction(0);
+    else if (_velocityDim == 2) velocityIntegral = moments_i->solutionMomentFunction(0,0);
+    else if (_velocityDim == 3) velocityIntegral = moments_i->solutionMomentFunction(0,0,0);
+    else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_velocityDim must be 1,2, or 3");
     rho = rho + q_i / _eps0 * (velocityIntegral - n0);
   }
   

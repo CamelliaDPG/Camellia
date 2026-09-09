@@ -14,7 +14,6 @@
 
 #include "TypeDefs.h"
 
-// Intrepid includes
 #include "Camellia_FieldContainer.hpp"
 
 #include "ElementType.h"

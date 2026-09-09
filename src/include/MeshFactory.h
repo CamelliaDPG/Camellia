@@ -87,6 +87,8 @@ public:
   static MeshTopologyPtr intervalMeshTopology(std::vector<double> vertices, bool periodicBCs=false); // arbitrarily spaced 1D
   static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements, vector<PeriodicBCPtr> periodicBCs);
 
+  static MeshTopologyPtr geometricGradedIntervalMeshTopology(double xLeft, double xRight, int numElements);
+  
   static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k, Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
   
   static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, vector<int> H1Order, int delta_k,

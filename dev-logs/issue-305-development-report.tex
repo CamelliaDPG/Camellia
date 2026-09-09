@@ -1,0 +1,130 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\geometry{margin=1in}
+
+\title{Issue \#305 Development Report: Separating Tensor Indexing Conventions from Exact Local Factor Spaces}
+\author{AI-assisted draft}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+
+\section{Summary}
+
+In this issue, we completed the architectural correction suggested by the envelope-based use of \texttt{TensorDofLayout}.  The key point was not simply to remove one implementation detail, but to separate two roles that had been mixed together:
+\begin{itemize}[leftmargin=*]
+  \item tensor-product indexing conventions, and
+  \item exact local factor spaces associated with specific tensor cells or tensor skeleton entities.
+\end{itemize}
+
+The final implementation takes a more honest position.  \texttt{TensorDofLayout} no longer treats mesh-wide component cardinalities as exact local-space facts under \(p\)-nonuniformity.  Instead, it now serves primarily as a variable-level indexing-convention descriptor together with flatten/unflatten logic for a supplied exact factor-space shape.
+
+At the same time, we introduced explicit exact local realization contexts for:
+\begin{itemize}[leftmargin=*]
+  \item volume tensor cell tuples, and
+  \item tensor skeleton entities.
+\end{itemize}
+These contexts now provide the exact trial/test factor cardinalities consumed by the matrix-free operator path.  Where the current code still requires a variable-level global/operator/transfer container size, that role is now expressed through an explicit ambient-shape query rather than being folded back into the semantics of exact local realization.
+
+The operator realization was then migrated so that local apply proceeds on those exact context-derived factor spaces, rather than looping over one exact variable-local block that had been padded by envelope cardinalities.  We retained a variable-level ambient flat vector interface only where the current global operator interface still requires one input and one output vector per realized operator.  Even there, however, the local realization itself now filters against the exact local shape rather than pretending that the ambient block is itself the exact local space.
+
+\section{What changed}
+
+\subsection{1. \texttt{TensorDofLayout} was reinterpreted}
+
+The most important semantic correction is that \texttt{TensorDofLayout} is now shape-parametric rather than shape-owning.
+
+Concretely:
+\begin{itemize}[leftmargin=*]
+  \item variable-level layout metadata now stores component count, support-kind metadata, and trace-component metadata,
+  \item exact local dof counts are no longer stored as though they were mesh-wide local-space facts,
+  \item and flatten/unflatten logic now acts on a supplied \texttt{TensorFactorSpaceShape}.
+\end{itemize}
+
+This means that variable-local indexing conventions are preserved, but exact local factor spaces are now supplied separately.
+
+\subsection{2. Exact local context objects were added}
+
+We introduced:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{TensorFactorSpaceShape},
+  \item \texttt{TensorLocalVolumeContext}, and
+  \item \texttt{TensorLocalSkeletonContext}.
+\end{itemize}
+
+These provide the exact local trial/test factor-space shapes for one active tensor cell tuple or one tensor skeleton entity.
+
+For volume realization, the exact shape is determined directly from the participating component cells in the active tensor cell tuple.  For skeleton realization, the exact shape is determined from:
+\begin{itemize}[leftmargin=*]
+  \item the retained-component cells of the tensor skeleton entity, and
+  \item the local-support trace semantics in the distinguished trace component.
+\end{itemize}
+
+This resolves the previous ambiguity in which a single object was being asked to represent both variable-level indexing rules and exact local spaces across changing geometric contexts.
+
+\subsection{3. Matrix-free local apply now uses exact local shapes}
+
+The matrix-free operator path in \texttt{TensorOperator.cpp} was migrated so that for each realized geometric entity it now obtains the exact local context and uses the exact trial/test factor shapes from that context.
+
+The current global operator interface still exposes one input and one output vector for a realized operator, and so there remains an ambient variable-level flat interface for those vectors.  However, the local realization itself no longer treats that ambient block as an exact local space.  Instead:
+\begin{itemize}[leftmargin=*]
+  \item exact local trial/test contexts are built entity by entity,
+  \item basis-ordinal tuples are decoded in the ambient indexing convention,
+  \item and only those tuples that are admissible for the current exact local shape contribute to the local realization.
+\end{itemize}
+
+This is not yet a fully redesigned global numbering and entity-index-list operator interface, but it removes the conceptual error that the ambient block itself was the exact local space.  The local realization now follows the exact context-derived shapes honestly.
+
+\subsection{4. Gather/scatter and transfer were aligned with explicit shape semantics}
+
+\texttt{TensorGatherScatter} no longer assumes that a variable has one exact fixed local block.  Instead, gather/scatter now takes an explicit \texttt{TensorFactorSpaceShape} and moves exactly that many coefficients.
+
+Likewise, the current transfer path now obtains variable-level tensor-product sizing from an explicit ambient-shape query rather than from \texttt{TensorDofLayout::VariableLayout} pretending to own exact local-space cardinalities.
+
+This preserves the present flat-buffer data-movement and transfer style while making the shape dependence explicit and correct.
+
+\section{Tests and behavioral changes}
+
+The tests were updated to match the corrected semantics.
+
+In particular, tests that had encoded envelope behavior as a desired \texttt{TensorDofLayout} fact were replaced by tests that verify:
+\begin{itemize}[leftmargin=*]
+  \item shape-dependent flatten/unflatten correctness,
+  \item exact volume context derivation from tensor cell tuples,
+  \item exact skeleton context derivation from tensor skeleton entities,
+  \item trace local-support extent in the distinguished trace component,
+  \item and representative \(p\)-nonuniform behavior through exact local contexts.
+\end{itemize}
+
+A particularly important behavioral change is that the trace-aware boundary operator path no longer rejects retained-component \(p\)-nonuniform cases merely because the retained components are not uniform.  Instead, those cases are now handled through exact local skeleton contexts and tested against an explicit reference implementation.
+
+\section{What remains imperfect}
+
+Although this issue completes the main architectural correction requested here, one practical limitation remains in the current public operator interface.
+
+Specifically, the realized matrix-free operator still exposes one input and one output vector of fixed size per realized operator.  To support that interface cleanly, the implementation still constructs an ambient variable-level shape for the global vector interface.  The difference is that this ambient shape is no longer misrepresented as the exact local factor space.  It is now treated explicitly as an ambient coefficient container through which exact entity-local realization is carried out.  The same observation applies to the present tensor transfer path.
+
+This means that issue \#305 should be regarded as having completed the conceptual correction within the current operator and transfer interface constraints, while also leaving a natural future direction:
+\begin{itemize}[leftmargin=*]
+  \item redesign global numbering and coefficient movement so that realized operators and transfers can work directly with entity-specific exact local index lists rather than with ambient per-variable vector blocks.
+\end{itemize}
+
+That follow-on work is not required to make \texttt{TensorDofLayout} honest, and we therefore treat it as a later issue rather than unfinished work within \#305.
+
+\section{Outcome}
+
+The final result is that the tensor-native stack now distinguishes much more cleanly between:
+\begin{itemize}[leftmargin=*]
+  \item variable-level indexing conventions, and
+  \item exact local factor spaces determined by current geometric context.
+\end{itemize}
+
+That was the core design goal of this issue.  The envelope is no longer needed as the defining semantic of \texttt{TensorDofLayout}, and the operator path now realizes local contributions against exact local contexts rather than against a padded local-space fiction.
+
+\end{document}

@@ -1,0 +1,223 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\title{Issue \#305 Development Plan\\
+Separating Tensor Indexing Conventions from Exact Local Factor Spaces}
+\author{}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+
+\section{Objective}
+
+The purpose of issue \#305 is to complete the architectural correction suggested by the present use of envelope cardinalities in \texttt{TensorDofLayout}.  In particular, we want to remove the assumption that a registered tensor variable has a single exact, context-independent local coefficient space whenever p-nonuniformity is present.  The intended end state is that:
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{TensorDofLayout} describes tensor indexing conventions rather than mesh-wide exact local spaces,
+\item exact local trial/test factor spaces are derived from the current tensor cell tuple or tensor skeleton entity,
+\item \texttt{TensorOperator} applies over those exact local spaces rather than treating an ambient variable-level shape as the exact realized local space,
+\item and \texttt{TensorGatherScatter} becomes shape-parameterized rather than pretending that each variable has one exact fixed local block.
+\end{itemize}
+
+This issue is therefore intended as the full architectural correction within the current global/operator interface constraints, not merely a semantic cleanup.  The key requirement is that the operator-side and data-movement assumptions that created the envelope cease to define the semantics of the exact local factor space.
+
+\section{Background and design problem}
+
+At present, \texttt{TensorDofLayout} plays two different roles at once:
+
+\begin{enumerate}[leftmargin=2em]
+\item it provides a tensor-product flattening convention for local coefficient indices, and
+\item it supplies one variable-local tensor block size that is treated as the local coefficient space for matrix-free realization and flat-buffer gather/scatter.
+\end{enumerate}
+
+For p-uniform settings, these roles coincide.  For p-nonuniform settings, however, they do not.  The current implementation resolves the mismatch by using, in each non-trace component, a component cardinality equal to the maximum 1D basis cardinality over active component cells.  The resulting tensor-product block is an ambient coefficient space that is large enough to contain all cell-local factor spaces, but it is not itself the exact factor space associated with any particular local realization context.
+
+This becomes especially visible in the current matrix-free operator path.  The operator integrates over a specific tensor cell tuple or tensor skeleton entity, but loops over local trial/test ordinals drawn from one fixed variable-level block size.  In other words, geometry is already context-sensitive, while algebra is still padded and context-insensitive.  The envelope is the mechanism that hides that mismatch.
+
+The central design correction is therefore to separate:
+\[
+\text{tensor indexing convention}
+\qquad \text{from} \qquad
+\text{exact local factor space associated with one geometric entity}.
+\]
+
+\section{Guiding principle}
+
+The principle we want the implementation to follow is the following:
+
+\begin{quote}
+Tensor-product geometric entities determine where local realization occurs, while admissible local coefficient indices are derived factorwise from the participating component mesh objects and variable semantics.
+\end{quote}
+
+Thus:
+
+\begin{itemize}[leftmargin=2em]
+\item tensor cell tuples and tensor skeleton entities remain the correct geometric carriers for local realization,
+\item but local coefficient spaces should be built from the relevant component-local basis data,
+\item and flattening should be applied to those exact factor spaces, not to a mesh-wide ambient envelope.
+\end{itemize}
+
+This principle applies equally to volume and trace realization.  For a volume contribution, the exact local factor space should be determined by the component cells in the active tensor cell tuple.  For a trace contribution, it should be determined by the distinguished trace-component semantics together with the retained-component cells in the current skeleton entity.
+
+\section{Scope and intended end state}
+
+The issue scope is the full correction of the current design pressure within the present global/operator interface constraints.  In practical terms, this means that by the end of the issue we expect all of the following to be true:
+
+\begin{enumerate}[leftmargin=2em]
+\item \texttt{TensorDofLayout} no longer stores p-nonuniform envelope cardinalities as though they were exact local-space facts.
+\item Exact local factor cardinalities are supplied by an explicit local realization context.
+\item Matrix-free local apply uses exact admissible factor shapes for the current geometric entity rather than treating a variable-level ambient block as the exact realized local space.
+\item Gather/scatter is shape-parameterized, and any remaining variable-level ambient shape is explicit about its role as a global/operator/transfer container interface.
+\item Tests that currently encode envelope semantics are rewritten or removed.
+\end{enumerate}
+
+We do not require that every legacy-looking API remain intact during this process.  In fact, the current task is better served by replacing misleading APIs directly than by preserving them under softened semantics.
+
+\section{Proposed implementation strategy}
+
+We expect the implementation to proceed in several tightly related steps.
+
+\subsection{Step 1: Redefine the meaning of \texttt{TensorDofLayout}}
+
+The first step is to change the meaning of \texttt{TensorDofLayout}.  It should become a descriptor of:
+
+\begin{itemize}[leftmargin=2em]
+\item support-kind metadata by component,
+\item trace-component metadata,
+\item ordering conventions,
+\item and flatten/unflatten rules for a supplied factor-cardinality tuple.
+\end{itemize}
+
+In particular, it should stop owning mesh-wide envelope cardinalities and variable-level total local dof counts that pretend to be exact local-space facts under p-nonuniformity.
+
+A likely consequence is that the current \texttt{VariableLayout} data structure will need to be replaced or substantially reinterpreted.  We may still need a compact variable-specific indexing descriptor, but it should be shape-parametric rather than shape-owning.
+
+\subsection{Step 2: Introduce explicit local realization contexts}
+
+The second step is to introduce one or more explicit local-context objects.  These should describe the exact local factor space associated with a realized tensor cell tuple or tensor skeleton entity.
+
+Representative forms include:
+
+\begin{itemize}[leftmargin=2em]
+\item a volume local context carrying active component cells, exact 1D basis cardinalities, effective trial/test p-orders, and the resulting trial/test factor tuples;
+\item a skeleton local context carrying the orthogonal component, retained-component cells, exact retained-component factor cardinalities, and the trace-specific support semantics.
+\end{itemize}
+
+These contexts should be the source of exact local trial/test dof counts.
+
+\subsection{Step 3: Migrate operator realization to exact local spaces}
+
+The next step is to migrate \texttt{TensorOperator}, especially \texttt{MatrixFreeTensorOperator}, away from a single padded variable-level local block model.  For each volume cell tuple or skeleton entity, the operator should:
+
+\begin{enumerate}[leftmargin=2em]
+\item build the appropriate exact local context,
+\item obtain the exact trial/test factor-cardinality tuples,
+\item enumerate admissible tensor-product basis tuples directly,
+\item evaluate basis data and coefficients on that exact local space,
+\item and accumulate the contribution without any envelope padding.
+\end{enumerate}
+
+This will likely remove a number of current admissibility checks that exist only because the local space is padded.  In other cases, those checks may remain but become honest checks of support semantics rather than envelope filtering.
+
+\subsection{Step 4: Rework gather/scatter or replace its role}
+
+The current \texttt{TensorGatherScatter} abstraction assumes one exact fixed local block per variable and does flat offset-based copying.  That assumption is one of the main reasons the envelope exists.
+
+We therefore expect this issue to either:
+
+\begin{itemize}[leftmargin=2em]
+\item redesign \texttt{TensorGatherScatter} to work with entity-specific exact local index lists, or
+\item replace the current notion of gather/scatter in the local operator path with a more structured context-driven coefficient movement mechanism.
+\end{itemize}
+
+The exact endpoint will depend somewhat on the current transfer and operator code once all dependencies are inspected, but the key requirement is that the resulting design no longer requires a single exact variable-local block size under p-nonuniformity.
+
+\subsection{Step 5: Update tests and issue artifacts}
+
+A number of current tests explicitly encode the present envelope semantics.  Those will need to be revised.  In particular, tests that assert envelope cardinality under p-nonuniformity should be replaced by tests that assert:
+
+\begin{itemize}[leftmargin=2em]
+\item shape-dependent flatten/unflatten correctness,
+\item exact local factor-space derivation from current context,
+\item p-nonuniform volume realization over exact factor spaces,
+\item and p-nonuniform trace realization over exact retained-component factor spaces.
+\end{itemize}
+
+We should also expect a development report and issue-closeout note after the code changes settle.
+
+\section{Expected files and subsystems involved}
+
+Based on the current code, the main files likely to be involved are:
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{src/include/TensorDofLayout.h}
+\item \texttt{src/Mesh/TensorDofLayout.cpp}
+\item \texttt{src/include/TensorGatherScatter.h}
+\item \texttt{src/Mesh/TensorGatherScatter.cpp}
+\item \texttt{src/include/TensorOperator.h}
+\item \texttt{src/include/TensorOperatorFactory.h}
+\item \texttt{src/Problem/TensorOperator.cpp}
+\item \texttt{unit\_tests/TensorDofLayoutTests.cpp}
+\item \texttt{unit\_tests/TensorGatherScatterTests.cpp}
+\item \texttt{unit\_tests/TensorOperatorTests.cpp}
+\item and possibly transfer-related files if they depend on the same fixed-block local-space assumption.
+\end{itemize}
+
+We may also need to add one or more new header/implementation files if the cleanest design introduces dedicated local-context types.
+
+\section{Validation strategy}
+
+The validation strategy should be test-first and incremental.
+
+We expect to proceed by:
+
+\begin{enumerate}[leftmargin=2em]
+\item introducing or updating tests for the corrected semantics,
+\item confirming that old envelope-based assumptions fail where appropriate,
+\item implementing the new local-context and indexing behavior,
+\item migrating operator realization to use exact local factor spaces,
+\item and finally running the existing tensor test suite more broadly to ensure that the corrected design remains coherent.
+\end{enumerate}
+
+In particular, the tests should verify not only that the new APIs compile, but that p-nonuniform local realization now proceeds on exact local factor spaces rather than on padded envelopes.
+
+\section{Known risks and likely pressure points}
+
+The main risk in this work is that the current fixed-block assumptions may be more deeply embedded than they first appear.  The operator path is an obvious site, but transfer and coefficient movement code may also depend on the same model.  We should therefore expect some amount of ripple effect once the redesign starts.
+
+A second risk is that the cleanest long-term abstraction may require a somewhat larger immediate change than originally hoped.  That is acceptable for this issue, since the full architectural correction is explicitly in scope, but it means we should remain disciplined about keeping each change set coherent and testable.
+
+A third risk is that trace semantics and volume semantics may need slightly different local-context structures.  This is not itself a problem, but we should resist the temptation to force them into a single over-general abstraction too early if doing so obscures the design.
+
+\section{Conditions that would force a stop-and-ask event}
+
+Under the present workflow, we should stop and ask only if:
+
+\begin{itemize}[leftmargin=2em]
+\item we discover that required files or implementation context are missing, or
+\item the implementation appears to require a major architectural deviation from the design stated here.
+\end{itemize}
+
+At present, the largest missing context is whether transfer-related code depends materially on the same fixed local tensor-block assumptions.  We have therefore requested those files before proceeding further.
+
+\section{Planned execution style}
+
+Subject to receipt of the requested files and confirmation that no major architectural surprise is hiding there, we intend to proceed in a high-autonomy fashion.  The likely pattern is:
+
+\begin{enumerate}[leftmargin=2em]
+\item inspect transfer-related dependencies,
+\item update the issue writeup and internal plan if needed,
+\item implement the redesign in coherent batches,
+\item update or replace tests as the semantics change,
+\item and then use the build/test loop to drive stabilization and final polish.
+\end{enumerate}
+
+The main objective is not merely to make the current code pass under renamed semantics, but to remove the actual architectural pressure that created the envelope in the first place.
+
+\end{document}

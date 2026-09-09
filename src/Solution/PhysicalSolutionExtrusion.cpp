@@ -104,7 +104,7 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
   
   const auto &tensorPoints = basisCache->getPhysicalCubaturePoints();
   
-  const bool isSideCache = (basisCache->getSideIndex() != -1);
+  const bool isSideCache = basisCache->isSideCache();
   const auto &phaseRefPoints = isSideCache ? basisCache->getSideRefCellPointsInVolumeCoordinates() : basisCache->getRefCellPoints(); // TODO: figure out whether we actually need the physical points (tensorPoints above), or whether we can just use tensorRefPoints everywhere instead…
   
   const int numPhysicalPointComponents = phaseRefPoints.numTensorComponents() - numVelocityDimensions;
@@ -283,6 +283,25 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> value
         {
           auto & phaseSpaceCellOrdinal = fullListOrdinals(i+phaseSpaceCellOrdinalOffset);
           values.getWritableEntry(phaseSpaceCellOrdinal,x0,x1,0) = value;
+        }
+      });
+    }
+    else if ((numPhysicalPointComponents == 2) && (numVelocityDimensions == 2))
+    {
+      // 2D2V or 1D1T2V case (space-time 1D2V)
+      auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCellsForElemType,physicalPointCounts[0],physicalPointCounts[1]});
+      
+      Kokkos::parallel_for("PhysicalSolutionExtrusion::values", policy,
+      KOKKOS_LAMBDA (const int &cellOrdinal, const int &x0, const int &x1)
+      {
+        const auto & value = g_dataValues(cellOrdinal,x0,x1);
+        int numPhaseSpaceCellOrdinals   = partitionedOrdinalToFullListCount(cellOrdinal);
+        int phaseSpaceCellOrdinalOffset = partitionedOrdinalToFullListOffset(cellOrdinal);
+        
+        for (int i=0; i<numPhaseSpaceCellOrdinals; i++)
+        {
+          auto & phaseSpaceCellOrdinal = fullListOrdinals(i+phaseSpaceCellOrdinalOffset);
+          values.getWritableEntry(phaseSpaceCellOrdinal,x0,x1,0,0) = value;
         }
       });
     }

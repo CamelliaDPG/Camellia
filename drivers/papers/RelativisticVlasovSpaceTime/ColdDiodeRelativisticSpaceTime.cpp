@@ -808,7 +808,7 @@ int main(int argc, char *argv[])
     form->setIterativeSolveOutputLevel(iterativeSolveOutputLevel);
     //    form->setIterativeSolveTolerance(iterativeSolveTolerance);
     std::vector<double> cgTols(maxSubsteps,iterativeSolveTolerance);
-    if (maxSubsteps > 3)
+    if ((maxSubsteps > 3) && !useAdaptivity) // for adaptive solves, after the 0 refinement, we'll already be pretty close to the right solution, and looser tolerances will tend to push us away.  Not worth it to special-case the 0 refinement, I think.  So we only use the looser CG tolerances below for non-adaptive solves.
     {
       // use looser tolerances for the first couple steps
       cgTols[0] = iterativeSolveTolerance * 10000.0;
@@ -818,7 +818,7 @@ int main(int argc, char *argv[])
     form->setIterativeSolveMaxIterations(iterativeSolveMaxIters);
     
     std::vector<double> cgTolsCoarse(coarseMaxSubsteps,coarseIterativeSolveTolerance);
-    if (coarseMaxSubsteps > 3)
+    if ((coarseMaxSubsteps > 3) && !useAdaptivity) // for adaptive solves, after the 0 refinement, we'll already be pretty close to the right solution, and looser tolerances will tend to push us away.  Not worth it to special-case the 0 refinement, I think.  So we only use the looser CG tolerances below for non-adaptive solves.
     {
       // use looser tolerances for the first couple steps
       cgTolsCoarse[0] = coarseIterativeSolveTolerance * 100.0;
@@ -1413,15 +1413,28 @@ int main(int argc, char *argv[])
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
           
           RieszRepPtr f_rieszRep;
+          
           {
             std::map<int, FunctionPtr> f_map;
             auto f_var = form->f(0); // 0: species ordinal
             f_map[f_var->ID()] = Function::solution(f_var, form->vlasovSolution());
             auto f_functional = form->vlasovBF()->testFunctional(f_map); // bilinear form evaluated at the f solution
-            f_rieszRep = RieszRep::rieszRep(form->vlasovMesh(), form->vlasovSolution()->ip(), f_functional);
+            f_rieszRep  = RieszRep::rieszRep(form->vlasovMesh(), form->vlasovSolution()->ip(),  f_functional);
           }
-          double f_norm = f_rieszRep->getNorm();
-          double relEnergyError = energyError / f_norm;
+          
+          RieszRepPtr tn_rieszRep;
+          {
+            std::map<int, FunctionPtr> tn_map;
+            auto tn_var = form->t_n_hat(0); // 0: species ordinal
+            const bool weightFluxesBySideParity = true;
+            tn_map[tn_var->ID()] = Function::solution(tn_var, form->vlasovSolution(), weightFluxesBySideParity);
+            auto tn_functional = form->vlasovBF()->testFunctional(tn_map); // bilinear form evaluated at the tn solution
+            tn_rieszRep = RieszRep::rieszRep(form->vlasovMesh(), form->vlasovSolution()->ip(), tn_functional);
+          }
+          double  f_norm =  f_rieszRep->getNorm();
+          double tn_norm = tn_rieszRep->getNorm();
+          double total_norm = sqrt(f_norm * f_norm + tn_norm * tn_norm);
+          double relEnergyError = energyError / total_norm;
           
           bool errorTargetMet = (relEnergyError < relErrorTarget);
           
@@ -1429,15 +1442,15 @@ int main(int argc, char *argv[])
           {
             std::cout << "\n********************************************************************************\n";
             std::cout << "Time slab " << timeSlabOrdinal << ", ";
-            std::cout << "solution after refinement " << refinementNumber << ": relative error " << energyError / f_norm * 100.0 << "%" << std::endl;
-            if (errorTargetMet)
+            std::cout << "solution after refinement " << refinementNumber << ": relative error " << relEnergyError * 100.0 << "%" << std::endl;
+            if (errorTargetMet && (refinementNumber < maxRefinements))
             {
               std::cout << "Energy error target met; will perform one more solve with tightened tolerances.\n";
             }
             std::cout << "********************************************************************************\n\n";
           }
           
-          if (errorTargetMet)
+          if (errorTargetMet && (refinementNumber < maxRefinements))
           {
             form->setIterativeSolveTolerances(cgTols);
             form->setIterativeSolveMaxIterations(iterativeSolveMaxIters);
@@ -1449,13 +1462,16 @@ int main(int argc, char *argv[])
             energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
             f_rieszRep->computeRieszRep(); // recompute now that we've solved to tighter tolerance
             f_norm = f_rieszRep->getNorm();
-            relEnergyError = energyError / f_norm;
+            tn_rieszRep->computeRieszRep();
+            tn_norm = tn_rieszRep->getNorm();
+            total_norm = sqrt(f_norm * f_norm + tn_norm * tn_norm);
+            relEnergyError = energyError / total_norm;
             errorTargetMet = (relEnergyError < relErrorTarget);
             
             if (rank == 0)
             {
               std::cout << "\n*******************************************************************\n";
-              std::cout << "After re-solve, relative error " << energyError / f_norm * 100.0 << "%" << std::endl;
+              std::cout << "After re-solve, relative error " << relEnergyError * 100.0 << "%" << std::endl;
               if ( !errorTargetMet )
               {
                 std::cout << "New error does not meet target; will not yet exit refinement loop early.\n";

@@ -14,6 +14,7 @@
 #include "AbsFunction.h"
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
+#include "SolutionMomentFunction.h"
 
 using namespace Camellia;
 using std::vector;
@@ -28,11 +29,14 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                vector<double> velocityVertices_z,
                                                                                const int H1Order, const int delta_k,
                                                                                const int numUniformRefinements,
+                                                                               const TestSpaceInnerProduct testSpaceIP,
                                                                                const double testSpaceL2Weight,
                                                                                const EBasisFamily &basisFamily,
-                                                                               const int maxMomentNumberForDriver)
+                                                                               const int maxMomentNumberForDriver,
+                                                                               const bool enforcePositivity)
 :
 _c(c),
+_testSpaceInnerProduct(testSpaceIP),
 _testSpaceL2Weight(testSpaceL2Weight),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
@@ -43,7 +47,8 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            numUniformRefinements,
                            basisFamily,
                            maxMomentNumberForDriver,
-                           true) // true: defer initialization; we call it below.
+                           true, // true: defer initialization; we call initialize() below.
+                           enforcePositivity)
 {
   this->_useSumFactorizedAssembly = false; // set base class's flag: we don't (yet) support sum-factorized assembly here.
   this->initialize();
@@ -71,22 +76,39 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const 
   {
     VarPtr w = this->w(i);
     
-    LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
-    for (int d=0; d<spaceDim; d++)
+    if (_testSpaceInnerProduct == GraphTestSpaceInnerProduct)
     {
-      auto  v_d    = v_i(d);
-      auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
-      f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+      LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
+      for (int d=0; d<spaceDim; d++)
+      {
+        auto  v_d    = v_i(d);
+        auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
+        f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+      }
+      for (int vd=0; vd<velocityDim; vd++)
+      {
+        auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
+        f_term = f_term - a[vd] * dw_dv_vd;
+      }
+      ip->addTerm(f_term);
+      
+      LinearTermPtr stabilization_term = sqrt(_testSpaceL2Weight) * w;
+      ip->addTerm(stabilization_term);
     }
-    for (int vd=0; vd<velocityDim; vd++)
+    else if (_testSpaceInnerProduct == L2TestSpaceInnerProduct)
     {
-      auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
-      f_term = f_term - a[vd] * dw_dv_vd;
+      ip->addTerm(w);
     }
-    ip->addTerm(f_term);
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported test space inner product selection");
+    }
     
-    LinearTermPtr stabilization_term = sqrt(_testSpaceL2Weight) * w;
-    ip->addTerm(stabilization_term);
+    if (this->enforcePositivity())
+    {
+      VarPtr phi = this->phi(i);
+      ip->addTerm(phi);
+    }
   }
   
   return ip;
@@ -98,6 +120,11 @@ VarFactoryPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovVarFactory(
   
   BasisFamilyPtr basisFamily = BasisFamily::basisFamily(this->basisFamily());
   
+  if (this->enforcePositivity())
+  {
+    this->initializeProximalGalerkinAlpha();
+  }
+  
   const int numSpecies = this->numSpecies();
   std::vector<VarPtr> f(numSpecies);
   std::vector<VarPtr> w(numSpecies);
@@ -108,6 +135,12 @@ VarFactoryPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovVarFactory(
     f[i] = vlasovVF->fieldVar(this->f_name(i));
     w[i] = vlasovVF->testVar(this->w_name(i), HGRAD);
     t_n_hat[i] = vlasovVF->fluxVar(this->t_n_hat_name(i));
+    
+    if (this->enforcePositivity())
+    {
+      VarPtr psi_i = vlasovVF->fieldVar(this->psi_name(i), CONSTANT_SCALAR); // element-wise constant latent positivity field on the full phase-space-time cell, including time
+      VarPtr phi_i = vlasovVF->testVar(this->phi_name(i), L2);               // latent positivity test function
+    }
   }
   
   vlasovVF->setTrialBasisFamily(basisFamily);
@@ -172,6 +205,19 @@ void RelativisticVlasovSpaceTimeFormulation::initializeVlasovBilinearForm(BFPtr 
     // test
     VarPtr w = this->w(i);
     
+    if (this->enforcePositivity())
+    {
+      VarPtr psi = this->psi(i);
+      VarPtr phi = this->phi(i);
+      FunctionPtr alphaPG = this->proximalGalerkinAlpha();
+      auto vlasovSolnPrevWeakPtr = Teuchos::rcp(this->vlasovSolutionPreviousSubstep().get(), false);
+      FunctionPtr psi_solnPrev = Function::solution(psi, vlasovSolnPrevWeakPtr);
+      FunctionPtr exp_psi = Exp<double>::exp(psi_solnPrev);
+      
+      vlasovBF->addTerm(psi / alphaPG, w);
+      vlasovBF->addTerm(f - exp_psi * psi, phi);
+    }
+    
     for (int d=0; d<spaceDim; d++)
     {
       vlasovBF->addTerm( -v[d] * f, w->di(indexOffsetSpaceOneBased + d));  // dx_d
@@ -198,9 +244,13 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
   // create a new spatial MeshTopology based on the root of the current _spatialMeshTopology
   auto rootSpatialMeshTopology = MeshFactory::rootMeshTopologyCopy(spatialMeshTopology());
   
-  auto nextSlabForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(_c, q(), m(), configurationSpaceFormulation(), rootSpatialMeshTopology,
+  auto nextConfigurationFormulation = configurationSpaceFormulation()->newInstance();
+  auto nextSlabForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(_c, q(), m(), nextConfigurationFormulation, rootSpatialMeshTopology,
                                                                               temporalVertices, velocitySpaceVertices_x(), velocitySpaceVertices_y(), velocitySpaceVertices_z(),
-                                                                              H1Order(), delta_k(), numUniformRefinements(), _testSpaceL2Weight, basisFamily()));
+                                                                              H1Order(), delta_k(), numUniformRefinements(),
+                                                                              _testSpaceInnerProduct, _testSpaceL2Weight,
+                                                                              basisFamily(),
+                                                                              0, this->enforcePositivity()));
   
   configureNextSlab(nextSlabForm);
   
@@ -214,4 +264,88 @@ FunctionPtr RelativisticVlasovSpaceTimeFormulation::v_i(const int zeroBasedComp)
   
   FunctionPtr gammaFxn = gamma();
   return ux / gammaFxn;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::relativisticFirstMoment(const int zeroBasedVelocityComponent, const int speciesOrdinal)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((speciesOrdinal < 0) || (speciesOrdinal >= numSpecies()), std::invalid_argument,
+                             "species ordinal out of range");
+  std::pair<int,int> key{zeroBasedVelocityComponent, speciesOrdinal};
+  auto cached = _relativisticFirstMomentFunctions.find(key);
+  if (cached != _relativisticFirstMomentFunctions.end())
+  {
+    return cached->second;
+  }
+
+  auto drivingMoments = solutionMoments(speciesOrdinal);
+  auto firstMoment = Teuchos::rcp(new RelativisticFirstMomentFunction(drivingMoments.get(),
+                                                                      vlasovSolution(), f(speciesOrdinal),
+                                                                      configurationSpaceMesh(), _c,
+                                                                      zeroBasedVelocityComponent));
+  _relativisticFirstMomentFunctions[key] = firstMoment;
+  return firstMoment;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::relativisticFirstMoment(const int zeroBasedVelocityComponent,
+                                                                            const int speciesOrdinal,
+                                                                            SolutionMoments* drivingMoments,
+                                                                            SolutionPtr phaseSpaceSolution)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((speciesOrdinal < 0) || (speciesOrdinal >= numSpecies()), std::invalid_argument,
+                             "species ordinal out of range");
+  TEUCHOS_TEST_FOR_EXCEPTION(drivingMoments == nullptr, std::invalid_argument,
+                             "drivingMoments may not be null");
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
+                             "phaseSpaceSolution may not be null");
+
+  return Teuchos::rcp(new RelativisticFirstMomentFunction(drivingMoments,
+                                                          phaseSpaceSolution, f(speciesOrdinal),
+                                                          configurationSpaceMesh(), _c,
+                                                          zeroBasedVelocityComponent));
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentX() const
+{
+  auto nonConstThis = const_cast<RelativisticVlasovSpaceTimeFormulation*>(this);
+  FunctionPtr Jx = Function::zero();
+  for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+  {
+    Jx = Jx + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(0, speciesOrdinal);
+  }
+  return Jx;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentY() const
+{
+  if (velocityDim() < 2) return Function::zero();
+  auto nonConstThis = const_cast<RelativisticVlasovSpaceTimeFormulation*>(this);
+  FunctionPtr Jy = Function::zero();
+  for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+  {
+    Jy = Jy + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(1, speciesOrdinal);
+  }
+  return Jy;
+}
+
+FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentZ() const
+{
+  auto nonConstThis = const_cast<RelativisticVlasovSpaceTimeFormulation*>(this);
+  FunctionPtr Jz = Function::zero();
+  if (velocityDim() == 2)
+  {
+    for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+    {
+      Jz = Jz + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(1, speciesOrdinal);
+    }
+    return Jz;
+  }
+  else if (velocityDim() >= 3)
+  {
+    for (int speciesOrdinal=0; speciesOrdinal<numSpecies(); speciesOrdinal++)
+    {
+      Jz = Jz + q(speciesOrdinal) * nonConstThis->relativisticFirstMoment(2, speciesOrdinal);
+    }
+    return Jz;
+  }
+  return Function::zero();
 }

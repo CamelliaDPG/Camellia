@@ -17,11 +17,11 @@
 
 #include "Basis.h"
 
-typedef Intrepid::EOperator EOperator;
+typedef Camellia::EOperator EOperator;
 
 namespace Camellia
 {
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class VectorizedBasis;
+template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class VectorizedBasis;
 template<class Scalar, class ArrayScalar> class VectorizedBasis : public Basis<Scalar,ArrayScalar>
 {
 private:

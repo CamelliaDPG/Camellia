@@ -56,8 +56,8 @@ private:
   
   double _alpha0 = 1.0;
   double _alphaMultiplier = 1.0;
-  std::map<GlobalIndexType,double> _fluxLimitingWeightForCell; // last used weight for MPI-local cells
-  std::map<GlobalIndexType,double> _expPsiForCell; // exponential of latent variable, available for MPI-local cells
+  std::map<std::pair<GlobalIndexType,int>,double> _fluxLimitingWeightForCell; // last used weight for MPI-local cells, keyed by (cellID,speciesOrdinal)
+  std::map<std::pair<GlobalIndexType,int>,double> _expPsiForCell; // exponential of latent variable, keyed by (cellID,speciesOrdinal), available for MPI-local cells
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev;      // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
@@ -307,10 +307,16 @@ public:
   //! Returns a (possibly dynamic) function for the alpha value in Proximal Galerkin.
   FunctionPtr alpha();
   
-  //! Returns the exponential of the latent variable psi for the specified cell (which must be active and owned by this MPI rank).  Only valid if positivity enforcement is turned on.
+  //! Returns the exponential of the latent variable psi for the specified cell and species (which must be active and owned by this MPI rank).  Only valid if positivity enforcement is turned on.
+  double expPsiForCell(GlobalIndexType cellID, int speciesOrdinal);
+  
+  //! Returns the exponential of the latent variable psi for species 0 in the specified cell (which must be active and owned by this MPI rank).  Only valid if positivity enforcement is turned on.
   double expPsiForCell(GlobalIndexType cellID);
   
-  //! Returns the flux-limiting weight for the specified cell (which must be active and owned by this MPI rank).  The weight is used to weight f and the exponential of the latent variable, psi.  A 1.0 weight means that f is given full weight (no limiting required); a 0 weight means f does not contribute at all.
+  //! Returns the flux-limiting weight for the specified cell and species (which must be active and owned by this MPI rank).  The weight is used to weight f and the exponential of the latent variable, psi.  A 1.0 weight means that f is given full weight (no limiting required); a 0 weight means f does not contribute at all.
+  double fluxLimitingWeightForCell(GlobalIndexType cellID, int speciesOrdinal);
+  
+  //! Returns the flux-limiting weight for species 0 in the specified cell (which must be active and owned by this MPI rank).  The weight is used to weight f and the exponential of the latent variable, psi.  A 1.0 weight means that f is given full weight (no limiting required); a 0 weight means f does not contribute at all.
   double fluxLimitingWeightForCell(GlobalIndexType cellID);
   
   //! Set the initial conditions without setting inflow conditions (relevant for the periodic case).  Note: configuration-space BCs should be set before this is called; this will perform a configuration-space solve.

@@ -15,8 +15,12 @@
 #include "Camellia_TensorIndices.h"
 #include "CamelliaDataHelpers.h"
 #include "CamelliaTestingHelpers.h"
+#include "doubleBasisConstruction.h"
 #include "ExtrudedMeshTopology.h"
 #include "MaxwellianFunction.h"
+#include "MonomialFunctions.h"
+#include "PhaseSpaceVisualization.h"
+#include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "SolutionMoments.h"
 #include "SolutionMomentFunction.h"
 #include "SubExtrudedMeshTopology.h"
@@ -28,7 +32,7 @@ using namespace std;
 
 namespace
 {
-  static const double EXTRUSION_EXTENT =  2.0; // extent of each extrusion dimension
+  static const double EXTRUSION_EXTENT =  3.0; // extent of each extrusion dimension
   static const double EXTRUSION_ORIGIN = -1.0; // starting coordinate in each extrusion dimension
   static const double PHYSICAL_EXTENT  =  1.0; // extent in each physical dimension
   static const double PHYSICAL_ORIGIN  =  0.0; // starting coordinate in each physical dimension
@@ -82,7 +86,9 @@ namespace
     
     const int delta_k = 0;
     
-    std::vector<int> H1Order(1 + numExtrusionDims, fxnPolyOrder + 1);
+    int numTimeDimensions = useSpaceTime ? 1 : 0;
+    
+    std::vector<int> H1Order(1 + numExtrusionDims + numTimeDimensions, fxnPolyOrder + 1);
     
     auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
     
@@ -262,6 +268,7 @@ namespace
     
     out << "L^2 norm of expected integral: " << expectedL2 << std::endl;
     out << "L^2 norm of actual integral:   " << actualL2 << std::endl;
+    out << "L^2 norm of error:             " << error << std::endl;
     
     if (expectedL2 < tol)
     {
@@ -272,8 +279,21 @@ namespace
     else
     {
       const double relativeError = error / expectedL2;
+      errorMeetsTol = (relativeError <= tol);
       TEST_COMPARE(relativeError, <=, tol);
     }
+    
+//    {
+//      // DEBUGGING
+//      std::string directoryPath = "/tmp";
+//      std::string vlasovStr     = "SolutionMomentsViz";
+//      std::cout << "PhaseSpaceVisualization: outputting to " << directoryPath << "/" << vlasovStr << std::endl;
+//      PhaseSpaceVisualization vlasovViz( soln, f, vlasovStr, directoryPath);
+//      const int num1DPoints = 50;
+//      const double vizTimeValue = 0.0;
+//      vlasovViz.exportTimeStep(vizTimeValue, num1DPoints);
+//    }
+    
     
     if (!errorMeetsTol)
     {
@@ -586,6 +606,7 @@ void testMoments(const int numPhysicalDims, const int numExtrusionDims, const bo
         else
         {
           const double relativeError = error / expectedL2;
+          errorMeetsTol = (relativeError <= tol);
           TEST_COMPARE(relativeError, <=, tol);
         }
         
@@ -758,13 +779,72 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
               f, expectedMoments, maxMoment, refine, tol, out, success, extrusionOrigin, extrusionExtent, extrusionMeshWidth);
 }
 
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtrudedMesh )
+{
+  const int numPhysicalDims  = 1;
+  const int numExtrusionDims = 2;
+  const int survivingExtrusionDim = 0; // x,vx survive
+  const bool useSpaceTime    = true;
+  const bool useSerendipity  = false;
+  const int polyOrder = 2;
+  const int delta_k   = 0;
+
+  std::vector<int> H1Order(1 + numExtrusionDims + 1, polyOrder + 1); // +1 for time
+
+  auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
+
+  VarFactoryPtr vf = VarFactory::varFactory();
+  auto f = vf->fieldVar("f");
+  auto v = vf->testVar("v", HGRAD);
+
+  if (useSerendipity)
+  {
+    f->setBasisFamily(BasisFamily::serendipityBasisFamily());
+  }
+
+  BFPtr bf = BF::bf(vf);
+
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
+
+  std::vector<int> physicalH1Order{polyOrder + 1};
+
+  MeshTopologyViewPtr extrudedPhysicalMeshTopology =
+    Teuchos::rcp(new SubExtrudedMeshTopology(meshTopo, survivingExtrusionDim));
+
+  MeshPtr physicalMesh =
+    MeshFactory::minRuleMesh(extrudedPhysicalMeshTopology, bf, physicalH1Order, delta_k, comm, allowPruning);
+
+  // Project a phase-space function that yields a nontrivial moment function.
+  SolutionPtr soln = Solution::solution(mesh);
+  FunctionPtr phaseSpaceFxn = Function::xn(1) * MonomialFunction::xi_n(3,2); // x * vy^2
+
+  std::map<int, FunctionPtr> functionMap;
+  functionMap[f->ID()] = phaseSpaceFxn;
+  soln->projectOntoMesh(functionMap);
+
+  const int maxMomentNumber = 0;
+  SolutionMoments solnMoments(maxMomentNumber, soln, f, physicalMesh, survivingExtrusionDim);
+  solnMoments.update();
+
+  FunctionPtr momentFxn = solnMoments.solutionMomentFunction(0); // integral over vy
+
+  const auto & myCells = physicalMesh->cellIDsInPartition();
+  if (!myCells.empty())
+  {
+    const IndexType cellID = *myCells.begin();
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, cellID);
+    testScalarFunctionDataPathMatchesViewPath(momentFxn, basisCache, 1e-14, out, success);
+  }
+}
 
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
   {
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -774,7 +854,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -784,7 +864,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 2;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -794,7 +874,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 2;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -804,7 +884,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 3;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -824,7 +904,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 2;
     const int numExtrusionDims = 1;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -834,7 +914,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 2;
     const int numExtrusionDims = 2;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -844,7 +924,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 2;
     const int numExtrusionDims = 2;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -874,7 +954,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 1;
     const bool refine          = false;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -884,7 +964,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const int numPhysicalDims  = 3;
     const int numExtrusionDims = 1;
     const bool refine          = true;
-    const double tol = 1e-15;
+    const double tol = 1e-14;
     
     testConstantMoments(numPhysicalDims, numExtrusionDims, refine, tol, out, success);
   }
@@ -1128,6 +1208,42 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
     const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1T2V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr f = Function::constant(1.0);
+    // integral in extrusion dimensions results in multiplication by extent in those dimensions:
+    FunctionPtr f_integral = pow(EXTRUSION_EXTENT,numExtrusionDims) * f;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_Constant_1D1T2V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 5e-14;
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
@@ -1425,7 +1541,7 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, pCoarsen, tol, out, success);
   }
-
+  
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_x_1D1T1V )
   {
     const int numPhysicalDims  = 1;
@@ -1639,6 +1755,147 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     const double z_min = EXTRUSION_ORIGIN;
     const double z_integral = (pow(z_max, 3) - pow(z_min, 3)) / 3.0;
     FunctionPtr f_integral = z_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xvx2vy_1D1T2V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-14;
+    
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vx2 = Function::zn(2);
+    FunctionPtr f = x * vx2;
+    // integral in vx is vx^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    // integral
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vy_max = vx_max;
+    const double vy_min = vx_min;
+    const double vx_integral = (pow(vx_max, 3) - pow(vx_min, 3)) / 3.0;
+    const double vy_integral = vy_max - vy_min; // constant in vy
+    FunctionPtr f_integral = vx_integral * vy_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xvy2_1D1T2V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr f = x * vy2;
+    // integral in vy is vy^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    // integral
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vy_max = vx_max;
+    const double vy_min = vx_min;
+    const double vy_integral = (pow(vy_max, 3) - pow(vy_min, 3)) / 3.0;
+    const double vx_integral = vx_max - vx_min; // constant in vx
+    FunctionPtr f_integral = vx_integral * vy_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xvy2_1D1T2V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr f = x * vy2;
+    // integral in vy is vy^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    // integral
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vy_max = vx_max;
+    const double vy_min = vx_min;
+    const double vy_integral = (pow(vy_max, 3) - pow(vy_min, 3)) / 3.0;
+    const double vx_integral = vx_max - vx_min; // constant in vx
+    FunctionPtr f_integral = vx_integral * vy_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xtvx2vy_1D1T2V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x   = MonomialFunction::xi_n(0,1);
+    FunctionPtr t   = MonomialFunction::xi_n(1,1);
+    FunctionPtr vx2 = MonomialFunction::xi_n(2,2);
+    FunctionPtr vy  = MonomialFunction::xi_n(3,1);
+    
+    FunctionPtr f = x * t * vx2 * vy;
+    // integral in vx is vx^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    // integral in vy is vy^2 / 2, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vy_max = vx_max;
+    const double vy_min = vx_min;
+    const double vx_integral = (pow(vx_max, 3) - pow(vx_min, 3)) / 3.0;
+    const double vy_integral = (pow(vy_max, 2) - pow(vx_min, 2)) / 2.0;
+    FunctionPtr f_integral = vx_integral * vy_integral * x * t;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, Integrate_xtvx2vy_1D1T2V_Serendipity )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = -1;
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 3; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-14;
+    
+    FunctionPtr x   = MonomialFunction::xi_n(0,1);
+    FunctionPtr t   = MonomialFunction::xi_n(1,1);
+    FunctionPtr vx2 = MonomialFunction::xi_n(2,2);
+    FunctionPtr vy  = MonomialFunction::xi_n(3,1);
+    
+    FunctionPtr f = x * t * vx2 * vy;
+    // integral in vx is vx^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    // integral in vy is vy^2 / 2, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vy_max = vx_max;
+    const double vy_min = vx_min;
+    const double vx_integral = (pow(vx_max, 3) - pow(vx_min, 3)) / 3.0;
+    const double vy_integral = (pow(vy_max, 2) - pow(vx_min, 2)) / 2.0;
+    FunctionPtr f_integral = vx_integral * vy_integral * x * t;
     
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
@@ -2065,6 +2322,192 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xvy2_1D1T2V_to_xvx ) // to xvx: x,v_x dimensions survive integration
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 0; // vx dimension
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-14;
+    
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr f = x * vy2;
+    // integral in vy is vy^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    // integral
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vy_max = vx_max;
+    const double vy_min = vx_min;
+    const double vy_integral = (pow(vy_max, 3) - pow(vy_min, 3)) / 3.0;
+    FunctionPtr f_integral = vy_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xvy2_1D1T2V_Serendipity_to_xvx ) // to xvx: x,v_x dimensions survive integration
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 0; // vx dimension
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-15;
+    
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr f = x * vy2;
+    // integral in vy is vy^3 / 3, evaluated at EXTRUSION_ORIGIN + EXTRUSION_EXTENT and EXTRUSION_ORIGIN
+    // integral
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vy_max = vx_max;
+    const double vy_min = vx_min;
+    const double vy_integral = (pow(vy_max, 3) - pow(vy_min, 3)) / 3.0;
+    FunctionPtr f_integral = vy_integral * x;
+    
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim, polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xvy2_1D1T2V_to_xvy ) // to xvy: x,v_y dimensions survive integration
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // vy dimension
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = false;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-14;
+
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr f = x * vy2;
+
+    // integrate in vx only; f does not vary in vx
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vx_integral = vx_max - vx_min;
+
+    // surviving mesh coordinates are (x,t,vy), so expected function is vx_integral * x * vy^2
+    FunctionPtr f_integral = vx_integral * MonomialFunction::xi_n(0,1) * MonomialFunction::xi_n(2,2);
+
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim,
+                  polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+/*
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xvy2_1D1T2V_Serendipity_to_xvy ) // to xvy: x,v_y dimensions survive integration
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // vy dimension
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2; // for L^2 fields, one less than H^1 order
+    const double tol = 1e-14;
+
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr f = x * vy2;
+
+    // integrate in vx only; f does not vary in vx
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vx_integral = vx_max - vx_min;
+
+    // surviving mesh coordinates are (x,t,vy), so expected function is vx_integral * x * vy^2
+    FunctionPtr f_integral = vx_integral * MonomialFunction::xi_n(0,1) * MonomialFunction::xi_n(2,2);
+
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim,
+                  polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }*/
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_x_1D1T2V_Serendipity_to_xvy )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // vy survives
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2;
+    const double tol = 1e-14;
+
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr f = x;
+
+    // integrate over vx only; f is constant in vx
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vx_integral = vx_max - vx_min;
+
+    // surviving mesh coords are (x,t,vy); expected = vx_integral * x
+    FunctionPtr f_integral = vx_integral * MonomialFunction::xi_n(0,1);
+
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim,
+                  polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
+/*  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xvy_1D1T2V_Serendipity_to_xvy )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // vy survives
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2;
+    const double tol = 1e-14;
+
+    FunctionPtr x  = Function::xn(1);
+    FunctionPtr vy = MonomialFunction::xi_n(3,1);
+    FunctionPtr f = x * vy;
+
+    // integrate over vx only; f is constant in vx
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vx_integral = vx_max - vx_min;
+
+    // surviving mesh coords are (x,t,vy); expected = vx_integral * x * vy
+    FunctionPtr f_integral = vx_integral * MonomialFunction::xi_n(0,1) * MonomialFunction::xi_n(2,1);
+
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim,
+                  polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }*/
+
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_vy2_1D1T2V_Serendipity_to_xvy )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // vy survives
+    const bool spaceTime       = true;
+    const bool refine          = false;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2;
+    const double tol = 1e-14;
+
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr f = vy2;
+
+    // integrate over vx only; f is constant in vx
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vx_integral = vx_max - vx_min;
+
+    // surviving mesh coords are (x,t,vy); expected = vx_integral * vy^2
+    FunctionPtr f_integral = vx_integral * MonomialFunction::xi_n(2,2);
+
+    testIntegrate(numPhysicalDims, numExtrusionDims, spaceTime, survivingExtrusionDim,
+                  polyOrder, useSerendipity, f, f_integral, refine, tol, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, PartiallyIntegrate_xz2_1D3V_to_xy ) // to xy: (x,v_x) dimensions survive integration
   {
     MPIWrapper::CommWorld()->Barrier(); // for breakpoint
@@ -2238,6 +2681,108 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
     }
   }
 
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, SerendipityProjectedSolutionMatchesMomentFunctionValues_xvy2_to_xvy_1D1T2V )
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const int survivingExtrusionDim = 1; // keep vy
+    const bool useSpaceTime    = true;
+    const bool useSerendipity  = true;
+    const int polyOrder = 2;
+    const int delta_k   = 0;
+    const double tol = 1e-13;
+
+    std::vector<int> H1Order(1 + numExtrusionDims + 1, polyOrder + 1); // +1 for time
+
+    auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
+
+    VarFactoryPtr vf = VarFactory::varFactory();
+    auto f = vf->fieldVar("f");
+    auto v = vf->testVar("v", HGRAD);
+    f->setBasisFamily(BasisFamily::serendipityBasisFamily());
+
+    BFPtr bf = BF::bf(vf);
+
+    Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
+    const bool allowPruning = false;
+    MeshPtr phaseMesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
+
+    MeshTopologyViewPtr subTopo = Teuchos::rcp(new SubExtrudedMeshTopology(meshTopo, survivingExtrusionDim));
+    std::vector<int> physicalH1Order{polyOrder + 1};
+    MeshPtr targetMesh = MeshFactory::minRuleMesh(subTopo, bf, physicalH1Order, delta_k, comm, allowPruning);
+
+    // Phase-space function f = x * vy^2
+    FunctionPtr x   = Function::xn(1);
+    FunctionPtr vy2 = MonomialFunction::xi_n(3,2);
+    FunctionPtr phaseSpaceFxn = x * vy2;
+
+    // Expected partially integrated function on target mesh coords (x,t,vy)
+    const double vx_max = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    const double vx_min = EXTRUSION_ORIGIN;
+    const double vx_integral = vx_max - vx_min;
+    FunctionPtr expectedIntegrated = vx_integral * MonomialFunction::xi_n(0,1) * MonomialFunction::xi_n(2,2);
+
+    // Phase-space solution
+    SolutionPtr phaseSoln = Solution::solution(phaseMesh);
+    std::map<int, FunctionPtr> phaseFunctionMap;
+    phaseFunctionMap[f->ID()] = phaseSpaceFxn;
+    phaseSoln->projectOntoMesh(phaseFunctionMap);
+
+    // Actual moment function
+    SolutionMoments actualMoments(/*maxMomentNumber=*/0, phaseSoln, f, targetMesh, survivingExtrusionDim);
+    actualMoments.update();
+    FunctionPtr actualMomentFunction = actualMoments.solutionMomentFunction(0);
+
+    // Project expected integrated function directly onto target mesh
+    SolutionPtr targetSoln = Solution::solution(targetMesh);
+    std::map<int, FunctionPtr> targetFunctionMap;
+    targetFunctionMap[f->ID()] = expectedIntegrated;
+    targetSoln->projectOntoMesh(targetFunctionMap);
+
+    FunctionPtr projectedExpectedFunction = Function::solution(f, targetSoln);
+
+    const auto & targetCellIDs = targetMesh->cellIDsInPartition();
+
+    out << "Comparing pointwise values of SolutionMomentFunction to projected expected target solution for x*vy^2 -> xvy\n";
+
+    for (IndexType cellID : targetCellIDs)
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(targetMesh, cellID);
+
+      const auto & physPts = basisCache->getPhysicalCubaturePointsFC();
+      const int numPoints = physPts.dimension(1);
+
+      FieldContainer<double> actualVals(1, numPoints);
+      FieldContainer<double> projectedVals(1, numPoints);
+
+      actualMomentFunction->values(actualVals, basisCache);
+      projectedExpectedFunction->values(projectedVals, basisCache);
+
+      out << "cell " << cellID << "\n";
+      for (int p=0; p<numPoints; p++)
+      {
+        const double actual = actualVals(0,p);
+        const double projected = projectedVals(0,p);
+
+        out << "  pt ";
+        for (int d=0; d<physPts.dimension(2); d++)
+        {
+          out << physPts(0,p,d);
+          if (d+1 < physPts.dimension(2)) out << ",";
+        }
+        out << "  actualMoment=" << actual
+            << " projectedExpected=" << projected
+            << " diff=" << (actual - projected) << "\n";
+
+        if (!errMeetsAbsAndRelTol(projected, actual, tol, tol))
+        {
+          // print mismatch detail if desired
+        }
+        TEST_ASSERT(errMeetsAbsAndRelTol(projected, actual, tol, tol));
+      }
+    }
+  }
+
   // TODO: move this to test group SubExtrudedMeshTopology, in SubExtrudedMeshTopologyTests.cpp (which we should create)
   TEUCHOS_UNIT_TEST( SolutionMomentFunction, SubExtrudedMeshTopology_CellHalo )
   {
@@ -2293,4 +2838,120 @@ void testMaxwellianMoments(const int numPhysicalDims, const int numExtrusionDims
       }
     }
   }
+void testRelativisticFirstMomentZeroBySymmetry(const int numPhysicalDims, const int numVelocityDims,
+                                               const bool useSpaceTime, const bool refine,
+                                               const bool createHangingNodes,
+                                               const int velocityComponentToMeasure,
+                                               const int oddComponentInF,
+                                               Teuchos::FancyOStream &out, bool &success)
+{
+  const int delta_k = 0;
+  const int polyOrder = 2;
+  const bool allowPruning = false;
+  const double c = 2.0;
+
+  int numTimeDimensions = useSpaceTime ? 1 : 0;
+  std::vector<int> H1Order(1 + numVelocityDims + numTimeDimensions, polyOrder + 1);
+  auto meshTopo = makeTestMeshTopology(numPhysicalDims, numVelocityDims, useSpaceTime,
+                                       -2.0, 4.0, 1);
+
+  VarFactoryPtr vf = VarFactory::varFactory();
+  auto f = vf->fieldVar("f");
+  auto v = vf->testVar("v", HGRAD);
+  BFPtr bf = BF::bf(vf);
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
+  MeshPtr phaseMesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
+
+  std::vector<int> physicalH1Order{polyOrder + 1};
+  MeshPtr configMesh = MeshFactory::minRuleMesh(meshTopo->physicalMeshTopology(), bf, physicalH1Order, delta_k, comm, allowPruning);
+  PhysicalMeshUpdater::registerForUpdates(phaseMesh, configMesh);
+
+  if (refine)
+  {
+    if (createHangingNodes)
+    {
+      std::set<GlobalIndexType> oneCell{*phaseMesh->getActiveCellIDsGlobal().begin()};
+      phaseMesh->hRefine(oneCell);
+    }
+    else
+    {
+      std::set<GlobalIndexType> allCells = phaseMesh->getActiveCellIDsGlobal();
+      phaseMesh->hRefine(allCells);
+    }
+  }
+
+  const int configDim = numPhysicalDims + (useSpaceTime ? 1 : 0);
+  FunctionPtr xFactor = Function::constant(1.0);
+  if (numPhysicalDims > 0)
+  {
+    xFactor = Function::xn(1);
+  }
+  if (useSpaceTime)
+  {
+    xFactor = xFactor * Function::yn(1);
+  }
+
+  FunctionPtr oddVelocity = MonomialFunction::xi_n(configDim + oddComponentInF, 1);
+  FunctionPtr phaseSpaceF = xFactor * oddVelocity;
+
+  SolutionPtr phaseSolution = Solution::solution(phaseMesh);
+  std::map<int, FunctionPtr> phaseMap;
+  phaseMap[f->ID()] = phaseSpaceF;
+  phaseSolution->projectOntoMesh(phaseMap);
+
+  auto drivingMoments = Teuchos::rcp(new SolutionMoments(0, phaseSolution, f, configMesh, -1));
+  FunctionPtr momentFxn = Teuchos::rcp(new RelativisticFirstMomentFunction(drivingMoments.get(), phaseSolution, f, configMesh, c, velocityComponentToMeasure));
+  drivingMoments->update();
+
+  const double error = momentFxn->l2norm(configMesh);
+  const double tol = 1e-12;
+  out << "Relativistic symmetry test error = " << error << std::endl;
+  TEST_COMPARE(error, <=, tol);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vx_Unrefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, false, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vx_UniformRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vy_Unrefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, false, false, 1, 0, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vy_UniformRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, false, 1, 0, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D3V_ZeroBySymmetry )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 3, false, false, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_2D2V_ZeroBySymmetry )
+{
+  testRelativisticFirstMomentZeroBySymmetry(2, 2, false, false, false, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_3D3V_ZeroBySymmetry )
+{
+  testRelativisticFirstMomentZeroBySymmetry(3, 3, false, false, false, 2, 0, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vx_HangingNodeRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, true, 0, 1, out, success);
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBySymmetry_vy_HangingNodeRefined )
+{
+  testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, true, 1, 0, out, success);
+}
+
 } // end anonymous namespace

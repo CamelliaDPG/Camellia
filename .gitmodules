@@ -1,3 +1,6 @@
 [submodule "TPL/choice"]
 	path = TPL/choice
 	url = https://github.com/poulson/choice.git
+[submodule "tpl/BoBa"]
+	path = tpl/BoBa
+	url = https://github.com/llnl/BoBa.git

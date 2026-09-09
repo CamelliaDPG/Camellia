@@ -14,11 +14,17 @@
  *
  */
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Intrepid2_Basis.hpp"
+#include "Shards_Array.hpp"
 
+#include "Kokkos_DualView.hpp"
 #include "Kokkos_DynRankView.hpp"
 
+#include <algorithm>
+#include <iomanip>
 #include <set>
+#include <sstream>
+#include <vector>
 
 #include "Camellia_KokkosAllocations.h"
 #include "SharedScratchStorage.h"
@@ -27,156 +33,102 @@
 namespace Camellia
 {
   extern const std::string DEFAULT_VIEW_NAME;
-  
+
   template<class Scalar, int ArrayTypeId=0>
-  class FieldContainer : public Intrepid::FieldContainer<Scalar, ArrayTypeId>
+  class FieldContainer
   {
-    
   public:
-    using FieldContainerBase = Intrepid::FieldContainer<Scalar, ArrayTypeId>;
+    using scalar_type       = Scalar;
     using DeviceMemorySpace = Camellia::DeviceMemorySpace;
     using HostMemorySpace   = Camellia::HostMemorySpace;
     using HostView          = Camellia::HostView<Scalar>;
+    using HostViewConst     = Camellia::HostViewConst<Scalar>;
     using ViewTraits        = Camellia::ViewTraits<Scalar>;
     using DeviceView        = Camellia::DeviceView<Scalar>;
     using DeviceViewConst   = Camellia::DeviceViewConst<Scalar>;
-    
-  private:
-    mutable DeviceView      _deviceView;
-    mutable HostView        _hostView;
-    
-    mutable bool _deviceViewIsCheckedOut = false; // it's an error to check out twice without checking back in first; data copies happen at check in
-    mutable bool _deviceViewIsValid      = false; // if invalid, call initializeDeviceView() on checkout
-    mutable bool _hostViewIsValid        = false; // if invalid, call initializeHostView() before access to _hostView -- right now only used for creating mirror in initializeDeviceView()
-    
-    mutable bool _fieldContainerDataAllocationRecorded = false; // we don't count deallocation if we didn't count allocation; this allows us to enforce that.
-    mutable int  _fieldContainerAllocationNumber = -1;
-    
-    DeviceView allocateDeviceView(const std::string &label) const
-    {
-      const int rank = this->rank();
-      std::vector<int> dims(rank); // maximum rank of DynRankView is 7
-      for (int d=0; d<rank; d++)
-      {
-        dims[d] = this->dimension(d);
-      }
-      return Allocation<Scalar>::allocateDeviceView(dims,label);
-    }
-    
-    void initializeHostView(Scalar* dataPtr)
-    {
-      const int rank = this->rank();
-      Kokkos::Array<int,7> dims = {1,1,1,1,1,1,1}; // maximum rank of DynRankView is 7
-      for (int d=0; d<rank; d++)
-      {
-        dims[d] = this->dimension(d);
-      }
-      
-      switch (rank)
-      {
-        case 0:
-          _hostView   = HostView(dataPtr);
-          break;
-        case 1:
-          _hostView   = HostView(dataPtr,dims[0]);
-          break;
-        case 2:
-          _hostView   = HostView(dataPtr,dims[0],dims[1]);
-          break;
-        case 3:
-          _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2]);
-          break;
-        case 4:
-          _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3]);
-          break;
-        case 5:
-          _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4]);
-          break;
-        case 6:
-          _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5]);
-          break;
-        case 7:
-          _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6]);
-          break;
-        default:
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported rank");
-      }
-      _hostViewIsValid = true;
-    }
-    
-    void initializeHostView()
-    {
-      Scalar* dataPtr = this->getData().getRawPtr();
-      initializeHostView(dataPtr);
-    }
-    
-    void initializeDeviceView()
-    {
-      if (!_hostViewIsValid)
-      {
-        initializeHostView();
-      }
-      
-      // if _deviceView has previously been checked out, we should check it back in. (This comes up during calls to resize() and clear().)
-      Allocation<Scalar>::checkinMirrorView(_deviceView);
-      std::ostringstream mirrorViewStringStream;
-      mirrorViewStringStream << "FieldContainer::_deviceView (mirrors _hostView for FC with _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << ")";
-      _deviceView = Allocation<Scalar>::checkoutMirrorView(_hostView, mirrorViewStringStream.str());
-      
-      _deviceViewIsValid = true;
-    }
-    
-    void initializeDeviceView() const
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(!_hostViewIsValid, std::invalid_argument, "call to initializeDeviceView() for const FC requires that host view be valid");
-      
-      // if _deviceView has previously been checked out, we should check it back in. (This comes up during calls to resize() and clear().)
-      Allocation<Scalar>::checkinMirrorView(_deviceView);
-      _deviceView = Allocation<Scalar>::checkoutMirrorView(_hostView, "FieldContainer::_deviceView (mirrors _hostView)");
-      
-      _deviceViewIsValid = true;
-    }
-    
-    void invalidateViews()
-    {
-      // called when the FC is resized, e.g.
-      _hostViewIsValid = false;
-      
-//      {
-//        // DEBUGGING:
-//        if (_fieldContainerAllocationNumber == 485)
-//        {
-//          std::cout << "Invalidating views for _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << std::endl;
-//        }
-//      }
-      
-      // record the deallocation
-      if (_deviceViewIsValid)
-      {
-        _deviceViewIsValid = false;
-        Allocation<Scalar>::checkinMirrorView(_deviceView);
-      }
 
-      _deviceView      = DeviceView();
-      _hostView        = HostView();
+#ifndef KOKKOS_ENABLE_HIP
+    using DualView = Kokkos::DualView<Scalar*******, typename DeviceView::array_layout, Camellia::DeviceType>;
+#else
+    using DualView = Kokkos::DualView<Scalar*******, Kokkos::LayoutLeft, Camellia::DeviceType>;
+#endif
+
+  private:
+    Teuchos::Array<int> _dimensions;
+    int _dim0 = 0;
+    int _dim1 = 0;
+    int _dim2 = 0;
+    int _dim3 = 0;
+    int _dim4 = 0;
+    int _size = 0;
+
+    mutable DualView  _dualView;
+    mutable DeviceView _deviceView;
+    mutable HostView   _hostView;
+
+    mutable bool _deviceViewIsCheckedOut = false;
+    mutable bool _hostModified = false;
+    mutable bool _deviceModified = false;
+    mutable bool _fieldContainerDataAllocationRecorded = false;
+    mutable bool _deviceAllocationRecorded = false;
+    mutable int  _fieldContainerAllocationNumber = -1;
+    mutable Scalar* _externalData = nullptr;
+
+    static int product(const Teuchos::Array<int> &dimensions)
+    {
+      if (dimensions.size() == 0) return 0;
+      int result = 1;
+      for (int d=0; d<dimensions.size(); d++) result *= dimensions[d];
+      return result;
     }
-    
+
+    void cacheDims()
+    {
+      _dim0 = (_dimensions.size() > 0) ? _dimensions[0] : 0;
+      _dim1 = (_dimensions.size() > 1) ? _dimensions[1] : 0;
+      _dim2 = (_dimensions.size() > 2) ? _dimensions[2] : 0;
+      _dim3 = (_dimensions.size() > 3) ? _dimensions[3] : 0;
+      _dim4 = (_dimensions.size() > 4) ? _dimensions[4] : 0;
+      _size = product(_dimensions);
+    }
+
+    static size_t extentFor(const Teuchos::Array<int> &dimensions, const int d)
+    {
+      if (dimensions.size() == 0) return (d == 0) ? 0 : 1;
+      return (d < dimensions.size()) ? static_cast<size_t>(dimensions[d]) : static_cast<size_t>(1);
+    }
+
+    static size_t extentOrInvalidFor(const Teuchos::Array<int> &dimensions, const int d)
+    {
+      return (d < dimensions.size()) ? static_cast<size_t>(dimensions[d]) : static_cast<size_t>(KOKKOS_INVALID_INDEX);
+    }
+
+    void refreshViews() const
+    {
+      const int rank = this->rank();
+      if (_externalData != nullptr)
+      {
+        _hostView = HostView(_externalData,
+                             extentOrInvalidFor(_dimensions,0), extentOrInvalidFor(_dimensions,1),
+                             extentOrInvalidFor(_dimensions,2), extentOrInvalidFor(_dimensions,3),
+                             extentOrInvalidFor(_dimensions,4), extentOrInvalidFor(_dimensions,5),
+                             extentOrInvalidFor(_dimensions,6));
+      }
+      else
+      {
+        _hostView = HostView(_dualView.view_host(), rank);
+      }
+      _deviceView = DeviceView(_dualView.view_device(), rank);
+    }
+
     void recordAllocation(AllocationRecord &record, long long entryCount) const
     {
       Camellia::recordAllocation<Scalar>(record, entryCount);
-      
+
       bool recordIsForFieldContainer = (&record == &fcAllocationRecord);
       if (recordIsForFieldContainer)
       {
         _fieldContainerAllocationNumber = record.allocationCount;
-//        {
-//          // DEBUGGING:
-//          if (_fieldContainerAllocationNumber == 485)
-//          {
-//            std::cout << "Recording allocation for _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << std::endl;
-//          }
-//        }
-        
         _fieldContainerDataAllocationRecorded = true;
         if (recordOutstandingFCAllocationNumbers)
         {
@@ -184,20 +136,19 @@ namespace Camellia
         }
       }
     }
-    
+
     void recordDeallocation(AllocationRecord &record, long long entryCount) const
     {
       bool recordIsForFieldContainer = (&record == &fcAllocationRecord);
       if (recordIsForFieldContainer && !_fieldContainerDataAllocationRecorded)
       {
-        // then don't actually record the deallocation
         return;
       }
-      
+
       Camellia::recordDeallocation<Scalar>(record, entryCount);
       if (recordIsForFieldContainer)
       {
-        _fieldContainerDataAllocationRecorded = false; // don't allow to record deallocation twice without recording an allocation
+        _fieldContainerDataAllocationRecorded = false;
         if (recordOutstandingFCAllocationNumbers)
         {
           if (outstandingFCAllocationNumbers.find(_fieldContainerAllocationNumber) != outstandingFCAllocationNumbers.end())
@@ -212,630 +163,699 @@ namespace Camellia
         }
       }
     }
-    
+
+    void recordCurrentDeallocation() const
+    {
+      if (_fieldContainerDataAllocationRecorded)
+      {
+        recordDeallocation(fcAllocationRecord, this->size());
+      }
+      if (_deviceAllocationRecorded)
+      {
+        Camellia::recordDeallocation<Scalar>(deviceViewAllocationRecord, this->size());
+        _deviceAllocationRecorded = false;
+      }
+    }
+
+    Scalar* hostData() const
+    {
+      return (_externalData != nullptr) ? _externalData : _hostView.data();
+    }
+
+    void copyExternalDataToHostView() const
+    {
+      if (_externalData != nullptr)
+      {
+        Scalar* hostViewData = _dualView.view_host().data();
+        for (int i=0; i<this->size(); i++) hostViewData[i] = _externalData[i];
+      }
+    }
+
+    void copyHostViewToExternalData() const
+    {
+      if (_externalData != nullptr)
+      {
+        const Scalar* hostViewData = _dualView.view_host().data();
+        for (int i=0; i<this->size(); i++) _externalData[i] = hostViewData[i];
+      }
+    }
+
+    void clearModifiedFlags() const
+    {
+      _hostModified = false;
+      _deviceModified = false;
+      _dualView.clear_sync_state();
+    }
+
+    void markHostModified() const
+    {
+      if (!_hostModified)
+      {
+        _dualView.template modify<HostMemorySpace>();
+      }
+      _hostModified = true;
+      _deviceModified = false;
+    }
+
+    void markDeviceModified() const
+    {
+      if (!_deviceModified)
+      {
+        _dualView.template modify<DeviceMemorySpace>();
+      }
+      _deviceModified = true;
+      _hostModified = false;
+    }
+
+    void syncHost() const
+    {
+      Kokkos::fence();
+      Kokkos::deep_copy(_dualView.view_host(), _dualView.view_device());
+      copyHostViewToExternalData();
+      recordDeepCopy<Scalar>(deviceToHostDeepCopyRecord, this->size());
+      clearModifiedFlags();
+    }
+
+    void syncDevice() const
+    {
+      Kokkos::fence();
+      copyExternalDataToHostView();
+      Kokkos::deep_copy(_dualView.view_device(), _dualView.view_host());
+      recordDeepCopy<Scalar>(hostToDeviceDeepCopyRecord, this->size());
+      clearModifiedFlags();
+    }
+
+    void allocateStorage(const Teuchos::Array<int> &dimensions, const bool initializeToZero)
+    {
+      recordCurrentDeallocation();
+
+      _externalData = nullptr;
+      _dimensions = dimensions;
+      cacheDims();
+
+      _dualView = DualView(DEFAULT_VIEW_NAME,
+                           extentFor(_dimensions,0), extentFor(_dimensions,1), extentFor(_dimensions,2), extentFor(_dimensions,3),
+                           extentFor(_dimensions,4), extentFor(_dimensions,5), extentFor(_dimensions,6));
+      refreshViews();
+
+      recordAllocation(fcAllocationRecord, this->size());
+      Camellia::recordAllocation<Scalar>(deviceViewAllocationRecord, this->size());
+      _deviceAllocationRecorded = true;
+
+      if (initializeToZero)
+      {
+        Kokkos::deep_copy(_dualView.view_host(), Scalar(0));
+      }
+      clearModifiedFlags();
+    }
+
   public:
     DeviceView checkoutDeviceView(bool deepCopyFromHost=true)
     {
-      if (!_deviceViewIsValid)
-      {
-        //std::cout << "initializeDeviceView..." << std::endl;
-        initializeDeviceView();
-      }
-      _deviceViewIsCheckedOut = true;
-      //printHostViewMetadata();
-      //printDeviceViewMetadata();
-      
-      // ideally, we should guard this so that we don't do unnecessary copies when memory spaces are the same
-      // but this is an optimization that we can make at any point
-      // the priority right now is to provide the same interface as FieldContainer, so that we have a
-      // drop-in replacement, and to allow us to gradually shift to using Kokkos::View instead.
-      // the checkout semantics here allow us at least some guard against accidental usage of UVM.
-      //std::cout << std::endl << "deep_copy host2device..." << std::endl;
       if (deepCopyFromHost)
       {
-        Kokkos::deep_copy(_deviceView,_hostView);
-        recordDeepCopy<Scalar>(hostToDeviceDeepCopyRecord, _hostView.size());
+        syncDevice();
       }
-      return _deviceView;
-    }
-    
-    DeviceViewConst checkoutDeviceView() const
-    {
-      if (!_deviceViewIsValid)
+      else
       {
-        initializeDeviceView();
-        Kokkos::deep_copy(_deviceView,_hostView);
-        recordDeepCopy<Scalar>(hostToDeviceDeepCopyRecord, _hostView.size());
+        // The caller intends to overwrite the device view.  Newly constructed or
+        // resized FieldContainers have host-side initialization marked as modified;
+        // if we leave that stale host flag set while the device is written, the
+        // subsequent checkinDeviceView(true) can fail to propagate the device
+        // result back to host.  Discard existing sync state before handing out an
+        // overwrite-only device view.
+        clearModifiedFlags();
       }
       _deviceViewIsCheckedOut = true;
-      
       return _deviceView;
     }
-    
+
+    DeviceViewConst checkoutDeviceView() const
+    {
+      syncDevice();
+      _deviceViewIsCheckedOut = true;
+      return DeviceViewConst(_deviceView);
+    }
+
     void checkinDeviceView(bool deepCopyToHost) const
     {
       TEUCHOS_TEST_FOR_EXCEPTION(!_deviceViewIsCheckedOut, std::invalid_argument, "this check-in request is for a device view that is not currently checked out");
-      // copy back to host
-      //std::cout << "deep_copy device2host..." << std::endl;
       if (deepCopyToHost)
       {
-        Kokkos::deep_copy(_hostView,_deviceView);
-        recordDeepCopy<Scalar>(deviceToHostDeepCopyRecord, _hostView.size());
+        syncHost();
       }
       _deviceViewIsCheckedOut = false;
     }
-    
-    /** \brief Default constructor.
-     */
+
     FieldContainer()
-    :
-    FieldContainerBase()
     {
-      initializeHostView();
+      allocateStorage(Teuchos::Array<int>(), true);
     }
-    
-    
-    /** \brief Copy constructor with Camellia::FieldContainer as source.
-     */
+
     FieldContainer(const FieldContainer& right)
-    :
-    FieldContainerBase(right)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      *this = right;
     }
-    
-    /** \brief Copy constructor.
-     */
-    FieldContainer(const FieldContainerBase& right)
-    :
-    FieldContainerBase(right)
-    {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
-    }
-    
-    /** \brief Creates a rank-1 FieldContainer with the specified dimension, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the only index
-     */
+
     FieldContainer(const int dim0)
-    :
-    FieldContainerBase(dim0)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      Teuchos::Array<int> dimensions(1); dimensions[0] = dim0;
+      allocateStorage(dimensions, true);
     }
-    
-    /** \brief Creates a rank-2 FieldContainer with the specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     */
+
     FieldContainer(const int dim0, const int dim1)
-    :
-    FieldContainerBase(dim0, dim1)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      Teuchos::Array<int> dimensions(2); dimensions[0] = dim0; dimensions[1] = dim1;
+      allocateStorage(dimensions, true);
     }
-    
-    /** \brief Creates a rank-3 FieldContainer with the specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     \param dim2    [in]      - dimension for the 3rd index
-     */
+
     FieldContainer(const int dim0, const int dim1, const int dim2)
-    :
-    FieldContainerBase(dim0, dim1, dim2)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      Teuchos::Array<int> dimensions(3); dimensions[0] = dim0; dimensions[1] = dim1; dimensions[2] = dim2;
+      allocateStorage(dimensions, true);
     }
-    
-    /** \brief Creates a rank-4 FieldContainer with the specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     \param dim2    [in]      - dimension for the 3rd index
-     \param dim3    [in]      - dimension for the 4th index
-     */
+
     FieldContainer(const int dim0, const int dim1, const int dim2, const int dim3)
-    :
-    FieldContainerBase(dim0, dim1, dim2, dim3)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      Teuchos::Array<int> dimensions(4); dimensions[0] = dim0; dimensions[1] = dim1; dimensions[2] = dim2; dimensions[3] = dim3;
+      allocateStorage(dimensions, true);
     }
-    
-    /** \brief Creates a rank-5 FieldContainer with the specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     \param dim2    [in]      - dimension for the 3rd index
-     \param dim3    [in]      - dimension for the 4th index
-     \param dim4    [in]      - dimension for the 5th index
-     */
+
     FieldContainer(const int dim0, const int dim1, const int dim2, const int dim3, const int dim4)
-    :
-    FieldContainerBase(dim0, dim1, dim2, dim3, dim4)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      Teuchos::Array<int> dimensions(5); dimensions[0] = dim0; dimensions[1] = dim1; dimensions[2] = dim2; dimensions[3] = dim3; dimensions[4] = dim4;
+      allocateStorage(dimensions, true);
     }
-    
-    /** \brief Creates a  FieldContainer of arbitrary rank,, initialized by 0, using dimensions
-     specified in an array. The size of the input array implicitly defines the rank of the
-     container and its capacity is defined by the specified dimensions.
-     
-     \param dimensions[in]           - array with container dimensions
-     */
+
     FieldContainer(const Teuchos::Array<int>& dimensions)
-    :
-    FieldContainerBase(dimensions)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      allocateStorage(dimensions, true);
     }
-    
-    /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
-     <var><b>dimensions</b></var> array, and fills it by deep-copying data from a
-     Teuchos::ArrayView array (which implicitly doubles as Teuchos::ArrayRCP or
-     Teuchos::Array). If the input data array is a Teuchos::ArrayRCP, then '()' should
-     be appended to it when calling this function. This forces direct conversion to a
-     Teuchos::ArrayView, and prevents the call to the shallow-copy constructor that
-     takes a Teuchos::ArrayRCP.
-     
-     \param dimensions[in]           - array with container dimensions
-     \param data[in]                 - array with container values
-     */
-    FieldContainer(const Teuchos::Array<int>&        dimensions,
+
+    FieldContainer(const Teuchos::Array<int>& dimensions, const bool initializeToZero)
+    {
+      allocateStorage(dimensions, initializeToZero);
+    }
+
+    FieldContainer(const Teuchos::Array<int>& dimensions,
                    const Teuchos::ArrayView<Scalar>& data)
-    :
-    FieldContainerBase(dimensions, data)
     {
-      recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      allocateStorage(dimensions, false);
+      setValues(data);
     }
-    
-    /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
-     <var><b>dimensions</b></var> array, and wraps (shallow-copies) the data pointed
-     to by the input Teuchos::ArrayRCP array. If a deep copy is desired instead,
-     one can force the use of the constructor that takes Teuchos::ArrayView by
-     appending () to the input Teuchos::ArrayRCP parameter. This forces direct
-     conversion to a Teuchos::ArrayView.
-     
-     \param dimensions[in]           - array with container dimensions
-     \param data[in]                 - array with container values
-     */
-    FieldContainer(const Teuchos::Array<int>&       dimensions,
+
+    FieldContainer(const Teuchos::Array<int>& dimensions,
                    const Teuchos::ArrayRCP<Scalar>& data)
-    :
-    FieldContainerBase(dimensions, data)
     {
-      invalidateViews();
-      initializeHostView();
+      allocateStorage(dimensions, false);
+      setValues(data());
     }
-    
-    /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
-     <var><b>dimensions</b></var> array, and either wraps (shallow-copies) Scalar*
-     <var><b>data</b></var>, or deep-copies it, based on the value of the parameter
-     <var><b>deep_copy</b></var>. Memory management through FieldContainer, via
-     its Teuchos::ArrayRCP data member, can be enabled.
-     
-     \param dimensions[in]           - array with container dimensions
-     \param data[in]                 - array with container values
-     \param deep_copy[in]            - if true, then deep-copy, otherwise shallow-copy; default: false
-     \param owns_mem[in]             - if true, the field container will manage memory; default: false
-     */
-    FieldContainer(const Teuchos::Array<int>&    dimensions,
-                   Scalar*                       data,
-                   const bool                    deep_copy = false,
-                   const bool                    owns_mem  = false)
-    :
-    FieldContainerBase(dimensions, data, deep_copy, owns_mem)
+
+    FieldContainer(const Teuchos::Array<int>& dimensions,
+                   Scalar* data,
+                   const bool deep_copy = false,
+                   const bool owns_mem  = false)
     {
-      if (deep_copy) recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      (void)owns_mem;
+      allocateStorage(dimensions, false);
+      if (!deep_copy)
+      {
+        _externalData = data;
+        refreshViews();
+      }
+      setValues(data, this->size());
     }
-    
-    /** \brief Creates a FieldContainer either as a wrapper of the shards::Array<Scalar,shards::NaturalOrder>
-     array <var><b>data</b></var>, or as its deep copy, based on the value of the parameter
-     <var><b>deep_copy</b></var>. Memory management through FieldContainer, via
-     its Teuchos::ArrayRCP data member, can be enabled.
-     
-     \param data[in]                 - array with container values
-     \param deep_copy[in]            - if true, then deep-copy, otherwise shallow-copy; default: false
-     \param owns_mem[in]             - if true, the field container will manage memory; default: false
-     */
-    FieldContainer(const shards::Array<Scalar,shards::NaturalOrder>&  data,
-                   const bool                                         deep_copy = false,
-                   const bool                                         owns_mem  = false)
-    :
-    FieldContainerBase(data, deep_copy, owns_mem)
+
+    FieldContainer(const shards::Array<Scalar,shards::NaturalOrder>& data,
+                   const bool deep_copy = false,
+                   const bool owns_mem  = false)
     {
-      if (deep_copy) recordAllocation(fcAllocationRecord,this->size());
-      invalidateViews();
-      initializeHostView();
+      (void)owns_mem;
+      Teuchos::Array<int> dimensions(data.rank());
+      for (int d=0; d<data.rank(); d++) dimensions[d] = data.dimension(d);
+      allocateStorage(dimensions, false);
+      if (!deep_copy)
+      {
+        _externalData = data.contiguous_data();
+        refreshViews();
+      }
+      setValues(data.contiguous_data(), this->size());
     }
-    
+
     ~FieldContainer()
     {
-      bool ownsMemory = this->getData().has_ownership();
-      
-//      if (_fieldContainerAllocationNumber == 485)
-//      {
-//        std::cout << "Deallocating _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << std::endl;
-//      }
-      
-      if (ownsMemory || (this->size() == 0))
+      if (!Kokkos::is_finalized())
       {
-        recordDeallocation(fcAllocationRecord,this->size());
+        recordCurrentDeallocation();
       }
-      invalidateViews();
     }
-    
-    /** \brief Clears FieldContainer to trivial container (one with rank = 0 and size = 0)
-     */
+
+    int rank() const
+    {
+      return _dimensions.size();
+    }
+
+    int size() const
+    {
+      return _size;
+    }
+
+    template<class Vector>
+    void dimensions(Vector& dimensions) const
+    {
+      dimensions.assign(_dimensions.begin(), _dimensions.end());
+    }
+
+    int dimension(const int whichDim) const
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION((whichDim < 0) || (whichDim >= this->rank()), std::invalid_argument, "dimension order is out of range");
+      return _dimensions[whichDim];
+    }
+
+    int getEnumeration(const int i0) const { return i0; }
+    int getEnumeration(const int i0, const int i1) const { return i0*_dim1 + i1; }
+    int getEnumeration(const int i0, const int i1, const int i2) const { return (i0*_dim1 + i1)*_dim2 + i2; }
+    int getEnumeration(const int i0, const int i1, const int i2, const int i3) const { return ((i0*_dim1 + i1)*_dim2 + i2)*_dim3 + i3; }
+    int getEnumeration(const int i0, const int i1, const int i2, const int i3, const int i4) const { return (((i0*_dim1 + i1)*_dim2 + i2)*_dim3 + i3)*_dim4 + i4; }
+
+    int getEnumeration(const Teuchos::Array<int>& multiIndex) const
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(multiIndex.size() != _dimensions.size(), std::invalid_argument, "Number of multi-indices does not match rank of container.");
+      if (multiIndex.size() == 0) return 0;
+      int address = multiIndex[0];
+      for (int r=1; r<multiIndex.size(); r++) address = address * _dimensions[r] + multiIndex[r];
+      return address;
+    }
+
+    void getMultiIndex(int &i0, const int valueEnum) const
+    {
+      i0 = valueEnum;
+    }
+
+    void getMultiIndex(int &i0, int &i1, const int valueEnum) const
+    {
+      i0 = valueEnum / _dim1;
+      i1 = valueEnum - i0 * _dim1;
+    }
+
+    void getMultiIndex(int &i0, int &i1, int &i2, const int valueEnum) const
+    {
+      int tempDim = _dim1 * _dim2;
+      int tempEnum = valueEnum;
+      i0 = tempEnum / tempDim;
+      tempEnum -= i0 * tempDim;
+      tempDim /= _dim1;
+      i1 = tempEnum / tempDim;
+      tempEnum -= i1 * tempDim;
+      i2 = tempEnum;
+    }
+
+    void getMultiIndex(int &i0, int &i1, int &i2, int &i3, const int valueEnum) const
+    {
+      int tempDim = _dim1 * _dim2 * _dim3;
+      int tempEnum = valueEnum;
+      i0 = tempEnum / tempDim;
+      tempEnum -= i0 * tempDim;
+      tempDim /= _dim1;
+      i1 = tempEnum / tempDim;
+      tempEnum -= i1 * tempDim;
+      tempDim /= _dim2;
+      i2 = tempEnum / tempDim;
+      tempEnum -= i2 * tempDim;
+      i3 = tempEnum;
+    }
+
+    void getMultiIndex(int &i0, int &i1, int &i2, int &i3, int &i4, const int valueEnum) const
+    {
+      int tempDim = _dim1 * _dim2 * _dim3 * _dim4;
+      int tempEnum = valueEnum;
+      i0 = tempEnum / tempDim;
+      tempEnum -= i0 * tempDim;
+      tempDim /= _dim1;
+      i1 = tempEnum / tempDim;
+      tempEnum -= i1 * tempDim;
+      tempDim /= _dim2;
+      i2 = tempEnum / tempDim;
+      tempEnum -= i2 * tempDim;
+      tempDim /= _dim3;
+      i3 = tempEnum / tempDim;
+      tempEnum -= i3 * tempDim;
+      i4 = tempEnum;
+    }
+
+    template<class Vector>
+    void getMultiIndex(Vector &multiIndex, const int valueEnum) const
+    {
+      const int theRank = this->rank();
+      multiIndex.resize(theRank);
+      if (theRank == 0) return;
+      int tempEnum = valueEnum;
+      int tempRange = 1;
+      for (int r=1; r<theRank; r++) tempRange *= _dimensions[r];
+      multiIndex[0] = tempEnum / tempRange;
+      for (int r=1; r<theRank-1; r++)
+      {
+        tempEnum -= multiIndex[r-1] * tempRange;
+        tempRange /= _dimensions[r];
+        multiIndex[r] = tempEnum / tempRange;
+      }
+      if (theRank > 1) multiIndex[theRank-1] = tempEnum - multiIndex[theRank-2] * tempRange;
+    }
+
     void clear()
     {
-      bool ownsMemory = this->getData().has_ownership();
-      
-      if (ownsMemory || (this->size() == 0))
-      {
-        recordDeallocation(fcAllocationRecord,this->size());
-      }
-      this->FieldContainerBase::clear();
-      invalidateViews();
-      initializeHostView();
+      allocateStorage(Teuchos::Array<int>(), true);
     }
-    
-    /** \brief Resizes FieldContainer to a rank-1 container with the specified dimension, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     */
+
     void resize(const int dim0)
     {
-      bool sizeChange = (dim0 != this->size());
-      if (sizeChange)
-      {
-        recordDeallocation(fcAllocationRecord,this->size());
-      }
-      this->FieldContainerBase::resize(dim0);
-      invalidateViews();
-      initializeHostView();
-      if (sizeChange)
-      {
-        recordAllocation(fcAllocationRecord,this->size());
-      }
+      Teuchos::Array<int> dimensions(1); dimensions[0] = dim0;
+      resize(dimensions);
     }
-    
-    /** \brief Resizes FieldContainer to a rank-2 container with specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     */
+
     void resize(const int dim0, const int dim1)
     {
-      bool sizeChange = (dim0 * dim1 != this->size());
-      if (sizeChange)
-      {
-        recordDeallocation(fcAllocationRecord,this->size());
-      }
-      this->FieldContainerBase::resize(dim0, dim1);
-      invalidateViews();
-      initializeHostView();
-      if (sizeChange)
-      {
-        recordAllocation(fcAllocationRecord,this->size());
-      }
+      Teuchos::Array<int> dimensions(2); dimensions[0] = dim0; dimensions[1] = dim1;
+      resize(dimensions);
     }
-    
-    /** \brief Resizes FieldContainer to a rank-3 container with specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     \param dim2    [in]      - dimension for the 3rd index
-     */
+
     void resize(const int dim0, const int dim1, const int dim2)
     {
-      bool sizeChange = (dim0*dim1*dim2 != this->size());
-      if (sizeChange)
-      {
-        recordDeallocation(fcAllocationRecord,this->size());
-      }
-      this->FieldContainerBase::resize(dim0, dim1, dim2);
-      invalidateViews();
-      initializeHostView();
-      if (sizeChange)
-      {
-        recordAllocation(fcAllocationRecord,this->size());
-      }
+      Teuchos::Array<int> dimensions(3); dimensions[0] = dim0; dimensions[1] = dim1; dimensions[2] = dim2;
+      resize(dimensions);
     }
-    
-    /** \brief Resizes FieldContainer to a rank-4 container with specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     \param dim2    [in]      - dimension for the 3rd index
-     \param dim3    [in]      - dimension for the 4th index
-     */
+
     void resize(const int dim0, const int dim1, const int dim2, const int dim3)
     {
-      bool sizeChange = (dim0*dim1*dim2*dim3 != this->size());
-      if (sizeChange)
-      {
-        recordDeallocation(fcAllocationRecord,this->size());
-      }
-      this->FieldContainerBase::resize(dim0, dim1, dim2, dim3);
-      invalidateViews();
-      initializeHostView();
-      if (sizeChange)
-      {
-        recordAllocation(fcAllocationRecord,this->size());
-      }
+      Teuchos::Array<int> dimensions(4); dimensions[0] = dim0; dimensions[1] = dim1; dimensions[2] = dim2; dimensions[3] = dim3;
+      resize(dimensions);
     }
-    
-    /** \brief Resizes FieldContainer to a rank-5 container with specified dimensions, initialized by 0.
-     
-     \param dim0    [in]      - dimension for the 1st index
-     \param dim1    [in]      - dimension for the 2nd index
-     \param dim2    [in]      - dimension for the 3rd index
-     \param dim3    [in]      - dimension for the 4th index
-     \param dim4    [in]      - dimension for the 5th index
-     */
-    void resize(const int dim0,
-                const int dim1,
-                const int dim2,
-                const int dim3,
-                const int dim4)
+
+    void resize(const int dim0, const int dim1, const int dim2, const int dim3, const int dim4)
     {
-      bool sizeChange = (dim0*dim1*dim2*dim3*dim4 != this->size());
-      if (sizeChange)
-      {
-        recordDeallocation(fcAllocationRecord,this->size());
-      }
-      this->FieldContainerBase::resize(dim0, dim1, dim2, dim3, dim4);
-      invalidateViews();
-      initializeHostView();
-      if (sizeChange)
-      {
-        recordAllocation(fcAllocationRecord,this->size());
-      }
+      Teuchos::Array<int> dimensions(5); dimensions[0] = dim0; dimensions[1] = dim1; dimensions[2] = dim2; dimensions[3] = dim3; dimensions[4] = dim4;
+      resize(dimensions);
     }
-    
-    /** \brief Resizes FieldContainer to arbitrary rank container, initialized by 0, with dimensions
-     specified in the input array. The size of this array implicitely defined the rank of the FieldContainer.
-     
-     \param newDimensions[in]          - new upper values for index ranges
-     */
+
     void resize(const Teuchos::Array<int>& newDimensions)
     {
-      int newSize = 1;
-      for (int i=0; i<newDimensions.size(); i++)
+      const int oldSize = this->size();
+      const int newSize = product(newDimensions);
+
+      if ((_externalData != nullptr) && (newSize == oldSize))
       {
-        newSize *= newDimensions[i];
+        _dimensions = newDimensions;
+        cacheDims();
+        refreshViews();
+        clearModifiedFlags();
+        return;
       }
-      bool sizeChange = (newSize != this->size());
-      if (sizeChange)
+
+      std::vector<Scalar> oldValues(oldSize);
+      if (oldSize > 0)
       {
-        recordDeallocation(fcAllocationRecord,this->size());
+        const Scalar* oldData = hostData();
+        for (int i=0; i<oldSize; i++) oldValues[i] = oldData[i];
       }
-      this->FieldContainerBase::resize(newDimensions);
-      invalidateViews();
-      initializeHostView();
-      if (sizeChange)
-      {
-        recordAllocation(fcAllocationRecord,this->size());
-      }
+
+      allocateStorage(newDimensions, true);
+
+      const int copyCount = std::min(oldSize, this->size());
+      Scalar* newData = hostData();
+      for (int i=0; i<copyCount; i++) newData[i] = oldValues[i];
+      clearModifiedFlags();
     }
-    
-    /** \brief Resizes FieldContainer to have the same rank and dimensions as another FieldContainer,
-     and initializes by 0.
-     
-     \param anotherContainer[in]          - a FieldContainer
-     */
+
     void resize(const FieldContainer<Scalar, ArrayTypeId>& anotherContainer)
     {
-      bool sizeChange = (anotherContainer.size() != this->size());
-      if (sizeChange)
-      {
-        recordDeallocation(fcAllocationRecord,this->size());
-      }
-      this->FieldContainerBase::resize(anotherContainer);
-      invalidateViews();
-      initializeHostView();
-      if (sizeChange)
-      {
-        recordAllocation(fcAllocationRecord,this->size());
-      }
+      Teuchos::Array<int> dimensions;
+      anotherContainer.dimensions(dimensions);
+      allocateStorage(dimensions, true);
     }
-    
-    /** \brief Resizes FieldContainer to a container whose rank depends on the specified field and
-     operator types and the space dimension, initialized by 0. The admissible combinations of these
-     arguments, the rank of the resulitng container and its dimensions are summarized in the following table:
-     \verbatim
-     |--------------------|-------------------|-------------------|-------------------|
-     |operator/field rank |       rank 0      | rank 1 2D/3D      | rank 2 2D/3D      |
-     |--------------------|-------------------|-------------------|-------------------|
-     |       VALUE        | (P,F)             | (P,F,D)           | (P,F,D,D)         |
-     |--------------------|-------------------|-------------------|-------------------|
-     |     GRAD, D1       | (P,F,D)           | (P,F,D,D)         | (P,F,D,D,D)       |
-     |--------------------|-------------------|-------------------|-------------------|
-     |        CURL        | (P,F,D) (undef3D) | (P,F)/(P,F,D)     | (P,F,D)/(P,F,D,D) |
-     |--------------------|-------------------|-------------------|-------------------|
-     |        DIV         | (P,F,D) (only 1D) | (P,F)             | (P,F,D)           |
-     |--------------------|-------------------|-------------------|-------------------|
-     |    D1,D2,..,D10    | (P,F,K)           | (P,F,D,K)         | (P,F,D,D,K)       |
-     |--------------------|-------------------|-------------------|-------------------|
-     
-     |------|----------------------|---------------------------|
-     |      |         Index        |         Dimension         |
-     |------|----------------------|---------------------------|
-     |   P  |         point        |  0 <= P < numPoints       |
-     |   F  |         field        |  0 <= F < numFields       |
-     |   D  |   field coordinate   |  0 <= D < spaceDim        |
-     |   K  |   enumeration of Dk  |  0 <= K < DkCardinality   |
-     |------|----------------------|---------------------------|
-     \endverbatim
-     \remarks
-     \li Enumeration of Dk (derivatives of total order k) follows the lexicographical order of
-     the partial derivatives; see getDkEnumeration() for details.
-     
-     
-     \param numPoints       [in]        - number of evaluation points
-     \param numFields       [in]        - number of fields that will be evaluated
-     \param spaceType       [in]        - type of the function space whose basis will be evaluated
-     \param operatorType    [in]        - type of the operator that will be applied to the basis
-     \param spaceDim        [in]        - dimension of the ambient space
-     */
-    void resize(const int                       numPoints,
-                const int                       numFields,
-                const Intrepid::EFunctionSpace  spaceType,
-                const Intrepid::EOperator       operatorType,
-                const int                       spaceDim)
+
+    void resize(const int numPoints,
+                const int numFields,
+                const Intrepid2::EFunctionSpace spaceType,
+                const Intrepid2::EOperator operatorType,
+                const int spaceDim)
     {
-      int oldSize = this->size();
-      this->FieldContainerBase::resize(numPoints,numFields,spaceType,operatorType,spaceDim);
-      invalidateViews();
-      if (oldSize != this->size())
+      const int fieldRank    = Intrepid2::getFieldRank(spaceType);
+      const int operatorRank = Intrepid2::getOperatorRank(spaceType,operatorType,spaceDim);
+      const int theRank = 1 + 1 + fieldRank + operatorRank;
+      Teuchos::Array<int> newDimensions(theRank);
+      newDimensions[0] = numPoints;
+      newDimensions[1] = numFields;
+      switch (operatorType)
       {
-        recordDeallocation(fcAllocationRecord,oldSize);
-        recordAllocation(fcAllocationRecord,this->size());
+        case Intrepid2::OPERATOR_VALUE:
+        case Intrepid2::OPERATOR_GRAD:
+        case Intrepid2::OPERATOR_D1:
+        case Intrepid2::OPERATOR_CURL:
+        case Intrepid2::OPERATOR_DIV:
+          for (int i=0; i<fieldRank+operatorRank; i++) newDimensions[2+i] = spaceDim;
+          break;
+        case Intrepid2::OPERATOR_D2:
+        case Intrepid2::OPERATOR_D3:
+        case Intrepid2::OPERATOR_D4:
+        case Intrepid2::OPERATOR_D5:
+        case Intrepid2::OPERATOR_D6:
+        case Intrepid2::OPERATOR_D7:
+        case Intrepid2::OPERATOR_D8:
+        case Intrepid2::OPERATOR_D9:
+        case Intrepid2::OPERATOR_D10:
+          for (int i=0; i<fieldRank; i++) newDimensions[2+i] = spaceDim;
+          newDimensions[2+fieldRank] = Intrepid2::getDkCardinality(operatorType,spaceDim);
+          break;
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid operator type");
       }
+      resize(newDimensions);
     }
-    
-    /** \brief Assignment operator <var>*this = right</var>.
-     */
-    FieldContainer<Scalar>& operator  = (const FieldContainer<Scalar>& right)
+
+    void initialize(const Scalar value = 0)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION( ( this == &right ),
-                                 std::invalid_argument,
-                                 ">>> ERROR (FieldContainer): Invalid right-hand side to '='. Self-assignment prohibited.");
-      recordDeallocation(fcAllocationRecord,this->size());
-      
-      this->FieldContainerBase::operator=(right);
-      this->invalidateViews();
-      this->initializeHostView();
-      
-      // base assignment above does deep copy; record the allocation
-      recordAllocation(fcAllocationRecord,this->size());
-      
+      Kokkos::deep_copy(_hostView, value);
+      clearModifiedFlags();
+    }
+
+    Scalar getValue(const Teuchos::Array<int>& multiIndex) const
+    {
+      return (*this)[getEnumeration(multiIndex)];
+    }
+
+    void setValue(const Scalar dataValue, const Teuchos::Array<int>& multiIndex)
+    {
+      (*this)[getEnumeration(multiIndex)] = dataValue;
+    }
+
+    void setValue(const Scalar dataValue, const int order)
+    {
+      (*this)[order] = dataValue;
+    }
+
+    void setValues(const Teuchos::ArrayView<Scalar>& dataArray)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(dataArray.size() != this->size(), std::invalid_argument, "Size of argument does not match the size of container.");
+      Scalar* data = hostData();
+      for (int i=0; i<this->size(); i++) data[i] = dataArray[i];
+      clearModifiedFlags();
+    }
+
+    void setValues(const Scalar* dataPtr, const int numData)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(numData != this->size(), std::invalid_argument, "Number of data does not match the size of container.");
+      Scalar* data = hostData();
+      for (int i=0; i<numData; i++) data[i] = dataPtr[i];
+      clearModifiedFlags();
+    }
+
+    Scalar* data()
+    {
+      markHostModified();
+      return hostData();
+    }
+
+    const Scalar* data() const
+    {
+      return hostData();
+    }
+
+    Teuchos::ArrayRCP<Scalar> getData()
+    {
+      return Teuchos::arcp<Scalar>(hostData(), 0, this->size(), false);
+    }
+
+    Teuchos::ArrayRCP<const Scalar> getData() const
+    {
+      return Teuchos::arcp<const Scalar>(hostData(), 0, this->size(), false);
+    }
+
+    const Scalar& operator()(const int i0) const { return _hostView(i0); }
+    Scalar& operator()(const int i0) { return _hostView(i0); }
+
+    const Scalar& operator()(const int i0, const int i1) const { return _hostView(i0,i1); }
+    Scalar& operator()(const int i0, const int i1) { return _hostView(i0,i1); }
+
+    const Scalar& operator()(const int i0, const int i1, const int i2) const { return _hostView(i0,i1,i2); }
+    Scalar& operator()(const int i0, const int i1, const int i2) { return _hostView(i0,i1,i2); }
+
+    const Scalar& operator()(const int i0, const int i1, const int i2, const int i3) const { return _hostView(i0,i1,i2,i3); }
+    Scalar& operator()(const int i0, const int i1, const int i2, const int i3) { return _hostView(i0,i1,i2,i3); }
+
+    const Scalar& operator()(const int i0, const int i1, const int i2, const int i3, const int i4) const { return _hostView(i0,i1,i2,i3,i4); }
+    Scalar& operator()(const int i0, const int i1, const int i2, const int i3, const int i4) { return _hostView(i0,i1,i2,i3,i4); }
+
+    const Scalar& operator[](const int address) const
+    {
+      return hostData()[address];
+    }
+
+    Scalar& operator[](const int address)
+    {
+      return hostData()[address];
+    }
+
+    FieldContainer<Scalar>& operator=(const FieldContainer<Scalar>& right)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION((this == &right), std::invalid_argument, "Invalid right-hand side to '='. Self-assignment prohibited.");
+      Teuchos::Array<int> dimensions;
+      right.dimensions(dimensions);
+      allocateStorage(dimensions, false);
+      const Scalar* rightData = right.hostData();
+      Scalar* data = hostData();
+      for (int i=0; i<this->size(); i++) data[i] = rightData[i];
+      clearModifiedFlags();
       return *this;
     }
 
-    static DeviceView getDeviceView(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static DeviceView getDeviceView(typename Camellia::FieldContainer<Scalar>::DeviceView &dv)
+    {
       DeviceView deviceView = Kokkos::create_mirror(DeviceMemorySpace(), dv);
       Camellia::recordAllocation<Scalar>(deviceViewAllocationRecord, deviceView.size());
       return deviceView;
     }
-    
+
     template<int rank>
-    static Kokkos::MDRangePolicy< Kokkos::Rank<rank> > getMDRangePolicy(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<rank> > getMDRangePolicy(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv)
+    {
       using array_index_type = typename Kokkos::MDRangePolicy< Kokkos::Rank<rank> >::array_index_type;
       Kokkos::Array<array_index_type,rank> mdRangeBegin;
       Kokkos::Array<array_index_type,rank> mdRangeEnd;
       for (int i=0; i<rank; i++)
       {
-        // set default values
         mdRangeBegin[i] = 0;
-        mdRangeEnd[i]   = 1;
+        mdRangeEnd[i] = 1;
       }
-      
       int numRanks = std::min((int) dv.rank(), rank);
-      for (int i=0; i<numRanks; i++)
-      {
-        mdRangeEnd[i] = dv.extent_int(i);
-      }
+      for (int i=0; i<numRanks; i++) mdRangeEnd[i] = dv.extent_int(i);
       return Kokkos::MDRangePolicy< Kokkos::Rank<rank> >(mdRangeBegin,mdRangeEnd);
     }
-    
+
     template<int rank>
-    static Kokkos::MDRangePolicy< Kokkos::Rank<rank> > getMDRangePolicy(Kokkos::Array<int,rank> dimSizes) {
+    static Kokkos::MDRangePolicy< Kokkos::Rank<rank> > getMDRangePolicy(Kokkos::Array<int,rank> dimSizes)
+    {
       using array_index_type = typename Kokkos::MDRangePolicy< Kokkos::Rank<rank> >::array_index_type;
       Kokkos::Array<array_index_type,rank> mdRangeBegin;
       Kokkos::Array<array_index_type,rank> mdRangeEnd;
       for (int i=0; i<rank; i++)
       {
-        // set default values
         mdRangeBegin[i] = 0;
-        mdRangeEnd[i]   = dimSizes[i];
+        mdRangeEnd[i] = dimSizes[i];
       }
-      
       return Kokkos::MDRangePolicy< Kokkos::Rank<rank> >(mdRangeBegin,mdRangeEnd);
     }
-    
-    static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
-      return getMDRangePolicy<2>(dv);
-    }
-    
-    static Kokkos::MDRangePolicy< Kokkos::Rank<3> > getMDRangePolicy3(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
-      return getMDRangePolicy<3>(dv);
-    }
-    
-    static Kokkos::MDRangePolicy< Kokkos::Rank<4> > getMDRangePolicy4(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
-      return getMDRangePolicy<4>(dv);
-    }
-    
-    static Kokkos::MDRangePolicy< Kokkos::Rank<5> > getMDRangePolicy5(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
-      return getMDRangePolicy<5>(dv);
-    }
 
-    static Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
-      return getMDRangePolicy<6>(dv);
-    }
+    static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) { return getMDRangePolicy<2>(dv); }
+    static Kokkos::MDRangePolicy< Kokkos::Rank<3> > getMDRangePolicy3(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) { return getMDRangePolicy<3>(dv); }
+    static Kokkos::MDRangePolicy< Kokkos::Rank<4> > getMDRangePolicy4(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) { return getMDRangePolicy<4>(dv); }
+    static Kokkos::MDRangePolicy< Kokkos::Rank<5> > getMDRangePolicy5(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) { return getMDRangePolicy<5>(dv); }
+    static Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6(const typename Camellia::FieldContainer<Scalar>::DeviceView &dv) { return getMDRangePolicy<6>(dv); }
 
-    Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2() {
-      TEUCHOS_TEST_FOR_EXCEPTION( !(this->_deviceViewIsCheckedOut), std::invalid_argument,
-                                  "getMDRangePolicy _deviceView is not checked out." );
+    Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2()
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(!(_deviceViewIsCheckedOut), std::invalid_argument, "getMDRangePolicy _deviceView is not checked out.");
       return getMDRangePolicy2(this->_deviceView);
     }
 
-    Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6() {
-      TEUCHOS_TEST_FOR_EXCEPTION( !(this->_deviceViewIsCheckedOut), std::invalid_argument,
-                                  "getMDRangePolicy _deviceView is not checked out." );
+    Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6()
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(!(_deviceViewIsCheckedOut), std::invalid_argument, "getMDRangePolicy _deviceView is not checked out.");
       return getMDRangePolicy6(this->_deviceView);
     }
 
-    /** \brief Print metadata info for member variable _hostView
-     */
-    void printHostViewMetadata(std::ostream &out = std::cout) {
-      out << "  _hostView.rank()    = " <<   _hostView.rank() << std::endl;
-      out << "  _hostView.data()    = " <<   _hostView.data() << std::endl;
-      for (int i = 0; i < _hostView.rank(); i++) {
-        out << "  _hostView.extent(" << std::setw(1) << i << ") = " << _hostView.extent(i) << std::endl;
-      }
-      out << "  _hostView.size()    = " <<   _hostView.size() << std::endl;
-      out << "typeid(_hostView  )   = " << typeid(_hostView  ).name() << std::endl;
+    void printHostViewMetadata(std::ostream &out = std::cout)
+    {
+      out << "  _hostView.rank()    = " << _hostView.rank() << std::endl;
+      out << "  _hostView.data()    = " << _hostView.data() << std::endl;
+      for (int i=0; i<_hostView.rank(); i++) out << "  _hostView.extent(" << std::setw(1) << i << ") = " << _hostView.extent(i) << std::endl;
+      out << "  _hostView.size()    = " << _hostView.size() << std::endl;
+      out << "typeid(_hostView  )   = " << typeid(_hostView).name() << std::endl;
     }
-    
-    /** \brief Print metadata info for member variable _deviceView
-    */
-    void printDeviceViewMetadata(std::ostream &out = std::cout) {
+
+    void printDeviceViewMetadata(std::ostream &out = std::cout)
+    {
       out << "_deviceView.rank()    = " << _deviceView.rank() << std::endl;
       out << "_deviceView.data()    = " << _deviceView.data() << std::endl;
-      for (int i = 0; i < _hostView.rank(); i++) {
-        out << "_deviceView.extent(" << std::setw(1) << i << ") = " << _deviceView.extent(i) << std::endl;
-      }
+      for (int i=0; i<_deviceView.rank(); i++) out << "_deviceView.extent(" << std::setw(1) << i << ") = " << _deviceView.extent(i) << std::endl;
       out << "_deviceView.size()    = " << _deviceView.size() << std::endl;
       out << "typeid(_deviceView)   = " << typeid(_deviceView).name() << std::endl;
     }
   };
-  
+
+  template<class Scalar, int ArrayTypeId>
+  std::ostream& operator<<(std::ostream& os, const FieldContainer<Scalar, ArrayTypeId>& container)
+  {
+    Teuchos::oblackholestream oldFormatState;
+    oldFormatState.copyfmt(os);
+    os.setf(std::ios_base::scientific, std::ios_base::floatfield);
+    os.setf(std::ios_base::right);
+    int myprec = os.precision();
+
+    int size = container.size();
+    int rank = container.rank();
+    Teuchos::Array<int> multiIndex(rank);
+    Teuchos::Array<int> dimensions;
+    container.dimensions(dimensions);
+
+    os << "===============================================================================\n"
+       << "\t Container size = " << size << "\n"
+       << "\t Container rank = " << rank << "\n";
+
+    if ((rank == 0) && (size == 0))
+    {
+      os << "====================================================================================\n"
+         << "|                        *** This is an empty container ****                       |\n";
+    }
+    else
+    {
+      os << "\t Dimensions     = ";
+      for (int r=0; r<rank; r++) os << " (" << dimensions[r] << ") ";
+      os << "\n";
+      os << "====================================================================================\n"
+         << "|              Multi-index          Enumeration             Value                  |\n"
+         << "====================================================================================\n";
+    }
+
+    for (int address=0; address<size; address++)
+    {
+      container.getMultiIndex(multiIndex,address);
+      std::ostringstream mistring;
+      for (int r=0; r<rank; r++) mistring << multiIndex[r] << std::dec << " ";
+      os.setf(std::ios::right, std::ios::adjustfield);
+      os << std::setw(27) << mistring.str();
+      os << std::setw(20) << address;
+      os << "             ";
+      os.setf(std::ios::left, std::ios::adjustfield);
+      os << std::setw(myprec+8) << container[address] << "\n";
+    }
+
+    os << "====================================================================================\n\n";
+    os.copyfmt(oldFormatState);
+    return os;
+  }
+
   std::string allocationReport(AllocationRecord &record);
-  
-  // Trilinos typedefs
+
   typedef Teuchos::RCP< Camellia::FieldContainer<double> > FCPtr;
   typedef Teuchos::RCP< const Camellia::FieldContainer<double> > constFCPtr;
 }

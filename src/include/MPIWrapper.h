@@ -418,7 +418,7 @@ public:
         char* myValuesCharCast = reinterpret_cast<char*>(myValuesPtr);
         auto gatheredValuesPtr = (gatheredValues.size() > 0) ? &gatheredValues[0] : NULL;
         char* gatheredValuesCharCast = reinterpret_cast<char*>(gatheredValuesPtr);
-        MPI_Allgatherv(myValuesCharCast, mySize, MPI_CHAR, gatheredValuesCharCast, &valuesSizes[0], &offsets[0], MPI_CHAR, mpiComm);
+        MPI_Allgatherv(myValuesCharCast, mySize, MPI_CHAR, gatheredValuesCharCast, valuesSizes.data(), &offsets[0], MPI_CHAR, mpiComm);
       }
       else
       {

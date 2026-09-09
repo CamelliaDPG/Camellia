@@ -8,12 +8,6 @@
 
 #include "LobattoHGRAD_QuadBasis.h"
 
-// *Intrepid* (not Intrepid2) includes
-#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
-#include "Intrepid_HGRAD_HEX_Cn_FEM.hpp"
-#include "Intrepid_HDIV_QUAD_In_FEM.hpp"
-#include "Intrepid_HDIV_HEX_In_FEM.hpp"
-
 // Intrepid2 includes follow
 #include <Intrepid2_HGRAD_LINE_Cn_FEM.hpp>
 #include <Intrepid2_HVOL_LINE_Cn_FEM.hpp>
@@ -57,34 +51,22 @@ BasisPtr lobattoQuadHGRAD(int polyOrder, bool conforming)
 
 BasisPtr intrepidQuadHGRAD(int polyOrder)
 {
-  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HGRAD;
-  int scalarRank = 0;
-  int spaceDim = 2;
-  return Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)), spaceDim, scalarRank, fs) );
+  return intrepid2QuadHGRAD(polyOrder);
 }
 
 BasisPtr intrepidQuadHDIV(int polyOrder)
 {
-  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV;
-  int vectorRank = 1;
-  int spaceDim = 2;
-  return Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)), spaceDim, vectorRank, fs) );
+  return intrepid2QuadHDIV(polyOrder);
 }
 
 BasisPtr intrepidHexHGRAD(int polyOrder)
 {
-  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HGRAD;
-  int scalarRank = 0;
-  int spaceDim = 3;
-  return Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HGRAD_HEX_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)), spaceDim, scalarRank, fs) );
+  return intrepid2HexHGRAD(polyOrder);
 }
 
 BasisPtr intrepidHexHDIV(int polyOrder)
 {
-  Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HDIV;
-  int vectorRank = 1;
-  int spaceDim = 3;
-  return Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_HEX_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)), spaceDim, vectorRank, fs) );
+  return intrepid2HexHDIV(polyOrder);
 }
 
 BasisPtr intrepid2LineHGRAD(int polyOrder)

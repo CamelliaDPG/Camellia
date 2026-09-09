@@ -33,7 +33,7 @@ namespace Camellia
         definition, which could allow for fast quadrature on hypercubes, e.g.
  */
 
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class TensorBasis;
+template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class TensorBasis;
 template<class Scalar, class ArrayScalar> class TensorBasis : public Camellia::Basis<Scalar,ArrayScalar>
 {
 private:
@@ -60,12 +60,12 @@ public:
    */
   virtual ~TensorBasis() {}
 
-  virtual Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,DeviceType> points,
+  virtual Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( const Intrepid2::TensorPoints<Scalar,DeviceType> &points,
                                                                          const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
   
   //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)  Non-Intrepid2 bases throw an exception.
-  virtual void getValues( Intrepid2::BasisValues<Scalar,DeviceType> outputValues,
-                         const Intrepid2::TensorPoints<Scalar,DeviceType>  inputPoints,
+  virtual void getValues( Intrepid2::BasisValues<Scalar,DeviceType> &outputValues,
+                         const Intrepid2::TensorPoints<Scalar,DeviceType>  &inputPoints,
                          const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const;
   
   /** \brief Returns the cardinality of the basis, computed as the product of the cardinalities of the component bases.
@@ -154,7 +154,7 @@ public:
                  ::Camellia::EOperator spatialOperatorType, ::Camellia::EOperator temporalOperatorType) const;
 };
 
-typedef Teuchos::RCP<TensorBasis<> > TensorBasisPtr;
+typedef Teuchos::RCP<TensorBasis<double, Camellia::FieldContainer<double> > > TensorBasisPtr;
 
 } // namespace Camellia
 

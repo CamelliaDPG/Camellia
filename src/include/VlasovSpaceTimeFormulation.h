@@ -37,6 +37,8 @@ public:
   static const string S_F_HAT;   // trace variable
   static const string S_T_N_HAT; // trace variable
   static const string S_W;       // test variable
+  static const string S_PSI;     // latent trial variable for positivity preservation
+  static const string S_PHI;     // latent test variable for positivity preservation
 protected:
   bool _useSumFactorizedAssembly = false; // TODO: change this to "true" after Trilinos PR 13391 has propagated to master
 private:
@@ -52,6 +54,13 @@ private:
   
   bool _useGeometricMultigrid = false;
   bool _enforceQuasiNeutrality = false;
+  bool _enforcePositivity = false;
+  
+  double _alpha0 = 1.0;
+  double _alphaMultiplier = 1.0;
+  ParameterFunctionPtr _alphaPG;
+  std::map<std::pair<GlobalIndexType,int>,double> _fluxLimitingWeightForCell; // last used positivity-preservation weight for MPI-local full space-time cells, keyed by (cellID,speciesOrdinal)
+  std::map<std::pair<GlobalIndexType,int>,double> _expPsiForCell; // exponential of latent variable, keyed by (cellID,speciesOrdinal), available for MPI-local full space-time cells
   
   SolutionPtr _vlasovSoln;
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
@@ -66,7 +75,8 @@ private:
   std::vector<double> _q;
   std::vector<double> _m;
   std::vector<std::string> _speciesLabels;
-  std::vector<std::string> _f_names, _w_names, _tn_hat_names, _f_hat_names;
+  std::vector<std::string> _f_names, _w_names, _tn_hat_names, _f_hat_names, _psi_names, _phi_names;
+  std::vector<FunctionPtr> _expPsiSoln;
     
   std::vector< Teuchos::RCP<SolutionMoments> > _solutionMoments;
   ParameterFunctionPtr _n0; // if quasi-neutrality is enforced, this is set when initial conditions are set, as the integral of f0 over the whole of phase space, divided by the measure of the configuration-space mesh.  Quasi-neutrality is not supported for multi-species formulations (to support it, we'd need to change the definition of _n0 to be a charge-weighted weighted sum of f_i, and reflect that change in the configuration-space formulations as well).
@@ -182,7 +192,8 @@ public:
                              const int numUniformRefinements,
                              const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL,
                              const int maxMomentNumberForDriver = 0,
-                             const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
+                             const bool deferInitialization = false,
+                             const bool enforcePositivity = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
   
   VlasovSpaceTimeFormulation(double q, double m, Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                              MeshTopologyPtr spatialMeshTopology,
@@ -194,7 +205,8 @@ public:
                              const int numUniformRefinements,
                              const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL,
                              const int maxMomentNumberForDriver = 0,
-                             const bool deferInitialization = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
+                             const bool deferInitialization = false,
+                             const bool enforcePositivity = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
 
   //! take time step.
   void solve();
@@ -226,6 +238,12 @@ public:
   virtual VarPtr w(int i=0);         // Vlasov test variable (species i)
   std::string w_name(int i=0) const; // string label for Vlasov test variable (species i)
   
+  // latent variables for positivity preservation:
+  virtual VarPtr psi(int i=0);          // latent positivity field variable (species i)
+  std::string psi_name(int i=0) const;  // string label for latent positivity field variable (species i)
+  virtual VarPtr phi(int i=0);          // latent positivity test variable (species i)
+  std::string phi_name(int i=0) const;  // string label for latent positivity test variable (species i)
+  
   //! Returns the BF object corresponding to the Vlasov bilinear form.
   BFPtr vlasovBF();
   
@@ -250,6 +268,33 @@ public:
   SolutionPtr vlasovSolutionPreviousSubstep();
     
   bool hasL2Trace() const;
+  
+  //! Set proximal Galerkin alpha parameters used when positivity preservation is enabled.
+  void setProximalGalerkinParameters(double alpha0, double alphaMultiplier);
+  
+  //! Returns true if proximal-Galerkin positivity preservation is enabled.
+  bool enforcePositivity() const;
+  
+  //! Initializes the proximal-Galerkin alpha parameter function; intended for use by subclasses that override constructVlasovVarFactory().
+  void initializeProximalGalerkinAlpha();
+  
+  //! Returns the proximal-Galerkin alpha parameter function.
+  FunctionPtr proximalGalerkinAlpha() const;
+  
+  //! Returns the exponential of the latent variable psi for the specified full space-time cell and species (which must be active and owned by this MPI rank).  Only valid if positivity enforcement is turned on.
+  double expPsiForCell(GlobalIndexType cellID, int speciesOrdinal);
+  
+  //! Returns the exponential of the latent variable psi for species 0 in the specified full space-time cell (which must be active and owned by this MPI rank).  Only valid if positivity enforcement is turned on.
+  double expPsiForCell(GlobalIndexType cellID);
+  
+  //! Returns the flux-limiting weight for the specified full space-time cell and species (which must be active and owned by this MPI rank).  The weight is used to weight f and the exponential of the latent variable, psi.  A 1.0 weight means that f is given full weight (no limiting required); a 0 weight means f does not contribute at all.
+  double fluxLimitingWeightForCell(GlobalIndexType cellID, int speciesOrdinal);
+  
+  //! Returns the flux-limiting weight for species 0 in the specified full space-time cell (which must be active and owned by this MPI rank).  The weight is used to weight f and the exponential of the latent variable, psi.  A 1.0 weight means that f is given full weight (no limiting required); a 0 weight means f does not contribute at all.
+  double fluxLimitingWeightForCell(GlobalIndexType cellID);
+  
+  //! Applies the cell-wise proximal-Galerkin positivity limiter over full phase-space-time cells.  Only valid if positivity enforcement is turned on.
+  void applyPositivityLimiter();
   
   //! Set the initial conditions for each species without setting inflow conditions (relevant for the periodic case).
   void setInitialConditions(std::vector<FunctionPtr> f0);
@@ -464,6 +509,12 @@ public:
   
   /** \brief  Returns a Function representing the specified velocity-space coordinate.*/
   virtual FunctionPtr v_i(const int zeroBasedComp) const;
+  
+  //! Current-source helper used by Maxwell-like configuration-space formulations; default implementation uses raw first moments.
+  virtual FunctionPtr currentDensity() const;
+  virtual FunctionPtr currentX() const;
+  virtual FunctionPtr currentY() const;
+  virtual FunctionPtr currentZ() const;
   
   void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
                                                               double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);

@@ -183,12 +183,12 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
   stripCellDimension(timeValues);
   stripCellDimension(spaceTimeValues);
 
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp(new TensorBasis(spatialBasis, temporalBasis) );
   
   FC expectedValues = spaceTimeValues;
   expectedValues.initialize(0.0); // zero out
-  vector< Intrepid::FieldContainer<double> > componentValues = {spaceValues, timeValues};
+  vector< Camellia::FieldContainer<double> > componentValues = {spaceValues, timeValues};
   vector<::Camellia::EOperator> componentOps = {spaceOpForSizing, timeOpForSizing};
   tensorBasis->getTensorValues(expectedValues, componentValues, componentOps);
 
@@ -340,9 +340,9 @@ void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo
     Camellia::EOperator temporalOp = OP_VALUE;
     Camellia::EOperator spaceTimeOp = spatialOp;
 
-    vector<Intrepid::EOperator> intrepidOperatorTypes(2);
-    intrepidOperatorTypes[0] = Intrepid::OPERATOR_CURL;
-    intrepidOperatorTypes[1] = Intrepid::OPERATOR_VALUE;
+    vector<Camellia::EOperator> intrepidOperatorTypes(2);
+    intrepidOperatorTypes[0] = Camellia::OP_CURL;
+    intrepidOperatorTypes[1] = Camellia::OP_VALUE;
 
     CellTopoPtr timeTopo = CellTopology::line();
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo,1);
@@ -528,7 +528,7 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, GetValues )
 
     Teuchos::RCP<TensorBasis<> > tensorBasis = Teuchos::rcp(new TensorBasis<>(spatialBasis, temporalBasis) );
     
-    vector< Intrepid::FieldContainer<double> > componentValues(2);
+    vector< Camellia::FieldContainer<double> > componentValues(2);
     componentValues[0] = transformedSpatialValues;
     componentValues[1] = transformedTemporalValues;
     FC transformedSpaceTimeValuesExpected = transformedSpaceTimeValues;

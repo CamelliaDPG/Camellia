@@ -14,7 +14,6 @@
 #ifndef Camellia_debug_Basis_h
 #define Camellia_debug_Basis_h
 
-#include "Intrepid_Basis.hpp"
 #include "Camellia_FieldContainer.hpp"
 #include "Shards_CellTopology.hpp"
 
@@ -27,7 +26,7 @@
 
 namespace Camellia
 {
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar> > class Basis;
+template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class Basis;
 
 template<class Scalar, class ArrayScalar> class Basis
 {
@@ -79,12 +78,12 @@ protected:
   mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinal;
 public:
   //! allocation method for Intrepid2-style getValues() output argument.  (For non-Intrepid2 bases, throws an exception.)
-  virtual Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,DeviceType> points,
+  virtual Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( const Intrepid2::TensorPoints<Scalar,DeviceType> &points,
                                                                          const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
   
   //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)  Non-Intrepid2 bases throw an exception.
-  virtual void getValues( Intrepid2::BasisValues<Scalar,DeviceType> outputValues,
-                         const Intrepid2::TensorPoints<Scalar,DeviceType>  inputPoints,
+  virtual void getValues( Intrepid2::BasisValues<Scalar,DeviceType> &outputValues,
+                         const Intrepid2::TensorPoints<Scalar,DeviceType>  &inputPoints,
                          const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const;
   
   virtual int getCardinality() const;
@@ -157,32 +156,8 @@ public:
   virtual ~Basis() {}
 };
 
-/***************** IntrepidBasisWrapper ******************/
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class IntrepidBasisWrapper;
-template<class Scalar, class ArrayScalar> class IntrepidBasisWrapper : public Basis<Scalar,ArrayScalar>
-{
-private:
-  Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > _intrepidBasis;
-protected:
-  void initializeTags() const;
-public:
-  IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis, int rangeDimension, int rangeRank,
-                       Camellia::EFunctionSpace functionSpace);
-
-  Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis();
-
-  virtual bool isConforming() const; // true for Intrepid bases
-  virtual bool isNodal() const;      // true for the Intrepid bases
-
-  virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
-  
-  using Basis<Scalar,ArrayScalar>::getValues;
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const;
-  
-  void getDofCoords(ArrayScalar & DofCoords) const;
-};
-
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class Intrepid2BasisWrapper;
+/***************** IntrepidBasisWrapper removed; use Intrepid2BasisWrapper ******************/
+template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class Intrepid2BasisWrapper;
 template<class Scalar, class ArrayScalar> class Intrepid2BasisWrapper : public Basis<Scalar,ArrayScalar>
 {
   using DeviceType = Camellia::DeviceType;
@@ -204,38 +179,15 @@ public:
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Camellia::EOperator operatorType) const override;
   
   //! allocation method for Intrepid2-style getValues() output argument.
-  Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,DeviceType> points,
+  Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( const Intrepid2::TensorPoints<Scalar,DeviceType> &points,
                                                                 const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const override;
   
   //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)
-  void getValues( Intrepid2::BasisValues<Scalar,DeviceType> outputValues,
-                  const Intrepid2::TensorPoints<Scalar,DeviceType>  inputPoints,
+  void getValues( Intrepid2::BasisValues<Scalar,DeviceType> &outputValues,
+                  const Intrepid2::TensorPoints<Scalar,DeviceType>  &inputPoints,
                   const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const override;
   
   void getDofCoords(ArrayScalar & DofCoords) const override;
-  
-  static Intrepid2::EOperator intrepidOpToIntrepid2Op(const Intrepid::EOperator &op)
-  {
-    switch (op)
-    {
-      case Intrepid::OPERATOR_VALUE: return Intrepid2::OPERATOR_VALUE;
-      case Intrepid::OPERATOR_GRAD:  return Intrepid2::OPERATOR_GRAD;
-      case Intrepid::OPERATOR_CURL:  return Intrepid2::OPERATOR_CURL;
-      case Intrepid::OPERATOR_DIV:   return Intrepid2::OPERATOR_DIV;
-      case Intrepid::OPERATOR_D1:    return Intrepid2::OPERATOR_D1;
-      case Intrepid::OPERATOR_D2:    return Intrepid2::OPERATOR_D2;
-      case Intrepid::OPERATOR_D3:    return Intrepid2::OPERATOR_D3;
-      case Intrepid::OPERATOR_D4:    return Intrepid2::OPERATOR_D4;
-      case Intrepid::OPERATOR_D5:    return Intrepid2::OPERATOR_D5;
-      case Intrepid::OPERATOR_D6:    return Intrepid2::OPERATOR_D6;
-      case Intrepid::OPERATOR_D7:    return Intrepid2::OPERATOR_D7;
-      case Intrepid::OPERATOR_D8:    return Intrepid2::OPERATOR_D8;
-      case Intrepid::OPERATOR_D9:    return Intrepid2::OPERATOR_D9;
-      case Intrepid::OPERATOR_D10:   return Intrepid2::OPERATOR_D10;
-      case Intrepid::OPERATOR_MAX:   return Intrepid2::OPERATOR_MAX;
-      default:                       return Intrepid2::OPERATOR_MAX;
-    }
-  }
 };
 } // namespace Camellia
 

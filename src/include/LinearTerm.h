@@ -18,8 +18,6 @@
 
 #include "IP.h"
 
-#include "Intrepid_Utils.hpp"
-#include "Intrepid_Basis.hpp"
 #include "Var.h"
 
 #include "DofOrdering.h"

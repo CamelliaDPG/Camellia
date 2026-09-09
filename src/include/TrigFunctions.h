@@ -158,5 +158,15 @@ public:
     static TFunctionPtr<Scalar> sin(TFunctionPtr<Scalar> argument);
     static TFunctionPtr<Scalar> cos(TFunctionPtr<Scalar> argument);
   };
+
+inline FunctionPtr sin(FunctionPtr arg)
+{
+  return TrigFunctions<double>::sin(arg);
+}
+
+inline FunctionPtr cos(FunctionPtr arg)
+{
+  return TrigFunctions<double>::cos(arg);
+}
 }
 #endif

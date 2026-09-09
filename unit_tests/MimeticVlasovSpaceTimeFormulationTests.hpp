@@ -19,10 +19,11 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, MimeticVariablesDefined )
   
   const bool usePeriodicBCs    = false;
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
   
-  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, usePeriodicBCs, q, basisFamily, useMimeticDPG);
+  auto form = getFormulation1D1T1V(xElements, tElements, vElements, H1Order, useGradedSpatialMesh, usePeriodicBCs, q, basisFamily, useMimeticDPG);
   
   const std::string & g_a_name = MimeticVlasovSpaceTimeFormulation::S_GA[0];
   const std::string & g_v_name = MimeticVlasovSpaceTimeFormulation::S_GV[0];
@@ -77,12 +78,13 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_z
   
   const bool overrideVlasovBCs = false;
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
   
   const double tol = 1e-12;
   
-  patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+  patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
 }
 
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_zero_Serendipity )
@@ -106,12 +108,13 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_xv2_E_z
   
   const bool overrideVlasovBCs = false;
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
   
   const double tol = 1e-11;
   
-  patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+  patchTestVlasovPoisson(f_exact, E_exact, VE_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
 }
 
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_zero_E_1 )
@@ -130,12 +133,13 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_zero_E_1 )
   
   const bool overrideVlasovBCs = false;
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
   
   const double tol = 1e-12;
   
-  patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+  patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
 }
 
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_zero_E_1_Serendipity )
@@ -154,12 +158,13 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_zero_E_1_Seren
   
   const bool overrideVlasovBCs = false;
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
   
   const double tol = 1e-12;
   
-  patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
+  patchTestVlasovPoisson(f_exact, E_exact, V_E_exact, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success);
 }
 
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_constant_E_linear )
@@ -185,10 +190,11 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_constan
   const std::string vizPrefix = "PatchTest_f_constant_E_linear";
   const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
   
-  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG,
+  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG,
                          tol, out, success, outputViz, vizPrefix);
 }
 
@@ -215,10 +221,11 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PoissonPatchTest_f_constan
   const std::string vizPrefix = "PatchTest_f_constant_E_linear";
   const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
   
-  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
+  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol, out, success, outputViz, vizPrefix);
 }
 
 TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadratic )
@@ -241,12 +248,13 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadr
   
   const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL;
   
   const bool outputViz = true;
   const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                          out, success, outputViz, testPrefix);
 }
 
@@ -270,11 +278,12 @@ TEUCHOS_UNIT_TEST( MimeticVlasovSpaceTimeFormulation, PatchTest_f_linear_E_quadr
   
   const bool overrideVlasovBCs = true; // required because this patch test does not have zero t_n at the velocity extrema
   const bool useMimeticDPG     = true;
+  const bool useGradedSpatialMesh = false;
   
   const EBasisFamily basisFamily = BASIS_FAMILY_SERENDIPITY;
   
   const bool outputViz = true;
   const std::string testPrefix = "PatchTest_f_linear_E_quadratic";
-  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
+  patchTestVlasovPoisson(f_exact, E_exact, V_E, q, H1Order, xElements, tElements, vElements, useGradedSpatialMesh, overrideVlasovBCs, basisFamily, useMimeticDPG, tol,
                          out, success, outputViz, testPrefix);
 }

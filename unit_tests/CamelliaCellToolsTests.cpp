@@ -14,7 +14,7 @@
 
 #include "Camellia_FieldContainer.hpp"
 
-#include "Intrepid_CellTools.hpp"
+#include <Intrepid2_CellTools.hpp>
 
 #include "Shards_CellTopology.hpp"
 
@@ -66,7 +66,9 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_Space)
       }
       else
       {
-        Intrepid::CellTools<double>::getReferenceSideNormal(expectedSideNormal, sideOrdinal, shardsTopo);
+        auto expectedSideNormalView = expectedSideNormal.checkoutDeviceView(false);
+        Intrepid2::CellTools<DeviceType>::getReferenceSideNormal(expectedSideNormalView, sideOrdinal, shardsTopo);
+        expectedSideNormal.checkinDeviceView(true);
       }
 
       CamelliaCellTools::getReferenceSideNormal(sideNormal, sideOrdinal, simpleTopo);
@@ -123,7 +125,9 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_SpaceTime)
         {
           unsigned spatialSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
           Camellia::FieldContainer<double> spaceSideNormal(spaceDim-1);
-          Intrepid::CellTools<double>::getReferenceSideNormal(spaceSideNormal, spatialSideOrdinal, spaceTopo);
+          auto spaceSideNormalView = spaceSideNormal.checkoutDeviceView(false);
+          Intrepid2::CellTools<DeviceType>::getReferenceSideNormal(spaceSideNormalView, spatialSideOrdinal, spaceTopo);
+          spaceSideNormal.checkinDeviceView(true);
           for (int d=0; d<spaceDim-1; d++)
           {
             expectedSideNormal[d] = spaceSideNormal[d];
@@ -173,7 +177,11 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_ShardsAndCamelliaAgr
         CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, shardsSubcellTopo);
 
         Camellia::FieldContainer<double> intrepidParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
-        Intrepid::CellTools<double>::mapToReferenceSubcell(intrepidParentNodes, refSubcellNodes, subcellDim, scord, shardsTopo);
+        auto intrepidParentNodesView = intrepidParentNodes.checkoutDeviceView(false);
+        auto refSubcellNodesView     = refSubcellNodes.checkoutDeviceView();
+        Intrepid2::CellTools<DeviceType>::mapToReferenceSubcell(intrepidParentNodesView, refSubcellNodesView, subcellDim, scord, shardsTopo);
+        refSubcellNodes.checkinDeviceView(false);
+        intrepidParentNodes.checkinDeviceView(true);
 
         Camellia::FieldContainer<double> camelliaParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
         CamelliaCellTools::mapToReferenceSubcell(camelliaParentNodes, refSubcellNodes, subcellDim, scord, simpleTopo);
@@ -394,7 +402,15 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSimpleShardsTopologies )
     Camellia::FieldContainer<double> jacobianCamellia(1,numPoints,spaceDim,spaceDim);
     Camellia::FieldContainer<double> jacobianShards(1,numPoints,spaceDim,spaceDim);
     CamelliaCellTools::setJacobian(jacobianCamellia, refCellNodes, cellNodes, topo);
-    Intrepid::CellTools<double>::setJacobian(jacobianShards, refCellNodes, cellNodes, topo->getShardsTopology());
+    {
+      auto jacobianShardsView = jacobianShards.checkoutDeviceView(false);
+      auto refCellNodesView   = refCellNodes.checkoutDeviceView();
+      auto cellNodesView      = cellNodes.checkoutDeviceView();
+      Intrepid2::CellTools<DeviceType>::setJacobian(jacobianShardsView, refCellNodesView, cellNodesView, topo->getShardsTopology());
+      cellNodes.checkinDeviceView(false);
+      refCellNodes.checkinDeviceView(false);
+      jacobianShards.checkinDeviceView(true);
+    }
 
     TEST_COMPARE_FLOATING_ARRAYS(jacobianShards, jacobianCamellia, 1e-15);
 
@@ -403,7 +419,15 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSimpleShardsTopologies )
       cellNodes[i] /= 2.0;
     }
     CamelliaCellTools::setJacobian(jacobianCamellia, refCellNodes, cellNodes, topo);
-    Intrepid::CellTools<double>::setJacobian(jacobianShards, refCellNodes, cellNodes, topo->getShardsTopology());
+    {
+      auto jacobianShardsView = jacobianShards.checkoutDeviceView(false);
+      auto refCellNodesView   = refCellNodes.checkoutDeviceView();
+      auto cellNodesView      = cellNodes.checkoutDeviceView();
+      Intrepid2::CellTools<DeviceType>::setJacobian(jacobianShardsView, refCellNodesView, cellNodesView, topo->getShardsTopology());
+      cellNodes.checkinDeviceView(false);
+      refCellNodes.checkinDeviceView(false);
+      jacobianShards.checkinDeviceView(true);
+    }
 
     TEST_COMPARE_FLOATING_ARRAYS(jacobianShards, jacobianCamellia, 1e-15);
   }

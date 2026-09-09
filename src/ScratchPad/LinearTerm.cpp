@@ -4,6 +4,7 @@
 
 #include "CamelliaCellTools.h"
 #include "CamelliaDataHelpers.h"
+#include "Camellia_Integrate.hpp"
 #include "ConstantScalarFunction.h"
 #include "ConstantVectorFunction.h"
 #include "Function.h"
@@ -15,8 +16,6 @@
 #include "Solution.h"
 #include "TensorBasis.h"
 #include "TimeLogger.h"
-
-#include <Intrepid_FunctionSpaceTools.hpp>
 
 #include <Intrepid2_TensorArgumentIterator.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
@@ -584,12 +583,9 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &valuesFC,
         multiplyFluxValuesByParity(vValues, basisCache);
       }
 
-      Intrepid::FieldContainer<double> miniMatrix( numCells, uBasisCardinality, vBasisCardinality );
-      Intrepid::FieldContainer<double> &uValuesIntrepid = uValues;
-      Intrepid::FieldContainer<double> &vValuesIntrepid = vValues;
+      Camellia::FieldContainer<double> miniMatrix( numCells, uBasisCardinality, vBasisCardinality );
       
-      // the casts above are important to let FunctionSpaceTools invoke BLAS
-      Intrepid::FunctionSpaceTools::integrate<double>(miniMatrix,uValuesIntrepid,vValuesIntrepid,Intrepid::COMP_BLAS);
+      Camellia::FunctionSpaceTools::integrate<double>(miniMatrix, uValues, vValues, false);
 
       //      cout << "uValues:" << endl << uValues;
       //      cout << "vValues:" << endl << vValues;
@@ -1109,7 +1105,8 @@ template<typename Scalar>
 void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
                                  bool applyCubatureWeights, bool naturalBoundaryTermsOnly)
 {
-  int sideIndex = basisCache->getSideIndex();
+  int sideIndex    = basisCache->getSideIndex();
+  bool isSideCache = basisCache->isSideCache(); // in some circumstances, we can have a volume cache that has side information.  If so, isSideCache will be false, but sideIndex will be different from -1.
 
   int valuesRankExpected = _rank + 3; // 3 for scalar, 4 for vector, etc.
   TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
@@ -1168,7 +1165,7 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
       else
       {
         // on sides, we use volume coords for test and field values
-        bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+        bool useVolumeCoords = isSideCache && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
         basisValues = basisCache->getTransformedValues(basis, ls.second->op(), useVolumeCoords);
       }
 
@@ -1179,13 +1176,13 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
           if (applyCubatureWeights)
           {
             // on sides, we use volume coords for test and field values
-            bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+            bool useVolumeCoords = isSideCache && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
             basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op(), useVolumeCoords);
           }
           else
           {
             // on sides, we use volume coords for test and field values
-            bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+            bool useVolumeCoords = isSideCache && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
             basisValues = basisCache->getTransformedValues(basis, ls.second->op(), useVolumeCoords);
           }
         }
@@ -1195,7 +1192,7 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
 
       if ( ls.first->rank() == 0 )   // scalar function -- we can speed things along in this case...
       {
-        const bool useReducedDataPath = true; // "true" choice is what we want ultimately; we have this here to diagnose numerical differences that have arisen in development of the reduced Data path…
+        const bool useReducedDataPath = false; // TODO: re-enable once the reduced Data path's tensor-product point ordering matches FieldContainer/BasisCache ordering for nonconstant functions.
         
         const bool doDataPathComparison = false;
         if (doDataPathComparison)
@@ -1687,7 +1684,7 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
       int numFields = basis->getCardinality();
 
 //        { // DEBUGGING:
-//          typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+//          typedef Camellia::TensorBasis<double, Camellia::FieldContainer<double> > TensorBasis;
 //          TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(basis.get());
 //          if (tensorBasis != NULL) {
 //            BasisPtr spatialBasis = tensorBasis->getSpatialBasis();

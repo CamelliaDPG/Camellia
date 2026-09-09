@@ -14,7 +14,7 @@
 #include "TrigFunctions.h"
 #include "VarFactory.h"
 
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 #include "Shards_CellTopology.hpp"
 
 using namespace Camellia;
@@ -99,7 +99,7 @@ void ParametricFunction::values(Camellia::FieldContainer<double> &values, BasisC
 
   // parametricValues has dimensions (C,P) == (1,P)
   int numCells = values.dimension(0);
-  using fst = Intrepid::FunctionSpaceTools;
+  namespace fst = Camellia::FunctionSpaceTools;
   if (_derivativeOrder > 0)
   {
     // HGRADtransformGRAD expects (F,P,D) for input, which here can be understood as (1,P,1)--one field
@@ -733,7 +733,7 @@ public:
 
     int spaceDim = basisCache->getSpaceDim();
     int numCells = values.dimension(0);
-    using fst = Intrepid::FunctionSpaceTools;
+    namespace fst = Camellia::FunctionSpaceTools;
     // HGRADtransformGRAD expects (F,P,D) for input, which here can be understood as (1,P,D)--one field
     dimensions[0] = 1; // one cell
     // get a Camellia::FieldContainer referring just to the first cell's values (all cells have the same values)

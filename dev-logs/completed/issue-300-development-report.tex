@@ -1,0 +1,193 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\title{Development Report for Issue \#300\\Tensor-Native Trace Discretization and Skeleton Support}
+\author{AI-assisted development report}
+\date{May 29, 2026}
+
+\begin{document}
+\maketitle
+
+\section{Purpose of the Work}
+
+The purpose of issue \#300 was to add the next missing structural layer in the tensor-native stack after the FE-aware volume-only matrix-free path from issue \#299. In particular, the goal was to define a tensor-native notion of:
+\begin{itemize}[leftmargin=2em]
+  \item dimension-specific trace variables,
+  \item tensor-native skeleton support for traces orthogonal to a chosen component dimension, and
+  \item an initial trace-local layout/runtime interpretation compatible with the current tensor-native discretization stack.
+\end{itemize}
+
+At the same time, the issue was intentionally \emph{not} meant to solve full trace-term operator realization. The central design requirement was therefore to introduce the missing topology/discretization/layout/runtime substrate for traces while keeping a clean path toward later side-term realization work.
+
+\section{Summary of What Was Implemented}
+
+The final implementation added three main pieces of functionality.
+
+\subsection{1. Dimension-specific trace semantics on \texttt{TensorVar}}
+
+\texttt{TensorVar} was extended so that trace variables now carry an explicit \emph{trace component ordinal}. Concretely:
+\begin{itemize}[leftmargin=2em]
+  \item field variables remain \texttt{TENSOR\_FIELD} and do not carry a trace component ordinal,
+  \item trace variables remain \texttt{TENSOR\_TRACE} but must now specify the component dimension to which they belong,
+  \item constructor validation was tightened so that field variables cannot accidentally carry trace-dimension metadata, and trace variables cannot omit it, and
+  \item \texttt{copyWithNewName(...)} preserves the trace component ordinal for trace variables.
+\end{itemize}
+
+This makes the geometric identity of a trace variable explicit at the variable-descriptor level, which is the natural place for it in the present tensor-native architecture.
+
+\subsection{2. Explicit tensor-skeleton support in \texttt{TensorMeshTopology}}
+
+\texttt{TensorMeshTopology} was extended with explicit skeleton support for a chosen orthogonal component dimension. The added API includes:
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{TensorSkeletonEntity},
+  \item \texttt{TensorSkeleton},
+  \item \texttt{retainedComponentOrdinalsForSkeleton(int)},
+  \item \texttt{tensorSkeleton(int)}, and
+  \item \texttt{isBoundarySkeletonEntity(...)}.
+\end{itemize}
+
+The implemented semantics are \emph{slice-based}. For a chosen component dimension $d$, we iterate over active vertices in that component and, for each such vertex, form the slice induced by fixing that vertex. The corresponding tensor-skeleton entities are then the retained active-cell tuples in that slice.
+
+This point is worth stating carefully. Informally, one might describe the geometry as ``the component-$d$ skeleton tensored with the remaining component topologies.'' That remains a useful shorthand. However, the implementation-level interpretation is more precise:
+\begin{itemize}[leftmargin=2em]
+  \item a boundary vertex in component $d$ typically contributes one retained slice-supported configuration, while
+  \item an interior vertex may contribute multiple retained active-cell tuples because it is incident to active cells on both sides.
+\end{itemize}
+
+Thus the final skeleton support is not merely a cartesian product of vertex count with one retained active-cell tuple per remaining-component configuration; rather, it is the explicit set of retained tuples that arise from the corresponding vertex-fixed slices.
+
+\subsection{3. Initial trace-local support in \texttt{TensorDofLayout}}
+
+\texttt{TensorDofLayout} was extended so that the local layout for a registered variable now carries explicit per-component support metadata. In particular:
+\begin{itemize}[leftmargin=2em]
+  \item a new \texttt{TensorComponentSupportKind} enum distinguishes volume-basis support from trace-skeleton support,
+  \item \texttt{VariableLayout} now stores per-component support kinds and the distinguished trace component ordinal when applicable, and
+  \item trace variables use a skeleton-support extent in their distinguished component rather than a volume-basis cardinality in that factor.
+\end{itemize}
+
+In the present implementation, the skeleton-support extent is taken to be the active component-vertex extent in the trace component. The remaining components continue to use the same basis-cardinality interpretation already used for volume variables.
+
+This gives a coherent first trace-local coefficient-space model of the form
+\[
+\text{trace-support extent in } d \times \prod_{r \ne d} \text{volume basis extent in } r.
+\]
+
+Importantly, the resulting local layout remains a deterministic flattening of one variable-local coefficient space, and both variable-ordering and cell-ordering views remain same-size, invertible flattenings of that space.
+
+\section{Runtime and Integration Consequences}
+
+A useful feature of the final implementation is that the new trace support fit cleanly into the existing tensor-native runtime structure.
+
+\subsection{TensorMesh registration}
+
+\texttt{TensorMesh} did not require a major redesign. The existing variable/discretization registration flow remained adequate once \texttt{TensorVar} acquired the missing trace-dimension semantics. Trial and test trace discretizations can now be registered coherently, and the resulting \texttt{TensorDofLayout} reflects their trace-local structure.
+
+\subsection{TensorGatherScatter compatibility}
+
+\texttt{TensorGatherScatter} did not require a substantive runtime redesign. Because it is driven by \texttt{TensorDofLayout} and remains fundamentally a flat local/global buffer mover, trace compatibility largely followed from the layout changes. Focused tests now verify that trace variables produce coherent local dof counts and remain compatible with gather/scatter round trips.
+
+This is an encouraging architectural result, because it means issue \#300 filled the intended structural gap without forcing premature changes in other tensor-native runtime layers.
+
+\section{Testing Added or Revised}
+
+The implementation added focused tests in the following areas.
+
+\subsection{TensorVar tests}
+
+The new \texttt{TensorVar} tests verify:
+\begin{itemize}[leftmargin=2em]
+  \item construction of trace variables with an explicit trace component ordinal,
+  \item rejection of missing or out-of-range trace component ordinals,
+  \item continued support for flux-like component vars under \texttt{TENSOR\_TRACE}, and
+  \item preservation of trace-dimension metadata under \texttt{copyWithNewName(...)}.
+\end{itemize}
+
+\subsection{TensorMeshTopology tests}
+
+The new topology tests verify:
+\begin{itemize}[leftmargin=2em]
+  \item skeleton entity counts under the final slice-based interpretation,
+  \item deterministic ordering with lower-indexed retained components varying fastest within each vertex slice,
+  \item agreement between skeleton entities and the corresponding \texttt{slice(...)} topologies, and
+  \item boundary/interior classification based on component-vertex incidence.
+\end{itemize}
+
+An important stabilization point arose here. An early version of the skeleton-count test assumed the simpler shorthand ``vertex count times retained active-cell count,'' which is not correct at interior vertices under slice-based semantics. The final tests now reflect the intended implementation more accurately by summing the retained active-cell counts of the vertex-fixed slices.
+
+\subsection{TensorDofLayout tests}
+
+The new layout tests verify:
+\begin{itemize}[leftmargin=2em]
+  \item support-kind metadata for trace variables,
+  \item use of the component-vertex extent in the distinguished trace component,
+  \item coherent total local dof counts for traces, and
+  \item invertibility of variable-ordering and cell-ordering flattenings for trace-local layouts.
+\end{itemize}
+
+\subsection{TensorMesh and TensorGatherScatter integration tests}
+
+The integration tests verify:
+\begin{itemize}[leftmargin=2em]
+  \item registration of trace discretizations on \texttt{TensorMesh},
+  \item creation of trace-aware local layouts through \texttt{createDofLayout()}, and
+  \item continued flat-buffer gather/scatter compatibility for trace-local coefficient vectors.
+\end{itemize}
+
+A small test-fix stabilization step was needed here as well: the round-trip gather/scatter test initially used a nonzero-initialized destination buffer even though \texttt{scatterLocalToGlobal()} is additive. That expectation was corrected, and the final tests now reflect the intended additive-scatter semantics.
+
+\section{Final Geometric Interpretation}
+
+The final implemented interpretation of trace support in the current orthogonal 1D component setting may be summarized as follows.
+
+Let $d$ be the distinguished trace component dimension. Then:
+\begin{enumerate}[leftmargin=2em]
+  \item the component-$d$ skeleton is represented by the active vertices in that component,
+  \item each such vertex defines a lower-dimensional tensor slice through the active tensor topology, and
+  \item the tensor-native trace-support entities are the retained active-cell tuples of those slices.
+\end{enumerate}
+
+Equivalently, one may think of traces as living on the skeleton orthogonal to dimension $d$, with the understanding that interior component vertices induce multiple slice-supported retained tuples. This is the precise structural model that was implemented and tested.
+
+\section{What Issue \#300 Did \emph{Not} Attempt}
+
+It is equally important to record what was intentionally left for later work.
+
+Issue \#300 did \emph{not} implement:
+\begin{itemize}[leftmargin=2em]
+  \item trace-aware basis evaluation on the new skeleton entities,
+  \item side quadrature or lower-dimensional physical-point generation for trace domains,
+  \item neighbor pairing or orientation logic for interior trace terms,
+  \item mixed volume/trace local kernels, or
+  \item trace-aware matrix-free or PAMatrix-backed operator realization.
+\end{itemize}
+
+Those topics remain the natural next step, but the present work now gives them a well-defined tensor-native support model to build on.
+
+\section{Overall Assessment}
+
+From an architectural perspective, issue \#300 achieved its intended purpose. The tensor-native stack now has:
+\begin{itemize}[leftmargin=2em]
+  \item trace variables with explicit component-dimension identity,
+  \item explicit tensor-native skeleton support for traces orthogonal to a chosen component dimension,
+  \item an initial trace-local coefficient/layout interpretation, and
+  \item focused tests that pin down the resulting semantics.
+\end{itemize}
+
+Just as importantly, this was accomplished without disrupting the current tensor-native descriptor/discretization/runtime layering. In particular, the work fit naturally into \texttt{TensorVar}, \texttt{TensorMeshTopology}, \texttt{TensorDofLayout}, \texttt{TensorMesh}, and \texttt{TensorGatherScatter}, which suggests that the underlying design direction remains sound.
+
+\section{Next Step}
+
+The next natural task is to make use of this new support in operator realization. In particular, the most direct follow-on is to implement tensor-native trace-aware local operator realization on the new skeleton substrate. That work should address:
+\begin{itemize}[leftmargin=2em]
+  \item trace-local basis interpretation,
+  \item lower-dimensional quadrature and physical-point generation on tensor skeletons,
+  \item representative mixed volume/trace and trace/trace terms, and
+  \item the corresponding integration of those terms into the existing tensor-native matrix-free operator path.
+\end{itemize}
+
+That is the natural place where the structural work of issue \#300 can begin to pay off numerically.
+
+\end{document}

@@ -1680,11 +1680,6 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: ancestralSideOrdinal not found.");
       }
       
-      // 5-21-15: It is possible use the common computeConstrainedWeights() for both the case where the subcell dimension is the same as constraining and the
-      //          one where it's different.  However, this version of computeConstrainedWeights is a *LOT* slower; overall runtime of runTests about doubled when
-      //          I tried using this for both.
-      // 10-9-23: Now that we do Piola transform correctly, the call to _br.constrainedWeights() for the (subcellConstraint->dimension == d) case will generally be incorrect for L^2 trace variables: it neglects transformations in the volume (only considers transformations in the lower-dimensional side).  So for now, despite the note above about performance, I'm just using the "common" computeConstrainedWeights() call.  We may want to add caching for the results of this, for improved performance.  (There might also be a way to remediate the issues with the lower-dimensional transformations -- one could probably work out a correction multiplier to apply, something like the determinant of the volumetric Jacobian of the coarse cell divided by the determinant of the reference-space fine cell.  But that seems complicated.)
-//      if (subcellConstraint->dimension != d)
       {
         // ancestralPermutation goes from canonical to cell's side's ancestor's ordering:
         unsigned ancestralCellPermutation = ancestralCell->subcellPermutation(ancestralSubcellDimension, ancestralSubcellOrdinal);
@@ -1695,35 +1690,12 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
         unsigned ancestralPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, ancestralCellPermutation);
         unsigned ancestralToConstrainedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, ancestralPermutationInverse, constrainingCellPermutation);
         
-        // TODO: add caching for this computeConstrainedWeights().
         wholeSubcellWeights = BasisReconciliation::computeConstrainedWeights(d, basis, subcord, volumeRefinements, sideOrdinal,
                                                                              ancestralCell->topology(), subcellConstraint->dimension,
                                                                              constrainingBasis, subcellConstraint->subcellOrdinal,
                                                                              subcellConstraint->sideOrdinal,
                                                                              ancestralToConstrainedPermutation);
       }
-//      else
-//      {
-//        RefinementBranch sideRefinements = RefinementPattern::subcellRefinementBranch(volumeRefinements, sideDim, ancestralSideOrdinal);
-//
-//        unsigned ancestralSubcellOrdinalInCell = ancestralCell->findSubcellOrdinal(subcellConstraint->dimension,
-//                                                                                   constrainingEntityIndex);
-//
-//        unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(ancestralCell->topology(), sideDim, ancestralSideOrdinal, subcellConstraint->dimension, ancestralSubcellOrdinalInCell);
-//
-//        // from canonical to ancestral view:
-//        unsigned ancestralPermutation = ancestralCell->sideSubcellPermutation(ancestralSideOrdinal, d, ancestralSubcellOrdinalInSide); // subcell permutation as seen from the perspective of the fine cell's side's ancestor
-//        // from canonical to constraining view:
-//        unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(subcellConstraint->sideOrdinal, subcellConstraint->dimension, subcellConstraint->subcellOrdinal); // subcell permutation as seen from the perspective of the constraining cell's side
-//
-//        // from ancestral to canonical:
-//        unsigned ancestralPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, ancestralPermutation);
-//        unsigned ancestralToConstrainingPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, ancestralPermutationInverse, constrainingPermutation);
-//
-//        // TODO:  Fix this. This will be incorrect if basis/constraining basis are not H^1 bases AND the sideRefinements are non-trivial.  It will only account for the Jacobian of the transform in the side dimensions, not the dimension orthogonal to the sides…
-//        wholeSubcellWeights = _br.constrainedWeights(d, basis, subcord, sideRefinements, constrainingBasis,
-//                                                     subcellConstraint->subcellOrdinal, ancestralToConstrainingPermutation);
-//      }
       
       // add sub-basis map for dofs interior to the constraining subcell
       // filter the weights whose coarse dofs are interior to this subcell, and create a SubBasisDofMapper for these (add it to varSideMap)
@@ -3439,21 +3411,24 @@ void GDAMinimumRule::rebuildLookups()
 
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
 
-  // Here, we check and warn if mesh must be 1-irregular but isn't.
-  // (Need to examine variables to see if there are any that require reconciliation for d < sideDim; otherwise we can do without 1-irregularity.)
-  int irregularity = _mesh->irregularity();
-  if (irregularity > 1)
+  if (d_min < spaceDim - 1)
   {
-    // this is only supported if only face continuity is required -- i.e. d_min == spaceDim - 1
-    if (d_min != spaceDim - 1)
+    // Here, we check and warn if mesh must be 1-irregular but isn't.
+    // (Need to examine variables to see if there are any that require reconciliation for d < sideDim; otherwise we can do without 1-irregularity.)
+    int irregularity = _mesh->irregularity();
+    if (irregularity > 1)
     {
-      cout << "ERROR: " << spaceDim << "D mesh is " << irregularity << "-irregular, but min continuity dimension is " << d_min << ".\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(d_min != spaceDim - 1, std::invalid_argument, "Mesh irregularity > 1 is only supported when only face continuity is required");
+      // this is only supported if only face continuity is required -- i.e. d_min >= spaceDim - 1
+      if (d_min < spaceDim - 1)
+      {
+        cout << "ERROR: " << spaceDim << "D mesh is " << irregularity << "-irregular, but min continuity dimension is " << d_min << ".\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(d_min != spaceDim - 1, std::invalid_argument, "Mesh irregularity > 1 is only supported when only face continuity is required");
+      }
     }
-  }
-  else
-  {
-//    cout << "Mesh is " << irregularity << "-irregular.\n";
+    else
+    {
+      //    cout << "Mesh is " << irregularity << "-irregular.\n";
+    }
   }
   
   map<GlobalIndexType, SubcellDofIndices> myCellDofIndices;

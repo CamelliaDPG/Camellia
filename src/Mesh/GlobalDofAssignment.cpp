@@ -1316,7 +1316,7 @@ void GlobalDofAssignment::unregisterSolution(TSolutionPtr<double> solution)
   for (vector< TSolutionPtr<double> >::iterator solnIt = _registeredSolutions.begin();
        solnIt != _registeredSolutions.end(); solnIt++)
   {
-    if ( *solnIt == solution )
+    if ( solnIt->get() == solution.get() )
     {
       _registeredSolutions.erase(solnIt);
       return;

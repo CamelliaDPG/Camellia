@@ -1695,6 +1695,7 @@ void runTestCases1D(const ProblemChoice problem, const GMGOperator::SmootherChoi
     
     out << std::endl;
     
+
     run(out, problem, iterationCount, spaceDim, numCells,
         H1Order, delta_k, H1Order_coarse, jumpToCoarsePolyOrder, useNodalBasis,
         conformingTraces, useStaticCondensation,
@@ -1793,7 +1794,7 @@ void runTestCases1D(const ProblemChoice problem, const GMGOperator::SmootherChoi
     
     // test cases are 4-tuples: (p, overlap, chebyshevDegree, iterationCount)
     const int c = -1; // unused chebyshevDegree
-    std::vector< std::tuple<int,int,int,int> > testCases {{2,0,c,157},{2,1,c,29},{3,0,c,223},{3,1,c,34}};
+    std::vector< std::tuple<int,int,int,int> > testCases {{2,0,c,178},{2,1,c,34},{3,0,c,253},{3,1,c,38}};
     runTestCases3D(problem, smoother, testCases, success, out);
   }
 

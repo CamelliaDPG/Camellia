@@ -22,8 +22,7 @@
 #include "SerialDenseWrapper.h"
 #include "Solution.h"
 
-#include "Intrepid_CellTools.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include "Camellia_Integrate.hpp"
 
 #include <Intrepid2_TestUtils.hpp>
 
@@ -289,10 +288,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_Space )
         Camellia::FieldContainer<double> normalLengths(numCells, numCubPoints);
 
         Camellia::FieldContainer<double> cellJacobian = sideCache->getJacobian();
-        Intrepid::CellTools<double>::getPhysicalSideNormals(sideNormalsExpected, cellJacobian, sideOrdinal, cellTopo->getShardsTopology());
-        // make unit length
-        Intrepid::RealSpaceTools<double>::vectorNorm(normalLengths, sideNormalsExpected, Intrepid::NORM_TWO);
-        Intrepid::FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormalsExpected, normalLengths, sideNormalsExpected, true);
+        CamelliaCellTools::getUnitSideNormals(sideNormalsExpected, normalLengths, sideOrdinal, cellJacobian, cellTopo);
       }
 
       Camellia::FieldContainer<double> sideNormals = sideCache->getSideNormals();
@@ -585,7 +581,6 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     int H1Order = 3;
     BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, H1Order, cellNodes);
     Camellia::EOperator op = OP_GRAD;
-    Intrepid::EOperator opIntrepid = Intrepid::OPERATOR_GRAD;
     BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
     int basisCardinality = basis->getCardinality();
     
@@ -968,21 +963,20 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     int H1Order = 3;
     BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, H1Order, cellNodes);
     Camellia::EOperator op = OP_LAPLACIAN;
-    Intrepid::EOperator intrepid_op_d2 = Intrepid::OPERATOR_D2;
     Camellia::EOperator op_d2 = Camellia::OP_D2;
     BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
     int basisCardinality = basis->getCardinality();
     
     // get gradients in reference space
     int numPoints = basisCache->getRefCellPointsFC().dimension(0);
-    int refSpaceValuesPerPoint = Intrepid::getDkCardinality(intrepid_op_d2, spaceDim);
+    int refSpaceValuesPerPoint = (spaceDim == 1) ? 1 : (spaceDim == 2) ? 3 : 6;
     Camellia::FieldContainer<double> valuesRefSpace(basisCardinality, numPoints, refSpaceValuesPerPoint);
     basis->getValues(valuesRefSpace, basisCache->getRefCellPointsFC(), op_d2);
     
     vector<int> d2_enumeration(3);
-    d2_enumeration[0] = Intrepid::getDkEnumeration(2,0,0);
-    d2_enumeration[1] = Intrepid::getDkEnumeration(0,2,0);
-    d2_enumeration[2] = Intrepid::getDkEnumeration(0,0,2);
+    d2_enumeration[0] = 0;                    // d^2/dx^2
+    d2_enumeration[1] = (spaceDim == 2) ? 2 : 3; // d^2/dy^2
+    d2_enumeration[2] = 5;                    // d^2/dz^2
     
     Camellia::FieldContainer<double> values(basisCardinality, numPoints);
     // if x dimension has doubled, then we expect d/dx to be scaled by 1/2, and d^2/dx^2 to be scaled by 1/4

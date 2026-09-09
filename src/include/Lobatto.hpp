@@ -19,7 +19,7 @@
 #include "SimpleFunction.h"
 
 namespace Camellia {
-  template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar> > class Lobatto;
+  template<class Scalar=double, class ArrayScalar=Camellia::FieldContainer<Scalar> > class Lobatto;
 
   template<class Scalar, class ArrayScalar> class Lobatto {
   public:

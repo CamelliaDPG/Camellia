@@ -45,6 +45,42 @@
 #include <Intrepid2_TensorArgumentIterator.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
 
+namespace
+{
+  class SideRestriction : public Camellia::TFunction<double>
+  {
+    std::vector<int> _sidesToMatch;
+  public:
+    SideRestriction(std::vector<int> sidesToMatch)
+    :
+    TFunction<double>("SideRestriction",0),
+    _sidesToMatch(sidesToMatch)
+    {}
+    
+    bool boundaryValueOnly() override
+    {
+      return true;
+    }
+    
+    using TFunction<double>::values;
+    void values(Camellia::FieldContainer<double> &values, Camellia::BasisCachePtr basisCache) override
+    {
+      const int sideOrdinal = basisCache->getSideIndex();
+      bool sideMatches = false;
+      for (auto sideToMatch : _sidesToMatch)
+      {
+        if (sideToMatch == sideOrdinal)
+        {
+          sideMatches = true;
+          break;
+        }
+      }
+      const double value = sideMatches ? 1.0 : 0.0;
+      values.initialize(value);
+    }
+  };
+}
+
 namespace Camellia
 {
   std::map<std::string,int> callsToFunctionsWithoutDevicePathImplementations;
@@ -594,13 +630,10 @@ TFunctionPtr<Scalar> TFunction<Scalar>::op(TFunctionPtr<Scalar> f, Camellia::EOp
   case Camellia::OP_VALUE:
       return f;
     case Camellia::OP_DX:
-    case Camellia::OP_DI1:
       return f->dx();
     case Camellia::OP_DY:
-    case Camellia::OP_DI2:
       return f->dy();
     case Camellia::OP_DZ:
-    case Camellia::OP_DI3:
       return f->dz();
     case Camellia::OP_DXDX:
       return f->dx()->dx();
@@ -626,6 +659,17 @@ TFunctionPtr<Scalar> TFunction<Scalar>::op(TFunctionPtr<Scalar> f, Camellia::EOp
       return f->div();
     case Camellia::OP_DOT_NORMAL:
       return f * TFunction<Scalar>::normal();
+    case Camellia::OP_DI1:
+    case Camellia::OP_DI2:
+    case Camellia::OP_DI3:
+    case Camellia::OP_DI4:
+    case Camellia::OP_DI5:
+    case Camellia::OP_DI6:
+    case Camellia::OP_DI7:
+    {
+      const int i = (op - OP_D1 + 1); // 1-based
+      return f->di(i);
+    }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
   }
@@ -678,6 +722,15 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
   }
+  {
+    // verify that we have exactly one cell that matches, across all MPI ranks
+    int myMatchingCell = (cellIDs[0] != -1) ? 1 : 0;
+    int matchingCellCount = MPIWrapper::sum(myMatchingCell);
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount == 0, std::invalid_argument,
+                               "No matching cells found");
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount > 1, std::invalid_argument,
+                               "Extra matching cells found");
+  }
   Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
   return MPIWrapper::sum(value);
 }
@@ -704,6 +757,15 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y)
   if (cellIDs.size() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
+  }
+  {
+    // verify that we have exactly one cell that matches, across all MPI ranks
+    int myMatchingCell = (cellIDs[0] != -1) ? 1 : 0;
+    int matchingCellCount = MPIWrapper::sum(myMatchingCell);
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount == 0, std::invalid_argument,
+                               "No matching cells found");
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount > 1, std::invalid_argument,
+                               "Extra matching cells found");
   }
   Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
   return MPIWrapper::sum(value);
@@ -732,6 +794,15 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
   if (cellIDs.size() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
+  }
+  {
+    // verify that we have exactly one cell that matches, across all MPI ranks
+    int myMatchingCell = (cellIDs[0] != -1) ? 1 : 0;
+    int matchingCellCount = MPIWrapper::sum(myMatchingCell);
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount == 0, std::invalid_argument,
+                               "No matching cells found");
+    TEUCHOS_TEST_FOR_EXCEPTION(matchingCellCount > 1, std::invalid_argument,
+                               "Extra matching cells found");
   }
   Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
   return MPIWrapper::sum(value);
@@ -874,6 +945,12 @@ size_t TFunction<Scalar>::getCellDataSize(GlobalIndexType cellID)
     }
   }
   return getCellDataSize(members, cellID);
+}
+
+template<typename Scalar>
+TFunctionPtr<double> TFunction<Scalar>::localSideCharacteristic(std::vector<int> &sidesToMatch)
+{
+  return Teuchos::rcp( new SideRestriction(sidesToMatch) );
 }
 
 template <typename Scalar>
@@ -2936,17 +3013,75 @@ void TFunction<Scalar>::scalarModifyFunctionValues(typename FieldContainer<Scala
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::parallel_for("scalarModifyFunctionValues", FieldContainer<Scalar>::getMDRangePolicy6(dv),
-  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
+  switch (dv.rank())
   {
-    Scalar scalarValue = dv_scalar(i0,i1);
-    for (int i6 = 0; i6 < dim6; i6++)
+    case 2:
     {
-      assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank2", FieldContainer<Scalar>::getMDRangePolicy2(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
+      {
+        assignValue(dv(i0,i1),valueModType,dv_scalar(i0,i1));
+      });
+      break;
     }
-  });
+    case 3:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank3", FieldContainer<Scalar>::getMDRangePolicy3(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2)
+      {
+        assignValue(dv(i0,i1,i2),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    case 4:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<4> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank4", FieldContainer<Scalar>::getMDRangePolicy4(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3)
+      {
+        assignValue(dv(i0,i1,i2,i3),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    case 5:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<5> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank5", FieldContainer<Scalar>::getMDRangePolicy5(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3, const array_index_type i4)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    case 6:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank6", FieldContainer<Scalar>::getMDRangePolicy6(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4,i5),valueModType,dv_scalar(i0,i1));
+      });
+      break;
+    }
+    default:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyFunctionValues_rank7", FieldContainer<Scalar>::getMDRangePolicy6(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        Scalar scalarValue = dv_scalar(i0,i1);
+        for (int i6 = 0; i6 < dim6; i6++)
+        {
+          assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+        }
+      });
+      break;
+    }
+  }
   Allocation<Scalar>::checkinDeviceView(dv_scalar);
 }
 
@@ -2980,17 +3115,65 @@ void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double>
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::parallel_for("scalarModifyBasisValues", values.getMDRangePolicy6(),
-  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
+  switch (dv.rank())
   {
-    Scalar scalarValue = dv_scalar(i0,i2);
-    for (int i6 = 0; i6 < dim6; i6++)
+    case 3:
     {
-      assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank3", FieldContainer<double>::getMDRangePolicy3(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2)
+      {
+        assignValue(dv(i0,i1,i2),valueModType,dv_scalar(i0,i2));
+      });
+      break;
     }
-  });
+    case 4:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<4> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank4", FieldContainer<double>::getMDRangePolicy4(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3)
+      {
+        assignValue(dv(i0,i1,i2,i3),valueModType,dv_scalar(i0,i2));
+      });
+      break;
+    }
+    case 5:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<5> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank5", FieldContainer<double>::getMDRangePolicy5(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2, const array_index_type i3, const array_index_type i4)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4),valueModType,dv_scalar(i0,i2));
+      });
+      break;
+    }
+    case 6:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank6", FieldContainer<double>::getMDRangePolicy6(dv),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        assignValue(dv(i0,i1,i2,i3,i4,i5),valueModType,dv_scalar(i0,i2));
+      });
+      break;
+    }
+    default:
+    {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::parallel_for("scalarModifyBasisValues_rank7", values.getMDRangePolicy6(),
+      KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                     const array_index_type i3, const array_index_type i4, const array_index_type i5)
+      {
+        Scalar scalarValue = dv_scalar(i0,i2);
+        for (int i6 = 0; i6 < dim6; i6++)
+        {
+          assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
+        }
+      });
+      break;
+    }
+  }
   Allocation<Scalar>::checkinDeviceView(dv_scalar);
   values.checkinDeviceView(true);
 }

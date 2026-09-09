@@ -10,7 +10,6 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-// Intrepid includes
 #include "Camellia_FieldContainer.hpp"
 
 #include "Function.h"

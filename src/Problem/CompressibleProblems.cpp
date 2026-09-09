@@ -367,7 +367,7 @@ namespace Camellia
   double Noh_u1::value(double x, double y)
   {
     double theta = atan2(y, x);
-    return -cos(theta);
+    return -std::cos(theta);
   }
 
   Noh_u2::Noh_u2() : SimpleFunction<double>("Noh_u2", VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1)
@@ -376,7 +376,7 @@ namespace Camellia
   double Noh_u2::value(double x, double y)
   {
     double theta = atan2(y, x);
-    return -sin(theta);
+    return -std::sin(theta);
   }
 
 
