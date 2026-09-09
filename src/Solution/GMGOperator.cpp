@@ -38,6 +38,7 @@
 
 #include "Tpetra_Operator_to_Tpetra_Matrix.h"
 #include "TpetraCamelliaAdditiveSchwarz.h"
+#include "TpetraOverlappingRowMatrix.h"
 
 using namespace Camellia;
 
@@ -262,12 +263,7 @@ int MaxGlobalOverlapSideNeighborCount(MeshPtr mesh, int overlap, bool hierarchic
 using LO = TMatrix<double>::local_ordinal_type;
 using GO = TMatrix<double>::global_ordinal_type;
 using Node = TMatrix<double>::node_type;
-// Note: this Ifpack2::OverlappingRowMatrix implementation is currently coming from
-// Nathan V. Roberts' Trilinos fork/branch:
-//   https://github.com/CamelliaDPG/Trilinos.git
-//   branch: fixes-for-camellia
-// This is already an accepted dependency of the target Camellia branch.
-using OverlappingRowMatrix = Ifpack2::OverlappingRowMatrix< TRowMatrix<double> >;
+using OverlappingRowMatrix = Camellia::TpetraOverlappingRowMatrix< TRowMatrix<double> >;
 
 using AdditiveSchwarzDetails = GMGOperator::AdditiveSchwarzDetails;
 
@@ -327,8 +323,11 @@ getAdditiveSchwarzDetails(MeshPtr mesh, int overlapLevel, bool hierarchical, int
     }
   }
   
-  // a little unfortunate that we construct this twice: once here, and once within Ifpack2::AdditiveSchwarz
-  Teuchos::RCP<OverlappingRowMatrix> overlapMatrix = Teuchos::rcp(new OverlappingRowMatrix(A, externalGIDsThisRank));
+  // Construct the overlap row map using Camellia's explicit-GID overlap wrapper;
+  // this keeps Camellia compatible with base Trilinos, whose Ifpack2
+  // OverlappingRowMatrix does not provide this constructor.
+  Teuchos::RCP<const TRowMatrix<double>> rowMatrix = Teuchos::rcp_implicit_cast<const TRowMatrix<double>>(A);
+  Teuchos::RCP<const TRowMatrix<double>> overlapMatrix = Camellia::makeOverlappingRowMatrix(rowMatrix, externalGIDsThisRank);
   
   auto overlapMap = overlapMatrix->getRowMap();
   Teuchos::Array<GO> overlapMapGlobalOrdinals;

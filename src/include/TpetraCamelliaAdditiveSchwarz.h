@@ -12,9 +12,10 @@
 #include "MPIWrapper.h"
 #include "TypeDefs.h"
 
+#include "TpetraOverlappingRowMatrix.h"
+
 #include <Ifpack2_BlockRelaxation.hpp>
 #include <Ifpack2_Factory.hpp>
-#include <Ifpack2_OverlappingRowMatrix.hpp>
 #include <Ifpack2_Preconditioner.hpp>
 #include <Teuchos_CommHelpers.hpp>
 #include <Teuchos_DefaultSerialComm.hpp>
@@ -146,7 +147,7 @@ private:
     // bypass the wrapper.
     if (A_->getComm()->getSize() == 1) return rowMatrix;
 
-    return Teuchos::rcp(new Ifpack2::OverlappingRowMatrix<row_matrix_type>(rowMatrix, externalGIDsThisRank_));
+    return Camellia::makeOverlappingRowMatrix(rowMatrix, externalGIDsThisRank_);
   }
 
   void buildLocalMatrixAndSolver(Subdomain &subdomain, const Teuchos::RCP<const row_matrix_type> &overlapMatrix) const
