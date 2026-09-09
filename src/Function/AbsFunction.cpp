@@ -47,7 +47,6 @@ void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, Va
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
   auto dv = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values, "AbsFunction dv");
   _f->values(dv, ASSIGN, basisCache);
-  Kokkos::fence();
   auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(values);
   Kokkos::parallel_for("AbsFunction_values", rangePolicy,
   KOKKOS_LAMBDA (const int i0, const int i1) {
@@ -59,8 +58,6 @@ void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, Va
 void AbsFunction::values(Intrepid2::Data<double, Camellia::DeviceType> &data, BasisCachePtr basisCache)
 {
   _f->values(data, basisCache);
-  
-  Kokkos::fence();
   
   auto absOp = KOKKOS_LAMBDA(const double &a) -> double
   {

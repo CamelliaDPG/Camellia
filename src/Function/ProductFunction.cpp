@@ -353,7 +353,6 @@ void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView
     else // scalar multiplication by f1, then
     {
       _f2->values(values, ValueModificationType::ASSIGN, basisCache);
-      Kokkos::fence();
       _f1->scalarMultiplyFunctionValues(values, basisCache);
     }
   }
@@ -367,10 +366,8 @@ void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView
     else // scalar multiplication by f1, then
     {
       _f2->values(valuesScratch, ValueModificationType::ASSIGN, basisCache);
-      Kokkos::fence();
       _f1->scalarMultiplyFunctionValues(valuesScratch, basisCache);
     }
-    Kokkos::fence();
     assignValues<Scalar>(values, modType, valuesScratch);
     basisCache->checkinScratchStorage<Scalar>(valuesScratch);
   }

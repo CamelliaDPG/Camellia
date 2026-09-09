@@ -125,16 +125,13 @@ void SumFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Devi
   if (modType == ASSIGN)
   {
     _f1->values(values, ValueModificationType::ASSIGN, basisCache);
-    Kokkos::fence();
     _f2->values(values, ValueModificationType::ADD, basisCache);
   }
   else
   {
     auto sumValues = basisCache->checkoutScratchStorage<Scalar>(values);
     _f1->values(sumValues, ValueModificationType::ASSIGN, basisCache);
-    Kokkos::fence();
     _f2->values(sumValues, ValueModificationType::ADD, basisCache);
-    Kokkos::fence();
     assignValues<Scalar>(values, modType, sumValues);
     basisCache->checkinScratchStorage<Scalar>(sumValues);
   }

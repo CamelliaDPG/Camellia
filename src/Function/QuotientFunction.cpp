@@ -169,16 +169,13 @@ void QuotientFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>:
   if (modType == ASSIGN)
   {
     _f->values(values, ValueModificationType::ASSIGN, basisCache);
-    Kokkos::fence();
     _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
   }
   else
   {
     auto quotientValues = basisCache->checkoutScratchStorage<Scalar>(values);
     _f->values(quotientValues, ValueModificationType::ASSIGN, basisCache);
-    Kokkos::fence();
     _scalarDivisor->scalarDivideFunctionValues(quotientValues, basisCache);
-    Kokkos::fence();
     assignValues<Scalar>(values, modType, quotientValues);
     basisCache->checkinScratchStorage<Scalar>(quotientValues);
   }

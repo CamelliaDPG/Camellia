@@ -41,7 +41,6 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
     auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
     _arg->values(dv, ASSIGN, basisCache);
-    Kokkos::fence();
     auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy2(values);
     Kokkos::parallel_for("Sin_values", rangePolicy,
     KOKKOS_LAMBDA (const int i0, const int i1) {
@@ -106,7 +105,6 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
     auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
     _arg->values(dv, ASSIGN, basisCache);
-    Kokkos::fence();
     auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy2(values);
     Kokkos::parallel_for("Cos_values", rangePolicy,
     KOKKOS_LAMBDA (const int i0, const int i1) {

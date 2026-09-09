@@ -301,7 +301,6 @@ namespace Camellia
           basisSumValues.access(i0,i1,i2,i3,i4,i5,0) += dv_transformedValues.access(i0,dof,i1,i2,i3,i4,i5) * weight;
         }
       });
-      Kokkos::fence();
       Kokkos::parallel_for("SolutionMomentFunction_assign_values", FieldContainer<double>::getMDRangePolicy6(values),
       KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
                      const array_index_type i3, const array_index_type i4, const array_index_type i5)

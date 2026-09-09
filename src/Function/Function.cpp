@@ -3012,7 +3012,6 @@ void TFunction<Scalar>::scalarModifyFunctionValues(typename FieldContainer<Scala
   auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims,"scalarModifyFunctionValues()::dv_scalar");
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
-  Kokkos::fence();
   switch (dv.rank())
   {
     case 2:
@@ -3114,7 +3113,6 @@ void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double>
   auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims, "Function::scalarModifyBasisValues, dv_scalar");
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
-  Kokkos::fence();
   switch (dv.rank())
   {
     case 3:
