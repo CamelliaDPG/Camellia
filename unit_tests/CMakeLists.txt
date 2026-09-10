@@ -15,4 +15,18 @@ target_link_libraries(runTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} C
 
 add_test(NAME runTests COMMAND runTests)
 
-install (TARGETS runTests DESTINATION bin/tests)
+set(PHASE0_TEST_SOURCES
+  Teuchos_StandardParallelUnitTestMain.cpp
+  TensorBasisTests.cpp
+  TensorFunctionTests.cpp
+  TensorMeshTests.cpp
+)
+
+add_executable(runPhase0Tests ${PHASE0_TEST_SOURCES})
+
+target_link_libraries(runPhase0Tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
+)
+
+add_test(NAME runPhase0Tests COMMAND runPhase0Tests)
+
+install (TARGETS runTests runPhase0Tests DESTINATION bin/tests)

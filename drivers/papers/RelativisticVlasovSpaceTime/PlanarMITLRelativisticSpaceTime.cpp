@@ -30,6 +30,14 @@
 #include "Solution.h"
 #include "TrigFunctions.h"
 
+#include <chrono>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -40,6 +48,87 @@ namespace
   bool gEnforcePositivity = false;
   double gProximalGalerkinAlpha0 = 1.0;
   double gProximalGalerkinAlphaMultiplier = 1.0;
+
+  using Phase0Clock = std::chrono::steady_clock;
+  using Phase0TimePoint = Phase0Clock::time_point;
+  using Phase0Fields = std::vector<std::pair<std::string,std::string>>;
+
+  std::string phase0DoubleString(double value)
+  {
+    std::ostringstream os;
+    os << std::setprecision(6) << std::scientific << value;
+    return os.str();
+  }
+
+  class Phase0Instrumentation
+  {
+    bool _enabled;
+    int _rank;
+    std::ofstream _file;
+  public:
+    Phase0Instrumentation(bool enabled, int rank, const std::string &timingFilePath)
+    : _enabled(enabled), _rank(rank)
+    {
+      if (_enabled && (_rank == 0) && (timingFilePath != ""))
+      {
+        _file.open(timingFilePath.c_str(), std::ios::out | std::ios::app);
+        if (!_file.is_open())
+        {
+          std::cout << "WARNING: unable to open Phase 0 timing file '" << timingFilePath << "'; timings will only be written to stdout.\n";
+        }
+      }
+    }
+
+    bool enabled() const { return _enabled; }
+    Phase0TimePoint now() const { return Phase0Clock::now(); }
+
+    double elapsedSince(const Phase0TimePoint &start) const
+    {
+      return std::chrono::duration<double>(Phase0Clock::now() - start).count();
+    }
+
+    void logDuration(const std::string &event, double seconds, const Phase0Fields &fields = Phase0Fields())
+    {
+      if (!_enabled || (_rank != 0)) return;
+
+      std::ostringstream line;
+      line << "PHASE0_TIMING event=" << event;
+      line << " seconds=" << phase0DoubleString(seconds);
+      for (const auto &field : fields)
+      {
+        line << " " << field.first << "=" << field.second;
+      }
+      line << "\n";
+
+      std::cout << line.str();
+      if (_file.is_open())
+      {
+        _file << line.str();
+        _file.flush();
+      }
+    }
+  };
+
+  Phase0Fields phase0MeshStats(const Teuchos::RCP<VlasovSpaceTimeFormulation> &form)
+  {
+    Phase0Fields fields;
+    if (form != Teuchos::null)
+    {
+      auto vlasovMesh = form->vlasovMesh();
+      auto configMesh = form->configurationSpaceMesh();
+      if (vlasovMesh != Teuchos::null)
+      {
+        fields.push_back({"vlasov_dofs", std::to_string(vlasovMesh->numGlobalDofs())});
+        fields.push_back({"vlasov_elements", std::to_string(vlasovMesh->numActiveElements())});
+      }
+      if (configMesh != Teuchos::null)
+      {
+        fields.push_back({"config_dofs", std::to_string(configMesh->numGlobalDofs())});
+        fields.push_back({"config_elements", std::to_string(configMesh->numActiveElements())});
+      }
+    }
+    return fields;
+  }
 }
 
 class Maxwellian1T2V : public TFunction<double>
@@ -718,11 +807,31 @@ int main(int argc, char *argv[])
     
     double initialTimeDivision = 0;
     cmdp.setOption("initialTimeDivision", &initialTimeDivision);
+
+    bool phase0Instrumentation = false;
+    std::string phase0TimingFile = "";
+    cmdp.setOption("phase0Instrumentation", "noPhase0Instrumentation", &phase0Instrumentation,
+                   "Emit grep-friendly Phase 0 timing lines for Planar MITL baseline/performance runs.");
+    cmdp.setOption("phase0TimingFile", &phase0TimingFile,
+                   "Optional rank-0 file for Phase 0 timing lines; stdout is always used when instrumentation is enabled.");
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
       return -1;
     }
+
+    Phase0Instrumentation phase0(phase0Instrumentation, rank, phase0TimingFile);
+    const auto phase0TotalStart = phase0.now();
+    phase0.logDuration("start", 0.0,
+                       {{"mpi_ranks", std::to_string(mpiSession.getNProc())},
+                        {"x_elements", std::to_string(xElements)},
+                        {"v_elements", std::to_string(vElements)},
+                        {"t_elements", std::to_string(tElements)},
+                        {"uniform_refinements", std::to_string(numUniformRefinements)},
+                        {"p", std::to_string(H1Order)},
+                        {"dp", std::to_string(delta_k)},
+                        {"num_time_slabs", std::to_string(numTimeSlabs)},
+                        {"serendipity", useSerendipityBasis ? "1" : "0"}});
     
     using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
     const TestIP testIP = useL2TestSpace ? TestIP::L2TestSpaceInnerProduct : TestIP::GraphTestSpaceInnerProduct;
@@ -837,10 +946,12 @@ int main(int argc, char *argv[])
     
     const bool useGeometricGradedSpatialMesh = true;
     
+    auto phase0FormulationSetupStart = phase0.now();
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, uxMin, uxMax-uxMin, uyMin, uyMax-uyMin, xElements, tElements, vxElements, vyElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
+    phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
     
 //    form->setExportViz(true, "/tmp"); // DEBUGGING
     
@@ -915,6 +1026,7 @@ int main(int argc, char *argv[])
       }
     }
     
+    auto phase0InitialBCRefinementStart = phase0.now();
     refineForBC(form->vlasovSolutionPreviousSubstep(), form->t_n_hat(), bcFunctionsToResolve, maxElements, bcResolutionTolerance);
     // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
     form->configurationSpaceMesh()->repartitionAndRebuild();
@@ -922,6 +1034,7 @@ int main(int argc, char *argv[])
     {
       std::cout << "Physical mesh has " << form->configurationSpaceMesh()->numActiveElements() << " elements.\n";
     }
+    phase0.logDuration("initial_bc_refinement", phase0.elapsedSince(phase0InitialBCRefinementStart), phase0MeshStats(form));
     
     std::ostringstream suffix;
     if (!useL2Trace)
@@ -1114,7 +1227,14 @@ int main(int argc, char *argv[])
           form->setUseGeometricMultigrid(false);
         }
         
+        auto phase0SlabSolveStart = phase0.now();
         form->solve();
+        {
+          auto fields = phase0MeshStats(form);
+          fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
+          fields.push_back({"memory_hwm_gb", phase0DoubleString(memoryHighWaterMarkInGigabytes())});
+          phase0.logDuration("slab_solve", phase0.elapsedSince(phase0SlabSolveStart), fields);
+        }
         
         if (rank == 0)
         {
@@ -1139,8 +1259,11 @@ int main(int argc, char *argv[])
           std::cout << "Updating solution moments.\n";
         }
         
+        auto phase0MomentUpdateStart = phase0.now();
         solutionMoments->update();
         positiveMoments->update();
+        phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),
+                           {{"slab", std::to_string(timeSlabOrdinal)}});
         
         if (rank == 0)
         {
@@ -1255,7 +1378,10 @@ int main(int argc, char *argv[])
         f_soln = Teuchos::null;
 
         // next time slab
+        auto phase0NextTimeSlabStart = phase0.now();
         form = form->nextTimeSlab(tWidth, tElements);
+        phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
+                           {{"completed_slab", std::to_string(timeSlabOrdinal)}});
         
         {
           // solutions have been recreated for the new slab.  We need to update anything that depends on the solution
@@ -1389,7 +1515,15 @@ int main(int argc, char *argv[])
             form->setFixedPointMaxSubsteps(maxSubsteps);
           }
           
+          auto phase0AdaptiveSolveStart = phase0.now();
           form->solve();
+          {
+            auto fields = phase0MeshStats(form);
+            fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
+            fields.push_back({"refinement", std::to_string(refinementNumber)});
+            fields.push_back({"memory_hwm_gb", phase0DoubleString(memoryHighWaterMarkInGigabytes())});
+            phase0.logDuration("adaptive_slab_solve", phase0.elapsedSince(phase0AdaptiveSolveStart), fields);
+          }
           
           if (rank == 0)
           {
@@ -1397,8 +1531,12 @@ int main(int argc, char *argv[])
             std::cout << "Time slab " << timeSlabOrdinal << ", refinement " << refinementNumber << ", memory HWM (rank 0): " << memoryHWM_GB << " GB\n";
           }
           
+          auto phase0AdaptiveMomentUpdateStart = phase0.now();
           solutionMoments->update();
           positiveMoments->update();
+          phase0.logDuration("adaptive_moment_update", phase0.elapsedSince(phase0AdaptiveMomentUpdateStart),
+                             {{"slab", std::to_string(timeSlabOrdinal)},
+                              {"refinement", std::to_string(refinementNumber)}});
           
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
           
@@ -1447,7 +1585,11 @@ int main(int argc, char *argv[])
             form->setFixedPointTolerance(fixedPointTol);
             form->setFixedPointMinSubsteps(minSubsteps);
             form->setFixedPointMaxSubsteps(maxSubsteps);
+            auto phase0AdaptiveResolveStart = phase0.now();
             form->solve();
+            phase0.logDuration("adaptive_slab_resolve", phase0.elapsedSince(phase0AdaptiveResolveStart),
+                               {{"slab", std::to_string(timeSlabOrdinal)},
+                                {"refinement", std::to_string(refinementNumber)}});
             
             energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
             f_rieszRep->computeRieszRep(); // recompute now that we've solved to tighter tolerance
@@ -1481,10 +1623,14 @@ int main(int argc, char *argv[])
           
           if (!errorTargetMet && (refinementNumber < maxRefinements))
           {
+            auto phase0AdaptiveRefinementStart = phase0.now();
             refStrategy->refine(rank==0);
             
             // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
             form->configurationSpaceMesh()->repartitionAndRebuild();
+            phase0.logDuration("adaptive_refinement", phase0.elapsedSince(phase0AdaptiveRefinementStart),
+                               {{"slab", std::to_string(timeSlabOrdinal)},
+                                {"refinement", std::to_string(refinementNumber)}});
             auto maxwellElementCount = form->configurationSpaceMesh()->numActiveElements();
             auto maxwellDofCount     = form->configurationSpaceMesh()->numGlobalDofs();
             if (rank == 0)
@@ -1542,7 +1688,10 @@ int main(int argc, char *argv[])
           f_soln = Teuchos::null;
 
           // next time slab
+          auto phase0NextTimeSlabStart = phase0.now();
           form = form->nextTimeSlab(tWidth, tElements);
+          phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
+                             {{"completed_slab", std::to_string(timeSlabOrdinal)}});
           
           {
             // solutions have been recreated for the new slab.  We need to update anything that depends on the solution
@@ -1585,9 +1734,12 @@ int main(int argc, char *argv[])
           }
           
           // refine the new slab to ensure resolution of the BC.
+          auto phase0AdaptiveBCRefinementStart = phase0.now();
           refineForBC(form->vlasovSolutionPreviousSubstep(), form->t_n_hat(), bcFunctionsToResolve, maxElements, bcResolutionTolerance);
           // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
           form->configurationSpaceMesh()->repartitionAndRebuild();
+          phase0.logDuration("adaptive_bc_refinement", phase0.elapsedSince(phase0AdaptiveBCRefinementStart),
+                             {{"slab", std::to_string(timeSlabOrdinal + 1)}});
           if (rank == 0)
           {
             std::cout << "Physical mesh has " << form->configurationSpaceMesh()->numActiveElements() << " elements.\n";
@@ -1596,6 +1748,8 @@ int main(int argc, char *argv[])
       } // timeSlabOrdinal loop
       
     } // end time slab + useAdaptivity
+
+    phase0.logDuration("total", phase0.elapsedSince(phase0TotalStart));
   }
   
   const bool printAllocationReport = (rank == 0);
