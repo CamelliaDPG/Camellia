@@ -106,13 +106,17 @@ namespace {
     auto domainMap = oldMatrix->getDomainMap();
     auto rangeMap  = oldMatrix->getRangeMap();
 
-    const size_t maxEntries = oldMatrix->getLocalMaxNumRowEntries() + 1;
-    auto newMatrix = Teuchos::rcp(new TMatrix<Scalar>(rowMap, maxEntries));
-
-    GlobalIndicesHostView oldCols("Tpetra OAZ old column gids", maxEntries);
-    ValuesViewHost oldVals("Tpetra OAZ old values", maxEntries);
-
     const size_t numLocalRows = rowMap->getLocalNumElements();
+    std::vector<size_t> oldRowEntryCounts(numLocalRows);
+    size_t newRowAllocation = 1;
+    for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
+    {
+      oldRowEntryCounts[localRowOrdinal] = oldMatrix->getNumEntriesInLocalRow(localRowOrdinal);
+      newRowAllocation = std::max(newRowAllocation, oldRowEntryCounts[localRowOrdinal]);
+    }
+
+    auto newMatrix = Teuchos::rcp(new TMatrix<Scalar>(rowMap, newRowAllocation));
+
     for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
     {
       GO rowGID = rowMap->getGlobalElement(localRowOrdinal);
@@ -127,8 +131,10 @@ namespace {
       else
       {
         size_t numRowEntries = 0;
+        const size_t rowEntryCapacity = std::max<size_t>(oldRowEntryCounts[localRowOrdinal], 1);
+        GlobalIndicesHostView oldCols("Tpetra OAZ old column gids", rowEntryCapacity);
+        ValuesViewHost oldVals("Tpetra OAZ old values", rowEntryCapacity);
         oldMatrix->getGlobalRowCopy(rowGID, oldCols, oldVals, numRowEntries);
-
         Teuchos::Array<GO> cols;
         Teuchos::Array<Scalar> vals;
         cols.reserve(numRowEntries);
@@ -1046,7 +1052,7 @@ GlobalIndexType TSolution<Scalar>::elementLagrangeIndex(GlobalIndexType cellID, 
   TEUCHOS_TEST_FOR_EXCEPTION(!_mesh->myCellsInclude(cellID), std::invalid_argument, "elementLagrangeIndices() requires that the cellID be rank-local");
   
   GlobalIndexType cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
-  GlobalIndexType numGlobalDofs = _mesh->numGlobalDofs();
+  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
   GlobalIndexType globalIndex = cellOffset + numGlobalDofs;
   int numElementConstraints = _lagrangeConstraints->numElementConstraints();
   
@@ -1197,15 +1203,77 @@ void TSolution<Scalar>::initializeStiffnessAndLoad()
     }
   }
 
+  // Zero-mean constraints and global Lagrange constraints are appended to the
+  // partition map after the regular and element-local Lagrange DOFs.  They are
+  // not present in any element-local stiffness stencil above, but
+  // populateStiffnessAndLoad() may later insert full constraint rows on rank 0
+  // and constraint columns into locally owned regular DOF rows.  Account for
+  // that explicitly so Tpetra's static graph allocation is large enough.
+  const GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
+  const int numElementConstraints = _lagrangeConstraints->numElementConstraints();
+  const int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
+  const int zeroMeanConstraintsSize = _zmcsAsRankOneUpdate ? 0 : getZeroMeanConstraints().size();
+  const GlobalIndexType globalNumElementLagrange = numElementConstraints * _mesh->numActiveElements();
+  const GlobalIndexType firstGlobalLagrangeIndex = numGlobalDofs + globalNumElementLagrange;
+  const GlobalIndexType firstZMCIndex = firstGlobalLagrangeIndex + numGlobalConstraints;
+  const std::set<GlobalIndexType> myRegularDofIndices = _dofInterpreter->globalDofIndicesForPartition(_mesh->Comm()->getRank());
+
+  for (int constraintOrdinal = 0; constraintOrdinal < numGlobalConstraints; constraintOrdinal++)
+  {
+    GlobalIndexType constraintIndex = firstGlobalLagrangeIndex + constraintOrdinal;
+    addLocalGraphEntry(constraintIndex, constraintIndex);
+    for (GlobalIndexType dofIndex = 0; dofIndex < numGlobalDofs; dofIndex++)
+    {
+      addLocalGraphEntry(constraintIndex, dofIndex);
+    }
+    for (GlobalIndexType dofIndex : myRegularDofIndices)
+    {
+      addLocalGraphEntry(dofIndex, constraintIndex);
+    }
+  }
+
+  for (int zmcOrdinal = 0; zmcOrdinal < zeroMeanConstraintsSize; zmcOrdinal++)
+  {
+    GlobalIndexType zmcIndex = firstZMCIndex + zmcOrdinal;
+    addLocalGraphEntry(zmcIndex, zmcIndex);
+    for (GlobalIndexType dofIndex = 0; dofIndex < numGlobalDofs; dofIndex++)
+    {
+      addLocalGraphEntry(zmcIndex, dofIndex);
+    }
+    for (GlobalIndexType dofIndex : myRegularDofIndices)
+    {
+      addLocalGraphEntry(dofIndex, zmcIndex);
+    }
+  }
+
+  size_t maxElementEntryCount = 1;
+  for (ElementTypePtr elemTypePtr : _mesh->elementTypes(_mesh->Comm()->getRank()))
+  {
+    maxElementEntryCount = std::max(maxElementEntryCount, static_cast<size_t>(elemTypePtr->trialOrderPtr->totalDofs()));
+  }
+
+  size_t maxNonzeroEntriesPerLocalRow = maxElementEntryCount;
+  for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
+  {
+    maxNonzeroEntriesPerLocalRow = std::max(maxNonzeroEntriesPerLocalRow, localRowColumns[localRowOrdinal].size());
+  }
+
   Teuchos::Array<size_t> numEntriesPerLocalRow(numLocalRows);
   for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
   {
-    // Leave at least one slot so rows that are intentionally empty until later
-    // constraint/BC handling can still receive their diagonal entry.
-    numEntriesPerLocalRow[localRowOrdinal] = std::max<size_t>(localRowColumns[localRowOrdinal].size(), 1);
+    // Leave enough slots for rows whose precise structure is not captured by
+    // the static graph estimate (for example, constraint rows/columns that are
+    // driven by interpreted data computed later).  This is still far smaller
+    // than the old dense-per-row getGlobalNumElements() allocation, but avoids
+    // one-entry rows that cannot accept a full element stencil.
+    size_t rowEntryCount = localRowColumns[localRowOrdinal].size();
+    numEntriesPerLocalRow[localRowOrdinal] = std::max(rowEntryCount, maxNonzeroEntriesPerLocalRow);
   }
 
-  _globalStiffMatrix = Teuchos::rcp(new TMatrix<Scalar>(tPartMap, numEntriesPerLocalRow()));
+  // Build the matrix after all row allocation hints have been computed.  Use
+  // the local maximum as Tpetra's per-row static allocation so every owned row
+  // can accept at least one complete element/constraint stencil.
+  _globalStiffMatrix = Teuchos::rcp(new TMatrix<Scalar>(tPartMap, maxNonzeroEntriesPerLocalRow));
   
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we

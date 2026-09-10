@@ -23,6 +23,7 @@ set(PHASE0_TEST_SOURCES
 )
 
 add_executable(runPhase0Tests ${PHASE0_TEST_SOURCES})
+add_dependencies(runPhase0Tests runTests)
 
 target_link_libraries(runPhase0Tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
 )
