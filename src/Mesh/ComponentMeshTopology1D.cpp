@@ -139,6 +139,7 @@ void ComponentMeshTopology1D::rebuildVertexIncidence()
   }
 
   _vertexToActiveCellsHost.clear();
+  _activeCellsForVertexHost.assign(vertexCount_, std::vector<ComponentCellID1D>());
   _vertexToCellOffsets = VertexToCellOffsetsDualView("component_vertex_to_cell_offsets", vertexCount_ + 1);
   IndexType runningOffset = 0;
   for (IndexType vertexOrdinal=0; vertexOrdinal<vertexCount_; vertexOrdinal++)
@@ -152,10 +153,12 @@ void ComponentMeshTopology1D::rebuildVertexIncidence()
   IndexType entryOrdinal = 0;
   for (IndexType vertexOrdinal=0; vertexOrdinal<vertexCount_; vertexOrdinal++)
   {
+    _activeCellsForVertexHost[vertexOrdinal].reserve(incidentCellOrdinals[vertexOrdinal].size());
     for (const auto &cellOrdinal : incidentCellOrdinals[vertexOrdinal])
     {
       _vertexToCellOrdinals.h_view(entryOrdinal) = cellOrdinal;
       _vertexToActiveCellsHost.push_back(_activeCells[cellOrdinal]);
+      _activeCellsForVertexHost[vertexOrdinal].push_back(_activeCells[cellOrdinal]);
       entryOrdinal++;
     }
   }
@@ -236,7 +239,7 @@ const std::vector<ComponentCellID1D> &ComponentMeshTopology1D::activeCellsForVer
 {
   TEUCHOS_TEST_FOR_EXCEPTION((vertexIndex < 0) || (vertexIndex >= vertexCount()), std::invalid_argument,
                              "ComponentMeshTopology1D::activeCellsForVertex vertex index out of range.");
-  return _vertexToActiveCellsHost;
+  return _activeCellsForVertexHost[vertexIndex];
 }
 
 bool ComponentMeshTopology1D::containsCell(const ComponentCellID1D &cellID) const

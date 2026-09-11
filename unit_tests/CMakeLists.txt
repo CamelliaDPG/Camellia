@@ -17,9 +17,12 @@ add_test(NAME runTests COMMAND runTests)
 
 set(PHASE0_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
+  TensorBasisCacheTests.cpp
   TensorBasisTests.cpp
+  TensorProductLocalOperatorTests.cpp
   TensorFunctionTests.cpp
   TensorMeshTests.cpp
+  TensorOperatorDataTests.cpp
 )
 
 add_executable(runPhase0Tests ${PHASE0_TEST_SOURCES})

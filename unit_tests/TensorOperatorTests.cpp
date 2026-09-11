@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "TensorOperatorFactory.h"
+#include "TensorBasisCache.h"
 #include "TensorBilinearForm.h"
 #include "TensorBilinearFormBuilder.h"
 #include "TensorCoefficientMap.h"
@@ -963,6 +964,37 @@ TEUCHOS_UNIT_TEST( TensorOperator, ApplyProducesNonzeroOutputForSimpleVolumeTerm
   TEST_ASSERT(someNonzero);
 }
 
+TEUCHOS_UNIT_TEST( TensorOperator, VolumeTermBasisCacheMatchesReferenceTensorPointCount )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = makeSimpleBilinearFormForOperatorTests();
+  const auto &term = form->terms()[0];
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  auto trialDiscretization = tensorMesh->trialDiscretization("u");
+  auto testDiscretization = tensorMesh->testDiscretization("v");
+
+  std::vector<int> quadratureDegrees(term.componentCount(), 1);
+  int expectedTensorPointCount = 1;
+  for (int d=0; d<term.componentCount(); d++)
+  {
+    const int trialPolyOrder = tensorMesh->effectivePolyOrder(trialDiscretization, cellTuple[d], d, false);
+    const int testPolyOrder  = tensorMesh->effectivePolyOrder(testDiscretization,  cellTuple[d], d, true);
+    quadratureDegrees[d] = quadratureDegreeForComponent(trialPolyOrder, testPolyOrder,
+                                                        term.trialOperator().takesDerivativeInComponent(d),
+                                                        term.testOperator().takesDerivativeInComponent(d));
+    expectedTensorPointCount *= lineQuadratureFromCubatureFactory(quadratureDegrees[d]).points.size();
+  }
+
+  TensorBasisCacheND trialCache(tensorMesh, trialDiscretization, false, cellTuple, quadratureDegrees);
+  TensorBasisCacheND testCache(tensorMesh, testDiscretization, true, cellTuple, quadratureDegrees);
+
+  TEST_EQUALITY(trialCache.tensorPointCount(), expectedTensorPointCount);
+  TEST_EQUALITY(testCache.tensorPointCount(), expectedTensorPointCount);
+  TEST_EQUALITY(trialCache.pointStride(0), 1);
+  TEST_EQUALITY(testCache.pointStride(1), testCache.componentCache(0).pointCount());
+}
+
 TEUCHOS_UNIT_TEST( TensorOperator, ValueValueConstantApplyMatchesExplicitReference )
 {
   auto tensorMesh = makeTensorMeshForOperatorTests();
@@ -1361,6 +1393,53 @@ TEUCHOS_UNIT_TEST( TensorOperator, TraceAwareBoundaryOperatorSupportsPNonuniform
   auto expected = applyReferenceBoundaryOperator(tensorMesh, dofLayout, form, "uhat", "v", input);
 
   compareVectors(actual, expected, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, SeparableProductCoefficientVolumeTermMatchesExplicitReference )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto form = Teuchos::rcp(new TensorBilinearForm("separable-product-coefficient"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                   makeFieldTensorVar("v"),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::singleDerivative(2, 1),
+                                   TensorFunction::componentCoordinate(0) * TensorFunction::componentCoordinate(1)));
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = ((i % 2) == 0) ? 0.75 : -0.375;
+
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+
+  compareVectors(actual, expected, out, success, 1e-10, 1e-13);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, SumFactorizedVlasovLikeVolumeTerms1X1T1VMatchExplicitReference )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests1X1T1V(false);
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = makeVlasovLikeBilinearForm1X1T1V();
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "f",
+                          TENSOR_TEST_SPACE,  "w");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.25 + 0.03125 * i;
+
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "f", "w", input);
+
+  compareVectors(actual, expected, out, success, 1e-10, 1e-13);
 }
 
 TEUCHOS_UNIT_TEST( TensorOperator, MixedUltraweakVlasov1X1T1VApplyMatchesExplicitReference )

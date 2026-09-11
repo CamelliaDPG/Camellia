@@ -33,6 +33,7 @@ namespace Camellia
     VertexToCellOffsetsDualView _vertexToCellOffsets;
     VertexToCellOrdinalsDualView _vertexToCellOrdinals;
     std::vector<ComponentCellID1D> _vertexToActiveCellsHost;
+    std::vector<std::vector<ComponentCellID1D>> _activeCellsForVertexHost;
 
     void validateConstructorInputs() const;
     void rebuildActiveCells();

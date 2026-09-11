@@ -13,6 +13,8 @@
 #include "Intrepid2_CubatureDirectLineGauss.hpp"
 #include "TensorFunction.h"
 #include "TensorCoefficientMap.h"
+#include "TensorBasisCache.h"
+#include "TensorProductLocalOperator.h"
 #include "Var.h"
 #include "Teuchos_TestForException.hpp"
 
@@ -178,6 +180,216 @@ namespace
       }
     }
     return value;
+  }
+
+  double cachedBasisEvaluationAtPoint(const std::vector<int> &componentBasisOrdinals,
+                                      const TensorBasisCacheND &basisCache,
+                                      const TensorComponentOperatorDescriptor &descriptor,
+                                      const std::vector<int> &pointOrdinals)
+  {
+    double value = 1.0;
+    const int componentCount = descriptor.componentCount();
+    for (int d=0; d<componentCount; d++)
+    {
+      const auto &componentCache = basisCache.componentCache(d);
+      const int basisOrdinal = componentBasisOrdinals[d];
+      const int pointOrdinal = pointOrdinals[d];
+      TEUCHOS_TEST_FOR_EXCEPTION((basisOrdinal < 0) || (basisOrdinal >= componentCache.basisCardinality()), std::invalid_argument,
+                                 "cachedBasisEvaluationAtPoint basis ordinal out of range.");
+      TEUCHOS_TEST_FOR_EXCEPTION((pointOrdinal < 0) || (pointOrdinal >= componentCache.pointCount()), std::invalid_argument,
+                                 "cachedBasisEvaluationAtPoint point ordinal out of range.");
+      if (descriptor.takesDerivativeInComponent(d))
+      {
+        value *= componentCache.derivativesAtQuadrature().h_view(basisOrdinal, pointOrdinal) * componentCache.derivativeScale();
+      }
+      else
+      {
+        value *= componentCache.valuesAtQuadrature().h_view(basisOrdinal, pointOrdinal);
+      }
+    }
+    return value;
+  }
+
+  bool appendSeparableCoefficientFactors(const TensorFunctionPtr &coefficient,
+                                         int componentCount,
+                                         std::vector<TensorFunctionPtr> &componentFactors)
+  {
+    if (coefficient == Teuchos::null) return false;
+    if (coefficient->hasSolutionDependencies()) return false;
+
+    const auto &dependentComponents = coefficient->dependencyScope().componentOrdinals();
+    if (dependentComponents.empty())
+    {
+      if (componentCount <= 0) return false;
+      componentFactors[0] = (componentFactors[0] == Teuchos::null) ? coefficient : componentFactors[0] * coefficient;
+      return true;
+    }
+
+    if (dependentComponents.size() == 1)
+    {
+      const int componentOrdinal = *dependentComponents.begin();
+      if ((componentOrdinal < 0) || (componentOrdinal >= componentCount)) return false;
+      componentFactors[componentOrdinal] = (componentFactors[componentOrdinal] == Teuchos::null) ? coefficient : componentFactors[componentOrdinal] * coefficient;
+      return true;
+    }
+
+    if (!coefficient->isSeparableProduct()) return false;
+    for (const auto &child : coefficient->childFunctions())
+    {
+      if (!appendSeparableCoefficientFactors(child, componentCount, componentFactors)) return false;
+    }
+    return true;
+  }
+
+  bool termSupportsSumFactorizedVolumeContraction(const TensorBilinearTerm &term,
+                                                  std::vector<TensorFunctionPtr> &coefficientFactors)
+  {
+    if (!term.isVolumeTerm()) return false;
+    if (tensorVarIsTraceLike(term.trialVar()) || tensorVarIsTraceLike(term.testVar())) return false;
+
+    coefficientFactors.assign(term.componentCount(), Teuchos::null);
+    return appendSeparableCoefficientFactors(term.coefficient(), term.componentCount(), coefficientFactors);
+  }
+
+  std::vector<double> coefficientValuesForComponent(const TensorFunctionPtr &coefficient,
+                                                    const TensorBasisCache1D &componentCache,
+                                                    int componentCount,
+                                                    int componentOrdinal)
+  {
+    TensorFunction::PointView points("MatrixFreeTensorOperator::componentCoefficientPoints",
+                                     componentCache.pointCount(),
+                                     componentCount);
+    auto pointsHost = Kokkos::create_mirror_view(points);
+    for (int pointOrdinal=0; pointOrdinal<componentCache.pointCount(); pointOrdinal++)
+    {
+      for (int d=0; d<componentCount; d++)
+      {
+        pointsHost(pointOrdinal,d) = 0.0;
+      }
+      const double xi = componentCache.referencePoints().h_view(pointOrdinal);
+      pointsHost(pointOrdinal,componentOrdinal) = componentCache.cellLeft() + 0.5 * (xi + 1.0) * componentCache.cellWidth();
+    }
+    Kokkos::deep_copy(points, pointsHost);
+
+    TensorFunction::ValueView values("MatrixFreeTensorOperator::componentCoefficientValues",
+                                     componentCache.pointCount());
+    coefficient->values(points, values);
+    auto valuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), values);
+
+    std::vector<double> coefficientValues(componentCache.pointCount(), 0.0);
+    for (int pointOrdinal=0; pointOrdinal<componentCache.pointCount(); pointOrdinal++)
+    {
+      coefficientValues[pointOrdinal] = valuesHost(pointOrdinal);
+    }
+    return coefficientValues;
+  }
+
+  double constantCoefficientValue(const TensorFunctionPtr &coefficient,
+                                  int componentCount)
+  {
+    TensorFunction::PointView points("MatrixFreeTensorOperator::constantCoefficientPoint", 1, componentCount);
+    auto pointsHost = Kokkos::create_mirror_view(points);
+    for (int d=0; d<componentCount; d++) pointsHost(0,d) = 0.0;
+    Kokkos::deep_copy(points, pointsHost);
+
+    TensorFunction::ValueView values("MatrixFreeTensorOperator::constantCoefficientValue", 1);
+    coefficient->values(points, values);
+    auto valuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), values);
+    return valuesHost(0);
+  }
+
+  void applySumFactorizedVolumeTermToCell(const TensorBilinearTerm &term,
+                                          const TensorDofLayoutPtr &tensorDofLayout,
+                                          const TensorDofLayout::VariableLayout &domainLayout,
+                                          const TensorDofLayout::VariableLayout &rangeLayout,
+                                          TensorLocalOrdering domainOrdering,
+                                          TensorLocalOrdering rangeOrdering,
+                                          const TensorBasisCacheND &trialBasisCache,
+                                          const TensorBasisCacheND &testBasisCache,
+                                          const TensorCoefficientTraversal &trialTraversal,
+                                          const TensorCoefficientTraversal &testTraversal,
+                                          const std::vector<double> &localInput,
+                                          std::vector<double> &localOutput)
+  {
+    const int componentCount = term.componentCount();
+    std::vector<TensorFunctionPtr> coefficientFactors(componentCount, Teuchos::null);
+    TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsSumFactorizedVolumeContraction(term, coefficientFactors), std::invalid_argument,
+                               "applySumFactorizedVolumeTermToCell requires a supported separable volume term.");
+
+    const auto &trialShape = trialTraversal.shape();
+    const auto &testShape  = testTraversal.shape();
+
+    std::vector<std::vector<double>> componentMatrices(componentCount);
+    for (int d=0; d<componentCount; d++)
+    {
+      const auto &trialCache = trialBasisCache.componentCache(d);
+      const auto &testCache  = testBasisCache.componentCache(d);
+      TEUCHOS_TEST_FOR_EXCEPTION(trialCache.pointCount() != testCache.pointCount(), std::logic_error,
+                                 "Sum-factorized volume term expected matching trial/test quadrature rules.");
+
+      auto trialValues = trialCache.valuesAtQuadrature();
+      auto trialDerivatives = trialCache.derivativesAtQuadrature();
+      auto testValues = testCache.valuesAtQuadrature();
+      auto testDerivatives = testCache.derivativesAtQuadrature();
+      auto weights = trialCache.referenceWeights();
+      trialValues.sync_host();
+      trialDerivatives.sync_host();
+      testValues.sync_host();
+      testDerivatives.sync_host();
+      weights.sync_host();
+
+      std::vector<double> coefficientValues;
+      if (coefficientFactors[d] != Teuchos::null)
+      {
+        coefficientValues = coefficientValuesForComponent(coefficientFactors[d], trialCache, componentCount, d);
+      }
+
+      componentMatrices[d].assign(testCache.basisCardinality() * trialCache.basisCardinality(), 0.0);
+      for (int testOrdinal=0; testOrdinal<testCache.basisCardinality(); testOrdinal++)
+      {
+        for (int trialOrdinal=0; trialOrdinal<trialCache.basisCardinality(); trialOrdinal++)
+        {
+          double entry = 0.0;
+          for (int pointOrdinal=0; pointOrdinal<trialCache.pointCount(); pointOrdinal++)
+          {
+            const double trialValue = term.trialOperator().takesDerivativeInComponent(d)
+                ? trialDerivatives.h_view(trialOrdinal,pointOrdinal) * trialCache.derivativeScale()
+                : trialValues.h_view(trialOrdinal,pointOrdinal);
+            const double testValue = term.testOperator().takesDerivativeInComponent(d)
+                ? testDerivatives.h_view(testOrdinal,pointOrdinal) * testCache.derivativeScale()
+                : testValues.h_view(testOrdinal,pointOrdinal);
+            const double coefficientValue = (coefficientFactors[d] != Teuchos::null) ? coefficientValues[pointOrdinal] : 1.0;
+            entry += weights.h_view(pointOrdinal) * trialCache.jacobian() * coefficientValue * trialValue * testValue;
+          }
+          componentMatrices[d][testOrdinal * trialCache.basisCardinality() + trialOrdinal] = entry;
+        }
+      }
+    }
+
+    std::vector<TensorComponentLocalMatrix> componentOperators;
+    componentOperators.reserve(componentCount);
+    for (int d=0; d<componentCount; d++)
+    {
+      const auto &trialCache = trialBasisCache.componentCache(d);
+      const auto &testCache  = testBasisCache.componentCache(d);
+      componentOperators.push_back(TensorComponentLocalMatrix(testCache.basisCardinality(),
+                                                              trialCache.basisCardinality(),
+                                                              componentMatrices[d]));
+    }
+    TensorProductLocalOperator localOperator(trialShape, testShape, componentOperators);
+
+    std::vector<double> cellInput(trialShape.totalDofs(), 0.0);
+    for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
+    {
+      cellInput[localTrialOrdinal] = localInput[trialTraversal.globalIndexForLocalOrdinal(localTrialOrdinal, tensorDofLayout)];
+    }
+
+    std::vector<double> cellOutput;
+    localOperator.apply(cellInput, cellOutput);
+    for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
+    {
+      localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, tensorDofLayout)] += cellOutput[localTestOrdinal];
+    }
   }
 
   bool termIsSupportedTraceAwareBoundaryTerm(const TensorBilinearTerm &term)
@@ -556,67 +768,50 @@ namespace
         const auto trialTraversal = domainTraversalForCell(cellTuple);
         const auto testTraversal  = rangeTraversalForCell(cellTuple);
 
-        std::vector<BasisData1D> trialBasisData(componentCount);
-        std::vector<BasisData1D> testBasisData(componentCount);
-        std::vector<int> pointCounts(componentCount, 0);
-        std::vector<std::vector<double>> refPoints(componentCount);
-        std::vector<std::vector<double>> refWeights(componentCount);
-        std::vector<double> measureScales(componentCount, 1.0);
-        std::vector<double> derivativeScales(componentCount, 1.0);
-        std::vector<double> cellLeft(componentCount, 0.0);
-        std::vector<double> cellWidth(componentCount, 1.0);
-
+        std::vector<int> quadratureDegrees(componentCount, 1);
         for (int d=0; d<componentCount; d++)
         {
           const int trialPolyOrder = _tensorMesh->effectivePolyOrder(trialDiscretization, cellTuple[d], d, false);
           const int testPolyOrder  = _tensorMesh->effectivePolyOrder(testDiscretization,  cellTuple[d], d, true);
           const bool trialDerivative = term.trialOperator().takesDerivativeInComponent(d);
           const bool testDerivative  = term.testOperator().takesDerivativeInComponent(d);
-          const int quadratureDegree = quadratureDegreeForComponent(trialPolyOrder, testPolyOrder,
-                                                                    trialDerivative, testDerivative);
-
-          LineQuadratureRule quadrature = lineQuadratureFromCubatureFactory(quadratureDegree);
-          refPoints[d] = quadrature.points;
-          refWeights[d] = quadrature.weights;
-          pointCounts[d] = static_cast<int>(quadrature.points.size());
-
-          trialBasisData[d] = buildBasisDataForComponent(_tensorMesh, trialDiscretization, d, false, cellTuple[d], refPoints[d]);
-          testBasisData[d]  = buildBasisDataForComponent(_tensorMesh, testDiscretization,  d, true,  cellTuple[d], refPoints[d]);
-
-          auto componentTopo = _tensorMesh->topology()->componentMeshTopology(d);
-          cellLeft[d] = componentTopo->cellLeft(cellTuple[d]);
-          cellWidth[d] = componentTopo->cellWidth(cellTuple[d]);
-          measureScales[d] = 0.5 * cellWidth[d];
-          derivativeScales[d] = 2.0 / cellWidth[d];
+          quadratureDegrees[d] = quadratureDegreeForComponent(trialPolyOrder, testPolyOrder,
+                                                             trialDerivative, testDerivative);
         }
 
-        int tensorPointCount = 1;
-        for (int d=0; d<componentCount; d++) tensorPointCount *= pointCounts[d];
+        TensorBasisCacheND trialBasisCache(_tensorMesh, trialDiscretization, false, cellTuple, quadratureDegrees);
+        TensorBasisCacheND testBasisCache (_tensorMesh, testDiscretization,  true,  cellTuple, quadratureDegrees);
 
-        TensorFunction::PointView physicalPoints("MatrixFreeTensorOperator::physicalPoints", tensorPointCount, componentCount);
-        auto physicalPointsHost = Kokkos::create_mirror_view(physicalPoints);
-        std::vector<double> quadratureWeights(tensorPointCount, 1.0);
-
-        for (int flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
+        std::vector<int> pointCounts(componentCount, 0);
+        for (int d=0; d<componentCount; d++)
         {
-          int workingOrdinal = flatPointOrdinal;
-          double weight = 1.0;
-          for (int d=0; d<componentCount; d++)
-          {
-            pointOrdinals[d] = workingOrdinal % pointCounts[d];
-            workingOrdinal /= pointCounts[d];
-            const double xi = refPoints[d][pointOrdinals[d]];
-            const double xPhysical = cellLeft[d] + 0.5 * (xi + 1.0) * cellWidth[d];
-            physicalPointsHost(flatPointOrdinal, d) = xPhysical;
-            weight *= refWeights[d][pointOrdinals[d]] * measureScales[d];
-          }
-          quadratureWeights[flatPointOrdinal] = weight;
+          pointCounts[d] = trialBasisCache.componentCache(d).pointCount();
         }
-        Kokkos::deep_copy(physicalPoints, physicalPointsHost);
 
+        const IndexType tensorPointCount = trialBasisCache.tensorPointCount();
         TensorFunction::ValueView coefficientValues("MatrixFreeTensorOperator::coefficientValues", tensorPointCount);
-        term.coefficient()->values(physicalPoints, coefficientValues);
+        term.coefficient()->values(trialBasisCache.physicalPoints().d_view, coefficientValues);
         auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
+        auto quadratureWeights = trialBasisCache.quadratureWeights();
+        quadratureWeights.sync_host();
+
+        std::vector<TensorFunctionPtr> sumFactorizedCoefficientFactors;
+        if (termSupportsSumFactorizedVolumeContraction(term, sumFactorizedCoefficientFactors))
+        {
+          applySumFactorizedVolumeTermToCell(term,
+                                            _tensorDofLayout,
+                                            _domainLayout,
+                                            _rangeLayout,
+                                            _domainOrdering,
+                                            _rangeOrdering,
+                                            trialBasisCache,
+                                            testBasisCache,
+                                            trialTraversal,
+                                            testTraversal,
+                                            localInput,
+                                            localOutput);
+          continue;
+        }
 
         std::vector<double> trialPointValues(tensorPointCount, 0.0);
         for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
@@ -634,11 +829,10 @@ namespace
               pointOrdinals[d] = workingOrdinal % pointCounts[d];
               workingOrdinal /= pointCounts[d];
             }
-            const double trialValue = basisEvaluationAtPoint(trialBasisOrdinals,
-                                                             trialBasisData,
-                                                             term.trialOperator(),
-                                                             pointOrdinals,
-                                                             derivativeScales);
+            const double trialValue = cachedBasisEvaluationAtPoint(trialBasisOrdinals,
+                                                                   trialBasisCache,
+                                                                   term.trialOperator(),
+                                                                   pointOrdinals);
             trialPointValues[flatPointOrdinal] += trialCoefficient * trialValue;
           }
         }
@@ -656,12 +850,11 @@ namespace
               pointOrdinals[d] = workingOrdinal % pointCounts[d];
               workingOrdinal /= pointCounts[d];
             }
-            const double testValue = basisEvaluationAtPoint(testBasisOrdinals,
-                                                            testBasisData,
-                                                            term.testOperator(),
-                                                            pointOrdinals,
-                                                            derivativeScales);
-            contribution += quadratureWeights[flatPointOrdinal]
+            const double testValue = cachedBasisEvaluationAtPoint(testBasisOrdinals,
+                                                                  testBasisCache,
+                                                                  term.testOperator(),
+                                                                  pointOrdinals);
+            contribution += quadratureWeights.h_view(flatPointOrdinal)
                             * coefficientValuesHost(flatPointOrdinal)
                             * trialPointValues[flatPointOrdinal]
                             * testValue;

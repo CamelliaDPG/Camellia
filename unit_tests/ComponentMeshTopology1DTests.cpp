@@ -229,6 +229,25 @@ TEUCHOS_UNIT_TEST( ComponentMeshTopology1D, CellVertexIndices )
   TEST_EQUALITY(topo.cellVertexIndex(c2,1), 3);
 }
 
+TEUCHOS_UNIT_TEST( ComponentMeshTopology1D, ActiveCellsForVertexReturnsRequestedIncidenceOnly )
+{
+  ComponentMeshTopology1D topo({0.0, 2.0},
+                               { ActiveLeafSet1D({{1,0}, {2,2}, {2,3}}) });
+
+  const auto &leftBoundaryCells = topo.activeCellsForVertex(0);
+  TEST_EQUALITY(leftBoundaryCells.size(), 1);
+  TEST_EQUALITY(leftBoundaryCells[0], ComponentCellID1D(0,1,0));
+
+  const auto &interiorCells = topo.activeCellsForVertex(1);
+  TEST_EQUALITY(interiorCells.size(), 2);
+  TEST_EQUALITY(interiorCells[0], ComponentCellID1D(0,1,0));
+  TEST_EQUALITY(interiorCells[1], ComponentCellID1D(0,2,2));
+
+  const auto &rightBoundaryCells = topo.activeCellsForVertex(3);
+  TEST_EQUALITY(rightBoundaryCells.size(), 1);
+  TEST_EQUALITY(rightBoundaryCells[0], ComponentCellID1D(0,2,3));
+}
+
 TEUCHOS_UNIT_TEST( ComponentMeshTopology1D, VertexCoordinates )
 {
   ComponentMeshTopology1D topo({0.0, 2.0},
