@@ -49,12 +49,13 @@ Refactor/fix before using in kernels:
 - Replace repeated linear `tensorCellOrdinal()` lookups with direct ordinal arithmetic for full tensor products, plus optional maps only for adaptive/non-product subsets.
 - Fix or remove `ComponentMeshTopology1D::activeCellsForVertex()` before relying on it.
 - Replace `TensorDofLayout` tuple enumeration in ordinal encode/decode with mixed-radix arithmetic.
-- Ensure trace skeleton entities carry enough side/orientation/parity data for `t_n_hat` terms.
+- Ensure trace skeleton entities carry enough side/orientation/parity data for flux trace terms.
+- Treat tensor trace variables as surface-family classified: each trace variable lives on exactly one orthogonal tensor skeleton family, identified by its `traceComponentOrdinal`.  For a logical flux trace such as `t_n_hat`, setup should represent the directional pieces as separate variables such as `tn_x`, `tn_t`, `tn_ux`, and `tn_uy`, rather than as one variable with runtime filtering over skeleton directions.
 
 Deliverables:
 
 - `TensorOperatorData` or equivalent header/source;
-- unit tests for mapping, local/global DOF counts, boundary tags, side parity, and trace layouts;
+- unit tests for mapping, local/global DOF counts, boundary tags, side parity, trace layouts, and multi-component directional trace families;
 - no performance-critical dependence on `std::vector` or `std::map` after setup.
 
 Status update:
@@ -152,7 +153,7 @@ Represent terms such as:
 - mass/time term: `-f, d_t w`;
 - spatial transport: `-v_i f, d_{x_i} w`;
 - velocity transport: `-(q/m) a_i f, d_{u_i} w`;
-- trace term: `t_n_hat, w` on tensor skeletons;
+- trace-family terms: represent the logical Vlasov flux trace `t_n_hat` as separate directional trace variables, one per supported orthogonal skeleton family, e.g. `(tn_x, w)` on x-orthogonal skeletons, `(tn_t, w)` on t-orthogonal skeletons, `(tn_ux, w)` on ux-orthogonal skeletons, and `(tn_uy, w)` on uy-orthogonal skeletons;
 - optional positivity terms only after the base linear problem is working.
 
 Classify coefficients:
@@ -164,6 +165,13 @@ Classify coefficients:
 - fully coupled fallbacks.
 
 Use `TensorFunction` metadata as setup input, but compile it into reusable device evaluators/scratch buffers.  Avoid virtual calls and per-term allocation in assembly kernels.
+
+Trace-family setup guidance:
+
+- Provide a setup-only helper, likely near `TensorVarFactory` or the tensor Vlasov formulation builder, that expands one logical trace family name such as `t_n_hat` into per-component trace variables with labels, variable IDs, and `traceComponentOrdinal` values.
+- Keep surface-family classification separate from side parity/orientation: `traceComponentOrdinal` decides which orthogonal skeleton family owns the DOFs, while skeleton side parity supplies flux signs/orientations on that family.
+- Construct the Vlasov weak form as an explicit sum over directional trace variables.  Do not use a single trace variable with runtime side-direction filtering in kernels.
+- Add tests that create at least two directional trace variables on the same tensor mesh and verify that `TensorDofLayout`, `TensorOperatorData`, local-to-global skeleton views, side parity, and boundary B-block assembly all use the requested skeleton family for each trace variable.
 
 Deliverables:
 
@@ -205,7 +213,7 @@ Create a new driver, for example `TensorPlanarMITLRelativisticSpaceTime.cpp`, ra
 The driver should:
 
 - construct component 1D topologies for x, t, ux, and uy;
-- construct a `TensorMesh` with f, w, and `t_n_hat` tensor variables;
+- construct a `TensorMesh` with f, w, and directional `t_n_hat` trace-family variables such as `tn_x`, `tn_t`, `tn_ux`, and `tn_uy`;
 - configure the same physical parameters and boundary data as `PlanarMITLRelativisticSpaceTime.cpp`;
 - use the tensor-native assembled K path for the Vlasov solve;
 - keep the existing configuration-space Maxwell solve initially, coupling through projected moments and fields;
@@ -221,6 +229,17 @@ Initially disable or postpone:
 - non-product meshes.
 
 After correctness and performance are established, selectively add these features back.
+
+Future out-of-scope direction: partially orthogonal extrusions over non-rectilinear configuration bases.
+
+The first tensor-native path assumes that every mesh component is a clean 1D tensor factor, so every skeleton face belongs to exactly one orthogonal component family.  A later extension could relax this for configuration-space meshes that are formed by extruding a lower-dimensional non-rectilinear base mesh through one or more clean tensor-product directions.  In that setting, only the extruded directions have the simple `traceComponentOrdinal`/sum-factorization interpretation.  The non-rectilinear base contributes a coupled surface geometry and should be treated as an unstructured block or base-element factor, while the extruded coordinates remain tensor factors.
+
+A plausible future abstraction is a hybrid product cell `(base cell) x (orthogonal 1D factors...)` with two kinds of trace support:
+
+- base-boundary traces on sides inherited from the non-rectilinear base mesh, assembled by a base-element or generic face integration path, possibly still tensorized across the extruded coordinates;
+- extrusion-family traces on surfaces orthogonal to one of the clean 1D factors, represented much like the current directional trace variables and eligible for the fast tensor skeleton path.
+
+This suggests generalizing `traceComponentOrdinal` from a single integer component family to a richer surface-family descriptor, for example `{base-side family}` versus `{orthogonal-factor ordinal}`.  The implementation should initially keep this out of scope for Planar MITL: directional trace variables are only guaranteed to be fast and simple when their support is one of the clean tensor-product skeleton families.
 
 ## Phase 6: matrix-free operators
 
@@ -298,7 +317,7 @@ Optimization priorities:
 2. Local N-factor basis/quadrature and term evaluator tests.
 3. Local B/G/K tensor assembly for affine cells and L2 test norm.
 4. Global assembled K Vlasov solve in a new tensor Planar MITL driver.
-5. Graph norm and required boundary/trace semantics.
+5. Graph norm and required boundary/directional-trace semantics.
 6. Performance tuning and scaling benchmarks.
 7. Matrix-free Schur-complement apply with Chebyshev approximate G inverse.
 8. Mixed-formulation matrix-free operator.
@@ -311,7 +330,7 @@ The first code slice should be deliberately narrow:
 
 - 1D1T2V tensor product mesh with uniform p and affine geometry;
 - one species;
-- variables f, w, and `t_n_hat`;
+- variables f, w, and directional `t_n_hat` trace-family variables for the required tensor skeleton families;
 - L2 test norm;
 - assembled K via sum-factorized local B/G/K;
 - no adaptivity, no positivity, no serendipity;
