@@ -111,10 +111,11 @@ Next slice:
 Next slice:
 
 - Completed first graph-norm local Schur-complement slice: `TensorLocalSchurComplementBuilder` now can form dense local graph-norm test matrices from a weighted L2 term plus separable per-component derivative/stiffness contributions, solve dense local `G y = B` columns to form `K = B^T G^{-1} B`, and assemble a single-variable affine volume graph-norm CRS matrix.  Phase 0 tests validate local graph-norm G entries against explicit tensor quadrature, local K symmetry/consistency, and CRS action against local-block scatter.
+- Completed graph-norm plumbing through the richer Phase 0 CRS helpers: multi-variable affine volume assembly now forms cross trial-variable blocks with dense local graph-norm solves, and volume+boundary assembly can combine supported volume-field and value-only trace boundary B blocks against per-cell dense graph-norm G matrices.  Regression tests compare both assembled actions against dense local references on the existing small tensor meshes.
 
 Next slice:
 
-- Thread graph-norm support through the multi-variable and volume+boundary CRS helpers, then compare those richer assembled actions against a dense/local reference before moving on to broader Vlasov coefficient coverage.
+- Broaden the supported Vlasov coefficient/term coverage beyond the current affine, separable, value-only boundary subset, while keeping dense host-side graph-norm assembly as Phase 0 correctness infrastructure before device/batched optimization.
 
 ## Phase 2: N-factor basis and quadrature cache
 

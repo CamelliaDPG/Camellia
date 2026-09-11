@@ -120,12 +120,28 @@ namespace Camellia
                                                                   const std::vector<std::string> &testVarNames,
                                                                   Teuchos_CommPtr comm = Teuchos::null);
 
+    static TMatrixPtr<double> affineGraphVolumeSchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                     const TensorDofLayoutPtr &tensorDofLayout,
+                                                                     const TensorBilinearFormPtr &bilinearForm,
+                                                                     const std::vector<std::string> &trialVarNames,
+                                                                     const std::vector<std::string> &testVarNames,
+                                                                     double l2Weight = 1.0,
+                                                                     Teuchos_CommPtr comm = Teuchos::null);
+
     static TMatrixPtr<double> affineL2VolumeBoundarySchurComplementMatrix(const TensorMeshPtr &tensorMesh,
                                                                           const TensorDofLayoutPtr &tensorDofLayout,
                                                                           const TensorBilinearFormPtr &bilinearForm,
                                                                           const std::vector<std::string> &trialVarNames,
                                                                           const std::vector<std::string> &testVarNames,
                                                                           Teuchos_CommPtr comm = Teuchos::null);
+
+    static TMatrixPtr<double> affineGraphVolumeBoundarySchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                             const TensorDofLayoutPtr &tensorDofLayout,
+                                                                             const TensorBilinearFormPtr &bilinearForm,
+                                                                             const std::vector<std::string> &trialVarNames,
+                                                                             const std::vector<std::string> &testVarNames,
+                                                                             double l2Weight = 1.0,
+                                                                             Teuchos_CommPtr comm = Teuchos::null);
   };
 }
 
