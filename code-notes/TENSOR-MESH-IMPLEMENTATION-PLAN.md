@@ -121,7 +121,17 @@ Next slice:
 
 Next slice:
 
-- Broaden supported Vlasov coefficient/term coverage beyond the current affine, separable, value-only boundary subset, prioritizing terms needed for the 1D1T2V Planar MITL tensor driver while keeping dense host-side graph-norm assembly as Phase 0 correctness infrastructure before device/batched optimization.
+- Completed first Vlasov coefficient-broadening slice: local tensor Schur volume assembly now expands supported `TensorFunction` sums into additive separable factor tuples, accumulates one sum-factorized dense B contribution per tuple, and therefore handles Vlasov-like transport coefficients in the dense host-side L2/graph-norm assembly paths.  Phase 0 local tests compare summed coefficients against explicit tensor quadrature and against equivalent split-term forms.
+- Completed 1X1T1V coefficient-sum CRS coverage: separable coefficient expansion now distributes through products containing sums, so transport coefficients written in the natural form `-(x_0 + x_1)` are assembled as additive separable B contributions.  The L2 Schur-complement CRS path is tested end-to-end against the matrix-free B path on a small multi-cell 1X1T1V-like volume mesh.
+- Completed matrix-free coefficient-sum fast-path slice: `MatrixFreeTensorOperator` now uses the same additive separable-factor expansion for volume applies, accumulating one sum-factorized local contraction per separable summand instead of falling back to full tensor quadrature for natural Vlasov coefficients such as `-(x_0 + x_1)`.
+
+Next slice:
+
+- Completed first 1D1T2V transport-coverage slice: Phase 0 graph-norm CRS tests now exercise a small 1D1T2V-like volume form with spatial, temporal, and both velocity-derivative directions plus separable configuration/velocity coefficient sums.
+
+Next slice:
+
+- Compare the 1D1T2V tensor-native prototype term set more directly against the Planar MITL relativistic weak form, then decide whether to add explicit support for relativistic velocity coefficients (`u_i / gamma`) as a controlled fully-coupled fallback or to keep them outside the first sum-factorized assembly subset.
 
 ## Phase 2: N-factor basis and quadrature cache
 

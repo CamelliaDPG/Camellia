@@ -1538,6 +1538,36 @@ TEUCHOS_UNIT_TEST( TensorOperator, SeparableProductCoefficientVolumeTermMatchesE
   compareVectors(actual, expected, out, success, 1e-10, 1e-13);
 }
 
+TEUCHOS_UNIT_TEST( TensorOperator, SeparableCoefficientSumVolumeTermUsesSumFactorizedPath )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto form = Teuchos::rcp(new TensorBilinearForm("separable-sum-coefficient"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                   makeFieldTensorVar("v"),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::singleDerivative(2, 1),
+                                   TensorFunction::constant(-1.0) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.2 + 0.05 * i;
+
+  op->resetInstrumentation();
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+  compareVectors(actual, expected, out, success, 1e-10, 1e-13);
+
+  auto stats = op->instrumentation();
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION) > 0);
+}
+
 TEUCHOS_UNIT_TEST( TensorOperator, SumFactorizedVlasovLikeVolumeTerms1X1T1VMatchExplicitReference )
 {
   auto tensorMesh = makeTensorMeshForOperatorTests1X1T1V(false);

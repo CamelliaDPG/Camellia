@@ -11,6 +11,7 @@
 #include "BasisFamily.h"
 #include "Var.h"
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -69,6 +70,33 @@ TensorMeshPtr makeSingleCellTensorMesh(const std::vector<std::pair<double,double
   const int componentCount = static_cast<int>(componentExtents.size());
   tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("u", componentCount), Teuchos::null, std::vector<int>(componentCount, 0))));
   tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("v", componentCount), Teuchos::null, std::vector<int>(componentCount, 0))));
+  return tensorMesh;
+}
+
+TensorMeshPtr makeVlasovLikeVolumeAffineTensorMesh1X1T1V()
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-2.0, 2.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 1));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("f", 3), Teuchos::null, std::vector<int>{0,0,0})));
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("w", 3), Teuchos::null, std::vector<int>{0,0,0})));
+  return tensorMesh;
+}
+
+TensorMeshPtr makeVlasovLikeVolumeAffineTensorMesh1D1T2V()
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-2.0, 2.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto component3 = Teuchos::rcp(new ComponentMeshTopology1D({-1.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2, component3}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 1));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("f", 4), Teuchos::null, std::vector<int>{0,0,0,0})));
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("w", 4), Teuchos::null, std::vector<int>{0,0,0,0})));
   return tensorMesh;
 }
 
@@ -331,6 +359,68 @@ bool closeEnough(double actual,
   return std::abs(actual - expected) <= relTol * scale;
 }
 
+std::vector<double> solveDenseLinearSystem(std::vector<double> matrix,
+                                           std::vector<double> rhs,
+                                           IndexType dimension)
+{
+  for (IndexType pivot=0; pivot<dimension; pivot++)
+  {
+    IndexType pivotRow = pivot;
+    double pivotAbs = std::abs(matrix[static_cast<size_t>(pivot * dimension + pivot)]);
+    for (IndexType row=pivot + 1; row<dimension; row++)
+    {
+      const double candidateAbs = std::abs(matrix[static_cast<size_t>(row * dimension + pivot)]);
+      if (candidateAbs > pivotAbs)
+      {
+        pivotAbs = candidateAbs;
+        pivotRow = row;
+      }
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(pivotAbs == 0.0, std::invalid_argument,
+                               "TensorLocalSchurComplementTests cannot solve a singular dense matrix.");
+    if (pivotRow != pivot)
+    {
+      for (IndexType col=0; col<dimension; col++) std::swap(matrix[static_cast<size_t>(pivot * dimension + col)], matrix[static_cast<size_t>(pivotRow * dimension + col)]);
+      std::swap(rhs[pivot], rhs[pivotRow]);
+    }
+    for (IndexType row=pivot + 1; row<dimension; row++)
+    {
+      const double factor = matrix[static_cast<size_t>(row * dimension + pivot)] / matrix[static_cast<size_t>(pivot * dimension + pivot)];
+      matrix[static_cast<size_t>(row * dimension + pivot)] = 0.0;
+      for (IndexType col=pivot + 1; col<dimension; col++) matrix[static_cast<size_t>(row * dimension + col)] -= factor * matrix[static_cast<size_t>(pivot * dimension + col)];
+      rhs[row] -= factor * rhs[pivot];
+    }
+  }
+
+  std::vector<double> solution(dimension, 0.0);
+  for (IndexType reverseOrdinal=0; reverseOrdinal<dimension; reverseOrdinal++)
+  {
+    const IndexType row = dimension - 1 - reverseOrdinal;
+    double value = rhs[row];
+    for (IndexType col=row + 1; col<dimension; col++) value -= matrix[static_cast<size_t>(row * dimension + col)] * solution[col];
+    solution[row] = value / matrix[static_cast<size_t>(row * dimension + row)];
+  }
+  return solution;
+}
+
+std::vector<double> applyDenseSchurAction(const std::vector<double> &bMatrix,
+                                          IndexType testDofCount,
+                                          IndexType trialDofCount,
+                                          const std::vector<double> &rhs,
+                                          const std::vector<double> &gMatrix)
+{
+  auto gInverseRhs = solveDenseLinearSystem(gMatrix, rhs, testDofCount);
+  std::vector<double> result(trialDofCount, 0.0);
+  for (IndexType trialOrdinal=0; trialOrdinal<trialDofCount; trialOrdinal++)
+  {
+    for (IndexType testOrdinal=0; testOrdinal<testDofCount; testOrdinal++)
+    {
+      result[trialOrdinal] += bMatrix[static_cast<size_t>(testOrdinal * trialDofCount + trialOrdinal)] * gInverseRhs[testOrdinal];
+    }
+  }
+  return result;
+}
+
 double explicitCachedBEntry(const TensorBilinearTerm &term,
                             const TensorDofLayoutPtr &dofLayout,
                             const TensorDofLayout::VariableLayout &trialLayout,
@@ -579,6 +669,109 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, CachedVlasovLikeVolumeBMatchesExp
                                                    row,
                                                    col);
       TEST_ASSERT(closeEnough(bMatrix[row * localContext.trialShape().totalDofs() + col], expected, 1e-11, 1e-13));
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineL2VolumeCellSchurComplementsSupportSeparableCoefficientSums )
+{
+  auto tensorMesh = makeSingleCellTensorMesh({{0.0, 1.0}, {0.0, 1.0}, {-2.0, 2.0}});
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("local-assembled-coefficient-sum"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 3),
+                                   makeFieldTensorVar("v", 3),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::singleDerivative(3, 2),
+                                   TensorFunction::constant(-1.0) * TensorFunction::componentCoordinate(2)
+                                     + TensorFunction::constant(0.5) * TensorFunction::componentCoordinate(0) * TensorFunction::componentCoordinate(1)));
+
+  auto blocks = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(tensorMesh,
+                                                                                      dofLayout,
+                                                                                      form,
+                                                                                      "u",
+                                                                                      "v");
+  TEST_EQUALITY(blocks.size(), static_cast<size_t>(1));
+
+  const auto &term = form->term(0);
+  const auto &block = blocks[0];
+  auto quadratureDegrees = quadratureDegreesForTerm(tensorMesh, term, block.cellTuple);
+  TensorBasisCacheND trialCache(tensorMesh, tensorMesh->trialDiscretization("u"), false, block.cellTuple, quadratureDegrees);
+  TensorBasisCacheND testCache (tensorMesh, tensorMesh->testDiscretization("v"), true,  block.cellTuple, quadratureDegrees);
+  auto fullCoefficientValues = coefficientValues(term.coefficient(), trialCache);
+  const auto trialLayout = dofLayout->layout("u", TENSOR_TRIAL_SPACE);
+  const auto testLayout  = dofLayout->layout("v", TENSOR_TEST_SPACE);
+
+  for (IndexType row=0; row<block.testShape.totalDofs(); row++)
+  {
+    for (IndexType col=0; col<block.trialShape.totalDofs(); col++)
+    {
+      const double expected = explicitCachedBEntry(term,
+                                                   dofLayout,
+                                                   trialLayout,
+                                                   testLayout,
+                                                   block.trialShape,
+                                                   block.testShape,
+                                                   trialCache,
+                                                   testCache,
+                                                   fullCoefficientValues,
+                                                   row,
+                                                   col);
+      TEST_ASSERT(closeEnough(block.bMatrix[row * block.trialShape.totalDofs() + col], expected, 1e-11, 1e-13));
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, SeparableCoefficientSumMatchesEquivalentSeparateTerms )
+{
+  auto tensorMesh = makeTwoByTwoAffineTensorMesh();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto sumForm = Teuchos::rcp(new TensorBilinearForm("coefficient-sum-single-term"));
+  sumForm->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                      makeFieldTensorVar("v", 2),
+                                      TensorComponentOperatorDescriptor::valueOnly(2),
+                                      TensorComponentOperatorDescriptor::singleDerivative(2, 0),
+                                      TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1)));
+
+  auto splitForm = Teuchos::rcp(new TensorBilinearForm("coefficient-sum-split-terms"));
+  splitForm->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                        makeFieldTensorVar("v", 2),
+                                        TensorComponentOperatorDescriptor::valueOnly(2),
+                                        TensorComponentOperatorDescriptor::singleDerivative(2, 0),
+                                        TensorFunction::componentCoordinate(0)));
+  splitForm->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                        makeFieldTensorVar("v", 2),
+                                        TensorComponentOperatorDescriptor::valueOnly(2),
+                                        TensorComponentOperatorDescriptor::singleDerivative(2, 0),
+                                        TensorFunction::componentCoordinate(1)));
+
+  auto sumBlocks = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(tensorMesh,
+                                                                                         dofLayout,
+                                                                                         sumForm,
+                                                                                         "u",
+                                                                                         "v");
+  auto splitBlocks = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(tensorMesh,
+                                                                                           dofLayout,
+                                                                                           splitForm,
+                                                                                           "u",
+                                                                                           "v");
+  TEST_EQUALITY(sumBlocks.size(), splitBlocks.size());
+  for (size_t blockOrdinal=0; blockOrdinal<sumBlocks.size(); blockOrdinal++)
+  {
+    TEST_EQUALITY(sumBlocks[blockOrdinal].bMatrix.size(), splitBlocks[blockOrdinal].bMatrix.size());
+    TEST_EQUALITY(sumBlocks[blockOrdinal].gDiagonal.size(), splitBlocks[blockOrdinal].gDiagonal.size());
+    TEST_EQUALITY(sumBlocks[blockOrdinal].kMatrix.size(), splitBlocks[blockOrdinal].kMatrix.size());
+    for (size_t entryOrdinal=0; entryOrdinal<sumBlocks[blockOrdinal].bMatrix.size(); entryOrdinal++)
+    {
+      TEST_ASSERT(closeEnough(sumBlocks[blockOrdinal].bMatrix[entryOrdinal], splitBlocks[blockOrdinal].bMatrix[entryOrdinal], 1e-12, 1e-14));
+    }
+    for (size_t entryOrdinal=0; entryOrdinal<sumBlocks[blockOrdinal].gDiagonal.size(); entryOrdinal++)
+    {
+      TEST_FLOATING_EQUALITY(sumBlocks[blockOrdinal].gDiagonal[entryOrdinal], splitBlocks[blockOrdinal].gDiagonal[entryOrdinal], 1e-14);
+    }
+    for (size_t entryOrdinal=0; entryOrdinal<sumBlocks[blockOrdinal].kMatrix.size(); entryOrdinal++)
+    {
+      TEST_ASSERT(closeEnough(sumBlocks[blockOrdinal].kMatrix[entryOrdinal], splitBlocks[blockOrdinal].kMatrix[entryOrdinal], 1e-11, 1e-13));
     }
   }
 }
@@ -880,6 +1073,175 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineL2VolumeSchurComplementMatr
   {
     const auto gid = matrix->getRangeMap()->getGlobalElement(localOrdinal);
     TEST_ASSERT(closeEnough(yHost(localOrdinal,0), expected[gid], 1e-11, 1e-13));
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineL2VolumeSchurComplementMatrixActionMatchesMatrixFreeVlasovLike1X1T1V )
+{
+  auto tensorMesh = makeVlasovLikeVolumeAffineTensorMesh1X1T1V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("vlasov-like-1x1t1v-volume-crs"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 3),
+                                   makeFieldTensorVar("w", 3),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::singleDerivative(3, 0),
+                                   TensorFunction::constant(-1.0) * TensorFunction::componentCoordinate(2)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 3),
+                                   makeFieldTensorVar("w", 3),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::singleDerivative(3, 1),
+                                   TensorFunction::constant(-1.0)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 3),
+                                   makeFieldTensorVar("w", 3),
+                                   TensorComponentOperatorDescriptor::valueOnly(3),
+                                   TensorComponentOperatorDescriptor::singleDerivative(3, 2),
+                                   TensorFunction::constant(-1.0) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
+
+  auto matrix = TensorLocalSchurComplementBuilder::affineL2VolumeSchurComplementMatrix(tensorMesh,
+                                                                                       dofLayout,
+                                                                                       form,
+                                                                                       "f",
+                                                                                       "w");
+  MatrixFreeTensorOperatorFactory factory;
+  auto bOperator = factory.build(tensorMesh,
+                                 dofLayout,
+                                 form,
+                                 TENSOR_TRIAL_SPACE,
+                                 "f",
+                                 TENSOR_TEST_SPACE,
+                                 "w");
+  TensorOperatorData operatorData(tensorMesh, dofLayout);
+  const IndexType trialDofCount = operatorData.coefficientCount(TENSOR_TRIAL_SPACE, "f");
+  const IndexType testDofCount  = operatorData.coefficientCount(TENSOR_TEST_SPACE,  "w");
+  TEST_EQUALITY(bOperator->domainSize(), trialDofCount);
+  TEST_EQUALITY(bOperator->rangeSize(),  testDofCount);
+  TEST_EQUALITY(matrix->getGlobalNumRows(), static_cast<Tpetra::global_size_t>(trialDofCount));
+  TEST_EQUALITY(matrix->getGlobalNumCols(), static_cast<Tpetra::global_size_t>(trialDofCount));
+
+  std::vector<double> input(trialDofCount, 0.0);
+  for (IndexType gid=0; gid<trialDofCount; gid++) input[gid] = 0.3 + 0.05 * static_cast<double>((gid % 17) + 1);
+
+  TVector<double> x(matrix->getDomainMap(), 1);
+  TVector<double> y(matrix->getRangeMap(), 1);
+  auto xHost = x.getLocalViewHost(Tpetra::Access::ReadWrite);
+  for (size_t localOrdinal=0; localOrdinal<matrix->getDomainMap()->getLocalNumElements(); localOrdinal++)
+  {
+    const auto gid = matrix->getDomainMap()->getGlobalElement(localOrdinal);
+    xHost(localOrdinal,0) = input[gid];
+  }
+  matrix->apply(x, y);
+
+  std::vector<double> bInputImage;
+  bOperator->apply(input, bInputImage);
+
+  std::vector<std::vector<double>> bColumns(trialDofCount);
+  for (IndexType trialOrdinal=0; trialOrdinal<trialDofCount; trialOrdinal++)
+  {
+    std::vector<double> basisVector(trialDofCount, 0.0);
+    basisVector[trialOrdinal] = 1.0;
+    bOperator->apply(basisVector, bColumns[trialOrdinal]);
+    TEST_EQUALITY(bColumns[trialOrdinal].size(), static_cast<size_t>(testDofCount));
+  }
+
+  std::vector<double> globalGDiagonal(testDofCount, 0.0);
+  auto blocks = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(tensorMesh,
+                                                                                      dofLayout,
+                                                                                      form,
+                                                                                      "f",
+                                                                                      "w");
+  for (const auto &block : blocks)
+  {
+    const IndexType tensorCellOrdinal = tensorMesh->topology()->tensorCellOrdinal(block.cellTuple);
+    const IndexType localTestDofCount = operatorData.volumeLocalDofCount(TENSOR_TEST_SPACE, "w", tensorCellOrdinal);
+    TEST_EQUALITY(localTestDofCount, block.testShape.totalDofs());
+    for (IndexType localTestOrdinal=0; localTestOrdinal<localTestDofCount; localTestOrdinal++)
+    {
+      const IndexType testGid = operatorData.volumeLocalToGlobalIndex(TENSOR_TEST_SPACE, "w", tensorCellOrdinal, localTestOrdinal);
+      TEST_ASSERT(globalGDiagonal[testGid] == 0.0);
+      globalGDiagonal[testGid] = block.gDiagonal[localTestOrdinal];
+    }
+  }
+
+  std::vector<double> expected(trialDofCount, 0.0);
+  for (IndexType trialOrdinal=0; trialOrdinal<trialDofCount; trialOrdinal++)
+  {
+    for (IndexType testOrdinal=0; testOrdinal<testDofCount; testOrdinal++)
+    {
+      TEST_ASSERT(globalGDiagonal[testOrdinal] > 0.0);
+      expected[trialOrdinal] += bColumns[trialOrdinal][testOrdinal] * bInputImage[testOrdinal] / globalGDiagonal[testOrdinal];
+    }
+  }
+
+  auto yHost = y.getLocalViewHost(Tpetra::Access::ReadOnly);
+  for (size_t localOrdinal=0; localOrdinal<matrix->getRangeMap()->getLocalNumElements(); localOrdinal++)
+  {
+    const auto gid = matrix->getRangeMap()->getGlobalElement(localOrdinal);
+    TEST_ASSERT(closeEnough(yHost(localOrdinal,0), expected[gid], 1e-10, 1e-12));
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineGraphVolumeSchurComplementMatrixActionMatchesMatrixFreeVlasovLike1D1T2V )
+{
+  auto tensorMesh = makeVlasovLikeVolumeAffineTensorMesh1D1T2V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("vlasov-like-1d1t2v-volume-graph-crs"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 4), makeFieldTensorVar("w", 4), TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 0), TensorFunction::constant(-1.0) * TensorFunction::componentCoordinate(2)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 4), makeFieldTensorVar("w", 4), TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 1), TensorFunction::constant(-1.0)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 4), makeFieldTensorVar("w", 4), TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 2), TensorFunction::constant(-0.5) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 4), makeFieldTensorVar("w", 4), TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 3), TensorFunction::constant(0.25) * TensorFunction::componentCoordinate(0) * TensorFunction::componentCoordinate(3) + TensorFunction::constant(-0.75) * TensorFunction::componentCoordinate(1)));
+
+  const double l2Weight = 1.75;
+  auto matrix = TensorLocalSchurComplementBuilder::affineGraphVolumeSchurComplementMatrix(tensorMesh, dofLayout, form, "f", "w", l2Weight);
+  MatrixFreeTensorOperatorFactory factory;
+  auto bOperator = factory.build(tensorMesh, dofLayout, form, TENSOR_TRIAL_SPACE, "f", TENSOR_TEST_SPACE, "w");
+  TensorOperatorData operatorData(tensorMesh, dofLayout);
+  const IndexType trialDofCount = operatorData.coefficientCount(TENSOR_TRIAL_SPACE, "f");
+  const IndexType testDofCount = operatorData.coefficientCount(TENSOR_TEST_SPACE, "w");
+  TEST_EQUALITY(bOperator->domainSize(), trialDofCount);
+  TEST_EQUALITY(bOperator->rangeSize(), testDofCount);
+
+  std::vector<double> input(trialDofCount, 0.0);
+  for (IndexType gid=0; gid<trialDofCount; gid++) input[gid] = -0.15 + 0.04 * static_cast<double>((gid % 19) + 1);
+
+  TVector<double> x(matrix->getDomainMap(), 1);
+  TVector<double> y(matrix->getRangeMap(), 1);
+  auto xHost = x.getLocalViewHost(Tpetra::Access::ReadWrite);
+  for (size_t localOrdinal=0; localOrdinal<matrix->getDomainMap()->getLocalNumElements(); localOrdinal++) xHost(localOrdinal,0) = input[matrix->getDomainMap()->getGlobalElement(localOrdinal)];
+  matrix->apply(x, y);
+
+  std::vector<double> bInputImage;
+  bOperator->apply(input, bInputImage);
+  std::vector<std::vector<double>> bColumns(trialDofCount);
+  for (IndexType trialOrdinal=0; trialOrdinal<trialDofCount; trialOrdinal++)
+  {
+    std::vector<double> basisVector(trialDofCount, 0.0);
+    basisVector[trialOrdinal] = 1.0;
+    bOperator->apply(basisVector, bColumns[trialOrdinal]);
+  }
+
+  std::vector<double> expected(trialDofCount, 0.0);
+  auto blocks = TensorLocalSchurComplementBuilder::affineGraphVolumeCellSchurComplements(tensorMesh, dofLayout, form, "f", "w", l2Weight);
+  for (const auto &block : blocks)
+  {
+    const IndexType tensorCellOrdinal = tensorMesh->topology()->tensorCellOrdinal(block.cellTuple);
+    const IndexType localTestDofCount = operatorData.volumeLocalDofCount(TENSOR_TEST_SPACE, "w", tensorCellOrdinal);
+    std::vector<double> localBInputImage(localTestDofCount, 0.0);
+    std::vector<double> localBColumns(static_cast<size_t>(localTestDofCount * trialDofCount), 0.0);
+    for (IndexType localTestOrdinal=0; localTestOrdinal<localTestDofCount; localTestOrdinal++)
+    {
+      const IndexType testGid = operatorData.volumeLocalToGlobalIndex(TENSOR_TEST_SPACE, "w", tensorCellOrdinal, localTestOrdinal);
+      localBInputImage[localTestOrdinal] = bInputImage[testGid];
+      for (IndexType trialOrdinal=0; trialOrdinal<trialDofCount; trialOrdinal++) localBColumns[static_cast<size_t>(localTestOrdinal * trialDofCount + trialOrdinal)] = bColumns[trialOrdinal][testGid];
+    }
+    auto localAction = applyDenseSchurAction(localBColumns, localTestDofCount, trialDofCount, localBInputImage, block.gMatrix);
+    for (IndexType trialOrdinal=0; trialOrdinal<trialDofCount; trialOrdinal++) expected[trialOrdinal] += localAction[trialOrdinal];
+  }
+
+  auto yHost = y.getLocalViewHost(Tpetra::Access::ReadOnly);
+  for (size_t localOrdinal=0; localOrdinal<matrix->getRangeMap()->getLocalNumElements(); localOrdinal++)
+  {
+    const auto gid = matrix->getRangeMap()->getGlobalElement(localOrdinal);
+    TEST_ASSERT(closeEnough(yHost(localOrdinal,0), expected[gid], 1e-10, 1e-12));
   }
 }
 

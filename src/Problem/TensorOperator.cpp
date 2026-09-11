@@ -222,9 +222,12 @@ namespace
     return value;
   }
 
-  bool appendSeparableCoefficientFactors(const TensorFunctionPtr &coefficient,
-                                         int componentCount,
-                                         std::vector<TensorFunctionPtr> &componentFactors)
+  using CoefficientFactorTuple = std::vector<TensorFunctionPtr>;
+  using CoefficientFactorExpansion = std::vector<CoefficientFactorTuple>;
+
+  bool appendCoefficientAsSingleComponentFactor(const TensorFunctionPtr &coefficient,
+                                                int componentCount,
+                                                CoefficientFactorTuple &componentFactors)
   {
     if (coefficient == Teuchos::null) return false;
     if (coefficient->hasSolutionDependencies()) return false;
@@ -245,22 +248,78 @@ namespace
       return true;
     }
 
-    if (!coefficient->isSeparableProduct()) return false;
-    for (const auto &child : coefficient->childFunctions())
+    return false;
+  }
+
+  CoefficientFactorTuple productOfFactorTuples(const CoefficientFactorTuple &left,
+                                               const CoefficientFactorTuple &right)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(left.size() != right.size(), std::invalid_argument,
+                               "MatrixFreeTensorOperator coefficient factor tuples must have matching ranks.");
+    CoefficientFactorTuple product = left;
+    for (size_t componentOrdinal=0; componentOrdinal<right.size(); componentOrdinal++)
     {
-      if (!appendSeparableCoefficientFactors(child, componentCount, componentFactors)) return false;
+      if (right[componentOrdinal] == Teuchos::null) continue;
+      product[componentOrdinal] = (product[componentOrdinal] == Teuchos::null) ? right[componentOrdinal]
+                                                                             : product[componentOrdinal] * right[componentOrdinal];
     }
+    return product;
+  }
+
+  bool appendSeparableCoefficientFactorTerms(const TensorFunctionPtr &coefficient,
+                                             int componentCount,
+                                             CoefficientFactorExpansion &coefficientFactorTerms)
+  {
+    if (coefficient == Teuchos::null) return false;
+    if (coefficient->hasSolutionDependencies()) return false;
+
+    if (coefficient->isSum())
+    {
+      for (const auto &child : coefficient->childFunctions())
+      {
+        if (!appendSeparableCoefficientFactorTerms(child, componentCount, coefficientFactorTerms)) return false;
+      }
+      return true;
+    }
+
+    if (coefficient->isProduct())
+    {
+      CoefficientFactorExpansion productExpansion(1, CoefficientFactorTuple(componentCount, Teuchos::null));
+      for (const auto &child : coefficient->childFunctions())
+      {
+        CoefficientFactorExpansion childExpansion;
+        if (!appendSeparableCoefficientFactorTerms(child, componentCount, childExpansion)) return false;
+
+        CoefficientFactorExpansion nextExpansion;
+        nextExpansion.reserve(productExpansion.size() * childExpansion.size());
+        for (const auto &leftFactors : productExpansion)
+        {
+          for (const auto &rightFactors : childExpansion)
+          {
+            nextExpansion.push_back(productOfFactorTuples(leftFactors, rightFactors));
+          }
+        }
+        productExpansion.swap(nextExpansion);
+      }
+      coefficientFactorTerms.insert(coefficientFactorTerms.end(), productExpansion.begin(), productExpansion.end());
+      return !productExpansion.empty();
+    }
+
+    CoefficientFactorTuple componentFactors(componentCount, Teuchos::null);
+    if (!appendCoefficientAsSingleComponentFactor(coefficient, componentCount, componentFactors)) return false;
+    coefficientFactorTerms.push_back(componentFactors);
     return true;
   }
 
   bool termSupportsSumFactorizedVolumeContraction(const TensorBilinearTerm &term,
-                                                  std::vector<TensorFunctionPtr> &coefficientFactors)
+                                                  CoefficientFactorExpansion &coefficientFactorTerms)
   {
     if (!term.isVolumeTerm()) return false;
     if (tensorVarIsTraceLike(term.trialVar()) || tensorVarIsTraceLike(term.testVar())) return false;
 
-    coefficientFactors.assign(term.componentCount(), Teuchos::null);
-    return appendSeparableCoefficientFactors(term.coefficient(), term.componentCount(), coefficientFactors);
+    coefficientFactorTerms.clear();
+    if (!appendSeparableCoefficientFactorTerms(term.coefficient(), term.componentCount(), coefficientFactorTerms)) return false;
+    return !coefficientFactorTerms.empty();
   }
 
   std::vector<double> coefficientValuesForComponent(const TensorFunctionPtr &coefficient,
@@ -325,36 +384,44 @@ namespace
                                           TensorOperatorInstrumentation *instrumentation)
   {
     const int componentCount = term.componentCount();
-    std::vector<TensorFunctionPtr> coefficientFactors(componentCount, Teuchos::null);
-    TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsSumFactorizedVolumeContraction(term, coefficientFactors), std::invalid_argument,
+    CoefficientFactorExpansion coefficientFactorTerms;
+    TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsSumFactorizedVolumeContraction(term, coefficientFactorTerms), std::invalid_argument,
                                "applySumFactorizedVolumeTermToCell requires a supported separable volume term.");
 
     const auto &trialShape = trialTraversal.shape();
     const auto &testShape  = testTraversal.shape();
 
-    const auto contractionConstructionStart = std::chrono::steady_clock::now();
-    TensorProductLocalOperator localOperator = TensorLocalSchurComplementBuilder::buildVolumeBOperator(term,
-                                                                                                      trialShape,
-                                                                                                      testShape,
-                                                                                                      trialBasisCache,
-                                                                                                      testBasisCache,
-                                                                                                      coefficientFactors);
-    recordTensorOperatorStage(instrumentation,
-                              TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION,
-                              contractionConstructionStart);
-
-    const auto localActionStart = std::chrono::steady_clock::now();
     std::vector<double> cellInput(trialShape.totalDofs(), 0.0);
     for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
     {
       cellInput[localTrialOrdinal] = localInput[trialTraversal.globalIndexForLocalOrdinal(localTrialOrdinal, tensorDofLayout)];
     }
 
-    std::vector<double> cellOutput;
-    localOperator.apply(cellInput, cellOutput);
-    recordTensorOperatorStage(instrumentation,
-                              TensorOperatorInstrumentation::LOCAL_ACTION,
-                              localActionStart);
+    std::vector<double> cellOutput(testShape.totalDofs(), 0.0);
+    for (const auto &coefficientFactors : coefficientFactorTerms)
+    {
+      const auto contractionConstructionStart = std::chrono::steady_clock::now();
+      TensorProductLocalOperator localOperator = TensorLocalSchurComplementBuilder::buildVolumeBOperator(term,
+                                                                                                        trialShape,
+                                                                                                        testShape,
+                                                                                                        trialBasisCache,
+                                                                                                        testBasisCache,
+                                                                                                        coefficientFactors);
+      recordTensorOperatorStage(instrumentation,
+                                TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION,
+                                contractionConstructionStart);
+
+      const auto localActionStart = std::chrono::steady_clock::now();
+      std::vector<double> termCellOutput;
+      localOperator.apply(cellInput, termCellOutput);
+      for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
+      {
+        cellOutput[localTestOrdinal] += termCellOutput[localTestOrdinal];
+      }
+      recordTensorOperatorStage(instrumentation,
+                                TensorOperatorInstrumentation::LOCAL_ACTION,
+                                localActionStart);
+    }
 
     const auto scatterStart = std::chrono::steady_clock::now();
     for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
@@ -778,8 +845,8 @@ namespace
         auto quadratureWeights = trialBasisCache.quadratureWeights();
         quadratureWeights.sync_host();
 
-        std::vector<TensorFunctionPtr> sumFactorizedCoefficientFactors;
-        if (termSupportsSumFactorizedVolumeContraction(term, sumFactorizedCoefficientFactors))
+        CoefficientFactorExpansion sumFactorizedCoefficientFactorTerms;
+        if (termSupportsSumFactorizedVolumeContraction(term, sumFactorizedCoefficientFactorTerms))
         {
           applySumFactorizedVolumeTermToCell(term,
                                             _tensorDofLayout,

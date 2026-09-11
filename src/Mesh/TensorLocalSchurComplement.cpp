@@ -224,9 +224,12 @@ namespace
     return std::max(1, degree + 1);
   }
 
-  bool appendSeparableCoefficientFactors(const TensorFunctionPtr &coefficient,
-                                         int componentCount,
-                                         std::vector<TensorFunctionPtr> &componentFactors)
+  using CoefficientFactorTuple = std::vector<TensorFunctionPtr>;
+  using CoefficientFactorExpansion = std::vector<CoefficientFactorTuple>;
+
+  bool appendCoefficientAsSingleComponentFactor(const TensorFunctionPtr &coefficient,
+                                                int componentCount,
+                                                CoefficientFactorTuple &componentFactors)
   {
     if (coefficient == Teuchos::null) return false;
     if (coefficient->hasSolutionDependencies()) return false;
@@ -247,22 +250,78 @@ namespace
       return true;
     }
 
-    if (!coefficient->isSeparableProduct()) return false;
-    for (const auto &child : coefficient->childFunctions())
+    return false;
+  }
+
+  CoefficientFactorTuple productOfFactorTuples(const CoefficientFactorTuple &left,
+                                               const CoefficientFactorTuple &right)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(left.size() != right.size(), std::invalid_argument,
+                               "TensorLocalSchurComplementBuilder coefficient factor tuples must have matching ranks.");
+    CoefficientFactorTuple product = left;
+    for (size_t componentOrdinal=0; componentOrdinal<right.size(); componentOrdinal++)
     {
-      if (!appendSeparableCoefficientFactors(child, componentCount, componentFactors)) return false;
+      if (right[componentOrdinal] == Teuchos::null) continue;
+      product[componentOrdinal] = (product[componentOrdinal] == Teuchos::null) ? right[componentOrdinal]
+                                                                             : product[componentOrdinal] * right[componentOrdinal];
     }
+    return product;
+  }
+
+  bool appendSeparableCoefficientFactorTerms(const TensorFunctionPtr &coefficient,
+                                             int componentCount,
+                                             CoefficientFactorExpansion &coefficientFactorTerms)
+  {
+    if (coefficient == Teuchos::null) return false;
+    if (coefficient->hasSolutionDependencies()) return false;
+
+    if (coefficient->isSum())
+    {
+      for (const auto &child : coefficient->childFunctions())
+      {
+        if (!appendSeparableCoefficientFactorTerms(child, componentCount, coefficientFactorTerms)) return false;
+      }
+      return true;
+    }
+
+    if (coefficient->isProduct())
+    {
+      CoefficientFactorExpansion productExpansion(1, CoefficientFactorTuple(componentCount, Teuchos::null));
+      for (const auto &child : coefficient->childFunctions())
+      {
+        CoefficientFactorExpansion childExpansion;
+        if (!appendSeparableCoefficientFactorTerms(child, componentCount, childExpansion)) return false;
+
+        CoefficientFactorExpansion nextExpansion;
+        nextExpansion.reserve(productExpansion.size() * childExpansion.size());
+        for (const auto &leftFactors : productExpansion)
+        {
+          for (const auto &rightFactors : childExpansion)
+          {
+            nextExpansion.push_back(productOfFactorTuples(leftFactors, rightFactors));
+          }
+        }
+        productExpansion.swap(nextExpansion);
+      }
+      coefficientFactorTerms.insert(coefficientFactorTerms.end(), productExpansion.begin(), productExpansion.end());
+      return !productExpansion.empty();
+    }
+
+    CoefficientFactorTuple componentFactors(componentCount, Teuchos::null);
+    if (!appendCoefficientAsSingleComponentFactor(coefficient, componentCount, componentFactors)) return false;
+    coefficientFactorTerms.push_back(componentFactors);
     return true;
   }
 
   bool termSupportsAffineL2VolumeCellSchurComplement(const TensorBilinearTerm &term,
-                                                     std::vector<TensorFunctionPtr> &coefficientFactors)
+                                                     CoefficientFactorExpansion &coefficientFactorTerms)
   {
     if (!term.isVolumeTerm()) return false;
     if (term.trialVar()->isTrace() || term.testVar()->isTrace()) return false;
 
-    coefficientFactors.assign(term.componentCount(), Teuchos::null);
-    return appendSeparableCoefficientFactors(term.coefficient(), term.componentCount(), coefficientFactors);
+    coefficientFactorTerms.clear();
+    if (!appendSeparableCoefficientFactorTerms(term.coefficient(), term.componentCount(), coefficientFactorTerms)) return false;
+    return !coefficientFactorTerms.empty();
   }
 
   bool hasMatchingVolumeTerms(const TensorBilinearFormPtr &bilinearForm,
@@ -708,8 +767,8 @@ TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(const Tens
       if (term.testVar()->name()  != testVarName)  continue;
       if (!term.isVolumeTerm()) continue;
 
-      std::vector<TensorFunctionPtr> coefficientFactors;
-      TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsAffineL2VolumeCellSchurComplement(term, coefficientFactors), std::invalid_argument,
+      CoefficientFactorExpansion coefficientFactorTerms;
+      TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsAffineL2VolumeCellSchurComplement(term, coefficientFactorTerms), std::invalid_argument,
                                  "TensorLocalSchurComplementBuilder encountered an unsupported affine L2 volume term for local assembled-cell construction.");
 
       std::vector<int> quadratureDegrees(term.componentCount(), 1);
@@ -725,16 +784,19 @@ TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(const Tens
 
       TensorBasisCacheND trialBasisCache(tensorMesh, trialDiscretization, false, cellTuple, quadratureDegrees);
       TensorBasisCacheND testBasisCache (tensorMesh, testDiscretization,  true,  cellTuple, quadratureDegrees);
-      auto bOperator = buildVolumeBOperator(term,
-                                            trialShape,
-                                            testShape,
-                                            trialBasisCache,
-                                            testBasisCache,
-                                            coefficientFactors);
-      auto termB = denseBMatrix(bOperator);
-      for (size_t entryOrdinal=0; entryOrdinal<block.bMatrix.size(); entryOrdinal++)
+      for (const auto &coefficientFactors : coefficientFactorTerms)
       {
-        block.bMatrix[entryOrdinal] += termB[entryOrdinal];
+        auto bOperator = buildVolumeBOperator(term,
+                                              trialShape,
+                                              testShape,
+                                              trialBasisCache,
+                                              testBasisCache,
+                                              coefficientFactors);
+        auto termB = denseBMatrix(bOperator);
+        for (size_t entryOrdinal=0; entryOrdinal<block.bMatrix.size(); entryOrdinal++)
+        {
+          block.bMatrix[entryOrdinal] += termB[entryOrdinal];
+        }
       }
       assembledAnyTerm = true;
     }
