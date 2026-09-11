@@ -15,6 +15,7 @@
 #include "TensorFunction.h"
 #include "TensorCoefficientMap.h"
 #include "TensorBasisCache.h"
+#include "TensorLocalSchurComplement.h"
 #include "TensorProductLocalOperator.h"
 #include "Var.h"
 #include "Teuchos_TestForException.hpp"
@@ -332,68 +333,12 @@ namespace
     const auto &testShape  = testTraversal.shape();
 
     const auto contractionConstructionStart = std::chrono::steady_clock::now();
-    std::vector<std::vector<double>> componentMatrices(componentCount);
-    for (int d=0; d<componentCount; d++)
-    {
-      const auto &trialCache = trialBasisCache.componentCache(d);
-      const auto &testCache  = testBasisCache.componentCache(d);
-      TEUCHOS_TEST_FOR_EXCEPTION(trialCache.pointCount() != testCache.pointCount(), std::logic_error,
-                                 "Sum-factorized volume term expected matching trial/test quadrature rules.");
-
-      auto trialValues = trialCache.valuesAtQuadrature();
-      auto trialDerivatives = trialCache.derivativesAtQuadrature();
-      auto testValues = testCache.valuesAtQuadrature();
-      auto testDerivatives = testCache.derivativesAtQuadrature();
-      auto weights = trialCache.referenceWeights();
-      trialValues.sync_host();
-      trialDerivatives.sync_host();
-      testValues.sync_host();
-      testDerivatives.sync_host();
-      weights.sync_host();
-
-      std::vector<double> coefficientValues;
-      if (coefficientFactors[d] != Teuchos::null)
-      {
-        const auto coefficientEvaluationStart = std::chrono::steady_clock::now();
-        coefficientValues = coefficientValuesForComponent(coefficientFactors[d], trialCache, componentCount, d);
-        recordTensorOperatorStage(instrumentation,
-                                  TensorOperatorInstrumentation::COEFFICIENT_EVALUATION,
-                                  coefficientEvaluationStart);
-      }
-
-      componentMatrices[d].assign(testCache.basisCardinality() * trialCache.basisCardinality(), 0.0);
-      for (int testOrdinal=0; testOrdinal<testCache.basisCardinality(); testOrdinal++)
-      {
-        for (int trialOrdinal=0; trialOrdinal<trialCache.basisCardinality(); trialOrdinal++)
-        {
-          double entry = 0.0;
-          for (int pointOrdinal=0; pointOrdinal<trialCache.pointCount(); pointOrdinal++)
-          {
-            const double trialValue = term.trialOperator().takesDerivativeInComponent(d)
-                ? trialDerivatives.h_view(trialOrdinal,pointOrdinal) * trialCache.derivativeScale()
-                : trialValues.h_view(trialOrdinal,pointOrdinal);
-            const double testValue = term.testOperator().takesDerivativeInComponent(d)
-                ? testDerivatives.h_view(testOrdinal,pointOrdinal) * testCache.derivativeScale()
-                : testValues.h_view(testOrdinal,pointOrdinal);
-            const double coefficientValue = (coefficientFactors[d] != Teuchos::null) ? coefficientValues[pointOrdinal] : 1.0;
-            entry += weights.h_view(pointOrdinal) * trialCache.jacobian() * coefficientValue * trialValue * testValue;
-          }
-          componentMatrices[d][testOrdinal * trialCache.basisCardinality() + trialOrdinal] = entry;
-        }
-      }
-    }
-
-    std::vector<TensorComponentLocalMatrix> componentOperators;
-    componentOperators.reserve(componentCount);
-    for (int d=0; d<componentCount; d++)
-    {
-      const auto &trialCache = trialBasisCache.componentCache(d);
-      const auto &testCache  = testBasisCache.componentCache(d);
-      componentOperators.push_back(TensorComponentLocalMatrix(testCache.basisCardinality(),
-                                                              trialCache.basisCardinality(),
-                                                              componentMatrices[d]));
-    }
-    TensorProductLocalOperator localOperator(trialShape, testShape, componentOperators);
+    TensorProductLocalOperator localOperator = TensorLocalSchurComplementBuilder::buildVolumeBOperator(term,
+                                                                                                      trialShape,
+                                                                                                      testShape,
+                                                                                                      trialBasisCache,
+                                                                                                      testBasisCache,
+                                                                                                      coefficientFactors);
     recordTensorOperatorStage(instrumentation,
                               TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION,
                               contractionConstructionStart);

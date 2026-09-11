@@ -78,7 +78,15 @@ Next slice:
 
 Next slice:
 
-- Promote the reusable local-action path toward explicit local B/G/K construction for affine L2 test-norm cells.  Start by building and testing local B and diagonal/mass-like G blocks from the same separable component matrices used by `TensorProductLocalOperator`, then compare local K = B G^-1 B^T blocks against legacy integration on the smallest tensor meshes before adding CRS scatter.
+- Completed first explicit local B/G/K construction slice: added a host-side `TensorLocalSchurComplementBuilder` that materializes local B blocks from `TensorProductLocalOperator`, constructs diagonal/mass-like tensor-product G entries from one-dimensional diagonal factors, and forms the local diagonal-test-norm Schur complement using the current test-by-trial local B convention (`K = B^T G^{-1} B`).  Phase 0 tests compare B, G, and K against an explicit affine L2 tensor-quadrature reference on the smallest two-factor cell before any CRS scatter is introduced.
+
+Next slice:
+
+- Completed cached affine volume-cell B/G/K wiring slice: `TensorLocalSchurComplementBuilder` can now build per-cell local B operators directly from `TensorBasisCacheND`, term operator descriptors, and separable coefficient factors, and can construct L2 mass-diagonal G entries from cached test basis data.  The sum-factorized `MatrixFreeTensorOperator` volume path now uses this shared B construction helper instead of duplicating component-matrix setup.  Phase 0 tests compare cache-built B blocks against explicit tensor quadrature for affine two-factor cells and a 1X1T1V-like volume term, and continue checking the local diagonal-test-norm K block symmetry before CRS scatter is introduced.
+
+Next slice:
+
+- Add the first assembled-cell path that loops over affine L2 volume cells, forms local B and diagonal G with `TensorLocalSchurComplementBuilder`, computes local K = B^T G^{-1} B in the trial-coefficient convention, and compares those local K blocks against the legacy/reference dense integration for the smallest tensor meshes.  Keep this local-only until the per-cell K comparison is stable; then add CRS preallocation/scatter as the following slice.
 
 ## Phase 2: N-factor basis and quadrature cache
 

@@ -20,6 +20,7 @@ set(PHASE0_TEST_SOURCES
   TensorBasisCacheTests.cpp
   TensorBasisTests.cpp
   TensorProductLocalOperatorTests.cpp
+  TensorLocalSchurComplementTests.cpp
   TensorFunctionTests.cpp
   TensorMeshTests.cpp
   TensorOperatorDataTests.cpp
