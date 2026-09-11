@@ -331,6 +331,47 @@ double explicitCachedBEntry(const TensorBilinearTerm &term,
   return entry;
 }
 
+double explicitCachedGraphGEntry(const TensorDofLayoutPtr &dofLayout,
+                                 const TensorDofLayout::VariableLayout &testLayout,
+                                 const TensorFactorSpaceShape &testShape,
+                                 const TensorBasisCacheND &testCache,
+                                 double l2Weight,
+                                 IndexType rowOrdinal,
+                                 IndexType colOrdinal)
+{
+  std::vector<int> rowBasisOrdinals(testShape.componentCount(), 0);
+  std::vector<int> colBasisOrdinals(testShape.componentCount(), 0);
+  std::vector<int> pointOrdinals(testShape.componentCount(), 0);
+  dofLayout->decodeLocalDofOrdinal(testLayout, testShape, TENSOR_VARIABLE_ORDERING, rowOrdinal, rowBasisOrdinals);
+  dofLayout->decodeLocalDofOrdinal(testLayout, testShape, TENSOR_VARIABLE_ORDERING, colOrdinal, colBasisOrdinals);
+
+  auto weights = testCache.quadratureWeights();
+  weights.sync_host();
+  double entry = 0.0;
+  for (IndexType flatPointOrdinal=0; flatPointOrdinal<testCache.tensorPointCount(); flatPointOrdinal++)
+  {
+    IndexType workingOrdinal = flatPointOrdinal;
+    for (int d=0; d<testShape.componentCount(); d++)
+    {
+      pointOrdinals[d] = workingOrdinal % testCache.componentCache(d).pointCount();
+      workingOrdinal /= testCache.componentCache(d).pointCount();
+    }
+
+    const auto valueDescriptor = TensorComponentOperatorDescriptor::valueOnly(testShape.componentCount());
+    const double rowValue = cachedBasisEvaluationAtPoint(rowBasisOrdinals, testCache, valueDescriptor, pointOrdinals);
+    const double colValue = cachedBasisEvaluationAtPoint(colBasisOrdinals, testCache, valueDescriptor, pointOrdinals);
+    entry += weights.h_view(flatPointOrdinal) * l2Weight * rowValue * colValue;
+    for (int derivativeComponent=0; derivativeComponent<testShape.componentCount(); derivativeComponent++)
+    {
+      const auto derivativeDescriptor = TensorComponentOperatorDescriptor::singleDerivative(testShape.componentCount(), derivativeComponent);
+      const double rowDerivative = cachedBasisEvaluationAtPoint(rowBasisOrdinals, testCache, derivativeDescriptor, pointOrdinals);
+      const double colDerivative = cachedBasisEvaluationAtPoint(colBasisOrdinals, testCache, derivativeDescriptor, pointOrdinals);
+      entry += weights.h_view(flatPointOrdinal) * rowDerivative * colDerivative;
+    }
+  }
+  return entry;
+}
+
 TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, LocalBAndDiagonalGMatchExplicitTensorQuadratureReference )
 {
   auto shape = makeShape({2,2});
@@ -590,6 +631,145 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineL2VolumeCellSchurComplement
     {
       TEST_ASSERT(closeEnough(block.kMatrix[entryOrdinal], referenceK[entryOrdinal], 1e-12, 1e-14));
     }
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineGraphNormLocalSchurComplementsMatchExplicitReference )
+{
+  auto tensorMesh = makeTwoByTwoAffineTensorMesh();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("assembled-affine-graph-local"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                   makeFieldTensorVar("v", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::constant(1.5)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                   makeFieldTensorVar("v", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::singleDerivative(2, 1),
+                                   TensorFunction::componentCoordinate(0)));
+
+  const double l2Weight = 3.0;
+  auto blocks = TensorLocalSchurComplementBuilder::affineGraphVolumeCellSchurComplements(tensorMesh,
+                                                                                         dofLayout,
+                                                                                         form,
+                                                                                         "u",
+                                                                                         "v",
+                                                                                         l2Weight);
+  TEST_EQUALITY(blocks.size(), static_cast<size_t>(tensorMesh->topology()->activeCellCount()));
+  const auto testLayout = dofLayout->layout("v", TENSOR_TEST_SPACE);
+  for (const auto &block : blocks)
+  {
+    std::vector<int> gQuadratureDegrees(block.testShape.componentCount(), 1);
+    for (int d=0; d<block.testShape.componentCount(); d++)
+    {
+      const int testPolyOrder = tensorMesh->effectivePolyOrder(tensorMesh->testDiscretization("v"), block.cellTuple[d], d, true);
+      gQuadratureDegrees[d] = std::max(1, 2 * testPolyOrder + 1);
+    }
+    TensorBasisCacheND gTestCache(tensorMesh, tensorMesh->testDiscretization("v"), true, block.cellTuple, gQuadratureDegrees);
+
+    TEST_EQUALITY(block.gMatrix.size(), static_cast<size_t>(block.testShape.totalDofs() * block.testShape.totalDofs()));
+    TEST_EQUALITY(block.kMatrix.size(), static_cast<size_t>(block.trialShape.totalDofs() * block.trialShape.totalDofs()));
+    auto referenceK = TensorLocalSchurComplementBuilder::formDenseTestNormSchurComplement(block.bMatrix,
+                                                                                         block.testShape.totalDofs(),
+                                                                                         block.trialShape.totalDofs(),
+                                                                                         block.gMatrix);
+    for (IndexType row=0; row<block.testShape.totalDofs(); row++)
+    {
+      TEST_FLOATING_EQUALITY(block.gDiagonal[row], block.gMatrix[row * block.testShape.totalDofs() + row], 1e-14);
+      for (IndexType col=0; col<block.testShape.totalDofs(); col++)
+      {
+        const double expected = explicitCachedGraphGEntry(dofLayout, testLayout, block.testShape, gTestCache, l2Weight, row, col);
+        TEST_ASSERT(closeEnough(block.gMatrix[row * block.testShape.totalDofs() + col], expected, 1e-12, 1e-14));
+        TEST_ASSERT(closeEnough(block.gMatrix[row * block.testShape.totalDofs() + col],
+                                block.gMatrix[col * block.testShape.totalDofs() + row],
+                                1e-12,
+                                1e-14));
+      }
+    }
+    for (IndexType row=0; row<block.trialShape.totalDofs(); row++)
+    {
+      for (IndexType col=0; col<block.trialShape.totalDofs(); col++)
+      {
+        TEST_ASSERT(closeEnough(block.kMatrix[row * block.trialShape.totalDofs() + col], referenceK[row * block.trialShape.totalDofs() + col], 1e-12, 1e-14));
+        TEST_ASSERT(closeEnough(block.kMatrix[row * block.trialShape.totalDofs() + col],
+                                block.kMatrix[col * block.trialShape.totalDofs() + row],
+                                1e-12,
+                                1e-14));
+      }
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineGraphNormVolumeSchurComplementMatrixActionMatchesLocalBlockScatter )
+{
+  auto tensorMesh = makeTwoByTwoAffineTensorMesh();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("assembled-affine-graph-crs"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                   makeFieldTensorVar("v", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::constant(1.5)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                   makeFieldTensorVar("v", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::singleDerivative(2, 1),
+                                   TensorFunction::componentCoordinate(0)));
+
+  const double l2Weight = 2.5;
+  auto matrix = TensorLocalSchurComplementBuilder::affineGraphVolumeSchurComplementMatrix(tensorMesh,
+                                                                                         dofLayout,
+                                                                                         form,
+                                                                                         "u",
+                                                                                         "v",
+                                                                                         l2Weight);
+  TensorOperatorData operatorData(tensorMesh, dofLayout);
+  const IndexType globalDofCount = operatorData.coefficientCount(TENSOR_TRIAL_SPACE, "u");
+  TEST_EQUALITY(matrix->getGlobalNumRows(), static_cast<Tpetra::global_size_t>(globalDofCount));
+  TEST_EQUALITY(matrix->getGlobalNumCols(), static_cast<Tpetra::global_size_t>(globalDofCount));
+
+  TVector<double> x(matrix->getDomainMap(), 1);
+  TVector<double> y(matrix->getRangeMap(), 1);
+  auto xHost = x.getLocalViewHost(Tpetra::Access::ReadWrite);
+  for (size_t localOrdinal=0; localOrdinal<matrix->getDomainMap()->getLocalNumElements(); localOrdinal++)
+  {
+    const auto gid = matrix->getDomainMap()->getGlobalElement(localOrdinal);
+    xHost(localOrdinal,0) = 0.4 + 0.075 * static_cast<double>(gid + 1);
+  }
+  matrix->apply(x, y);
+
+  std::vector<double> input(globalDofCount, 0.0);
+  for (IndexType gid=0; gid<globalDofCount; gid++) input[gid] = 0.4 + 0.075 * static_cast<double>(gid + 1);
+
+  std::vector<double> expected(globalDofCount, 0.0);
+  auto blocks = TensorLocalSchurComplementBuilder::affineGraphVolumeCellSchurComplements(tensorMesh,
+                                                                                         dofLayout,
+                                                                                         form,
+                                                                                         "u",
+                                                                                         "v",
+                                                                                         l2Weight);
+  for (const auto &block : blocks)
+  {
+    const IndexType tensorCellOrdinal = tensorMesh->topology()->tensorCellOrdinal(block.cellTuple);
+    const IndexType localDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE, "u", tensorCellOrdinal);
+    for (IndexType localRow=0; localRow<localDofCount; localRow++)
+    {
+      const IndexType rowGid = operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "u", tensorCellOrdinal, localRow);
+      for (IndexType localCol=0; localCol<localDofCount; localCol++)
+      {
+        const IndexType colGid = operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "u", tensorCellOrdinal, localCol);
+        expected[rowGid] += block.kMatrix[static_cast<size_t>(localRow * localDofCount + localCol)] * input[colGid];
+      }
+    }
+  }
+
+  auto yHost = y.getLocalViewHost(Tpetra::Access::ReadOnly);
+  for (size_t localOrdinal=0; localOrdinal<matrix->getRangeMap()->getLocalNumElements(); localOrdinal++)
+  {
+    const auto gid = matrix->getRangeMap()->getGlobalElement(localOrdinal);
+    TEST_ASSERT(closeEnough(yHost(localOrdinal,0), expected[gid], 1e-11, 1e-13));
   }
 }
 

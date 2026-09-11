@@ -39,6 +39,7 @@ namespace Camellia
       TensorFactorSpaceShape testShape;
       std::vector<double> bMatrix;
       std::vector<double> gDiagonal;
+      std::vector<double> gMatrix;
       std::vector<double> kMatrix;
     };
 
@@ -58,6 +59,10 @@ namespace Camellia
     static std::vector<double> l2TestMassDiagonal(const TensorFactorSpaceShape &testShape,
                                                   const TensorBasisCacheND &testBasisCache);
 
+    static std::vector<double> graphTestNormMatrix(const TensorFactorSpaceShape &testShape,
+                                                   const TensorBasisCacheND &testBasisCache,
+                                                   double l2Weight = 1.0);
+
     static std::vector<double> tensorProductDiagonal(const TensorFactorSpaceShape &shape,
                                                      const std::vector<std::vector<double>> &componentDiagonals);
 
@@ -69,11 +74,23 @@ namespace Camellia
                                                                    IndexType trialDofCount,
                                                                    const std::vector<double> &gDiagonal);
 
+    static std::vector<double> formDenseTestNormSchurComplement(const std::vector<double> &bMatrix,
+                                                                IndexType testDofCount,
+                                                                IndexType trialDofCount,
+                                                                const std::vector<double> &gMatrix);
+
     static std::vector<LocalVolumeSchurComplementBlock> affineL2VolumeCellSchurComplements(const TensorMeshPtr &tensorMesh,
                                                                                            const TensorDofLayoutPtr &tensorDofLayout,
                                                                                            const TensorBilinearFormPtr &bilinearForm,
                                                                                            const std::string &trialVarName,
                                                                                            const std::string &testVarName);
+
+    static std::vector<LocalVolumeSchurComplementBlock> affineGraphVolumeCellSchurComplements(const TensorMeshPtr &tensorMesh,
+                                                                                              const TensorDofLayoutPtr &tensorDofLayout,
+                                                                                              const TensorBilinearFormPtr &bilinearForm,
+                                                                                              const std::string &trialVarName,
+                                                                                              const std::string &testVarName,
+                                                                                              double l2Weight = 1.0);
 
     static std::vector<LocalBoundaryBBlock> affineBoundaryBBlocks(const TensorMeshPtr &tensorMesh,
                                                                  const TensorDofLayoutPtr &tensorDofLayout,
@@ -87,6 +104,14 @@ namespace Camellia
                                                                   const std::string &trialVarName,
                                                                   const std::string &testVarName,
                                                                   Teuchos_CommPtr comm = Teuchos::null);
+
+    static TMatrixPtr<double> affineGraphVolumeSchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                     const TensorDofLayoutPtr &tensorDofLayout,
+                                                                     const TensorBilinearFormPtr &bilinearForm,
+                                                                     const std::string &trialVarName,
+                                                                     const std::string &testVarName,
+                                                                     double l2Weight = 1.0,
+                                                                     Teuchos_CommPtr comm = Teuchos::null);
 
     static TMatrixPtr<double> affineL2VolumeSchurComplementMatrix(const TensorMeshPtr &tensorMesh,
                                                                   const TensorDofLayoutPtr &tensorDofLayout,

@@ -110,7 +110,11 @@ Next slice:
 
 Next slice:
 
-- Start graph-norm support for local Schur complements: add separable derivative contributions to the test norm G path beyond the current diagonal L2 approximation, validate local G/K blocks against explicit tensor quadrature, then thread the richer local test norm through the existing CRS assembly helpers.
+- Completed first graph-norm local Schur-complement slice: `TensorLocalSchurComplementBuilder` now can form dense local graph-norm test matrices from a weighted L2 term plus separable per-component derivative/stiffness contributions, solve dense local `G y = B` columns to form `K = B^T G^{-1} B`, and assemble a single-variable affine volume graph-norm CRS matrix.  Phase 0 tests validate local graph-norm G entries against explicit tensor quadrature, local K symmetry/consistency, and CRS action against local-block scatter.
+
+Next slice:
+
+- Thread graph-norm support through the multi-variable and volume+boundary CRS helpers, then compare those richer assembled actions against a dense/local reference before moving on to broader Vlasov coefficient coverage.
 
 ## Phase 2: N-factor basis and quadrature cache
 
