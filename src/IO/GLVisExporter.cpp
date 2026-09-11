@@ -298,12 +298,26 @@ void GLVisExporter::writeExport(const vector<TFunctionPtr<double>> &functions, c
   int numProcs = comm->getSize();
 
   MeshTopologyViewPtr meshTopo = _mesh->getTopology();
+  bool localUnsupportedTopology = false;
   for (GlobalIndexType cellID : cellIndices)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(cellHasCurvedEdges(meshTopo, cellID), std::invalid_argument,
-                               "GLVisExporter supports straight-sided geometry only; curvilinear cells are unsupported");
-    mfemNodePerm(meshTopo->getCell(cellID)->topology());
+    if (cellHasCurvedEdges(meshTopo, cellID))
+    {
+      localUnsupportedTopology = true;
+      continue;
+    }
+    try
+    {
+      mfemNodePerm(meshTopo->getCell(cellID)->topology());
+    }
+    catch (const std::invalid_argument &)
+    {
+      localUnsupportedTopology = true;
+    }
   }
+  bool unsupportedTopology = MPIWrapper::globalOr(comm, localUnsupportedTopology);
+  TEUCHOS_TEST_FOR_EXCEPTION(unsupportedTopology, std::invalid_argument,
+                             "GLVisExporter supports straight-sided segment, quadrilateral, and hexahedral topologies only; curvilinear cells and simplices are unsupported");
 
   int degree = MPIWrapper::max(comm, max(localDegree, _minDegree));
   int n1D = degree + 1;
