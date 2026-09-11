@@ -1,9 +1,17 @@
 #include "TensorLocalSchurComplement.h"
 
 #include <algorithm>
+#include <map>
+#include <set>
 #include <stdexcept>
 
+#include "Basis.h"
+#include "CamelliaIntrepidExtendedTypes.h"
+#include "CellTopology.h"
+#include "CubatureFactory.h"
+#include "MPIWrapper.h"
 #include "Teuchos_TestForException.hpp"
+#include "Var.h"
 
 using namespace Camellia;
 
@@ -118,6 +126,157 @@ namespace
 
     coefficientFactors.assign(term.componentCount(), Teuchos::null);
     return appendSeparableCoefficientFactors(term.coefficient(), term.componentCount(), coefficientFactors);
+  }
+
+  bool hasMatchingVolumeTerms(const TensorBilinearFormPtr &bilinearForm,
+                              const std::string &trialVarName,
+                              const std::string &testVarName)
+  {
+    for (const auto &term : bilinearForm->terms())
+    {
+      if (term.trialVar()->name() != trialVarName) continue;
+      if (term.testVar()->name()  != testVarName)  continue;
+      if (term.isVolumeTerm()) return true;
+    }
+    return false;
+  }
+
+  bool hasMatchingBoundaryTerms(const TensorBilinearFormPtr &bilinearForm,
+                                const std::string &trialVarName,
+                                const std::string &testVarName)
+  {
+    for (const auto &term : bilinearForm->terms())
+    {
+      if (term.trialVar()->name() != trialVarName) continue;
+      if (term.testVar()->name()  != testVarName)  continue;
+      if (term.isBoundaryTerm()) return true;
+    }
+    return false;
+  }
+
+  struct LineQuadratureRule
+  {
+    std::vector<double> points;
+    std::vector<double> weights;
+  };
+
+  struct BoundaryBasisData1D
+  {
+    std::vector<double> values;
+    int fieldCount = 0;
+    int pointCount = 0;
+  };
+
+  bool tensorVarIsTraceLike(const TensorVarPtr &tensorVar)
+  {
+    return (tensorVar != Teuchos::null) && tensorVar->isTrace();
+  }
+
+  bool tensorVarIsFluxLike(const TensorVarPtr &tensorVar)
+  {
+    return (tensorVar != Teuchos::null) && tensorVar->isFluxLikeTrace();
+  }
+
+  LineQuadratureRule lineQuadratureFromCubatureFactory(int exactnessDegree)
+  {
+    CubatureFactory cubFactory;
+    auto cubature = cubFactory.create(CellTopology::line(), exactnessDegree);
+
+    const int pointCount = cubature->getNumPoints();
+    auto points = cubature->allocateCubaturePoints();
+    auto weights = cubature->allocateCubatureWeights();
+    cubature->getCubature(points, weights);
+
+    auto pointsView  = points.getTensorComponent(0);
+    auto weightsView = weights.getTensorComponent(0).getUnderlyingView();
+    auto pointsHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), pointsView);
+    auto weightsHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), weightsView);
+
+    LineQuadratureRule rule;
+    rule.points.resize(pointCount);
+    rule.weights.resize(pointCount);
+    for (int p=0; p<pointCount; p++)
+    {
+      rule.points[p] = pointsHost(p,0);
+      rule.weights[p] = weightsHost(p);
+    }
+    return rule;
+  }
+
+  BoundaryBasisData1D buildBoundaryBasisDataForComponent(const TensorMeshPtr &tensorMesh,
+                                                         const TensorVarDiscretizationPtr &discretization,
+                                                         int componentOrdinal,
+                                                         bool isTest,
+                                                         const ComponentCellID1D &cellID,
+                                                         const std::vector<double> &quadraturePoints)
+  {
+    BoundaryBasisData1D data;
+    auto basisFamily = tensorMesh->effectiveBasisFamily(discretization);
+    VarPtr componentVar = discretization->tensorVar()->componentVar(componentOrdinal);
+    const int polyOrder = tensorMesh->effectivePolyOrder(discretization, cellID, componentOrdinal, isTest);
+    auto basis = basisFamily->getBasis(CellTopology::line(), efsForSpace(componentVar->space()), polyOrder);
+
+    data.fieldCount = basis->getCardinality();
+    data.pointCount = static_cast<int>(quadraturePoints.size());
+    data.values.assign(data.fieldCount * data.pointCount, 0.0);
+
+    Camellia::FieldContainer<double> refPointContainer(data.pointCount, 1);
+    for (int p=0; p<data.pointCount; p++) refPointContainer(p,0) = quadraturePoints[p];
+
+    Camellia::FieldContainer<double> basisValues(data.fieldCount, data.pointCount);
+    basis->getValues(basisValues, refPointContainer, OP_VALUE);
+    for (int fieldOrdinal=0; fieldOrdinal<data.fieldCount; fieldOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal<data.pointCount; pointOrdinal++)
+      {
+        data.values[fieldOrdinal * data.pointCount + pointOrdinal] = basisValues(fieldOrdinal, pointOrdinal);
+      }
+    }
+    return data;
+  }
+
+  double boundaryBasisValue(const TensorVarPtr &tensorVar,
+                            const std::vector<int> &componentBasisOrdinals,
+                            const std::vector<BoundaryBasisData1D> &basisData,
+                            int orthogonalComponentOrdinal,
+                            const std::vector<int> &pointOrdinals)
+  {
+    double value = 1.0;
+    for (int d=0; d<static_cast<int>(componentBasisOrdinals.size()); d++)
+    {
+      if (tensorVarIsTraceLike(tensorVar) && (d == tensorVar->traceComponentOrdinal()))
+      {
+        value *= (componentBasisOrdinals[d] == 0) ? 1.0 : 0.0;
+        continue;
+      }
+      const int pointOrdinal = (d == orthogonalComponentOrdinal) ? 0 : pointOrdinals[d];
+      value *= basisData[d].values[componentBasisOrdinals[d] * basisData[d].pointCount + pointOrdinal];
+    }
+    return value;
+  }
+
+  ComponentCellID1D firstIncidentOrthogonalCell(const TensorMeshPtr &tensorMesh,
+                                                const TensorMeshTopology::TensorSkeletonEntity &entity)
+  {
+    auto orthogonalTopo = tensorMesh->topology()->componentMeshTopology(entity.orthogonalComponentOrdinal());
+    const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
+    const IndexType incidentEnd   = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal() + 1);
+    TEUCHOS_TEST_FOR_EXCEPTION(incidentBegin >= incidentEnd, std::logic_error,
+                               "TensorLocalSchurComplementBuilder expected at least one incident orthogonal-component cell for boundary assembly.");
+    return orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
+  }
+
+  bool termSupportsAffineBoundaryB(const TensorBilinearTerm &term)
+  {
+    if (!term.isBoundaryTerm()) return false;
+    if (!term.trialOperator().isValueOnly()) return false;
+    if (!term.testOperator().isValueOnly()) return false;
+    const bool trialTrace = tensorVarIsTraceLike(term.trialVar());
+    const bool testTrace  = tensorVarIsTraceLike(term.testVar());
+    if (trialTrace == testTrace) return false;
+    if (term.coefficient() == Teuchos::null) return false;
+    if (term.coefficient()->hasSolutionDependencies()) return false;
+    return true;
   }
 }
 
@@ -391,4 +550,703 @@ TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(const Tens
   }
 
   return blocks;
+}
+
+TMatrixPtr<double> TensorLocalSchurComplementBuilder::affineL2VolumeSchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                                          const TensorDofLayoutPtr &tensorDofLayout,
+                                                                                          const TensorBilinearFormPtr &bilinearForm,
+                                                                                          const std::string &trialVarName,
+                                                                                          const std::string &testVarName,
+                                                                                          Teuchos_CommPtr comm)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorMesh == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorMesh for CRS assembly.");
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorDofLayout == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorDofLayout for CRS assembly.");
+  if (comm == Teuchos::null)
+  {
+    comm = MPIWrapper::TeuchosCommSerial();
+  }
+
+  TensorOperatorData operatorData(tensorMesh, tensorDofLayout);
+  const IndexType coefficientCount = operatorData.coefficientCount(TENSOR_TRIAL_SPACE, trialVarName);
+
+  using Matrix = TMatrix<double>;
+  using GO = typename Matrix::global_ordinal_type;
+  using Scalar = double;
+
+  Teuchos::Array<GO> rowGids(coefficientCount);
+  for (IndexType gid=0; gid<coefficientCount; gid++)
+  {
+    rowGids[gid] = static_cast<GO>(gid);
+  }
+  TMapPtr map = Teuchos::rcp(new TMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+                                      rowGids(),
+                                      0,
+                                      comm));
+
+  auto blocks = affineL2VolumeCellSchurComplements(tensorMesh,
+                                                   tensorDofLayout,
+                                                   bilinearForm,
+                                                   trialVarName,
+                                                   testVarName);
+
+  std::vector<std::set<GO>> rowColumns(coefficientCount);
+  for (const auto &block : blocks)
+  {
+    const IndexType tensorCellOrdinal = tensorMesh->topology()->tensorCellOrdinal(block.cellTuple);
+    const IndexType localDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal);
+    TEUCHOS_TEST_FOR_EXCEPTION(localDofCount != block.trialShape.totalDofs(), std::logic_error,
+                               "TensorLocalSchurComplementBuilder local CRS graph size does not match the local K block size.");
+
+    std::vector<GO> localGids(localDofCount);
+    for (IndexType localOrdinal=0; localOrdinal<localDofCount; localOrdinal++)
+    {
+      localGids[localOrdinal] = static_cast<GO>(operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE,
+                                                                                       trialVarName,
+                                                                                       tensorCellOrdinal,
+                                                                                       localOrdinal));
+    }
+
+    for (IndexType localRow=0; localRow<localDofCount; localRow++)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION((localGids[localRow] < 0) || (localGids[localRow] >= coefficientCount), std::logic_error,
+                                 "TensorLocalSchurComplementBuilder encountered an out-of-range global row index during CRS graph construction.");
+      for (IndexType localCol=0; localCol<localDofCount; localCol++)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION((localGids[localCol] < 0) || (localGids[localCol] >= coefficientCount), std::logic_error,
+                                   "TensorLocalSchurComplementBuilder encountered an out-of-range global column index during CRS graph construction.");
+        rowColumns[localGids[localRow]].insert(localGids[localCol]);
+      }
+    }
+  }
+
+  size_t maxEntriesPerRow = 1;
+  for (const auto &columns : rowColumns)
+  {
+    maxEntriesPerRow = std::max(maxEntriesPerRow, columns.size());
+  }
+
+  TMatrixPtr<double> matrix = Teuchos::rcp(new Matrix(map, maxEntriesPerRow));
+  for (const auto &block : blocks)
+  {
+    const IndexType tensorCellOrdinal = tensorMesh->topology()->tensorCellOrdinal(block.cellTuple);
+    const IndexType localDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal);
+
+    Teuchos::Array<GO> cols(localDofCount);
+    for (IndexType localCol=0; localCol<localDofCount; localCol++)
+    {
+      cols[localCol] = static_cast<GO>(operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE,
+                                                                              trialVarName,
+                                                                              tensorCellOrdinal,
+                                                                              localCol));
+    }
+
+    for (IndexType localRow=0; localRow<localDofCount; localRow++)
+    {
+      const GO row = static_cast<GO>(operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE,
+                                                                           trialVarName,
+                                                                           tensorCellOrdinal,
+                                                                           localRow));
+      Teuchos::Array<Scalar> values(localDofCount);
+      for (IndexType localCol=0; localCol<localDofCount; localCol++)
+      {
+        values[localCol] = block.kMatrix[static_cast<size_t>(localRow * localDofCount + localCol)];
+      }
+      matrix->insertGlobalValues(row, cols(), values());
+    }
+  }
+
+  matrix->fillComplete(map, map);
+  return matrix;
+}
+
+std::vector<TensorLocalSchurComplementBuilder::LocalBoundaryBBlock>
+TensorLocalSchurComplementBuilder::affineBoundaryBBlocks(const TensorMeshPtr &tensorMesh,
+                                                         const TensorDofLayoutPtr &tensorDofLayout,
+                                                         const TensorBilinearFormPtr &bilinearForm,
+                                                         const std::string &trialVarName,
+                                                         const std::string &testVarName)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorMesh == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorMesh for local boundary blocks.");
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorDofLayout == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorDofLayout for local boundary blocks.");
+  TEUCHOS_TEST_FOR_EXCEPTION(bilinearForm == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorBilinearForm for local boundary blocks.");
+
+  auto trialDiscretization = tensorMesh->trialDiscretization(trialVarName);
+  auto testDiscretization  = tensorMesh->testDiscretization(testVarName);
+  TensorOperatorData operatorData(tensorMesh, tensorDofLayout);
+  std::vector<LocalBoundaryBBlock> blocks;
+
+  for (const auto &term : bilinearForm->terms())
+  {
+    if (term.trialVar()->name() != trialVarName) continue;
+    if (term.testVar()->name()  != testVarName)  continue;
+    if (!term.isBoundaryTerm()) continue;
+    TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsAffineBoundaryB(term), std::invalid_argument,
+                               "TensorLocalSchurComplementBuilder encountered an unsupported affine boundary term for local B construction.");
+
+    const bool trialTrace = tensorVarIsTraceLike(term.trialVar());
+    const bool testTrace  = tensorVarIsTraceLike(term.testVar());
+    const int orthogonalComponentOrdinal = trialTrace ? term.trialVar()->traceComponentOrdinal()
+                                                      : term.testVar()->traceComponentOrdinal();
+    auto skeleton = tensorMesh->topology()->tensorSkeleton(orthogonalComponentOrdinal);
+    const auto retainedComponents = tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(orthogonalComponentOrdinal);
+
+    for (IndexType entityOrdinal=0; entityOrdinal<skeleton.entityCount(); entityOrdinal++)
+    {
+      const auto &entity = skeleton.entity(entityOrdinal);
+      auto localContext = tensorDofLayout->skeletonContext(trialVarName, testVarName, entity);
+      const auto &trialShape = localContext.trialShape();
+      const auto &testShape  = localContext.testShape();
+
+      const ComponentCellID1D incidentCell = firstIncidentOrthogonalCell(tensorMesh, entity);
+      std::vector<ComponentCellID1D> componentCells(term.componentCount(), incidentCell);
+      for (size_t retainedOrdinal=0; retainedOrdinal<retainedComponents.size(); retainedOrdinal++)
+      {
+        componentCells[retainedComponents[retainedOrdinal]] = entity.retainedCellTuple()[retainedOrdinal];
+      }
+
+      std::vector<int> pointCounts(term.componentCount(), 1);
+      std::vector<std::vector<double>> refPoints(term.componentCount());
+      std::vector<std::vector<double>> refWeights(term.componentCount());
+      std::vector<double> measureScales(term.componentCount(), 1.0);
+      std::vector<double> fixedCoordinates(term.componentCount(), 0.0);
+      auto orthogonalTopo = tensorMesh->topology()->componentMeshTopology(orthogonalComponentOrdinal);
+      fixedCoordinates[orthogonalComponentOrdinal] = orthogonalTopo->activeVertexCoordinates().h_view(entity.vertexOrdinal());
+      const IndexType leftVertex  = orthogonalTopo->cellVertexIndex(incidentCell, 0);
+      const IndexType rightVertex = orthogonalTopo->cellVertexIndex(incidentCell, 1);
+      double orthogonalReferenceCoordinate = 0.0;
+      if (entity.vertexOrdinal() == leftVertex)
+      {
+        orthogonalReferenceCoordinate = -1.0;
+      }
+      else if (entity.vertexOrdinal() == rightVertex)
+      {
+        orthogonalReferenceCoordinate = 1.0;
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error,
+                                   "TensorLocalSchurComplementBuilder boundary entity vertex is not incident on the selected orthogonal cell.");
+      }
+
+      for (int d : retainedComponents)
+      {
+        const int trialPolyOrder = tensorMesh->effectivePolyOrder(trialDiscretization, componentCells[d], d, false);
+        const int testPolyOrder  = tensorMesh->effectivePolyOrder(testDiscretization,  componentCells[d], d, true);
+        const int quadratureDegree = quadratureDegreeForComponent(trialPolyOrder, testPolyOrder, false, false);
+        LineQuadratureRule quadrature = lineQuadratureFromCubatureFactory(quadratureDegree);
+        refPoints[d] = quadrature.points;
+        refWeights[d] = quadrature.weights;
+        pointCounts[d] = static_cast<int>(quadrature.points.size());
+        auto componentTopo = tensorMesh->topology()->componentMeshTopology(d);
+        measureScales[d] = 0.5 * componentTopo->cellWidth(componentCells[d]);
+      }
+      refPoints[orthogonalComponentOrdinal] = {orthogonalReferenceCoordinate};
+      refWeights[orthogonalComponentOrdinal] = {1.0};
+
+      std::vector<BoundaryBasisData1D> trialBasisData(term.componentCount());
+      std::vector<BoundaryBasisData1D> testBasisData(term.componentCount());
+      for (int d=0; d<term.componentCount(); d++)
+      {
+        if (!(trialTrace && (d == orthogonalComponentOrdinal)))
+        {
+          trialBasisData[d] = buildBoundaryBasisDataForComponent(tensorMesh, trialDiscretization, d, false, componentCells[d], refPoints[d]);
+        }
+        if (!(testTrace && (d == orthogonalComponentOrdinal)))
+        {
+          testBasisData[d] = buildBoundaryBasisDataForComponent(tensorMesh, testDiscretization, d, true, componentCells[d], refPoints[d]);
+        }
+      }
+
+      IndexType tensorPointCount = 1;
+      for (int d : retainedComponents) tensorPointCount *= pointCounts[d];
+      TensorFunction::PointView physicalPoints("TensorLocalSchurComplementBuilder::boundaryPhysicalPoints",
+                                               tensorPointCount,
+                                               term.componentCount());
+      auto physicalPointsHost = Kokkos::create_mirror_view(physicalPoints);
+      std::vector<double> quadratureWeights(tensorPointCount, 1.0);
+      std::vector<int> pointOrdinals(term.componentCount(), 0);
+      for (IndexType flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
+      {
+        IndexType workingOrdinal = flatPointOrdinal;
+        double weight = 1.0;
+        for (int d=0; d<term.componentCount(); d++)
+        {
+          if (d == orthogonalComponentOrdinal) physicalPointsHost(flatPointOrdinal,d) = fixedCoordinates[d];
+        }
+        for (int d : retainedComponents)
+        {
+          pointOrdinals[d] = workingOrdinal % pointCounts[d];
+          workingOrdinal /= pointCounts[d];
+          const double xi = refPoints[d][pointOrdinals[d]];
+          auto componentTopo = tensorMesh->topology()->componentMeshTopology(d);
+          physicalPointsHost(flatPointOrdinal,d) = componentTopo->cellLeft(componentCells[d]) + 0.5 * (xi + 1.0) * componentTopo->cellWidth(componentCells[d]);
+          weight *= refWeights[d][pointOrdinals[d]] * measureScales[d];
+        }
+        quadratureWeights[flatPointOrdinal] = weight;
+      }
+      Kokkos::deep_copy(physicalPoints, physicalPointsHost);
+
+      TensorFunction::ValueView coefficientValues("TensorLocalSchurComplementBuilder::boundaryCoefficientValues",
+                                                  tensorPointCount);
+      term.coefficient()->values(physicalPoints, coefficientValues);
+      auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
+
+      const double trialParity = tensorVarIsFluxLike(term.trialVar())
+          ? static_cast<double>(operatorData.skeletonEntitySideParity(TENSOR_TRIAL_SPACE, trialVarName, entityOrdinal))
+          : 1.0;
+      const double testParity = tensorVarIsFluxLike(term.testVar())
+          ? static_cast<double>(operatorData.skeletonEntitySideParity(TENSOR_TEST_SPACE, testVarName, entityOrdinal))
+          : 1.0;
+
+      LocalBoundaryBBlock block;
+      block.entity = entity;
+      block.entityOrdinal = entityOrdinal;
+      block.trialShape = trialShape;
+      block.testShape = testShape;
+      block.bMatrix.assign(static_cast<size_t>(testShape.totalDofs() * trialShape.totalDofs()), 0.0);
+      const auto trialLayout = tensorDofLayout->layout(trialVarName, TENSOR_TRIAL_SPACE);
+      const auto testLayout  = tensorDofLayout->layout(testVarName,  TENSOR_TEST_SPACE);
+      std::vector<int> trialBasisOrdinals(term.componentCount(), 0);
+      std::vector<int> testBasisOrdinals(term.componentCount(), 0);
+      for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
+      {
+        tensorDofLayout->decodeLocalDofOrdinal(testLayout, testShape, TENSOR_VARIABLE_ORDERING, localTestOrdinal, testBasisOrdinals);
+        for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
+        {
+          tensorDofLayout->decodeLocalDofOrdinal(trialLayout, trialShape, TENSOR_VARIABLE_ORDERING, localTrialOrdinal, trialBasisOrdinals);
+          double entry = 0.0;
+          for (IndexType flatPointOrdinal=0; flatPointOrdinal<tensorPointCount; flatPointOrdinal++)
+          {
+            IndexType workingOrdinal = flatPointOrdinal;
+            for (int d : retainedComponents)
+            {
+              pointOrdinals[d] = workingOrdinal % pointCounts[d];
+              workingOrdinal /= pointCounts[d];
+            }
+            pointOrdinals[orthogonalComponentOrdinal] = 0;
+            entry += quadratureWeights[flatPointOrdinal]
+                     * coefficientValuesHost(flatPointOrdinal)
+                     * trialParity
+                     * boundaryBasisValue(term.trialVar(), trialBasisOrdinals, trialBasisData, orthogonalComponentOrdinal, pointOrdinals)
+                     * testParity
+                     * boundaryBasisValue(term.testVar(), testBasisOrdinals, testBasisData, orthogonalComponentOrdinal, pointOrdinals);
+          }
+          block.bMatrix[static_cast<size_t>(localTestOrdinal * trialShape.totalDofs() + localTrialOrdinal)] = entry;
+        }
+      }
+      blocks.push_back(block);
+    }
+  }
+
+  TEUCHOS_TEST_FOR_EXCEPTION(blocks.empty(), std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder found no supported matching affine boundary terms for local B construction.");
+  return blocks;
+}
+
+TMatrixPtr<double> TensorLocalSchurComplementBuilder::affineL2VolumeBoundarySchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                                                  const TensorDofLayoutPtr &tensorDofLayout,
+                                                                                                  const TensorBilinearFormPtr &bilinearForm,
+                                                                                                  const std::vector<std::string> &trialVarNames,
+                                                                                                  const std::vector<std::string> &testVarNames,
+                                                                                                  Teuchos_CommPtr comm)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorMesh == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorMesh for volume/boundary CRS assembly.");
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorDofLayout == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorDofLayout for volume/boundary CRS assembly.");
+  TEUCHOS_TEST_FOR_EXCEPTION(bilinearForm == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorBilinearForm for volume/boundary CRS assembly.");
+  TEUCHOS_TEST_FOR_EXCEPTION(trialVarNames.empty() || testVarNames.empty(), std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder volume/boundary CRS assembly requires trial and test variables.");
+  if (comm == Teuchos::null)
+  {
+    comm = MPIWrapper::TeuchosCommSerial();
+  }
+
+  TensorOperatorData operatorData(tensorMesh, tensorDofLayout);
+  const IndexType trialVarCount = static_cast<IndexType>(trialVarNames.size());
+  std::vector<IndexType> trialOffsets(trialVarCount, 0);
+  IndexType totalTrialDofCount = 0;
+  for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+  {
+    trialOffsets[trialVarOrdinal] = totalTrialDofCount;
+    totalTrialDofCount += operatorData.coefficientCount(TENSOR_TRIAL_SPACE, trialVarNames[trialVarOrdinal]);
+  }
+
+  using Matrix = TMatrix<double>;
+  using GO = typename Matrix::global_ordinal_type;
+  using Scalar = double;
+
+  std::vector<double> denseK(static_cast<size_t>(totalTrialDofCount * totalTrialDofCount), 0.0);
+
+  for (const std::string &testVarName : testVarNames)
+  {
+    const auto &testVariableData = operatorData.variableData(TENSOR_TEST_SPACE, testVarName);
+    TEUCHOS_TEST_FOR_EXCEPTION(testVariableData.isTraceVariable(), std::invalid_argument,
+                               "TensorLocalSchurComplementBuilder volume/boundary CRS assembly currently requires volume test variables.");
+    const IndexType testDofCount = testVariableData.coefficientCount();
+    std::vector<double> globalB(static_cast<size_t>(testDofCount * totalTrialDofCount), 0.0);
+    std::vector<double> globalGDiagonal(testDofCount, 0.0);
+    TensorCoefficientMap testMap(tensorMesh, tensorDofLayout, TENSOR_TEST_SPACE, testVarName);
+
+    const auto testDiscretization = tensorMesh->testDiscretization(testVarName);
+    for (IndexType tensorCellOrdinal=0; tensorCellOrdinal<tensorMesh->topology()->activeCellCount(); tensorCellOrdinal++)
+    {
+      const auto cellTuple = tensorMesh->topology()->tensorCellTuple(tensorCellOrdinal);
+      auto testShape = tensorDofLayout->factorSpaceShape(testVarName, TENSOR_TEST_SPACE, cellTuple);
+      std::vector<int> gQuadratureDegrees(testShape.componentCount(), 1);
+      for (int d=0; d<testShape.componentCount(); d++)
+      {
+        const int testPolyOrder = tensorMesh->effectivePolyOrder(testDiscretization, cellTuple[d], d, true);
+        gQuadratureDegrees[d] = std::max(1, 2 * testPolyOrder + 1);
+      }
+      TensorBasisCacheND gTestBasisCache(tensorMesh, testDiscretization, true, cellTuple, gQuadratureDegrees);
+      auto localG = l2TestMassDiagonal(testShape, gTestBasisCache);
+      const IndexType localTestDofCount = operatorData.volumeLocalDofCount(TENSOR_TEST_SPACE, testVarName, tensorCellOrdinal);
+      TEUCHOS_TEST_FOR_EXCEPTION(localTestDofCount != testShape.totalDofs(), std::logic_error,
+                                 "TensorLocalSchurComplementBuilder local test shape does not match TensorOperatorData for G assembly.");
+      for (IndexType localTestOrdinal=0; localTestOrdinal<localTestDofCount; localTestOrdinal++)
+      {
+        const IndexType testGid = operatorData.volumeLocalToGlobalIndex(TENSOR_TEST_SPACE, testVarName, tensorCellOrdinal, localTestOrdinal);
+        globalGDiagonal[testGid] = localG[localTestOrdinal];
+      }
+    }
+
+    for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+    {
+      const std::string &trialVarName = trialVarNames[trialVarOrdinal];
+      if (hasMatchingVolumeTerms(bilinearForm, trialVarName, testVarName))
+      {
+        auto blocks = affineL2VolumeCellSchurComplements(tensorMesh,
+                                                         tensorDofLayout,
+                                                         bilinearForm,
+                                                         trialVarName,
+                                                         testVarName);
+        for (const auto &block : blocks)
+        {
+          const IndexType tensorCellOrdinal = tensorMesh->topology()->tensorCellOrdinal(block.cellTuple);
+          const IndexType localTrialDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal);
+          const IndexType localTestDofCount  = operatorData.volumeLocalDofCount(TENSOR_TEST_SPACE,  testVarName,  tensorCellOrdinal);
+          TEUCHOS_TEST_FOR_EXCEPTION((localTrialDofCount != block.trialShape.totalDofs()) || (localTestDofCount != block.testShape.totalDofs()), std::logic_error,
+                                     "TensorLocalSchurComplementBuilder local volume B block shape does not match TensorOperatorData.");
+          for (IndexType localTestOrdinal=0; localTestOrdinal<localTestDofCount; localTestOrdinal++)
+          {
+            const IndexType testGid = operatorData.volumeLocalToGlobalIndex(TENSOR_TEST_SPACE, testVarName, tensorCellOrdinal, localTestOrdinal);
+            for (IndexType localTrialOrdinal=0; localTrialOrdinal<localTrialDofCount; localTrialOrdinal++)
+            {
+              const IndexType trialGid = trialOffsets[trialVarOrdinal]
+                  + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal, localTrialOrdinal);
+              globalB[static_cast<size_t>(testGid * totalTrialDofCount + trialGid)] += block.bMatrix[static_cast<size_t>(localTestOrdinal * localTrialDofCount + localTrialOrdinal)];
+            }
+          }
+        }
+      }
+
+      if (hasMatchingBoundaryTerms(bilinearForm, trialVarName, testVarName))
+      {
+        auto boundaryBlocks = affineBoundaryBBlocks(tensorMesh,
+                                                    tensorDofLayout,
+                                                    bilinearForm,
+                                                    trialVarName,
+                                                    testVarName);
+        const auto &trialVariableData = operatorData.variableData(TENSOR_TRIAL_SPACE, trialVarName);
+        TensorCoefficientMap trialMap(tensorMesh, tensorDofLayout, TENSOR_TRIAL_SPACE, trialVarName);
+        for (const auto &block : boundaryBlocks)
+        {
+          const IndexType entityOrdinal = block.entityOrdinal;
+          const int orthogonalComponentOrdinal = block.entity.orthogonalComponentOrdinal();
+          const auto retainedComponents = tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(orthogonalComponentOrdinal);
+          auto orthogonalTopo = tensorMesh->topology()->componentMeshTopology(orthogonalComponentOrdinal);
+          const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(block.entity.vertexOrdinal());
+          const ComponentCellID1D incidentCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
+          std::vector<ComponentCellID1D> testCells(tensorMesh->topology()->componentCount(), incidentCell);
+          for (size_t retainedOrdinal=0; retainedOrdinal<retainedComponents.size(); retainedOrdinal++)
+          {
+            testCells[retainedComponents[retainedOrdinal]] = block.entity.retainedCellTuple()[retainedOrdinal];
+          }
+          auto testIndices = testMap.indicesForVolumeCell(testCells);
+          TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(testIndices.size()) != block.testShape.totalDofs(), std::logic_error,
+                                     "TensorLocalSchurComplementBuilder boundary test indices do not match block test shape.");
+
+          std::vector<IndexType> trialIndices(block.trialShape.totalDofs(), -1);
+          if (trialVariableData.isTraceVariable())
+          {
+            for (IndexType localTrialOrdinal=0; localTrialOrdinal<block.trialShape.totalDofs(); localTrialOrdinal++)
+            {
+              trialIndices[localTrialOrdinal] = operatorData.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, trialVarName, entityOrdinal, localTrialOrdinal);
+            }
+          }
+          else
+          {
+            trialIndices = trialMap.indicesForVolumeCell(testCells);
+          }
+
+          for (IndexType localTestOrdinal=0; localTestOrdinal<block.testShape.totalDofs(); localTestOrdinal++)
+          {
+            const IndexType testGid = testIndices[localTestOrdinal];
+            for (IndexType localTrialOrdinal=0; localTrialOrdinal<block.trialShape.totalDofs(); localTrialOrdinal++)
+            {
+              const IndexType trialGid = trialOffsets[trialVarOrdinal] + trialIndices[localTrialOrdinal];
+              globalB[static_cast<size_t>(testGid * totalTrialDofCount + trialGid)] += block.bMatrix[static_cast<size_t>(localTestOrdinal * block.trialShape.totalDofs() + localTrialOrdinal)];
+            }
+          }
+        }
+      }
+    }
+
+    for (IndexType testOrdinal=0; testOrdinal<testDofCount; testOrdinal++)
+    {
+      const double gEntry = globalGDiagonal[testOrdinal];
+      TEUCHOS_TEST_FOR_EXCEPTION(gEntry == 0.0, std::invalid_argument,
+                                 "TensorLocalSchurComplementBuilder cannot assemble volume/boundary Schur complement without a positive L2 test diagonal.");
+      for (IndexType row=0; row<totalTrialDofCount; row++)
+      {
+        const double left = globalB[static_cast<size_t>(testOrdinal * totalTrialDofCount + row)];
+        if (left == 0.0) continue;
+        for (IndexType col=0; col<totalTrialDofCount; col++)
+        {
+          const double right = globalB[static_cast<size_t>(testOrdinal * totalTrialDofCount + col)];
+          if (right == 0.0) continue;
+          denseK[static_cast<size_t>(row * totalTrialDofCount + col)] += left * right / gEntry;
+        }
+      }
+    }
+  }
+
+  Teuchos::Array<GO> rowGids(totalTrialDofCount);
+  for (IndexType gid=0; gid<totalTrialDofCount; gid++)
+  {
+    rowGids[gid] = static_cast<GO>(gid);
+  }
+  TMapPtr map = Teuchos::rcp(new TMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+                                      rowGids(),
+                                      0,
+                                      comm));
+
+  size_t maxEntriesPerRow = 1;
+  for (IndexType row=0; row<totalTrialDofCount; row++)
+  {
+    size_t rowEntryCount = 0;
+    for (IndexType col=0; col<totalTrialDofCount; col++)
+    {
+      if (denseK[static_cast<size_t>(row * totalTrialDofCount + col)] != 0.0) rowEntryCount++;
+    }
+    maxEntriesPerRow = std::max(maxEntriesPerRow, rowEntryCount);
+  }
+
+  TMatrixPtr<double> matrix = Teuchos::rcp(new Matrix(map, maxEntriesPerRow));
+  for (IndexType row=0; row<totalTrialDofCount; row++)
+  {
+    Teuchos::Array<GO> cols;
+    Teuchos::Array<Scalar> values;
+    for (IndexType col=0; col<totalTrialDofCount; col++)
+    {
+      const double value = denseK[static_cast<size_t>(row * totalTrialDofCount + col)];
+      if (value == 0.0) continue;
+      cols.push_back(static_cast<GO>(col));
+      values.push_back(value);
+    }
+    if (!cols.empty())
+    {
+      matrix->insertGlobalValues(static_cast<GO>(row), cols(), values());
+    }
+  }
+
+  matrix->fillComplete(map, map);
+  return matrix;
+}
+
+TMatrixPtr<double> TensorLocalSchurComplementBuilder::affineL2VolumeSchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                                          const TensorDofLayoutPtr &tensorDofLayout,
+                                                                                          const TensorBilinearFormPtr &bilinearForm,
+                                                                                          const std::vector<std::string> &trialVarNames,
+                                                                                          const std::vector<std::string> &testVarNames,
+                                                                                          Teuchos_CommPtr comm)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorMesh == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorMesh for multi-variable CRS assembly.");
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorDofLayout == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorDofLayout for multi-variable CRS assembly.");
+  TEUCHOS_TEST_FOR_EXCEPTION(bilinearForm == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorBilinearForm for multi-variable CRS assembly.");
+  TEUCHOS_TEST_FOR_EXCEPTION(trialVarNames.empty(), std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder multi-variable CRS assembly requires at least one trial variable.");
+  TEUCHOS_TEST_FOR_EXCEPTION(testVarNames.empty(), std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder multi-variable CRS assembly requires at least one test variable.");
+  if (comm == Teuchos::null)
+  {
+    comm = MPIWrapper::TeuchosCommSerial();
+  }
+
+  TensorOperatorData operatorData(tensorMesh, tensorDofLayout);
+  const IndexType trialVarCount = static_cast<IndexType>(trialVarNames.size());
+  const IndexType testVarCount  = static_cast<IndexType>(testVarNames.size());
+  std::vector<IndexType> trialOffsets(trialVarCount, 0);
+  IndexType totalTrialDofCount = 0;
+  for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+  {
+    trialOffsets[trialVarOrdinal] = totalTrialDofCount;
+    totalTrialDofCount += operatorData.coefficientCount(TENSOR_TRIAL_SPACE, trialVarNames[trialVarOrdinal]);
+  }
+
+  using Matrix = TMatrix<double>;
+  using GO = typename Matrix::global_ordinal_type;
+  using Scalar = double;
+
+  Teuchos::Array<GO> rowGids(totalTrialDofCount);
+  for (IndexType gid=0; gid<totalTrialDofCount; gid++)
+  {
+    rowGids[gid] = static_cast<GO>(gid);
+  }
+  TMapPtr map = Teuchos::rcp(new TMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+                                      rowGids(),
+                                      0,
+                                      comm));
+
+  std::vector<std::vector<bool>> pairHasBlocks(testVarCount, std::vector<bool>(trialVarCount, false));
+  std::vector<std::vector<std::vector<LocalVolumeSchurComplementBlock>>> pairBlocks(testVarCount,
+                                                                                    std::vector<std::vector<LocalVolumeSchurComplementBlock>>(trialVarCount));
+  for (IndexType testVarOrdinal=0; testVarOrdinal<testVarCount; testVarOrdinal++)
+  {
+    for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+    {
+      const std::string &trialVarName = trialVarNames[trialVarOrdinal];
+      const std::string &testVarName  = testVarNames[testVarOrdinal];
+      if (!hasMatchingVolumeTerms(bilinearForm, trialVarName, testVarName)) continue;
+
+      pairBlocks[testVarOrdinal][trialVarOrdinal] = affineL2VolumeCellSchurComplements(tensorMesh,
+                                                                                       tensorDofLayout,
+                                                                                       bilinearForm,
+                                                                                       trialVarName,
+                                                                                       testVarName);
+      TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(pairBlocks[testVarOrdinal][trialVarOrdinal].size()) != tensorMesh->topology()->activeCellCount(), std::logic_error,
+                                 "TensorLocalSchurComplementBuilder expected one local block per active tensor cell for multi-variable CRS assembly.");
+      pairHasBlocks[testVarOrdinal][trialVarOrdinal] = true;
+    }
+  }
+
+  std::vector<std::set<GO>> rowColumns(totalTrialDofCount);
+  const IndexType activeCellCount = tensorMesh->topology()->activeCellCount();
+  for (IndexType testVarOrdinal=0; testVarOrdinal<testVarCount; testVarOrdinal++)
+  {
+    for (IndexType tensorCellOrdinal=0; tensorCellOrdinal<activeCellCount; tensorCellOrdinal++)
+    {
+      for (IndexType rowTrialVarOrdinal=0; rowTrialVarOrdinal<trialVarCount; rowTrialVarOrdinal++)
+      {
+        if (!pairHasBlocks[testVarOrdinal][rowTrialVarOrdinal]) continue;
+        const auto &rowBlock = pairBlocks[testVarOrdinal][rowTrialVarOrdinal][tensorCellOrdinal];
+        const IndexType rowLocalDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE,
+                                                                            trialVarNames[rowTrialVarOrdinal],
+                                                                            tensorCellOrdinal);
+        TEUCHOS_TEST_FOR_EXCEPTION(rowLocalDofCount != rowBlock.trialShape.totalDofs(), std::logic_error,
+                                   "TensorLocalSchurComplementBuilder row trial local DOF count does not match local B block shape.");
+
+        for (IndexType colTrialVarOrdinal=0; colTrialVarOrdinal<trialVarCount; colTrialVarOrdinal++)
+        {
+          if (!pairHasBlocks[testVarOrdinal][colTrialVarOrdinal]) continue;
+          const auto &colBlock = pairBlocks[testVarOrdinal][colTrialVarOrdinal][tensorCellOrdinal];
+          const IndexType colLocalDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE,
+                                                                              trialVarNames[colTrialVarOrdinal],
+                                                                              tensorCellOrdinal);
+          TEUCHOS_TEST_FOR_EXCEPTION(colLocalDofCount != colBlock.trialShape.totalDofs(), std::logic_error,
+                                     "TensorLocalSchurComplementBuilder column trial local DOF count does not match local B block shape.");
+          TEUCHOS_TEST_FOR_EXCEPTION(rowBlock.testShape.totalDofs() != colBlock.testShape.totalDofs(), std::logic_error,
+                                     "TensorLocalSchurComplementBuilder requires matching test shapes when forming multi-variable cross blocks.");
+
+          for (IndexType localRow=0; localRow<rowLocalDofCount; localRow++)
+          {
+            const IndexType rowGid = trialOffsets[rowTrialVarOrdinal]
+                + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE,
+                                                        trialVarNames[rowTrialVarOrdinal],
+                                                        tensorCellOrdinal,
+                                                        localRow);
+            for (IndexType localCol=0; localCol<colLocalDofCount; localCol++)
+            {
+              const IndexType colGid = trialOffsets[colTrialVarOrdinal]
+                  + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE,
+                                                          trialVarNames[colTrialVarOrdinal],
+                                                          tensorCellOrdinal,
+                                                          localCol);
+              rowColumns[rowGid].insert(static_cast<GO>(colGid));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  size_t maxEntriesPerRow = 1;
+  for (const auto &columns : rowColumns)
+  {
+    maxEntriesPerRow = std::max(maxEntriesPerRow, columns.size());
+  }
+
+  TMatrixPtr<double> matrix = Teuchos::rcp(new Matrix(map, maxEntriesPerRow));
+  for (IndexType testVarOrdinal=0; testVarOrdinal<testVarCount; testVarOrdinal++)
+  {
+    for (IndexType tensorCellOrdinal=0; tensorCellOrdinal<activeCellCount; tensorCellOrdinal++)
+    {
+      for (IndexType rowTrialVarOrdinal=0; rowTrialVarOrdinal<trialVarCount; rowTrialVarOrdinal++)
+      {
+        if (!pairHasBlocks[testVarOrdinal][rowTrialVarOrdinal]) continue;
+        const auto &rowBlock = pairBlocks[testVarOrdinal][rowTrialVarOrdinal][tensorCellOrdinal];
+        const IndexType rowLocalDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE,
+                                                                            trialVarNames[rowTrialVarOrdinal],
+                                                                            tensorCellOrdinal);
+        const IndexType testDofCount = rowBlock.testShape.totalDofs();
+
+        for (IndexType colTrialVarOrdinal=0; colTrialVarOrdinal<trialVarCount; colTrialVarOrdinal++)
+        {
+          if (!pairHasBlocks[testVarOrdinal][colTrialVarOrdinal]) continue;
+          const auto &colBlock = pairBlocks[testVarOrdinal][colTrialVarOrdinal][tensorCellOrdinal];
+          const IndexType colLocalDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE,
+                                                                              trialVarNames[colTrialVarOrdinal],
+                                                                              tensorCellOrdinal);
+
+          Teuchos::Array<GO> cols(colLocalDofCount);
+          for (IndexType localCol=0; localCol<colLocalDofCount; localCol++)
+          {
+            cols[localCol] = static_cast<GO>(trialOffsets[colTrialVarOrdinal]
+                + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE,
+                                                        trialVarNames[colTrialVarOrdinal],
+                                                        tensorCellOrdinal,
+                                                        localCol));
+          }
+
+          for (IndexType localRow=0; localRow<rowLocalDofCount; localRow++)
+          {
+            const GO row = static_cast<GO>(trialOffsets[rowTrialVarOrdinal]
+                + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE,
+                                                        trialVarNames[rowTrialVarOrdinal],
+                                                        tensorCellOrdinal,
+                                                        localRow));
+            Teuchos::Array<Scalar> values(colLocalDofCount);
+            for (IndexType localCol=0; localCol<colLocalDofCount; localCol++)
+            {
+              double entry = 0.0;
+              for (IndexType localTestOrdinal=0; localTestOrdinal<testDofCount; localTestOrdinal++)
+              {
+                const double gEntry = rowBlock.gDiagonal[localTestOrdinal];
+                TEUCHOS_TEST_FOR_EXCEPTION(gEntry == 0.0, std::invalid_argument,
+                                           "TensorLocalSchurComplementBuilder cannot form a multi-variable Schur complement with a zero G diagonal entry.");
+                entry += rowBlock.bMatrix[static_cast<size_t>(localTestOrdinal * rowLocalDofCount + localRow)]
+                         * colBlock.bMatrix[static_cast<size_t>(localTestOrdinal * colLocalDofCount + localCol)]
+                         / gEntry;
+              }
+              values[localCol] = entry;
+            }
+            matrix->insertGlobalValues(row, cols(), values());
+          }
+        }
+      }
+    }
+  }
+
+  matrix->fillComplete(map, map);
+  return matrix;
 }

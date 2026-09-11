@@ -6,7 +6,9 @@
 
 #include "TensorBasisCache.h"
 #include "TensorBilinearForm.h"
+#include "TensorOperatorData.h"
 #include "TensorProductLocalOperator.h"
+#include "TypeDefs.h"
 
 namespace Camellia
 {
@@ -40,6 +42,15 @@ namespace Camellia
       std::vector<double> kMatrix;
     };
 
+    struct LocalBoundaryBBlock
+    {
+      TensorMeshTopology::TensorSkeletonEntity entity;
+      IndexType entityOrdinal = -1;
+      TensorFactorSpaceShape trialShape;
+      TensorFactorSpaceShape testShape;
+      std::vector<double> bMatrix;
+    };
+
     static std::vector<double> denseBMatrix(const TensorProductLocalOperator &bOperator);
 
     static std::vector<std::vector<double>> l2TestMassDiagonalFactors(const TensorBasisCacheND &testBasisCache);
@@ -63,6 +74,33 @@ namespace Camellia
                                                                                            const TensorBilinearFormPtr &bilinearForm,
                                                                                            const std::string &trialVarName,
                                                                                            const std::string &testVarName);
+
+    static std::vector<LocalBoundaryBBlock> affineBoundaryBBlocks(const TensorMeshPtr &tensorMesh,
+                                                                 const TensorDofLayoutPtr &tensorDofLayout,
+                                                                 const TensorBilinearFormPtr &bilinearForm,
+                                                                 const std::string &trialVarName,
+                                                                 const std::string &testVarName);
+
+    static TMatrixPtr<double> affineL2VolumeSchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                  const TensorDofLayoutPtr &tensorDofLayout,
+                                                                  const TensorBilinearFormPtr &bilinearForm,
+                                                                  const std::string &trialVarName,
+                                                                  const std::string &testVarName,
+                                                                  Teuchos_CommPtr comm = Teuchos::null);
+
+    static TMatrixPtr<double> affineL2VolumeSchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                  const TensorDofLayoutPtr &tensorDofLayout,
+                                                                  const TensorBilinearFormPtr &bilinearForm,
+                                                                  const std::vector<std::string> &trialVarNames,
+                                                                  const std::vector<std::string> &testVarNames,
+                                                                  Teuchos_CommPtr comm = Teuchos::null);
+
+    static TMatrixPtr<double> affineL2VolumeBoundarySchurComplementMatrix(const TensorMeshPtr &tensorMesh,
+                                                                          const TensorDofLayoutPtr &tensorDofLayout,
+                                                                          const TensorBilinearFormPtr &bilinearForm,
+                                                                          const std::vector<std::string> &trialVarNames,
+                                                                          const std::vector<std::string> &testVarNames,
+                                                                          Teuchos_CommPtr comm = Teuchos::null);
   };
 }
 

@@ -90,7 +90,27 @@ Next slice:
 
 Next slice:
 
-- Add CRS preallocation/scatter for the supported affine L2 assembled-cell path: use `TensorOperatorData` local-to-global views to precompute local K graph entries, scatter the tested local K blocks into a global Tpetra/Crs matrix, and compare the assembled matrix action against the existing matrix-free/reference action on the same smallest tensor meshes before broadening coefficients or boundary terms.
+- Completed first CRS preallocation/scatter slice for the supported affine L2 assembled-cell path: `TensorLocalSchurComplementBuilder` now uses `TensorOperatorData` volume local-to-global views to precompute the local K graph, scatter local Schur-complement blocks into a Tpetra/Crs matrix, and test the assembled matrix action against an explicit local-block scatter reference on the smallest multi-cell tensor meshes.
+
+Next slice:
+
+- Completed CRS-vs-matrix-free comparison slice for the affine L2 volume path: the assembled Tpetra/Crs Schur-complement action is now tested against `B^T G^{-1} B` formed from the existing `MatrixFreeTensorOperator` volume apply path and the same local L2 G diagonals on matching multi-cell tensor meshes.
+
+Next slice:
+
+- Completed first multi-variable CRS block assembly slice: `TensorLocalSchurComplementBuilder` now accepts multiple trial and test variable names, builds TensorOperatorData-offset concatenated trial maps, forms cross trial-variable Schur-complement blocks through shared L2 test diagonals for supported affine volume terms, precomputes the combined graph, and validates the global block action against a `MatrixFreeTensorOperator`-based `B^T G^{-1} B` reference.
+
+Next slice:
+
+- Completed first local trace/boundary B-block slice: `TensorLocalSchurComplementBuilder` now materializes supported value-only mixed volume/trace affine boundary B blocks on tensor skeleton entities, including flux-like side-parity weighting from `TensorOperatorData` skeleton metadata.  Phase 0 tests scatter these local boundary blocks through TensorOperatorData skeleton/volume local-to-global views and compare the result against the existing trace-aware `MatrixFreeTensorOperator` boundary apply path.
+
+Next slice:
+
+- Completed first volume+boundary CRS Schur-complement slice: the assembled helper now combines volume field terms and supported `t_n_hat`-style boundary trace terms into a shared global B for volume test variables, forms field/trace cross blocks with the global L2 test diagonal, scatters into Tpetra/Crs, and validates the resulting action against a matrix-free `B^T G^{-1} B` reference on the smallest trace/volume tensor mesh.
+
+Next slice:
+
+- Start graph-norm support for local Schur complements: add separable derivative contributions to the test norm G path beyond the current diagonal L2 approximation, validate local G/K blocks against explicit tensor quadrature, then thread the richer local test norm through the existing CRS assembly helpers.
 
 ## Phase 2: N-factor basis and quadrature cache
 
