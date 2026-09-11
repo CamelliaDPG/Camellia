@@ -261,6 +261,16 @@ namespace
     }
   };
 
+  TensorFunctionCouplingStructure couplingForUnaryComposition(const TensorFunctionPtr &arg)
+  {
+    const auto &components = arg->dependencyScope().componentOrdinals();
+    if (components.size() <= 1)
+    {
+      return arg->couplingStructure();
+    }
+    return TensorFunctionCouplingStructure({components}, true);
+  }
+
   class UnaryTensorFunction : public TensorFunction
   {
     TensorUnaryFunctionType _unaryType;
@@ -269,7 +279,7 @@ namespace
     UnaryTensorFunction(TensorUnaryFunctionType unaryType, TensorFunctionPtr arg)
     : TensorFunction(arg->dependencyScope(),
                      TENSOR_FUNCTION_UNARY_COMPOSITION,
-                     arg->couplingStructure(),
+                     couplingForUnaryComposition(arg),
                      arg->dependencySources()),
       _unaryType(unaryType), _arg(arg) {}
 
@@ -300,6 +310,20 @@ namespace
             valuesOut(pointOrdinal) = std::cos(valuesOut(pointOrdinal));
           });
           break;
+        case TENSOR_UNARY_SQRT:
+          Kokkos::parallel_for("UnaryTensorFunction::sqrt", numPoints,
+          KOKKOS_LAMBDA (const int pointOrdinal)
+          {
+            valuesOut(pointOrdinal) = std::sqrt(valuesOut(pointOrdinal));
+          });
+          break;
+        case TENSOR_UNARY_RECIPROCAL:
+          Kokkos::parallel_for("UnaryTensorFunction::reciprocal", numPoints,
+          KOKKOS_LAMBDA (const int pointOrdinal)
+          {
+            valuesOut(pointOrdinal) = 1.0 / valuesOut(pointOrdinal);
+          });
+          break;
       }
     }
 
@@ -314,6 +338,13 @@ namespace
           return darg * TensorFunction::unary(TENSOR_UNARY_COS, _arg);
         case TENSOR_UNARY_COS:
           return TensorFunction::constant(-1.0) * darg * TensorFunction::unary(TENSOR_UNARY_SIN, _arg);
+        case TENSOR_UNARY_SQRT:
+          return TensorFunction::constant(0.5) * darg * reciprocal(TensorFunction::unary(TENSOR_UNARY_SQRT, _arg));
+        case TENSOR_UNARY_RECIPROCAL:
+        {
+          auto reciprocalArg = TensorFunction::unary(TENSOR_UNARY_RECIPROCAL, _arg);
+          return TensorFunction::constant(-1.0) * darg * reciprocalArg * reciprocalArg;
+        }
       }
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported unary function type.");
     }
@@ -330,6 +361,8 @@ namespace
         case TENSOR_UNARY_EXP: return "exp(" + _arg->displayString() + ")";
         case TENSOR_UNARY_SIN: return "sin(" + _arg->displayString() + ")";
         case TENSOR_UNARY_COS: return "cos(" + _arg->displayString() + ")";
+        case TENSOR_UNARY_SQRT: return "sqrt(" + _arg->displayString() + ")";
+        case TENSOR_UNARY_RECIPROCAL: return "reciprocal(" + _arg->displayString() + ")";
       }
       return "unary(?)";
     }
@@ -642,4 +675,14 @@ TensorFunctionPtr Camellia::sin(TensorFunctionPtr arg)
 TensorFunctionPtr Camellia::cos(TensorFunctionPtr arg)
 {
   return TensorFunction::unary(TENSOR_UNARY_COS, arg);
+}
+
+TensorFunctionPtr Camellia::sqrt(TensorFunctionPtr arg)
+{
+  return TensorFunction::unary(TENSOR_UNARY_SQRT, arg);
+}
+
+TensorFunctionPtr Camellia::reciprocal(TensorFunctionPtr arg)
+{
+  return TensorFunction::unary(TENSOR_UNARY_RECIPROCAL, arg);
 }

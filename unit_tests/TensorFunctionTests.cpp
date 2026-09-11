@@ -221,6 +221,29 @@ TEUCHOS_UNIT_TEST( TensorFunction, UnaryCompositionPreservesDependencySources )
   TEST_EQUALITY(g->dependencySources()[0], TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, "E"));
 }
 
+TEUCHOS_UNIT_TEST( TensorFunction, SqrtAndReciprocalRepresentRelativisticVelocityCoefficient )
+{
+  auto ux = TensorFunction::componentCoordinate(2);
+  auto uy = TensorFunction::componentCoordinate(3);
+  const double c = 5.0;
+  auto gamma = sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (c * c)) * (ux * ux + uy * uy));
+  auto vx = ux * reciprocal(gamma);
+
+  TEST_ASSERT(vx->isFullyCoupled());
+  TEST_ASSERT(vx->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(vx->dependencyScope().dependsOnComponent(3));
+
+  const double uxValue = 3.0;
+  const double uyValue = 4.0;
+  const double expectedGamma = std::sqrt(1.0 + (uxValue * uxValue + uyValue * uyValue) / (c * c));
+  TEST_FLOATING_EQUALITY(gamma->value({0.0, 0.0, uxValue, uyValue}), expectedGamma, 1e-14);
+  TEST_FLOATING_EQUALITY(vx->value({0.0, 0.0, uxValue, uyValue}), uxValue / expectedGamma, 1e-14);
+
+  auto dvxdux = vx->derivativeFunction(2);
+  const double expectedDerivative = 1.0 / expectedGamma - uxValue * uxValue / (c * c * expectedGamma * expectedGamma * expectedGamma);
+  TEST_FLOATING_EQUALITY(dvxdux->value({0.0, 0.0, uxValue, uyValue}), expectedDerivative, 1e-12);
+}
+
 TEUCHOS_UNIT_TEST( TensorFunction, CenteredMaxwellianDependsOnlyOnVelocityComponent )
 {
   auto maxwellian = TensorFunction::centeredMaxwellian1D(2, 1.0, 0.0, 1.0);

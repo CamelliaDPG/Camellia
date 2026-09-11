@@ -131,7 +131,12 @@ Next slice:
 
 Next slice:
 
-- Compare the 1D1T2V tensor-native prototype term set more directly against the Planar MITL relativistic weak form, then decide whether to add explicit support for relativistic velocity coefficients (`u_i / gamma`) as a controlled fully-coupled fallback or to keep them outside the first sum-factorized assembly subset.
+- Completed 1D1T2V-vs-Planar-MITL comparison slice: the tensor-native prototype now has regression coverage for the Planar relativistic weak-form volume structure `-v_x f, d_x w`, `-f, d_t w`, and two velocity-derivative acceleration terms on components `(x,t,ux,uy)`.  Relativistic velocity coefficients are represented as fully coupled tensor coefficients, e.g. `u_x / sqrt(1 + (u_x^2 + u_y^2)/c^2)`, using new `TensorFunction` `sqrt()` and `reciprocal()` unary helpers.
+- Decision: keep `u_i/gamma` outside the first sum-factorized subset, but support it as an explicit controlled fully-coupled fallback.  Matrix-free volume apply already evaluates such coefficients through the full tensor quadrature path; local L2/graph Schur assembly now falls back to dense tensor-quadrature B-block construction for non-solution, fully coupled coefficients while preserving the separable 1D-contraction fast path for constants, single-component factors, separable products, and additive separable sums.
+
+Next slice:
+
+- Carry the same 1D1T2V relativistic coefficient coverage through assembled graph-norm CRS action tests and then decide whether to introduce low-rank/separable approximations for `u_i/gamma` or leave the exact coupled fallback as the correctness path while optimizing the rest of the Planar MITL operator.
 
 ## Phase 2: N-factor basis and quadrature cache
 

@@ -77,6 +77,43 @@ namespace
     }
   }
 
+  double cachedBasisEvaluationAtPoint(const std::vector<int> &componentBasisOrdinals,
+                                      const TensorBasisCacheND &basisCache,
+                                      const TensorComponentOperatorDescriptor &descriptor,
+                                      const std::vector<int> &pointOrdinals)
+  {
+    double value = 1.0;
+    for (int d=0; d<descriptor.componentCount(); d++)
+    {
+      const auto &componentCache = basisCache.componentCache(d);
+      auto values = componentCache.valuesAtQuadrature();
+      auto derivatives = componentCache.derivativesAtQuadrature();
+      values.sync_host();
+      derivatives.sync_host();
+      const int basisOrdinal = componentBasisOrdinals[d];
+      const int pointOrdinal = pointOrdinals[d];
+      value *= descriptor.takesDerivativeInComponent(d)
+          ? derivatives.h_view(basisOrdinal, pointOrdinal) * componentCache.derivativeScale()
+          : values.h_view(basisOrdinal, pointOrdinal);
+    }
+    return value;
+  }
+
+  std::vector<double> fullTensorCoefficientValues(const TensorFunctionPtr &coefficient,
+                                                  const TensorBasisCacheND &basisCache)
+  {
+    TensorFunction::ValueView values("TensorLocalSchurComplementBuilder::fullTensorCoefficientValues",
+                                     basisCache.tensorPointCount());
+    coefficient->values(basisCache.physicalPoints().d_view, values);
+    auto valuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), values);
+    std::vector<double> result(basisCache.tensorPointCount(), 0.0);
+    for (IndexType pointOrdinal=0; pointOrdinal<basisCache.tensorPointCount(); pointOrdinal++)
+    {
+      result[pointOrdinal] = valuesHost(pointOrdinal);
+    }
+    return result;
+  }
+
   std::vector<double> componentTestGramMatrix(const TensorBasisCache1D &testCache,
                                               bool derivative)
   {
@@ -324,6 +361,15 @@ namespace
     return !coefficientFactorTerms.empty();
   }
 
+  bool termSupportsFullTensorCoefficientVolumeCellSchurComplement(const TensorBilinearTerm &term)
+  {
+    if (!term.isVolumeTerm()) return false;
+    if (term.trialVar()->isTrace() || term.testVar()->isTrace()) return false;
+    if (term.coefficient() == Teuchos::null) return false;
+    if (term.coefficient()->hasSolutionDependencies()) return false;
+    return true;
+  }
+
   bool hasMatchingVolumeTerms(const TensorBilinearFormPtr &bilinearForm,
                               const std::string &trialVarName,
                               const std::string &testVarName)
@@ -473,6 +519,61 @@ namespace
     if (term.coefficient() == Teuchos::null) return false;
     if (term.coefficient()->hasSolutionDependencies()) return false;
     return true;
+  }
+}
+
+namespace
+{
+  std::vector<double> denseVolumeBMatrixByTensorQuadrature(const TensorBilinearTerm &term,
+                                                           const TensorFactorSpaceShape &trialShape,
+                                                           const TensorFactorSpaceShape &testShape,
+                                                           const TensorBasisCacheND &trialBasisCache,
+                                                           const TensorBasisCacheND &testBasisCache)
+  {
+    validateShapeAgainstCache(trialShape, trialBasisCache, "trial space");
+    validateShapeAgainstCache(testShape,  testBasisCache,  "test space");
+
+    std::vector<double> coefficientValues = fullTensorCoefficientValues(term.coefficient(), trialBasisCache);
+    auto weights = trialBasisCache.quadratureWeights();
+    weights.sync_host();
+
+    std::vector<int> pointCounts(term.componentCount(), 1);
+    for (int d=0; d<term.componentCount(); d++)
+    {
+      pointCounts[d] = trialBasisCache.componentCache(d).pointCount();
+      TEUCHOS_TEST_FOR_EXCEPTION(pointCounts[d] != testBasisCache.componentCache(d).pointCount(), std::logic_error,
+                                 "TensorLocalSchurComplementBuilder expected matching trial/test quadrature rules for full tensor coefficient fallback.");
+    }
+
+    std::vector<double> b(static_cast<size_t>(testShape.totalDofs() * trialShape.totalDofs()), 0.0);
+    std::vector<int> trialBasisOrdinals(term.componentCount(), 0);
+    std::vector<int> testBasisOrdinals(term.componentCount(), 0);
+    std::vector<int> pointOrdinals(term.componentCount(), 0);
+
+    for (IndexType testOrdinal=0; testOrdinal<testShape.totalDofs(); testOrdinal++)
+    {
+      decodeOrdinal(testShape, testOrdinal, testBasisOrdinals);
+      for (IndexType trialOrdinal=0; trialOrdinal<trialShape.totalDofs(); trialOrdinal++)
+      {
+        decodeOrdinal(trialShape, trialOrdinal, trialBasisOrdinals);
+        double entry = 0.0;
+        for (IndexType flatPointOrdinal=0; flatPointOrdinal<trialBasisCache.tensorPointCount(); flatPointOrdinal++)
+        {
+          IndexType workingOrdinal = flatPointOrdinal;
+          for (int d=0; d<term.componentCount(); d++)
+          {
+            pointOrdinals[d] = workingOrdinal % pointCounts[d];
+            workingOrdinal /= pointCounts[d];
+          }
+          entry += weights.h_view(flatPointOrdinal)
+                   * coefficientValues[flatPointOrdinal]
+                   * cachedBasisEvaluationAtPoint(trialBasisOrdinals, trialBasisCache, term.trialOperator(), pointOrdinals)
+                   * cachedBasisEvaluationAtPoint(testBasisOrdinals,  testBasisCache,  term.testOperator(),  pointOrdinals);
+        }
+        b[static_cast<size_t>(testOrdinal * trialShape.totalDofs() + trialOrdinal)] = entry;
+      }
+    }
+    return b;
   }
 }
 
@@ -768,7 +869,8 @@ TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(const Tens
       if (!term.isVolumeTerm()) continue;
 
       CoefficientFactorExpansion coefficientFactorTerms;
-      TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsAffineL2VolumeCellSchurComplement(term, coefficientFactorTerms), std::invalid_argument,
+      const bool supportsSeparableCoefficientFactors = termSupportsAffineL2VolumeCellSchurComplement(term, coefficientFactorTerms);
+      TEUCHOS_TEST_FOR_EXCEPTION(!supportsSeparableCoefficientFactors && !termSupportsFullTensorCoefficientVolumeCellSchurComplement(term), std::invalid_argument,
                                  "TensorLocalSchurComplementBuilder encountered an unsupported affine L2 volume term for local assembled-cell construction.");
 
       std::vector<int> quadratureDegrees(term.componentCount(), 1);
@@ -784,15 +886,30 @@ TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(const Tens
 
       TensorBasisCacheND trialBasisCache(tensorMesh, trialDiscretization, false, cellTuple, quadratureDegrees);
       TensorBasisCacheND testBasisCache (tensorMesh, testDiscretization,  true,  cellTuple, quadratureDegrees);
-      for (const auto &coefficientFactors : coefficientFactorTerms)
+      if (supportsSeparableCoefficientFactors)
       {
-        auto bOperator = buildVolumeBOperator(term,
-                                              trialShape,
-                                              testShape,
-                                              trialBasisCache,
-                                              testBasisCache,
-                                              coefficientFactors);
-        auto termB = denseBMatrix(bOperator);
+        for (const auto &coefficientFactors : coefficientFactorTerms)
+        {
+          auto bOperator = buildVolumeBOperator(term,
+                                                trialShape,
+                                                testShape,
+                                                trialBasisCache,
+                                                testBasisCache,
+                                                coefficientFactors);
+          auto termB = denseBMatrix(bOperator);
+          for (size_t entryOrdinal=0; entryOrdinal<block.bMatrix.size(); entryOrdinal++)
+          {
+            block.bMatrix[entryOrdinal] += termB[entryOrdinal];
+          }
+        }
+      }
+      else
+      {
+        auto termB = denseVolumeBMatrixByTensorQuadrature(term,
+                                                          trialShape,
+                                                          testShape,
+                                                          trialBasisCache,
+                                                          testBasisCache);
         for (size_t entryOrdinal=0; entryOrdinal<block.bMatrix.size(); entryOrdinal++)
         {
           block.bMatrix[entryOrdinal] += termB[entryOrdinal];

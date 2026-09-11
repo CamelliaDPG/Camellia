@@ -111,6 +111,15 @@ std::vector<TensorVarPtr> makeDirectionalFluxTraceFamily1X1T1V(const std::string
   return TensorVarFactory::directionalTraceFamily(baseName, {"x", "t", "v"}, componentVars);
 }
 
+TensorVarPtr makeFieldTensorVar1D1T2V(const std::string &name)
+{
+  VarPtr vx  = Teuchos::rcp(new Var(0, 0, name + "_x",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vt  = Teuchos::rcp(new Var(1, 0, name + "_t",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vux = Teuchos::rcp(new Var(2, 0, name + "_ux", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr vuy = Teuchos::rcp(new Var(3, 0, name + "_uy", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{vx, vt, vux, vuy}));
+}
+
 TensorMeshPtr makeTensorMeshForOperatorTests(bool nonuniformFirstComponent = false)
 {
   auto component0 = nonuniformFirstComponent
@@ -163,6 +172,21 @@ TensorMeshPtr makeTensorMeshForTraceOperatorTests1X1T1V(bool nonuniformVelocityC
   return tensorMesh;
 }
 
+TensorMeshPtr makeTensorMeshForOperatorTests1D1T2V()
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-2.0, 2.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto component3 = Teuchos::rcp(new ComponentMeshTopology1D({-1.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2, component3}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 1));
+
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar1D1T2V("f"), Teuchos::null, std::vector<int>{0,0,0,0})));
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar1D1T2V("w"), Teuchos::null, std::vector<int>{0,0,0,0})));
+  return tensorMesh;
+}
+
 TensorBilinearFormPtr makeSimpleBilinearFormForOperatorTests()
 {
   auto form = Teuchos::rcp(new TensorBilinearForm("simple"));
@@ -191,6 +215,37 @@ TensorBilinearFormPtr makeVlasovLikeVolumeBilinearForm1X1T1V()
                                         w,
                                         2,
                                         TensorFunction::constant(-1.0) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1)))
+                .build();
+}
+
+TensorBilinearFormPtr makeRelativisticVlasovLikeVolumeBilinearForm1D1T2V(double c)
+{
+  TensorBilinearFormBuilder builder("relativistic-vlasov-1d1t2v-volume");
+  auto f = makeFieldTensorVar1D1T2V("f");
+  auto w = makeFieldTensorVar1D1T2V("w");
+  auto ux = TensorFunction::componentCoordinate(2);
+  auto uy = TensorFunction::componentCoordinate(3);
+  auto gamma = sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (c * c)) * (ux * ux + uy * uy));
+  auto vx = ux * reciprocal(gamma);
+  auto electricAcceleration = TensorFunction::componentCoordinate(0) + TensorFunction::constant(-0.5) * TensorFunction::componentCoordinate(1);
+  auto magneticAcceleration = TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1);
+
+  return builder.addValueDerivativeTerm(f,
+                                        w,
+                                        0,
+                                        TensorFunction::constant(-1.0) * vx)
+                .addValueDerivativeTerm(f,
+                                        w,
+                                        1,
+                                        TensorFunction::constant(-1.0))
+                .addValueDerivativeTerm(f,
+                                        w,
+                                        2,
+                                        TensorFunction::constant(-1.0) * electricAcceleration)
+                .addValueDerivativeTerm(f,
+                                        w,
+                                        3,
+                                        TensorFunction::constant(-1.0) * magneticAcceleration)
                 .build();
 }
 
@@ -1669,6 +1724,37 @@ TEUCHOS_UNIT_TEST( TensorOperator, ManufacturedPatchSolveForVlasovLike1X1T1VFiel
     recoveredResidual[i] -= rhs[i];
   }
   TEST_ASSERT(vectorL2Norm(recoveredResidual) < 1e-10);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, RelativisticVlasovLike1D1T2VVolumePrototypeMatchesPlanarWeakTermStructure )
+{
+  const double c = 5.0;
+  auto tensorMesh = makeTensorMeshForOperatorTests1D1T2V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = makeRelativisticVlasovLikeVolumeBilinearForm1D1T2V(c);
+
+  TEST_EQUALITY(form->termCount(), 4);
+  TEST_ASSERT(form->term(0).testOperator().takesDerivativeInComponent(0));
+  TEST_ASSERT(form->term(1).testOperator().takesDerivativeInComponent(1));
+  TEST_ASSERT(form->term(2).testOperator().takesDerivativeInComponent(2));
+  TEST_ASSERT(form->term(3).testOperator().takesDerivativeInComponent(3));
+  TEST_ASSERT(form->term(0).coefficient()->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(form->term(0).coefficient()->dependencyScope().dependsOnComponent(3));
+  TEST_ASSERT(form->term(0).coefficient()->isFullyCoupled());
+  TEST_ASSERT(form->term(1).coefficient()->dependencyScope().isEmpty());
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "f",
+                          TENSOR_TEST_SPACE,  "w");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.125 + 0.015625 * i;
+
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "f", "w", input);
+  compareVectors(actual, expected, out, success, 1e-10, 1e-13);
 }
 
 TEUCHOS_UNIT_TEST( TensorOperator, VlasovLike1X1T1VPrototypeMatchesLegacyRepresentativeTermStructure )

@@ -673,6 +673,59 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, CachedVlasovLikeVolumeBMatchesExp
   }
 }
 
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineL2VolumeCellSchurComplementsSupportRelativisticVelocityFallback )
+{
+  auto tensorMesh = makeVlasovLikeVolumeAffineTensorMesh1D1T2V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("local-assembled-relativistic-velocity"));
+  const double c = 5.0;
+  auto ux = TensorFunction::componentCoordinate(2);
+  auto uy = TensorFunction::componentCoordinate(3);
+  auto gamma = sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (c * c)) * (ux * ux + uy * uy));
+  auto vx = TensorFunction::constant(-1.0) * ux * reciprocal(gamma);
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("f", 4),
+                                   makeFieldTensorVar("w", 4),
+                                   TensorComponentOperatorDescriptor::valueOnly(4),
+                                   TensorComponentOperatorDescriptor::singleDerivative(4, 0),
+                                   vx));
+
+  auto blocks = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(tensorMesh,
+                                                                                      dofLayout,
+                                                                                      form,
+                                                                                      "f",
+                                                                                      "w");
+  TEST_EQUALITY(blocks.size(), static_cast<size_t>(tensorMesh->topology()->activeCellCount()));
+
+  const auto &term = form->term(0);
+  const auto trialLayout = dofLayout->layout("f", TENSOR_TRIAL_SPACE);
+  const auto testLayout  = dofLayout->layout("w", TENSOR_TEST_SPACE);
+  for (const auto &block : blocks)
+  {
+    auto quadratureDegrees = quadratureDegreesForTerm(tensorMesh, term, block.cellTuple);
+    TensorBasisCacheND trialCache(tensorMesh, tensorMesh->trialDiscretization("f"), false, block.cellTuple, quadratureDegrees);
+    TensorBasisCacheND testCache (tensorMesh, tensorMesh->testDiscretization("w"), true,  block.cellTuple, quadratureDegrees);
+    auto fullCoefficientValues = coefficientValues(term.coefficient(), trialCache);
+    for (IndexType row=0; row<block.testShape.totalDofs(); row++)
+    {
+      for (IndexType col=0; col<block.trialShape.totalDofs(); col++)
+      {
+        const double expected = explicitCachedBEntry(term,
+                                                     dofLayout,
+                                                     trialLayout,
+                                                     testLayout,
+                                                     block.trialShape,
+                                                     block.testShape,
+                                                     trialCache,
+                                                     testCache,
+                                                     fullCoefficientValues,
+                                                     row,
+                                                     col);
+        TEST_ASSERT(closeEnough(block.bMatrix[row * block.trialShape.totalDofs() + col], expected, 1e-11, 1e-13));
+      }
+    }
+  }
+}
+
 TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineL2VolumeCellSchurComplementsSupportSeparableCoefficientSums )
 {
   auto tensorMesh = makeSingleCellTensorMesh({{0.0, 1.0}, {0.0, 1.0}, {-2.0, 2.0}});

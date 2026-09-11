@@ -113,7 +113,9 @@ namespace Camellia
   {
     TENSOR_UNARY_EXP,
     TENSOR_UNARY_SIN,
-    TENSOR_UNARY_COS
+    TENSOR_UNARY_COS,
+    TENSOR_UNARY_SQRT,
+    TENSOR_UNARY_RECIPROCAL
   };
 
   /**
@@ -199,6 +201,8 @@ namespace Camellia
   TensorFunctionPtr exp(TensorFunctionPtr arg);
   TensorFunctionPtr sin(TensorFunctionPtr arg);
   TensorFunctionPtr cos(TensorFunctionPtr arg);
+  TensorFunctionPtr sqrt(TensorFunctionPtr arg);
+  TensorFunctionPtr reciprocal(TensorFunctionPtr arg);
 
   inline std::ostream &operator<<(std::ostream &os, const TensorFunction &f)
   {
