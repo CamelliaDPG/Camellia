@@ -10,6 +10,73 @@
 namespace Camellia
 {
   /**
+   *  \brief Host-side Phase 0 instrumentation for tensor-native operator apply work.
+   *
+   *  The counters are intentionally lightweight and passive: operator implementations
+   *  can add elapsed wall-clock seconds for each stage while callers that do not query
+   *  instrumentation continue to see the same apply() behavior.
+   */
+  class TensorOperatorInstrumentation
+  {
+  public:
+    enum Stage
+    {
+      BASIS_CACHE_CONSTRUCTION = 0,
+      COEFFICIENT_EVALUATION,
+      CONTRACTION_1D_CONSTRUCTION,
+      LOCAL_ACTION,
+      SCATTER_LOCAL_OUTPUT_ACCUMULATION,
+      STAGE_COUNT
+    };
+
+    struct StageStats
+    {
+      long long count = 0;
+      double seconds = 0.0;
+    };
+
+  private:
+    StageStats _stageStats[STAGE_COUNT];
+
+  public:
+    TensorOperatorInstrumentation()
+    {
+      reset();
+    }
+
+    void reset()
+    {
+      for (int stageOrdinal=0; stageOrdinal<STAGE_COUNT; stageOrdinal++)
+      {
+        _stageStats[stageOrdinal].count = 0;
+        _stageStats[stageOrdinal].seconds = 0.0;
+      }
+    }
+
+    void add(Stage stage,
+             double seconds)
+    {
+      _stageStats[stage].count++;
+      _stageStats[stage].seconds += seconds;
+    }
+
+    StageStats stats(Stage stage) const
+    {
+      return _stageStats[stage];
+    }
+
+    long long count(Stage stage) const
+    {
+      return _stageStats[stage].count;
+    }
+
+    double seconds(Stage stage) const
+    {
+      return _stageStats[stage].seconds;
+    }
+  };
+
+  /**
    *  \brief Explicit stage labeling for tensor-native operator application.
    *
    *  The initial issue #298 implementation is matrix-free-first. These stage labels make the
@@ -64,6 +131,12 @@ namespace Camellia
 
     virtual void apply(const std::vector<double> &input,
                        std::vector<double> &output) const = 0;
+
+    virtual void resetInstrumentation() const {}
+    virtual TensorOperatorInstrumentation instrumentation() const
+    {
+      return TensorOperatorInstrumentation();
+    }
   };
 }
 

@@ -74,7 +74,11 @@ Next slice:
 
 Next slice:
 
-- Add operation-count/timing instrumentation that distinguishes basis-cache construction, coefficient evaluation, 1D contraction construction, local action, and scatter for the Phase 0 tensor tests.  Then promote the reusable local-action path toward explicit local B/G/K construction for affine L2 test-norm cells.
+- Completed Phase 0 tensor-operator instrumentation slice: `MatrixFreeTensorOperator` now accumulates per-apply stage counters/timings for basis-cache construction, coefficient evaluation, 1D contraction construction, local action, and scatter/local-output accumulation.  Regression tests cover reset/accumulation behavior, the sum-factorized 1D-contraction count, fallback paths with no 1D-contraction construction, and unchanged numerical results against the explicit reference operator.
+
+Next slice:
+
+- Promote the reusable local-action path toward explicit local B/G/K construction for affine L2 test-norm cells.  Start by building and testing local B and diagonal/mass-like G blocks from the same separable component matrices used by `TensorProductLocalOperator`, then compare local K = B G^-1 B^T blocks against legacy integration on the smallest tensor meshes before adding CRS scatter.
 
 ## Phase 2: N-factor basis and quadrature cache
 
@@ -101,8 +105,7 @@ Deliverables:
 
 - `TensorBasisCache1D` and `TensorBasisCacheND` or similar;
 - tests comparing against `TensorBasis`/legacy basis values for 2D and direct product checks for 4D;
-- flop and memory accounting utilities.
-
+- flop, timing, and memory accounting utilities.
 ## Phase 3: tensor Vlasov term representation
 
 Introduce a Vlasov-specific tensor weak-form representation rather than trying to make arbitrary legacy `BF` terms sum-factorized immediately.

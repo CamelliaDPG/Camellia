@@ -2,6 +2,7 @@
 #include "TensorOperatorFactory.h"
 
 #include <algorithm>
+#include <chrono>
 #include <map>
 #include <stdexcept>
 
@@ -55,6 +56,16 @@ namespace
     TensorFunction::PointView physicalPoints;
     std::vector<double> quadratureWeights;
   };
+
+  void recordTensorOperatorStage(TensorOperatorInstrumentation *instrumentation,
+                                 TensorOperatorInstrumentation::Stage stage,
+                                 const std::chrono::steady_clock::time_point &start)
+  {
+    if (instrumentation == nullptr) return;
+
+    const auto end = std::chrono::steady_clock::now();
+    instrumentation->add(stage, std::chrono::duration<double>(end - start).count());
+  }
 
   bool tensorVarIsFluxLike(const TensorVarPtr &tensorVar)
   {
@@ -309,7 +320,8 @@ namespace
                                           const TensorCoefficientTraversal &trialTraversal,
                                           const TensorCoefficientTraversal &testTraversal,
                                           const std::vector<double> &localInput,
-                                          std::vector<double> &localOutput)
+                                          std::vector<double> &localOutput,
+                                          TensorOperatorInstrumentation *instrumentation)
   {
     const int componentCount = term.componentCount();
     std::vector<TensorFunctionPtr> coefficientFactors(componentCount, Teuchos::null);
@@ -319,6 +331,7 @@ namespace
     const auto &trialShape = trialTraversal.shape();
     const auto &testShape  = testTraversal.shape();
 
+    const auto contractionConstructionStart = std::chrono::steady_clock::now();
     std::vector<std::vector<double>> componentMatrices(componentCount);
     for (int d=0; d<componentCount; d++)
     {
@@ -341,7 +354,11 @@ namespace
       std::vector<double> coefficientValues;
       if (coefficientFactors[d] != Teuchos::null)
       {
+        const auto coefficientEvaluationStart = std::chrono::steady_clock::now();
         coefficientValues = coefficientValuesForComponent(coefficientFactors[d], trialCache, componentCount, d);
+        recordTensorOperatorStage(instrumentation,
+                                  TensorOperatorInstrumentation::COEFFICIENT_EVALUATION,
+                                  coefficientEvaluationStart);
       }
 
       componentMatrices[d].assign(testCache.basisCardinality() * trialCache.basisCardinality(), 0.0);
@@ -377,7 +394,11 @@ namespace
                                                               componentMatrices[d]));
     }
     TensorProductLocalOperator localOperator(trialShape, testShape, componentOperators);
+    recordTensorOperatorStage(instrumentation,
+                              TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION,
+                              contractionConstructionStart);
 
+    const auto localActionStart = std::chrono::steady_clock::now();
     std::vector<double> cellInput(trialShape.totalDofs(), 0.0);
     for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
     {
@@ -386,10 +407,18 @@ namespace
 
     std::vector<double> cellOutput;
     localOperator.apply(cellInput, cellOutput);
+    recordTensorOperatorStage(instrumentation,
+                              TensorOperatorInstrumentation::LOCAL_ACTION,
+                              localActionStart);
+
+    const auto scatterStart = std::chrono::steady_clock::now();
     for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
     {
       localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, tensorDofLayout)] += cellOutput[localTestOrdinal];
     }
+    recordTensorOperatorStage(instrumentation,
+                              TensorOperatorInstrumentation::SCATTER_LOCAL_OUTPUT_ACCUMULATION,
+                              scatterStart);
   }
 
   bool termIsSupportedTraceAwareBoundaryTerm(const TensorBilinearTerm &term)
@@ -455,6 +484,7 @@ namespace
     TensorDofLayout::VariableLayout _rangeLayout;
     TensorFactorSpaceShape _ambientDomainShape;
     TensorFactorSpaceShape _ambientRangeShape;
+    mutable TensorOperatorInstrumentation _instrumentation;
 
     void validateInputVector(const std::vector<double> &input) const
     {
@@ -779,8 +809,12 @@ namespace
                                                              trialDerivative, testDerivative);
         }
 
+        const auto basisCacheConstructionStart = std::chrono::steady_clock::now();
         TensorBasisCacheND trialBasisCache(_tensorMesh, trialDiscretization, false, cellTuple, quadratureDegrees);
         TensorBasisCacheND testBasisCache (_tensorMesh, testDiscretization,  true,  cellTuple, quadratureDegrees);
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::BASIS_CACHE_CONSTRUCTION,
+                                  basisCacheConstructionStart);
 
         std::vector<int> pointCounts(componentCount, 0);
         for (int d=0; d<componentCount; d++)
@@ -789,9 +823,13 @@ namespace
         }
 
         const IndexType tensorPointCount = trialBasisCache.tensorPointCount();
+        const auto coefficientEvaluationStart = std::chrono::steady_clock::now();
         TensorFunction::ValueView coefficientValues("MatrixFreeTensorOperator::coefficientValues", tensorPointCount);
         term.coefficient()->values(trialBasisCache.physicalPoints().d_view, coefficientValues);
         auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::COEFFICIENT_EVALUATION,
+                                  coefficientEvaluationStart);
         auto quadratureWeights = trialBasisCache.quadratureWeights();
         quadratureWeights.sync_host();
 
@@ -809,10 +847,12 @@ namespace
                                             trialTraversal,
                                             testTraversal,
                                             localInput,
-                                            localOutput);
+                                            localOutput,
+                                            &_instrumentation);
           continue;
         }
 
+        const auto localActionStart = std::chrono::steady_clock::now();
         std::vector<double> trialPointValues(tensorPointCount, 0.0);
         for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
         {
@@ -837,6 +877,7 @@ namespace
           }
         }
 
+        std::vector<double> cellOutput(testShape.totalDofs(), 0.0);
         for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
         {
           _tensorDofLayout->decodeLocalDofOrdinal(_rangeLayout, testShape, _rangeOrdering, localTestOrdinal, testBasisOrdinals);
@@ -859,8 +900,20 @@ namespace
                             * trialPointValues[flatPointOrdinal]
                             * testValue;
           }
-          localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, _tensorDofLayout)] += contribution;
+          cellOutput[localTestOrdinal] += contribution;
         }
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::LOCAL_ACTION,
+                                  localActionStart);
+
+        const auto scatterStart = std::chrono::steady_clock::now();
+        for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
+        {
+          localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, _tensorDofLayout)] += cellOutput[localTestOrdinal];
+        }
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::SCATTER_LOCAL_OUTPUT_ACCUMULATION,
+                                  scatterStart);
       }
     }
 
@@ -888,6 +941,7 @@ namespace
         const auto trialTraversal = domainTraversalForSkeletonEntity(entity);
         const auto testTraversal  = rangeTraversalForSkeletonEntity(entity);
 
+        const auto basisCacheConstructionStart = std::chrono::steady_clock::now();
         TraceEntityGeometryData geometryData = buildTraceEntityGeometryData(entity,
                                                                            term,
                                                                            trialDiscretization,
@@ -895,11 +949,18 @@ namespace
 
         auto trialBasisData = buildBasisDataForBoundaryEntity(trialDiscretization, false, entity, geometryData);
         auto testBasisData  = buildBasisDataForBoundaryEntity(testDiscretization,  true,  entity, geometryData);
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::BASIS_CACHE_CONSTRUCTION,
+                                  basisCacheConstructionStart);
 
+        const auto coefficientEvaluationStart = std::chrono::steady_clock::now();
         TensorFunction::ValueView coefficientValues("MatrixFreeTensorOperator::traceCoefficientValues",
                                                     geometryData.tensorPointCount);
         term.coefficient()->values(geometryData.physicalPoints, coefficientValues);
         auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::COEFFICIENT_EVALUATION,
+                                  coefficientEvaluationStart);
 
         double trialParity = 1.0;
         double testParity  = 1.0;
@@ -920,6 +981,7 @@ namespace
           testParity = sideParity(*orthogonalTopo, incidentCell, entity.vertexOrdinal());
         }
 
+        const auto localActionStart = std::chrono::steady_clock::now();
         std::vector<double> trialPointValues(geometryData.tensorPointCount, 0.0);
         for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
         {
@@ -950,6 +1012,7 @@ namespace
           }
         }
 
+        std::vector<double> cellOutput(testShape.totalDofs(), 0.0);
         for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
         {
           _tensorDofLayout->decodeLocalDofOrdinal(_rangeLayout, testShape, _rangeOrdering, localTestOrdinal, testBasisOrdinals);
@@ -980,8 +1043,20 @@ namespace
                             * trialPointValues[flatPointOrdinal]
                             * (testParity * testValue);
           }
-          localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, _tensorDofLayout)] += contribution;
+          cellOutput[localTestOrdinal] += contribution;
         }
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::LOCAL_ACTION,
+                                  localActionStart);
+
+        const auto scatterStart = std::chrono::steady_clock::now();
+        for (IndexType localTestOrdinal=0; localTestOrdinal<testShape.totalDofs(); localTestOrdinal++)
+        {
+          localOutput[testTraversal.globalIndexForLocalOrdinal(localTestOrdinal, _tensorDofLayout)] += cellOutput[localTestOrdinal];
+        }
+        recordTensorOperatorStage(&_instrumentation,
+                                  TensorOperatorInstrumentation::SCATTER_LOCAL_OUTPUT_ACCUMULATION,
+                                  scatterStart);
       }
     }
 
@@ -1093,6 +1168,16 @@ namespace
     TensorApplyPipelineDescription pipelineDescription() const override
     {
       return _pipeline;
+    }
+
+    void resetInstrumentation() const override
+    {
+      _instrumentation.reset();
+    }
+
+    TensorOperatorInstrumentation instrumentation() const override
+    {
+      return _instrumentation;
     }
 
     void apply(const std::vector<double> &input,

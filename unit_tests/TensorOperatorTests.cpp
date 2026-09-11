@@ -1232,6 +1232,91 @@ TEUCHOS_UNIT_TEST( TensorOperator, RealizedOperatorReportsStandardPipelineMetada
   TEST_ASSERT(pipeline.containsStage(TENSOR_APPLY_STAGE_SCATTER));
 }
 
+TEUCHOS_UNIT_TEST( TensorOperator, InstrumentationResetApplyAndAccumulateForSumFactorizedVolumePath )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = makeSimpleBilinearFormForOperatorTests();
+  MatrixFreeTensorOperatorFactory factory;
+
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  auto stats = op->instrumentation();
+  for (int stageOrdinal=0; stageOrdinal<TensorOperatorInstrumentation::STAGE_COUNT; stageOrdinal++)
+  {
+    auto stage = static_cast<TensorOperatorInstrumentation::Stage>(stageOrdinal);
+    TEST_EQUALITY(stats.count(stage), 0);
+    TEST_EQUALITY(stats.seconds(stage), 0.0);
+  }
+
+  std::vector<double> input(op->domainSize(), 1.0);
+  std::vector<double> output;
+  op->apply(input, output);
+  stats = op->instrumentation();
+
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::BASIS_CACHE_CONSTRUCTION) > 0);
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::COEFFICIENT_EVALUATION) > 0);
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION) > 0);
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::LOCAL_ACTION) > 0);
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::SCATTER_LOCAL_OUTPUT_ACCUMULATION) > 0);
+  for (int stageOrdinal=0; stageOrdinal<TensorOperatorInstrumentation::STAGE_COUNT; stageOrdinal++)
+  {
+    auto stage = static_cast<TensorOperatorInstrumentation::Stage>(stageOrdinal);
+    TEST_ASSERT(stats.seconds(stage) >= 0.0);
+  }
+
+  const long long localActionCountAfterOneApply = stats.count(TensorOperatorInstrumentation::LOCAL_ACTION);
+  op->apply(input, output);
+  auto accumulatedStats = op->instrumentation();
+  TEST_ASSERT(accumulatedStats.count(TensorOperatorInstrumentation::LOCAL_ACTION) >= 2 * localActionCountAfterOneApply);
+  TEST_ASSERT(accumulatedStats.seconds(TensorOperatorInstrumentation::LOCAL_ACTION) >= stats.seconds(TensorOperatorInstrumentation::LOCAL_ACTION));
+
+  op->resetInstrumentation();
+  stats = op->instrumentation();
+  for (int stageOrdinal=0; stageOrdinal<TensorOperatorInstrumentation::STAGE_COUNT; stageOrdinal++)
+  {
+    auto stage = static_cast<TensorOperatorInstrumentation::Stage>(stageOrdinal);
+    TEST_EQUALITY(stats.count(stage), 0);
+    TEST_EQUALITY(stats.seconds(stage), 0.0);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorOperator, InstrumentationLeavesFallbackVolumeResultUnchangedAndReportsNoContractionConstruction )
+{
+  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+
+  auto form = Teuchos::rcp(new TensorBilinearForm("coupled-fallback"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
+                                   makeFieldTensorVar("v"),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1)));
+
+  MatrixFreeTensorOperatorFactory factory;
+  auto op = factory.build(tensorMesh, dofLayout, form,
+                          TENSOR_TRIAL_SPACE, "u",
+                          TENSOR_TEST_SPACE,  "v");
+
+  std::vector<double> input(op->domainSize(), 0.0);
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.25 + 0.125 * i;
+
+  op->resetInstrumentation();
+  std::vector<double> actual;
+  op->apply(input, actual);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+  compareVectors(actual, expected, out, success, 1e-10, 1e-13);
+
+  auto stats = op->instrumentation();
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::BASIS_CACHE_CONSTRUCTION) > 0);
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::COEFFICIENT_EVALUATION) > 0);
+  TEST_EQUALITY(stats.count(TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION), 0);
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::LOCAL_ACTION) > 0);
+  TEST_ASSERT(stats.count(TensorOperatorInstrumentation::SCATTER_LOCAL_OUTPUT_ACCUMULATION) > 0);
+}
+
 TEUCHOS_UNIT_TEST( TensorOperator, BuilderProducedFormCanBeRealized )
 {
   auto tensorMesh = makeTensorMeshForOperatorTests();
