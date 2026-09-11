@@ -43,6 +43,20 @@ TensorMeshPtr makeTensorMeshForOperatorDataTests(bool includeTrace = false)
   return tensorMesh;
 }
 
+TensorMeshPtr makeDirectionalTraceTensorMeshForOperatorDataTests()
+{
+  auto tensorMesh = makeTensorMeshForOperatorDataTests(false);
+  std::vector<VarPtr> componentVars;
+  componentVars.push_back(Teuchos::rcp(new Var(10, 0, "tn_x_component", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS)));
+  componentVars.push_back(Teuchos::rcp(new Var(11, 0, "tn_t_component", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS)));
+  auto directionalTraces = TensorVarFactory::directionalTraceFamily("tn", {"x", "t"}, componentVars);
+  for (const auto &traceVar : directionalTraces)
+  {
+    tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(traceVar, Teuchos::null, std::vector<int>{0,0})));
+  }
+  return tensorMesh;
+}
+
 TEUCHOS_UNIT_TEST( TensorOperatorData, ComponentGeometryCompiledToViews )
 {
   auto tensorMesh = makeTensorMeshForOperatorDataTests();
@@ -208,6 +222,47 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, TraceSkeletonLocalToGlobalViewsAndParityM
     {
       TEST_EQUALITY(data.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "tn", entityOrdinal, localOrdinal), expectedIndices[localOrdinal]);
       TEST_EQUALITY(localToGlobal.h_view(entityOrdinal,localOrdinal), expectedIndices[localOrdinal]);
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorOperatorData, DirectionalTraceVariablesCompileToDistinctSkeletonFamilies )
+{
+  auto tensorMesh = makeDirectionalTraceTensorMeshForOperatorDataTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorOperatorData data(tensorMesh, dofLayout);
+
+  const auto &tnXData = data.variableData(TENSOR_TRIAL_SPACE, "tn_x");
+  const auto &tnTData = data.variableData(TENSOR_TRIAL_SPACE, "tn_t");
+  TEST_ASSERT(tnXData.isTraceVariable());
+  TEST_ASSERT(tnTData.isTraceVariable());
+  TEST_EQUALITY(tnXData.traceComponentOrdinal(), 0);
+  TEST_EQUALITY(tnTData.traceComponentOrdinal(), 1);
+  auto xSkeleton = tensorMesh->topology()->tensorSkeleton(0);
+  auto tSkeleton = tensorMesh->topology()->tensorSkeleton(1);
+  TEST_EQUALITY(data.skeletonEntityCount(TENSOR_TRIAL_SPACE, "tn_x"), xSkeleton.entityCount());
+  TEST_EQUALITY(data.skeletonEntityCount(TENSOR_TRIAL_SPACE, "tn_t"), tSkeleton.entityCount());
+
+  TensorCoefficientMap tnXMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "tn_x");
+  TensorCoefficientMap tnTMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "tn_t");
+  for (IndexType entityOrdinal=0; entityOrdinal<xSkeleton.entityCount(); entityOrdinal++)
+  {
+    const auto &entity = xSkeleton.entity(entityOrdinal);
+    auto expectedIndices = tnXMap.indicesForSkeletonEntity(entity);
+    TEST_EQUALITY(data.skeletonLocalDofCount(TENSOR_TRIAL_SPACE, "tn_x", entityOrdinal), static_cast<IndexType>(expectedIndices.size()));
+    for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(expectedIndices.size()); localOrdinal++)
+    {
+      TEST_EQUALITY(data.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "tn_x", entityOrdinal, localOrdinal), expectedIndices[localOrdinal]);
+    }
+  }
+  for (IndexType entityOrdinal=0; entityOrdinal<tSkeleton.entityCount(); entityOrdinal++)
+  {
+    const auto &entity = tSkeleton.entity(entityOrdinal);
+    auto expectedIndices = tnTMap.indicesForSkeletonEntity(entity);
+    TEST_EQUALITY(data.skeletonLocalDofCount(TENSOR_TRIAL_SPACE, "tn_t", entityOrdinal), static_cast<IndexType>(expectedIndices.size()));
+    for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(expectedIndices.size()); localOrdinal++)
+    {
+      TEST_EQUALITY(data.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "tn_t", entityOrdinal, localOrdinal), expectedIndices[localOrdinal]);
     }
   }
 }

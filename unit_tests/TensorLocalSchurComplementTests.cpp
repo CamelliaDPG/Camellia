@@ -110,6 +110,27 @@ TensorMeshPtr makeTraceVolumeAffineTensorMesh()
   return tensorMesh;
 }
 
+TensorMeshPtr makeDirectionalTraceVolumeAffineTensorMesh()
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 2.0}, { ActiveLeafSet1D({{0,0}}) }, false, 2));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 1));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("f", 2), Teuchos::null, std::vector<int>{0,0})));
+
+  std::vector<VarPtr> componentVars;
+  componentVars.push_back(Teuchos::rcp(new Var(10, 0, "tn_x_component", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS)));
+  componentVars.push_back(Teuchos::rcp(new Var(11, 0, "tn_t_component", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS)));
+  auto directionalTraces = TensorVarFactory::directionalTraceFamily("tn", {"x", "t"}, componentVars);
+  for (const auto &traceVar : directionalTraces)
+  {
+    tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(traceVar, Teuchos::null, std::vector<int>{0,0})));
+  }
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("w", 2), Teuchos::null, std::vector<int>{0,0})));
+  return tensorMesh;
+}
+
 int quadratureDegreeForComponent(int trialPolyOrder,
                                  int testPolyOrder,
                                  bool trialDerivative,
@@ -1168,6 +1189,59 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineBoundaryBBlocksMatchTraceAw
   for (size_t i=0; i<actual.size(); i++)
   {
     TEST_ASSERT(closeEnough(actual[i], expected[i], 1e-11, 1e-13));
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, DirectionalTraceBoundaryBBlocksUseRequestedSkeletonFamilies )
+{
+  auto tensorMesh = makeDirectionalTraceVolumeAffineTensorMesh();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("directional-trace-boundary-b-blocks"));
+  form->addTerm(TensorBilinearTerm(makeFluxTensorVar("tn_x", 2, 0),
+                                   makeFieldTensorVar("w", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::constant(1.0),
+                                   TENSOR_BILINEAR_TERM_BOUNDARY));
+  form->addTerm(TensorBilinearTerm(makeFluxTensorVar("tn_t", 2, 1),
+                                   makeFieldTensorVar("w", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::constant(2.0),
+                                   TENSOR_BILINEAR_TERM_BOUNDARY));
+
+  auto xBlocks = TensorLocalSchurComplementBuilder::affineBoundaryBBlocks(tensorMesh,
+                                                                          dofLayout,
+                                                                          form,
+                                                                          "tn_x",
+                                                                          "w");
+  auto tBlocks = TensorLocalSchurComplementBuilder::affineBoundaryBBlocks(tensorMesh,
+                                                                          dofLayout,
+                                                                          form,
+                                                                          "tn_t",
+                                                                          "w");
+  auto xSkeleton = tensorMesh->topology()->tensorSkeleton(0);
+  auto tSkeleton = tensorMesh->topology()->tensorSkeleton(1);
+  TEST_EQUALITY(xBlocks.size(), static_cast<size_t>(xSkeleton.entityCount()));
+  TEST_EQUALITY(tBlocks.size(), static_cast<size_t>(tSkeleton.entityCount()));
+
+  TensorOperatorData operatorData(tensorMesh, dofLayout);
+  TEST_EQUALITY(operatorData.variableData(TENSOR_TRIAL_SPACE, "tn_x").traceComponentOrdinal(), 0);
+  TEST_EQUALITY(operatorData.variableData(TENSOR_TRIAL_SPACE, "tn_t").traceComponentOrdinal(), 1);
+  TEST_EQUALITY(operatorData.skeletonEntityCount(TENSOR_TRIAL_SPACE, "tn_x"), xSkeleton.entityCount());
+  TEST_EQUALITY(operatorData.skeletonEntityCount(TENSOR_TRIAL_SPACE, "tn_t"), tSkeleton.entityCount());
+
+  for (IndexType entityOrdinal=0; entityOrdinal<xSkeleton.entityCount(); entityOrdinal++)
+  {
+    TEST_EQUALITY(xBlocks[entityOrdinal].entity, xSkeleton.entity(entityOrdinal));
+    TEST_EQUALITY(xBlocks[entityOrdinal].entity.orthogonalComponentOrdinal(), 0);
+    TEST_ASSERT(!xBlocks[entityOrdinal].bMatrix.empty());
+  }
+  for (IndexType entityOrdinal=0; entityOrdinal<tSkeleton.entityCount(); entityOrdinal++)
+  {
+    TEST_EQUALITY(tBlocks[entityOrdinal].entity, tSkeleton.entity(entityOrdinal));
+    TEST_EQUALITY(tBlocks[entityOrdinal].entity.orthogonalComponentOrdinal(), 1);
+    TEST_ASSERT(!tBlocks[entityOrdinal].bMatrix.empty());
   }
 }
 

@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "Teuchos_TestForException.hpp"
+#include "Var.h"
 
 using namespace Camellia;
 
@@ -40,4 +41,51 @@ std::vector<TensorVarPtr> TensorVarFactory::tensorVars() const
     vars.push_back(entry.second);
   }
   return vars;
+}
+
+std::vector<TensorVarPtr> TensorVarFactory::directionalTraceFamily(const std::string &baseName,
+                                                                   const std::vector<std::string> &componentLabels,
+                                                                   const std::vector<VarPtr> &componentVars)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(baseName == "", std::invalid_argument,
+                             "TensorVarFactory::directionalTraceFamily requires a nonempty base name.");
+  TEUCHOS_TEST_FOR_EXCEPTION(componentLabels.empty(), std::invalid_argument,
+                             "TensorVarFactory::directionalTraceFamily requires at least one component label.");
+  TEUCHOS_TEST_FOR_EXCEPTION(componentLabels.size() != componentVars.size(), std::invalid_argument,
+                             "TensorVarFactory::directionalTraceFamily requires one component label per component Var.");
+
+  std::vector<TensorVarPtr> directionalVars;
+  directionalVars.reserve(componentLabels.size());
+  for (int traceComponentOrdinal=0; traceComponentOrdinal<static_cast<int>(componentLabels.size()); traceComponentOrdinal++)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(componentLabels[traceComponentOrdinal] == "", std::invalid_argument,
+                               "TensorVarFactory::directionalTraceFamily requires nonempty component labels.");
+
+    std::vector<VarPtr> copiedComponentVars;
+    copiedComponentVars.reserve(componentVars.size());
+    for (const auto &componentVar : componentVars)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(componentVar == Teuchos::null, std::invalid_argument,
+                                 "TensorVarFactory::directionalTraceFamily requires non-null component Vars.");
+      copiedComponentVars.push_back(Teuchos::rcp(new Var(*componentVar)));
+    }
+
+    directionalVars.push_back(Teuchos::rcp(new TensorVar(baseName + "_" + componentLabels[traceComponentOrdinal],
+                                                        TENSOR_TRACE,
+                                                        copiedComponentVars,
+                                                        traceComponentOrdinal)));
+  }
+  return directionalVars;
+}
+
+std::vector<TensorVarPtr> TensorVarFactory::addDirectionalTraceFamily(const std::string &baseName,
+                                                                      const std::vector<std::string> &componentLabels,
+                                                                      const std::vector<VarPtr> &componentVars)
+{
+  auto directionalVars = directionalTraceFamily(baseName, componentLabels, componentVars);
+  for (const auto &directionalVar : directionalVars)
+  {
+    addTensorVar(directionalVar);
+  }
+  return directionalVars;
 }

@@ -113,10 +113,11 @@ Next slice:
 
 - Completed first graph-norm local Schur-complement slice: `TensorLocalSchurComplementBuilder` now can form dense local graph-norm test matrices from a weighted L2 term plus separable per-component derivative/stiffness contributions, solve dense local `G y = B` columns to form `K = B^T G^{-1} B`, and assemble a single-variable affine volume graph-norm CRS matrix.  Phase 0 tests validate local graph-norm G entries against explicit tensor quadrature, local K symmetry/consistency, and CRS action against local-block scatter.
 - Completed graph-norm plumbing through the richer Phase 0 CRS helpers: multi-variable affine volume assembly now forms cross trial-variable blocks with dense local graph-norm solves, and volume+boundary assembly can combine supported volume-field and value-only trace boundary B blocks against per-cell dense graph-norm G matrices.  Regression tests compare both assembled actions against dense local references on the existing small tensor meshes.
+- Completed first directional trace-family implementation slice: `TensorVarFactory` now has setup-only helpers that expand one logical trace family into per-component trace variables, e.g. `tn_x`, `tn_t`, `tn_ux`, and `tn_uy`, each with the matching `traceComponentOrdinal`.  Phase 0 coverage now verifies that multiple directional trace variables on one tensor mesh compile into distinct `TensorOperatorData` skeleton-family views and that boundary B-block construction uses each trace variable's requested orthogonal skeleton family rather than filtering one trace variable at runtime.
 
 Next slice:
 
-- Broaden the supported Vlasov coefficient/term coverage beyond the current affine, separable, value-only boundary subset, while keeping dense host-side graph-norm assembly as Phase 0 correctness infrastructure before device/batched optimization.
+- Thread directional trace families into the prototype Vlasov tensor-form/driver setup, replacing remaining single-`tn` 1D1T1V-style examples with explicit sums over directional trace variables where the test mesh has more than one skeleton family.  Then broaden supported Vlasov coefficient/term coverage beyond the current affine, separable, value-only boundary subset, while keeping dense host-side graph-norm assembly as Phase 0 correctness infrastructure before device/batched optimization.
 
 ## Phase 2: N-factor basis and quadrature cache
 
