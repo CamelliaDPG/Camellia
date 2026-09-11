@@ -1266,9 +1266,17 @@ namespace
         const IndexType localTestDofCount = operatorData.volumeLocalDofCount(TENSOR_TEST_SPACE, testVarName, tensorCellOrdinal);
         TEUCHOS_TEST_FOR_EXCEPTION(localTestDofCount != testShape.totalDofs(), std::logic_error,
                                    "MatrixFreeGraphNormSchurTensorOperator local test shape does not match TensorOperatorData.");
+        IndexType compactTrialDofCount = 0;
+        for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+        {
+          if (!pairHasBlocks[0][trialVarOrdinal]) continue;
+          const std::string &trialVarName = _trialVarNames[trialVarOrdinal];
+          compactTrialDofCount += operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal);
+        }
         std::vector<IndexType> localTrialGids;
-        std::map<IndexType,IndexType> localTrialGidToColumn;
-        std::vector<double> localB;
+        localTrialGids.reserve(static_cast<size_t>(compactTrialDofCount));
+        std::vector<double> localB(static_cast<size_t>(localTestDofCount * compactTrialDofCount), 0.0);
+        IndexType compactColumnStart = 0;
 
         for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
         {
@@ -1282,12 +1290,14 @@ namespace
           {
             const IndexType trialGid = trialOffsets[trialVarOrdinal]
                 + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal, localTrialOrdinal);
-            const IndexType compactColumn = compactColumnOrdinal(trialGid, localTestDofCount, localTrialGids, localTrialGidToColumn, localB);
+            const IndexType compactColumn = compactColumnStart + localTrialOrdinal;
+            localTrialGids.push_back(trialGid);
             for (IndexType localTestOrdinal=0; localTestOrdinal<localTestDofCount; localTestOrdinal++)
             {
-              localB[static_cast<size_t>(localTestOrdinal * localTrialGids.size() + compactColumn)] += block.bMatrix[static_cast<size_t>(localTestOrdinal * localTrialDofCount + localTrialOrdinal)];
+              localB[static_cast<size_t>(localTestOrdinal * compactTrialDofCount + compactColumn)] += block.bMatrix[static_cast<size_t>(localTestOrdinal * localTrialDofCount + localTrialOrdinal)];
             }
           }
+          compactColumnStart += localTrialDofCount;
         }
 
         std::vector<int> gQuadratureDegrees(testShape.componentCount(), 1);

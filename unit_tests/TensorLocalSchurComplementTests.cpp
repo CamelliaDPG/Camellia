@@ -1057,6 +1057,18 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, LocalGraphNormActionMatchesDenseS
       }
       TEST_ASSERT(closeEnough(reconstructed, bTimesX[row], 1e-11, 1e-13));
     }
+
+    const auto repeatedInverse = action.applyInverse(bTimesX);
+    TEST_EQUALITY(action.gMatrix().size(), block.gMatrix.size());
+    for (size_t i=0; i<block.gMatrix.size(); i++)
+    {
+      TEST_ASSERT(closeEnough(action.gMatrix()[i], block.gMatrix[i], 1e-14, 1e-14));
+    }
+    TEST_EQUALITY(repeatedInverse.size(), gInverseBTimesX.size());
+    for (size_t i=0; i<gInverseBTimesX.size(); i++)
+    {
+      TEST_ASSERT(closeEnough(repeatedInverse[i], gInverseBTimesX[i], 1e-14, 1e-14));
+    }
   }
 }
 

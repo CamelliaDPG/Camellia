@@ -68,6 +68,10 @@ namespace Camellia
     private:
       IndexType _testDofCount = 0;
       std::vector<double> _gMatrix;
+      std::vector<double> _gFactorization;
+      std::vector<IndexType> _pivotRows;
+
+      void factorGraphNormMatrix();
 
     public:
       LocalGraphNormAction(IndexType testDofCount,

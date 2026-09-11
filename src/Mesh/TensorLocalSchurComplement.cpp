@@ -640,12 +640,13 @@ std::vector<double> TensorLocalSchurComplementBuilder::graphTestNormMatrix(const
 
 TensorLocalSchurComplementBuilder::LocalGraphNormAction::LocalGraphNormAction(IndexType testDofCount,
                                                                                const std::vector<double> &gMatrix)
-: _testDofCount(testDofCount), _gMatrix(gMatrix)
+: _testDofCount(testDofCount), _gMatrix(gMatrix), _gFactorization(gMatrix)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_testDofCount < 0, std::invalid_argument,
                              "TensorLocalSchurComplementBuilder LocalGraphNormAction requires a nonnegative local test dof count.");
   TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(_gMatrix.size()) != _testDofCount * _testDofCount, std::invalid_argument,
                              "TensorLocalSchurComplementBuilder LocalGraphNormAction requires a square dense G matrix matching the test dof count.");
+  factorGraphNormMatrix();
 }
 
 IndexType TensorLocalSchurComplementBuilder::LocalGraphNormAction::testDofCount() const
@@ -658,11 +659,63 @@ const std::vector<double> &TensorLocalSchurComplementBuilder::LocalGraphNormActi
   return _gMatrix;
 }
 
+void TensorLocalSchurComplementBuilder::LocalGraphNormAction::factorGraphNormMatrix()
+{
+  _pivotRows.assign(_testDofCount, 0);
+  for (IndexType pivot=0; pivot<_testDofCount; pivot++)
+  {
+    IndexType pivotRow = pivot;
+    double pivotAbs = std::abs(_gFactorization[static_cast<size_t>(pivot * _testDofCount + pivot)]);
+    for (IndexType row=pivot + 1; row<_testDofCount; row++)
+    {
+      const double candidateAbs = std::abs(_gFactorization[static_cast<size_t>(row * _testDofCount + pivot)]);
+      if (candidateAbs > pivotAbs)
+      {
+        pivotAbs = candidateAbs;
+        pivotRow = row;
+      }
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(pivotAbs == 0.0, std::invalid_argument,
+                               "TensorLocalSchurComplementBuilder cannot factor a singular dense test-norm matrix.");
+    _pivotRows[pivot] = pivotRow;
+    if (pivotRow != pivot)
+    {
+      for (IndexType col=0; col<_testDofCount; col++) std::swap(_gFactorization[static_cast<size_t>(pivot * _testDofCount + col)], _gFactorization[static_cast<size_t>(pivotRow * _testDofCount + col)]);
+    }
+    for (IndexType row=pivot + 1; row<_testDofCount; row++)
+    {
+      const double factor = _gFactorization[static_cast<size_t>(row * _testDofCount + pivot)] / _gFactorization[static_cast<size_t>(pivot * _testDofCount + pivot)];
+      _gFactorization[static_cast<size_t>(row * _testDofCount + pivot)] = factor;
+      for (IndexType col=pivot + 1; col<_testDofCount; col++) _gFactorization[static_cast<size_t>(row * _testDofCount + col)] -= factor * _gFactorization[static_cast<size_t>(pivot * _testDofCount + col)];
+    }
+  }
+}
+
 std::vector<double> TensorLocalSchurComplementBuilder::LocalGraphNormAction::applyInverse(const std::vector<double> &rhs) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(rhs.size()) != _testDofCount, std::invalid_argument,
                              "TensorLocalSchurComplementBuilder LocalGraphNormAction RHS size does not match the local test dof count.");
-  return solveDenseLinearSystem(_gMatrix, rhs, _testDofCount);
+
+  std::vector<double> working = rhs;
+  for (IndexType pivot=0; pivot<_testDofCount; pivot++)
+  {
+    const IndexType pivotRow = _pivotRows[pivot];
+    if (pivotRow != pivot) std::swap(working[pivot], working[pivotRow]);
+    for (IndexType row=pivot + 1; row<_testDofCount; row++)
+    {
+      working[row] -= _gFactorization[static_cast<size_t>(row * _testDofCount + pivot)] * working[pivot];
+    }
+  }
+
+  std::vector<double> solution(_testDofCount, 0.0);
+  for (IndexType reverseOrdinal=0; reverseOrdinal<_testDofCount; reverseOrdinal++)
+  {
+    const IndexType row = _testDofCount - 1 - reverseOrdinal;
+    double value = working[row];
+    for (IndexType col=row + 1; col<_testDofCount; col++) value -= _gFactorization[static_cast<size_t>(row * _testDofCount + col)] * solution[col];
+    solution[row] = value / _gFactorization[static_cast<size_t>(row * _testDofCount + row)];
+  }
+  return solution;
 }
 
 std::vector<double> TensorLocalSchurComplementBuilder::LocalGraphNormAction::applyInverseToColumns(const std::vector<double> &inputMatrix,

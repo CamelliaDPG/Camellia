@@ -200,7 +200,15 @@ Next slice:
 
 Next slice:
 
-- Use the expanded benchmark results to identify whether local B construction, dense graph-norm solves, or trace/block scatter dominates, then add the smallest targeted cache/reuse optimization for the winning hotspot.
+- Completed dense graph-norm solve reuse slice: expanded graph-Schur timing remains the driver-side hotspot probe, and the first targeted optimization now caches a pivoted LU factorization inside each `LocalGraphNormAction`.  Cached matrix-free Schur applies still reuse compact local B blocks, but repeated `G^{-1}` applications no longer refactor the dense graph norm matrix on every cell apply or per RHS column.  Regression coverage verifies repeated inverse applications are stable and that the public `gMatrix()` remains the original unfactored graph norm matrix.
+
+Next slice:
+
+- Completed volume-only compact-B cache construction slice: after the LU-reuse change, the small assembled graph-Schur micro-apply still dominates the Phase 0 timing stream, so the next low-risk optimization targets construction-side compact local B packing for the matrix-free graph-Schur facade.  Volume-only cached blocks now pre-size their active trial-column list and compact B storage per cell, avoiding the previous grow-and-copy path in `compactColumnOrdinal()` while preserving the map-based path for mixed volume/boundary trace blocks where duplicate trace/volume columns can still occur.  The slice also repairs the cached LU regression test by comparing vector entries explicitly instead of asking Teuchos to stringify `std::vector<double>`.
+
+Next slice:
+
+- Re-run `runPhase0PerformanceCompareExpandedGraphSchur` once the execution bridge can target it directly, compare assembled vs matrix-free timing after LU reuse and compact B pre-sizing, then decide whether the remaining dominant cost is apply-time compact Bx/B^T scatter or construction-time local B/fallback coefficient evaluation.
 
 ## Phase 2: N-factor basis and quadrature cache
 
