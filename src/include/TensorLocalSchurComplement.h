@@ -1,6 +1,7 @@
 #ifndef Camellia_TensorLocalSchurComplement_h
 #define Camellia_TensorLocalSchurComplement_h
 
+#include <string>
 #include <vector>
 
 #include "TensorBasisCache.h"
@@ -29,6 +30,16 @@ namespace Camellia
                                                            const TensorBasisCacheND &testBasisCache,
                                                            const std::vector<TensorFunctionPtr> &coefficientFactors);
 
+    struct LocalVolumeSchurComplementBlock
+    {
+      TensorMeshTopology::TensorCellTuple cellTuple;
+      TensorFactorSpaceShape trialShape;
+      TensorFactorSpaceShape testShape;
+      std::vector<double> bMatrix;
+      std::vector<double> gDiagonal;
+      std::vector<double> kMatrix;
+    };
+
     static std::vector<double> denseBMatrix(const TensorProductLocalOperator &bOperator);
 
     static std::vector<std::vector<double>> l2TestMassDiagonalFactors(const TensorBasisCacheND &testBasisCache);
@@ -41,6 +52,17 @@ namespace Camellia
 
     static std::vector<double> formDiagonalTestNormSchurComplement(const TensorProductLocalOperator &bOperator,
                                                                    const std::vector<double> &gDiagonal);
+
+    static std::vector<double> formDiagonalTestNormSchurComplement(const std::vector<double> &bMatrix,
+                                                                   IndexType testDofCount,
+                                                                   IndexType trialDofCount,
+                                                                   const std::vector<double> &gDiagonal);
+
+    static std::vector<LocalVolumeSchurComplementBlock> affineL2VolumeCellSchurComplements(const TensorMeshPtr &tensorMesh,
+                                                                                           const TensorDofLayoutPtr &tensorDofLayout,
+                                                                                           const TensorBilinearFormPtr &bilinearForm,
+                                                                                           const std::string &trialVarName,
+                                                                                           const std::string &testVarName);
   };
 }
 

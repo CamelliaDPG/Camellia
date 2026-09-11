@@ -86,7 +86,11 @@ Next slice:
 
 Next slice:
 
-- Add the first assembled-cell path that loops over affine L2 volume cells, forms local B and diagonal G with `TensorLocalSchurComplementBuilder`, computes local K = B^T G^{-1} B in the trial-coefficient convention, and compares those local K blocks against the legacy/reference dense integration for the smallest tensor meshes.  Keep this local-only until the per-cell K comparison is stable; then add CRS preallocation/scatter as the following slice.
+- Completed first local assembled-cell path: `TensorLocalSchurComplementBuilder` now loops over affine L2 volume cells for a selected trial/test variable pair, reuses the cached separable B construction for supported volume terms, accumulates local dense B blocks, constructs diagonal L2 test-norm G entries, and forms local `K = B^T G^{-1} B` in the trial-coefficient convention.  Phase 0 tests compare the per-cell B/G/K blocks against an explicit dense tensor-quadrature reference on the smallest multi-cell tensor mesh, keeping the path local-only while the Schur-complement semantics stabilize.
+
+Next slice:
+
+- Add CRS preallocation/scatter for the supported affine L2 assembled-cell path: use `TensorOperatorData` local-to-global views to precompute local K graph entries, scatter the tested local K blocks into a global Tpetra/Crs matrix, and compare the assembled matrix action against the existing matrix-free/reference action on the same smallest tensor meshes before broadening coefficients or boundary terms.
 
 ## Phase 2: N-factor basis and quadrature cache
 

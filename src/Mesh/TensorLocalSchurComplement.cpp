@@ -1,5 +1,6 @@
 #include "TensorLocalSchurComplement.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "Teuchos_TestForException.hpp"
@@ -65,6 +66,58 @@ namespace
       TEUCHOS_TEST_FOR_EXCEPTION(shape.componentCardinality(d) != basisCache.componentCache(d).basisCardinality(), std::invalid_argument,
                                  "TensorLocalSchurComplementBuilder shape/cache basis-cardinality mismatch for " + label + ".");
     }
+  }
+
+  int quadratureDegreeForComponent(int trialPolyOrder,
+                                   int testPolyOrder,
+                                   bool trialDerivative,
+                                   bool testDerivative)
+  {
+    int degree = trialPolyOrder + testPolyOrder;
+    if (trialDerivative) degree -= 1;
+    if (testDerivative) degree -= 1;
+    return std::max(1, degree + 1);
+  }
+
+  bool appendSeparableCoefficientFactors(const TensorFunctionPtr &coefficient,
+                                         int componentCount,
+                                         std::vector<TensorFunctionPtr> &componentFactors)
+  {
+    if (coefficient == Teuchos::null) return false;
+    if (coefficient->hasSolutionDependencies()) return false;
+
+    const auto &dependentComponents = coefficient->dependencyScope().componentOrdinals();
+    if (dependentComponents.empty())
+    {
+      if (componentCount <= 0) return false;
+      componentFactors[0] = (componentFactors[0] == Teuchos::null) ? coefficient : componentFactors[0] * coefficient;
+      return true;
+    }
+
+    if (dependentComponents.size() == 1)
+    {
+      const int componentOrdinal = *dependentComponents.begin();
+      if ((componentOrdinal < 0) || (componentOrdinal >= componentCount)) return false;
+      componentFactors[componentOrdinal] = (componentFactors[componentOrdinal] == Teuchos::null) ? coefficient : componentFactors[componentOrdinal] * coefficient;
+      return true;
+    }
+
+    if (!coefficient->isSeparableProduct()) return false;
+    for (const auto &child : coefficient->childFunctions())
+    {
+      if (!appendSeparableCoefficientFactors(child, componentCount, componentFactors)) return false;
+    }
+    return true;
+  }
+
+  bool termSupportsAffineL2VolumeCellSchurComplement(const TensorBilinearTerm &term,
+                                                     std::vector<TensorFunctionPtr> &coefficientFactors)
+  {
+    if (!term.isVolumeTerm()) return false;
+    if (term.trialVar()->isTrace() || term.testVar()->isTrace()) return false;
+
+    coefficientFactors.assign(term.componentCount(), Teuchos::null);
+    return appendSeparableCoefficientFactors(term.coefficient(), term.componentCount(), coefficientFactors);
   }
 }
 
@@ -216,13 +269,23 @@ std::vector<double> TensorLocalSchurComplementBuilder::tensorProductDiagonal(con
 std::vector<double> TensorLocalSchurComplementBuilder::formDiagonalTestNormSchurComplement(const TensorProductLocalOperator &bOperator,
                                                                                            const std::vector<double> &gDiagonal)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(gDiagonal.size()) != bOperator.rangeSize(), std::invalid_argument,
+  return formDiagonalTestNormSchurComplement(denseBMatrix(bOperator),
+                                             bOperator.rangeSize(),
+                                             bOperator.domainSize(),
+                                             gDiagonal);
+}
+
+std::vector<double> TensorLocalSchurComplementBuilder::formDiagonalTestNormSchurComplement(const std::vector<double> &bMatrix,
+                                                                                           IndexType testDofCount,
+                                                                                           IndexType trialDofCount,
+                                                                                           const std::vector<double> &gDiagonal)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(gDiagonal.size()) != testDofCount, std::invalid_argument,
                              "TensorLocalSchurComplementBuilder requires one G diagonal entry per local test dof.");
+  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(bMatrix.size()) != testDofCount * trialDofCount, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder dense B dimensions do not match the supplied test/trial dof counts.");
 
-  const IndexType trialDofCount = bOperator.domainSize();
-  const IndexType testDofCount  = bOperator.rangeSize();
   std::vector<double> k(static_cast<size_t>(trialDofCount * trialDofCount), 0.0);
-
   for (IndexType testOrdinal=0; testOrdinal<testDofCount; testOrdinal++)
   {
     const double gEntry = gDiagonal[testOrdinal];
@@ -230,12 +293,102 @@ std::vector<double> TensorLocalSchurComplementBuilder::formDiagonalTestNormSchur
                                "TensorLocalSchurComplementBuilder cannot form a Schur complement with a zero G diagonal entry.");
     for (IndexType trialRow=0; trialRow<trialDofCount; trialRow++)
     {
-      const double left = bOperator.entry(testOrdinal, trialRow) / gEntry;
+      const double left = bMatrix[static_cast<size_t>(testOrdinal * trialDofCount + trialRow)] / gEntry;
       for (IndexType trialCol=0; trialCol<trialDofCount; trialCol++)
       {
-        k[static_cast<size_t>(trialRow * trialDofCount + trialCol)] += left * bOperator.entry(testOrdinal, trialCol);
+        k[static_cast<size_t>(trialRow * trialDofCount + trialCol)] += left * bMatrix[static_cast<size_t>(testOrdinal * trialDofCount + trialCol)];
       }
     }
   }
   return k;
+}
+
+std::vector<TensorLocalSchurComplementBuilder::LocalVolumeSchurComplementBlock>
+TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(const TensorMeshPtr &tensorMesh,
+                                                                      const TensorDofLayoutPtr &tensorDofLayout,
+                                                                      const TensorBilinearFormPtr &bilinearForm,
+                                                                      const std::string &trialVarName,
+                                                                      const std::string &testVarName)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorMesh == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorMesh for local assembled cells.");
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorDofLayout == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorDofLayout for local assembled cells.");
+  TEUCHOS_TEST_FOR_EXCEPTION(bilinearForm == Teuchos::null, std::invalid_argument,
+                             "TensorLocalSchurComplementBuilder requires a non-null TensorBilinearForm for local assembled cells.");
+
+  auto trialDiscretization = tensorMesh->trialDiscretization(trialVarName);
+  auto testDiscretization  = tensorMesh->testDiscretization(testVarName);
+  std::vector<LocalVolumeSchurComplementBlock> blocks;
+  blocks.reserve(tensorMesh->topology()->activeCellCount());
+
+  for (const auto &cellTuple : tensorMesh->topology()->activeCellTuples())
+  {
+    auto localContext = tensorDofLayout->volumeContext(trialVarName, testVarName, cellTuple);
+    const auto &trialShape = localContext.trialShape();
+    const auto &testShape  = localContext.testShape();
+
+    LocalVolumeSchurComplementBlock block;
+    block.cellTuple = cellTuple;
+    block.trialShape = trialShape;
+    block.testShape = testShape;
+    block.bMatrix.assign(static_cast<size_t>(testShape.totalDofs() * trialShape.totalDofs()), 0.0);
+
+    bool assembledAnyTerm = false;
+    for (const auto &term : bilinearForm->terms())
+    {
+      if (term.trialVar()->name() != trialVarName) continue;
+      if (term.testVar()->name()  != testVarName)  continue;
+      if (!term.isVolumeTerm()) continue;
+
+      std::vector<TensorFunctionPtr> coefficientFactors;
+      TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsAffineL2VolumeCellSchurComplement(term, coefficientFactors), std::invalid_argument,
+                                 "TensorLocalSchurComplementBuilder encountered an unsupported affine L2 volume term for local assembled-cell construction.");
+
+      std::vector<int> quadratureDegrees(term.componentCount(), 1);
+      for (int d=0; d<term.componentCount(); d++)
+      {
+        const int trialPolyOrder = tensorMesh->effectivePolyOrder(trialDiscretization, cellTuple[d], d, false);
+        const int testPolyOrder  = tensorMesh->effectivePolyOrder(testDiscretization,  cellTuple[d], d, true);
+        quadratureDegrees[d] = quadratureDegreeForComponent(trialPolyOrder,
+                                                            testPolyOrder,
+                                                            term.trialOperator().takesDerivativeInComponent(d),
+                                                            term.testOperator().takesDerivativeInComponent(d));
+      }
+
+      TensorBasisCacheND trialBasisCache(tensorMesh, trialDiscretization, false, cellTuple, quadratureDegrees);
+      TensorBasisCacheND testBasisCache (tensorMesh, testDiscretization,  true,  cellTuple, quadratureDegrees);
+      auto bOperator = buildVolumeBOperator(term,
+                                            trialShape,
+                                            testShape,
+                                            trialBasisCache,
+                                            testBasisCache,
+                                            coefficientFactors);
+      auto termB = denseBMatrix(bOperator);
+      for (size_t entryOrdinal=0; entryOrdinal<block.bMatrix.size(); entryOrdinal++)
+      {
+        block.bMatrix[entryOrdinal] += termB[entryOrdinal];
+      }
+      assembledAnyTerm = true;
+    }
+
+    TEUCHOS_TEST_FOR_EXCEPTION(!assembledAnyTerm, std::invalid_argument,
+                               "TensorLocalSchurComplementBuilder found no supported matching affine L2 volume terms for local assembled-cell construction.");
+
+    std::vector<int> gQuadratureDegrees(testShape.componentCount(), 1);
+    for (int d=0; d<testShape.componentCount(); d++)
+    {
+      const int testPolyOrder = tensorMesh->effectivePolyOrder(testDiscretization, cellTuple[d], d, true);
+      gQuadratureDegrees[d] = std::max(1, 2 * testPolyOrder + 1);
+    }
+    TensorBasisCacheND gTestBasisCache(tensorMesh, testDiscretization, true, cellTuple, gQuadratureDegrees);
+    block.gDiagonal = l2TestMassDiagonal(testShape, gTestBasisCache);
+    block.kMatrix = formDiagonalTestNormSchurComplement(block.bMatrix,
+                                                        testShape.totalDofs(),
+                                                        trialShape.totalDofs(),
+                                                        block.gDiagonal);
+    blocks.push_back(block);
+  }
+
+  return blocks;
 }

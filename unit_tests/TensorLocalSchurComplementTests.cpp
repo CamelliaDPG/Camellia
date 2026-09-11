@@ -57,6 +57,18 @@ TensorMeshPtr makeSingleCellTensorMesh(const std::vector<std::pair<double,double
   return tensorMesh;
 }
 
+TensorMeshPtr makeTwoByTwoAffineTensorMesh()
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 2.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({-1.0, 3.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 2));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 1));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("u", 2), Teuchos::null, std::vector<int>{0,0})));
+  tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar("v", 2), Teuchos::null, std::vector<int>{0,0})));
+  return tensorMesh;
+}
+
 int quadratureDegreeForComponent(int trialPolyOrder,
                                  int testPolyOrder,
                                  bool trialDerivative,
@@ -447,6 +459,95 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, CachedVlasovLikeVolumeBMatchesExp
                                                    row,
                                                    col);
       TEST_ASSERT(closeEnough(bMatrix[row * localContext.trialShape().totalDofs() + col], expected, 1e-11, 1e-13));
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineL2VolumeCellSchurComplementsMatchDenseReference )
+{
+  auto tensorMesh = makeTwoByTwoAffineTensorMesh();
+  auto dofLayout = tensorMesh->createDofLayout();
+  auto form = Teuchos::rcp(new TensorBilinearForm("local-assembled-affine-l2"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                   makeFieldTensorVar("v", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorFunction::constant(2.0)));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u", 2),
+                                   makeFieldTensorVar("v", 2),
+                                   TensorComponentOperatorDescriptor::valueOnly(2),
+                                   TensorComponentOperatorDescriptor::singleDerivative(2, 0),
+                                   TensorFunction::componentCoordinate(1)));
+
+  auto blocks = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(tensorMesh,
+                                                                                      dofLayout,
+                                                                                      form,
+                                                                                      "u",
+                                                                                      "v");
+  TEST_EQUALITY(blocks.size(), static_cast<size_t>(tensorMesh->topology()->activeCellCount()));
+
+  const auto trialLayout = dofLayout->layout("u", TENSOR_TRIAL_SPACE);
+  const auto testLayout  = dofLayout->layout("v", TENSOR_TEST_SPACE);
+  for (const auto &block : blocks)
+  {
+    auto localContext = dofLayout->volumeContext("u", "v", block.cellTuple);
+    TEST_ASSERT(block.trialShape == localContext.trialShape());
+    TEST_ASSERT(block.testShape  == localContext.testShape());
+    TEST_EQUALITY(block.bMatrix.size(), static_cast<size_t>(block.testShape.totalDofs() * block.trialShape.totalDofs()));
+    TEST_EQUALITY(block.gDiagonal.size(), static_cast<size_t>(block.testShape.totalDofs()));
+    TEST_EQUALITY(block.kMatrix.size(), static_cast<size_t>(block.trialShape.totalDofs() * block.trialShape.totalDofs()));
+
+    std::vector<double> referenceB(block.bMatrix.size(), 0.0);
+    for (const auto &term : form->terms())
+    {
+      auto quadratureDegrees = quadratureDegreesForTerm(tensorMesh, term, block.cellTuple);
+      TensorBasisCacheND trialCache(tensorMesh, tensorMesh->trialDiscretization("u"), false, block.cellTuple, quadratureDegrees);
+      TensorBasisCacheND testCache (tensorMesh, tensorMesh->testDiscretization("v"), true,  block.cellTuple, quadratureDegrees);
+      auto fullCoefficientValues = coefficientValues(term.coefficient(), trialCache);
+      for (IndexType row=0; row<block.testShape.totalDofs(); row++)
+      {
+        for (IndexType col=0; col<block.trialShape.totalDofs(); col++)
+        {
+          referenceB[row * block.trialShape.totalDofs() + col] += explicitCachedBEntry(term,
+                                                                                       dofLayout,
+                                                                                       trialLayout,
+                                                                                       testLayout,
+                                                                                       block.trialShape,
+                                                                                       block.testShape,
+                                                                                       trialCache,
+                                                                                       testCache,
+                                                                                       fullCoefficientValues,
+                                                                                       row,
+                                                                                       col);
+        }
+      }
+    }
+
+    for (size_t entryOrdinal=0; entryOrdinal<referenceB.size(); entryOrdinal++)
+    {
+      TEST_ASSERT(closeEnough(block.bMatrix[entryOrdinal], referenceB[entryOrdinal], 1e-12, 1e-14));
+    }
+
+    std::vector<int> gReferenceQuadratureDegrees(block.testShape.componentCount(), 1);
+    for (int d=0; d<block.testShape.componentCount(); d++)
+    {
+      const int testPolyOrder = tensorMesh->effectivePolyOrder(tensorMesh->testDiscretization("v"), block.cellTuple[d], d, true);
+      gReferenceQuadratureDegrees[d] = std::max(1, 2 * testPolyOrder + 1);
+    }
+    TensorBasisCacheND gTestCache(tensorMesh, tensorMesh->testDiscretization("v"), true, block.cellTuple, gReferenceQuadratureDegrees);
+    auto referenceG = TensorLocalSchurComplementBuilder::l2TestMassDiagonal(block.testShape, gTestCache);
+    auto referenceK = TensorLocalSchurComplementBuilder::formDiagonalTestNormSchurComplement(referenceB,
+                                                                                            block.testShape.totalDofs(),
+                                                                                            block.trialShape.totalDofs(),
+                                                                                            referenceG);
+    for (IndexType testOrdinal=0; testOrdinal<block.testShape.totalDofs(); testOrdinal++)
+    {
+      TEST_ASSERT(block.gDiagonal[testOrdinal] > 0.0);
+      TEST_FLOATING_EQUALITY(block.gDiagonal[testOrdinal], referenceG[testOrdinal], 1e-14);
+    }
+    for (size_t entryOrdinal=0; entryOrdinal<referenceK.size(); entryOrdinal++)
+    {
+      TEST_ASSERT(closeEnough(block.kMatrix[entryOrdinal], referenceK[entryOrdinal], 1e-12, 1e-14));
     }
   }
 }
