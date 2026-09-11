@@ -117,7 +117,11 @@ Next slice:
 
 Next slice:
 
-- Thread directional trace families into the prototype Vlasov tensor-form/driver setup, replacing remaining single-`tn` 1D1T1V-style examples with explicit sums over directional trace variables where the test mesh has more than one skeleton family.  Then broaden supported Vlasov coefficient/term coverage beyond the current affine, separable, value-only boundary subset, while keeping dense host-side graph-norm assembly as Phase 0 correctness infrastructure before device/batched optimization.
+- Completed directional Vlasov prototype wiring slice: `TensorBilinearFormBuilder` now has setup-only helpers for value/value boundary terms and directional trace-family boundary sums, and the 1X1T1V tensor Vlasov prototype now registers and applies explicit directional flux trace variables (`tn_x`, `tn_t`, and `tn_v`) instead of a single `tn` boundary variable.  Phase 0 tests compare each directional trace operator against the explicit boundary reference and keep the combined ultraweak volume+trace action check.
+
+Next slice:
+
+- Broaden supported Vlasov coefficient/term coverage beyond the current affine, separable, value-only boundary subset, prioritizing terms needed for the 1D1T2V Planar MITL tensor driver while keeping dense host-side graph-norm assembly as Phase 0 correctness infrastructure before device/batched optimization.
 
 ## Phase 2: N-factor basis and quadrature cache
 

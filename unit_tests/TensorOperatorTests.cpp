@@ -102,6 +102,15 @@ TensorVarPtr makeFluxTensorVar1X1T1V(const std::string &name, int traceComponent
   return Teuchos::rcp(new TensorVar(name, TENSOR_TRACE, std::vector<VarPtr>{vx, vt, vv}, traceComponentOrdinal));
 }
 
+std::vector<TensorVarPtr> makeDirectionalFluxTraceFamily1X1T1V(const std::string &baseName)
+{
+  std::vector<VarPtr> componentVars;
+  componentVars.push_back(Teuchos::rcp(new Var(0, 0, baseName + "_x_component", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS)));
+  componentVars.push_back(Teuchos::rcp(new Var(1, 0, baseName + "_t_component", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS)));
+  componentVars.push_back(Teuchos::rcp(new Var(2, 0, baseName + "_v_component", Camellia::OP_VALUE, L2, FLUX, Teuchos::null, true, UNKNOWN_FS)));
+  return TensorVarFactory::directionalTraceFamily(baseName, {"x", "t", "v"}, componentVars);
+}
+
 TensorMeshPtr makeTensorMeshForOperatorTests(bool nonuniformFirstComponent = false)
 {
   auto component0 = nonuniformFirstComponent
@@ -146,7 +155,10 @@ TensorMeshPtr makeTensorMeshForOperatorTests1X1T1V(bool nonuniformVelocityCompon
 TensorMeshPtr makeTensorMeshForTraceOperatorTests1X1T1V(bool nonuniformVelocityComponent = false)
 {
   auto tensorMesh = makeTensorMeshForOperatorTests1X1T1V(nonuniformVelocityComponent);
-  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFluxTensorVar1X1T1V("tn", 1), Teuchos::null, std::vector<int>{0,0,0})));
+  for (const auto &traceVar : makeDirectionalFluxTraceFamily1X1T1V("tn"))
+  {
+    tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(traceVar, Teuchos::null, std::vector<int>{0,0,0})));
+  }
   tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(makeTraceTensorVar1X1T1V("what", 1), Teuchos::null, std::vector<int>{0,0,0})));
   return tensorMesh;
 }
@@ -162,31 +174,50 @@ TensorBilinearFormPtr makeSimpleBilinearFormForOperatorTests()
   return form;
 }
 
+TensorBilinearFormPtr makeVlasovLikeVolumeBilinearForm1X1T1V()
+{
+  TensorBilinearFormBuilder builder("vlasov-1x1t1v-volume");
+  auto f = makeFieldTensorVar1X1T1V("f");
+  auto w = makeFieldTensorVar1X1T1V("w");
+  return builder.addValueDerivativeTerm(f,
+                                        w,
+                                        0,
+                                        TensorFunction::constant(-1.0) * TensorFunction::componentCoordinate(2))
+                .addValueDerivativeTerm(f,
+                                        w,
+                                        1,
+                                        TensorFunction::constant(-1.0))
+                .addValueDerivativeTerm(f,
+                                        w,
+                                        2,
+                                        TensorFunction::constant(-1.0) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1)))
+                .build();
+}
+
 TensorBilinearFormPtr makeVlasovLikeBilinearForm1X1T1V()
 {
-  auto form = Teuchos::rcp(new TensorBilinearForm("vlasov-1x1t1v"));
-  form->addTerm(TensorBilinearTerm(makeFieldTensorVar1X1T1V("f"),
-                                   makeFieldTensorVar1X1T1V("w"),
-                                   TensorComponentOperatorDescriptor::valueOnly(3),
-                                   TensorComponentOperatorDescriptor::singleDerivative(3, 0),
-                                   TensorFunction::constant(-1.0) * TensorFunction::componentCoordinate(2)));
-  form->addTerm(TensorBilinearTerm(makeFieldTensorVar1X1T1V("f"),
-                                   makeFieldTensorVar1X1T1V("w"),
-                                   TensorComponentOperatorDescriptor::valueOnly(3),
-                                   TensorComponentOperatorDescriptor::singleDerivative(3, 1),
-                                   TensorFunction::constant(-1.0)));
-  form->addTerm(TensorBilinearTerm(makeFieldTensorVar1X1T1V("f"),
-                                   makeFieldTensorVar1X1T1V("w"),
-                                   TensorComponentOperatorDescriptor::valueOnly(3),
-                                   TensorComponentOperatorDescriptor::singleDerivative(3, 2),
-                                   TensorFunction::constant(-1.0) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
-  form->addTerm(TensorBilinearTerm(makeFluxTensorVar1X1T1V("tn", 1),
-                                   makeFieldTensorVar1X1T1V("w"),
-                                   TensorComponentOperatorDescriptor::valueOnly(3),
-                                   TensorComponentOperatorDescriptor::valueOnly(3),
-                                   TensorFunction::constant(1.0),
-                                   TENSOR_BILINEAR_TERM_BOUNDARY));
-  return form;
+  TensorBilinearFormBuilder builder("vlasov-1x1t1v");
+  auto f = makeFieldTensorVar1X1T1V("f");
+  auto w = makeFieldTensorVar1X1T1V("w");
+  auto directionalTraces = makeDirectionalFluxTraceFamily1X1T1V("tn");
+  std::vector<TensorFunctionPtr> traceCoefficients(directionalTraces.size(), TensorFunction::constant(1.0));
+
+  return builder.addValueDerivativeTerm(f,
+                                        w,
+                                        0,
+                                        TensorFunction::constant(-1.0) * TensorFunction::componentCoordinate(2))
+                .addValueDerivativeTerm(f,
+                                        w,
+                                        1,
+                                        TensorFunction::constant(-1.0))
+                .addValueDerivativeTerm(f,
+                                        w,
+                                        2,
+                                        TensorFunction::constant(-1.0) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1)))
+                .addDirectionalTraceBoundaryValueTerms(directionalTraces,
+                                                       w,
+                                                       traceCoefficients)
+                .build();
 }
 
 struct BasisData1D
@@ -1511,7 +1542,7 @@ TEUCHOS_UNIT_TEST( TensorOperator, SumFactorizedVlasovLikeVolumeTerms1X1T1VMatch
 {
   auto tensorMesh = makeTensorMeshForOperatorTests1X1T1V(false);
   auto dofLayout = tensorMesh->createDofLayout();
-  auto form = makeVlasovLikeBilinearForm1X1T1V();
+  auto form = makeVlasovLikeVolumeBilinearForm1X1T1V();
   MatrixFreeTensorOperatorFactory factory;
   auto op = factory.build(tensorMesh, dofLayout, form,
                           TENSOR_TRIAL_SPACE, "f",
@@ -1539,33 +1570,37 @@ TEUCHOS_UNIT_TEST( TensorOperator, MixedUltraweakVlasov1X1T1VApplyMatchesExplici
   auto volumeOp = factory.build(tensorMesh, dofLayout, form,
                                 TENSOR_TRIAL_SPACE, "f",
                                 TENSOR_TEST_SPACE,  "w");
-  auto traceOp = factory.build(tensorMesh, dofLayout, form,
-                               TENSOR_TRIAL_SPACE, "tn",
-                               TENSOR_TEST_SPACE,  "w");
 
   std::vector<double> fieldInput(volumeOp->domainSize(), 0.0);
   for (IndexType i=0; i<volumeOp->domainSize(); i++) fieldInput[i] = 0.25 + 0.1 * i;
 
-  std::vector<double> traceInput(traceOp->domainSize(), 0.0);
-  for (IndexType i=0; i<traceOp->domainSize(); i++) traceInput[i] = -0.5 + 0.2 * i;
-
-  std::vector<double> actualVolume, actualTrace;
+  std::vector<double> actualVolume;
   volumeOp->apply(fieldInput, actualVolume);
-  traceOp->apply(traceInput, actualTrace);
-
   auto expectedVolume = applyReferenceOperator(tensorMesh, dofLayout, form, "f", "w", fieldInput);
-  auto expectedTrace  = applyReferenceBoundaryOperator(tensorMesh, dofLayout, form, "tn", "w", traceInput);
-
   compareVectors(actualVolume, expectedVolume, out, success, 1e-11, 1e-14);
-  compareVectors(actualTrace, expectedTrace, out, success, 1e-11, 1e-14);
 
-  std::vector<double> combinedActual(actualVolume.size(), 0.0);
-  std::vector<double> combinedExpected(expectedVolume.size(), 0.0);
-  TEST_EQUALITY(combinedActual.size(), actualTrace.size());
-  for (size_t i=0; i<combinedActual.size(); i++)
+  std::vector<double> combinedActual = actualVolume;
+  std::vector<double> combinedExpected = expectedVolume;
+  for (const std::string &traceName : {std::string("tn_x"), std::string("tn_t"), std::string("tn_v")})
   {
-    combinedActual[i] = actualVolume[i] + actualTrace[i];
-    combinedExpected[i] = expectedVolume[i] + expectedTrace[i];
+    auto traceOp = factory.build(tensorMesh, dofLayout, form,
+                                 TENSOR_TRIAL_SPACE, traceName,
+                                 TENSOR_TEST_SPACE,  "w");
+
+    std::vector<double> traceInput(traceOp->domainSize(), 0.0);
+    for (IndexType i=0; i<traceOp->domainSize(); i++) traceInput[i] = -0.5 + 0.2 * i;
+
+    std::vector<double> actualTrace;
+    traceOp->apply(traceInput, actualTrace);
+    auto expectedTrace = applyReferenceBoundaryOperator(tensorMesh, dofLayout, form, traceName, "w", traceInput);
+    compareVectors(actualTrace, expectedTrace, out, success, 1e-11, 1e-14);
+
+    TEST_EQUALITY(combinedActual.size(), actualTrace.size());
+    for (size_t i=0; i<combinedActual.size(); i++)
+    {
+      combinedActual[i] += actualTrace[i];
+      combinedExpected[i] += expectedTrace[i];
+    }
   }
   compareVectors(combinedActual, combinedExpected, out, success, 1e-11, 1e-14);
 }
@@ -1610,15 +1645,22 @@ TEUCHOS_UNIT_TEST( TensorOperator, VlasovLike1X1T1VPrototypeMatchesLegacyReprese
 {
   auto form = makeVlasovLikeBilinearForm1X1T1V();
 
-  TEST_EQUALITY(form->termCount(), 4);
+  TEST_EQUALITY(form->termCount(), 6);
   TEST_EQUALITY(form->term(0).trialVar()->name(), "f");
   TEST_EQUALITY(form->term(0).testVar()->name(),  "w");
-  TEST_EQUALITY(form->term(3).trialVar()->name(), "tn");
+  TEST_EQUALITY(form->term(3).trialVar()->name(), "tn_x");
+  TEST_EQUALITY(form->term(4).trialVar()->name(), "tn_t");
+  TEST_EQUALITY(form->term(5).trialVar()->name(), "tn_v");
+  TEST_EQUALITY(form->term(3).trialVar()->traceComponentOrdinal(), 0);
+  TEST_EQUALITY(form->term(4).trialVar()->traceComponentOrdinal(), 1);
+  TEST_EQUALITY(form->term(5).trialVar()->traceComponentOrdinal(), 2);
 
   TEST_ASSERT(form->term(0).testOperator().takesDerivativeInComponent(0));
   TEST_ASSERT(form->term(1).testOperator().takesDerivativeInComponent(1));
   TEST_ASSERT(form->term(2).testOperator().takesDerivativeInComponent(2));
   TEST_ASSERT(form->term(3).isBoundaryTerm());
+  TEST_ASSERT(form->term(4).isBoundaryTerm());
+  TEST_ASSERT(form->term(5).isBoundaryTerm());
 
   TEST_ASSERT(form->term(0).coefficient()->dependencyScope().dependsOnComponent(2));
   TEST_ASSERT(form->term(1).coefficient()->dependencyScope().isEmpty());

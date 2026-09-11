@@ -3,13 +3,16 @@
 
 #include "TensorBilinearForm.h"
 
+#include <vector>
+
 namespace Camellia
 {
   /**
    *  \brief Convenience builder for the descriptor-side tensor bilinear-form layer.
    *
    *  The main TensorBilinearForm and TensorBilinearTerm classes remain the canonical descriptor types.
-   *  This helper exists only to reduce repetitive boilerplate in common volume-term construction paths.
+   *  This helper exists only to reduce repetitive boilerplate in common volume-term construction paths
+   *  and setup-time trace-family wiring.
    */
   class TensorBilinearFormBuilder
   {
@@ -21,6 +24,16 @@ namespace Camellia
                                                  TensorVarPtr testVar,
                                                  TensorFunctionPtr coefficient,
                                                  const TensorOperatorCapabilitySet &capabilities = TensorOperatorCapabilitySet::matrixFreeOnly());
+
+    TensorBilinearFormBuilder &addBoundaryValueValueTerm(TensorVarPtr trialVar,
+                                                         TensorVarPtr testVar,
+                                                         TensorFunctionPtr coefficient,
+                                                         const TensorOperatorCapabilitySet &capabilities = TensorOperatorCapabilitySet::matrixFreeOnly());
+
+    TensorBilinearFormBuilder &addDirectionalTraceBoundaryValueTerms(const std::vector<TensorVarPtr> &directionalTraceVars,
+                                                                     TensorVarPtr testVar,
+                                                                     const std::vector<TensorFunctionPtr> &coefficients,
+                                                                     const TensorOperatorCapabilitySet &capabilities = TensorOperatorCapabilitySet::matrixFreeOnly());
 
     TensorBilinearFormBuilder &addDerivativeValueTerm(TensorVarPtr trialVar,
                                                       TensorVarPtr testVar,
