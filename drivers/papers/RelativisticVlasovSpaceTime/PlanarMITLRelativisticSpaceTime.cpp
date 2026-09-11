@@ -28,12 +28,20 @@
 #include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "RHS.h"
 #include "Solution.h"
+#include "TensorBilinearForm.h"
+#include "TensorLocalSchurComplement.h"
+#include "TensorMesh.h"
+#include "TensorOperatorData.h"
+#include "TensorOperatorFactory.h"
+#include "TensorVar.h"
+#include "TensorVarDiscretization.h"
 #include "TrigFunctions.h"
 
 #include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -128,6 +136,181 @@ namespace
       }
     }
     return fields;
+  }
+
+  std::string phase0TensorGraphSchurBackendName(const std::string &backend)
+  {
+    if (backend == "off") return "off";
+    if (backend == "assembled_crs") return "assembled_crs_graph_schur";
+    if (backend == "matrix_free") return "matrix_free_graph_schur";
+    return "invalid";
+  }
+
+  bool phase0TensorGraphSchurBackendIsValid(const std::string &backend)
+  {
+    return (backend == "off") || (backend == "assembled_crs") || (backend == "matrix_free");
+  }
+
+  std::vector<double> phase0UniformVertices(double left, double right, int elementCount)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(elementCount <= 0, std::invalid_argument,
+                               "Phase 0 tensor graph-norm Schur microbenchmark requires positive element counts.");
+    std::vector<double> vertices(elementCount + 1, left);
+    for (int vertexOrdinal=0; vertexOrdinal<=elementCount; vertexOrdinal++)
+    {
+      vertices[vertexOrdinal] = left + (right - left) * static_cast<double>(vertexOrdinal) / static_cast<double>(elementCount);
+    }
+    return vertices;
+  }
+
+  std::vector<ActiveLeafSet1D> phase0RootLeafSets(int elementCount)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(elementCount <= 0, std::invalid_argument,
+                               "Phase 0 tensor graph-norm Schur microbenchmark requires positive element counts.");
+    return std::vector<ActiveLeafSet1D>(elementCount, ActiveLeafSet1D({{0,0}}));
+  }
+
+  TensorVarPtr phase0TensorFieldVar1D1T2V(const std::string &name)
+  {
+    std::vector<VarPtr> componentVars;
+    componentVars.push_back(Teuchos::rcp(new Var(2000, 0, name + "_x",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
+    componentVars.push_back(Teuchos::rcp(new Var(2001, 0, name + "_t",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
+    componentVars.push_back(Teuchos::rcp(new Var(2002, 0, name + "_ux", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
+    componentVars.push_back(Teuchos::rcp(new Var(2003, 0, name + "_uy", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
+    return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, componentVars));
+  }
+
+  TensorMeshPtr makePhase0TensorGraphSchurMesh1D1T2V(double x0,
+                                                     double xWidth,
+                                                     double t0,
+                                                     double tWidth,
+                                                     double uxMin,
+                                                     double uxMax,
+                                                     double uyMin,
+                                                     double uyMax,
+                                                     int xElementCount,
+                                                     int tElementCount,
+                                                     int uxElementCount,
+                                                     int uyElementCount,
+                                                     int componentPolyOrder,
+                                                     int testSpaceEnrichment)
+  {
+    auto component0 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(x0, x0 + xWidth, xElementCount), phase0RootLeafSets(xElementCount), false, componentPolyOrder));
+    auto component1 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(t0, t0 + tWidth, tElementCount), phase0RootLeafSets(tElementCount), false, componentPolyOrder));
+    auto component2 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(uxMin, uxMax, uxElementCount), phase0RootLeafSets(uxElementCount), false, componentPolyOrder));
+    auto component3 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(uyMin, uyMax, uyElementCount), phase0RootLeafSets(uyElementCount), false, componentPolyOrder));
+    auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2, component3}));
+    auto factory = TensorVarFactory::factory();
+    auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), componentPolyOrder, testSpaceEnrichment));
+    tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(phase0TensorFieldVar1D1T2V("f"), Teuchos::null, std::vector<int>{0,0,0,0})));
+    tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(phase0TensorFieldVar1D1T2V("w"), Teuchos::null, std::vector<int>{0,0,0,0})));
+    return tensorMesh;
+  }
+
+  TensorBilinearFormPtr makePhase0TensorGraphSchurForm1D1T2V(double cScaled)
+  {
+    auto form = Teuchos::rcp(new TensorBilinearForm("phase0-tensor-relativistic-graph-schur"));
+    auto f = phase0TensorFieldVar1D1T2V("f");
+    auto w = phase0TensorFieldVar1D1T2V("w");
+    auto ux = TensorFunction::componentCoordinate(2);
+    auto uy = TensorFunction::componentCoordinate(3);
+    auto gamma = Camellia::sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (cScaled * cScaled)) * (ux * ux + uy * uy));
+    auto vx = TensorFunction::constant(-1.0) * ux * reciprocal(gamma);
+    auto vy = TensorFunction::constant(0.5) * uy * reciprocal(gamma);
+    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 0), vx));
+    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 1), TensorFunction::constant(-1.0)));
+    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 2), TensorFunction::constant(-0.5) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
+    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 3), vy + TensorFunction::constant(-0.75) * TensorFunction::componentCoordinate(1)));
+    return form;
+  }
+
+  double phase0VectorL2Norm(const std::vector<double> &values)
+  {
+    double normSquared = 0.0;
+    for (double value : values) normSquared += value * value;
+    return std::sqrt(normSquared);
+  }
+
+  void runPhase0TensorGraphSchurMicroApply(const std::string &backend,
+                                           double cScaled,
+                                           double x0,
+                                           double xWidth,
+                                           double t0,
+                                           double tWidth,
+                                           double uxMin,
+                                           double uxMax,
+                                           double uyMin,
+                                           double uyMax,
+                                           double l2Weight,
+                                           int microXElements,
+                                           int microTElements,
+                                           int microUxElements,
+                                           int microUyElements,
+                                           int microComponentPolyOrder,
+                                           int microTestSpaceEnrichment,
+                                           Phase0Instrumentation &phase0)
+  {
+    if (backend == "off") return;
+    TEUCHOS_TEST_FOR_EXCEPTION(!phase0TensorGraphSchurBackendIsValid(backend), std::invalid_argument,
+                               "Unsupported Phase 0 tensor graph-norm Schur backend option: " + backend);
+
+    auto tensorMesh = makePhase0TensorGraphSchurMesh1D1T2V(x0, xWidth, t0, tWidth, uxMin, uxMax, uyMin, uyMax,
+                                                           microXElements,
+                                                           microTElements,
+                                                           microUxElements,
+                                                           microUyElements,
+                                                           microComponentPolyOrder,
+                                                           microTestSpaceEnrichment);
+    auto dofLayout = tensorMesh->createDofLayout();
+    auto tensorForm = makePhase0TensorGraphSchurForm1D1T2V(cScaled);
+    TensorOperatorData operatorData(tensorMesh, dofLayout);
+    const IndexType trialDofCount = operatorData.coefficientCount(TENSOR_TRIAL_SPACE, "f");
+    std::vector<double> input(trialDofCount, 0.0);
+    for (IndexType gid=0; gid<trialDofCount; gid++) input[gid] = 0.1 + 0.025 * static_cast<double>((gid % 17) + 1);
+
+    const auto applyStart = phase0.now();
+    std::vector<double> output;
+    if (backend == "matrix_free")
+    {
+      MatrixFreeGraphNormSchurTensorOperatorFactory graphFactory(l2Weight);
+      auto graphOp = graphFactory.build(tensorMesh,
+                                        dofLayout,
+                                        tensorForm,
+                                        TENSOR_TRIAL_SPACE,
+                                        "f",
+                                        TENSOR_TRIAL_SPACE,
+                                        "f");
+      graphOp->apply(input, output);
+    }
+    else
+    {
+      auto graphMatrix = TensorLocalSchurComplementBuilder::affineGraphVolumeSchurComplementMatrix(tensorMesh,
+                                                                                                   dofLayout,
+                                                                                                   tensorForm,
+                                                                                                   "f",
+                                                                                                   "w",
+                                                                                                   l2Weight);
+      TVector<double> x(graphMatrix->getDomainMap(), 1);
+      TVector<double> y(graphMatrix->getRangeMap(), 1);
+      auto xHost = x.getLocalViewHost(Tpetra::Access::ReadWrite);
+      for (size_t localOrdinal=0; localOrdinal<graphMatrix->getDomainMap()->getLocalNumElements(); localOrdinal++) xHost(localOrdinal,0) = input[graphMatrix->getDomainMap()->getGlobalElement(localOrdinal)];
+      graphMatrix->apply(x, y);
+      output.assign(trialDofCount, 0.0);
+      auto yHost = y.getLocalViewHost(Tpetra::Access::ReadOnly);
+      for (size_t localOrdinal=0; localOrdinal<graphMatrix->getRangeMap()->getLocalNumElements(); localOrdinal++) output[graphMatrix->getRangeMap()->getGlobalElement(localOrdinal)] = yHost(localOrdinal,0);
+    }
+
+    phase0.logDuration("tensor_graph_schur_micro_apply",
+                       phase0.elapsedSince(applyStart),
+                       {{"backend", phase0TensorGraphSchurBackendName(backend)},
+                        {"micro_x_elements", std::to_string(microXElements)},
+                        {"micro_t_elements", std::to_string(microTElements)},
+                        {"micro_ux_elements", std::to_string(microUxElements)},
+                        {"micro_uy_elements", std::to_string(microUyElements)},
+                        {"micro_component_p", std::to_string(microComponentPolyOrder)},
+                        {"micro_test_enrichment", std::to_string(microTestSpaceEnrichment)},
+                        {"trial_dofs", std::to_string(trialDofCount)},
+                        {"output_norm", phase0DoubleString(phase0VectorL2Norm(output))}});
   }
 }
 
@@ -810,13 +993,47 @@ int main(int argc, char *argv[])
 
     bool phase0Instrumentation = false;
     std::string phase0TimingFile = "";
+    std::string phase0TensorGraphSchurBackend = "off";
+    int phase0TensorGraphSchurXElements = 2;
+    int phase0TensorGraphSchurTElements = 1;
+    int phase0TensorGraphSchurUxElements = 1;
+    int phase0TensorGraphSchurUyElements = 2;
+    int phase0TensorGraphSchurComponentP = 2;
+    int phase0TensorGraphSchurTestEnrichment = 1;
     cmdp.setOption("phase0Instrumentation", "noPhase0Instrumentation", &phase0Instrumentation,
                    "Emit grep-friendly Phase 0 timing lines for Planar MITL baseline/performance runs.");
     cmdp.setOption("phase0TimingFile", &phase0TimingFile,
                    "Optional rank-0 file for Phase 0 timing lines; stdout is always used when instrumentation is enabled.");
+    cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
+                   "Optional Phase 0 tensor-native graph-norm Schur micro-apply backend: off, assembled_crs, or matrix_free.");
+    cmdp.setOption("phase0TensorGraphSchurXElements",  &phase0TensorGraphSchurXElements,  "Number of x cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
+    cmdp.setOption("phase0TensorGraphSchurTElements",  &phase0TensorGraphSchurTElements,  "Number of t cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
+    cmdp.setOption("phase0TensorGraphSchurUxElements", &phase0TensorGraphSchurUxElements, "Number of ux cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
+    cmdp.setOption("phase0TensorGraphSchurUyElements", &phase0TensorGraphSchurUyElements, "Number of uy cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
+    cmdp.setOption("phase0TensorGraphSchurComponentP", &phase0TensorGraphSchurComponentP, "Per-component polynomial order for the optional Phase 0 tensor graph-norm Schur microbenchmark.");
+    cmdp.setOption("phase0TensorGraphSchurTestEnrichment", &phase0TensorGraphSchurTestEnrichment, "Test-space enrichment for the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
+      return -1;
+    }
+    if (!phase0TensorGraphSchurBackendIsValid(phase0TensorGraphSchurBackend))
+    {
+      if (rank == 0)
+      {
+        std::cout << "Unsupported phase0TensorGraphSchurBackend='" << phase0TensorGraphSchurBackend
+                  << "'; expected off, assembled_crs, or matrix_free.\n";
+      }
+      return -1;
+    }
+    if ((phase0TensorGraphSchurXElements <= 0) || (phase0TensorGraphSchurTElements <= 0) ||
+        (phase0TensorGraphSchurUxElements <= 0) || (phase0TensorGraphSchurUyElements <= 0) ||
+        (phase0TensorGraphSchurComponentP < 0) || (phase0TensorGraphSchurTestEnrichment < 0))
+    {
+      if (rank == 0)
+      {
+        std::cout << "Phase 0 tensor graph-norm Schur microbenchmark sizes require positive element counts and nonnegative p/enrichment.\n";
+      }
       return -1;
     }
 
@@ -848,6 +1065,8 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
       std::cout << "Proximal Galerkin positivity enforcement: " << (gEnforcePositivity ? "enabled" : "disabled") << "\n";
+      std::cout << "Phase 0 tensor graph-norm Schur backend: " << phase0TensorGraphSchurBackendName(phase0TensorGraphSchurBackend)
+                << " (micro-apply selection only; legacy production solve remains active)\n";
       if (gEnforcePositivity)
       {
         std::cout << "  proximalGalerkinAlpha0 = " << gProximalGalerkinAlpha0 << "\n";
@@ -952,6 +1171,24 @@ int main(int argc, char *argv[])
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
+    runPhase0TensorGraphSchurMicroApply(phase0TensorGraphSchurBackend,
+                                        cScaled,
+                                        x0,
+                                        xWidth,
+                                        t0,
+                                        tWidth,
+                                        uxMin,
+                                        uxMax,
+                                        uyMin,
+                                        uyMax,
+                                        L2WeightGraph,
+                                        phase0TensorGraphSchurXElements,
+                                        phase0TensorGraphSchurTElements,
+                                        phase0TensorGraphSchurUxElements,
+                                        phase0TensorGraphSchurUyElements,
+                                        phase0TensorGraphSchurComponentP,
+                                        phase0TensorGraphSchurTestEnrichment,
+                                        phase0);
     
 //    form->setExportViz(true, "/tmp"); // DEBUGGING
     

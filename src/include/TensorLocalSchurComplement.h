@@ -63,6 +63,54 @@ namespace Camellia
                                                    const TensorBasisCacheND &testBasisCache,
                                                    double l2Weight = 1.0);
 
+    struct LocalGraphNormAction
+    {
+    private:
+      IndexType _testDofCount = 0;
+      std::vector<double> _gMatrix;
+
+    public:
+      LocalGraphNormAction(IndexType testDofCount,
+                           const std::vector<double> &gMatrix);
+
+      IndexType testDofCount() const;
+      const std::vector<double> &gMatrix() const;
+
+      std::vector<double> applyInverse(const std::vector<double> &rhs) const;
+      std::vector<double> applyInverseToColumns(const std::vector<double> &inputMatrix,
+                                                IndexType columnCount) const;
+      std::vector<double> applySchurComplement(const std::vector<double> &bMatrix,
+                                               IndexType trialDofCount,
+                                               const std::vector<double> &trialVector) const;
+    };
+
+    static LocalGraphNormAction localGraphNormAction(IndexType testDofCount,
+                                                     const std::vector<double> &gMatrix);
+
+    static std::vector<double> applyAffineGraphVolumeSchurComplement(const TensorMeshPtr &tensorMesh,
+                                                                     const TensorDofLayoutPtr &tensorDofLayout,
+                                                                     const TensorBilinearFormPtr &bilinearForm,
+                                                                     const std::string &trialVarName,
+                                                                     const std::string &testVarName,
+                                                                     const std::vector<double> &trialVector,
+                                                                     double l2Weight = 1.0);
+
+    static std::vector<double> applyAffineGraphVolumeSchurComplement(const TensorMeshPtr &tensorMesh,
+                                                                     const TensorDofLayoutPtr &tensorDofLayout,
+                                                                     const TensorBilinearFormPtr &bilinearForm,
+                                                                     const std::vector<std::string> &trialVarNames,
+                                                                     const std::vector<std::string> &testVarNames,
+                                                                     const std::vector<double> &trialVector,
+                                                                     double l2Weight = 1.0);
+
+    static std::vector<double> applyAffineGraphVolumeBoundarySchurComplement(const TensorMeshPtr &tensorMesh,
+                                                                             const TensorDofLayoutPtr &tensorDofLayout,
+                                                                             const TensorBilinearFormPtr &bilinearForm,
+                                                                             const std::vector<std::string> &trialVarNames,
+                                                                             const std::vector<std::string> &testVarNames,
+                                                                             const std::vector<double> &trialVector,
+                                                                             double l2Weight = 1.0);
+
     static std::vector<double> tensorProductDiagonal(const TensorFactorSpaceShape &shape,
                                                      const std::vector<std::vector<double>> &componentDiagonals);
 

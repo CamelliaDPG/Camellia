@@ -1347,6 +1347,8 @@ TEUCHOS_UNIT_TEST( TensorOperator, InstrumentationResetApplyAndAccumulateForSumF
   TEST_ASSERT(stats.count(TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION) > 0);
   TEST_ASSERT(stats.count(TensorOperatorInstrumentation::LOCAL_ACTION) > 0);
   TEST_ASSERT(stats.count(TensorOperatorInstrumentation::SCATTER_LOCAL_OUTPUT_ACCUMULATION) > 0);
+  TEST_ASSERT(stats.sumFactorizedVolumeTermCount() > 0);
+  TEST_EQUALITY(stats.fullTensorVolumeTermCount(), 0);
   for (int stageOrdinal=0; stageOrdinal<TensorOperatorInstrumentation::STAGE_COUNT; stageOrdinal++)
   {
     auto stage = static_cast<TensorOperatorInstrumentation::Stage>(stageOrdinal);
@@ -1367,32 +1369,40 @@ TEUCHOS_UNIT_TEST( TensorOperator, InstrumentationResetApplyAndAccumulateForSumF
     TEST_EQUALITY(stats.count(stage), 0);
     TEST_EQUALITY(stats.seconds(stage), 0.0);
   }
+  TEST_EQUALITY(stats.sumFactorizedVolumeTermCount(), 0);
+  TEST_EQUALITY(stats.fullTensorVolumeTermCount(), 0);
 }
 
-TEUCHOS_UNIT_TEST( TensorOperator, InstrumentationLeavesFallbackVolumeResultUnchangedAndReportsNoContractionConstruction )
+TEUCHOS_UNIT_TEST( TensorOperator, InstrumentationLeavesRelativisticVelocityFallbackResultUnchangedAndReportsNoContractionConstruction )
 {
-  auto tensorMesh = makeTensorMeshForOperatorTests();
+  auto tensorMesh = makeTensorMeshForOperatorTests1D1T2V();
   auto dofLayout = tensorMesh->createDofLayout();
 
-  auto form = Teuchos::rcp(new TensorBilinearForm("coupled-fallback"));
-  form->addTerm(TensorBilinearTerm(makeFieldTensorVar("u"),
-                                   makeFieldTensorVar("v"),
-                                   TensorComponentOperatorDescriptor::valueOnly(2),
-                                   TensorComponentOperatorDescriptor::valueOnly(2),
-                                   TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1)));
+  const double c = 5.0;
+  auto ux = TensorFunction::componentCoordinate(2);
+  auto uy = TensorFunction::componentCoordinate(3);
+  auto gamma = sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (c * c)) * (ux * ux + uy * uy));
+  auto relativisticVelocityX = TensorFunction::constant(-1.0) * ux * reciprocal(gamma);
+
+  auto form = Teuchos::rcp(new TensorBilinearForm("relativistic-velocity-fallback"));
+  form->addTerm(TensorBilinearTerm(makeFieldTensorVar1D1T2V("f"),
+                                   makeFieldTensorVar1D1T2V("w"),
+                                   TensorComponentOperatorDescriptor::valueOnly(4),
+                                   TensorComponentOperatorDescriptor::singleDerivative(4, 0),
+                                   relativisticVelocityX));
 
   MatrixFreeTensorOperatorFactory factory;
   auto op = factory.build(tensorMesh, dofLayout, form,
-                          TENSOR_TRIAL_SPACE, "u",
-                          TENSOR_TEST_SPACE,  "v");
+                          TENSOR_TRIAL_SPACE, "f",
+                          TENSOR_TEST_SPACE,  "w");
 
   std::vector<double> input(op->domainSize(), 0.0);
-  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.25 + 0.125 * i;
+  for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.25 + 0.0125 * i;
 
   op->resetInstrumentation();
   std::vector<double> actual;
   op->apply(input, actual);
-  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "u", "v", input);
+  auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "f", "w", input);
   compareVectors(actual, expected, out, success, 1e-10, 1e-13);
 
   auto stats = op->instrumentation();
@@ -1401,6 +1411,8 @@ TEUCHOS_UNIT_TEST( TensorOperator, InstrumentationLeavesFallbackVolumeResultUnch
   TEST_EQUALITY(stats.count(TensorOperatorInstrumentation::CONTRACTION_1D_CONSTRUCTION), 0);
   TEST_ASSERT(stats.count(TensorOperatorInstrumentation::LOCAL_ACTION) > 0);
   TEST_ASSERT(stats.count(TensorOperatorInstrumentation::SCATTER_LOCAL_OUTPUT_ACCUMULATION) > 0);
+  TEST_EQUALITY(stats.sumFactorizedVolumeTermCount(), 0);
+  TEST_ASSERT(stats.fullTensorVolumeTermCount() > 0);
 }
 
 TEUCHOS_UNIT_TEST( TensorOperator, BuilderProducedFormCanBeRealized )
@@ -1751,10 +1763,15 @@ TEUCHOS_UNIT_TEST( TensorOperator, RelativisticVlasovLike1D1T2VVolumePrototypeMa
   std::vector<double> input(op->domainSize(), 0.0);
   for (IndexType i=0; i<op->domainSize(); i++) input[i] = 0.125 + 0.015625 * i;
 
+  op->resetInstrumentation();
   std::vector<double> actual;
   op->apply(input, actual);
   auto expected = applyReferenceOperator(tensorMesh, dofLayout, form, "f", "w", input);
   compareVectors(actual, expected, out, success, 1e-10, 1e-13);
+
+  auto stats = op->instrumentation();
+  TEST_ASSERT(stats.fullTensorVolumeTermCount() > 0);
+  TEST_ASSERT(stats.sumFactorizedVolumeTermCount() > 0);
 }
 
 TEUCHOS_UNIT_TEST( TensorOperator, VlasovLike1X1T1VPrototypeMatchesLegacyRepresentativeTermStructure )

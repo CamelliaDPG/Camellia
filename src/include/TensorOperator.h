@@ -37,6 +37,10 @@ namespace Camellia
 
   private:
     StageStats _stageStats[STAGE_COUNT];
+    long long _sumFactorizedVolumeTermCount = 0;
+    long long _fullTensorVolumeTermCount = 0;
+    long long _graphNormSchurApplyCount = 0;
+    long long _graphNormSchurActiveTrialDofCount = 0;
 
   public:
     TensorOperatorInstrumentation()
@@ -51,6 +55,10 @@ namespace Camellia
         _stageStats[stageOrdinal].count = 0;
         _stageStats[stageOrdinal].seconds = 0.0;
       }
+      _sumFactorizedVolumeTermCount = 0;
+      _fullTensorVolumeTermCount = 0;
+      _graphNormSchurApplyCount = 0;
+      _graphNormSchurActiveTrialDofCount = 0;
     }
 
     void add(Stage stage,
@@ -58,6 +66,26 @@ namespace Camellia
     {
       _stageStats[stage].count++;
       _stageStats[stage].seconds += seconds;
+    }
+
+    void recordSumFactorizedVolumeTerm()
+    {
+      _sumFactorizedVolumeTermCount++;
+    }
+
+    void recordFullTensorVolumeTerm()
+    {
+      _fullTensorVolumeTermCount++;
+    }
+
+    void recordGraphNormSchurApply()
+    {
+      _graphNormSchurApplyCount++;
+    }
+
+    void recordGraphNormSchurActiveTrialDofs(long long activeTrialDofs)
+    {
+      _graphNormSchurActiveTrialDofCount += activeTrialDofs;
     }
 
     StageStats stats(Stage stage) const
@@ -73,6 +101,26 @@ namespace Camellia
     double seconds(Stage stage) const
     {
       return _stageStats[stage].seconds;
+    }
+
+    long long sumFactorizedVolumeTermCount() const
+    {
+      return _sumFactorizedVolumeTermCount;
+    }
+
+    long long fullTensorVolumeTermCount() const
+    {
+      return _fullTensorVolumeTermCount;
+    }
+
+    long long graphNormSchurApplyCount() const
+    {
+      return _graphNormSchurApplyCount;
+    }
+
+    long long graphNormSchurActiveTrialDofCount() const
+    {
+      return _graphNormSchurActiveTrialDofCount;
     }
   };
 

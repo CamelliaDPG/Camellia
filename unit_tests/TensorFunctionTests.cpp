@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "TensorFunction.h"
+#include "TensorCoefficientExpansion.h"
 
 #include <cmath>
 
@@ -219,6 +220,31 @@ TEUCHOS_UNIT_TEST( TensorFunction, UnaryCompositionPreservesDependencySources )
   TEST_ASSERT(g->hasSolutionDependencies());
   TEST_EQUALITY(g->dependencySources().size(), 1);
   TEST_EQUALITY(g->dependencySources()[0], TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, "E"));
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, SeparableCoefficientExpansionDistributesSumsAndRejectsRelativisticCoupling )
+{
+  auto x0 = TensorFunction::componentCoordinate(0);
+  auto x1 = TensorFunction::componentCoordinate(1);
+  auto x2 = TensorFunction::componentCoordinate(2);
+  auto x3 = TensorFunction::componentCoordinate(3);
+
+  TensorCoefficientFactorExpansion expansion;
+  TEST_ASSERT(appendTensorSeparableCoefficientFactorTerms(TensorFunction::constant(-2.0) * (x0 + x1 * x2), 4, expansion));
+  TEST_EQUALITY(expansion.size(), 2);
+  TEST_ASSERT(expansion[0][0] != Teuchos::null);
+  TEST_ASSERT(expansion[0][1] == Teuchos::null);
+  TEST_ASSERT(expansion[0][2] == Teuchos::null);
+  TEST_ASSERT(expansion[0][3] == Teuchos::null);
+  TEST_ASSERT(expansion[1][0] != Teuchos::null);
+  TEST_ASSERT(expansion[1][1] != Teuchos::null);
+  TEST_ASSERT(expansion[1][2] != Teuchos::null);
+  TEST_ASSERT(expansion[1][3] == Teuchos::null);
+
+  const double c = 5.0;
+  auto gamma = sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (c * c)) * (x2 * x2 + x3 * x3));
+  TensorCoefficientFactorExpansion coupledExpansion;
+  TEST_ASSERT(!appendTensorSeparableCoefficientFactorTerms(x2 * reciprocal(gamma), 4, coupledExpansion));
 }
 
 TEUCHOS_UNIT_TEST( TensorFunction, SqrtAndReciprocalRepresentRelativisticVelocityCoefficient )

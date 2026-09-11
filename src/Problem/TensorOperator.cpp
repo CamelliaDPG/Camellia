@@ -13,6 +13,7 @@
 #include "CubatureFactory.h"
 #include "Intrepid2_CubatureDirectLineGauss.hpp"
 #include "TensorFunction.h"
+#include "TensorCoefficientExpansion.h"
 #include "TensorCoefficientMap.h"
 #include "TensorBasisCache.h"
 #include "TensorLocalSchurComplement.h"
@@ -81,6 +82,49 @@ namespace
   bool tensorVarIsTraceLike(const TensorVarPtr &tensorVar)
   {
     return (tensorVar != Teuchos::null) && tensorVar->isTrace();
+  }
+
+  std::string joinedVarNames(const std::vector<std::string> &varNames)
+  {
+    std::string joined;
+    for (size_t varOrdinal=0; varOrdinal<varNames.size(); varOrdinal++)
+    {
+      if (varOrdinal > 0) joined += ",";
+      joined += varNames[varOrdinal];
+    }
+    return joined;
+  }
+
+  bool vectorContainsName(const std::vector<std::string> &varNames,
+                          const std::string &varName)
+  {
+    return varNames.end() != std::find(varNames.begin(), varNames.end(), varName);
+  }
+
+  bool hasMatchingVolumeTerms(const TensorBilinearFormPtr &bilinearForm,
+                              const std::string &trialVarName,
+                              const std::string &testVarName)
+  {
+    for (const auto &term : bilinearForm->terms())
+    {
+      if (term.trialVar()->name() != trialVarName) continue;
+      if (term.testVar()->name()  != testVarName)  continue;
+      if (term.isVolumeTerm()) return true;
+    }
+    return false;
+  }
+
+  bool hasMatchingBoundaryTerms(const TensorBilinearFormPtr &bilinearForm,
+                                const std::string &trialVarName,
+                                const std::string &testVarName)
+  {
+    for (const auto &term : bilinearForm->terms())
+    {
+      if (term.trialVar()->name() != trialVarName) continue;
+      if (term.testVar()->name()  != testVarName)  continue;
+      if (term.isBoundaryTerm()) return true;
+    }
+    return false;
   }
 
   LineQuadratureRule lineQuadratureFromCubatureFactory(int exactnessDegree)
@@ -222,94 +266,8 @@ namespace
     return value;
   }
 
-  using CoefficientFactorTuple = std::vector<TensorFunctionPtr>;
-  using CoefficientFactorExpansion = std::vector<CoefficientFactorTuple>;
-
-  bool appendCoefficientAsSingleComponentFactor(const TensorFunctionPtr &coefficient,
-                                                int componentCount,
-                                                CoefficientFactorTuple &componentFactors)
-  {
-    if (coefficient == Teuchos::null) return false;
-    if (coefficient->hasSolutionDependencies()) return false;
-
-    const auto &dependentComponents = coefficient->dependencyScope().componentOrdinals();
-    if (dependentComponents.empty())
-    {
-      if (componentCount <= 0) return false;
-      componentFactors[0] = (componentFactors[0] == Teuchos::null) ? coefficient : componentFactors[0] * coefficient;
-      return true;
-    }
-
-    if (dependentComponents.size() == 1)
-    {
-      const int componentOrdinal = *dependentComponents.begin();
-      if ((componentOrdinal < 0) || (componentOrdinal >= componentCount)) return false;
-      componentFactors[componentOrdinal] = (componentFactors[componentOrdinal] == Teuchos::null) ? coefficient : componentFactors[componentOrdinal] * coefficient;
-      return true;
-    }
-
-    return false;
-  }
-
-  CoefficientFactorTuple productOfFactorTuples(const CoefficientFactorTuple &left,
-                                               const CoefficientFactorTuple &right)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(left.size() != right.size(), std::invalid_argument,
-                               "MatrixFreeTensorOperator coefficient factor tuples must have matching ranks.");
-    CoefficientFactorTuple product = left;
-    for (size_t componentOrdinal=0; componentOrdinal<right.size(); componentOrdinal++)
-    {
-      if (right[componentOrdinal] == Teuchos::null) continue;
-      product[componentOrdinal] = (product[componentOrdinal] == Teuchos::null) ? right[componentOrdinal]
-                                                                             : product[componentOrdinal] * right[componentOrdinal];
-    }
-    return product;
-  }
-
-  bool appendSeparableCoefficientFactorTerms(const TensorFunctionPtr &coefficient,
-                                             int componentCount,
-                                             CoefficientFactorExpansion &coefficientFactorTerms)
-  {
-    if (coefficient == Teuchos::null) return false;
-    if (coefficient->hasSolutionDependencies()) return false;
-
-    if (coefficient->isSum())
-    {
-      for (const auto &child : coefficient->childFunctions())
-      {
-        if (!appendSeparableCoefficientFactorTerms(child, componentCount, coefficientFactorTerms)) return false;
-      }
-      return true;
-    }
-
-    if (coefficient->isProduct())
-    {
-      CoefficientFactorExpansion productExpansion(1, CoefficientFactorTuple(componentCount, Teuchos::null));
-      for (const auto &child : coefficient->childFunctions())
-      {
-        CoefficientFactorExpansion childExpansion;
-        if (!appendSeparableCoefficientFactorTerms(child, componentCount, childExpansion)) return false;
-
-        CoefficientFactorExpansion nextExpansion;
-        nextExpansion.reserve(productExpansion.size() * childExpansion.size());
-        for (const auto &leftFactors : productExpansion)
-        {
-          for (const auto &rightFactors : childExpansion)
-          {
-            nextExpansion.push_back(productOfFactorTuples(leftFactors, rightFactors));
-          }
-        }
-        productExpansion.swap(nextExpansion);
-      }
-      coefficientFactorTerms.insert(coefficientFactorTerms.end(), productExpansion.begin(), productExpansion.end());
-      return !productExpansion.empty();
-    }
-
-    CoefficientFactorTuple componentFactors(componentCount, Teuchos::null);
-    if (!appendCoefficientAsSingleComponentFactor(coefficient, componentCount, componentFactors)) return false;
-    coefficientFactorTerms.push_back(componentFactors);
-    return true;
-  }
+  using CoefficientFactorTuple = TensorCoefficientFactorTuple;
+  using CoefficientFactorExpansion = TensorCoefficientFactorExpansion;
 
   bool termSupportsSumFactorizedVolumeContraction(const TensorBilinearTerm &term,
                                                   CoefficientFactorExpansion &coefficientFactorTerms)
@@ -318,7 +276,7 @@ namespace
     if (tensorVarIsTraceLike(term.trialVar()) || tensorVarIsTraceLike(term.testVar())) return false;
 
     coefficientFactorTerms.clear();
-    if (!appendSeparableCoefficientFactorTerms(term.coefficient(), term.componentCount(), coefficientFactorTerms)) return false;
+    if (!appendTensorSeparableCoefficientFactorTerms(term.coefficient(), term.componentCount(), coefficientFactorTerms)) return false;
     return !coefficientFactorTerms.empty();
   }
 
@@ -387,6 +345,10 @@ namespace
     CoefficientFactorExpansion coefficientFactorTerms;
     TEUCHOS_TEST_FOR_EXCEPTION(!termSupportsSumFactorizedVolumeContraction(term, coefficientFactorTerms), std::invalid_argument,
                                "applySumFactorizedVolumeTermToCell requires a supported separable volume term.");
+    if (instrumentation != nullptr)
+    {
+      instrumentation->recordSumFactorizedVolumeTerm();
+    }
 
     const auto &trialShape = trialTraversal.shape();
     const auto &testShape  = testTraversal.shape();
@@ -864,6 +826,8 @@ namespace
           continue;
         }
 
+        _instrumentation.recordFullTensorVolumeTerm();
+
         const auto localActionStart = std::chrono::steady_clock::now();
         std::vector<double> trialPointValues(tensorPointCount, 0.0);
         for (IndexType localTrialOrdinal=0; localTrialOrdinal<trialShape.totalDofs(); localTrialOrdinal++)
@@ -1213,6 +1177,405 @@ namespace
       output = localOutput;
     }
   };
+
+  class MatrixFreeGraphNormSchurTensorOperator : public TensorOperator
+  {
+    TensorMeshPtr _tensorMesh;
+    TensorDofLayoutPtr _tensorDofLayout;
+    TensorBilinearFormPtr _bilinearForm;
+    std::vector<std::string> _trialVarNames;
+    std::vector<std::string> _testVarNames;
+    std::string _domainVarName;
+    std::string _rangeVarName;
+    double _l2Weight;
+    bool _includeBoundaryTerms;
+    TensorApplyPipelineDescription _pipeline;
+    IndexType _trialDofCount = 0;
+    mutable TensorOperatorInstrumentation _instrumentation;
+
+    struct CachedGraphSchurBlock
+    {
+      std::vector<IndexType> trialGids;
+      std::vector<double> bMatrix;
+      TensorLocalSchurComplementBuilder::LocalGraphNormAction graphAction;
+
+      CachedGraphSchurBlock(const std::vector<IndexType> &trialGids,
+                            const std::vector<double> &bMatrix,
+                            const TensorLocalSchurComplementBuilder::LocalGraphNormAction &graphAction)
+      : trialGids(trialGids), bMatrix(bMatrix), graphAction(graphAction)
+      {}
+
+      IndexType trialDofCount() const
+      {
+        return static_cast<IndexType>(trialGids.size());
+      }
+    };
+    std::vector<CachedGraphSchurBlock> _cachedBlocks;
+
+    IndexType compactColumnOrdinal(IndexType trialGid,
+                                   IndexType testDofCount,
+                                   std::vector<IndexType> &trialGids,
+                                   std::map<IndexType,IndexType> &trialGidToColumn,
+                                   std::vector<double> &bMatrix) const
+    {
+      auto found = trialGidToColumn.find(trialGid);
+      if (found != trialGidToColumn.end()) return found->second;
+
+      const IndexType oldColumnCount = static_cast<IndexType>(trialGids.size());
+      const IndexType newColumnCount = oldColumnCount + 1;
+      std::vector<double> expanded(static_cast<size_t>(testDofCount * newColumnCount), 0.0);
+      for (IndexType row=0; row<testDofCount; row++)
+      {
+        for (IndexType col=0; col<oldColumnCount; col++)
+        {
+          expanded[static_cast<size_t>(row * newColumnCount + col)] = bMatrix[static_cast<size_t>(row * oldColumnCount + col)];
+        }
+      }
+      bMatrix.swap(expanded);
+      trialGids.push_back(trialGid);
+      trialGidToColumn[trialGid] = oldColumnCount;
+      return oldColumnCount;
+    }
+
+    void appendCachedVolumeBlocks(const TensorOperatorData &operatorData,
+                                  const std::vector<IndexType> &trialOffsets,
+                                  const std::string &testVarName)
+    {
+      const IndexType trialVarCount = static_cast<IndexType>(_trialVarNames.size());
+      std::vector<std::vector<bool>> pairHasBlocks(1, std::vector<bool>(trialVarCount, false));
+      std::vector<std::vector<TensorLocalSchurComplementBuilder::LocalVolumeSchurComplementBlock>> pairBlocks(trialVarCount);
+      for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+      {
+        const std::string &trialVarName = _trialVarNames[trialVarOrdinal];
+        if (!hasMatchingVolumeTerms(_bilinearForm, trialVarName, testVarName)) continue;
+        pairBlocks[trialVarOrdinal] = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(_tensorMesh,
+                                                                                                            _tensorDofLayout,
+                                                                                                            _bilinearForm,
+                                                                                                            trialVarName,
+                                                                                                            testVarName);
+        TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(pairBlocks[trialVarOrdinal].size()) != _tensorMesh->topology()->activeCellCount(), std::logic_error,
+                                   "MatrixFreeGraphNormSchurTensorOperator expected one volume B block per active tensor cell.");
+        pairHasBlocks[0][trialVarOrdinal] = true;
+      }
+
+      const auto testDiscretization = _tensorMesh->testDiscretization(testVarName);
+      for (IndexType tensorCellOrdinal=0; tensorCellOrdinal<_tensorMesh->topology()->activeCellCount(); tensorCellOrdinal++)
+      {
+        const auto cellTuple = _tensorMesh->topology()->tensorCellTuple(tensorCellOrdinal);
+        auto testShape = _tensorDofLayout->factorSpaceShape(testVarName, TENSOR_TEST_SPACE, cellTuple);
+        const IndexType localTestDofCount = operatorData.volumeLocalDofCount(TENSOR_TEST_SPACE, testVarName, tensorCellOrdinal);
+        TEUCHOS_TEST_FOR_EXCEPTION(localTestDofCount != testShape.totalDofs(), std::logic_error,
+                                   "MatrixFreeGraphNormSchurTensorOperator local test shape does not match TensorOperatorData.");
+        std::vector<IndexType> localTrialGids;
+        std::map<IndexType,IndexType> localTrialGidToColumn;
+        std::vector<double> localB;
+
+        for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+        {
+          if (!pairHasBlocks[0][trialVarOrdinal]) continue;
+          const std::string &trialVarName = _trialVarNames[trialVarOrdinal];
+          const auto &block = pairBlocks[trialVarOrdinal][tensorCellOrdinal];
+          const IndexType localTrialDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal);
+          TEUCHOS_TEST_FOR_EXCEPTION((localTrialDofCount != block.trialShape.totalDofs()) || (localTestDofCount != block.testShape.totalDofs()), std::logic_error,
+                                     "MatrixFreeGraphNormSchurTensorOperator local volume B block shape does not match TensorOperatorData.");
+          for (IndexType localTrialOrdinal=0; localTrialOrdinal<localTrialDofCount; localTrialOrdinal++)
+          {
+            const IndexType trialGid = trialOffsets[trialVarOrdinal]
+                + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal, localTrialOrdinal);
+            const IndexType compactColumn = compactColumnOrdinal(trialGid, localTestDofCount, localTrialGids, localTrialGidToColumn, localB);
+            for (IndexType localTestOrdinal=0; localTestOrdinal<localTestDofCount; localTestOrdinal++)
+            {
+              localB[static_cast<size_t>(localTestOrdinal * localTrialGids.size() + compactColumn)] += block.bMatrix[static_cast<size_t>(localTestOrdinal * localTrialDofCount + localTrialOrdinal)];
+            }
+          }
+        }
+
+        std::vector<int> gQuadratureDegrees(testShape.componentCount(), 1);
+        for (int d=0; d<testShape.componentCount(); d++)
+        {
+          const int testPolyOrder = _tensorMesh->effectivePolyOrder(testDiscretization, cellTuple[d], d, true);
+          gQuadratureDegrees[d] = std::max(1, 2 * testPolyOrder + 1);
+        }
+        TensorBasisCacheND gTestBasisCache(_tensorMesh, testDiscretization, true, cellTuple, gQuadratureDegrees);
+        _cachedBlocks.push_back(CachedGraphSchurBlock(localTrialGids,
+                                                      localB,
+                                                      TensorLocalSchurComplementBuilder::localGraphNormAction(localTestDofCount,
+                                                                                                             TensorLocalSchurComplementBuilder::graphTestNormMatrix(testShape, gTestBasisCache, _l2Weight))));
+      }
+    }
+
+    void buildCachedBlocks()
+    {
+      TensorOperatorData operatorData(_tensorMesh, _tensorDofLayout);
+      std::vector<IndexType> trialOffsets(_trialVarNames.size(), 0);
+      IndexType totalTrialDofCount = 0;
+      for (size_t trialVarOrdinal=0; trialVarOrdinal<_trialVarNames.size(); trialVarOrdinal++)
+      {
+        trialOffsets[trialVarOrdinal] = totalTrialDofCount;
+        totalTrialDofCount += operatorData.coefficientCount(TENSOR_TRIAL_SPACE, _trialVarNames[trialVarOrdinal]);
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(totalTrialDofCount != _trialDofCount, std::logic_error,
+                                 "MatrixFreeGraphNormSchurTensorOperator cached trial size does not match operator size.");
+
+      _cachedBlocks.clear();
+      for (const auto &testVarName : _testVarNames)
+      {
+        if (_includeBoundaryTerms)
+        {
+          appendCachedVolumeBoundaryBlocks(operatorData, trialOffsets, testVarName);
+        }
+        else
+        {
+          appendCachedVolumeBlocks(operatorData, trialOffsets, testVarName);
+        }
+      }
+    }
+
+    void appendCachedVolumeBoundaryBlocks(const TensorOperatorData &operatorData,
+                                          const std::vector<IndexType> &trialOffsets,
+                                          const std::string &testVarName)
+    {
+      const IndexType trialVarCount = static_cast<IndexType>(_trialVarNames.size());
+      TensorCoefficientMap testMap(_tensorMesh, _tensorDofLayout, TENSOR_TEST_SPACE, testVarName);
+      const auto testDiscretization = _tensorMesh->testDiscretization(testVarName);
+
+      for (IndexType tensorCellOrdinal=0; tensorCellOrdinal<_tensorMesh->topology()->activeCellCount(); tensorCellOrdinal++)
+      {
+        const auto cellTuple = _tensorMesh->topology()->tensorCellTuple(tensorCellOrdinal);
+        auto testShape = _tensorDofLayout->factorSpaceShape(testVarName, TENSOR_TEST_SPACE, cellTuple);
+        const IndexType localTestDofCount = operatorData.volumeLocalDofCount(TENSOR_TEST_SPACE, testVarName, tensorCellOrdinal);
+        std::vector<int> gQuadratureDegrees(testShape.componentCount(), 1);
+        for (int d=0; d<testShape.componentCount(); d++)
+        {
+          const int testPolyOrder = _tensorMesh->effectivePolyOrder(testDiscretization, cellTuple[d], d, true);
+          gQuadratureDegrees[d] = std::max(1, 2 * testPolyOrder + 1);
+        }
+        TensorBasisCacheND gTestBasisCache(_tensorMesh, testDiscretization, true, cellTuple, gQuadratureDegrees);
+        std::vector<IndexType> localTrialGids;
+        std::map<IndexType,IndexType> localTrialGidToColumn;
+        std::vector<double> localB;
+
+        for (IndexType trialVarOrdinal=0; trialVarOrdinal<trialVarCount; trialVarOrdinal++)
+        {
+          const std::string &trialVarName = _trialVarNames[trialVarOrdinal];
+          if (hasMatchingVolumeTerms(_bilinearForm, trialVarName, testVarName))
+          {
+            auto volumeBlocks = TensorLocalSchurComplementBuilder::affineL2VolumeCellSchurComplements(_tensorMesh,
+                                                                                                      _tensorDofLayout,
+                                                                                                      _bilinearForm,
+                                                                                                      trialVarName,
+                                                                                                      testVarName);
+            const auto &block = volumeBlocks[tensorCellOrdinal];
+            const IndexType localTrialDofCount = operatorData.volumeLocalDofCount(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal);
+            for (IndexType localTrialOrdinal=0; localTrialOrdinal<localTrialDofCount; localTrialOrdinal++)
+            {
+              const IndexType trialGid = trialOffsets[trialVarOrdinal]
+                  + operatorData.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE, trialVarName, tensorCellOrdinal, localTrialOrdinal);
+              const IndexType compactColumn = compactColumnOrdinal(trialGid, localTestDofCount, localTrialGids, localTrialGidToColumn, localB);
+              for (IndexType localTestOrdinal=0; localTestOrdinal<localTestDofCount; localTestOrdinal++)
+              {
+                localB[static_cast<size_t>(localTestOrdinal * localTrialGids.size() + compactColumn)] += block.bMatrix[static_cast<size_t>(localTestOrdinal * localTrialDofCount + localTrialOrdinal)];
+              }
+            }
+          }
+
+          if (hasMatchingBoundaryTerms(_bilinearForm, trialVarName, testVarName))
+          {
+            auto boundaryBlocks = TensorLocalSchurComplementBuilder::affineBoundaryBBlocks(_tensorMesh,
+                                                                                          _tensorDofLayout,
+                                                                                          _bilinearForm,
+                                                                                          trialVarName,
+                                                                                          testVarName);
+            const auto &trialVariableData = operatorData.variableData(TENSOR_TRIAL_SPACE, trialVarName);
+            TensorCoefficientMap trialMap(_tensorMesh, _tensorDofLayout, TENSOR_TRIAL_SPACE, trialVarName);
+            for (const auto &block : boundaryBlocks)
+            {
+              const IndexType entityOrdinal = block.entityOrdinal;
+              const int orthogonalComponentOrdinal = block.entity.orthogonalComponentOrdinal();
+              const auto retainedComponents = _tensorMesh->topology()->retainedComponentOrdinalsForSkeleton(orthogonalComponentOrdinal);
+              auto orthogonalTopo = _tensorMesh->topology()->componentMeshTopology(orthogonalComponentOrdinal);
+              const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(block.entity.vertexOrdinal());
+              const ComponentCellID1D incidentCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
+              std::vector<ComponentCellID1D> testCells(_tensorMesh->topology()->componentCount(), incidentCell);
+              for (size_t retainedOrdinal=0; retainedOrdinal<retainedComponents.size(); retainedOrdinal++)
+              {
+                testCells[retainedComponents[retainedOrdinal]] = block.entity.retainedCellTuple()[retainedOrdinal];
+              }
+              if (_tensorMesh->topology()->tensorCellOrdinal(testCells) != tensorCellOrdinal) continue;
+
+              auto testIndices = testMap.indicesForVolumeCell(testCells);
+              for (IndexType localTrialOrdinal=0; localTrialOrdinal<block.trialShape.totalDofs(); localTrialOrdinal++)
+              {
+                IndexType trialGid = trialOffsets[trialVarOrdinal];
+                trialGid += trialVariableData.isTraceVariable()
+                    ? operatorData.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, trialVarName, entityOrdinal, localTrialOrdinal)
+                    : trialMap.globalIndexForVolumeLocalOrdinal(testCells, localTrialOrdinal);
+                const IndexType compactColumn = compactColumnOrdinal(trialGid, localTestDofCount, localTrialGids, localTrialGidToColumn, localB);
+                for (IndexType boundaryTestOrdinal=0; boundaryTestOrdinal<block.testShape.totalDofs(); boundaryTestOrdinal++)
+                {
+                  const IndexType testGid = testIndices[boundaryTestOrdinal];
+                  IndexType cellLocalTestOrdinal = -1;
+                  for (IndexType candidate=0; candidate<localTestDofCount; candidate++)
+                  {
+                    if (operatorData.volumeLocalToGlobalIndex(TENSOR_TEST_SPACE, testVarName, tensorCellOrdinal, candidate) == testGid)
+                    {
+                      cellLocalTestOrdinal = candidate;
+                      break;
+                    }
+                  }
+                  TEUCHOS_TEST_FOR_EXCEPTION(cellLocalTestOrdinal < 0, std::logic_error,
+                                             "MatrixFreeGraphNormSchurTensorOperator could not map a boundary test index into the graph volume cell.");
+                  localB[static_cast<size_t>(cellLocalTestOrdinal * localTrialGids.size() + compactColumn)] += block.bMatrix[static_cast<size_t>(boundaryTestOrdinal * block.trialShape.totalDofs() + localTrialOrdinal)];
+                }
+              }
+            }
+          }
+        }
+
+        _cachedBlocks.push_back(CachedGraphSchurBlock(localTrialGids,
+                                                      localB,
+                                                      TensorLocalSchurComplementBuilder::localGraphNormAction(localTestDofCount,
+                                                                                                             TensorLocalSchurComplementBuilder::graphTestNormMatrix(testShape, gTestBasisCache, _l2Weight))));
+      }
+    }
+
+  public:
+    MatrixFreeGraphNormSchurTensorOperator(const TensorMeshPtr &tensorMesh,
+                                           const TensorDofLayoutPtr &tensorDofLayout,
+                                           const TensorBilinearFormPtr &bilinearForm,
+                                           const std::vector<std::string> &trialVarNames,
+                                           const std::vector<std::string> &testVarNames,
+                                           bool includeBoundaryTerms,
+                                           double l2Weight)
+    : _tensorMesh(tensorMesh),
+      _tensorDofLayout(tensorDofLayout),
+      _bilinearForm(bilinearForm),
+      _trialVarNames(trialVarNames),
+      _testVarNames(testVarNames),
+      _domainVarName(joinedVarNames(trialVarNames)),
+      _rangeVarName(joinedVarNames(trialVarNames)),
+      _l2Weight(l2Weight),
+      _includeBoundaryTerms(includeBoundaryTerms),
+      _pipeline(TensorApplyPipelineDescription::standardMatrixFreePipeline())
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(_tensorMesh == Teuchos::null, std::invalid_argument,
+                                 "MatrixFreeGraphNormSchurTensorOperator requires a non-null TensorMesh.");
+      TEUCHOS_TEST_FOR_EXCEPTION(_tensorDofLayout == Teuchos::null, std::invalid_argument,
+                                 "MatrixFreeGraphNormSchurTensorOperator requires a non-null TensorDofLayout.");
+      TEUCHOS_TEST_FOR_EXCEPTION(_bilinearForm == Teuchos::null, std::invalid_argument,
+                                 "MatrixFreeGraphNormSchurTensorOperator requires a non-null TensorBilinearForm.");
+      TEUCHOS_TEST_FOR_EXCEPTION(_trialVarNames.empty() || _testVarNames.empty(), std::invalid_argument,
+                                 "MatrixFreeGraphNormSchurTensorOperator requires trial and test variables.");
+      _bilinearForm->validateAgainst(_tensorMesh);
+      TensorOperatorData operatorData(_tensorMesh, _tensorDofLayout);
+      for (const auto &trialVarName : _trialVarNames)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(!_tensorDofLayout->hasLayout(trialVarName, TENSOR_TRIAL_SPACE), std::invalid_argument,
+                                   "MatrixFreeGraphNormSchurTensorOperator requires trial-space layouts for all trial variables.");
+        _trialDofCount += operatorData.coefficientCount(TENSOR_TRIAL_SPACE, trialVarName);
+      }
+      for (const auto &testVarName : _testVarNames)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(!_tensorDofLayout->hasLayout(testVarName, TENSOR_TEST_SPACE), std::invalid_argument,
+                                   "MatrixFreeGraphNormSchurTensorOperator requires test-space layouts for all eliminated test variables.");
+      }
+      buildCachedBlocks();
+    }
+
+    TensorOperatorBackend backend() const override
+    {
+      return TENSOR_OPERATOR_BACKEND_MATRIX_FREE;
+    }
+
+    TensorMeshPtr tensorMesh() const override
+    {
+      return _tensorMesh;
+    }
+
+    TensorDofLayoutPtr tensorDofLayout() const override
+    {
+      return _tensorDofLayout;
+    }
+
+    TensorBilinearFormPtr bilinearForm() const override
+    {
+      return _bilinearForm;
+    }
+
+    TensorSpaceRole domainRole() const override
+    {
+      return TENSOR_TRIAL_SPACE;
+    }
+
+    TensorSpaceRole rangeRole() const override
+    {
+      return TENSOR_TRIAL_SPACE;
+    }
+
+    const std::string &domainVarName() const override
+    {
+      return _domainVarName;
+    }
+
+    const std::string &rangeVarName() const override
+    {
+      return _rangeVarName;
+    }
+
+    IndexType domainSize() const override
+    {
+      return _trialDofCount;
+    }
+
+    IndexType rangeSize() const override
+    {
+      return _trialDofCount;
+    }
+
+    TensorApplyPipelineDescription pipelineDescription() const override
+    {
+      return _pipeline;
+    }
+
+    void resetInstrumentation() const override
+    {
+      _instrumentation.reset();
+    }
+
+    TensorOperatorInstrumentation instrumentation() const override
+    {
+      return _instrumentation;
+    }
+
+    void apply(const std::vector<double> &input,
+               std::vector<double> &output) const override
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(static_cast<IndexType>(input.size()) != _trialDofCount, std::invalid_argument,
+                                 "MatrixFreeGraphNormSchurTensorOperator input size does not match trial coefficient count.");
+      const auto schurActionStart = std::chrono::steady_clock::now();
+      output.assign(_trialDofCount, 0.0);
+      for (const auto &cachedBlock : _cachedBlocks)
+      {
+        std::vector<double> localTrialVector(cachedBlock.trialDofCount(), 0.0);
+        for (IndexType localOrdinal=0; localOrdinal<cachedBlock.trialDofCount(); localOrdinal++)
+        {
+          localTrialVector[localOrdinal] = input[cachedBlock.trialGids[localOrdinal]];
+        }
+        _instrumentation.recordGraphNormSchurActiveTrialDofs(cachedBlock.trialDofCount());
+        auto localOutput = cachedBlock.graphAction.applySchurComplement(cachedBlock.bMatrix,
+                                                                        cachedBlock.trialDofCount(),
+                                                                        localTrialVector);
+        for (IndexType localOrdinal=0; localOrdinal<cachedBlock.trialDofCount(); localOrdinal++)
+        {
+          output[cachedBlock.trialGids[localOrdinal]] += localOutput[localOrdinal];
+        }
+      }
+      recordTensorOperatorStage(&_instrumentation,
+                                TensorOperatorInstrumentation::LOCAL_ACTION,
+                                schurActionStart);
+      _instrumentation.recordGraphNormSchurApply();
+    }
+  };
 }
 
 TensorApplyPipelineDescription::TensorApplyPipelineDescription()
@@ -1299,4 +1662,201 @@ TensorOperatorPtr MatrixFreeTensorOperatorFactory::build(const TensorMeshPtr &te
                                                    domainVarName,
                                                    rangeRole,
                                                    rangeVarName));
+}
+
+MatrixFreeGraphNormSchurTensorOperatorFactory::MatrixFreeGraphNormSchurTensorOperatorFactory(double l2Weight)
+: _l2Weight(l2Weight)
+{
+}
+
+double MatrixFreeGraphNormSchurTensorOperatorFactory::l2Weight() const
+{
+  return _l2Weight;
+}
+
+std::string MatrixFreeGraphNormSchurTensorOperatorFactory::validationMessage(const TensorMeshPtr &tensorMesh,
+                                                                             const TensorDofLayoutPtr &tensorDofLayout,
+                                                                             const TensorBilinearFormPtr &bilinearForm,
+                                                                             const std::vector<std::string> &trialVarNames,
+                                                                             const std::vector<std::string> &testVarNames,
+                                                                             bool includeBoundaryTerms) const
+{
+  if ((tensorMesh == Teuchos::null) || (tensorDofLayout == Teuchos::null) || (bilinearForm == Teuchos::null)) return "graph-norm Schur facade requires non-null tensor mesh, dof layout, and bilinear form.";
+  if (_l2Weight < 0.0) return "graph-norm Schur facade requires a nonnegative L2 graph-norm weight.";
+  if (trialVarNames.empty() || testVarNames.empty()) return "graph-norm Schur facade requires at least one trial variable and one eliminated test variable.";
+
+  try
+  {
+    bilinearForm->validateAgainst(tensorMesh);
+    TensorOperatorData operatorData(tensorMesh, tensorDofLayout);
+    for (const auto &trialVarName : trialVarNames)
+    {
+      if (!tensorDofLayout->hasLayout(trialVarName, TENSOR_TRIAL_SPACE)) return "graph-norm Schur facade requested a trial variable without a trial-space layout.";
+      const auto &trialData = operatorData.variableData(TENSOR_TRIAL_SPACE, trialVarName);
+      if (!includeBoundaryTerms && trialData.isTraceVariable()) return "graph-norm Schur volume facade does not accept trace trial variables unless boundary terms are enabled.";
+    }
+    for (const auto &testVarName : testVarNames)
+    {
+      if (!tensorDofLayout->hasLayout(testVarName, TENSOR_TEST_SPACE)) return "graph-norm Schur facade requested an eliminated test variable without a test-space layout.";
+      const auto &testData = operatorData.variableData(TENSOR_TEST_SPACE, testVarName);
+      if (testData.isTraceVariable()) return "graph-norm Schur facade currently requires volume test variables.";
+    }
+
+    bool hasUsableTerm = false;
+    for (const auto &term : bilinearForm->terms())
+    {
+      const bool selectedTrial = vectorContainsName(trialVarNames, term.trialVar()->name());
+      const bool selectedTest  = vectorContainsName(testVarNames, term.testVar()->name());
+      if (!selectedTrial && !selectedTest) continue;
+      if (!selectedTrial || !selectedTest) return "graph-norm Schur facade found a term touching only one side of the requested trial/test block.";
+      if (!term.isMatrixFreeCandidate()) return "graph-norm Schur facade requires matrix-free-capable terms.";
+      if (term.isVolumeTerm())
+      {
+        if (tensorVarIsTraceLike(term.trialVar()) || tensorVarIsTraceLike(term.testVar())) return "graph-norm Schur volume terms must use volume trial and test variables.";
+        hasUsableTerm = true;
+        continue;
+      }
+      if (term.isBoundaryTerm())
+      {
+        if (!includeBoundaryTerms) return "graph-norm Schur facade found boundary terms but boundary handling was not enabled.";
+        if (!termIsSupportedTraceAwareBoundaryTerm(term)) return "graph-norm Schur facade encountered an unsupported boundary/trace term combination.";
+        hasUsableTerm = true;
+        continue;
+      }
+      return "graph-norm Schur facade encountered an unsupported bilinear-term domain.";
+    }
+    if (!hasUsableTerm) return "graph-norm Schur facade found no terms for the requested trial/test block.";
+  }
+  catch (const std::exception &e)
+  {
+    return e.what();
+  }
+  catch (...)
+  {
+    return "graph-norm Schur facade validation failed with an unknown exception.";
+  }
+
+  return "";
+}
+
+std::string MatrixFreeGraphNormSchurTensorOperatorFactory::validationMessage(const TensorMeshPtr &tensorMesh,
+                                                                             const TensorDofLayoutPtr &tensorDofLayout,
+                                                                             const TensorBilinearFormPtr &bilinearForm,
+                                                                             TensorSpaceRole domainRole,
+                                                                             const std::string &domainVarName,
+                                                                             TensorSpaceRole rangeRole,
+                                                                             const std::string &rangeVarName) const
+{
+  if (domainRole != TENSOR_TRIAL_SPACE) return "graph-norm Schur facade requires a trial-space domain.";
+  if (rangeRole != TENSOR_TRIAL_SPACE) return "graph-norm Schur facade is trial-to-trial and requires a trial-space range.";
+  if (domainVarName != rangeVarName) return "graph-norm Schur facade requires matching domain and range trial variable names.";
+  if ((tensorMesh == Teuchos::null) || (tensorDofLayout == Teuchos::null) || (bilinearForm == Teuchos::null)) return "graph-norm Schur facade requires non-null tensor mesh, dof layout, and bilinear form.";
+
+  std::string testVarName;
+  for (const auto &term : bilinearForm->terms())
+  {
+    if (term.trialVar()->name() != domainVarName) continue;
+    if (testVarName.empty()) testVarName = term.testVar()->name();
+    if (testVarName != term.testVar()->name()) return "graph-norm Schur scalar facade supports exactly one eliminated test variable.";
+  }
+  if (testVarName.empty()) return "graph-norm Schur facade found no terms for the requested trial variable.";
+  return validationMessage(tensorMesh,
+                           tensorDofLayout,
+                           bilinearForm,
+                           std::vector<std::string>{domainVarName},
+                           std::vector<std::string>{testVarName},
+                           false);
+}
+
+TensorOperatorBackend MatrixFreeGraphNormSchurTensorOperatorFactory::backend() const
+{
+  return TENSOR_OPERATOR_BACKEND_MATRIX_FREE;
+}
+
+bool MatrixFreeGraphNormSchurTensorOperatorFactory::canBuild(const TensorMeshPtr &tensorMesh,
+                                                             const TensorDofLayoutPtr &tensorDofLayout,
+                                                             const TensorBilinearFormPtr &bilinearForm,
+                                                             TensorSpaceRole domainRole,
+                                                             const std::string &domainVarName,
+                                                             TensorSpaceRole rangeRole,
+                                                             const std::string &rangeVarName) const
+{
+  return validationMessage(tensorMesh,
+                           tensorDofLayout,
+                           bilinearForm,
+                           domainRole,
+                           domainVarName,
+                           rangeRole,
+                           rangeVarName).empty();
+}
+
+TensorOperatorPtr MatrixFreeGraphNormSchurTensorOperatorFactory::build(const TensorMeshPtr &tensorMesh,
+                                                                       const TensorDofLayoutPtr &tensorDofLayout,
+                                                                       const TensorBilinearFormPtr &bilinearForm,
+                                                                       TensorSpaceRole domainRole,
+                                                                       const std::string &domainVarName,
+                                                                       TensorSpaceRole rangeRole,
+                                                                       const std::string &rangeVarName) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!canBuild(tensorMesh, tensorDofLayout, bilinearForm,
+                                       domainRole, domainVarName,
+                                       rangeRole, rangeVarName),
+                             std::invalid_argument,
+                             "MatrixFreeGraphNormSchurTensorOperatorFactory::build called with unsupported inputs.");
+
+  std::string testVarName;
+  for (const auto &term : bilinearForm->terms())
+  {
+    if (term.trialVar()->name() != domainVarName) continue;
+    if (testVarName.empty()) testVarName = term.testVar()->name();
+    TEUCHOS_TEST_FOR_EXCEPTION(testVarName != term.testVar()->name(), std::invalid_argument,
+                               "MatrixFreeGraphNormSchurTensorOperatorFactory minimal facade supports one eliminated test variable.");
+  }
+
+  return build(tensorMesh,
+               tensorDofLayout,
+               bilinearForm,
+               std::vector<std::string>{domainVarName},
+               std::vector<std::string>{testVarName},
+               false);
+}
+
+bool MatrixFreeGraphNormSchurTensorOperatorFactory::canBuild(const TensorMeshPtr &tensorMesh,
+                                                             const TensorDofLayoutPtr &tensorDofLayout,
+                                                             const TensorBilinearFormPtr &bilinearForm,
+                                                             const std::vector<std::string> &trialVarNames,
+                                                             const std::vector<std::string> &testVarNames,
+                                                             bool includeBoundaryTerms) const
+{
+  return validationMessage(tensorMesh,
+                           tensorDofLayout,
+                           bilinearForm,
+                           trialVarNames,
+                           testVarNames,
+                           includeBoundaryTerms).empty();
+}
+
+TensorOperatorPtr MatrixFreeGraphNormSchurTensorOperatorFactory::build(const TensorMeshPtr &tensorMesh,
+                                                                       const TensorDofLayoutPtr &tensorDofLayout,
+                                                                       const TensorBilinearFormPtr &bilinearForm,
+                                                                       const std::vector<std::string> &trialVarNames,
+                                                                       const std::vector<std::string> &testVarNames,
+                                                                       bool includeBoundaryTerms) const
+{
+  const std::string message = validationMessage(tensorMesh,
+                                                tensorDofLayout,
+                                                bilinearForm,
+                                                trialVarNames,
+                                                testVarNames,
+                                                includeBoundaryTerms);
+  TEUCHOS_TEST_FOR_EXCEPTION(!message.empty(),
+                             std::invalid_argument,
+                             "MatrixFreeGraphNormSchurTensorOperatorFactory::build called with unsupported multi-variable inputs: " + message);
+  return Teuchos::rcp(new MatrixFreeGraphNormSchurTensorOperator(tensorMesh,
+                                                                 tensorDofLayout,
+                                                                 bilinearForm,
+                                                                 trialVarNames,
+                                                                 testVarNames,
+                                                                 includeBoundaryTerms,
+                                                                 _l2Weight));
 }

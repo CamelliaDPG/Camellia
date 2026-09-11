@@ -136,7 +136,71 @@ Next slice:
 
 Next slice:
 
-- Carry the same 1D1T2V relativistic coefficient coverage through assembled graph-norm CRS action tests and then decide whether to introduce low-rank/separable approximations for `u_i/gamma` or leave the exact coupled fallback as the correctness path while optimizing the rest of the Planar MITL operator.
+- Completed assembled graph-norm CRS relativistic coverage slice: Phase 0 now exercises the 1D1T2V Planar-MITL-like graph-norm Schur-complement matrix action with exact fully coupled relativistic coefficients `u_x/gamma` and `u_y/gamma`, validating the assembled CRS action against the matrix-free B path plus dense local graph-norm solves.  This keeps the controlled full-tensor quadrature fallback as the correctness path while separable constants, coordinate factors, products, and sums still use the sum-factorized path.
+
+Next slice:
+
+- Decision completed: do not introduce low-rank/separable approximations for `u_i/gamma` in the first tensor-native Planar MITL path.  Keep exact fully coupled `u_i/gamma` evaluation as the correctness fallback for both matrix-free B applies and assembled L2/graph-norm CRS Schur actions, and reserve separable/low-rank approximations as an explicit later optimization with tolerance controls.  Phase 0 instrumentation now names this exact relativistic velocity fallback directly and verifies that isolated fully coupled relativistic coefficients avoid the 1D-contraction construction path while still matching the explicit reference operator.
+
+Next slice:
+
+- Completed matrix-free path-accounting slice: `TensorOperatorInstrumentation` now reports per-apply volume term-cell counts for the sum-factorized separable path and the exact full-tensor fallback path.  Phase 0 tests verify pure separable applies, isolated exact relativistic `u_x/gamma` fallback applies, and mixed 1D1T2V Planar-MITL-like forms that combine exact coupled relativistic velocity terms with optimized separable transport/acceleration terms.
+
+Next slice:
+
+- Completed shared coefficient-expansion refactor: separable coefficient factor expansion now lives in `TensorCoefficientExpansion` and is shared by both matrix-free volume applies and local L2/graph Schur assembly.  Regression coverage exercises distribution over separable sums/products and confirms exact relativistic `u_i/gamma` coefficients are rejected by the separable expansion helper so they continue down the explicit coupled fallback path.
+
+Next slice:
+
+- Completed local graph-norm action adapter slice: `TensorLocalSchurComplementBuilder::LocalGraphNormAction` now exposes reusable dense local `G^{-1}` application, column solves, and direct `B^T G^{-1} B x` action without materializing a local K in the call site.  Existing dense graph-norm Schur construction now routes its G solves through this adapter, and Phase 0 tests verify both the inverse reconstruction and the adapter Schur action against materialized local K blocks.
+
+Next slice:
+
+- Completed first CRS-free graph-norm Schur action prototype: `TensorLocalSchurComplementBuilder::applyAffineGraphVolumeSchurComplement()` applies cell-local `B^T G^{-1} B x` with `LocalGraphNormAction` and scatters directly to the trial vector without assembling a CRS matrix.  Phase 0 tests compare this CRS-free graph action against assembled graph-norm CRS matrices for both a small affine separable case and the 1D1T2V relativistic fallback case.
+
+Next slice:
+
+- Completed multi-variable and trace graph-action slice: the CRS-free graph-norm Schur helper now has multi-variable volume and volume+boundary variants that build cell-local B images for concatenated trial variables, apply `LocalGraphNormAction`, and scatter the result directly without forming a CRS matrix.  Phase 0 tests compare these matrix-free graph actions against the assembled multi-variable volume and volume+trace graph-norm CRS matrices.
+
+Next slice:
+
+- Completed graph-norm Schur facade slice: added `MatrixFreeGraphNormSchurTensorOperatorFactory`, which builds a solver-facing `TensorOperator` for the single-field-variable affine volume graph-norm Schur action.  The operator reports matrix-free backend metadata, maps trial coefficients to the same trial variable, retains the eliminated test variable internally, delegates apply to the CRS-free graph-norm helper, and is covered by Phase 0 metadata and assembled-CRS action comparisons.
+
+Next slice:
+
+- Completed multi-variable and directional-trace graph-norm Schur facade slice: `MatrixFreeGraphNormSchurTensorOperatorFactory` now also builds concatenated trial-space matrix-free Schur operators for multi-variable volume forms and opt-in volume+boundary trace forms.  The facade exposes comma-joined domain/range metadata for the concatenated trial block, delegates to the CRS-free graph action helpers, and Phase 0 tests compare the resulting actions against assembled CRS graph-norm matrices, including separate `tn_x`/`tn_t` directional trace variables.
+
+Next slice:
+
+- Completed graph-norm Schur facade diagnostics slice: `MatrixFreeGraphNormSchurTensorOperatorFactory` now exposes validation-message helpers for scalar and concatenated-trial build requests, build failures include the specific rejection reason, and the facade records resettable graph-Schur apply counts plus local-action timing.  Phase 0 tests cover trial-to-trial validation diagnostics and facade apply instrumentation.
+
+Next slice:
+
+- Completed driver-side Phase 0 selection slice: `PlanarMITLRelativisticSpaceTime` now accepts `--phase0TensorGraphSchurBackend={off,assembled_crs,matrix_free}` and runs a bounded tensor-native 1D1T2V graph-norm Schur micro-apply when requested.  The timing stream records the selected backend, trial DOFs, output norm, and micro-apply time, while the default `off` path leaves the production legacy solve unchanged; the small Phase 0 performance target exercises the assembled-CRS selector explicitly.
+
+Next slice:
+
+- Completed companion Phase 0 performance-target slice: `runPhase0PerformanceSmallMatrixFreeGraphSchur` now runs the same bounded Planar-MITL-like graph-norm Schur micro-apply through the CRS-free matrix-free facade, writes a separate timing log, and can be paired with `runPhase0PerformanceSmall` through `runPhase0PerformanceCompareGraphSchur` for assembled-CRS vs matrix-free timing comparison.
+
+Next slice:
+
+- Completed Phase 0 graph-norm Schur timing-log comparison slice: the small assembled-CRS and CRS-free matrix-free graph-norm Schur micro-apply targets now clear their timing logs before each run, and `runPhase0PerformanceCompareGraphSchur` parses both logs, checks that the expected backend labels are present, verifies matching trial DOF counts, and fails if either output norm is zero or the paired output norms differ.  This establishes a repeatable side-by-side timing gate before increasing the tensor microbenchmark size.
+
+Next slice:
+
+- Completed cached graph-norm Schur facade slice: `MatrixFreeGraphNormSchurTensorOperator` now precomputes and stores cell-local B blocks and `LocalGraphNormAction` objects at construction, then each apply reuses those cached local actions instead of rebuilding B blocks and graph-norm matrices.  Regression coverage verifies repeated facade applies remain numerically stable and record only facade-level graph-Schur/local-action counters, with no per-apply basis or 1D-contraction reconstruction.
+
+Next slice:
+
+- Completed compact cached-column graph Schur facade slice: cached graph-norm Schur blocks now store only active trial GIDs and a compact local B matrix, gather/scatter through those active columns on each apply, and report the aggregate active local trial DOF count.  Regression coverage confirms repeated applies continue to avoid basis/1D-contraction rebuilds and that the compact path touches fewer local trial columns than the previous dense global-width local B representation.
+
+Next slice:
+
+- Completed controlled graph-norm Schur microbenchmark scaling slice: the Planar MITL driver now exposes independent Phase 0 tensor graph-Schur microbenchmark controls for x/t/ux/uy cell counts, component p, and test enrichment, logs those dimensions with the micro-apply timing, and the performance CMake file adds paired expanded assembled-CRS and CRS-free matrix-free targets plus a comparison target.  The existing small target remains bounded and the default driver path still leaves the tensor micro-apply off.
+
+Next slice:
+
+- Use the expanded benchmark results to identify whether local B construction, dense graph-norm solves, or trace/block scatter dominates, then add the smallest targeted cache/reuse optimization for the winning hotspot.
 
 ## Phase 2: N-factor basis and quadrature cache
 
