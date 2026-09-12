@@ -385,6 +385,12 @@ TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixRectangularAssemble2MatchesAssembl
   testAssemble2MatchesAssemble(op, out, success);
 }
 
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixAssemble2MultipleColumnBlocksMatchesAssemble)
+{
+  auto op = makeRealPAMatrix(3, 5, 6, false, 1);
+  testAssemble2MatchesAssemble(op, out, success);
+}
+
 TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixExtractDiagonalMatchesAssembledDiagonal)
 {
   auto op = makeRealPAMatrix(3, 3, 4, false, 2);

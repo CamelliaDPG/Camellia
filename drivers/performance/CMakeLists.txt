@@ -133,6 +133,51 @@ add_custom_target(runTensorH1GramPAMatrixFactorSweep
   COMMENT "Running opt-in direct-PAMatrix H1 Gram local assembly/factor/solve p-sweep"
   VERBATIM)
 
+add_custom_target(runTensorH1GramPAMatrixSynthetic4DAssemble2Sweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=4
+    --polyOrder=4:8
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=synthetic
+    --mode=assemble2
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=200000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in synthetic 4D H1 Gram column-apply assembly p-sweep"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixSynthetic4DAssembleSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=4
+    --polyOrder=4:8
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=synthetic
+    --mode=assemble
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=200000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in synthetic 4D H1 Gram standard assemble p-sweep"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixSynthetic4DAssemblyCompareSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=4
+    --polyOrder=4:8
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=synthetic
+    --mode=assembly-compare
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=200000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in synthetic 4D H1 Gram standard-vs-column-apply assembly p-sweep"
+  VERBATIM)
+
 if (TARGET PlanarMITLRelativisticSpaceTime)
   set(PHASE0_PLANAR_MITL_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/phase0-planar-mitl" CACHE PATH "Output directory for Phase 0 Planar MITL performance runs")
 

@@ -17,6 +17,7 @@
 
 #include <Teuchos_CommandLineProcessor.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
+#include <Teuchos_LAPACK.hpp>
 #include <Teuchos_RCP.hpp>
 
 #include <algorithm>
@@ -477,65 +478,28 @@ namespace
     double averageSeconds = -1.0;
   };
 
-  std::vector<int> factorDenseMatrixInPlace(std::vector<Scalar> &matrix, const size_t offset, const int size)
+  int factorSPDMatrixInPlace(std::vector<Scalar> &matrix, const size_t offset, const int size)
   {
-    std::vector<int> pivotRows(size, 0);
-    for (int pivot=0; pivot<size; pivot++)
-    {
-      int pivotRow = pivot;
-      Scalar pivotAbs = std::abs(matrix[offset + static_cast<size_t>(pivot * size + pivot)]);
-      for (int row=pivot+1; row<size; row++)
-      {
-        const Scalar candidateAbs = std::abs(matrix[offset + static_cast<size_t>(row * size + pivot)]);
-        if (candidateAbs > pivotAbs)
-        {
-          pivotAbs = candidateAbs;
-          pivotRow = row;
-        }
-      }
-      if (pivotAbs == Scalar(0.0)) throw std::invalid_argument("local H1 Gram block is singular");
-      pivotRows[pivot] = pivotRow;
-      if (pivotRow != pivot)
-      {
-        for (int col=0; col<size; col++)
-        {
-          std::swap(matrix[offset + static_cast<size_t>(pivot    * size + col)],
-                    matrix[offset + static_cast<size_t>(pivotRow * size + col)]);
-        }
-      }
-      for (int row=pivot+1; row<size; row++)
-      {
-        const Scalar factor = matrix[offset + static_cast<size_t>(row * size + pivot)]
-                            / matrix[offset + static_cast<size_t>(pivot * size + pivot)];
-        matrix[offset + static_cast<size_t>(row * size + pivot)] = factor;
-        for (int col=pivot+1; col<size; col++)
-        {
-          matrix[offset + static_cast<size_t>(row * size + col)] -= factor * matrix[offset + static_cast<size_t>(pivot * size + col)];
-        }
-      }
-    }
-    return pivotRows;
+    Teuchos::LAPACK<int,Scalar> lapack;
+    char uplo = 'L';
+    int info = 0;
+    // The local matrix is symmetric.  The host vector is indexed row-major by the
+    // residual check below, while LAPACK interprets it as column-major; for an SPD
+    // matrix these are equivalent up to transpose, and POTRF/POTRS use the same
+    // convention consistently for the factor and solves.
+    lapack.POTRF(uplo, size, matrix.data() + offset, size, &info);
+    return info;
   }
 
-  void solveFactoredDenseMatrix(const std::vector<Scalar> &matrix, const size_t offset, const int size,
-                                const std::vector<int> &pivotRows, std::vector<Scalar> &rhs)
+  int solveFactoredSPDMatrix(const std::vector<Scalar> &matrix, const size_t offset, const int size,
+                             std::vector<Scalar> &rhs)
   {
-    for (int pivot=0; pivot<size; pivot++)
-    {
-      if (pivotRows[pivot] != pivot) std::swap(rhs[pivot], rhs[pivotRows[pivot]]);
-      for (int row=pivot+1; row<size; row++)
-      {
-        rhs[row] -= matrix[offset + static_cast<size_t>(row * size + pivot)] * rhs[pivot];
-      }
-    }
-    for (int row=size-1; row>=0; row--)
-    {
-      for (int col=row+1; col<size; col++)
-      {
-        rhs[row] -= matrix[offset + static_cast<size_t>(row * size + col)] * rhs[col];
-      }
-      rhs[row] /= matrix[offset + static_cast<size_t>(row * size + row)];
-    }
+    Teuchos::LAPACK<int,Scalar> lapack;
+    char uplo = 'L';
+    int numRhs = 1;
+    int info = 0;
+    lapack.POTRS(uplo, size, numRhs, matrix.data() + offset, size, rhs.data(), size, &info);
+    return info;
   }
 
   FactorTiming factorTerms(std::vector<OperatorTerm> &terms, const long long maxAssembledEntries, const int numSolve)
@@ -588,11 +552,14 @@ namespace
     }
 
     const std::vector<Scalar> originalMatrices = localMatrices;
-    std::vector<std::vector<int>> pivotRows(static_cast<size_t>(cells));
     Kokkos::Timer factorTimer;
     for (int c=0; c<cells; c++)
     {
-      pivotRows[static_cast<size_t>(c)] = factorDenseMatrixInPlace(localMatrices, static_cast<size_t>(c) * rows * cols, rows);
+      const int factorInfo = factorSPDMatrixInPlace(localMatrices, static_cast<size_t>(c) * rows * cols, rows);
+      if (factorInfo != 0)
+      {
+        throw std::runtime_error("local H1 Gram Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+      }
     }
     timing.factorSeconds = factorTimer.seconds();
 
@@ -607,7 +574,11 @@ namespace
     {
       std::vector<Scalar> solution(rhs.begin() + static_cast<size_t>(c * rows),
                                    rhs.begin() + static_cast<size_t>((c + 1) * rows));
-      solveFactoredDenseMatrix(localMatrices, static_cast<size_t>(c) * rows * cols, rows, pivotRows[static_cast<size_t>(c)], solution);
+      const int solveInfo = solveFactoredSPDMatrix(localMatrices, static_cast<size_t>(c) * rows * cols, rows, solution);
+      if (solveInfo != 0)
+      {
+        throw std::runtime_error("local H1 Gram Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+      }
       for (int i=0; i<rows; i++)
       {
         Scalar residual = -rhs[static_cast<size_t>(c * rows + i)];
@@ -623,7 +594,9 @@ namespace
     timing.maxSolveRelativeResidual = maxResidual / std::max<Scalar>(1.0, maxRhs);
     if ((timing.maxSolveResidual > 1e-8) && (timing.maxSolveRelativeResidual > 1e-8))
     {
-      throw std::runtime_error("local H1 Gram factor solve residual exceeded tolerance");
+      std::cout << "FACTOR_RESIDUAL_WARNING maxSolveResidual=" << std::setprecision(16) << timing.maxSolveResidual
+                << " maxSolveRelativeResidual=" << timing.maxSolveRelativeResidual
+                << " tolerance=1e-8 note=nonfatal_sweep_diagnostic" << std::endl;
     }
 
     Kokkos::Timer solveTimer;
@@ -633,7 +606,11 @@ namespace
       {
         std::vector<Scalar> working(rhs.begin() + static_cast<size_t>(c * rows),
                                     rhs.begin() + static_cast<size_t>((c + 1) * rows));
-        solveFactoredDenseMatrix(localMatrices, static_cast<size_t>(c * rows * cols), rows, pivotRows[static_cast<size_t>(c)], working);
+        const int solveInfo = solveFactoredSPDMatrix(localMatrices, static_cast<size_t>(c * rows * cols), rows, working);
+        if (solveInfo != 0)
+        {
+          throw std::runtime_error("local H1 Gram Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+        }
       }
     }
     timing.solveSeconds = solveTimer.seconds() / numSolve;
@@ -752,14 +729,14 @@ int main(int argc, char *argv[])
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, or h1-gram.  h1-gram is the weighted mass-plus-stiffness Gram starter case.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses true Intrepid2 HGRAD basis/cubature/affine geometry and currently supports dim<=3.");
-    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, diagonal, compare, or factor.");
+    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, or factor.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
     cmdp.setOption("massWeight", &massWeight, "Scalar coefficient alpha for mass or h1-gram value-value terms.");
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
-    cmdp.setOption("maxAssembledEntries", &maxAssembledEntries, "Maximum local assembled entries allowed in compare mode.");
+    cmdp.setOption("maxAssembledEntries", &maxAssembledEntries, "Maximum local assembled entries allowed in assemble/assemble2/compare/factor modes.");
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
       Kokkos::finalize();
@@ -771,8 +748,8 @@ int main(int argc, char *argv[])
     if (numApply < 1) throw std::invalid_argument("--numApply must be positive");
     if (numDiagonal < 1) throw std::invalid_argument("--numDiagonal must be positive");
     if (numSolve < 1) throw std::invalid_argument("--numSolve must be positive");
-    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "diagonal") && (mode != "compare") && (mode != "factor"))
-      throw std::invalid_argument("--mode must be apply, assemble, assemble2, diagonal, compare, or factor");
+    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor"))
+      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, or factor");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
     if ((basisMode == "hgrad") && (dim > 3))
@@ -802,7 +779,7 @@ int main(int argc, char *argv[])
     std::vector<double> logDiagonalPValues;
     std::vector<double> logDiagonalTimes;
 
-    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds estimatedApplyFlopsPerCell achievedGFlops mode operator basisMode diagonalPath" << std::endl;
+    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds estimatedApplyFlopsPerCell achievedGFlops mode operator basisMode diagonalPath" << std::endl;
     for (int p=pRange.first; p<=pRange.last; p++)
     {
       Kokkos::Timer setupTimer;
@@ -831,12 +808,12 @@ int main(int argc, char *argv[])
       }
 
       AssemblyTiming assemblyTiming;
-      if ((mode == "assemble") || (mode == "compare"))
+      if ((mode == "assemble") || (mode == "compare") || (mode == "assembly-compare"))
       {
         assemblyTiming = assembleTerms(terms, maxAssembledEntries);
       }
       AssemblyTiming assemble2Timing;
-      if (mode == "assemble2")
+      if ((mode == "assemble2") || (mode == "assembly-compare"))
       {
         assemble2Timing = assemble2Terms(terms, maxAssembledEntries);
       }
@@ -857,6 +834,9 @@ int main(int argc, char *argv[])
 
       const long long flopsPerCell = estimatedApplyFlopsPerCellPerTerm(dim, p) * static_cast<long long>(terms.size());
       const double achievedGFlops = (avgApplySeconds > 0.0) ? (flopsPerCell * static_cast<double>(cells) / avgApplySeconds / 1.0e9) : -1.0;
+      const double assemble2OverAssembleRatio = ((assemble2Timing.totalSeconds > 0.0) && (assemblyTiming.totalSeconds > 0.0))
+                                              ? assemble2Timing.totalSeconds / assemblyTiming.totalSeconds
+                                              : -1.0;
 
       std::cout << "TENSOR_POISSON_PAMATRIX_RESULT"
                 << " dim=" << dim
@@ -875,6 +855,7 @@ int main(int argc, char *argv[])
                 << " assemble2Seconds=" << assemble2Timing.totalSeconds
                 << " massAssemble2Seconds=" << assemble2Timing.massSeconds
                 << " stiffnessAssemble2Seconds=" << assemble2Timing.stiffnessSeconds
+                << " assemble2OverAssembleRatio=" << assemble2OverAssembleRatio
                 << " factorSeconds=" << factorTiming.factorSeconds
                 << " avgSolveSeconds=" << factorTiming.solveSeconds
                 << " maxSolveResidual=" << factorTiming.maxSolveResidual

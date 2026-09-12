@@ -71,6 +71,7 @@ void PAMatrix<DeviceType,Scalar>::assemble2(Data<Scalar,DeviceType> &integrals) 
 {
   using ExecutionSpace = typename DeviceType::execution_space;
   using MultiVector = ScalarView<Scalar,DeviceType>;
+  using ScratchView = Kokkos::View<Scalar*,DeviceType,Kokkos::MemoryUnmanaged>;
 
   const ordinal_type numCells       = _basisValuesLeft.numCells();
   const ordinal_type numFieldsLeft  = _basisValuesLeft.numFields();
@@ -83,24 +84,161 @@ void PAMatrix<DeviceType,Scalar>::assemble2(Data<Scalar,DeviceType> &integrals) 
                                integrals.extent_int(2) != numFieldsRight, std::invalid_argument,
       "PAMatrix::assemble2() output container has incompatible extents");
 
+  bool useUnitColumnPath = (_orientations.size() == 0);
+  for (const auto &integralTuple : componentIntegralsToSum_)
+  {
+    const auto &leftOps       = std::get<0>(integralTuple);
+    const PointDataSpec &pointDataSpec = std::get<1>(integralTuple);
+    const auto &rightOps      = std::get<2>(integralTuple);
+    const int leftSpan        = std::get<4>(integralTuple);
+    const int rightSpan       = std::get<6>(integralTuple);
+
+    if ((leftOps.size() != rightOps.size()) || (rightOps.size() == 0) ||
+        (rightOps.size() > 8) || (pointDataSpec.aSpan != 1) || (pointDataSpec.bSpan != 1))
+    {
+      useUnitColumnPath = false;
+      break;
+    }
+
+    int rightFieldProduct = 1;
+    int pointProduct = 1;
+    for (size_t r=0; r<rightOps.size(); r++)
+    {
+      rightFieldProduct *= rightOps[r].N;
+      pointProduct      *= rightOps[r].M;
+    }
+    int leftFieldProduct = 1;
+    int leftPointProduct = 1;
+    for (size_t r=0; r<leftOps.size(); r++)
+    {
+      leftFieldProduct *= leftOps[r].M;
+      leftPointProduct *= leftOps[r].N;
+    }
+    if ((rightFieldProduct != rightSpan) || (leftFieldProduct != leftSpan) ||
+        (pointProduct != pointDataSpec.P) || (leftPointProduct != pointDataSpec.P))
+    {
+      useUnitColumnPath = false;
+      break;
+    }
+  }
+
   const ordinal_type maxColumnBlockSize = 64;
   const ordinal_type columnBlockSize = std::min(numFieldsRight, maxColumnBlockSize);
 
   for (ordinal_type columnStart=0; columnStart<numFieldsRight; columnStart+=columnBlockSize)
   {
     const ordinal_type blockSize = std::min(columnBlockSize, numFieldsRight - columnStart);
-    MultiVector inputColumns ("PAMatrix assemble2 input unit columns", numCells, numFieldsRight, blockSize);
-    MultiVector outputColumns("PAMatrix assemble2 output columns",     numCells, numFieldsLeft,  blockSize);
-
-    auto identityPolicy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,numFieldsRight,blockSize});
-    Kokkos::parallel_for("PAMatrix::assemble2(): set unit multivector", identityPolicy,
-    KOKKOS_LAMBDA(const ordinal_type &cell, const ordinal_type &field, const ordinal_type &blockColumn)
-    {
-      inputColumns(cell,field,blockColumn) = (field == columnStart + blockColumn) ? Scalar(1) : Scalar(0);
-    });
+    MultiVector outputColumns("PAMatrix assemble2 output columns", numCells, numFieldsLeft, blockSize);
 
     auto workspace = this->allocateWorkspace(numCells, blockSize);
-    this->apply(outputColumns, inputColumns, workspace, false, numCells);
+
+    if (useUnitColumnPath)
+    {
+      Kokkos::deep_copy(outputColumns, Scalar(0));
+
+      const int numIntegrationPasses = int(componentIntegralsToSum_.size());
+      for (int integrationPass=0; integrationPass<numIntegrationPasses; integrationPass++)
+      {
+        const auto &integralTuple = componentIntegralsToSum_[integrationPass];
+        const auto &leftOps       = std::get<0>(integralTuple);
+        const PointDataSpec &pointDataSpec = std::get<1>(integralTuple);
+        const auto &rightOps      = std::get<2>(integralTuple);
+        const int leftOrdinalOffset  = std::get<3>(integralTuple);
+        const int leftOutputSpan     = std::get<4>(integralTuple);
+        const int rightOrdinalOffset = std::get<5>(integralTuple);
+        const int rightInputSpan     = std::get<6>(integralTuple);
+        const int numTensorComponents = int(rightOps.size());
+
+        Kokkos::Array<typename PAMatrix<DeviceType,Scalar>::OpSpec,8> rightOpsArray;
+        Kokkos::Array<typename PAMatrix<DeviceType,Scalar>::OpSpec,8> leftOpsArray;
+        Kokkos::Array<int,8> rightFieldExtents;
+        Kokkos::Array<int,8> pointExtents;
+        for (int r=0; r<numTensorComponents; r++)
+        {
+          rightOpsArray[r] = rightOps[r];
+          leftOpsArray[r]  = leftOps[r];
+          rightFieldExtents[r] = rightOps[r].N;
+          pointExtents[r]      = rightOps[r].M;
+        }
+
+        const int workspace1Size = maxIntermediateSize_ * numCells * blockSize;
+        const int workspace2Size = maxIntermediateSize_ * numCells * blockSize;
+        ScratchView workspace1(workspace.data(), workspace1Size);
+        ScratchView workspace2(workspace.data() + workspace1Size, workspace2Size);
+        ScratchView pointDataIn  = (numTensorComponents % 2 == 0) ? workspace1 : workspace2;
+        ScratchView pointDataOut = (numTensorComponents % 2 == 0) ? workspace2 : workspace1;
+
+        auto unitColumnPolicy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,pointDataSpec.P,blockSize});
+        Kokkos::parallel_for("PAMatrix::assemble2(): unit trial columns to points", unitColumnPolicy,
+        KOKKOS_LAMBDA(const ordinal_type &cell, const ordinal_type &pointOrdinal, const ordinal_type &blockColumn)
+        {
+          const int globalColumn = columnStart + blockColumn;
+          Scalar value = 0;
+          if ((globalColumn >= rightOrdinalOffset) && (globalColumn < rightOrdinalOffset + rightInputSpan))
+          {
+            int columnRemainder = globalColumn - rightOrdinalOffset;
+            int pointRemainder = pointOrdinal;
+            value = Scalar(1);
+            for (int r=0; r<numTensorComponents; r++)
+            {
+              const int field = columnRemainder % rightFieldExtents[r];
+              const int point = pointRemainder % pointExtents[r];
+              columnRemainder /= rightFieldExtents[r];
+              pointRemainder  /= pointExtents[r];
+              const auto op = rightOpsArray[r];
+              value *= op.opView(point + field * op.M);
+            }
+          }
+          pointDataIn(pointOrdinal + (blockColumn + cell * blockSize) * pointDataSpec.P) = value;
+        });
+        ExecutionSpace().fence();
+
+        auto pointData = _pointDataCache.find(pointDataSpec)->second;
+        Impl::pointDataMultiply<DeviceType,Scalar>(pointDataSpec.C, pointDataSpec.P, pointDataSpec.aSpan, pointDataSpec.bSpan,
+                                                   pointData.data(), pointDataIn.data(), pointDataOut.data(), blockSize);
+
+        int Nr = pointDataSpec.P * numCells * blockSize * pointDataSpec.aSpan;
+        const int numLeftIntegrals = int(leftOps.size());
+        for (int i=0; i<numLeftIntegrals; i++)
+        {
+          auto in  = ((i+numTensorComponents+1)%2 == 0) ? workspace1 : workspace2;
+          auto out = ((i+numTensorComponents+1)%2 == 0) ? workspace2 : workspace1;
+
+          const int r = numLeftIntegrals-i-1;
+          auto op = leftOpsArray[r];
+          const ordinal_type & Fr = op.M;
+          const ordinal_type & Pr = op.N;
+
+          const auto A = op.opView.data();
+          const ordinal_type LDA = Fr;
+          const auto B = in.data();
+          auto C = out.data();
+          INTREPID2_TEST_FOR_EXCEPTION(Nr % Pr != 0, std::invalid_argument, "Error: Nr must be a multiple of Pr");
+          Impl::gemm<Impl::GemmDeviceType>('N', 'T', Fr, Nr/Pr, Pr, Scalar(1.0), A, LDA, B, Scalar(0.0), C);
+          Nr = (Nr * Fr) / Pr;
+        }
+        auto finalOut = ((numLeftIntegrals+numTensorComponents+1)%2 == 0) ? workspace1 : workspace2;
+        auto sumPolicy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,leftOutputSpan,blockSize});
+        Kokkos::parallel_for("PAMatrix::assemble2(): sum unit-column final output", sumPolicy,
+        KOKKOS_LAMBDA(const ordinal_type &cell, const ordinal_type &field, const ordinal_type &blockColumn)
+        {
+          const ordinal_type idx = field + (blockColumn + cell * blockSize) * leftOutputSpan;
+          outputColumns(cell,field+leftOrdinalOffset,blockColumn) += finalOut(idx);
+        });
+        ExecutionSpace().fence();
+      }
+    }
+    else
+    {
+      MultiVector inputColumns ("PAMatrix assemble2 input unit columns", numCells, numFieldsRight, blockSize);
+      auto identityPolicy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,numFieldsRight,blockSize});
+      Kokkos::parallel_for("PAMatrix::assemble2(): set unit multivector", identityPolicy,
+      KOKKOS_LAMBDA(const ordinal_type &cell, const ordinal_type &field, const ordinal_type &blockColumn)
+      {
+        inputColumns(cell,field,blockColumn) = (field == columnStart + blockColumn) ? Scalar(1) : Scalar(0);
+      });
+      this->apply(outputColumns, inputColumns, workspace, false, numCells);
+    }
 
     if (integrals.getUnderlyingViewRank() == 3)
     {

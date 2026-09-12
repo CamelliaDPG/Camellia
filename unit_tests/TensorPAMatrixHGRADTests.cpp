@@ -65,10 +65,14 @@ namespace
 
   void addPAMatrixAssemblyToDense(Intrepid2::PAMatrix<DeviceType,Scalar> &paMatrix,
                                   const Scalar weight,
-                                  std::vector<Scalar> &dense)
+                                  std::vector<Scalar> &dense,
+                                  const bool useAssemble2 = false)
   {
     auto paMatrixData = paMatrix.allocateMatrixStorage();
-    paMatrix.assemble(paMatrixData);
+    if (useAssemble2)
+      paMatrix.assemble2(paMatrixData);
+    else
+      paMatrix.assemble(paMatrixData);
     const int cells = paMatrixData.extent_int(0);
     const int rows  = paMatrixData.extent_int(1);
     const int cols  = paMatrixData.extent_int(2);
@@ -114,7 +118,8 @@ namespace
 
   template<int spaceDim>
   void comparePAMatrixAssemblyToStandard(const Intrepid2::EOperator op,
-                                         Teuchos::FancyOStream &out, bool &success)
+                                         Teuchos::FancyOStream &out, bool &success,
+                                         const bool useAssemble2 = false)
   {
     auto geometry = makeUnitGeometry<spaceDim>(1);
     constexpr int p = 2;
@@ -135,13 +140,16 @@ namespace
 
     std::vector<Scalar> actual;
     std::vector<Scalar> expected;
-    addPAMatrixAssemblyToDense(paMatrix, 1.0, actual);
+    addPAMatrixAssemblyToDense(paMatrix, 1.0, actual, useAssemble2);
     addStandardAssemblyToDense(standardMatrix, 1.0, expected);
-    compareDenseMatrices(actual, expected, "HGRAD PAMatrix/standard assembly", out, success);
+    const std::string label = useAssemble2 ? "HGRAD PAMatrix assemble2/standard assembly"
+                                           : "HGRAD PAMatrix/standard assembly";
+    compareDenseMatrices(actual, expected, label, out, success);
   }
 
   template<int spaceDim>
-  void compareWeightedH1GramToStandard(Teuchos::FancyOStream &out, bool &success)
+  void compareWeightedH1GramToStandard(Teuchos::FancyOStream &out, bool &success,
+                                        const bool useAssemble2 = false)
   {
     auto geometry = makeUnitGeometry<spaceDim>(2);
     constexpr int p = 2;
@@ -156,7 +164,7 @@ namespace
         geometry,
         p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE,
         p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE);
-    addPAMatrixAssemblyToDense(paMass, massWeight, actual);
+    addPAMatrixAssemblyToDense(paMass, massWeight, actual, useAssemble2);
 
     double standardFlops = 0.0;
     double jacobianFlops = 0.0;
@@ -176,7 +184,7 @@ namespace
           geometry,
           p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight,
           p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight);
-      addPAMatrixAssemblyToDense(paStiffness, stiffnessWeight, actual);
+      addPAMatrixAssemblyToDense(paStiffness, stiffnessWeight, actual, useAssemble2);
 
       auto standardStiffness = performStandardAssembly<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
           geometry, worksetSize,
@@ -208,4 +216,14 @@ TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, StiffnessMatchesStandardIntegration3D)
 TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, WeightedH1GramComponentSplitMatchesStandardIntegration3D)
 {
   compareWeightedH1GramToStandard<3>(out, success);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, MassAssemble2MatchesStandardIntegration3D)
+{
+  comparePAMatrixAssemblyToStandard<3>(Intrepid2::OPERATOR_VALUE, out, success, true);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, WeightedH1GramComponentSplitAssemble2MatchesStandardIntegration3D)
+{
+  compareWeightedH1GramToStandard<3>(out, success, true);
 }
