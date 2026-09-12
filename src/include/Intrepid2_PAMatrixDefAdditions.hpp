@@ -34,13 +34,22 @@ Data<Scalar,DeviceType> PAMatrix<DeviceType,Scalar>::allocateDiagonalStorage() c
                                                 _basisValuesRight.transform().getDimensionInfo(CELL_DIM));
   }
 
-  const DataVariationType cellVariationType = combinedCellDimInfo.variationType;
-  const int cellDataExtent                  = combinedCellDimInfo.dataExtent;
+  DataVariationType cellVariationType = combinedCellDimInfo.variationType;
+  int cellDataExtent                  = combinedCellDimInfo.dataExtent;
 
   const int numCells       = _basisValuesLeft.numCells();
   const int numFieldsLeft  = _basisValuesLeft.numFields();
   const int numFieldsRight = _basisValuesRight.numFields();
   const int numDiagonalEntries = std::min(numFieldsLeft, numFieldsRight);
+
+  if (_orientations.size() > 0)
+  {
+    // Orientations can make otherwise constant cell data cell-dependent.
+    // Preserve per-cell diagonal storage so fallback assembly/copy and future
+    // oriented diagonal paths do not collapse distinct oriented cells.
+    cellVariationType = GENERAL;
+    cellDataExtent = numCells;
+  }
 
   Kokkos::Array<int,2> extents {numCells, numDiagonalEntries};
   Kokkos::Array<DataVariationType,2> variationTypes {cellVariationType, GENERAL};
