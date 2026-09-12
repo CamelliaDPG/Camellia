@@ -30,6 +30,19 @@ add_test(NAME TensorPoissonPAMatrixDriverSmoke
     --numApply=2
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorH1GramPAMatrixDriverSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=3
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=compare
+    --numApply=2
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
 add_custom_target(runTensorPoissonPAMatrixSmoke
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=2
@@ -42,6 +55,82 @@ add_custom_target(runTensorPoissonPAMatrixSmoke
     --maxAssembledEntries=50000
   DEPENDS TensorPoissonPAMatrixDriver
   COMMENT "Running small direct-PAMatrix tensor Poisson apply/compare smoke test"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixSmoke
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=compare
+    --numApply=3
+    --maxAssembledEntries=10000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running small direct-PAMatrix H1 Gram assembly/apply smoke test"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixFactorSmoke
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=factor
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --numSolve=3
+    --maxAssembledEntries=10000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running small direct-PAMatrix H1 Gram local assembly/factor smoke test"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixAssemble2Sweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=8:12
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=assemble2
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=200000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram column-apply assembly p-sweep"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixAssembleSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=8:12
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=assemble
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=200000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram standard assemble p-sweep"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixFactorSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=3:5
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=factor
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --numSolve=10
+    --maxAssembledEntries=20000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram local assembly/factor/solve p-sweep"
   VERBATIM)
 
 if (TARGET PlanarMITLRelativisticSpaceTime)

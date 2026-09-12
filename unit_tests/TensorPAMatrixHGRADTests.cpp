@@ -42,6 +42,76 @@ namespace
     return Intrepid2::getNodalCellGeometry(uniformGeometry, copyAffineness);
   }
 
+  void compareDenseMatrices(const std::vector<Scalar> &actual,
+                            const std::vector<Scalar> &expected,
+                            const std::string &label,
+                            Teuchos::FancyOStream &out, bool &success)
+  {
+    Scalar maxError = 0.0;
+    Scalar maxExpected = 0.0;
+    for (size_t i=0; i<actual.size(); i++)
+    {
+      maxError = std::max(maxError, std::abs(actual[i] - expected[i]));
+      maxExpected = std::max(maxExpected, std::abs(expected[i]));
+    }
+    const Scalar relativeError = maxError / std::max<Scalar>(1.0, maxExpected);
+    if ((maxError > 1e-10) && (relativeError > 1e-10))
+    {
+      out << label << " mismatch: maxAbsError=" << maxError
+          << ", maxRelError=" << relativeError << std::endl;
+      success = false;
+    }
+  }
+
+  void addPAMatrixAssemblyToDense(Intrepid2::PAMatrix<DeviceType,Scalar> &paMatrix,
+                                  const Scalar weight,
+                                  std::vector<Scalar> &dense)
+  {
+    auto paMatrixData = paMatrix.allocateMatrixStorage();
+    paMatrix.assemble(paMatrixData);
+    const int cells = paMatrixData.extent_int(0);
+    const int rows  = paMatrixData.extent_int(1);
+    const int cols  = paMatrixData.extent_int(2);
+    if (dense.empty()) dense.assign(static_cast<size_t>(cells * rows * cols), 0.0);
+
+    if (paMatrixData.getUnderlyingViewRank() == 3)
+    {
+      auto paHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), paMatrixData.template getUnderlyingView<3>());
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++)
+          for (int j=0; j<cols; j++)
+            dense[static_cast<size_t>((c * rows + i) * cols + j)] += weight * paHost(c,i,j);
+    }
+    else if (paMatrixData.getUnderlyingViewRank() == 2)
+    {
+      auto paHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), paMatrixData.template getUnderlyingView<2>());
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++)
+          for (int j=0; j<cols; j++)
+            dense[static_cast<size_t>((c * rows + i) * cols + j)] += weight * paHost(i,j);
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unexpected PAMatrix storage rank in HGRAD comparison");
+    }
+  }
+
+  template<class ViewType>
+  void addStandardAssemblyToDense(const ViewType &standardMatrix,
+                                  const Scalar weight,
+                                  std::vector<Scalar> &dense)
+  {
+    auto standardHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), standardMatrix);
+    const int cells = standardHost.extent_int(0);
+    const int rows  = standardHost.extent_int(1);
+    const int cols  = standardHost.extent_int(2);
+    if (dense.empty()) dense.assign(static_cast<size_t>(cells * rows * cols), 0.0);
+    for (int c=0; c<cells; c++)
+      for (int i=0; i<rows; i++)
+        for (int j=0; j<cols; j++)
+          dense[static_cast<size_t>((c * rows + i) * cols + j)] += weight * standardHost(c,i,j);
+  }
+
   template<int spaceDim>
   void comparePAMatrixAssemblyToStandard(const Intrepid2::EOperator op,
                                          Teuchos::FancyOStream &out, bool &success)
@@ -63,62 +133,60 @@ namespace
         p, Intrepid2::FUNCTION_SPACE_HGRAD, op,
         standardFlops, jacobianFlops);
 
-    auto paMatrixData = paMatrix.allocateMatrixStorage();
-    paMatrix.assemble(paMatrixData);
+    std::vector<Scalar> actual;
+    std::vector<Scalar> expected;
+    addPAMatrixAssemblyToDense(paMatrix, 1.0, actual);
+    addStandardAssemblyToDense(standardMatrix, 1.0, expected);
+    compareDenseMatrices(actual, expected, "HGRAD PAMatrix/standard assembly", out, success);
+  }
 
-    auto standardHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), standardMatrix);
-    const int cells = paMatrixData.extent_int(0);
-    const int rows  = paMatrixData.extent_int(1);
-    const int cols  = paMatrixData.extent_int(2);
+  template<int spaceDim>
+  void compareWeightedH1GramToStandard(Teuchos::FancyOStream &out, bool &success)
+  {
+    auto geometry = makeUnitGeometry<spaceDim>(2);
+    constexpr int p = 2;
+    const int worksetSize = geometry.numCells();
+    const Scalar massWeight = 2.0;
+    const Scalar stiffnessWeight = 0.5;
 
-    Scalar maxError = 0.0;
-    Scalar maxExpected = 0.0;
-    if (paMatrixData.getUnderlyingViewRank() == 3)
+    std::vector<Scalar> actual;
+    std::vector<Scalar> expected;
+
+    auto paMass = constructPAMatrix<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
+        geometry,
+        p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE,
+        p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE);
+    addPAMatrixAssemblyToDense(paMass, massWeight, actual);
+
+    double standardFlops = 0.0;
+    double jacobianFlops = 0.0;
+    auto standardMass = performStandardAssembly<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
+        geometry, worksetSize,
+        p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE,
+        p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE,
+        standardFlops, jacobianFlops);
+    addStandardAssemblyToDense(standardMass, massWeight, expected);
+
+    for (int d=0; d<spaceDim; d++)
     {
-      auto paHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), paMatrixData.template getUnderlyingView<3>());
-      for (int c=0; c<cells; c++)
-      {
-        for (int i=0; i<rows; i++)
-        {
-          for (int j=0; j<cols; j++)
-          {
-            const Scalar expected = standardHost(c,i,j);
-            const Scalar actual = paHost(c,i,j);
-            maxError = std::max(maxError, std::abs(actual - expected));
-            maxExpected = std::max(maxExpected, std::abs(expected));
-          }
-        }
-      }
-    }
-    else if (paMatrixData.getUnderlyingViewRank() == 2)
-    {
-      auto paHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), paMatrixData.template getUnderlyingView<2>());
-      for (int c=0; c<cells; c++)
-      {
-        for (int i=0; i<rows; i++)
-        {
-          for (int j=0; j<cols; j++)
-          {
-            const Scalar expected = standardHost(c,i,j);
-            const Scalar actual = paHost(i,j);
-            maxError = std::max(maxError, std::abs(actual - expected));
-            maxExpected = std::max(maxExpected, std::abs(expected));
-          }
-        }
-      }
-    }
-    else
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unexpected PAMatrix storage rank in HGRAD comparison");
+      auto vectorWeight = Teuchos::rcp(new Kokkos::Array<Scalar,spaceDim>());
+      for (int e=0; e<spaceDim; e++) (*vectorWeight)[e] = (e == d) ? Scalar(1.0) : Scalar(0.0);
+
+      auto paStiffness = constructPAMatrix<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
+          geometry,
+          p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight,
+          p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight);
+      addPAMatrixAssemblyToDense(paStiffness, stiffnessWeight, actual);
+
+      auto standardStiffness = performStandardAssembly<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
+          geometry, worksetSize,
+          p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight,
+          p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight,
+          standardFlops, jacobianFlops);
+      addStandardAssemblyToDense(standardStiffness, stiffnessWeight, expected);
     }
 
-    const Scalar relativeError = maxError / std::max<Scalar>(1.0, maxExpected);
-    if ((maxError > 1e-10) && (relativeError > 1e-10))
-    {
-      out << "HGRAD PAMatrix/standard assembly mismatch: maxAbsError=" << maxError
-          << ", maxRelError=" << relativeError << std::endl;
-      success = false;
-    }
+    compareDenseMatrices(actual, expected, "Weighted component-split H1 Gram PAMatrix/standard assembly", out, success);
   }
 }
 
@@ -135,4 +203,9 @@ TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, StiffnessMatchesStandardIntegration2D)
 TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, StiffnessMatchesStandardIntegration3D)
 {
   comparePAMatrixAssemblyToStandard<3>(Intrepid2::OPERATOR_GRAD, out, success);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, WeightedH1GramComponentSplitMatchesStandardIntegration3D)
+{
+  compareWeightedH1GramToStandard<3>(out, success);
 }
