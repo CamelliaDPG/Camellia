@@ -4,16 +4,20 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "Intrepid2_PAMatrix.hpp"
+
 #include "Kokkos_Core.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
 namespace
 {
   using Scalar = double;
+  using DeviceType = Kokkos::DefaultExecutionSpace::device_type;
+  using View2D = Kokkos::View<Scalar**,DeviceType>;
 
   int product(const std::vector<int> &values)
   {
@@ -32,18 +36,6 @@ namespace
       remainder /= extents[d];
     }
     return index;
-  }
-
-  int ordinal(const std::vector<int> &index, const std::vector<int> &extents)
-  {
-    int value = 0;
-    int stride = 1;
-    for (size_t d=0; d<extents.size(); d++)
-    {
-      value += index[d] * stride;
-      stride *= extents[d];
-    }
-    return value;
   }
 
   struct OneDimensionalOperator
@@ -75,214 +67,264 @@ namespace
     return op;
   }
 
-  class SyntheticTensorPAMatrix
+  View2D makeView(const OneDimensionalOperator &op, const std::string &label)
   {
-    std::vector<OneDimensionalOperator> leftOps_;
-    std::vector<OneDimensionalOperator> rightOps_;
-    std::vector<Scalar> pointWeights_;
-    int numFieldsLeft_ = 0;
-    int numFieldsRight_ = 0;
-    int numPoints_ = 0;
-
-  public:
-    SyntheticTensorPAMatrix(std::vector<OneDimensionalOperator> leftOps,
-                            std::vector<OneDimensionalOperator> rightOps,
-                            std::vector<Scalar> pointWeights)
-    : leftOps_(std::move(leftOps)), rightOps_(std::move(rightOps)), pointWeights_(std::move(pointWeights))
+    View2D view(label, op.fields, op.points);
+    auto host = Kokkos::create_mirror_view(view);
+    for (int f=0; f<op.fields; f++)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(leftOps_.empty(), std::invalid_argument, "At least one tensor dimension is required");
-      TEUCHOS_TEST_FOR_EXCEPTION(leftOps_.size() != rightOps_.size(), std::invalid_argument, "Left/right operator dimensions must agree");
-
-      std::vector<int> leftFieldExtents, rightFieldExtents, pointExtents;
-      for (size_t d=0; d<leftOps_.size(); d++)
+      for (int p=0; p<op.points; p++)
       {
-        TEUCHOS_TEST_FOR_EXCEPTION(leftOps_[d].points != rightOps_[d].points, std::invalid_argument, "Left/right point extents must agree");
-        leftFieldExtents.push_back(leftOps_[d].fields);
-        rightFieldExtents.push_back(rightOps_[d].fields);
-        pointExtents.push_back(leftOps_[d].points);
+        host(f,p) = op(f,p);
       }
-      numFieldsLeft_  = product(leftFieldExtents);
-      numFieldsRight_ = product(rightFieldExtents);
-      numPoints_      = product(pointExtents);
-      TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(pointWeights_.size()) != numPoints_, std::invalid_argument, "Point weight count does not match tensor point count");
     }
+    Kokkos::deep_copy(view, host);
+    return view;
+  }
 
-    int numFieldsLeft() const { return numFieldsLeft_; }
-    int numFieldsRight() const { return numFieldsRight_; }
-    int numPoints() const { return numPoints_; }
-    int spaceDim() const { return static_cast<int>(leftOps_.size()); }
-
-    std::vector<Scalar> apply(const std::vector<Scalar> &input) const
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(input.size()) != numFieldsRight_, std::invalid_argument, "Input vector has wrong size");
-
-      std::vector<int> rightExtents, leftExtents, pointExtents;
-      for (size_t d=0; d<rightOps_.size(); d++)
-      {
-        rightExtents.push_back(rightOps_[d].fields);
-        leftExtents.push_back(leftOps_[d].fields);
-        pointExtents.push_back(rightOps_[d].points);
-      }
-
-      // Matrix-free tensor-product action: coefficient-to-quadrature, point multiply,
-      // then quadrature-to-coefficient.  The assembled matrix is not formed here.
-      std::vector<Scalar> pointValues(numPoints_, 0.0);
-      for (int pointOrdinal=0; pointOrdinal<numPoints_; pointOrdinal++)
-      {
-        const auto pointIndex = multiIndex(pointOrdinal, pointExtents);
-        Scalar pointValue = 0.0;
-        for (int fieldOrdinal=0; fieldOrdinal<numFieldsRight_; fieldOrdinal++)
-        {
-          const auto fieldIndex = multiIndex(fieldOrdinal, rightExtents);
-          Scalar basisValue = 1.0;
-          for (int d=0; d<spaceDim(); d++)
-          {
-            basisValue *= rightOps_[d](fieldIndex[d], pointIndex[d]);
-          }
-          pointValue += basisValue * input[fieldOrdinal];
-        }
-        pointValues[pointOrdinal] = pointWeights_[pointOrdinal] * pointValue;
-      }
-
-      std::vector<Scalar> output(numFieldsLeft_, 0.0);
-      for (int fieldOrdinal=0; fieldOrdinal<numFieldsLeft_; fieldOrdinal++)
-      {
-        const auto fieldIndex = multiIndex(fieldOrdinal, leftExtents);
-        Scalar value = 0.0;
-        for (int pointOrdinal=0; pointOrdinal<numPoints_; pointOrdinal++)
-        {
-          const auto pointIndex = multiIndex(pointOrdinal, pointExtents);
-          Scalar basisValue = 1.0;
-          for (int d=0; d<spaceDim(); d++)
-          {
-            basisValue *= leftOps_[d](fieldIndex[d], pointIndex[d]);
-          }
-          value += basisValue * pointValues[pointOrdinal];
-        }
-        output[fieldOrdinal] = value;
-      }
-      return output;
-    }
-
-    std::vector<Scalar> assemble() const
-    {
-      std::vector<Scalar> matrix(numFieldsLeft_ * numFieldsRight_, 0.0);
-      for (int j=0; j<numFieldsRight_; j++)
-      {
-        std::vector<Scalar> e(numFieldsRight_, 0.0);
-        e[j] = 1.0;
-        const auto column = apply(e);
-        for (int i=0; i<numFieldsLeft_; i++)
-        {
-          matrix[i + numFieldsLeft_ * j] = column[i];
-        }
-      }
-      return matrix;
-    }
-
-    std::vector<Scalar> diagonal() const
-    {
-      const int numDiag = std::min(numFieldsLeft_, numFieldsRight_);
-      const auto matrix = assemble();
-      std::vector<Scalar> diag(numDiag, 0.0);
-      for (int i=0; i<numDiag; i++) diag[i] = matrix[i + numFieldsLeft_ * i];
-      return diag;
-    }
-
-    long long estimatedApplyFlops() const
-    {
-      long long coefficientToPoint = 0;
-      long long pointToCoefficient = 0;
-      long long rightPartial = numFieldsRight_;
-      long long leftPartial = numPoints_;
-      for (int d=spaceDim()-1; d>=0; d--)
-      {
-        coefficientToPoint += 2LL * rightOps_[d].points * rightPartial;
-        rightPartial = rightPartial / rightOps_[d].fields * rightOps_[d].points;
-        pointToCoefficient += 2LL * leftOps_[d].fields * leftPartial;
-        leftPartial = leftPartial / leftOps_[d].points * leftOps_[d].fields;
-      }
-      return coefficientToPoint + numPoints_ + pointToCoefficient;
-    }
-  };
-
-  SyntheticTensorPAMatrix makeTensorOperator(const int spaceDim, const int fieldsPerDim, const int pointsPerDim,
-                                             const bool rectangular = false)
+  View2D makeWeights(const int cells, const int points, const std::string &label)
   {
-    std::vector<OneDimensionalOperator> leftOps, rightOps;
+    View2D weights(label, cells, points);
+    auto host = Kokkos::create_mirror_view(weights);
+    for (int c=0; c<cells; c++)
+    {
+      for (int p=0; p<points; p++)
+      {
+        host(c,p) = 0.8 + 0.01 * ((p + 3 * c) % 7);
+      }
+    }
+    Kokkos::deep_copy(weights, host);
+    return weights;
+  }
+
+  Intrepid2::PAMatrix<DeviceType,Scalar>
+  makeRealPAMatrix(const int spaceDim, const int fieldsPerDim, const int pointsPerDim,
+                   const bool rectangular = false, const int cells = 1)
+  {
+    std::vector<Intrepid2::Data<Scalar,DeviceType>> leftDataComps, rightDataComps;
     for (int d=0; d<spaceDim; d++)
     {
-      leftOps.push_back(makeOperator(fieldsPerDim + (rectangular && d == 0 ? 1 : 0), pointsPerDim, 0.25 + 0.1 * d));
-      rightOps.push_back(makeOperator(fieldsPerDim, pointsPerDim, 0.5 + 0.075 * d));
+      const int leftFields = fieldsPerDim + ((rectangular && d == 0) ? 1 : 0);
+      const OneDimensionalOperator leftOp  = makeOperator(leftFields,   pointsPerDim, 0.25 + 0.1   * d);
+      const OneDimensionalOperator rightOp = makeOperator(fieldsPerDim, pointsPerDim, 0.50 + 0.075 * d);
+
+      leftDataComps.push_back(Intrepid2::Data<Scalar,DeviceType>(makeView(leftOp,  "TensorPAMatrixTests left op")));
+      rightDataComps.push_back(Intrepid2::Data<Scalar,DeviceType>(makeView(rightOp, "TensorPAMatrixTests right op")));
     }
 
-    const int numPoints = product(std::vector<int>(spaceDim, pointsPerDim));
-    std::vector<Scalar> pointWeights(numPoints, 0.0);
-    for (int p=0; p<numPoints; p++) pointWeights[p] = 0.8 + 0.01 * (p % 7);
+    Intrepid2::TensorData<Scalar,DeviceType> leftTensorData(leftDataComps);
+    Intrepid2::TensorData<Scalar,DeviceType> rightTensorData(rightDataComps);
+    Intrepid2::BasisValues<Scalar,DeviceType> leftBasisValues(leftTensorData);
+    Intrepid2::BasisValues<Scalar,DeviceType> rightBasisValues(rightTensorData);
 
-    return SyntheticTensorPAMatrix(leftOps, rightOps, pointWeights);
+    const int totalPoints = product(std::vector<int>(spaceDim, pointsPerDim));
+    View2D weightsView = makeWeights(cells, totalPoints, "TensorPAMatrixTests point weights");
+    Kokkos::Array<int,2> extents {cells, totalPoints};
+    Kokkos::Array<Intrepid2::DataVariationType,2> variationTypes {Intrepid2::GENERAL, Intrepid2::GENERAL};
+    Intrepid2::Data<Scalar,DeviceType> weightsData(weightsView, extents, variationTypes);
+    Intrepid2::TensorData<Scalar,DeviceType> cellMeasures(weightsData);
+
+    Intrepid2::TransformedBasisValues<Scalar,DeviceType> leftTransformed(cells, leftBasisValues);
+    Intrepid2::TransformedBasisValues<Scalar,DeviceType> rightTransformed(cells, rightBasisValues);
+
+    return Intrepid2::PAMatrix<DeviceType,Scalar>(leftTransformed, cellMeasures, rightTransformed);
   }
 
-  void testApplyMatchesAssembled(const SyntheticTensorPAMatrix &op, Teuchos::FancyOStream &out, bool &success)
+  void testApplyMatchesAssembled(Intrepid2::PAMatrix<DeviceType,Scalar> &op, Teuchos::FancyOStream &out, bool &success)
   {
-    std::vector<Scalar> input(op.numFieldsRight(), 0.0);
-    for (int i=0; i<op.numFieldsRight(); i++) input[i] = 0.125 + 0.0625 * (i + 1) + ((i % 2 == 0) ? 0.5 : -0.25);
+    auto matrixData = op.allocateMatrixStorage();
+    op.assemble(matrixData);
+    auto matrix = matrixData.getUnderlyingView();
+    TEUCHOS_TEST_FOR_EXCEPTION(matrix.rank() != 3, std::invalid_argument, "PAMatrix matrix storage should expose a rank-3 underlying view for GENERAL cell weights");
 
-    const auto actual = op.apply(input);
-    const auto matrix = op.assemble();
+    const int cells = matrixData.extent_int(0);
+    const int rows  = matrixData.extent_int(1);
+    const int cols  = matrixData.extent_int(2);
 
-    for (int i=0; i<op.numFieldsLeft(); i++)
+    Intrepid2::ScalarView<Scalar,DeviceType> input("TensorPAMatrixTests input", cells, cols);
+    Intrepid2::ScalarView<Scalar,DeviceType> output("TensorPAMatrixTests output", cells, rows);
+    Kokkos::deep_copy(input, 0.0);
+    auto workspace = op.allocateWorkspace(cells);
+
+    for (int j=0; j<cols; j++)
     {
-      Scalar expected = 0.0;
-      for (int j=0; j<op.numFieldsRight(); j++) expected += matrix[i + op.numFieldsLeft() * j] * input[j];
-      const Scalar error = std::abs(actual[i] - expected);
-      if (error > 1e-12)
+      auto inputColumn = Kokkos::subview(input, Kokkos::ALL(), j);
+      Kokkos::deep_copy(inputColumn, 1.0);
+      op.apply(output, input, workspace);
+
+      auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrix);
+      auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+      for (int c=0; c<cells; c++)
       {
-        out << "Tensor matrix-free apply mismatch at row " << i << ": expected " << expected
-            << ", actual " << actual[i] << ", error " << error << std::endl;
-        success = false;
+        for (int i=0; i<rows; i++)
+        {
+          const Scalar error = std::abs(outputHost(c,i) - matrixHost(c,i,j));
+          if (error > 1e-11)
+          {
+            out << "PAMatrix apply/assembled mismatch at cell " << c << ", row " << i
+                << ", column " << j << ": assembled=" << matrixHost(c,i,j)
+                << ", apply=" << outputHost(c,i) << ", error=" << error << std::endl;
+            success = false;
+          }
+        }
+      }
+      Kokkos::deep_copy(inputColumn, 0.0);
+    }
+  }
+
+  template<class HostInputViewType>
+  std::vector<Scalar> explicitTensorApply(const int spaceDim, const int fieldsPerDim, const int pointsPerDim,
+                                          const bool rectangular, const int cells,
+                                          const HostInputViewType &inputHost)
+  {
+    std::vector<OneDimensionalOperator> leftOps, rightOps;
+    std::vector<int> leftExtents, rightExtents, pointExtents;
+    for (int d=0; d<spaceDim; d++)
+    {
+      const int leftFields = fieldsPerDim + ((rectangular && d == 0) ? 1 : 0);
+      leftOps.push_back(makeOperator(leftFields, pointsPerDim, 0.25 + 0.1 * d));
+      rightOps.push_back(makeOperator(fieldsPerDim, pointsPerDim, 0.50 + 0.075 * d));
+      leftExtents.push_back(leftFields);
+      rightExtents.push_back(fieldsPerDim);
+      pointExtents.push_back(pointsPerDim);
+    }
+
+    const int rows = product(leftExtents);
+    const int cols = product(rightExtents);
+    const int points = product(pointExtents);
+    std::vector<Scalar> output(cells * rows, 0.0);
+
+    for (int c=0; c<cells; c++)
+    {
+      for (int rowOrdinal=0; rowOrdinal<rows; rowOrdinal++)
+      {
+        const auto rowIndex = multiIndex(rowOrdinal, leftExtents);
+        Scalar rowValue = 0.0;
+        for (int colOrdinal=0; colOrdinal<cols; colOrdinal++)
+        {
+          const auto colIndex = multiIndex(colOrdinal, rightExtents);
+          Scalar matrixEntry = 0.0;
+          for (int pointOrdinal=0; pointOrdinal<points; pointOrdinal++)
+          {
+            const auto pointIndex = multiIndex(pointOrdinal, pointExtents);
+            Scalar leftValue = 1.0;
+            Scalar rightValue = 1.0;
+            for (int d=0; d<spaceDim; d++)
+            {
+              leftValue  *= leftOps[d]( rowIndex[d], pointIndex[d]);
+              rightValue *= rightOps[d](colIndex[d], pointIndex[d]);
+            }
+            const Scalar weight = 0.8 + 0.01 * ((pointOrdinal + 3 * c) % 7);
+            matrixEntry += leftValue * weight * rightValue;
+          }
+          rowValue += matrixEntry * inputHost(c,colOrdinal);
+        }
+        output[c * rows + rowOrdinal] = rowValue;
+      }
+    }
+    return output;
+  }
+
+  void testApplyMatchesExplicitReference(const int spaceDim, const int fieldsPerDim, const int pointsPerDim,
+                                         const bool rectangular, const int cells,
+                                         Teuchos::FancyOStream &out, bool &success)
+  {
+    auto op = makeRealPAMatrix(spaceDim, fieldsPerDim, pointsPerDim, rectangular, cells);
+
+    const int cols = product(std::vector<int>(spaceDim, fieldsPerDim));
+    std::vector<int> leftExtents(spaceDim, fieldsPerDim);
+    if (rectangular && spaceDim > 0) leftExtents[0] = fieldsPerDim + 1;
+    const int rows = product(leftExtents);
+    Intrepid2::ScalarView<Scalar,DeviceType> input("TensorPAMatrixTests explicit input", cells, cols);
+    Intrepid2::ScalarView<Scalar,DeviceType> output("TensorPAMatrixTests explicit output", cells, rows);
+    auto inputHost = Kokkos::create_mirror_view(input);
+    for (int c=0; c<cells; c++)
+    {
+      for (int j=0; j<cols; j++) inputHost(c,j) = 0.25 + 0.0625 * ((j + 5 * c) % 19);
+    }
+    Kokkos::deep_copy(input, inputHost);
+
+    auto workspace = op.allocateWorkspace(cells);
+    op.apply(output, input, workspace);
+
+    auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+    const auto expected = explicitTensorApply(spaceDim, fieldsPerDim, pointsPerDim, rectangular, cells, inputHost);
+    for (int c=0; c<cells; c++)
+    {
+      for (int i=0; i<rows; i++)
+      {
+        const Scalar error = std::abs(outputHost(c,i) - expected[c * rows + i]);
+        if (error > 1e-10)
+        {
+          out << "PAMatrix apply/explicit-reference mismatch at cell " << c << ", row " << i
+              << ": expected=" << expected[c * rows + i]
+              << ", apply=" << outputHost(c,i) << ", error=" << error << std::endl;
+          success = false;
+        }
       }
     }
   }
-}
 
-TEUCHOS_UNIT_TEST(TensorPAMatrix, TensorProductApplyMatchesAssembled)
-{
-  auto op = makeTensorOperator(3, 3, 4);
-  testApplyMatchesAssembled(op, out, success);
-}
+  // The fork header advertises direct diagonal extraction, but the currently
+  // linked library does not provide those symbols.  Keep this first smoke test
+  // on linkable direct PAMatrix apply/assemble APIs and track diagonal support
+  // in the implementation plan.
 
-TEUCHOS_UNIT_TEST(TensorPAMatrix, RectangularTensorProductApplyMatchesAssembled)
-{
-  auto op = makeTensorOperator(2, 3, 4, true);
-  testApplyMatchesAssembled(op, out, success);
-}
-
-TEUCHOS_UNIT_TEST(TensorPAMatrix, DiagonalMatchesAssembled)
-{
-  auto op = makeTensorOperator(3, 2, 3);
-  const auto matrix = op.assemble();
-  const auto diagonal = op.diagonal();
-
-  for (int i=0; i<static_cast<int>(diagonal.size()); i++)
+  long long estimatedTensorApplyFlops(const int spaceDim, const int fieldsPerDim, const int pointsPerDim)
   {
-    TEST_FLOATING_EQUALITY(diagonal[i], matrix[i + op.numFieldsLeft() * i], 1e-14);
+    long long coefficientToPoint = 0;
+    long long pointToCoefficient = 0;
+    long long rightPartial = 1;
+    for (int d=0; d<spaceDim; d++) rightPartial *= fieldsPerDim;
+    long long leftPartial = 1;
+    for (int d=0; d<spaceDim; d++) leftPartial *= pointsPerDim;
+
+    for (int d=spaceDim-1; d>=0; d--)
+    {
+      coefficientToPoint += 2LL * pointsPerDim * rightPartial;
+      rightPartial = rightPartial / fieldsPerDim * pointsPerDim;
+      pointToCoefficient += 2LL * fieldsPerDim * leftPartial;
+      leftPartial = leftPartial / pointsPerDim * fieldsPerDim;
+    }
+    long long points = 1;
+    for (int d=0; d<spaceDim; d++) points *= pointsPerDim;
+    return coefficientToPoint + points + pointToCoefficient;
   }
 }
 
-TEUCHOS_UNIT_TEST(TensorPAMatrix, EstimatedApplyFlopsScaleAsTensorContractions)
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixTensorProductApplyMatchesAssembled)
+{
+  auto op = makeRealPAMatrix(3, 3, 4);
+  testApplyMatchesAssembled(op, out, success);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixRectangularTensorProductApplyMatchesAssembled)
+{
+  auto op = makeRealPAMatrix(2, 3, 4, true, 2);
+  testApplyMatchesAssembled(op, out, success);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixApplyMatchesExplicitTensorReference)
+{
+  testApplyMatchesExplicitReference(3, 3, 4, false, 2, out, success);
+}
+
+// Direct diagonal extraction will be re-enabled after the linked fork library
+// provides Intrepid2::PAMatrix::allocateDiagonalStorage()/extractDiagonal().
+
+TEUCHOS_UNIT_TEST(TensorPAMatrix, TensorContractionWorkEstimateBeatsDenseMatvec)
 {
   const int dim = 4;
   const int p = 5;
   const int fieldsPerDim = p + 1;
   const int pointsPerDim = p + 2;
-  auto op = makeTensorOperator(dim, fieldsPerDim, pointsPerDim);
 
   // Each one-dimensional contraction costs O(p) work for each tensor line and
   // there are O(p^d) tensor entries.  This check protects the first-slice target
-  // from silently replacing the apply path with O(p^(2d)) assembled matvec work.
-  const long long tensorApplyFlops = op.estimatedApplyFlops();
-  const long long denseMatvecFlops = 2LL * op.numFieldsLeft() * op.numFieldsRight();
+  // from silently replacing the matrix-free path with O(p^(2d)) assembled matvec work.
+  const long long tensorApplyFlops = estimatedTensorApplyFlops(dim, fieldsPerDim, pointsPerDim);
+  const long long denseMatvecFlops = 2LL * product(std::vector<int>(dim, fieldsPerDim))
+                                       * product(std::vector<int>(dim, fieldsPerDim));
 
   TEST_ASSERT(tensorApplyFlops < denseMatvecFlops / 4);
 }

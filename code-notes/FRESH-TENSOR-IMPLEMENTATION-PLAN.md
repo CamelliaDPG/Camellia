@@ -15,24 +15,26 @@ The first target is standard Bubnov-Galerkin Poisson on tensor-product cells.  T
 5. **Keep dense/CRS fallback guarded.**  Any path with intentionally bad asymptotic scaling is allowed only for tiny regression tests.  Add threshold checks or explicit command-line opt-in so that performance tests cannot accidentally spend hours in an assembled dense path.
 6. **Dimension must be runtime-selectable up to 7.**  The demonstration driver must support tensor dimension `d = 1,...,7`, with the understanding that high-dimensional assembled matrices become memory-limited and should be guarded.
 
-## Phase 1: vendor and isolate the PAMatrix dependency
+## Phase 1: use the PAMatrix-enabled Trilinos fork directly
 
 ### Goals
 
-- Make the PAMatrix code available to the Camellia/tensor experiment in a narrow integration layer.
+- Build the tensor experiment against the installed Trilinos fork that already contains `Intrepid2::PAMatrix`, its dependent Intrepid2 tensor-data classes, and the PAMatrix assembly/apply APIs.
+- Avoid vendoring or adapting PAMatrix into Camellia.  Any local code in Camellia should be a narrow test/driver wrapper around the fork API, not a copy of PAMatrix internals.
 - Preserve the ability to compare against standard Intrepid2 integration and existing Camellia assembly on small problems.
 
 ### Tasks
 
-1. Add or verify availability of the shelved Intrepid2 files needed by `PAMatrix`, including `Intrepid2_PAMatrix.hpp`, `Intrepid2_PAMatrixDef.hpp`, and the assembly helper patterns in `PAMatrixAssembly.hpp`.
-2. Provide a local wrapper namespace or adapter if needed, but do not rewrite PAMatrix internals initially.
-3. Add CMake options for the experimental tensor/PAMatrix drivers and tests.
-4. Build a tiny synthetic PAMatrix smoke test using tensor-product 1D value/derivative matrices and cell measures.
+1. Point the experimental tensor test/driver targets at the PAMatrix-enabled Intrepid2 source/include directories from the fork, using those headers before older installed Intrepid2 headers when necessary.
+2. Use the fork API directly: `Intrepid2::PAMatrix`, `BasisValues`, `TensorData`, `TransformedBasisValues`, `apply()`, `assemble()`, column/diagonal extraction, and PAMatrix workspace allocation.
+3. Keep any Camellia-side helper minimal and temporary: it may construct simple tensor-product basis/value containers for tests, but it must not duplicate the PAMatrix contraction implementation.
+4. Convert the first smoke test from the old independent synthetic tensor operator to real `Intrepid2::PAMatrix` objects using tensor-product 1D value/derivative matrices and cell measures.
 
 ### Acceptance criteria
 
-- The code builds in the configured OpenMP/release build.
-- A unit test constructs a synthetic PAMatrix, applies it, assembles it, and compares apply-vs-assembled matvec to near roundoff.
+- The code builds in the configured OpenMP/release build against the PAMatrix-enabled fork.
+- A unit test constructs real `Intrepid2::PAMatrix` instances, applies them, assembles them, and compares apply-vs-assembled matvec to near roundoff.
+- The plan and tests no longer call for vendoring/adapting PAMatrix as the next step.
 
 ## Phase 2: matrix-free Bubnov-Galerkin Poisson driver
 
@@ -261,10 +263,20 @@ Only after this point should full planar MITL performance runs be attempted.  Fu
 
 ## Immediate next implementation slice
 
-1. Add the PAMatrix smoke test and driver CMake wiring.
-2. Implement `TensorPoissonPAMatrixDriver` for matrix-free mass and stiffness apply.
-3. Add p-sweep timing output and slope fitting for dimensions 1 through 7.
-4. Add small correctness comparisons against assembled PAMatrix and standard integration.
-5. Add sum-factorized local assembly mode and verify `O(p^(2d+1))` timing.
+### Completed in the current direct-fork slice
+
+1. Updated the tensor test target to use the PAMatrix-enabled Intrepid2 fork source include directories (`Discretization/Integration`, `Discretization/Basis`, and `Shared`) before any older installed headers.
+2. Replaced the self-contained synthetic tensor operator smoke harness with tests that construct real `Intrepid2::PAMatrix` instances from `BasisValues`, `TensorData`, `TransformedBasisValues`, and tensor-product 1D operator views.
+3. Added small direct-PAMatrix checks for apply-vs-assembled action, rectangular left/right spaces, apply-vs-independent explicit tensor-product reference action, and a tensor-contraction work-estimate guard.  `allocateDiagonalStorage()`/`extractDiagonal()` are declared in the inspected header but were not linkable in the current fork build, so diagonal extraction remains a near-term fork/API follow-up rather than part of this first smoke test.
+4. Added an opt-in `TensorPoissonPAMatrixDriver` prototype under `drivers/performance`.  It constructs direct fork `Intrepid2::PAMatrix` tensor-product mass and derivative-component stiffness terms for runtime dimensions 1 through 7, supports `apply`, guarded `assemble`, and guarded `compare` modes, reports setup/first-apply/steady-apply/assembly timings separately, emits p-sweep apply and assembly slope estimates, and is compiled by the autotest path through the tensor test target dependency without running expensive sweeps.
+5. Added a tiny `TensorPoissonPAMatrixDriverSmoke` CTest and matching `runTensorPoissonPAMatrixSmoke` custom target that exercise guarded compare mode on small 2D p-sweeps without entering the expensive benchmark regime.
+6. Moved PAMatrix workspace allocation out of the driver's timed apply loop so `firstApplySeconds` and `avgApplySeconds` are closer to pure matrix-free action measurements rather than setup/allocation measurements.
+
+### Next work
+
+1. Replace the driver prototype's deterministic synthetic one-dimensional value/derivative tables with true Intrepid2 HGRAD basis values, gradients, cubature, and affine tensor-product `CellGeometry` while keeping the same direct PAMatrix apply path.  This likely needs either test-helper access to `Intrepid2_CellGeometryTestUtils.hpp` for `dim <= 3`, or a small non-test geometry builder; standard Intrepid2 cell topologies do not cover the prototype's synthetic `dim = 4,...,7` sweep.
+2. Resolve or gate direct use of PAMatrix diagonal extraction in this build; the header advertises `allocateDiagonalStorage()`/`extractDiagonal()`, but the current linked library did not provide those definitions during the first direct-PAMatrix test slice.
+3. Add small correctness comparisons against standard Intrepid2 integration, not just PAMatrix's assembled fallback.
+4. Verify `O(p^(2d+1))` local assembly timing once the linked fork provides structured `PAMatrix::assemble()`; the currently inspected implementation still delegates to `IntegrationTools::integrate()` as a placeholder, so the driver's assembly slope is diagnostic rather than an acceptance result for sum-factorized assembly.
 
 This slice is complete only when the driver demonstrates the advertised apply and assembly complexity with construction costs excluded from pure apply timings.

@@ -41,13 +41,23 @@ set(TENSOR_TEST_SOURCES
 
 add_executable(runTensorTests ${TENSOR_TEST_SOURCES})
 
+set(TENSOR_INTREPID2_SOURCE_DIR
+  "/Users/nvrober/fork-Trilinos/packages/intrepid2/src"
+  CACHE PATH "Intrepid2 source directory from the PAMatrix-enabled Trilinos fork")
 set(TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR
-  "/Users/nvrober/fork-Trilinos/packages/intrepid2/src/Discretization/Integration"
+  "${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Integration"
   CACHE PATH "Directory containing experimental Intrepid2 PAMatrix headers")
-target_include_directories(runTensorTests PRIVATE ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR})
+target_include_directories(runTensorTests BEFORE PRIVATE
+  ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR}
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Basis
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Shared
+)
 
 target_link_libraries(runTensorTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
 )
+if (TARGET TensorPoissonPAMatrixDriver)
+  add_dependencies(runTensorTests TensorPoissonPAMatrixDriver)
+endif()
 
 add_test(NAME runTensorTests COMMAND runTensorTests)
 

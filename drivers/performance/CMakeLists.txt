@@ -3,6 +3,43 @@ project(performance)
 add_executable(StokesAssemblyPerformanceTest "StokesAssemblyPerformanceTest.cpp")
 target_link_libraries(StokesAssemblyPerformanceTest Camellia)
 
+add_executable(TensorPoissonPAMatrixDriver "TensorPoissonPAMatrixDriver.cpp")
+set(TENSOR_INTREPID2_SOURCE_DIR
+  "/Users/nvrober/fork-Trilinos/packages/intrepid2/src"
+  CACHE PATH "Intrepid2 source directory from the PAMatrix-enabled Trilinos fork")
+set(TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR
+  "${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Integration"
+  CACHE PATH "Directory containing experimental Intrepid2 PAMatrix headers")
+target_include_directories(TensorPoissonPAMatrixDriver BEFORE PRIVATE
+  ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR}
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Basis
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Shared
+)
+target_link_libraries(TensorPoissonPAMatrixDriver Camellia)
+
+add_test(NAME TensorPoissonPAMatrixDriverSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=mass-plus-stiffness
+    --mode=compare
+    --numApply=2
+    --maxAssembledEntries=10000)
+
+add_custom_target(runTensorPoissonPAMatrixSmoke
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=2
+    --polyOrder=1:3
+    --cellsPerDim=1
+    --operator=mass-plus-stiffness
+    --mode=compare
+    --numApply=5
+    --maxAssembledEntries=50000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running small direct-PAMatrix tensor Poisson apply/compare smoke test"
+  VERBATIM)
+
 if (TARGET PlanarMITLRelativisticSpaceTime)
   set(PHASE0_PLANAR_MITL_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/phase0-planar-mitl" CACHE PATH "Output directory for Phase 0 Planar MITL performance runs")
 
