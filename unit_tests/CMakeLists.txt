@@ -1,7 +1,7 @@
 project(UnitTests)
 
 FILE(GLOB TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
-list(FILTER TEST_SOURCES EXCLUDE REGEX "Epetra_Operator_to_Epetra_MatrixTests\\.cpp$|OverlappingRowMatrixTests\\.cpp$")
+list(FILTER TEST_SOURCES EXCLUDE REGEX "Epetra_Operator_to_Epetra_MatrixTests\\.cpp$|OverlappingRowMatrixTests\\.cpp$|TensorPAMatrixTests\\.cpp$")
 set_source_files_properties(
   "${CMAKE_CURRENT_SOURCE_DIR}/Epetra_Operator_to_Epetra_MatrixTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/OverlappingRowMatrixTests.cpp"
@@ -34,4 +34,21 @@ target_link_libraries(runPhase0Tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRAR
 
 add_test(NAME runPhase0Tests COMMAND runPhase0Tests)
 
-install (TARGETS runTests runPhase0Tests DESTINATION bin/tests)
+set(TENSOR_TEST_SOURCES
+  Teuchos_StandardParallelUnitTestMain.cpp
+  TensorPAMatrixTests.cpp
+)
+
+add_executable(runTensorTests ${TENSOR_TEST_SOURCES})
+
+set(TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR
+  "/Users/nvrober/fork-Trilinos/packages/intrepid2/src/Discretization/Integration"
+  CACHE PATH "Directory containing experimental Intrepid2 PAMatrix headers")
+target_include_directories(runTensorTests PRIVATE ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR})
+
+target_link_libraries(runTensorTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
+)
+
+add_test(NAME runTensorTests COMMAND runTensorTests)
+
+install (TARGETS runTests runPhase0Tests runTensorTests DESTINATION bin/tests)
