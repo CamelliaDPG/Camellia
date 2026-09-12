@@ -5,6 +5,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Intrepid2_PAMatrix.hpp"
+#include "Intrepid2_PAMatrixDefAdditions.hpp"
 
 #include "Kokkos_Core.hpp"
 
@@ -265,10 +266,73 @@ namespace
     }
   }
 
-  // The fork header advertises direct diagonal extraction, but the currently
-  // linked library does not provide those symbols.  Keep this first smoke test
-  // on linkable direct PAMatrix apply/assemble APIs and track diagonal support
-  // in the implementation plan.
+  void testAssemble2MatchesAssemble(Intrepid2::PAMatrix<DeviceType,Scalar> &op,
+                                    Teuchos::FancyOStream &out, bool &success)
+  {
+    auto expectedData = op.allocateMatrixStorage();
+    auto actualData   = op.allocateMatrixStorage();
+    op.assemble(expectedData);
+    op.assemble2(actualData);
+
+    TEUCHOS_TEST_FOR_EXCEPTION(expectedData.getUnderlyingViewRank() != 3 || actualData.getUnderlyingViewRank() != 3,
+                               std::invalid_argument,
+                               "TensorPAMatrixTests expected rank-3 matrix storage for GENERAL cell weights");
+    auto expected = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), expectedData.getUnderlyingView3());
+    auto actual   = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), actualData.getUnderlyingView3());
+
+    const int cells = expectedData.extent_int(0);
+    const int rows  = expectedData.extent_int(1);
+    const int cols  = expectedData.extent_int(2);
+    for (int c=0; c<cells; c++)
+    {
+      for (int i=0; i<rows; i++)
+      {
+        for (int j=0; j<cols; j++)
+        {
+          const Scalar error = std::abs(actual(c,i,j) - expected(c,i,j));
+          if (error > 1e-10)
+          {
+            out << "PAMatrix assemble2/assemble mismatch at cell " << c << ", row " << i
+                << ", column " << j << ": expected=" << expected(c,i,j)
+                << ", actual=" << actual(c,i,j) << ", error=" << error << std::endl;
+            success = false;
+          }
+        }
+      }
+    }
+  }
+
+  void testDiagonalMatchesAssemble(Intrepid2::PAMatrix<DeviceType,Scalar> &op,
+                                   Teuchos::FancyOStream &out, bool &success)
+  {
+    auto matrixData = op.allocateMatrixStorage();
+    op.assemble(matrixData);
+    auto diagonalData = op.allocateDiagonalStorage();
+    op.extractDiagonal(diagonalData);
+
+    TEUCHOS_TEST_FOR_EXCEPTION(matrixData.getUnderlyingViewRank() != 3 || diagonalData.getUnderlyingViewRank() != 2,
+                               std::invalid_argument,
+                               "TensorPAMatrixTests expected rank-3 matrix and rank-2 diagonal storage for GENERAL cell weights");
+    auto matrix   = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.getUnderlyingView3());
+    auto diagonal = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagonalData.getUnderlyingView2());
+
+    const int cells = diagonalData.extent_int(0);
+    const int fields = diagonalData.extent_int(1);
+    for (int c=0; c<cells; c++)
+    {
+      for (int i=0; i<fields; i++)
+      {
+        const Scalar error = std::abs(diagonal(c,i) - matrix(c,i,i));
+        if (error > 1e-10)
+        {
+          out << "PAMatrix diagonal/assemble mismatch at cell " << c << ", field " << i
+              << ": expected=" << matrix(c,i,i)
+              << ", actual=" << diagonal(c,i) << ", error=" << error << std::endl;
+          success = false;
+        }
+      }
+    }
+  }
 
   long long estimatedTensorApplyFlops(const int spaceDim, const int fieldsPerDim, const int pointsPerDim)
   {
@@ -309,8 +373,29 @@ TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixApplyMatchesExplicitTensorReferenc
   testApplyMatchesExplicitReference(3, 3, 4, false, 2, out, success);
 }
 
-// Direct diagonal extraction will be re-enabled after the linked fork library
-// provides Intrepid2::PAMatrix::allocateDiagonalStorage()/extractDiagonal().
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixAssemble2MatchesAssemble)
+{
+  auto op = makeRealPAMatrix(3, 3, 4, false, 2);
+  testAssemble2MatchesAssemble(op, out, success);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixRectangularAssemble2MatchesAssemble)
+{
+  auto op = makeRealPAMatrix(2, 3, 4, true, 2);
+  testAssemble2MatchesAssemble(op, out, success);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixExtractDiagonalMatchesAssembledDiagonal)
+{
+  auto op = makeRealPAMatrix(3, 3, 4, false, 2);
+  testDiagonalMatchesAssemble(op, out, success);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixRectangularExtractDiagonalMatchesAssembledDiagonal)
+{
+  auto op = makeRealPAMatrix(2, 3, 4, true, 2);
+  testDiagonalMatchesAssemble(op, out, success);
+}
 
 TEUCHOS_UNIT_TEST(TensorPAMatrix, TensorContractionWorkEstimateBeatsDenseMatvec)
 {

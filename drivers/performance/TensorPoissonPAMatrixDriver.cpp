@@ -3,6 +3,7 @@
 //
 
 #include "Intrepid2_PAMatrix.hpp"
+#include "Intrepid2_PAMatrixDefAdditions.hpp"
 
 #include "Kokkos_Core.hpp"
 
@@ -279,6 +280,43 @@ namespace
     return totalSeconds;
   }
 
+  double assemble2Terms(std::vector<PAMatrix> &terms, const long long maxAssembledEntries)
+  {
+    double totalSeconds = 0.0;
+    for (auto &term : terms)
+    {
+      auto matrixData = term.allocateMatrixStorage();
+      const long long entries = static_cast<long long>(matrixData.extent_int(0))
+                              * static_cast<long long>(matrixData.extent_int(1))
+                              * static_cast<long long>(matrixData.extent_int(2));
+      if (entries > maxAssembledEntries)
+      {
+        std::cout << "ASSEMBLE2_SKIPPED entries=" << entries
+                  << " maxAssembledEntries=" << maxAssembledEntries << std::endl;
+        return -1.0;
+      }
+      Kokkos::Timer timer;
+      term.assemble2(matrixData);
+      Kokkos::fence();
+      totalSeconds += timer.seconds();
+    }
+    return totalSeconds;
+  }
+
+  double diagonalTerms(std::vector<PAMatrix> &terms)
+  {
+    double totalSeconds = 0.0;
+    for (auto &term : terms)
+    {
+      auto diagonalData = term.allocateDiagonalStorage();
+      Kokkos::Timer timer;
+      term.extractDiagonal(diagonalData);
+      Kokkos::fence();
+      totalSeconds += timer.seconds();
+    }
+    return totalSeconds;
+  }
+
   double leastSquaresSlope(const std::vector<double> &x, const std::vector<double> &y)
   {
     if (x.size() != y.size() || x.size() < 2) return std::numeric_limits<double>::quiet_NaN();
@@ -343,7 +381,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("polyOrder", &polyOrderText, "Polynomial order p or inclusive range pMin:pMax.");
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, or mass-plus-stiffness.");
-    cmdp.setOption("mode", &mode, "apply, assemble, or compare.");
+    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, diagonal, or compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
     cmdp.setOption("maxAssembledEntries", &maxAssembledEntries, "Maximum local assembled entries allowed in compare mode.");
@@ -356,7 +394,8 @@ int main(int argc, char *argv[])
     if ((dim < 1) || (dim > 7)) throw std::invalid_argument("--dim must be in [1,7]");
     if (cellsPerDim < 1) throw std::invalid_argument("--cellsPerDim must be positive");
     if (numApply < 1) throw std::invalid_argument("--numApply must be positive");
-    if ((mode != "apply") && (mode != "assemble") && (mode != "compare")) throw std::invalid_argument("--mode must be apply, assemble, or compare");
+    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "diagonal") && (mode != "compare"))
+      throw std::invalid_argument("--mode must be apply, assemble, assemble2, diagonal, or compare");
 
     const PolyOrderRange pRange = parsePolyOrderRange(polyOrderText);
     if ((pRange.first < 1) || (pRange.last < pRange.first)) throw std::invalid_argument("invalid --polyOrder range");
@@ -369,7 +408,7 @@ int main(int argc, char *argv[])
     std::vector<double> logApplyTimes;
     std::vector<double> logAssemblyTimes;
 
-    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms setupSeconds firstApplySeconds avgApplySeconds assemblySeconds estimatedApplyFlopsPerCell achievedGFlops mode operator" << std::endl;
+    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms setupSeconds firstApplySeconds avgApplySeconds assemblySeconds assemble2Seconds diagonalSeconds estimatedApplyFlopsPerCell achievedGFlops mode operator" << std::endl;
     for (int p=pRange.first; p<=pRange.last; p++)
     {
       Kokkos::Timer setupTimer;
@@ -396,6 +435,16 @@ int main(int argc, char *argv[])
       {
         assemblySeconds = assembleTerms(terms, maxAssembledEntries);
       }
+      double assemble2Seconds = -1.0;
+      if (mode == "assemble2")
+      {
+        assemble2Seconds = assemble2Terms(terms, maxAssembledEntries);
+      }
+      double diagonalSeconds = -1.0;
+      if (mode == "diagonal")
+      {
+        diagonalSeconds = diagonalTerms(terms);
+      }
 
       const long long flopsPerCell = estimatedApplyFlopsPerCellPerTerm(dim, p) * static_cast<long long>(terms.size());
       const double achievedGFlops = (avgApplySeconds > 0.0) ? (flopsPerCell * static_cast<double>(cells) / avgApplySeconds / 1.0e9) : 0.0;
@@ -411,6 +460,8 @@ int main(int argc, char *argv[])
                 << " firstApplySeconds=" << firstApplySeconds
                 << " avgApplySeconds=" << avgApplySeconds
                 << " assemblySeconds=" << assemblySeconds
+                << " assemble2Seconds=" << assemble2Seconds
+                << " diagonalSeconds=" << diagonalSeconds
                 << " estimatedApplyFlopsPerCell=" << flopsPerCell
                 << " achievedGFlops=" << achievedGFlops
                 << " mode=" << mode
