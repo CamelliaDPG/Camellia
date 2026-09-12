@@ -14,6 +14,8 @@ target_include_directories(TensorPoissonPAMatrixDriver BEFORE PRIVATE
   ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR}
   ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Basis
   ${TENSOR_INTREPID2_SOURCE_DIR}/Shared
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Cell
+  ${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples
 )
 target_link_libraries(TensorPoissonPAMatrixDriver Camellia)
 
@@ -23,6 +25,7 @@ add_test(NAME TensorPoissonPAMatrixDriverSmoke
     --polyOrder=1:2
     --cellsPerDim=1
     --operator=mass-plus-stiffness
+    --basisMode=hgrad
     --mode=compare
     --numApply=2
     --maxAssembledEntries=10000)
@@ -33,6 +36,7 @@ add_custom_target(runTensorPoissonPAMatrixSmoke
     --polyOrder=1:3
     --cellsPerDim=1
     --operator=mass-plus-stiffness
+    --basisMode=hgrad
     --mode=compare
     --numApply=5
     --maxAssembledEntries=50000

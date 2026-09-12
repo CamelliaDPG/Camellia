@@ -1,7 +1,7 @@
 project(UnitTests)
 
 FILE(GLOB TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
-list(FILTER TEST_SOURCES EXCLUDE REGEX "Epetra_Operator_to_Epetra_MatrixTests\\.cpp$|OverlappingRowMatrixTests\\.cpp$|TensorPAMatrixTests\\.cpp$")
+list(FILTER TEST_SOURCES EXCLUDE REGEX "Epetra_Operator_to_Epetra_MatrixTests\\.cpp$|OverlappingRowMatrixTests\\.cpp$|TensorPAMatrixTests\\.cpp$|TensorPAMatrixHGRADTests\\.cpp$")
 set_source_files_properties(
   "${CMAKE_CURRENT_SOURCE_DIR}/Epetra_Operator_to_Epetra_MatrixTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/OverlappingRowMatrixTests.cpp"
@@ -37,6 +37,7 @@ add_test(NAME runPhase0Tests COMMAND runPhase0Tests)
 set(TENSOR_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   TensorPAMatrixTests.cpp
+  TensorPAMatrixHGRADTests.cpp
 )
 
 add_executable(runTensorTests ${TENSOR_TEST_SOURCES})
@@ -51,6 +52,8 @@ target_include_directories(runTensorTests BEFORE PRIVATE
   ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR}
   ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Basis
   ${TENSOR_INTREPID2_SOURCE_DIR}/Shared
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Cell
+  ${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples
 )
 
 target_link_libraries(runTensorTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
