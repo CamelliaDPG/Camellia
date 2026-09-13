@@ -169,9 +169,28 @@ Required methods/data:
 - timing hooks for pure apply;
 - optional local/block view for correctness tests only.
 
+### Narrow Panzer `MatrixFreeRowMatrix` port slice
+
+The first Panzer-inspired RowMatrix slice is deliberately experimental, local-flat, and nonproduction.  It should copy only the useful adapter idea: present a PAMatrix-backed matrix-free apply as a `Tpetra::RowMatrix` so RowMatrix-facing diagnostics can exercise the same contract Ifpack2 Chebyshev expects.  It must not claim Panzer's global FE ownership/ghosting semantics.
+
+Scope and guardrails:
+
+- Use one packed local-flat map of length `cells * localDofs`; in this diagnostic slice the domain, range, row, and column maps are intentionally identical.
+- Implement `apply()` by delegating to the existing PAMatrix `applyTerms()` contraction path; do not assemble or cache dense element matrices for normal apply.
+- Implement `getLocalDiagCopy()` from the existing combined PAMatrix diagonal extraction helper, returning the true diagonal of `A`, not an inverse diagonal.
+- Keep global FE dof semantics, halo exchange, real CRS graph ownership, and MueLu/global solver use explicitly unsupported.
+- If RowMatrix row-entry APIs must exist, satisfy them only through an expensive diagnostic row materialization path built by applying to local unit columns.  Label this as diagnostic-only and do not use it for performance claims.
+
+The validation mode for this slice is `--mode=tpetra-rowmatrix-compare`.  Validation is complete for the slice when that mode:
+
+1. Checks RowMatrix `apply()` against direct PAMatrix `applyTerms()` for the same local-flat vectors.
+2. Checks `getLocalDiagCopy()` against `extractCombinedDiagonal()`.
+3. Confirms domain/range/row/column map consistency for the packed local-flat diagnostic map.
+4. Emits honest telemetry such as `local_flat_map_nonproduction_rowmatrix`, `globalDofSemantics=not_supported`, and an Ifpack2 RowMatrix status that does not imply production global FE readiness.
+
 ### Chebyshev inverse approximation
 
-Use Ifpack2 Chebyshev with the matrix-free Gram operator to approximate `G^{-1} r`.  The point of this phase is to demonstrate that the inverse action can be recovered without forming local `G^{-1}` in the matrix-free backend.
+Use Ifpack2 Chebyshev with the matrix-free Gram operator to approximate `G^{-1} r`.  The point of this phase is to demonstrate that the inverse action can be recovered without forming local `G^{-1}` in the matrix-free backend.  Ifpack2 integration remains deferred until the local-flat RowMatrix adapter passes the contract checks above; the first Ifpack2 smoke is opt-in and diagnostic-only, comparing `Ifpack2::Chebyshev<Tpetra::RowMatrix>` on the local-flat adapter against the existing host Chebyshev recurrence with consistent diagonal and spectral parameters.  It is not a production solver path and still does not provide global finite-element map, ghosting, overlap/import, or scalable row-extraction semantics.
 
 Validation procedure:
 
@@ -184,6 +203,7 @@ Validation procedure:
 Acceptance criteria:
 
 - The matrix-free Gram apply agrees with assembled Gram apply on small cases.
+- The local-flat RowMatrix diagnostic apply and true diagonal match the direct PAMatrix paths before any Ifpack2 smoke is attempted.
 - Chebyshev recovers the assembled inverse action to documented tolerances without forming local inverse matrices in the matrix-free path.
 - Timings separate Chebyshev setup, diagonal/spectral estimate, and repeated inverse applications.
 

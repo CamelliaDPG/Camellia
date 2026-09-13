@@ -17,7 +17,7 @@ target_include_directories(TensorPoissonPAMatrixDriver BEFORE PRIVATE
   ${TENSOR_INTREPID2_SOURCE_DIR}/Cell
   ${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples
 )
-target_link_libraries(TensorPoissonPAMatrixDriver Camellia)
+target_link_libraries(TensorPoissonPAMatrixDriver Camellia ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
 
 add_test(NAME TensorPoissonPAMatrixDriverSmoke
   COMMAND TensorPoissonPAMatrixDriver
@@ -138,6 +138,36 @@ add_test(NAME TensorH1GramPAMatrixTpetraOperatorSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorH1GramPAMatrixTpetraRowMatrixSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=tpetra-rowmatrix-compare
+    --numApply=3
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
+add_test(NAME TensorH1GramPAMatrixIfpack2ChebyshevSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
 add_custom_target(runTensorPoissonPAMatrixSmoke
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=2
@@ -181,6 +211,21 @@ add_custom_target(runTensorH1GramPAMatrixTpetraOperatorSmoke
   COMMENT "Running local-flat-map Tpetra operator comparison for direct-PAMatrix H1 Gram apply"
   VERBATIM)
 
+add_custom_target(runTensorH1GramPAMatrixTpetraRowMatrixSmoke
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=1:3
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=tpetra-rowmatrix-compare
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=10000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running local-flat-map Tpetra RowMatrix comparison for direct-PAMatrix H1 Gram apply/diagonal"
+  VERBATIM)
+
 add_custom_target(runTensorH1GramPAMatrixInverseDiagnosticSweep
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=3
@@ -214,6 +259,30 @@ add_custom_target(runTensorH1GramPAMatrixChebyshevDiagnosticSweep
   DEPENDS TensorPoissonPAMatrixDriver
   COMMENT "Running opt-in direct-PAMatrix H1 Gram local Chebyshev inverse diagnostic p-sweep"
   VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixIfpack2ChebyshevSmoke
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=1:3
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=10000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in Ifpack2 Chebyshev smoke on the local-flat PAMatrix RowMatrix adapter"
+  VERBATIM)
+
+add_dependencies(runTensorH1GramPAMatrixInverseDiagnosticSweep
+  runTensorH1GramPAMatrixTpetraRowMatrixSmoke
+  runTensorH1GramPAMatrixIfpack2ChebyshevSmoke)
 
 add_custom_target(runTensorH1GramPAMatrixPowerSpectralChebyshevSweep
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>

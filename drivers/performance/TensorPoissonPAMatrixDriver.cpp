@@ -15,16 +15,24 @@
 
 #include "Kokkos_Core.hpp"
 
+#include <Ifpack2_Chebyshev.hpp>
+
+#include <Teuchos_Array.hpp>
 #include <Teuchos_CommandLineProcessor.hpp>
+#include <Teuchos_CommHelpers.hpp>
 #include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
 #include <Teuchos_LAPACK.hpp>
 #include <Teuchos_OrdinalTraits.hpp>
+#include <Teuchos_ParameterList.hpp>
 #include <Teuchos_RCP.hpp>
 
+#include <Tpetra_CrsGraph.hpp>
 #include <Tpetra_Map.hpp>
 #include <Tpetra_MultiVector.hpp>
 #include <Tpetra_Operator.hpp>
+#include <Tpetra_RowMatrix.hpp>
+#include <Tpetra_Vector.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -42,8 +50,11 @@ namespace
   using View2D = Kokkos::View<Scalar**,DeviceType>;
   using PAMatrix = Intrepid2::PAMatrix<DeviceType,Scalar>;
   using TpetraMap = Tpetra::Map<>;
+  using TpetraCrsGraph = Tpetra::CrsGraph<typename TpetraMap::local_ordinal_type, typename TpetraMap::global_ordinal_type, typename TpetraMap::node_type>;
   using TpetraMultiVector = Tpetra::MultiVector<Scalar>;
   using TpetraOperator = Tpetra::Operator<Scalar>;
+  using TpetraRowMatrix = Tpetra::RowMatrix<Scalar>;
+  using TpetraVector = Tpetra::Vector<Scalar>;
 
   struct OperatorTerm
   {
@@ -454,6 +465,285 @@ namespace
     }
   };
 
+  class LocalPAMatrixTpetraRowMatrix : public TpetraRowMatrix
+  {
+    using local_ordinal_type = typename TpetraRowMatrix::local_ordinal_type;
+    using global_ordinal_type = typename TpetraRowMatrix::global_ordinal_type;
+    using node_type = typename TpetraRowMatrix::node_type;
+    using row_graph_type = Tpetra::RowGraph<local_ordinal_type, global_ordinal_type, node_type>;
+    using global_inds_host_view_type = typename TpetraRowMatrix::global_inds_host_view_type;
+    using local_inds_host_view_type = typename TpetraRowMatrix::local_inds_host_view_type;
+    using values_host_view_type = typename TpetraRowMatrix::values_host_view_type;
+    using nonconst_global_inds_host_view_type = typename TpetraRowMatrix::nonconst_global_inds_host_view_type;
+    using nonconst_local_inds_host_view_type = typename TpetraRowMatrix::nonconst_local_inds_host_view_type;
+    using nonconst_values_host_view_type = typename TpetraRowMatrix::nonconst_values_host_view_type;
+
+    Teuchos::RCP<const TpetraMap> map_;
+    mutable std::vector<OperatorTerm> *terms_;
+    std::vector<WorkspaceView> workspaces_;
+    int cells_ = 0;
+    int localDofs_ = 0;
+    int worksetSize_ = 0;
+    mutable std::vector<Scalar> denseRows_;
+    mutable bool denseRowsBuilt_ = false;
+    mutable nonconst_local_inds_host_view_type localIndices_;
+    mutable nonconst_global_inds_host_view_type globalIndices_;
+    mutable nonconst_values_host_view_type values_;
+    Teuchos::RCP<const row_graph_type> graph_;
+
+    size_t localLength() const
+    {
+      return static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
+    }
+
+    void checkLocalRow(const local_ordinal_type localRow) const
+    {
+      if ((localRow < 0) || (static_cast<size_t>(localRow) >= localLength()))
+        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix local row out of range");
+    }
+
+    void ensureDenseRowsBuilt() const
+    {
+      if (denseRowsBuilt_) return;
+      const size_t length = localLength();
+      denseRows_.assign(length * length, Scalar(0.0));
+      TpetraMultiVector X(map_, 1);
+      TpetraMultiVector Y(map_, 1);
+      for (size_t column=0; column<length; column++)
+      {
+        X.putScalar(Scalar(0.0));
+        {
+          auto xHost = X.getLocalViewHost(Tpetra::Access::ReadWrite);
+          xHost(column, 0) = Scalar(1.0);
+        }
+        apply(X, Y);
+        auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadOnly);
+        for (size_t row=0; row<length; row++)
+          denseRows_[row * length + column] = yHost(row, 0);
+      }
+      denseRowsBuilt_ = true;
+    }
+
+  public:
+    LocalPAMatrixTpetraRowMatrix(const Teuchos::RCP<const TpetraMap> &map, std::vector<OperatorTerm> &terms,
+                                 const std::vector<WorkspaceView> &workspaces, const int cells,
+                                 const int localDofs, const int worksetSize)
+      : map_(map), terms_(&terms), workspaces_(workspaces), cells_(cells), localDofs_(localDofs), worksetSize_(worksetSize)
+    {
+      const size_t length = localLength();
+      auto graph = Teuchos::rcp(new TpetraCrsGraph(map_, length));
+      Teuchos::Array<global_ordinal_type> columns(length);
+      for (size_t column=0; column<length; column++)
+        columns[static_cast<Teuchos::Ordinal>(column)] = map_->getGlobalElement(static_cast<local_ordinal_type>(column));
+      for (size_t row=0; row<length; row++)
+        graph->insertGlobalIndices(map_->getGlobalElement(static_cast<local_ordinal_type>(row)), columns());
+      graph->fillComplete(map_, map_);
+      graph_ = graph;
+    }
+
+    Teuchos::RCP<const Teuchos::Comm<int>> getComm() const override { return map_->getComm(); }
+    Teuchos::RCP<const TpetraMap> getRowMap() const override { return map_; }
+    Teuchos::RCP<const TpetraMap> getColMap() const override { return map_; }
+    Teuchos::RCP<const TpetraMap> getDomainMap() const override { return map_; }
+    Teuchos::RCP<const TpetraMap> getRangeMap() const override { return map_; }
+    Teuchos::RCP<const row_graph_type> getGraph() const override { return graph_; }
+
+    Tpetra::global_size_t getGlobalNumRows() const override { return map_->getGlobalNumElements(); }
+    Tpetra::global_size_t getGlobalNumCols() const override { return map_->getGlobalNumElements(); }
+    size_t getLocalNumRows() const override { return localLength(); }
+    size_t getLocalNumCols() const override { return localLength(); }
+    global_ordinal_type getIndexBase() const override { return map_->getIndexBase(); }
+
+    Tpetra::global_size_t getGlobalNumEntries() const override
+    {
+      const Tpetra::global_size_t localEntries = static_cast<Tpetra::global_size_t>(getLocalNumEntries());
+      Tpetra::global_size_t globalEntries = 0;
+      Teuchos::reduceAll<int, Tpetra::global_size_t>(*getComm(), Teuchos::REDUCE_SUM, 1, &localEntries, &globalEntries);
+      return globalEntries;
+    }
+
+    size_t getLocalNumEntries() const override { return localLength() * localLength(); }
+
+    size_t getNumEntriesInGlobalRow(global_ordinal_type globalRow) const override
+    {
+      const local_ordinal_type localRow = map_->getLocalElement(globalRow);
+      if (localRow == Teuchos::OrdinalTraits<local_ordinal_type>::invalid()) return Teuchos::OrdinalTraits<size_t>::invalid();
+      return getNumEntriesInLocalRow(localRow);
+    }
+
+    size_t getNumEntriesInLocalRow(local_ordinal_type localRow) const override
+    {
+      checkLocalRow(localRow);
+      return localLength();
+    }
+
+    size_t getGlobalMaxNumRowEntries() const override { return localLength(); }
+    size_t getLocalMaxNumRowEntries() const override { return localLength(); }
+    local_ordinal_type getBlockSize() const override { return 1; }
+    bool hasColMap() const override { return true; }
+    bool isLocallyIndexed() const override { return true; }
+    bool isGloballyIndexed() const override { return false; }
+    bool isFillComplete() const override { return true; }
+    bool supportsRowViews() const override { return true; }
+
+    void getGlobalRowCopy(global_ordinal_type globalRow,
+                          nonconst_global_inds_host_view_type &indices,
+                          nonconst_values_host_view_type &values,
+                          size_t &numEntries) const override
+    {
+      const local_ordinal_type localRow = map_->getLocalElement(globalRow);
+      if (localRow == Teuchos::OrdinalTraits<local_ordinal_type>::invalid())
+        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix global row is not local");
+      const size_t length = localLength();
+      if ((indices.extent(0) < length) || (values.extent(0) < length))
+        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix global row copy buffers are too small");
+      ensureDenseRowsBuilt();
+      for (size_t column=0; column<length; column++)
+      {
+        indices(column) = map_->getGlobalElement(static_cast<local_ordinal_type>(column));
+        values(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
+      }
+      numEntries = length;
+    }
+
+    void getLocalRowCopy(local_ordinal_type localRow,
+                         nonconst_local_inds_host_view_type &indices,
+                         nonconst_values_host_view_type &values,
+                         size_t &numEntries) const override
+    {
+      checkLocalRow(localRow);
+      const size_t length = localLength();
+      if ((indices.extent(0) < length) || (values.extent(0) < length))
+        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix local row copy buffers are too small");
+      ensureDenseRowsBuilt();
+      for (size_t column=0; column<length; column++)
+      {
+        indices(column) = static_cast<local_ordinal_type>(column);
+        values(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
+      }
+      numEntries = length;
+    }
+
+    void getGlobalRowView(global_ordinal_type globalRow,
+                          global_inds_host_view_type &indices,
+                          values_host_view_type &values) const override
+    {
+      const local_ordinal_type localRow = map_->getLocalElement(globalRow);
+      if (localRow == Teuchos::OrdinalTraits<local_ordinal_type>::invalid())
+      {
+        indices = global_inds_host_view_type();
+        values = values_host_view_type();
+        return;
+      }
+      const size_t length = localLength();
+      Kokkos::resize(globalIndices_, length);
+      Kokkos::resize(values_, length);
+      ensureDenseRowsBuilt();
+      for (size_t column=0; column<length; column++)
+      {
+        globalIndices_(column) = map_->getGlobalElement(static_cast<local_ordinal_type>(column));
+        values_(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
+      }
+      indices = globalIndices_;
+      values = values_;
+    }
+
+    void getLocalRowView(local_ordinal_type localRow,
+                         local_inds_host_view_type &indices,
+                         values_host_view_type &values) const override
+    {
+      checkLocalRow(localRow);
+      const size_t length = localLength();
+      Kokkos::resize(localIndices_, length);
+      Kokkos::resize(values_, length);
+      ensureDenseRowsBuilt();
+      for (size_t column=0; column<length; column++)
+      {
+        localIndices_(column) = static_cast<local_ordinal_type>(column);
+        values_(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
+      }
+      indices = localIndices_;
+      values = values_;
+    }
+
+    void getLocalDiagCopy(TpetraVector &diag) const override
+    {
+      const size_t length = localLength();
+      if (diag.getLocalLength() != length)
+        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix diagonal length mismatch");
+      auto diagHost = diag.getLocalViewHost(Tpetra::Access::OverwriteAll);
+      const auto diagonal = extractCombinedDiagonal(*terms_, cells_, localDofs_);
+      for (size_t localOrdinal=0; localOrdinal<length; localOrdinal++) diagHost(localOrdinal, 0) = diagonal[localOrdinal];
+    }
+
+    void leftScale(const TpetraVector &) override
+    {
+      throw std::runtime_error("LocalPAMatrixTpetraRowMatrix does not support leftScale in the diagnostic adapter.");
+    }
+
+    void rightScale(const TpetraVector &) override
+    {
+      throw std::runtime_error("LocalPAMatrixTpetraRowMatrix does not support rightScale in the diagnostic adapter.");
+    }
+
+    typename TpetraRowMatrix::mag_type getFrobeniusNorm() const override
+    {
+      ensureDenseRowsBuilt();
+      Scalar normSquared = 0.0;
+      for (const Scalar entry : denseRows_) normSquared += entry * entry;
+      return std::sqrt(normSquared);
+    }
+
+    void apply(const TpetraMultiVector &X, TpetraMultiVector &Y,
+               Teuchos::ETransp mode = Teuchos::NO_TRANS,
+               Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
+               Scalar beta = Teuchos::ScalarTraits<Scalar>::zero()) const override
+    {
+      if (mode != Teuchos::NO_TRANS) throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix does not support transpose apply");
+      const size_t length = localLength();
+      if ((X.getLocalLength() != length) || (Y.getLocalLength() != length))
+        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix local vector length mismatch");
+      if (X.getNumVectors() != Y.getNumVectors())
+        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix multivector count mismatch");
+
+      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+      Intrepid2::ScalarView<Scalar,DeviceType> input("LocalPAMatrixTpetraRowMatrix input", cells_, localDofs_);
+      Intrepid2::ScalarView<Scalar,DeviceType> output("LocalPAMatrixTpetraRowMatrix output", cells_, localDofs_);
+      auto inputHost = Kokkos::create_mirror_view(input);
+
+      for (size_t vectorOrdinal=0; vectorOrdinal<X.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+          for (int f=0; f<localDofs_; f++)
+            inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs_ + f), vectorOrdinal);
+        Kokkos::deep_copy(input, inputHost);
+
+        applyTerms(*terms_, workspaces_, input, output, worksetSize_);
+        auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+
+        for (int c=0; c<cells_; c++)
+          for (int f=0; f<localDofs_; f++)
+          {
+            const size_t localOrdinal = static_cast<size_t>(c * localDofs_ + f);
+            yHost(localOrdinal, vectorOrdinal) = alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
+          }
+      }
+    }
+
+    bool hasTransposeApply() const override { return false; }
+
+    std::string description() const override
+    {
+      return "LocalPAMatrixTpetraRowMatrix(local_flat_map_nonproduction_rowmatrix)";
+    }
+
+    void describe(Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel) const override
+    {
+      if (verbLevel != Teuchos::VERB_NONE) out << description() << std::endl;
+    }
+  };
+
   struct AssemblyTiming
   {
     double totalSeconds = -1.0;
@@ -483,11 +773,18 @@ namespace
     double inverseDiagonalMaxAbsError = -1.0;
     double inverseDiagonalMin = -1.0;
     double inverseDiagonalMax = -1.0;
+    double rowMatrixDiagonalMaxAbsError = -1.0;
+    double rowMatrixDiagonalMin = -1.0;
+    double rowMatrixDiagonalMax = -1.0;
+    double rowMatrixRowCopyMaxAbsError = -1.0;
+    int rowMatrixRowCopyChecked = 0;
     double firstApplySeconds = -1.0;
     double avgApplySeconds = -1.0;
     int numVectors = 0;
     int localLength = 0;
     int domainRangeMapSame = 0;
+    int rowMatrixRowMapSame = 0;
+    int rowMatrixColMapSame = 0;
     std::string adapterPath = "not_requested";
     std::string globalDofSemantics = "not_requested";
     std::string ifpack2RowMatrix = "not_requested";
@@ -516,6 +813,10 @@ namespace
     double tpetraPowerLambdaMaxRelError = -1.0;
     double lambdaMaxEstimateOverAssembledGershgorin = -1.0;
     int compareTpetraPowerEstimate = 0;
+    int ifpack2ChebyshevSmoke = 0;
+    double ifpack2ChebyshevSeconds = -1.0;
+    double ifpack2ChebyshevMaxAbsError = -1.0;
+    double ifpack2ChebyshevMaxRelError = -1.0;
     double inverseEigenRatio = -1.0;
     int spectralEstimateIterations = 0;
     double spectralEstimateSeconds = -1.0;
@@ -525,6 +826,7 @@ namespace
     double maxDiagonalEstimate = -1.0;
     std::string inversePath = "not_requested";
     std::string spectralEstimatePath = "not_requested";
+    std::string ifpack2ChebyshevPath = "not_requested";
     std::string lambdaMinSource = "not_requested";
     std::string lambdaMaxSource = "not_requested";
     std::string inverseInitialGuess = "not_requested";
@@ -663,6 +965,183 @@ namespace
               << " globalDofSemantics=" << comparison.globalDofSemantics
               << " ifpack2RowMatrix=" << comparison.ifpack2RowMatrix
               << " note=local_flat_map_diagnostic_not_global_fe_operator" << std::endl;
+    return comparison;
+  }
+
+  TpetraOperatorComparison compareTpetraRowMatrixAgainstDirect(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
+                                                               const Intrepid2::ScalarView<Scalar,DeviceType> &baseInput,
+                                                               const int cells, const int localDofs, const int worksetSize,
+                                                               const int numApply, const long long maxAssembledEntries)
+  {
+    TpetraOperatorComparison comparison;
+    comparison.numVectors = 2;
+    const size_t localLength = static_cast<size_t>(cells) * static_cast<size_t>(localDofs);
+    comparison.localLength = static_cast<int>(localLength);
+    comparison.adapterPath = "local_flat_map_nonproduction_rowmatrix";
+    comparison.globalDofSemantics = "not_supported";
+    comparison.ifpack2RowMatrix = "local_diag_copy_only_no_global_fe_semantics";
+    auto comm = Teuchos::DefaultComm<int>::getComm();
+    auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
+    LocalPAMatrixTpetraRowMatrix rowMatrix(map, terms, workspaces, cells, localDofs, worksetSize);
+    comparison.domainRangeMapSame = (rowMatrix.getDomainMap().getRawPtr() == rowMatrix.getRangeMap().getRawPtr()) ? 1 : 0;
+    comparison.rowMatrixRowMapSame = (rowMatrix.getRowMap().getRawPtr() == rowMatrix.getRangeMap().getRawPtr()) ? 1 : 0;
+    comparison.rowMatrixColMapSame = (rowMatrix.getColMap().getRawPtr() == rowMatrix.getDomainMap().getRawPtr()) ? 1 : 0;
+
+    TpetraVector diagonal(map);
+    rowMatrix.getLocalDiagCopy(diagonal);
+    auto diagonalHost = diagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
+    const auto expectedDiagonal = extractCombinedDiagonal(terms, cells, localDofs);
+    comparison.rowMatrixDiagonalMaxAbsError = 0.0;
+    comparison.rowMatrixDiagonalMin = std::numeric_limits<Scalar>::max();
+    comparison.rowMatrixDiagonalMax = 0.0;
+    for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++)
+    {
+      comparison.rowMatrixDiagonalMaxAbsError = std::max(comparison.rowMatrixDiagonalMaxAbsError,
+                                                         std::abs(diagonalHost(localOrdinal,0) - expectedDiagonal[localOrdinal]));
+      comparison.rowMatrixDiagonalMin = std::min(comparison.rowMatrixDiagonalMin, diagonalHost(localOrdinal,0));
+      comparison.rowMatrixDiagonalMax = std::max(comparison.rowMatrixDiagonalMax, diagonalHost(localOrdinal,0));
+    }
+
+    const long long entries = static_cast<long long>(cells) * localDofs * localDofs;
+    if (entries <= maxAssembledEntries)
+    {
+      std::vector<Scalar> localMatrices(static_cast<size_t>(entries), Scalar(0.0));
+      for (auto &term : terms)
+      {
+        auto matrixData = term.matrix.allocateMatrixStorage();
+        term.matrix.assemble(matrixData);
+        Kokkos::fence();
+        if (matrixData.getUnderlyingViewRank() == 3)
+        {
+          auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<3>());
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<localDofs; i++)
+              for (int j=0; j<localDofs; j++)
+                localMatrices[static_cast<size_t>((c * localDofs + i) * localDofs + j)] += term.weight * matrixHost(c,i,j);
+        }
+        else if (matrixData.getUnderlyingViewRank() == 2)
+        {
+          auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<2>());
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<localDofs; i++)
+              for (int j=0; j<localDofs; j++)
+                localMatrices[static_cast<size_t>((c * localDofs + i) * localDofs + j)] += term.weight * matrixHost(i,j);
+        }
+        else
+        {
+          throw std::invalid_argument("Unexpected PAMatrix storage rank in RowMatrix row-copy diagnostic");
+        }
+      }
+
+      TpetraRowMatrix::nonconst_local_inds_host_view_type localIndices("rowmatrix diagnostic local indices", localLength);
+      TpetraRowMatrix::nonconst_values_host_view_type values("rowmatrix diagnostic row values", localLength);
+      comparison.rowMatrixRowCopyMaxAbsError = 0.0;
+      comparison.rowMatrixRowCopyChecked = 1;
+      for (size_t row=0; row<localLength; row++)
+      {
+        size_t numEntries = 0;
+        rowMatrix.getLocalRowCopy(static_cast<TpetraRowMatrix::local_ordinal_type>(row), localIndices, values, numEntries);
+        if (numEntries != localLength) throw std::runtime_error("RowMatrix diagnostic returned unexpected row length");
+        const int cell = static_cast<int>(row / static_cast<size_t>(localDofs));
+        const int rowInCell = static_cast<int>(row % static_cast<size_t>(localDofs));
+        for (size_t column=0; column<localLength; column++)
+        {
+          if (localIndices(column) != static_cast<TpetraRowMatrix::local_ordinal_type>(column))
+            throw std::runtime_error("RowMatrix diagnostic returned unexpected local column ordinal");
+          const int columnCell = static_cast<int>(column / static_cast<size_t>(localDofs));
+          const int columnInCell = static_cast<int>(column % static_cast<size_t>(localDofs));
+          const Scalar expected = (columnCell == cell)
+                                ? localMatrices[static_cast<size_t>((cell * localDofs + rowInCell) * localDofs + columnInCell)]
+                                : Scalar(0.0);
+          comparison.rowMatrixRowCopyMaxAbsError = std::max(comparison.rowMatrixRowCopyMaxAbsError, std::abs(values(column) - expected));
+        }
+      }
+    }
+    else
+    {
+      std::cout << "TPETRA_ROWMATRIX_ROW_COPY_SKIPPED entries=" << entries
+                << " maxAssembledEntries=" << maxAssembledEntries
+                << " note=guarded_tiny_case_only" << std::endl;
+    }
+
+    TpetraMultiVector X(map, comparison.numVectors);
+    TpetraMultiVector Y(map, comparison.numVectors);
+    auto xHost = X.getLocalViewHost(Tpetra::Access::OverwriteAll);
+    auto yHost = Y.getLocalViewHost(Tpetra::Access::OverwriteAll);
+    auto baseHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), baseInput);
+    std::vector<Scalar> yInitial(localLength * comparison.numVectors, Scalar(0.0));
+    for (int v=0; v<comparison.numVectors; v++)
+    {
+      for (int c=0; c<cells; c++)
+        for (int f=0; f<localDofs; f++)
+        {
+          const size_t localOrdinal = static_cast<size_t>(c * localDofs + f);
+          xHost(localOrdinal, v) = baseHost(c,f) * (Scalar(1.0) + Scalar(0.25) * v);
+          yInitial[localOrdinal + localLength * v] = Scalar(0.125) * (Scalar(1.0) + Scalar((localOrdinal + v) % 5));
+          yHost(localOrdinal, v) = yInitial[localOrdinal + localLength * v];
+        }
+    }
+
+    const Scalar alpha = 0.75;
+    const Scalar beta = 0.5;
+    Kokkos::Timer firstApplyTimer;
+    rowMatrix.apply(X, Y, Teuchos::NO_TRANS, alpha, beta);
+    comparison.firstApplySeconds = firstApplyTimer.seconds();
+    auto yResultHost = Y.getLocalViewHost(Tpetra::Access::ReadOnly);
+
+    comparison.maxAbsError = 0.0;
+    Scalar maxExpected = 0.0;
+    Intrepid2::ScalarView<Scalar,DeviceType> input("Tpetra rowmatrix compare direct input", cells, localDofs);
+    Intrepid2::ScalarView<Scalar,DeviceType> output("Tpetra rowmatrix compare direct output", cells, localDofs);
+    auto inputHost = Kokkos::create_mirror_view(input);
+    for (int v=0; v<comparison.numVectors; v++)
+    {
+      for (int c=0; c<cells; c++)
+        for (int f=0; f<localDofs; f++)
+          inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs + f), v);
+      Kokkos::deep_copy(input, inputHost);
+      applyTerms(terms, workspaces, input, output, worksetSize);
+      auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+      for (int c=0; c<cells; c++)
+        for (int f=0; f<localDofs; f++)
+        {
+          const size_t localOrdinal = static_cast<size_t>(c * localDofs + f);
+          const Scalar expected = alpha * outputHost(c,f) + beta * yInitial[localOrdinal + localLength * v];
+          comparison.maxAbsError = std::max(comparison.maxAbsError, std::abs(yResultHost(localOrdinal, v) - expected));
+          maxExpected = std::max(maxExpected, std::abs(expected));
+        }
+    }
+
+    Kokkos::Timer repeatApplyTimer;
+    for (int applyOrdinal=0; applyOrdinal<numApply; applyOrdinal++)
+    {
+      rowMatrix.apply(X, Y, Teuchos::NO_TRANS, Scalar(1.0), Scalar(0.0));
+    }
+    comparison.avgApplySeconds = repeatApplyTimer.seconds() / numApply;
+
+    comparison.maxRelError = comparison.maxAbsError / std::max<Scalar>(1.0, maxExpected);
+    std::cout << "TPETRA_ROWMATRIX_COMPARE maxAbsError=" << std::setprecision(16) << comparison.maxAbsError
+              << " maxRelError=" << comparison.maxRelError
+              << " diagonalMaxAbsError=" << comparison.rowMatrixDiagonalMaxAbsError
+              << " diagonalMin=" << comparison.rowMatrixDiagonalMin
+              << " diagonalMax=" << comparison.rowMatrixDiagonalMax
+              << " rowCopyMaxAbsError=" << comparison.rowMatrixRowCopyMaxAbsError
+              << " rowCopyChecked=" << comparison.rowMatrixRowCopyChecked
+              << " firstApplySeconds=" << comparison.firstApplySeconds
+              << " avgApplySeconds=" << comparison.avgApplySeconds
+              << " numVectors=" << comparison.numVectors
+              << " localLength=" << comparison.localLength
+              << " domainRangeMapSame=" << comparison.domainRangeMapSame
+              << " rowRangeMapSame=" << comparison.rowMatrixRowMapSame
+              << " colDomainMapSame=" << comparison.rowMatrixColMapSame
+              << " localNumRows=" << rowMatrix.getLocalNumRows()
+              << " localNumCols=" << rowMatrix.getLocalNumCols()
+              << " localNumEntries=" << rowMatrix.getLocalNumEntries()
+              << " localMaxNumRowEntries=" << rowMatrix.getLocalMaxNumRowEntries()
+              << " adapterPath=" << comparison.adapterPath
+              << " globalDofSemantics=" << comparison.globalDofSemantics
+              << " ifpack2RowMatrix=" << comparison.ifpack2RowMatrix
+              << " note=local_flat_rowmatrix_diagnostic_expensive_row_extraction_not_global_fe_operator" << std::endl;
     return comparison;
   }
 
@@ -869,7 +1348,7 @@ namespace
                                                  const Scalar inverseEigenRatio, const Scalar inverseLambdaMinOverride,
                                                  const Scalar inverseLambdaMaxOverride, const std::string &inverseSpectralEstimate,
                                                  const int inverseSpectralEstimateIterations, const Scalar inversePowerSafetyFactor,
-                                                 const int compareTpetraPowerEstimate, const std::string &inverseInitialGuess,
+                                                 const int compareTpetraPowerEstimate, const int ifpack2ChebyshevSmoke, const std::string &inverseInitialGuess,
                                                  const Scalar inverseTolerance)
   {
     InverseDiagnosticTiming timing;
@@ -883,6 +1362,7 @@ namespace
     timing.spectralEstimateIterations = inverseSpectralEstimateIterations;
     timing.lambdaMaxSafetyFactor = inversePowerSafetyFactor;
     timing.compareTpetraPowerEstimate = compareTpetraPowerEstimate;
+    timing.ifpack2ChebyshevSmoke = ifpack2ChebyshevSmoke;
     timing.lambdaMaxSource = "assembled_reference_gershgorin_preconditioned_upper_bound";
     timing.inverseInitialGuess = inverseInitialGuess;
     if (terms.empty()) return timing;
@@ -1180,6 +1660,7 @@ namespace
     }
 
     std::vector<Scalar> iterate(static_cast<size_t>(cells * rows), 0.0);
+    std::vector<Scalar> hostChebyshevIterate;
     std::vector<Scalar> applied(static_cast<size_t>(cells * rows), 0.0);
     if (inverseInitialGuess == "diagonal")
     {
@@ -1250,12 +1731,119 @@ namespace
         }
         for (size_t i=0; i<iterate.size(); i++) iterate[i] += alpha * direction[i];
       }
+      hostChebyshevIterate = iterate;
     }
     else
     {
       throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson or chebyshev");
     }
     timing.avgInverseApplySeconds = inverseTimer.seconds() / numInverseIterations;
+
+    if (ifpack2ChebyshevSmoke != 0)
+    {
+      if (inverseDiagnosticAlgorithm != "chebyshev")
+        throw std::invalid_argument("--ifpack2ChebyshevSmoke requires --inverseDiagnosticAlgorithm=chebyshev");
+      if (inverseInitialGuess != "zero")
+        throw std::invalid_argument("--ifpack2ChebyshevSmoke currently supports --inverseInitialGuess=zero only");
+      if (hostChebyshevIterate.size() != rhs.size())
+        throw std::runtime_error("Ifpack2 Chebyshev smoke did not find a host Chebyshev reference iterate");
+
+      const size_t localLength = rhs.size();
+      std::vector<Scalar> ifpackHostReference(localLength, Scalar(0.0));
+      std::vector<Scalar> ifpackHostCorrection(localLength, Scalar(0.0));
+      std::vector<Scalar> ifpackHostApplied(localLength, Scalar(0.0));
+      if (numInverseIterations > 0)
+      {
+        const Scalar ifpackLambdaMax = timing.lambdaMaxEstimate;
+        const Scalar ifpackLambdaMin = timing.lambdaMaxEstimate / (timing.lambdaMaxEstimate / timing.lambdaMinEstimate);
+        const Scalar ifpackDelta = Scalar(2.0) / (ifpackLambdaMax - ifpackLambdaMin);
+        const Scalar ifpackTheta = Scalar(0.5) * (ifpackLambdaMax + ifpackLambdaMin);
+        const Scalar s1 = ifpackTheta * ifpackDelta;
+        for (size_t i=0; i<localLength; i++)
+        {
+          ifpackHostCorrection[i] = (Scalar(1.0) / ifpackTheta) * rhs[i] / diagonal[i];
+          ifpackHostReference[i] = ifpackHostCorrection[i];
+        }
+        Scalar rhok = Scalar(1.0) / s1;
+        for (int iteration=1; iteration<numInverseIterations; iteration++)
+        {
+          applyVector(ifpackHostReference, ifpackHostApplied);
+          const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
+          const Scalar dtemp1 = rhokp1 * rhok;
+          const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
+          rhok = rhokp1;
+          for (size_t i=0; i<localLength; i++)
+          {
+            ifpackHostCorrection[i] = dtemp2 * (rhs[i] - ifpackHostApplied[i]) / diagonal[i]
+                                      + dtemp1 * ifpackHostCorrection[i];
+            ifpackHostReference[i] += ifpackHostCorrection[i];
+          }
+        }
+      }
+
+      auto comm = Teuchos::DefaultComm<int>::getComm();
+      auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
+      auto rowMatrix = Teuchos::rcp(new LocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize));
+      Teuchos::RCP<const TpetraRowMatrix> rowMatrixBase = Teuchos::rcp_implicit_cast<const TpetraRowMatrix>(rowMatrix);
+      auto inverseDiagonal = Teuchos::rcp(new TpetraVector(map));
+      {
+        auto inverseDiagonalHost = inverseDiagonal->getLocalViewHost(Tpetra::Access::OverwriteAll);
+        for (size_t i=0; i<localLength; i++) inverseDiagonalHost(i,0) = Scalar(1.0) / diagonal[i];
+      }
+
+      TpetraMultiVector B(map, 1);
+      TpetraMultiVector X(map, 1);
+      {
+        auto bHost = B.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        auto xHost = X.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        for (size_t i=0; i<localLength; i++)
+        {
+          bHost(i,0) = rhs[i];
+          xHost(i,0) = Scalar(0.0);
+        }
+      }
+
+      Teuchos::ParameterList params;
+      params.set("chebyshev: degree", numInverseIterations);
+      params.set("chebyshev: max eigenvalue", timing.lambdaMaxEstimate);
+      params.set("chebyshev: min eigenvalue", timing.lambdaMinEstimate);
+      params.set("chebyshev: ratio eigenvalue", timing.lambdaMaxEstimate / timing.lambdaMinEstimate);
+      params.set("chebyshev: boost factor", Scalar(1.0));
+      params.set("chebyshev: zero starting solution", true);
+      params.set("chebyshev: operator inv diagonal", inverseDiagonal);
+      params.set("chebyshev: eigenvalue max iterations", 0);
+      params.set("chebyshev: use native spmv", false);
+
+      using Ifpack2Chebyshev = Ifpack2::Chebyshev<TpetraRowMatrix>;
+      Kokkos::Timer ifpack2Timer;
+      Ifpack2Chebyshev chebyshev(rowMatrixBase);
+      chebyshev.setParameters(params);
+      chebyshev.initialize();
+      chebyshev.compute();
+      chebyshev.apply(B, X);
+      timing.ifpack2ChebyshevSeconds = ifpack2Timer.seconds();
+
+      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+      Scalar maxReference = 0.0;
+      timing.ifpack2ChebyshevMaxAbsError = 0.0;
+      for (size_t i=0; i<localLength; i++)
+      {
+        const Scalar referenceValue = ifpackHostReference[i];
+        maxReference = std::max(maxReference, std::abs(referenceValue));
+        timing.ifpack2ChebyshevMaxAbsError = std::max(timing.ifpack2ChebyshevMaxAbsError,
+                                                       std::abs(xHost(i,0) - referenceValue));
+      }
+      timing.ifpack2ChebyshevMaxRelError = timing.ifpack2ChebyshevMaxAbsError / std::max<Scalar>(Scalar(1.0), maxReference);
+      timing.ifpack2ChebyshevPath = "local_flat_rowmatrix_ifpack2_chebyshev_smoke_against_matching_host_recurrence_not_production_solver";
+      std::cout << "IFPACK2_CHEBYSHEV_SMOKE maxAbsError=" << std::setprecision(16) << timing.ifpack2ChebyshevMaxAbsError
+                << " maxRelError=" << timing.ifpack2ChebyshevMaxRelError
+                << " seconds=" << timing.ifpack2ChebyshevSeconds
+                << " iterations=" << numInverseIterations
+                << " adapterPath=local_flat_map_nonproduction_rowmatrix"
+                << " globalDofSemantics=not_supported"
+                << " path=" << timing.ifpack2ChebyshevPath
+                << " note=diagnostic_smoke_only_not_global_fe_solver" << std::endl;
+    }
 
     applyHostVector();
     timing.finalResidualNorm = residualNorm();
@@ -1521,6 +2109,7 @@ int main(int argc, char *argv[])
     int inverseSpectralEstimateIterations = 8;
     int inverseDiagnosticRequireAssembledReference = 1;
     int compareTpetraPowerEstimate = 0;
+    int ifpack2ChebyshevSmoke = 0;
     int worksetSize = 0;
     int checkAssemblyAgreement = 0;
     long long maxAssembledEntries = 200000;
@@ -1545,7 +2134,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, or h1-gram.  h1-gram is the weighted mass-plus-stiffness Gram starter case.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses true Intrepid2 HGRAD basis/cubature/affine geometry and currently supports dim<=3.");
-    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, or tpetra-operator-compare.");
+    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
@@ -1556,6 +2145,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power lambdaMax estimates before Chebyshev use.");
     cmdp.setOption("inverseDiagnosticRequireAssembledReference", &inverseDiagnosticRequireAssembledReference, "Set to 0 to allow power-estimated inverse diagnostics without assembled reference/oracle matrices.");
     cmdp.setOption("compareTpetraPowerEstimate", &compareTpetraPowerEstimate, "Set to 1 in inverse-diagnostic power mode to compare direct and local-Tpetra-operator power estimates.");
+    cmdp.setOption("ifpack2ChebyshevSmoke", &ifpack2ChebyshevSmoke, "Set to 1 in inverse-diagnostic Chebyshev mode to compare Ifpack2::Chebyshev on the local-flat RowMatrix against the host recurrence.");
     cmdp.setOption("inverseEigenRatio", &inverseEigenRatio, "Chebyshev lambdaMax/lambdaMin ratio used when --inverseLambdaMin is not positive.");
     cmdp.setOption("inverseLambdaMin", &inverseLambdaMin, "Optional positive user override for the Chebyshev/Richardson lower spectral bound.");
     cmdp.setOption("inverseLambdaMax", &inverseLambdaMax, "Optional positive user override for the Chebyshev/Richardson upper spectral bound.");
@@ -1581,14 +2171,19 @@ int main(int argc, char *argv[])
     if ((checkAssemblyAgreement != 0) && (checkAssemblyAgreement != 1)) throw std::invalid_argument("--checkAssemblyAgreement must be 0 or 1");
     if ((inverseDiagnosticRequireAssembledReference != 0) && (inverseDiagnosticRequireAssembledReference != 1)) throw std::invalid_argument("--inverseDiagnosticRequireAssembledReference must be 0 or 1");
     if ((compareTpetraPowerEstimate != 0) && (compareTpetraPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraPowerEstimate must be 0 or 1");
-    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic") && (mode != "tpetra-operator-compare"))
-      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, or tpetra-operator-compare");
+    if ((ifpack2ChebyshevSmoke != 0) && (ifpack2ChebyshevSmoke != 1)) throw std::invalid_argument("--ifpack2ChebyshevSmoke must be 0 or 1");
+    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic") && (mode != "tpetra-operator-compare") && (mode != "tpetra-rowmatrix-compare"))
+      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev"))
       throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson or chebyshev");
     if ((inverseInitialGuess != "zero") && (inverseInitialGuess != "diagonal"))
       throw std::invalid_argument("--inverseInitialGuess must be zero or diagonal");
+    if ((ifpack2ChebyshevSmoke != 0) && ((mode != "inverse-diagnostic") || (inverseDiagnosticAlgorithm != "chebyshev")))
+      throw std::invalid_argument("--ifpack2ChebyshevSmoke requires --mode=inverse-diagnostic --inverseDiagnosticAlgorithm=chebyshev");
+    if ((ifpack2ChebyshevSmoke != 0) && (inverseInitialGuess != "zero"))
+      throw std::invalid_argument("--ifpack2ChebyshevSmoke currently supports --inverseInitialGuess=zero only");
     if ((inverseSpectralEstimate != "assembled-gershgorin") && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "user"))
       throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, or user");
     if ((inverseSpectralEstimate == "user") && (inverseLambdaMax <= 0.0))
@@ -1626,7 +2221,7 @@ int main(int argc, char *argv[])
     std::vector<double> logDiagonalPValues;
     std::vector<double> logDiagonalTimes;
 
-    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio assemblyAgreementMaxAbsError assemblyAgreementMaxRelError tpetraOperatorMaxAbsError tpetraOperatorMaxRelError tpetraInverseDiagonalMaxAbsError tpetraInverseDiagonalMin tpetraInverseDiagonalMax tpetraOperatorFirstApplySeconds tpetraOperatorAvgApplySeconds tpetraOperatorNumVectors tpetraOperatorLocalLength tpetraDomainRangeMapSame tpetraAdapterPath tpetraGlobalDofSemantics tpetraIfpack2RowMatrix factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds avgInverseApplySeconds inverseIterations initialInverseAbsError initialInverseRelError maxInverseAbsError maxInverseRelError initialResidualNorm finalResidualNorm residualReduction inverseTolerance inverseConverged inverseStoppedReason lambdaMinEstimate lambdaMaxEstimate assembledGershgorinLambdaMax powerRawLambdaMaxEstimate tpetraPowerRawLambdaMaxEstimate tpetraPowerLambdaMaxAbsError tpetraPowerLambdaMaxRelError compareTpetraPowerEstimate lambdaMaxEstimateOverAssembledGershgorin inverseEigenRatio spectralEstimateIterations spectralEstimateSeconds lambdaMaxSafetyFactor maxSymmetryAbsError minDiagonalEstimate maxDiagonalEstimate estimatedApplyFlopsPerCell lambdaMinSource lambdaMaxSource inverseInitialGuess achievedGFlops mode operator basisMode diagonalPath assemble2Path inversePath spectralEstimatePath" << std::endl;
+    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio assemblyAgreementMaxAbsError assemblyAgreementMaxRelError tpetraOperatorMaxAbsError tpetraOperatorMaxRelError tpetraInverseDiagonalMaxAbsError tpetraInverseDiagonalMin tpetraInverseDiagonalMax tpetraRowMatrixDiagonalMaxAbsError tpetraRowMatrixDiagonalMin tpetraRowMatrixDiagonalMax tpetraRowMatrixRowCopyMaxAbsError tpetraRowMatrixRowCopyChecked tpetraOperatorFirstApplySeconds tpetraOperatorAvgApplySeconds tpetraOperatorNumVectors tpetraOperatorLocalLength tpetraDomainRangeMapSame tpetraRowMatrixRowMapSame tpetraRowMatrixColMapSame tpetraAdapterPath tpetraGlobalDofSemantics tpetraIfpack2RowMatrix factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds avgInverseApplySeconds inverseIterations initialInverseAbsError initialInverseRelError maxInverseAbsError maxInverseRelError initialResidualNorm finalResidualNorm residualReduction inverseTolerance inverseConverged inverseStoppedReason lambdaMinEstimate lambdaMaxEstimate assembledGershgorinLambdaMax powerRawLambdaMaxEstimate tpetraPowerRawLambdaMaxEstimate tpetraPowerLambdaMaxAbsError tpetraPowerLambdaMaxRelError compareTpetraPowerEstimate ifpack2ChebyshevSmoke ifpack2ChebyshevSeconds ifpack2ChebyshevMaxAbsError ifpack2ChebyshevMaxRelError ifpack2ChebyshevPath lambdaMaxEstimateOverAssembledGershgorin inverseEigenRatio spectralEstimateIterations spectralEstimateSeconds lambdaMaxSafetyFactor maxSymmetryAbsError minDiagonalEstimate maxDiagonalEstimate estimatedApplyFlopsPerCell lambdaMinSource lambdaMaxSource inverseInitialGuess achievedGFlops mode operator basisMode diagonalPath assemble2Path inversePath spectralEstimatePath" << std::endl;
     for (int p=pRange.first; p<=pRange.last; p++)
     {
       Kokkos::Timer setupTimer;
@@ -1688,10 +2283,13 @@ int main(int argc, char *argv[])
                                                         maxAssembledEntries, inverseDiagnosticRequireAssembledReference, numInverseIterations,
                                                         inverseDiagnosticAlgorithm, inverseEigenRatio, inverseLambdaMin, inverseLambdaMax,
                                                         inverseSpectralEstimate, inverseSpectralEstimateIterations, inversePowerSafetyFactor,
-                                                        compareTpetraPowerEstimate, inverseInitialGuess, inverseTolerance);
+                                                        compareTpetraPowerEstimate, ifpack2ChebyshevSmoke, inverseInitialGuess, inverseTolerance);
         if ((compareTpetraPowerEstimate != 0) &&
             (inverseDiagnosticTiming.tpetraPowerLambdaMaxAbsError > 1e-10) &&
             (inverseDiagnosticTiming.tpetraPowerLambdaMaxRelError > 1e-10)) returnCode = 2;
+        if ((ifpack2ChebyshevSmoke != 0) &&
+            (inverseDiagnosticTiming.ifpack2ChebyshevMaxAbsError > 1e-10) &&
+            (inverseDiagnosticTiming.ifpack2ChebyshevMaxRelError > 1e-10)) returnCode = 2;
       }
 
       const long long flopsPerCell = estimatedApplyFlopsPerCellPerTerm(dim, p) * static_cast<long long>(terms.size());
@@ -1712,6 +2310,17 @@ int main(int argc, char *argv[])
         if ((tpetraOperatorComparison.maxAbsError > 1e-10) && (tpetraOperatorComparison.maxRelError > 1e-10)) returnCode = 2;
         if (tpetraOperatorComparison.inverseDiagonalMaxAbsError > 1e-12) returnCode = 2;
         if (tpetraOperatorComparison.domainRangeMapSame != 1) returnCode = 2;
+      }
+      if (mode == "tpetra-rowmatrix-compare")
+      {
+        tpetraOperatorComparison = compareTpetraRowMatrixAgainstDirect(terms, workspaces, input, cells, localDofs, worksetSize, numApply, maxAssembledEntries);
+        if ((tpetraOperatorComparison.maxAbsError > 1e-10) && (tpetraOperatorComparison.maxRelError > 1e-10)) returnCode = 2;
+        if (tpetraOperatorComparison.rowMatrixDiagonalMaxAbsError > 1e-12) returnCode = 2;
+        if ((tpetraOperatorComparison.rowMatrixRowCopyChecked != 0) &&
+            (tpetraOperatorComparison.rowMatrixRowCopyMaxAbsError > 1e-10)) returnCode = 2;
+        if (tpetraOperatorComparison.domainRangeMapSame != 1) returnCode = 2;
+        if (tpetraOperatorComparison.rowMatrixRowMapSame != 1) returnCode = 2;
+        if (tpetraOperatorComparison.rowMatrixColMapSame != 1) returnCode = 2;
       }
 
       std::cout << "TENSOR_POISSON_PAMATRIX_RESULT"
@@ -1739,11 +2348,18 @@ int main(int argc, char *argv[])
                 << " tpetraInverseDiagonalMaxAbsError=" << tpetraOperatorComparison.inverseDiagonalMaxAbsError
                 << " tpetraInverseDiagonalMin=" << tpetraOperatorComparison.inverseDiagonalMin
                 << " tpetraInverseDiagonalMax=" << tpetraOperatorComparison.inverseDiagonalMax
+                << " tpetraRowMatrixDiagonalMaxAbsError=" << tpetraOperatorComparison.rowMatrixDiagonalMaxAbsError
+                << " tpetraRowMatrixDiagonalMin=" << tpetraOperatorComparison.rowMatrixDiagonalMin
+                << " tpetraRowMatrixDiagonalMax=" << tpetraOperatorComparison.rowMatrixDiagonalMax
+                << " tpetraRowMatrixRowCopyMaxAbsError=" << tpetraOperatorComparison.rowMatrixRowCopyMaxAbsError
+                << " tpetraRowMatrixRowCopyChecked=" << tpetraOperatorComparison.rowMatrixRowCopyChecked
                 << " tpetraOperatorFirstApplySeconds=" << tpetraOperatorComparison.firstApplySeconds
                 << " tpetraOperatorAvgApplySeconds=" << tpetraOperatorComparison.avgApplySeconds
                 << " tpetraOperatorNumVectors=" << tpetraOperatorComparison.numVectors
                 << " tpetraOperatorLocalLength=" << tpetraOperatorComparison.localLength
                 << " tpetraDomainRangeMapSame=" << tpetraOperatorComparison.domainRangeMapSame
+                << " tpetraRowMatrixRowMapSame=" << tpetraOperatorComparison.rowMatrixRowMapSame
+                << " tpetraRowMatrixColMapSame=" << tpetraOperatorComparison.rowMatrixColMapSame
                 << " tpetraAdapterPath=" << tpetraOperatorComparison.adapterPath
                 << " tpetraGlobalDofSemantics=" << tpetraOperatorComparison.globalDofSemantics
                 << " tpetraIfpack2RowMatrix=" << tpetraOperatorComparison.ifpack2RowMatrix
@@ -1773,6 +2389,11 @@ int main(int argc, char *argv[])
                 << " tpetraPowerLambdaMaxAbsError=" << inverseDiagnosticTiming.tpetraPowerLambdaMaxAbsError
                 << " tpetraPowerLambdaMaxRelError=" << inverseDiagnosticTiming.tpetraPowerLambdaMaxRelError
                 << " compareTpetraPowerEstimate=" << inverseDiagnosticTiming.compareTpetraPowerEstimate
+                << " ifpack2ChebyshevSmoke=" << inverseDiagnosticTiming.ifpack2ChebyshevSmoke
+                << " ifpack2ChebyshevSeconds=" << inverseDiagnosticTiming.ifpack2ChebyshevSeconds
+                << " ifpack2ChebyshevMaxAbsError=" << inverseDiagnosticTiming.ifpack2ChebyshevMaxAbsError
+                << " ifpack2ChebyshevMaxRelError=" << inverseDiagnosticTiming.ifpack2ChebyshevMaxRelError
+                << " ifpack2ChebyshevPath=" << inverseDiagnosticTiming.ifpack2ChebyshevPath
                 << " lambdaMaxEstimateOverAssembledGershgorin=" << inverseDiagnosticTiming.lambdaMaxEstimateOverAssembledGershgorin
                 << " inverseEigenRatio=" << inverseDiagnosticTiming.inverseEigenRatio
                 << " spectralEstimateIterations=" << inverseDiagnosticTiming.spectralEstimateIterations
