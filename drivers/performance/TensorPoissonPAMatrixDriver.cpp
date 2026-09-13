@@ -1413,7 +1413,7 @@ namespace
     timing.inverseTolerance = inverseTolerance;
     timing.inverseStoppedReason = "fixed_iteration_limit";
     timing.inversePath = (inverseDiagnosticAlgorithm == "chebyshev")
-                       ? "local_chebyshev_pamatrix_apply_host_recurrence"
+                       ? "local_chebyshev_ifpack2_compatible_pamatrix_apply_host_recurrence"
                        : "local_damped_jacobi_richardson_pamatrix_apply";
     timing.spectralEstimatePath = "assembled_reference_gershgorin_preconditioned_upper_bound_with_extracted_diagonal";
     timing.spectralEstimateIterations = inverseSpectralEstimateIterations;
@@ -1845,6 +1845,45 @@ namespace
       timing.initialInverseRelError = timing.initialInverseAbsError / std::max<Scalar>(1.0, referenceNorm);
     }
 
+    auto runIfpack2CompatibleHostChebyshev = [&](std::vector<Scalar> &candidate)
+    {
+      const size_t localLength = rhs.size();
+      if (candidate.size() != localLength)
+        throw std::runtime_error("Chebyshev host recurrence candidate has incorrect length");
+      if (numInverseIterations <= 0) return;
+
+      const Scalar chebyshevLambdaMax = timing.lambdaMaxEstimate;
+      const Scalar chebyshevLambdaMin = timing.lambdaMinEstimate;
+      const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
+      const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+      const Scalar s1 = ifpackTheta * ifpackDelta;
+      std::vector<Scalar> correction(localLength, Scalar(0.0));
+      std::vector<Scalar> candidateApplied(localLength, Scalar(0.0));
+
+      applyVector(candidate, candidateApplied);
+      for (size_t i=0; i<localLength; i++)
+      {
+        correction[i] = (Scalar(1.0) / ifpackTheta) * (rhs[i] - candidateApplied[i]) / diagonal[i];
+        candidate[i] += correction[i];
+      }
+
+      Scalar rhok = Scalar(1.0) / s1;
+      for (int iteration=1; iteration<numInverseIterations; iteration++)
+      {
+        applyVector(candidate, candidateApplied);
+        const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
+        const Scalar dtemp1 = rhokp1 * rhok;
+        const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
+        rhok = rhokp1;
+        for (size_t i=0; i<localLength; i++)
+        {
+          correction[i] = dtemp2 * (rhs[i] - candidateApplied[i]) / diagonal[i]
+                        + dtemp1 * correction[i];
+          candidate[i] += correction[i];
+        }
+      }
+    };
+
     Kokkos::Timer inverseTimer;
     if (inverseDiagnosticAlgorithm == "richardson")
     {
@@ -1862,27 +1901,7 @@ namespace
     }
     else if (inverseDiagnosticAlgorithm == "chebyshev")
     {
-      const Scalar theta = Scalar(0.5) * (timing.lambdaMaxEstimate + timing.lambdaMinEstimate);
-      const Scalar delta = Scalar(0.5) * (timing.lambdaMaxEstimate - timing.lambdaMinEstimate);
-      Scalar alpha = Scalar(0.0);
-      std::vector<Scalar> direction(iterate.size(), Scalar(0.0));
-      for (int iteration=0; iteration<numInverseIterations; iteration++)
-      {
-        applyHostVector();
-        if (iteration == 0)
-        {
-          alpha = Scalar(1.0) / theta;
-          for (size_t i=0; i<iterate.size(); i++) direction[i] = (rhs[i] - applied[i]) / diagonal[i];
-        }
-        else
-        {
-          const Scalar beta = std::pow(alpha * delta * Scalar(0.5), 2);
-          const Scalar previousAlpha = alpha;
-          alpha = Scalar(1.0) / (theta - beta / previousAlpha);
-          for (size_t i=0; i<iterate.size(); i++) direction[i] = (rhs[i] - applied[i]) / diagonal[i] + beta * direction[i];
-        }
-        for (size_t i=0; i<iterate.size(); i++) iterate[i] += alpha * direction[i];
-      }
+      runIfpack2CompatibleHostChebyshev(iterate);
       hostChebyshevIterate = iterate;
     }
     else
@@ -1902,36 +1921,7 @@ namespace
 
       const size_t localLength = rhs.size();
       std::vector<Scalar> ifpackHostReference(localLength, Scalar(0.0));
-      std::vector<Scalar> ifpackHostCorrection(localLength, Scalar(0.0));
-      std::vector<Scalar> ifpackHostApplied(localLength, Scalar(0.0));
-      if (numInverseIterations > 0)
-      {
-        const Scalar ifpackLambdaMax = timing.lambdaMaxEstimate;
-        const Scalar ifpackLambdaMin = timing.lambdaMaxEstimate / (timing.lambdaMaxEstimate / timing.lambdaMinEstimate);
-        const Scalar ifpackDelta = Scalar(2.0) / (ifpackLambdaMax - ifpackLambdaMin);
-        const Scalar ifpackTheta = Scalar(0.5) * (ifpackLambdaMax + ifpackLambdaMin);
-        const Scalar s1 = ifpackTheta * ifpackDelta;
-        for (size_t i=0; i<localLength; i++)
-        {
-          ifpackHostCorrection[i] = (Scalar(1.0) / ifpackTheta) * rhs[i] / diagonal[i];
-          ifpackHostReference[i] = ifpackHostCorrection[i];
-        }
-        Scalar rhok = Scalar(1.0) / s1;
-        for (int iteration=1; iteration<numInverseIterations; iteration++)
-        {
-          applyVector(ifpackHostReference, ifpackHostApplied);
-          const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
-          const Scalar dtemp1 = rhokp1 * rhok;
-          const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
-          rhok = rhokp1;
-          for (size_t i=0; i<localLength; i++)
-          {
-            ifpackHostCorrection[i] = dtemp2 * (rhs[i] - ifpackHostApplied[i]) / diagonal[i]
-                                      + dtemp1 * ifpackHostCorrection[i];
-            ifpackHostReference[i] += ifpackHostCorrection[i];
-          }
-        }
-      }
+      runIfpack2CompatibleHostChebyshev(ifpackHostReference);
 
       auto comm = Teuchos::DefaultComm<int>::getComm();
       auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));

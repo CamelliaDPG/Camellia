@@ -215,6 +215,8 @@ add_test(NAME TensorH1GramPAMatrixLowerSpectralDiagnosticSmoke
     --inverseLowerSpectralEstimate=assembled-inverse-iteration
     --inverseLowerSpectralEstimateIterations=4
     --inverseLowerPowerSafetyFactor=0.95
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
     --numInverseIterations=5
     --massWeight=2.0
     --stiffnessWeight=0.5
@@ -416,12 +418,14 @@ add_custom_target(runTensorH1GramPAMatrixLowerSpectralChebyshevSweep
     --inverseLowerSpectralEstimate=assembled-inverse-iteration
     --inverseLowerSpectralEstimateIterations=8
     --inverseLowerPowerSafetyFactor=0.95
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
     --numInverseIterations=20
     --massWeight=1.0
     --stiffnessWeight=1.0
     --maxAssembledEntries=20000000
   DEPENDS TensorPoissonPAMatrixDriver
-  COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic with assembled inverse-iteration lower spectral estimate"
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic with assembled inverse-iteration lower spectral estimate and Ifpack2 recurrence smoke"
   VERBATIM)
 
 add_custom_target(runTensorH1GramPAMatrixUserSpectralNoReferenceSweep
