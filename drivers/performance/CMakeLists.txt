@@ -69,6 +69,75 @@ add_test(NAME TensorH1GramPAMatrixInverseDiagnosticSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorH1GramPAMatrixChebyshevDiagnosticSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
+add_test(NAME TensorH1GramPAMatrixPowerSpectralDiagnosticSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=6
+    --inversePowerSafetyFactor=1.10
+    --inverseDiagnosticRequireAssembledReference=0
+    --compareTpetraPowerEstimate=1
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --inverseLambdaMin=0.01
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
+add_test(NAME TensorH1GramPAMatrixUserSpectralNoReferenceSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=richardson
+    --inverseSpectralEstimate=user
+    --inverseDiagnosticRequireAssembledReference=0
+    --inverseInitialGuess=diagonal
+    --numInverseIterations=5
+    --inverseTolerance=1e-6
+    --inverseLambdaMin=0.01
+    --inverseLambdaMax=10.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
+add_test(NAME TensorH1GramPAMatrixTpetraOperatorSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=tpetra-operator-compare
+    --numApply=3
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
 add_custom_target(runTensorPoissonPAMatrixSmoke
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=2
@@ -97,6 +166,21 @@ add_custom_target(runTensorH1GramPAMatrixSmoke
   COMMENT "Running small direct-PAMatrix H1 Gram assembly/apply smoke test"
   VERBATIM)
 
+add_custom_target(runTensorH1GramPAMatrixTpetraOperatorSmoke
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=1:3
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=tpetra-operator-compare
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=10000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running local-flat-map Tpetra operator comparison for direct-PAMatrix H1 Gram apply"
+  VERBATIM)
+
 add_custom_target(runTensorH1GramPAMatrixInverseDiagnosticSweep
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=3
@@ -111,6 +195,88 @@ add_custom_target(runTensorH1GramPAMatrixInverseDiagnosticSweep
     --maxAssembledEntries=20000000
   DEPENDS TensorPoissonPAMatrixDriver
   COMMENT "Running opt-in direct-PAMatrix H1 Gram local matrix-free inverse diagnostic p-sweep"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixChebyshevDiagnosticSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=2:5
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --numInverseIterations=20
+    --inverseEigenRatio=30.0
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=20000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram local Chebyshev inverse diagnostic p-sweep"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixPowerSpectralChebyshevSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=2:5
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=10
+    --inversePowerSafetyFactor=1.05
+    --numInverseIterations=20
+    --inverseEigenRatio=30.0
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=20000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic with matrix-free power spectral estimate"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixNoReferenceChebyshevSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=2:5
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=10
+    --inverseDiagnosticRequireAssembledReference=0
+    --numInverseIterations=20
+    --inverseEigenRatio=30.0
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=1
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic without assembled reference/oracle blocks"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixUserSpectralNoReferenceSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=2:5
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=richardson
+    --inverseSpectralEstimate=user
+    --inverseDiagnosticRequireAssembledReference=0
+    --inverseInitialGuess=diagonal
+    --numInverseIterations=20
+    --inverseLambdaMin=0.01
+    --inverseLambdaMax=10.0
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=1
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram inverse diagnostic with user spectral bounds and no assembled reference"
   VERBATIM)
 
 add_custom_target(runTensorH1GramPAMatrixFactorSmoke

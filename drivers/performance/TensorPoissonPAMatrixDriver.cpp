@@ -16,9 +16,15 @@
 #include "Kokkos_Core.hpp"
 
 #include <Teuchos_CommandLineProcessor.hpp>
+#include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
 #include <Teuchos_LAPACK.hpp>
+#include <Teuchos_OrdinalTraits.hpp>
 #include <Teuchos_RCP.hpp>
+
+#include <Tpetra_Map.hpp>
+#include <Tpetra_MultiVector.hpp>
+#include <Tpetra_Operator.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -35,6 +41,9 @@ namespace
   using DeviceType = Kokkos::DefaultExecutionSpace::device_type;
   using View2D = Kokkos::View<Scalar**,DeviceType>;
   using PAMatrix = Intrepid2::PAMatrix<DeviceType,Scalar>;
+  using TpetraMap = Tpetra::Map<>;
+  using TpetraMultiVector = Tpetra::MultiVector<Scalar>;
+  using TpetraOperator = Tpetra::Operator<Scalar>;
 
   struct OperatorTerm
   {
@@ -340,6 +349,111 @@ namespace
     return timer.seconds();
   }
 
+  std::vector<Scalar> extractCombinedDiagonal(std::vector<OperatorTerm> &terms, const int cells, const int localDofs)
+  {
+    std::vector<Scalar> diagonal(static_cast<size_t>(cells * localDofs), Scalar(0.0));
+    for (auto &term : terms)
+    {
+      auto diagonalData = term.matrix.allocateDiagonalStorage();
+      term.matrix.extractDiagonal(diagonalData);
+      Kokkos::fence();
+
+      if (diagonalData.getUnderlyingViewRank() == 2)
+      {
+        auto diagonalHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagonalData.template getUnderlyingView<2>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<localDofs; i++)
+            diagonal[static_cast<size_t>(c * localDofs + i)] += term.weight * diagonalHost(c,i);
+      }
+      else if (diagonalData.getUnderlyingViewRank() == 1)
+      {
+        auto diagonalHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagonalData.template getUnderlyingView<1>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<localDofs; i++)
+            diagonal[static_cast<size_t>(c * localDofs + i)] += term.weight * diagonalHost(i);
+      }
+      else
+      {
+        throw std::invalid_argument("Unexpected PAMatrix diagonal storage rank");
+      }
+    }
+    return diagonal;
+  }
+
+  class LocalPAMatrixTpetraOperator : public TpetraOperator
+  {
+    Teuchos::RCP<const TpetraMap> map_;
+    mutable std::vector<OperatorTerm> *terms_;
+    std::vector<WorkspaceView> workspaces_;
+    int cells_ = 0;
+    int localDofs_ = 0;
+    int worksetSize_ = 0;
+
+  public:
+    LocalPAMatrixTpetraOperator(const Teuchos::RCP<const TpetraMap> &map, std::vector<OperatorTerm> &terms,
+                                const std::vector<WorkspaceView> &workspaces, const int cells,
+                                const int localDofs, const int worksetSize)
+      : map_(map), terms_(&terms), workspaces_(workspaces), cells_(cells), localDofs_(localDofs), worksetSize_(worksetSize)
+    {}
+
+    Teuchos::RCP<const TpetraMap> getDomainMap() const override { return map_; }
+    Teuchos::RCP<const TpetraMap> getRangeMap() const override { return map_; }
+    bool hasTransposeApply() const override { return false; }
+
+    void fillInverseDiagonal(TpetraMultiVector &inverseDiagonal) const
+    {
+      const size_t localLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
+      if (inverseDiagonal.getLocalLength() != localLength)
+        throw std::invalid_argument("LocalPAMatrixTpetraOperator inverse diagonal length mismatch");
+      auto inverseDiagonalHost = inverseDiagonal.getLocalViewHost(Tpetra::Access::OverwriteAll);
+      const auto diagonal = extractCombinedDiagonal(*terms_, cells_, localDofs_);
+      for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++)
+      {
+        if (diagonal[localOrdinal] <= std::numeric_limits<Scalar>::epsilon())
+          throw std::runtime_error("LocalPAMatrixTpetraOperator found nonpositive diagonal entry");
+        for (size_t vectorOrdinal=0; vectorOrdinal<inverseDiagonal.getNumVectors(); vectorOrdinal++)
+          inverseDiagonalHost(localOrdinal, vectorOrdinal) = Scalar(1.0) / diagonal[localOrdinal];
+      }
+    }
+
+    void apply(const TpetraMultiVector &X, TpetraMultiVector &Y,
+               Teuchos::ETransp mode = Teuchos::NO_TRANS,
+               Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
+               Scalar beta = Teuchos::ScalarTraits<Scalar>::zero()) const override
+    {
+      if (mode != Teuchos::NO_TRANS) throw std::invalid_argument("LocalPAMatrixTpetraOperator does not support transpose apply");
+      const size_t localLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
+      if ((X.getLocalLength() != localLength) || (Y.getLocalLength() != localLength))
+        throw std::invalid_argument("LocalPAMatrixTpetraOperator local vector length mismatch");
+      if (X.getNumVectors() != Y.getNumVectors())
+        throw std::invalid_argument("LocalPAMatrixTpetraOperator multivector count mismatch");
+
+      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+      Intrepid2::ScalarView<Scalar,DeviceType> input("LocalPAMatrixTpetraOperator input", cells_, localDofs_);
+      Intrepid2::ScalarView<Scalar,DeviceType> output("LocalPAMatrixTpetraOperator output", cells_, localDofs_);
+      auto inputHost = Kokkos::create_mirror_view(input);
+
+      for (size_t vectorOrdinal=0; vectorOrdinal<X.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+          for (int f=0; f<localDofs_; f++)
+            inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs_ + f), vectorOrdinal);
+        Kokkos::deep_copy(input, inputHost);
+
+        applyTerms(*terms_, workspaces_, input, output, worksetSize_);
+        auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+
+        for (int c=0; c<cells_; c++)
+          for (int f=0; f<localDofs_; f++)
+          {
+            const size_t localOrdinal = static_cast<size_t>(c * localDofs_ + f);
+            yHost(localOrdinal, vectorOrdinal) = alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
+          }
+      }
+    }
+  };
+
   struct AssemblyTiming
   {
     double totalSeconds = -1.0;
@@ -362,6 +476,23 @@ namespace
     double maxRelError = -1.0;
   };
 
+  struct TpetraOperatorComparison
+  {
+    double maxAbsError = -1.0;
+    double maxRelError = -1.0;
+    double inverseDiagonalMaxAbsError = -1.0;
+    double inverseDiagonalMin = -1.0;
+    double inverseDiagonalMax = -1.0;
+    double firstApplySeconds = -1.0;
+    double avgApplySeconds = -1.0;
+    int numVectors = 0;
+    int localLength = 0;
+    int domainRangeMapSame = 0;
+    std::string adapterPath = "not_requested";
+    std::string globalDofSemantics = "not_requested";
+    std::string ifpack2RowMatrix = "not_requested";
+  };
+
   struct InverseDiagnosticTiming
   {
     double avgInverseApplySeconds = -1.0;
@@ -370,9 +501,33 @@ namespace
     double initialInverseRelError = -1.0;
     double maxInverseAbsError = -1.0;
     double maxInverseRelError = -1.0;
+    double initialResidualNorm = -1.0;
+    double finalResidualNorm = -1.0;
+    double residualReduction = -1.0;
+    double inverseTolerance = -1.0;
+    int inverseConverged = 0;
+    std::string inverseStoppedReason = "not_requested";
+    double lambdaMinEstimate = -1.0;
     double lambdaMaxEstimate = -1.0;
+    double assembledGershgorinLambdaMax = -1.0;
+    double powerRawLambdaMaxEstimate = -1.0;
+    double tpetraPowerRawLambdaMaxEstimate = -1.0;
+    double tpetraPowerLambdaMaxAbsError = -1.0;
+    double tpetraPowerLambdaMaxRelError = -1.0;
+    double lambdaMaxEstimateOverAssembledGershgorin = -1.0;
+    int compareTpetraPowerEstimate = 0;
+    double inverseEigenRatio = -1.0;
+    int spectralEstimateIterations = 0;
+    double spectralEstimateSeconds = -1.0;
+    double lambdaMaxSafetyFactor = -1.0;
+    double maxSymmetryAbsError = -1.0;
+    double minDiagonalEstimate = -1.0;
+    double maxDiagonalEstimate = -1.0;
     std::string inversePath = "not_requested";
     std::string spectralEstimatePath = "not_requested";
+    std::string lambdaMinSource = "not_requested";
+    std::string lambdaMaxSource = "not_requested";
+    std::string inverseInitialGuess = "not_requested";
   };
 
   void addTermSeconds(AssemblyTiming &timing, const std::string &label, const double seconds)
@@ -404,6 +559,111 @@ namespace
     if (sawUnitColumn && sawApplyFallback) return "mixed_unit_column_and_blocked_apply_fallback";
     if (sawUnitColumn) return "unit_column_fast_path";
     return "blocked_apply_fallback";
+  }
+
+  TpetraOperatorComparison compareTpetraOperatorAgainstDirect(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
+                                                               const Intrepid2::ScalarView<Scalar,DeviceType> &baseInput,
+                                                               const int cells, const int localDofs, const int worksetSize,
+                                                               const int numApply)
+  {
+    TpetraOperatorComparison comparison;
+    comparison.numVectors = 2;
+    const size_t localLength = static_cast<size_t>(cells) * static_cast<size_t>(localDofs);
+    comparison.localLength = static_cast<int>(localLength);
+    comparison.adapterPath = "local_flat_map_nonproduction_operator";
+    comparison.globalDofSemantics = "not_supported";
+    comparison.ifpack2RowMatrix = "not_supported";
+    auto comm = Teuchos::DefaultComm<int>::getComm();
+    auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
+    LocalPAMatrixTpetraOperator op(map, terms, workspaces, cells, localDofs, worksetSize);
+    comparison.domainRangeMapSame = (op.getDomainMap().getRawPtr() == op.getRangeMap().getRawPtr()) ? 1 : 0;
+    TpetraMultiVector inverseDiagonal(map, 1);
+    op.fillInverseDiagonal(inverseDiagonal);
+    auto inverseDiagonalHost = inverseDiagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
+    const auto expectedDiagonal = extractCombinedDiagonal(terms, cells, localDofs);
+    comparison.inverseDiagonalMaxAbsError = 0.0;
+    comparison.inverseDiagonalMin = std::numeric_limits<Scalar>::max();
+    comparison.inverseDiagonalMax = 0.0;
+    for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++)
+    {
+      const Scalar expectedInverseDiagonal = Scalar(1.0) / expectedDiagonal[localOrdinal];
+      comparison.inverseDiagonalMaxAbsError = std::max(comparison.inverseDiagonalMaxAbsError,
+                                                       std::abs(inverseDiagonalHost(localOrdinal,0) - expectedInverseDiagonal));
+      comparison.inverseDiagonalMin = std::min(comparison.inverseDiagonalMin, inverseDiagonalHost(localOrdinal,0));
+      comparison.inverseDiagonalMax = std::max(comparison.inverseDiagonalMax, inverseDiagonalHost(localOrdinal,0));
+    }
+
+    TpetraMultiVector X(map, comparison.numVectors);
+    TpetraMultiVector Y(map, comparison.numVectors);
+    auto xHost = X.getLocalViewHost(Tpetra::Access::OverwriteAll);
+    auto yHost = Y.getLocalViewHost(Tpetra::Access::OverwriteAll);
+    auto baseHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), baseInput);
+    std::vector<Scalar> yInitial(localLength * comparison.numVectors, Scalar(0.0));
+    for (int v=0; v<comparison.numVectors; v++)
+    {
+      for (int c=0; c<cells; c++)
+        for (int f=0; f<localDofs; f++)
+        {
+          const size_t localOrdinal = static_cast<size_t>(c * localDofs + f);
+          xHost(localOrdinal, v) = baseHost(c,f) * (Scalar(1.0) + Scalar(0.25) * v);
+          yInitial[localOrdinal + localLength * v] = Scalar(0.125) * (Scalar(1.0) + Scalar((localOrdinal + v) % 5));
+          yHost(localOrdinal, v) = yInitial[localOrdinal + localLength * v];
+        }
+    }
+
+    const Scalar alpha = 0.75;
+    const Scalar beta = 0.5;
+    Kokkos::Timer firstApplyTimer;
+    op.apply(X, Y, Teuchos::NO_TRANS, alpha, beta);
+    comparison.firstApplySeconds = firstApplyTimer.seconds();
+    auto yResultHost = Y.getLocalViewHost(Tpetra::Access::ReadOnly);
+
+    comparison.maxAbsError = 0.0;
+    Scalar maxExpected = 0.0;
+    Intrepid2::ScalarView<Scalar,DeviceType> input("Tpetra operator compare direct input", cells, localDofs);
+    Intrepid2::ScalarView<Scalar,DeviceType> output("Tpetra operator compare direct output", cells, localDofs);
+    auto inputHost = Kokkos::create_mirror_view(input);
+    for (int v=0; v<comparison.numVectors; v++)
+    {
+      for (int c=0; c<cells; c++)
+        for (int f=0; f<localDofs; f++)
+          inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs + f), v);
+      Kokkos::deep_copy(input, inputHost);
+      applyTerms(terms, workspaces, input, output, worksetSize);
+      auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+      for (int c=0; c<cells; c++)
+        for (int f=0; f<localDofs; f++)
+        {
+          const size_t localOrdinal = static_cast<size_t>(c * localDofs + f);
+          const Scalar expected = alpha * outputHost(c,f) + beta * yInitial[localOrdinal + localLength * v];
+          comparison.maxAbsError = std::max(comparison.maxAbsError, std::abs(yResultHost(localOrdinal, v) - expected));
+          maxExpected = std::max(maxExpected, std::abs(expected));
+        }
+    }
+
+    Kokkos::Timer repeatApplyTimer;
+    for (int applyOrdinal=0; applyOrdinal<numApply; applyOrdinal++)
+    {
+      op.apply(X, Y, Teuchos::NO_TRANS, Scalar(1.0), Scalar(0.0));
+    }
+    comparison.avgApplySeconds = repeatApplyTimer.seconds() / numApply;
+
+    comparison.maxRelError = comparison.maxAbsError / std::max<Scalar>(1.0, maxExpected);
+    std::cout << "TPETRA_OPERATOR_COMPARE maxAbsError=" << std::setprecision(16) << comparison.maxAbsError
+              << " maxRelError=" << comparison.maxRelError
+              << " inverseDiagonalMaxAbsError=" << comparison.inverseDiagonalMaxAbsError
+              << " inverseDiagonalMin=" << comparison.inverseDiagonalMin
+              << " inverseDiagonalMax=" << comparison.inverseDiagonalMax
+              << " firstApplySeconds=" << comparison.firstApplySeconds
+              << " avgApplySeconds=" << comparison.avgApplySeconds
+              << " numVectors=" << comparison.numVectors
+              << " localLength=" << comparison.localLength
+              << " domainRangeMapSame=" << comparison.domainRangeMapSame
+              << " adapterPath=" << comparison.adapterPath
+              << " globalDofSemantics=" << comparison.globalDofSemantics
+              << " ifpack2RowMatrix=" << comparison.ifpack2RowMatrix
+              << " note=local_flat_map_diagnostic_not_global_fe_operator" << std::endl;
+    return comparison;
   }
 
   bool compareApplyAgainstAssembled(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
@@ -603,22 +863,35 @@ namespace
   }
 
   InverseDiagnosticTiming inverseDiagnosticTerms(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
-                                                 const int worksetSize, const long long maxAssembledEntries,
-                                                 const int numInverseIterations)
+                                                 const int worksetSize, const int cells, const int rows,
+                                                 const long long maxAssembledEntries, const int inverseDiagnosticRequireAssembledReference,
+                                                 const int numInverseIterations, const std::string &inverseDiagnosticAlgorithm,
+                                                 const Scalar inverseEigenRatio, const Scalar inverseLambdaMinOverride,
+                                                 const Scalar inverseLambdaMaxOverride, const std::string &inverseSpectralEstimate,
+                                                 const int inverseSpectralEstimateIterations, const Scalar inversePowerSafetyFactor,
+                                                 const int compareTpetraPowerEstimate, const std::string &inverseInitialGuess,
+                                                 const Scalar inverseTolerance)
   {
     InverseDiagnosticTiming timing;
     timing.inverseIterations = numInverseIterations;
-    timing.inversePath = "local_damped_jacobi_richardson_pamatrix_apply";
+    timing.inverseTolerance = inverseTolerance;
+    timing.inverseStoppedReason = "fixed_iteration_limit";
+    timing.inversePath = (inverseDiagnosticAlgorithm == "chebyshev")
+                       ? "local_chebyshev_pamatrix_apply_host_recurrence"
+                       : "local_damped_jacobi_richardson_pamatrix_apply";
     timing.spectralEstimatePath = "assembled_reference_gershgorin_preconditioned_upper_bound_with_extracted_diagonal";
+    timing.spectralEstimateIterations = inverseSpectralEstimateIterations;
+    timing.lambdaMaxSafetyFactor = inversePowerSafetyFactor;
+    timing.compareTpetraPowerEstimate = compareTpetraPowerEstimate;
+    timing.lambdaMaxSource = "assembled_reference_gershgorin_preconditioned_upper_bound";
+    timing.inverseInitialGuess = inverseInitialGuess;
     if (terms.empty()) return timing;
 
-    auto firstMatrixData = terms.front().matrix.allocateMatrixStorage();
-    const int cells = firstMatrixData.extent_int(0);
-    const int rows  = firstMatrixData.extent_int(1);
-    const int cols  = firstMatrixData.extent_int(2);
-    if (rows != cols) throw std::invalid_argument("inverse diagnostic requires square Gram blocks");
+    const int cols = rows;
+    if ((cells < 1) || (rows < 1)) throw std::invalid_argument("inverse diagnostic requires positive local extents");
     const long long entries = static_cast<long long>(cells) * rows * cols;
-    if (entries > maxAssembledEntries)
+    const bool useAssembledReference = entries <= maxAssembledEntries;
+    if (!useAssembledReference && (inverseDiagnosticRequireAssembledReference != 0))
     {
       std::cout << "INVERSE_DIAGNOSTIC_SKIPPED entries=" << entries
                 << " maxAssembledEntries=" << maxAssembledEntries << std::endl;
@@ -626,33 +899,40 @@ namespace
       timing.spectralEstimatePath = "not_computed";
       return timing;
     }
+    if (!useAssembledReference && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "user"))
+      throw std::invalid_argument("inverse diagnostic without assembled reference requires --inverseSpectralEstimate=power or user");
+    if (!useAssembledReference) timing.inversePath += "_no_assembled_reference";
 
-    std::vector<Scalar> localMatrices(static_cast<size_t>(entries), 0.0);
-    for (auto &term : terms)
+    std::vector<Scalar> localMatrices;
+    if (useAssembledReference)
     {
-      auto matrixData = term.matrix.allocateMatrixStorage();
-      term.matrix.assemble(matrixData);
-      Kokkos::fence();
+      localMatrices.assign(static_cast<size_t>(entries), 0.0);
+      for (auto &term : terms)
+      {
+        auto matrixData = term.matrix.allocateMatrixStorage();
+        term.matrix.assemble(matrixData);
+        Kokkos::fence();
 
-      if (matrixData.getUnderlyingViewRank() == 3)
-      {
-        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<3>());
-        for (int c=0; c<cells; c++)
-          for (int i=0; i<rows; i++)
-            for (int j=0; j<cols; j++)
-              localMatrices[static_cast<size_t>((c * rows + i) * cols + j)] += term.weight * matrixHost(c,i,j);
-      }
-      else if (matrixData.getUnderlyingViewRank() == 2)
-      {
-        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<2>());
-        for (int c=0; c<cells; c++)
-          for (int i=0; i<rows; i++)
-            for (int j=0; j<cols; j++)
-              localMatrices[static_cast<size_t>((c * rows + i) * cols + j)] += term.weight * matrixHost(i,j);
-      }
-      else
-      {
-        throw std::invalid_argument("Unexpected PAMatrix storage rank in inverse diagnostic");
+        if (matrixData.getUnderlyingViewRank() == 3)
+        {
+          auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<3>());
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<rows; i++)
+              for (int j=0; j<cols; j++)
+                localMatrices[static_cast<size_t>((c * rows + i) * cols + j)] += term.weight * matrixHost(c,i,j);
+        }
+        else if (matrixData.getUnderlyingViewRank() == 2)
+        {
+          auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<2>());
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<rows; i++)
+              for (int j=0; j<cols; j++)
+                localMatrices[static_cast<size_t>((c * rows + i) * cols + j)] += term.weight * matrixHost(i,j);
+        }
+        else
+        {
+          throw std::invalid_argument("Unexpected PAMatrix storage rank in inverse diagnostic");
+        }
       }
     }
 
@@ -683,80 +963,343 @@ namespace
       }
     }
 
-    Scalar lambdaMaxEstimate = 0.0;
+    timing.maxSymmetryAbsError = useAssembledReference ? 0.0 : -1.0;
+    timing.minDiagonalEstimate = std::numeric_limits<Scalar>::max();
+    timing.maxDiagonalEstimate = 0.0;
     for (int c=0; c<cells; c++)
     {
       for (int i=0; i<rows; i++)
       {
-        const Scalar diagonalValue = std::abs(diagonal[static_cast<size_t>(c * rows + i)]);
-        if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
-          throw std::runtime_error("inverse diagnostic found zero diagonal entry");
-        Scalar scaledRowSum = 0.0;
-        for (int j=0; j<cols; j++) scaledRowSum += std::abs(localMatrices[static_cast<size_t>((c * rows + i) * cols + j)]) / diagonalValue;
-        lambdaMaxEstimate = std::max(lambdaMaxEstimate, scaledRowSum);
+        const Scalar diagonalValue = diagonal[static_cast<size_t>(c * rows + i)];
+        timing.minDiagonalEstimate = std::min(timing.minDiagonalEstimate, diagonalValue);
+        timing.maxDiagonalEstimate = std::max(timing.maxDiagonalEstimate, diagonalValue);
+        if (useAssembledReference)
+        {
+          for (int j=i+1; j<cols; j++)
+          {
+            const Scalar aij = localMatrices[static_cast<size_t>((c * rows + i) * cols + j)];
+            const Scalar aji = localMatrices[static_cast<size_t>((c * rows + j) * cols + i)];
+            timing.maxSymmetryAbsError = std::max(timing.maxSymmetryAbsError, std::abs(aij - aji));
+          }
+        }
       }
     }
-    if (lambdaMaxEstimate <= 0.0) throw std::runtime_error("inverse diagnostic found nonpositive spectral upper estimate");
+    if (timing.minDiagonalEstimate <= std::numeric_limits<Scalar>::epsilon())
+      throw std::runtime_error("inverse diagnostic found nonpositive diagonal entry");
+
+    Intrepid2::ScalarView<Scalar,DeviceType> input("TensorPoissonPAMatrix inverse diagnostic input", cells, rows);
+    Intrepid2::ScalarView<Scalar,DeviceType> output("TensorPoissonPAMatrix inverse diagnostic output", cells, rows);
+
+    auto applyVector = [&](const std::vector<Scalar> &inputVector, std::vector<Scalar> &outputVector)
+    {
+      auto inputHost = Kokkos::create_mirror_view(input);
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++)
+          inputHost(c,i) = inputVector[static_cast<size_t>(c * rows + i)];
+      Kokkos::deep_copy(input, inputHost);
+      applyTerms(terms, workspaces, input, output, worksetSize);
+      auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++)
+          outputVector[static_cast<size_t>(c * rows + i)] = outputHost(c,i);
+    };
+
+    Scalar assembledGershgorinLambdaMax = -1.0;
+    if (useAssembledReference)
+    {
+      assembledGershgorinLambdaMax = 0.0;
+      for (int c=0; c<cells; c++)
+      {
+        for (int i=0; i<rows; i++)
+        {
+          const Scalar diagonalValue = diagonal[static_cast<size_t>(c * rows + i)];
+          Scalar scaledRowSum = 0.0;
+          for (int j=0; j<cols; j++) scaledRowSum += std::abs(localMatrices[static_cast<size_t>((c * rows + i) * cols + j)]) / diagonalValue;
+          assembledGershgorinLambdaMax = std::max(assembledGershgorinLambdaMax, scaledRowSum);
+        }
+      }
+    }
+    timing.assembledGershgorinLambdaMax = assembledGershgorinLambdaMax;
+
+    Scalar lambdaMaxEstimate = 0.0;
+    Kokkos::Timer spectralEstimateTimer;
+    if (inverseSpectralEstimate == "assembled-gershgorin")
+    {
+      if (!useAssembledReference) throw std::invalid_argument("assembled-gershgorin spectral estimate requires assembled reference");
+      lambdaMaxEstimate = assembledGershgorinLambdaMax;
+    }
+    else if (inverseSpectralEstimate == "user")
+    {
+      if (inverseLambdaMaxOverride <= 0.0) throw std::invalid_argument("--inverseSpectralEstimate=user requires positive --inverseLambdaMax");
+      lambdaMaxEstimate = inverseLambdaMaxOverride;
+      timing.spectralEstimatePath = "user_lambda_max_with_extracted_diagonal";
+      timing.lambdaMaxSource = "user_lambda_max_override";
+    }
+    else if (inverseSpectralEstimate == "power")
+    {
+      timing.spectralEstimatePath = "matrix_free_power_symmetric_diagonal_scaling_with_extracted_diagonal";
+      timing.lambdaMaxSource = "matrix_free_power_symmetric_diagonal_scaling_with_safety_factor";
+      auto runPowerEstimate = [&](const bool useTpetraApply)
+      {
+        std::vector<Scalar> vector(static_cast<size_t>(cells * rows), Scalar(0.0));
+        std::vector<Scalar> scaledInput(vector.size(), Scalar(0.0));
+        std::vector<Scalar> applied(vector.size(), Scalar(0.0));
+        std::vector<Scalar> scaledOutput(vector.size(), Scalar(0.0));
+        for (size_t i=0; i<vector.size(); i++) vector[i] = Scalar(1.0) + Scalar((i * 13) % 17) / Scalar(17.0);
+
+        Teuchos::RCP<TpetraMap> map;
+        Teuchos::RCP<LocalPAMatrixTpetraOperator> tpetraOperator;
+        Teuchos::RCP<TpetraMultiVector> X;
+        Teuchos::RCP<TpetraMultiVector> Y;
+        if (useTpetraApply)
+        {
+          auto comm = Teuchos::DefaultComm<int>::getComm();
+          map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), vector.size(), 0, comm));
+          tpetraOperator = Teuchos::rcp(new LocalPAMatrixTpetraOperator(map, terms, workspaces, cells, rows, worksetSize));
+          X = Teuchos::rcp(new TpetraMultiVector(map, 1));
+          Y = Teuchos::rcp(new TpetraMultiVector(map, 1));
+        }
+
+        Scalar rawEstimate = 0.0;
+        for (int iteration=0; iteration<inverseSpectralEstimateIterations; iteration++)
+        {
+          Scalar inputNorm = 0.0;
+          for (const Scalar value : vector) inputNorm += value * value;
+          inputNorm = std::sqrt(inputNorm);
+          if (inputNorm <= std::numeric_limits<Scalar>::epsilon()) throw std::runtime_error("inverse diagnostic power estimate found zero vector");
+          for (Scalar &value : vector) value /= inputNorm;
+
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<rows; i++)
+            {
+              const size_t index = static_cast<size_t>(c * rows + i);
+              scaledInput[index] = vector[index] / std::sqrt(diagonal[index]);
+            }
+
+          if (useTpetraApply)
+          {
+            auto xHost = X->getLocalViewHost(Tpetra::Access::OverwriteAll);
+            for (size_t index=0; index<scaledInput.size(); index++) xHost(index,0) = scaledInput[index];
+            tpetraOperator->apply(*X, *Y);
+            auto yHost = Y->getLocalViewHost(Tpetra::Access::ReadOnly);
+            for (size_t index=0; index<applied.size(); index++) applied[index] = yHost(index,0);
+          }
+          else
+          {
+            applyVector(scaledInput, applied);
+          }
+
+          Scalar rayleigh = 0.0;
+          Scalar outputNorm = 0.0;
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<rows; i++)
+            {
+              const size_t index = static_cast<size_t>(c * rows + i);
+              scaledOutput[index] = applied[index] / std::sqrt(diagonal[index]);
+              rayleigh += vector[index] * scaledOutput[index];
+              outputNorm += scaledOutput[index] * scaledOutput[index];
+            }
+          outputNorm = std::sqrt(outputNorm);
+          rawEstimate = std::max(rawEstimate, std::max(std::abs(rayleigh), outputNorm));
+          vector.swap(scaledOutput);
+        }
+        return rawEstimate;
+      };
+
+      lambdaMaxEstimate = runPowerEstimate(false);
+      timing.powerRawLambdaMaxEstimate = lambdaMaxEstimate;
+      if (compareTpetraPowerEstimate != 0)
+      {
+        timing.tpetraPowerRawLambdaMaxEstimate = runPowerEstimate(true);
+        timing.tpetraPowerLambdaMaxAbsError = std::abs(timing.tpetraPowerRawLambdaMaxEstimate - timing.powerRawLambdaMaxEstimate);
+        timing.tpetraPowerLambdaMaxRelError = timing.tpetraPowerLambdaMaxAbsError / std::max<Scalar>(Scalar(1.0), std::abs(timing.powerRawLambdaMaxEstimate));
+      }
+      // Power iteration is a diagnostic estimate, not a rigorous upper bound; add a
+      // user-visible safety margin before using it as the Chebyshev upper endpoint.
+      lambdaMaxEstimate *= inversePowerSafetyFactor;
+    }
+    else
+    {
+      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, or user");
+    }
+    timing.spectralEstimateSeconds = spectralEstimateTimer.seconds();
+    if (!std::isfinite(lambdaMaxEstimate) || (lambdaMaxEstimate <= 0.0)) throw std::runtime_error("inverse diagnostic found nonpositive or nonfinite spectral upper estimate");
+    if (inverseLambdaMaxOverride > 0.0)
+    {
+      lambdaMaxEstimate = inverseLambdaMaxOverride;
+      timing.spectralEstimatePath = "user_lambda_max_override_with_extracted_diagonal";
+      timing.lambdaMaxSource = "user_lambda_max_override";
+    }
     timing.lambdaMaxEstimate = lambdaMaxEstimate;
-    const Scalar omega = Scalar(1.0) / lambdaMaxEstimate;
+    if (assembledGershgorinLambdaMax > 0.0)
+      timing.lambdaMaxEstimateOverAssembledGershgorin = lambdaMaxEstimate / assembledGershgorinLambdaMax;
+    timing.inverseEigenRatio = inverseEigenRatio;
+    if (inverseLambdaMinOverride > 0.0)
+    {
+      timing.lambdaMinEstimate = inverseLambdaMinOverride;
+      timing.lambdaMinSource = "user_lambda_min_override";
+    }
+    else
+    {
+      timing.lambdaMinEstimate = lambdaMaxEstimate / inverseEigenRatio;
+      timing.lambdaMinSource = "ratio_from_lambda_max";
+    }
+    if ((timing.lambdaMinEstimate <= 0.0) || (timing.lambdaMinEstimate >= timing.lambdaMaxEstimate))
+      throw std::runtime_error("inverse diagnostic Chebyshev/Richardson spectral bounds must satisfy 0 < lambdaMin < lambdaMax");
+    if (inverseLambdaMinOverride > 0.0)
+    {
+      timing.spectralEstimatePath = (inverseLambdaMaxOverride > 0.0)
+                                  ? "user_lambda_min_max_override_with_extracted_diagonal"
+                                  : timing.spectralEstimatePath + "_user_lambda_min";
+    }
 
     std::vector<Scalar> rhs(static_cast<size_t>(cells * rows), 0.0);
     for (int c=0; c<cells; c++)
       for (int i=0; i<rows; i++)
         rhs[static_cast<size_t>(c * rows + i)] = 0.25 + 0.0625 * ((i + 5 * c) % 29);
 
-    std::vector<Scalar> factoredMatrices = localMatrices;
-    std::vector<Scalar> referenceSolution = rhs;
-    for (int c=0; c<cells; c++)
+    std::vector<Scalar> referenceSolution;
+    Scalar referenceNorm = 0.0;
+    if (useAssembledReference)
     {
-      const size_t offset = static_cast<size_t>(c) * rows * cols;
-      const int factorInfo = factorSPDMatrixInPlace(factoredMatrices, offset, rows);
-      if (factorInfo != 0) throw std::runtime_error("inverse diagnostic Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
-      std::vector<Scalar> cellRhs(rhs.begin() + static_cast<size_t>(c * rows),
-                                  rhs.begin() + static_cast<size_t>((c + 1) * rows));
-      const int solveInfo = solveFactoredSPDMatrix(factoredMatrices, offset, rows, cellRhs);
-      if (solveInfo != 0) throw std::runtime_error("inverse diagnostic Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
-      for (int i=0; i<rows; i++) referenceSolution[static_cast<size_t>(c * rows + i)] = cellRhs[i];
+      std::vector<Scalar> factoredMatrices = localMatrices;
+      referenceSolution = rhs;
+      for (int c=0; c<cells; c++)
+      {
+        const size_t offset = static_cast<size_t>(c) * rows * cols;
+        const int factorInfo = factorSPDMatrixInPlace(factoredMatrices, offset, rows);
+        if (factorInfo != 0) throw std::runtime_error("inverse diagnostic Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+        std::vector<Scalar> cellRhs(rhs.begin() + static_cast<size_t>(c * rows),
+                                    rhs.begin() + static_cast<size_t>((c + 1) * rows));
+        const int solveInfo = solveFactoredSPDMatrix(factoredMatrices, offset, rows, cellRhs);
+        if (solveInfo != 0) throw std::runtime_error("inverse diagnostic Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+        for (int i=0; i<rows; i++) referenceSolution[static_cast<size_t>(c * rows + i)] = cellRhs[i];
+      }
+
+      for (const Scalar value : referenceSolution) referenceNorm = std::max(referenceNorm, std::abs(value));
     }
 
-    Scalar referenceNorm = 0.0;
-    for (const Scalar value : referenceSolution) referenceNorm = std::max(referenceNorm, std::abs(value));
-    timing.initialInverseAbsError = referenceNorm;
-    timing.initialInverseRelError = referenceNorm / std::max<Scalar>(1.0, referenceNorm);
-
     std::vector<Scalar> iterate(static_cast<size_t>(cells * rows), 0.0);
-    Intrepid2::ScalarView<Scalar,DeviceType> input("TensorPoissonPAMatrix inverse diagnostic input", cells, rows);
-    Intrepid2::ScalarView<Scalar,DeviceType> output("TensorPoissonPAMatrix inverse diagnostic output", cells, rows);
+    std::vector<Scalar> applied(static_cast<size_t>(cells * rows), 0.0);
+    if (inverseInitialGuess == "diagonal")
+    {
+      for (size_t i=0; i<iterate.size(); i++) iterate[i] = rhs[i] / diagonal[i];
+    }
+    else if (inverseInitialGuess != "zero")
+    {
+      throw std::invalid_argument("--inverseInitialGuess must be zero or diagonal");
+    }
+
+    auto applyHostVector = [&]()
+    {
+      applyVector(iterate, applied);
+    };
+
+    auto residualNorm = [&]()
+    {
+      Scalar maxResidual = 0.0;
+      for (size_t i=0; i<rhs.size(); i++) maxResidual = std::max(maxResidual, std::abs(rhs[i] - applied[i]));
+      return maxResidual;
+    };
+
+    applyHostVector();
+    timing.initialResidualNorm = residualNorm();
+    if (useAssembledReference)
+    {
+      timing.initialInverseAbsError = 0.0;
+      for (size_t i=0; i<iterate.size(); i++)
+        timing.initialInverseAbsError = std::max(timing.initialInverseAbsError, std::abs(iterate[i] - referenceSolution[i]));
+      timing.initialInverseRelError = timing.initialInverseAbsError / std::max<Scalar>(1.0, referenceNorm);
+    }
 
     Kokkos::Timer inverseTimer;
-    for (int iteration=0; iteration<numInverseIterations; iteration++)
+    if (inverseDiagnosticAlgorithm == "richardson")
     {
-      auto inputHost = Kokkos::create_mirror_view(input);
-      for (int c=0; c<cells; c++)
-        for (int i=0; i<rows; i++)
-          inputHost(c,i) = iterate[static_cast<size_t>(c * rows + i)];
-      Kokkos::deep_copy(input, inputHost);
-      applyTerms(terms, workspaces, input, output, worksetSize);
-      auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
-      for (int c=0; c<cells; c++)
-        for (int i=0; i<rows; i++)
+      const Scalar omega = Scalar(1.0) / timing.lambdaMaxEstimate;
+      for (int iteration=0; iteration<numInverseIterations; iteration++)
+      {
+        applyHostVector();
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++)
+          {
+            const size_t index = static_cast<size_t>(c * rows + i);
+            iterate[index] += omega * (rhs[index] - applied[index]) / diagonal[index];
+          }
+      }
+    }
+    else if (inverseDiagnosticAlgorithm == "chebyshev")
+    {
+      const Scalar theta = Scalar(0.5) * (timing.lambdaMaxEstimate + timing.lambdaMinEstimate);
+      const Scalar delta = Scalar(0.5) * (timing.lambdaMaxEstimate - timing.lambdaMinEstimate);
+      Scalar alpha = Scalar(0.0);
+      std::vector<Scalar> direction(iterate.size(), Scalar(0.0));
+      for (int iteration=0; iteration<numInverseIterations; iteration++)
+      {
+        applyHostVector();
+        if (iteration == 0)
         {
-          const size_t index = static_cast<size_t>(c * rows + i);
-          iterate[index] += omega * (rhs[index] - outputHost(c,i)) / diagonal[index];
+          alpha = Scalar(1.0) / theta;
+          for (size_t i=0; i<iterate.size(); i++) direction[i] = (rhs[i] - applied[i]) / diagonal[i];
         }
+        else
+        {
+          const Scalar beta = std::pow(alpha * delta * Scalar(0.5), 2);
+          const Scalar previousAlpha = alpha;
+          alpha = Scalar(1.0) / (theta - beta / previousAlpha);
+          for (size_t i=0; i<iterate.size(); i++) direction[i] = (rhs[i] - applied[i]) / diagonal[i] + beta * direction[i];
+        }
+        for (size_t i=0; i<iterate.size(); i++) iterate[i] += alpha * direction[i];
+      }
+    }
+    else
+    {
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson or chebyshev");
     }
     timing.avgInverseApplySeconds = inverseTimer.seconds() / numInverseIterations;
 
-    timing.maxInverseAbsError = 0.0;
-    for (size_t i=0; i<iterate.size(); i++)
-      timing.maxInverseAbsError = std::max(timing.maxInverseAbsError, std::abs(iterate[i] - referenceSolution[i]));
-    timing.maxInverseRelError = timing.maxInverseAbsError / std::max<Scalar>(1.0, referenceNorm);
+    applyHostVector();
+    timing.finalResidualNorm = residualNorm();
+    timing.residualReduction = timing.finalResidualNorm / std::max<Scalar>(std::numeric_limits<Scalar>::epsilon(), timing.initialResidualNorm);
+    timing.inverseConverged = (timing.residualReduction <= inverseTolerance) ? 1 : 0;
+    if (timing.inverseConverged != 0) timing.inverseStoppedReason = "fixed_iterations_met_tolerance";
+
+    if (useAssembledReference)
+    {
+      timing.maxInverseAbsError = 0.0;
+      for (size_t i=0; i<iterate.size(); i++)
+        timing.maxInverseAbsError = std::max(timing.maxInverseAbsError, std::abs(iterate[i] - referenceSolution[i]));
+      timing.maxInverseRelError = timing.maxInverseAbsError / std::max<Scalar>(1.0, referenceNorm);
+    }
     std::cout << "INVERSE_DIAGNOSTIC initialMaxAbsError=" << std::setprecision(16) << timing.initialInverseAbsError
               << " initialMaxRelError=" << timing.initialInverseRelError
               << " maxAbsError=" << timing.maxInverseAbsError
               << " maxRelError=" << timing.maxInverseRelError
+              << " initialResidualNorm=" << timing.initialResidualNorm
+              << " finalResidualNorm=" << timing.finalResidualNorm
+              << " residualReduction=" << timing.residualReduction
+              << " inverseTolerance=" << timing.inverseTolerance
+              << " inverseConverged=" << timing.inverseConverged
+              << " inverseStoppedReason=" << timing.inverseStoppedReason
+              << " lambdaMinEstimate=" << timing.lambdaMinEstimate
               << " lambdaMaxEstimate=" << timing.lambdaMaxEstimate
+              << " assembledGershgorinLambdaMax=" << timing.assembledGershgorinLambdaMax
+              << " powerRawLambdaMaxEstimate=" << timing.powerRawLambdaMaxEstimate
+              << " tpetraPowerRawLambdaMaxEstimate=" << timing.tpetraPowerRawLambdaMaxEstimate
+              << " tpetraPowerLambdaMaxAbsError=" << timing.tpetraPowerLambdaMaxAbsError
+              << " tpetraPowerLambdaMaxRelError=" << timing.tpetraPowerLambdaMaxRelError
+              << " compareTpetraPowerEstimate=" << timing.compareTpetraPowerEstimate
+              << " lambdaMaxEstimateOverAssembledGershgorin=" << timing.lambdaMaxEstimateOverAssembledGershgorin
+              << " inverseEigenRatio=" << timing.inverseEigenRatio
+              << " spectralEstimateIterations=" << timing.spectralEstimateIterations
+              << " spectralEstimateSeconds=" << timing.spectralEstimateSeconds
+              << " lambdaMaxSafetyFactor=" << timing.lambdaMaxSafetyFactor
+              << " lambdaMinSource=" << timing.lambdaMinSource
+              << " lambdaMaxSource=" << timing.lambdaMaxSource
+              << " maxSymmetryAbsError=" << timing.maxSymmetryAbsError
+              << " minDiagonalEstimate=" << timing.minDiagonalEstimate
+              << " maxDiagonalEstimate=" << timing.maxDiagonalEstimate
               << " iterations=" << timing.inverseIterations
+              << " inverseInitialGuess=" << timing.inverseInitialGuess
               << " inversePath=" << timing.inversePath
               << " spectralEstimatePath=" << timing.spectralEstimatePath << std::endl;
     return timing;
@@ -975,15 +1518,26 @@ int main(int argc, char *argv[])
     int numDiagonal = 10;
     int numSolve = 10;
     int numInverseIterations = 10;
+    int inverseSpectralEstimateIterations = 8;
+    int inverseDiagnosticRequireAssembledReference = 1;
+    int compareTpetraPowerEstimate = 0;
     int worksetSize = 0;
     int checkAssemblyAgreement = 0;
     long long maxAssembledEntries = 200000;
     Scalar massWeight = 1.0;
     Scalar stiffnessWeight = 1.0;
+    Scalar inverseEigenRatio = 30.0;
+    Scalar inverseLambdaMin = -1.0;
+    Scalar inverseLambdaMax = -1.0;
+    Scalar inversePowerSafetyFactor = 1.05;
+    Scalar inverseTolerance = 1e-8;
     std::string polyOrderText = "1:4";
     std::string operatorChoice = "mass-plus-stiffness";
     std::string mode = "apply";
     std::string basisMode = "hgrad";
+    std::string inverseDiagnosticAlgorithm = "richardson";
+    std::string inverseSpectralEstimate = "assembled-gershgorin";
+    std::string inverseInitialGuess = "zero";
 
     Teuchos::CommandLineProcessor cmdp(false,true);
     cmdp.setOption("dim", &dim, "Tensor dimension, 1 through 7.");
@@ -991,11 +1545,22 @@ int main(int argc, char *argv[])
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, or h1-gram.  h1-gram is the weighted mass-plus-stiffness Gram starter case.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses true Intrepid2 HGRAD basis/cubature/affine geometry and currently supports dim<=3.");
-    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, or inverse-diagnostic.");
+    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, or tpetra-operator-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
-    cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local damped Richardson iterations used in inverse-diagnostic mode.");
+    cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local Richardson or Chebyshev iterations used in inverse-diagnostic mode.");
+    cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson or chebyshev local inverse diagnostic recurrence.");
+    cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, power, or user spectral upper-estimate path for inverse diagnostics.");
+    cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free power spectral estimate.");
+    cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power lambdaMax estimates before Chebyshev use.");
+    cmdp.setOption("inverseDiagnosticRequireAssembledReference", &inverseDiagnosticRequireAssembledReference, "Set to 0 to allow power-estimated inverse diagnostics without assembled reference/oracle matrices.");
+    cmdp.setOption("compareTpetraPowerEstimate", &compareTpetraPowerEstimate, "Set to 1 in inverse-diagnostic power mode to compare direct and local-Tpetra-operator power estimates.");
+    cmdp.setOption("inverseEigenRatio", &inverseEigenRatio, "Chebyshev lambdaMax/lambdaMin ratio used when --inverseLambdaMin is not positive.");
+    cmdp.setOption("inverseLambdaMin", &inverseLambdaMin, "Optional positive user override for the Chebyshev/Richardson lower spectral bound.");
+    cmdp.setOption("inverseLambdaMax", &inverseLambdaMax, "Optional positive user override for the Chebyshev/Richardson upper spectral bound.");
+    cmdp.setOption("inverseInitialGuess", &inverseInitialGuess, "zero or diagonal initial guess for inverse diagnostics.");
+    cmdp.setOption("inverseTolerance", &inverseTolerance, "Relative residual-reduction tolerance reported by inverse diagnostics; fixed iteration count is unchanged.");
     cmdp.setOption("massWeight", &massWeight, "Scalar coefficient alpha for mass or h1-gram value-value terms.");
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
@@ -1014,10 +1579,26 @@ int main(int argc, char *argv[])
     if (numSolve < 1) throw std::invalid_argument("--numSolve must be positive");
     if (numInverseIterations < 1) throw std::invalid_argument("--numInverseIterations must be positive");
     if ((checkAssemblyAgreement != 0) && (checkAssemblyAgreement != 1)) throw std::invalid_argument("--checkAssemblyAgreement must be 0 or 1");
-    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic"))
-      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, or inverse-diagnostic");
+    if ((inverseDiagnosticRequireAssembledReference != 0) && (inverseDiagnosticRequireAssembledReference != 1)) throw std::invalid_argument("--inverseDiagnosticRequireAssembledReference must be 0 or 1");
+    if ((compareTpetraPowerEstimate != 0) && (compareTpetraPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraPowerEstimate must be 0 or 1");
+    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic") && (mode != "tpetra-operator-compare"))
+      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, or tpetra-operator-compare");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
+    if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev"))
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson or chebyshev");
+    if ((inverseInitialGuess != "zero") && (inverseInitialGuess != "diagonal"))
+      throw std::invalid_argument("--inverseInitialGuess must be zero or diagonal");
+    if ((inverseSpectralEstimate != "assembled-gershgorin") && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "user"))
+      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, or user");
+    if ((inverseSpectralEstimate == "user") && (inverseLambdaMax <= 0.0))
+      throw std::invalid_argument("--inverseSpectralEstimate=user requires positive --inverseLambdaMax");
+    if (inverseSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
+    if (inversePowerSafetyFactor < 1.0) throw std::invalid_argument("--inversePowerSafetyFactor must be at least 1");
+    if (inverseEigenRatio <= 1.0) throw std::invalid_argument("--inverseEigenRatio must be greater than 1");
+    if ((inverseLambdaMin > 0.0) && (inverseLambdaMax > 0.0) && (inverseLambdaMin >= inverseLambdaMax))
+      throw std::invalid_argument("--inverseLambdaMin must be less than --inverseLambdaMax when both are positive");
+    if (inverseTolerance <= 0.0) throw std::invalid_argument("--inverseTolerance must be positive");
     if ((basisMode == "hgrad") && (dim > 3))
       throw std::invalid_argument("--basisMode=hgrad currently supports --dim=1,2,3");
 
@@ -1045,7 +1626,7 @@ int main(int argc, char *argv[])
     std::vector<double> logDiagonalPValues;
     std::vector<double> logDiagonalTimes;
 
-    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio assemblyAgreementMaxAbsError assemblyAgreementMaxRelError factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds avgInverseApplySeconds inverseIterations initialInverseAbsError initialInverseRelError maxInverseAbsError maxInverseRelError lambdaMaxEstimate estimatedApplyFlopsPerCell achievedGFlops mode operator basisMode diagonalPath assemble2Path inversePath spectralEstimatePath" << std::endl;
+    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio assemblyAgreementMaxAbsError assemblyAgreementMaxRelError tpetraOperatorMaxAbsError tpetraOperatorMaxRelError tpetraInverseDiagonalMaxAbsError tpetraInverseDiagonalMin tpetraInverseDiagonalMax tpetraOperatorFirstApplySeconds tpetraOperatorAvgApplySeconds tpetraOperatorNumVectors tpetraOperatorLocalLength tpetraDomainRangeMapSame tpetraAdapterPath tpetraGlobalDofSemantics tpetraIfpack2RowMatrix factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds avgInverseApplySeconds inverseIterations initialInverseAbsError initialInverseRelError maxInverseAbsError maxInverseRelError initialResidualNorm finalResidualNorm residualReduction inverseTolerance inverseConverged inverseStoppedReason lambdaMinEstimate lambdaMaxEstimate assembledGershgorinLambdaMax powerRawLambdaMaxEstimate tpetraPowerRawLambdaMaxEstimate tpetraPowerLambdaMaxAbsError tpetraPowerLambdaMaxRelError compareTpetraPowerEstimate lambdaMaxEstimateOverAssembledGershgorin inverseEigenRatio spectralEstimateIterations spectralEstimateSeconds lambdaMaxSafetyFactor maxSymmetryAbsError minDiagonalEstimate maxDiagonalEstimate estimatedApplyFlopsPerCell lambdaMinSource lambdaMaxSource inverseInitialGuess achievedGFlops mode operator basisMode diagonalPath assemble2Path inversePath spectralEstimatePath" << std::endl;
     for (int p=pRange.first; p<=pRange.last; p++)
     {
       Kokkos::Timer setupTimer;
@@ -1103,7 +1684,14 @@ int main(int argc, char *argv[])
       InverseDiagnosticTiming inverseDiagnosticTiming;
       if (mode == "inverse-diagnostic")
       {
-        inverseDiagnosticTiming = inverseDiagnosticTerms(terms, workspaces, worksetSize, maxAssembledEntries, numInverseIterations);
+        inverseDiagnosticTiming = inverseDiagnosticTerms(terms, workspaces, worksetSize, cells, localDofs,
+                                                        maxAssembledEntries, inverseDiagnosticRequireAssembledReference, numInverseIterations,
+                                                        inverseDiagnosticAlgorithm, inverseEigenRatio, inverseLambdaMin, inverseLambdaMax,
+                                                        inverseSpectralEstimate, inverseSpectralEstimateIterations, inversePowerSafetyFactor,
+                                                        compareTpetraPowerEstimate, inverseInitialGuess, inverseTolerance);
+        if ((compareTpetraPowerEstimate != 0) &&
+            (inverseDiagnosticTiming.tpetraPowerLambdaMaxAbsError > 1e-10) &&
+            (inverseDiagnosticTiming.tpetraPowerLambdaMaxRelError > 1e-10)) returnCode = 2;
       }
 
       const long long flopsPerCell = estimatedApplyFlopsPerCellPerTerm(dim, p) * static_cast<long long>(terms.size());
@@ -1116,6 +1704,14 @@ int main(int argc, char *argv[])
       {
         assemblyComparison = compareAssemble2AgainstAssemble(terms, maxAssembledEntries);
         if ((assemblyComparison.maxAbsError > 1e-10) && (assemblyComparison.maxRelError > 1e-10)) returnCode = 2;
+      }
+      TpetraOperatorComparison tpetraOperatorComparison;
+      if (mode == "tpetra-operator-compare")
+      {
+        tpetraOperatorComparison = compareTpetraOperatorAgainstDirect(terms, workspaces, input, cells, localDofs, worksetSize, numApply);
+        if ((tpetraOperatorComparison.maxAbsError > 1e-10) && (tpetraOperatorComparison.maxRelError > 1e-10)) returnCode = 2;
+        if (tpetraOperatorComparison.inverseDiagonalMaxAbsError > 1e-12) returnCode = 2;
+        if (tpetraOperatorComparison.domainRangeMapSame != 1) returnCode = 2;
       }
 
       std::cout << "TENSOR_POISSON_PAMATRIX_RESULT"
@@ -1138,6 +1734,19 @@ int main(int argc, char *argv[])
                 << " assemble2OverAssembleRatio=" << assemble2OverAssembleRatio
                 << " assemblyAgreementMaxAbsError=" << assemblyComparison.maxAbsError
                 << " assemblyAgreementMaxRelError=" << assemblyComparison.maxRelError
+                << " tpetraOperatorMaxAbsError=" << tpetraOperatorComparison.maxAbsError
+                << " tpetraOperatorMaxRelError=" << tpetraOperatorComparison.maxRelError
+                << " tpetraInverseDiagonalMaxAbsError=" << tpetraOperatorComparison.inverseDiagonalMaxAbsError
+                << " tpetraInverseDiagonalMin=" << tpetraOperatorComparison.inverseDiagonalMin
+                << " tpetraInverseDiagonalMax=" << tpetraOperatorComparison.inverseDiagonalMax
+                << " tpetraOperatorFirstApplySeconds=" << tpetraOperatorComparison.firstApplySeconds
+                << " tpetraOperatorAvgApplySeconds=" << tpetraOperatorComparison.avgApplySeconds
+                << " tpetraOperatorNumVectors=" << tpetraOperatorComparison.numVectors
+                << " tpetraOperatorLocalLength=" << tpetraOperatorComparison.localLength
+                << " tpetraDomainRangeMapSame=" << tpetraOperatorComparison.domainRangeMapSame
+                << " tpetraAdapterPath=" << tpetraOperatorComparison.adapterPath
+                << " tpetraGlobalDofSemantics=" << tpetraOperatorComparison.globalDofSemantics
+                << " tpetraIfpack2RowMatrix=" << tpetraOperatorComparison.ifpack2RowMatrix
                 << " factorSeconds=" << factorTiming.factorSeconds
                 << " avgSolveSeconds=" << factorTiming.solveSeconds
                 << " maxSolveResidual=" << factorTiming.maxSolveResidual
@@ -1150,8 +1759,32 @@ int main(int argc, char *argv[])
                 << " initialInverseRelError=" << inverseDiagnosticTiming.initialInverseRelError
                 << " maxInverseAbsError=" << inverseDiagnosticTiming.maxInverseAbsError
                 << " maxInverseRelError=" << inverseDiagnosticTiming.maxInverseRelError
+                << " initialResidualNorm=" << inverseDiagnosticTiming.initialResidualNorm
+                << " finalResidualNorm=" << inverseDiagnosticTiming.finalResidualNorm
+                << " residualReduction=" << inverseDiagnosticTiming.residualReduction
+                << " inverseTolerance=" << inverseDiagnosticTiming.inverseTolerance
+                << " inverseConverged=" << inverseDiagnosticTiming.inverseConverged
+                << " inverseStoppedReason=" << inverseDiagnosticTiming.inverseStoppedReason
+                << " lambdaMinEstimate=" << inverseDiagnosticTiming.lambdaMinEstimate
                 << " lambdaMaxEstimate=" << inverseDiagnosticTiming.lambdaMaxEstimate
+                << " assembledGershgorinLambdaMax=" << inverseDiagnosticTiming.assembledGershgorinLambdaMax
+                << " powerRawLambdaMaxEstimate=" << inverseDiagnosticTiming.powerRawLambdaMaxEstimate
+                << " tpetraPowerRawLambdaMaxEstimate=" << inverseDiagnosticTiming.tpetraPowerRawLambdaMaxEstimate
+                << " tpetraPowerLambdaMaxAbsError=" << inverseDiagnosticTiming.tpetraPowerLambdaMaxAbsError
+                << " tpetraPowerLambdaMaxRelError=" << inverseDiagnosticTiming.tpetraPowerLambdaMaxRelError
+                << " compareTpetraPowerEstimate=" << inverseDiagnosticTiming.compareTpetraPowerEstimate
+                << " lambdaMaxEstimateOverAssembledGershgorin=" << inverseDiagnosticTiming.lambdaMaxEstimateOverAssembledGershgorin
+                << " inverseEigenRatio=" << inverseDiagnosticTiming.inverseEigenRatio
+                << " spectralEstimateIterations=" << inverseDiagnosticTiming.spectralEstimateIterations
+                << " spectralEstimateSeconds=" << inverseDiagnosticTiming.spectralEstimateSeconds
+                << " lambdaMaxSafetyFactor=" << inverseDiagnosticTiming.lambdaMaxSafetyFactor
+                << " maxSymmetryAbsError=" << inverseDiagnosticTiming.maxSymmetryAbsError
+                << " minDiagonalEstimate=" << inverseDiagnosticTiming.minDiagonalEstimate
+                << " maxDiagonalEstimate=" << inverseDiagnosticTiming.maxDiagonalEstimate
                 << " estimatedApplyFlopsPerCell=" << flopsPerCell
+                << " lambdaMinSource=" << inverseDiagnosticTiming.lambdaMinSource
+                << " lambdaMaxSource=" << inverseDiagnosticTiming.lambdaMaxSource
+                << " inverseInitialGuess=" << inverseDiagnosticTiming.inverseInitialGuess
                 << " achievedGFlops=" << achievedGFlops
                 << " mode=" << mode
                 << " operator=" << operatorChoice
