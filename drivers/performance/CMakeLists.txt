@@ -151,6 +151,19 @@ add_test(NAME TensorH1GramPAMatrixTpetraRowMatrixSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorH1GramPAMatrixTpetraRowMatrixGuardSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=tpetra-rowmatrix-compare
+    --numApply=3
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
 add_test(NAME TensorH1GramPAMatrixIfpack2ChebyshevSmoke
   COMMAND TensorPoissonPAMatrixDriver
     --dim=2
@@ -164,6 +177,45 @@ add_test(NAME TensorH1GramPAMatrixIfpack2ChebyshevSmoke
     --inverseInitialGuess=zero
     --numInverseIterations=5
     --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
+add_test(NAME TensorH1GramPAMatrixIfpack2PowerNoReferenceSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=6
+    --inverseDiagnosticRequireAssembledReference=0
+    --compareTpetraPowerEstimate=1
+    --compareTpetraRowMatrixPowerEstimate=1
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
+add_test(NAME TensorH1GramPAMatrixLowerSpectralDiagnosticSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseLowerSpectralEstimate=assembled-inverse-iteration
+    --inverseLowerSpectralEstimateIterations=4
+    --inverseLowerPowerSafetyFactor=0.95
+    --numInverseIterations=5
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
@@ -280,9 +332,35 @@ add_custom_target(runTensorH1GramPAMatrixIfpack2ChebyshevSmoke
   COMMENT "Running opt-in Ifpack2 Chebyshev smoke on the local-flat PAMatrix RowMatrix adapter"
   VERBATIM)
 
+add_custom_target(runTensorH1GramPAMatrixIfpack2PowerNoReferenceSmoke
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=1:3
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=8
+    --inverseDiagnosticRequireAssembledReference=0
+    --compareTpetraPowerEstimate=1
+    --compareTpetraRowMatrixPowerEstimate=1
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=1
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in local-flat Ifpack2 Chebyshev smoke with matrix-free power bounds and no assembled reference"
+  VERBATIM)
+
 add_dependencies(runTensorH1GramPAMatrixInverseDiagnosticSweep
   runTensorH1GramPAMatrixTpetraRowMatrixSmoke
-  runTensorH1GramPAMatrixIfpack2ChebyshevSmoke)
+  runTensorH1GramPAMatrixIfpack2ChebyshevSmoke
+  runTensorH1GramPAMatrixIfpack2PowerNoReferenceSmoke)
 
 add_custom_target(runTensorH1GramPAMatrixPowerSpectralChebyshevSweep
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
@@ -324,6 +402,26 @@ add_custom_target(runTensorH1GramPAMatrixNoReferenceChebyshevSweep
     --maxAssembledEntries=1
   DEPENDS TensorPoissonPAMatrixDriver
   COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic without assembled reference/oracle blocks"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixLowerSpectralChebyshevSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=2:5
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseLowerSpectralEstimate=assembled-inverse-iteration
+    --inverseLowerSpectralEstimateIterations=8
+    --inverseLowerPowerSafetyFactor=0.95
+    --numInverseIterations=20
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=20000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic with assembled inverse-iteration lower spectral estimate"
   VERBATIM)
 
 add_custom_target(runTensorH1GramPAMatrixUserSpectralNoReferenceSweep
