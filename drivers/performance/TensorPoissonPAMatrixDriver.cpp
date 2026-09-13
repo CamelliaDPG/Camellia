@@ -9,7 +9,7 @@
 #include <Intrepid2_CellTools.hpp>
 #include <Intrepid2_DefaultCubatureFactory.hpp>
 #include <Intrepid2_FunctionSpaceTools.hpp>
-#include <Intrepid2_NodalBasisFamily.hpp>
+#include <Intrepid2_HierarchicalBasisFamily.hpp>
 
 #include "PAMatrixAssembly.hpp"
 
@@ -212,10 +212,121 @@ namespace
   }
 
   template<int spaceDim>
+  Intrepid2::TensorPoints<Scalar,DeviceType> makeHypercubeCubaturePoints(const int degree,
+                                                                          Intrepid2::TensorData<Scalar,DeviceType> &tensorCubatureWeights)
+  {
+    const auto lineTopo = shards::CellTopology(shards::getCellTopologyData<shards::Line<> >());
+    auto lineCubature = Intrepid2::DefaultCubatureFactory::create<DeviceType,Scalar,Scalar>(lineTopo, degree);
+    auto linePoints = lineCubature->allocateCubaturePoints();
+    auto lineWeights = lineCubature->allocateCubatureWeights();
+    lineCubature->getCubature(linePoints, lineWeights);
+
+    std::vector<Intrepid2::ScalarView<Scalar,DeviceType>> pointComponents(spaceDim);
+    std::vector<Intrepid2::Data<Scalar,DeviceType>> weightComponents(spaceDim);
+    for (int d=0; d<spaceDim; d++)
+    {
+      pointComponents[d] = linePoints.getTensorComponent(0);
+      weightComponents[d] = lineWeights.getTensorComponent(0);
+    }
+    tensorCubatureWeights = Intrepid2::TensorData<Scalar,DeviceType>(weightComponents);
+    return Intrepid2::TensorPoints<Scalar,DeviceType>(pointComponents);
+  }
+
+  template<int spaceDim, unsigned long spaceDim2>
+  PAMatrix constructHypercubeHGRADPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+                                           const int p,
+                                           const Intrepid2::EOperator op1,
+                                           Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
+                                           const Intrepid2::EOperator op2,
+                                           Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2)
+  {
+    using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
+    using ExecutionSpace = typename DeviceType::execution_space;
+
+    auto basis1 = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(p, spaceDim);
+    auto basis2 = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(p, spaceDim);
+
+    Intrepid2::TensorData<Scalar,DeviceType> tensorCubatureWeights;
+    auto tensorCubaturePoints = makeHypercubeCubaturePoints<spaceDim>(2 * p, tensorCubatureWeights);
+
+    auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
+    basis1->getValues(basis1Values, tensorCubaturePoints, op1);
+    basis1Values.setBasis(basis1);
+
+    auto basis2Values = basis2->allocateBasisValues(tensorCubaturePoints, op2);
+    basis2->getValues(basis2Values, tensorCubaturePoints, op2);
+    basis2Values.setBasis(basis2);
+
+    const int numCells = geometry.numCells();
+    auto jacobian       = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
+    auto jacobianDividedByJacobianDet = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
+    auto jacobianDet    = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
+    auto jacobianDetInv = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
+    auto jacobianInv    = Intrepid2::CellTools<DeviceType>::allocateJacobianInv(jacobian);
+    auto cellMeasures   = geometry.allocateCellMeasure(jacobianDet, tensorCubatureWeights);
+
+    auto refData = geometry.getJacobianRefData(tensorCubaturePoints);
+    geometry.setJacobian(jacobian, tensorCubaturePoints, refData);
+    Intrepid2::CellTools<DeviceType>::setJacobianDet         (jacobianDet,    jacobian);
+    Intrepid2::CellTools<DeviceType>::setJacobianDetInv      (jacobianDetInv, jacobian);
+    Intrepid2::CellTools<DeviceType>::setJacobianInv         (jacobianInv,    jacobian);
+    Intrepid2::CellTools<DeviceType>::setJacobianDividedByDet(jacobianDividedByJacobianDet, jacobian, jacobianDetInv);
+
+    auto transformedBasis1Values = transform(basis1Values, Intrepid2::FUNCTION_SPACE_HGRAD, op1,
+                                             jacobian, jacobianDet, jacobianInv, jacobianDetInv, jacobianDividedByJacobianDet);
+    auto transformedBasis2Values = transform(basis2Values, Intrepid2::FUNCTION_SPACE_HGRAD, op2,
+                                             jacobian, jacobianDet, jacobianInv, jacobianDetInv, jacobianDividedByJacobianDet);
+
+    if (vectorWeight1 != Teuchos::null)
+    {
+      Intrepid2::ScalarView<Scalar,DeviceType> auView("a_u", spaceDim);
+      auto auViewHost = Kokkos::create_mirror(auView);
+      for (int d=0; d<spaceDim; d++) auViewHost(d) = (*vectorWeight1)[d];
+      Kokkos::deep_copy(auView, auViewHost);
+
+      Kokkos::Array<int,3> extents {numCells, tensorCubaturePoints.extent_int(0), spaceDim};
+      Kokkos::Array<Intrepid2::DataVariationType,3> variationTypes {Intrepid2::CONSTANT, Intrepid2::CONSTANT, Intrepid2::GENERAL};
+      Intrepid2::Data<Scalar,DeviceType> auData(auView, extents, variationTypes);
+      auto uTransform = Intrepid2::Data<Scalar,DeviceType>::allocateMatVecResult(transformedBasis1Values.transform(), auData, true);
+      uTransform.storeMatVec(transformedBasis1Values.transform(), auData, true);
+      transformedBasis1Values = Intrepid2::TransformedBasisValues<Scalar,DeviceType>(uTransform, basis1Values);
+    }
+
+    if (vectorWeight2 != Teuchos::null)
+    {
+      Intrepid2::ScalarView<Scalar,DeviceType> avView("a_v", spaceDim);
+      auto avViewHost = Kokkos::create_mirror(avView);
+      for (int d=0; d<spaceDim; d++) avViewHost(d) = (*vectorWeight2)[d];
+      Kokkos::deep_copy(avView, avViewHost);
+
+      Kokkos::Array<int,3> extents {numCells, tensorCubaturePoints.extent_int(0), spaceDim};
+      Kokkos::Array<Intrepid2::DataVariationType,3> variationTypes {Intrepid2::CONSTANT, Intrepid2::CONSTANT, Intrepid2::GENERAL};
+      Intrepid2::Data<Scalar,DeviceType> avData(avView, extents, variationTypes);
+      auto vTransform = Intrepid2::Data<Scalar,DeviceType>::allocateMatVecResult(transformedBasis2Values.transform(), avData, true);
+      vTransform.storeMatVec(transformedBasis2Values.transform(), avData, true);
+      transformedBasis2Values = Intrepid2::TransformedBasisValues<Scalar,DeviceType>(vTransform, basis2Values);
+    }
+
+    geometry.computeCellMeasure(cellMeasures, jacobianDet, tensorCubatureWeights);
+    ExecutionSpace().fence();
+
+    return PAMatrix(transformedBasis1Values, cellMeasures, transformedBasis2Values);
+  }
+
+  template<int spaceDim>
+  PAMatrix constructHypercubeHGRADPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+                                           const int p,
+                                           const Intrepid2::EOperator op1,
+                                           const Intrepid2::EOperator op2)
+  {
+    Teuchos::RCP<Kokkos::Array<Scalar,spaceDim>> nullVectorWeight = Teuchos::null;
+    return constructHypercubeHGRADPAMatrix<spaceDim>(geometry, p, op1, nullVectorWeight, op2, nullVectorWeight);
+  }
+
+  template<int spaceDim>
   std::vector<OperatorTerm> makeHGRADOperatorTermsForDim(const int p, const int cellsPerDim, const std::string &operatorChoice,
                                                          const Scalar massWeight, const Scalar stiffnessWeight)
   {
-    using BasisFamily = Intrepid2::DerivedNodalBasisFamily<DeviceType,Scalar,Scalar>;
     Kokkos::Array<Scalar,spaceDim> domainExtents;
     Kokkos::Array<int,spaceDim> gridCellCounts;
     for (int d=0; d<spaceDim; d++)
@@ -228,10 +339,8 @@ namespace
     std::vector<OperatorTerm> terms;
     if (operatorIncludesMass(operatorChoice))
     {
-      terms.push_back({constructPAMatrix<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
-          geometry,
-          p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE,
-          p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_VALUE), massWeight, "mass"});
+      terms.push_back({constructHypercubeHGRADPAMatrix<spaceDim>(
+          geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE), massWeight, "mass"});
     }
     if (operatorIncludesStiffness(operatorChoice))
     {
@@ -241,18 +350,15 @@ namespace
         {
           auto vectorWeight = Teuchos::rcp(new Kokkos::Array<Scalar,spaceDim>());
           for (int e=0; e<spaceDim; e++) (*vectorWeight)[e] = (e == d) ? Scalar(1.0) : Scalar(0.0);
-          terms.push_back({constructPAMatrix<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
-              geometry,
-              p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight,
-              p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD, vectorWeight), stiffnessWeight, "stiffness" + std::to_string(d)});
+          terms.push_back({constructHypercubeHGRADPAMatrix<spaceDim>(
+              geometry, p, Intrepid2::OPERATOR_GRAD, vectorWeight,
+              Intrepid2::OPERATOR_GRAD, vectorWeight), stiffnessWeight, "stiffness" + std::to_string(d)});
         }
       }
       else
       {
-        terms.push_back({constructPAMatrix<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
-            geometry,
-            p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD,
-            p, Intrepid2::FUNCTION_SPACE_HGRAD, Intrepid2::OPERATOR_GRAD), stiffnessWeight, "stiffness"});
+        terms.push_back({constructHypercubeHGRADPAMatrix<spaceDim>(
+            geometry, p, Intrepid2::OPERATOR_GRAD, Intrepid2::OPERATOR_GRAD), stiffnessWeight, "stiffness"});
       }
     }
     if (terms.empty())
@@ -270,8 +376,12 @@ namespace
       case 1: return makeHGRADOperatorTermsForDim<1>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
       case 2: return makeHGRADOperatorTermsForDim<2>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
       case 3: return makeHGRADOperatorTermsForDim<3>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
+      case 4: return makeHGRADOperatorTermsForDim<4>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
+      case 5: return makeHGRADOperatorTermsForDim<5>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
+      case 6: return makeHGRADOperatorTermsForDim<6>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
+      case 7: return makeHGRADOperatorTermsForDim<7>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
       default:
-        throw std::invalid_argument("--basisMode=hgrad currently supports --dim=1,2,3; use --basisMode=synthetic for higher-dimensional contraction stress tests");
+        throw std::invalid_argument("--basisMode=hgrad supports --dim=1 through 7");
     }
   }
 
@@ -2302,7 +2412,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("polyOrder", &polyOrderText, "Polynomial order p or inclusive range pMin:pMax.");
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, or h1-gram.  h1-gram is the weighted mass-plus-stiffness Gram starter case.");
-    cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses true Intrepid2 HGRAD basis/cubature/affine geometry and currently supports dim<=3.");
+    cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses Intrepid2 hypercube HGRAD hierarchical bases, tensor-product cubature, and affine geometry for dim=1..7; synthetic remains available for high-dimensional contraction stress tests.");
     cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
@@ -2377,8 +2487,7 @@ int main(int argc, char *argv[])
     if ((inverseLambdaMin > 0.0) && (inverseLambdaMax > 0.0) && (inverseLambdaMin >= inverseLambdaMax))
       throw std::invalid_argument("--inverseLambdaMin must be less than --inverseLambdaMax when both are positive");
     if (inverseTolerance <= 0.0) throw std::invalid_argument("--inverseTolerance must be positive");
-    if ((basisMode == "hgrad") && (dim > 3))
-      throw std::invalid_argument("--basisMode=hgrad currently supports --dim=1,2,3");
+    // --basisMode=hgrad is supported for --dim=1..7; unsupported dimensions are rejected above and in makeHGRADOperatorTerms().
 
     const PolyOrderRange pRange = parsePolyOrderRange(polyOrderText);
     if ((pRange.first < 1) || (pRange.last < pRange.first)) throw std::invalid_argument("invalid --polyOrder range");

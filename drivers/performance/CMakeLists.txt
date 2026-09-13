@@ -56,6 +56,19 @@ add_test(NAME TensorH1GramPAMatrixAssemblyCompareSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorH1GramPAMatrixSynthetic4DSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=4
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=synthetic
+    --mode=apply
+    --numApply=1
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
 add_test(NAME TensorH1GramPAMatrixInverseDiagnosticSmoke
   COMMAND TensorPoissonPAMatrixDriver
     --dim=2
