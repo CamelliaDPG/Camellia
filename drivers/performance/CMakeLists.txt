@@ -43,6 +43,32 @@ add_test(NAME TensorH1GramPAMatrixDriverSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorH1GramPAMatrixAssemblyCompareSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=3
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=assembly-compare
+    --checkAssemblyAgreement=1
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
+add_test(NAME TensorH1GramPAMatrixInverseDiagnosticSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --numInverseIterations=5
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=10000)
+
 add_custom_target(runTensorPoissonPAMatrixSmoke
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=2
@@ -69,6 +95,22 @@ add_custom_target(runTensorH1GramPAMatrixSmoke
     --maxAssembledEntries=10000
   DEPENDS TensorPoissonPAMatrixDriver
   COMMENT "Running small direct-PAMatrix H1 Gram assembly/apply smoke test"
+  VERBATIM)
+
+add_custom_target(runTensorH1GramPAMatrixInverseDiagnosticSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=2:5
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --numInverseIterations=20
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=20000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram local matrix-free inverse diagnostic p-sweep"
   VERBATIM)
 
 add_custom_target(runTensorH1GramPAMatrixFactorSmoke
@@ -133,6 +175,22 @@ add_custom_target(runTensorH1GramPAMatrixFactorSweep
   COMMENT "Running opt-in direct-PAMatrix H1 Gram local assembly/factor/solve p-sweep"
   VERBATIM)
 
+add_custom_target(runTensorH1GramPAMatrixAssemblyCompareSweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=3
+    --polyOrder=8:12
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=assembly-compare
+    --checkAssemblyAgreement=1
+    --massWeight=1.0
+    --stiffnessWeight=1.0
+    --maxAssembledEntries=200000000
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in direct-PAMatrix H1 Gram standard-vs-column-apply assembly p-sweep with agreement check"
+  VERBATIM)
+
 add_custom_target(runTensorH1GramPAMatrixSynthetic4DAssemble2Sweep
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=4
@@ -171,11 +229,12 @@ add_custom_target(runTensorH1GramPAMatrixSynthetic4DAssemblyCompareSweep
     --operator=h1-gram
     --basisMode=synthetic
     --mode=assembly-compare
+    --checkAssemblyAgreement=1
     --massWeight=1.0
     --stiffnessWeight=1.0
     --maxAssembledEntries=200000000
   DEPENDS TensorPoissonPAMatrixDriver
-  COMMENT "Running opt-in synthetic 4D H1 Gram standard-vs-column-apply assembly p-sweep"
+  COMMENT "Running opt-in synthetic 4D H1 Gram standard-vs-column-apply assembly p-sweep with agreement check"
   VERBATIM)
 
 if (TARGET PlanarMITLRelativisticSpaceTime)

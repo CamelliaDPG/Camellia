@@ -67,28 +67,13 @@ Data<Scalar,DeviceType> PAMatrix<DeviceType,Scalar>::allocateDiagonalStorage() c
 }
 
 template<typename DeviceType,class Scalar>
-void PAMatrix<DeviceType,Scalar>::assemble2(Data<Scalar,DeviceType> &integrals) const
+bool pamatrixAssemble2UsesUnitColumnPath(const PAMatrix<DeviceType,Scalar> &matrix)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MultiVector = ScalarView<Scalar,DeviceType>;
-  using ScratchView = Kokkos::View<Scalar*,DeviceType,Kokkos::MemoryUnmanaged>;
-
-  const ordinal_type numCells       = _basisValuesLeft.numCells();
-  const ordinal_type numFieldsLeft  = _basisValuesLeft.numFields();
-  const ordinal_type numFieldsRight = _basisValuesRight.numFields();
-
-  INTREPID2_TEST_FOR_EXCEPTION(integrals.rank() != 3, std::invalid_argument,
-      "PAMatrix::assemble2() requires a rank-3 logical output container");
-  INTREPID2_TEST_FOR_EXCEPTION(integrals.extent_int(0) != numCells ||
-                               integrals.extent_int(1) != numFieldsLeft ||
-                               integrals.extent_int(2) != numFieldsRight, std::invalid_argument,
-      "PAMatrix::assemble2() output container has incompatible extents");
-
-  bool useUnitColumnPath = (_orientations.size() == 0);
-  for (const auto &integralTuple : componentIntegralsToSum_)
+  bool useUnitColumnPath = (matrix._orientations.size() == 0);
+  for (const auto &integralTuple : matrix.componentIntegralsToSum_)
   {
     const auto &leftOps       = std::get<0>(integralTuple);
-    const PointDataSpec &pointDataSpec = std::get<1>(integralTuple);
+    const typename PAMatrix<DeviceType,Scalar>::PointDataSpec &pointDataSpec = std::get<1>(integralTuple);
     const auto &rightOps      = std::get<2>(integralTuple);
     const int leftSpan        = std::get<4>(integralTuple);
     const int rightSpan       = std::get<6>(integralTuple);
@@ -121,6 +106,28 @@ void PAMatrix<DeviceType,Scalar>::assemble2(Data<Scalar,DeviceType> &integrals) 
       break;
     }
   }
+  return useUnitColumnPath;
+}
+
+template<typename DeviceType,class Scalar>
+void PAMatrix<DeviceType,Scalar>::assemble2(Data<Scalar,DeviceType> &integrals) const
+{
+  using ExecutionSpace = typename DeviceType::execution_space;
+  using MultiVector = ScalarView<Scalar,DeviceType>;
+  using ScratchView = Kokkos::View<Scalar*,DeviceType,Kokkos::MemoryUnmanaged>;
+
+  const ordinal_type numCells       = _basisValuesLeft.numCells();
+  const ordinal_type numFieldsLeft  = _basisValuesLeft.numFields();
+  const ordinal_type numFieldsRight = _basisValuesRight.numFields();
+
+  INTREPID2_TEST_FOR_EXCEPTION(integrals.rank() != 3, std::invalid_argument,
+      "PAMatrix::assemble2() requires a rank-3 logical output container");
+  INTREPID2_TEST_FOR_EXCEPTION(integrals.extent_int(0) != numCells ||
+                               integrals.extent_int(1) != numFieldsLeft ||
+                               integrals.extent_int(2) != numFieldsRight, std::invalid_argument,
+      "PAMatrix::assemble2() output container has incompatible extents");
+
+  const bool useUnitColumnPath = pamatrixAssemble2UsesUnitColumnPath(*this);
 
   const ordinal_type maxColumnBlockSize = 64;
   const ordinal_type columnBlockSize = std::min(numFieldsRight, maxColumnBlockSize);

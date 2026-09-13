@@ -356,6 +356,25 @@ namespace
     double maxSolveRelativeResidual = -1.0;
   };
 
+  struct AssemblyComparison
+  {
+    double maxAbsError = -1.0;
+    double maxRelError = -1.0;
+  };
+
+  struct InverseDiagnosticTiming
+  {
+    double avgInverseApplySeconds = -1.0;
+    int inverseIterations = 0;
+    double initialInverseAbsError = -1.0;
+    double initialInverseRelError = -1.0;
+    double maxInverseAbsError = -1.0;
+    double maxInverseRelError = -1.0;
+    double lambdaMaxEstimate = -1.0;
+    std::string inversePath = "not_requested";
+    std::string spectralEstimatePath = "not_requested";
+  };
+
   void addTermSeconds(AssemblyTiming &timing, const std::string &label, const double seconds)
   {
     if (timing.totalSeconds < 0.0) timing.totalSeconds = 0.0;
@@ -370,6 +389,21 @@ namespace
       if (timing.stiffnessSeconds < 0.0) timing.stiffnessSeconds = 0.0;
       timing.stiffnessSeconds += seconds;
     }
+  }
+
+  std::string assemble2PathSummary(const std::vector<OperatorTerm> &terms)
+  {
+    bool sawUnitColumn = false;
+    bool sawApplyFallback = false;
+    for (const auto &term : terms)
+    {
+      if (Intrepid2::pamatrixAssemble2UsesUnitColumnPath(term.matrix)) sawUnitColumn = true;
+      else sawApplyFallback = true;
+    }
+
+    if (sawUnitColumn && sawApplyFallback) return "mixed_unit_column_and_blocked_apply_fallback";
+    if (sawUnitColumn) return "unit_column_fast_path";
+    return "blocked_apply_fallback";
   }
 
   bool compareApplyAgainstAssembled(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
@@ -472,6 +506,72 @@ namespace
     return timing;
   }
 
+  AssemblyComparison compareAssemble2AgainstAssemble(std::vector<OperatorTerm> &terms, const long long maxAssembledEntries)
+  {
+    AssemblyComparison comparison;
+    double maxExpected = 0.0;
+    comparison.maxAbsError = 0.0;
+
+    for (auto &term : terms)
+    {
+      auto expectedData = term.matrix.allocateMatrixStorage();
+      auto actualData   = term.matrix.allocateMatrixStorage();
+      const long long entries = static_cast<long long>(expectedData.extent_int(0))
+                              * static_cast<long long>(expectedData.extent_int(1))
+                              * static_cast<long long>(expectedData.extent_int(2));
+      if (entries > maxAssembledEntries)
+      {
+        std::cout << "ASSEMBLY_AGREEMENT_SKIPPED term=" << term.label
+                  << " entries=" << entries
+                  << " maxAssembledEntries=" << maxAssembledEntries << std::endl;
+        comparison.maxAbsError = -1.0;
+        comparison.maxRelError = -1.0;
+        return comparison;
+      }
+
+      term.matrix.assemble(expectedData);
+      term.matrix.assemble2(actualData);
+      Kokkos::fence();
+
+      if (expectedData.getUnderlyingViewRank() == 3)
+      {
+        auto expected = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), expectedData.template getUnderlyingView<3>());
+        auto actual   = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), actualData.template getUnderlyingView<3>());
+        for (int c=0; c<expectedData.extent_int(0); c++)
+          for (int i=0; i<expectedData.extent_int(1); i++)
+            for (int j=0; j<expectedData.extent_int(2); j++)
+            {
+              const double expectedValue = term.weight * expected(c,i,j);
+              const double actualValue   = term.weight * actual(c,i,j);
+              comparison.maxAbsError = std::max(comparison.maxAbsError, std::abs(actualValue - expectedValue));
+              maxExpected = std::max(maxExpected, std::abs(expectedValue));
+            }
+      }
+      else if (expectedData.getUnderlyingViewRank() == 2)
+      {
+        auto expected = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), expectedData.template getUnderlyingView<2>());
+        auto actual   = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), actualData.template getUnderlyingView<2>());
+        for (int i=0; i<expectedData.extent_int(1); i++)
+          for (int j=0; j<expectedData.extent_int(2); j++)
+          {
+            const double expectedValue = term.weight * expected(i,j);
+            const double actualValue   = term.weight * actual(i,j);
+            comparison.maxAbsError = std::max(comparison.maxAbsError, std::abs(actualValue - expectedValue));
+            maxExpected = std::max(maxExpected, std::abs(expectedValue));
+          }
+      }
+      else
+      {
+        throw std::invalid_argument("Unexpected PAMatrix storage rank in assembly agreement check");
+      }
+    }
+
+    comparison.maxRelError = comparison.maxAbsError / std::max(1.0, maxExpected);
+    std::cout << "ASSEMBLY_AGREEMENT maxAbsError=" << std::setprecision(16) << comparison.maxAbsError
+              << " maxRelError=" << comparison.maxRelError << std::endl;
+    return comparison;
+  }
+
   struct RepeatedTiming
   {
     double firstSeconds = -1.0;
@@ -500,6 +600,166 @@ namespace
     int info = 0;
     lapack.POTRS(uplo, size, numRhs, matrix.data() + offset, size, rhs.data(), size, &info);
     return info;
+  }
+
+  InverseDiagnosticTiming inverseDiagnosticTerms(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
+                                                 const int worksetSize, const long long maxAssembledEntries,
+                                                 const int numInverseIterations)
+  {
+    InverseDiagnosticTiming timing;
+    timing.inverseIterations = numInverseIterations;
+    timing.inversePath = "local_damped_jacobi_richardson_pamatrix_apply";
+    timing.spectralEstimatePath = "assembled_reference_gershgorin_preconditioned_upper_bound_with_extracted_diagonal";
+    if (terms.empty()) return timing;
+
+    auto firstMatrixData = terms.front().matrix.allocateMatrixStorage();
+    const int cells = firstMatrixData.extent_int(0);
+    const int rows  = firstMatrixData.extent_int(1);
+    const int cols  = firstMatrixData.extent_int(2);
+    if (rows != cols) throw std::invalid_argument("inverse diagnostic requires square Gram blocks");
+    const long long entries = static_cast<long long>(cells) * rows * cols;
+    if (entries > maxAssembledEntries)
+    {
+      std::cout << "INVERSE_DIAGNOSTIC_SKIPPED entries=" << entries
+                << " maxAssembledEntries=" << maxAssembledEntries << std::endl;
+      timing.inversePath = "skipped_assembled_reference_guard";
+      timing.spectralEstimatePath = "not_computed";
+      return timing;
+    }
+
+    std::vector<Scalar> localMatrices(static_cast<size_t>(entries), 0.0);
+    for (auto &term : terms)
+    {
+      auto matrixData = term.matrix.allocateMatrixStorage();
+      term.matrix.assemble(matrixData);
+      Kokkos::fence();
+
+      if (matrixData.getUnderlyingViewRank() == 3)
+      {
+        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<3>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++)
+            for (int j=0; j<cols; j++)
+              localMatrices[static_cast<size_t>((c * rows + i) * cols + j)] += term.weight * matrixHost(c,i,j);
+      }
+      else if (matrixData.getUnderlyingViewRank() == 2)
+      {
+        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<2>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++)
+            for (int j=0; j<cols; j++)
+              localMatrices[static_cast<size_t>((c * rows + i) * cols + j)] += term.weight * matrixHost(i,j);
+      }
+      else
+      {
+        throw std::invalid_argument("Unexpected PAMatrix storage rank in inverse diagnostic");
+      }
+    }
+
+    std::vector<Scalar> diagonal(static_cast<size_t>(cells * rows), 0.0);
+    for (auto &term : terms)
+    {
+      auto diagonalData = term.matrix.allocateDiagonalStorage();
+      term.matrix.extractDiagonal(diagonalData);
+      Kokkos::fence();
+
+      if (diagonalData.getUnderlyingViewRank() == 2)
+      {
+        auto diagonalHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagonalData.template getUnderlyingView<2>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++)
+            diagonal[static_cast<size_t>(c * rows + i)] += term.weight * diagonalHost(c,i);
+      }
+      else if (diagonalData.getUnderlyingViewRank() == 1)
+      {
+        auto diagonalHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagonalData.template getUnderlyingView<1>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++)
+            diagonal[static_cast<size_t>(c * rows + i)] += term.weight * diagonalHost(i);
+      }
+      else
+      {
+        throw std::invalid_argument("Unexpected PAMatrix diagonal storage rank in inverse diagnostic");
+      }
+    }
+
+    Scalar lambdaMaxEstimate = 0.0;
+    for (int c=0; c<cells; c++)
+    {
+      for (int i=0; i<rows; i++)
+      {
+        const Scalar diagonalValue = std::abs(diagonal[static_cast<size_t>(c * rows + i)]);
+        if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
+          throw std::runtime_error("inverse diagnostic found zero diagonal entry");
+        Scalar scaledRowSum = 0.0;
+        for (int j=0; j<cols; j++) scaledRowSum += std::abs(localMatrices[static_cast<size_t>((c * rows + i) * cols + j)]) / diagonalValue;
+        lambdaMaxEstimate = std::max(lambdaMaxEstimate, scaledRowSum);
+      }
+    }
+    if (lambdaMaxEstimate <= 0.0) throw std::runtime_error("inverse diagnostic found nonpositive spectral upper estimate");
+    timing.lambdaMaxEstimate = lambdaMaxEstimate;
+    const Scalar omega = Scalar(1.0) / lambdaMaxEstimate;
+
+    std::vector<Scalar> rhs(static_cast<size_t>(cells * rows), 0.0);
+    for (int c=0; c<cells; c++)
+      for (int i=0; i<rows; i++)
+        rhs[static_cast<size_t>(c * rows + i)] = 0.25 + 0.0625 * ((i + 5 * c) % 29);
+
+    std::vector<Scalar> factoredMatrices = localMatrices;
+    std::vector<Scalar> referenceSolution = rhs;
+    for (int c=0; c<cells; c++)
+    {
+      const size_t offset = static_cast<size_t>(c) * rows * cols;
+      const int factorInfo = factorSPDMatrixInPlace(factoredMatrices, offset, rows);
+      if (factorInfo != 0) throw std::runtime_error("inverse diagnostic Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+      std::vector<Scalar> cellRhs(rhs.begin() + static_cast<size_t>(c * rows),
+                                  rhs.begin() + static_cast<size_t>((c + 1) * rows));
+      const int solveInfo = solveFactoredSPDMatrix(factoredMatrices, offset, rows, cellRhs);
+      if (solveInfo != 0) throw std::runtime_error("inverse diagnostic Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+      for (int i=0; i<rows; i++) referenceSolution[static_cast<size_t>(c * rows + i)] = cellRhs[i];
+    }
+
+    Scalar referenceNorm = 0.0;
+    for (const Scalar value : referenceSolution) referenceNorm = std::max(referenceNorm, std::abs(value));
+    timing.initialInverseAbsError = referenceNorm;
+    timing.initialInverseRelError = referenceNorm / std::max<Scalar>(1.0, referenceNorm);
+
+    std::vector<Scalar> iterate(static_cast<size_t>(cells * rows), 0.0);
+    Intrepid2::ScalarView<Scalar,DeviceType> input("TensorPoissonPAMatrix inverse diagnostic input", cells, rows);
+    Intrepid2::ScalarView<Scalar,DeviceType> output("TensorPoissonPAMatrix inverse diagnostic output", cells, rows);
+
+    Kokkos::Timer inverseTimer;
+    for (int iteration=0; iteration<numInverseIterations; iteration++)
+    {
+      auto inputHost = Kokkos::create_mirror_view(input);
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++)
+          inputHost(c,i) = iterate[static_cast<size_t>(c * rows + i)];
+      Kokkos::deep_copy(input, inputHost);
+      applyTerms(terms, workspaces, input, output, worksetSize);
+      auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++)
+        {
+          const size_t index = static_cast<size_t>(c * rows + i);
+          iterate[index] += omega * (rhs[index] - outputHost(c,i)) / diagonal[index];
+        }
+    }
+    timing.avgInverseApplySeconds = inverseTimer.seconds() / numInverseIterations;
+
+    timing.maxInverseAbsError = 0.0;
+    for (size_t i=0; i<iterate.size(); i++)
+      timing.maxInverseAbsError = std::max(timing.maxInverseAbsError, std::abs(iterate[i] - referenceSolution[i]));
+    timing.maxInverseRelError = timing.maxInverseAbsError / std::max<Scalar>(1.0, referenceNorm);
+    std::cout << "INVERSE_DIAGNOSTIC initialMaxAbsError=" << std::setprecision(16) << timing.initialInverseAbsError
+              << " initialMaxRelError=" << timing.initialInverseRelError
+              << " maxAbsError=" << timing.maxInverseAbsError
+              << " maxRelError=" << timing.maxInverseRelError
+              << " lambdaMaxEstimate=" << timing.lambdaMaxEstimate
+              << " iterations=" << timing.inverseIterations
+              << " inversePath=" << timing.inversePath
+              << " spectralEstimatePath=" << timing.spectralEstimatePath << std::endl;
+    return timing;
   }
 
   FactorTiming factorTerms(std::vector<OperatorTerm> &terms, const long long maxAssembledEntries, const int numSolve)
@@ -714,7 +974,9 @@ int main(int argc, char *argv[])
     int numApply = 10;
     int numDiagonal = 10;
     int numSolve = 10;
+    int numInverseIterations = 10;
     int worksetSize = 0;
+    int checkAssemblyAgreement = 0;
     long long maxAssembledEntries = 200000;
     Scalar massWeight = 1.0;
     Scalar stiffnessWeight = 1.0;
@@ -729,13 +991,15 @@ int main(int argc, char *argv[])
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, or h1-gram.  h1-gram is the weighted mass-plus-stiffness Gram starter case.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses true Intrepid2 HGRAD basis/cubature/affine geometry and currently supports dim<=3.");
-    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, or factor.");
+    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, or inverse-diagnostic.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
+    cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local damped Richardson iterations used in inverse-diagnostic mode.");
     cmdp.setOption("massWeight", &massWeight, "Scalar coefficient alpha for mass or h1-gram value-value terms.");
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
+    cmdp.setOption("checkAssemblyAgreement", &checkAssemblyAgreement, "Set to 1 in assembly-compare mode to compare assemble2() entries against standard assemble().");
     cmdp.setOption("maxAssembledEntries", &maxAssembledEntries, "Maximum local assembled entries allowed in assemble/assemble2/compare/factor modes.");
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -748,8 +1012,10 @@ int main(int argc, char *argv[])
     if (numApply < 1) throw std::invalid_argument("--numApply must be positive");
     if (numDiagonal < 1) throw std::invalid_argument("--numDiagonal must be positive");
     if (numSolve < 1) throw std::invalid_argument("--numSolve must be positive");
-    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor"))
-      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, or factor");
+    if (numInverseIterations < 1) throw std::invalid_argument("--numInverseIterations must be positive");
+    if ((checkAssemblyAgreement != 0) && (checkAssemblyAgreement != 1)) throw std::invalid_argument("--checkAssemblyAgreement must be 0 or 1");
+    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic"))
+      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, or inverse-diagnostic");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
     if ((basisMode == "hgrad") && (dim > 3))
@@ -779,12 +1045,15 @@ int main(int argc, char *argv[])
     std::vector<double> logDiagonalPValues;
     std::vector<double> logDiagonalTimes;
 
-    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds estimatedApplyFlopsPerCell achievedGFlops mode operator basisMode diagonalPath" << std::endl;
+    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio assemblyAgreementMaxAbsError assemblyAgreementMaxRelError factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds avgInverseApplySeconds inverseIterations initialInverseAbsError initialInverseRelError maxInverseAbsError maxInverseRelError lambdaMaxEstimate estimatedApplyFlopsPerCell achievedGFlops mode operator basisMode diagonalPath assemble2Path inversePath spectralEstimatePath" << std::endl;
     for (int p=pRange.first; p<=pRange.last; p++)
     {
       Kokkos::Timer setupTimer;
       auto terms = makeOperatorTerms(dim, p, cellsPerDim, cells, operatorChoice, basisMode, massWeight, stiffnessWeight);
       const double setupSeconds = setupTimer.seconds();
+      const std::string assemble2Path = ((mode == "assemble2") || (mode == "assembly-compare"))
+                                      ? assemble2PathSummary(terms)
+                                      : "not_requested";
 
       const int localDofs = checkedProduct(std::vector<int>(dim, p + 1));
       const int pointsPerDim = (basisMode == "hgrad") ? (p + 1) : (p + 2);
@@ -831,12 +1100,23 @@ int main(int argc, char *argv[])
         diagonalPath = (basisMode == "synthetic") ? "sum_factorized_synthetic_scalar_tensor_terms"
                                                : "hgrad_pamatrix_direct_or_guarded_fallback";
       }
+      InverseDiagnosticTiming inverseDiagnosticTiming;
+      if (mode == "inverse-diagnostic")
+      {
+        inverseDiagnosticTiming = inverseDiagnosticTerms(terms, workspaces, worksetSize, maxAssembledEntries, numInverseIterations);
+      }
 
       const long long flopsPerCell = estimatedApplyFlopsPerCellPerTerm(dim, p) * static_cast<long long>(terms.size());
       const double achievedGFlops = (avgApplySeconds > 0.0) ? (flopsPerCell * static_cast<double>(cells) / avgApplySeconds / 1.0e9) : -1.0;
       const double assemble2OverAssembleRatio = ((assemble2Timing.totalSeconds > 0.0) && (assemblyTiming.totalSeconds > 0.0))
                                               ? assemble2Timing.totalSeconds / assemblyTiming.totalSeconds
                                               : -1.0;
+      AssemblyComparison assemblyComparison;
+      if ((mode == "assembly-compare") && (checkAssemblyAgreement != 0))
+      {
+        assemblyComparison = compareAssemble2AgainstAssemble(terms, maxAssembledEntries);
+        if ((assemblyComparison.maxAbsError > 1e-10) && (assemblyComparison.maxRelError > 1e-10)) returnCode = 2;
+      }
 
       std::cout << "TENSOR_POISSON_PAMATRIX_RESULT"
                 << " dim=" << dim
@@ -856,18 +1136,30 @@ int main(int argc, char *argv[])
                 << " massAssemble2Seconds=" << assemble2Timing.massSeconds
                 << " stiffnessAssemble2Seconds=" << assemble2Timing.stiffnessSeconds
                 << " assemble2OverAssembleRatio=" << assemble2OverAssembleRatio
+                << " assemblyAgreementMaxAbsError=" << assemblyComparison.maxAbsError
+                << " assemblyAgreementMaxRelError=" << assemblyComparison.maxRelError
                 << " factorSeconds=" << factorTiming.factorSeconds
                 << " avgSolveSeconds=" << factorTiming.solveSeconds
                 << " maxSolveResidual=" << factorTiming.maxSolveResidual
                 << " maxSolveRelativeResidual=" << factorTiming.maxSolveRelativeResidual
                 << " firstDiagonalSeconds=" << diagonalTiming.firstSeconds
                 << " avgDiagonalSeconds=" << diagonalTiming.averageSeconds
+                << " avgInverseApplySeconds=" << inverseDiagnosticTiming.avgInverseApplySeconds
+                << " inverseIterations=" << inverseDiagnosticTiming.inverseIterations
+                << " initialInverseAbsError=" << inverseDiagnosticTiming.initialInverseAbsError
+                << " initialInverseRelError=" << inverseDiagnosticTiming.initialInverseRelError
+                << " maxInverseAbsError=" << inverseDiagnosticTiming.maxInverseAbsError
+                << " maxInverseRelError=" << inverseDiagnosticTiming.maxInverseRelError
+                << " lambdaMaxEstimate=" << inverseDiagnosticTiming.lambdaMaxEstimate
                 << " estimatedApplyFlopsPerCell=" << flopsPerCell
                 << " achievedGFlops=" << achievedGFlops
                 << " mode=" << mode
                 << " operator=" << operatorChoice
                 << " basisMode=" << basisMode
                 << " diagonalPath=" << diagonalPath
+                << " assemble2Path=" << assemble2Path
+                << " inversePath=" << inverseDiagnosticTiming.inversePath
+                << " spectralEstimatePath=" << inverseDiagnosticTiming.spectralEstimatePath
                 << std::endl;
 
       const double logP = std::log(static_cast<double>(p + 1));
@@ -958,21 +1250,21 @@ int main(int argc, char *argv[])
       std::cout << "TENSOR_POISSON_PAMATRIX_SLOPE assemble2Slope=" << leastSquaresSlope(logAssemble2PValues, logAssemble2Times)
                 << " expectedColumnApplyAssemblySlope=" << (2 * dim + 1)
                 << " samples=" << logAssemble2Times.size()
-                << " note=assemble2_forms_columns_by_repeated_matrix_free_apply" << std::endl;
+                << " note=assemble2_path_reported_per_result_row" << std::endl;
     }
     if (logMassAssemble2Times.size() >= 2)
     {
       std::cout << "TENSOR_POISSON_PAMATRIX_SLOPE massAssemble2Slope=" << leastSquaresSlope(logMassAssemble2PValues, logMassAssemble2Times)
                 << " expectedColumnApplyAssemblySlope=" << (2 * dim + 1)
                 << " samples=" << logMassAssemble2Times.size()
-                << " note=term_separated_column_apply_assembly_timing" << std::endl;
+                << " note=term_separated_assemble2_timing_path_reported_per_result_row" << std::endl;
     }
     if (logStiffnessAssemble2Times.size() >= 2)
     {
       std::cout << "TENSOR_POISSON_PAMATRIX_SLOPE stiffnessAssemble2Slope=" << leastSquaresSlope(logStiffnessAssemble2PValues, logStiffnessAssemble2Times)
                 << " expectedColumnApplyAssemblySlope=" << (2 * dim + 1)
                 << " samples=" << logStiffnessAssemble2Times.size()
-                << " note=term_separated_column_apply_assembly_timing" << std::endl;
+                << " note=term_separated_assemble2_timing_path_reported_per_result_row" << std::endl;
     }
     if (logDiagonalTimes.size() >= 2)
     {
