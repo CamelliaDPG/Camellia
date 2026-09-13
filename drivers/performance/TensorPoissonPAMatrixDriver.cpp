@@ -327,14 +327,22 @@ namespace
   std::vector<OperatorTerm> makeHGRADOperatorTermsForDim(const int p, const int cellsPerDim, const std::string &operatorChoice,
                                                          const Scalar massWeight, const Scalar stiffnessWeight)
   {
+    Kokkos::Array<Scalar,spaceDim> origin;
     Kokkos::Array<Scalar,spaceDim> domainExtents;
     Kokkos::Array<int,spaceDim> gridCellCounts;
     for (int d=0; d<spaceDim; d++)
     {
+      origin[d] = 0.0;
       domainExtents[d] = 1.0;
       gridCellCounts[d] = cellsPerDim;
     }
-    auto geometry = Intrepid2::uniformCartesianMesh<Scalar,spaceDim,DeviceType>(domainExtents, gridCellCounts);
+
+    using CellGeometry = Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType>;
+    const auto nodeOrdering = (spaceDim <= 3)
+                            ? CellGeometry::HYPERCUBE_NODE_ORDER_CLASSIC_SHARDS
+                            : CellGeometry::HYPERCUBE_NODE_ORDER_TENSOR;
+    auto geometry = CellGeometry(origin, domainExtents, gridCellCounts,
+                                 CellGeometry::NO_SUBDIVISION, nodeOrdering);
 
     std::vector<OperatorTerm> terms;
     if (operatorIncludesMass(operatorChoice))
