@@ -38,6 +38,7 @@ set(TENSOR_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   TensorPAMatrixTests.cpp
   TensorPAMatrixHGRADTests.cpp
+  TensorPAMatrixBridgeTests.cpp
 )
 
 add_executable(runTensorTests ${TENSOR_TEST_SOURCES})

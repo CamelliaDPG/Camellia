@@ -380,138 +380,13 @@ namespace
     return constructHypercubeHGRADPAMatrix<spaceDim>(geometry, p, op1, nullVectorWeight, op2, nullVectorWeight);
   }
 
-  Camellia::TensorVarPtr makeHGRADTensorFieldVar(const std::string &name, const int componentCount)
-  {
-    std::vector<Camellia::VarPtr> components;
-    components.reserve(componentCount);
-    for (int d=0; d<componentCount; d++)
-    {
-      components.push_back(Teuchos::rcp(new Camellia::Var(d, 0, name + "_" + std::to_string(d),
-                                                          Camellia::OP_VALUE, Camellia::HGRAD, Camellia::FIELD,
-                                                          Teuchos::null, true, Camellia::UNKNOWN_FS)));
-    }
-    return Teuchos::rcp(new Camellia::TensorVar(name, Camellia::TENSOR_FIELD, components));
-  }
+  // HGRAD tensor field variable construction is provided by TensorPAMatrixBridge.h.
 
-  Intrepid2::EOperator localPAMatrixOperatorForTensorDescriptor(const Camellia::TensorComponentOperatorDescriptor &descriptor)
-  {
-    if (descriptor.isValueOnly()) return Intrepid2::OPERATOR_VALUE;
-    if (descriptor.derivativeComponentOrdinals().size() == 1) return Intrepid2::OPERATOR_GRAD;
-    throw std::invalid_argument("PAMatrix bridge currently supports only value-only or single-derivative tensor descriptors");
-  }
+  // Tensor descriptor mapping and derivative vector weights are provided by TensorPAMatrixBridge.h.
 
-  template<int spaceDim>
-  Teuchos::RCP<Kokkos::Array<Scalar,spaceDim>> vectorWeightForSingleDerivative(const Camellia::TensorComponentOperatorDescriptor &descriptor)
-  {
-    if (descriptor.derivativeComponentOrdinals().empty()) return Teuchos::null;
-    if (descriptor.derivativeComponentOrdinals().size() != 1)
-      throw std::invalid_argument("PAMatrix bridge currently supports one derivative component per side");
+  // Coefficient decomposition for tensor bridge terms is provided by TensorPAMatrixBridge.h.
 
-    const int derivativeComponent = descriptor.derivativeComponentOrdinals()[0];
-    if ((derivativeComponent < 0) || (derivativeComponent >= spaceDim))
-      throw std::invalid_argument("Tensor derivative component is outside the HGRAD hypercube dimension");
-
-    auto vectorWeight = Teuchos::rcp(new Kokkos::Array<Scalar,spaceDim>());
-    for (int d=0; d<spaceDim; d++) (*vectorWeight)[d] = (d == derivativeComponent) ? Scalar(1.0) : Scalar(0.0);
-    return vectorWeight;
-  }
-
-  template<int spaceDim>
-  std::vector<Camellia::TensorFunctionPtr> decomposeTensorCoefficientForPAMatrixBridge(const Camellia::TensorFunctionPtr &coefficient)
-  {
-    if (coefficient == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
-    if (coefficient->hasSolutionDependencies())
-      throw std::invalid_argument("PAMatrix bridge does not support solution-dependent tensor coefficients");
-
-    const auto &componentOrdinals = coefficient->dependencyScope().componentOrdinals();
-    if (componentOrdinals.empty() || (componentOrdinals.size() == 1))
-      return {coefficient};
-
-    if (coefficient->isSum())
-    {
-      std::vector<Camellia::TensorFunctionPtr> decomposedAddends;
-      for (const auto &child : coefficient->childFunctions())
-      {
-        auto childAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(child);
-        decomposedAddends.insert(decomposedAddends.end(), childAddends.begin(), childAddends.end());
-      }
-      return decomposedAddends;
-    }
-
-    if (coefficient->isProduct())
-    {
-      const auto children = coefficient->childFunctions();
-      if (children.size() == 2)
-      {
-        const bool leftIsScalar  = children[0]->dependencyScope().isEmpty();
-        const bool rightIsScalar = children[1]->dependencyScope().isEmpty();
-        if (leftIsScalar || rightIsScalar)
-        {
-          const auto scalarFactor = leftIsScalar ? children[0] : children[1];
-          const auto tensorFactor = leftIsScalar ? children[1] : children[0];
-          auto tensorAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(tensorFactor);
-          std::vector<Camellia::TensorFunctionPtr> scaledAddends;
-          scaledAddends.reserve(tensorAddends.size());
-          for (const auto &addend : tensorAddends)
-          {
-            scaledAddends.push_back(scalarFactor * addend);
-          }
-          return scaledAddends;
-        }
-      }
-    }
-
-    throw std::invalid_argument("PAMatrix bridge currently supports only constant, single-component, or additively decomposable single-component tensor coefficients");
-  }
-
-  template<int spaceDim>
-  OperatorTerm adaptTensorHGRADVolumeTermToPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
-                                                    const int p,
-                                                    const Camellia::TensorBilinearTerm &term,
-                                                    const std::string &label)
-  {
-    if (!term.isVolumeTerm()) throw std::invalid_argument("PAMatrix bridge only accepts tensor volume terms");
-    if (!term.isPAMatrixCandidate()) throw std::invalid_argument("Tensor term does not declare PAMatrix support");
-    if (term.componentCount() != spaceDim) throw std::invalid_argument("Tensor term component count must match HGRAD hypercube dimension");
-    if (term.coefficient() == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
-    const auto op1 = localPAMatrixOperatorForTensorDescriptor(term.trialOperator());
-    const auto op2 = localPAMatrixOperatorForTensorDescriptor(term.testOperator());
-    auto vectorWeight1 = vectorWeightForSingleDerivative<spaceDim>(term.trialOperator());
-    auto vectorWeight2 = vectorWeightForSingleDerivative<spaceDim>(term.testOperator());
-    Scalar scalarWeight = 1.0;
-
-    return {constructHypercubeHGRADPAMatrix<spaceDim>(geometry, p, op1, vectorWeight1, op2, vectorWeight2,
-                                                     term.coefficient(), &scalarWeight),
-            scalarWeight, label};
-  }
-
-  template<int spaceDim>
-  void appendTensorHGRADVolumeTermsToPAMatrix(std::vector<OperatorTerm> &terms,
-                                              Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
-                                              const int p,
-                                              const Camellia::TensorBilinearTerm &term,
-                                              const std::string &label)
-  {
-    const auto coefficientAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(term.coefficient());
-    if (coefficientAddends.size() == 1)
-    {
-      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim>(geometry, p, term, label));
-      return;
-    }
-
-    for (size_t addendOrdinal=0; addendOrdinal<coefficientAddends.size(); addendOrdinal++)
-    {
-      Camellia::TensorBilinearTerm addendTerm(term.trialVar(),
-                                              term.testVar(),
-                                              term.trialOperator(),
-                                              term.testOperator(),
-                                              coefficientAddends[addendOrdinal],
-                                              term.domain(),
-                                              term.capabilities());
-      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim>(geometry, p, addendTerm,
-                                                                     label + "_addend" + std::to_string(addendOrdinal)));
-    }
-  }
+  // Tensor-term-to-PAMatrix adapter wrappers are provided by TensorPAMatrixBridge.h.
 
   template<int spaceDim>
   std::vector<OperatorTerm> makeHGRADOperatorTermsForDim(const int p, const int cellsPerDim, const std::string &operatorChoice,
@@ -542,8 +417,8 @@ namespace
         throw std::invalid_argument("--operator=vlasov-linear-x0-x1-d2 requires --dim >= 3 so derivative component 2 is present");
       if ((operatorChoice == "vlasov-coordinate-x1-d3") && (spaceDim < 4))
         throw std::invalid_argument("--operator=vlasov-coordinate-x1-d3 requires --dim >= 4 so derivative component 3 is present");
-      auto trialVar = makeHGRADTensorFieldVar("f", spaceDim);
-      auto testVar  = makeHGRADTensorFieldVar("w", spaceDim);
+      auto trialVar = Camellia::makeHGRADTensorFieldVar("f", spaceDim);
+      auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
       if (operatorChoice == "vlasov-coordinate-x1-d3")
       {
         Camellia::TensorBilinearTerm vlasovCoordinateD3Term(trialVar,
@@ -587,7 +462,7 @@ namespace
     }
     if (operatorIncludesMass(operatorChoice))
     {
-      terms.push_back({constructHypercubeHGRADPAMatrix<spaceDim>(
+      terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
           geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE), massWeight, "mass"});
     }
     if (operatorIncludesStiffness(operatorChoice))
@@ -598,14 +473,14 @@ namespace
         {
           auto vectorWeight = Teuchos::rcp(new Kokkos::Array<Scalar,spaceDim>());
           for (int e=0; e<spaceDim; e++) (*vectorWeight)[e] = (e == d) ? Scalar(1.0) : Scalar(0.0);
-          terms.push_back({constructHypercubeHGRADPAMatrix<spaceDim>(
+          terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
               geometry, p, Intrepid2::OPERATOR_GRAD, vectorWeight,
               Intrepid2::OPERATOR_GRAD, vectorWeight), stiffnessWeight, "stiffness" + std::to_string(d)});
         }
       }
       else
       {
-        terms.push_back({constructHypercubeHGRADPAMatrix<spaceDim>(
+        terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
             geometry, p, Intrepid2::OPERATOR_GRAD, Intrepid2::OPERATOR_GRAD), stiffnessWeight, "stiffness"});
       }
     }
