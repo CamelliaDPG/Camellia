@@ -216,6 +216,8 @@ namespace Camellia
     return Intrepid2::TensorPoints<Scalar,DeviceType>(pointComponents);
   }
 
+  // Nonseparable coupled coefficient point-weight injection into PAMatrix is intentionally deferred.
+
   template<int spaceDim, class DeviceType, class Scalar>
   Scalar foldSupportedTensorCoefficientIntoCubatureWeights(const TensorFunctionPtr &coefficient,
                                                            const Intrepid2::TensorPoints<Scalar,DeviceType> &tensorCubaturePoints,
@@ -228,6 +230,8 @@ namespace Camellia
     const auto &dependencyScope = coefficient->dependencyScope();
     if (dependencyScope.isEmpty())
       return static_cast<Scalar>(coefficient->value(std::vector<double>(spaceDim, 0.0)));
+
+    // Coupled/nonseparable coefficients fall through to the existing separable-scope guard below.
 
     const auto &componentOrdinals = dependencyScope.componentOrdinals();
     if (componentOrdinals.size() != 1)

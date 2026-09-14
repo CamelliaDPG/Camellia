@@ -179,6 +179,7 @@ namespace Camellia
     virtual TensorFunctionPtr derivativeFunction(int componentOrdinal) const = 0;
 
     virtual std::vector<TensorFunctionPtr> childFunctions() const;
+    virtual TensorUnaryFunctionType unaryFunctionType() const;
     virtual std::string displayString() const = 0;
 
     static TensorFunctionPtr constant(double value);

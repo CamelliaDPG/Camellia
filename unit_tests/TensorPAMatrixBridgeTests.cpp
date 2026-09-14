@@ -74,6 +74,8 @@ namespace
     }
   }
 
+  // Bridge-level nonseparable coefficient injection tests belong with the future point-weight path.
+
   void addPAMatrixAssemblyToDense(Intrepid2::PAMatrix<DeviceType,Scalar> &paMatrix,
                                   const Scalar weight,
                                   std::vector<Scalar> &dense)

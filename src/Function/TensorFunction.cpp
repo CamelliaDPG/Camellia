@@ -354,6 +354,11 @@ namespace
       return {_arg};
     }
 
+    TensorUnaryFunctionType unaryFunctionType() const override
+    {
+      return _unaryType;
+    }
+
     std::string displayString() const override
     {
       switch (_unaryType)
@@ -561,6 +566,13 @@ bool TensorFunction::hasSolutionDependencies() const
 const std::vector<TensorFunctionDependencySource> &TensorFunction::dependencySources() const
 {
   return _dependencySources;
+}
+
+TensorUnaryFunctionType TensorFunction::unaryFunctionType() const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!isUnaryComposition(), std::invalid_argument,
+                             "TensorFunction::unaryFunctionType() is only valid for unary-composition functions.");
+  return TENSOR_UNARY_EXP;
 }
 
 void TensorFunction::values(PointViewHost pointsIn, ValueViewHost valuesOut) const
