@@ -236,13 +236,66 @@ namespace
     return Intrepid2::TensorPoints<Scalar,DeviceType>(pointComponents);
   }
 
+  template<int spaceDim>
+  Scalar foldSupportedTensorCoefficientIntoCubatureWeights(const Camellia::TensorFunctionPtr &coefficient,
+                                                           const Intrepid2::TensorPoints<Scalar,DeviceType> &tensorCubaturePoints,
+                                                           Intrepid2::TensorData<Scalar,DeviceType> &tensorCubatureWeights)
+  {
+    if (coefficient == Teuchos::null) return Scalar(1.0);
+    if (coefficient->hasSolutionDependencies())
+      throw std::invalid_argument("PAMatrix bridge does not support solution-dependent tensor coefficients");
+
+    const auto &dependencyScope = coefficient->dependencyScope();
+    if (dependencyScope.isEmpty())
+      return coefficient->value(std::vector<double>(spaceDim, 0.0));
+
+    const auto &componentOrdinals = dependencyScope.componentOrdinals();
+    if (componentOrdinals.size() != 1)
+      throw std::invalid_argument("PAMatrix bridge currently supports only constant or single-component separable tensor coefficients");
+
+    const int coefficientComponent = *componentOrdinals.begin();
+    if ((coefficientComponent < 0) || (coefficientComponent >= spaceDim))
+      throw std::invalid_argument("Tensor coefficient component is outside the HGRAD hypercube dimension");
+
+    std::vector<Intrepid2::Data<Scalar,DeviceType>> weightedComponents(spaceDim);
+    for (int d=0; d<spaceDim; d++)
+    {
+      weightedComponents[d] = tensorCubatureWeights.getTensorComponent(d);
+    }
+
+    auto componentPoints  = tensorCubaturePoints.getTensorComponent(coefficientComponent);
+    auto componentWeights = tensorCubatureWeights.getTensorComponent(coefficientComponent);
+    const int componentPointCount = componentPoints.extent_int(0);
+
+    Intrepid2::ScalarView<Scalar,DeviceType> weightedComponentView("tensor coefficient weighted cubature", componentPointCount);
+    auto pointsHost  = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), componentPoints);
+    auto weightsHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), componentWeights.getUnderlyingView1());
+    auto weightedHost = Kokkos::create_mirror_view(weightedComponentView);
+
+    std::vector<double> coord(spaceDim, 0.0);
+    for (int pointOrdinal=0; pointOrdinal<componentPointCount; pointOrdinal++)
+    {
+      coord[coefficientComponent] = pointsHost(pointOrdinal, 0);
+      weightedHost(pointOrdinal) = weightsHost(pointOrdinal) * coefficient->value(coord);
+    }
+    Kokkos::deep_copy(weightedComponentView, weightedHost);
+
+    Kokkos::Array<int,1> extents {componentPointCount};
+    Kokkos::Array<Intrepid2::DataVariationType,1> variationTypes {Intrepid2::GENERAL};
+    weightedComponents[coefficientComponent] = Intrepid2::Data<Scalar,DeviceType>(weightedComponentView, extents, variationTypes);
+    tensorCubatureWeights = Intrepid2::TensorData<Scalar,DeviceType>(weightedComponents);
+    return Scalar(1.0);
+  }
+
   template<int spaceDim, unsigned long spaceDim2>
   PAMatrix constructHypercubeHGRADPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
                                            const int p,
                                            const Intrepid2::EOperator op1,
                                            Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
                                            const Intrepid2::EOperator op2,
-                                           Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2)
+                                           Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
+                                           const Camellia::TensorFunctionPtr &coefficient = Teuchos::null,
+                                           Scalar *scalarWeight = nullptr)
   {
     using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
     using ExecutionSpace = typename DeviceType::execution_space;
@@ -252,6 +305,10 @@ namespace
 
     Intrepid2::TensorData<Scalar,DeviceType> tensorCubatureWeights;
     auto tensorCubaturePoints = makeHypercubeCubaturePoints<spaceDim>(2 * p, tensorCubatureWeights);
+    const Scalar coefficientScalarWeight = foldSupportedTensorCoefficientIntoCubatureWeights<spaceDim>(coefficient,
+                                                                                                      tensorCubaturePoints,
+                                                                                                      tensorCubatureWeights);
+    if (scalarWeight != nullptr) *scalarWeight = coefficientScalarWeight;
 
     auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
     basis1->getValues(basis1Values, tensorCubaturePoints, op1);
@@ -364,6 +421,54 @@ namespace
   }
 
   template<int spaceDim>
+  std::vector<Camellia::TensorFunctionPtr> decomposeTensorCoefficientForPAMatrixBridge(const Camellia::TensorFunctionPtr &coefficient)
+  {
+    if (coefficient == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
+    if (coefficient->hasSolutionDependencies())
+      throw std::invalid_argument("PAMatrix bridge does not support solution-dependent tensor coefficients");
+
+    const auto &componentOrdinals = coefficient->dependencyScope().componentOrdinals();
+    if (componentOrdinals.empty() || (componentOrdinals.size() == 1))
+      return {coefficient};
+
+    if (coefficient->isSum())
+    {
+      std::vector<Camellia::TensorFunctionPtr> decomposedAddends;
+      for (const auto &child : coefficient->childFunctions())
+      {
+        auto childAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(child);
+        decomposedAddends.insert(decomposedAddends.end(), childAddends.begin(), childAddends.end());
+      }
+      return decomposedAddends;
+    }
+
+    if (coefficient->isProduct())
+    {
+      const auto children = coefficient->childFunctions();
+      if (children.size() == 2)
+      {
+        const bool leftIsScalar  = children[0]->dependencyScope().isEmpty();
+        const bool rightIsScalar = children[1]->dependencyScope().isEmpty();
+        if (leftIsScalar || rightIsScalar)
+        {
+          const auto scalarFactor = leftIsScalar ? children[0] : children[1];
+          const auto tensorFactor = leftIsScalar ? children[1] : children[0];
+          auto tensorAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(tensorFactor);
+          std::vector<Camellia::TensorFunctionPtr> scaledAddends;
+          scaledAddends.reserve(tensorAddends.size());
+          for (const auto &addend : tensorAddends)
+          {
+            scaledAddends.push_back(scalarFactor * addend);
+          }
+          return scaledAddends;
+        }
+      }
+    }
+
+    throw std::invalid_argument("PAMatrix bridge currently supports only constant, single-component, or additively decomposable single-component tensor coefficients");
+  }
+
+  template<int spaceDim>
   OperatorTerm adaptTensorHGRADVolumeTermToPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
                                                     const int p,
                                                     const Camellia::TensorBilinearTerm &term,
@@ -373,17 +478,43 @@ namespace
     if (!term.isPAMatrixCandidate()) throw std::invalid_argument("Tensor term does not declare PAMatrix support");
     if (term.componentCount() != spaceDim) throw std::invalid_argument("Tensor term component count must match HGRAD hypercube dimension");
     if (term.coefficient() == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
-    if (!term.coefficient()->dependencyScope().isEmpty() || term.coefficient()->hasSolutionDependencies())
-      throw std::invalid_argument("Initial PAMatrix bridge only supports constant tensor coefficients");
-
     const auto op1 = pamatrixOperatorForTensorDescriptor(term.trialOperator());
     const auto op2 = pamatrixOperatorForTensorDescriptor(term.testOperator());
     auto vectorWeight1 = vectorWeightForSingleDerivative<spaceDim>(term.trialOperator());
     auto vectorWeight2 = vectorWeightForSingleDerivative<spaceDim>(term.testOperator());
-    const Scalar scalarWeight = term.coefficient()->value(std::vector<double>(spaceDim, 0.0));
+    Scalar scalarWeight = 1.0;
 
-    return {constructHypercubeHGRADPAMatrix<spaceDim>(geometry, p, op1, vectorWeight1, op2, vectorWeight2),
+    return {constructHypercubeHGRADPAMatrix<spaceDim>(geometry, p, op1, vectorWeight1, op2, vectorWeight2,
+                                                     term.coefficient(), &scalarWeight),
             scalarWeight, label};
+  }
+
+  template<int spaceDim>
+  void appendTensorHGRADVolumeTermsToPAMatrix(std::vector<OperatorTerm> &terms,
+                                              Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+                                              const int p,
+                                              const Camellia::TensorBilinearTerm &term,
+                                              const std::string &label)
+  {
+    const auto coefficientAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(term.coefficient());
+    if (coefficientAddends.size() == 1)
+    {
+      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim>(geometry, p, term, label));
+      return;
+    }
+
+    for (size_t addendOrdinal=0; addendOrdinal<coefficientAddends.size(); addendOrdinal++)
+    {
+      Camellia::TensorBilinearTerm addendTerm(term.trialVar(),
+                                              term.testVar(),
+                                              term.trialOperator(),
+                                              term.testOperator(),
+                                              coefficientAddends[addendOrdinal],
+                                              term.domain(),
+                                              term.capabilities());
+      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim>(geometry, p, addendTerm,
+                                                                     label + "_addend" + std::to_string(addendOrdinal)));
+    }
   }
 
   template<int spaceDim>
@@ -408,20 +539,54 @@ namespace
                                  CellGeometry::NO_SUBDIVISION, nodeOrdering);
 
     std::vector<OperatorTerm> terms;
-    if (operatorChoice == "vlasov-dt")
+    if ((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3"))
     {
-      if (spaceDim < 2) throw std::invalid_argument("--operator=vlasov-dt requires --dim >= 2 so derivative component 1 is present");
+      if (spaceDim < 2) throw std::invalid_argument("--operator=vlasov-dt and --operator=vlasov-coordinate require --dim >= 2 so derivative component 1 is present");
+      if ((operatorChoice == "vlasov-linear-x0-x1-d2") && (spaceDim < 3))
+        throw std::invalid_argument("--operator=vlasov-linear-x0-x1-d2 requires --dim >= 3 so derivative component 2 is present");
+      if ((operatorChoice == "vlasov-coordinate-x1-d3") && (spaceDim < 4))
+        throw std::invalid_argument("--operator=vlasov-coordinate-x1-d3 requires --dim >= 4 so derivative component 3 is present");
       auto trialVar = makeHGRADTensorFieldVar("f", spaceDim);
       auto testVar  = makeHGRADTensorFieldVar("w", spaceDim);
+      if (operatorChoice == "vlasov-coordinate-x1-d3")
+      {
+        Camellia::TensorBilinearTerm vlasovCoordinateD3Term(trialVar,
+                                                            testVar,
+                                                            Camellia::TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                                            Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 3),
+                                                            Camellia::TensorFunction::constant(-0.75) * Camellia::TensorFunction::componentCoordinate(1),
+                                                            Camellia::TENSOR_BILINEAR_TERM_VOLUME,
+                                                            Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+        appendTensorHGRADVolumeTermsToPAMatrix<spaceDim>(terms, geometry, p, vlasovCoordinateD3Term,
+                                                         "vlasov_coordinate_x1_value_test_d3");
+        return terms;
+      }
+      if (operatorChoice == "vlasov-linear-x0-x1-d2")
+      {
+        Camellia::TensorBilinearTerm vlasovLinearTerm(trialVar,
+                                                      testVar,
+                                                      Camellia::TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                                      Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 2),
+                                                      Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1)),
+                                                      Camellia::TENSOR_BILINEAR_TERM_VOLUME,
+                                                      Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+        appendTensorHGRADVolumeTermsToPAMatrix<spaceDim>(terms, geometry, p, vlasovLinearTerm,
+                                                         "vlasov_linear_x0_plus_x1_value_test_d2");
+        return terms;
+      }
+
+      const auto coefficient = (operatorChoice == "vlasov-coordinate")
+                             ? Camellia::TensorFunction::componentCoordinate(0)
+                             : Camellia::TensorFunction::constant(-1.0);
       Camellia::TensorBilinearTerm vlasovDtTerm(trialVar,
                                                  testVar,
                                                  Camellia::TensorComponentOperatorDescriptor::valueOnly(spaceDim),
                                                  Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 1),
-                                                 Camellia::TensorFunction::constant(-1.0),
+                                                 coefficient,
                                                  Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                  Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
-      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim>(geometry, p, vlasovDtTerm,
-                                                                     "vlasov_dt_value_test_d1"));
+      appendTensorHGRADVolumeTermsToPAMatrix<spaceDim>(terms, geometry, p, vlasovDtTerm,
+                                                       (operatorChoice == "vlasov-coordinate") ? "vlasov_coordinate_x0_value_test_d1" : "vlasov_dt_value_test_d1");
       return terms;
     }
     if (operatorIncludesMass(operatorChoice))
@@ -450,7 +615,7 @@ namespace
     }
     if (terms.empty())
     {
-      throw std::invalid_argument("--operator must be mass, stiffness, mass-plus-stiffness, or h1-gram");
+      throw std::invalid_argument("--operator must be mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, or vlasov-coordinate-x1-d3");
     }
     return terms;
   }
@@ -2548,7 +2713,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("dim", &dim, "Tensor dimension, 1 through 7.");
     cmdp.setOption("polyOrder", &polyOrderText, "Polynomial order p or inclusive range pMin:pMax.");
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
-    cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, or vlasov-dt.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge.");
+    cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, or vlasov-coordinate-x1-d3.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge; vlasov-coordinate exercises the single-component coefficient bridge; vlasov-linear-x0-x1-d2 exercises a two-term separable decomposition of -0.5*(x0+x1)*value(f)*d2(w); vlasov-coordinate-x1-d3 exercises the separable -0.75*x1*value(f)*d3(w) partial term.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses Intrepid2 hypercube HGRAD hierarchical bases, tensor-product cubature, and affine geometry for dim=1..7; synthetic remains available for high-dimensional contraction stress tests.");
     cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
@@ -2602,8 +2767,8 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
-    if ((operatorChoice == "vlasov-dt") && (basisMode != "hgrad"))
-      throw std::invalid_argument("--operator=vlasov-dt requires --basisMode=hgrad");
+    if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3")) && (basisMode != "hgrad"))
+      throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, and --operator=vlasov-coordinate-x1-d3 require --basisMode=hgrad");
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev"))
       throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson or chebyshev");
     if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))

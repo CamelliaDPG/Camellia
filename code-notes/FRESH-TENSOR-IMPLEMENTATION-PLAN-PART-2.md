@@ -109,6 +109,8 @@ Use tiny one-cell comparisons to relate the tensor-native H1 Gram path to the ex
 
 Before Vlasov integration, finish narrow adapters for tensor mesh metadata, tensor-product geometry, basis selection, cell maps, and coefficient evaluators.  These adapters should select and feed PAMatrix-backed kernels; they should not introduce another contraction engine.
 
+Current progress: the initial HGRAD/HGRAD tensor-volume bridge covers the constant-coefficient `vlasov-dt` smoke case.  The next adapter increment extends that bridge to coefficients that are either constant or depend on a single tensor component, folding the coefficient into that component's tensor cubature weights.  The bridge now also decomposes additive separable coefficients with scalar factors, so the Planar MITL-style `-0.5 * (x_0 + x_1) * value(f) * d_2(w)` volume term is expressed as one composed tensor coefficient and then split into supported single-component PAMatrix terms by the adapter layer.  Another 4D smoke case covers the separable `-0.75 * x_1 * value(f) * d_3(w)` partial term from the next Planar MITL volume contribution while leaving its `v_y` coefficient subterm guarded as coupled/nonlinear follow-on work.  This is intentionally still a narrow separable-coefficient bridge; coupled multi-component products, solution-dependent coefficients, boundary/trace terms, and non-HGRAD spaces remain guarded follow-on work.
+
 Important requirements:
 
 - preserve true tensor-product cell structure through the mesh/geometry metadata;
@@ -132,6 +134,7 @@ For each Vlasov/DPG term:
 The intended order is:
 
 - volume scalar HGRAD/HGRAD-style terms already closest to the H1 Gram machinery;
+- single-component separable coefficient variants of those volume terms, starting with coordinate coefficients such as the `x_0 * value(f) * d_1(w)` smoke term, then sums decomposed into multiple such terms such as `-0.5 * (x_0 + x_1) * value(f) * d_2(w)`, and separable subterms extracted from larger coefficients such as `-0.75 * x_1 * value(f) * d_3(w)`;
 - vector-valued or mixed HGRAD/HCURL/HDIV/HVOL terms that PAMatrix already supports in monolithic tests;
 - trace and skeleton terms, with explicit orientation and side-topology handling;
 - graph-norm pieces needed by the DPG test solve;

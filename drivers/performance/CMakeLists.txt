@@ -67,6 +67,39 @@ add_test(NAME TensorVlasovPAMatrixBridgeCompareSmoke
     --numApply=2
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorVlasovCoordinatePAMatrixBridgeCompareSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=vlasov-coordinate
+    --basisMode=hgrad
+    --mode=compare
+    --numApply=2
+    --maxAssembledEntries=10000)
+
+add_test(NAME TensorVlasovLinearCoordinatePAMatrixBridgeCompareSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=3
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=vlasov-linear-x0-x1-d2
+    --basisMode=hgrad
+    --mode=compare
+    --numApply=2
+    --maxAssembledEntries=10000)
+
+add_test(NAME TensorVlasovCoordinateX1D3PAMatrixBridgeCompareSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=4
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=vlasov-coordinate-x1-d3
+    --basisMode=hgrad
+    --mode=compare
+    --numApply=2
+    --maxAssembledEntries=10000)
+
 add_test(NAME TensorH1GramPAMatrixSynthetic4DSmoke
   COMMAND TensorPoissonPAMatrixDriver
     --dim=4
