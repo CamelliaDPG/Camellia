@@ -37,6 +37,16 @@ namespace
       domainExtents[d] = 1.0;
       gridCellCounts[d] = cellsPerDim;
     }
+    using CellGeometry = Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType>;
+    if (spaceDim > 3)
+    {
+      Kokkos::Array<Scalar,spaceDim> origin;
+      for (int d=0; d<spaceDim; d++) origin[d] = 0.0;
+      return CellGeometry(origin, domainExtents, gridCellCounts,
+                          CellGeometry::NO_SUBDIVISION,
+                          CellGeometry::HYPERCUBE_NODE_ORDER_TENSOR);
+    }
+
     auto uniformGeometry = Intrepid2::uniformCartesianMesh<Scalar,spaceDim,DeviceType>(domainExtents, gridCellCounts);
     const bool copyAffineness = false;
     return Intrepid2::getNodalCellGeometry(uniformGeometry, copyAffineness);
@@ -178,6 +188,8 @@ namespace
     std::vector<TensorPAMatrixTerm<DeviceType,Scalar>> bridgeTerms;
     Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(bridgeTerms, geometry, p, term, label);
 
+    const auto fs1 = Camellia::intrepidFunctionSpaceForTensorDescriptor(term.trialOperator());
+    const auto fs2 = Camellia::intrepidFunctionSpaceForTensorDescriptor(term.testOperator());
     const auto op1 = Camellia::pamatrixOperatorForTensorDescriptor(term.trialOperator());
     const auto op2 = Camellia::pamatrixOperatorForTensorDescriptor(term.testOperator());
     auto vectorWeight1 = Camellia::vectorWeightForSingleDerivative<spaceDim,Scalar>(term.trialOperator());
@@ -188,8 +200,8 @@ namespace
     double jacobianFlops = 0.0;
     auto standardMatrix = performStandardAssembly<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
         geometry, worksetSize,
-        p, Intrepid2::FUNCTION_SPACE_HGRAD, op1, vectorWeight1,
-        p, Intrepid2::FUNCTION_SPACE_HGRAD, op2, vectorWeight2,
+        p, fs1, op1, vectorWeight1,
+        p, fs2, op2, vectorWeight2,
         standardFlops, jacobianFlops, coefficientMultipliers);
 
     std::vector<Scalar> actual;
@@ -209,6 +221,10 @@ namespace
 
     auto derivativeDescriptor = TensorComponentOperatorDescriptor::singleDerivative(3, 2);
     TEST_EQUALITY(Camellia::pamatrixOperatorForTensorDescriptor(derivativeDescriptor), Intrepid2::OPERATOR_GRAD);
+
+    auto l2ValueDescriptor = TensorComponentOperatorDescriptor::valueOnly(3, TENSOR_COMPONENT_FUNCTION_SPACE_HVOL);
+    TEST_EQUALITY(Camellia::intrepidFunctionSpaceForTensorDescriptor(l2ValueDescriptor), Intrepid2::FUNCTION_SPACE_HVOL);
+    TEST_EQUALITY(Camellia::pamatrixOperatorForTensorDescriptor(l2ValueDescriptor), Intrepid2::OPERATOR_VALUE);
 
     auto vectorWeight = Camellia::vectorWeightForSingleDerivative<3,double>(derivativeDescriptor);
     TEST_ASSERT(vectorWeight != Teuchos::null);
@@ -308,6 +324,29 @@ namespace
                                      TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
 
     compareBridgeTermToStandardAssembly<spaceDim>(vlasovDtTerm, "constant Vlasov value/d1 bridge", out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, L2TrialHGRADTestVlasovDtTermMatchesStandardAssembly )
+  {
+    // Keep this correctness comparison within the existing StandardAssembly
+    // reference helper's 1D-3D Jacobian flop-estimate support.  The production
+    // Planar MITL target remains the 4-component (x,t,ux,uy) term documented in
+    // FRESH-TENSOR-IMPLEMENTATION-PLAN-PART-2.md; this smoke covers the new
+    // L2/HVOL-trial + HGRAD-test routing without depending on a 4D dense
+    // reference helper.
+    const int spaceDim = 3;
+    const int timeComponentOrdinal = 1;
+    auto trialVar = Camellia::makeHVOLTensorFieldVar("f", spaceDim);
+    auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+    TensorBilinearTerm vlasovDtTerm(trialVar,
+                                     testVar,
+                                     TensorComponentOperatorDescriptor::valueOnly(spaceDim, TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                     TensorComponentOperatorDescriptor::singleDerivative(spaceDim, timeComponentOrdinal),
+                                     TensorFunction::constant(1.0),
+                                     TENSOR_BILINEAR_TERM_VOLUME,
+                                     TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+
+    compareBridgeTermToStandardAssembly<spaceDim>(vlasovDtTerm, "L2/HGRAD Vlasov value/dt bridge", out, success);
   }
 
   TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, CoordinateCoefficientVlasovTermMatchesStandardAssembly )

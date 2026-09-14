@@ -8,6 +8,7 @@
 #include <Intrepid2_CellGeometry.hpp>
 #include <Intrepid2_CellTools.hpp>
 #include <Intrepid2_DefaultCubatureFactory.hpp>
+#include <Intrepid2_DerivedBasisFamily.hpp>
 #include <Intrepid2_FunctionSpaceTools.hpp>
 #include <Intrepid2_HierarchicalBasisFamily.hpp>
 #include <Intrepid2_PAMatrix.hpp>
@@ -23,6 +24,22 @@ namespace Camellia
 {
   namespace detail
   {
+    template<class BasisFamily>
+    typename BasisFamily::BasisPtr getHypercubeBasisForPAMatrixBridge(const Intrepid2::EFunctionSpace functionSpace,
+                                                                      const int p,
+                                                                      const int spaceDim)
+    {
+      switch (functionSpace)
+      {
+        case Intrepid2::FUNCTION_SPACE_HGRAD:
+          return Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(p, spaceDim);
+        case Intrepid2::FUNCTION_SPACE_HVOL:
+          return Intrepid2::getHypercubeBasis_HVOL<BasisFamily>(p, spaceDim);
+        default:
+          throw std::invalid_argument("Tensor PAMatrix bridge currently routes only HGRAD and scalar HVOL volume bases");
+      }
+    }
+
     template<class Scalar, class DeviceType>
     Intrepid2::TransformedBasisValues<Scalar,DeviceType> transformForPAMatrixBridge(const Intrepid2::EFunctionSpace functionSpace,
                                                                                     const Intrepid2::EOperator op,
@@ -122,10 +139,43 @@ namespace Camellia
     return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, components));
   }
 
+  /**
+   * \brief Convenience constructor for scalar L2/HVOL tensor field variables used by bridge smokes.
+   */
+  inline TensorVarPtr makeHVOLTensorFieldVar(const std::string &name, const int componentCount)
+  {
+    std::vector<VarPtr> components;
+    components.reserve(componentCount);
+    for (int d=0; d<componentCount; d++)
+    {
+      components.push_back(Teuchos::rcp(new Var(d, 0, name + "_" + std::to_string(d),
+                                                  OP_VALUE, L2, FIELD,
+                                                  Teuchos::null, true, UNKNOWN_FS)));
+    }
+    return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, components));
+  }
+
+  inline Intrepid2::EFunctionSpace intrepidFunctionSpaceForTensorDescriptor(const TensorComponentOperatorDescriptor &descriptor)
+  {
+    switch (descriptor.functionSpace())
+    {
+      case TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD: return Intrepid2::FUNCTION_SPACE_HGRAD;
+      case TENSOR_COMPONENT_FUNCTION_SPACE_HCURL: return Intrepid2::FUNCTION_SPACE_HCURL;
+      case TENSOR_COMPONENT_FUNCTION_SPACE_HDIV:  return Intrepid2::FUNCTION_SPACE_HDIV;
+      case TENSOR_COMPONENT_FUNCTION_SPACE_HVOL:  return Intrepid2::FUNCTION_SPACE_HVOL;
+      default: throw std::invalid_argument("PAMatrix bridge does not recognize tensor descriptor function-space metadata");
+    }
+  }
+
   inline Intrepid2::EOperator pamatrixOperatorForTensorDescriptor(const TensorComponentOperatorDescriptor &descriptor)
   {
     if (descriptor.isValueOnly()) return Intrepid2::OPERATOR_VALUE;
-    if (descriptor.derivativeComponentOrdinals().size() == 1) return Intrepid2::OPERATOR_GRAD;
+    if (descriptor.derivativeComponentOrdinals().size() == 1)
+    {
+      if (descriptor.functionSpace() != TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD)
+        throw std::invalid_argument("PAMatrix bridge only supports derivative descriptors for HGRAD variables");
+      return Intrepid2::OPERATOR_GRAD;
+    }
     throw std::invalid_argument("PAMatrix bridge currently supports only value-only or single-derivative tensor descriptors");
   }
 
@@ -215,6 +265,95 @@ namespace Camellia
     weightedComponents[coefficientComponent] = Intrepid2::Data<Scalar,DeviceType>(weightedComponentView, extents, variationTypes);
     tensorCubatureWeights = Intrepid2::TensorData<Scalar,DeviceType>(weightedComponents);
     return Scalar(1.0);
+  }
+
+  template<int spaceDim, unsigned long spaceDim2, class DeviceType, class Scalar>
+  Intrepid2::PAMatrix<DeviceType,Scalar> constructHypercubePAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+                                                                    const int p,
+                                                                    const Intrepid2::EFunctionSpace functionSpace1,
+                                                                    const Intrepid2::EOperator op1,
+                                                                    Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
+                                                                    const Intrepid2::EFunctionSpace functionSpace2,
+                                                                    const Intrepid2::EOperator op2,
+                                                                    Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
+                                                                    const TensorFunctionPtr &coefficient = Teuchos::null,
+                                                                    Scalar *scalarWeight = nullptr)
+  {
+    using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
+    using ExecutionSpace = typename DeviceType::execution_space;
+
+    auto basis1 = detail::getHypercubeBasisForPAMatrixBridge<BasisFamily>(functionSpace1, p, spaceDim);
+    auto basis2 = detail::getHypercubeBasisForPAMatrixBridge<BasisFamily>(functionSpace2, p, spaceDim);
+
+    Intrepid2::TensorData<Scalar,DeviceType> tensorCubatureWeights;
+    auto tensorCubaturePoints = makeHypercubeCubaturePoints<spaceDim,DeviceType,Scalar>(2 * p, tensorCubatureWeights);
+    const Scalar coefficientScalarWeight = foldSupportedTensorCoefficientIntoCubatureWeights<spaceDim,DeviceType,Scalar>(coefficient,
+                                                                                                                        tensorCubaturePoints,
+                                                                                                                        tensorCubatureWeights);
+    if (scalarWeight != nullptr) *scalarWeight = coefficientScalarWeight;
+
+    auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
+    basis1->getValues(basis1Values, tensorCubaturePoints, op1);
+    basis1Values.setBasis(basis1);
+
+    auto basis2Values = basis2->allocateBasisValues(tensorCubaturePoints, op2);
+    basis2->getValues(basis2Values, tensorCubaturePoints, op2);
+    basis2Values.setBasis(basis2);
+
+    const int numCells = geometry.numCells();
+    auto jacobian       = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
+    auto jacobianDividedByJacobianDet = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
+    auto jacobianDet    = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
+    auto jacobianDetInv = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
+    auto jacobianInv    = Intrepid2::CellTools<DeviceType>::allocateJacobianInv(jacobian);
+    auto cellMeasures   = geometry.allocateCellMeasure(jacobianDet, tensorCubatureWeights);
+
+    auto refData = geometry.getJacobianRefData(tensorCubaturePoints);
+    geometry.setJacobian(jacobian, tensorCubaturePoints, refData);
+    Intrepid2::CellTools<DeviceType>::setJacobianDet         (jacobianDet,    jacobian);
+    Intrepid2::CellTools<DeviceType>::setJacobianDetInv      (jacobianDetInv, jacobian);
+    Intrepid2::CellTools<DeviceType>::setJacobianInv         (jacobianInv,    jacobian);
+    Intrepid2::CellTools<DeviceType>::setJacobianDividedByDet(jacobianDividedByJacobianDet, jacobian, jacobianDetInv);
+
+    auto transformedBasis1Values = detail::transformForPAMatrixBridge(functionSpace1, op1, basis1Values,
+                                                                       jacobian, jacobianInv, jacobianDetInv, jacobianDividedByJacobianDet);
+    auto transformedBasis2Values = detail::transformForPAMatrixBridge(functionSpace2, op2, basis2Values,
+                                                                       jacobian, jacobianInv, jacobianDetInv, jacobianDividedByJacobianDet);
+
+    if (vectorWeight1 != Teuchos::null)
+    {
+      Intrepid2::ScalarView<Scalar,DeviceType> auView("a_u", spaceDim);
+      auto auViewHost = Kokkos::create_mirror(auView);
+      for (int d=0; d<spaceDim; d++) auViewHost(d) = (*vectorWeight1)[d];
+      Kokkos::deep_copy(auView, auViewHost);
+
+      Kokkos::Array<int,3> extents {numCells, tensorCubaturePoints.extent_int(0), spaceDim};
+      Kokkos::Array<Intrepid2::DataVariationType,3> variationTypes {Intrepid2::CONSTANT, Intrepid2::CONSTANT, Intrepid2::GENERAL};
+      Intrepid2::Data<Scalar,DeviceType> auData(auView, extents, variationTypes);
+      auto uTransform = Intrepid2::Data<Scalar,DeviceType>::allocateMatVecResult(transformedBasis1Values.transform(), auData, true);
+      uTransform.storeMatVec(transformedBasis1Values.transform(), auData, true);
+      transformedBasis1Values = Intrepid2::TransformedBasisValues<Scalar,DeviceType>(uTransform, basis1Values);
+    }
+
+    if (vectorWeight2 != Teuchos::null)
+    {
+      Intrepid2::ScalarView<Scalar,DeviceType> avView("a_v", spaceDim);
+      auto avViewHost = Kokkos::create_mirror(avView);
+      for (int d=0; d<spaceDim; d++) avViewHost(d) = (*vectorWeight2)[d];
+      Kokkos::deep_copy(avView, avViewHost);
+
+      Kokkos::Array<int,3> extents {numCells, tensorCubaturePoints.extent_int(0), spaceDim};
+      Kokkos::Array<Intrepid2::DataVariationType,3> variationTypes {Intrepid2::CONSTANT, Intrepid2::CONSTANT, Intrepid2::GENERAL};
+      Intrepid2::Data<Scalar,DeviceType> avData(avView, extents, variationTypes);
+      auto vTransform = Intrepid2::Data<Scalar,DeviceType>::allocateMatVecResult(transformedBasis2Values.transform(), avData, true);
+      vTransform.storeMatVec(transformedBasis2Values.transform(), avData, true);
+      transformedBasis2Values = Intrepid2::TransformedBasisValues<Scalar,DeviceType>(vTransform, basis2Values);
+    }
+
+    geometry.computeCellMeasure(cellMeasures, jacobianDet, tensorCubatureWeights);
+    ExecutionSpace().fence();
+
+    return Intrepid2::PAMatrix<DeviceType,Scalar>(transformedBasis1Values, cellMeasures, transformedBasis2Values);
   }
 
   template<int spaceDim, unsigned long spaceDim2, class DeviceType, class Scalar>
@@ -373,13 +512,17 @@ namespace Camellia
     if (term.componentCount() != spaceDim) throw std::invalid_argument("Tensor term component count must match HGRAD hypercube dimension");
     if (term.coefficient() == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
 
+    const auto functionSpace1 = intrepidFunctionSpaceForTensorDescriptor(term.trialOperator());
+    const auto functionSpace2 = intrepidFunctionSpaceForTensorDescriptor(term.testOperator());
     const auto op1 = pamatrixOperatorForTensorDescriptor(term.trialOperator());
     const auto op2 = pamatrixOperatorForTensorDescriptor(term.testOperator());
     auto vectorWeight1 = vectorWeightForSingleDerivative<spaceDim,Scalar>(term.trialOperator());
     auto vectorWeight2 = vectorWeightForSingleDerivative<spaceDim,Scalar>(term.testOperator());
     Scalar scalarWeight = Scalar(1.0);
 
-    return {constructHypercubeHGRADPAMatrix<spaceDim,spaceDim,DeviceType,Scalar>(geometry, p, op1, vectorWeight1, op2, vectorWeight2,
+    return {constructHypercubePAMatrix<spaceDim,spaceDim,DeviceType,Scalar>(geometry, p,
+                                                                                 functionSpace1, op1, vectorWeight1,
+                                                                                 functionSpace2, op2, vectorWeight2,
                                                                                 term.coefficient(), &scalarWeight),
             scalarWeight, label};
   }
