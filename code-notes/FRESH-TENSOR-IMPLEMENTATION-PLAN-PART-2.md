@@ -131,21 +131,26 @@ For each Vlasov/DPG term:
 5. Add assembly coverage only if the assembled local matrix is needed for diagnostics or preconditioner construction.
 6. Record unsupported features explicitly, including orientation, non-tensor topology, trace coupling, or coefficient layout limitations.
 
-The intended order is:
+The Vlasov term unguarding order is now:
 
-- volume scalar HGRAD/HGRAD-style terms already closest to the H1 Gram machinery, now routed through the reusable `TensorPAMatrixBridge` adapter rather than remaining solely driver-local;
-- single-component separable coefficient variants of those volume terms, starting with coordinate coefficients such as the `x_0 * value(f) * d_1(w)` smoke term, then sums decomposed into multiple such terms such as `-0.5 * (x_0 + x_1) * value(f) * d_2(w)`, and separable subterms extracted from larger coefficients such as `-0.75 * x_1 * value(f) * d_3(w)`;
-- vector-valued or mixed HGRAD/HCURL/HDIV/HVOL terms that PAMatrix already supports in monolithic tests;
-- trace and skeleton terms, with explicit orientation and side-topology handling;
-- graph-norm pieces needed by the DPG test solve;
-- only then the assembled ingredients needed for `B^T G^{-1} B`.
+1. **L2 volume terms first; defer HDIV and HCURL.**  Treat L2 as scalar-valued.  The first targets should be scalar volume terms that require only VALUE/gradient-style transformed basis data already close to the current HGRAD/HGRAD bridge machinery.  Legal near-term combinations include scalar-weighted `(HGRAD,HGRAD)`, `(L2,HGRAD)`, `(HGRAD,L2)`, and `(L2,L2)` terms, with `(L2,L2)` included when an L2 test-space inner product is useful.  Unsupported combinations should fail immediately at descriptor construction or adapter selection rather than falling through to a dense or guessed path.
+2. **Trace and skeleton terms by component dimension.**  Add traces one component dimension at a time.  For Vlasov, the immediate variables are Dirichlet trace/flux variables for the `t_n hat` unknowns: non-conforming L2 variables on the mesh skeleton with an implicit outward-facing normal.  These traces are subdivided according to the dimension they are orthogonal to, so each trace variable lives in a geometric space that is still a true tensor product.  For Maxwell and Poisson, H1 traces are also needed; in the immediate 1D configuration-space case these are point values at element interfaces.  Skeleton variables are distinct variables, not merely traces of volume variables, and may be associated with combinations of volume variables and material weights without requiring a one-to-one volume-variable correspondence.
+3. **Solution-dependent scalar coefficients.**  Add coefficients whose data come from another solution field after the fixed-coefficient L2 and trace paths are correct.  For the near-term planar MITL case, assume these coefficients are effectively 1D when used in Vlasov, matching the electromagnetic fields obtained from the Maxwell solve.  Coefficient evaluation, caching, invalidation, and fixed-point iteration state should be explicit in the adapter layer.
+4. **Moment computations from the Vlasov solution.**  Add tensor-native moment reductions needed to form the Maxwell right-hand side, and expose the same moment machinery for diagnostic and visualization output.  These are reductions/projections from the Vlasov distribution, not ordinary bilinear-form terms, so they should have separate tests and timing labels.
+5. **Coupled multi-component scalar coefficients.**  Add genuinely coupled coefficient data only after the separable/scalar paths and moments are stable.  For the 1D2V plus time planar MITL problem, the important coupled coefficient is the relativistic `gamma`, which depends on both velocity dimensions but is still scalar-valued.  Matrix-valued coefficients are not a canonical tensor coefficient type here; decompose any such data into scalar components before it reaches the tensor bridge.
+
+The ordering above is pragmatic rather than mathematical: Vlasov eventually needs all of these pieces, but this sequence maximizes isolated correctness tests and fail-fast adapter boundaries before combining terms.
 
 Rules for this phase:
 
 - no dense local `B` in the matrix-free backend;
 - no full local Schur complement as the first tensor-native target;
 - each term must have a correctness test before it is combined with other terms;
-- performance labels must separate coefficient evaluation, point-data construction, tensor apply/assembly, and any local solve.
+- performance labels must separate coefficient evaluation, point-data construction, tensor apply/assembly, reductions/moments, and any local solve;
+- unsupported function-space/operator/coefficient combinations must fail fast when a descriptor is built or when adapter selection is attempted;
+- descriptor metadata should use the existing TensorVar/TensorBilinearTerm representation of values, gradients, curls, divergences, and related operators rather than inventing a parallel metadata scheme; if an operator-space combination is not represented there yet, record that as a specific descriptor gap before implementing the term;
+- coefficient data crossing the tensor bridge should be scalar-valued; matrix-valued physics data must be split into scalar component coefficients before tensor adapter selection;
+- skeleton variables must be modeled as distinct unknowns on skeleton geometry, not as implicit aliases for volume variable traces.
 
 ### Phase 8: global solve and preconditioning path
 
@@ -191,7 +196,21 @@ No staged sparse right-apply path should be described as an active Part 2 delive
 
 ### Phase D: proceed toward Vlasov only after kernel stability
 
-Once the lazy tag fix and current diagnostics are clean, the next productive implementation step is the Phase 6/7 bridge: choose the smallest DPG/Vlasov volume term that maps directly to existing PAMatrix capabilities, implement it as a narrow adapter, and compare it against the existing dense/standard path on tiny tensor-product cells.
+Once the lazy tag fix and current diagnostics are clean, the next productive implementation step is the Phase 6/7 bridge: choose the smallest scalar L2 volume term that maps directly to existing PAMatrix capabilities, implement it as a narrow adapter, and compare it against the existing dense/standard path on tiny tensor-product cells.  Keep HDIV and HCURL guarded while this L2 path is brought up.  After the L2 volume path is stable, proceed to dimension-split skeleton trace terms, then solution-dependent scalar coefficients from Maxwell fields, then Vlasov moment reductions for the Maxwell RHS and diagnostics, and finally the coupled scalar `gamma(v_x,v_y)` coefficient.
+
+The Vlasov-Maxwell coupling should be treated as an explicit fixed-point loop in the plan: electromagnetic fields used by the Vlasov solve are solution coefficients produced by the Maxwell solve, while the Maxwell right-hand side is determined by moments of the Vlasov distribution.  The tensor implementation should therefore distinguish ordinary coefficient evaluation, solution-dependent coefficient refresh from Maxwell state, and Vlasov moment computation feeding the next Maxwell solve.
+
+## Remaining answers that would maximize autonomous progress
+
+Most of the previously open semantic questions are now answered well enough to proceed on isolated L2 volume terms, dimension-split traces, scalar solution-dependent coefficients, moments, and the scalar coupled `gamma` coefficient.  The remaining decisions that would most improve autonomous progress are:
+
+1. **Pick the first concrete L2 volume term.**  Name the exact Vlasov bilinear term to implement first, including trial variable, test variable, operator on each side, coefficient, sign, and which component dimensions it spans.  If there is no preference, start with the smallest scalar constant-coefficient `(L2,L2)` or `(L2,HGRAD)` term already present in the Planar MITL formulation and keep all other terms guarded.
+2. **Specify trace orientation/sign conventions in code-facing terms.**  The plan now records outward-facing normals and dimension-orthogonal skeleton variables, but implementation still needs the exact plus/minus, left/right, or inflow/outflow naming convention expected by the existing Vlasov formulation and tests.
+3. **Define moment formulas and storage layout.**  For the Maxwell RHS and diagnostics, specify the exact moments needed first, the velocity-space weights including where `gamma` enters, quadrature order expectations, and the target layout for writing the reduced data back into Maxwell coefficient/RHS structures.
+4. **Define fixed-point lifecycle details.**  State the intended initial field guess, update order, convergence metric, relaxation policy if any, and whether Vlasov and Maxwell coefficient data should be cached per nonlinear iteration, per time slab, or per assembly/apply call.
+5. **Identify the first H1 trace target for Maxwell/Poisson.**  In 1D configuration space these are point values at interfaces, but the first concrete unknown and term should be named before implementation.
+
+These are not blockers for beginning the first fail-fast scalar L2 volume adapter, but answering them soon will reduce rework once traces, moments, and solution-dependent coefficients are unguarded.
 
 ## What not to do next
 
