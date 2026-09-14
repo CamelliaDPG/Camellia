@@ -14,6 +14,7 @@
 
 #include "TensorBilinearForm.h"
 #include "TensorFunction.h"
+#include "TensorPAMatrixBridge.h"
 #include "Var.h"
 
 #include "Kokkos_Core.hpp"
@@ -60,12 +61,7 @@ namespace
   using TpetraRowMatrix = Tpetra::RowMatrix<Scalar>;
   using TpetraVector = Tpetra::Vector<Scalar>;
 
-  struct OperatorTerm
-  {
-    PAMatrix matrix;
-    Scalar weight = 1.0;
-    std::string label;
-  };
+  using OperatorTerm = Camellia::TensorPAMatrixTerm<DeviceType,Scalar>;
 
   int checkedProduct(const std::vector<int> &values)
   {
@@ -397,7 +393,7 @@ namespace
     return Teuchos::rcp(new Camellia::TensorVar(name, Camellia::TENSOR_FIELD, components));
   }
 
-  Intrepid2::EOperator pamatrixOperatorForTensorDescriptor(const Camellia::TensorComponentOperatorDescriptor &descriptor)
+  Intrepid2::EOperator localPAMatrixOperatorForTensorDescriptor(const Camellia::TensorComponentOperatorDescriptor &descriptor)
   {
     if (descriptor.isValueOnly()) return Intrepid2::OPERATOR_VALUE;
     if (descriptor.derivativeComponentOrdinals().size() == 1) return Intrepid2::OPERATOR_GRAD;
@@ -478,8 +474,8 @@ namespace
     if (!term.isPAMatrixCandidate()) throw std::invalid_argument("Tensor term does not declare PAMatrix support");
     if (term.componentCount() != spaceDim) throw std::invalid_argument("Tensor term component count must match HGRAD hypercube dimension");
     if (term.coefficient() == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
-    const auto op1 = pamatrixOperatorForTensorDescriptor(term.trialOperator());
-    const auto op2 = pamatrixOperatorForTensorDescriptor(term.testOperator());
+    const auto op1 = localPAMatrixOperatorForTensorDescriptor(term.trialOperator());
+    const auto op2 = localPAMatrixOperatorForTensorDescriptor(term.testOperator());
     auto vectorWeight1 = vectorWeightForSingleDerivative<spaceDim>(term.trialOperator());
     auto vectorWeight2 = vectorWeightForSingleDerivative<spaceDim>(term.testOperator());
     Scalar scalarWeight = 1.0;
@@ -557,7 +553,7 @@ namespace
                                                             Camellia::TensorFunction::constant(-0.75) * Camellia::TensorFunction::componentCoordinate(1),
                                                             Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                             Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
-        appendTensorHGRADVolumeTermsToPAMatrix<spaceDim>(terms, geometry, p, vlasovCoordinateD3Term,
+        Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovCoordinateD3Term,
                                                          "vlasov_coordinate_x1_value_test_d3");
         return terms;
       }
@@ -570,7 +566,7 @@ namespace
                                                       Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1)),
                                                       Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                       Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
-        appendTensorHGRADVolumeTermsToPAMatrix<spaceDim>(terms, geometry, p, vlasovLinearTerm,
+        Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovLinearTerm,
                                                          "vlasov_linear_x0_plus_x1_value_test_d2");
         return terms;
       }
@@ -585,7 +581,7 @@ namespace
                                                  coefficient,
                                                  Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                  Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
-      appendTensorHGRADVolumeTermsToPAMatrix<spaceDim>(terms, geometry, p, vlasovDtTerm,
+      Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovDtTerm,
                                                        (operatorChoice == "vlasov-coordinate") ? "vlasov_coordinate_x0_value_test_d1" : "vlasov_dt_value_test_d1");
       return terms;
     }
