@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "TensorPAMatrixBridge.h"
+#include "TensorBilinearFormBuilder.h"
 
 #include <Intrepid2_CellGeometryTestUtils.hpp>
 #include <Intrepid2_DefaultCubatureFactory.hpp>
@@ -347,6 +348,87 @@ namespace
                                      TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
 
     compareBridgeTermToStandardAssembly<spaceDim>(vlasovDtTerm, "L2/HGRAD Vlasov value/dt bridge", out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, BuilderCreatesL2VolumeDescriptorTerms )
+  {
+    const int spaceDim = 3;
+    auto l2Trial = Camellia::makeHVOLTensorFieldVar("f", spaceDim);
+    auto h1Var   = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+    auto l2Test  = Camellia::makeHVOLTensorFieldVar("g", spaceDim);
+
+    TensorBilinearFormBuilder builder("l2-volume-descriptors");
+    auto form = builder.addL2ValueDerivativeTerm(l2Trial,
+                                                 h1Var,
+                                                 1,
+                                                 TensorFunction::constant(1.0),
+                                                 TensorOperatorCapabilitySet::matrixFreeAndPAMatrix())
+                       .addValueL2ValueTerm(h1Var,
+                                            l2Test,
+                                            TensorFunction::constant(2.0),
+                                            TensorOperatorCapabilitySet::matrixFreeAndPAMatrix())
+                       .addL2ValueL2ValueTerm(l2Trial,
+                                              l2Test,
+                                              TensorFunction::constant(3.0),
+                                              TensorOperatorCapabilitySet::matrixFreeAndPAMatrix())
+                       .build();
+
+    TEST_EQUALITY(form->termCount(), 3);
+    TEST_EQUALITY(form->term(0).trialOperator().functionSpace(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL);
+    TEST_EQUALITY(form->term(0).testOperator().functionSpace(), TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD);
+    TEST_ASSERT(form->term(0).testOperator().takesDerivativeInComponent(1));
+    TEST_EQUALITY(form->term(1).trialOperator().functionSpace(), TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD);
+    TEST_EQUALITY(form->term(1).testOperator().functionSpace(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL);
+    TEST_EQUALITY(form->term(2).trialOperator().functionSpace(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL);
+    TEST_EQUALITY(form->term(2).testOperator().functionSpace(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, L2TrialCoordinateHGRADTestVlasovTermMatchesStandardAssembly )
+  {
+    const int spaceDim = 3;
+    auto trialVar = Camellia::makeHVOLTensorFieldVar("f", spaceDim);
+    auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+    TensorBilinearTerm vlasovCoordinateTerm(trialVar,
+                                            testVar,
+                                            TensorComponentOperatorDescriptor::valueOnly(spaceDim, TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                            TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 2),
+                                            TensorFunction::componentCoordinate(0),
+                                            TENSOR_BILINEAR_TERM_VOLUME,
+                                            TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+
+    compareBridgeTermToStandardAssembly<spaceDim>(vlasovCoordinateTerm, "L2/HGRAD coordinate x0 value/d2 bridge", out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, HGRADTrialL2TestValueTermMatchesStandardAssembly )
+  {
+    const int spaceDim = 2;
+    auto trialVar = Camellia::makeHGRADTensorFieldVar("u", spaceDim);
+    auto testVar  = Camellia::makeHVOLTensorFieldVar("g", spaceDim);
+    TensorBilinearTerm hgradL2Term(trialVar,
+                                   testVar,
+                                   TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                   TensorComponentOperatorDescriptor::valueOnly(spaceDim, TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                   TensorFunction::constant(2.0),
+                                   TENSOR_BILINEAR_TERM_VOLUME,
+                                   TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+
+    compareBridgeTermToStandardAssembly<spaceDim>(hgradL2Term, "HGRAD/L2 value/value bridge", out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, L2ValueValueTermMatchesStandardAssembly )
+  {
+    const int spaceDim = 2;
+    auto trialVar = Camellia::makeHVOLTensorFieldVar("f", spaceDim);
+    auto testVar  = Camellia::makeHVOLTensorFieldVar("g", spaceDim);
+    TensorBilinearTerm l2MassTerm(trialVar,
+                                  testVar,
+                                  TensorComponentOperatorDescriptor::valueOnly(spaceDim, TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                  TensorComponentOperatorDescriptor::valueOnly(spaceDim, TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                  TensorFunction::constant(1.25),
+                                  TENSOR_BILINEAR_TERM_VOLUME,
+                                  TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+
+    compareBridgeTermToStandardAssembly<spaceDim>(l2MassTerm, "L2/L2 value/value bridge", out, success);
   }
 
   TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, CoordinateCoefficientVlasovTermMatchesStandardAssembly )

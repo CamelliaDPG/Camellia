@@ -49,6 +49,9 @@ namespace Camellia
       IndexType entityOrdinal = -1;
       TensorFactorSpaceShape trialShape;
       TensorFactorSpaceShape testShape;
+      // Row-major test-by-trial boundary block.  For flux-like skeleton variables,
+      // entries include the tensor skeleton outward-normal sign: -1 on lower/left
+      // component endpoints and +1 on upper/right component endpoints.
       std::vector<double> bMatrix;
     };
 

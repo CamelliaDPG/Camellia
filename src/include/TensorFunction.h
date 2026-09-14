@@ -183,6 +183,17 @@ namespace Camellia
 
     static TensorFunctionPtr constant(double value);
     static TensorFunctionPtr componentCoordinate(int componentOrdinal);
+    static TensorFunctionPtr solutionCoefficient1D(int componentOrdinal,
+                                                   const TensorFunctionDependencySource &dependencySource);
+    static TensorFunctionPtr configurationSpaceSolutionCoefficient1D(int componentOrdinal,
+                                                                     const std::string &name);
+    static TensorFunctionPtr namedSolutionCoefficient1D(int componentOrdinal,
+                                                       const std::string &name);
+    static TensorFunctionPtr relativisticGamma(const std::vector<int> &velocityComponentOrdinals,
+                                               double c);
+    static TensorFunctionPtr relativisticVelocityComponent(int velocityComponentOrdinal,
+                                                           const std::vector<int> &velocityComponentOrdinals,
+                                                           double c);
     static TensorFunctionPtr centeredMaxwellian1D(int velocityComponentOrdinal,
                                                   double density,
                                                   double mean,

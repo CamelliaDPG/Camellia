@@ -597,6 +597,66 @@ TensorFunctionPtr TensorFunction::componentCoordinate(int componentOrdinal)
   return Teuchos::rcp(new ComponentCoordinateTensorFunction(componentOrdinal));
 }
 
+TensorFunctionPtr TensorFunction::solutionCoefficient1D(int componentOrdinal,
+                                                        const TensorFunctionDependencySource &dependencySource)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(componentOrdinal < 0, std::invalid_argument,
+                             "TensorFunction::solutionCoefficient1D requires nonnegative component ordinal.");
+  return TensorFunction::withDependencySource(TensorFunction::componentCoordinate(componentOrdinal), dependencySource);
+}
+
+TensorFunctionPtr TensorFunction::configurationSpaceSolutionCoefficient1D(int componentOrdinal,
+                                                                          const std::string &name)
+{
+  return TensorFunction::solutionCoefficient1D(componentOrdinal,
+                                               TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, name));
+}
+
+TensorFunctionPtr TensorFunction::namedSolutionCoefficient1D(int componentOrdinal,
+                                                            const std::string &name)
+{
+  return TensorFunction::solutionCoefficient1D(componentOrdinal,
+                                               TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, name));
+}
+
+TensorFunctionPtr TensorFunction::relativisticGamma(const std::vector<int> &velocityComponentOrdinals,
+                                                    double c)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(velocityComponentOrdinals.empty(), std::invalid_argument,
+                             "TensorFunction::relativisticGamma requires at least one velocity component ordinal.");
+  TEUCHOS_TEST_FOR_EXCEPTION(c <= 0.0, std::invalid_argument,
+                             "TensorFunction::relativisticGamma requires positive light speed c.");
+
+  auto gammaSquared = TensorFunction::constant(1.0);
+  const double inverseCSquared = 1.0 / (c * c);
+  for (const int velocityComponentOrdinal : velocityComponentOrdinals)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(velocityComponentOrdinal < 0, std::invalid_argument,
+                               "TensorFunction::relativisticGamma requires nonnegative velocity component ordinals.");
+    auto u = TensorFunction::componentCoordinate(velocityComponentOrdinal);
+    gammaSquared = gammaSquared + TensorFunction::constant(inverseCSquared) * u * u;
+  }
+  return sqrt(gammaSquared);
+}
+
+TensorFunctionPtr TensorFunction::relativisticVelocityComponent(int velocityComponentOrdinal,
+                                                                const std::vector<int> &velocityComponentOrdinals,
+                                                                double c)
+{
+  bool componentIsInGamma = false;
+  for (const int gammaComponentOrdinal : velocityComponentOrdinals)
+  {
+    if (gammaComponentOrdinal == velocityComponentOrdinal)
+    {
+      componentIsInGamma = true;
+      break;
+    }
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(!componentIsInGamma, std::invalid_argument,
+                             "TensorFunction::relativisticVelocityComponent requires the requested component to appear in the gamma velocity list.");
+  return TensorFunction::componentCoordinate(velocityComponentOrdinal) * reciprocal(TensorFunction::relativisticGamma(velocityComponentOrdinals, c));
+}
+
 TensorFunctionPtr TensorFunction::centeredMaxwellian1D(int velocityComponentOrdinal,
                                                        double density,
                                                        double mean,

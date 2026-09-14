@@ -77,6 +77,8 @@ namespace Camellia
       LocalDofCountDualView _skeletonLocalDofCounts;
       LocalToGlobalIndexDualView _skeletonLocalToGlobalIndices;
       SkeletonEntityOrdinalDualView _skeletonEntityVertexOrdinals;
+      // For trace/skeleton variables, side parity is the 1D outward-normal sign in the
+      // orthogonal component: -1 on the lower/left side and +1 on the upper/right side.
       SkeletonEntityParityDualView _skeletonEntitySideParities;
 
       const std::string &name() const { return _name; }
@@ -94,6 +96,7 @@ namespace Camellia
       const LocalToGlobalIndexDualView &skeletonLocalToGlobalIndices() const { return _skeletonLocalToGlobalIndices; }
       const SkeletonEntityOrdinalDualView &skeletonEntityVertexOrdinals() const { return _skeletonEntityVertexOrdinals; }
       const SkeletonEntityParityDualView &skeletonEntitySideParities() const { return _skeletonEntitySideParities; }
+      const SkeletonEntityParityDualView &skeletonEntityOutwardNormalSigns() const { return _skeletonEntitySideParities; }
     };
 
   private:
@@ -160,6 +163,9 @@ namespace Camellia
     int skeletonEntitySideParity(TensorSpaceRole role,
                                  const std::string &varName,
                                  IndexType skeletonEntityOrdinal) const;
+    int skeletonEntityOutwardNormalSign(TensorSpaceRole role,
+                                        const std::string &varName,
+                                        IndexType skeletonEntityOrdinal) const;
   };
 }
 

@@ -47,6 +47,22 @@ namespace Camellia
                                                       TensorFunctionPtr coefficient,
                                                       const TensorOperatorCapabilitySet &capabilities = TensorOperatorCapabilitySet::matrixFreeOnly());
 
+    TensorBilinearFormBuilder &addL2ValueDerivativeTerm(TensorVarPtr trialVar,
+                                                        TensorVarPtr testVar,
+                                                        int derivativeComponentOrdinal,
+                                                        TensorFunctionPtr coefficient,
+                                                        const TensorOperatorCapabilitySet &capabilities = TensorOperatorCapabilitySet::matrixFreeOnly());
+
+    TensorBilinearFormBuilder &addValueL2ValueTerm(TensorVarPtr trialVar,
+                                                  TensorVarPtr testVar,
+                                                  TensorFunctionPtr coefficient,
+                                                  const TensorOperatorCapabilitySet &capabilities = TensorOperatorCapabilitySet::matrixFreeOnly());
+
+    TensorBilinearFormBuilder &addL2ValueL2ValueTerm(TensorVarPtr trialVar,
+                                                    TensorVarPtr testVar,
+                                                    TensorFunctionPtr coefficient,
+                                                    const TensorOperatorCapabilitySet &capabilities = TensorOperatorCapabilitySet::matrixFreeOnly());
+
     TensorBilinearFormBuilder &addDerivativeDerivativeTerm(TensorVarPtr trialVar,
                                                            TensorVarPtr testVar,
                                                            int trialDerivativeComponentOrdinal,

@@ -102,6 +102,8 @@ void TensorOperatorData::buildBoundarySideData()
 
 namespace
 {
+  // Returns the 1D outward-normal sign for the first incident active cell:
+  // -1 on the lower/left endpoint and +1 on the upper/right endpoint.
   int firstIncidentCellSideParity(const Teuchos::RCP<ComponentMeshTopology1D> &componentTopo,
                                   IndexType vertexOrdinal)
   {
@@ -420,4 +422,11 @@ int TensorOperatorData::skeletonEntitySideParity(TensorSpaceRole role,
   TEUCHOS_TEST_FOR_EXCEPTION((skeletonEntityOrdinal < 0) || (skeletonEntityOrdinal >= variable.skeletonEntityCount()), std::invalid_argument,
                              "TensorOperatorData::skeletonEntitySideParity skeleton entity ordinal out of range.");
   return variable.skeletonEntitySideParities().h_view(skeletonEntityOrdinal);
+}
+
+int TensorOperatorData::skeletonEntityOutwardNormalSign(TensorSpaceRole role,
+                                                       const std::string &varName,
+                                                       IndexType skeletonEntityOrdinal) const
+{
+  return skeletonEntitySideParity(role, varName, skeletonEntityOrdinal);
 }

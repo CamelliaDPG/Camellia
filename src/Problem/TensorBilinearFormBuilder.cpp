@@ -91,6 +91,52 @@ TensorBilinearFormBuilder &TensorBilinearFormBuilder::addValueDerivativeTerm(Ten
   return *this;
 }
 
+TensorBilinearFormBuilder &TensorBilinearFormBuilder::addL2ValueDerivativeTerm(TensorVarPtr trialVar,
+                                                                                TensorVarPtr testVar,
+                                                                                int derivativeComponentOrdinal,
+                                                                                TensorFunctionPtr coefficient,
+                                                                                const TensorOperatorCapabilitySet &capabilities)
+{
+  _form->addTerm(TensorBilinearTerm(trialVar,
+                                    testVar,
+                                    TensorComponentOperatorDescriptor::valueOnly(trialVar->componentCount(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                    TensorComponentOperatorDescriptor::singleDerivative(testVar->componentCount(), derivativeComponentOrdinal),
+                                    coefficient,
+                                    TENSOR_BILINEAR_TERM_VOLUME,
+                                    capabilities));
+  return *this;
+}
+
+TensorBilinearFormBuilder &TensorBilinearFormBuilder::addValueL2ValueTerm(TensorVarPtr trialVar,
+                                                                          TensorVarPtr testVar,
+                                                                          TensorFunctionPtr coefficient,
+                                                                          const TensorOperatorCapabilitySet &capabilities)
+{
+  _form->addTerm(TensorBilinearTerm(trialVar,
+                                    testVar,
+                                    TensorComponentOperatorDescriptor::valueOnly(trialVar->componentCount()),
+                                    TensorComponentOperatorDescriptor::valueOnly(testVar->componentCount(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                    coefficient,
+                                    TENSOR_BILINEAR_TERM_VOLUME,
+                                    capabilities));
+  return *this;
+}
+
+TensorBilinearFormBuilder &TensorBilinearFormBuilder::addL2ValueL2ValueTerm(TensorVarPtr trialVar,
+                                                                            TensorVarPtr testVar,
+                                                                            TensorFunctionPtr coefficient,
+                                                                            const TensorOperatorCapabilitySet &capabilities)
+{
+  _form->addTerm(TensorBilinearTerm(trialVar,
+                                    testVar,
+                                    TensorComponentOperatorDescriptor::valueOnly(trialVar->componentCount(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                    TensorComponentOperatorDescriptor::valueOnly(testVar->componentCount(), TENSOR_COMPONENT_FUNCTION_SPACE_HVOL),
+                                    coefficient,
+                                    TENSOR_BILINEAR_TERM_VOLUME,
+                                    capabilities));
+  return *this;
+}
+
 TensorBilinearFormBuilder &TensorBilinearFormBuilder::addDerivativeDerivativeTerm(TensorVarPtr trialVar,
                                                                                   TensorVarPtr testVar,
                                                                                   int trialDerivativeComponentOrdinal,

@@ -197,10 +197,12 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, TraceSkeletonLocalToGlobalViewsAndParityM
   auto localToGlobal = traceData.skeletonLocalToGlobalIndices();
   auto vertexOrdinals = traceData.skeletonEntityVertexOrdinals();
   auto sideParities = traceData.skeletonEntitySideParities();
+  auto outwardNormalSigns = traceData.skeletonEntityOutwardNormalSigns();
   localCounts.sync_host();
   localToGlobal.sync_host();
   vertexOrdinals.sync_host();
   sideParities.sync_host();
+  outwardNormalSigns.sync_host();
 
   auto orthogonalTopo = tensorMesh->topology()->componentMeshTopology(1);
   for (IndexType entityOrdinal=0; entityOrdinal<skeleton.entityCount(); entityOrdinal++)
@@ -216,7 +218,9 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, TraceSkeletonLocalToGlobalViewsAndParityM
     const IndexType leftVertex = orthogonalTopo->cellVertexIndex(incidentCell, 0);
     const int expectedParity = (entity.vertexOrdinal() == leftVertex) ? -1 : 1;
     TEST_EQUALITY(data.skeletonEntitySideParity(TENSOR_TRIAL_SPACE, "tn", entityOrdinal), expectedParity);
+    TEST_EQUALITY(data.skeletonEntityOutwardNormalSign(TENSOR_TRIAL_SPACE, "tn", entityOrdinal), expectedParity);
     TEST_EQUALITY(sideParities.h_view(entityOrdinal), expectedParity);
+    TEST_EQUALITY(outwardNormalSigns.h_view(entityOrdinal), expectedParity);
 
     for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(expectedIndices.size()); localOrdinal++)
     {
@@ -243,6 +247,14 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, DirectionalTraceVariablesCompileToDistinc
   TEST_EQUALITY(data.skeletonEntityCount(TENSOR_TRIAL_SPACE, "tn_x"), xSkeleton.entityCount());
   TEST_EQUALITY(data.skeletonEntityCount(TENSOR_TRIAL_SPACE, "tn_t"), tSkeleton.entityCount());
 
+  auto expectedOutwardNormalSign = [tensorMesh](int componentOrdinal, IndexType vertexOrdinal) {
+    auto componentTopo = tensorMesh->topology()->componentMeshTopology(componentOrdinal);
+    const IndexType incidentBegin = componentTopo->vertexToCellOffsetHost(vertexOrdinal);
+    const ComponentCellID1D &incidentCell = componentTopo->activeCells()[componentTopo->vertexToCellOrdinalHost(incidentBegin)];
+    const IndexType leftVertex = componentTopo->cellVertexIndex(incidentCell, 0);
+    return (vertexOrdinal == leftVertex) ? -1 : 1;
+  };
+
   TensorCoefficientMap tnXMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "tn_x");
   TensorCoefficientMap tnTMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "tn_t");
   for (IndexType entityOrdinal=0; entityOrdinal<xSkeleton.entityCount(); entityOrdinal++)
@@ -250,6 +262,8 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, DirectionalTraceVariablesCompileToDistinc
     const auto &entity = xSkeleton.entity(entityOrdinal);
     auto expectedIndices = tnXMap.indicesForSkeletonEntity(entity);
     TEST_EQUALITY(data.skeletonLocalDofCount(TENSOR_TRIAL_SPACE, "tn_x", entityOrdinal), static_cast<IndexType>(expectedIndices.size()));
+    TEST_EQUALITY(data.skeletonEntityOutwardNormalSign(TENSOR_TRIAL_SPACE, "tn_x", entityOrdinal),
+                  expectedOutwardNormalSign(0, entity.vertexOrdinal()));
     for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(expectedIndices.size()); localOrdinal++)
     {
       TEST_EQUALITY(data.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "tn_x", entityOrdinal, localOrdinal), expectedIndices[localOrdinal]);
@@ -260,6 +274,8 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, DirectionalTraceVariablesCompileToDistinc
     const auto &entity = tSkeleton.entity(entityOrdinal);
     auto expectedIndices = tnTMap.indicesForSkeletonEntity(entity);
     TEST_EQUALITY(data.skeletonLocalDofCount(TENSOR_TRIAL_SPACE, "tn_t", entityOrdinal), static_cast<IndexType>(expectedIndices.size()));
+    TEST_EQUALITY(data.skeletonEntityOutwardNormalSign(TENSOR_TRIAL_SPACE, "tn_t", entityOrdinal),
+                  expectedOutwardNormalSign(1, entity.vertexOrdinal()));
     for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(expectedIndices.size()); localOrdinal++)
     {
       TEST_EQUALITY(data.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "tn_t", entityOrdinal, localOrdinal), expectedIndices[localOrdinal]);

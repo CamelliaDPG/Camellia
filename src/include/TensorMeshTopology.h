@@ -33,6 +33,16 @@ namespace Camellia
       }
     };
 
+    /**
+     * \brief One tensor-product skeleton entity orthogonal to a single component dimension.
+     *
+     * The orthogonal component supplies the skeleton-support vertex.  Retained components
+     * supply the tensor-product cell tuple on the lower-dimensional skeleton geometry.  When
+     * an operator evaluates this entity against one incident 1D component cell, the outward
+     * normal sign in the orthogonal component is -1 on the lower/left endpoint and +1 on the
+     * upper/right endpoint.  TensorOperatorData exposes that sign as the skeleton side parity
+     * and as an outward-normal-sign alias for trace/skeleton kernels.
+     */
     struct TensorSkeletonEntity
     {
       int _orthogonalComponentOrdinal = -1;

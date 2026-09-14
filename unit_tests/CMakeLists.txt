@@ -22,6 +22,9 @@ set(PHASE0_TEST_SOURCES
   TensorProductLocalOperatorTests.cpp
   TensorLocalSchurComplementTests.cpp
   TensorFunctionTests.cpp
+  TensorFixedPointLifecycleTests.cpp
+  TensorMomentDescriptorTests.cpp
+  TensorTraceDescriptorTests.cpp
   TensorMeshTests.cpp
   TensorOperatorDataTests.cpp
 )

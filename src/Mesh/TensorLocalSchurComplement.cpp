@@ -1854,11 +1854,11 @@ TensorLocalSchurComplementBuilder::affineBoundaryBBlocks(const TensorMeshPtr &te
       term.coefficient()->values(physicalPoints, coefficientValues);
       auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
 
-      const double trialParity = tensorVarIsFluxLike(term.trialVar())
-          ? static_cast<double>(operatorData.skeletonEntitySideParity(TENSOR_TRIAL_SPACE, trialVarName, entityOrdinal))
+      const double trialOutwardNormalSign = tensorVarIsFluxLike(term.trialVar())
+          ? static_cast<double>(operatorData.skeletonEntityOutwardNormalSign(TENSOR_TRIAL_SPACE, trialVarName, entityOrdinal))
           : 1.0;
-      const double testParity = tensorVarIsFluxLike(term.testVar())
-          ? static_cast<double>(operatorData.skeletonEntitySideParity(TENSOR_TEST_SPACE, testVarName, entityOrdinal))
+      const double testOutwardNormalSign = tensorVarIsFluxLike(term.testVar())
+          ? static_cast<double>(operatorData.skeletonEntityOutwardNormalSign(TENSOR_TEST_SPACE, testVarName, entityOrdinal))
           : 1.0;
 
       LocalBoundaryBBlock block;
@@ -1889,9 +1889,9 @@ TensorLocalSchurComplementBuilder::affineBoundaryBBlocks(const TensorMeshPtr &te
             pointOrdinals[orthogonalComponentOrdinal] = 0;
             entry += quadratureWeights[flatPointOrdinal]
                      * coefficientValuesHost(flatPointOrdinal)
-                     * trialParity
+                     * trialOutwardNormalSign
                      * boundaryBasisValue(term.trialVar(), trialBasisOrdinals, trialBasisData, orthogonalComponentOrdinal, pointOrdinals)
-                     * testParity
+                     * testOutwardNormalSign
                      * boundaryBasisValue(term.testVar(), testBasisOrdinals, testBasisData, orthogonalComponentOrdinal, pointOrdinals);
           }
           block.bMatrix[static_cast<size_t>(localTestOrdinal * trialShape.totalDofs() + localTrialOrdinal)] = entry;

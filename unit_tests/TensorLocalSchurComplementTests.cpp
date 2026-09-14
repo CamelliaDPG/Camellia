@@ -1904,7 +1904,7 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, MultiVariableAffineL2VolumeSchurC
   }
 }
 
-TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineBoundaryBBlocksMatchTraceAwareMatrixFreeApply )
+TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineBoundaryBBlocksUseOutwardNormalSignsAndMatchMatrixFreeApply )
 {
   auto tensorMesh = makeTraceVolumeAffineTensorMesh();
   auto dofLayout = tensorMesh->createDofLayout();
@@ -1950,6 +1950,8 @@ TEUCHOS_UNIT_TEST( TensorLocalSchurComplement, AffineBoundaryBBlocksMatchTraceAw
     const auto &block = blocks[entityOrdinal];
     TEST_ASSERT(block.entity == entity);
     TEST_EQUALITY(block.bMatrix.size(), static_cast<size_t>(block.testShape.totalDofs() * block.trialShape.totalDofs()));
+    TEST_EQUALITY(operatorData.skeletonEntityOutwardNormalSign(TENSOR_TRIAL_SPACE, "tn", entityOrdinal),
+                  operatorData.skeletonEntitySideParity(TENSOR_TRIAL_SPACE, "tn", entityOrdinal));
 
     auto orthogonalTopo = tensorMesh->topology()->componentMeshTopology(entity.orthogonalComponentOrdinal());
     const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
