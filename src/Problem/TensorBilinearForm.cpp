@@ -64,8 +64,9 @@ TensorComponentOperatorDescriptor::TensorComponentOperatorDescriptor()
 }
 
 TensorComponentOperatorDescriptor::TensorComponentOperatorDescriptor(const std::vector<TensorComponentOperator> &operators,
-                                                                     const std::vector<int> &derivativeComponentOrdinals)
-: _operators(operators), _derivativeComponentOrdinals(derivativeComponentOrdinals)
+                                                                     const std::vector<int> &derivativeComponentOrdinals,
+                                                                     TensorComponentFunctionSpace functionSpace)
+: _functionSpace(functionSpace), _operators(operators), _derivativeComponentOrdinals(derivativeComponentOrdinals)
 {
   validate();
 }
@@ -73,6 +74,11 @@ TensorComponentOperatorDescriptor::TensorComponentOperatorDescriptor(const std::
 int TensorComponentOperatorDescriptor::componentCount() const
 {
   return static_cast<int>(_operators.size());
+}
+
+TensorComponentFunctionSpace TensorComponentOperatorDescriptor::functionSpace() const
+{
+  return _functionSpace;
 }
 
 TensorComponentOperator TensorComponentOperatorDescriptor::op(int componentOrdinal) const
@@ -116,16 +122,27 @@ const std::vector<int> &TensorComponentOperatorDescriptor::derivativeComponentOr
   return _derivativeComponentOrdinals;
 }
 
-TensorComponentOperatorDescriptor TensorComponentOperatorDescriptor::valueOnly(int componentCount)
+TensorComponentOperatorDescriptor TensorComponentOperatorDescriptor::valueOnly(int componentCount,
+                                                                    TensorComponentFunctionSpace functionSpace)
 {
-  return TensorComponentOperatorDescriptor(std::vector<TensorComponentOperator>(componentCount, TENSOR_COMPONENT_OP_VALUE));
+  return TensorComponentOperatorDescriptor(std::vector<TensorComponentOperator>(componentCount, TENSOR_COMPONENT_OP_VALUE), {}, functionSpace);
 }
 
 TensorComponentOperatorDescriptor TensorComponentOperatorDescriptor::singleDerivative(int componentCount, int derivativeComponentOrdinal)
 {
   std::vector<TensorComponentOperator> operators(componentCount, TENSOR_COMPONENT_OP_VALUE);
   operators[derivativeComponentOrdinal] = TENSOR_COMPONENT_OP_DERIVATIVE;
-  return TensorComponentOperatorDescriptor(operators, {derivativeComponentOrdinal});
+  return TensorComponentOperatorDescriptor(operators, {derivativeComponentOrdinal}, TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD);
+}
+
+TensorComponentOperatorDescriptor TensorComponentOperatorDescriptor::curl(int componentCount)
+{
+  return TensorComponentOperatorDescriptor(std::vector<TensorComponentOperator>(componentCount, TENSOR_COMPONENT_OP_CURL), {}, TENSOR_COMPONENT_FUNCTION_SPACE_HCURL);
+}
+
+TensorComponentOperatorDescriptor TensorComponentOperatorDescriptor::div(int componentCount)
+{
+  return TensorComponentOperatorDescriptor(std::vector<TensorComponentOperator>(componentCount, TENSOR_COMPONENT_OP_DIV), {}, TENSOR_COMPONENT_FUNCTION_SPACE_HDIV);
 }
 
 void TensorBilinearTerm::validate() const

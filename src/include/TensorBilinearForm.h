@@ -23,7 +23,24 @@ namespace Camellia
   enum TensorComponentOperator
   {
     TENSOR_COMPONENT_OP_VALUE,
-    TENSOR_COMPONENT_OP_DERIVATIVE
+    TENSOR_COMPONENT_OP_DERIVATIVE,
+    TENSOR_COMPONENT_OP_CURL,
+    TENSOR_COMPONENT_OP_DIV
+  };
+
+  /**
+   *  \brief Function-space intent for a tensor-component operator descriptor.
+   *
+   *  This is descriptor metadata only.  The current PAMatrix bridge still realizes only
+   *  HGRAD VALUE/DERIVATIVE tensor bilinear terms, but these tags make future HCURL,
+   *  HDIV, and HVOL routing explicit rather than inferred from component counts.
+   */
+  enum TensorComponentFunctionSpace
+  {
+    TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD,
+    TENSOR_COMPONENT_FUNCTION_SPACE_HCURL,
+    TENSOR_COMPONENT_FUNCTION_SPACE_HDIV,
+    TENSOR_COMPONENT_FUNCTION_SPACE_HVOL
   };
 
   /**
@@ -71,6 +88,7 @@ namespace Camellia
    */
   class TensorComponentOperatorDescriptor
   {
+    TensorComponentFunctionSpace _functionSpace = TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD;
     std::vector<TensorComponentOperator> _operators;
     std::vector<int> _derivativeComponentOrdinals;
 
@@ -78,9 +96,11 @@ namespace Camellia
   public:
     TensorComponentOperatorDescriptor();
     TensorComponentOperatorDescriptor(const std::vector<TensorComponentOperator> &operators,
-                                      const std::vector<int> &derivativeComponentOrdinals = {});
+                                      const std::vector<int> &derivativeComponentOrdinals = {},
+                                      TensorComponentFunctionSpace functionSpace = TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD);
 
     int componentCount() const;
+    TensorComponentFunctionSpace functionSpace() const;
     TensorComponentOperator op(int componentOrdinal) const;
     bool isIdentityValueAction() const;
     bool isValueOnly() const;
@@ -89,8 +109,11 @@ namespace Camellia
     const std::vector<TensorComponentOperator> &operators() const;
     const std::vector<int> &derivativeComponentOrdinals() const;
 
-    static TensorComponentOperatorDescriptor valueOnly(int componentCount);
+    static TensorComponentOperatorDescriptor valueOnly(int componentCount,
+                                                       TensorComponentFunctionSpace functionSpace = TENSOR_COMPONENT_FUNCTION_SPACE_HGRAD);
     static TensorComponentOperatorDescriptor singleDerivative(int componentCount, int derivativeComponentOrdinal);
+    static TensorComponentOperatorDescriptor curl(int componentCount);
+    static TensorComponentOperatorDescriptor div(int componentCount);
   };
 
   /**
