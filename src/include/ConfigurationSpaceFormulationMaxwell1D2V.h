@@ -10,6 +10,7 @@
 
 #include "Camellia.h"
 #include "ConfigurationSpaceFormulation.h"
+#include "TensorMaxwellRHSMomentData.h"
 #include "TypeDefs.h"
 
 namespace Camellia
@@ -82,6 +83,9 @@ namespace Camellia
     
     //! Allows the owning formulation to provide explicit charge/current source functions.
     virtual void setCurrentSources(FunctionPtr rho, FunctionPtr Jx, FunctionPtr Jy, FunctionPtr Jz) override;
+
+    //! Allows tensor-native Vlasov moment reduction to provide Maxwell RHS-ready point data.
+    void setCurrentSources(const TensorMaxwellRHSMomentData &momentData);
     
     //! Perform MPI communication, etc. to ensure that the B_i, E_i function values for a given configuration-space cell are available on each MPI rank that has a corresponding phase-space cell.
     virtual void updateConfigurationSpaceFunctions() override;

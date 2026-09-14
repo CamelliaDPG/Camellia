@@ -18,6 +18,7 @@ add_test(NAME runTests COMMAND runTests)
 set(PHASE0_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   TensorBasisCacheTests.cpp
+  TensorCoefficientValueEvaluatorTests.cpp
   TensorBasisTests.cpp
   TensorProductLocalOperatorTests.cpp
   TensorLocalSchurComplementTests.cpp

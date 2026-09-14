@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "TensorMesh.h"
+#include "TensorTraceLayout.h"
 
 namespace Camellia
 {
@@ -164,6 +165,9 @@ namespace Camellia
 
     TensorFactorSpaceShape ambientShape(const std::string &name,
                                         TensorSpaceRole role) const;
+
+    TensorH1PointTraceLayout1D h1PointTraceLayout1D(const std::string &traceName,
+                                                   TensorSpaceRole role) const;
 
     TensorLocalVolumeContext volumeContext(const std::string &trialVarName,
                                            const std::string &testVarName,

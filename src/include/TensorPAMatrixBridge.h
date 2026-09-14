@@ -3,6 +3,7 @@
 
 #include "TensorBilinearForm.h"
 #include "TensorFunction.h"
+#include "TensorFunctionEvaluationContext.h"
 #include "Var.h"
 
 #include <Intrepid2_CellGeometry.hpp>
@@ -216,26 +217,99 @@ namespace Camellia
     return Intrepid2::TensorPoints<Scalar,DeviceType>(pointComponents);
   }
 
-  // Nonseparable coupled coefficient point-weight injection into PAMatrix is intentionally deferred.
+  template<int spaceDim, class DeviceType, class Scalar>
+  void injectGeneralTensorCoefficientIntoCubatureWeights(const TensorFunctionPtr &coefficient,
+                                                         const Intrepid2::TensorPoints<Scalar,DeviceType> &tensorCubaturePoints,
+                                                         Intrepid2::TensorData<Scalar,DeviceType> &tensorCubatureWeights,
+                                                         TensorFunctionEvaluationContext *evaluationContext = nullptr)
+  {
+    const int pointCount = tensorCubaturePoints.extent_int(0);
+    if (pointCount != tensorCubatureWeights.extent_int(0))
+      throw std::invalid_argument("Tensor cubature points and weights have inconsistent point extents");
+
+    using PointComponentHostView = typename Intrepid2::ScalarView<Scalar,DeviceType>::HostMirror;
+    using WeightComponentHostView = typename Kokkos::View<Scalar*,DeviceType>::HostMirror;
+    std::vector<int> componentPointCounts(spaceDim);
+    std::vector<PointComponentHostView> pointComponentHosts(spaceDim);
+    std::vector<WeightComponentHostView> weightComponentHosts(spaceDim);
+    for (int d=0; d<spaceDim; d++)
+    {
+      auto componentPoints  = tensorCubaturePoints.getTensorComponent(d);
+      auto componentWeights = tensorCubatureWeights.getTensorComponent(d);
+      componentPointCounts[d] = tensorCubaturePoints.componentPointCount(d);
+      pointComponentHosts[d]  = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), componentPoints);
+      weightComponentHosts[d] = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), componentWeights.getUnderlyingView1());
+    }
+
+    Intrepid2::ScalarView<Scalar,DeviceType> weightedPointView("general tensor coefficient weighted cubature", pointCount);
+    auto weightedHost = Kokkos::create_mirror_view(weightedPointView);
+    TensorFunction::PointViewHost coefficientPoints("general tensor coefficient host points", pointCount, spaceDim);
+    std::vector<Scalar> referenceWeights(pointCount, Scalar(1.0));
+
+    std::vector<double> coord(spaceDim, 0.0);
+    for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
+    {
+      int remainingPointOrdinal = pointOrdinal;
+      Scalar referenceWeight = Scalar(1.0);
+      for (int d=0; d<spaceDim; d++)
+      {
+        const int componentPointOrdinal = remainingPointOrdinal % componentPointCounts[d];
+        remainingPointOrdinal /= componentPointCounts[d];
+        coord[d] = pointComponentHosts[d](componentPointOrdinal, 0);
+        coefficientPoints(pointOrdinal,d) = coord[d];
+        referenceWeight *= weightComponentHosts[d](componentPointOrdinal);
+      }
+      referenceWeights[pointOrdinal] = referenceWeight;
+      if (evaluationContext == nullptr)
+        weightedHost(pointOrdinal) = static_cast<Scalar>(referenceWeight * coefficient->value(coord));
+    }
+
+    if (evaluationContext != nullptr)
+    {
+      TensorFunction::ValueViewHost coefficientValues("general tensor coefficient values", pointCount);
+      evaluationContext->values(coefficient, coefficientPoints, coefficientValues);
+      for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
+        weightedHost(pointOrdinal) = static_cast<Scalar>(referenceWeights[pointOrdinal] * coefficientValues(pointOrdinal));
+    }
+    Kokkos::deep_copy(weightedPointView, weightedHost);
+
+    Kokkos::Array<int,1> extents {pointCount};
+    Kokkos::Array<Intrepid2::DataVariationType,1> variationTypes {Intrepid2::GENERAL};
+    Intrepid2::Data<Scalar,DeviceType> weightedPointData(weightedPointView, extents, variationTypes);
+    tensorCubatureWeights = Intrepid2::TensorData<Scalar,DeviceType>(std::vector<Intrepid2::Data<Scalar,DeviceType>>{weightedPointData});
+  }
 
   template<int spaceDim, class DeviceType, class Scalar>
   Scalar foldSupportedTensorCoefficientIntoCubatureWeights(const TensorFunctionPtr &coefficient,
                                                            const Intrepid2::TensorPoints<Scalar,DeviceType> &tensorCubaturePoints,
-                                                           Intrepid2::TensorData<Scalar,DeviceType> &tensorCubatureWeights)
+                                                           Intrepid2::TensorData<Scalar,DeviceType> &tensorCubatureWeights,
+                                                           TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
     if (coefficient == Teuchos::null) return Scalar(1.0);
     if (coefficient->hasSolutionDependencies())
-      throw std::invalid_argument("PAMatrix bridge does not support solution-dependent tensor coefficients");
+    {
+      if (evaluationContext == nullptr)
+        throw std::invalid_argument("PAMatrix bridge requires a TensorFunctionEvaluationContext for solution-dependent tensor coefficients");
+      injectGeneralTensorCoefficientIntoCubatureWeights<spaceDim,DeviceType,Scalar>(coefficient,
+                                                                                    tensorCubaturePoints,
+                                                                                    tensorCubatureWeights,
+                                                                                    evaluationContext);
+      return Scalar(1.0);
+    }
 
     const auto &dependencyScope = coefficient->dependencyScope();
     if (dependencyScope.isEmpty())
       return static_cast<Scalar>(coefficient->value(std::vector<double>(spaceDim, 0.0)));
 
-    // Coupled/nonseparable coefficients fall through to the existing separable-scope guard below.
-
     const auto &componentOrdinals = dependencyScope.componentOrdinals();
     if (componentOrdinals.size() != 1)
-      throw std::invalid_argument("PAMatrix bridge currently supports only constant or single-component separable tensor coefficients");
+    {
+      injectGeneralTensorCoefficientIntoCubatureWeights<spaceDim,DeviceType,Scalar>(coefficient,
+                                                                                    tensorCubaturePoints,
+                                                                                    tensorCubatureWeights,
+                                                                                    evaluationContext);
+      return Scalar(1.0);
+    }
 
     const int coefficientComponent = *componentOrdinals.begin();
     if ((coefficientComponent < 0) || (coefficientComponent >= spaceDim))
@@ -281,7 +355,8 @@ namespace Camellia
                                                                     const Intrepid2::EOperator op2,
                                                                     Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
                                                                     const TensorFunctionPtr &coefficient = Teuchos::null,
-                                                                    Scalar *scalarWeight = nullptr)
+                                                                    Scalar *scalarWeight = nullptr,
+                                                                    TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
     using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
     using ExecutionSpace = typename DeviceType::execution_space;
@@ -293,7 +368,8 @@ namespace Camellia
     auto tensorCubaturePoints = makeHypercubeCubaturePoints<spaceDim,DeviceType,Scalar>(2 * p, tensorCubatureWeights);
     const Scalar coefficientScalarWeight = foldSupportedTensorCoefficientIntoCubatureWeights<spaceDim,DeviceType,Scalar>(coefficient,
                                                                                                                         tensorCubaturePoints,
-                                                                                                                        tensorCubatureWeights);
+                                                                                                                        tensorCubatureWeights,
+                                                                                                                        evaluationContext);
     if (scalarWeight != nullptr) *scalarWeight = coefficientScalarWeight;
 
     auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
@@ -368,7 +444,8 @@ namespace Camellia
                                                                          const Intrepid2::EOperator op2,
                                                                          Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
                                                                          const TensorFunctionPtr &coefficient = Teuchos::null,
-                                                                         Scalar *scalarWeight = nullptr)
+                                                                         Scalar *scalarWeight = nullptr,
+                                                                         TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
     using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
     using ExecutionSpace = typename DeviceType::execution_space;
@@ -380,7 +457,8 @@ namespace Camellia
     auto tensorCubaturePoints = makeHypercubeCubaturePoints<spaceDim,DeviceType,Scalar>(2 * p, tensorCubatureWeights);
     const Scalar coefficientScalarWeight = foldSupportedTensorCoefficientIntoCubatureWeights<spaceDim,DeviceType,Scalar>(coefficient,
                                                                                                                         tensorCubaturePoints,
-                                                                                                                        tensorCubatureWeights);
+                                                                                                                        tensorCubatureWeights,
+                                                                                                                        evaluationContext);
     if (scalarWeight != nullptr) *scalarWeight = coefficientScalarWeight;
 
     auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
@@ -462,7 +540,7 @@ namespace Camellia
   {
     if (coefficient == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
     if (coefficient->hasSolutionDependencies())
-      throw std::invalid_argument("PAMatrix bridge does not support solution-dependent tensor coefficients");
+      return {coefficient};
 
     const auto &componentOrdinals = coefficient->dependencyScope().componentOrdinals();
     if (componentOrdinals.empty() || (componentOrdinals.size() == 1))
@@ -502,14 +580,15 @@ namespace Camellia
       }
     }
 
-    throw std::invalid_argument("PAMatrix bridge currently supports only constant, single-component, or additively decomposable single-component tensor coefficients");
+    return {coefficient};
   }
 
   template<int spaceDim, class DeviceType, class Scalar>
   TensorPAMatrixTerm<DeviceType,Scalar> adaptTensorHGRADVolumeTermToPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
                                                                              const int p,
                                                                              const TensorBilinearTerm &term,
-                                                                             const std::string &label)
+                                                                             const std::string &label,
+                                                                             TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
     if (!term.isVolumeTerm()) throw std::invalid_argument("PAMatrix bridge only accepts tensor volume terms");
     if (!term.isPAMatrixCandidate()) throw std::invalid_argument("Tensor term does not declare PAMatrix support");
@@ -527,7 +606,8 @@ namespace Camellia
     return {constructHypercubePAMatrix<spaceDim,spaceDim,DeviceType,Scalar>(geometry, p,
                                                                                  functionSpace1, op1, vectorWeight1,
                                                                                  functionSpace2, op2, vectorWeight2,
-                                                                                term.coefficient(), &scalarWeight),
+                                                                                term.coefficient(), &scalarWeight,
+                                                                                  evaluationContext),
             scalarWeight, label};
   }
 
@@ -536,12 +616,14 @@ namespace Camellia
                                               Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
                                               const int p,
                                               const TensorBilinearTerm &term,
-                                              const std::string &label)
+                                              const std::string &label,
+                                              TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
     const auto coefficientAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(term.coefficient());
     if (coefficientAddends.size() == 1)
     {
-      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, p, term, label));
+      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, p, term, label,
+                                                                                       evaluationContext));
       return;
     }
 
@@ -556,7 +638,8 @@ namespace Camellia
                                               term.domain(),
                                               term.capabilities());
       terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, p, addendTerm,
-                                                                                       label + "_addend" + std::to_string(addendOrdinal)));
+                                                                                       label + "_addend" + std::to_string(addendOrdinal),
+                                                                                       evaluationContext));
       addendOrdinal++;
     }
   }

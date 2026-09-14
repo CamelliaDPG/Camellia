@@ -258,18 +258,62 @@ namespace
     TEST_FLOATING_EQUALITY(addends[1]->value(std::vector<double>{0.0, 4.0, 0.0}), -2.0, 1e-15);
   }
 
-  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, RejectsCoupledCoefficientProduct )
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, CoupledCoefficientProductUsesGeneralPointWeights )
   {
     auto coefficient = TensorFunction::componentCoordinate(0) * TensorFunction::componentCoordinate(1);
-    TEST_THROW(Camellia::decomposeTensorCoefficientForPAMatrixBridge<3>(coefficient), std::invalid_argument);
+    auto addends = Camellia::decomposeTensorCoefficientForPAMatrixBridge<3>(coefficient);
+    TEST_EQUALITY(addends.size(), 1);
+    TEST_ASSERT(addends[0] == coefficient);
   }
 
-  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, RejectsSolutionDependentCoefficient )
+  class BridgeSolutionCoefficientEvaluator : public TensorSolutionCoefficientEvaluator
   {
-    auto coefficient = TensorFunction::withDependencySource(
-        TensorFunction::componentCoordinate(0),
-        TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, "frozen-state"));
-    TEST_THROW(Camellia::decomposeTensorCoefficientForPAMatrixBridge<2>(coefficient), std::invalid_argument);
+  public:
+    mutable int callCount = 0;
+
+    void values(int componentOrdinal,
+                TensorFunction::PointViewHost pointsIn,
+                TensorFunction::ValueViewHost valuesOut) const override
+    {
+      callCount++;
+      for (int p=0; p<static_cast<int>(pointsIn.extent(0)); p++)
+      {
+        valuesOut(p) = 10.0 + componentOrdinal + pointsIn(p,0);
+      }
+    }
+  };
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, SolutionDependentCoefficientUsesEvaluationContext )
+  {
+    const int spaceDim = 2;
+    auto trialVar = Camellia::makeHGRADTensorFieldVar("f", spaceDim);
+    auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+    auto coefficient = TensorFunction::configurationSpaceSolutionCoefficient1D(0, "E_x");
+    TensorBilinearTerm solutionDependentTerm(trialVar,
+                                             testVar,
+                                             TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                             TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 1),
+                                             coefficient,
+                                             TENSOR_BILINEAR_TERM_VOLUME,
+                                             TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+
+    auto addends = Camellia::decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(coefficient);
+    TEST_EQUALITY(addends.size(), 1);
+
+    auto geometryWithoutContext = makeUnitGeometry<spaceDim>(1);
+    TEST_THROW((Camellia::adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometryWithoutContext, 1, solutionDependentTerm,
+                                                                                          "solution-dependent coefficient guard")),
+               std::invalid_argument);
+
+    auto evaluator = Teuchos::rcp(new BridgeSolutionCoefficientEvaluator);
+    TensorFunctionEvaluationContext evaluationContext;
+    evaluationContext.registerSolutionCoefficientEvaluator(coefficient->dependencySources()[0], evaluator);
+    auto geometryWithContext = makeUnitGeometry<spaceDim>(1);
+    auto bridgeTerm = Camellia::adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometryWithContext, 1, solutionDependentTerm,
+                                                                                                "solution-dependent coefficient context",
+                                                                                                &evaluationContext);
+    TEST_EQUALITY(evaluator->callCount, 1);
+    TEST_FLOATING_EQUALITY(bridgeTerm.weight, 1.0, 1e-15);
   }
 
   TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, RejectsBoundaryTerm )
@@ -447,6 +491,22 @@ namespace
                                             TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
 
     compareBridgeTermToStandardAssembly<spaceDim>(vlasovCoordinateTerm, "coordinate Vlasov x0 value/d1 bridge", out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, CoupledCoefficientVlasovTermMatchesStandardAssembly )
+  {
+    const int spaceDim = 2;
+    auto trialVar = Camellia::makeHGRADTensorFieldVar("f", spaceDim);
+    auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+    TensorBilinearTerm coupledTerm(trialVar,
+                                   testVar,
+                                   TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                   TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 1),
+                                   TensorFunction::componentCoordinate(0) * TensorFunction::componentCoordinate(1),
+                                   TENSOR_BILINEAR_TERM_VOLUME,
+                                   TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+
+    compareBridgeTermToStandardAssembly<spaceDim>(coupledTerm, "coupled x0*x1 value/d1 bridge", out, success);
   }
 
   TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, AdditiveSeparableVlasovTermMatchesStandardAssembly )

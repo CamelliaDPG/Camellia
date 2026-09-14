@@ -358,6 +358,14 @@ void ConfigurationSpaceFormulationMaxwell1D2V::setCurrentSources(FunctionPtr rho
   _configurationSoln->setRHS(rhs);
 }
 
+void ConfigurationSpaceFormulationMaxwell1D2V::setCurrentSources(const TensorMaxwellRHSMomentData &momentData)
+{
+  setCurrentSources(TensorMaxwellRHSFunctionAdapter::rhoRHSFunction(momentData),
+                    TensorMaxwellRHSFunctionAdapter::JxFunction(momentData),
+                    Function::zero(),
+                    TensorMaxwellRHSFunctionAdapter::JzFunction(momentData));
+}
+
 void ConfigurationSpaceFormulationMaxwell1D2V::setRHSForTesting(FunctionPtr rho_over_eps0,
                                                                 FunctionPtr Jx_over_eps0,
                                                                 FunctionPtr Jz_over_eps0)
