@@ -5,7 +5,6 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Intrepid2_PAMatrix.hpp"
-#include "Intrepid2_PAMatrixDefAdditions.hpp"
 
 #include "Kokkos_Core.hpp"
 

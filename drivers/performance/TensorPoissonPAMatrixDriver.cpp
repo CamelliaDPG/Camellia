@@ -3,7 +3,6 @@
 //
 
 #include "Intrepid2_PAMatrix.hpp"
-#include "Intrepid2_PAMatrixDefAdditions.hpp"
 
 #include <Intrepid2_CellGeometryTestUtils.hpp>
 #include <Intrepid2_CellTools.hpp>
@@ -12,6 +11,10 @@
 #include <Intrepid2_HierarchicalBasisFamily.hpp>
 
 #include "PAMatrixAssembly.hpp"
+
+#include "TensorBilinearForm.h"
+#include "TensorFunction.h"
+#include "Var.h"
 
 #include "Kokkos_Core.hpp"
 
@@ -323,6 +326,65 @@ namespace
     return constructHypercubeHGRADPAMatrix<spaceDim>(geometry, p, op1, nullVectorWeight, op2, nullVectorWeight);
   }
 
+  Camellia::TensorVarPtr makeHGRADTensorFieldVar(const std::string &name, const int componentCount)
+  {
+    std::vector<Camellia::VarPtr> components;
+    components.reserve(componentCount);
+    for (int d=0; d<componentCount; d++)
+    {
+      components.push_back(Teuchos::rcp(new Camellia::Var(d, 0, name + "_" + std::to_string(d),
+                                                          Camellia::OP_VALUE, Camellia::HGRAD, Camellia::FIELD,
+                                                          Teuchos::null, true, Camellia::UNKNOWN_FS)));
+    }
+    return Teuchos::rcp(new Camellia::TensorVar(name, Camellia::TENSOR_FIELD, components));
+  }
+
+  Intrepid2::EOperator pamatrixOperatorForTensorDescriptor(const Camellia::TensorComponentOperatorDescriptor &descriptor)
+  {
+    if (descriptor.isValueOnly()) return Intrepid2::OPERATOR_VALUE;
+    if (descriptor.derivativeComponentOrdinals().size() == 1) return Intrepid2::OPERATOR_GRAD;
+    throw std::invalid_argument("PAMatrix bridge currently supports only value-only or single-derivative tensor descriptors");
+  }
+
+  template<int spaceDim>
+  Teuchos::RCP<Kokkos::Array<Scalar,spaceDim>> vectorWeightForSingleDerivative(const Camellia::TensorComponentOperatorDescriptor &descriptor)
+  {
+    if (descriptor.derivativeComponentOrdinals().empty()) return Teuchos::null;
+    if (descriptor.derivativeComponentOrdinals().size() != 1)
+      throw std::invalid_argument("PAMatrix bridge currently supports one derivative component per side");
+
+    const int derivativeComponent = descriptor.derivativeComponentOrdinals()[0];
+    if ((derivativeComponent < 0) || (derivativeComponent >= spaceDim))
+      throw std::invalid_argument("Tensor derivative component is outside the HGRAD hypercube dimension");
+
+    auto vectorWeight = Teuchos::rcp(new Kokkos::Array<Scalar,spaceDim>());
+    for (int d=0; d<spaceDim; d++) (*vectorWeight)[d] = (d == derivativeComponent) ? Scalar(1.0) : Scalar(0.0);
+    return vectorWeight;
+  }
+
+  template<int spaceDim>
+  OperatorTerm adaptTensorHGRADVolumeTermToPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+                                                    const int p,
+                                                    const Camellia::TensorBilinearTerm &term,
+                                                    const std::string &label)
+  {
+    if (!term.isVolumeTerm()) throw std::invalid_argument("PAMatrix bridge only accepts tensor volume terms");
+    if (!term.isPAMatrixCandidate()) throw std::invalid_argument("Tensor term does not declare PAMatrix support");
+    if (term.componentCount() != spaceDim) throw std::invalid_argument("Tensor term component count must match HGRAD hypercube dimension");
+    if (term.coefficient() == Teuchos::null) throw std::invalid_argument("Tensor term requires a coefficient");
+    if (!term.coefficient()->dependencyScope().isEmpty() || term.coefficient()->hasSolutionDependencies())
+      throw std::invalid_argument("Initial PAMatrix bridge only supports constant tensor coefficients");
+
+    const auto op1 = pamatrixOperatorForTensorDescriptor(term.trialOperator());
+    const auto op2 = pamatrixOperatorForTensorDescriptor(term.testOperator());
+    auto vectorWeight1 = vectorWeightForSingleDerivative<spaceDim>(term.trialOperator());
+    auto vectorWeight2 = vectorWeightForSingleDerivative<spaceDim>(term.testOperator());
+    const Scalar scalarWeight = term.coefficient()->value(std::vector<double>(spaceDim, 0.0));
+
+    return {constructHypercubeHGRADPAMatrix<spaceDim>(geometry, p, op1, vectorWeight1, op2, vectorWeight2),
+            scalarWeight, label};
+  }
+
   template<int spaceDim>
   std::vector<OperatorTerm> makeHGRADOperatorTermsForDim(const int p, const int cellsPerDim, const std::string &operatorChoice,
                                                          const Scalar massWeight, const Scalar stiffnessWeight)
@@ -345,6 +407,22 @@ namespace
                                  CellGeometry::NO_SUBDIVISION, nodeOrdering);
 
     std::vector<OperatorTerm> terms;
+    if (operatorChoice == "vlasov-dt")
+    {
+      if (spaceDim < 2) throw std::invalid_argument("--operator=vlasov-dt requires --dim >= 2 so derivative component 1 is present");
+      auto trialVar = makeHGRADTensorFieldVar("f", spaceDim);
+      auto testVar  = makeHGRADTensorFieldVar("w", spaceDim);
+      Camellia::TensorBilinearTerm vlasovDtTerm(trialVar,
+                                                 testVar,
+                                                 Camellia::TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                                 Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 1),
+                                                 Camellia::TensorFunction::constant(-1.0),
+                                                 Camellia::TENSOR_BILINEAR_TERM_VOLUME,
+                                                 Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim>(geometry, p, vlasovDtTerm,
+                                                                     "vlasov_dt_value_test_d1"));
+      return terms;
+    }
     if (operatorIncludesMass(operatorChoice))
     {
       terms.push_back({constructHypercubeHGRADPAMatrix<spaceDim>(
@@ -994,9 +1072,9 @@ namespace
       else sawApplyFallback = true;
     }
 
-    if (sawUnitColumn && sawApplyFallback) return "mixed_unit_column_and_blocked_apply_fallback";
-    if (sawUnitColumn) return "unit_column_fast_path";
-    return "blocked_apply_fallback";
+    if (sawUnitColumn && sawApplyFallback) return "mixed_staged_unit_column_and_apply_unit_multivector_fallback";
+    if (sawUnitColumn) return "staged_sparse_unit_column_right_apply";
+    return "apply_unit_multivector_fallback";
   }
 
   TpetraOperatorComparison compareTpetraOperatorAgainstDirect(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
@@ -2419,7 +2497,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("dim", &dim, "Tensor dimension, 1 through 7.");
     cmdp.setOption("polyOrder", &polyOrderText, "Polynomial order p or inclusive range pMin:pMax.");
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
-    cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, or h1-gram.  h1-gram is the weighted mass-plus-stiffness Gram starter case.");
+    cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, or vlasov-dt.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses Intrepid2 hypercube HGRAD hierarchical bases, tensor-product cubature, and affine geometry for dim=1..7; synthetic remains available for high-dimensional contraction stress tests.");
     cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
@@ -2473,6 +2551,8 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
+    if ((operatorChoice == "vlasov-dt") && (basisMode != "hgrad"))
+      throw std::invalid_argument("--operator=vlasov-dt requires --basisMode=hgrad");
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev"))
       throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson or chebyshev");
     if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))

@@ -56,6 +56,17 @@ add_test(NAME TensorH1GramPAMatrixAssemblyCompareSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorVlasovPAMatrixBridgeCompareSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=2
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=vlasov-dt
+    --basisMode=hgrad
+    --mode=compare
+    --numApply=2
+    --maxAssembledEntries=10000)
+
 add_test(NAME TensorH1GramPAMatrixSynthetic4DSmoke
   COMMAND TensorPoissonPAMatrixDriver
     --dim=4

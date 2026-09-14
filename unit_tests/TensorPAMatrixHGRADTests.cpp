@@ -5,7 +5,6 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Intrepid2_PAMatrix.hpp"
-#include "Intrepid2_PAMatrixDefAdditions.hpp"
 
 #include <Intrepid2_CellGeometryTestUtils.hpp>
 #include <Intrepid2_CellTools.hpp>
@@ -119,10 +118,10 @@ namespace
   template<int spaceDim>
   void comparePAMatrixAssemblyToStandard(const Intrepid2::EOperator op,
                                          Teuchos::FancyOStream &out, bool &success,
-                                         const bool useAssemble2 = false)
+                                         const bool useAssemble2 = false,
+                                         const int p = 2)
   {
     auto geometry = makeUnitGeometry<spaceDim>(1);
-    constexpr int p = 2;
     const int worksetSize = 1;
 
     auto paMatrix = constructPAMatrix<Scalar,BasisFamily,Scalar,spaceDim,DeviceType>(
@@ -148,11 +147,23 @@ namespace
   }
 
   template<int spaceDim>
+  void comparePAMatrixAssemblyToStandardForPRange(const Intrepid2::EOperator op,
+                                                  const int firstP, const int lastP,
+                                                  Teuchos::FancyOStream &out, bool &success,
+                                                  const bool useAssemble2 = false)
+  {
+    for (int p=firstP; p<=lastP; p++)
+    {
+      comparePAMatrixAssemblyToStandard<spaceDim>(op, out, success, useAssemble2, p);
+    }
+  }
+
+  template<int spaceDim>
   void compareWeightedH1GramToStandard(Teuchos::FancyOStream &out, bool &success,
-                                        const bool useAssemble2 = false)
+                                        const bool useAssemble2 = false,
+                                        const int p = 2)
   {
     auto geometry = makeUnitGeometry<spaceDim>(2);
-    constexpr int p = 2;
     const int worksetSize = geometry.numCells();
     const Scalar massWeight = 2.0;
     const Scalar stiffnessWeight = 0.5;
@@ -196,6 +207,17 @@ namespace
 
     compareDenseMatrices(actual, expected, "Weighted component-split H1 Gram PAMatrix/standard assembly", out, success);
   }
+
+  template<int spaceDim>
+  void compareWeightedH1GramToStandardForPRange(const int firstP, const int lastP,
+                                                Teuchos::FancyOStream &out, bool &success,
+                                                const bool useAssemble2 = false)
+  {
+    for (int p=firstP; p<=lastP; p++)
+    {
+      compareWeightedH1GramToStandard<spaceDim>(out, success, useAssemble2, p);
+    }
+  }
 }
 
 TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, MassMatchesStandardIntegration2D)
@@ -218,12 +240,48 @@ TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, WeightedH1GramComponentSplitMatchesStanda
   compareWeightedH1GramToStandard<3>(out, success);
 }
 
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, MassAssemble2MatchesStandardIntegration1D)
+{
+  comparePAMatrixAssemblyToStandard<1>(Intrepid2::OPERATOR_VALUE, out, success, true);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, MassAssemble2MatchesStandardIntegration2D)
+{
+  comparePAMatrixAssemblyToStandard<2>(Intrepid2::OPERATOR_VALUE, out, success, true);
+}
+
 TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, MassAssemble2MatchesStandardIntegration3D)
 {
   comparePAMatrixAssemblyToStandard<3>(Intrepid2::OPERATOR_VALUE, out, success, true);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, StiffnessAssemble2MatchesStandardIntegration2D)
+{
+  comparePAMatrixAssemblyToStandard<2>(Intrepid2::OPERATOR_GRAD, out, success, true);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, StiffnessAssemble2MatchesStandardIntegration3D)
+{
+  comparePAMatrixAssemblyToStandard<3>(Intrepid2::OPERATOR_GRAD, out, success, true);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, WeightedH1GramComponentSplitAssemble2MatchesStandardIntegration1D)
+{
+  compareWeightedH1GramToStandard<1>(out, success, true);
+}
+
+TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, WeightedH1GramComponentSplitAssemble2MatchesStandardIntegration2D)
+{
+  compareWeightedH1GramToStandard<2>(out, success, true);
 }
 
 TEUCHOS_UNIT_TEST(TensorPAMatrixHGRAD, WeightedH1GramComponentSplitAssemble2MatchesStandardIntegration3D)
 {
   compareWeightedH1GramToStandard<3>(out, success, true);
 }
+
+// Broader p-range assemble2/standard-reference tests were attempted here, but
+// the standard-assembly HGRAD reference path currently fails in OrientationTools
+// coefficient-matrix construction before assemble2() is meaningfully exercised.
+// Keep the stable explicit 1D/2D/3D assemble2 checks above until the reference
+// path is fixed or a non-OrientationTools p-sweep reference is added.
