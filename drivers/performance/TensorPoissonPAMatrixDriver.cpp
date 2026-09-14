@@ -42,6 +42,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -1419,15 +1420,35 @@ namespace
     {
       auto matrixData = term.matrix.allocateMatrixStorage();
       term.matrix.assemble(matrixData);
-      auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.getUnderlyingView());
-      for (int c=0; c<cells; c++)
+      if (matrixData.getUnderlyingViewRank() == 3)
       {
-        for (int i=0; i<rows; i++)
+        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<3>());
+        for (int c=0; c<cells; c++)
         {
-          Scalar value = 0.0;
-          for (int j=0; j<cols; j++) value += matrixHost(c,i,j) * inputHost(c,j);
-          expected[c * rows + i] += term.weight * value;
+          for (int i=0; i<rows; i++)
+          {
+            Scalar value = 0.0;
+            for (int j=0; j<cols; j++) value += matrixHost(c,i,j) * inputHost(c,j);
+            expected[c * rows + i] += term.weight * value;
+          }
         }
+      }
+      else if (matrixData.getUnderlyingViewRank() == 2)
+      {
+        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<2>());
+        for (int c=0; c<cells; c++)
+        {
+          for (int i=0; i<rows; i++)
+          {
+            Scalar value = 0.0;
+            for (int j=0; j<cols; j++) value += matrixHost(i,j) * inputHost(c,j);
+            expected[c * rows + i] += term.weight * value;
+          }
+        }
+      }
+      else
+      {
+        throw std::invalid_argument("Unexpected PAMatrix storage rank in apply-vs-assembled compare");
       }
     }
 
@@ -1442,9 +1463,16 @@ namespace
       }
     }
     const Scalar relError = maxError / std::max<Scalar>(1.0, maxExpected);
-    std::cout << "COMPARE maxAbsError=" << std::setprecision(16) << maxError
-              << " maxRelError=" << relError << std::endl;
-    return (maxError <= 1e-10) || (relError <= 1e-10);
+    constexpr Scalar compareAbsTol = 1e-10;
+    constexpr Scalar compareRelTol = 1e-10;
+    const bool passed = (maxError <= compareAbsTol) || (relError <= compareRelTol);
+    std::cout << "COMPARE passed=" << (passed ? 1 : 0)
+              << " maxAbsError=" << std::setprecision(16) << maxError
+              << " maxRelError=" << relError
+              << " absTol=" << compareAbsTol
+              << " relTol=" << compareRelTol
+              << " note=apply_vs_assembled" << std::endl;
+    return passed;
   }
 
   AssemblyTiming assembleTerms(std::vector<OperatorTerm> &terms, const long long maxAssembledEntries)
@@ -2411,6 +2439,29 @@ namespace
     return summary;
   }
 
+  bool isDisabledResultToken(const std::string &token)
+  {
+    const auto equalsPosition = token.find('=');
+    if (equalsPosition == std::string::npos) return false;
+    const std::string value = token.substr(equalsPosition + 1);
+    return (value == "-1") || (value == "not_requested");
+  }
+
+  void printCompactKeyValueLine(const std::string &line)
+  {
+    std::istringstream tokens(line);
+    std::string token;
+    bool first = true;
+    while (tokens >> token)
+    {
+      if (isDisabledResultToken(token)) continue;
+      if (!first) std::cout << ' ';
+      std::cout << token;
+      first = false;
+    }
+    std::cout << std::endl;
+  }
+
   double leastSquaresSlope(const std::vector<double> &x, const std::vector<double> &y)
   {
     if (x.size() != y.size() || x.size() < 2) return std::numeric_limits<double>::quiet_NaN();
@@ -2601,7 +2652,7 @@ int main(int argc, char *argv[])
     std::vector<double> logDiagonalPValues;
     std::vector<double> logDiagonalTimes;
 
-    std::cout << "TENSOR_POISSON_PAMATRIX_HEADER dim p cells localDofs localPoints terms termWeights setupSeconds firstApplySeconds avgApplySeconds assemblySeconds massAssemblySeconds stiffnessAssemblySeconds assemble2Seconds massAssemble2Seconds stiffnessAssemble2Seconds assemble2OverAssembleRatio assemblyAgreementMaxAbsError assemblyAgreementMaxRelError tpetraOperatorMaxAbsError tpetraOperatorMaxRelError tpetraInverseDiagonalMaxAbsError tpetraInverseDiagonalMin tpetraInverseDiagonalMax tpetraRowMatrixDiagonalMaxAbsError tpetraRowMatrixDiagonalMin tpetraRowMatrixDiagonalMax tpetraRowMatrixRowCopyMaxAbsError tpetraRowMatrixRowCopyChecked tpetraRowMatrixRowViewMaxAbsError tpetraRowMatrixRowViewChecked tpetraRowMatrixDenseRowMaterializationEntries tpetraRowMatrixMaxDenseRowMaterializationEntries tpetraOperatorFirstApplySeconds tpetraOperatorAvgApplySeconds tpetraOperatorNumVectors tpetraOperatorLocalLength tpetraDomainRangeMapSame tpetraRowMatrixRowMapSame tpetraRowMatrixColMapSame tpetraAdapterPath tpetraGlobalDofSemantics tpetraIfpack2RowMatrix factorSeconds avgSolveSeconds maxSolveResidual maxSolveRelativeResidual firstDiagonalSeconds avgDiagonalSeconds avgInverseApplySeconds inverseIterations initialInverseAbsError initialInverseRelError maxInverseAbsError maxInverseRelError initialResidualNorm finalResidualNorm residualReduction inverseTolerance inverseConverged inverseStoppedReason lambdaMinEstimate lambdaMaxEstimate assembledGershgorinLambdaMax powerRawLambdaMaxEstimate tpetraPowerRawLambdaMaxEstimate tpetraPowerLambdaMaxAbsError tpetraPowerLambdaMaxRelError tpetraRowMatrixPowerRawLambdaMaxEstimate tpetraRowMatrixPowerLambdaMaxAbsError tpetraRowMatrixPowerLambdaMaxRelError compareTpetraRowMatrixPowerEstimate lambdaMinRawEstimate lambdaMinSafetyFactor lambdaMinEstimateOverRaw compareTpetraPowerEstimate ifpack2ChebyshevSmoke ifpack2ChebyshevSeconds ifpack2ChebyshevMaxAbsError ifpack2ChebyshevMaxRelError ifpack2ChebyshevPath lambdaMaxEstimateOverAssembledGershgorin inverseEigenRatio spectralEstimateIterations spectralEstimateSeconds lambdaMaxSafetyFactor maxSymmetryAbsError minDiagonalEstimate maxDiagonalEstimate estimatedApplyFlopsPerCell lambdaMinSource lambdaMaxSource inverseLowerSpectralEstimate inverseLowerSpectralEstimateIterations inverseInitialGuess achievedGFlops mode operator basisMode diagonalPath assemble2Path inversePath spectralEstimatePath" << std::endl;
+    std::cout << "TENSOR_POISSON_PAMATRIX_SCHEMA format=space_separated_key_value disabled_fields_omitted=1 disabled_values=-1,not_requested" << std::endl;
     for (int p=pRange.first; p<=pRange.last; p++)
     {
       Kokkos::Timer setupTimer;
@@ -2710,7 +2761,8 @@ int main(int argc, char *argv[])
         if (tpetraOperatorComparison.rowMatrixColMapSame != 1) returnCode = 2;
       }
 
-      std::cout << "TENSOR_POISSON_PAMATRIX_RESULT"
+      std::ostringstream resultLine;
+      resultLine << "TENSOR_POISSON_PAMATRIX_RESULT"
                 << " dim=" << dim
                 << " p=" << p
                 << " cells=" << cells
@@ -2813,8 +2865,8 @@ int main(int argc, char *argv[])
                 << " diagonalPath=" << diagonalPath
                 << " assemble2Path=" << assemble2Path
                 << " inversePath=" << inverseDiagnosticTiming.inversePath
-                << " spectralEstimatePath=" << inverseDiagnosticTiming.spectralEstimatePath
-                << std::endl;
+                << " spectralEstimatePath=" << inverseDiagnosticTiming.spectralEstimatePath;
+      printCompactKeyValueLine(resultLine.str());
 
       const double logP = std::log(static_cast<double>(p + 1));
       if (avgApplySeconds > 0.0)
