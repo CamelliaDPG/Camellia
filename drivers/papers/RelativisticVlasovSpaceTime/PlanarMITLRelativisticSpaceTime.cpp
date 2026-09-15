@@ -245,6 +245,8 @@ namespace
                                                                                   double uxMax,
                                                                                   double uzMin,
                                                                                   double uzMax,
+                                                                                  int uxElementCount,
+                                                                                  int uzElementCount,
                                                                                   int velocityQuadratureDegree)
   {
     using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
@@ -256,6 +258,8 @@ namespace
                                "Phase 8 Vlasov HostMatrix sampling requires a non-null Vlasov field variable.");
     TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree <= 0, std::invalid_argument,
                                "Phase 8 Vlasov HostMatrix sampling requires a positive velocity quadrature degree.");
+    TEUCHOS_TEST_FOR_EXCEPTION((uxElementCount <= 0) || (uzElementCount <= 0), std::invalid_argument,
+                               "Phase 8 Vlasov HostMatrix sampling requires positive velocity element counts.");
     TEUCHOS_TEST_FOR_EXCEPTION((uxMax <= uxMin) || (uzMax <= uzMin), std::invalid_argument,
                                "Phase 8 Vlasov HostMatrix sampling requires nonempty velocity intervals.");
 
@@ -299,26 +303,37 @@ namespace
     auto velocityRefWeightsFC = FieldContainerConversion<double>::fromTensorData(velocityRefWeights);
 
     const int velocityPointCount1D = velocityRefPointsFC.dimension(0);
-    const int velocityPointCount = velocityPointCount1D * velocityPointCount1D;
+    const int velocityPointCount = uxElementCount * uzElementCount * velocityPointCount1D * velocityPointCount1D;
     input.velocityPoints = Pipeline::HostMatrix("Phase 8 sampled velocity points", velocityPointCount, 2);
     input.velocityWeights = Pipeline::HostVector("Phase 8 sampled velocity weights", velocityPointCount);
 
-    const double uxCenter = 0.5 * (uxMin + uxMax);
-    const double uxScale  = 0.5 * (uxMax - uxMin);
-    const double uzCenter = 0.5 * (uzMin + uzMax);
-    const double uzScale  = 0.5 * (uzMax - uzMin);
-    for (int uxOrdinal=0; uxOrdinal<velocityPointCount1D; uxOrdinal++)
+    const double uxElementWidth = (uxMax - uxMin) / static_cast<double>(uxElementCount);
+    const double uzElementWidth = (uzMax - uzMin) / static_cast<double>(uzElementCount);
+    int velocityEntry = 0;
+    for (int uxElementOrdinal=0; uxElementOrdinal<uxElementCount; uxElementOrdinal++)
     {
-      const double ux = uxCenter + uxScale * velocityRefPointsFC(uxOrdinal, 0);
-      const double uxWeight = uxScale * velocityRefWeightsFC(uxOrdinal);
-      for (int uzOrdinal=0; uzOrdinal<velocityPointCount1D; uzOrdinal++)
+      const double uxCellLeft = uxMin + uxElementWidth * uxElementOrdinal;
+      const double uxCenter = uxCellLeft + 0.5 * uxElementWidth;
+      const double uxScale = 0.5 * uxElementWidth;
+      for (int uzElementOrdinal=0; uzElementOrdinal<uzElementCount; uzElementOrdinal++)
       {
-        const int velocityEntry = uxOrdinal * velocityPointCount1D + uzOrdinal;
-        const double uz = uzCenter + uzScale * velocityRefPointsFC(uzOrdinal, 0);
-        const double uzWeight = uzScale * velocityRefWeightsFC(uzOrdinal);
-        input.velocityPoints(velocityEntry, 0) = ux;
-        input.velocityPoints(velocityEntry, 1) = uz;
-        input.velocityWeights(velocityEntry) = uxWeight * uzWeight;
+        const double uzCellLeft = uzMin + uzElementWidth * uzElementOrdinal;
+        const double uzCenter = uzCellLeft + 0.5 * uzElementWidth;
+        const double uzScale = 0.5 * uzElementWidth;
+        for (int uxOrdinal=0; uxOrdinal<velocityPointCount1D; uxOrdinal++)
+        {
+          const double ux = uxCenter + uxScale * velocityRefPointsFC(uxOrdinal, 0);
+          const double uxWeight = uxScale * velocityRefWeightsFC(uxOrdinal);
+          for (int uzOrdinal=0; uzOrdinal<velocityPointCount1D; uzOrdinal++)
+          {
+            const double uz = uzCenter + uzScale * velocityRefPointsFC(uzOrdinal, 0);
+            const double uzWeight = uzScale * velocityRefWeightsFC(uzOrdinal);
+            input.velocityPoints(velocityEntry, 0) = ux;
+            input.velocityPoints(velocityEntry, 1) = uz;
+            input.velocityWeights(velocityEntry) = uxWeight * uzWeight;
+            velocityEntry++;
+          }
+        }
       }
     }
 
@@ -1762,6 +1777,8 @@ int main(int argc, char *argv[])
                                                                             uxMax,
                                                                             uyMin,
                                                                             uyMax,
+                                                                            vxElements,
+                                                                            vyElements,
                                                                             phase8VelocityQuadratureDegree);
           const int numTensorEntries = sampledInput.numConfigurationCells * sampledInput.numPointsPerConfigurationCell;
           std::vector<double> n0Values(numTensorEntries, n0);
