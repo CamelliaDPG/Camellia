@@ -22,6 +22,7 @@
 #include "GMGSolver.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
+#include "GLVisExporter.h"
 #include "LinearTerm.h"
 #include "Mesh.h"
 #include "MeshFactory.h"
