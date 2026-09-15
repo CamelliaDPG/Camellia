@@ -2,6 +2,7 @@
 
 #include "TensorBasisCache.h"
 #include "TensorMaxwell1D2VMomentReductionPipeline.h"
+#include "TensorPlanarMITLMomentComparisonAdapter.h"
 #include "TensorSolution.h"
 #include "TensorMesh.h"
 #include "Var.h"
@@ -163,6 +164,65 @@ TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, ReducesRelativistic
   TEST_FLOATING_EQUALITY(data.Jz(0, 0), expectedJz, 1e-14);
 }
 
+TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, RelativisticCurrentMatchesAnalyticGammaWeightedDistribution )
+{
+  using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+
+  const int numCells = 1;
+  const int pointsPerCell = 1;
+  const double eps0 = 3.0;
+  const double q = -0.75;
+  const double c = 2.0;
+  std::vector<double> charges = {q};
+  std::vector<double> n0 = {0.0};
+
+  const double uxLeft = 0.0;
+  const double uxRight = 2.0;
+  const double uzLeft = -1.0;
+  const double uzRight = 3.0;
+  const double gaussPoint = 1.0 / std::sqrt(3.0);
+  const double uxCenter = 0.5 * (uxLeft + uxRight);
+  const double uxScale = 0.5 * (uxRight - uxLeft);
+  const double uzCenter = 0.5 * (uzLeft + uzRight);
+  const double uzScale = 0.5 * (uzRight - uzLeft);
+
+  Pipeline::HostMatrix velocityPoints("velocityPoints", 4, 2);
+  Pipeline::HostVector velocityWeights("velocityWeights", 4);
+  Pipeline::HostMatrix species0("species0", pointsPerCell, 4);
+
+  int velocityOrdinal = 0;
+  for (const double uxRef : {-gaussPoint, gaussPoint})
+  {
+    for (const double uzRef : {-gaussPoint, gaussPoint})
+    {
+      const double ux = uxCenter + uxScale * uxRef;
+      const double uz = uzCenter + uzScale * uzRef;
+      const double gamma = std::sqrt(1.0 + (ux * ux + uz * uz) / (c * c));
+      velocityPoints(velocityOrdinal, 0) = ux;
+      velocityPoints(velocityOrdinal, 1) = uz;
+      velocityWeights(velocityOrdinal) = uxScale * uzScale;
+      species0(0, velocityOrdinal) = gamma;
+      velocityOrdinal++;
+    }
+  }
+
+  auto data = Pipeline::buildRHSMomentData(numCells,
+                                           pointsPerCell,
+                                           charges,
+                                           eps0,
+                                           {species0},
+                                           velocityPoints,
+                                           velocityWeights,
+                                           n0,
+                                           true,
+                                           c);
+
+  const double expectedUxIntegral = 0.5 * (uxRight * uxRight - uxLeft * uxLeft) * (uzRight - uzLeft);
+  const double expectedUzIntegral = (uxRight - uxLeft) * 0.5 * (uzRight * uzRight - uzLeft * uzLeft);
+  TEST_FLOATING_EQUALITY(data.Jx(0, 0), q * expectedUxIntegral, 1e-14);
+  TEST_FLOATING_EQUALITY(data.Jz(0, 0), q * expectedUzIntegral, 1e-14);
+}
+
 TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, RejectsSpeciesCountMismatch )
 {
   using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
@@ -275,5 +335,135 @@ TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, BuildsRHSDataFromTe
                                                               velocityWeights,
                                                               n0),
              std::invalid_argument);
+}
+
+TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, DefaultProperVelocityCurrentsDifferFromRelativisticCurrents )
+{
+  using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+
+  const int numCells = 1;
+  const int pointsPerCell = 2;
+  const double eps0 = 5.0;
+  const double q = -1.25;
+  const double c = 2.0;
+  std::vector<double> charges = {q};
+  std::vector<double> n0 = {0.2, 0.4};
+
+  Pipeline::HostMatrix velocityPoints("velocityPoints", 3, 2);
+  velocityPoints(0,0) = 0.5; velocityPoints(0,1) =  0.0;
+  velocityPoints(1,0) = 1.5; velocityPoints(1,1) = -2.0;
+  velocityPoints(2,0) = 3.0; velocityPoints(2,1) =  4.0;
+
+  Pipeline::HostVector velocityWeights("velocityWeights", 3);
+  velocityWeights(0) = 0.25;
+  velocityWeights(1) = 0.50;
+  velocityWeights(2) = 0.75;
+
+  Pipeline::HostMatrix species0("species0", pointsPerCell, 3);
+  species0(0,0) = 2.0; species0(0,1) = 3.0; species0(0,2) = 5.0;
+  species0(1,0) = 7.0; species0(1,1) = 11.0; species0(1,2) = 13.0;
+
+  auto legacySemantics = Pipeline::buildRHSMomentData(numCells,
+                                                       pointsPerCell,
+                                                       charges,
+                                                       eps0,
+                                                       {species0},
+                                                       velocityPoints,
+                                                       velocityWeights,
+                                                       n0);
+  auto relativisticCurrentSemantics = Pipeline::buildRHSMomentData(numCells,
+                                                                    pointsPerCell,
+                                                                    charges,
+                                                                    eps0,
+                                                                    {species0},
+                                                                    velocityPoints,
+                                                                    velocityWeights,
+                                                                    n0,
+                                                                    true,
+                                                                    c);
+
+  for (int point=0; point<pointsPerCell; point++)
+  {
+    double density = 0.0;
+    double properUxMoment = 0.0;
+    double properUzMoment = 0.0;
+    for (int velocityOrdinal=0; velocityOrdinal<3; velocityOrdinal++)
+    {
+      const double weightedF = species0(point, velocityOrdinal) * velocityWeights(velocityOrdinal);
+      density += weightedF;
+      properUxMoment += weightedF * velocityPoints(velocityOrdinal, 0);
+      properUzMoment += weightedF * velocityPoints(velocityOrdinal, 1);
+    }
+
+    TEST_FLOATING_EQUALITY(legacySemantics.rhoRHS(0, point), q / eps0 * (density - n0[point]), 1e-14);
+    TEST_FLOATING_EQUALITY(legacySemantics.Jx(0, point), q * properUxMoment, 1e-14);
+    TEST_FLOATING_EQUALITY(legacySemantics.Jz(0, point), q * properUzMoment, 1e-14);
+    TEST_FLOATING_EQUALITY(relativisticCurrentSemantics.rhoRHS(0, point), legacySemantics.rhoRHS(0, point), 1e-14);
+    TEST_ASSERT(std::abs(relativisticCurrentSemantics.Jx(0, point) - legacySemantics.Jx(0, point)) > 1e-6);
+    TEST_ASSERT(std::abs(relativisticCurrentSemantics.Jz(0, point) - legacySemantics.Jz(0, point)) > 1e-6);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, ComparisonAdapterAcceptsGammaWeightedCurrentsForRelativisticReference )
+{
+  using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+
+  const int numCells = 1;
+  const int pointsPerCell = 1;
+  const double eps0 = 1.0;
+  const double q = 1.0;
+  const double c = 1.0;
+  std::vector<double> charges = {q};
+  std::vector<double> n0 = {0.0};
+
+  Pipeline::HostMatrix velocityPoints("velocityPoints", 2, 2);
+  velocityPoints(0,0) = 1.0; velocityPoints(0,1) = 0.0;
+  velocityPoints(1,0) = 0.0; velocityPoints(1,1) = 2.0;
+
+  Pipeline::HostVector velocityWeights("velocityWeights", 2);
+  velocityWeights(0) = 1.0;
+  velocityWeights(1) = 1.0;
+
+  Pipeline::HostMatrix species0("species0", pointsPerCell, 2);
+  species0(0,0) = 4.0;
+  species0(0,1) = 6.0;
+
+  auto relativisticReference = Pipeline::buildRHSMomentData(numCells,
+                                                            pointsPerCell,
+                                                            charges,
+                                                            eps0,
+                                                            {species0},
+                                                            velocityPoints,
+                                                            velocityWeights,
+                                                            n0,
+                                                            true,
+                                                            c);
+  auto tensorProperVelocity = Pipeline::buildRHSMomentData(numCells,
+                                                           pointsPerCell,
+                                                           charges,
+                                                           eps0,
+                                                           {species0},
+                                                           velocityPoints,
+                                                           velocityWeights,
+                                                           n0);
+  auto tensorRelativisticCurrent = Pipeline::buildRHSMomentData(numCells,
+                                                                pointsPerCell,
+                                                                charges,
+                                                                eps0,
+                                                                {species0},
+                                                                velocityPoints,
+                                                                velocityWeights,
+                                                                n0,
+                                                                true,
+                                                                c);
+
+  auto properComparison = TensorPlanarMITLMomentComparisonAdapter::compare(tensorProperVelocity, relativisticReference);
+  auto relativisticComparison = TensorPlanarMITLMomentComparisonAdapter::compare(tensorRelativisticCurrent, relativisticReference);
+
+  TEST_FLOATING_EQUALITY(relativisticComparison.rhoRHS.maxAbsDifference, 0.0, 1e-14);
+  TEST_ASSERT(relativisticComparison.Jx.within(1e-14, 1e-14));
+  TEST_ASSERT(relativisticComparison.Jz.within(1e-14, 1e-14));
+  TEST_ASSERT(!properComparison.Jx.within(1e-14, 1e-14));
+  TEST_ASSERT(!properComparison.Jz.within(1e-14, 1e-14));
 }
 }

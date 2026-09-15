@@ -839,7 +839,131 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
   }
 }
 
-  TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
+  TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMomentFunctionMatchesDirectQuadrature )
+{
+  const int numPhysicalDims  = 1;
+  const int numExtrusionDims = 2;
+  const bool useSpaceTime    = false;
+  const int polyOrder = 3;
+  const int delta_k   = 0;
+  const double c = 2.0;
+  const int velocityComponent = 0;
+
+  std::vector<int> H1Order(1 + numExtrusionDims, polyOrder + 1);
+  auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
+
+  VarFactoryPtr vf = VarFactory::varFactory();
+  auto f = vf->fieldVar("f");
+  auto v = vf->testVar("v", HGRAD);
+  BFPtr bf = BF::bf(vf);
+
+  Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
+  const bool allowPruning = false;
+  MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
+  MeshPtr physicalMesh = MeshFactory::minRuleMesh(meshTopo->physicalMeshTopology(), bf, std::vector<int>{polyOrder + 1}, delta_k, comm, allowPruning);
+  PhysicalMeshUpdater::registerForUpdates(mesh, physicalMesh);
+
+  SolutionPtr soln = Solution::solution(mesh);
+  mesh->registerSolution(soln);
+
+  // The relativistic weight u_i/gamma is non-polynomial.  This synthetic distribution is
+  // polynomial so it projects accurately, while the weighted current integrand remains
+  // non-polynomial and must be integrated directly rather than via an intermediate projection.
+  FunctionPtr phaseSpaceFxn = Function::constant(1.0)
+                           + 0.25 * MonomialFunction::xi_n(1,2)
+                           + 0.50 * MonomialFunction::xi_n(2,1);
+  std::map<int, FunctionPtr> functionMap;
+  functionMap[f->ID()] = phaseSpaceFxn;
+  soln->projectOntoMesh(functionMap);
+
+  SolutionMoments solnMoments(0, soln, f, physicalMesh, -1);
+  solnMoments.update();
+  RelativisticFirstMomentFunction relativisticMoment(&solnMoments, soln, f, physicalMesh, c, velocityComponent);
+
+  auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(mesh->getTopology()->baseMeshTopology());
+  TEST_ASSERT(phaseSpaceMeshTopology != NULL);
+
+  CubatureFactory cubatureFactory;
+  const double tol = 1e-10;
+  const auto & myCells = physicalMesh->cellIDsInPartition();
+  for (const auto & physicalCellID : myCells)
+  {
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, physicalCellID);
+    const auto &configurationPoints = basisCache->getPhysicalCubaturePointsFC();
+    const int numPoints = configurationPoints.dimension(1);
+
+    FieldContainer<double> actual(1,numPoints);
+    relativisticMoment.values(actual, basisCache);
+
+    FieldContainer<double> expected(1,numPoints);
+    expected.initialize(0.0);
+
+    const auto &phaseSpaceCellIDs = phaseSpaceMeshTopology->phaseSpaceCellIDsForPhysicalCell(physicalCellID);
+    for (const auto &phaseSpaceCellID : phaseSpaceCellIDs)
+    {
+      int velocityQuadratureDegree = std::max(1, mesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID));
+      auto velocityCubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{velocityQuadratureDegree});
+      auto velocityRefPoints = velocityCubature->allocateCubaturePoints();
+      auto velocityRefWeights = velocityCubature->allocateCubatureWeights();
+      velocityCubature->getCubature(velocityRefPoints, velocityRefWeights);
+      auto velocityRefPointsFC  = FieldContainerConversion<double>::fromTensorPoints(velocityRefPoints);
+      auto velocityRefWeightsFC = FieldContainerConversion<double>::fromTensorData(velocityRefWeights);
+
+      const int velocityPointCount1D = velocityRefPointsFC.dimension(0);
+      const int velocityPointCount = velocityPointCount1D * velocityPointCount1D;
+
+      double vCenter[2], vScale[2];
+      for (int d=0; d<2; d++)
+      {
+        double v0, v1;
+        phaseSpaceMeshTopology->extrusionVerticesForPhaseSpaceCell(v0, v1, phaseSpaceCellID, d);
+        vCenter[d] = 0.5 * (v0 + v1);
+        vScale[d]  = 0.5 * (v1 - v0);
+      }
+
+      FieldContainer<double> phaseSpacePoints(numPoints * velocityPointCount, 3);
+      std::vector<double> relativisticWeights(velocityPointCount, 0.0);
+      int velocityEntry = 0;
+      for (int u0Ordinal=0; u0Ordinal<velocityPointCount1D; u0Ordinal++)
+      {
+        const double u0 = vCenter[0] + vScale[0] * velocityRefPointsFC(u0Ordinal,0);
+        const double w0 = vScale[0] * velocityRefWeightsFC(u0Ordinal);
+        for (int u1Ordinal=0; u1Ordinal<velocityPointCount1D; u1Ordinal++)
+        {
+          const double u1 = vCenter[1] + vScale[1] * velocityRefPointsFC(u1Ordinal,0);
+          const double w1 = vScale[1] * velocityRefWeightsFC(u1Ordinal);
+          const double gamma = std::sqrt(1.0 + (u0*u0 + u1*u1) / (c*c));
+          relativisticWeights[velocityEntry] = w0 * w1 * u0 / gamma;
+          for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+          {
+            const int phasePointOrdinal = pointOrdinal * velocityPointCount + velocityEntry;
+            phaseSpacePoints(phasePointOrdinal,0) = configurationPoints(0,pointOrdinal,0);
+            phaseSpacePoints(phasePointOrdinal,1) = u0;
+            phaseSpacePoints(phasePointOrdinal,2) = u1;
+          }
+          velocityEntry++;
+        }
+      }
+
+      FieldContainer<double> fValues(numPoints * velocityPointCount);
+      soln->solutionValues(fValues, f->ID(), phaseSpacePoints);
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        for (int velocityPointOrdinal=0; velocityPointOrdinal<velocityPointCount; velocityPointOrdinal++)
+        {
+          expected(0,pointOrdinal) += fValues(pointOrdinal * velocityPointCount + velocityPointOrdinal) * relativisticWeights[velocityPointOrdinal];
+        }
+      }
+    }
+
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+    {
+      TEST_FLOATING_EQUALITY(expected(0,pointOrdinal), actual(0,pointOrdinal), tol);
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
   {
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 1;

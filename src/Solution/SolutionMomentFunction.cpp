@@ -13,6 +13,8 @@
 #include "SolutionMomentFunction.h"
 
 #include "Camellia_TensorIndices.h"
+#include "ExtrudedMeshTopology.h"
+#include "GlobalDofAssignment.h"
 #include "MonomialFunctions.h"
 #include "Solution.h"
 
@@ -339,24 +341,8 @@ namespace Camellia
     TEUCHOS_TEST_FOR_EXCEPTION((_velocityComponent < 0) || (_velocityComponent >= velocityDim), std::invalid_argument,
                                "velocity component out of range");
 
-    const int velocityStartComponent = configDim;
-    FunctionPtr u_i = MonomialFunction::xi_n(velocityStartComponent + _velocityComponent, 1);
-    FunctionPtr uSquared = Function::zero();
-    for (int d=0; d<velocityDim; d++)
-    {
-      auto u_d = MonomialFunction::xi_n(velocityStartComponent + d, 1);
-      uSquared = uSquared + u_d * u_d;
-    }
-    FunctionPtr gamma = Function::sqrtFunction(1.0 + uSquared / (_c * _c));
-    _weightedF = Function::solution(_fieldVar, _phaseSpaceSolution) * (u_i / gamma);
-
-    _weightedSolution = Solution::solution(phaseSpaceMesh);
-    _weightedMoments = Teuchos::rcp(new SolutionMoments(0, _weightedSolution, _fieldVar, _configurationSpaceMesh, -1));
-
-    if (velocityDim == 1)      _zeroMomentFunction = _weightedMoments->solutionMomentFunction(0);
-    else if (velocityDim == 2) _zeroMomentFunction = _weightedMoments->solutionMomentFunction(0,0);
-    else if (velocityDim == 3) _zeroMomentFunction = _weightedMoments->solutionMomentFunction(0,0,0);
-    else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension in RelativisticFirstMomentFunction");
+    TEUCHOS_TEST_FOR_EXCEPTION(velocityDim > 3, std::invalid_argument,
+                               "Unsupported velocity dimension in RelativisticFirstMomentFunction");
 
     _drivingMoments->registerUpdateListener(this);
     update();
@@ -374,26 +360,11 @@ namespace Camellia
       _drivingMoments->unregisterUpdateListener(this);
     }
 
-    // Explicitly clear the weighted state before global Camellia teardown so that the
-    // owned weighted SolutionMoments object is destroyed in time to check its shared
-    // scratch storage back in.
-    _zeroMomentFunction = Teuchos::null;
-    _weightedMoments = Teuchos::null;
-    _weightedSolution = Teuchos::null;
-    _weightedF = Teuchos::null;
     _drivingMoments = nullptr;
   }
 
   void RelativisticFirstMomentFunction::update()
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(_weightedSolution == Teuchos::null, std::invalid_argument, "weighted solution is null");
-    TEUCHOS_TEST_FOR_EXCEPTION(_weightedMoments == Teuchos::null, std::invalid_argument, "weighted moments is null");
-    TEUCHOS_TEST_FOR_EXCEPTION(_weightedF == Teuchos::null, std::invalid_argument, "weighted function is null");
-
-    std::map<int, FunctionPtr> projectionMap;
-    projectionMap[_fieldVar->ID()] = _weightedF;
-    _weightedSolution->projectOntoMesh(projectionMap);
-    _weightedMoments->update();
     _hasBeenUpdated = true;
   }
 
@@ -471,11 +442,125 @@ namespace Camellia
     TEUCHOS_TEST_FOR_EXCEPTION(basisCache->mesh().get() != _configurationSpaceMesh.get(), std::invalid_argument,
                                "RelativisticFirstMomentFunction must be evaluated on its configuration-space mesh");
     TEUCHOS_TEST_FOR_EXCEPTION(!_hasBeenUpdated, std::invalid_argument,
-                               "RelativisticFirstMomentFunction values() called before the driving SolutionMoments update initialized weighted moments");
-    TEUCHOS_TEST_FOR_EXCEPTION(_zeroMomentFunction == Teuchos::null, std::invalid_argument,
-                               "zero moment function is null");
+                               "RelativisticFirstMomentFunction values() called before update()");
+    TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument,
+                               "RelativisticFirstMomentFunction DeviceView values must have shape (C,P)");
 
-    _zeroMomentFunction->values(values, modType, basisCache);
+    MeshPtr phaseSpaceMesh = _phaseSpaceSolution->mesh();
+    auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology());
+    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopology == NULL, std::invalid_argument,
+                               "RelativisticFirstMomentFunction requires an ExtrudedMeshTopology phase-space mesh");
+
+    const int configDim = _configurationSpaceMesh->getDimension();
+    const int phaseDim  = phaseSpaceMesh->getDimension();
+    const int velocityDim = phaseDim - configDim;
+    TEUCHOS_TEST_FOR_EXCEPTION((velocityDim <= 0) || (velocityDim > 3), std::invalid_argument,
+                               "RelativisticFirstMomentFunction supports one to three velocity dimensions");
+    TEUCHOS_TEST_FOR_EXCEPTION((_velocityComponent < 0) || (_velocityComponent >= velocityDim), std::invalid_argument,
+                               "velocity component out of range");
+
+    const int numCells  = values.extent_int(0);
+    const int numPoints = values.extent_int(1);
+    TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(basisCache->cellIDs().size()) != numCells, std::invalid_argument,
+                               "RelativisticFirstMomentFunction values shape must match BasisCache cell count");
+
+    const auto &configurationPoints = basisCache->getPhysicalCubaturePointsFC();
+    FieldContainer<double> accumulatedValues(numCells,numPoints);
+    accumulatedValues.initialize(0.0);
+
+    CubatureFactory cubatureFactory;
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      const auto configurationCellID = basisCache->cellIDs()[cellOrdinal];
+      const auto &phaseSpaceCellIDs = phaseSpaceMeshTopology->phaseSpaceCellIDsForPhysicalCell(configurationCellID);
+
+      for (const auto &phaseSpaceCellID : phaseSpaceCellIDs)
+      {
+        int velocityQuadratureDegree = phaseSpaceMesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID);
+        velocityQuadratureDegree = std::max(1, velocityQuadratureDegree);
+        auto velocityCubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{velocityQuadratureDegree});
+        auto velocityRefPoints = velocityCubature->allocateCubaturePoints();
+        auto velocityRefWeights = velocityCubature->allocateCubatureWeights();
+        velocityCubature->getCubature(velocityRefPoints, velocityRefWeights);
+        auto velocityRefPointsFC  = FieldContainerConversion<double>::fromTensorPoints(velocityRefPoints);
+        auto velocityRefWeightsFC = FieldContainerConversion<double>::fromTensorData(velocityRefWeights);
+
+        const int velocityPointCount1D = velocityRefPointsFC.dimension(0);
+        int velocityPointCount = 1;
+        for (int d=0; d<velocityDim; d++) velocityPointCount *= velocityPointCount1D;
+
+        Kokkos::Array<double,Intrepid2::Parameters::MaxTensorComponents> velocityLeft, velocityScale;
+        for (int d=0; d<velocityDim; d++)
+        {
+          double v0, v1;
+          phaseSpaceMeshTopology->extrusionVerticesForPhaseSpaceCell(v0, v1, phaseSpaceCellID, d);
+          velocityLeft[d]  = 0.5 * (v0 + v1);
+          velocityScale[d] = 0.5 * (v1 - v0);
+        }
+
+        FieldContainer<double> phaseSpacePoints(numPoints * velocityPointCount, phaseDim);
+        std::vector<double> relativisticVelocityWeights(velocityPointCount, 0.0);
+        for (int velocityPointOrdinal=0; velocityPointOrdinal<velocityPointCount; velocityPointOrdinal++)
+        {
+          int remainingOrdinal = velocityPointOrdinal;
+          double quadratureWeight = 1.0;
+          double velocitySquared = 0.0;
+          double selectedVelocity = 0.0;
+          for (int d=0; d<velocityDim; d++)
+          {
+            const int pointOrdinal1D = remainingOrdinal % velocityPointCount1D;
+            remainingOrdinal /= velocityPointCount1D;
+            const double velocity = velocityLeft[d] + velocityScale[d] * velocityRefPointsFC(pointOrdinal1D,0);
+            quadratureWeight *= velocityScale[d] * velocityRefWeightsFC(pointOrdinal1D);
+            velocitySquared += velocity * velocity;
+            if (d == _velocityComponent) selectedVelocity = velocity;
+          }
+          const double gamma = std::sqrt(1.0 + velocitySquared / (_c * _c));
+          relativisticVelocityWeights[velocityPointOrdinal] = quadratureWeight * selectedVelocity / gamma;
+        }
+
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          for (int velocityPointOrdinal=0; velocityPointOrdinal<velocityPointCount; velocityPointOrdinal++)
+          {
+            const int phaseSpacePointOrdinal = pointOrdinal * velocityPointCount + velocityPointOrdinal;
+            for (int d=0; d<configDim; d++)
+            {
+              phaseSpacePoints(phaseSpacePointOrdinal,d) = configurationPoints(cellOrdinal,pointOrdinal,d);
+            }
+            int remainingOrdinal = velocityPointOrdinal;
+            for (int d=0; d<velocityDim; d++)
+            {
+              const int pointOrdinal1D = remainingOrdinal % velocityPointCount1D;
+              remainingOrdinal /= velocityPointCount1D;
+              phaseSpacePoints(phaseSpacePointOrdinal,configDim+d) = velocityLeft[d] + velocityScale[d] * velocityRefPointsFC(pointOrdinal1D,0);
+            }
+          }
+        }
+
+        FieldContainer<double> fValues(numPoints * velocityPointCount);
+        _phaseSpaceSolution->solutionValues(fValues, _fieldVar->ID(), phaseSpacePoints);
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          for (int velocityPointOrdinal=0; velocityPointOrdinal<velocityPointCount; velocityPointOrdinal++)
+          {
+            const int phaseSpacePointOrdinal = pointOrdinal * velocityPointCount + velocityPointOrdinal;
+            accumulatedValues(cellOrdinal,pointOrdinal) += fValues(phaseSpacePointOrdinal) * relativisticVelocityWeights[velocityPointOrdinal];
+          }
+        }
+      }
+    }
+
+    auto accumulatedValuesDevice = accumulatedValues.checkoutDeviceView(true);
+    auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(values);
+    Kokkos::parallel_for("RelativisticFirstMomentFunction direct quadrature assign", rangePolicy,
+    KOKKOS_LAMBDA (const int cellOrdinal, const int pointOrdinal)
+    {
+      double &entry = values.access(cellOrdinal,pointOrdinal);
+      const double &value = accumulatedValuesDevice(cellOrdinal,pointOrdinal);
+      assignValue(entry, modType, value);
+    });
+    accumulatedValues.checkinDeviceView(false);
   }
 
 } // namespace Camellia
