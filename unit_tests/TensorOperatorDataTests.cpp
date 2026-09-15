@@ -6,6 +6,8 @@
 #include "TensorOperatorData.h"
 #include "Var.h"
 
+#include <Kokkos_Core.hpp>
+
 using namespace Camellia;
 
 namespace
@@ -80,6 +82,34 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, ComponentGeometryCompiledToViews )
   TEST_FLOATING_EQUALITY(widths.h_view(2), 0.5, 1e-15);
   TEST_FLOATING_EQUALITY(jacobians.h_view(1), 0.25, 1e-15);
   TEST_EQUALITY(polyOrders.h_view(0), 3);
+}
+
+TEUCHOS_UNIT_TEST( TensorOperatorData, DeviceViewsExposeComponentGeometry )
+{
+  auto tensorMesh = makeTensorMeshForOperatorDataTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorOperatorData data(tensorMesh, dofLayout);
+
+  auto widths = data.componentData(1).cellWidths();
+  auto jacobians = data.componentData(1).cellJacobians();
+  auto polyOrders = data.componentData(1).cellPolyOrders();
+  auto widthsDevice = widths.d_view;
+  auto jacobiansDevice = jacobians.d_view;
+  auto polyOrdersDevice = polyOrders.d_view;
+
+  double widthSum = 0.0;
+  double jacobianSum = 0.0;
+  int polyOrderSum = 0;
+  Kokkos::parallel_reduce("TensorOperatorDataDeviceWidthSum", static_cast<int>(widths.extent(0)),
+                          KOKKOS_LAMBDA(const int i, double &sum) { sum += widthsDevice(i); }, widthSum);
+  Kokkos::parallel_reduce("TensorOperatorDataDeviceJacobianSum", static_cast<int>(jacobians.extent(0)),
+                          KOKKOS_LAMBDA(const int i, double &sum) { sum += jacobiansDevice(i); }, jacobianSum);
+  Kokkos::parallel_reduce("TensorOperatorDataDevicePolyOrderSum", static_cast<int>(polyOrders.extent(0)),
+                          KOKKOS_LAMBDA(const int i, int &sum) { sum += polyOrdersDevice(i); }, polyOrderSum);
+
+  TEST_FLOATING_EQUALITY(widthSum, 2.0, 1e-15);
+  TEST_FLOATING_EQUALITY(jacobianSum, 1.0, 1e-15);
+  TEST_EQUALITY(polyOrderSum, 9);
 }
 
 TEUCHOS_UNIT_TEST( TensorOperatorData, ActiveTensorCellsStoreComponentOrdinals )
@@ -180,6 +210,45 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, VolumeLocalToGlobalViewsMatchCoefficientM
   }
 }
 
+TEUCHOS_UNIT_TEST( TensorOperatorData, DeviceViewsExposeVolumeLocalToGlobalMaps )
+{
+  auto tensorMesh = makeTensorMeshForOperatorDataTests();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorOperatorData data(tensorMesh, dofLayout);
+  TensorCoefficientMap coefficientMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "u");
+
+  IndexType expectedCountSum = 0;
+  IndexType expectedIndexSum = 0;
+  for (IndexType cellOrdinal=0; cellOrdinal<tensorMesh->topology()->activeCellCount(); cellOrdinal++)
+  {
+    auto expectedIndices = coefficientMap.indicesForVolumeCell(tensorMesh->topology()->tensorCellTuple(cellOrdinal));
+    expectedCountSum += expectedIndices.size();
+    for (IndexType index : expectedIndices) expectedIndexSum += index;
+  }
+
+  const auto &variableData = data.variableData(TENSOR_TRIAL_SPACE, "u");
+  auto localCounts = variableData.volumeLocalDofCounts();
+  auto localToGlobal = variableData.volumeLocalToGlobalIndices();
+  auto localCountsDevice = localCounts.d_view;
+  auto localToGlobalDevice = localToGlobal.d_view;
+
+  IndexType actualCountSum = 0;
+  IndexType actualIndexSum = 0;
+  Kokkos::parallel_reduce("TensorOperatorDataDeviceVolumeLocalDofCountSum", static_cast<int>(localCounts.extent(0)),
+                          KOKKOS_LAMBDA(const int cellOrdinal, IndexType &sum) { sum += localCountsDevice(cellOrdinal); }, actualCountSum);
+  Kokkos::parallel_reduce("TensorOperatorDataDeviceVolumeLocalToGlobalIndexSum", static_cast<int>(localCounts.extent(0)),
+                          KOKKOS_LAMBDA(const int cellOrdinal, IndexType &sum)
+                          {
+                            for (IndexType localOrdinal=0; localOrdinal<localCountsDevice(cellOrdinal); localOrdinal++)
+                            {
+                              sum += localToGlobalDevice(cellOrdinal, localOrdinal);
+                            }
+                          }, actualIndexSum);
+
+  TEST_EQUALITY(actualCountSum, expectedCountSum);
+  TEST_EQUALITY(actualIndexSum, expectedIndexSum);
+}
+
 TEUCHOS_UNIT_TEST( TensorOperatorData, TraceSkeletonLocalToGlobalViewsAndParityMatchTopology )
 {
   auto tensorMesh = makeTensorMeshForOperatorDataTests(true);
@@ -228,6 +297,55 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, TraceSkeletonLocalToGlobalViewsAndParityM
       TEST_EQUALITY(localToGlobal.h_view(entityOrdinal,localOrdinal), expectedIndices[localOrdinal]);
     }
   }
+}
+
+TEUCHOS_UNIT_TEST( TensorOperatorData, DeviceViewsExposeSkeletonTraceMapsAndNormalSigns )
+{
+  auto tensorMesh = makeTensorMeshForOperatorDataTests(true);
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorOperatorData data(tensorMesh, dofLayout);
+  TensorCoefficientMap coefficientMap(tensorMesh, dofLayout, TENSOR_TRIAL_SPACE, "tn");
+  auto skeleton = tensorMesh->topology()->tensorSkeleton(1);
+
+  IndexType expectedCountSum = 0;
+  IndexType expectedIndexSum = 0;
+  int expectedNormalSignSum = 0;
+  for (IndexType entityOrdinal=0; entityOrdinal<skeleton.entityCount(); entityOrdinal++)
+  {
+    const auto &entity = skeleton.entity(entityOrdinal);
+    auto expectedIndices = coefficientMap.indicesForSkeletonEntity(entity);
+    expectedCountSum += expectedIndices.size();
+    for (IndexType index : expectedIndices) expectedIndexSum += index;
+    expectedNormalSignSum += data.skeletonEntityOutwardNormalSign(TENSOR_TRIAL_SPACE, "tn", entityOrdinal);
+  }
+
+  const auto &traceData = data.variableData(TENSOR_TRIAL_SPACE, "tn");
+  auto localCounts = traceData.skeletonLocalDofCounts();
+  auto localToGlobal = traceData.skeletonLocalToGlobalIndices();
+  auto outwardNormalSigns = traceData.skeletonEntityOutwardNormalSigns();
+  auto localCountsDevice = localCounts.d_view;
+  auto localToGlobalDevice = localToGlobal.d_view;
+  auto outwardNormalSignsDevice = outwardNormalSigns.d_view;
+
+  IndexType actualCountSum = 0;
+  IndexType actualIndexSum = 0;
+  int actualNormalSignSum = 0;
+  Kokkos::parallel_reduce("TensorOperatorDataDeviceSkeletonLocalDofCountSum", static_cast<int>(localCounts.extent(0)),
+                          KOKKOS_LAMBDA(const int entityOrdinal, IndexType &sum) { sum += localCountsDevice(entityOrdinal); }, actualCountSum);
+  Kokkos::parallel_reduce("TensorOperatorDataDeviceSkeletonLocalToGlobalIndexSum", static_cast<int>(localCounts.extent(0)),
+                          KOKKOS_LAMBDA(const int entityOrdinal, IndexType &sum)
+                          {
+                            for (IndexType localOrdinal=0; localOrdinal<localCountsDevice(entityOrdinal); localOrdinal++)
+                            {
+                              sum += localToGlobalDevice(entityOrdinal, localOrdinal);
+                            }
+                          }, actualIndexSum);
+  Kokkos::parallel_reduce("TensorOperatorDataDeviceSkeletonOutwardNormalSignSum", static_cast<int>(outwardNormalSigns.extent(0)),
+                          KOKKOS_LAMBDA(const int entityOrdinal, int &sum) { sum += outwardNormalSignsDevice(entityOrdinal); }, actualNormalSignSum);
+
+  TEST_EQUALITY(actualCountSum, expectedCountSum);
+  TEST_EQUALITY(actualIndexSum, expectedIndexSum);
+  TEST_EQUALITY(actualNormalSignSum, expectedNormalSignSum);
 }
 
 TEUCHOS_UNIT_TEST( TensorOperatorData, DirectionalTraceVariablesCompileToDistinctSkeletonFamilies )

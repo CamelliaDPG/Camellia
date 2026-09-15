@@ -69,6 +69,38 @@ void ConfigurationSpaceFormulationMaxwell1D2V::registerTensorH1PointTraceDescrip
   }
 }
 
+TensorH1PointTraceLayout1D ConfigurationSpaceFormulationMaxwell1D2V::h1PointTraceLayout1D(TensorDofLayoutPtr dofLayout,
+                                                                                          const std::string &fieldName) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(dofLayout == Teuchos::null, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V requires a non-null tensor dof layout for H1 point trace lookup.");
+
+  for (const auto &descriptor : tensorH1PointTraceDescriptors1D())
+  {
+    if (descriptor.fieldName() == fieldName)
+    {
+      return dofLayout->h1PointTraceLayout1D(descriptor.traceName(), TENSOR_TRIAL_SPACE);
+    }
+  }
+
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V does not define a tensor H1 point trace for the requested field.");
+  return TensorH1PointTraceLayout1D(TensorTraceDescriptor::h1PointValueTrace1D(fieldName, fieldName), 0);
+}
+
+std::vector<TensorH1PointTraceLayout1D> ConfigurationSpaceFormulationMaxwell1D2V::h1PointTraceLayouts1D(TensorDofLayoutPtr dofLayout) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(dofLayout == Teuchos::null, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V requires a non-null tensor dof layout for H1 point trace lookup.");
+
+  std::vector<TensorH1PointTraceLayout1D> layouts;
+  for (const auto &descriptor : tensorH1PointTraceDescriptors1D())
+  {
+    layouts.push_back(dofLayout->h1PointTraceLayout1D(descriptor.traceName(), TENSOR_TRIAL_SPACE));
+  }
+  return layouts;
+}
+
 void ConfigurationSpaceFormulationMaxwell1D2V::registerSolutionCoefficientEvaluators(TensorFunctionEvaluationContext &context)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_configurationSoln == Teuchos::null, std::invalid_argument,

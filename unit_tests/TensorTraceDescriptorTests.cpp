@@ -1,13 +1,25 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
+#include "TensorDofLayout.h"
 #include "TensorMesh.h"
 #include "TensorTraceDescriptor.h"
+#include "TensorTraceLayout.h"
+#include "Var.h"
 
 using namespace Camellia;
 
 namespace
 {
+void addH1PointTraceTrialDiscretization(TensorMeshPtr tensorMesh,
+                                        const std::string &traceName,
+                                        int varID)
+{
+  VarPtr traceComponent = Teuchos::rcp(new Var(varID, 0, traceName + "_component", Camellia::OP_VALUE, HGRAD, TRACE, Teuchos::null, true, UNKNOWN_FS));
+  auto traceVar = Teuchos::rcp(new TensorVar(traceName, TENSOR_TRACE, std::vector<VarPtr>{traceComponent}, 0));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(traceVar, Teuchos::null, std::vector<int>{0})));
+}
+
 TEUCHOS_UNIT_TEST( TensorTraceDescriptor, NonconformingL2TraceCarriesOutwardNormalIntent )
 {
   auto tn = TensorTraceDescriptor::nonconformingL2SkeletonTrace("f", "t_n", 1);
@@ -78,6 +90,43 @@ TEUCHOS_UNIT_TEST( TensorTraceDescriptor, MaxwellFormulationRegistersH1PointTrac
   }
 
   TEST_NOTHROW(formulation.registerTensorH1PointTraceDescriptors(tensorMesh));
+}
+
+TEUCHOS_UNIT_TEST( TensorTraceDescriptor, MaxwellFormulationRetrievesConcreteH1PointTraceLayouts )
+{
+  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 1));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));
+
+  ConfigurationSpaceFormulationMaxwell1D2V formulation(1.0, 1.0);
+  formulation.registerTensorH1PointTraceDescriptors(tensorMesh);
+
+  int varID = 1000;
+  for (const auto &descriptor : ConfigurationSpaceFormulationMaxwell1D2V::tensorH1PointTraceDescriptors1D())
+  {
+    addH1PointTraceTrialDiscretization(tensorMesh, descriptor.traceName(), varID++);
+  }
+
+  TensorDofLayoutPtr dofLayout = tensorMesh->createDofLayout();
+  auto layouts = formulation.h1PointTraceLayouts1D(dofLayout);
+  TEST_EQUALITY(layouts.size(), 4);
+  for (const auto &layout : layouts)
+  {
+    TEST_ASSERT(layout.descriptor().isH1PointValueTrace());
+    TEST_EQUALITY(layout.interfacePointCount(), component->vertexCount());
+    TEST_EQUALITY(layout.valueDofOrdinal(0), 0);
+    TEST_EQUALITY(layout.valueDofOrdinal(static_cast<int>(component->vertexCount()) - 1), static_cast<int>(component->vertexCount()) - 1);
+    TEST_ASSERT(!layout.descriptor().usesOutwardNormalSign());
+  }
+
+  auto exLayout = formulation.h1PointTraceLayout1D(dofLayout, ConfigurationSpaceFormulationMaxwell1D2V::S_EX);
+  TEST_EQUALITY(exLayout.descriptor().fieldName(), ConfigurationSpaceFormulationMaxwell1D2V::S_EX);
+  TEST_EQUALITY(exLayout.descriptor().traceName(), ConfigurationSpaceFormulationMaxwell1D2V::S_EX_HAT);
+  TEST_EQUALITY(exLayout.endpointValueDofOrdinal(0, 1, TENSOR_TRACE_INTERFACE_LOWER), 0);
+  TEST_EQUALITY(exLayout.endpointValueDofOrdinal(0, 1, TENSOR_TRACE_INTERFACE_UPPER), 1);
+  TEST_THROW(formulation.h1PointTraceLayout1D(dofLayout, "missing Maxwell field"), std::invalid_argument);
+  TEST_THROW(formulation.h1PointTraceLayout1D(Teuchos::null, ConfigurationSpaceFormulationMaxwell1D2V::S_EX), std::invalid_argument);
 }
 
 TEUCHOS_UNIT_TEST( TensorTraceDescriptor, RejectsInvalidTraceMetadata )

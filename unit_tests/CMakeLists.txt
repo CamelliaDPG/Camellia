@@ -19,6 +19,7 @@ set(PHASE0_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   TensorBasisCacheTests.cpp
   TensorCoefficientValueEvaluatorTests.cpp
+  TensorCoefficientTpetraImportTests.cpp
   TensorBasisTests.cpp
   TensorProductLocalOperatorTests.cpp
   TensorLocalSchurComplementTests.cpp

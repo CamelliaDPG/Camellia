@@ -10,6 +10,7 @@
 
 #include "Camellia.h"
 #include "ConfigurationSpaceFormulation.h"
+#include "TensorDofLayout.h"
 #include "TensorMaxwellRHSMomentData.h"
 #include "TensorMesh.h"
 #include "TensorTraceDescriptor.h"
@@ -95,6 +96,13 @@ namespace Camellia
 
     //! Register the Maxwell 1D H1 point-value trace descriptors on a tensor-native configuration mesh.
     void registerTensorH1PointTraceDescriptors(TensorMeshPtr tensorMesh) const;
+
+    //! Return the concrete tensor-native 1D H1 point-trace layout for one Maxwell field name.
+    TensorH1PointTraceLayout1D h1PointTraceLayout1D(TensorDofLayoutPtr dofLayout,
+                                                    const std::string &fieldName) const;
+
+    //! Return the concrete tensor-native 1D H1 point-trace layouts for E_x, B_y, phi, and A, in descriptor order.
+    std::vector<TensorH1PointTraceLayout1D> h1PointTraceLayouts1D(TensorDofLayoutPtr dofLayout) const;
 
     //! Register production configuration-space solution evaluators for E_x, B_y, phi, and A.
     void registerSolutionCoefficientEvaluators(TensorFunctionEvaluationContext &context);

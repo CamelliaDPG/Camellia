@@ -734,6 +734,16 @@ namespace
     registerTensorSolutionCoefficientEvaluatorsIfSupported(form);
   }
 
+  void beginTensorFixedPointSubstepIfNeeded(VlasovSpaceTimeFormulation &form,
+                                            int substepOrdinal)
+  {
+    auto tensorContext = form.tensorFunctionEvaluationContext();
+    if (tensorContext != Teuchos::null)
+    {
+      tensorContext->beginFixedPointSubstep(substepOrdinal);
+    }
+  }
+
   class VlasovSpaceTimeIP : public TIP<double>
   {
     vector<FunctionPtr> _acceleration;
@@ -2420,6 +2430,8 @@ void VlasovSpaceTimeFormulation::solve()
   
   for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
   {
+    beginTensorFixedPointSubstepIfNeeded(*this, substepOrdinal);
+
     if (_enforcePositivity)
     {
       _alphaPG->setValue(alpha);
