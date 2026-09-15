@@ -8,8 +8,10 @@
 #include "BasisSumFunction.h"
 #include "CamelliaDataHelpers.h"
 #include "CamelliaMemoryTools.h"
+#include "Camellia_FieldContainerConversion.hpp"
 #include "ConfigurationSpaceFormulation.h"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
+#include "CubatureFactory.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
 #include "DoerflerRefinementStrategy.h"
 #include "EnergyErrorFunction.h"
@@ -30,6 +32,7 @@
 #include "Solution.h"
 #include "TensorBilinearForm.h"
 #include "TensorLocalSchurComplement.h"
+#include "TensorMaxwell1D2VMomentReductionPipeline.h"
 #include "TensorMaxwellRHSMomentData.h"
 #include "TensorMesh.h"
 #include "TensorOperatorData.h"
@@ -223,6 +226,134 @@ namespace
       referenceData = TensorMaxwellRHSMomentData(0, 0);
     }
     return referenceData;
+  }
+
+  struct Phase8SampledVlasovMomentInput1D2V
+  {
+    TensorMaxwell1D2VMomentReductionPipeline::HostMatrix speciesVlasovValues;
+    TensorMaxwell1D2VMomentReductionPipeline::HostMatrix velocityPoints;
+    TensorMaxwell1D2VMomentReductionPipeline::HostVector velocityWeights;
+    int numConfigurationCells = 0;
+    int numPointsPerConfigurationCell = 0;
+  };
+
+  Phase8SampledVlasovMomentInput1D2V phase8SampleVlasovSolutionIntoMomentInput1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                                                                  MeshPtr configurationMesh,
+                                                                                  SolutionPtr phaseSpaceSolution,
+                                                                                  VarPtr vlasovFieldVar,
+                                                                                  double uxMin,
+                                                                                  double uxMax,
+                                                                                  double uzMin,
+                                                                                  double uzMax,
+                                                                                  int velocityQuadratureDegree)
+  {
+    using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+    TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument,
+                               "Phase 8 Vlasov HostMatrix sampling requires a non-null configuration mesh.");
+    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
+                               "Phase 8 Vlasov HostMatrix sampling requires a non-null phase-space solution.");
+    TEUCHOS_TEST_FOR_EXCEPTION(vlasovFieldVar == Teuchos::null, std::invalid_argument,
+                               "Phase 8 Vlasov HostMatrix sampling requires a non-null Vlasov field variable.");
+    TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree <= 0, std::invalid_argument,
+                               "Phase 8 Vlasov HostMatrix sampling requires a positive velocity quadrature degree.");
+    TEUCHOS_TEST_FOR_EXCEPTION((uxMax <= uxMin) || (uzMax <= uzMin), std::invalid_argument,
+                               "Phase 8 Vlasov HostMatrix sampling requires nonempty velocity intervals.");
+
+    Phase8SampledVlasovMomentInput1D2V input;
+    input.numConfigurationCells = static_cast<int>(configurationCellIDs.size());
+
+    int expectedPointCount = -1;
+    std::vector<double> configurationPointCoordinates;
+    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(configurationCellIDs.size()); cellOrdinal++)
+    {
+      const auto cellID = configurationCellIDs[cellOrdinal];
+      auto basisCache = BasisCache::basisCacheForCell(configurationMesh, cellID);
+      const auto &points = basisCache->getPhysicalCubaturePointsFC();
+      const int pointCount = points.dimension(1);
+      const int spaceTimeDim = points.dimension(2);
+      TEUCHOS_TEST_FOR_EXCEPTION(spaceTimeDim != 2, std::invalid_argument,
+                                 "Phase 8 sampled Planar MITL comparison expects 1D space-time configuration points.");
+      if (expectedPointCount < 0)
+      {
+        expectedPointCount = pointCount;
+        input.numPointsPerConfigurationCell = pointCount;
+        configurationPointCoordinates.resize(static_cast<size_t>(configurationCellIDs.size()) * pointCount * spaceTimeDim);
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(pointCount != expectedPointCount, std::invalid_argument,
+                                 "Phase 8 Vlasov HostMatrix sampling requires a uniform configuration point count per cell.");
+
+      for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
+      {
+        const int configurationEntry = cellOrdinal * expectedPointCount + pointOrdinal;
+        configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2]     = points(0, pointOrdinal, 0);
+        configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2 + 1] = points(0, pointOrdinal, 1);
+      }
+    }
+
+    CubatureFactory cubatureFactory;
+    auto velocityCubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{velocityQuadratureDegree});
+    auto velocityRefPoints = velocityCubature->allocateCubaturePoints();
+    auto velocityRefWeights = velocityCubature->allocateCubatureWeights();
+    velocityCubature->getCubature(velocityRefPoints, velocityRefWeights);
+    auto velocityRefPointsFC = FieldContainerConversion<double>::fromTensorPoints(velocityRefPoints);
+    auto velocityRefWeightsFC = FieldContainerConversion<double>::fromTensorData(velocityRefWeights);
+
+    const int velocityPointCount1D = velocityRefPointsFC.dimension(0);
+    const int velocityPointCount = velocityPointCount1D * velocityPointCount1D;
+    input.velocityPoints = Pipeline::HostMatrix("Phase 8 sampled velocity points", velocityPointCount, 2);
+    input.velocityWeights = Pipeline::HostVector("Phase 8 sampled velocity weights", velocityPointCount);
+
+    const double uxCenter = 0.5 * (uxMin + uxMax);
+    const double uxScale  = 0.5 * (uxMax - uxMin);
+    const double uzCenter = 0.5 * (uzMin + uzMax);
+    const double uzScale  = 0.5 * (uzMax - uzMin);
+    for (int uxOrdinal=0; uxOrdinal<velocityPointCount1D; uxOrdinal++)
+    {
+      const double ux = uxCenter + uxScale * velocityRefPointsFC(uxOrdinal, 0);
+      const double uxWeight = uxScale * velocityRefWeightsFC(uxOrdinal);
+      for (int uzOrdinal=0; uzOrdinal<velocityPointCount1D; uzOrdinal++)
+      {
+        const int velocityEntry = uxOrdinal * velocityPointCount1D + uzOrdinal;
+        const double uz = uzCenter + uzScale * velocityRefPointsFC(uzOrdinal, 0);
+        const double uzWeight = uzScale * velocityRefWeightsFC(uzOrdinal);
+        input.velocityPoints(velocityEntry, 0) = ux;
+        input.velocityPoints(velocityEntry, 1) = uz;
+        input.velocityWeights(velocityEntry) = uxWeight * uzWeight;
+      }
+    }
+
+    const int configurationEntryCount = input.numConfigurationCells * input.numPointsPerConfigurationCell;
+    input.speciesVlasovValues = Pipeline::HostMatrix("Phase 8 sampled Vlasov f", configurationEntryCount, velocityPointCount);
+    if ((configurationEntryCount == 0) || (velocityPointCount == 0)) return input;
+
+    Camellia::FieldContainer<double> phaseSpacePoints(configurationEntryCount * velocityPointCount, 4);
+    for (int configurationEntry=0; configurationEntry<configurationEntryCount; configurationEntry++)
+    {
+      const double x = configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2];
+      const double t = configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2 + 1];
+      for (int velocityEntry=0; velocityEntry<velocityPointCount; velocityEntry++)
+      {
+        const int phaseSpacePointOrdinal = configurationEntry * velocityPointCount + velocityEntry;
+        phaseSpacePoints(phaseSpacePointOrdinal, 0) = x;
+        phaseSpacePoints(phaseSpacePointOrdinal, 1) = t;
+        phaseSpacePoints(phaseSpacePointOrdinal, 2) = input.velocityPoints(velocityEntry, 0);
+        phaseSpacePoints(phaseSpacePointOrdinal, 3) = input.velocityPoints(velocityEntry, 1);
+      }
+    }
+
+    Camellia::FieldContainer<double> fValues(configurationEntryCount * velocityPointCount);
+    phaseSpaceSolution->solutionValues(fValues, vlasovFieldVar->ID(), phaseSpacePoints);
+
+    for (int configurationEntry=0; configurationEntry<configurationEntryCount; configurationEntry++)
+    {
+      for (int velocityEntry=0; velocityEntry<velocityPointCount; velocityEntry++)
+      {
+        const int phaseSpacePointOrdinal = configurationEntry * velocityPointCount + velocityEntry;
+        input.speciesVlasovValues(configurationEntry, velocityEntry) = fValues(phaseSpacePointOrdinal);
+      }
+    }
+
+    return input;
   }
 
   std::vector<double> phase0UniformVertices(double left, double right, int elementCount)
@@ -1069,6 +1200,11 @@ int main(int argc, char *argv[])
     std::string phase0TimingFile = "";
     std::string phase0TensorGraphSchurBackend = "off";
     std::string phase8MomentBackend = "legacy";
+    double phase8MomentCompareAbsTol = 1e-10;
+    double phase8MomentCompareRelTol = 1e-8;
+    double phase8MomentCompareRelFloor = 1e-14;
+    bool phase8MomentCompareStrict = false;
+    int phase8MomentVelocityQuadratureDegree = -1;
     int phase0TensorGraphSchurXElements = 2;
     int phase0TensorGraphSchurTElements = 1;
     int phase0TensorGraphSchurUxElements = 1;
@@ -1082,7 +1218,17 @@ int main(int argc, char *argv[])
     cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
                    "Optional Phase 0 tensor-native graph-norm Schur micro-apply backend: off, assembled_crs, or matrix_free.");
     cmdp.setOption("phase8MomentBackend", &phase8MomentBackend,
-                   "Temporary Phase 8 Planar MITL moment backend: legacy, tensor_native, dry_run_compare, or compare.  The default legacy path preserves SolutionMoments; tensor_native/dry_run_compare currently request a non-authoritative Phase 8 comparison dry run.");
+                   "Temporary Phase 8 Planar MITL moment backend: legacy, tensor_native, dry_run_compare, or compare.  The default legacy path preserves SolutionMoments; tensor_native/dry_run_compare request a non-authoritative Phase 8 comparison dry run.");
+    cmdp.setOption("phase8MomentCompareAbsTol", &phase8MomentCompareAbsTol,
+                   "Absolute tolerance for Phase 8 tensor-vs-legacy rhoRHS/Jx/Jz moment comparisons.");
+    cmdp.setOption("phase8MomentCompareRelTol", &phase8MomentCompareRelTol,
+                   "Relative tolerance for Phase 8 tensor-vs-legacy rhoRHS/Jx/Jz moment comparisons.");
+    cmdp.setOption("phase8MomentCompareRelFloor", &phase8MomentCompareRelFloor,
+                   "Positive denominator floor for Phase 8 tensor-vs-legacy relative moment comparisons.");
+    cmdp.setOption("phase8MomentCompareStrict", "noPhase8MomentCompareStrict", &phase8MomentCompareStrict,
+                   "When enabled, abort if Phase 8 tensor-vs-legacy moment differences exceed tolerances.");
+    cmdp.setOption("phase8MomentVelocityQuadratureDegree", &phase8MomentVelocityQuadratureDegree,
+                   "Velocity quadrature degree for Phase 8 sampled Vlasov HostMatrix bridge; negative uses p.");
     cmdp.setOption("phase0TensorGraphSchurXElements",  &phase0TensorGraphSchurXElements,  "Number of x cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurTElements",  &phase0TensorGraphSchurTElements,  "Number of t cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurUxElements", &phase0TensorGraphSchurUxElements, "Number of ux cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
@@ -1109,6 +1255,15 @@ int main(int argc, char *argv[])
       {
         std::cout << "Unsupported phase8MomentBackend='" << phase8MomentBackend
                   << "'; expected legacy, tensor_native, dry_run_compare, or compare.\n";
+      }
+      return -1;
+    }
+    if ((phase8MomentCompareAbsTol < 0.0) || (phase8MomentCompareRelTol < 0.0) ||
+        (phase8MomentCompareRelFloor <= 0.0) || (phase8MomentVelocityQuadratureDegree == 0))
+    {
+      if (rank == 0)
+      {
+        std::cout << "Phase 8 moment comparison requires nonnegative tolerances, a positive relative floor, and a nonzero velocity quadrature degree (negative selects p).\n";
       }
       return -1;
     }
@@ -1598,16 +1753,40 @@ int main(int argc, char *argv[])
                                                                       q,
                                                                       eps0,
                                                                       n0);
-          auto comparison = TensorPlanarMITLMomentComparisonAdapter::compare(legacyReference, legacyReference);
-          const std::string phase8Status = "legacy_reference_self_check_pending_tensor_solution_bridge";
+          const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree : H1Order;
+          auto sampledInput = phase8SampleVlasovSolutionIntoMomentInput1D2V(solutionMoments->physicalCellIDs(),
+                                                                            form->configurationSpaceMesh(),
+                                                                            form->vlasovSolution(),
+                                                                            form->f(speciesOrdinal),
+                                                                            uxMin,
+                                                                            uxMax,
+                                                                            uyMin,
+                                                                            uyMax,
+                                                                            phase8VelocityQuadratureDegree);
+          const int numTensorEntries = sampledInput.numConfigurationCells * sampledInput.numPointsPerConfigurationCell;
+          std::vector<double> n0Values(numTensorEntries, n0);
+          auto tensorMomentData = TensorMaxwell1D2VMomentReductionPipeline::buildRHSMomentData(sampledInput.numConfigurationCells,
+                                                                                              sampledInput.numPointsPerConfigurationCell,
+                                                                                              {q},
+                                                                                              eps0,
+                                                                                              {sampledInput.speciesVlasovValues},
+                                                                                              sampledInput.velocityPoints,
+                                                                                              sampledInput.velocityWeights,
+                                                                                              n0Values,
+                                                                                              true,
+                                                                                              cScaled);
+          auto comparison = TensorPlanarMITLMomentComparisonAdapter::compare(tensorMomentData, legacyReference, phase8MomentCompareRelFloor);
+          const bool phase8WithinTolerance = comparison.within(phase8MomentCompareAbsTol, phase8MomentCompareRelTol);
+          const std::string phase8Status = phase8WithinTolerance ? "tensor_vs_legacy_compare_within_tolerance" : "tensor_vs_legacy_compare_exceeds_tolerance";
           if (rank == 0)
           {
             std::cout << "Phase 8 moment backend '" << phase8MomentBackend
                       << "' is running in legacy-authoritative dry-run mode. "
-                      << "Packed legacy Maxwell RHS moment reference data for "
+                      << "Compared tensor-native sampled Vlasov moment data against legacy Maxwell RHS moment reference data for "
                       << legacyReference.numConfigurationCells() << " local configuration cells and "
-                      << legacyReference.numPointsPerConfigurationCell() << " points per cell; "
-                      << "tensor-native moment comparison is deferred until the Planar MITL Vlasov Solution -> TensorSolution coefficient bridge is wired.\n";
+                      << legacyReference.numPointsPerConfigurationCell() << " points per cell using "
+                      << sampledInput.velocityWeights.extent(0) << " velocity quadrature points; status="
+                      << phase8Status << ".\n";
           }
           phase0.logDuration("phase8_moment_compare", phase0.elapsedSince(phase8MomentComparisonStart),
                              {{"slab", std::to_string(timeSlabOrdinal)},
@@ -1615,12 +1794,20 @@ int main(int argc, char *argv[])
                               {"status", phase8Status},
                               {"local_config_cells", std::to_string(legacyReference.numConfigurationCells())},
                               {"points_per_cell", std::to_string(legacyReference.numPointsPerConfigurationCell())},
+                              {"velocity_points", std::to_string(sampledInput.velocityWeights.extent(0))},
+                              {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)},
+                              {"abs_tol", phase0DoubleString(phase8MomentCompareAbsTol)},
+                              {"rel_tol", phase0DoubleString(phase8MomentCompareRelTol)},
+                              {"rel_floor", phase0DoubleString(phase8MomentCompareRelFloor)},
+                              {"within_tolerance", phase8WithinTolerance ? "1" : "0"},
                               {"rho_abs", phase0DoubleString(comparison.rhoRHS.maxAbsDifference)},
                               {"rho_rel", phase0DoubleString(comparison.rhoRHS.maxRelDifference)},
                               {"jx_abs", phase0DoubleString(comparison.Jx.maxAbsDifference)},
                               {"jx_rel", phase0DoubleString(comparison.Jx.maxRelDifference)},
                               {"jz_abs", phase0DoubleString(comparison.Jz.maxAbsDifference)},
                               {"jz_rel", phase0DoubleString(comparison.Jz.maxRelDifference)}});
+          TEUCHOS_TEST_FOR_EXCEPTION(phase8MomentCompareStrict && !phase8WithinTolerance, std::runtime_error,
+                                     "Phase 8 tensor-vs-legacy moment comparison exceeded configured tolerances.");
         }
 
         phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),

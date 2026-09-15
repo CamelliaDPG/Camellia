@@ -29,7 +29,9 @@ namespace Camellia
 
     static TensorPlanar1D2VSpeciesMoments reduceSpeciesMoments(HostMatrix vlasovSolutionValues,
                                                                HostMatrix velocityPoints,
-                                                               HostVector velocityWeights)
+                                                               HostVector velocityWeights,
+                                                               bool useRelativisticCurrentMoments = false,
+                                                               double lightSpeed = 1.0)
     {
       const int configurationEntryCount = static_cast<int>(vlasovSolutionValues.extent(0));
       HostVector density("TensorMaxwell1D2VMomentReductionPipeline density", configurationEntryCount);
@@ -41,16 +43,20 @@ namespace Camellia
                                         velocityPoints,
                                         velocityWeights,
                                         density);
-      TensorMomentReduction::reduceHost(TensorMomentDescriptor::planar1D2VXProperVelocityMoment(),
+      TensorMomentReduction::reduceHost(useRelativisticCurrentMoments ? TensorMomentDescriptor::planar1D2VCurrentX(1.0)
+                                                                      : TensorMomentDescriptor::planar1D2VXProperVelocityMoment(),
                                         vlasovSolutionValues,
                                         velocityPoints,
                                         velocityWeights,
-                                        xMoment);
-      TensorMomentReduction::reduceHost(TensorMomentDescriptor::planar1D2VSecondProperVelocityMoment(),
+                                        xMoment,
+                                        lightSpeed);
+      TensorMomentReduction::reduceHost(useRelativisticCurrentMoments ? TensorMomentDescriptor::planar1D2VCurrentZ(1.0)
+                                                                      : TensorMomentDescriptor::planar1D2VSecondProperVelocityMoment(),
                                         vlasovSolutionValues,
                                         velocityPoints,
                                         velocityWeights,
-                                        zMoment);
+                                        zMoment,
+                                        lightSpeed);
 
       std::vector<double> densityValues(configurationEntryCount);
       std::vector<double> xMomentValues(configurationEntryCount);
@@ -72,7 +78,9 @@ namespace Camellia
                                                          const std::vector<HostMatrix> &speciesVlasovSolutionValues,
                                                          HostMatrix velocityPoints,
                                                          HostVector velocityWeights,
-                                                         const std::vector<double> &n0Values)
+                                                         const std::vector<double> &n0Values,
+                                                         bool useRelativisticCurrentMoments = false,
+                                                         double lightSpeed = 1.0)
     {
       if (speciesCharges.size() != speciesVlasovSolutionValues.size())
       {
@@ -83,7 +91,7 @@ namespace Camellia
       speciesMoments.reserve(speciesVlasovSolutionValues.size());
       for (const auto &values : speciesVlasovSolutionValues)
       {
-        speciesMoments.push_back(reduceSpeciesMoments(values, velocityPoints, velocityWeights));
+        speciesMoments.push_back(reduceSpeciesMoments(values, velocityPoints, velocityWeights, useRelativisticCurrentMoments, lightSpeed));
       }
 
       return TensorMaxwell1D2VMomentAdapter::buildRHSMomentData(numConfigurationCells,

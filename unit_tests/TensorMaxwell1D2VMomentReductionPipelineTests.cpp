@@ -8,6 +8,8 @@
 
 #include <Tpetra_Core.hpp>
 
+#include <cmath>
+
 using namespace Camellia;
 
 namespace
@@ -108,6 +110,57 @@ TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, ReducesSpeciesAndBu
     TEST_FLOATING_EQUALITY(data.Jx(0, point), expectedJx, 1e-14);
     TEST_FLOATING_EQUALITY(data.Jz(0, point), expectedJz, 1e-14);
   }
+}
+
+TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, ReducesRelativisticCurrentMomentsWhenRequested )
+{
+  using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+
+  const int numCells = 1;
+  const int pointsPerCell = 1;
+  const double eps0 = 4.0;
+  const double c = 2.0;
+  const double q = -2.0;
+  std::vector<double> charges = {q};
+  std::vector<double> n0 = {0.25};
+
+  Pipeline::HostMatrix velocityPoints("velocityPoints", 2, 2);
+  velocityPoints(0,0) = 1.0; velocityPoints(0,1) = 0.0;
+  velocityPoints(1,0) = 0.0; velocityPoints(1,1) = 2.0;
+
+  Pipeline::HostVector velocityWeights("velocityWeights", 2);
+  velocityWeights(0) = 0.5;
+  velocityWeights(1) = 1.5;
+
+  Pipeline::HostMatrix species0("species0", 1, 2);
+  species0(0,0) = 4.0;
+  species0(0,1) = 6.0;
+
+  auto data = Pipeline::buildRHSMomentData(numCells,
+                                           pointsPerCell,
+                                           charges,
+                                           eps0,
+                                           {species0},
+                                           velocityPoints,
+                                           velocityWeights,
+                                           n0,
+                                           true,
+                                           c);
+
+  const double density = species0(0,0) * velocityWeights(0)
+                       + species0(0,1) * velocityWeights(1);
+  const double gamma0 = std::sqrt(1.0 + (velocityPoints(0,0) * velocityPoints(0,0)
+                                      + velocityPoints(0,1) * velocityPoints(0,1)) / (c * c));
+  const double gamma1 = std::sqrt(1.0 + (velocityPoints(1,0) * velocityPoints(1,0)
+                                      + velocityPoints(1,1) * velocityPoints(1,1)) / (c * c));
+  const double expectedJx = q * (species0(0,0) * velocityWeights(0) * velocityPoints(0,0) / gamma0
+                              + species0(0,1) * velocityWeights(1) * velocityPoints(1,0) / gamma1);
+  const double expectedJz = q * (species0(0,0) * velocityWeights(0) * velocityPoints(0,1) / gamma0
+                              + species0(0,1) * velocityWeights(1) * velocityPoints(1,1) / gamma1);
+
+  TEST_FLOATING_EQUALITY(data.rhoRHS(0, 0), q / eps0 * (density - n0[0]), 1e-14);
+  TEST_FLOATING_EQUALITY(data.Jx(0, 0), expectedJx, 1e-14);
+  TEST_FLOATING_EQUALITY(data.Jz(0, 0), expectedJz, 1e-14);
 }
 
 TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, RejectsSpeciesCountMismatch )
