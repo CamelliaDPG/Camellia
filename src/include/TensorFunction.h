@@ -174,6 +174,14 @@ namespace Camellia
 
     virtual void values(PointView pointsIn, ValueView valuesOut) const = 0;
     virtual void values(PointViewHost pointsIn, ValueViewHost valuesOut) const;
+
+    /**
+     * \brief Evaluate from host views while guarding overload dispatch.
+     *
+     * This entry point is intentionally named so callers and the host overload can avoid
+     * accidentally re-entering values(PointViewHost, ValueViewHost) when the implementation
+     * needs to dispatch to the device-view overload.
+     */
     void valuesOnHost(PointViewHost pointsIn, ValueViewHost valuesOut) const;
 
     virtual double value(const std::vector<double> &coordVector) const;

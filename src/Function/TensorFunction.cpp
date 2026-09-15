@@ -587,6 +587,14 @@ void TensorFunction::valuesOnHost(PointViewHost pointsIn, ValueViewHost valuesOu
   TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(valuesOut.extent(0)) != pointCount, std::invalid_argument,
                              "TensorFunction::valuesOnHost valuesOut extent must match pointsIn point count.");
 
+#if !defined(KOKKOS_ENABLE_CUDA) && !defined(KOKKOS_ENABLE_HIP)
+  // CPU backends use host-accessible memory for DeviceType.  Wrap the host mirrors in explicitly
+  // typed device views before dispatching so overload resolution selects values(PointView, ValueView)
+  // rather than recursing through values(PointViewHost, ValueViewHost).
+  PointView pointsDevice(pointsIn);
+  ValueView valuesDevice(valuesOut);
+  this->values(pointsDevice, valuesDevice);
+#else
   PointView pointsDevice("TensorFunction::valuesOnHost points", pointCount, pointDim);
   auto pointsDeviceHost = Kokkos::create_mirror_view(pointsDevice);
   for (int p=0; p<pointCount; p++)
@@ -603,6 +611,7 @@ void TensorFunction::valuesOnHost(PointViewHost pointsIn, ValueViewHost valuesOu
 
   auto valuesDeviceHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), valuesDevice);
   for (int p=0; p<pointCount; p++) valuesOut(p) = valuesDeviceHost(p);
+#endif
 }
 
 void TensorFunction::values(PointViewHost pointsIn, ValueViewHost valuesOut) const

@@ -62,6 +62,32 @@ TEUCHOS_UNIT_TEST( TensorFunction, BatchedPointViewEvaluation )
   TEST_FLOATING_EQUALITY(valuesHost(2), 30.0, 1e-14);
 }
 
+TEUCHOS_UNIT_TEST( TensorFunction, HostPointViewEvaluationUsesOverloadDispatchGuard )
+{
+  auto x0 = TensorFunction::componentCoordinate(0);
+  auto x1 = TensorFunction::componentCoordinate(1);
+  auto f = x0 * x1 + TensorFunction::constant(2.0);
+
+  TensorFunction::PointViewHost points("host points", 3, 2);
+  points(0,0) = 1.0; points(0,1) = 2.0;
+  points(1,0) = 3.0; points(1,1) = 4.0;
+  points(2,0) = 5.0; points(2,1) = 6.0;
+
+  TensorFunction::ValueViewHost valuesFromNamedGuard("values from named host guard", 3);
+  f->valuesOnHost(points, valuesFromNamedGuard);
+
+  TensorFunction::ValueViewHost valuesFromHostOverload("values from host overload", 3);
+  f->values(points, valuesFromHostOverload);
+
+  TEST_FLOATING_EQUALITY(valuesFromNamedGuard(0),  4.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromNamedGuard(1), 14.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromNamedGuard(2), 32.0, 1e-14);
+
+  TEST_FLOATING_EQUALITY(valuesFromHostOverload(0),  4.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromHostOverload(1), 14.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromHostOverload(2), 32.0, 1e-14);
+}
+
 TEUCHOS_UNIT_TEST( TensorFunction, SumAndProductExposeChildStructure )
 {
   auto x0 = TensorFunction::componentCoordinate(0);
