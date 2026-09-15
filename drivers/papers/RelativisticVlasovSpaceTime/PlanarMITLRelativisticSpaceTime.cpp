@@ -30,9 +30,11 @@
 #include "Solution.h"
 #include "TensorBilinearForm.h"
 #include "TensorLocalSchurComplement.h"
+#include "TensorMaxwellRHSMomentData.h"
 #include "TensorMesh.h"
 #include "TensorOperatorData.h"
 #include "TensorOperatorFactory.h"
+#include "TensorPlanarMITLMomentComparisonAdapter.h"
 #include "TensorVar.h"
 #include "TensorVarDiscretization.h"
 #include "TrigFunctions.h"
@@ -153,7 +155,74 @@ namespace
 
   bool phase8MomentBackendIsValid(const std::string &backend)
   {
-    return (backend == "legacy") || (backend == "tensor_native");
+    return (backend == "legacy") ||
+           (backend == "tensor_native") ||
+           (backend == "dry_run_compare") ||
+           (backend == "compare");
+  }
+
+  bool phase8MomentBackendRequestsDryRunComparison(const std::string &backend)
+  {
+    return (backend == "tensor_native") ||
+           (backend == "dry_run_compare") ||
+           (backend == "compare");
+  }
+
+  TensorMaxwellRHSMomentData phase8BuildLegacyMomentReferenceData(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                                                  MeshPtr configurationMesh,
+                                                                  FunctionPtr densityFunction,
+                                                                  FunctionPtr JxFunction,
+                                                                  FunctionPtr JzFunction,
+                                                                  double q,
+                                                                  double eps0,
+                                                                  double n0)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument,
+                               "Phase 8 legacy moment reference packing requires a non-null configuration mesh.");
+    TEUCHOS_TEST_FOR_EXCEPTION(densityFunction == Teuchos::null, std::invalid_argument,
+                               "Phase 8 legacy moment reference packing requires a non-null density function.");
+    TEUCHOS_TEST_FOR_EXCEPTION(JxFunction == Teuchos::null, std::invalid_argument,
+                               "Phase 8 legacy moment reference packing requires a non-null Jx function.");
+    TEUCHOS_TEST_FOR_EXCEPTION(JzFunction == Teuchos::null, std::invalid_argument,
+                               "Phase 8 legacy moment reference packing requires a non-null Jz function.");
+    TEUCHOS_TEST_FOR_EXCEPTION(eps0 == 0.0, std::invalid_argument,
+                               "Phase 8 legacy moment reference packing requires nonzero eps0.");
+
+    TensorMaxwellRHSMomentData referenceData;
+    int expectedPointCount = -1;
+    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(configurationCellIDs.size()); cellOrdinal++)
+    {
+      const auto cellID = configurationCellIDs[cellOrdinal];
+      auto basisCache = BasisCache::basisCacheForCell(configurationMesh, cellID);
+      const auto &points = basisCache->getPhysicalCubaturePointsFC();
+      const int pointCount = points.dimension(1);
+      if (expectedPointCount < 0)
+      {
+        expectedPointCount = pointCount;
+        referenceData = TensorMaxwellRHSMomentData(static_cast<int>(configurationCellIDs.size()), expectedPointCount);
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(pointCount != expectedPointCount, std::invalid_argument,
+                                 "Phase 8 legacy moment reference packing requires a uniform configuration point count per cell.");
+
+      FieldContainer<double> densityValues(1, pointCount);
+      FieldContainer<double> JxValues(1, pointCount);
+      FieldContainer<double> JzValues(1, pointCount);
+      densityFunction->values(densityValues, basisCache);
+      JxFunction->values(JxValues, basisCache);
+      JzFunction->values(JzValues, basisCache);
+
+      for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
+      {
+        referenceData.rhoRHS(cellOrdinal, pointOrdinal) = q / eps0 * (densityValues(0, pointOrdinal) - n0);
+        referenceData.Jx(cellOrdinal, pointOrdinal)     = JxValues(0, pointOrdinal);
+        referenceData.Jz(cellOrdinal, pointOrdinal)     = JzValues(0, pointOrdinal);
+      }
+    }
+    if (expectedPointCount < 0)
+    {
+      referenceData = TensorMaxwellRHSMomentData(0, 0);
+    }
+    return referenceData;
   }
 
   std::vector<double> phase0UniformVertices(double left, double right, int elementCount)
@@ -1013,7 +1082,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
                    "Optional Phase 0 tensor-native graph-norm Schur micro-apply backend: off, assembled_crs, or matrix_free.");
     cmdp.setOption("phase8MomentBackend", &phase8MomentBackend,
-                   "Temporary Phase 8 Planar MITL moment backend: legacy or tensor_native.  The default legacy path preserves SolutionMoments until the tensor-native gate passes.");
+                   "Temporary Phase 8 Planar MITL moment backend: legacy, tensor_native, dry_run_compare, or compare.  The default legacy path preserves SolutionMoments; tensor_native/dry_run_compare currently request a non-authoritative Phase 8 comparison dry run.");
     cmdp.setOption("phase0TensorGraphSchurXElements",  &phase0TensorGraphSchurXElements,  "Number of x cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurTElements",  &phase0TensorGraphSchurTElements,  "Number of t cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurUxElements", &phase0TensorGraphSchurUxElements, "Number of ux cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
@@ -1039,7 +1108,7 @@ int main(int argc, char *argv[])
       if (rank == 0)
       {
         std::cout << "Unsupported phase8MomentBackend='" << phase8MomentBackend
-                  << "'; expected legacy or tensor_native.\n";
+                  << "'; expected legacy, tensor_native, dry_run_compare, or compare.\n";
       }
       return -1;
     }
@@ -1515,16 +1584,45 @@ int main(int argc, char *argv[])
         }
         
         auto phase0MomentUpdateStart = phase0.now();
-        if (phase8MomentBackend == "legacy")
+        solutionMoments->update();
+        positiveMoments->update();
+
+        if (phase8MomentBackendRequestsDryRunComparison(phase8MomentBackend))
         {
-          solutionMoments->update();
-          positiveMoments->update();
+          auto phase8MomentComparisonStart = phase0.now();
+          auto legacyReference = phase8BuildLegacyMomentReferenceData(solutionMoments->physicalCellIDs(),
+                                                                      form->configurationSpaceMesh(),
+                                                                      density,
+                                                                      Jx,
+                                                                      Jz,
+                                                                      q,
+                                                                      eps0,
+                                                                      n0);
+          auto comparison = TensorPlanarMITLMomentComparisonAdapter::compare(legacyReference, legacyReference);
+          const std::string phase8Status = "legacy_reference_self_check_pending_tensor_solution_bridge";
+          if (rank == 0)
+          {
+            std::cout << "Phase 8 moment backend '" << phase8MomentBackend
+                      << "' is running in legacy-authoritative dry-run mode. "
+                      << "Packed legacy Maxwell RHS moment reference data for "
+                      << legacyReference.numConfigurationCells() << " local configuration cells and "
+                      << legacyReference.numPointsPerConfigurationCell() << " points per cell; "
+                      << "tensor-native moment comparison is deferred until the Planar MITL Vlasov Solution -> TensorSolution coefficient bridge is wired.\n";
+          }
+          phase0.logDuration("phase8_moment_compare", phase0.elapsedSince(phase8MomentComparisonStart),
+                             {{"slab", std::to_string(timeSlabOrdinal)},
+                              {"moment_backend", phase8MomentBackend},
+                              {"status", phase8Status},
+                              {"local_config_cells", std::to_string(legacyReference.numConfigurationCells())},
+                              {"points_per_cell", std::to_string(legacyReference.numPointsPerConfigurationCell())},
+                              {"rho_abs", phase0DoubleString(comparison.rhoRHS.maxAbsDifference)},
+                              {"rho_rel", phase0DoubleString(comparison.rhoRHS.maxRelDifference)},
+                              {"jx_abs", phase0DoubleString(comparison.Jx.maxAbsDifference)},
+                              {"jx_rel", phase0DoubleString(comparison.Jx.maxRelDifference)},
+                              {"jz_abs", phase0DoubleString(comparison.Jz.maxAbsDifference)},
+                              {"jz_rel", phase0DoubleString(comparison.Jz.maxRelDifference)}});
         }
-        else
-        {
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error,
-                                     "phase8MomentBackend=tensor_native was requested, but the TensorSolution-backed Planar MITL moment update path is not wired yet.");
-        }
+
         phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),
                            {{"slab", std::to_string(timeSlabOrdinal)},
                             {"moment_backend", phase8MomentBackend}});

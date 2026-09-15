@@ -185,7 +185,8 @@ Phase 8 progress notes:
 - the temporary Planar MITL `phase8MomentBackend` flag is registered and timing metadata now records the selected moment backend while defaulting to the unchanged legacy path;
 - `TensorSolution` exposes host volume-value and 1D2V configuration/velocity-matrix evaluation helpers so Vlasov `f` coefficient storage can feed moment reductions directly;
 - `TensorMaxwell1D2VMomentReductionPipeline` can now build Maxwell RHS moment payloads from one or more `TensorSolution` species inputs;
-- `TensorPlanarMITLMomentComparisonAdapter` records fieldwise max absolute/relative differences for `rhoRHS`, `Jx`, and `Jz`, providing the metric container needed by the upcoming driver dry-run/comparison mode.
+- `TensorPlanarMITLMomentComparisonAdapter` records fieldwise max absolute/relative differences for `rhoRHS`, `Jx`, and `Jz`, providing the metric container needed by the upcoming driver dry-run/comparison mode;
+- the Planar MITL driver now treats `tensor_native`, `dry_run_compare`, and `compare` as legacy-authoritative Phase 8 dry-run requests instead of aborting immediately.  The current scaffold packs the authoritative legacy `density`, `Jx`, and `Jz` functions into a `TensorMaxwellRHSMomentData` reference payload on the rank-local configuration cells, runs a zero-difference `TensorPlanarMITLMomentComparisonAdapter` self-check, and logs a `phase8_moment_compare` Phase 0 event with status `legacy_reference_self_check_pending_tensor_solution_bridge`; the next implementation step is to wire the live Vlasov `Solution` coefficients into `TensorSolution`/`TensorCoefficientValueEvaluator` or an equivalent sampled `HostMatrix`, run `TensorMaxwell1D2VMomentReductionPipeline`, and replace the self-check with real tensor-vs-legacy `rhoRHS`/`Jx`/`Jz` comparisons on identical configuration points.
 
 ### Phase 9: global solve and preconditioning path
 
