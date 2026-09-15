@@ -45,6 +45,22 @@ target_link_libraries(runPhase0Tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRAR
 
 add_test(NAME runPhase0Tests COMMAND runPhase0Tests)
 
+set(TENSOR_TPETRA_IMPORT_MPI2_TEST_SOURCES
+  Teuchos_StandardParallelUnitTestMain.cpp
+  TensorCoefficientTpetraImportTests.cpp
+)
+
+add_executable(runTensorCoefficientTpetraImportMPI2 ${TENSOR_TPETRA_IMPORT_MPI2_TEST_SOURCES})
+add_dependencies(runTensorCoefficientTpetraImportMPI2 runTests)
+
+target_link_libraries(runTensorCoefficientTpetraImportMPI2 ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
+)
+
+if (MPIEXEC_EXECUTABLE)
+  add_test(NAME runTensorCoefficientTpetraImportMPI2
+           COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 $<TARGET_FILE:runTensorCoefficientTpetraImportMPI2>)
+endif()
+
 set(TENSOR_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   TensorPAMatrixTests.cpp
@@ -76,4 +92,4 @@ endif()
 
 add_test(NAME runTensorTests COMMAND runTensorTests)
 
-install (TARGETS runTests runPhase0Tests runTensorTests DESTINATION bin/tests)
+install (TARGETS runTests runPhase0Tests runTensorTests runTensorCoefficientTpetraImportMPI2 DESTINATION bin/tests)

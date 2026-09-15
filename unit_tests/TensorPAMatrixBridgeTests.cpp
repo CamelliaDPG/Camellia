@@ -158,7 +158,8 @@ namespace
   template<int spaceDim>
   Teuchos::RCP<std::vector<Scalar>> cubatureWeightMultipliersForCoefficient(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
                                                                             const int p,
-                                                                            const TensorFunctionPtr &coefficient)
+                                                                            const TensorFunctionPtr &coefficient,
+                                                                            TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
     if (coefficient == Teuchos::null) return Teuchos::null;
 
@@ -170,6 +171,22 @@ namespace
 
     auto pointsHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), cubaturePoints);
     auto multipliers = Teuchos::rcp(new std::vector<Scalar>(numPoints, Scalar(1.0)));
+    if ((coefficient->hasSolutionDependencies()) && (evaluationContext != nullptr))
+    {
+      TensorFunction::PointViewHost coefficientPoints("coefficient reference context points", numPoints, spaceDim);
+      TensorFunction::ValueViewHost coefficientValues("coefficient reference context values", numPoints);
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        for (int d=0; d<spaceDim; d++) coefficientPoints(pointOrdinal,d) = pointsHost(pointOrdinal,d);
+      }
+      evaluationContext->values(coefficient, coefficientPoints, coefficientValues);
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        (*multipliers)[pointOrdinal] = static_cast<Scalar>(coefficientValues(pointOrdinal));
+      }
+      return multipliers;
+    }
+
     std::vector<double> coord(spaceDim, 0.0);
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
@@ -183,13 +200,15 @@ namespace
   void compareBridgeTermToStandardAssembly(const TensorBilinearTerm &term,
                                            const std::string &label,
                                            Teuchos::FancyOStream &out, bool &success,
-                                           const int p = 2)
+                                           const int p = 2,
+                                           TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
     auto geometry = makeUnitGeometry<spaceDim>(1);
     const int worksetSize = geometry.numCells();
 
     std::vector<TensorPAMatrixTerm<DeviceType,Scalar>> bridgeTerms;
-    Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(bridgeTerms, geometry, p, term, label);
+    Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(bridgeTerms, geometry, p, term, label,
+                                                                                 evaluationContext);
 
     const auto fs1 = Camellia::intrepidFunctionSpaceForTensorDescriptor(term.trialOperator());
     const auto fs2 = Camellia::intrepidFunctionSpaceForTensorDescriptor(term.testOperator());
@@ -197,7 +216,7 @@ namespace
     const auto op2 = Camellia::pamatrixOperatorForTensorDescriptor(term.testOperator());
     auto vectorWeight1 = Camellia::vectorWeightForSingleDerivative<spaceDim,Scalar>(term.trialOperator());
     auto vectorWeight2 = Camellia::vectorWeightForSingleDerivative<spaceDim,Scalar>(term.testOperator());
-    auto coefficientMultipliers = cubatureWeightMultipliersForCoefficient<spaceDim>(geometry, p, term.coefficient());
+    auto coefficientMultipliers = cubatureWeightMultipliersForCoefficient<spaceDim>(geometry, p, term.coefficient(), evaluationContext);
 
     double standardFlops = 0.0;
     double jacobianFlops = 0.0;
@@ -314,6 +333,34 @@ namespace
                                                                                                 &evaluationContext);
     TEST_EQUALITY(evaluator->callCount, 1);
     TEST_FLOATING_EQUALITY(bridgeTerm.weight, 1.0, 1e-15);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, SolutionDependentCoefficientPAMatrixAssemblyMatchesStandardAssembly )
+  {
+    const int spaceDim = 2;
+    auto trialVar = Camellia::makeHGRADTensorFieldVar("f", spaceDim);
+    auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+    auto coefficient = TensorFunction::configurationSpaceSolutionCoefficient1D(0, "E_x");
+    TensorBilinearTerm solutionDependentTerm(trialVar,
+                                             testVar,
+                                             TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                             TensorComponentOperatorDescriptor::valueOnly(spaceDim),
+                                             coefficient,
+                                             TENSOR_BILINEAR_TERM_VOLUME,
+                                             TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+
+    auto evaluator = Teuchos::rcp(new BridgeSolutionCoefficientEvaluator);
+    TensorFunctionEvaluationContext evaluationContext;
+    evaluationContext.registerSolutionCoefficientEvaluator(coefficient->dependencySources()[0], evaluator);
+
+    compareBridgeTermToStandardAssembly<spaceDim>(solutionDependentTerm,
+                                                  "solution-dependent coefficient PAMatrix context assembly",
+                                                  out, success,
+                                                  2,
+                                                  &evaluationContext);
+    // The PAMatrix path populates the context cache; the standard-assembly reference
+    // samples the same coefficient points through the same context and reuses that cache.
+    TEST_EQUALITY(evaluator->callCount, 1);
   }
 
   TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, RejectsBoundaryTerm )
