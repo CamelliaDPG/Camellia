@@ -146,6 +146,17 @@ static string fileSafe(const string &name)
   return safe.empty() ? "var" : safe;
 }
 
+struct GLVisSideKey
+{
+  int cellID;
+  int sideOrdinal;
+};
+
+static bool operator<(const GLVisSideKey &a, const GLVisSideKey &b)
+{
+  return (a.cellID < b.cellID) || ((a.cellID == b.cellID) && (a.sideOrdinal < b.sideOrdinal));
+}
+
 GLVisExporter::GLVisExporter(MeshPtr mesh, string outputDirName, string outputDirSuperPath, bool allowOverwrite) :
   _dirName(outputDirName), _dirSuperPath(outputDirSuperPath), _mesh(mesh)
 {
@@ -206,10 +217,6 @@ void GLVisExporter::exportFunction(vector<TFunctionPtr<double>> functions, vecto
 {
   TEUCHOS_TEST_FOR_EXCEPTION(functions.size() != functionNames.size(), std::invalid_argument, "functions must match functionNames in length!");
   TEUCHOS_TEST_FOR_EXCEPTION(functions.size() == 0, std::invalid_argument, "empty function container");
-  for (auto &f : functions)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(f->boundaryValueOnly(), std::invalid_argument, "trace/flux functions are not supported by GLVisExporter v1");
-  }
 
   int commRank = _mesh->Comm()->getRank();
   if (cellIndices.size() == 0) cellIndices = _mesh->globalDofAssignment()->cellsInPartition(commRank);
@@ -222,7 +229,27 @@ void GLVisExporter::exportFunction(vector<TFunctionPtr<double>> functions, vecto
       localDegree = max(localDegree, order);
     }
   }
-  writeExport(functions, functionNames, localDegree, timeVal, cellIndices);
+
+  vector<TFunctionPtr<double>> fieldFunctions, boundaryFunctions;
+  vector<string> fieldNames, boundaryNames;
+  for (int i = 0; i < functions.size(); i++)
+  {
+    if (functions[i]->boundaryValueOnly())
+    {
+      boundaryFunctions.push_back(functions[i]);
+      boundaryNames.push_back(functionNames[i]);
+    }
+    else
+    {
+      fieldFunctions.push_back(functions[i]);
+      fieldNames.push_back(functionNames[i]);
+    }
+  }
+
+  int step = _exportStep;
+  if (fieldFunctions.size() > 0) writeExport(fieldFunctions, fieldNames, localDegree, timeVal, cellIndices);
+  if ((fieldFunctions.size() > 0) && (boundaryFunctions.size() > 0)) _exportStep = step;
+  if (boundaryFunctions.size() > 0) writeBoundaryExport(boundaryFunctions, boundaryNames, localDegree, timeVal, cellIndices);
 }
 
 void GLVisExporter::exportSolution(TSolutionPtr<double> solution, double timeVal, set<GlobalIndexType> cellIndices)
@@ -233,11 +260,7 @@ void GLVisExporter::exportSolution(TSolutionPtr<double> solution, double timeVal
   VarFactoryPtr varFactory = _mesh->varFactory();
   vector<int> fieldTrialIDs = solution->bf()->trialVolumeIDs();
   vector<int> traceTrialIDs = solution->bf()->trialBoundaryIDs();
-  if ((traceTrialIDs.size() > 0) && (commRank == 0))
-  {
-    cout << "GLVisExporter: skipping " << traceTrialIDs.size() << " trace/flux variables (v1 exports field variables only).\n";
-  }
-  TEUCHOS_TEST_FOR_EXCEPTION(fieldTrialIDs.size() == 0, std::invalid_argument, "solution has no field variables");
+  TEUCHOS_TEST_FOR_EXCEPTION((fieldTrialIDs.size() == 0) && (traceTrialIDs.size() == 0), std::invalid_argument, "solution has no field or trace/flux variables");
 
   int h1Max = 0;
   for (GlobalIndexType cellID : cellIndices)
@@ -249,8 +272,8 @@ void GLVisExporter::exportSolution(TSolutionPtr<double> solution, double timeVal
   }
 
   bool dontWeightByParity = false;
-  vector<TFunctionPtr<double>> fieldFunctions;
-  vector<string> fieldNames;
+  vector<TFunctionPtr<double>> fieldFunctions, boundaryFunctions;
+  vector<string> fieldNames, boundaryNames;
   int localDegree = 0;
   for (int trialID : fieldTrialIDs)
   {
@@ -260,7 +283,18 @@ void GLVisExporter::exportSolution(TSolutionPtr<double> solution, double timeVal
     bool hvol = (var->space() == L2) || (var->space() == VECTOR_L2);
     localDegree = max(localDegree, hvol ? h1Max - 1 : h1Max);
   }
-  writeExport(fieldFunctions, fieldNames, localDegree, timeVal, cellIndices);
+  for (int trialID : traceTrialIDs)
+  {
+    VarPtr var = varFactory->trial(trialID);
+    boundaryFunctions.push_back(TFunction<double>::solution(var, solution, dontWeightByParity));
+    boundaryNames.push_back(var->name());
+    localDegree = max(localDegree, h1Max);
+  }
+
+  int step = _exportStep;
+  if (fieldFunctions.size() > 0) writeExport(fieldFunctions, fieldNames, localDegree, timeVal, cellIndices);
+  if ((fieldFunctions.size() > 0) && (boundaryFunctions.size() > 0)) _exportStep = step;
+  if (boundaryFunctions.size() > 0) writeBoundaryExport(boundaryFunctions, boundaryNames, localDegree, timeVal, cellIndices);
 }
 
 void GLVisExporter::exportTimeSlab(TFunctionPtr<double> function, string functionName, double tInit, double tFinal,
@@ -515,6 +549,209 @@ void GLVisExporter::writeExport(const vector<TFunctionPtr<double>> &functions, c
   {
     ofstream indexFile(outputDirPath() + "/index.txt", ios::app);
     indexFile << "step " << _exportStep << " time " << timeVal << " degree " << degree
+              << " mode " << (gather ? "gathered" : "pieces") << " ranks " << (gather ? 1 : numProcs) << " vars";
+    for (auto &name : names) indexFile << " " << name;
+    indexFile << "\n";
+  }
+  _exportStep++;
+}
+
+void GLVisExporter::writeBoundaryExport(const vector<TFunctionPtr<double>> &functions, const vector<string> &functionNames,
+                                          int localDegree, double timeVal, const set<GlobalIndexType> &cellIndices)
+{
+  int dim = _mesh->getTopology()->getDimension();
+  TEUCHOS_TEST_FOR_EXCEPTION(dim > 3, std::invalid_argument,
+                             "GLVisExporter: total dimension 4 is unsupported; export 3D slices instead");
+  TEUCHOS_TEST_FOR_EXCEPTION(dim <= 1, std::invalid_argument,
+                             "GLVisExporter: trace/flux export is supported for 2D and 3D volume meshes only");
+  int sideDim = dim - 1;
+
+  Teuchos_CommPtr comm = _mesh->Comm();
+  int commRank = comm->getRank();
+  int numProcs = comm->getSize();
+  MeshTopologyViewPtr meshTopo = _mesh->getTopology();
+
+  bool localUnsupportedTopology = false;
+  for (GlobalIndexType cellID : cellIndices)
+  {
+    if (cellHasCurvedEdges(meshTopo, cellID))
+    {
+      localUnsupportedTopology = true;
+      continue;
+    }
+    try
+    {
+      CellPtr cell = meshTopo->getCell(cellID);
+      mfemNodePerm(cell->topology());
+      for (unsigned side = 0; side < cell->getSideCount(); side++) mfemNodePerm(cell->topology()->getSubcell(sideDim, side));
+    }
+    catch (const std::invalid_argument &)
+    {
+      localUnsupportedTopology = true;
+    }
+  }
+  bool unsupportedTopology = MPIWrapper::globalOr(comm, localUnsupportedTopology);
+  TEUCHOS_TEST_FOR_EXCEPTION(unsupportedTopology, std::invalid_argument,
+                             "GLVisExporter supports straight-sided segment, quadrilateral, and hexahedral topologies only; curvilinear cells and simplices are unsupported");
+
+  int degree = MPIWrapper::max(comm, max(localDegree, _minDegree));
+  int n1D = degree + 1;
+  int numPoints = 1;
+  for (int d = 0; d < sideDim; d++) numPoints *= n1D;
+  int numVertices = 1 << sideDim;
+  int geomCode = (sideDim == 1) ? 1 : 3;
+
+  FieldContainer<double> refPoints(numPoints, sideDim);
+  getGaussLobattoPointsFC(refPoints, sideDim, degree);
+
+  int nFcns = functions.size();
+  vector<string> names(nFcns);
+  for (int i = 0; i < nFcns; i++) names[i] = fileSafe(functionNames[i]);
+  vector<int> vdims(nFcns);
+  for (int i = 0; i < nFcns; i++)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(!functions[i]->boundaryValueOnly(), std::invalid_argument, "writeBoundaryExport expects trace/flux functions only");
+    if (functions[i]->rank() == 0) vdims[i] = 1;
+    else if (functions[i]->rank() == 1) vdims[i] = dim;
+    else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled function rank");
+  }
+
+  vector<GLVisSideKey> sideKeys;
+  vector<double> coords;
+  vector<vector<double>> fcnValues(nFcns);
+
+  for (GlobalIndexType cellID : cellIndices)
+  {
+    CellPtr cell = meshTopo->getCell(cellID);
+    CellTopoPtr cellTopo = cell->topology();
+    const vector<IndexType> &vertices = cell->vertices();
+    BasisCachePtr volumeBasisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+    for (unsigned side = 0; side < cell->getSideCount(); side++)
+    {
+      CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, side);
+      vector<int> sidePerm = mfemNodePerm(sideTopo);
+      sideKeys.push_back({cellID, (int) side});
+      for (int i = 0; i < numVertices; i++)
+      {
+        unsigned cellNode = cellTopo->getNodeMap(sideDim, side, sidePerm[i]);
+        const vector<double> &vertex = meshTopo->getVertex(vertices[cellNode]);
+        for (int d = 0; d < dim; d++) coords.push_back(vertex[d]);
+      }
+
+      BasisCachePtr sideCache = volumeBasisCache->getSideBasisCache(side);
+      sideCache->setRefCellPointsFC(refPoints);
+      for (int i = 0; i < nFcns; i++)
+      {
+        if (vdims[i] == 1)
+        {
+          FieldContainer<double> values(1, numPoints);
+          if (functions[i]->isDefined(sideCache)) functions[i]->values(values, sideCache);
+          for (int pt = 0; pt < numPoints; pt++) fcnValues[i].push_back(values(0, pt));
+        }
+        else
+        {
+          FieldContainer<double> values(1, numPoints, dim);
+          if (functions[i]->isDefined(sideCache)) functions[i]->values(values, sideCache);
+          for (int c = 0; c < vdims[i]; c++)
+          {
+            for (int pt = 0; pt < numPoints; pt++) fcnValues[i].push_back(values(0, pt, c));
+          }
+        }
+      }
+    }
+  }
+
+  bool gather = _gatherToRankZero && (numProcs > 1);
+  if (gather)
+  {
+    vector<int> offsets;
+    vector<GLVisSideKey> allSideKeys;
+    vector<double> allCoords;
+    MPIWrapper::allGatherVariable(comm, allSideKeys, sideKeys, offsets);
+    MPIWrapper::allGatherVariable(comm, allCoords, coords, offsets);
+    for (int i = 0; i < nFcns; i++)
+    {
+      vector<double> allValues;
+      MPIWrapper::allGatherVariable(comm, allValues, fcnValues[i], offsets);
+      fcnValues[i] = allValues;
+    }
+    sideKeys = allSideKeys;
+    coords = allCoords;
+  }
+
+  int numSides = sideKeys.size();
+  vector<int> order(numSides);
+  iota(order.begin(), order.end(), 0);
+  sort(order.begin(), order.end(), [&](int a, int b) { return sideKeys[a] < sideKeys[b]; });
+
+  string suffix = "";
+  if (!gather && (numProcs > 1))
+  {
+    char rankBuf[16];
+    snprintf(rankBuf, sizeof(rankBuf), ".%06d", commRank);
+    suffix = rankBuf;
+  }
+  ostringstream basePath;
+  basePath << outputDirPath() << "/step" << _exportStep << "_trace";
+
+  if (!gather || (commRank == 0))
+  {
+    char buf[32];
+    ofstream meshFile(basePath.str() + ".mesh" + suffix);
+    TEUCHOS_TEST_FOR_EXCEPTION(!meshFile, std::runtime_error, "GLVisExporter: cannot open " << basePath.str() << ".mesh" << suffix);
+    meshFile << "MFEM mesh v1.0\n\ndimension\n" << sideDim << "\n\n";
+    meshFile << "elements\n" << numSides << "\n";
+    for (int k = 0; k < numSides; k++)
+    {
+      meshFile << "1 " << geomCode;
+      for (int v = 0; v < numVertices; v++) meshFile << " " << k * numVertices + v;
+      meshFile << "\n";
+    }
+    meshFile << "\nboundary\n0\n";
+    meshFile << "\nvertices\n" << numSides * numVertices << "\n" << dim << "\n";
+    for (int k = 0; k < numSides; k++)
+    {
+      int sideOrdinal = order[k];
+      for (int v = 0; v < numVertices; v++)
+      {
+        for (int d = 0; d < dim; d++)
+        {
+          snprintf(buf, sizeof(buf), "%.17g", coords[(sideOrdinal * numVertices + v) * dim + d]);
+          meshFile << ((d > 0) ? " " : "") << buf;
+        }
+        meshFile << "\n";
+      }
+    }
+    meshFile.close();
+
+    for (int i = 0; i < nFcns; i++)
+    {
+      ofstream gfFile(basePath.str() + "_" + names[i] + ".gf" + suffix);
+      TEUCHOS_TEST_FOR_EXCEPTION(!gfFile, std::runtime_error, "GLVisExporter: cannot open " << basePath.str() << "_" << names[i] << ".gf" << suffix);
+      gfFile << "FiniteElementSpace\n";
+      gfFile << "FiniteElementCollection: L2_T1_" << sideDim << "D_P" << degree << "\n";
+      gfFile << "VDim: " << vdims[i] << "\nOrdering: 0\n\n";
+      int stride = vdims[i] * numPoints;
+      for (int c = 0; c < vdims[i]; c++)
+      {
+        for (int k = 0; k < numSides; k++)
+        {
+          int sideOrdinal = order[k];
+          for (int pt = 0; pt < numPoints; pt++)
+          {
+            snprintf(buf, sizeof(buf), "%.17g", fcnValues[i][sideOrdinal * stride + c * numPoints + pt]);
+            gfFile << buf << "\n";
+          }
+        }
+      }
+      gfFile.close();
+    }
+  }
+
+  if (commRank == 0)
+  {
+    ofstream indexFile(outputDirPath() + "/index.txt", ios::app);
+    indexFile << "step " << _exportStep << " trace time " << timeVal << " degree " << degree
               << " mode " << (gather ? "gathered" : "pieces") << " ranks " << (gather ? 1 : numProcs) << " vars";
     for (auto &name : names) indexFile << " " << name;
     indexFile << "\n";

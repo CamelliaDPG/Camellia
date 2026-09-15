@@ -43,9 +43,12 @@ namespace
   void removeGLVisDir(const string &dir)
   {
     remove((dir + "/step0.mesh").c_str());
+    remove((dir + "/step0_trace.mesh").c_str());
     remove((dir + "/step0_x.gf").c_str());
     remove((dir + "/step0_velocity.gf").c_str());
     remove((dir + "/step0_u.gf").c_str());
+    remove((dir + "/step0_trace_u_hat.gf").c_str());
+    remove((dir + "/step0_trace_sigma_n_hat.gf").c_str());
     remove((dir + "/index.txt").c_str());
     rmdir(dir.c_str());
   }
@@ -130,7 +133,11 @@ namespace
     PoissonFormulation form(spaceDim, conformingTraces);
     MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), 2, spaceDim, 1.0, 1.0, 1, 1);
     SolutionPtr solution = Solution::solution(mesh);
-    solution->projectOntoMesh({{form.u()->ID(), Function::xn(1)}});
+    map<int, FunctionPtr> solutionMap;
+    solutionMap[form.u()->ID()] = Function::xn(1);
+    solutionMap[form.u_hat()->ID()] = Function::yn(1);
+    solutionMap[form.sigma_n_hat()->ID()] = Function::normal()->x();
+    solution->projectOntoMesh(solutionMap);
 
     GLVisExporter exporter(mesh, "CamelliaGLVisExporterSolutionTest", "/tmp", true);
     exporter.setGatherToRankZero(true);
@@ -140,16 +147,32 @@ namespace
     if (rank == 0)
     {
       TEST_ASSERT(fileExists(dir + "/step0.mesh"));
+      TEST_ASSERT(fileExists(dir + "/step0_trace.mesh"));
       TEST_ASSERT(fileExists(dir + "/step0_u.gf"));
+      TEST_ASSERT(fileExists(dir + "/step0_trace_u_hat.gf"));
+      TEST_ASSERT(fileExists(dir + "/step0_trace_sigma_n_hat.gf"));
       TEST_ASSERT(fileExists(dir + "/index.txt"));
 
       string gfFile = readFile(dir + "/step0_u.gf");
+      string traceMeshFile = readFile(dir + "/step0_trace.mesh");
+      string traceFile = readFile(dir + "/step0_trace_u_hat.gf");
+      string fluxFile = readFile(dir + "/step0_trace_sigma_n_hat.gf");
       string indexFile = readFile(dir + "/index.txt");
       TEST_ASSERT(contains(gfFile, "FiniteElementSpace"));
       TEST_ASSERT(contains(gfFile, "VDim: 1"));
+      TEST_ASSERT(contains(traceMeshFile, "dimension\n1"));
+      TEST_ASSERT(contains(traceMeshFile, "elements\n4"));
+      TEST_ASSERT(contains(traceMeshFile, "vertices\n8\n2"));
+      TEST_ASSERT(contains(traceFile, "FiniteElementCollection: L2_T1_1D_P2"));
+      TEST_ASSERT(contains(traceFile, "VDim: 1"));
+      TEST_ASSERT(contains(fluxFile, "FiniteElementCollection: L2_T1_1D_P2"));
+      TEST_ASSERT(contains(fluxFile, "VDim: 1"));
       TEST_ASSERT(contains(indexFile, "step 0 time 1.5"));
       TEST_ASSERT(contains(indexFile, "vars"));
       TEST_ASSERT(contains(indexFile, "u"));
+      TEST_ASSERT(contains(indexFile, "step 0 trace time 1.5"));
+      TEST_ASSERT(contains(indexFile, "u_hat"));
+      TEST_ASSERT(contains(indexFile, "sigma_n_hat"));
 
       removeGLVisDir(dir);
     }

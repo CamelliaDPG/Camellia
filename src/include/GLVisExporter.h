@@ -12,8 +12,9 @@
  *
  *  Writes MFEM/GLVis ASCII files (.mesh + .gf) for GLVis.
  *  Version 1 supports straight-sided segment, quadrilateral, and hexahedral
- *  meshes and field variables.  Curvilinear geometry, simplices, traces/fluxes,
- *  and 4D/time-slab export are intentionally out of scope.
+ *  meshes.  Field variables are exported on the volume mesh; traces and fluxes
+ *  are exported on a separate lower-dimensional side mesh.  Curvilinear geometry,
+ *  simplices, and 4D/time-slab export are intentionally out of scope.
  */
 
 #include "TypeDefs.h"
@@ -42,6 +43,8 @@ private:
   void getGaussLobattoPointsFC(Camellia::FieldContainer<double> &points, int spaceDim, int degree);
   void writeExport(const std::vector<TFunctionPtr<double>> &functions, const std::vector<std::string> &functionNames,
                    int localDegree, double timeVal, const std::set<GlobalIndexType> &cellIndices);
+  void writeBoundaryExport(const std::vector<TFunctionPtr<double>> &functions, const std::vector<std::string> &functionNames,
+                           int localDegree, double timeVal, const std::set<GlobalIndexType> &cellIndices);
 public:
   // By default, protects existing output by writing to outputDirName-2,
   // outputDirName-3, ... when outputDirName already exists.  Set
