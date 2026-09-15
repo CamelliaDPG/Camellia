@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
+#include "TensorMesh.h"
 #include "TensorTraceDescriptor.h"
 
 using namespace Camellia;
@@ -55,6 +56,28 @@ TEUCHOS_UNIT_TEST( TensorTraceDescriptor, Maxwell1D2VH1TraceTargetsMatchConfigur
     TEST_EQUALITY(trace.supportKind(), TENSOR_TRACE_SUPPORT_1D_INTERFACE_POINTS);
     TEST_ASSERT(!trace.usesOutwardNormalSign());
   }
+}
+
+TEUCHOS_UNIT_TEST( TensorTraceDescriptor, MaxwellFormulationRegistersH1PointTracesOnTensorMesh )
+{
+  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 1));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));
+
+  ConfigurationSpaceFormulationMaxwell1D2V formulation(1.0, 1.0);
+  formulation.registerTensorH1PointTraceDescriptors(tensorMesh);
+
+  for (const auto &descriptor : ConfigurationSpaceFormulationMaxwell1D2V::tensorH1PointTraceDescriptors1D())
+  {
+    TEST_ASSERT(tensorMesh->hasTraceDescriptor(descriptor.traceName()));
+    const auto &registered = tensorMesh->traceDescriptor(descriptor.traceName());
+    TEST_EQUALITY(registered.fieldName(), descriptor.fieldName());
+    TEST_EQUALITY(registered.supportKind(), TENSOR_TRACE_SUPPORT_1D_INTERFACE_POINTS);
+    TEST_ASSERT(!registered.usesOutwardNormalSign());
+  }
+
+  TEST_NOTHROW(formulation.registerTensorH1PointTraceDescriptors(tensorMesh));
 }
 
 TEUCHOS_UNIT_TEST( TensorTraceDescriptor, RejectsInvalidTraceMetadata )

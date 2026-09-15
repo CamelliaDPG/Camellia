@@ -29,6 +29,7 @@
 #include "RHS.h"
 #include "SimpleSolutionFunction.h"
 #include "Solution.h"
+#include "TensorFunctionEvaluationContext.h"
 #include "SolutionStage.h"
 #include "TypeDefs.h"
 
@@ -41,6 +42,7 @@
 #include "Intrepid2_NodalBasisFamily.hpp"
 
 #include <chrono>
+#include <cmath>
 
 using namespace Camellia;
 
@@ -706,6 +708,32 @@ namespace
     maxwell1D2V->setCurrentSources(rho, Jx, Jy, Jz);
   }
 
+  void registerTensorSolutionCoefficientEvaluatorsIfSupported(VlasovSpaceTimeFormulation &form)
+  {
+    auto configurationFormulation = form.configurationSpaceFormulation();
+    auto maxwell1D2V = Teuchos::rcp_dynamic_cast<ConfigurationSpaceFormulationMaxwell1D2V>(configurationFormulation);
+    if (maxwell1D2V == Teuchos::null)
+    {
+      return;
+    }
+
+    auto tensorContext = form.tensorFunctionEvaluationContext();
+    if (tensorContext != Teuchos::null)
+    {
+      maxwell1D2V->registerSolutionCoefficientEvaluators(*tensorContext);
+    }
+  }
+
+  void noteTensorConfigurationSolutionChangedIfNeeded(VlasovSpaceTimeFormulation &form)
+  {
+    auto tensorContext = form.tensorFunctionEvaluationContext();
+    if (tensorContext != Teuchos::null)
+    {
+      tensorContext->configurationSolutionChanged();
+    }
+    registerTensorSolutionCoefficientEvaluatorsIfSupported(form);
+  }
+
   class VlasovSpaceTimeIP : public TIP<double>
   {
     vector<FunctionPtr> _acceleration;
@@ -996,6 +1024,9 @@ _numUniformRefinements(numUniformRefinements)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_q.size() != _m.size(), std::invalid_argument, "q and m arguments must agree in length");
   TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies == 0, std::invalid_argument, "Must have at least one species");
+
+  _tensorFunctionEvaluationContext = Teuchos::rcp(new TensorFunctionEvaluationContext(
+      TensorFixedPointLifecycle::planarMITLDefaults(_minSubsteps, _maxSubsteps, _fixedPointTolerance)));
   
   if (_basisFamily == BASIS_FAMILY_SERENDIPITY)
   {
@@ -1244,6 +1275,11 @@ Teuchos::RCP<ConfigurationSpaceFormulation> VlasovSpaceTimeFormulation::configur
   return _configurationSpaceFormulation;
 }
 
+Teuchos::RCP<TensorFunctionEvaluationContext> VlasovSpaceTimeFormulation::tensorFunctionEvaluationContext()
+{
+  return _tensorFunctionEvaluationContext;
+}
+
 MeshPtr VlasovSpaceTimeFormulation::configurationSpaceMesh()
 {
   return _configurationSpaceFormulation->configurationSpaceMesh();
@@ -1286,6 +1322,7 @@ void VlasovSpaceTimeFormulation::configurationSpaceSolve()
 
   _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  noteTensorConfigurationSolutionChangedIfNeeded(*this);
 }
 
 const double &VlasovSpaceTimeFormulation::conservationLawResidualNorm(int slabOrdinal, int speciesOrdinal)
@@ -2288,7 +2325,7 @@ void VlasovSpaceTimeFormulation::applyPositivityLimiter()
       psi_value = std::min(PSI_MAX, psi_value);
       
       Projector<double>::projectFunctionOntoBasis(psiBasisCoefficients, Function::constant(psi_value), psiBasis, basisCache);
-      const double exp_psi_value = exp(psi_value);
+      const double exp_psi_value = std::exp(psi_value);
       
       const int psi_ID = this->psi(i)->ID();
       for (int dofOrdinal=0; dofOrdinal < psiBasis->getCardinality(); dofOrdinal++)
@@ -2369,6 +2406,7 @@ void VlasovSpaceTimeFormulation::solve()
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  registerTensorSolutionCoefficientEvaluatorsIfSupported(*this);
   
   if (_enforcePositivity)
   {
@@ -2444,6 +2482,7 @@ void VlasovSpaceTimeFormulation::solve()
     applyExplicitCurrentSourcesIfSupported(*this);
     _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
     _configurationSpaceFormulation->updateConfigurationSpaceFunctions(); // update/MPI-communicate (Poisson/Maxwell) values to make available for phase-space solution
+    noteTensorConfigurationSolutionChangedIfNeeded(*this);
     
     // Copy vlasov, Poisson solution to Prev solutions.  For substepOrdinal > 0, measure difference between the two solutions first.
     if (substepOrdinal > 0)
@@ -2457,8 +2496,8 @@ void VlasovSpaceTimeFormulation::solve()
         fDiff_L2_squared += fDiff_L2_i * fDiff_L2_i;
         f_L2_squared     += f_L2_i * f_L2_i;
       }
-      const double fDiff_L2 = sqrt(fDiff_L2_squared);
-      const double f_L2 = sqrt(f_L2_squared);
+      const double fDiff_L2 = std::sqrt(fDiff_L2_squared);
+      const double f_L2 = std::sqrt(f_L2_squared);
       const double fRelDiff = fDiff_L2 / f_L2;
       
       substepStepSizesVlasov.push_back(fRelDiff);

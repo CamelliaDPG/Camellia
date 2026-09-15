@@ -213,6 +213,20 @@ Most of the previously open semantic questions are now answered well enough to p
 
 These are not blockers for beginning the first fail-fast scalar L2 volume adapter, but answering them soon will reduce rework once traces, moments, and solution-dependent coefficients are unguarded.
 
+## Current Phase 6/7 production-integration checkpoint
+
+- The Maxwell/configuration-space solution-coefficient hook is no longer only a test evaluator concept.  `TensorFunctionEvaluationContext` now has a host-side `TensorLegacyFunctionSolutionCoefficientEvaluator` that wraps production Camellia `Function` objects, including mesh-dependent `Function::solution()` evaluators.  `ConfigurationSpaceFormulationMaxwell1D2V::registerSolutionCoefficientEvaluators()` registers real configuration-space evaluators for the 1D Maxwell fields `E_x`, `B_y`, `phi`, and `A` under the same configuration-space dependency names used by `TensorFunction::configurationSpaceSolutionCoefficient1D()`.  This is still a safe host path; device-side and kernel-resident solution sampling remain follow-on work.
+- Tensor coefficient-value evaluation now has a production-ownership overload that accepts a half-open owned global coefficient range plus an explicit ghost/nonowned coefficient map.  This pins the immediate ownership contract for volume coefficient sampling: cell-local tensor DOFs are addressed through `TensorCoefficientMap`, owned values are indexed relative to the owned range, and any required nonowned DOF must be supplied explicitly as a ghost value or the evaluator fails fast.  This replaces the earlier assumption that coefficient-value sampling always receives an all-global/workset-ordered host vector, while deliberately deferring Tpetra import/export and multi-rank communicator plumbing.
+- Maxwell 1D H1 point traces are now exposed through formulation-level helpers.  `ConfigurationSpaceFormulationMaxwell1D2V::tensorH1PointTraceDescriptors1D()` returns the owned point-value descriptors for `E_x`, `B_y`, `phi`, and `A`, and `registerTensorH1PointTraceDescriptors()` registers them on a tensor-native configuration mesh.  The semantics remain that H1 point traces are single-valued interface DOFs with no outward-normal sign; multi-rank ownership should follow the `TensorCoefficientMap` trace-support vertex numbering, with nonowners acquiring ghost values explicitly just as for volume coefficient sampling.  Actual Maxwell boundary/RHS kernels still need to consume `TensorH1PointTraceLayout1D` rather than merely register the metadata.
+
+## Remaining Phase 6/7 follow-on work
+
+- Complete the end-to-end production registration path by calling `ConfigurationSpaceFormulationMaxwell1D2V::registerSolutionCoefficientEvaluators()` from the tensor Vlasov/Maxwell assembly setup when the current Maxwell solution is available, and increment/invalidate the `TensorFunctionEvaluationContext` configuration-solution epoch after each Maxwell update.
+- Replace the host-only coefficient vector handoff with distributed coefficient storage/imports: use `TensorCoefficientMap::ownedRangeForRank()`, `ownedIndicesForRank()`, and `neededIndicesForVolumeCell()` / `neededIndicesForSkeletonEntity()` to drive actual Tpetra or MPI ghost exchange instead of manually supplied maps.
+- Keep the legacy `SolutionMoments` path available until tensor coefficient-value matrix ownership and reduction ownership are verified across cells and ranks.  Only then route the Planar MITL driver end-to-end through `TensorMomentReduction` / `TensorMaxwellRHSMomentData` and retire or bypass `SolutionMoments` for that path.
+- Wire the registered `TensorH1PointTraceLayout1D` objects into Maxwell boundary/RHS assembly kernels and test global continuity across multi-rank interface points, including boundary endpoints versus shared interior vertices.
+- Extend the current safe volume-only host evaluator path to device/kernel execution and/or `TensorOperatorData` integration once the ownership semantics above are tested.
+
 ## What not to do next
 
 - Do not reintroduce the sparse/staged unit-column branch without a BLAS-only design.

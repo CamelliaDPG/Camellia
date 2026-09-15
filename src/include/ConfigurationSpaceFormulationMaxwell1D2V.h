@@ -11,10 +11,13 @@
 #include "Camellia.h"
 #include "ConfigurationSpaceFormulation.h"
 #include "TensorMaxwellRHSMomentData.h"
+#include "TensorMesh.h"
+#include "TensorTraceDescriptor.h"
 #include "TypeDefs.h"
 
 namespace Camellia
 {
+  class TensorFunctionEvaluationContext;
   /**
     \brief Class for specifying a Maxwell configuration-space formulation; intended to be used in context of a Vlasov (phase-space) solve.
    */
@@ -86,6 +89,15 @@ namespace Camellia
 
     //! Allows tensor-native Vlasov moment reduction to provide Maxwell RHS-ready point data.
     void setCurrentSources(const TensorMaxwellRHSMomentData &momentData);
+
+    //! Tensor-native H1 point-value trace descriptors for the 1D Maxwell unknowns E_x, B_y, phi, and A.
+    static std::vector<TensorTraceDescriptor> tensorH1PointTraceDescriptors1D();
+
+    //! Register the Maxwell 1D H1 point-value trace descriptors on a tensor-native configuration mesh.
+    void registerTensorH1PointTraceDescriptors(TensorMeshPtr tensorMesh) const;
+
+    //! Register production configuration-space solution evaluators for E_x, B_y, phi, and A.
+    void registerSolutionCoefficientEvaluators(TensorFunctionEvaluationContext &context);
     
     //! Perform MPI communication, etc. to ensure that the B_i, E_i function values for a given configuration-space cell are available on each MPI rank that has a corresponding phase-space cell.
     virtual void updateConfigurationSpaceFunctions() override;

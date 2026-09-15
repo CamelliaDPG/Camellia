@@ -28,6 +28,7 @@
 
 namespace Camellia
 {
+  class TensorFunctionEvaluationContext;
 
   class VlasovSpaceTimeFormulation
 {
@@ -66,6 +67,7 @@ private:
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
   
   Teuchos::RCP<ConfigurationSpaceFormulation> _configurationSpaceFormulation; // could be Poisson or Maxwell (among others)
+  Teuchos::RCP<TensorFunctionEvaluationContext> _tensorFunctionEvaluationContext; // tensor-native coefficient evaluator/cache state for coupled Vlasov/Maxwell paths
   MeshTopologyPtr _configurationSpaceMeshTopology; // space-time mesh, created during VlasovSpaceTimeFormulation construction
   
   std::vector<std::pair<SpatialFilterPtr,bool>> _configurationSpaceSideSetFilters; // we append one each time that createConfigurationMeshSideSetTag() is called.
@@ -259,6 +261,9 @@ public:
   int numUniformRefinements() const;
   
   Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation();
+
+  //! Returns the tensor-native evaluation context used for solution-dependent coefficient sampling.
+  Teuchos::RCP<TensorFunctionEvaluationContext> tensorFunctionEvaluationContext();
   
   Teuchos::RCP<SolutionMoments> solutionMoments(int i=0);
       
