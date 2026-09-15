@@ -1,5 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "TensorBasisCache.h"
+#include "TensorCoefficientValueEvaluator.h"
 #include "TensorSolution.h"
 #include "TensorMesh.h"
 #include "Var.h"
@@ -88,4 +90,63 @@ TEUCHOS_UNIT_TEST( TensorSolution, VolumeImportUsesLongLivedCoefficientVectorVal
     TEST_FLOATING_EQUALITY(ownedValues.ghostCoefficientsByGlobalIndex[gid], tensorSolutionDeterministicCoefficient(gid), 1e-14);
   }
   TEST_ASSERT(ownedValues.hasDeviceMirrors());
+}
+
+TEUCHOS_UNIT_TEST( TensorSolution, VolumeValuesFeedConfigurationVelocityMomentInput )
+{
+  auto tensorMesh = makeTensorSolutionTestMesh(2);
+  TensorSolution solution(tensorMesh, Teuchos::null, Tpetra::getDefaultComm());
+  solution.registerCoefficientVariable(TENSOR_TRIAL_SPACE, "f");
+
+  auto ownedMap = solution.ownedMap(TENSOR_TRIAL_SPACE, "f");
+  std::vector<double> localValues(ownedMap->getLocalNumElements(), 0.0);
+  for (size_t localOrdinal=0; localOrdinal<localValues.size(); localOrdinal++)
+  {
+    const IndexType gid = static_cast<IndexType>(ownedMap->getGlobalElement(static_cast<TensorSolution::map_type::local_ordinal_type>(localOrdinal)));
+    localValues[localOrdinal] = tensorSolutionDeterministicCoefficient(gid);
+  }
+  solution.setOwnedCoefficients(TENSOR_TRIAL_SPACE, "f", localValues);
+
+  const auto &coefficientMap = solution.coefficientMap(TENSOR_TRIAL_SPACE, "f");
+  std::vector<double> allCoefficients(coefficientMap.coefficientCount(), 0.0);
+  for (IndexType gid=0; gid<coefficientMap.coefficientCount(); gid++)
+  {
+    allCoefficients[gid] = tensorSolutionDeterministicCoefficient(gid);
+  }
+
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  TensorBasisCacheND basisCache(tensorMesh, tensorMesh->trialDiscretization("f"), false, cellTuple, std::vector<int>{2,2,2});
+
+  auto expectedValues = TensorCoefficientValueEvaluator::volumeValuesOnTensorCell(coefficientMap,
+                                                                                  basisCache,
+                                                                                  allCoefficients,
+                                                                                  cellTuple);
+  auto actualValues = solution.volumeValuesOnTensorCell(TENSOR_TRIAL_SPACE, "f", basisCache, cellTuple);
+  TEST_EQUALITY(actualValues.extent_int(0), expectedValues.extent_int(0));
+  for (int pointOrdinal=0; pointOrdinal<actualValues.extent_int(0); pointOrdinal++)
+  {
+    TEST_FLOATING_EQUALITY(actualValues(pointOrdinal), expectedValues(pointOrdinal), 1e-14);
+  }
+
+  auto expectedMatrix = TensorCoefficientValueEvaluator::volumeValuesAsConfigurationVelocityMatrix1D2V(coefficientMap,
+                                                                                                       basisCache,
+                                                                                                       allCoefficients,
+                                                                                                       cellTuple,
+                                                                                                       std::vector<int>{0},
+                                                                                                       std::vector<int>{1,2});
+  auto actualMatrix = solution.volumeValuesAsConfigurationVelocityMatrix1D2V(TENSOR_TRIAL_SPACE,
+                                                                             "f",
+                                                                             basisCache,
+                                                                             cellTuple,
+                                                                             std::vector<int>{0},
+                                                                             std::vector<int>{1,2});
+  TEST_EQUALITY(actualMatrix.extent_int(0), expectedMatrix.extent_int(0));
+  TEST_EQUALITY(actualMatrix.extent_int(1), expectedMatrix.extent_int(1));
+  for (int configurationPoint=0; configurationPoint<actualMatrix.extent_int(0); configurationPoint++)
+  {
+    for (int velocityPoint=0; velocityPoint<actualMatrix.extent_int(1); velocityPoint++)
+    {
+      TEST_FLOATING_EQUALITY(actualMatrix(configurationPoint,velocityPoint), expectedMatrix(configurationPoint,velocityPoint), 1e-14);
+    }
+  }
 }

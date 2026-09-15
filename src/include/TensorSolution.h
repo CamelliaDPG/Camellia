@@ -91,6 +91,29 @@ public:
     auto data = storage(role, varName);
     return TensorCoefficientTpetraImport::ownedValuesForVolumeCell(data->coefficientMap, *data->ownedCoefficients, cellTuple);
   }
+  TensorCoefficientValueEvaluator::HostVector volumeValuesOnTensorCell(TensorSpaceRole role,
+                                                                       const std::string &varName,
+                                                                       const TensorBasisCacheND &basisCache,
+                                                                       const TensorMeshTopology::TensorCellTuple &cellTuple) const {
+    auto data = storage(role, varName);
+    auto ownedValues = TensorCoefficientTpetraImport::ownedValuesForVolumeCell(data->coefficientMap, *data->ownedCoefficients, cellTuple);
+    return TensorCoefficientValueEvaluator::volumeValuesOnTensorCell(data->coefficientMap, basisCache, ownedValues, cellTuple);
+  }
+  TensorCoefficientValueEvaluator::HostMatrix volumeValuesAsConfigurationVelocityMatrix1D2V(TensorSpaceRole role,
+                                                                                            const std::string &varName,
+                                                                                            const TensorBasisCacheND &basisCache,
+                                                                                            const TensorMeshTopology::TensorCellTuple &cellTuple,
+                                                                                            const std::vector<int> &configurationComponentOrdinals,
+                                                                                            const std::vector<int> &velocityComponentOrdinals) const {
+    auto data = storage(role, varName);
+    auto ownedValues = TensorCoefficientTpetraImport::ownedValuesForVolumeCell(data->coefficientMap, *data->ownedCoefficients, cellTuple);
+    return TensorCoefficientValueEvaluator::volumeValuesAsConfigurationVelocityMatrix1D2V(data->coefficientMap,
+                                                                                          basisCache,
+                                                                                          ownedValues,
+                                                                                          cellTuple,
+                                                                                          configurationComponentOrdinals,
+                                                                                          velocityComponentOrdinals);
+  }
   std::vector<TensorCoefficientValueEvaluator::OwnedCoefficientValues> ownedValuesForVolumeCells(TensorSpaceRole role, const std::string &varName, const std::vector<TensorMeshTopology::TensorCellTuple> &cellTuples) const {
     auto data = storage(role, varName);
     return TensorCoefficientTpetraImport::ownedValuesForVolumeCells(data->coefficientMap, *data->ownedCoefficients, cellTuples);

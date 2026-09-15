@@ -33,6 +33,7 @@ set(TENSOR_TEST_SOURCES
   TensorMomentReductionTests.cpp
   TensorMaxwellRHSMomentDataTests.cpp
   TensorMaxwell1D2VMomentReductionPipelineTests.cpp
+  TensorPlanarMITLMomentComparisonAdapterTests.cpp
   TensorOperatorDataTests.cpp
   TensorPAMatrixTests.cpp
   TensorPAMatrixHGRADTests.cpp

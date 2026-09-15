@@ -1,11 +1,54 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "TensorBasisCache.h"
 #include "TensorMaxwell1D2VMomentReductionPipeline.h"
+#include "TensorSolution.h"
+#include "TensorMesh.h"
+#include "Var.h"
+
+#include <Tpetra_Core.hpp>
 
 using namespace Camellia;
 
 namespace
 {
+TensorVarPtr makePipelineFieldTensorVar1C2V(const std::string &name)
+{
+  VarPtr x  = Teuchos::rcp(new Var(0, 0, name + "_x",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr ux = Teuchos::rcp(new Var(1, 0, name + "_ux", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  VarPtr uz = Teuchos::rcp(new Var(2, 0, name + "_uz", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS));
+  return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, std::vector<VarPtr>{x, ux, uz}));
+}
+
+TensorMeshPtr makePipelineTensorMesh1C2V()
+{
+  auto component0 = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 1));
+  auto component1 = Teuchos::rcp(new ComponentMeshTopology1D({-1.0, 1.0}, { ActiveLeafSet1D({{0,0}}) }, false, 1));
+  auto component2 = Teuchos::rcp(new ComponentMeshTopology1D({-2.0, 2.0}, { ActiveLeafSet1D({{0,0}}) }, false, 1));
+  auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2}));
+  auto factory = TensorVarFactory::factory();
+  auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));
+  tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makePipelineFieldTensorVar1C2V("f"), Teuchos::null, std::vector<int>{0,0,0})));
+  return tensorMesh;
+}
+
+double pipelineCoefficientValue(IndexType globalIndex, double shift)
+{
+  return shift + 0.25 * static_cast<double>(globalIndex + 1);
+}
+
+void fillTensorSolutionCoefficients(TensorSolution &solution, double shift)
+{
+  auto ownedMap = solution.ownedMap(TENSOR_TRIAL_SPACE, "f");
+  std::vector<double> localValues(ownedMap->getLocalNumElements(), 0.0);
+  for (size_t localOrdinal=0; localOrdinal<localValues.size(); localOrdinal++)
+  {
+    const IndexType gid = static_cast<IndexType>(ownedMap->getGlobalElement(static_cast<TensorSolution::map_type::local_ordinal_type>(localOrdinal)));
+    localValues[localOrdinal] = pipelineCoefficientValue(gid, shift);
+  }
+  solution.setOwnedCoefficients(TENSOR_TRIAL_SPACE, "f", localValues);
+}
+
 TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, ReducesSpeciesAndBuildsMaxwellRHSData )
 {
   using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
@@ -87,6 +130,97 @@ TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, RejectsSpeciesCount
                                           velocityPoints,
                                           velocityWeights,
                                           {0.0}),
+             std::invalid_argument);
+}
+
+TEUCHOS_UNIT_TEST( TensorMaxwell1D2VMomentReductionPipeline, BuildsRHSDataFromTensorSolutions )
+{
+  using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+
+  auto tensorMesh = makePipelineTensorMesh1C2V();
+  auto dofLayout = tensorMesh->createDofLayout();
+  TensorSolutionPtr species0Solution = Teuchos::rcp(new TensorSolution(tensorMesh, dofLayout, Tpetra::getDefaultComm()));
+  TensorSolutionPtr species1Solution = Teuchos::rcp(new TensorSolution(tensorMesh, dofLayout, Tpetra::getDefaultComm()));
+  species0Solution->registerCoefficientVariable(TENSOR_TRIAL_SPACE, "f");
+  species1Solution->registerCoefficientVariable(TENSOR_TRIAL_SPACE, "f");
+  fillTensorSolutionCoefficients(*species0Solution, 0.125);
+  fillTensorSolutionCoefficients(*species1Solution, 0.875);
+
+  auto cellTuple = tensorMesh->topology()->tensorCellTuple(0);
+  TensorBasisCacheND basisCache(tensorMesh, tensorMesh->trialDiscretization("f"), false, cellTuple, std::vector<int>{2,2,2});
+  Pipeline::HostMatrix velocityPoints("velocityPoints", basisCache.componentCache(1).pointCount() * basisCache.componentCache(2).pointCount(), 2);
+  Pipeline::HostVector velocityWeights("velocityWeights", velocityPoints.extent_int(0));
+  for (int uxPoint=0; uxPoint<basisCache.componentCache(1).pointCount(); uxPoint++)
+  {
+    for (int uzPoint=0; uzPoint<basisCache.componentCache(2).pointCount(); uzPoint++)
+    {
+      const int velocityOrdinal = uxPoint + basisCache.componentCache(1).pointCount() * uzPoint;
+      velocityPoints(velocityOrdinal,0) = -0.5 + static_cast<double>(uxPoint);
+      velocityPoints(velocityOrdinal,1) =  1.0 + 0.25 * static_cast<double>(uzPoint);
+      velocityWeights(velocityOrdinal) = 0.5 + 0.125 * static_cast<double>(velocityOrdinal);
+    }
+  }
+
+  const int pointsPerCell = basisCache.componentCache(0).pointCount();
+  const std::vector<double> charges = {2.0, -0.5};
+  const double eps0 = 3.0;
+  std::vector<double> n0(pointsPerCell, 0.25);
+
+  auto expectedSpecies0 = species0Solution->volumeValuesAsConfigurationVelocityMatrix1D2V(TENSOR_TRIAL_SPACE,
+                                                                                           "f",
+                                                                                           basisCache,
+                                                                                           cellTuple,
+                                                                                           std::vector<int>{0},
+                                                                                           std::vector<int>{1,2});
+  auto expectedSpecies1 = species1Solution->volumeValuesAsConfigurationVelocityMatrix1D2V(TENSOR_TRIAL_SPACE,
+                                                                                           "f",
+                                                                                           basisCache,
+                                                                                           cellTuple,
+                                                                                           std::vector<int>{0},
+                                                                                           std::vector<int>{1,2});
+  auto expected = Pipeline::buildRHSMomentData(1,
+                                               pointsPerCell,
+                                               charges,
+                                               eps0,
+                                               {expectedSpecies0, expectedSpecies1},
+                                               velocityPoints,
+                                               velocityWeights,
+                                               n0);
+  auto actual = Pipeline::buildRHSMomentDataFromTensorSolutions(1,
+                                                                 pointsPerCell,
+                                                                 charges,
+                                                                 eps0,
+                                                                 {species0Solution, species1Solution},
+                                                                 TENSOR_TRIAL_SPACE,
+                                                                 {"f", "f"},
+                                                                 basisCache,
+                                                                 cellTuple,
+                                                                 std::vector<int>{0},
+                                                                 std::vector<int>{1,2},
+                                                                 velocityPoints,
+                                                                 velocityWeights,
+                                                                 n0);
+  for (int point=0; point<pointsPerCell; point++)
+  {
+    TEST_FLOATING_EQUALITY(actual.rhoRHS(0, point), expected.rhoRHS(0, point), 1e-14);
+    TEST_FLOATING_EQUALITY(actual.Jx(0, point), expected.Jx(0, point), 1e-14);
+    TEST_FLOATING_EQUALITY(actual.Jz(0, point), expected.Jz(0, point), 1e-14);
+  }
+
+  TEST_THROW(Pipeline::buildRHSMomentDataFromTensorSolutions(1,
+                                                              pointsPerCell,
+                                                              charges,
+                                                              eps0,
+                                                              {species0Solution},
+                                                              TENSOR_TRIAL_SPACE,
+                                                              {"f"},
+                                                              basisCache,
+                                                              cellTuple,
+                                                              std::vector<int>{0},
+                                                              std::vector<int>{1,2},
+                                                              velocityPoints,
+                                                              velocityWeights,
+                                                              n0),
              std::invalid_argument);
 }
 }

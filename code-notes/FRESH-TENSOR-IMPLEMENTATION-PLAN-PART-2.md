@@ -153,9 +153,43 @@ Rules for this phase:
 - coefficient data crossing the tensor bridge should be scalar-valued; matrix-valued physics data must be split into scalar component coefficients before tensor adapter selection;
 - skeleton variables must be modeled as distinct unknowns on skeleton geometry, not as implicit aliases for volume variable traces.
 
-### Phase 8: global solve and preconditioning path
+### Phase 8: Planar MITL tensor-native moments and TensorSolution production seam
 
-Only after the local tensor kernels and individual Vlasov terms are correct should the work move to global FE semantics.  The local-flat Tpetra adapters are smoke-test tools; production integration needs proper maps, owned/shared DoF handling, import/export behavior, and preconditioner setup that respects the FE graph.
+Phase 8 starts with the narrow production seam needed to replace the legacy `SolutionMoments` hot path for Planar MITL moments without silently changing the production solve.  The tensor-native path should remain opt-in until the existing Planar MITL baselines show competitive serial CPU performance and the moment handoff has correctness coverage against the current `SolutionMoments` outputs.
+
+Phase 8 performance gate:
+
+- use the existing `drivers/performance/CMakeLists.txt` Planar MITL baseline targets as the gate definition;
+- **small baseline:** `runPhase0PerformanceSmall`, one MPI rank, `OMP_NUM_THREADS=1`, `--vElements=2`, `--xElements=8`, `--tElements=1`, `--numUniformRefinements=0`, `--p=4`, `--dp=2`, `--numTimeSlabs=2`, `--minSubsteps=2`, `--fixedPointTol=1e-4`, `--useSerendipityBasis`, `--J=5e8`, `--V=1.5e7`, `--noViz`, and `--phase0Instrumentation`;
+- **medium baseline:** `runPhase0PerformanceMedium`, two MPI ranks with serial CPU threads per rank, `--vElements=2`, `--xElements=8`, `--tElements=1`, `--numUniformRefinements=1`, `--p=4`, `--dp=2`, `--numTimeSlabs=5`, `--minSubsteps=2`, `--fixedPointTol=1e-4`, `--useSerendipityBasis`, `--J=5e8`, `--V=1.5e7`, `--noViz`, and `--phase0Instrumentation`;
+- compare the `PHASE0_TIMING event=moment_update` timings, with backend labels, between legacy `SolutionMoments` and the opt-in tensor-native moment path;
+- do not hard-bypass `SolutionMoments` until the tensor-native backend is correct on those runs and has competitive serial CPU `moment_update` timing on the small and medium baselines.
+
+Phase 8 integration policy:
+
+- add a temporary runtime backend flag for Planar MITL moment updates, defaulting to the unchanged legacy path;
+- fail fast if an unsupported tensor-native backend is requested before the production TensorSolution/moment bridge is wired, rather than silently falling back to `SolutionMoments` under a tensor-native label;
+- keep performance labels separate for coefficient evaluation, point-data construction, moment reductions, Maxwell RHS handoff, and any legacy compatibility copies;
+- wire `TensorSolution` first for Vlasov `f` coefficient storage and moment input.  Maxwell field coefficient migration may follow in this phase if it simplifies the evaluator/context seam, but it is not required for the initial moment-bypass gate;
+- shape visualization hooks to the merged GLVis interface, which currently supports field-variable visualization only.  Trace and flux visualization hooks should remain explicit extension points until the GLVis trace/flux API stabilizes.
+
+Phase 8 near-term tasks:
+
+- register the temporary Planar MITL moment backend flag and record the selected backend in Phase 0 timing logs;
+- build a correctness comparison that samples the current Vlasov `f` coefficients through `TensorSolution`/tensor evaluators and compares tensor-native density/current reductions with `SolutionMoments` on the small baseline;
+- add a tensor-native Planar MITL moment update path below the `FunctionPtr`/RHS layer using `TensorMomentReduction` and `TensorMaxwell1D2VMomentReductionPipeline`;
+- only after correctness and baseline timing pass, replace the legacy `SolutionMoments` update in the production Planar MITL loop.
+
+Phase 8 progress notes:
+
+- the temporary Planar MITL `phase8MomentBackend` flag is registered and timing metadata now records the selected moment backend while defaulting to the unchanged legacy path;
+- `TensorSolution` exposes host volume-value and 1D2V configuration/velocity-matrix evaluation helpers so Vlasov `f` coefficient storage can feed moment reductions directly;
+- `TensorMaxwell1D2VMomentReductionPipeline` can now build Maxwell RHS moment payloads from one or more `TensorSolution` species inputs;
+- `TensorPlanarMITLMomentComparisonAdapter` records fieldwise max absolute/relative differences for `rhoRHS`, `Jx`, and `Jz`, providing the metric container needed by the upcoming driver dry-run/comparison mode.
+
+### Phase 9: global solve and preconditioning path
+
+Only after the local tensor kernels, individual Vlasov terms, tensor-native moment handoff, and TensorSolution production seam are correct should the work move to global FE semantics.  The local-flat Tpetra adapters are smoke-test tools; production integration needs proper maps, owned/shared DoF handling, import/export behavior, and preconditioner setup that respects the FE graph.
 
 Near-term global/preconditioner tasks:
 

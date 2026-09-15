@@ -151,6 +151,11 @@ namespace
     return (backend == "off") || (backend == "assembled_crs") || (backend == "matrix_free");
   }
 
+  bool phase8MomentBackendIsValid(const std::string &backend)
+  {
+    return (backend == "legacy") || (backend == "tensor_native");
+  }
+
   std::vector<double> phase0UniformVertices(double left, double right, int elementCount)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(elementCount <= 0, std::invalid_argument,
@@ -994,6 +999,7 @@ int main(int argc, char *argv[])
     bool phase0Instrumentation = false;
     std::string phase0TimingFile = "";
     std::string phase0TensorGraphSchurBackend = "off";
+    std::string phase8MomentBackend = "legacy";
     int phase0TensorGraphSchurXElements = 2;
     int phase0TensorGraphSchurTElements = 1;
     int phase0TensorGraphSchurUxElements = 1;
@@ -1006,6 +1012,8 @@ int main(int argc, char *argv[])
                    "Optional rank-0 file for Phase 0 timing lines; stdout is always used when instrumentation is enabled.");
     cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
                    "Optional Phase 0 tensor-native graph-norm Schur micro-apply backend: off, assembled_crs, or matrix_free.");
+    cmdp.setOption("phase8MomentBackend", &phase8MomentBackend,
+                   "Temporary Phase 8 Planar MITL moment backend: legacy or tensor_native.  The default legacy path preserves SolutionMoments until the tensor-native gate passes.");
     cmdp.setOption("phase0TensorGraphSchurXElements",  &phase0TensorGraphSchurXElements,  "Number of x cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurTElements",  &phase0TensorGraphSchurTElements,  "Number of t cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurUxElements", &phase0TensorGraphSchurUxElements, "Number of ux cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
@@ -1023,6 +1031,15 @@ int main(int argc, char *argv[])
       {
         std::cout << "Unsupported phase0TensorGraphSchurBackend='" << phase0TensorGraphSchurBackend
                   << "'; expected off, assembled_crs, or matrix_free.\n";
+      }
+      return -1;
+    }
+    if (!phase8MomentBackendIsValid(phase8MomentBackend))
+    {
+      if (rank == 0)
+      {
+        std::cout << "Unsupported phase8MomentBackend='" << phase8MomentBackend
+                  << "'; expected legacy or tensor_native.\n";
       }
       return -1;
     }
@@ -1048,7 +1065,8 @@ int main(int argc, char *argv[])
                         {"p", std::to_string(H1Order)},
                         {"dp", std::to_string(delta_k)},
                         {"num_time_slabs", std::to_string(numTimeSlabs)},
-                        {"serendipity", useSerendipityBasis ? "1" : "0"}});
+                        {"serendipity", useSerendipityBasis ? "1" : "0"},
+                         {"moment_backend", phase8MomentBackend}});
     
     using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
     const TestIP testIP = useL2TestSpace ? TestIP::L2TestSpaceInnerProduct : TestIP::GraphTestSpaceInnerProduct;
@@ -1497,10 +1515,19 @@ int main(int argc, char *argv[])
         }
         
         auto phase0MomentUpdateStart = phase0.now();
-        solutionMoments->update();
-        positiveMoments->update();
+        if (phase8MomentBackend == "legacy")
+        {
+          solutionMoments->update();
+          positiveMoments->update();
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error,
+                                     "phase8MomentBackend=tensor_native was requested, but the TensorSolution-backed Planar MITL moment update path is not wired yet.");
+        }
         phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),
-                           {{"slab", std::to_string(timeSlabOrdinal)}});
+                           {{"slab", std::to_string(timeSlabOrdinal)},
+                            {"moment_backend", phase8MomentBackend}});
         
         if (rank == 0)
         {

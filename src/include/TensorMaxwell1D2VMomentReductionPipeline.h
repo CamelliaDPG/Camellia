@@ -6,6 +6,7 @@
 #include "TensorCoefficientValueEvaluator.h"
 #include "TensorMaxwellRHSMomentData.h"
 #include "TensorMomentReduction.h"
+#include "TensorSolution.h"
 
 namespace Camellia
 {
@@ -118,6 +119,57 @@ namespace Camellia
                                                                                                                              cellTuple,
                                                                                                                              configurationComponentOrdinals,
                                                                                                                              velocityComponentOrdinals));
+      }
+
+      return buildRHSMomentData(numConfigurationCells,
+                                numPointsPerConfigurationCell,
+                                speciesCharges,
+                                eps0,
+                                speciesVlasovSolutionValues,
+                                velocityPoints,
+                                velocityWeights,
+                                n0Values);
+    }
+
+    static TensorMaxwellRHSMomentData buildRHSMomentDataFromTensorSolutions(
+        int numConfigurationCells,
+        int numPointsPerConfigurationCell,
+        const std::vector<double> &speciesCharges,
+        double eps0,
+        const std::vector<TensorSolutionPtr> &speciesSolutions,
+        TensorSpaceRole role,
+        const std::vector<std::string> &speciesVariableNames,
+        const TensorBasisCacheND &basisCache,
+        const TensorMeshTopology::TensorCellTuple &cellTuple,
+        const std::vector<int> &configurationComponentOrdinals,
+        const std::vector<int> &velocityComponentOrdinals,
+        HostMatrix velocityPoints,
+        HostVector velocityWeights,
+        const std::vector<double> &n0Values)
+    {
+      if (speciesCharges.size() != speciesSolutions.size())
+      {
+        throw std::invalid_argument("TensorMaxwell1D2VMomentReductionPipeline species charge/TensorSolution count mismatch.");
+      }
+      if (speciesCharges.size() != speciesVariableNames.size())
+      {
+        throw std::invalid_argument("TensorMaxwell1D2VMomentReductionPipeline species charge/variable-name count mismatch.");
+      }
+
+      std::vector<HostMatrix> speciesVlasovSolutionValues;
+      speciesVlasovSolutionValues.reserve(speciesSolutions.size());
+      for (size_t speciesOrdinal=0; speciesOrdinal<speciesSolutions.size(); speciesOrdinal++)
+      {
+        if (speciesSolutions[speciesOrdinal] == Teuchos::null)
+        {
+          throw std::invalid_argument("TensorMaxwell1D2VMomentReductionPipeline requires non-null TensorSolution species inputs.");
+        }
+        speciesVlasovSolutionValues.push_back(speciesSolutions[speciesOrdinal]->volumeValuesAsConfigurationVelocityMatrix1D2V(role,
+                                                                                                                              speciesVariableNames[speciesOrdinal],
+                                                                                                                              basisCache,
+                                                                                                                              cellTuple,
+                                                                                                                              configurationComponentOrdinals,
+                                                                                                                              velocityComponentOrdinals));
       }
 
       return buildRHSMomentData(numConfigurationCells,
