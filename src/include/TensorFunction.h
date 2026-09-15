@@ -174,6 +174,7 @@ namespace Camellia
 
     virtual void values(PointView pointsIn, ValueView valuesOut) const = 0;
     virtual void values(PointViewHost pointsIn, ValueViewHost valuesOut) const;
+    void valuesOnHost(PointViewHost pointsIn, ValueViewHost valuesOut) const;
 
     virtual double value(const std::vector<double> &coordVector) const;
     virtual TensorFunctionPtr derivativeFunction(int componentOrdinal) const = 0;

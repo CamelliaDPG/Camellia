@@ -38,7 +38,9 @@ TEUCHOS_UNIT_TEST( TensorTraceLayout, RejectsNonH1TraceDescriptor )
 
 TEUCHOS_UNIT_TEST( TensorTraceLayout, MaxwellH1PointTracesAreContinuousAcrossSharedInterfacePoint )
 {
-  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 1));
+  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0},
+                                                        { ActiveLeafSet1D({{0,0}}), ActiveLeafSet1D({{0,0}}) },
+                                                        false, 1));
   auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component}));
   auto factory = TensorVarFactory::factory();
   auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));
@@ -75,7 +77,9 @@ TEUCHOS_UNIT_TEST( TensorTraceLayout, MaxwellH1PointTracesAreContinuousAcrossSha
 
 TEUCHOS_UNIT_TEST( TensorTraceLayout, DofLayoutOwnsRegisteredH1PointTraceLayoutFromTensorMesh )
 {
-  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 1));
+  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0},
+                                                        { ActiveLeafSet1D({{0,0}}), ActiveLeafSet1D({{0,0}}) },
+                                                        false, 1));
   auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component}));
   auto factory = TensorVarFactory::factory();
   auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));

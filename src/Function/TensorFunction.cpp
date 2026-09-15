@@ -156,7 +156,12 @@ namespace
 
     std::vector<TensorFunctionPtr> childFunctions() const override
     {
-      return {_wrapped};
+      return _wrapped->childFunctions();
+    }
+
+    TensorUnaryFunctionType unaryFunctionType() const override
+    {
+      return _wrapped->unaryFunctionType();
     }
 
     std::string displayString() const override
@@ -575,12 +580,34 @@ TensorUnaryFunctionType TensorFunction::unaryFunctionType() const
   return TENSOR_UNARY_EXP;
 }
 
+void TensorFunction::valuesOnHost(PointViewHost pointsIn, ValueViewHost valuesOut) const
+{
+  const int pointCount = static_cast<int>(pointsIn.extent(0));
+  const int pointDim = static_cast<int>(pointsIn.extent(1));
+  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(valuesOut.extent(0)) != pointCount, std::invalid_argument,
+                             "TensorFunction::valuesOnHost valuesOut extent must match pointsIn point count.");
+
+  PointView pointsDevice("TensorFunction::valuesOnHost points", pointCount, pointDim);
+  auto pointsDeviceHost = Kokkos::create_mirror_view(pointsDevice);
+  for (int p=0; p<pointCount; p++)
+  {
+    for (int d=0; d<pointDim; d++)
+    {
+      pointsDeviceHost(p,d) = pointsIn(p,d);
+    }
+  }
+  Kokkos::deep_copy(pointsDevice, pointsDeviceHost);
+
+  ValueView valuesDevice("TensorFunction::valuesOnHost values", pointCount);
+  this->values(pointsDevice, valuesDevice);
+
+  auto valuesDeviceHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), valuesDevice);
+  for (int p=0; p<pointCount; p++) valuesOut(p) = valuesDeviceHost(p);
+}
+
 void TensorFunction::values(PointViewHost pointsIn, ValueViewHost valuesOut) const
 {
-  auto pointsDevice = Kokkos::create_mirror_view_and_copy(DeviceType::execution_space(), pointsIn);
-  auto valuesDevice = Kokkos::create_mirror_view(DeviceType::execution_space(), valuesOut);
-  values(pointsDevice, valuesDevice);
-  Kokkos::deep_copy(valuesOut, valuesDevice);
+  valuesOnHost(pointsIn, valuesOut);
 }
 
 double TensorFunction::value(const std::vector<double> &coordVector) const

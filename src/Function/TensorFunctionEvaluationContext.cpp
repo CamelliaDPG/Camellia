@@ -212,7 +212,7 @@ void TensorFunctionEvaluationContext::evaluateExpression(TensorFunctionPtr funct
 
   if (!function->hasSolutionDependencies())
   {
-    function->values(pointsIn, valuesOut);
+    function->valuesOnHost(pointsIn, valuesOut);
     return;
   }
 

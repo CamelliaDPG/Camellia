@@ -145,6 +145,43 @@ namespace Camellia
     }
   };
 
+  class TensorMaxwellRHSBoundaryAssembly
+  {
+  public:
+    using DeviceVector = TensorMaxwellRHSMomentData::DeviceVector;
+
+    static void assemblePointVolumeTerms(const TensorMaxwellRHSMomentData &momentData,
+                                         double eps0,
+                                         DeviceVector rhoTermOut,
+                                         DeviceVector jxTermOut,
+                                         DeviceVector jzTermOut)
+    {
+      TensorMaxwellRHSDevicePointAssembly::assemblePointSourceTerms(momentData,
+                                                                    eps0,
+                                                                    rhoTermOut,
+                                                                    jxTermOut,
+                                                                    jzTermOut);
+    }
+
+    static void assembleH1PointBoundaryTerms1D(DeviceVector traceValues,
+                                               DeviceVector lowerBoundaryOut,
+                                               DeviceVector upperBoundaryOut)
+    {
+      const int entryCount = static_cast<int>(traceValues.extent(0));
+      if (static_cast<int>(lowerBoundaryOut.extent(0)) != entryCount) throw std::invalid_argument("TensorMaxwellRHSBoundaryAssembly lower boundary output extent mismatch.");
+      if (static_cast<int>(upperBoundaryOut.extent(0)) != entryCount) throw std::invalid_argument("TensorMaxwellRHSBoundaryAssembly upper boundary output extent mismatch.");
+
+      Kokkos::parallel_for("TensorMaxwellRHSBoundaryAssembly::assembleH1PointBoundaryTerms1D",
+                           entryCount,
+                           KOKKOS_LAMBDA(const int entry)
+                           {
+                             lowerBoundaryOut(entry) = traceValues(entry);
+                             upperBoundaryOut(entry) = traceValues(entry);
+                           });
+      Kokkos::fence();
+    }
+  };
+
   class TensorMaxwellRHSPointFunction : public TFunction<double>
   {
   public:

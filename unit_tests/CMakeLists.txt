@@ -15,11 +15,12 @@ target_link_libraries(runTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} C
 
 add_test(NAME runTests COMMAND runTests)
 
-set(PHASE0_TEST_SOURCES
+set(TENSOR_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   TensorBasisCacheTests.cpp
   TensorCoefficientValueEvaluatorTests.cpp
   TensorCoefficientTpetraImportTests.cpp
+  TensorSolutionTests.cpp
   TensorBasisTests.cpp
   TensorProductLocalOperatorTests.cpp
   TensorLocalSchurComplementTests.cpp
@@ -27,45 +28,17 @@ set(PHASE0_TEST_SOURCES
   TensorFunctionEvaluationContextTests.cpp
   TensorCoupledCoefficientEvaluatorTests.cpp
   TensorFixedPointLifecycleTests.cpp
+  TensorMeshTests.cpp
   TensorMomentDescriptorTests.cpp
   TensorMomentReductionTests.cpp
   TensorMaxwellRHSMomentDataTests.cpp
   TensorMaxwell1D2VMomentReductionPipelineTests.cpp
-  TensorTraceDescriptorTests.cpp
-  TensorTraceLayoutTests.cpp
-  TensorMeshTests.cpp
   TensorOperatorDataTests.cpp
-)
-
-add_executable(runPhase0Tests ${PHASE0_TEST_SOURCES})
-add_dependencies(runPhase0Tests runTests)
-
-target_link_libraries(runPhase0Tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
-)
-
-add_test(NAME runPhase0Tests COMMAND runPhase0Tests)
-
-set(TENSOR_TPETRA_IMPORT_MPI2_TEST_SOURCES
-  Teuchos_StandardParallelUnitTestMain.cpp
-  TensorCoefficientTpetraImportTests.cpp
-)
-
-add_executable(runTensorCoefficientTpetraImportMPI2 ${TENSOR_TPETRA_IMPORT_MPI2_TEST_SOURCES})
-add_dependencies(runTensorCoefficientTpetraImportMPI2 runTests)
-
-target_link_libraries(runTensorCoefficientTpetraImportMPI2 ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
-)
-
-if (MPIEXEC_EXECUTABLE)
-  add_test(NAME runTensorCoefficientTpetraImportMPI2
-           COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 $<TARGET_FILE:runTensorCoefficientTpetraImportMPI2>)
-endif()
-
-set(TENSOR_TEST_SOURCES
-  Teuchos_StandardParallelUnitTestMain.cpp
   TensorPAMatrixTests.cpp
   TensorPAMatrixHGRADTests.cpp
   TensorPAMatrixBridgeTests.cpp
+  TensorTraceDescriptorTests.cpp
+  TensorTraceLayoutTests.cpp
 )
 
 add_executable(runTensorTests ${TENSOR_TEST_SOURCES})
@@ -86,10 +59,11 @@ target_include_directories(runTensorTests BEFORE PRIVATE
 
 target_link_libraries(runTensorTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
 )
+
 if (TARGET TensorPoissonPAMatrixDriver)
   add_dependencies(runTensorTests TensorPoissonPAMatrixDriver)
 endif()
 
 add_test(NAME runTensorTests COMMAND runTensorTests)
 
-install (TARGETS runTests runPhase0Tests runTensorTests runTensorCoefficientTpetraImportMPI2 DESTINATION bin/tests)
+install (TARGETS runTests runTensorTests DESTINATION bin/tests)

@@ -52,6 +52,7 @@ TensorMeshPtr makeTensorCoefficientTpetraImportMesh(bool includeTrace = false,
   auto factory = TensorVarFactory::factory();
   auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));
   tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar1C2V("f"), Teuchos::null, std::vector<int>{0,0,0})));
+  tensorMesh->addTestDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeFieldTensorVar1C2V("w"), Teuchos::null, std::vector<int>{0,0,0})));
   if (includeTrace)
   {
     tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(makeTraceTensorVar1C2V("tn", 0), Teuchos::null, std::vector<int>{0,0,0})));

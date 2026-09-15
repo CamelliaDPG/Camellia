@@ -72,7 +72,9 @@ TEUCHOS_UNIT_TEST( TensorTraceDescriptor, Maxwell1D2VH1TraceTargetsMatchConfigur
 
 TEUCHOS_UNIT_TEST( TensorTraceDescriptor, MaxwellFormulationRegistersH1PointTracesOnTensorMesh )
 {
-  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 1));
+  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0},
+                                                        { ActiveLeafSet1D({{0,0}}), ActiveLeafSet1D({{0,0}}) },
+                                                        false, 1));
   auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component}));
   auto factory = TensorVarFactory::factory();
   auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));
@@ -94,7 +96,9 @@ TEUCHOS_UNIT_TEST( TensorTraceDescriptor, MaxwellFormulationRegistersH1PointTrac
 
 TEUCHOS_UNIT_TEST( TensorTraceDescriptor, MaxwellFormulationRetrievesConcreteH1PointTraceLayouts )
 {
-  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0}, { ActiveLeafSet1D({{1,0}, {1,1}}) }, false, 1));
+  auto component = Teuchos::rcp(new ComponentMeshTopology1D({0.0, 0.5, 1.0},
+                                                        { ActiveLeafSet1D({{0,0}}), ActiveLeafSet1D({{0,0}}) },
+                                                        false, 1));
   auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component}));
   auto factory = TensorVarFactory::factory();
   auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), 1, 0));

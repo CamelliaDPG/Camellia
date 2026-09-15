@@ -136,4 +136,58 @@ TEUCHOS_UNIT_TEST( TensorMaxwellRHSMomentData, FunctionAdapterProvidesPointValue
   TensorMaxwellRHSMomentData mismatchedData(numCells + 1, pointsPerCell);
   TEST_THROW(TensorMaxwellRHSFunctionAdapter::rhoRHSFunction(mismatchedData)->values(values, basisCache), std::invalid_argument);
 }
+
+TEUCHOS_UNIT_TEST( TensorMaxwellRHSBoundaryAssembly, PointVolumeTermsMatchExistingDeviceSourceAssembly )
+{
+  const int numCells = 1;
+  const int pointsPerCell = 3;
+  const double eps0 = 5.0;
+  TensorMaxwellRHSMomentData data(numCells, pointsPerCell);
+  for (int point=0; point<pointsPerCell; point++)
+  {
+    data.rhoRHS(0, point) = 0.5 + point;
+    data.Jx(0, point) = 1.5 + point;
+    data.Jz(0, point) = 2.5 + point;
+  }
+  data.populateDeviceMirrors();
+
+  TensorMaxwellRHSMomentData::DeviceVector rhoTerm("tensor Maxwell assembly rho", data.numEntries());
+  TensorMaxwellRHSMomentData::DeviceVector jxTerm("tensor Maxwell assembly jx", data.numEntries());
+  TensorMaxwellRHSMomentData::DeviceVector jzTerm("tensor Maxwell assembly jz", data.numEntries());
+  TensorMaxwellRHSBoundaryAssembly::assemblePointVolumeTerms(data, eps0, rhoTerm, jxTerm, jzTerm);
+
+  auto rhoHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rhoTerm);
+  auto jxHost  = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), jxTerm);
+  auto jzHost  = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), jzTerm);
+  for (int point=0; point<pointsPerCell; point++)
+  {
+    TEST_FLOATING_EQUALITY(rhoHost(point), data.rhoRHS(0, point), 1e-14);
+    TEST_FLOATING_EQUALITY(jxHost(point), -data.Jx(0, point) / eps0, 1e-14);
+    TEST_FLOATING_EQUALITY(jzHost(point),  data.Jz(0, point) / eps0, 1e-14);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorMaxwellRHSBoundaryAssembly, H1PointBoundaryCopiesLowerAndUpperValuesWithoutNormalSign )
+{
+  TensorMaxwellRHSMomentData::DeviceVector traceValues("tensor Maxwell H1 point trace values", 4);
+  auto traceHost = Kokkos::create_mirror_view(traceValues);
+  for (int i=0; i<4; i++) traceHost(i) = 2.0 + 0.5 * i;
+  Kokkos::deep_copy(traceValues, traceHost);
+
+  TensorMaxwellRHSMomentData::DeviceVector lower("tensor Maxwell lower H1 boundary terms", 4);
+  TensorMaxwellRHSMomentData::DeviceVector upper("tensor Maxwell upper H1 boundary terms", 4);
+  TensorMaxwellRHSBoundaryAssembly::assembleH1PointBoundaryTerms1D(traceValues, lower, upper);
+
+  auto lowerHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), lower);
+  auto upperHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), upper);
+  for (int i=0; i<4; i++)
+  {
+    TEST_FLOATING_EQUALITY(lowerHost(i), traceHost(i), 1e-14);
+    TEST_FLOATING_EQUALITY(upperHost(i), traceHost(i), 1e-14);
+  }
+
+  TensorMaxwellRHSMomentData::DeviceVector shortOutput("short tensor Maxwell H1 boundary output", 3);
+  TEST_THROW(TensorMaxwellRHSBoundaryAssembly::assembleH1PointBoundaryTerms1D(traceValues, shortOutput, upper), std::invalid_argument);
+  TEST_THROW(TensorMaxwellRHSBoundaryAssembly::assembleH1PointBoundaryTerms1D(traceValues, lower, shortOutput), std::invalid_argument);
+}
 }
