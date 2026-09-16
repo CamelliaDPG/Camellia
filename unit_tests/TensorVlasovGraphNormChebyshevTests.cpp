@@ -6,6 +6,7 @@
 #include "Teuchos_GlobalMPISession.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -122,18 +123,23 @@ namespace
     return std::stod(value);
   }
 
-  std::vector<double> parseAllInverseDiagnosticResidualReductions(const std::string &output)
+  std::vector<double> parseAllInverseDiagnosticDoubleKey(const std::string &output, const std::string &key)
   {
-    std::vector<double> reductions;
+    std::vector<double> values;
     std::string::size_type cursor = 0;
     while (true)
     {
       const std::string::size_type lineStart = output.find("INVERSE_DIAGNOSTIC ", cursor);
       if (lineStart == std::string::npos) break;
-      reductions.push_back(parseDoubleKeyAfter(output, "residualReduction", lineStart));
+      values.push_back(parseDoubleKeyAfter(output, key, lineStart));
       cursor = lineStart + 1;
     }
-    return reductions;
+    return values;
+  }
+
+  std::vector<double> parseAllInverseDiagnosticResidualReductions(const std::string &output)
+  {
+    return parseAllInverseDiagnosticDoubleKey(output, "residualReduction");
   }
 
   double minimumResidualReduction(const std::vector<double> &values)
@@ -181,6 +187,127 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, AssembledBoundsReduceResidual
     std::cout << "VLASOV_GRAPH_NORM_CHEBYSHEV_ASSEMBLED_BOUNDS p=1 residualReduction=" << reductions[0] << std::endl;
     std::cout << "VLASOV_GRAPH_NORM_CHEBYSHEV_ASSEMBLED_BOUNDS p=2 residualReduction=" << reductions[1] << std::endl;
     TEST_COMPARE(reductions[0], <, 1.0);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, AssembledTrueEigenDiagnosticsForP2ToP5 )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=2:5 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=chebyshev "
+      "--inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20 "
+      "--inverseTrueEigenDiagnostic=1 "
+      "--inverseLowerSpectralEstimate=ratio --inverseEigenRatio=30 "
+      "--numInverseIterations=6 --inverseInitialGuess=zero "
+      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> trueMin = parseAllInverseDiagnosticDoubleKey(run.output, "trueLambdaMin");
+  const std::vector<double> trueMax = parseAllInverseDiagnosticDoubleKey(run.output, "trueLambdaMax");
+  const std::vector<double> trueCondition = parseAllInverseDiagnosticDoubleKey(run.output, "trueCondition");
+  const std::vector<double> trueMaxOverGershgorin = parseAllInverseDiagnosticDoubleKey(run.output, "trueLambdaMaxOverAssembledGershgorin");
+  const std::vector<double> trueMaxOverPowerRaw = parseAllInverseDiagnosticDoubleKey(run.output, "trueLambdaMaxOverPowerRaw");
+  const std::vector<double> trueMinOverLowerEstimate = parseAllInverseDiagnosticDoubleKey(run.output, "trueLambdaMinOverLowerEstimate");
+  const std::vector<double> residualReduction = parseAllInverseDiagnosticResidualReductions(run.output);
+  TEST_EQUALITY(trueMin.size(), static_cast<std::size_t>(4));
+  TEST_EQUALITY(trueMax.size(), static_cast<std::size_t>(4));
+  TEST_EQUALITY(trueCondition.size(), static_cast<std::size_t>(4));
+  TEST_EQUALITY(trueMaxOverGershgorin.size(), static_cast<std::size_t>(4));
+  TEST_EQUALITY(trueMaxOverPowerRaw.size(), static_cast<std::size_t>(4));
+  TEST_EQUALITY(trueMinOverLowerEstimate.size(), static_cast<std::size_t>(4));
+  TEST_EQUALITY(residualReduction.size(), static_cast<std::size_t>(4));
+  for (std::size_t ordinal=0; ordinal<trueMin.size(); ordinal++)
+  {
+    const int p = static_cast<int>(ordinal) + 2;
+    std::cout << "VLASOV_GRAPH_NORM_TRUE_EIGEN p=" << p
+              << " trueLambdaMin=" << trueMin[ordinal]
+              << " trueLambdaMax=" << trueMax[ordinal]
+              << " trueCondition=" << trueCondition[ordinal]
+              << " trueLambdaMaxOverAssembledGershgorin=" << trueMaxOverGershgorin[ordinal]
+              << " trueLambdaMaxOverPowerRaw=" << trueMaxOverPowerRaw[ordinal]
+              << " trueLambdaMinOverLowerEstimate=" << trueMinOverLowerEstimate[ordinal]
+              << " residualReduction=" << residualReduction[ordinal]
+              << std::endl;
+    TEST_ASSERT(std::isfinite(trueMin[ordinal]));
+    TEST_ASSERT(std::isfinite(trueMax[ordinal]));
+    TEST_ASSERT(std::isfinite(trueCondition[ordinal]));
+    TEST_ASSERT(std::isfinite(trueMaxOverGershgorin[ordinal]));
+    TEST_ASSERT(std::isfinite(trueMaxOverPowerRaw[ordinal]));
+    TEST_ASSERT(std::isfinite(trueMinOverLowerEstimate[ordinal]));
+    TEST_COMPARE(trueMin[ordinal], >, 0.0);
+    TEST_COMPARE(trueMax[ordinal], >, trueMin[ordinal]);
+    TEST_COMPARE(trueCondition[ordinal], >, 1.0);
+    TEST_COMPARE(trueMaxOverGershgorin[ordinal], >, 0.0);
+    TEST_COMPARE(trueMaxOverPowerRaw[ordinal], >, 0.0);
+    TEST_COMPARE(trueMinOverLowerEstimate[ordinal], >, 0.0);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, OracleTrueLambdaMinChebyshevForP2ToP5 )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=2:5 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=chebyshev "
+      "--inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20 "
+      "--inverseTrueEigenDiagnostic=1 "
+      "--inverseLowerSpectralEstimate=true-eigen "
+      "--numInverseIterations=30 --inverseInitialGuess=zero "
+      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
+  const std::vector<double> lowerRatios = parseAllInverseDiagnosticDoubleKey(run.output, "trueLambdaMinOverLowerEstimate");
+  TEST_EQUALITY(reductions.size(), static_cast<std::size_t>(4));
+  TEST_EQUALITY(lowerRatios.size(), static_cast<std::size_t>(4));
+  for (std::size_t ordinal=0; ordinal<reductions.size(); ordinal++)
+  {
+    const int p = static_cast<int>(ordinal) + 2;
+    std::cout << "VLASOV_GRAPH_NORM_ORACLE_CHEBYSHEV p=" << p
+              << " residualReduction=" << reductions[ordinal]
+              << " trueLambdaMinOverLowerEstimate=" << lowerRatios[ordinal]
+              << std::endl;
+    TEST_ASSERT(std::isfinite(reductions[ordinal]));
+    TEST_ASSERT(std::isfinite(lowerRatios[ordinal]));
+    TEST_FLOATING_EQUALITY(lowerRatios[ordinal], 1.0, 1e-10);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevSkeletonRunsForP2 )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=2 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=pmultigrid-chebyshev "
+      "--inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20 "
+      "--inverseTrueEigenDiagnostic=1 "
+      "--inverseLowerSpectralEstimate=true-eigen "
+      "--numInverseIterations=3 --pMultigridChebyshevSmootherIterations=2 --inverseInitialGuess=zero "
+      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
+  const std::vector<double> levels = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridLevels");
+  const std::vector<double> coarseDofs = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridCoarseDofs");
+  TEST_EQUALITY(reductions.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(levels.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(coarseDofs.size(), static_cast<std::size_t>(1));
+  if (!reductions.empty())
+  {
+    std::cout << "VLASOV_GRAPH_NORM_PMULTIGRID_CHEBYSHEV p=2 residualReduction=" << reductions[0]
+              << " levels=" << (levels.empty() ? -1.0 : levels[0])
+              << " coarseDofs=" << (coarseDofs.empty() ? -1.0 : coarseDofs[0])
+              << std::endl;
+    TEST_ASSERT(std::isfinite(reductions[0]));
+    TEST_COMPARE(levels[0], ==, 2.0);
+    TEST_COMPARE(coarseDofs[0], ==, 16.0);
   }
 }
 
