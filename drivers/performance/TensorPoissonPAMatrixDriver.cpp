@@ -57,6 +57,49 @@ namespace
 
   using OperatorTerm = Camellia::TensorPAMatrixTerm<DeviceType,Scalar>;
 
+  class AnalyticGraphNormSolutionCoefficientEvaluator : public Camellia::TensorSolutionCoefficientEvaluator
+  {
+    std::string _kind;
+  public:
+    explicit AnalyticGraphNormSolutionCoefficientEvaluator(const std::string &kind)
+    : _kind(kind)
+    {}
+
+    void values(int componentOrdinal,
+                Camellia::TensorFunction::PointViewHost pointsIn,
+                Camellia::TensorFunction::ValueViewHost valuesOut) const override
+    {
+      const int pointCount = static_cast<int>(pointsIn.extent(0));
+      const int pointDim = static_cast<int>(pointsIn.extent(1));
+      if (static_cast<int>(valuesOut.extent(0)) != pointCount)
+        throw std::invalid_argument("AnalyticGraphNormSolutionCoefficientEvaluator output length mismatch");
+      if (pointDim < 4)
+        throw std::invalid_argument("AnalyticGraphNormSolutionCoefficientEvaluator requires 4D points ordered (x,t,ux,uy)");
+
+      for (int p=0; p<pointCount; p++)
+      {
+        if (_kind == "velocity-component")
+        {
+          if ((componentOrdinal < 0) || (componentOrdinal >= pointDim))
+            throw std::invalid_argument("AnalyticGraphNormSolutionCoefficientEvaluator velocity component is outside point dimension");
+          valuesOut(p) = pointsIn(p,componentOrdinal);
+        }
+        else if (_kind == "maxwell-ax-proxy")
+        {
+          valuesOut(p) = 0.5 * (pointsIn(p,0) + pointsIn(p,1));
+        }
+        else if (_kind == "maxwell-ay-proxy")
+        {
+          valuesOut(p) = 0.75 * pointsIn(p,1);
+        }
+        else
+        {
+          throw std::invalid_argument("Unknown analytic graph-norm solution coefficient evaluator kind");
+        }
+      }
+    }
+  };
+
   int checkedProduct(const std::vector<int> &values)
   {
     long long result = 1;
@@ -237,15 +280,79 @@ namespace
                                  CellGeometry::NO_SUBDIVISION, nodeOrdering);
 
     std::vector<OperatorTerm> terms;
-    if ((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3"))
+    if ((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v"))
     {
       if (spaceDim < 2) throw std::invalid_argument("--operator=vlasov-dt and --operator=vlasov-coordinate require --dim >= 2 so derivative component 1 is present");
       if ((operatorChoice == "vlasov-linear-x0-x1-d2") && (spaceDim < 3))
         throw std::invalid_argument("--operator=vlasov-linear-x0-x1-d2 requires --dim >= 3 so derivative component 2 is present");
       if ((operatorChoice == "vlasov-coordinate-x1-d3") && (spaceDim < 4))
         throw std::invalid_argument("--operator=vlasov-coordinate-x1-d3 requires --dim >= 4 so derivative component 3 is present");
+      if (((operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && (spaceDim != 4))
+        throw std::invalid_argument("--operator=vlasov-graph-norm-1d1t2v and --operator=vlasov-graph-norm-solution-coeff-1d1t2v require --dim=4 with component ordering (x,t,ux,uy)");
       auto trialVar = Camellia::makeHGRADTensorFieldVar("f", spaceDim);
       auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+      if ((operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v"))
+      {
+        const bool useSolutionCoefficientProxies = (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v");
+        // Matrix-free viability proxy for the Planar MITL Vlasov test-space graph norm on
+        // a tensor cell with component ordering (x,t,ux,uy).  The production relativistic
+        // graph norm is ||-w_t - v_x w_x - a_x w_ux - a_y w_uy||^2 + L2WeightGraph ||w||^2.
+        // This diagnostic keeps the full expanded derivative-pair structure.  The default
+        // operator uses bounded analytic coefficients directly; the solution-coeff variant
+        // evaluates the same proxies through TensorFunctionEvaluationContext so the
+        // solution-dependent coefficient PAMatrix path is exercised before live Maxwell
+        // TensorSolution coefficients are wired in.
+        terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
+            geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE), massWeight, "vlasov_graph_norm_l2"});
+
+        Camellia::TensorFunctionEvaluationContext solutionCoefficientContext;
+        Camellia::TensorFunctionEvaluationContext *graphEvaluationContext = nullptr;
+        Camellia::TensorFunctionDependencySource vxSource(Camellia::TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, "graph_norm_proxy_vx");
+        Camellia::TensorFunctionDependencySource axSource(Camellia::TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, "graph_norm_proxy_ax");
+        Camellia::TensorFunctionDependencySource aySource(Camellia::TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, "graph_norm_proxy_ay");
+        if (useSolutionCoefficientProxies)
+        {
+          solutionCoefficientContext.registerSolutionCoefficientEvaluator(vxSource, Teuchos::rcp(new AnalyticGraphNormSolutionCoefficientEvaluator("velocity-component")));
+          solutionCoefficientContext.registerSolutionCoefficientEvaluator(axSource, Teuchos::rcp(new AnalyticGraphNormSolutionCoefficientEvaluator("maxwell-ax-proxy")));
+          solutionCoefficientContext.registerSolutionCoefficientEvaluator(aySource, Teuchos::rcp(new AnalyticGraphNormSolutionCoefficientEvaluator("maxwell-ay-proxy")));
+          graphEvaluationContext = &solutionCoefficientContext;
+        }
+
+        const std::vector<int> derivativeComponents {1, 0, 2, 3};
+        const std::vector<std::string> derivativeLabels {"dt", "dx", "dux", "duy"};
+        const std::vector<Camellia::TensorFunctionPtr> coefficients = useSolutionCoefficientProxies
+          ? std::vector<Camellia::TensorFunctionPtr>{
+              Camellia::TensorFunction::constant(-1.0),
+              Camellia::TensorFunction::constant(-1.0) * Camellia::TensorFunction::solutionCoefficient1D(2, vxSource),
+              Camellia::TensorFunction::constant(-1.0) * Camellia::TensorFunction::solutionCoefficient1D(0, axSource),
+              Camellia::TensorFunction::constant(-1.0) * Camellia::TensorFunction::solutionCoefficient1D(1, aySource)
+            }
+          : std::vector<Camellia::TensorFunctionPtr>{
+              Camellia::TensorFunction::constant(-1.0),
+              Camellia::TensorFunction::constant(-1.0) * Camellia::TensorFunction::componentCoordinate(2),
+              Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1)),
+              Camellia::TensorFunction::constant(-0.75) * Camellia::TensorFunction::componentCoordinate(1)
+            };
+
+        for (size_t trialComponent=0; trialComponent<derivativeComponents.size(); trialComponent++)
+        {
+          for (size_t testComponent=0; testComponent<derivativeComponents.size(); testComponent++)
+          {
+            Camellia::TensorBilinearTerm graphTerm(trialVar,
+                                                   testVar,
+                                                   Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, derivativeComponents[trialComponent]),
+                                                   Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, derivativeComponents[testComponent]),
+                                                   coefficients[trialComponent] * coefficients[testComponent],
+                                                   Camellia::TENSOR_BILINEAR_TERM_VOLUME,
+                                                   Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+            Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, graphTerm,
+                                                             "vlasov_graph_norm_" + derivativeLabels[trialComponent] + "_" + derivativeLabels[testComponent],
+                                                             graphEvaluationContext);
+            terms.back().weight *= stiffnessWeight;
+          }
+        }
+        return terms;
+      }
       if (operatorChoice == "vlasov-coordinate-x1-d3")
       {
         Camellia::TensorBilinearTerm vlasovCoordinateD3Term(trialVar,
@@ -313,7 +420,7 @@ namespace
     }
     if (terms.empty())
     {
-      throw std::invalid_argument("--operator must be mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, or vlasov-coordinate-x1-d3");
+      throw std::invalid_argument("--operator must be mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, vlasov-coordinate-x1-d3, vlasov-graph-norm-1d1t2v, or vlasov-graph-norm-solution-coeff-1d1t2v");
     }
     return terms;
   }
@@ -888,6 +995,12 @@ namespace
     double lambdaMinSafetyFactor = -1.0;
     double lambdaMinEstimateOverRaw = -1.0;
     double lambdaMaxEstimateOverAssembledGershgorin = -1.0;
+    double perCellLambdaMinEstimateMin = -1.0;
+    double perCellLambdaMinEstimateMax = -1.0;
+    double perCellLambdaMaxEstimateMin = -1.0;
+    double perCellLambdaMaxEstimateMax = -1.0;
+    double perCellLambdaMaxSpread = -1.0;
+    int perCellSpectralEstimate = 0;
     int compareTpetraPowerEstimate = 0;
     int compareTpetraRowMatrixPowerEstimate = 0;
     int ifpack2ChebyshevSmoke = 0;
@@ -1526,8 +1639,8 @@ namespace
       timing.spectralEstimatePath = "not_computed";
       return timing;
     }
-    if (!useAssembledReference && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "user"))
-      throw std::invalid_argument("inverse diagnostic without assembled reference requires --inverseSpectralEstimate=power or user");
+    if (!useAssembledReference && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "cell-power") && (inverseSpectralEstimate != "user"))
+      throw std::invalid_argument("inverse diagnostic without assembled reference requires --inverseSpectralEstimate=power, cell-power, or user");
     if (!useAssembledReference) timing.inversePath += "_no_assembled_reference";
 
     std::vector<Scalar> localMatrices;
@@ -1649,6 +1762,8 @@ namespace
     timing.assembledGershgorinLambdaMax = assembledGershgorinLambdaMax;
 
     Scalar lambdaMaxEstimate = 0.0;
+    std::vector<Scalar> perCellLambdaMaxEstimates;
+    std::vector<Scalar> perCellLambdaMinEstimates;
     Kokkos::Timer spectralEstimateTimer;
     if (inverseSpectralEstimate == "assembled-gershgorin")
     {
@@ -1666,13 +1781,18 @@ namespace
     {
       timing.spectralEstimatePath = "matrix_free_power_symmetric_diagonal_scaling_with_extracted_diagonal";
       timing.lambdaMaxSource = "matrix_free_power_symmetric_diagonal_scaling_with_safety_factor";
-      auto runPowerEstimate = [&](const std::string &tpetraAdapter)
+      auto runPowerEstimate = [&](const std::string &tpetraAdapter, const int activeCell)
       {
         std::vector<Scalar> vector(static_cast<size_t>(cells * rows), Scalar(0.0));
         std::vector<Scalar> scaledInput(vector.size(), Scalar(0.0));
         std::vector<Scalar> applied(vector.size(), Scalar(0.0));
         std::vector<Scalar> scaledOutput(vector.size(), Scalar(0.0));
-        for (size_t i=0; i<vector.size(); i++) vector[i] = Scalar(1.0) + Scalar((i * 13) % 17) / Scalar(17.0);
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++)
+          {
+            const size_t index = static_cast<size_t>(c * rows + i);
+            if ((activeCell < 0) || (activeCell == c)) vector[index] = Scalar(1.0) + Scalar((index * 13) % 17) / Scalar(17.0);
+          }
 
         Teuchos::RCP<TpetraMap> map;
         Teuchos::RCP<LocalPAMatrixTpetraOperator> tpetraOperator;
@@ -1740,17 +1860,17 @@ namespace
         return rawEstimate;
       };
 
-      lambdaMaxEstimate = runPowerEstimate("direct");
+      lambdaMaxEstimate = runPowerEstimate("direct", -1);
       timing.powerRawLambdaMaxEstimate = lambdaMaxEstimate;
       if (compareTpetraPowerEstimate != 0)
       {
-        timing.tpetraPowerRawLambdaMaxEstimate = runPowerEstimate("operator");
+        timing.tpetraPowerRawLambdaMaxEstimate = runPowerEstimate("operator", -1);
         timing.tpetraPowerLambdaMaxAbsError = std::abs(timing.tpetraPowerRawLambdaMaxEstimate - timing.powerRawLambdaMaxEstimate);
         timing.tpetraPowerLambdaMaxRelError = timing.tpetraPowerLambdaMaxAbsError / std::max<Scalar>(Scalar(1.0), std::abs(timing.powerRawLambdaMaxEstimate));
       }
       if (compareTpetraRowMatrixPowerEstimate != 0)
       {
-        timing.tpetraRowMatrixPowerRawLambdaMaxEstimate = runPowerEstimate("rowmatrix");
+        timing.tpetraRowMatrixPowerRawLambdaMaxEstimate = runPowerEstimate("rowmatrix", -1);
         timing.tpetraRowMatrixPowerLambdaMaxAbsError = std::abs(timing.tpetraRowMatrixPowerRawLambdaMaxEstimate - timing.powerRawLambdaMaxEstimate);
         timing.tpetraRowMatrixPowerLambdaMaxRelError = timing.tpetraRowMatrixPowerLambdaMaxAbsError / std::max<Scalar>(Scalar(1.0), std::abs(timing.powerRawLambdaMaxEstimate));
       }
@@ -1758,9 +1878,77 @@ namespace
       // user-visible safety margin before using it as the Chebyshev upper endpoint.
       lambdaMaxEstimate *= inversePowerSafetyFactor;
     }
+    else if (inverseSpectralEstimate == "cell-power")
+    {
+      timing.perCellSpectralEstimate = 1;
+      timing.spectralEstimatePath = "per_cell_matrix_free_power_symmetric_diagonal_scaling_with_extracted_diagonal";
+      timing.lambdaMaxSource = "per_cell_matrix_free_power_symmetric_diagonal_scaling_with_safety_factor";
+      auto runCellPowerEstimate = [&](const int activeCell)
+      {
+        std::vector<Scalar> vector(static_cast<size_t>(cells * rows), Scalar(0.0));
+        std::vector<Scalar> scaledInput(vector.size(), Scalar(0.0));
+        std::vector<Scalar> applied(vector.size(), Scalar(0.0));
+        std::vector<Scalar> scaledOutput(vector.size(), Scalar(0.0));
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++)
+          {
+            const size_t index = static_cast<size_t>(c * rows + i);
+            if (activeCell == c) vector[index] = Scalar(1.0) + Scalar((index * 13) % 17) / Scalar(17.0);
+          }
+
+        Scalar rawEstimate = 0.0;
+        for (int iteration=0; iteration<inverseSpectralEstimateIterations; iteration++)
+        {
+          Scalar inputNorm = 0.0;
+          for (const Scalar value : vector) inputNorm += value * value;
+          inputNorm = std::sqrt(inputNorm);
+          if (inputNorm <= std::numeric_limits<Scalar>::epsilon()) throw std::runtime_error("per-cell inverse diagnostic power estimate found zero vector");
+          for (Scalar &value : vector) value /= inputNorm;
+
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<rows; i++)
+            {
+              const size_t index = static_cast<size_t>(c * rows + i);
+              scaledInput[index] = vector[index] / std::sqrt(diagonal[index]);
+            }
+
+          applyVector(scaledInput, applied);
+          Scalar rayleigh = 0.0;
+          Scalar outputNorm = 0.0;
+          for (int c=0; c<cells; c++)
+            for (int i=0; i<rows; i++)
+            {
+              const size_t index = static_cast<size_t>(c * rows + i);
+              scaledOutput[index] = (c == activeCell) ? applied[index] / std::sqrt(diagonal[index]) : Scalar(0.0);
+              rayleigh += vector[index] * scaledOutput[index];
+              outputNorm += scaledOutput[index] * scaledOutput[index];
+            }
+          outputNorm = std::sqrt(outputNorm);
+          rawEstimate = std::max(rawEstimate, std::max(std::abs(rayleigh), outputNorm));
+          vector.swap(scaledOutput);
+        }
+        return rawEstimate;
+      };
+      perCellLambdaMaxEstimates.assign(static_cast<size_t>(cells), Scalar(0.0));
+      timing.perCellLambdaMaxEstimateMin = std::numeric_limits<Scalar>::max();
+      timing.perCellLambdaMaxEstimateMax = 0.0;
+      for (int c=0; c<cells; c++)
+      {
+        const Scalar rawCellEstimate = runCellPowerEstimate(c);
+        const Scalar safeCellEstimate = rawCellEstimate * inversePowerSafetyFactor;
+        if (!std::isfinite(safeCellEstimate) || (safeCellEstimate <= 0.0))
+          throw std::runtime_error("per-cell inverse diagnostic found nonpositive or nonfinite spectral upper estimate");
+        perCellLambdaMaxEstimates[static_cast<size_t>(c)] = safeCellEstimate;
+        timing.perCellLambdaMaxEstimateMin = std::min(timing.perCellLambdaMaxEstimateMin, safeCellEstimate);
+        timing.perCellLambdaMaxEstimateMax = std::max(timing.perCellLambdaMaxEstimateMax, safeCellEstimate);
+      }
+      timing.perCellLambdaMaxSpread = timing.perCellLambdaMaxEstimateMax / std::max<Scalar>(Scalar(1.0), timing.perCellLambdaMaxEstimateMin);
+      lambdaMaxEstimate = timing.perCellLambdaMaxEstimateMax;
+      timing.powerRawLambdaMaxEstimate = lambdaMaxEstimate;
+    }
     else
     {
-      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, or user");
+      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, cell-power, or user");
     }
     timing.spectralEstimateSeconds = spectralEstimateTimer.seconds();
     if (!std::isfinite(lambdaMaxEstimate) || (lambdaMaxEstimate <= 0.0)) throw std::runtime_error("inverse diagnostic found nonpositive or nonfinite spectral upper estimate");
@@ -1783,10 +1971,30 @@ namespace
     }
     else if (inverseLowerSpectralEstimate == "ratio")
     {
-      timing.lambdaMinEstimate = lambdaMaxEstimate / inverseEigenRatio;
-      timing.lambdaMinRawEstimate = timing.lambdaMinEstimate;
-      timing.lambdaMinEstimateOverRaw = Scalar(1.0);
-      timing.lambdaMinSource = "ratio_from_lambda_max";
+      if (!perCellLambdaMaxEstimates.empty())
+      {
+        perCellLambdaMinEstimates.assign(perCellLambdaMaxEstimates.size(), Scalar(0.0));
+        timing.perCellLambdaMinEstimateMin = std::numeric_limits<Scalar>::max();
+        timing.perCellLambdaMinEstimateMax = 0.0;
+        for (size_t c=0; c<perCellLambdaMaxEstimates.size(); c++)
+        {
+          const Scalar cellLambdaMin = perCellLambdaMaxEstimates[c] / inverseEigenRatio;
+          perCellLambdaMinEstimates[c] = cellLambdaMin;
+          timing.perCellLambdaMinEstimateMin = std::min(timing.perCellLambdaMinEstimateMin, cellLambdaMin);
+          timing.perCellLambdaMinEstimateMax = std::max(timing.perCellLambdaMinEstimateMax, cellLambdaMin);
+        }
+        timing.lambdaMinEstimate = timing.perCellLambdaMinEstimateMin;
+        timing.lambdaMinRawEstimate = timing.lambdaMinEstimate;
+        timing.lambdaMinEstimateOverRaw = Scalar(1.0);
+        timing.lambdaMinSource = "per_cell_ratio_from_lambda_max";
+      }
+      else
+      {
+        timing.lambdaMinEstimate = lambdaMaxEstimate / inverseEigenRatio;
+        timing.lambdaMinRawEstimate = timing.lambdaMinEstimate;
+        timing.lambdaMinEstimateOverRaw = Scalar(1.0);
+        timing.lambdaMinSource = "ratio_from_lambda_max";
+      }
     }
     else if (inverseLowerSpectralEstimate == "user")
     {
@@ -1939,34 +2147,56 @@ namespace
         throw std::runtime_error("Chebyshev host recurrence candidate has incorrect length");
       if (numInverseIterations <= 0) return;
 
-      const Scalar chebyshevLambdaMax = timing.lambdaMaxEstimate;
-      const Scalar chebyshevLambdaMin = timing.lambdaMinEstimate;
-      const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
-      const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
-      const Scalar s1 = ifpackTheta * ifpackDelta;
+      auto lambdaMaxForCell = [&](const int cellOrdinal)
+      {
+        return perCellLambdaMaxEstimates.empty() ? timing.lambdaMaxEstimate : perCellLambdaMaxEstimates[static_cast<size_t>(cellOrdinal)];
+      };
+      auto lambdaMinForCell = [&](const int cellOrdinal)
+      {
+        return perCellLambdaMinEstimates.empty() ? timing.lambdaMinEstimate : perCellLambdaMinEstimates[static_cast<size_t>(cellOrdinal)];
+      };
       std::vector<Scalar> correction(localLength, Scalar(0.0));
       std::vector<Scalar> candidateApplied(localLength, Scalar(0.0));
+      std::vector<Scalar> rhokByCell(static_cast<size_t>(cells), Scalar(0.0));
 
       applyVector(candidate, candidateApplied);
-      for (size_t i=0; i<localLength; i++)
+      for (int c=0; c<cells; c++)
       {
-        correction[i] = (Scalar(1.0) / ifpackTheta) * (rhs[i] - candidateApplied[i]) / diagonal[i];
-        candidate[i] += correction[i];
+        const Scalar chebyshevLambdaMax = lambdaMaxForCell(c);
+        const Scalar chebyshevLambdaMin = lambdaMinForCell(c);
+        const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
+        const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+        const Scalar s1 = ifpackTheta * ifpackDelta;
+        rhokByCell[static_cast<size_t>(c)] = Scalar(1.0) / s1;
+        for (int i=0; i<rows; i++)
+        {
+          const size_t index = static_cast<size_t>(c * rows + i);
+          correction[index] = (Scalar(1.0) / ifpackTheta) * (rhs[index] - candidateApplied[index]) / diagonal[index];
+          candidate[index] += correction[index];
+        }
       }
 
-      Scalar rhok = Scalar(1.0) / s1;
       for (int iteration=1; iteration<numInverseIterations; iteration++)
       {
         applyVector(candidate, candidateApplied);
-        const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
-        const Scalar dtemp1 = rhokp1 * rhok;
-        const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
-        rhok = rhokp1;
-        for (size_t i=0; i<localLength; i++)
+        for (int c=0; c<cells; c++)
         {
-          correction[i] = dtemp2 * (rhs[i] - candidateApplied[i]) / diagonal[i]
-                        + dtemp1 * correction[i];
-          candidate[i] += correction[i];
+          const Scalar chebyshevLambdaMax = lambdaMaxForCell(c);
+          const Scalar chebyshevLambdaMin = lambdaMinForCell(c);
+          const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
+          const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+          const Scalar s1 = ifpackTheta * ifpackDelta;
+          const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhokByCell[static_cast<size_t>(c)]);
+          const Scalar dtemp1 = rhokp1 * rhokByCell[static_cast<size_t>(c)];
+          const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
+          rhokByCell[static_cast<size_t>(c)] = rhokp1;
+          for (int i=0; i<rows; i++)
+          {
+            const size_t index = static_cast<size_t>(c * rows + i);
+            correction[index] = dtemp2 * (rhs[index] - candidateApplied[index]) / diagonal[index]
+                              + dtemp1 * correction[index];
+            candidate[index] += correction[index];
+          }
         }
       }
     };
@@ -2133,6 +2363,12 @@ namespace
               << " lambdaMaxSafetyFactor=" << timing.lambdaMaxSafetyFactor
               << " lambdaMinSource=" << timing.lambdaMinSource
               << " lambdaMaxSource=" << timing.lambdaMaxSource
+              << " perCellSpectralEstimate=" << timing.perCellSpectralEstimate
+              << " perCellLambdaMinEstimateMin=" << timing.perCellLambdaMinEstimateMin
+              << " perCellLambdaMinEstimateMax=" << timing.perCellLambdaMinEstimateMax
+              << " perCellLambdaMaxEstimateMin=" << timing.perCellLambdaMaxEstimateMin
+              << " perCellLambdaMaxEstimateMax=" << timing.perCellLambdaMaxEstimateMax
+              << " perCellLambdaMaxSpread=" << timing.perCellLambdaMaxSpread
               << " inverseLowerSpectralEstimate=" << timing.inverseLowerSpectralEstimate
               << " inverseLowerSpectralEstimateIterations=" << inverseLowerSpectralEstimateIterations
               << " maxSymmetryAbsError=" << timing.maxSymmetryAbsError
@@ -2398,6 +2634,7 @@ int main(int argc, char *argv[])
     Scalar inversePowerSafetyFactor = 1.05;
     Scalar inverseLowerPowerSafetyFactor = 0.95;
     Scalar inverseTolerance = 1e-8;
+    Scalar inverseMaxResidualReduction = -1.0;
     std::string polyOrderText = "1:4";
     std::string operatorChoice = "mass-plus-stiffness";
     std::string mode = "apply";
@@ -2411,7 +2648,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("dim", &dim, "Tensor dimension, 1 through 7.");
     cmdp.setOption("polyOrder", &polyOrderText, "Polynomial order p or inclusive range pMin:pMax.");
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
-    cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, or vlasov-coordinate-x1-d3.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge; vlasov-coordinate exercises the single-component coefficient bridge; vlasov-linear-x0-x1-d2 exercises a two-term separable decomposition of -0.5*(x0+x1)*value(f)*d2(w); vlasov-coordinate-x1-d3 exercises the separable -0.75*x1*value(f)*d3(w) partial term.");
+    cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, vlasov-coordinate-x1-d3, vlasov-graph-norm-1d1t2v, or vlasov-graph-norm-solution-coeff-1d1t2v.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge; vlasov-coordinate exercises the single-component coefficient bridge; vlasov-linear-x0-x1-d2 exercises a two-term separable decomposition of -0.5*(x0+x1)*value(f)*d2(w); vlasov-coordinate-x1-d3 exercises the separable -0.75*x1*value(f)*d3(w) partial term; vlasov-graph-norm-1d1t2v expands a 4D Planar MITL graph-norm proxy for Chebyshev G^{-1} calibration; vlasov-graph-norm-solution-coeff-1d1t2v routes the same proxy through TensorFunctionEvaluationContext solution-coefficient evaluators.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses Intrepid2 hypercube HGRAD hierarchical bases, tensor-product cubature, and affine geometry for dim=1..7; synthetic remains available for high-dimensional contraction stress tests.");
     cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
@@ -2419,7 +2656,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
     cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local Richardson or Chebyshev iterations used in inverse-diagnostic mode.");
     cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson or chebyshev local inverse diagnostic recurrence.");
-    cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, power, or user spectral upper-estimate path for inverse diagnostics.");
+    cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
     cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free power spectral estimate.");
     cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power lambdaMax estimates before Chebyshev use.");
     cmdp.setOption("inverseLowerSpectralEstimate", &inverseLowerSpectralEstimate, "ratio, user, or assembled-inverse-iteration lower spectral estimate for inverse diagnostics; positive --inverseLambdaMin overrides this choice.");
@@ -2434,6 +2671,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("inverseLambdaMax", &inverseLambdaMax, "Optional positive user override for the Chebyshev/Richardson upper spectral bound.");
     cmdp.setOption("inverseInitialGuess", &inverseInitialGuess, "zero or diagonal initial guess for inverse diagnostics.");
     cmdp.setOption("inverseTolerance", &inverseTolerance, "Relative residual-reduction tolerance reported by inverse diagnostics; fixed iteration count is unchanged.");
+    cmdp.setOption("inverseMaxResidualReduction", &inverseMaxResidualReduction, "Optional pass/fail ceiling for inverse-diagnostic final/initial residual reduction; negative disables the check.");
     cmdp.setOption("massWeight", &massWeight, "Scalar coefficient alpha for mass or h1-gram value-value terms.");
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
@@ -2465,8 +2703,8 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
-    if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3")) && (basisMode != "hgrad"))
-      throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, and --operator=vlasov-coordinate-x1-d3 require --basisMode=hgrad");
+    if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && (basisMode != "hgrad"))
+      throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, --operator=vlasov-coordinate-x1-d3, --operator=vlasov-graph-norm-1d1t2v, and --operator=vlasov-graph-norm-solution-coeff-1d1t2v require --basisMode=hgrad");
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev"))
       throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson or chebyshev");
     if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))
@@ -2477,10 +2715,12 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--ifpack2ChebyshevSmoke requires --mode=inverse-diagnostic --inverseDiagnosticAlgorithm=chebyshev");
     if ((ifpack2ChebyshevSmoke != 0) && (inverseInitialGuess != "zero"))
       throw std::invalid_argument("--ifpack2ChebyshevSmoke currently supports --inverseInitialGuess=zero only");
+    if ((ifpack2ChebyshevSmoke != 0) && (inverseSpectralEstimate == "cell-power"))
+      throw std::invalid_argument("--ifpack2ChebyshevSmoke compares against scalar Ifpack2 parameters and is not compatible with per-cell Chebyshev endpoints");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (inverseSpectralEstimate != "power"))
       throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate requires --inverseSpectralEstimate=power");
-    if ((inverseSpectralEstimate != "assembled-gershgorin") && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "user"))
-      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, or user");
+    if ((inverseSpectralEstimate != "assembled-gershgorin") && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "cell-power") && (inverseSpectralEstimate != "user"))
+      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, cell-power, or user");
     if ((inverseSpectralEstimate == "user") && (inverseLambdaMax <= 0.0))
       throw std::invalid_argument("--inverseSpectralEstimate=user requires positive --inverseLambdaMax");
     if (inverseSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
@@ -2489,6 +2729,8 @@ int main(int argc, char *argv[])
     if ((inverseLambdaMin > 0.0) && (inverseLambdaMax > 0.0) && (inverseLambdaMin >= inverseLambdaMax))
       throw std::invalid_argument("--inverseLambdaMin must be less than --inverseLambdaMax when both are positive");
     if (inverseTolerance <= 0.0) throw std::invalid_argument("--inverseTolerance must be positive");
+    if ((inverseMaxResidualReduction == 0.0) || (inverseMaxResidualReduction < -1.0))
+      throw std::invalid_argument("--inverseMaxResidualReduction must be positive, or negative to disable the check");
     // --basisMode=hgrad is supported for --dim=1..7; unsupported dimensions are rejected above and in makeHGRADOperatorTerms().
 
     const PolyOrderRange pRange = parsePolyOrderRange(polyOrderText);
@@ -2589,6 +2831,8 @@ int main(int argc, char *argv[])
         if ((ifpack2ChebyshevSmoke != 0) &&
             (inverseDiagnosticTiming.ifpack2ChebyshevMaxAbsError > 1e-10) &&
             (inverseDiagnosticTiming.ifpack2ChebyshevMaxRelError > 1e-10)) returnCode = 2;
+        if ((inverseMaxResidualReduction > 0.0) &&
+            (inverseDiagnosticTiming.residualReduction > inverseMaxResidualReduction)) returnCode = 2;
       }
 
       const long long flopsPerCell = estimatedApplyFlopsPerCellPerTerm(dim, p) * static_cast<long long>(terms.size());

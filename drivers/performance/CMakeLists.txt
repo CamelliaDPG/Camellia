@@ -279,6 +279,66 @@ add_test(NAME TensorH1GramPAMatrixLowerSpectralDiagnosticSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
+add_test(NAME TensorVlasovGraphNormPAMatrixChebyshevPowerSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=4
+    --polyOrder=1
+    --cellsPerDim=1
+    --operator=vlasov-graph-norm-1d1t2v
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=6
+    --inverseDiagnosticRequireAssembledReference=0
+    --compareTpetraPowerEstimate=1
+    --compareTpetraRowMatrixPowerEstimate=1
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
+add_test(NAME TensorVlasovGraphNormPAMatrixCellPowerChebyshevSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=4
+    --polyOrder=1
+    --cellsPerDim=2
+    --operator=vlasov-graph-norm-1d1t2v
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=cell-power
+    --inverseSpectralEstimateIterations=5
+    --inverseDiagnosticRequireAssembledReference=0
+    --inverseInitialGuess=zero
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
+add_test(NAME TensorVlasovGraphNormSolutionCoeffPAMatrixChebyshevSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=4
+    --polyOrder=1
+    --cellsPerDim=1
+    --operator=vlasov-graph-norm-solution-coeff-1d1t2v
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=5
+    --inverseDiagnosticRequireAssembledReference=0
+    --inverseInitialGuess=zero
+    --numInverseIterations=5
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1)
+
 add_custom_target(runTensorPoissonPAMatrixSmoke
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=2
@@ -461,6 +521,68 @@ add_custom_target(runTensorH1GramPAMatrixNoReferenceChebyshevSweep
     --maxAssembledEntries=1
   DEPENDS TensorPoissonPAMatrixDriver
   COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic without assembled reference/oracle blocks"
+  VERBATIM)
+
+add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=4
+    --polyOrder=1:2
+    --cellsPerDim=1
+    --operator=vlasov-graph-norm-1d1t2v
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=power
+    --inverseSpectralEstimateIterations=10
+    --inverseDiagnosticRequireAssembledReference=0
+    --compareTpetraPowerEstimate=1
+    --compareTpetraRowMatrixPowerEstimate=1
+    --ifpack2ChebyshevSmoke=1
+    --inverseInitialGuess=zero
+    --numInverseIterations=10
+    --inverseMaxResidualReduction=0.99
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=4
+    --polyOrder=1:2
+    --cellsPerDim=2
+    --operator=vlasov-graph-norm-1d1t2v
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=cell-power
+    --inverseSpectralEstimateIterations=8
+    --inverseDiagnosticRequireAssembledReference=0
+    --inverseInitialGuess=zero
+    --numInverseIterations=10
+    --inverseMaxResidualReduction=0.99
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1
+  COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
+    --dim=4
+    --polyOrder=1:2
+    --cellsPerDim=2
+    --operator=vlasov-graph-norm-1d1t2v
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=chebyshev
+    --inverseSpectralEstimate=cell-power
+    --inverseSpectralEstimateIterations=8
+    --inverseDiagnosticRequireAssembledReference=0
+    --inverseInitialGuess=zero
+    --numInverseIterations=20
+    --inverseMaxResidualReduction=0.99
+    --inverseEigenRatio=30.0
+    --massWeight=2.0
+    --stiffnessWeight=0.5
+    --maxAssembledEntries=1
+  DEPENDS TensorPoissonPAMatrixDriver
+  COMMENT "Running opt-in Vlasov graph-norm Chebyshev G-inverse viability sweep with global and per-cell matrix-free spectral calibration"
   VERBATIM)
 
 add_custom_target(runTensorH1GramPAMatrixLowerSpectralChebyshevSweep
