@@ -11,6 +11,7 @@
 
 #include "VlasovSpaceTimeFormulation.h"
 #include "CamelliaMemoryTools.h"
+#include "Camellia_FieldContainerConversion.hpp"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
@@ -30,6 +31,8 @@
 #include "SimpleSolutionFunction.h"
 #include "Solution.h"
 #include "TensorFunctionEvaluationContext.h"
+#include "TensorMaxwell1D2VMomentReductionPipeline.h"
+#include "TensorMaxwellRHSMomentData.h"
 #include "SolutionStage.h"
 #include "TypeDefs.h"
 
@@ -41,6 +44,7 @@
 #include "Intrepid2_IntegrationTools.hpp"
 #include "Intrepid2_NodalBasisFamily.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 
@@ -692,6 +696,235 @@ namespace
     }
   };
 
+  struct TensorNativeMaxwellMomentInput1D2V
+  {
+    TensorMaxwell1D2VMomentReductionPipeline::HostMatrix speciesVlasovValues;
+    TensorMaxwell1D2VMomentReductionPipeline::HostMatrix velocityPoints;
+    TensorMaxwell1D2VMomentReductionPipeline::HostVector velocityWeights;
+    int numConfigurationCells = 0;
+    int numPointsPerConfigurationCell = 0;
+  };
+
+  std::vector<GlobalIndexType> rankLocalConfigurationCellIDs(MeshPtr configurationMesh)
+  {
+    const auto &cellIDSet = configurationMesh->cellIDsInPartition();
+    return std::vector<GlobalIndexType>(cellIDSet.begin(), cellIDSet.end());
+  }
+
+  int tensorNativeDefaultVelocityQuadratureDegree(SolutionPtr phaseSpaceSolution,
+                                                  const std::vector<GlobalIndexType> &configurationCellIDs)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
+                               "Tensor-native Maxwell current-source sampling requires a non-null phase-space solution.");
+    MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
+    auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology());
+    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopology == NULL, std::invalid_argument,
+                               "Tensor-native Maxwell current-source sampling requires an ExtrudedMeshTopology phase-space mesh.");
+
+    int velocityQuadratureDegree = 1;
+    for (const auto &configurationCellID : configurationCellIDs)
+    {
+      const auto &phaseSpaceCellIDs = phaseSpaceMeshTopology->phaseSpaceCellIDsForPhysicalCell(configurationCellID);
+      for (const auto &phaseSpaceCellID : phaseSpaceCellIDs)
+      {
+        velocityQuadratureDegree = std::max(velocityQuadratureDegree,
+                                            phaseSpaceMesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID));
+      }
+    }
+    return std::max(1, velocityQuadratureDegree);
+  }
+
+  TensorNativeMaxwellMomentInput1D2V sampleVlasovSolutionIntoTensorNativeMomentInput1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                                                                        MeshPtr configurationMesh,
+                                                                                        SolutionPtr phaseSpaceSolution,
+                                                                                        VarPtr vlasovFieldVar,
+                                                                                        const std::vector<double> &uxVertices,
+                                                                                        const std::vector<double> &uzVertices,
+                                                                                        int velocityQuadratureDegree)
+  {
+    using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+    TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument,
+                               "Tensor-native Maxwell current-source sampling requires a non-null configuration mesh.");
+    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
+                               "Tensor-native Maxwell current-source sampling requires a non-null phase-space solution.");
+    TEUCHOS_TEST_FOR_EXCEPTION(vlasovFieldVar == Teuchos::null, std::invalid_argument,
+                               "Tensor-native Maxwell current-source sampling requires a non-null Vlasov field variable.");
+    TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree <= 0, std::invalid_argument,
+                               "Tensor-native Maxwell current-source sampling requires a positive velocity quadrature degree.");
+    TEUCHOS_TEST_FOR_EXCEPTION((uxVertices.size() < 2) || (uzVertices.size() < 2), std::invalid_argument,
+                               "Tensor-native Maxwell current-source sampling requires two retained velocity dimensions.");
+
+    TensorNativeMaxwellMomentInput1D2V input;
+    input.numConfigurationCells = static_cast<int>(configurationCellIDs.size());
+
+    int expectedPointCount = -1;
+    std::vector<double> configurationPointCoordinates;
+    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(configurationCellIDs.size()); cellOrdinal++)
+    {
+      const auto cellID = configurationCellIDs[cellOrdinal];
+      auto basisCache = BasisCache::basisCacheForCell(configurationMesh, cellID);
+      const auto &points = basisCache->getPhysicalCubaturePointsFC();
+      const int pointCount = points.dimension(1);
+      const int spaceTimeDim = points.dimension(2);
+      TEUCHOS_TEST_FOR_EXCEPTION(spaceTimeDim != 2, std::invalid_argument,
+                                 "Tensor-native Maxwell current-source sampling expects 1D space-time configuration points.");
+      if (expectedPointCount < 0)
+      {
+        expectedPointCount = pointCount;
+        input.numPointsPerConfigurationCell = pointCount;
+        configurationPointCoordinates.resize(static_cast<size_t>(configurationCellIDs.size()) * pointCount * spaceTimeDim);
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(pointCount != expectedPointCount, std::invalid_argument,
+                                 "Tensor-native Maxwell current-source sampling requires a uniform configuration cubature point count across local cells.");
+      for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
+      {
+        const int configurationEntry = cellOrdinal * pointCount + pointOrdinal;
+        configurationPointCoordinates[static_cast<size_t>(configurationEntry) * spaceTimeDim] = points(cellOrdinal, pointOrdinal, 0);
+        configurationPointCoordinates[static_cast<size_t>(configurationEntry) * spaceTimeDim + 1] = points(cellOrdinal, pointOrdinal, 1);
+      }
+    }
+
+    CubatureFactory cubatureFactory;
+    auto velocityCubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{velocityQuadratureDegree});
+    auto velocityRefPoints = velocityCubature->allocateCubaturePoints();
+    auto velocityRefWeights = velocityCubature->allocateCubatureWeights();
+    velocityCubature->getCubature(velocityRefPoints, velocityRefWeights);
+    auto velocityRefPointsFC = FieldContainerConversion<double>::fromTensorPoints(velocityRefPoints);
+    auto velocityRefWeightsFC = FieldContainerConversion<double>::fromTensorData(velocityRefWeights);
+
+    const int velocityPointCount1D = velocityRefPointsFC.dimension(0);
+    const int velocityPointCount = static_cast<int>(uxVertices.size() - 1) * static_cast<int>(uzVertices.size() - 1) * velocityPointCount1D * velocityPointCount1D;
+    input.velocityPoints = Pipeline::HostMatrix("Tensor-native Maxwell sampled velocity points", velocityPointCount, 2);
+    input.velocityWeights = Pipeline::HostVector("Tensor-native Maxwell sampled velocity weights", velocityPointCount);
+
+    int velocityEntry = 0;
+    for (int uxElementOrdinal=0; uxElementOrdinal<static_cast<int>(uxVertices.size())-1; uxElementOrdinal++)
+    {
+      const double uxCellLeft = uxVertices[uxElementOrdinal];
+      const double uxElementWidth = uxVertices[uxElementOrdinal+1] - uxCellLeft;
+      const double uxCenter = uxCellLeft + 0.5 * uxElementWidth;
+      const double uxScale = 0.5 * uxElementWidth;
+      for (int uzElementOrdinal=0; uzElementOrdinal<static_cast<int>(uzVertices.size())-1; uzElementOrdinal++)
+      {
+        const double uzCellLeft = uzVertices[uzElementOrdinal];
+        const double uzElementWidth = uzVertices[uzElementOrdinal+1] - uzCellLeft;
+        const double uzCenter = uzCellLeft + 0.5 * uzElementWidth;
+        const double uzScale = 0.5 * uzElementWidth;
+        for (int uxOrdinal=0; uxOrdinal<velocityPointCount1D; uxOrdinal++)
+        {
+          const double ux = uxCenter + uxScale * velocityRefPointsFC(uxOrdinal, 0);
+          const double uxWeight = uxScale * velocityRefWeightsFC(uxOrdinal);
+          for (int uzOrdinal=0; uzOrdinal<velocityPointCount1D; uzOrdinal++)
+          {
+            const double uz = uzCenter + uzScale * velocityRefPointsFC(uzOrdinal, 0);
+            const double uzWeight = uzScale * velocityRefWeightsFC(uzOrdinal);
+            input.velocityPoints(velocityEntry, 0) = ux;
+            input.velocityPoints(velocityEntry, 1) = uz;
+            input.velocityWeights(velocityEntry) = uxWeight * uzWeight;
+            velocityEntry++;
+          }
+        }
+      }
+    }
+
+    const int configurationEntryCount = input.numConfigurationCells * input.numPointsPerConfigurationCell;
+    input.speciesVlasovValues = Pipeline::HostMatrix("Tensor-native Maxwell sampled Vlasov f", configurationEntryCount, velocityPointCount);
+    if ((configurationEntryCount == 0) || (velocityPointCount == 0)) return input;
+
+    Camellia::FieldContainer<double> phaseSpacePoints(configurationEntryCount * velocityPointCount, 4);
+    for (int configurationEntry=0; configurationEntry<configurationEntryCount; configurationEntry++)
+    {
+      const double x = configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2];
+      const double t = configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2 + 1];
+      for (int velocityEntry=0; velocityEntry<velocityPointCount; velocityEntry++)
+      {
+        const int phaseSpacePointOrdinal = configurationEntry * velocityPointCount + velocityEntry;
+        phaseSpacePoints(phaseSpacePointOrdinal, 0) = x;
+        phaseSpacePoints(phaseSpacePointOrdinal, 1) = t;
+        phaseSpacePoints(phaseSpacePointOrdinal, 2) = input.velocityPoints(velocityEntry, 0);
+        phaseSpacePoints(phaseSpacePointOrdinal, 3) = input.velocityPoints(velocityEntry, 1);
+      }
+    }
+
+    Camellia::FieldContainer<double> fValues(configurationEntryCount * velocityPointCount);
+    phaseSpaceSolution->solutionValues(fValues, vlasovFieldVar->ID(), phaseSpacePoints);
+
+    for (int configurationEntry=0; configurationEntry<configurationEntryCount; configurationEntry++)
+    {
+      for (int velocityEntry=0; velocityEntry<velocityPointCount; velocityEntry++)
+      {
+        const int phaseSpacePointOrdinal = configurationEntry * velocityPointCount + velocityEntry;
+        input.speciesVlasovValues(configurationEntry, velocityEntry) = fValues(phaseSpacePointOrdinal);
+      }
+    }
+
+    return input;
+  }
+
+  bool applyTensorNativeMaxwellCurrentSourcesIfSupported(VlasovSpaceTimeFormulation &form)
+  {
+    auto configurationFormulation = form.configurationSpaceFormulation();
+    auto maxwell1D2V = Teuchos::rcp_dynamic_cast<ConfigurationSpaceFormulationMaxwell1D2V>(configurationFormulation);
+    if (maxwell1D2V == Teuchos::null)
+    {
+      return false;
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(form.velocityDim() != 2, std::invalid_argument,
+                               "Tensor-native Maxwell current-source handoff currently requires a 1D2V Vlasov formulation.");
+    TEUCHOS_TEST_FOR_EXCEPTION(form.enforceQuasiNeutrality(), std::invalid_argument,
+                               "Tensor-native Maxwell current-source handoff does not yet support enforceQuasiNeutrality=true.");
+
+    auto configurationMesh = form.configurationSpaceMesh();
+    auto configurationCellIDs = rankLocalConfigurationCellIDs(configurationMesh);
+    const int velocityQuadratureDegree = tensorNativeDefaultVelocityQuadratureDegree(form.vlasovSolution(), configurationCellIDs);
+
+    std::vector<double> speciesCharges;
+    std::vector<TensorMaxwell1D2VMomentReductionPipeline::HostMatrix> speciesValues;
+    speciesCharges.reserve(form.numSpecies());
+    speciesValues.reserve(form.numSpecies());
+
+    TensorNativeMaxwellMomentInput1D2V firstInput;
+    for (int speciesOrdinal=0; speciesOrdinal<form.numSpecies(); speciesOrdinal++)
+    {
+      auto sampledInput = sampleVlasovSolutionIntoTensorNativeMomentInput1D2V(configurationCellIDs,
+                                                                              configurationMesh,
+                                                                              form.vlasovSolution(),
+                                                                              form.f(speciesOrdinal),
+                                                                              form.velocitySpaceVertices_x(),
+                                                                              form.velocitySpaceVertices_y(),
+                                                                              velocityQuadratureDegree);
+      if (speciesOrdinal == 0)
+      {
+        firstInput = sampledInput;
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION((sampledInput.numConfigurationCells != firstInput.numConfigurationCells) ||
+                                   (sampledInput.numPointsPerConfigurationCell != firstInput.numPointsPerConfigurationCell) ||
+                                   (sampledInput.velocityWeights.extent(0) != firstInput.velocityWeights.extent(0)),
+                                   std::invalid_argument,
+                                   "Tensor-native Maxwell current-source sampling produced inconsistent species layouts.");
+      }
+      speciesCharges.push_back(form.q(speciesOrdinal));
+      speciesValues.push_back(sampledInput.speciesVlasovValues);
+    }
+
+    const int numTensorEntries = firstInput.numConfigurationCells * firstInput.numPointsPerConfigurationCell;
+    std::vector<double> n0Values(numTensorEntries, 0.0);
+    auto tensorMomentData = TensorMaxwell1D2VMomentReductionPipeline::buildRHSMomentData(firstInput.numConfigurationCells,
+                                                                                        firstInput.numPointsPerConfigurationCell,
+                                                                                        speciesCharges,
+                                                                                        maxwell1D2V->eps0(),
+                                                                                        speciesValues,
+                                                                                        firstInput.velocityPoints,
+                                                                                        firstInput.velocityWeights,
+                                                                                        n0Values,
+                                                                                        form.useRelativisticCurrentMoments(),
+                                                                                        form.currentMomentLightSpeed());
+    maxwell1D2V->setCurrentSources(tensorMomentData);
+    return true;
+  }
+
   void applyExplicitCurrentSourcesIfSupported(VlasovSpaceTimeFormulation &form)
   {
     auto configurationFormulation = form.configurationSpaceFormulation();
@@ -1302,35 +1535,38 @@ SolutionPtr VlasovSpaceTimeFormulation::configurationSpaceSolution()
 
 void VlasovSpaceTimeFormulation::configurationSpaceSolve()
 {
-  for (int i=0; i<_numSpecies; i++)
+  if (!applyTensorNativeMaxwellCurrentSourcesIfSupported(*this))
   {
-    _solutionMoments[i]->update();
-  }
-  {
-    double n0;
-    if (_enforceQuasiNeutrality)
+    for (int i=0; i<_numSpecies; i++)
     {
-      // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
-      FunctionPtr zeroMoment;
-      if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
-      else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
-      else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
-      else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
-      auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
-      const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
-      const double f_integral  = zeroMoment->integrate(configurationMesh);
-      n0 = f_integral / meshMeasure;
+      _solutionMoments[i]->update();
     }
-    else
     {
-      n0 = 0;
+      double n0;
+      if (_enforceQuasiNeutrality)
+      {
+        // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
+        FunctionPtr zeroMoment;
+        if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
+        else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
+        else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
+        else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
+        auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+        const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+        const double f_integral  = zeroMoment->integrate(configurationMesh);
+        n0 = f_integral / meshMeasure;
+      }
+      else
+      {
+        n0 = 0;
+      }
+      _n0->setValue(n0);
     }
-    _n0->setValue(n0);
+
+    applyExplicitCurrentSourcesIfSupported(*this);
   }
 
-  applyExplicitCurrentSourcesIfSupported(*this);
-
-  _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
+  _configurationSpaceFormulation->solve(false); // false: tensor-native or legacy moments have already provided the current sources.
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
   noteTensorConfigurationSolutionChangedIfNeeded(*this);
 }
@@ -2466,33 +2702,36 @@ void VlasovSpaceTimeFormulation::solve()
       applyPositivityLimiter();
     }
     
-    for (auto & solnMoments : _solutionMoments)
+    if (!applyTensorNativeMaxwellCurrentSourcesIfSupported(*this))
     {
-      solnMoments->update();
-    }
-    {
-      double n0;
-      if (_enforceQuasiNeutrality)
+      for (auto & solnMoments : _solutionMoments)
       {
-        // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
-        FunctionPtr zeroMoment;
-        if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
-        else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
-        else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
-        else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
-        auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
-        const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
-        const double f_integral  = zeroMoment->integrate(configurationMesh);
-        n0 = f_integral / meshMeasure;
+        solnMoments->update();
       }
-      else
       {
-        n0 = 0;
+        double n0;
+        if (_enforceQuasiNeutrality)
+        {
+          // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
+          FunctionPtr zeroMoment;
+          if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
+          else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
+          else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
+          else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
+          auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+          const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+          const double f_integral  = zeroMoment->integrate(configurationMesh);
+          n0 = f_integral / meshMeasure;
+        }
+        else
+        {
+          n0 = 0;
+        }
+        _n0->setValue(n0);
       }
-      _n0->setValue(n0);
+      applyExplicitCurrentSourcesIfSupported(*this);
     }
-    applyExplicitCurrentSourcesIfSupported(*this);
-    _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
+    _configurationSpaceFormulation->solve(false); // false: tensor-native or legacy moments have already provided the current sources.
     _configurationSpaceFormulation->updateConfigurationSpaceFunctions(); // update/MPI-communicate (Poisson/Maxwell) values to make available for phase-space solution
     noteTensorConfigurationSolutionChangedIfNeeded(*this);
     
@@ -3285,6 +3524,16 @@ FunctionPtr VlasovSpaceTimeFormulation::currentZ() const
   if (_velocityDim == 3) return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,0,1);
   else if (_velocityDim == 2) return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,1);
   else return Function::zero();
+}
+
+bool VlasovSpaceTimeFormulation::useRelativisticCurrentMoments() const
+{
+  return false;
+}
+
+double VlasovSpaceTimeFormulation::currentMomentLightSpeed() const
+{
+  return 1.0;
 }
 
 VarPtr VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()

@@ -439,6 +439,11 @@ void ConfigurationSpaceFormulationMaxwell1D2V::setCurrentSources(const TensorMax
                     TensorMaxwellRHSFunctionAdapter::JzFunction(momentData));
 }
 
+double ConfigurationSpaceFormulationMaxwell1D2V::eps0() const
+{
+  return _eps0;
+}
+
 void ConfigurationSpaceFormulationMaxwell1D2V::setRHSForTesting(FunctionPtr rho_over_eps0,
                                                                 FunctionPtr Jx_over_eps0,
                                                                 FunctionPtr Jz_over_eps0)

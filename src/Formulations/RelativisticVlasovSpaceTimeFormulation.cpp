@@ -349,3 +349,13 @@ FunctionPtr RelativisticVlasovSpaceTimeFormulation::currentZ() const
   }
   return Function::zero();
 }
+
+bool RelativisticVlasovSpaceTimeFormulation::useRelativisticCurrentMoments() const
+{
+  return true;
+}
+
+double RelativisticVlasovSpaceTimeFormulation::currentMomentLightSpeed() const
+{
+  return _c;
+}

@@ -520,6 +520,10 @@ public:
   virtual FunctionPtr currentX() const;
   virtual FunctionPtr currentY() const;
   virtual FunctionPtr currentZ() const;
+
+  //! Tensor-native current-source reduction hooks; relativistic formulations override these.
+  virtual bool useRelativisticCurrentMoments() const;
+  virtual double currentMomentLightSpeed() const;
   
   void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
                                                               double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);

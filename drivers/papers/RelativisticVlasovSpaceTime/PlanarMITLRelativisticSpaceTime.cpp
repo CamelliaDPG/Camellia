@@ -1238,7 +1238,7 @@ int main(int argc, char *argv[])
     bool phase0Instrumentation = false;
     std::string phase0TimingFile = "";
     std::string phase0TensorGraphSchurBackend = "off";
-    std::string phase8MomentBackend = "legacy";
+    std::string phase8MomentBackend = "tensor_native";
     double phase8MomentCompareAbsTol = 1e-10;
     double phase8MomentCompareRelTol = 1e-8;
     double phase8MomentCompareRelFloor = 1e-14;
@@ -1257,7 +1257,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
                    "Optional Phase 0 tensor-native graph-norm Schur micro-apply backend: off, assembled_crs, or matrix_free.");
     cmdp.setOption("phase8MomentBackend", &phase8MomentBackend,
-                   "Temporary Phase 8 Planar MITL moment backend: legacy, tensor_native, dry_run_compare, or compare.  The default legacy path preserves SolutionMoments; tensor_native/dry_run_compare request a non-authoritative Phase 8 comparison dry run.");
+                   "Compatibility-only Phase 8 Planar MITL moment backend label.  Planar MITL now unconditionally uses tensor-native moment reductions for production Maxwell current sources.");
     cmdp.setOption("phase8MomentCompareAbsTol", &phase8MomentCompareAbsTol,
                    "Absolute tolerance for Phase 8 tensor-vs-legacy rhoRHS/Jx/Jz moment comparisons.");
     cmdp.setOption("phase8MomentCompareRelTol", &phase8MomentCompareRelTol,
@@ -1677,41 +1677,19 @@ int main(int argc, char *argv[])
     
     //  form->vlasovSolution()->setWriteMatrixToFile(true, "/tmp/A_Vlasov.dat");
     
-    const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
-    auto solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form->vlasovSolution(), form->f(), form->configurationSpaceMesh()) );
-    
     FunctionPtr potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
-    
-    auto density    = solutionMoments->solutionMomentFunction(0,0);
-    auto momentum   = solutionMoments->solutionMomentFunction(1,0); // x proper velocity moment
-    auto momentum_z = solutionMoments->solutionMomentFunction(0,1); // second retained component moment; in 1D2V this is z
-    
-    auto velocity   = momentum   / density;
-    auto velocity_z = momentum_z / density;
-    
-    auto relativisticForm = Teuchos::rcp_dynamic_cast<RelativisticVlasovSpaceTimeFormulation>(form);
-    TEUCHOS_TEST_FOR_EXCEPTION(relativisticForm == Teuchos::null, std::invalid_argument, "Expected RelativisticVlasovSpaceTimeFormulation in PlanarMITLRelativisticSpaceTime");
-    auto Jx = relativisticForm->currentX();
-    auto Jz = relativisticForm->currentZ();
-    auto vx_rel_mean = Jx / (q * density);
-    auto vz_rel_mean = Jz / (q * density);
+    FunctionPtr density = Teuchos::null;
+    FunctionPtr velocity = Teuchos::null;
+    FunctionPtr velocity_z = Teuchos::null;
+    FunctionPtr Jx = Teuchos::null;
+    FunctionPtr Jz = Teuchos::null;
+    FunctionPtr vx_rel_mean = Teuchos::null;
+    FunctionPtr vz_rel_mean = Teuchos::null;
+    FunctionPtr vx_rel_mean_clipped = Teuchos::null;
+    FunctionPtr vz_rel_mean_clipped = Teuchos::null;
     
     const int speciesOrdinal = 0;
     auto f_soln = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
-    auto f_positive = Function::max(f_soln, Function::constant(0.0));
-    auto f_positive_soln = Solution::solution(form->vlasovMesh());
-    {
-      std::map<int,FunctionPtr> projectionMap;
-      projectionMap[form->f(speciesOrdinal)->ID()] = f_positive;
-      f_positive_soln->projectOntoMesh(projectionMap);
-    }
-    auto positiveMoments = Teuchos::rcp(new SolutionMoments(maxMomentNumber, f_positive_soln, form->f(speciesOrdinal), form->configurationSpaceMesh()));
-    positiveMoments->update();
-    auto density_positive = positiveMoments->solutionMomentFunction(0,0);
-    auto vx_rel_positive_moment = relativisticForm->relativisticFirstMoment(0, speciesOrdinal, positiveMoments.get(), f_positive_soln);
-    auto vz_rel_positive_moment = relativisticForm->relativisticFirstMoment(1, speciesOrdinal, positiveMoments.get(), f_positive_soln);
-    auto vx_rel_mean_clipped = vx_rel_positive_moment / density_positive;
-    auto vz_rel_mean_clipped = vz_rel_positive_moment / density_positive;
         
     if (!useAdaptivity)
     {
@@ -1774,92 +1752,60 @@ int main(int argc, char *argv[])
         
         if (rank == 0)
         {
-          std::cout << "Updating solution moments.\n";
+          std::cout << "Updating tensor-native moment diagnostics.\n";
         }
         
         auto phase0MomentUpdateStart = phase0.now();
-        solutionMoments->update();
-        positiveMoments->update();
-
-        if (phase8MomentBackendRequestsDryRunComparison(phase8MomentBackend))
-        {
-          auto phase8MomentComparisonStart = phase0.now();
-          auto legacyReference = phase8BuildLegacyMomentReferenceData(solutionMoments->physicalCellIDs(),
-                                                                      form->configurationSpaceMesh(),
-                                                                      density,
-                                                                      Jx,
-                                                                      Jz,
-                                                                      q,
-                                                                      eps0,
-                                                                      n0);
-          const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                                                                 : phase8DefaultVelocityQuadratureDegree(form->vlasovSolution(),
-                                                                                                                                         solutionMoments->physicalCellIDs());
-          auto sampledInput = phase8SampleVlasovSolutionIntoMomentInput1D2V(solutionMoments->physicalCellIDs(),
-                                                                            form->configurationSpaceMesh(),
-                                                                            form->vlasovSolution(),
-                                                                            form->f(speciesOrdinal),
-                                                                            uxMin,
-                                                                            uxMax,
-                                                                            uyMin,
-                                                                            uyMax,
-                                                                            vxElements,
-                                                                            vyElements,
-                                                                            phase8VelocityQuadratureDegree);
-          const int numTensorEntries = sampledInput.numConfigurationCells * sampledInput.numPointsPerConfigurationCell;
-          std::vector<double> n0Values(numTensorEntries, n0);
-          auto tensorMomentData = TensorMaxwell1D2VMomentReductionPipeline::buildRHSMomentData(sampledInput.numConfigurationCells,
-                                                                                              sampledInput.numPointsPerConfigurationCell,
-                                                                                              {q},
-                                                                                              eps0,
-                                                                                              {sampledInput.speciesVlasovValues},
-                                                                                              sampledInput.velocityPoints,
-                                                                                              sampledInput.velocityWeights,
-                                                                                              n0Values,
-                                                                                              true,
-                                                                                              cScaled);
-          auto comparison = TensorPlanarMITLMomentComparisonAdapter::compare(tensorMomentData, legacyReference, phase8MomentCompareRelFloor);
-          const bool phase8WithinTolerance = comparison.within(phase8MomentCompareAbsTol, phase8MomentCompareRelTol);
-          const std::string phase8Status = phase8WithinTolerance ? "tensor_vs_legacy_compare_within_tolerance" : "tensor_vs_legacy_compare_exceeds_tolerance";
-          if (rank == 0)
-          {
-            std::cout << "Phase 8 moment backend '" << phase8MomentBackend
-                      << "' is running in legacy-authoritative dry-run mode. "
-                      << "Compared tensor-native sampled Vlasov moment data against legacy Maxwell RHS moment reference data for "
-                      << legacyReference.numConfigurationCells() << " local configuration cells and "
-                      << legacyReference.numPointsPerConfigurationCell() << " points per cell using "
-                      << sampledInput.velocityWeights.extent(0) << " velocity quadrature points; status="
-                      << phase8Status << ".\n";
-          }
-          phase0.logDuration("phase8_moment_compare", phase0.elapsedSince(phase8MomentComparisonStart),
-                             {{"slab", std::to_string(timeSlabOrdinal)},
-                              {"moment_backend", phase8MomentBackend},
-                              {"status", phase8Status},
-                              {"local_config_cells", std::to_string(legacyReference.numConfigurationCells())},
-                              {"points_per_cell", std::to_string(legacyReference.numPointsPerConfigurationCell())},
-                              {"velocity_points", std::to_string(sampledInput.velocityWeights.extent(0))},
-                              {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)},
-                              {"abs_tol", phase0DoubleString(phase8MomentCompareAbsTol)},
-                              {"rel_tol", phase0DoubleString(phase8MomentCompareRelTol)},
-                              {"rel_floor", phase0DoubleString(phase8MomentCompareRelFloor)},
-                              {"within_tolerance", phase8WithinTolerance ? "1" : "0"},
-                              {"rho_abs", phase0DoubleString(comparison.rhoRHS.maxAbsDifference)},
-                              {"rho_rel", phase0DoubleString(comparison.rhoRHS.maxRelDifference)},
-                              {"jx_abs", phase0DoubleString(comparison.Jx.maxAbsDifference)},
-                              {"jx_rel", phase0DoubleString(comparison.Jx.maxRelDifference)},
-                              {"jz_abs", phase0DoubleString(comparison.Jz.maxAbsDifference)},
-                              {"jz_rel", phase0DoubleString(comparison.Jz.maxRelDifference)}});
-          TEUCHOS_TEST_FOR_EXCEPTION(phase8MomentCompareStrict && !phase8WithinTolerance, std::runtime_error,
-                                     "Phase 8 tensor-vs-legacy moment comparison exceeded configured tolerances.");
-        }
+        const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
+        std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
+        const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
+                                                                                               : phase8DefaultVelocityQuadratureDegree(form->vlasovSolution(),
+                                                                                                                                       configurationCellIDs);
+        auto sampledInput = phase8SampleVlasovSolutionIntoMomentInput1D2V(configurationCellIDs,
+                                                                          form->configurationSpaceMesh(),
+                                                                          form->vlasovSolution(),
+                                                                          form->f(speciesOrdinal),
+                                                                          uxMin,
+                                                                          uxMax,
+                                                                          uyMin,
+                                                                          uyMax,
+                                                                          vxElements,
+                                                                          vyElements,
+                                                                          phase8VelocityQuadratureDegree);
+        const int numTensorEntries = sampledInput.numConfigurationCells * sampledInput.numPointsPerConfigurationCell;
+        std::vector<double> n0Values(numTensorEntries, n0);
+        auto tensorMomentData = TensorMaxwell1D2VMomentReductionPipeline::buildRHSMomentData(sampledInput.numConfigurationCells,
+                                                                                            sampledInput.numPointsPerConfigurationCell,
+                                                                                            {q},
+                                                                                            eps0,
+                                                                                            {sampledInput.speciesVlasovValues},
+                                                                                            sampledInput.velocityPoints,
+                                                                                            sampledInput.velocityWeights,
+                                                                                            n0Values,
+                                                                                            true,
+                                                                                            cScaled);
+        auto rhoRHS = TensorMaxwellRHSFunctionAdapter::rhoRHSFunction(tensorMomentData);
+        density = (eps0 / q) * rhoRHS + Function::constant(n0);
+        Jx = TensorMaxwellRHSFunctionAdapter::JxFunction(tensorMomentData);
+        Jz = TensorMaxwellRHSFunctionAdapter::JzFunction(tensorMomentData);
+        vx_rel_mean = Jx / (q * density);
+        vz_rel_mean = Jz / (q * density);
+        velocity = vx_rel_mean;
+        velocity_z = vz_rel_mean;
+        vx_rel_mean_clipped = vx_rel_mean;
+        vz_rel_mean_clipped = vz_rel_mean;
 
         phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),
                            {{"slab", std::to_string(timeSlabOrdinal)},
-                            {"moment_backend", phase8MomentBackend}});
+                            {"moment_backend", "tensor_native"},
+                            {"local_config_cells", std::to_string(sampledInput.numConfigurationCells)},
+                            {"points_per_cell", std::to_string(sampledInput.numPointsPerConfigurationCell)},
+                            {"velocity_points", std::to_string(sampledInput.velocityWeights.extent(0))},
+                            {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
         
         if (rank == 0)
         {
-          std::cout << "Solution moments updated.\n";
+          std::cout << "Tensor-native moment diagnostics updated.\n";
         }
         
         if (saveViz)
@@ -1955,15 +1901,7 @@ int main(int argc, char *argv[])
         vz_rel_mean = Teuchos::null;
         vx_rel_mean_clipped = Teuchos::null;
         vz_rel_mean_clipped = Teuchos::null;
-        vx_rel_positive_moment = Teuchos::null;
-        vz_rel_positive_moment = Teuchos::null;
-        density_positive = Teuchos::null;
-        positiveMoments = Teuchos::null;
-        f_positive_soln = Teuchos::null;
-        f_positive = Teuchos::null;
         density = Teuchos::null;
-        momentum = Teuchos::null;
-        momentum_z = Teuchos::null;
         velocity = Teuchos::null;
         velocity_z = Teuchos::null;
         potential = Teuchos::null;
@@ -1976,41 +1914,18 @@ int main(int argc, char *argv[])
                            {{"completed_slab", std::to_string(timeSlabOrdinal)}});
         
         {
-          // solutions have been recreated for the new slab.  We need to update anything that depends on the solution
-          const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
-          solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form->vlasovSolution(), form->f(), form->configurationSpaceMesh()) );
-          
+          // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
           potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
-          
-          density    = solutionMoments->solutionMomentFunction(0,0);
-          momentum   = solutionMoments->solutionMomentFunction(1,0); // x proper-velocity moment
-          momentum_z = solutionMoments->solutionMomentFunction(0,1); // second retained component; z in 1D2V
-          
-          velocity   = momentum   / density; // x raw moment ratio
-          velocity_z = momentum_z / density;
-          
-          relativisticForm = Teuchos::rcp_dynamic_cast<RelativisticVlasovSpaceTimeFormulation>(form);
-          TEUCHOS_TEST_FOR_EXCEPTION(relativisticForm == Teuchos::null, std::invalid_argument, "Expected RelativisticVlasovSpaceTimeFormulation in PlanarMITLRelativisticSpaceTime");
-          Jx = relativisticForm->currentX();
-          Jz = relativisticForm->currentZ();
-          vx_rel_mean = Jx / (q * density);
-          vz_rel_mean = Jz / (q * density);
-          
+          density = Teuchos::null;
+          velocity = Teuchos::null;
+          velocity_z = Teuchos::null;
+          Jx = Teuchos::null;
+          Jz = Teuchos::null;
+          vx_rel_mean = Teuchos::null;
+          vz_rel_mean = Teuchos::null;
+          vx_rel_mean_clipped = Teuchos::null;
+          vz_rel_mean_clipped = Teuchos::null;
           f_soln = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
-          f_positive = Function::max(f_soln, Function::constant(0.0));
-          f_positive_soln = Solution::solution(form->vlasovMesh());
-          {
-            std::map<int,FunctionPtr> projectionMap;
-            projectionMap[form->f(speciesOrdinal)->ID()] = f_positive;
-            f_positive_soln->projectOntoMesh(projectionMap);
-          }
-          positiveMoments = Teuchos::rcp(new SolutionMoments(maxMomentNumber, f_positive_soln, form->f(speciesOrdinal), form->configurationSpaceMesh()));
-          positiveMoments->update();
-          density_positive = positiveMoments->solutionMomentFunction(0,0);
-          vx_rel_positive_moment = relativisticForm->relativisticFirstMoment(0, speciesOrdinal, positiveMoments.get(), f_positive_soln);
-          vz_rel_positive_moment = relativisticForm->relativisticFirstMoment(1, speciesOrdinal, positiveMoments.get(), f_positive_soln);
-          vx_rel_mean_clipped = vx_rel_positive_moment / density_positive;
-          vz_rel_mean_clipped = vz_rel_positive_moment / density_positive;
         }
       }
     }
@@ -2124,11 +2039,52 @@ int main(int argc, char *argv[])
           }
           
           auto phase0AdaptiveMomentUpdateStart = phase0.now();
-          solutionMoments->update();
-          positiveMoments->update();
+          const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
+          std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
+          const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
+                                                                                                 : phase8DefaultVelocityQuadratureDegree(form->vlasovSolution(),
+                                                                                                                                         configurationCellIDs);
+          auto sampledInput = phase8SampleVlasovSolutionIntoMomentInput1D2V(configurationCellIDs,
+                                                                            form->configurationSpaceMesh(),
+                                                                            form->vlasovSolution(),
+                                                                            form->f(speciesOrdinal),
+                                                                            uxMin,
+                                                                            uxMax,
+                                                                            uyMin,
+                                                                            uyMax,
+                                                                            vxElements,
+                                                                            vyElements,
+                                                                            phase8VelocityQuadratureDegree);
+          const int numTensorEntries = sampledInput.numConfigurationCells * sampledInput.numPointsPerConfigurationCell;
+          std::vector<double> n0Values(numTensorEntries, n0);
+          auto tensorMomentData = TensorMaxwell1D2VMomentReductionPipeline::buildRHSMomentData(sampledInput.numConfigurationCells,
+                                                                                              sampledInput.numPointsPerConfigurationCell,
+                                                                                              {q},
+                                                                                              eps0,
+                                                                                              {sampledInput.speciesVlasovValues},
+                                                                                              sampledInput.velocityPoints,
+                                                                                              sampledInput.velocityWeights,
+                                                                                              n0Values,
+                                                                                              true,
+                                                                                              cScaled);
+          auto rhoRHS = TensorMaxwellRHSFunctionAdapter::rhoRHSFunction(tensorMomentData);
+          density = (eps0 / q) * rhoRHS + Function::constant(n0);
+          Jx = TensorMaxwellRHSFunctionAdapter::JxFunction(tensorMomentData);
+          Jz = TensorMaxwellRHSFunctionAdapter::JzFunction(tensorMomentData);
+          vx_rel_mean = Jx / (q * density);
+          vz_rel_mean = Jz / (q * density);
+          velocity = vx_rel_mean;
+          velocity_z = vz_rel_mean;
+          vx_rel_mean_clipped = vx_rel_mean;
+          vz_rel_mean_clipped = vz_rel_mean;
           phase0.logDuration("adaptive_moment_update", phase0.elapsedSince(phase0AdaptiveMomentUpdateStart),
                              {{"slab", std::to_string(timeSlabOrdinal)},
-                              {"refinement", std::to_string(refinementNumber)}});
+                              {"refinement", std::to_string(refinementNumber)},
+                              {"moment_backend", "tensor_native"},
+                              {"local_config_cells", std::to_string(sampledInput.numConfigurationCells)},
+                              {"points_per_cell", std::to_string(sampledInput.numPointsPerConfigurationCell)},
+                              {"velocity_points", std::to_string(sampledInput.velocityWeights.extent(0))},
+                              {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
           
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
           
@@ -2265,15 +2221,7 @@ int main(int argc, char *argv[])
           vz_rel_mean = Teuchos::null;
           vx_rel_mean_clipped = Teuchos::null;
           vz_rel_mean_clipped = Teuchos::null;
-          vx_rel_positive_moment = Teuchos::null;
-          vz_rel_positive_moment = Teuchos::null;
-          density_positive = Teuchos::null;
-          positiveMoments = Teuchos::null;
-          f_positive_soln = Teuchos::null;
-          f_positive = Teuchos::null;
           density = Teuchos::null;
-          momentum = Teuchos::null;
-          momentum_z = Teuchos::null;
           velocity = Teuchos::null;
           velocity_z = Teuchos::null;
           potential = Teuchos::null;
@@ -2286,41 +2234,18 @@ int main(int argc, char *argv[])
                              {{"completed_slab", std::to_string(timeSlabOrdinal)}});
           
           {
-            // solutions have been recreated for the new slab.  We need to update anything that depends on the solution
-            const int maxMomentNumber = 1; // we want both density (moment 0) and momentum (moment 1)
-            solutionMoments = Teuchos::rcp( new SolutionMoments(maxMomentNumber, form->vlasovSolution(), form->f(), form->configurationSpaceMesh()) );
-            
+            // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
             potential = Function::solution(form->configurationSpaceFormulation()->VE_fieldVar(), form->configurationSpaceSolution());
-            
-            density    = solutionMoments->solutionMomentFunction(0,0);
-            momentum   = solutionMoments->solutionMomentFunction(1,0); // x proper-velocity moment
-            momentum_z = solutionMoments->solutionMomentFunction(0,1); // second retained component; z in 1D2V
-            
-            velocity   = momentum   / density; // x raw moment ratio
-            velocity_z = momentum_z / density;
-            
-            relativisticForm = Teuchos::rcp_dynamic_cast<RelativisticVlasovSpaceTimeFormulation>(form);
-            TEUCHOS_TEST_FOR_EXCEPTION(relativisticForm == Teuchos::null, std::invalid_argument, "Expected RelativisticVlasovSpaceTimeFormulation in PlanarMITLRelativisticSpaceTime");
-            Jx = relativisticForm->currentX();
-            Jz = relativisticForm->currentZ();
-            vx_rel_mean = Jx / (q * density);
-            vz_rel_mean = Jz / (q * density);
-            
+            density = Teuchos::null;
+            velocity = Teuchos::null;
+            velocity_z = Teuchos::null;
+            Jx = Teuchos::null;
+            Jz = Teuchos::null;
+            vx_rel_mean = Teuchos::null;
+            vz_rel_mean = Teuchos::null;
+            vx_rel_mean_clipped = Teuchos::null;
+            vz_rel_mean_clipped = Teuchos::null;
             f_soln = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
-            f_positive = Function::max(f_soln, Function::constant(0.0));
-            f_positive_soln = Solution::solution(form->vlasovMesh());
-            {
-              std::map<int,FunctionPtr> projectionMap;
-              projectionMap[form->f(speciesOrdinal)->ID()] = f_positive;
-              f_positive_soln->projectOntoMesh(projectionMap);
-            }
-            positiveMoments = Teuchos::rcp(new SolutionMoments(maxMomentNumber, f_positive_soln, form->f(speciesOrdinal), form->configurationSpaceMesh()));
-            positiveMoments->update();
-            density_positive = positiveMoments->solutionMomentFunction(0,0);
-            vx_rel_positive_moment = relativisticForm->relativisticFirstMoment(0, speciesOrdinal, positiveMoments.get(), f_positive_soln);
-            vz_rel_positive_moment = relativisticForm->relativisticFirstMoment(1, speciesOrdinal, positiveMoments.get(), f_positive_soln);
-            vx_rel_mean_clipped = vx_rel_positive_moment / density_positive;
-            vz_rel_mean_clipped = vz_rel_positive_moment / density_positive;
             
             bcFunctionsToResolve = bcFunctions(form, f_leftInflow);
           }

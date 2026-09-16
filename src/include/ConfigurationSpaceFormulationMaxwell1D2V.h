@@ -91,6 +91,9 @@ namespace Camellia
     //! Allows tensor-native Vlasov moment reduction to provide Maxwell RHS-ready point data.
     void setCurrentSources(const TensorMaxwellRHSMomentData &momentData);
 
+    //! Permittivity used by Maxwell RHS source scaling.
+    double eps0() const;
+
     //! Tensor-native H1 point-value trace descriptors for the 1D Maxwell unknowns E_x, B_y, phi, and A.
     static std::vector<TensorTraceDescriptor> tensorH1PointTraceDescriptors1D();
 

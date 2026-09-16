@@ -89,6 +89,9 @@ public:
   FunctionPtr currentX() const override;
   FunctionPtr currentY() const override;
   FunctionPtr currentZ() const override;
+
+  bool useRelativisticCurrentMoments() const override;
+  double currentMomentLightSpeed() const override;
 };
 
 }

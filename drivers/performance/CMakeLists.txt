@@ -701,34 +701,8 @@ if (TARGET PlanarMITLRelativisticSpaceTime)
     VERBATIM)
 
   add_custom_target(runPhase0PerformanceSmallPhase8MomentCompare
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHASE0_PLANAR_MITL_OUTPUT_DIR}/small-phase8-moment-compare"
-    COMMAND ${CMAKE_COMMAND} -E remove -f "${PHASE0_PLANAR_MITL_OUTPUT_DIR}/small-phase8-moment-compare/timing.log"
-    COMMAND ${CMAKE_COMMAND} -E env OMP_NUM_THREADS=1 OMP_PROC_BIND=spread OMP_PLACES=threads
-            ${PHASE0_MPI_1RANK_COMMAND} $<TARGET_FILE:PlanarMITLRelativisticSpaceTime>
-            --vElements=2
-            --xElements=8
-            --maxDofsForDirectSolve=0
-            --tElements=1
-            --numUniformRefinements=0
-            --p=4
-            --dp=2
-            --tWidth=1e-1
-            --numTimeSlabs=2
-            --ratio=1.5
-            --outputDir=${PHASE0_PLANAR_MITL_OUTPUT_DIR}/small-phase8-moment-compare
-            --minSubsteps=2
-            --fixedPointTol=1e-4
-            --useSerendipityBasis
-            --J=5e8
-            --V=1.5e7
-            --noViz
-            --phase0Instrumentation
-            --phase0TensorGraphSchurBackend=off
-            --phase8MomentBackend=compare
-            --phase8MomentCompareStrict
-            --phase0TimingFile=${PHASE0_PLANAR_MITL_OUTPUT_DIR}/small-phase8-moment-compare/timing.log
-    DEPENDS PlanarMITLRelativisticSpaceTime
-    COMMENT "Running opt-in Phase 8 small Planar MITL strict tensor-vs-legacy moment comparison on one MPI rank"
+    COMMAND ${CMAKE_COMMAND} -E echo "runPhase0PerformanceSmallPhase8MomentCompare is disabled: accepted accuracy data is recorded, and the legacy direct-quadrature comparison path is too slow for routine runs."
+    COMMENT "Phase 8 small Planar MITL strict tensor-vs-legacy moment comparison disabled"
     VERBATIM)
 
   add_custom_target(runPhase0PerformanceCompareGraphSchur
