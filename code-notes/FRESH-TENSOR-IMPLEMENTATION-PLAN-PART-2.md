@@ -42,6 +42,10 @@ The RowMatrix smoke diagnostics show that the current local-flat RowMatrix adapt
 
 The Ifpack2 Chebyshev smoke outputs show that the Chebyshev recurrence can be exercised against the local-flat diagnostic operator and compared to a matching host-side recurrence.  The separate inverse/action calibration diagnostics may still expose parameter or endpoint-estimate issues; those should be treated as preconditioner-calibration work, not as evidence against the tensor contraction kernels.
 
+## TensorFunction host-evaluation dispatch status
+
+The recent TensorFunction host-evaluation failure was an overload-dispatch / recursion hazard, not a change in device semantics.  `TensorFunction::valuesOnHost(...)` should be read as an explicit overload-dispatch guard: it keeps decorated/composed functions from re-entering the wrong host overload while still preserving the normal device-view evaluation contract.  On host-accessible non-CUDA/HIP builds the path now dispatches directly to the correctly typed `values(PointView, ValueView)` overload, avoiding the previous allocation/copy round trip.  Regression coverage exercises both `valuesOnHost(PointViewHost, ValueViewHost)` and `values(PointViewHost, ValueViewHost)` for a non-solution-dependent composed/decorated function, so this crash/workaround item is no longer a Phase 8 blocker.
+
 ## Deferred: unit-column optimization for assemble2
 
 The unit-column optimization is deferred until we can design and implement it as a carefully measured BLAS-only path.  A future implementation should be close to the existing high-performance contraction machinery and should avoid sparse coordinate logic in the hot kernels.
@@ -175,18 +179,23 @@ Phase 8 integration policy:
 
 Phase 8 near-term tasks:
 
-- register the temporary Planar MITL moment backend flag and record the selected backend in Phase 0 timing logs;
-- build a correctness comparison that samples the current Vlasov `f` coefficients through `TensorSolution`/tensor evaluators and compares tensor-native density/current reductions with `SolutionMoments` on the small baseline;
+- re-run the opt-in `runPhase0PerformanceSmallPhase8MomentCompare` strict comparison target and require `within_tolerance=1` for `rhoRHS`, `Jx`, and `Jz` before declaring the sampled tensor-vs-legacy moment comparison correct;
+- if the small target passes, run the opt-in `runPhase0PerformanceMediumPhase8MomentCompare` target and inspect both correctness fields and Phase 0 timing labels.  These targets are intentionally not default CI because the Planar MITL solve/comparison runs are long;
 - add a tensor-native Planar MITL moment update path below the `FunctionPtr`/RHS layer using `TensorMomentReduction` and `TensorMaxwell1D2VMomentReductionPipeline`;
 - only after correctness and baseline timing pass, replace the legacy `SolutionMoments` update in the production Planar MITL loop.
 
 Phase 8 progress notes:
 
-- the temporary Planar MITL `phase8MomentBackend` flag is registered and timing metadata now records the selected moment backend while defaulting to the unchanged legacy path;
+- the temporary Planar MITL `phase8MomentBackend` flag is registered and timing metadata now records the selected moment backend while defaulting to the unchanged legacy path.  Supported values are `legacy`, `tensor_native`, `dry_run_compare`, and `compare`; the non-legacy values are still legacy-authoritative comparison requests rather than production hard-bypass modes;
 - `TensorSolution` exposes host volume-value and 1D2V configuration/velocity-matrix evaluation helpers so Vlasov `f` coefficient storage can feed moment reductions directly;
-- `TensorMaxwell1D2VMomentReductionPipeline` can now build Maxwell RHS moment payloads from one or more `TensorSolution` species inputs;
-- `TensorPlanarMITLMomentComparisonAdapter` records fieldwise max absolute/relative differences for `rhoRHS`, `Jx`, and `Jz`, providing the metric container needed by the upcoming driver dry-run/comparison mode;
-- the Planar MITL driver now treats `tensor_native`, `dry_run_compare`, and `compare` as legacy-authoritative Phase 8 dry-run requests instead of aborting immediately.  The current scaffold packs the authoritative legacy `density`, `Jx`, and `Jz` functions into a `TensorMaxwellRHSMomentData` reference payload on the rank-local configuration cells, runs a zero-difference `TensorPlanarMITLMomentComparisonAdapter` self-check, and logs a `phase8_moment_compare` Phase 0 event with status `legacy_reference_self_check_pending_tensor_solution_bridge`; the next implementation step is to wire the live Vlasov `Solution` coefficients into `TensorSolution`/`TensorCoefficientValueEvaluator` or an equivalent sampled `HostMatrix`, run `TensorMaxwell1D2VMomentReductionPipeline`, and replace the self-check with real tensor-vs-legacy `rhoRHS`/`Jx`/`Jz` comparisons on identical configuration points.
+- `TensorMaxwell1D2VMomentReductionPipeline` can now build Maxwell RHS moment payloads from one or more `TensorSolution` species inputs, and it has an explicit `useRelativisticCurrentMoments` / `lightSpeed` path for current reductions using `u_i/gamma` rather than proper-velocity moments;
+- `TensorPlanarMITLMomentComparisonAdapter` records fieldwise max absolute/relative differences for `rhoRHS`, `Jx`, and `Jz`.  The Planar MITL driver logs these in the `phase8_moment_compare` Phase 0 event together with `within_tolerance`, selected backend, local configuration cell count, points per cell, velocity point count, velocity quadrature degree, absolute tolerance, relative tolerance, and relative-denominator floor;
+- the Planar MITL driver now builds a real sampled comparison: after the authoritative `solutionMoments->update()` / `positiveMoments->update()` calls, it packs the legacy `density`, `currentX()`, and `currentZ()` functions into a `TensorMaxwellRHSMomentData` reference payload on rank-local configuration cells, samples live Vlasov `f` values from `form->vlasovSolution()` into a `TensorMaxwell1D2VMomentReductionPipeline::HostMatrix`, runs the tensor moment pipeline, and compares tensor `rhoRHS`/`Jx`/`Jz` against the legacy reference at identical configuration points;
+- the sampled comparison now integrates velocity space cell by cell across the retained velocity elements (`vxElements`/`vyElements`) instead of applying a single global quadrature rule over the whole velocity interval.  The default negative `phase8MomentVelocityQuadratureDegree` is being tightened to use the maximum local phase-space cell cubature degree, matching the direct legacy relativistic-current path more closely than the earlier `H1Order` default;
+- comparison controls are explicit: `phase8MomentCompareAbsTol` (default `1e-10`), `phase8MomentCompareRelTol` (default `1e-8`), `phase8MomentCompareRelFloor` (default `1e-14`), `phase8MomentCompareStrict` / `noPhase8MomentCompareStrict`, and `phase8MomentVelocityQuadratureDegree` (negative means use the local phase-space cubature-degree default);
+- relativistic-current semantics are now covered in multiple places: tensor pipeline tests distinguish proper-velocity moments from gamma-weighted current moments; a synthetic analytic `f = gamma`-style regression validates the current path; and `SolutionMomentFunction.RelativisticFirstMomentFunctionMatchesDirectQuadrature` protects the legacy `RelativisticFirstMomentFunction` implementation;
+- the legacy relativistic current bug found during Phase 8 has been fixed.  `RelativisticFirstMomentFunction::update()` no longer builds a lossy projected weighted solution, and `values()` now performs direct velocity-cell quadrature of `f * u_i / sqrt(1 + |u|^2/c^2)` using mapped velocity weights.  This is the key correctness repair needed for relativistic-to-relativistic tensor/legacy equivalence;
+- the last recorded small strict comparison artifact still failed before this pass (`rho` agreed to roundoff, while `Jx`/`Jz` exceeded tolerance).  Treat that as a stale/diagnostic failure to be re-run after the direct-quadrature legacy fix and the matching default velocity quadrature update.  Phase 8 is not complete until small and medium Planar MITL compare runs report `within_tolerance=1` and the serial CPU `moment_update`/comparison timings are reviewed.
 
 ### Phase 9: global solve and preconditioning path
 
@@ -238,15 +247,20 @@ The Vlasov-Maxwell coupling should be treated as an explicit fixed-point loop in
 
 ## Remaining answers that would maximize autonomous progress
 
-Most of the previously open semantic questions are now answered well enough to proceed on isolated L2 volume terms, dimension-split traces, scalar solution-dependent coefficients, moments, and the scalar coupled `gamma` coefficient.  The remaining decisions that would most improve autonomous progress are:
+Phase 8 completion gates now supersede the older open-question list for moment work:
 
-1. **Pick the first concrete L2 volume term.**  Name the exact Vlasov bilinear term to implement first, including trial variable, test variable, operator on each side, coefficient, sign, and which component dimensions it spans.  If there is no preference, start with the smallest scalar constant-coefficient `(L2,L2)` or `(L2,HGRAD)` term already present in the Planar MITL formulation and keep all other terms guarded.
-2. **Specify trace orientation/sign conventions in code-facing terms.**  The plan now records outward-facing normals and dimension-orthogonal skeleton variables, but implementation still needs the exact plus/minus, left/right, or inflow/outflow naming convention expected by the existing Vlasov formulation and tests.
-3. **Define moment formulas and storage layout.**  For the Maxwell RHS and diagnostics, specify the exact moments needed first, the velocity-space weights including where `gamma` enters, quadrature order expectations, and the target layout for writing the reduced data back into Maxwell coefficient/RHS structures.
-4. **Define fixed-point lifecycle details.**  State the intended initial field guess, update order, convergence metric, relaxation policy if any, and whether Vlasov and Maxwell coefficient data should be cached per nonlinear iteration, per time slab, or per assembly/apply call.
-5. **Identify the first H1 trace target for Maxwell/Poisson.**  In 1D configuration space these are point values at interfaces, but the first concrete unknown and term should be named before implementation.
+1. Re-run the opt-in `runPhase0PerformanceSmallPhase8MomentCompare` target after the direct legacy relativistic-current quadrature fix and the matching default velocity quadrature update.  Acceptance requires `PHASE0_TIMING event=phase8_moment_compare ... within_tolerance=1` for `rhoRHS`, `Jx`, and `Jz`.
+2. Re-run the opt-in `runPhase0PerformanceMediumPhase8MomentCompare` target once the small gate passes.  Keep both comparison targets opt-in; do not add long sweeps to default CI.
+3. Compare `PHASE0_TIMING event=moment_update` and `phase8_moment_compare` timings with backend labels on the small and medium serial-CPU baselines.  Do not hard-bypass `SolutionMoments` until correctness passes and the tensor-native moment path is competitive enough to justify replacing the legacy update.
+4. If both comparison gates pass, add the production handoff that writes tensor-native moment data below the `FunctionPtr`/RHS layer while preserving a runtime fallback to the legacy `SolutionMoments` path.
 
-These are not blockers for beginning the first fail-fast scalar L2 volume adapter, but answering them soon will reduce rework once traces, moments, and solution-dependent coefficients are unguarded.
+Questions needed before Phase 9 can start in earnest:
+
+1. What exact performance threshold is required to hard-bypass `SolutionMoments` on the Phase 8 small and medium gates: merely no regression in `moment_update`, a fixed speedup, or a broader slab-time/memory criterion?
+2. Should the hard-bypass remain controlled by a runtime flag for one or more releases, or should `tensor_native` become the default once the Phase 8 gates pass?
+3. Should Phase 9 treat `TensorSolution` ownership as Vlasov-`f` only, or should Maxwell coefficient storage be migrated into the same ownership/import model before global operator/preconditioner work begins?
+4. Which global solve/preconditioning target should come first: a matrix-free operator with correct Tpetra maps/import/export, a tensor diagonal/block-diagonal preconditioner, a local Gram-inverse ingredient, or Chebyshev calibration against the real FE graph?
+5. What visualization/API contract is expected for TensorSolution-backed outputs beyond the currently merged field-variable GLVis hooks, especially for trace and flux variables?
 
 ## Current Phase 6/7 production-integration checkpoint
 
