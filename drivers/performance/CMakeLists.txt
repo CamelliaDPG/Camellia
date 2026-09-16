@@ -540,8 +540,8 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --ifpack2ChebyshevSmoke=1
     --inverseInitialGuess=zero
     --numInverseIterations=10
-    --inverseMaxResidualReduction=0.99
-    --inverseEigenRatio=30.0
+    --inverseMaxResidualReduction=-1
+    --inverseEigenRatio=30000.0
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
@@ -558,8 +558,8 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --inverseDiagnosticRequireAssembledReference=0
     --inverseInitialGuess=zero
     --numInverseIterations=10
-    --inverseMaxResidualReduction=0.99
-    --inverseEigenRatio=30.0
+    --inverseMaxResidualReduction=-1
+    --inverseEigenRatio=30000.0
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
@@ -576,8 +576,8 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --inverseDiagnosticRequireAssembledReference=0
     --inverseInitialGuess=zero
     --numInverseIterations=20
-    --inverseMaxResidualReduction=0.99
-    --inverseEigenRatio=30.0
+    --inverseMaxResidualReduction=-1
+    --inverseEigenRatio=30000.0
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
