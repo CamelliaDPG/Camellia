@@ -345,10 +345,12 @@ namespace
                                                    coefficients[trialComponent] * coefficients[testComponent],
                                                    Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                    Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+            const size_t firstNewTerm = terms.size();
             Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, graphTerm,
                                                              "vlasov_graph_norm_" + derivativeLabels[trialComponent] + "_" + derivativeLabels[testComponent],
                                                              graphEvaluationContext);
-            terms.back().weight *= stiffnessWeight;
+            for (size_t termOrdinal=firstNewTerm; termOrdinal<terms.size(); termOrdinal++)
+              terms[termOrdinal].weight *= stiffnessWeight;
           }
         }
         return terms;
@@ -1779,12 +1781,11 @@ namespace
     }
     else if (inverseSpectralEstimate == "power")
     {
-      timing.spectralEstimatePath = "matrix_free_power_symmetric_diagonal_scaling_with_extracted_diagonal";
-      timing.lambdaMaxSource = "matrix_free_power_symmetric_diagonal_scaling_with_safety_factor";
+      timing.spectralEstimatePath = "matrix_free_power_ifpack2_left_diagonal_scaling_with_extracted_diagonal";
+      timing.lambdaMaxSource = "matrix_free_power_ifpack2_left_diagonal_scaling_with_safety_factor";
       auto runPowerEstimate = [&](const std::string &tpetraAdapter, const int activeCell)
       {
         std::vector<Scalar> vector(static_cast<size_t>(cells * rows), Scalar(0.0));
-        std::vector<Scalar> scaledInput(vector.size(), Scalar(0.0));
         std::vector<Scalar> applied(vector.size(), Scalar(0.0));
         std::vector<Scalar> scaledOutput(vector.size(), Scalar(0.0));
         for (int c=0; c<cells; c++)
@@ -1822,17 +1823,10 @@ namespace
           if (inputNorm <= std::numeric_limits<Scalar>::epsilon()) throw std::runtime_error("inverse diagnostic power estimate found zero vector");
           for (Scalar &value : vector) value /= inputNorm;
 
-          for (int c=0; c<cells; c++)
-            for (int i=0; i<rows; i++)
-            {
-              const size_t index = static_cast<size_t>(c * rows + i);
-              scaledInput[index] = vector[index] / std::sqrt(diagonal[index]);
-            }
-
           if (tpetraAdapter != "direct")
           {
             auto xHost = X->getLocalViewHost(Tpetra::Access::OverwriteAll);
-            for (size_t index=0; index<scaledInput.size(); index++) xHost(index,0) = scaledInput[index];
+            for (size_t index=0; index<vector.size(); index++) xHost(index,0) = vector[index];
             if (tpetraAdapter == "operator") tpetraOperator->apply(*X, *Y);
             else if (tpetraAdapter == "rowmatrix") tpetraRowMatrix->apply(*X, *Y);
             auto yHost = Y->getLocalViewHost(Tpetra::Access::ReadOnly);
@@ -1840,21 +1834,19 @@ namespace
           }
           else
           {
-            applyVector(scaledInput, applied);
+            applyVector(vector, applied);
           }
 
-          Scalar rayleigh = 0.0;
           Scalar outputNorm = 0.0;
           for (int c=0; c<cells; c++)
             for (int i=0; i<rows; i++)
             {
               const size_t index = static_cast<size_t>(c * rows + i);
-              scaledOutput[index] = applied[index] / std::sqrt(diagonal[index]);
-              rayleigh += vector[index] * scaledOutput[index];
+              scaledOutput[index] = applied[index] / diagonal[index];
               outputNorm += scaledOutput[index] * scaledOutput[index];
             }
           outputNorm = std::sqrt(outputNorm);
-          rawEstimate = std::max(rawEstimate, std::max(std::abs(rayleigh), outputNorm));
+          rawEstimate = outputNorm;
           vector.swap(scaledOutput);
         }
         return rawEstimate;
@@ -1881,12 +1873,11 @@ namespace
     else if (inverseSpectralEstimate == "cell-power")
     {
       timing.perCellSpectralEstimate = 1;
-      timing.spectralEstimatePath = "per_cell_matrix_free_power_symmetric_diagonal_scaling_with_extracted_diagonal";
-      timing.lambdaMaxSource = "per_cell_matrix_free_power_symmetric_diagonal_scaling_with_safety_factor";
+      timing.spectralEstimatePath = "per_cell_matrix_free_power_ifpack2_left_diagonal_scaling_with_extracted_diagonal";
+      timing.lambdaMaxSource = "per_cell_matrix_free_power_ifpack2_left_diagonal_scaling_with_safety_factor";
       auto runCellPowerEstimate = [&](const int activeCell)
       {
         std::vector<Scalar> vector(static_cast<size_t>(cells * rows), Scalar(0.0));
-        std::vector<Scalar> scaledInput(vector.size(), Scalar(0.0));
         std::vector<Scalar> applied(vector.size(), Scalar(0.0));
         std::vector<Scalar> scaledOutput(vector.size(), Scalar(0.0));
         for (int c=0; c<cells; c++)
@@ -1905,26 +1896,17 @@ namespace
           if (inputNorm <= std::numeric_limits<Scalar>::epsilon()) throw std::runtime_error("per-cell inverse diagnostic power estimate found zero vector");
           for (Scalar &value : vector) value /= inputNorm;
 
-          for (int c=0; c<cells; c++)
-            for (int i=0; i<rows; i++)
-            {
-              const size_t index = static_cast<size_t>(c * rows + i);
-              scaledInput[index] = vector[index] / std::sqrt(diagonal[index]);
-            }
-
-          applyVector(scaledInput, applied);
-          Scalar rayleigh = 0.0;
+          applyVector(vector, applied);
           Scalar outputNorm = 0.0;
           for (int c=0; c<cells; c++)
             for (int i=0; i<rows; i++)
             {
               const size_t index = static_cast<size_t>(c * rows + i);
-              scaledOutput[index] = (c == activeCell) ? applied[index] / std::sqrt(diagonal[index]) : Scalar(0.0);
-              rayleigh += vector[index] * scaledOutput[index];
+              scaledOutput[index] = (c == activeCell) ? applied[index] / diagonal[index] : Scalar(0.0);
               outputNorm += scaledOutput[index] * scaledOutput[index];
             }
           outputNorm = std::sqrt(outputNorm);
-          rawEstimate = std::max(rawEstimate, std::max(std::abs(rayleigh), outputNorm));
+          rawEstimate = outputNorm;
           vector.swap(scaledOutput);
         }
         return rawEstimate;
@@ -2631,7 +2613,7 @@ int main(int argc, char *argv[])
     Scalar inverseEigenRatio = 30.0;
     Scalar inverseLambdaMin = -1.0;
     Scalar inverseLambdaMax = -1.0;
-    Scalar inversePowerSafetyFactor = 1.05;
+    Scalar inversePowerSafetyFactor = 1.1;
     Scalar inverseLowerPowerSafetyFactor = 0.95;
     Scalar inverseTolerance = 1e-8;
     Scalar inverseMaxResidualReduction = -1.0;
@@ -2657,7 +2639,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local Richardson or Chebyshev iterations used in inverse-diagnostic mode.");
     cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson or chebyshev local inverse diagnostic recurrence.");
     cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
-    cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free power spectral estimate.");
+    cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free Ifpack2-style D^{-1}A spectral-radius power estimate.");
     cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power lambdaMax estimates before Chebyshev use.");
     cmdp.setOption("inverseLowerSpectralEstimate", &inverseLowerSpectralEstimate, "ratio, user, or assembled-inverse-iteration lower spectral estimate for inverse diagnostics; positive --inverseLambdaMin overrides this choice.");
     cmdp.setOption("inverseLowerSpectralEstimateIterations", &inverseLowerSpectralEstimateIterations, "Iterations for assembled inverse-iteration lower spectral estimate; <=0 reuses --inverseSpectralEstimateIterations.");

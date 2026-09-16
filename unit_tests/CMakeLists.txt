@@ -38,6 +38,7 @@ set(TENSOR_TEST_SOURCES
   TensorPAMatrixTests.cpp
   TensorPAMatrixHGRADTests.cpp
   TensorPAMatrixBridgeTests.cpp
+  TensorVlasovGraphNormChebyshevTests.cpp
   TensorTraceDescriptorTests.cpp
   TensorTraceLayoutTests.cpp
 )
@@ -63,6 +64,7 @@ target_link_libraries(runTensorTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRAR
 
 if (TARGET TensorPoissonPAMatrixDriver)
   add_dependencies(runTensorTests TensorPoissonPAMatrixDriver)
+  target_compile_definitions(runTensorTests PRIVATE TENSOR_POISSON_PAMATRIX_DRIVER_PATH=\"$<TARGET_FILE:TensorPoissonPAMatrixDriver>\")
 endif()
 
 add_test(NAME runTensorTests COMMAND runTensorTests)

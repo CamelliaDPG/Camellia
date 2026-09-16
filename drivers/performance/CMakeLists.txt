@@ -541,7 +541,7 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --inverseInitialGuess=zero
     --numInverseIterations=10
     --inverseMaxResidualReduction=-1
-    --inverseEigenRatio=30000.0
+    --inverseEigenRatio=1.1
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
@@ -559,7 +559,7 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --inverseInitialGuess=zero
     --numInverseIterations=10
     --inverseMaxResidualReduction=-1
-    --inverseEigenRatio=30000.0
+    --inverseEigenRatio=1.1
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
@@ -577,7 +577,7 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --inverseInitialGuess=zero
     --numInverseIterations=20
     --inverseMaxResidualReduction=-1
-    --inverseEigenRatio=30000.0
+    --inverseEigenRatio=1.1
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
