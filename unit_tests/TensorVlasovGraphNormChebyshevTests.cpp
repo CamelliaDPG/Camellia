@@ -278,37 +278,76 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, OracleTrueLambdaMinChebyshevF
   }
 }
 
-TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevSkeletonRunsForP2 )
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevCachedHgradSweepBeyondP2 )
 {
   if (!shouldRunExternalDiagnosticsOnThisRank()) return;
 
-  const DriverRun run = runDriver(
-      "--dim=4 --polyOrder=2 --cellsPerDim=1 "
-      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
-      "--inverseDiagnosticAlgorithm=pmultigrid-chebyshev "
-      "--inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20 "
-      "--inverseTrueEigenDiagnostic=1 "
-      "--inverseLowerSpectralEstimate=true-eigen "
-      "--numInverseIterations=3 --pMultigridChebyshevSmootherIterations=2 --inverseInitialGuess=zero "
-      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+  const std::vector<int> cycleCounts {1, 2};
+  const std::vector<int> smootherDegrees {1, 2, 4};
+  double bestReduction = std::numeric_limits<double>::infinity();
+  int bestP = -1;
+  int bestCycles = -1;
+  int bestSmootherDegree = -1;
 
-  TEST_EQUALITY(run.status, 0);
-  const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
-  const std::vector<double> levels = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridLevels");
-  const std::vector<double> coarseDofs = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridCoarseDofs");
-  TEST_EQUALITY(reductions.size(), static_cast<std::size_t>(1));
-  TEST_EQUALITY(levels.size(), static_cast<std::size_t>(1));
-  TEST_EQUALITY(coarseDofs.size(), static_cast<std::size_t>(1));
-  if (!reductions.empty())
+  for (const int cycles : cycleCounts)
   {
-    std::cout << "VLASOV_GRAPH_NORM_PMULTIGRID_CHEBYSHEV p=2 residualReduction=" << reductions[0]
-              << " levels=" << (levels.empty() ? -1.0 : levels[0])
-              << " coarseDofs=" << (coarseDofs.empty() ? -1.0 : coarseDofs[0])
-              << std::endl;
-    TEST_ASSERT(std::isfinite(reductions[0]));
-    TEST_COMPARE(levels[0], ==, 2.0);
-    TEST_COMPARE(coarseDofs[0], ==, 16.0);
+    for (const int smootherDegree : smootherDegrees)
+    {
+      std::ostringstream args;
+      args << "--dim=4 --polyOrder=2:3 --cellsPerDim=1 "
+           << "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+           << "--inverseDiagnosticAlgorithm=pmultigrid-chebyshev "
+           << "--inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20 "
+           << "--inverseLowerSpectralEstimate=ratio --inverseEigenRatio=30 "
+           << "--numInverseIterations=" << cycles << " "
+           << "--pMultigridChebyshevSmootherIterations=" << smootherDegree << " "
+           << "--pMultigridChebyshevSmootherLowerFraction=0.30 "
+           << "--inverseInitialGuess=zero "
+           << "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000";
+      const DriverRun run = runDriver(args.str());
+
+      TEST_EQUALITY(run.status, 0);
+      const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
+      const std::vector<double> levels = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridLevels");
+      const std::vector<double> coarseDofs = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridCoarseDofs");
+      const std::vector<double> smootherFractions = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridChebyshevSmootherLowerFraction");
+      TEST_EQUALITY(reductions.size(), static_cast<std::size_t>(2));
+      TEST_EQUALITY(levels.size(), static_cast<std::size_t>(2));
+      TEST_EQUALITY(coarseDofs.size(), static_cast<std::size_t>(2));
+      TEST_EQUALITY(smootherFractions.size(), static_cast<std::size_t>(2));
+      for (std::size_t ordinal=0; ordinal<reductions.size(); ordinal++)
+      {
+        const int p = static_cast<int>(ordinal) + 2;
+        int expectedCoarseDofs = 1;
+        for (int d=0; d<4; d++) expectedCoarseDofs *= p;
+        std::cout << "VLASOV_GRAPH_NORM_PMULTIGRID_CHEBYSHEV_SWEEP p=" << p
+                  << " cycles=" << cycles
+                  << " smootherDegree=" << smootherDegree
+                  << " smootherLowerFraction=" << (smootherFractions.empty() ? -1.0 : smootherFractions[ordinal])
+                  << " residualReduction=" << reductions[ordinal]
+                  << " levels=" << (levels.empty() ? -1.0 : levels[ordinal])
+                  << " coarseDofs=" << (coarseDofs.empty() ? -1.0 : coarseDofs[ordinal])
+                  << std::endl;
+        TEST_ASSERT(std::isfinite(reductions[ordinal]));
+        TEST_COMPARE(levels[ordinal], ==, 2.0);
+        TEST_COMPARE(coarseDofs[ordinal], ==, static_cast<double>(expectedCoarseDofs));
+        TEST_FLOATING_EQUALITY(smootherFractions[ordinal], 0.30, 1e-12);
+        if (reductions[ordinal] < bestReduction)
+        {
+          bestReduction = reductions[ordinal];
+          bestP = p;
+          bestCycles = cycles;
+          bestSmootherDegree = smootherDegree;
+        }
+      }
+    }
   }
+
+  std::cout << "VLASOV_GRAPH_NORM_PMULTIGRID_CHEBYSHEV_BEST p=" << bestP
+            << " cycles=" << bestCycles
+            << " smootherDegree=" << bestSmootherDegree
+            << " residualReduction=" << bestReduction << std::endl;
+  TEST_ASSERT(std::isfinite(bestReduction));
 }
 
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, MatrixFreeCellPowerSweepFindsImprovingParameters )
