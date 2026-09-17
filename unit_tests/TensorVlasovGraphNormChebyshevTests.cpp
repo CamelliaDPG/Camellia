@@ -278,6 +278,65 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, OracleTrueLambdaMinChebyshevF
   }
 }
 
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ConservativeTrueEigenBoundsAndOperatorSanity )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=2:3 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=chebyshev "
+      "--inverseSpectralEstimate=true-eigen --inversePowerSafetyFactor=1.1 "
+      "--inverseLowerSpectralEstimate=true-eigen-safe --inverseLowerPowerSafetyFactor=0.9 "
+      "--inverseTrueEigenDiagnostic=1 --inverseOperatorCheckSamples=3 "
+      "--numInverseIterations=6 --inverseInitialGuess=zero "
+      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
+  const std::vector<double> actionRel = parseAllInverseDiagnosticDoubleKey(run.output, "operatorActionMaxRelDiff");
+  const std::vector<double> symmetry = parseAllInverseDiagnosticDoubleKey(run.output, "operatorBilinearSymmetryAbsError");
+  const std::vector<double> minRayleigh = parseAllInverseDiagnosticDoubleKey(run.output, "operatorMinRayleighQuotient");
+  const std::vector<double> scalarAmplification = parseAllInverseDiagnosticDoubleKey(run.output, "chebyshevScalarMaxAbsAmplification");
+  const std::vector<double> scalarAmplifiedModes = parseAllInverseDiagnosticDoubleKey(run.output, "chebyshevScalarNumModesAmplified");
+  const std::vector<double> belowLower = parseAllInverseDiagnosticDoubleKey(run.output, "chebyshevScalarNumBelowLower");
+  const std::vector<double> aboveUpper = parseAllInverseDiagnosticDoubleKey(run.output, "chebyshevScalarNumAboveUpper");
+  TEST_EQUALITY(reductions.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(actionRel.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(symmetry.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(minRayleigh.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(scalarAmplification.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(scalarAmplifiedModes.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(belowLower.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(aboveUpper.size(), static_cast<std::size_t>(2));
+  for (std::size_t ordinal=0; ordinal<reductions.size(); ordinal++)
+  {
+    const int p = static_cast<int>(ordinal) + 2;
+    std::cout << "VLASOV_GRAPH_NORM_CHEBYSHEV_SANITY p=" << p
+              << " residualReduction=" << reductions[ordinal]
+              << " operatorActionMaxRelDiff=" << actionRel[ordinal]
+              << " operatorBilinearSymmetryAbsError=" << symmetry[ordinal]
+              << " operatorMinRayleighQuotient=" << minRayleigh[ordinal]
+              << " chebyshevScalarMaxAbsAmplification=" << scalarAmplification[ordinal]
+              << " chebyshevScalarNumModesAmplified=" << scalarAmplifiedModes[ordinal]
+              << " chebyshevScalarNumBelowLower=" << belowLower[ordinal]
+              << " chebyshevScalarNumAboveUpper=" << aboveUpper[ordinal]
+              << std::endl;
+    TEST_ASSERT(std::isfinite(reductions[ordinal]));
+    // This is an interrogation/triage diagnostic: residual growth is allowed here
+    // because it is the symptom we are trying to classify.  The stricter checks
+    // below verify whether the assembled operator, matrix-free action, and scalar
+    // Chebyshev polynomial are individually sane.
+    TEST_COMPARE(actionRel[ordinal], <, 1e-10);
+    TEST_COMPARE(symmetry[ordinal], <, 1e-10);
+    TEST_COMPARE(minRayleigh[ordinal], >, 0.0);
+    TEST_COMPARE(scalarAmplification[ordinal], <=, 1.0 + 1e-10);
+    TEST_FLOATING_EQUALITY(scalarAmplifiedModes[ordinal], 0.0, 1e-12);
+    TEST_FLOATING_EQUALITY(belowLower[ordinal], 0.0, 1e-12);
+    TEST_FLOATING_EQUALITY(aboveUpper[ordinal], 0.0, 1e-12);
+  }
+}
+
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevCachedHgradSweepBeyondP2 )
 {
   if (!shouldRunExternalDiagnosticsOnThisRank()) return;

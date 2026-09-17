@@ -1026,6 +1026,18 @@ namespace
     double trueLambdaMinOverLowerEstimate = -1.0;
     int trueEigenDiagnostic = 0;
     std::string trueEigenPath = "not_requested";
+    int operatorCheckSamples = 0;
+    double operatorActionMaxAbsDiff = -1.0;
+    double operatorActionMaxRelDiff = -1.0;
+    double operatorBilinearSymmetryAbsError = -1.0;
+    double operatorMinRayleighQuotient = -1.0;
+    int chebyshevScalarNumEigenvalues = 0;
+    int chebyshevScalarNumBelowLower = 0;
+    int chebyshevScalarNumInsideInterval = 0;
+    int chebyshevScalarNumAboveUpper = 0;
+    int chebyshevScalarNumModesAmplified = 0;
+    double chebyshevScalarMaxAbsAmplification = -1.0;
+    double chebyshevScalarWorstLambda = -1.0;
     int pMultigridLevels = 0;
     int pMultigridFineDofs = 0;
     int pMultigridCoarseDofs = 0;
@@ -1614,8 +1626,8 @@ namespace
     return info;
   }
 
-  void computeTrueEigenDiagnostics(const std::vector<Scalar> &localMatrices, const std::vector<Scalar> &diagonal,
-                                   const int cells, const int rows, InverseDiagnosticTiming &timing)
+  std::vector<Scalar> computeTrueEigenDiagnostics(const std::vector<Scalar> &localMatrices, const std::vector<Scalar> &diagonal,
+                                                  const int cells, const int rows, InverseDiagnosticTiming &timing)
   {
     if ((cells < 1) || (rows < 1)) throw std::invalid_argument("true eigen diagnostic requires positive local extents");
     if (localMatrices.size() != static_cast<size_t>(cells * rows * rows))
@@ -1628,6 +1640,8 @@ namespace
     char uplo = 'U';
     timing.trueLambdaMin = std::numeric_limits<Scalar>::max();
     timing.trueLambdaMax = -std::numeric_limits<Scalar>::max();
+    std::vector<Scalar> allEigenvalues;
+    allEigenvalues.reserve(static_cast<size_t>(cells * rows));
 
     for (int c=0; c<cells; c++)
     {
@@ -1662,12 +1676,14 @@ namespace
 
       timing.trueLambdaMin = std::min(timing.trueLambdaMin, eigenvalues.front());
       timing.trueLambdaMax = std::max(timing.trueLambdaMax, eigenvalues.back());
+      allEigenvalues.insert(allEigenvalues.end(), eigenvalues.begin(), eigenvalues.end());
     }
 
     if ((timing.trueLambdaMin > Scalar(0.0)) && (timing.trueLambdaMax > Scalar(0.0)))
       timing.trueCondition = timing.trueLambdaMax / timing.trueLambdaMin;
     timing.trueEigenDiagnostic = 1;
     timing.trueEigenPath = "assembled_lapack_syev_symmetric_diagonal_scaling";
+    return allEigenvalues;
   }
 
   int ordinalFromMultiIndex(const std::vector<int> &index, const std::vector<int> &extents)
@@ -1794,7 +1810,7 @@ namespace
                                                  const int inverseSpectralEstimateIterations, const Scalar inversePowerSafetyFactor,
                                                  const std::string &inverseLowerSpectralEstimate, const int inverseLowerSpectralEstimateIterations,
                                                  const Scalar inverseLowerPowerSafetyFactor,
-                                                 const int inverseTrueEigenDiagnostic,
+                                                 const int inverseTrueEigenDiagnostic, const int inverseOperatorCheckSamples,
                                                  const int compareTpetraPowerEstimate, const int compareTpetraRowMatrixPowerEstimate,
                                                  const int ifpack2ChebyshevSmoke, const std::string &inverseInitialGuess,
                                                  const Scalar inverseTolerance)
@@ -1818,6 +1834,7 @@ namespace
     timing.inverseInitialGuess = inverseInitialGuess;
     timing.trueEigenDiagnostic = inverseTrueEigenDiagnostic;
     timing.trueEigenPath = (inverseTrueEigenDiagnostic != 0) ? "assembled_lapack_syev_symmetric_diagonal_scaling" : "not_requested";
+    timing.operatorCheckSamples = inverseOperatorCheckSamples;
     if (terms.empty()) return timing;
 
     const int cols = rows;
@@ -1955,8 +1972,70 @@ namespace
       }
     }
     timing.assembledGershgorinLambdaMax = assembledGershgorinLambdaMax;
-    if (inverseTrueEigenDiagnostic != 0)
-      computeTrueEigenDiagnostics(localMatrices, diagonal, cells, rows, timing);
+    std::vector<Scalar> trueEigenvalues;
+    if ((inverseTrueEigenDiagnostic != 0) || (inverseSpectralEstimate == "true-eigen") ||
+        (inverseLowerSpectralEstimate == "true-eigen") || (inverseLowerSpectralEstimate == "true-eigen-safe"))
+    {
+      if (!useAssembledReference)
+        throw std::invalid_argument("true-eigen diagnostics require assembled reference; increase --maxAssembledEntries");
+      trueEigenvalues = computeTrueEigenDiagnostics(localMatrices, diagonal, cells, rows, timing);
+    }
+
+    if (inverseOperatorCheckSamples > 0)
+    {
+      if (!useAssembledReference)
+        throw std::invalid_argument("operator sanity checks require assembled reference; increase --maxAssembledEntries");
+      timing.operatorActionMaxAbsDiff = 0.0;
+      timing.operatorActionMaxRelDiff = 0.0;
+      timing.operatorBilinearSymmetryAbsError = 0.0;
+      timing.operatorMinRayleighQuotient = std::numeric_limits<Scalar>::max();
+      std::vector<Scalar> x(static_cast<size_t>(cells * rows), Scalar(0.0));
+      std::vector<Scalar> y(static_cast<size_t>(cells * rows), Scalar(0.0));
+      std::vector<Scalar> matrixFreeAx(x.size(), Scalar(0.0));
+      std::vector<Scalar> matrixFreeAy(x.size(), Scalar(0.0));
+      std::vector<Scalar> assembledAx(x.size(), Scalar(0.0));
+      for (int sample=0; sample<inverseOperatorCheckSamples; sample++)
+      {
+        for (size_t i=0; i<x.size(); i++)
+        {
+          x[i] = std::sin(Scalar(sample + 1) * Scalar(i + 3) * Scalar(0.37))
+               + Scalar(0.5) * std::cos(Scalar(sample + 2) * Scalar(i + 5) * Scalar(0.19));
+          y[i] = std::cos(Scalar(sample + 3) * Scalar(i + 7) * Scalar(0.23))
+               - Scalar(0.25) * std::sin(Scalar(sample + 4) * Scalar(i + 11) * Scalar(0.31));
+        }
+        applyVector(x, matrixFreeAx);
+        applyVector(y, matrixFreeAy);
+        std::fill(assembledAx.begin(), assembledAx.end(), Scalar(0.0));
+        for (int c=0; c<cells; c++)
+        {
+          const size_t cellOffset = static_cast<size_t>(c * rows);
+          for (int i=0; i<rows; i++)
+            for (int j=0; j<rows; j++)
+              assembledAx[cellOffset + i] += localMatrices[static_cast<size_t>((c * rows + i) * rows + j)] * x[cellOffset + j];
+        }
+        Scalar diffNormSquared = 0.0;
+        Scalar assembledNormSquared = 0.0;
+        Scalar xNormSquared = 0.0;
+        Scalar xTAx = 0.0;
+        Scalar xTAy = 0.0;
+        Scalar yTAx = 0.0;
+        for (size_t i=0; i<x.size(); i++)
+        {
+          const Scalar diff = matrixFreeAx[i] - assembledAx[i];
+          timing.operatorActionMaxAbsDiff = std::max(timing.operatorActionMaxAbsDiff, std::abs(diff));
+          diffNormSquared += diff * diff;
+          assembledNormSquared += assembledAx[i] * assembledAx[i];
+          xNormSquared += x[i] * x[i];
+          xTAx += x[i] * matrixFreeAx[i];
+          xTAy += x[i] * matrixFreeAy[i];
+          yTAx += y[i] * matrixFreeAx[i];
+        }
+        const Scalar relDiff = std::sqrt(diffNormSquared) / std::max(std::numeric_limits<Scalar>::epsilon(), std::sqrt(assembledNormSquared));
+        timing.operatorActionMaxRelDiff = std::max(timing.operatorActionMaxRelDiff, relDiff);
+        timing.operatorBilinearSymmetryAbsError = std::max(timing.operatorBilinearSymmetryAbsError, std::abs(xTAy - yTAx));
+        timing.operatorMinRayleighQuotient = std::min(timing.operatorMinRayleighQuotient, xTAx / std::max(std::numeric_limits<Scalar>::epsilon(), xNormSquared));
+      }
+    }
 
     Scalar lambdaMaxEstimate = 0.0;
     std::vector<Scalar> perCellLambdaMaxEstimates;
@@ -1966,6 +2045,15 @@ namespace
     {
       if (!useAssembledReference) throw std::invalid_argument("assembled-gershgorin spectral estimate requires assembled reference");
       lambdaMaxEstimate = assembledGershgorinLambdaMax;
+    }
+    else if (inverseSpectralEstimate == "true-eigen")
+    {
+      if ((timing.trueEigenDiagnostic == 0) || !(timing.trueLambdaMax > Scalar(0.0)))
+        throw std::invalid_argument("--inverseSpectralEstimate=true-eigen requires positive trueLambdaMax");
+      lambdaMaxEstimate = inversePowerSafetyFactor * timing.trueLambdaMax;
+      timing.spectralEstimatePath = "assembled_lapack_syev_true_eigen_lambda_max_with_safety_factor";
+      timing.lambdaMaxSource = "true_eigen_oracle_lambda_max_with_safety_factor";
+      timing.powerRawLambdaMaxEstimate = timing.trueLambdaMax;
     }
     else if (inverseSpectralEstimate == "user")
     {
@@ -2125,7 +2213,7 @@ namespace
     }
     else
     {
-      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, cell-power, or user");
+      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, true-eigen, power, cell-power, or user");
     }
     timing.spectralEstimateSeconds = spectralEstimateTimer.seconds();
     if (!std::isfinite(lambdaMaxEstimate) || (lambdaMaxEstimate <= 0.0)) throw std::runtime_error("inverse diagnostic found nonpositive or nonfinite spectral upper estimate");
@@ -2176,12 +2264,22 @@ namespace
     else if (inverseLowerSpectralEstimate == "true-eigen")
     {
       if ((timing.trueEigenDiagnostic == 0) || !(timing.trueLambdaMin > Scalar(0.0)))
-        throw std::invalid_argument("--inverseLowerSpectralEstimate=true-eigen requires --inverseTrueEigenDiagnostic=1 and positive trueLambdaMin");
+        throw std::invalid_argument("--inverseLowerSpectralEstimate=true-eigen requires true eigen diagnostics and positive trueLambdaMin");
       timing.lambdaMinEstimate = timing.trueLambdaMin;
       timing.lambdaMinRawEstimate = timing.trueLambdaMin;
       timing.lambdaMinEstimateOverRaw = Scalar(1.0);
       timing.lambdaMinSource = "true_eigen_oracle_lambda_min";
       timing.spectralEstimatePath += "_true_eigen_oracle_lambda_min";
+    }
+    else if (inverseLowerSpectralEstimate == "true-eigen-safe")
+    {
+      if ((timing.trueEigenDiagnostic == 0) || !(timing.trueLambdaMin > Scalar(0.0)))
+        throw std::invalid_argument("--inverseLowerSpectralEstimate=true-eigen-safe requires true eigen diagnostics and positive trueLambdaMin");
+      timing.lambdaMinEstimate = inverseLowerPowerSafetyFactor * timing.trueLambdaMin;
+      timing.lambdaMinRawEstimate = timing.trueLambdaMin;
+      timing.lambdaMinEstimateOverRaw = timing.lambdaMinEstimate / timing.lambdaMinRawEstimate;
+      timing.lambdaMinSource = "true_eigen_oracle_lambda_min_with_safety_factor";
+      timing.spectralEstimatePath += "_true_eigen_oracle_lambda_min_with_safety_factor";
     }
     else if (inverseLowerSpectralEstimate == "user")
     {
@@ -2256,7 +2354,7 @@ namespace
     }
     else
     {
-      throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, user, or assembled-inverse-iteration");
+      throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, true-eigen-safe, user, or assembled-inverse-iteration");
     }
     if ((timing.trueEigenDiagnostic != 0) && (timing.trueLambdaMax > 0.0))
     {
@@ -2274,6 +2372,48 @@ namespace
       timing.spectralEstimatePath = (inverseLambdaMaxOverride > 0.0)
                                   ? "user_lambda_min_max_override_with_extracted_diagonal"
                                   : timing.spectralEstimatePath + "_user_lambda_min";
+    }
+
+    if (!trueEigenvalues.empty() && (inverseDiagnosticAlgorithm == "chebyshev"))
+    {
+      timing.chebyshevScalarNumEigenvalues = static_cast<int>(trueEigenvalues.size());
+      timing.chebyshevScalarMaxAbsAmplification = 0.0;
+      const Scalar chebyshevLambdaMax = timing.lambdaMaxEstimate;
+      const Scalar chebyshevLambdaMin = timing.lambdaMinEstimate;
+      const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
+      const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+      const Scalar s1 = ifpackTheta * ifpackDelta;
+      for (const Scalar lambda : trueEigenvalues)
+      {
+        if (lambda < chebyshevLambdaMin) timing.chebyshevScalarNumBelowLower++;
+        else if (lambda > chebyshevLambdaMax) timing.chebyshevScalarNumAboveUpper++;
+        else timing.chebyshevScalarNumInsideInterval++;
+        Scalar error = Scalar(1.0);
+        Scalar correction = Scalar(0.0);
+        if (numInverseIterations > 0)
+        {
+          Scalar rhok = Scalar(1.0) / s1;
+          correction = -(lambda / ifpackTheta) * error;
+          error += correction;
+          for (int iteration=1; iteration<numInverseIterations; iteration++)
+          {
+            const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
+            const Scalar dtemp1 = rhokp1 * rhok;
+            const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
+            rhok = rhokp1;
+            correction = -dtemp2 * lambda * error + dtemp1 * correction;
+            error += correction;
+          }
+        }
+        const Scalar amplification = std::abs(error);
+        if (amplification > Scalar(1.0) + Scalar(100.0) * std::numeric_limits<Scalar>::epsilon())
+          timing.chebyshevScalarNumModesAmplified++;
+        if (amplification > timing.chebyshevScalarMaxAbsAmplification)
+        {
+          timing.chebyshevScalarMaxAbsAmplification = amplification;
+          timing.chebyshevScalarWorstLambda = lambda;
+        }
+      }
     }
 
     std::vector<Scalar> rhs(static_cast<size_t>(cells * rows), 0.0);
@@ -2655,6 +2795,18 @@ namespace
               << " trueLambdaMaxOverPowerRaw=" << timing.trueLambdaMaxOverPowerRaw
               << " trueLambdaMinOverLowerEstimate=" << timing.trueLambdaMinOverLowerEstimate
               << " trueEigenPath=" << timing.trueEigenPath
+              << " operatorCheckSamples=" << timing.operatorCheckSamples
+              << " operatorActionMaxAbsDiff=" << timing.operatorActionMaxAbsDiff
+              << " operatorActionMaxRelDiff=" << timing.operatorActionMaxRelDiff
+              << " operatorBilinearSymmetryAbsError=" << timing.operatorBilinearSymmetryAbsError
+              << " operatorMinRayleighQuotient=" << timing.operatorMinRayleighQuotient
+              << " chebyshevScalarNumEigenvalues=" << timing.chebyshevScalarNumEigenvalues
+              << " chebyshevScalarNumBelowLower=" << timing.chebyshevScalarNumBelowLower
+              << " chebyshevScalarNumInsideInterval=" << timing.chebyshevScalarNumInsideInterval
+              << " chebyshevScalarNumAboveUpper=" << timing.chebyshevScalarNumAboveUpper
+              << " chebyshevScalarNumModesAmplified=" << timing.chebyshevScalarNumModesAmplified
+              << " chebyshevScalarMaxAbsAmplification=" << timing.chebyshevScalarMaxAbsAmplification
+              << " chebyshevScalarWorstLambda=" << timing.chebyshevScalarWorstLambda
               << " pMultigridLevels=" << timing.pMultigridLevels
               << " pMultigridFineDofs=" << timing.pMultigridFineDofs
               << " pMultigridCoarseDofs=" << timing.pMultigridCoarseDofs
@@ -2924,6 +3076,7 @@ int main(int argc, char *argv[])
     Scalar inverseLowerPowerSafetyFactor = 0.95;
     Scalar inverseTolerance = 1e-8;
     Scalar inverseMaxResidualReduction = -1.0;
+    int inverseOperatorCheckSamples = 0;
     Scalar pMultigridChebyshevSmootherLowerFraction = 0.30;
     int pMultigridChebyshevSmootherIterations = 2;
     std::string polyOrderText = "1:4";
@@ -2949,10 +3102,10 @@ int main(int argc, char *argv[])
     cmdp.setOption("pMultigridChebyshevSmootherIterations", &pMultigridChebyshevSmootherIterations, "Chebyshev pre/post smoother iterations for --inverseDiagnosticAlgorithm=pmultigrid-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherLowerFraction", &pMultigridChebyshevSmootherLowerFraction, "Lower endpoint as a fraction of lambdaMax for high-frequency Chebyshev p-multigrid smoothing.");
     cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson, chebyshev, or pmultigrid-chebyshev local inverse diagnostic recurrence.");
-    cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
+    cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, true-eigen, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
     cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free Ifpack2-style D^{-1}A spectral-radius power estimate.");
-    cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power lambdaMax estimates before Chebyshev use.");
-    cmdp.setOption("inverseLowerSpectralEstimate", &inverseLowerSpectralEstimate, "ratio, true-eigen, user, or assembled-inverse-iteration lower spectral estimate for inverse diagnostics; positive --inverseLambdaMin overrides this choice.");
+    cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power or true-eigen lambdaMax estimates before Chebyshev use.");
+    cmdp.setOption("inverseLowerSpectralEstimate", &inverseLowerSpectralEstimate, "ratio, true-eigen, true-eigen-safe, user, or assembled-inverse-iteration lower spectral estimate for inverse diagnostics; positive --inverseLambdaMin overrides this choice.");
     cmdp.setOption("inverseLowerSpectralEstimateIterations", &inverseLowerSpectralEstimateIterations, "Iterations for assembled inverse-iteration lower spectral estimate; <=0 reuses --inverseSpectralEstimateIterations.");
     cmdp.setOption("inverseLowerPowerSafetyFactor", &inverseLowerPowerSafetyFactor, "Safety factor applied to assembled inverse-iteration lambdaMin estimates before Chebyshev use.");
     cmdp.setOption("inverseDiagnosticRequireAssembledReference", &inverseDiagnosticRequireAssembledReference, "Set to 0 to allow power-estimated inverse diagnostics without assembled reference/oracle matrices.");
@@ -2966,6 +3119,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("inverseInitialGuess", &inverseInitialGuess, "zero or diagonal initial guess for inverse diagnostics.");
     cmdp.setOption("inverseTolerance", &inverseTolerance, "Relative residual-reduction tolerance reported by inverse diagnostics; fixed iteration count is unchanged.");
     cmdp.setOption("inverseMaxResidualReduction", &inverseMaxResidualReduction, "Optional pass/fail ceiling for inverse-diagnostic final/initial residual reduction; negative disables the check.");
+    cmdp.setOption("inverseOperatorCheckSamples", &inverseOperatorCheckSamples, "Deterministic vector samples for assembled-vs-matrix-free action, symmetry, and positivity checks in inverse diagnostics; 0 disables.");
     cmdp.setOption("massWeight", &massWeight, "Scalar coefficient alpha for mass or h1-gram value-value terms.");
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
@@ -3002,8 +3156,8 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, --operator=vlasov-coordinate-x1-d3, --operator=vlasov-graph-norm-1d1t2v, and --operator=vlasov-graph-norm-solution-coeff-1d1t2v require --basisMode=hgrad");
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-chebyshev"))
       throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, or pmultigrid-chebyshev");
-    if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "true-eigen") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))
-      throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, user, or assembled-inverse-iteration");
+    if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "true-eigen") && (inverseLowerSpectralEstimate != "true-eigen-safe") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))
+      throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, true-eigen-safe, user, or assembled-inverse-iteration");
     if ((inverseInitialGuess != "zero") && (inverseInitialGuess != "diagonal"))
       throw std::invalid_argument("--inverseInitialGuess must be zero or diagonal");
     if ((ifpack2ChebyshevSmoke != 0) && ((mode != "inverse-diagnostic") || (inverseDiagnosticAlgorithm != "chebyshev")))
@@ -3014,8 +3168,8 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--ifpack2ChebyshevSmoke compares against scalar Ifpack2 parameters and is not compatible with per-cell Chebyshev endpoints");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (inverseSpectralEstimate != "power"))
       throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate requires --inverseSpectralEstimate=power");
-    if ((inverseSpectralEstimate != "assembled-gershgorin") && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "cell-power") && (inverseSpectralEstimate != "user"))
-      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, power, cell-power, or user");
+    if ((inverseSpectralEstimate != "assembled-gershgorin") && (inverseSpectralEstimate != "true-eigen") && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "cell-power") && (inverseSpectralEstimate != "user"))
+      throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, true-eigen, power, cell-power, or user");
     if ((inverseSpectralEstimate == "user") && (inverseLambdaMax <= 0.0))
       throw std::invalid_argument("--inverseSpectralEstimate=user requires positive --inverseLambdaMax");
     if (inverseSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
@@ -3116,7 +3270,7 @@ int main(int argc, char *argv[])
                                                         inverseDiagnosticAlgorithm, inverseEigenRatio, inverseLambdaMin, inverseLambdaMax,
                                                         inverseSpectralEstimate, inverseSpectralEstimateIterations, inversePowerSafetyFactor,
                                                         inverseLowerSpectralEstimate, inverseLowerSpectralEstimateIterations, inverseLowerPowerSafetyFactor,
-                                                        inverseTrueEigenDiagnostic,
+                                                        inverseTrueEigenDiagnostic, inverseOperatorCheckSamples,
                                                         compareTpetraPowerEstimate, compareTpetraRowMatrixPowerEstimate,
                                                         ifpack2ChebyshevSmoke, inverseInitialGuess, inverseTolerance);
         if ((compareTpetraPowerEstimate != 0) &&
