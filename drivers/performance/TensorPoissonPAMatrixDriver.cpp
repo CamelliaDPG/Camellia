@@ -5,6 +5,8 @@
 #include "Intrepid2_PAMatrix.hpp"
 
 #include <Intrepid2_CellGeometryTestUtils.hpp>
+#include <Intrepid2_DerivedBasisFamily.hpp>
+#include <Intrepid2_HierarchicalBasisProlongator.hpp>
 
 #include "TensorBilinearForm.h"
 #include "TensorFunction.h"
@@ -34,6 +36,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -1043,6 +1046,9 @@ namespace
     int pMultigridCoarseDofs = 0;
     int pMultigridChebyshevSmootherIterations = 0;
     double pMultigridChebyshevSmootherLowerFraction = -1.0;
+    int pMultigridJacobiSmootherIterations = 0;
+    int pMultigridCoarseChebyshevIterations = 0;
+    double pMultigridCoarseChebyshevLowerFraction = -1.0;
     int pMultigridCoarseSolveCount = 0;
     std::string pMultigridPath = "not_requested";
     std::string inversePath = "not_requested";
@@ -1699,25 +1705,6 @@ namespace
     return ordinal;
   }
 
-  Scalar equispacedLineCoordinate(const int ordinal, const int degree)
-  {
-    return (degree == 0) ? Scalar(0.0) : Scalar(-1.0) + Scalar(2.0) * Scalar(ordinal) / Scalar(degree);
-  }
-
-  Scalar lagrangeValueAtEquispacedPoint(const int basisOrdinal, const int degree, const Scalar x)
-  {
-    if ((basisOrdinal < 0) || (basisOrdinal > degree)) throw std::invalid_argument("invalid 1D Lagrange basis ordinal");
-    Scalar value = Scalar(1.0);
-    const Scalar node = equispacedLineCoordinate(basisOrdinal, degree);
-    for (int other=0; other<=degree; other++)
-    {
-      if (other == basisOrdinal) continue;
-      const Scalar otherNode = equispacedLineCoordinate(other, degree);
-      value *= (x - otherNode) / (node - otherNode);
-    }
-    return value;
-  }
-
   struct TensorHGradPTransfer
   {
     int dim = 0;
@@ -1742,36 +1729,40 @@ namespace
     transfer.dim = dim;
     transfer.fineP = fineP;
     transfer.coarseP = fineP - 1;
-    const int fineDofs1D = fineP + 1;
-    const int coarseDofs1D = transfer.coarseP + 1;
-    const std::vector<int> fineExtents(static_cast<size_t>(dim), fineDofs1D);
-    const std::vector<int> coarseExtents(static_cast<size_t>(dim), coarseDofs1D);
+    const std::vector<int> fineExtents(static_cast<size_t>(dim), fineP + 1);
+    const std::vector<int> coarseExtents(static_cast<size_t>(dim), transfer.coarseP + 1);
     transfer.fineRows = checkedProduct(fineExtents);
     transfer.coarseRows = checkedProduct(coarseExtents);
 
-    std::vector<Scalar> interp1D(static_cast<size_t>(fineDofs1D * coarseDofs1D), Scalar(0.0));
-    for (int fineOrdinal=0; fineOrdinal<fineDofs1D; fineOrdinal++)
-    {
-      const Scalar fineNode = equispacedLineCoordinate(fineOrdinal, fineP);
-      for (int coarseOrdinal=0; coarseOrdinal<coarseDofs1D; coarseOrdinal++)
-        interp1D[static_cast<size_t>(fineOrdinal * coarseDofs1D + coarseOrdinal)] = lagrangeValueAtEquispacedPoint(coarseOrdinal, transfer.coarseP, fineNode);
-    }
+    using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType>;
+    auto coarseBasis = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(transfer.coarseP, dim);
+    auto fineBasis = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(fineP, dim);
+    Intrepid2::HierarchicalBasisProlongator<DeviceType,Scalar> prolongator(coarseBasis, fineBasis);
+    if (coarseBasis->getCardinality() != transfer.coarseRows)
+      throw std::runtime_error("hierarchical p-multigrid coarse basis cardinality did not match tensor-product row count");
+    if (fineBasis->getCardinality() != transfer.fineRows)
+      throw std::runtime_error("hierarchical p-multigrid fine basis cardinality did not match tensor-product row count");
 
+    View2D coarseIdentity("TensorHGradPTransfer hierarchical coarse identity", transfer.coarseRows, transfer.coarseRows);
+    View2D fineProlongedIdentity("TensorHGradPTransfer hierarchical fine identity", transfer.coarseRows, transfer.fineRows);
+    Kokkos::deep_copy(coarseIdentity, Scalar(0.0));
+    auto coarseIdentityHost = Kokkos::create_mirror_view(coarseIdentity);
+    for (int coarseOrdinal=0; coarseOrdinal<transfer.coarseRows; coarseOrdinal++)
+      coarseIdentityHost(coarseOrdinal, coarseOrdinal) = Scalar(1.0);
+    Kokkos::deep_copy(coarseIdentity, coarseIdentityHost);
+    prolongator.apply(fineProlongedIdentity, coarseIdentity);
+    Kokkos::fence();
+
+    auto fineProlongedIdentityHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), fineProlongedIdentity);
     transfer.prolongation.assign(static_cast<size_t>(transfer.fineRows) * transfer.coarseRows, Scalar(0.0));
     transfer.restriction.assign(static_cast<size_t>(transfer.coarseRows) * transfer.fineRows, Scalar(0.0));
-    for (int fineOrdinal=0; fineOrdinal<transfer.fineRows; fineOrdinal++)
-    {
-      const auto fineIndex = multiIndex(fineOrdinal, fineExtents);
-      for (int coarseOrdinal=0; coarseOrdinal<transfer.coarseRows; coarseOrdinal++)
+    for (int coarseOrdinal=0; coarseOrdinal<transfer.coarseRows; coarseOrdinal++)
+      for (int fineOrdinal=0; fineOrdinal<transfer.fineRows; fineOrdinal++)
       {
-        const auto coarseIndex = multiIndex(coarseOrdinal, coarseExtents);
-        Scalar value = Scalar(1.0);
-        for (int d=0; d<dim; d++)
-          value *= interp1D[static_cast<size_t>(fineIndex[static_cast<size_t>(d)] * coarseDofs1D + coarseIndex[static_cast<size_t>(d)])];
+        const Scalar value = fineProlongedIdentityHost(coarseOrdinal, fineOrdinal);
         transfer.prolongation[static_cast<size_t>(fineOrdinal * transfer.coarseRows + coarseOrdinal)] = value;
         transfer.restriction[static_cast<size_t>(coarseOrdinal * transfer.fineRows + fineOrdinal)] = value;
       }
-    }
 
     auto inserted = cache.emplace(key, std::move(transfer));
     return inserted.first->second;
@@ -1804,6 +1795,9 @@ namespace
                                                  const long long maxAssembledEntries, const int inverseDiagnosticRequireAssembledReference,
                                                  const int numInverseIterations, const int pMultigridChebyshevSmootherIterations,
                                                  const Scalar pMultigridChebyshevSmootherLowerFraction,
+                                                 const int pMultigridJacobiSmootherIterations,
+                                                 const int pMultigridCoarseChebyshevIterations,
+                                                 const Scalar pMultigridCoarseChebyshevLowerFraction,
                                                  const std::string &inverseDiagnosticAlgorithm,
                                                  const Scalar inverseEigenRatio, const Scalar inverseLambdaMinOverride,
                                                  const Scalar inverseLambdaMaxOverride, const std::string &inverseSpectralEstimate,
@@ -2561,17 +2555,19 @@ namespace
       runIfpack2CompatibleHostChebyshev(iterate, numInverseIterations);
       hostChebyshevIterate = iterate;
     }
-    else if (inverseDiagnosticAlgorithm == "pmultigrid-chebyshev")
+    else if ((inverseDiagnosticAlgorithm == "pmultigrid-chebyshev") || (inverseDiagnosticAlgorithm == "pmultigrid-jacobi-chebyshev"))
     {
       if (!useAssembledReference)
-        throw std::invalid_argument("--inverseDiagnosticAlgorithm=pmultigrid-chebyshev currently requires assembled reference; increase --maxAssembledEntries");
+        throw std::invalid_argument("p-multigrid inverse diagnostics currently require assembled reference; increase --maxAssembledEntries");
       if (p < 2)
-        throw std::invalid_argument("--inverseDiagnosticAlgorithm=pmultigrid-chebyshev requires --polyOrder >= 2");
-      if (pMultigridChebyshevSmootherIterations < 1)
-        throw std::invalid_argument("--pMultigridChebyshevSmootherIterations must be positive");
-
-      if ((pMultigridChebyshevSmootherLowerFraction <= Scalar(0.0)) || (pMultigridChebyshevSmootherLowerFraction >= Scalar(1.0)))
-        throw std::invalid_argument("--pMultigridChebyshevSmootherLowerFraction must be in (0,1) for high-frequency Chebyshev smoothing");
+        throw std::invalid_argument("p-multigrid inverse diagnostics require --polyOrder >= 2");
+      if (inverseDiagnosticAlgorithm == "pmultigrid-chebyshev")
+      {
+        if (pMultigridChebyshevSmootherIterations < 1)
+          throw std::invalid_argument("--pMultigridChebyshevSmootherIterations must be positive");
+        if ((pMultigridChebyshevSmootherLowerFraction <= Scalar(0.0)) || (pMultigridChebyshevSmootherLowerFraction >= Scalar(1.0)))
+          throw std::invalid_argument("--pMultigridChebyshevSmootherLowerFraction must be in (0,1) for high-frequency Chebyshev smoothing");
+      }
       const TensorHGradPTransfer &transfer = cachedTensorHGradPTransfer(dim, p);
       if (transfer.fineRows != rows) throw std::runtime_error("p-multigrid transfer fine dimension does not match local dofs");
       const int coarseRows = transfer.coarseRows;
@@ -2599,40 +2595,299 @@ namespace
           }
       }
 
-      std::vector<Scalar> factoredCoarseMatrices = coarseMatrices;
-      for (int c=0; c<cells; c++)
+      std::vector<Scalar> factoredCoarseMatrices;
+      std::vector<Scalar> coarseDiagonal(static_cast<size_t>(cells * coarseRows), Scalar(0.0));
+      std::vector<Scalar> coarseLambdaMaxByCell(static_cast<size_t>(cells), Scalar(0.0));
+      if (inverseDiagnosticAlgorithm == "pmultigrid-chebyshev")
       {
-        const int factorInfo = factorSPDMatrixInPlace(factoredCoarseMatrices, static_cast<size_t>(c) * coarseRows * coarseRows, coarseRows);
-        if (factorInfo != 0) throw std::runtime_error("p-multigrid diagnostic coarse Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+        factoredCoarseMatrices = coarseMatrices;
+        for (int c=0; c<cells; c++)
+        {
+          const int factorInfo = factorSPDMatrixInPlace(factoredCoarseMatrices, static_cast<size_t>(c) * coarseRows * coarseRows, coarseRows);
+          if (factorInfo != 0) throw std::runtime_error("p-multigrid diagnostic coarse Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+        }
       }
+      else
+      {
+        for (int c=0; c<cells; c++)
+        {
+          for (int i=0; i<coarseRows; i++)
+          {
+            const Scalar diagonalValue = coarseMatrices[static_cast<size_t>((c * coarseRows + i) * coarseRows + i)];
+            if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
+              throw std::runtime_error("p-multigrid Chebyshev coarse solve found nonpositive coarse diagonal entry");
+            coarseDiagonal[static_cast<size_t>(c * coarseRows + i)] = diagonalValue;
+            Scalar scaledRowSum = 0.0;
+            for (int j=0; j<coarseRows; j++)
+              scaledRowSum += std::abs(coarseMatrices[static_cast<size_t>((c * coarseRows + i) * coarseRows + j)]) / diagonalValue;
+            coarseLambdaMaxByCell[static_cast<size_t>(c)] = std::max(coarseLambdaMaxByCell[static_cast<size_t>(c)], scaledRowSum);
+          }
+        }
+      }
+
+      auto runFineJacobiSmoother = [&]()
+      {
+        for (int sweep=0; sweep<pMultigridJacobiSmootherIterations; sweep++)
+        {
+          applyHostVector();
+          for (int c=0; c<cells; c++)
+          {
+            const Scalar lambdaMaxForCell = perCellLambdaMaxEstimates.empty() ? timing.lambdaMaxEstimate : perCellLambdaMaxEstimates[static_cast<size_t>(c)];
+            const Scalar omega = Scalar(1.0) / lambdaMaxForCell;
+            for (int i=0; i<rows; i++)
+            {
+              const size_t index = static_cast<size_t>(c * rows + i);
+              iterate[index] += omega * (rhs[index] - applied[index]) / diagonal[index];
+            }
+          }
+        }
+      };
+
+      auto applyCoarseMatrix = [&](const int cellOrdinal, const std::vector<Scalar> &inputVector, std::vector<Scalar> &outputVector)
+      {
+        outputVector.assign(static_cast<size_t>(coarseRows), Scalar(0.0));
+        const size_t offset = static_cast<size_t>(cellOrdinal) * coarseRows * coarseRows;
+        for (int i=0; i<coarseRows; i++)
+          for (int j=0; j<coarseRows; j++)
+            outputVector[static_cast<size_t>(i)] += coarseMatrices[offset + static_cast<size_t>(i * coarseRows + j)] * inputVector[static_cast<size_t>(j)];
+      };
+
+      auto runCoarseChebyshev = [&](const int cellOrdinal, const std::vector<Scalar> &coarseRhs, std::vector<Scalar> &coarseSolution)
+      {
+        coarseSolution.assign(static_cast<size_t>(coarseRows), Scalar(0.0));
+        const Scalar chebyshevLambdaMax = coarseLambdaMaxByCell[static_cast<size_t>(cellOrdinal)];
+        const Scalar chebyshevLambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), pMultigridCoarseChebyshevLowerFraction * chebyshevLambdaMax);
+        const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
+        const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+        const Scalar s1 = ifpackTheta * ifpackDelta;
+        Scalar rhok = Scalar(1.0) / s1;
+        std::vector<Scalar> correction(static_cast<size_t>(coarseRows), Scalar(0.0));
+        std::vector<Scalar> coarseApplied(static_cast<size_t>(coarseRows), Scalar(0.0));
+        applyCoarseMatrix(cellOrdinal, coarseSolution, coarseApplied);
+        for (int i=0; i<coarseRows; i++)
+        {
+          const size_t index = static_cast<size_t>(cellOrdinal * coarseRows + i);
+          correction[static_cast<size_t>(i)] = (Scalar(1.0) / ifpackTheta) * (coarseRhs[static_cast<size_t>(i)] - coarseApplied[static_cast<size_t>(i)]) / coarseDiagonal[index];
+          coarseSolution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
+        }
+        for (int iteration=1; iteration<pMultigridCoarseChebyshevIterations; iteration++)
+        {
+          applyCoarseMatrix(cellOrdinal, coarseSolution, coarseApplied);
+          const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
+          const Scalar dtemp1 = rhokp1 * rhok;
+          const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
+          rhok = rhokp1;
+          for (int i=0; i<coarseRows; i++)
+          {
+            const size_t index = static_cast<size_t>(cellOrdinal * coarseRows + i);
+            correction[static_cast<size_t>(i)] = dtemp2 * (coarseRhs[static_cast<size_t>(i)] - coarseApplied[static_cast<size_t>(i)]) / coarseDiagonal[index]
+                                           + dtemp1 * correction[static_cast<size_t>(i)];
+            coarseSolution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
+          }
+        }
+      };
 
       std::vector<Scalar> fineResidual(static_cast<size_t>(rows), Scalar(0.0));
       std::vector<Scalar> fineCorrection(static_cast<size_t>(rows), Scalar(0.0));
       std::vector<Scalar> coarseCorrection(static_cast<size_t>(coarseRows), Scalar(0.0));
-      for (int cycle=0; cycle<numInverseIterations; cycle++)
+      if (inverseDiagnosticAlgorithm == "pmultigrid-chebyshev")
       {
-        runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
-        applyHostVector();
-        for (int c=0; c<cells; c++)
+        for (int cycle=0; cycle<numInverseIterations; cycle++)
         {
-          const size_t cellOffset = static_cast<size_t>(c * rows);
-          for (int i=0; i<rows; i++) fineResidual[static_cast<size_t>(i)] = rhs[cellOffset + i] - applied[cellOffset + i];
-          applyTensorHGradPTransferRestriction(transfer, fineResidual, coarseCorrection);
-          const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices, static_cast<size_t>(c) * coarseRows * coarseRows, coarseRows, coarseCorrection);
-          if (solveInfo != 0) throw std::runtime_error("p-multigrid diagnostic coarse Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
-          applyTensorHGradPTransferProlongation(transfer, coarseCorrection, fineCorrection);
-          for (int i=0; i<rows; i++) iterate[cellOffset + i] += fineCorrection[static_cast<size_t>(i)];
+          runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
+          applyHostVector();
+          for (int c=0; c<cells; c++)
+          {
+            const size_t cellOffset = static_cast<size_t>(c * rows);
+            for (int i=0; i<rows; i++) fineResidual[static_cast<size_t>(i)] = rhs[cellOffset + i] - applied[cellOffset + i];
+            applyTensorHGradPTransferRestriction(transfer, fineResidual, coarseCorrection);
+            const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices, static_cast<size_t>(c) * coarseRows * coarseRows, coarseRows, coarseCorrection);
+            if (solveInfo != 0) throw std::runtime_error("p-multigrid diagnostic coarse Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+            applyTensorHGradPTransferProlongation(transfer, coarseCorrection, fineCorrection);
+            for (int i=0; i<rows; i++) iterate[cellOffset + i] += fineCorrection[static_cast<size_t>(i)];
+          }
+          runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
         }
-        runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
+        timing.pMultigridLevels = 2;
+        timing.pMultigridFineDofs = rows;
+        timing.pMultigridCoarseDofs = coarseRows;
+        timing.pMultigridChebyshevSmootherIterations = pMultigridChebyshevSmootherIterations;
+        timing.pMultigridChebyshevSmootherLowerFraction = pMultigridChebyshevSmootherLowerFraction;
+        timing.pMultigridCoarseSolveCount = numInverseIterations * cells;
+        timing.inversePath = "two_level_pmultigrid_cached_tensor_hgrad_transfer_chebyshev_smoother";
+        timing.pMultigridPath = "two_level_cached_tensor_hgrad_hierarchical_restriction_prolongation_galerkin_coarse_exact_solve_high_frequency_chebyshev_pre_post_smoothing_diagnostic";
       }
-      timing.pMultigridLevels = 2;
-      timing.pMultigridFineDofs = rows;
-      timing.pMultigridCoarseDofs = coarseRows;
-      timing.pMultigridChebyshevSmootherIterations = pMultigridChebyshevSmootherIterations;
-      timing.pMultigridChebyshevSmootherLowerFraction = pMultigridChebyshevSmootherLowerFraction;
-      timing.pMultigridCoarseSolveCount = numInverseIterations * cells;
-      timing.inversePath = "two_level_pmultigrid_cached_tensor_hgrad_transfer_chebyshev_smoother";
-      timing.pMultigridPath = "two_level_cached_tensor_hgrad_lagrange_restriction_prolongation_galerkin_coarse_exact_solve_high_frequency_chebyshev_pre_post_smoothing_diagnostic";
+      else
+      {
+        struct PMultigridLevel
+        {
+          int degree = 0;
+          int levelRows = 0;
+          std::vector<Scalar> matrix;
+          std::vector<Scalar> levelDiagonal;
+          std::vector<Scalar> lambdaMaxByCell;
+        };
+
+        std::vector<PMultigridLevel> levels;
+        levels.push_back({p, rows, localMatrices, diagonal, std::vector<Scalar>(static_cast<size_t>(cells), timing.lambdaMaxEstimate)});
+        for (int c=0; c<cells; c++)
+          if (!perCellLambdaMaxEstimates.empty()) levels.front().lambdaMaxByCell[static_cast<size_t>(c)] = perCellLambdaMaxEstimates[static_cast<size_t>(c)];
+        levels.push_back({p - 1, coarseRows, coarseMatrices, coarseDiagonal, coarseLambdaMaxByCell});
+        while (levels.back().degree > 1)
+        {
+          const PMultigridLevel &fineLevel = levels.back();
+          const TensorHGradPTransfer &levelTransfer = cachedTensorHGradPTransfer(dim, fineLevel.degree);
+          const int levelCoarseRows = levelTransfer.coarseRows;
+          PMultigridLevel nextLevel;
+          nextLevel.degree = fineLevel.degree - 1;
+          nextLevel.levelRows = levelCoarseRows;
+          nextLevel.matrix.assign(static_cast<size_t>(cells * levelCoarseRows * levelCoarseRows), Scalar(0.0));
+          nextLevel.levelDiagonal.assign(static_cast<size_t>(cells * levelCoarseRows), Scalar(0.0));
+          nextLevel.lambdaMaxByCell.assign(static_cast<size_t>(cells), Scalar(0.0));
+          std::vector<Scalar> levelMatrixTimesP(static_cast<size_t>(fineLevel.levelRows * levelCoarseRows), Scalar(0.0));
+          for (int c=0; c<cells; c++)
+          {
+            std::fill(levelMatrixTimesP.begin(), levelMatrixTimesP.end(), Scalar(0.0));
+            for (int fineI=0; fineI<fineLevel.levelRows; fineI++)
+              for (int fineJ=0; fineJ<fineLevel.levelRows; fineJ++)
+              {
+                const Scalar matrixEntry = fineLevel.matrix[static_cast<size_t>((c * fineLevel.levelRows + fineI) * fineLevel.levelRows + fineJ)];
+                if (matrixEntry == Scalar(0.0)) continue;
+                for (int coarseJ=0; coarseJ<levelCoarseRows; coarseJ++)
+                  levelMatrixTimesP[static_cast<size_t>(fineI * levelCoarseRows + coarseJ)] += matrixEntry * levelTransfer.prolongation[static_cast<size_t>(fineJ * levelCoarseRows + coarseJ)];
+              }
+            for (int coarseI=0; coarseI<levelCoarseRows; coarseI++)
+              for (int fineI=0; fineI<fineLevel.levelRows; fineI++)
+              {
+                const Scalar restrictionEntry = levelTransfer.restriction[static_cast<size_t>(coarseI * fineLevel.levelRows + fineI)];
+                if (restrictionEntry == Scalar(0.0)) continue;
+                for (int coarseJ=0; coarseJ<levelCoarseRows; coarseJ++)
+                  nextLevel.matrix[static_cast<size_t>((c * levelCoarseRows + coarseI) * levelCoarseRows + coarseJ)] += restrictionEntry * levelMatrixTimesP[static_cast<size_t>(fineI * levelCoarseRows + coarseJ)];
+              }
+            for (int i=0; i<levelCoarseRows; i++)
+            {
+              const Scalar diagonalValue = nextLevel.matrix[static_cast<size_t>((c * levelCoarseRows + i) * levelCoarseRows + i)];
+              if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
+                throw std::runtime_error("p-multigrid Chebyshev coarse solve found nonpositive recursive coarse diagonal entry");
+              nextLevel.levelDiagonal[static_cast<size_t>(c * levelCoarseRows + i)] = diagonalValue;
+              Scalar scaledRowSum = 0.0;
+              for (int j=0; j<levelCoarseRows; j++)
+                scaledRowSum += std::abs(nextLevel.matrix[static_cast<size_t>((c * levelCoarseRows + i) * levelCoarseRows + j)]) / diagonalValue;
+              nextLevel.lambdaMaxByCell[static_cast<size_t>(c)] = std::max(nextLevel.lambdaMaxByCell[static_cast<size_t>(c)], scaledRowSum);
+            }
+          }
+          levels.push_back(std::move(nextLevel));
+        }
+
+        auto applyLevelMatrix = [&](const PMultigridLevel &level, const int cellOrdinal, const std::vector<Scalar> &inputVector, std::vector<Scalar> &outputVector)
+        {
+          outputVector.assign(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          const size_t offset = static_cast<size_t>(cellOrdinal) * level.levelRows * level.levelRows;
+          for (int i=0; i<level.levelRows; i++)
+            for (int j=0; j<level.levelRows; j++)
+              outputVector[static_cast<size_t>(i)] += level.matrix[offset + static_cast<size_t>(i * level.levelRows + j)] * inputVector[static_cast<size_t>(j)];
+        };
+
+        auto jacobiSmoothLevel = [&](const PMultigridLevel &level, const int cellOrdinal, const std::vector<Scalar> &levelRhs, std::vector<Scalar> &levelSolution)
+        {
+          std::vector<Scalar> levelApplied(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          const Scalar omega = Scalar(1.0) / level.lambdaMaxByCell[static_cast<size_t>(cellOrdinal)];
+          for (int sweep=0; sweep<pMultigridJacobiSmootherIterations; sweep++)
+          {
+            applyLevelMatrix(level, cellOrdinal, levelSolution, levelApplied);
+            for (int i=0; i<level.levelRows; i++)
+            {
+              const size_t index = static_cast<size_t>(cellOrdinal * level.levelRows + i);
+              levelSolution[static_cast<size_t>(i)] += omega * (levelRhs[static_cast<size_t>(i)] - levelApplied[static_cast<size_t>(i)]) / level.levelDiagonal[index];
+            }
+          }
+        };
+
+        auto coarseChebyshevSolveLevel = [&](const PMultigridLevel &level, const int cellOrdinal, const std::vector<Scalar> &levelRhs, std::vector<Scalar> &levelSolution)
+        {
+          levelSolution.assign(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          const Scalar chebyshevLambdaMax = level.lambdaMaxByCell[static_cast<size_t>(cellOrdinal)];
+          const Scalar chebyshevLambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), pMultigridCoarseChebyshevLowerFraction * chebyshevLambdaMax);
+          if (!(chebyshevLambdaMax > chebyshevLambdaMin))
+            throw std::runtime_error("p-multigrid Chebyshev coarse solve has invalid spectral interval");
+          const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
+          const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+          const Scalar s1 = ifpackTheta * ifpackDelta;
+          Scalar rhok = Scalar(1.0) / s1;
+          std::vector<Scalar> correction(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          std::vector<Scalar> levelApplied(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          applyLevelMatrix(level, cellOrdinal, levelSolution, levelApplied);
+          for (int i=0; i<level.levelRows; i++)
+          {
+            const size_t index = static_cast<size_t>(cellOrdinal * level.levelRows + i);
+            correction[static_cast<size_t>(i)] = (Scalar(1.0) / ifpackTheta) * (levelRhs[static_cast<size_t>(i)] - levelApplied[static_cast<size_t>(i)]) / level.levelDiagonal[index];
+            levelSolution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
+          }
+          for (int iteration=1; iteration<pMultigridCoarseChebyshevIterations; iteration++)
+          {
+            applyLevelMatrix(level, cellOrdinal, levelSolution, levelApplied);
+            const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
+            const Scalar dtemp1 = rhokp1 * rhok;
+            const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
+            rhok = rhokp1;
+            for (int i=0; i<level.levelRows; i++)
+            {
+              const size_t index = static_cast<size_t>(cellOrdinal * level.levelRows + i);
+              correction[static_cast<size_t>(i)] = dtemp2 * (levelRhs[static_cast<size_t>(i)] - levelApplied[static_cast<size_t>(i)]) / level.levelDiagonal[index]
+                                             + dtemp1 * correction[static_cast<size_t>(i)];
+              levelSolution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
+            }
+          }
+        };
+
+        std::function<void(size_t,int,const std::vector<Scalar>&,std::vector<Scalar>&)> vCycle;
+        vCycle = [&](const size_t levelOrdinal, const int cellOrdinal, const std::vector<Scalar> &levelRhs, std::vector<Scalar> &levelSolution)
+        {
+          const PMultigridLevel &level = levels[levelOrdinal];
+          levelSolution.assign(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          if (levelOrdinal + 1 == levels.size())
+          {
+            coarseChebyshevSolveLevel(level, cellOrdinal, levelRhs, levelSolution);
+            return;
+          }
+
+          jacobiSmoothLevel(level, cellOrdinal, levelRhs, levelSolution);
+          std::vector<Scalar> levelApplied(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          applyLevelMatrix(level, cellOrdinal, levelSolution, levelApplied);
+          std::vector<Scalar> levelResidual(static_cast<size_t>(level.levelRows), Scalar(0.0));
+          for (int i=0; i<level.levelRows; i++) levelResidual[static_cast<size_t>(i)] = levelRhs[static_cast<size_t>(i)] - levelApplied[static_cast<size_t>(i)];
+          const TensorHGradPTransfer &levelTransfer = cachedTensorHGradPTransfer(dim, level.degree);
+          std::vector<Scalar> restrictedResidual;
+          applyTensorHGradPTransferRestriction(levelTransfer, levelResidual, restrictedResidual);
+          std::vector<Scalar> coarseLevelCorrection;
+          vCycle(levelOrdinal + 1, cellOrdinal, restrictedResidual, coarseLevelCorrection);
+          std::vector<Scalar> levelCorrection;
+          applyTensorHGradPTransferProlongation(levelTransfer, coarseLevelCorrection, levelCorrection);
+          for (int i=0; i<level.levelRows; i++) levelSolution[static_cast<size_t>(i)] += levelCorrection[static_cast<size_t>(i)];
+          jacobiSmoothLevel(level, cellOrdinal, levelRhs, levelSolution);
+        };
+
+        for (int cycle=0; cycle<numInverseIterations; cycle++)
+        {
+          applyHostVector();
+          for (int c=0; c<cells; c++)
+          {
+            const size_t cellOffset = static_cast<size_t>(c * rows);
+            for (int i=0; i<rows; i++) fineResidual[static_cast<size_t>(i)] = rhs[cellOffset + i] - applied[cellOffset + i];
+            vCycle(0, c, fineResidual, fineCorrection);
+            for (int i=0; i<rows; i++) iterate[cellOffset + i] += fineCorrection[static_cast<size_t>(i)];
+          }
+        }
+        timing.pMultigridLevels = static_cast<int>(levels.size());
+        timing.pMultigridFineDofs = rows;
+        timing.pMultigridCoarseDofs = levels.back().levelRows;
+        timing.pMultigridJacobiSmootherIterations = pMultigridJacobiSmootherIterations;
+        timing.pMultigridCoarseChebyshevIterations = pMultigridCoarseChebyshevIterations;
+        timing.pMultigridCoarseChebyshevLowerFraction = pMultigridCoarseChebyshevLowerFraction;
+        timing.pMultigridCoarseSolveCount = numInverseIterations * cells;
+        timing.inversePath = "recursive_pmultigrid_cached_tensor_hgrad_transfer_jacobi_smoother_chebyshev_coarse";
+        timing.pMultigridPath = "recursive_cached_tensor_hgrad_hierarchical_restriction_prolongation_galerkin_hierarchy_diagonal_jacobi_smoothing_chebyshev_coarse_solver_diagnostic";
+      }
     }
     else
     {
@@ -2812,6 +3067,9 @@ namespace
               << " pMultigridCoarseDofs=" << timing.pMultigridCoarseDofs
               << " pMultigridChebyshevSmootherIterations=" << timing.pMultigridChebyshevSmootherIterations
               << " pMultigridChebyshevSmootherLowerFraction=" << timing.pMultigridChebyshevSmootherLowerFraction
+              << " pMultigridJacobiSmootherIterations=" << timing.pMultigridJacobiSmootherIterations
+              << " pMultigridCoarseChebyshevIterations=" << timing.pMultigridCoarseChebyshevIterations
+              << " pMultigridCoarseChebyshevLowerFraction=" << timing.pMultigridCoarseChebyshevLowerFraction
               << " pMultigridCoarseSolveCount=" << timing.pMultigridCoarseSolveCount
               << " pMultigridPath=" << timing.pMultigridPath
               << " iterations=" << timing.inverseIterations
@@ -3079,6 +3337,9 @@ int main(int argc, char *argv[])
     int inverseOperatorCheckSamples = 0;
     Scalar pMultigridChebyshevSmootherLowerFraction = 0.30;
     int pMultigridChebyshevSmootherIterations = 2;
+    int pMultigridJacobiSmootherIterations = 2;
+    int pMultigridCoarseChebyshevIterations = 8;
+    Scalar pMultigridCoarseChebyshevLowerFraction = 0.05;
     std::string polyOrderText = "1:4";
     std::string operatorChoice = "mass-plus-stiffness";
     std::string mode = "apply";
@@ -3101,7 +3362,10 @@ int main(int argc, char *argv[])
     cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local Richardson/Chebyshev iterations, or p-multigrid V-cycles, used in inverse-diagnostic mode.");
     cmdp.setOption("pMultigridChebyshevSmootherIterations", &pMultigridChebyshevSmootherIterations, "Chebyshev pre/post smoother iterations for --inverseDiagnosticAlgorithm=pmultigrid-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherLowerFraction", &pMultigridChebyshevSmootherLowerFraction, "Lower endpoint as a fraction of lambdaMax for high-frequency Chebyshev p-multigrid smoothing.");
-    cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson, chebyshev, or pmultigrid-chebyshev local inverse diagnostic recurrence.");
+    cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
+    cmdp.setOption("pMultigridCoarseChebyshevIterations", &pMultigridCoarseChebyshevIterations, "Chebyshev iterations used as the coarsest p-multigrid solver for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
+    cmdp.setOption("pMultigridCoarseChebyshevLowerFraction", &pMultigridCoarseChebyshevLowerFraction, "Coarse Chebyshev lower endpoint as a fraction of the coarse diagonal-Jacobi lambdaMax estimate.");
+    cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson, chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev local inverse diagnostic recurrence.");
     cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, true-eigen, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
     cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free Ifpack2-style D^{-1}A spectral-radius power estimate.");
     cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power or true-eigen lambdaMax estimates before Chebyshev use.");
@@ -3138,6 +3402,10 @@ int main(int argc, char *argv[])
     if (numSolve < 1) throw std::invalid_argument("--numSolve must be positive");
     if (numInverseIterations < 1) throw std::invalid_argument("--numInverseIterations must be positive");
     if (pMultigridChebyshevSmootherIterations < 1) throw std::invalid_argument("--pMultigridChebyshevSmootherIterations must be positive");
+    if (pMultigridJacobiSmootherIterations < 1) throw std::invalid_argument("--pMultigridJacobiSmootherIterations must be positive");
+    if (pMultigridCoarseChebyshevIterations < 1) throw std::invalid_argument("--pMultigridCoarseChebyshevIterations must be positive");
+    if ((pMultigridCoarseChebyshevLowerFraction <= 0.0) || (pMultigridCoarseChebyshevLowerFraction >= 1.0))
+      throw std::invalid_argument("--pMultigridCoarseChebyshevLowerFraction must be in (0,1)");
     if (inverseSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
     if (inverseLowerSpectralEstimateIterations <= 0) inverseLowerSpectralEstimateIterations = inverseSpectralEstimateIterations;
     if (inverseLowerSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseLowerSpectralEstimateIterations must be positive after defaulting");
@@ -3154,8 +3422,8 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
     if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && (basisMode != "hgrad"))
       throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, --operator=vlasov-coordinate-x1-d3, --operator=vlasov-graph-norm-1d1t2v, and --operator=vlasov-graph-norm-solution-coeff-1d1t2v require --basisMode=hgrad");
-    if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-chebyshev"))
-      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, or pmultigrid-chebyshev");
+    if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-jacobi-chebyshev"))
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "true-eigen") && (inverseLowerSpectralEstimate != "true-eigen-safe") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))
       throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, true-eigen-safe, user, or assembled-inverse-iteration");
     if ((inverseInitialGuess != "zero") && (inverseInitialGuess != "diagonal"))
@@ -3267,6 +3535,8 @@ int main(int argc, char *argv[])
         inverseDiagnosticTiming = inverseDiagnosticTerms(terms, workspaces, worksetSize, cells, localDofs, dim, p,
                                                         maxAssembledEntries, inverseDiagnosticRequireAssembledReference, numInverseIterations,
                                                         pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction,
+                                                        pMultigridJacobiSmootherIterations, pMultigridCoarseChebyshevIterations,
+                                                        pMultigridCoarseChebyshevLowerFraction,
                                                         inverseDiagnosticAlgorithm, inverseEigenRatio, inverseLambdaMin, inverseLambdaMax,
                                                         inverseSpectralEstimate, inverseSpectralEstimateIterations, inversePowerSafetyFactor,
                                                         inverseLowerSpectralEstimate, inverseLowerSpectralEstimateIterations, inverseLowerPowerSafetyFactor,

@@ -157,12 +157,12 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ReportsL2MassWeight )
   const DriverRun run = runDriver(
       "--dim=4 --polyOrder=1 --cellsPerDim=1 "
       "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=diagonal "
-      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=10000");
+      "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=10000");
 
   TEST_EQUALITY(run.status, 0);
   TEST_INEQUALITY(run.output.find("termWeights="), std::string::npos);
-  TEST_INEQUALITY(run.output.find("vlasov_graph_norm_l2:2.000000"), std::string::npos);
-  std::cout << "VLASOV_GRAPH_NORM_L2_WEIGHT observed=2.000000 source=massWeight" << std::endl;
+  TEST_INEQUALITY(run.output.find("vlasov_graph_norm_l2:1000000.000000"), std::string::npos);
+  std::cout << "VLASOV_GRAPH_NORM_L2_WEIGHT observed=1000000.000000 source=massWeight" << std::endl;
 }
 
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, AssembledBoundsReduceResidualForP1P2 )
@@ -177,7 +177,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, AssembledBoundsReduceResidual
       "--inverseLowerSpectralEstimate=assembled-inverse-iteration "
       "--inverseLowerSpectralEstimateIterations=20 "
       "--numInverseIterations=30 --inverseInitialGuess=zero "
-      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=100000");
+      "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=100000");
 
   TEST_EQUALITY(run.status, 0);
   const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
@@ -202,7 +202,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, AssembledTrueEigenDiagnostics
       "--inverseTrueEigenDiagnostic=1 "
       "--inverseLowerSpectralEstimate=ratio --inverseEigenRatio=30 "
       "--numInverseIterations=6 --inverseInitialGuess=zero "
-      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+      "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
 
   TEST_EQUALITY(run.status, 0);
   const std::vector<double> trueMin = parseAllInverseDiagnosticDoubleKey(run.output, "trueLambdaMin");
@@ -258,7 +258,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, OracleTrueLambdaMinChebyshevF
       "--inverseTrueEigenDiagnostic=1 "
       "--inverseLowerSpectralEstimate=true-eigen "
       "--numInverseIterations=30 --inverseInitialGuess=zero "
-      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+      "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
 
   TEST_EQUALITY(run.status, 0);
   const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
@@ -290,7 +290,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ConservativeTrueEigenBoundsAn
       "--inverseLowerSpectralEstimate=true-eigen-safe --inverseLowerPowerSafetyFactor=0.9 "
       "--inverseTrueEigenDiagnostic=1 --inverseOperatorCheckSamples=3 "
       "--numInverseIterations=6 --inverseInitialGuess=zero "
-      "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
+      "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=3000000");
 
   TEST_EQUALITY(run.status, 0);
   const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
@@ -362,7 +362,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevCachedHgra
            << "--pMultigridChebyshevSmootherIterations=" << smootherDegree << " "
            << "--pMultigridChebyshevSmootherLowerFraction=0.30 "
            << "--inverseInitialGuess=zero "
-           << "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=3000000";
+           << "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=3000000";
       const DriverRun run = runDriver(args.str());
 
       TEST_EQUALITY(run.status, 0);
@@ -409,6 +409,57 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevCachedHgra
   TEST_ASSERT(std::isfinite(bestReduction));
 }
 
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridJacobiSmootherChebyshevCoarseDiagnostic )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  std::ostringstream args;
+  args << "--dim=4 --polyOrder=2:3 --cellsPerDim=1 "
+       << "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+       << "--inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev "
+       << "--inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20 "
+       << "--inverseLowerSpectralEstimate=ratio --inverseEigenRatio=30 "
+       << "--numInverseIterations=2 "
+       << "--pMultigridJacobiSmootherIterations=2 "
+       << "--pMultigridCoarseChebyshevIterations=6 "
+       << "--pMultigridCoarseChebyshevLowerFraction=0.05 "
+       << "--inverseInitialGuess=zero "
+       << "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=3000000";
+  const DriverRun run = runDriver(args.str());
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> reductions = parseAllInverseDiagnosticResidualReductions(run.output);
+  const std::vector<double> levels = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridLevels");
+  const std::vector<double> coarseDofs = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridCoarseDofs");
+  const std::vector<double> jacobiSweeps = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridJacobiSmootherIterations");
+  const std::vector<double> coarseChebyshevIterations = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridCoarseChebyshevIterations");
+  const std::vector<double> coarseChebyshevFractions = parseAllInverseDiagnosticDoubleKey(run.output, "pMultigridCoarseChebyshevLowerFraction");
+  TEST_EQUALITY(reductions.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(levels.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(coarseDofs.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(jacobiSweeps.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(coarseChebyshevIterations.size(), static_cast<std::size_t>(2));
+  TEST_EQUALITY(coarseChebyshevFractions.size(), static_cast<std::size_t>(2));
+  for (std::size_t ordinal=0; ordinal<reductions.size(); ordinal++)
+  {
+    const int p = static_cast<int>(ordinal) + 2;
+    std::cout << "VLASOV_GRAPH_NORM_PMULTIGRID_JACOBI_CHEBYSHEV_COARSE p=" << p
+              << " residualReduction=" << reductions[ordinal]
+              << " levels=" << levels[ordinal]
+              << " coarseDofs=" << coarseDofs[ordinal]
+              << " jacobiSweeps=" << jacobiSweeps[ordinal]
+              << " coarseChebyshevIterations=" << coarseChebyshevIterations[ordinal]
+              << " coarseChebyshevLowerFraction=" << coarseChebyshevFractions[ordinal]
+              << std::endl;
+    TEST_ASSERT(std::isfinite(reductions[ordinal]));
+    TEST_COMPARE(levels[ordinal], ==, static_cast<double>(p));
+    TEST_COMPARE(coarseDofs[ordinal], ==, 16.0);
+    TEST_COMPARE(jacobiSweeps[ordinal], ==, 2.0);
+    TEST_COMPARE(coarseChebyshevIterations[ordinal], ==, 6.0);
+    TEST_FLOATING_EQUALITY(coarseChebyshevFractions[ordinal], 0.05, 1e-12);
+  }
+}
+
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, MatrixFreeCellPowerSweepFindsImprovingParameters )
 {
   if (!shouldRunExternalDiagnosticsOnThisRank()) return;
@@ -431,7 +482,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, MatrixFreeCellPowerSweepFinds
            << "--inverseLowerSpectralEstimate=ratio --inverseEigenRatio=" << ratio << " "
            << "--numInverseIterations=" << iterations << " --inverseInitialGuess=zero "
            << "--inverseDiagnosticRequireAssembledReference=0 "
-           << "--massWeight=2.0 --stiffnessWeight=0.5 --maxAssembledEntries=1";
+           << "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=1";
       const DriverRun run = runDriver(args.str());
       TEST_EQUALITY(run.status, 0);
       const double reduction = minimumResidualReduction(parseAllInverseDiagnosticResidualReductions(run.output));

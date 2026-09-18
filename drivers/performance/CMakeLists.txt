@@ -4,6 +4,8 @@ add_executable(StokesAssemblyPerformanceTest "StokesAssemblyPerformanceTest.cpp"
 target_link_libraries(StokesAssemblyPerformanceTest Camellia)
 
 add_executable(TensorPoissonPAMatrixDriver "TensorPoissonPAMatrixDriver.cpp")
+add_executable(VlasovGramGMGStudyDriver "VlasovGramGMGStudyDriver.cpp")
+target_link_libraries(VlasovGramGMGStudyDriver Camellia ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
 set(TENSOR_INTREPID2_SOURCE_DIR
   "/Users/nvrober/fork-Trilinos/packages/intrepid2/src"
   CACHE PATH "Intrepid2 source directory from the PAMatrix-enabled Trilinos fork")
@@ -523,7 +525,7 @@ add_custom_target(runTensorH1GramPAMatrixNoReferenceChebyshevSweep
   COMMENT "Running opt-in direct-PAMatrix H1 Gram Chebyshev diagnostic without assembled reference/oracle blocks"
   VERBATIM)
 
-add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
+add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep ALL
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
     --dim=4
     --polyOrder=1:2
@@ -542,7 +544,7 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --numInverseIterations=10
     --inverseMaxResidualReduction=-1
     --inverseEigenRatio=1.1
-    --massWeight=2.0
+    --massWeight=1e6
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
@@ -560,7 +562,7 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --numInverseIterations=10
     --inverseMaxResidualReduction=-1
     --inverseEigenRatio=1.1
-    --massWeight=2.0
+    --massWeight=1e6
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
   COMMAND $<TARGET_FILE:TensorPoissonPAMatrixDriver>
@@ -578,7 +580,7 @@ add_custom_target(runTensorVlasovGraphNormPAMatrixChebyshevViabilitySweep
     --numInverseIterations=20
     --inverseMaxResidualReduction=-1
     --inverseEigenRatio=1.1
-    --massWeight=2.0
+    --massWeight=1e6
     --stiffnessWeight=0.5
     --maxAssembledEntries=1
   DEPENDS TensorPoissonPAMatrixDriver
