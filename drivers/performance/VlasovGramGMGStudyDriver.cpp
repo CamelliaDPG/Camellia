@@ -19,6 +19,7 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #include <Teuchos_RCP.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -34,8 +35,7 @@ namespace
   struct StudyOptions
   {
     std::string outputFile = "vlasov-gram-gmg-study.txt";
-    int fineH1Order = 4;
-    int coarseH1Order = 2;
+    int fineH1Order = 7;
     int deltaK = 0;
     int elementsPerDim = 1;
     int maxIterations = 200;
@@ -68,6 +68,46 @@ namespace
       case GMGOperator::SMOOTHER_ONLY: return "SMOOTHER_ONLY";
       default: return "UNKNOWN";
     }
+  }
+
+  std::vector<int> pCoarsenSchedule(int degree)
+  {
+    if (degree < 1) throw std::invalid_argument("fineH1Order/fine p degree must be positive");
+
+    std::vector<int> pCoarsenSchedule;
+    int pCoarse = std::max(degree / 2, 1);
+    pCoarsenSchedule.push_back(pCoarse);
+    while (pCoarse > 1)
+    {
+      pCoarse = std::max(pCoarse / 2, 1);
+      pCoarsenSchedule.push_back(pCoarse);
+    }
+    return pCoarsenSchedule;
+  }
+
+  std::string pCoarsenScheduleString(int degree)
+  {
+    std::string schedule = std::to_string(degree);
+    for (int p : pCoarsenSchedule(degree))
+    {
+      schedule += " -> " + std::to_string(p);
+    }
+    return schedule;
+  }
+
+  std::vector<MeshPtr> meshesForPCoarseningSchedule(SolutionPtr solution, const StudyOptions &options)
+  {
+    MeshPtr fineMesh = solution->mesh();
+    std::vector<MeshPtr> meshesCoarseToFine;
+    std::vector<int> schedule = pCoarsenSchedule(options.fineH1Order);
+
+    for (auto it = schedule.rbegin(); it != schedule.rend(); ++it)
+    {
+      meshesCoarseToFine.push_back(MeshFactory::minRuleMesh(fineMesh->getTopology(), fineMesh->bilinearForm(),
+                                                            *it, options.deltaK));
+    }
+    meshesCoarseToFine.push_back(fineMesh);
+    return meshesCoarseToFine;
   }
 
   SolutionPtr makeVlasovGraphGramSolution(const StudyOptions &options)
@@ -164,8 +204,7 @@ namespace
     }
     else
     {
-      const int kCoarse = options.coarseH1Order - 1;
-      meshes = GMGSolver::meshesForMultigrid(solution->mesh(), kCoarse, options.deltaK);
+      meshes = meshesForPCoarseningSchedule(solution, options);
     }
 
     Teuchos::RCP<GMGSolver> solver = Teuchos::rcp(new GMGSolver(solution, meshes,
@@ -245,8 +284,10 @@ namespace
     out << "  space: HGRAD_DISC\n";
     out << "  basis family: hierarchical\n";
     out << "  elements per dimension: " << options.elementsPerDim << "\n";
-    out << "  fine H1Order: " << options.fineH1Order << "\n";
-    out << "  coarse H1Order: " << options.coarseH1Order << "\n";
+    out << "  fine p degree range: 1 .. " << options.fineH1Order << "\n";
+    out << "  p coarsening schedule: for each fine p, "
+        << "p -> max(p/2,1) -> ... -> 1; max-p schedule is "
+        << pCoarsenScheduleString(options.fineH1Order) << "\n";
     out << "  delta_k: " << options.deltaK << "\n";
     out << "  massWeight: " << options.massWeight << "\n\n";
     out << "Solver settings:\n";
@@ -254,7 +295,7 @@ namespace
     out << "  tolerance: " << options.tolerance << "\n";
     out << "  max iterations: " << options.maxIterations << "\n";
     out << "  smoother applications: " << options.smootherApplications << "\n\n";
-    out << std::left << std::setw(48) << "strategy"
+    out << std::left << std::setw(56) << "strategy"
         << std::setw(16) << "status"
         << std::setw(12) << "iterations"
         << std::setw(14) << "seconds"
@@ -279,8 +320,7 @@ int main(int argc, char *argv[])
     StudyOptions options;
     Teuchos::CommandLineProcessor cmdp(false,true);
     cmdp.setOption("outputFile", &options.outputFile, "Human-readable study output file.");
-    cmdp.setOption("fineH1Order", &options.fineH1Order, "Fine H1Order for the HGRAD_DISC Gram problem.");
-    cmdp.setOption("coarseH1Order", &options.coarseH1Order, "Lowest-order p-multigrid H1Order.");
+    cmdp.setOption("fineH1Order", &options.fineH1Order, "Maximum fine p degree/H1Order for the HGRAD_DISC Gram sweep; default studies p=1..7.");
     cmdp.setOption("deltaK", &options.deltaK, "Camellia test-space enrichment parameter used by Mesh/GMGOperator.");
     cmdp.setOption("elementsPerDim", &options.elementsPerDim, "Uniform element count in each of the four dimensions; default is the requested single element.");
     cmdp.setOption("maxIterations", &options.maxIterations, "Maximum outer Krylov iterations.");
@@ -304,32 +344,39 @@ int main(int argc, char *argv[])
       writeHeader(output, options);
     }
 
-    for (const Strategy &strategy : defaultStrategies(options.quick))
+    for (int fineP = 1; fineP <= options.fineH1Order; fineP++)
     {
-      auto solution = makeVlasovGraphGramSolution(options);
-      auto gmgSolver = makeStudySolver(solution, strategy, options);
-      SolverPtr solver = Teuchos::rcp_implicit_cast<Solver>(gmgSolver);
+      StudyOptions degreeOptions = options;
+      degreeOptions.fineH1Order = fineP;
 
-      const auto start = std::chrono::steady_clock::now();
-      int solveResult = solution->solve(solver);
-      const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-      const int iterations = (solveResult == 0) ? gmgSolver->iterationCount() : -1;
-
-      // This executable is a study harness: an individual strategy failing to
-      // converge is a result to record, not a driver failure.  Exceptions still
-      // produce a nonzero process return code via the catch block below.
-      if (rank == 0)
+      for (const Strategy &strategy : defaultStrategies(options.quick))
       {
-        output << std::left << std::setw(48) << strategy.name
-               << std::setw(16) << (solveResult == 0 ? "converged" : "failed")
-               << std::setw(12) << iterations
-               << std::setw(14) << std::setprecision(6) << std::fixed << seconds
-               << std::setw(18) << multigridStrategyString(strategy.multigridStrategy)
-               << std::setw(18) << GMGOperator::smootherString(strategy.smoother)
-               << std::setw(14) << strategy.coarseSolver
-               << std::setw(12) << strategy.chebyshevDegree
-               << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
-               << strategy.chebyshevMaxEigenIterations << "\n";
+        auto solution = makeVlasovGraphGramSolution(degreeOptions);
+        auto gmgSolver = makeStudySolver(solution, strategy, degreeOptions);
+        SolverPtr solver = Teuchos::rcp_implicit_cast<Solver>(gmgSolver);
+
+        const auto start = std::chrono::steady_clock::now();
+        int solveResult = solution->solve(solver);
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        const int iterations = (solveResult == 0) ? gmgSolver->iterationCount() : -1;
+
+        // This executable is a study harness: an individual strategy failing to
+        // converge is a result to record, not a driver failure.  Exceptions still
+        // produce a nonzero process return code via the catch block below.
+        if (rank == 0)
+        {
+          const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name;
+          output << std::left << std::setw(56) << strategyName
+                 << std::setw(16) << (solveResult == 0 ? "converged" : "failed")
+                 << std::setw(12) << iterations
+                 << std::setw(14) << std::setprecision(6) << std::fixed << seconds
+                 << std::setw(18) << multigridStrategyString(strategy.multigridStrategy)
+                 << std::setw(18) << GMGOperator::smootherString(strategy.smoother)
+                 << std::setw(14) << strategy.coarseSolver
+                 << std::setw(12) << strategy.chebyshevDegree
+                 << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
+                 << strategy.chebyshevMaxEigenIterations << "\n";
+        }
       }
     }
 
@@ -337,6 +384,8 @@ int main(int argc, char *argv[])
     {
       output << "\nNotes:\n";
       output << "  This driver intentionally uses Camellia assembled operators and GMGOperator/GMGSolver.\n";
+      output << "  The study sweeps fine p from 1 through the configured maximum.\n";
+      output << "  For each fine p, p-multigrid levels follow p -> max(p/2,1) -> ... -> 1.\n";
       output << "  The coarse Chebyshev/Jacobi variants replace the lowest-level coarse solver with\n";
       output << "  a smoother-only GMGSolver on the coarsest p mesh.\n";
       output << "  Failed strategy rows are recorded as study results; they do not make the driver fail.\n";
