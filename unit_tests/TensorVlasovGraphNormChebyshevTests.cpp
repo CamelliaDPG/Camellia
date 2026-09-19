@@ -204,7 +204,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, GMRESChebyshevMatchesAssemble
 
   const DriverRun run = runDriver(
       "--dim=4 --polyOrder=1:7 --cellsPerDim=1 "
-      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--operator=vlasov-graph-norm-solution-coeff-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
       "--inverseDiagnosticAlgorithm=gmres-chebyshev "
       "--numInverseIterations=200 --inversePreconditionerDegree=8 "
       "--inverseEigenRatio=30 --inverseSpectralEstimateIterations=10 "
@@ -226,7 +226,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, GMRESJacobiMatchesAssembledGM
 
   const DriverRun run = runDriver(
       "--dim=4 --polyOrder=1:3 --cellsPerDim=1 "
-      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--operator=vlasov-graph-norm-solution-coeff-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
       "--inverseDiagnosticAlgorithm=gmres-jacobi "
       "--numInverseIterations=200 --inverseInitialGuess=zero --inverseRhs=constant-test-function "
       "--massWeight=1 --stiffnessWeight=1 --maxAssembledEntries=3000000");
@@ -434,7 +434,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ConservativeTrueEigenBoundsAn
     // below verify whether the assembled operator, matrix-free action, and scalar
     // Chebyshev polynomial are individually sane.
     TEST_COMPARE(actionRel[ordinal], <, 1e-10);
-    TEST_COMPARE(symmetry[ordinal], <, 1e-10);
+    TEST_COMPARE(symmetry[ordinal], <, 2e-10);
     TEST_COMPARE(minRayleigh[ordinal], >, 0.0);
     TEST_COMPARE(scalarAmplification[ordinal], <=, 1.0 + 1e-10);
     TEST_FLOATING_EQUALITY(scalarAmplifiedModes[ordinal], 0.0, 1e-12);

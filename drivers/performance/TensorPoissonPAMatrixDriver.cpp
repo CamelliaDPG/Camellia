@@ -4,6 +4,14 @@
 
 #include "Intrepid2_PAMatrix.hpp"
 
+#include "BF.h"
+#include "BC.h"
+#include "Function.h"
+#include "MeshFactory.h"
+#include "RHS.h"
+#include "Solution.h"
+#include "VarFactory.h"
+
 #include <Intrepid2_CellGeometryTestUtils.hpp>
 #include <Intrepid2_DerivedBasisFamily.hpp>
 #include <Intrepid2_HierarchicalBasisProlongator.hpp>
@@ -60,6 +68,7 @@ namespace
   using PAMatrix = Intrepid2::PAMatrix<DeviceType,Scalar>;
   using TpetraMap = Tpetra::Map<>;
   using TpetraCrsGraph = Tpetra::CrsGraph<typename TpetraMap::local_ordinal_type, typename TpetraMap::global_ordinal_type, typename TpetraMap::node_type>;
+  using TpetraCrsMatrix = Tpetra::CrsMatrix<Scalar, typename TpetraMap::local_ordinal_type, typename TpetraMap::global_ordinal_type, typename TpetraMap::node_type>;
   using TpetraMultiVector = Tpetra::MultiVector<Scalar>;
   using TpetraOperator = Tpetra::Operator<Scalar>;
   using TpetraRowMatrix = Tpetra::RowMatrix<Scalar>;
@@ -88,19 +97,23 @@ namespace
 
       for (int p=0; p<pointCount; p++)
       {
+        const auto physicalCoordinate = [&](const int d)
+        {
+          return 0.5 * (pointsIn(p,d) + 1.0);
+        };
         if (_kind == "velocity-component")
         {
           if ((componentOrdinal < 0) || (componentOrdinal >= pointDim))
             throw std::invalid_argument("AnalyticGraphNormSolutionCoefficientEvaluator velocity component is outside point dimension");
-          valuesOut(p) = pointsIn(p,componentOrdinal);
+          valuesOut(p) = physicalCoordinate(componentOrdinal);
         }
         else if (_kind == "maxwell-ax-proxy")
         {
-          valuesOut(p) = 0.5 * (pointsIn(p,0) + pointsIn(p,1));
+          valuesOut(p) = 0.5 * (physicalCoordinate(0) + physicalCoordinate(1));
         }
         else if (_kind == "maxwell-ay-proxy")
         {
-          valuesOut(p) = 0.75 * pointsIn(p,1);
+          valuesOut(p) = 0.75 * physicalCoordinate(1);
         }
         else
         {
@@ -339,9 +352,9 @@ namespace
             }
           : std::vector<Camellia::TensorFunctionPtr>{
               Camellia::TensorFunction::constant(-1.0),
-              Camellia::TensorFunction::constant(-1.0) * Camellia::TensorFunction::componentCoordinate(2),
-              Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1)),
-              Camellia::TensorFunction::constant(-0.75) * Camellia::TensorFunction::componentCoordinate(1)
+              Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(2) + Camellia::TensorFunction::constant(1.0)),
+              Camellia::TensorFunction::constant(-0.25) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1) + Camellia::TensorFunction::constant(2.0)),
+              Camellia::TensorFunction::constant(-0.375) * (Camellia::TensorFunction::componentCoordinate(1) + Camellia::TensorFunction::constant(1.0))
             };
 
         for (size_t trialComponent=0; trialComponent<derivativeComponents.size(); trialComponent++)
@@ -461,6 +474,337 @@ namespace
     if (basisMode == "synthetic") return makeSyntheticOperatorTerms(dim, p, cells, operatorChoice, massWeight, stiffnessWeight);
     if (basisMode == "hgrad")     return makeHGRADOperatorTerms(dim, p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
     throw std::invalid_argument("--basisMode must be synthetic or hgrad");
+  }
+
+  enum class VlasovCamelliaComparisonBlock
+  {
+    Mass,
+    DtDt,
+    FullGraphNorm
+  };
+
+  struct DenseMatrixComparison
+  {
+    double maxAbsError = -1.0;
+    double maxRelError = -1.0;
+    int localDofs = 0;
+    int globalDofs = 0;
+  };
+
+  std::vector<Scalar> assembleDenseLocalMatrix(std::vector<OperatorTerm> &terms, const int cells, const int localDofs,
+                                               const long long maxAssembledEntries)
+  {
+    const long long entries = static_cast<long long>(cells) * localDofs * localDofs;
+    if (entries > maxAssembledEntries)
+      throw std::runtime_error("Camellia matrix comparison local matrix exceeds --maxAssembledEntries");
+
+    std::vector<Scalar> localMatrices(static_cast<size_t>(entries), Scalar(0.0));
+    for (auto &term : terms)
+    {
+      auto matrixData = term.matrix.allocateMatrixStorage();
+      term.matrix.assemble(matrixData);
+      Kokkos::fence();
+      if (matrixData.getUnderlyingViewRank() == 3)
+      {
+        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<3>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<localDofs; i++)
+            for (int j=0; j<localDofs; j++)
+              localMatrices[static_cast<size_t>((c * localDofs + i) * localDofs + j)] += term.weight * matrixHost(c,i,j);
+      }
+      else if (matrixData.getUnderlyingViewRank() == 2)
+      {
+        auto matrixHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), matrixData.template getUnderlyingView<2>());
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<localDofs; i++)
+            for (int j=0; j<localDofs; j++)
+              localMatrices[static_cast<size_t>((c * localDofs + i) * localDofs + j)] += term.weight * matrixHost(i,j);
+      }
+      else
+      {
+        throw std::invalid_argument("Unexpected PAMatrix storage rank in Camellia matrix comparison");
+      }
+    }
+    return localMatrices;
+  }
+
+  std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int p,
+                                                                         const VlasovCamelliaComparisonBlock block,
+                                                                         const Scalar massWeight)
+  {
+    constexpr int spaceDim = 4;
+    Kokkos::Array<Scalar,spaceDim> origin;
+    Kokkos::Array<Scalar,spaceDim> domainExtents;
+    Kokkos::Array<int,spaceDim> gridCellCounts;
+    for (int d=0; d<spaceDim; d++)
+    {
+      origin[d] = 0.0;
+      domainExtents[d] = 1.0;
+      gridCellCounts[d] = 1;
+    }
+
+    using CellGeometry = Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType>;
+    auto geometry = CellGeometry(origin, domainExtents, gridCellCounts,
+                                 CellGeometry::NO_SUBDIVISION, CellGeometry::HYPERCUBE_NODE_ORDER_TENSOR);
+
+    if (block == VlasovCamelliaComparisonBlock::Mass)
+    {
+      return std::vector<OperatorTerm>{{Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
+          geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE), massWeight, "camellia_compare_mass"}};
+    }
+
+    auto trialVar = Camellia::makeHGRADTensorFieldVar("f", spaceDim);
+    auto testVar  = Camellia::makeHGRADTensorFieldVar("w", spaceDim);
+    std::vector<OperatorTerm> terms;
+
+    if (block == VlasovCamelliaComparisonBlock::DtDt)
+    {
+      Camellia::TensorBilinearTerm dtDtTerm(trialVar,
+                                            testVar,
+                                            Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 1),
+                                            Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, 1),
+                                            Camellia::TensorFunction::constant(1.0),
+                                            Camellia::TENSOR_BILINEAR_TERM_VOLUME,
+                                            Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+      Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, dtDtTerm,
+                                                           "camellia_compare_dt_dt");
+      return terms;
+    }
+
+    if (block == VlasovCamelliaComparisonBlock::FullGraphNorm)
+    {
+      terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
+          geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE), massWeight, "camellia_compare_l2"});
+
+      const std::vector<int> derivativeComponents {1, 0, 2, 3};
+      const std::vector<std::string> derivativeLabels {"dt", "dx", "dux", "duy"};
+      const std::vector<Camellia::TensorFunctionPtr> coefficients {
+          Camellia::TensorFunction::constant(-1.0),
+          Camellia::TensorFunction::constant(-1.0) * Camellia::TensorFunction::componentCoordinate(2),
+          Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1)),
+          Camellia::TensorFunction::constant(-0.75) * Camellia::TensorFunction::componentCoordinate(1)
+      };
+
+      for (size_t trialComponent=0; trialComponent<derivativeComponents.size(); trialComponent++)
+      {
+        for (size_t testComponent=0; testComponent<derivativeComponents.size(); testComponent++)
+        {
+          Camellia::TensorBilinearTerm graphTerm(trialVar,
+                                                 testVar,
+                                                 Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, derivativeComponents[trialComponent]),
+                                                 Camellia::TensorComponentOperatorDescriptor::singleDerivative(spaceDim, derivativeComponents[testComponent]),
+                                                 coefficients[trialComponent] * coefficients[testComponent],
+                                                 Camellia::TENSOR_BILINEAR_TERM_VOLUME,
+                                                 Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
+          Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, graphTerm,
+                                                               "camellia_compare_full_" + derivativeLabels[trialComponent] + "_" + derivativeLabels[testComponent]);
+        }
+      }
+      return terms;
+    }
+
+    throw std::invalid_argument("Unknown Vlasov Camellia comparison block");
+  }
+
+  Camellia::SolutionPtr makeCamelliaVlasovGraphGramComparisonSolution(const int p,
+                                                                      const Scalar massWeight,
+                                                                      const VlasovCamelliaComparisonBlock block)
+  {
+    const int spaceTimePhaseDim = 4;
+    Camellia::VarFactoryPtr vf = Camellia::VarFactory::varFactory();
+    vf->setBasisFamily(Camellia::BasisFamily::hierarchicalBasisFamily());
+
+    Camellia::VarPtr f = vf->fieldVar("f", Camellia::HGRAD_DISC);
+    Camellia::VarFactoryPtr bubnovVF = vf->getBubnovFactory(Camellia::VarFactory::BUBNOV_TRIAL);
+    Camellia::BFPtr bf = Camellia::BF::bf(bubnovVF);
+    Camellia::VarPtr w = f;
+
+    if ((block == VlasovCamelliaComparisonBlock::Mass) || (block == VlasovCamelliaComparisonBlock::FullGraphNorm))
+      bf->addTerm(massWeight * f, w);
+
+    if (block == VlasovCamelliaComparisonBlock::DtDt)
+    {
+      Camellia::LinearTermPtr Lf = -f->di(2);
+      Camellia::LinearTermPtr Lw = -w->di(2);
+      bf->addTerm(Lf, Lw);
+    }
+    else if (block == VlasovCamelliaComparisonBlock::FullGraphNorm)
+    {
+      Camellia::FunctionPtr x  = Camellia::Function::xn(1);
+      Camellia::FunctionPtr t  = Camellia::Function::yn(1);
+      Camellia::FunctionPtr ux = Camellia::Function::zn(1);
+      Camellia::FunctionPtr uy = Camellia::Function::tn(1);
+      (void)uy;
+
+      Camellia::FunctionPtr ax = Camellia::Function::constant(0.5) * (x + t);
+      Camellia::FunctionPtr ay = Camellia::Function::constant(0.75) * t;
+
+      Camellia::LinearTermPtr Lf = -f->di(2);
+      Lf = Lf - ux * f->di(1);
+      Lf = Lf - ax * f->di(3);
+      Lf = Lf - ay * f->di(4);
+
+      Camellia::LinearTermPtr Lw = -w->di(2);
+      Lw = Lw - ux * w->di(1);
+      Lw = Lw - ax * w->di(3);
+      Lw = Lw - ay * w->di(4);
+
+      bf->addTerm(Lf, Lw);
+    }
+
+    std::vector<double> dimensions(spaceTimePhaseDim, 1.0);
+    std::vector<int> elementCounts(spaceTimePhaseDim, 1);
+    std::vector<double> origin(spaceTimePhaseDim, 0.0);
+
+    Camellia::MeshTopologyPtr meshTopology = Camellia::MeshFactory::hypercubeMeshTopology(dimensions, elementCounts, origin);
+    Camellia::MeshPtr mesh = Camellia::MeshFactory::minRuleMesh(meshTopology, bf, p, 0);
+
+    Camellia::RHSPtr rhs = Camellia::RHS::rhs();
+    rhs->addTerm(Camellia::Function::constant(1.0) * w);
+    Camellia::BCPtr bc = Camellia::BC::bc();
+
+    Camellia::SolutionPtr solution = Camellia::Solution::solution(mesh, bc, rhs, Teuchos::null);
+    solution->setUseCondensedSolve(false);
+    solution->setZMCsAsGlobalLagrange(false);
+    return solution;
+  }
+
+  std::vector<Camellia::GlobalIndexType> localToGlobalDofMap(Camellia::MeshPtr mesh, const Camellia::GlobalIndexType cellID,
+                                                             const int localDofs)
+  {
+    std::vector<Camellia::GlobalIndexType> localToGlobal(static_cast<size_t>(localDofs), -1);
+    Camellia::FieldContainer<double> localBasisVector(localDofs);
+    Camellia::FieldContainer<double> globalVector;
+    Camellia::FieldContainer<Camellia::GlobalIndexType> globalDofIndices;
+    for (int localDof=0; localDof<localDofs; localDof++)
+    {
+      for (int i=0; i<localDofs; i++) localBasisVector(i) = 0.0;
+      localBasisVector(localDof) = 1.0;
+      mesh->interpretLocalData(cellID, localBasisVector, globalVector, globalDofIndices);
+      double maxMagnitude = 0.0;
+      int maxOrdinal = -1;
+      for (int globalOrdinal=0; globalOrdinal<globalVector.dimension(0); globalOrdinal++)
+      {
+        const double magnitude = std::abs(globalVector(globalOrdinal));
+        if (magnitude > maxMagnitude)
+        {
+          maxMagnitude = magnitude;
+          maxOrdinal = globalOrdinal;
+        }
+      }
+      if ((maxOrdinal < 0) || (maxMagnitude < 0.5))
+        throw std::runtime_error("Could not determine local-to-global DOF map for Camellia matrix comparison");
+      localToGlobal[static_cast<size_t>(localDof)] = globalDofIndices(maxOrdinal);
+    }
+    return localToGlobal;
+  }
+
+  std::vector<Scalar> extractCamelliaDenseMatrixInLocalOrder(Camellia::SolutionPtr solution, const int expectedLocalDofs)
+  {
+    solution->initializeStiffnessAndLoad();
+    solution->populateStiffnessAndLoad();
+    auto matrix = solution->getStiffnessMatrix();
+    Camellia::MeshPtr mesh = solution->mesh();
+    const auto &cellIDs = mesh->cellIDsInPartition();
+    if (cellIDs.size() != 1)
+      throw std::runtime_error("Camellia matrix comparison expects exactly one locally-owned cell");
+    const Camellia::GlobalIndexType cellID = *cellIDs.begin();
+    const int localDofs = mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
+    if (localDofs != expectedLocalDofs)
+      throw std::runtime_error("Camellia matrix comparison local DOF count does not match matrix-free local DOF count");
+
+    const auto localToGlobal = localToGlobalDofMap(mesh, cellID, localDofs);
+    std::vector<Scalar> dense(static_cast<size_t>(localDofs) * localDofs, Scalar(0.0));
+
+    const int maxEntries = static_cast<int>(matrix->getLocalMaxNumRowEntries());
+    TpetraCrsMatrix::nonconst_global_inds_host_view_type columnIndices("Camellia comparison columns", maxEntries);
+    TpetraCrsMatrix::nonconst_values_host_view_type values("Camellia comparison values", maxEntries);
+    for (int row=0; row<localDofs; row++)
+    {
+      size_t numEntries = 0;
+      matrix->getGlobalRowCopy(localToGlobal[static_cast<size_t>(row)], columnIndices, values, numEntries);
+      for (size_t entryOrdinal=0; entryOrdinal<numEntries; entryOrdinal++)
+      {
+        const auto columnGlobal = columnIndices(entryOrdinal);
+        for (int col=0; col<localDofs; col++)
+        {
+          if (localToGlobal[static_cast<size_t>(col)] == columnGlobal)
+          {
+            dense[static_cast<size_t>(row) * localDofs + col] = values(entryOrdinal);
+            break;
+          }
+        }
+      }
+    }
+    return dense;
+  }
+
+  DenseMatrixComparison compareDenseMatrices(const std::vector<Scalar> &matrixFree, const std::vector<Scalar> &camellia,
+                                             const int localDofs, const int globalDofs)
+  {
+    DenseMatrixComparison comparison;
+    comparison.localDofs = localDofs;
+    comparison.globalDofs = globalDofs;
+    comparison.maxAbsError = 0.0;
+    comparison.maxRelError = 0.0;
+    for (size_t entryOrdinal=0; entryOrdinal<matrixFree.size(); entryOrdinal++)
+    {
+      const double absError = std::abs(matrixFree[entryOrdinal] - camellia[entryOrdinal]);
+      const double scale = std::max<double>(1.0, std::max(std::abs(matrixFree[entryOrdinal]), std::abs(camellia[entryOrdinal])));
+      comparison.maxAbsError = std::max(comparison.maxAbsError, absError);
+      comparison.maxRelError = std::max(comparison.maxRelError, absError / scale);
+    }
+    return comparison;
+  }
+
+  DenseMatrixComparison compareCamelliaVlasovBlock(const int p, const VlasovCamelliaComparisonBlock block,
+                                                   const Scalar massWeight, const long long maxAssembledEntries)
+  {
+    const int cells = 1;
+    const int localDofs = checkedProduct(std::vector<int>(4, p + 1));
+    auto matrixFreeTerms = makeVlasovCamelliaComparisonMatrixFreeTerms(p, block, massWeight);
+    const auto matrixFreeDense = assembleDenseLocalMatrix(matrixFreeTerms, cells, localDofs, maxAssembledEntries);
+
+    auto camelliaSolution = makeCamelliaVlasovGraphGramComparisonSolution(p, massWeight, block);
+    const int globalDofs = static_cast<int>(camelliaSolution->mesh()->globalDofCount());
+    const auto camelliaDense = extractCamelliaDenseMatrixInLocalOrder(camelliaSolution, localDofs);
+
+    return compareDenseMatrices(matrixFreeDense, camelliaDense, localDofs, globalDofs);
+  }
+
+  std::string camelliaComparisonBlockName(const VlasovCamelliaComparisonBlock block)
+  {
+    switch (block)
+    {
+      case VlasovCamelliaComparisonBlock::Mass: return "mass";
+      case VlasovCamelliaComparisonBlock::DtDt: return "dt_dt";
+      case VlasovCamelliaComparisonBlock::FullGraphNorm: return "full_graph_norm";
+    }
+    return "unknown";
+  }
+
+  std::vector<DenseMatrixComparison> runCamelliaVlasovMatrixComparison(const int p, const Scalar massWeight,
+                                                                       const long long maxAssembledEntries)
+  {
+    const std::vector<VlasovCamelliaComparisonBlock> blocks {VlasovCamelliaComparisonBlock::Mass,
+                                                            VlasovCamelliaComparisonBlock::DtDt,
+                                                            VlasovCamelliaComparisonBlock::FullGraphNorm};
+    std::vector<DenseMatrixComparison> comparisons;
+    comparisons.reserve(blocks.size());
+    for (const auto block : blocks)
+    {
+      const auto comparison = compareCamelliaVlasovBlock(p, block, massWeight, maxAssembledEntries);
+      std::cout << "CAMELLIA_VLASOV_MATRIX_COMPARISON"
+                << " block=" << camelliaComparisonBlockName(block)
+                << " p=" << p
+                << " localDofs=" << comparison.localDofs
+                << " globalDofs=" << comparison.globalDofs
+                << " maxAbsError=" << std::setprecision(16) << comparison.maxAbsError
+                << " maxRelError=" << comparison.maxRelError
+                << std::endl;
+      comparisons.push_back(comparison);
+    }
+    return comparisons;
   }
 
   void fillInput(Intrepid2::ScalarView<Scalar,DeviceType> input)
@@ -2633,8 +2977,28 @@ namespace
       auto comm = Teuchos::DefaultComm<int>::getComm();
       auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
       auto matrixFreeOperator = Teuchos::rcp(new LocalPAMatrixTpetraOperator(map, terms, workspaces, cells, rows, worksetSize));
-      auto rowMatrix = Teuchos::rcp(new LocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries));
-      Teuchos::RCP<const TpetraRowMatrix> rowMatrixBase = Teuchos::rcp_implicit_cast<const TpetraRowMatrix>(rowMatrix);
+      Teuchos::RCP<const TpetraRowMatrix> rowMatrixBase;
+      if (useAssembledReference)
+      {
+        auto crsMatrix = Teuchos::rcp(new TpetraCrsMatrix(map, rows));
+        Teuchos::Array<typename TpetraMap::global_ordinal_type> columns(static_cast<Teuchos::Array<TpetraMap::global_ordinal_type>::size_type>(localLength));
+        Teuchos::Array<Scalar> values(static_cast<Teuchos::Array<Scalar>::size_type>(localLength));
+        for (size_t column=0; column<localLength; column++)
+          columns[static_cast<Teuchos::Array<TpetraMap::global_ordinal_type>::size_type>(column)] = map->getGlobalElement(static_cast<typename TpetraMap::local_ordinal_type>(column));
+        for (size_t row=0; row<localLength; row++)
+        {
+          for (size_t column=0; column<localLength; column++)
+            values[static_cast<Teuchos::Array<Scalar>::size_type>(column)] = localMatrices[row * localLength + column];
+          crsMatrix->insertGlobalValues(map->getGlobalElement(static_cast<typename TpetraMap::local_ordinal_type>(row)), columns(), values());
+        }
+        crsMatrix->fillComplete(map, map);
+        rowMatrixBase = Teuchos::rcp_implicit_cast<const TpetraRowMatrix>(crsMatrix);
+      }
+      else
+      {
+        auto rowMatrix = Teuchos::rcp(new LocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries));
+        rowMatrixBase = Teuchos::rcp_implicit_cast<const TpetraRowMatrix>(rowMatrix);
+      }
 
       Teuchos::RCP<Ifpack2::Preconditioner<Scalar,
                                             typename TpetraMap::local_ordinal_type,
@@ -3502,7 +3866,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, vlasov-coordinate-x1-d3, vlasov-graph-norm-1d1t2v, or vlasov-graph-norm-solution-coeff-1d1t2v.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge; vlasov-coordinate exercises the single-component coefficient bridge; vlasov-linear-x0-x1-d2 exercises a two-term separable decomposition of -0.5*(x0+x1)*value(f)*d2(w); vlasov-coordinate-x1-d3 exercises the separable -0.75*x1*value(f)*d3(w) partial term; vlasov-graph-norm-1d1t2v expands a 4D Planar MITL graph-norm proxy for Chebyshev G^{-1} calibration; vlasov-graph-norm-solution-coeff-1d1t2v routes the same proxy through TensorFunctionEvaluationContext solution-coefficient evaluators.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses Intrepid2 hypercube HGRAD hierarchical bases, tensor-product cubature, and affine geometry for dim=1..7; synthetic remains available for high-dimensional contraction stress tests.");
-    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare.");
+    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, tpetra-rowmatrix-compare, or camellia-vlasov-matrix-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
@@ -3565,8 +3929,10 @@ int main(int argc, char *argv[])
     if ((compareTpetraPowerEstimate != 0) && (compareTpetraPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraPowerEstimate must be 0 or 1");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (compareTpetraRowMatrixPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate must be 0 or 1");
     if ((ifpack2ChebyshevSmoke != 0) && (ifpack2ChebyshevSmoke != 1)) throw std::invalid_argument("--ifpack2ChebyshevSmoke must be 0 or 1");
-    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic") && (mode != "tpetra-operator-compare") && (mode != "tpetra-rowmatrix-compare"))
-      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, or tpetra-rowmatrix-compare");
+    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic") && (mode != "tpetra-operator-compare") && (mode != "tpetra-rowmatrix-compare") && (mode != "camellia-vlasov-matrix-compare"))
+      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, tpetra-rowmatrix-compare, or camellia-vlasov-matrix-compare");
+    if ((mode == "camellia-vlasov-matrix-compare") && ((dim != 4) || (cellsPerDim != 1) || (basisMode != "hgrad") || (std::abs(stiffnessWeight - 1.0) > 1e-15)))
+      throw std::invalid_argument("--mode=camellia-vlasov-matrix-compare requires --dim=4 --cellsPerDim=1 --basisMode=hgrad --stiffnessWeight=1");
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
     if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && (basisMode != "hgrad"))
@@ -3741,6 +4107,14 @@ int main(int argc, char *argv[])
         if (tpetraOperatorComparison.domainRangeMapSame != 1) returnCode = 2;
         if (tpetraOperatorComparison.rowMatrixRowMapSame != 1) returnCode = 2;
         if (tpetraOperatorComparison.rowMatrixColMapSame != 1) returnCode = 2;
+      }
+      if (mode == "camellia-vlasov-matrix-compare")
+      {
+        const auto camelliaComparisons = runCamelliaVlasovMatrixComparison(p, massWeight, maxAssembledEntries);
+        for (const auto &comparison : camelliaComparisons)
+        {
+          if ((comparison.maxAbsError > 1e-10) && (comparison.maxRelError > 1e-10)) returnCode = 2;
+        }
       }
 
       std::ostringstream resultLine;
