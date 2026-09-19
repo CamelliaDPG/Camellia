@@ -5,6 +5,7 @@ target_link_libraries(StokesAssemblyPerformanceTest Camellia)
 
 add_executable(TensorPoissonPAMatrixDriver "TensorPoissonPAMatrixDriver.cpp")
 add_executable(VlasovGramGMGStudyDriver "VlasovGramGMGStudyDriver.cpp")
+add_executable(VlasovGramMatrixFreeStudyDriver "VlasovGramMatrixFreeStudyDriver.cpp")
 target_link_libraries(VlasovGramGMGStudyDriver Camellia ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
 set(TENSOR_INTREPID2_SOURCE_DIR
   "/Users/nvrober/fork-Trilinos/packages/intrepid2/src"
@@ -31,6 +32,13 @@ add_test(NAME TensorPoissonPAMatrixDriverSmoke
     --mode=compare
     --numApply=2
     --maxAssembledEntries=10000)
+
+add_test(NAME VlasovGramMatrixFreeStudyDriverSmoke
+  COMMAND VlasovGramMatrixFreeStudyDriver
+    --fineH1Order=1
+    --quick
+    --maxIterations=5
+    --outputFile=vlasov-gram-matrix-free-study-smoke.txt)
 
 add_test(NAME TensorH1GramPAMatrixDriverSmoke
   COMMAND TensorPoissonPAMatrixDriver
