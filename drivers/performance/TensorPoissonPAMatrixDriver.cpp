@@ -15,7 +15,12 @@
 
 #include "Kokkos_Core.hpp"
 
+#include <BelosLinearProblem.hpp>
+#include <BelosSolverFactory.hpp>
+#include <BelosSolverFactory_Tpetra.hpp>
 #include <Ifpack2_Chebyshev.hpp>
+#include <Ifpack2_Factory.hpp>
+#include <Ifpack2_Preconditioner.hpp>
 
 #include <Teuchos_Array.hpp>
 #include <Teuchos_CommandLineProcessor.hpp>
@@ -978,6 +983,7 @@ namespace
   {
     double avgInverseApplySeconds = -1.0;
     int inverseIterations = 0;
+    int inversePreconditionerDegree = 0;
     double initialInverseAbsError = -1.0;
     double initialInverseRelError = -1.0;
     double maxInverseAbsError = -1.0;
@@ -988,6 +994,7 @@ namespace
     double inverseTolerance = -1.0;
     int inverseConverged = 0;
     std::string inverseStoppedReason = "not_requested";
+    std::string inverseRhs = "deterministic";
     double lambdaMinEstimate = -1.0;
     double lambdaMaxEstimate = -1.0;
     double assembledGershgorinLambdaMax = -1.0;
@@ -1807,20 +1814,31 @@ namespace
                                                  const int inverseTrueEigenDiagnostic, const int inverseOperatorCheckSamples,
                                                  const int compareTpetraPowerEstimate, const int compareTpetraRowMatrixPowerEstimate,
                                                  const int ifpack2ChebyshevSmoke, const std::string &inverseInitialGuess,
+                                                 const std::string &inverseRhs, const int inversePreconditionerDegree,
                                                  const Scalar inverseTolerance)
   {
+    const bool useBelosGmres = (inverseDiagnosticAlgorithm == "gmres-chebyshev") ||
+                               (inverseDiagnosticAlgorithm == "gmres-jacobi");
+
     InverseDiagnosticTiming timing;
     timing.inverseIterations = numInverseIterations;
+    timing.inversePreconditionerDegree = inversePreconditionerDegree;
     timing.inverseTolerance = inverseTolerance;
-    timing.inverseStoppedReason = "fixed_iteration_limit";
-    timing.inversePath = (inverseDiagnosticAlgorithm == "chebyshev")
-                       ? "local_chebyshev_ifpack2_compatible_pamatrix_apply_host_recurrence"
-                       : "local_damped_jacobi_richardson_pamatrix_apply";
+    timing.inverseStoppedReason = useBelosGmres ? "belos_gmres_iteration_limit" : "fixed_iteration_limit";
+    if (inverseDiagnosticAlgorithm == "chebyshev")
+      timing.inversePath = "local_chebyshev_ifpack2_compatible_pamatrix_apply_host_recurrence";
+    else if (inverseDiagnosticAlgorithm == "gmres-chebyshev")
+      timing.inversePath = "belos_gmres_right_preconditioned_by_ifpack2_chebyshev_rowmatrix_pamatrix_apply";
+    else if (inverseDiagnosticAlgorithm == "gmres-jacobi")
+      timing.inversePath = "belos_gmres_right_preconditioned_by_ifpack2_point_jacobi_rowmatrix_pamatrix_apply";
+    else
+      timing.inversePath = "local_damped_jacobi_richardson_or_pmultigrid_pamatrix_apply";
     timing.spectralEstimatePath = "assembled_reference_gershgorin_preconditioned_upper_bound_with_extracted_diagonal";
     timing.spectralEstimateIterations = inverseSpectralEstimateIterations;
     timing.lambdaMaxSafetyFactor = inversePowerSafetyFactor;
     timing.lambdaMinSafetyFactor = inverseLowerPowerSafetyFactor;
     timing.inverseLowerSpectralEstimate = inverseLowerSpectralEstimate;
+    timing.inverseRhs = inverseRhs;
     timing.compareTpetraPowerEstimate = compareTpetraPowerEstimate;
     timing.compareTpetraRowMatrixPowerEstimate = compareTpetraRowMatrixPowerEstimate;
     timing.ifpack2ChebyshevSmoke = ifpack2ChebyshevSmoke;
@@ -2411,9 +2429,58 @@ namespace
     }
 
     std::vector<Scalar> rhs(static_cast<size_t>(cells * rows), 0.0);
-    for (int c=0; c<cells; c++)
+    if (inverseRhs == "deterministic")
+    {
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++)
+          rhs[static_cast<size_t>(c * rows + i)] = 0.25 + 0.0625 * ((i + 5 * c) % 29);
+    }
+    else if (inverseRhs == "constant-test-function")
+    {
+      const int fieldsPerDim = p + 1;
+      std::vector<Scalar> constantCoefficients(static_cast<size_t>(rows), Scalar(0.0));
+      const std::vector<int> basisExtents(static_cast<size_t>(dim), fieldsPerDim);
       for (int i=0; i<rows; i++)
-        rhs[static_cast<size_t>(c * rows + i)] = 0.25 + 0.0625 * ((i + 5 * c) % 29);
+      {
+        const std::vector<int> basisOrdinal = multiIndex(i, basisExtents);
+        bool isVertexTensorBasis = true;
+        for (const int componentOrdinal : basisOrdinal)
+        {
+          if (componentOrdinal > 1)
+          {
+            isVertexTensorBasis = false;
+            break;
+          }
+        }
+        if (isVertexTensorBasis) constantCoefficients[static_cast<size_t>(i)] = Scalar(1.0);
+      }
+
+      Intrepid2::ScalarView<Scalar,DeviceType> constantInput("TensorPoissonPAMatrix constant coefficient input", cells, rows);
+      Intrepid2::ScalarView<Scalar,DeviceType> massOutput("TensorPoissonPAMatrix constant test rhs output", cells, rows);
+      auto constantInputHost = Kokkos::create_mirror_view(constantInput);
+      for (int c=0; c<cells; c++)
+        for (int i=0; i<rows; i++) constantInputHost(c,i) = constantCoefficients[static_cast<size_t>(i)];
+      Kokkos::deep_copy(constantInput, constantInputHost);
+
+      bool foundMassTerm = false;
+      for (size_t termOrdinal=0; termOrdinal<terms.size(); termOrdinal++)
+      {
+        const std::string &label = terms[termOrdinal].label;
+        if ((label.find("mass") == std::string::npos) && (label.find("l2") == std::string::npos)) continue;
+        terms[termOrdinal].matrix.apply(massOutput, constantInput, workspaces[termOrdinal], false, worksetSize);
+        Kokkos::fence();
+        auto massOutputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), massOutput);
+        for (int c=0; c<cells; c++)
+          for (int i=0; i<rows; i++) rhs[static_cast<size_t>(c * rows + i)] += massOutputHost(c,i);
+        foundMassTerm = true;
+      }
+      if (!foundMassTerm)
+        throw std::invalid_argument("--inverseRhs=constant-test-function requires an HGRAD mass/L2 term in the operator");
+    }
+    else
+    {
+      throw std::invalid_argument("--inverseRhs must be deterministic or constant-test-function");
+    }
 
     std::vector<Scalar> referenceSolution;
     Scalar referenceNorm = 0.0;
@@ -2554,6 +2621,79 @@ namespace
     {
       runIfpack2CompatibleHostChebyshev(iterate, numInverseIterations);
       hostChebyshevIterate = iterate;
+    }
+    else if (useBelosGmres)
+    {
+      if (inverseInitialGuess != "zero")
+        throw std::invalid_argument("Belos GMRES inverse diagnostics currently support --inverseInitialGuess=zero only");
+      if (inversePreconditionerDegree < 1)
+        throw std::invalid_argument("--inversePreconditionerDegree must be positive for Belos GMRES Chebyshev diagnostics");
+
+      const size_t localLength = rhs.size();
+      auto comm = Teuchos::DefaultComm<int>::getComm();
+      auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
+      auto matrixFreeOperator = Teuchos::rcp(new LocalPAMatrixTpetraOperator(map, terms, workspaces, cells, rows, worksetSize));
+      auto rowMatrix = Teuchos::rcp(new LocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries));
+      Teuchos::RCP<const TpetraRowMatrix> rowMatrixBase = Teuchos::rcp_implicit_cast<const TpetraRowMatrix>(rowMatrix);
+
+      Teuchos::RCP<Ifpack2::Preconditioner<Scalar,
+                                            typename TpetraMap::local_ordinal_type,
+                                            typename TpetraMap::global_ordinal_type,
+                                            typename TpetraMap::node_type>> preconditioner;
+      Teuchos::ParameterList preconditionerParams;
+      if (inverseDiagnosticAlgorithm == "gmres-chebyshev")
+      {
+        preconditioner = Ifpack2::Factory::create<TpetraRowMatrix>("CHEBYSHEV", rowMatrixBase);
+        preconditionerParams.set("chebyshev: ratio eigenvalue", inverseEigenRatio);
+        preconditionerParams.set("chebyshev: eigenvalue max iterations", inverseSpectralEstimateIterations);
+        preconditionerParams.set("chebyshev: degree", inversePreconditionerDegree);
+      }
+      else
+      {
+        preconditioner = Ifpack2::Factory::create<TpetraRowMatrix>("RELAXATION", rowMatrixBase);
+        preconditionerParams.set("relaxation: type", "Jacobi");
+        preconditionerParams.set("relaxation: sweeps", 1);
+      }
+      preconditioner->setParameters(preconditionerParams);
+      preconditioner->initialize();
+      preconditioner->compute();
+
+      TpetraMultiVector B(map, 1);
+      TpetraMultiVector X(map, 1);
+      {
+        auto bHost = B.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        auto xHost = X.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        for (size_t i=0; i<localLength; i++)
+        {
+          bHost(i,0) = rhs[i];
+          xHost(i,0) = Scalar(0.0);
+        }
+      }
+
+      using MV = TpetraMultiVector;
+      using OP = TpetraOperator;
+      using BelosProblem = Belos::LinearProblem<Scalar,MV,OP>;
+      auto operatorBase = Teuchos::rcp_implicit_cast<OP>(matrixFreeOperator);
+      auto preconditionerOperator = Teuchos::rcp_implicit_cast<OP>(preconditioner);
+      auto problem = Teuchos::rcp(new BelosProblem(operatorBase, Teuchos::rcpFromRef(X), Teuchos::rcpFromRef(B)));
+      problem->setRightPrec(preconditionerOperator);
+      problem->setProblem();
+
+      Teuchos::RCP<Teuchos::ParameterList> solverParams = Teuchos::parameterList();
+      solverParams->set("Maximum Iterations", numInverseIterations);
+      solverParams->set("Convergence Tolerance", inverseTolerance);
+      solverParams->set("Residual Scaling", "Norm of RHS");
+      solverParams->set("Num Blocks", 200);
+      Belos::SolverFactory<Scalar,MV,OP> solverFactory;
+      auto solver = solverFactory.create("GMRES", solverParams);
+      solver->setProblem(problem);
+      const Belos::ReturnType belosResult = solver->solve();
+      timing.inverseIterations = solver->getNumIters();
+      timing.inverseConverged = (belosResult == Belos::Converged) ? 1 : 0;
+      timing.inverseStoppedReason = (timing.inverseConverged != 0) ? "belos_gmres_converged" : "belos_gmres_iteration_limit";
+
+      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+      for (size_t i=0; i<localLength; i++) iterate[i] = xHost(i,0);
     }
     else if ((inverseDiagnosticAlgorithm == "pmultigrid-chebyshev") || (inverseDiagnosticAlgorithm == "pmultigrid-jacobi-chebyshev"))
     {
@@ -2891,9 +3031,9 @@ namespace
     }
     else
     {
-      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, or pmultigrid-chebyshev");
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     }
-    timing.avgInverseApplySeconds = inverseTimer.seconds() / numInverseIterations;
+    timing.avgInverseApplySeconds = inverseTimer.seconds() / std::max(1, timing.inverseIterations);
 
     if (ifpack2ChebyshevSmoke != 0)
     {
@@ -2989,8 +3129,11 @@ namespace
     applyHostVector();
     timing.finalResidualNorm = residualNorm();
     timing.residualReduction = timing.finalResidualNorm / std::max<Scalar>(std::numeric_limits<Scalar>::epsilon(), timing.initialResidualNorm);
-    timing.inverseConverged = (timing.residualReduction <= inverseTolerance) ? 1 : 0;
-    if (timing.inverseConverged != 0) timing.inverseStoppedReason = "fixed_iterations_met_tolerance";
+    if (!useBelosGmres)
+    {
+      timing.inverseConverged = (timing.residualReduction <= inverseTolerance) ? 1 : 0;
+      if (timing.inverseConverged != 0) timing.inverseStoppedReason = "fixed_iterations_met_tolerance";
+    }
 
     if (useAssembledReference)
     {
@@ -3007,6 +3150,7 @@ namespace
               << " finalResidualNorm=" << timing.finalResidualNorm
               << " residualReduction=" << timing.residualReduction
               << " inverseTolerance=" << timing.inverseTolerance
+              << " inversePreconditionerDegree=" << timing.inversePreconditionerDegree
               << " inverseConverged=" << timing.inverseConverged
               << " inverseStoppedReason=" << timing.inverseStoppedReason
               << " lambdaMinEstimate=" << timing.lambdaMinEstimate
@@ -3074,6 +3218,7 @@ namespace
               << " pMultigridPath=" << timing.pMultigridPath
               << " iterations=" << timing.inverseIterations
               << " inverseInitialGuess=" << timing.inverseInitialGuess
+              << " inverseRhs=" << timing.inverseRhs
               << " inversePath=" << timing.inversePath
               << " spectralEstimatePath=" << timing.spectralEstimatePath << std::endl;
     return timing;
@@ -3315,6 +3460,7 @@ int main(int argc, char *argv[])
     int numDiagonal = 10;
     int numSolve = 10;
     int numInverseIterations = 10;
+    int inversePreconditionerDegree = 8;
     int inverseSpectralEstimateIterations = 8;
     int inverseLowerSpectralEstimateIterations = 0;
     int inverseDiagnosticRequireAssembledReference = 1;
@@ -3348,6 +3494,7 @@ int main(int argc, char *argv[])
     std::string inverseSpectralEstimate = "assembled-gershgorin";
     std::string inverseLowerSpectralEstimate = "ratio";
     std::string inverseInitialGuess = "zero";
+    std::string inverseRhs = "deterministic";
 
     Teuchos::CommandLineProcessor cmdp(false,true);
     cmdp.setOption("dim", &dim, "Tensor dimension, 1 through 7.");
@@ -3359,7 +3506,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
-    cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local Richardson/Chebyshev iterations, or p-multigrid V-cycles, used in inverse-diagnostic mode.");
+    cmdp.setOption("numInverseIterations", &numInverseIterations, "Number of local Richardson/Chebyshev iterations, p-multigrid V-cycles, or outer GMRES iterations used in inverse-diagnostic mode.");
+    cmdp.setOption("inversePreconditionerDegree", &inversePreconditionerDegree, "Chebyshev polynomial degree for --inverseDiagnosticAlgorithm=gmres-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherIterations", &pMultigridChebyshevSmootherIterations, "Chebyshev pre/post smoother iterations for --inverseDiagnosticAlgorithm=pmultigrid-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherLowerFraction", &pMultigridChebyshevSmootherLowerFraction, "Lower endpoint as a fraction of lambdaMax for high-frequency Chebyshev p-multigrid smoothing.");
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
@@ -3381,6 +3529,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("inverseLambdaMin", &inverseLambdaMin, "Optional positive user override for the Chebyshev/Richardson lower spectral bound.");
     cmdp.setOption("inverseLambdaMax", &inverseLambdaMax, "Optional positive user override for the Chebyshev/Richardson upper spectral bound.");
     cmdp.setOption("inverseInitialGuess", &inverseInitialGuess, "zero or diagonal initial guess for inverse diagnostics.");
+    cmdp.setOption("inverseRhs", &inverseRhs, "deterministic or constant-test-function.  constant-test-function matches RHS::addTerm(1*w) in VlasovGramGMGStudyDriver.");
     cmdp.setOption("inverseTolerance", &inverseTolerance, "Relative residual-reduction tolerance reported by inverse diagnostics; fixed iteration count is unchanged.");
     cmdp.setOption("inverseMaxResidualReduction", &inverseMaxResidualReduction, "Optional pass/fail ceiling for inverse-diagnostic final/initial residual reduction; negative disables the check.");
     cmdp.setOption("inverseOperatorCheckSamples", &inverseOperatorCheckSamples, "Deterministic vector samples for assembled-vs-matrix-free action, symmetry, and positivity checks in inverse diagnostics; 0 disables.");
@@ -3422,12 +3571,16 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
     if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && (basisMode != "hgrad"))
       throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, --operator=vlasov-coordinate-x1-d3, --operator=vlasov-graph-norm-1d1t2v, and --operator=vlasov-graph-norm-solution-coeff-1d1t2v require --basisMode=hgrad");
-    if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-jacobi-chebyshev"))
-      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
+    if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") &&
+        (inverseDiagnosticAlgorithm != "gmres-chebyshev") && (inverseDiagnosticAlgorithm != "gmres-jacobi") &&
+        (inverseDiagnosticAlgorithm != "pmultigrid-chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-jacobi-chebyshev"))
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "true-eigen") && (inverseLowerSpectralEstimate != "true-eigen-safe") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))
       throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, true-eigen-safe, user, or assembled-inverse-iteration");
     if ((inverseInitialGuess != "zero") && (inverseInitialGuess != "diagonal"))
       throw std::invalid_argument("--inverseInitialGuess must be zero or diagonal");
+    if ((inverseRhs != "deterministic") && (inverseRhs != "constant-test-function"))
+      throw std::invalid_argument("--inverseRhs must be deterministic or constant-test-function");
     if ((ifpack2ChebyshevSmoke != 0) && ((mode != "inverse-diagnostic") || (inverseDiagnosticAlgorithm != "chebyshev")))
       throw std::invalid_argument("--ifpack2ChebyshevSmoke requires --mode=inverse-diagnostic --inverseDiagnosticAlgorithm=chebyshev");
     if ((ifpack2ChebyshevSmoke != 0) && (inverseInitialGuess != "zero"))
@@ -3542,7 +3695,8 @@ int main(int argc, char *argv[])
                                                         inverseLowerSpectralEstimate, inverseLowerSpectralEstimateIterations, inverseLowerPowerSafetyFactor,
                                                         inverseTrueEigenDiagnostic, inverseOperatorCheckSamples,
                                                         compareTpetraPowerEstimate, compareTpetraRowMatrixPowerEstimate,
-                                                        ifpack2ChebyshevSmoke, inverseInitialGuess, inverseTolerance);
+                                                        ifpack2ChebyshevSmoke, inverseInitialGuess,
+                                                        inverseRhs, inversePreconditionerDegree, inverseTolerance);
         if ((compareTpetraPowerEstimate != 0) &&
             (inverseDiagnosticTiming.tpetraPowerLambdaMaxAbsError > 1e-10) &&
             (inverseDiagnosticTiming.tpetraPowerLambdaMaxRelError > 1e-10)) returnCode = 2;
@@ -3650,6 +3804,7 @@ int main(int argc, char *argv[])
                 << " finalResidualNorm=" << inverseDiagnosticTiming.finalResidualNorm
                 << " residualReduction=" << inverseDiagnosticTiming.residualReduction
                 << " inverseTolerance=" << inverseDiagnosticTiming.inverseTolerance
+                << " inversePreconditionerDegree=" << inverseDiagnosticTiming.inversePreconditionerDegree
                 << " inverseConverged=" << inverseDiagnosticTiming.inverseConverged
                 << " inverseStoppedReason=" << inverseDiagnosticTiming.inverseStoppedReason
                 << " lambdaMinEstimate=" << inverseDiagnosticTiming.lambdaMinEstimate
@@ -3700,6 +3855,7 @@ int main(int argc, char *argv[])
                 << " inverseLowerSpectralEstimate=" << inverseDiagnosticTiming.inverseLowerSpectralEstimate
                 << " inverseLowerSpectralEstimateIterations=" << inverseLowerSpectralEstimateIterations
                 << " inverseInitialGuess=" << inverseDiagnosticTiming.inverseInitialGuess
+                << " inverseRhs=" << inverseDiagnosticTiming.inverseRhs
                 << " achievedGFlops=" << achievedGFlops
                 << " mode=" << mode
                 << " operator=" << operatorChoice

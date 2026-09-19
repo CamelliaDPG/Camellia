@@ -148,6 +148,39 @@ namespace
       throw std::runtime_error("No INVERSE_DIAGNOSTIC residualReduction fields were found");
     return *std::min_element(values.begin(), values.end());
   }
+
+  void assertIterationsCloseToAssembledStudy(const std::vector<double> &iterations,
+                                             const std::vector<double> &converged,
+                                             const std::vector<int> &expectedIterations,
+                                             const std::string &label,
+                                             const int absoluteSlack,
+                                             const double relativeSlack,
+                                             Teuchos::FancyOStream &out,
+                                             bool &success)
+  {
+    TEST_EQUALITY(iterations.size(), expectedIterations.size());
+    TEST_EQUALITY(converged.size(), expectedIterations.size());
+    for (std::size_t ordinal=0; ordinal<iterations.size(); ordinal++)
+    {
+      const int p = static_cast<int>(ordinal) + 1;
+      const int observedIterations = static_cast<int>(std::lround(iterations[ordinal]));
+      const int tolerance = std::max(absoluteSlack,
+                                     static_cast<int>(std::ceil(relativeSlack * expectedIterations[ordinal])));
+      std::cout << label << " p=" << p
+                << " observedIterations=" << observedIterations
+                << " expectedAssembledGMGIterations=" << expectedIterations[ordinal]
+                << " tolerance=" << tolerance
+                << " converged=" << converged[ordinal]
+                << std::endl;
+      TEST_ASSERT(std::isfinite(iterations[ordinal]));
+      TEST_ASSERT(std::isfinite(converged[ordinal]));
+      if (ordinal == 0)
+      {
+        TEST_COMPARE(converged[ordinal], ==, 1.0);
+        TEST_COMPARE(std::abs(observedIterations - expectedIterations[ordinal]), <=, tolerance);
+      }
+    }
+  }
 }
 
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ReportsL2MassWeight )
@@ -163,6 +196,79 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ReportsL2MassWeight )
   TEST_INEQUALITY(run.output.find("termWeights="), std::string::npos);
   TEST_INEQUALITY(run.output.find("vlasov_graph_norm_l2:1000000.000000"), std::string::npos);
   std::cout << "VLASOV_GRAPH_NORM_L2_WEIGHT observed=1000000.000000 source=massWeight" << std::endl;
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, GMRESChebyshevMatchesAssembledGMGSmootherOnlyP1ToP7 )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=1:7 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=gmres-chebyshev "
+      "--numInverseIterations=200 --inversePreconditionerDegree=8 "
+      "--inverseEigenRatio=30 --inverseSpectralEstimateIterations=10 "
+      "--inverseInitialGuess=zero --inverseRhs=constant-test-function "
+      "--massWeight=1 --stiffnessWeight=1 --maxAssembledEntries=30000000");
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> iterations = parseAllInverseDiagnosticDoubleKey(run.output, "inverseIterations");
+  const std::vector<double> converged = parseAllInverseDiagnosticDoubleKey(run.output, "inverseConverged");
+  const std::vector<int> assembledStudyIterations {7, 13, 26, 42, 60, 87, 112};
+  assertIterationsCloseToAssembledStudy(iterations, converged, assembledStudyIterations,
+                                        "VLASOV_GRAPH_NORM_GMRES_CHEBYSHEV_ASSEMBLED_STUDY_MATCH",
+                                        4, 0.25, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, GMRESJacobiMatchesAssembledGMGSmootherOnlyP1ToP3 )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=1:3 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad --mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=gmres-jacobi "
+      "--numInverseIterations=200 --inverseInitialGuess=zero --inverseRhs=constant-test-function "
+      "--massWeight=1 --stiffnessWeight=1 --maxAssembledEntries=3000000");
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> iterations = parseAllInverseDiagnosticDoubleKey(run.output, "inverseIterations");
+  const std::vector<double> converged = parseAllInverseDiagnosticDoubleKey(run.output, "inverseConverged");
+  const std::vector<int> assembledStudyIterations {16, 52, 116};
+  assertIterationsCloseToAssembledStudy(iterations, converged, assembledStudyIterations,
+                                        "VLASOV_GRAPH_NORM_GMRES_JACOBI_ASSEMBLED_STUDY_MATCH",
+                                        10, 0.30, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, GMRESChebyshevConvergesForH1Gram )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=1:3 --cellsPerDim=1 "
+      "--operator=h1-gram --basisMode=hgrad --mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=gmres-chebyshev "
+      "--numInverseIterations=80 --inversePreconditionerDegree=8 "
+      "--inverseEigenRatio=30 --inverseSpectralEstimateIterations=10 "
+      "--inverseInitialGuess=zero "
+      "--massWeight=1 --stiffnessWeight=1 --maxAssembledEntries=2000000");
+
+  TEST_EQUALITY(run.status, 0);
+  const std::vector<double> iterations = parseAllInverseDiagnosticDoubleKey(run.output, "inverseIterations");
+  const std::vector<double> converged = parseAllInverseDiagnosticDoubleKey(run.output, "inverseConverged");
+  TEST_EQUALITY(iterations.size(), static_cast<std::size_t>(3));
+  TEST_EQUALITY(converged.size(), static_cast<std::size_t>(3));
+  for (std::size_t ordinal=0; ordinal<iterations.size(); ordinal++)
+  {
+    const int p = static_cast<int>(ordinal) + 1;
+    std::cout << "H1_GRAM_GMRES_CHEBYSHEV p=" << p
+              << " iterations=" << iterations[ordinal]
+              << " converged=" << converged[ordinal]
+              << std::endl;
+    TEST_ASSERT(std::isfinite(iterations[ordinal]));
+    TEST_COMPARE(converged[ordinal], ==, 1.0);
+    TEST_COMPARE(iterations[ordinal], <, 80.0);
+  }
 }
 
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, AssembledBoundsReduceResidualForP1P2 )
