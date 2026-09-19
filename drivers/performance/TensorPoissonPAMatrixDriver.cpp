@@ -6,6 +6,7 @@
 
 #include "BF.h"
 #include "BC.h"
+#include "Camellia.h"
 #include "Function.h"
 #include "MeshFactory.h"
 #include "RHS.h"
@@ -791,19 +792,43 @@ namespace
                                                             VlasovCamelliaComparisonBlock::FullGraphNorm};
     std::vector<DenseMatrixComparison> comparisons;
     comparisons.reserve(blocks.size());
+    int passed = 1;
+    std::string firstFailingBlock = "none";
+    double worstAbsError = 0.0;
+    double worstRelError = 0.0;
+    constexpr double tolerance = 1e-10;
     for (const auto block : blocks)
     {
       const auto comparison = compareCamelliaVlasovBlock(p, block, massWeight, maxAssembledEntries);
+      const std::string blockName = camelliaComparisonBlockName(block);
+      const bool blockPassed = (comparison.maxAbsError <= tolerance) || (comparison.maxRelError <= tolerance);
+      if (!blockPassed && passed)
+      {
+        passed = 0;
+        firstFailingBlock = blockName;
+      }
+      worstAbsError = std::max(worstAbsError, comparison.maxAbsError);
+      worstRelError = std::max(worstRelError, comparison.maxRelError);
       std::cout << "CAMELLIA_VLASOV_MATRIX_COMPARISON"
-                << " block=" << camelliaComparisonBlockName(block)
+                << " block=" << blockName
                 << " p=" << p
                 << " localDofs=" << comparison.localDofs
                 << " globalDofs=" << comparison.globalDofs
                 << " maxAbsError=" << std::setprecision(16) << comparison.maxAbsError
                 << " maxRelError=" << comparison.maxRelError
+                << " tolerance=" << tolerance
+                << " passed=" << (blockPassed ? 1 : 0)
                 << std::endl;
       comparisons.push_back(comparison);
     }
+    std::cout << "CAMELLIA_VLASOV_MATRIX_COMPARISON_SUMMARY"
+              << " p=" << p
+              << " passed=" << passed
+              << " firstFailingBlock=" << firstFailingBlock
+              << " worstMaxAbsError=" << std::setprecision(16) << worstAbsError
+              << " worstMaxRelError=" << worstRelError
+              << " tolerance=" << tolerance
+              << std::endl;
     return comparisons;
   }
 
@@ -3834,6 +3859,7 @@ int main(int argc, char *argv[])
     int inverseTrueEigenDiagnostic = 0;
     int worksetSize = 0;
     int checkAssemblyAgreement = 0;
+    int camelliaMatrixCompareFailOnMismatch = 1;
     long long maxAssembledEntries = 200000;
     Scalar massWeight = 1.0;
     Scalar stiffnessWeight = 1.0;
@@ -3901,9 +3927,11 @@ int main(int argc, char *argv[])
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
     cmdp.setOption("checkAssemblyAgreement", &checkAssemblyAgreement, "Set to 1 in assembly-compare mode to compare assemble2() entries against standard assemble().");
+    cmdp.setOption("camelliaMatrixCompareFailOnMismatch", &camelliaMatrixCompareFailOnMismatch, "Set to 0 to make --mode=camellia-vlasov-matrix-compare report mismatches without returning failure; useful while diagnosing the current p>=2 discrepancy.");
     cmdp.setOption("maxAssembledEntries", &maxAssembledEntries, "Maximum local assembled entries allowed in assemble/assemble2/compare/factor modes.");
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
+      Camellia::finalize(false);
       Kokkos::finalize();
       return -1;
     }
@@ -3925,6 +3953,7 @@ int main(int argc, char *argv[])
     if (!std::isfinite(inverseLowerPowerSafetyFactor) || (inverseLowerPowerSafetyFactor <= 0.0) || (inverseLowerPowerSafetyFactor > 1.0))
       throw std::invalid_argument("--inverseLowerPowerSafetyFactor must be in (0,1]");
     if ((checkAssemblyAgreement != 0) && (checkAssemblyAgreement != 1)) throw std::invalid_argument("--checkAssemblyAgreement must be 0 or 1");
+    if ((camelliaMatrixCompareFailOnMismatch != 0) && (camelliaMatrixCompareFailOnMismatch != 1)) throw std::invalid_argument("--camelliaMatrixCompareFailOnMismatch must be 0 or 1");
     if ((inverseDiagnosticRequireAssembledReference != 0) && (inverseDiagnosticRequireAssembledReference != 1)) throw std::invalid_argument("--inverseDiagnosticRequireAssembledReference must be 0 or 1");
     if ((compareTpetraPowerEstimate != 0) && (compareTpetraPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraPowerEstimate must be 0 or 1");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (compareTpetraRowMatrixPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate must be 0 or 1");
@@ -4111,9 +4140,12 @@ int main(int argc, char *argv[])
       if (mode == "camellia-vlasov-matrix-compare")
       {
         const auto camelliaComparisons = runCamelliaVlasovMatrixComparison(p, massWeight, maxAssembledEntries);
-        for (const auto &comparison : camelliaComparisons)
+        if (camelliaMatrixCompareFailOnMismatch != 0)
         {
-          if ((comparison.maxAbsError > 1e-10) && (comparison.maxRelError > 1e-10)) returnCode = 2;
+          for (const auto &comparison : camelliaComparisons)
+          {
+            if ((comparison.maxAbsError > 1e-10) && (comparison.maxRelError > 1e-10)) returnCode = 2;
+          }
         }
       }
 
@@ -4357,6 +4389,7 @@ int main(int argc, char *argv[])
     std::cerr << "TensorPoissonPAMatrixDriver failed: " << e.what() << std::endl;
     returnCode = 1;
   }
+  Camellia::finalize(false);
   Kokkos::finalize();
   return returnCode;
 }

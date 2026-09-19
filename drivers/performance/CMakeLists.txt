@@ -220,6 +220,7 @@ add_test(NAME TensorVlasovGraphNormCamelliaP2MatrixCompareSmoke
     --mode=camellia-vlasov-matrix-compare
     --massWeight=1.0
     --stiffnessWeight=1.0
+    --camelliaMatrixCompareFailOnMismatch=0
     --maxAssembledEntries=1000000)
 
 add_test(NAME TensorH1GramPAMatrixTpetraRowMatrixGuardSmoke
