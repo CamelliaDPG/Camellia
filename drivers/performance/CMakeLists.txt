@@ -210,17 +210,17 @@ add_test(NAME TensorH1GramPAMatrixTpetraRowMatrixSmoke
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
 
-add_test(NAME TensorVlasovGraphNormCamelliaP2MatrixCompareSmoke
+add_test(NAME TensorVlasovGraphNormCamelliaP1P2MatrixCompareSmoke
   COMMAND TensorPoissonPAMatrixDriver
     --dim=4
-    --polyOrder=2
+    --polyOrder=1:2
     --cellsPerDim=1
     --operator=vlasov-graph-norm-1d1t2v
     --basisMode=hgrad
     --mode=camellia-vlasov-matrix-compare
     --massWeight=1.0
     --stiffnessWeight=1.0
-    --camelliaMatrixCompareFailOnMismatch=0
+    --camelliaMatrixCompareFailOnMismatch=1
     --maxAssembledEntries=1000000)
 
 add_test(NAME TensorH1GramPAMatrixTpetraRowMatrixGuardSmoke

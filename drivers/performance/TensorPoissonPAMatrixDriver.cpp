@@ -6,6 +6,7 @@
 
 #include "BF.h"
 #include "BC.h"
+#include "Basis.h"
 #include "Camellia.h"
 #include "Function.h"
 #include "MeshFactory.h"
@@ -488,6 +489,37 @@ namespace
   {
     double maxAbsError = -1.0;
     double maxRelError = -1.0;
+    int maxErrorRow = -1;
+    int maxErrorCol = -1;
+    double matrixFreeAtMaxError = 0.0;
+    double camelliaAtMaxError = 0.0;
+    double matrixFreeTrace = 0.0;
+    double camelliaTrace = 0.0;
+    double matrixFreeTotal = 0.0;
+    double camelliaTotal = 0.0;
+    double maxDiagonalAbsError = 0.0;
+    double maxRowSumAbsError = 0.0;
+    double matrixFreeSymmetryMaxAbsError = 0.0;
+    double camelliaSymmetryMaxAbsError = 0.0;
+    double crossTransposeMaxAbsError = 0.0;
+    double matrixFreeDiagonalMin = 0.0;
+    double matrixFreeDiagonalMax = 0.0;
+    double camelliaDiagonalMin = 0.0;
+    double camelliaDiagonalMax = 0.0;
+    double sortedDiagonalMaxAbsError = 0.0;
+    double sortedDiagonalL2Error = 0.0;
+    double sortedRowSumMaxAbsError = 0.0;
+    double sortedRowSumL2Error = 0.0;
+    double sortedColumnSumMaxAbsError = 0.0;
+    double sortedColumnSumL2Error = 0.0;
+    double greedyRowMatchMaxAbsError = 0.0;
+    double greedyRowMatchMeanAbsError = 0.0;
+    int greedyRowMatchWorstRow = -1;
+    int greedyRowMatchMatchedRow = -1;
+    double greedyColumnMatchMaxAbsError = 0.0;
+    double greedyColumnMatchMeanAbsError = 0.0;
+    int greedyColumnMatchWorstColumn = -1;
+    int greedyColumnMatchMatchedColumn = -1;
     int localDofs = 0;
     int globalDofs = 0;
   };
@@ -581,9 +613,13 @@ namespace
       const std::vector<std::string> derivativeLabels {"dt", "dx", "dux", "duy"};
       const std::vector<Camellia::TensorFunctionPtr> coefficients {
           Camellia::TensorFunction::constant(-1.0),
-          Camellia::TensorFunction::constant(-1.0) * Camellia::TensorFunction::componentCoordinate(2),
-          Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1)),
-          Camellia::TensorFunction::constant(-0.75) * Camellia::TensorFunction::componentCoordinate(1)
+          // TensorFunction::componentCoordinate() is evaluated on reference tensor points, while
+          // the Camellia comparison form below uses Function::xn/yn/zn/tn on the physical unit
+          // hypercube.  Shift reference coordinates from [-1,1] to [0,1] before forming the
+          // physical velocity/field coefficients.
+          Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(2) + Camellia::TensorFunction::constant(1.0)),
+          Camellia::TensorFunction::constant(-0.25) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1) + Camellia::TensorFunction::constant(2.0)),
+          Camellia::TensorFunction::constant(-0.375) * (Camellia::TensorFunction::componentCoordinate(1) + Camellia::TensorFunction::constant(1.0))
       };
 
       for (size_t trialComponent=0; trialComponent<derivativeComponents.size(); trialComponent++)
@@ -613,10 +649,22 @@ namespace
   {
     const int spaceTimePhaseDim = 4;
     Camellia::VarFactoryPtr vf = Camellia::VarFactory::varFactory();
-    vf->setBasisFamily(Camellia::BasisFamily::hierarchicalBasisFamily());
 
     Camellia::VarPtr f = vf->fieldVar("f", Camellia::HGRAD_DISC);
+    // VarFactory::setBasisFamily() only updates variables that already exist; it does not store
+    // a default for variables created later.  Apply the hierarchical basis after creating f so the
+    // Camellia reference matrix uses the same Intrepid2 hierarchical tensor HGRAD family as the
+    // matrix-free PAMatrix side.
+    using IntrepidBasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
+    auto intrepid2Basis = Intrepid2::getHypercubeBasis_HGRAD<IntrepidBasisFamily>(p, spaceTimePhaseDim);
+    auto camelliaBasis = Teuchos::rcp(new Camellia::Intrepid2BasisWrapper<Scalar>(intrepid2Basis,
+                                                                                  spaceTimePhaseDim,
+                                                                                  0,
+                                                                                  Camellia::FUNCTION_SPACE_HGRAD_DISC));
+    auto comparisonBasisFamily = Camellia::BasisFamily::singletonBasisFamily(camelliaBasis);
+    vf->setBasisFamily(comparisonBasisFamily);
     Camellia::VarFactoryPtr bubnovVF = vf->getBubnovFactory(Camellia::VarFactory::BUBNOV_TRIAL);
+    bubnovVF->setBasisFamily(comparisonBasisFamily);
     Camellia::BFPtr bf = Camellia::BF::bf(bubnovVF);
     Camellia::VarPtr w = f;
 
@@ -700,12 +748,11 @@ namespace
     return localToGlobal;
   }
 
-  std::vector<Scalar> extractCamelliaDenseMatrixInLocalOrder(Camellia::SolutionPtr solution, const int expectedLocalDofs)
+  std::vector<Scalar> interpretLocalDenseMatrixIntoCamelliaGlobalOrder(Camellia::MeshPtr mesh,
+                                                                        const std::vector<Scalar> &localDense,
+                                                                        const int expectedLocalDofs,
+                                                                        std::vector<Camellia::GlobalIndexType> &globalDofIndicesVector)
   {
-    solution->initializeStiffnessAndLoad();
-    solution->populateStiffnessAndLoad();
-    auto matrix = solution->getStiffnessMatrix();
-    Camellia::MeshPtr mesh = solution->mesh();
     const auto &cellIDs = mesh->cellIDsInPartition();
     if (cellIDs.size() != 1)
       throw std::runtime_error("Camellia matrix comparison expects exactly one locally-owned cell");
@@ -714,24 +761,50 @@ namespace
     if (localDofs != expectedLocalDofs)
       throw std::runtime_error("Camellia matrix comparison local DOF count does not match matrix-free local DOF count");
 
-    const auto localToGlobal = localToGlobalDofMap(mesh, cellID, localDofs);
-    std::vector<Scalar> dense(static_cast<size_t>(localDofs) * localDofs, Scalar(0.0));
+    Camellia::FieldContainer<Scalar> localData(localDofs, localDofs);
+    for (int row=0; row<localDofs; row++)
+      for (int col=0; col<localDofs; col++)
+        localData(row,col) = localDense[static_cast<size_t>(row) * localDofs + col];
+
+    Camellia::FieldContainer<Scalar> globalData;
+    Camellia::FieldContainer<Camellia::GlobalIndexType> globalDofIndices;
+    mesh->interpretLocalData(cellID, localData, globalData, globalDofIndices);
+
+    const int globalDofs = globalDofIndices.dimension(0);
+    globalDofIndicesVector.resize(static_cast<size_t>(globalDofs));
+    for (int ordinal=0; ordinal<globalDofs; ordinal++) globalDofIndicesVector[static_cast<size_t>(ordinal)] = globalDofIndices(ordinal);
+
+    std::vector<Scalar> dense(static_cast<size_t>(globalDofs) * globalDofs, Scalar(0.0));
+    for (int row=0; row<globalDofs; row++)
+      for (int col=0; col<globalDofs; col++)
+        dense[static_cast<size_t>(row) * globalDofs + col] = globalData(row,col);
+    return dense;
+  }
+
+  std::vector<Scalar> extractCamelliaDenseMatrixInGlobalOrder(Camellia::SolutionPtr solution,
+                                                              const std::vector<Camellia::GlobalIndexType> &globalDofIndices)
+  {
+    solution->initializeStiffnessAndLoad();
+    solution->populateStiffnessAndLoad();
+    auto matrix = solution->getStiffnessMatrix();
+    const int globalDofs = static_cast<int>(globalDofIndices.size());
+    std::vector<Scalar> dense(static_cast<size_t>(globalDofs) * globalDofs, Scalar(0.0));
 
     const int maxEntries = static_cast<int>(matrix->getLocalMaxNumRowEntries());
     TpetraCrsMatrix::nonconst_global_inds_host_view_type columnIndices("Camellia comparison columns", maxEntries);
     TpetraCrsMatrix::nonconst_values_host_view_type values("Camellia comparison values", maxEntries);
-    for (int row=0; row<localDofs; row++)
+    for (int row=0; row<globalDofs; row++)
     {
       size_t numEntries = 0;
-      matrix->getGlobalRowCopy(localToGlobal[static_cast<size_t>(row)], columnIndices, values, numEntries);
+      matrix->getGlobalRowCopy(globalDofIndices[static_cast<size_t>(row)], columnIndices, values, numEntries);
       for (size_t entryOrdinal=0; entryOrdinal<numEntries; entryOrdinal++)
       {
         const auto columnGlobal = columnIndices(entryOrdinal);
-        for (int col=0; col<localDofs; col++)
+        for (int col=0; col<globalDofs; col++)
         {
-          if (localToGlobal[static_cast<size_t>(col)] == columnGlobal)
+          if (globalDofIndices[static_cast<size_t>(col)] == columnGlobal)
           {
-            dense[static_cast<size_t>(row) * localDofs + col] = values(entryOrdinal);
+            dense[static_cast<size_t>(row) * globalDofs + col] = values(entryOrdinal);
             break;
           }
         }
@@ -748,13 +821,149 @@ namespace
     comparison.globalDofs = globalDofs;
     comparison.maxAbsError = 0.0;
     comparison.maxRelError = 0.0;
-    for (size_t entryOrdinal=0; entryOrdinal<matrixFree.size(); entryOrdinal++)
+    if (matrixFree.size() != camellia.size())
+      throw std::invalid_argument("Camellia matrix comparison requires equal matrix sizes");
+    if (matrixFree.size() != static_cast<size_t>(globalDofs) * globalDofs)
+      throw std::invalid_argument("Camellia matrix comparison matrix size does not match globalDofs");
+
+    std::vector<double> matrixFreeDiagonal(static_cast<size_t>(globalDofs), 0.0);
+    std::vector<double> camelliaDiagonal(static_cast<size_t>(globalDofs), 0.0);
+    std::vector<double> matrixFreeRowSums(static_cast<size_t>(globalDofs), 0.0);
+    std::vector<double> camelliaRowSums(static_cast<size_t>(globalDofs), 0.0);
+    std::vector<double> matrixFreeColumnSums(static_cast<size_t>(globalDofs), 0.0);
+    std::vector<double> camelliaColumnSums(static_cast<size_t>(globalDofs), 0.0);
+
+    for (int row=0; row<globalDofs; row++)
     {
-      const double absError = std::abs(matrixFree[entryOrdinal] - camellia[entryOrdinal]);
-      const double scale = std::max<double>(1.0, std::max(std::abs(matrixFree[entryOrdinal]), std::abs(camellia[entryOrdinal])));
-      comparison.maxAbsError = std::max(comparison.maxAbsError, absError);
-      comparison.maxRelError = std::max(comparison.maxRelError, absError / scale);
+      for (int col=0; col<globalDofs; col++)
+      {
+        const size_t entryOrdinal = static_cast<size_t>(row) * globalDofs + col;
+        const double matrixFreeValue = matrixFree[entryOrdinal];
+        const double camelliaValue = camellia[entryOrdinal];
+        const double absError = std::abs(matrixFreeValue - camelliaValue);
+        const double scale = std::max<double>(1.0, std::max(std::abs(matrixFreeValue), std::abs(camelliaValue)));
+        if (absError > comparison.maxAbsError)
+        {
+          comparison.maxAbsError = absError;
+          comparison.maxErrorRow = row;
+          comparison.maxErrorCol = col;
+          comparison.matrixFreeAtMaxError = matrixFreeValue;
+          comparison.camelliaAtMaxError = camelliaValue;
+        }
+        comparison.maxRelError = std::max(comparison.maxRelError, absError / scale);
+        if (row == col)
+        {
+          comparison.matrixFreeTrace += matrixFreeValue;
+          comparison.camelliaTrace += camelliaValue;
+          comparison.maxDiagonalAbsError = std::max(comparison.maxDiagonalAbsError, absError);
+          matrixFreeDiagonal[static_cast<size_t>(row)] = matrixFreeValue;
+          camelliaDiagonal[static_cast<size_t>(row)] = camelliaValue;
+        }
+        comparison.matrixFreeTotal += matrixFreeValue;
+        comparison.camelliaTotal += camelliaValue;
+        matrixFreeRowSums[static_cast<size_t>(row)] += matrixFreeValue;
+        camelliaRowSums[static_cast<size_t>(row)] += camelliaValue;
+        matrixFreeColumnSums[static_cast<size_t>(col)] += matrixFreeValue;
+        camelliaColumnSums[static_cast<size_t>(col)] += camelliaValue;
+      }
     }
+
+    for (int row=0; row<globalDofs; row++)
+      comparison.maxRowSumAbsError = std::max(comparison.maxRowSumAbsError,
+                                              std::abs(matrixFreeRowSums[static_cast<size_t>(row)] - camelliaRowSums[static_cast<size_t>(row)]));
+
+    if (globalDofs > 0)
+    {
+      comparison.matrixFreeDiagonalMin = *std::min_element(matrixFreeDiagonal.begin(), matrixFreeDiagonal.end());
+      comparison.matrixFreeDiagonalMax = *std::max_element(matrixFreeDiagonal.begin(), matrixFreeDiagonal.end());
+      comparison.camelliaDiagonalMin = *std::min_element(camelliaDiagonal.begin(), camelliaDiagonal.end());
+      comparison.camelliaDiagonalMax = *std::max_element(camelliaDiagonal.begin(), camelliaDiagonal.end());
+    }
+
+    auto sortedSignatureErrors = [](std::vector<double> left, std::vector<double> right, double &maxAbsError, double &l2Error)
+    {
+      std::sort(left.begin(), left.end());
+      std::sort(right.begin(), right.end());
+      maxAbsError = 0.0;
+      double squaredError = 0.0;
+      for (size_t i=0; i<left.size(); i++)
+      {
+        const double absError = std::abs(left[i] - right[i]);
+        maxAbsError = std::max(maxAbsError, absError);
+        squaredError += absError * absError;
+      }
+      l2Error = std::sqrt(squaredError);
+    };
+    sortedSignatureErrors(matrixFreeDiagonal, camelliaDiagonal,
+                          comparison.sortedDiagonalMaxAbsError, comparison.sortedDiagonalL2Error);
+    sortedSignatureErrors(matrixFreeRowSums, camelliaRowSums,
+                          comparison.sortedRowSumMaxAbsError, comparison.sortedRowSumL2Error);
+    sortedSignatureErrors(matrixFreeColumnSums, camelliaColumnSums,
+                          comparison.sortedColumnSumMaxAbsError, comparison.sortedColumnSumL2Error);
+
+    for (int row=0; row<globalDofs; row++)
+    {
+      for (int col=0; col<globalDofs; col++)
+      {
+        const size_t entryOrdinal = static_cast<size_t>(row) * globalDofs + col;
+        const size_t transposeOrdinal = static_cast<size_t>(col) * globalDofs + row;
+        comparison.matrixFreeSymmetryMaxAbsError = std::max(comparison.matrixFreeSymmetryMaxAbsError,
+                                                            std::abs(matrixFree[entryOrdinal] - matrixFree[transposeOrdinal]));
+        comparison.camelliaSymmetryMaxAbsError = std::max(comparison.camelliaSymmetryMaxAbsError,
+                                                          std::abs(camellia[entryOrdinal] - camellia[transposeOrdinal]));
+        comparison.crossTransposeMaxAbsError = std::max(comparison.crossTransposeMaxAbsError,
+                                                        std::abs(matrixFree[entryOrdinal] - camellia[transposeOrdinal]));
+      }
+    }
+
+    auto greedyLineMatch = [globalDofs](const std::vector<Scalar> &left, const std::vector<Scalar> &right, const bool matchRows,
+                                        double &maxAbsError, double &meanAbsError, int &worstLeftOrdinal, int &matchedRightOrdinal)
+    {
+      std::vector<int> usedRight(static_cast<size_t>(globalDofs), 0);
+      maxAbsError = 0.0;
+      meanAbsError = 0.0;
+      worstLeftOrdinal = -1;
+      matchedRightOrdinal = -1;
+      for (int leftOrdinal=0; leftOrdinal<globalDofs; leftOrdinal++)
+      {
+        double bestError = std::numeric_limits<double>::infinity();
+        int bestRightOrdinal = -1;
+        for (int rightOrdinal=0; rightOrdinal<globalDofs; rightOrdinal++)
+        {
+          if (usedRight[static_cast<size_t>(rightOrdinal)] != 0) continue;
+          double candidateError = 0.0;
+          for (int k=0; k<globalDofs; k++)
+          {
+            const size_t leftEntry = matchRows ? static_cast<size_t>(leftOrdinal) * globalDofs + k
+                                               : static_cast<size_t>(k) * globalDofs + leftOrdinal;
+            const size_t rightEntry = matchRows ? static_cast<size_t>(rightOrdinal) * globalDofs + k
+                                                : static_cast<size_t>(k) * globalDofs + rightOrdinal;
+            candidateError = std::max(candidateError, std::abs(left[leftEntry] - right[rightEntry]));
+          }
+          if (candidateError < bestError)
+          {
+            bestError = candidateError;
+            bestRightOrdinal = rightOrdinal;
+          }
+        }
+        if (bestRightOrdinal >= 0) usedRight[static_cast<size_t>(bestRightOrdinal)] = 1;
+        meanAbsError += bestError;
+        if (bestError > maxAbsError)
+        {
+          maxAbsError = bestError;
+          worstLeftOrdinal = leftOrdinal;
+          matchedRightOrdinal = bestRightOrdinal;
+        }
+      }
+      if (globalDofs > 0) meanAbsError /= globalDofs;
+    };
+    greedyLineMatch(matrixFree, camellia, true,
+                    comparison.greedyRowMatchMaxAbsError, comparison.greedyRowMatchMeanAbsError,
+                    comparison.greedyRowMatchWorstRow, comparison.greedyRowMatchMatchedRow);
+    greedyLineMatch(matrixFree, camellia, false,
+                    comparison.greedyColumnMatchMaxAbsError, comparison.greedyColumnMatchMeanAbsError,
+                    comparison.greedyColumnMatchWorstColumn, comparison.greedyColumnMatchMatchedColumn);
+
     return comparison;
   }
 
@@ -767,10 +976,13 @@ namespace
     const auto matrixFreeDense = assembleDenseLocalMatrix(matrixFreeTerms, cells, localDofs, maxAssembledEntries);
 
     auto camelliaSolution = makeCamelliaVlasovGraphGramComparisonSolution(p, massWeight, block);
-    const int globalDofs = static_cast<int>(camelliaSolution->mesh()->globalDofCount());
-    const auto camelliaDense = extractCamelliaDenseMatrixInLocalOrder(camelliaSolution, localDofs);
+    std::vector<Camellia::GlobalIndexType> globalDofIndices;
+    const auto matrixFreeGlobalDense = interpretLocalDenseMatrixIntoCamelliaGlobalOrder(camelliaSolution->mesh(), matrixFreeDense,
+                                                                                       localDofs, globalDofIndices);
+    const int globalDofs = static_cast<int>(globalDofIndices.size());
+    const auto camelliaDense = extractCamelliaDenseMatrixInGlobalOrder(camelliaSolution, globalDofIndices);
 
-    return compareDenseMatrices(matrixFreeDense, camelliaDense, localDofs, globalDofs);
+    return compareDenseMatrices(matrixFreeGlobalDense, camelliaDense, localDofs, globalDofs);
   }
 
   std::string camelliaComparisonBlockName(const VlasovCamelliaComparisonBlock block)
@@ -816,6 +1028,37 @@ namespace
                 << " globalDofs=" << comparison.globalDofs
                 << " maxAbsError=" << std::setprecision(16) << comparison.maxAbsError
                 << " maxRelError=" << comparison.maxRelError
+                << " maxErrorRow=" << comparison.maxErrorRow
+                << " maxErrorCol=" << comparison.maxErrorCol
+                << " matrixFreeAtMaxError=" << comparison.matrixFreeAtMaxError
+                << " camelliaAtMaxError=" << comparison.camelliaAtMaxError
+                << " matrixFreeTrace=" << comparison.matrixFreeTrace
+                << " camelliaTrace=" << comparison.camelliaTrace
+                << " matrixFreeTotal=" << comparison.matrixFreeTotal
+                << " camelliaTotal=" << comparison.camelliaTotal
+                << " maxDiagonalAbsError=" << comparison.maxDiagonalAbsError
+                << " maxRowSumAbsError=" << comparison.maxRowSumAbsError
+                << " matrixFreeSymmetryMaxAbsError=" << comparison.matrixFreeSymmetryMaxAbsError
+                << " camelliaSymmetryMaxAbsError=" << comparison.camelliaSymmetryMaxAbsError
+                << " crossTransposeMaxAbsError=" << comparison.crossTransposeMaxAbsError
+                << " matrixFreeDiagonalMin=" << comparison.matrixFreeDiagonalMin
+                << " matrixFreeDiagonalMax=" << comparison.matrixFreeDiagonalMax
+                << " camelliaDiagonalMin=" << comparison.camelliaDiagonalMin
+                << " camelliaDiagonalMax=" << comparison.camelliaDiagonalMax
+                << " sortedDiagonalMaxAbsError=" << comparison.sortedDiagonalMaxAbsError
+                << " sortedDiagonalL2Error=" << comparison.sortedDiagonalL2Error
+                << " sortedRowSumMaxAbsError=" << comparison.sortedRowSumMaxAbsError
+                << " sortedRowSumL2Error=" << comparison.sortedRowSumL2Error
+                << " sortedColumnSumMaxAbsError=" << comparison.sortedColumnSumMaxAbsError
+                << " sortedColumnSumL2Error=" << comparison.sortedColumnSumL2Error
+                << " greedyRowMatchMaxAbsError=" << comparison.greedyRowMatchMaxAbsError
+                << " greedyRowMatchMeanAbsError=" << comparison.greedyRowMatchMeanAbsError
+                << " greedyRowMatchWorstRow=" << comparison.greedyRowMatchWorstRow
+                << " greedyRowMatchMatchedRow=" << comparison.greedyRowMatchMatchedRow
+                << " greedyColumnMatchMaxAbsError=" << comparison.greedyColumnMatchMaxAbsError
+                << " greedyColumnMatchMeanAbsError=" << comparison.greedyColumnMatchMeanAbsError
+                << " greedyColumnMatchWorstColumn=" << comparison.greedyColumnMatchWorstColumn
+                << " greedyColumnMatchMatchedColumn=" << comparison.greedyColumnMatchMatchedColumn
                 << " tolerance=" << tolerance
                 << " passed=" << (blockPassed ? 1 : 0)
                 << std::endl;
