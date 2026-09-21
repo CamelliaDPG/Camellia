@@ -2485,6 +2485,7 @@ namespace
     int localDofs_ = 0;
     int coarseRows_ = 0;
     int smootherIterations_ = 1;
+    Scalar smootherLowerFraction_ = Scalar(0.3);
     std::string smootherName_;
     std::vector<Scalar> fineMatrices_;
     std::vector<Scalar> fineInverseDiagonal_;
@@ -2527,13 +2528,14 @@ namespace
     static void runChebyshevSmoother(const std::vector<Scalar> &matrices, const std::vector<Scalar> &inverseDiagonal,
                                      const std::vector<Scalar> &lambdaMaxByCell, const int cellOrdinal,
                                      const int rows, const std::vector<Scalar> &rhs,
-                                     std::vector<Scalar> &solution, const int iterations)
+                                     std::vector<Scalar> &solution, const int iterations,
+                                     const Scalar lowerFraction)
     {
       if (iterations < 1) return;
       std::vector<Scalar> correction(static_cast<size_t>(rows), Scalar(0.0));
       std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
       const Scalar chebyshevLambdaMax = std::max(lambdaMaxByCell[static_cast<size_t>(cellOrdinal)], Scalar(1.0));
-      const Scalar chebyshevLambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), Scalar(0.3) * chebyshevLambdaMax);
+      const Scalar chebyshevLambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), lowerFraction * chebyshevLambdaMax);
       const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
       const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
       const Scalar s1 = ifpackTheta * ifpackDelta;
@@ -2566,7 +2568,7 @@ namespace
     void smoothFine(const int cellOrdinal, const std::vector<Scalar> &rhs, std::vector<Scalar> &solution) const
     {
       if (smootherName_ == "chebyshev")
-        runChebyshevSmoother(fineMatrices_, fineInverseDiagonal_, fineLambdaMaxByCell_, cellOrdinal, localDofs_, rhs, solution, smootherIterations_);
+        runChebyshevSmoother(fineMatrices_, fineInverseDiagonal_, fineLambdaMaxByCell_, cellOrdinal, localDofs_, rhs, solution, smootherIterations_, smootherLowerFraction_);
       else
         runDampedJacobiSmoother(fineMatrices_, fineInverseDiagonal_, fineLambdaMaxByCell_, cellOrdinal, localDofs_, rhs, solution, smootherIterations_);
     }
@@ -2576,9 +2578,11 @@ namespace
                                         const LocalPAMatrixTpetraOperator &fineOperator,
                                         const int dim, const int p, const int cells,
                                         const int localDofs, const int smootherIterations,
-                                        const std::string &smootherName)
+                                        const std::string &smootherName,
+                                        const Scalar smootherLowerFraction)
       : map_(map), transfer_(&cachedTensorHGradPTransfer(dim, p)), cells_(cells), localDofs_(localDofs),
-        coarseRows_(transfer_->coarseRows), smootherIterations_(std::max(1, smootherIterations)), smootherName_(smootherName)
+        coarseRows_(transfer_->coarseRows), smootherIterations_(std::max(1, smootherIterations)),
+        smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)), smootherName_(smootherName)
     {
       if (p < 2) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner requires p >= 2");
       if (transfer_->fineRows != localDofs) throw std::runtime_error("LocalPMultigridTpetraPreconditioner fine transfer dimension does not match local dofs");
@@ -2660,6 +2664,7 @@ namespace
            << ",fineP=" << p << ",coarseP=" << transfer_->coarseP
            << ",fineRows=" << transfer_->fineRows << ",coarseRows=" << transfer_->coarseRows
            << ",smoother=" << smootherName_ << ",smootherIterations=" << smootherIterations_
+           << ",smootherLowerFraction=" << smootherLowerFraction_
            << ",coarse=exact_cholesky)";
       description_ = desc.str();
     }
@@ -2705,7 +2710,6 @@ namespace
           if (solveInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarse Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
           applyTensorHGradPTransferProlongation(*transfer_, coarseCorrection, fineCorrection);
           for (int i=0; i<localDofs_; i++) solution[static_cast<size_t>(i)] += fineCorrection[static_cast<size_t>(i)];
-          smoothFine(c, rhs, solution);
           smoothFine(c, rhs, solution);
 
           for (int i=0; i<localDofs_; i++)
@@ -3601,14 +3605,15 @@ namespace
                                      : pMultigridJacobiSmootherIterations;
         const std::string smootherName = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? "chebyshev" : "jacobi";
         const TensorHGradPTransfer &transfer = cachedTensorHGradPTransfer(dim, p);
-        auto pmgPreconditioner = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map, *matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName));
+        auto pmgPreconditioner = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map, *matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction));
         preconditionerOperator = Teuchos::rcp_implicit_cast<TpetraOperator>(pmgPreconditioner);
         timing.pMultigridLevels = 2;
         timing.pMultigridFineDofs = rows;
         timing.pMultigridCoarseDofs = transfer.coarseRows;
         timing.pMultigridChebyshevSmootherIterations = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? smootherIterations : 0;
+        timing.pMultigridChebyshevSmootherLowerFraction = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? pMultigridChebyshevSmootherLowerFraction : -1.0;
         timing.pMultigridJacobiSmootherIterations = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev") ? smootherIterations : 0;
-        timing.pMultigridPath = "tpetra_operator_right_preconditioner_cached_tensor_hgrad_transfer_validated_diagonal_fallback_skeleton";
+        timing.pMultigridPath = "tpetra_operator_right_preconditioner_cached_tensor_hgrad_transfer_configured_chebyshev_interval";
       }
       else
       {
@@ -3715,8 +3720,55 @@ namespace
       std::vector<Scalar> factoredCoarseMatrices;
       std::vector<Scalar> coarseDiagonal(static_cast<size_t>(cells * coarseRows), Scalar(0.0));
       std::vector<Scalar> coarseLambdaMaxByCell(static_cast<size_t>(cells), Scalar(0.0));
+      Scalar fineMatrixMaxAbs = Scalar(0.0);
+      Scalar fineMatrixFrobeniusNorm = Scalar(0.0);
+      Scalar fineMatrixDiagonalMinAbs = Scalar(-1.0);
+      Scalar fineMatrixDiagonalMaxAbs = Scalar(0.0);
+      Scalar coarseMatrixMaxAbs = Scalar(0.0);
+      Scalar coarseMatrixFrobeniusNorm = Scalar(0.0);
+      Scalar coarseMatrixDiagonalMinAbs = Scalar(-1.0);
+      Scalar coarseMatrixDiagonalMaxAbs = Scalar(0.0);
       if (inverseDiagnosticAlgorithm == "pmultigrid-chebyshev")
       {
+        coarseMatrixMaxAbs = Scalar(0.0);
+        Scalar coarseMatrixFrobeniusNormSquared = Scalar(0.0);
+        coarseMatrixDiagonalMinAbs = Scalar(-1.0);
+        coarseMatrixDiagonalMaxAbs = Scalar(0.0);
+        for (int coarseScaleCell=0; coarseScaleCell<cells; coarseScaleCell++)
+        {
+          const size_t coarseOffset = static_cast<size_t>(coarseScaleCell) * coarseRows * coarseRows;
+          for (int i=0; i<coarseRows; i++)
+          {
+            for (int j=0; j<coarseRows; j++)
+            {
+              const Scalar entryAbs = std::abs(coarseMatrices[coarseOffset + static_cast<size_t>(i * coarseRows + j)]);
+              coarseMatrixMaxAbs = std::max(coarseMatrixMaxAbs, entryAbs);
+              coarseMatrixFrobeniusNormSquared += entryAbs * entryAbs;
+              if (i == j)
+              {
+                coarseMatrixDiagonalMaxAbs = std::max(coarseMatrixDiagonalMaxAbs, entryAbs);
+                if ((coarseMatrixDiagonalMinAbs < Scalar(0.0)) || (entryAbs < coarseMatrixDiagonalMinAbs)) coarseMatrixDiagonalMinAbs = entryAbs;
+              }
+            }
+          }
+        }
+        coarseMatrixFrobeniusNorm = std::sqrt(coarseMatrixFrobeniusNormSquared);
+
+        Scalar fineMatrixFrobeniusNormSquared = Scalar(0.0);
+        for (size_t entry=0; entry<localMatrices.size(); entry++)
+        {
+          const Scalar entryAbs = std::abs(localMatrices[entry]);
+          fineMatrixMaxAbs = std::max(fineMatrixMaxAbs, entryAbs);
+          fineMatrixFrobeniusNormSquared += localMatrices[entry] * localMatrices[entry];
+        }
+        for (size_t entry=0; entry<diagonal.size(); entry++)
+        {
+          const Scalar diagonalAbs = std::abs(diagonal[entry]);
+          fineMatrixDiagonalMaxAbs = std::max(fineMatrixDiagonalMaxAbs, diagonalAbs);
+          if ((fineMatrixDiagonalMinAbs < Scalar(0.0)) || (diagonalAbs < fineMatrixDiagonalMinAbs)) fineMatrixDiagonalMinAbs = diagonalAbs;
+        }
+        fineMatrixFrobeniusNorm = std::sqrt(fineMatrixFrobeniusNormSquared);
+
         factoredCoarseMatrices = coarseMatrices;
         for (int c=0; c<cells; c++)
         {
@@ -3807,23 +3859,147 @@ namespace
       std::vector<Scalar> fineResidual(static_cast<size_t>(rows), Scalar(0.0));
       std::vector<Scalar> fineCorrection(static_cast<size_t>(rows), Scalar(0.0));
       std::vector<Scalar> coarseCorrection(static_cast<size_t>(coarseRows), Scalar(0.0));
+      auto maxAbsNorm = [](const std::vector<Scalar> &values)
+      {
+        Scalar norm = Scalar(0.0);
+        for (const Scalar value : values) norm = std::max(norm, std::abs(value));
+        return norm;
+      };
       if (inverseDiagnosticAlgorithm == "pmultigrid-chebyshev")
       {
         for (int cycle=0; cycle<numInverseIterations; cycle++)
         {
+          applyHostVector();
+          const Scalar cycleInitialResidualNorm = residualNorm();
           runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
           applyHostVector();
+          const Scalar residualAfterPreSmooth = residualNorm();
+          Scalar restrictedResidualNorm = Scalar(0.0);
+          Scalar coarseCorrectionNorm = Scalar(0.0);
+          Scalar prolongatedCorrectionNorm = Scalar(0.0);
+          Scalar coarseSolveResidualNorm = Scalar(0.0);
+          Scalar galerkinActionDefectNorm = Scalar(0.0);
+          Scalar prolongationScaleRatio = Scalar(0.0);
+          Scalar fineActionScaleRatio = Scalar(0.0);
+          Scalar coarseActionScaleRatio = Scalar(0.0);
+          Scalar restrictedResidualL2NormSquared = Scalar(0.0);
+          Scalar coarseResidualDotCorrection = Scalar(0.0);
+          Scalar coarseCorrectionEnergy = Scalar(0.0);
+          Scalar fineResidualDotCorrection = Scalar(0.0);
+          Scalar fineCorrectionEnergy = Scalar(0.0);
+          std::vector<Scalar> coarseAction(static_cast<size_t>(coarseRows), Scalar(0.0));
+          std::vector<Scalar> fineAction(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> restrictedFineAction(static_cast<size_t>(coarseRows), Scalar(0.0));
+          const std::vector<Scalar> iterateBeforeCoarseCorrection = iterate;
+          std::vector<Scalar> prolongatedCoarseCorrection(static_cast<size_t>(cells * rows), Scalar(0.0));
           for (int c=0; c<cells; c++)
           {
             const size_t cellOffset = static_cast<size_t>(c * rows);
             for (int i=0; i<rows; i++) fineResidual[static_cast<size_t>(i)] = rhs[cellOffset + i] - applied[cellOffset + i];
             applyTensorHGradPTransferRestriction(transfer, fineResidual, coarseCorrection);
+            const std::vector<Scalar> restrictedResidual = coarseCorrection;
+            const Scalar restrictedResidualCellNorm = maxAbsNorm(restrictedResidual);
+            restrictedResidualNorm = std::max(restrictedResidualNorm, restrictedResidualCellNorm);
+            for (int i=0; i<coarseRows; i++) restrictedResidualL2NormSquared += restrictedResidual[static_cast<size_t>(i)] * restrictedResidual[static_cast<size_t>(i)];
             const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices, static_cast<size_t>(c) * coarseRows * coarseRows, coarseRows, coarseCorrection);
+            for (int i=0; i<coarseRows; i++) coarseResidualDotCorrection += restrictedResidual[static_cast<size_t>(i)] * coarseCorrection[static_cast<size_t>(i)];
             if (solveInfo != 0) throw std::runtime_error("p-multigrid diagnostic coarse Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+            const Scalar coarseCorrectionCellNorm = maxAbsNorm(coarseCorrection);
+            coarseCorrectionNorm = std::max(coarseCorrectionNorm, coarseCorrectionCellNorm);
+
+            coarseAction.assign(static_cast<size_t>(coarseRows), Scalar(0.0));
+            const size_t coarseOffset = static_cast<size_t>(c) * coarseRows * coarseRows;
+            for (int i=0; i<coarseRows; i++)
+              for (int j=0; j<coarseRows; j++)
+                coarseAction[static_cast<size_t>(i)] += coarseMatrices[coarseOffset + static_cast<size_t>(i * coarseRows + j)] * coarseCorrection[static_cast<size_t>(j)];
+            Scalar coarseSolveResidualCellNorm = Scalar(0.0);
+            for (int i=0; i<coarseRows; i++)
+              coarseSolveResidualCellNorm = std::max(coarseSolveResidualCellNorm, std::abs(coarseAction[static_cast<size_t>(i)] - restrictedResidual[static_cast<size_t>(i)]));
+            coarseSolveResidualNorm = std::max(coarseSolveResidualNorm, coarseSolveResidualCellNorm);
+            const Scalar coarseActionNorm = maxAbsNorm(coarseAction);
+            if (restrictedResidualCellNorm > Scalar(0.0)) coarseActionScaleRatio = std::max(coarseActionScaleRatio, coarseActionNorm / restrictedResidualCellNorm);
+            for (int i=0; i<coarseRows; i++) coarseCorrectionEnergy += coarseCorrection[static_cast<size_t>(i)] * coarseAction[static_cast<size_t>(i)];
+
             applyTensorHGradPTransferProlongation(transfer, coarseCorrection, fineCorrection);
-            for (int i=0; i<rows; i++) iterate[cellOffset + i] += fineCorrection[static_cast<size_t>(i)];
+            const Scalar fineCorrectionNorm = maxAbsNorm(fineCorrection);
+            prolongatedCorrectionNorm = std::max(prolongatedCorrectionNorm, fineCorrectionNorm);
+            if (coarseCorrectionCellNorm > Scalar(0.0)) prolongationScaleRatio = std::max(prolongationScaleRatio, fineCorrectionNorm / coarseCorrectionCellNorm);
+
+            fineAction.assign(static_cast<size_t>(rows), Scalar(0.0));
+            const size_t fineOffset = static_cast<size_t>(c) * rows * rows;
+            for (int i=0; i<rows; i++)
+              for (int j=0; j<rows; j++)
+                fineAction[static_cast<size_t>(i)] += localMatrices[fineOffset + static_cast<size_t>(i * rows + j)] * fineCorrection[static_cast<size_t>(j)];
+            const Scalar fineActionNorm = maxAbsNorm(fineAction);
+            if (fineCorrectionNorm > Scalar(0.0)) fineActionScaleRatio = std::max(fineActionScaleRatio, fineActionNorm / fineCorrectionNorm);
+            for (int i=0; i<rows; i++)
+            {
+              fineResidualDotCorrection += fineResidual[static_cast<size_t>(i)] * fineCorrection[static_cast<size_t>(i)];
+              fineCorrectionEnergy += fineCorrection[static_cast<size_t>(i)] * fineAction[static_cast<size_t>(i)];
+            }
+            applyTensorHGradPTransferRestriction(transfer, fineAction, restrictedFineAction);
+            Scalar galerkinActionDefectCellNorm = Scalar(0.0);
+            for (int i=0; i<coarseRows; i++)
+              galerkinActionDefectCellNorm = std::max(galerkinActionDefectCellNorm, std::abs(restrictedFineAction[static_cast<size_t>(i)] - coarseAction[static_cast<size_t>(i)]));
+            galerkinActionDefectNorm = std::max(galerkinActionDefectNorm, galerkinActionDefectCellNorm);
+
+            for (int i=0; i<rows; i++) prolongatedCoarseCorrection[static_cast<size_t>(cellOffset + i)] += fineCorrection[static_cast<size_t>(i)];
           }
+          for (size_t i=0; i<iterate.size(); i++) iterate[i] = iterateBeforeCoarseCorrection[i] + prolongatedCoarseCorrection[i];
+          applyHostVector();
+          const Scalar residualAfterPlusCoarseCorrection = residualNorm();
+          for (size_t i=0; i<iterate.size(); i++) iterate[i] = iterateBeforeCoarseCorrection[i] - prolongatedCoarseCorrection[i];
+          applyHostVector();
+          const Scalar residualAfterMinusCoarseCorrection = residualNorm();
+          for (size_t i=0; i<iterate.size(); i++) iterate[i] = iterateBeforeCoarseCorrection[i] + prolongatedCoarseCorrection[i];
+          applyHostVector();
+          const Scalar residualAfterCoarseCorrection = residualAfterPlusCoarseCorrection;
           runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
+          applyHostVector();
+          const Scalar residualAfterPostSmooth = residualNorm();
+          const Scalar restrictedResidualL2Norm = std::sqrt(restrictedResidualL2NormSquared);
+          const Scalar coarsePredictedEnergyReduction = coarseResidualDotCorrection - Scalar(0.5) * coarseCorrectionEnergy;
+          const Scalar finePredictedEnergyReduction = fineResidualDotCorrection - Scalar(0.5) * fineCorrectionEnergy;
+          if (p == 2)
+          {
+            std::cout << "VLASOV_GRAPH_NORM_PMULTIGRID_STAGE p=" << p
+                      << " cycle=" << (cycle + 1)
+                      << " cycles=" << numInverseIterations
+                      << " initialResidualNorm=" << std::setprecision(16) << cycleInitialResidualNorm
+                      << " residualAfterPreSmooth=" << residualAfterPreSmooth
+                      << " restrictedResidualNorm=" << restrictedResidualNorm
+                      << " coarseCorrectionNorm=" << coarseCorrectionNorm
+                      << " prolongatedCorrectionNorm=" << prolongatedCorrectionNorm
+                      << " residualAfterPlusCoarseCorrection=" << residualAfterPlusCoarseCorrection
+                      << " residualAfterMinusCoarseCorrection=" << residualAfterMinusCoarseCorrection
+                      << " residualAfterCoarseCorrection=" << residualAfterCoarseCorrection
+                      << " residualAfterPostSmooth=" << residualAfterPostSmooth
+                      << " coarseSolveResidualNorm=" << coarseSolveResidualNorm
+                      << " galerkinActionDefectNorm=" << galerkinActionDefectNorm
+                      << " restrictedResidualL2Norm=" << restrictedResidualL2Norm
+                      << " coarseResidualDotCorrection=" << coarseResidualDotCorrection
+                      << " fineResidualDotCorrection=" << fineResidualDotCorrection
+                      << " coarseCorrectionEnergy=" << coarseCorrectionEnergy
+                      << " fineCorrectionEnergy=" << fineCorrectionEnergy
+                      << " coarsePredictedEnergyReduction=" << coarsePredictedEnergyReduction
+                      << " finePredictedEnergyReduction=" << finePredictedEnergyReduction
+                      << " prolongationScaleRatio=" << prolongationScaleRatio
+                      << " fineActionScaleRatio=" << fineActionScaleRatio
+                      << " coarseActionScaleRatio=" << coarseActionScaleRatio
+                      << " fineMatrixMaxAbs=" << fineMatrixMaxAbs
+                      << " fineMatrixFrobeniusNorm=" << fineMatrixFrobeniusNorm
+                      << " fineMatrixDiagonalMinAbs=" << fineMatrixDiagonalMinAbs
+                      << " fineMatrixDiagonalMaxAbs=" << fineMatrixDiagonalMaxAbs
+                      << " coarseMatrixMaxAbs=" << coarseMatrixMaxAbs
+                      << " coarseMatrixFrobeniusNorm=" << coarseMatrixFrobeniusNorm
+                      << " coarseMatrixDiagonalMinAbs=" << coarseMatrixDiagonalMinAbs
+                      << " coarseMatrixDiagonalMaxAbs=" << coarseMatrixDiagonalMaxAbs
+                      << " lambdaMax=" << timing.lambdaMaxEstimate
+                      << " smootherIterations=" << pMultigridChebyshevSmootherIterations
+                      << " coarseDofs=" << coarseRows
+                      << " residualReduction=" << (residualAfterPostSmooth / std::max<Scalar>(std::numeric_limits<Scalar>::epsilon(), cycleInitialResidualNorm))
+                      << std::endl;
+          }
         }
         timing.pMultigridLevels = 2;
         timing.pMultigridFineDofs = rows;
@@ -4459,8 +4635,9 @@ int main(int argc, char *argv[])
     Scalar inverseTolerance = 1e-8;
     Scalar inverseMaxResidualReduction = -1.0;
     int inverseOperatorCheckSamples = 0;
-    Scalar pMultigridChebyshevSmootherLowerFraction = 0.30;
-    int pMultigridChebyshevSmootherIterations = 2;
+    Scalar pMultigridChebyshevSmootherLowerFraction = 1.0 / 30.0;
+    // Match the assembled GMG p=2 study's effective Chebyshev smoother degree by default.
+    int pMultigridChebyshevSmootherIterations = 8;
     int pMultigridJacobiSmootherIterations = 2;
     int pMultigridCoarseChebyshevIterations = 8;
     Scalar pMultigridCoarseChebyshevLowerFraction = 0.05;

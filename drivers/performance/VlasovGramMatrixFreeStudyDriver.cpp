@@ -25,7 +25,7 @@ namespace
   {
     std::string outputFile = "vlasov-gram-matrix-free-study.txt";
     std::string tensorDriverPath;
-    int fineH1Order = 7;
+    int fineH1Order = 4;
     int elementsPerDim = 1;
     int maxIterations = 200;
     int smootherApplications = 1;

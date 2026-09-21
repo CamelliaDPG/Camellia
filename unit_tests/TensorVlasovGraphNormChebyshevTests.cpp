@@ -448,7 +448,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevCachedHgra
   if (!shouldRunExternalDiagnosticsOnThisRank()) return;
 
   const std::vector<int> cycleCounts {1, 2};
-  const std::vector<int> smootherDegrees {1, 2, 4};
+  const std::vector<int> smootherDegrees {1, 2, 4, 8};
   double bestReduction = std::numeric_limits<double>::infinity();
   int bestP = -1;
   int bestCycles = -1;
@@ -466,7 +466,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevCachedHgra
            << "--inverseLowerSpectralEstimate=ratio --inverseEigenRatio=30 "
            << "--numInverseIterations=" << cycles << " "
            << "--pMultigridChebyshevSmootherIterations=" << smootherDegree << " "
-           << "--pMultigridChebyshevSmootherLowerFraction=0.30 "
+           << "--pMultigridChebyshevSmootherLowerFraction=0.033333333333333333 "
            << "--inverseInitialGuess=zero "
            << "--massWeight=1e6 --stiffnessWeight=0.5 --maxAssembledEntries=3000000";
       const DriverRun run = runDriver(args.str());
@@ -496,7 +496,7 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, PMultigridChebyshevCachedHgra
         TEST_ASSERT(std::isfinite(reductions[ordinal]));
         TEST_COMPARE(levels[ordinal], ==, 2.0);
         TEST_COMPARE(coarseDofs[ordinal], ==, static_cast<double>(expectedCoarseDofs));
-        TEST_FLOATING_EQUALITY(smootherFractions[ordinal], 0.30, 1e-12);
+        TEST_FLOATING_EQUALITY(smootherFractions[ordinal], 1.0 / 30.0, 1e-12);
         if (reductions[ordinal] < bestReduction)
         {
           bestReduction = reductions[ordinal];

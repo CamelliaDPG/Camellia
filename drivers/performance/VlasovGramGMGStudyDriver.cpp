@@ -35,7 +35,7 @@ namespace
   struct StudyOptions
   {
     std::string outputFile = "vlasov-gram-gmg-study.txt";
-    int fineH1Order = 7;
+    int fineH1Order = 4;
     int deltaK = 0;
     int elementsPerDim = 1;
     int maxIterations = 200;
