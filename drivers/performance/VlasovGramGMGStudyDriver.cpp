@@ -304,8 +304,12 @@ namespace
         << std::setw(14) << "coarse"
         << std::setw(12) << "chebDeg"
         << std::setw(12) << "chebRatio"
-        << "maxEigIters" << "\n";
-    out << std::string(180, '-') << "\n";
+        << std::setw(14) << "lowerFrac"
+        << std::setw(14) << "maxEigIters"
+        << std::setw(14) << "smoothApps"
+        << std::setw(16) << "lambdaMax"
+        << "lambdaMin" << "\n";
+    out << std::string(240, '-') << "\n";
   }
 }
 
@@ -375,7 +379,11 @@ int main(int argc, char *argv[])
                  << std::setw(14) << strategy.coarseSolver
                  << std::setw(12) << strategy.chebyshevDegree
                  << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
-                 << strategy.chebyshevMaxEigenIterations << "\n";
+                 << std::setw(14) << std::setprecision(6) << (1.0 / strategy.chebyshevRatio)
+                 << std::setw(14) << strategy.chebyshevMaxEigenIterations
+                 << std::setw(14) << options.smootherApplications
+                 << std::setw(16) << "unavailable"
+                 << "unavailable" << "\n";
         }
       }
     }

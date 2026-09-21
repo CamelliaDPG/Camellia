@@ -111,17 +111,26 @@ namespace
                             16, 60.0, 20, true});
     }
 
-    // These are local matrix-free p-multigrid inverse recurrences currently available in
-    // TensorPoissonPAMatrixDriver.  They are included so this study exposes the remaining
-    // semantic gap to GMGOperator's right-preconditioned GMRES V-cycle rows.
+    // These are matrix-free p-multigrid inverse diagnostics implemented in
+    // TensorPoissonPAMatrixDriver as Belos GMRES right-preconditioner operators,
+    // matching the intended GMGOperator-style V-cycle study rows.
     strategies.push_back({"pmg-chebyshev-smoother-direct-coarse",
                           "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "direct",
+                          8, 30.0, 10, true});
+    strategies.push_back({"pmg-tpetra-chebyshev-smoother-direct-coarse",
+                          "gmres-pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "direct",
                           8, 30.0, 10, true});
     strategies.push_back({"pmg-jacobi-smoother-chebyshev-coarse",
                           "pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
                           8, 30.0, 10, true});
+    strategies.push_back({"pmg-tpetra-jacobi-smoother-chebyshev-coarse",
+                          "gmres-pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
+                          8, 30.0, 10, true});
+    strategies.push_back({"pmg-chebyshev-smoother-chebyshev-coarse",
+                          "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "chebyshev",
+                          8, 30.0, 10, true});
     strategies.push_back({"pmg-chebyshev-smoother-jacobi-coarse",
-                          "unsupported", "V_CYCLE", "CHEBYSHEV", "jacobi",
+                          "pmultigrid-chebyshev-jacobi-coarse", "V_CYCLE", "CHEBYSHEV", "jacobi",
                           8, 30.0, 10, false});
     return strategies;
   }
@@ -330,7 +339,7 @@ namespace
                 << " --inverseSpectralEstimateIterations=" << strategy.chebyshevMaxEigenIterations
                 << " --inverseDiagnosticRequireAssembledReference=1";
     }
-    else if (strategy.matrixFreeAlgorithm == "pmultigrid-chebyshev")
+    else if (strategy.matrixFreeAlgorithm == "gmres-pmultigrid-chebyshev")
     {
       arguments << " --pMultigridChebyshevSmootherIterations=" << std::max(1, options.smootherApplications * strategy.chebyshevDegree)
                 << " --pMultigridChebyshevSmootherLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
@@ -338,7 +347,7 @@ namespace
                 << " --inverseLowerSpectralEstimate=ratio"
                 << " --inverseEigenRatio=" << std::setprecision(16) << strategy.chebyshevRatio;
     }
-    else if (strategy.matrixFreeAlgorithm == "pmultigrid-jacobi-chebyshev")
+    else if (strategy.matrixFreeAlgorithm == "gmres-pmultigrid-jacobi-chebyshev")
     {
       arguments << " --pMultigridJacobiSmootherIterations=" << options.smootherApplications
                 << " --pMultigridCoarseChebyshevIterations=" << strategy.chebyshevDegree
@@ -412,7 +421,7 @@ int main(int argc, char *argv[])
       for (const Strategy &strategy : defaultStrategies(options.quick))
       {
         const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name;
-        if (!strategy.supported)
+        if (!strategy.supported || ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
         {
           output << std::left << std::setw(56) << strategyName
                  << std::setw(16) << "not_supported"

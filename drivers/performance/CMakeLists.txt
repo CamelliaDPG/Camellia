@@ -40,6 +40,14 @@ add_test(NAME VlasovGramMatrixFreeStudyDriverSmoke
     --maxIterations=5
     --outputFile=vlasov-gram-matrix-free-study-smoke.txt)
 
+add_test(NAME VlasovGramMatrixFreePMultigridP2DiagnosticSmoke
+  COMMAND VlasovGramMatrixFreeStudyDriver
+    --fineH1Order=2
+    --quick
+    --maxIterations=5
+    --keepChildOutput=1
+    --outputFile=vlasov-gram-matrix-free-study-p2-pmg-diagnostic.txt)
+
 add_test(NAME TensorH1GramPAMatrixDriverSmoke
   COMMAND TensorPoissonPAMatrixDriver
     --dim=3
