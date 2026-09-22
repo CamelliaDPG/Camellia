@@ -25,6 +25,56 @@ For each subsystem, answer the following:
 - What existing tests cover the behavior, and where are tests missing?
 - What changes are logically prior to other proposed changes?
 
+## Comparative Source Study: MFEM and hp3d
+
+Because both MFEM and hp3d are available in the source manifest, the analysis should include direct source-level comparisons rather than only conceptual comparisons. The goal is not to clone either project, but to identify mature implementation patterns that could inform Camellia's modernization.
+
+### MFEM Comparison Targets
+
+Use MFEM as the primary comparison point for general finite element infrastructure, especially separation of mesh topology, finite element spaces, nonconforming constraints, and geometry evaluation. Initial files to inspect include:
+
+- `/Users/nvrober/reference-codes/mfem/fem/fespace.hpp`
+- `/Users/nvrober/reference-codes/mfem/mesh/mesh.hpp`
+- `/Users/nvrober/reference-codes/mfem/mesh/ncmesh.hpp`
+- `/Users/nvrober/reference-codes/mfem/mesh/nurbs.hpp`
+
+Specific MFEM concepts to compare against Camellia:
+
+1. **DOF numbering and constraints:** `FiniteElementSpace` is documented as responsible for the FEM view of the mesh and for managing degrees of freedom. Compare this separation with Camellia's coupling among `Mesh`, `GlobalDofAssignment`, `GDAMinimumRule`, `BasisReconciliation`, and `LocalDofMapper`. Pay particular attention to MFEM's conforming prolongation/restriction APIs, true DOF handling, and nonconforming interpolation support such as `BuildConformingInterpolation()`, `GetConformingProlongation()`, `GetProlongationMatrix()`, and `GetRestrictionMatrix()`.
+2. **Nonconforming topology:** compare Camellia's `MeshTopology` with MFEM's split between `Mesh` and optional `NCMesh` support. MFEM's `Mesh` explicitly carries optional nonconforming mesh support and initialization paths from `NCMesh`; this should be used as a reference point for whether Camellia should separate active mesh entities from refinement forest data.
+3. **Curvilinear and high-order geometry:** compare Camellia's `CamelliaCellTools`, parametric curve/surface support, and mesh transformation functions with MFEM's optional `NURBSExtension`, mesh nodes, element transformations, `GeometricFactors`, and `FaceGeometricFactors`. The analysis should ask which geometric data are persistent mesh state, which are finite-element coordinate fields, and which are cached evaluation products.
+4. **Topology/geometry separation:** identify how MFEM keeps mesh connectivity, nonconforming refinement, NURBS/high-order geometry, and geometric factor caches as separable concerns. Use this to evaluate whether Camellia's `MeshTopology` should become a narrower combinatorial topology object with geometry moved elsewhere.
+
+### hp3d Comparison Targets
+
+Use hp3d primarily as a comparison point for hp-adaptive multigrid transfer, trace/field relationships, and the Petrides-style approach mentioned in the modernization goal. Initial files to inspect include:
+
+- `/Users/nvrober/reference-codes/hp3d/trunk/src/solver/MGCG/modules/prolongation.F90`
+- `/Users/nvrober/reference-codes/hp3d/trunk/src/solver/MGCG/prolongation/coarse2macro.F90`
+- `/Users/nvrober/reference-codes/hp3d/trunk/src/solver/MGCG/prolongation/macro2coarse.F90`
+- `/Users/nvrober/reference-codes/hp3d/trunk/src/solver/MGCG/prolongation/schur_compl_extension.F90`
+- `/Users/nvrober/reference-codes/hp3d/trunk/src/solver/MGCG/prolongation/schur_compl_restriction.F90`
+- `/Users/nvrober/reference-codes/hp3d/trunk/src/solver/MGCG/solve/prolong_solution.F90`
+
+Specific hp3d concepts to compare against Camellia:
+
+1. **Macro/coarse transfer decomposition:** study how hp3d decomposes transfer into modules such as `coarse2macro` and `macro2coarse`, and compare that with Camellia's current `GMGOperator` transfer construction.
+2. **Schur-complement trace handling:** inspect hp3d's Schur-complement extension and restriction modules to understand how trace/interface unknowns are transferred relative to element-interior fields. Compare this explicitly with Camellia's DPG trace treatment under h-refinement.
+3. **Strategy extraction:** determine whether hp3d's organization suggests a clean `MultigridTransferBuilder` or equivalent strategy interface for Camellia, allowing the current transfer and a Petrides-style transfer to coexist.
+4. **Constraint interaction:** identify what constraint, topology, and finite-element-space metadata hp3d's transfer needs, then compare that with what Camellia's `GDAMinimumRule`, `BasisReconciliation`, and `MeshTopology` can currently expose.
+
+### Comparative Deliverables
+
+Each focused analysis document should include a short comparison table with these columns:
+
+- Camellia current mechanism
+- MFEM equivalent or contrast, when applicable
+- hp3d equivalent or contrast, when applicable
+- Design lesson for Camellia
+- Migration risk
+
+The comparison should be evidence-based: cite file names, classes, routines, and relevant APIs. Where the external code has no direct analogue, say so explicitly rather than forcing a comparison.
+
 ## Phase 0: Repository and Note Refresh
 
 ### Goals
