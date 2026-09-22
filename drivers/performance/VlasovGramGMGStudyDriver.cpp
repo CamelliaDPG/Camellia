@@ -408,20 +408,24 @@ int main(int argc, char *argv[])
         auto gmgSolver = makeStudySolver(solution, strategy, degreeOptions);
         SolverPtr solver = Teuchos::rcp_implicit_cast<Solver>(gmgSolver);
 
-        if ((fineP == 2) && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
+        if ((fineP == 2) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
         {
           solution->initializeStiffnessAndLoad();
+          solution->populateStiffnessAndLoad();
           solution->initializeLHSVector();
           auto rhsVector = solution->getRHSVector();
           auto lhsVector = solution->getLHSVector();
           auto opStack = gmgSolver->getOperatorStack(false);
-          const double initialResidualNorm = (rhsVector != Teuchos::null) ? multiVectorInfNorm(*rhsVector) : -1.0;
           // Do not emit fallback V-cycle stage traces: the smoke test requires real numeric stage values from GMGOperator.
           if ((rhsVector != Teuchos::null) && (lhsVector != Teuchos::null) && !opStack.empty())
           {
-            opStack.front()->setEmitVcycleStageTrace(true);
+            auto finestGMGOperator = opStack.front();
+            finestGMGOperator->setFineStiffnessMatrix(solution->getStiffnessMatrix());
+            finestGMGOperator->setIsFinest(true);
+            finestGMGOperator->setMultigridStrategy(GMGOperator::V_CYCLE);
+            finestGMGOperator->setEmitVcycleStageTrace(true);
             lhsVector->putScalar(0.0);
-            opStack.front()->ApplyInverse(*rhsVector, *lhsVector);
+            finestGMGOperator->ApplyInverse(*rhsVector, *lhsVector);
             lhsVector->putScalar(0.0);
           }
         }
