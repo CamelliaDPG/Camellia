@@ -34,21 +34,21 @@ add_test(NAME TensorPoissonPAMatrixDriverSmoke
     --maxAssembledEntries=10000)
 
 add_test(NAME VlasovGramMatrixFreeStudyDriverSmoke
-  COMMAND VlasovGramMatrixFreeStudyDriver
+  COMMAND $<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
     --fineH1Order=1
     --quick
     --maxIterations=5
     --outputFile=vlasov-gram-matrix-free-study-smoke.txt)
 
 add_test(NAME TensorVlasovGramMatrixFreePMultigridP2DiagnosticSmoke
-  COMMAND VlasovGramMatrixFreeStudyDriver
+  COMMAND $<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
     --fineH1Order=2
     --quick
     --maxIterations=200
     --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-study.txt)
 
 add_test(NAME TensorVlasovGramAssembledGMGP2TraceSmoke
-  COMMAND VlasovGramGMGStudyDriver
+  COMMAND $<TARGET_FILE:VlasovGramGMGStudyDriver>
     --fineH1Order=2
     --quick
     --maxIterations=5

@@ -446,7 +446,7 @@ int main(int argc, char *argv[])
         const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name + weightSuffix;
         if (!strategy.supported || ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
         {
-          output << std::left << std::setw(56) << strategyName
+          output << std::left << std::setw(68) << strategyName
                  << std::setw(16) << "not_supported"
                  << std::setw(12) << -1
                  << std::setw(14) << std::setprecision(6) << std::fixed << 0.0
@@ -473,7 +473,7 @@ int main(int argc, char *argv[])
                                ? diagnostic.pMultigridPath
                                : diagnostic.inversePath;
 
-        output << std::left << std::setw(56) << strategyName
+        output << std::left << std::setw(68) << strategyName
                << std::setw(16) << status
                << std::setw(12) << diagnostic.iterations
                << std::setw(14) << std::setprecision(6) << std::fixed << run.seconds
@@ -514,7 +514,7 @@ int main(int argc, char *argv[])
     output << "  Belos GMRES with right Ifpack2 Jacobi/Chebyshev preconditioning and the same RHS.\n";
     output << "  The p-multigrid rows are diagnostic local V-cycle recurrences, not yet the exact\n";
     output << "  GMGOperator semantics of a matrix-free V-cycle object used as a right preconditioner.\n";
-    output << "  Unsupported rows are retained to make that remaining implementation gap explicit.\n";
+    output << "  Unsupported lower-degree p-multigrid rows are retained to make that remaining gap explicit.\n";
     output << "  Child command lines are echoed to stdout with VLASOV_GRAM_MATRIX_FREE_CHILD_COMMAND.\n";
 
     std::cout << "Wrote Vlasov Gram matrix-free study results to " << options.outputFile << std::endl;
