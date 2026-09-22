@@ -318,7 +318,7 @@ namespace
     arguments << "--dim=4"
               << " --polyOrder=" << p
               << " --cellsPerDim=" << options.elementsPerDim
-              << " --operator=vlasov-graph-norm-solution-coeff-1d1t2v"
+              << " --operator=vlasov-graph-norm-1d1t2v"
               << " --basisMode=hgrad"
               << " --mode=inverse-diagnostic"
               << " --inverseDiagnosticAlgorithm=" << strategy.matrixFreeAlgorithm
@@ -517,6 +517,7 @@ int main(int argc, char *argv[])
     output << "  Unsupported lower-degree p-multigrid rows are retained to make that remaining gap explicit.\n";
     output << "  Child command lines are echoed to stdout with VLASOV_GRAM_MATRIX_FREE_CHILD_COMMAND.\n";
 
+    std::cout << "VLASOV_GRAM_MATRIX_FREE_DRIVER_VERSION matrix_free_gmg_smoother_only" << std::endl;
     std::cout << "Wrote Vlasov Gram matrix-free study results to " << options.outputFile << std::endl;
   }
   catch (const std::exception &e)

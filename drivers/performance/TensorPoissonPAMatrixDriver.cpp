@@ -2777,6 +2777,10 @@ namespace
       timing.inversePath = "belos_gmres_right_preconditioned_by_tensor_hgrad_pmultigrid_operator_two_level_v_cycle_chebyshev_smoother";
     else if (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev")
       timing.inversePath = "belos_gmres_right_preconditioned_by_tensor_hgrad_pmultigrid_operator_two_level_v_cycle_jacobi_smoother";
+    else if (inverseDiagnosticAlgorithm == "matrix-free-gmg-chebyshev-smoother")
+      timing.inversePath = "matrix_free_gmg_style_smoother_only_chebyshev_pamatrix_apply";
+    else if (inverseDiagnosticAlgorithm == "matrix-free-gmg-jacobi-smoother")
+      timing.inversePath = "matrix_free_gmg_style_smoother_only_point_jacobi_pamatrix_apply";
     else
       timing.inversePath = "local_damped_jacobi_richardson_or_pmultigrid_pamatrix_apply";
     timing.spectralEstimatePath = "assembled_reference_gershgorin_preconditioned_upper_bound_with_extracted_diagonal";
@@ -3568,6 +3572,50 @@ namespace
       runIfpack2CompatibleHostChebyshev(iterate, numInverseIterations);
       hostChebyshevIterate = iterate;
     }
+    else if ((inverseDiagnosticAlgorithm == "matrix-free-gmg-chebyshev-smoother") ||
+             (inverseDiagnosticAlgorithm == "matrix-free-gmg-jacobi-smoother"))
+    {
+      if (inverseDiagnosticAlgorithm == "matrix-free-gmg-chebyshev-smoother")
+      {
+        if (inversePreconditionerDegree < 1)
+          throw std::invalid_argument("--inversePreconditionerDegree must be positive for matrix-free GMG-style Chebyshev smoother diagnostics");
+        if (inverseEigenRatio <= Scalar(1.0))
+          throw std::invalid_argument("--inverseEigenRatio must be greater than one for matrix-free GMG-style Chebyshev smoother diagnostics");
+      }
+
+      for (int iteration=0; iteration<numInverseIterations; iteration++)
+      {
+        applyHostVector();
+        std::vector<Scalar> residual(rhs.size(), Scalar(0.0));
+        for (size_t i=0; i<rhs.size(); i++) residual[i] = rhs[i] - applied[i];
+
+        std::vector<Scalar> correction(rhs.size(), Scalar(0.0));
+        if (inverseDiagnosticAlgorithm == "matrix-free-gmg-chebyshev-smoother")
+        {
+          const std::vector<Scalar> savedRhs = rhs;
+          rhs = residual;
+          runIfpack2CompatibleHostChebyshev(correction, inversePreconditionerDegree, Scalar(1.0) / inverseEigenRatio);
+          rhs = savedRhs;
+        }
+        else
+        {
+          for (size_t i=0; i<rhs.size(); i++) correction[i] = residual[i] / diagonal[i];
+        }
+
+        for (size_t i=0; i<iterate.size(); i++) iterate[i] += correction[i];
+        timing.inverseIterations = iteration + 1;
+
+        applyHostVector();
+        timing.finalResidualNorm = residualNorm();
+        timing.residualReduction = timing.finalResidualNorm / std::max<Scalar>(std::numeric_limits<Scalar>::epsilon(), timing.initialResidualNorm);
+        if (timing.residualReduction <= inverseTolerance)
+        {
+          timing.inverseConverged = 1;
+          timing.inverseStoppedReason = "matrix_free_gmg_style_smoother_only_converged";
+          break;
+        }
+      }
+    }
     else if (useBelosGmres)
     {
       if (inverseInitialGuess != "zero")
@@ -4208,7 +4256,7 @@ namespace
     }
     else
     {
-      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     }
     timing.avgInverseApplySeconds = inverseTimer.seconds() / std::max(1, timing.inverseIterations);
 
@@ -4696,7 +4744,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
     cmdp.setOption("pMultigridCoarseChebyshevIterations", &pMultigridCoarseChebyshevIterations, "Chebyshev iterations used as the coarsest p-multigrid solver for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
     cmdp.setOption("pMultigridCoarseChebyshevLowerFraction", &pMultigridCoarseChebyshevLowerFraction, "Coarse Chebyshev lower endpoint as a fraction of the coarse diagonal-Jacobi lambdaMax estimate.");
-    cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson, chebyshev, gmres-chebyshev, gmres-jacobi, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev inverse diagnostic recurrence.");
+    cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev inverse diagnostic recurrence.");
     cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, true-eigen, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
     cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free Ifpack2-style D^{-1}A spectral-radius power estimate.");
     cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power or true-eigen lambdaMax estimates before Chebyshev use.");
@@ -4741,7 +4789,15 @@ int main(int argc, char *argv[])
     if (pMultigridCoarseChebyshevIterations < 1) throw std::invalid_argument("--pMultigridCoarseChebyshevIterations must be positive");
     if ((pMultigridCoarseChebyshevLowerFraction <= 0.0) || (pMultigridCoarseChebyshevLowerFraction >= 1.0))
       throw std::invalid_argument("--pMultigridCoarseChebyshevLowerFraction must be in (0,1)");
-    if (inverseSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
+    const bool inverseDiagnosticNeedsSpectralEstimate = (inverseDiagnosticAlgorithm == "chebyshev") ||
+                                                        (inverseDiagnosticAlgorithm == "gmres-chebyshev") ||
+                                                        (inverseDiagnosticAlgorithm == "matrix-free-gmg-chebyshev-smoother") ||
+                                                        (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ||
+                                                        (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev") ||
+                                                        (inverseDiagnosticAlgorithm == "pmultigrid-chebyshev") ||
+                                                        (inverseDiagnosticAlgorithm == "pmultigrid-jacobi-chebyshev");
+    if (inverseDiagnosticNeedsSpectralEstimate && (inverseSpectralEstimateIterations < 1)) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
+    if (!inverseDiagnosticNeedsSpectralEstimate && (inverseSpectralEstimateIterations < 1)) inverseSpectralEstimateIterations = 1;
     if (inverseLowerSpectralEstimateIterations <= 0) inverseLowerSpectralEstimateIterations = inverseSpectralEstimateIterations;
     if (inverseLowerSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseLowerSpectralEstimateIterations must be positive after defaulting");
     if (!std::isfinite(inverseLowerPowerSafetyFactor) || (inverseLowerPowerSafetyFactor <= 0.0) || (inverseLowerPowerSafetyFactor > 1.0))
@@ -4763,8 +4819,12 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, --operator=vlasov-coordinate-x1-d3, --operator=vlasov-graph-norm-1d1t2v, and --operator=vlasov-graph-norm-solution-coeff-1d1t2v require --basisMode=hgrad");
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") &&
         (inverseDiagnosticAlgorithm != "gmres-chebyshev") && (inverseDiagnosticAlgorithm != "gmres-jacobi") &&
+        (inverseDiagnosticAlgorithm != "matrix-free-gmg-chebyshev-smoother") &&
+        (inverseDiagnosticAlgorithm != "matrix-free-gmg-jacobi-smoother") &&
+        (inverseDiagnosticAlgorithm != "gmres-pmultigrid-chebyshev") &&
+        (inverseDiagnosticAlgorithm != "gmres-pmultigrid-jacobi-chebyshev") &&
         (inverseDiagnosticAlgorithm != "pmultigrid-chebyshev") && (inverseDiagnosticAlgorithm != "pmultigrid-jacobi-chebyshev"))
-      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "true-eigen") && (inverseLowerSpectralEstimate != "true-eigen-safe") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))
       throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, true-eigen-safe, user, or assembled-inverse-iteration");
     if ((inverseInitialGuess != "zero") && (inverseInitialGuess != "diagonal"))
@@ -4783,7 +4843,7 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--inverseSpectralEstimate must be assembled-gershgorin, true-eigen, power, cell-power, or user");
     if ((inverseSpectralEstimate == "user") && (inverseLambdaMax <= 0.0))
       throw std::invalid_argument("--inverseSpectralEstimate=user requires positive --inverseLambdaMax");
-    if (inverseSpectralEstimateIterations < 1) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
+    if (inverseDiagnosticNeedsSpectralEstimate && (inverseSpectralEstimateIterations < 1)) throw std::invalid_argument("--inverseSpectralEstimateIterations must be positive");
     if (inversePowerSafetyFactor < 1.0) throw std::invalid_argument("--inversePowerSafetyFactor must be at least 1");
     if (inverseEigenRatio <= 1.0) throw std::invalid_argument("--inverseEigenRatio must be greater than 1");
     if ((inverseLambdaMin > 0.0) && (inverseLambdaMax > 0.0) && (inverseLambdaMin >= inverseLambdaMax))
