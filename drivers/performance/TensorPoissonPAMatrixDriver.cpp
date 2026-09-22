@@ -1733,6 +1733,7 @@ namespace
     int pMultigridCoarseDofs = 0;
     int pMultigridChebyshevSmootherIterations = 0;
     double pMultigridChebyshevSmootherLowerFraction = -1.0;
+    double pMultigridFineSmootherWeight = -1.0;
     int pMultigridJacobiSmootherIterations = 0;
     int pMultigridCoarseChebyshevIterations = 0;
     double pMultigridCoarseChebyshevLowerFraction = -1.0;
@@ -2486,6 +2487,7 @@ namespace
     int coarseRows_ = 0;
     int smootherIterations_ = 1;
     Scalar smootherLowerFraction_ = Scalar(0.3);
+    Scalar smootherWeight_ = Scalar(1.0);
     std::string smootherName_;
     std::vector<Scalar> fineMatrices_;
     std::vector<Scalar> fineInverseDiagonal_;
@@ -2567,10 +2569,14 @@ namespace
 
     void smoothFine(const int cellOrdinal, const std::vector<Scalar> &rhs, std::vector<Scalar> &solution) const
     {
+      std::vector<Scalar> before;
+      if (smootherWeight_ != Scalar(1.0)) before = solution;
       if (smootherName_ == "chebyshev")
         runChebyshevSmoother(fineMatrices_, fineInverseDiagonal_, fineLambdaMaxByCell_, cellOrdinal, localDofs_, rhs, solution, smootherIterations_, smootherLowerFraction_);
       else
         runDampedJacobiSmoother(fineMatrices_, fineInverseDiagonal_, fineLambdaMaxByCell_, cellOrdinal, localDofs_, rhs, solution, smootherIterations_);
+      if (smootherWeight_ != Scalar(1.0))
+        for (size_t i=0; i<solution.size(); i++) solution[i] = before[i] + smootherWeight_ * (solution[i] - before[i]);
     }
 
   public:
@@ -2579,10 +2585,11 @@ namespace
                                         const int dim, const int p, const int cells,
                                         const int localDofs, const int smootherIterations,
                                         const std::string &smootherName,
-                                        const Scalar smootherLowerFraction)
+                                        const Scalar smootherLowerFraction, const Scalar smootherWeight)
       : map_(map), transfer_(&cachedTensorHGradPTransfer(dim, p)), cells_(cells), localDofs_(localDofs),
         coarseRows_(transfer_->coarseRows), smootherIterations_(std::max(1, smootherIterations)),
-        smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)), smootherName_(smootherName)
+        smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)),
+        smootherWeight_(smootherWeight), smootherName_(smootherName)
     {
       if (p < 2) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner requires p >= 2");
       if (transfer_->fineRows != localDofs) throw std::runtime_error("LocalPMultigridTpetraPreconditioner fine transfer dimension does not match local dofs");
@@ -2734,6 +2741,7 @@ namespace
                                                  const long long maxAssembledEntries, const int inverseDiagnosticRequireAssembledReference,
                                                  const int numInverseIterations, const int pMultigridChebyshevSmootherIterations,
                                                  const Scalar pMultigridChebyshevSmootherLowerFraction,
+                                                 const Scalar pMultigridFineSmootherWeight,
                                                  const int pMultigridJacobiSmootherIterations,
                                                  const int pMultigridCoarseChebyshevIterations,
                                                  const Scalar pMultigridCoarseChebyshevLowerFraction,
@@ -3605,13 +3613,14 @@ namespace
                                      : pMultigridJacobiSmootherIterations;
         const std::string smootherName = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? "chebyshev" : "jacobi";
         const TensorHGradPTransfer &transfer = cachedTensorHGradPTransfer(dim, p);
-        auto pmgPreconditioner = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map, *matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction));
+        auto pmgPreconditioner = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map, *matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight));
         preconditionerOperator = Teuchos::rcp_implicit_cast<TpetraOperator>(pmgPreconditioner);
         timing.pMultigridLevels = 2;
         timing.pMultigridFineDofs = rows;
         timing.pMultigridCoarseDofs = transfer.coarseRows;
         timing.pMultigridChebyshevSmootherIterations = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? smootherIterations : 0;
         timing.pMultigridChebyshevSmootherLowerFraction = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? pMultigridChebyshevSmootherLowerFraction : -1.0;
+        timing.pMultigridFineSmootherWeight = pMultigridFineSmootherWeight;
         timing.pMultigridJacobiSmootherIterations = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev") ? smootherIterations : 0;
         timing.pMultigridPath = "tpetra_operator_right_preconditioner_cached_tensor_hgrad_transfer_configured_chebyshev_interval";
       }
@@ -3871,7 +3880,12 @@ namespace
         {
           applyHostVector();
           const Scalar cycleInitialResidualNorm = residualNorm();
-          runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
+          {
+            const std::vector<Scalar> beforeSmooth = iterate;
+            runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
+            if (pMultigridFineSmootherWeight != Scalar(1.0))
+              for (size_t i=0; i<iterate.size(); i++) iterate[i] = beforeSmooth[i] + pMultigridFineSmootherWeight * (iterate[i] - beforeSmooth[i]);
+          }
           applyHostVector();
           const Scalar residualAfterPreSmooth = residualNorm();
           Scalar restrictedResidualNorm = Scalar(0.0);
@@ -3954,7 +3968,12 @@ namespace
           for (size_t i=0; i<iterate.size(); i++) iterate[i] = iterateBeforeCoarseCorrection[i] + prolongatedCoarseCorrection[i];
           applyHostVector();
           const Scalar residualAfterCoarseCorrection = residualAfterPlusCoarseCorrection;
-          runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
+          {
+            const std::vector<Scalar> beforeSmooth = iterate;
+            runIfpack2CompatibleHostChebyshev(iterate, pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction);
+            if (pMultigridFineSmootherWeight != Scalar(1.0))
+              for (size_t i=0; i<iterate.size(); i++) iterate[i] = beforeSmooth[i] + pMultigridFineSmootherWeight * (iterate[i] - beforeSmooth[i]);
+          }
           applyHostVector();
           const Scalar residualAfterPostSmooth = residualNorm();
           const Scalar restrictedResidualL2Norm = std::sqrt(restrictedResidualL2NormSquared);
@@ -3994,8 +4013,11 @@ namespace
                       << " coarseMatrixFrobeniusNorm=" << coarseMatrixFrobeniusNorm
                       << " coarseMatrixDiagonalMinAbs=" << coarseMatrixDiagonalMinAbs
                       << " coarseMatrixDiagonalMaxAbs=" << coarseMatrixDiagonalMaxAbs
+                      << " assembledProxyOperatorActionMaxRelDiff=" << timing.operatorActionMaxRelDiff
+                      << " assembledProxyOperatorBilinearSymmetryAbsError=" << timing.operatorBilinearSymmetryAbsError
                       << " lambdaMax=" << timing.lambdaMaxEstimate
                       << " smootherIterations=" << pMultigridChebyshevSmootherIterations
+                      << " fineSmootherWeight=" << pMultigridFineSmootherWeight
                       << " coarseDofs=" << coarseRows
                       << " residualReduction=" << (residualAfterPostSmooth / std::max<Scalar>(std::numeric_limits<Scalar>::epsilon(), cycleInitialResidualNorm))
                       << std::endl;
@@ -4006,6 +4028,7 @@ namespace
         timing.pMultigridCoarseDofs = coarseRows;
         timing.pMultigridChebyshevSmootherIterations = pMultigridChebyshevSmootherIterations;
         timing.pMultigridChebyshevSmootherLowerFraction = pMultigridChebyshevSmootherLowerFraction;
+        timing.pMultigridFineSmootherWeight = pMultigridFineSmootherWeight;
         timing.pMultigridCoarseSolveCount = numInverseIterations * cells;
         timing.inversePath = "two_level_pmultigrid_cached_tensor_hgrad_transfer_chebyshev_smoother";
         timing.pMultigridPath = "two_level_cached_tensor_hgrad_hierarchical_restriction_prolongation_galerkin_coarse_exact_solve_high_frequency_chebyshev_pre_post_smoothing_diagnostic";
@@ -4174,6 +4197,7 @@ namespace
         timing.pMultigridLevels = static_cast<int>(levels.size());
         timing.pMultigridFineDofs = rows;
         timing.pMultigridCoarseDofs = levels.back().levelRows;
+        timing.pMultigridFineSmootherWeight = pMultigridFineSmootherWeight;
         timing.pMultigridJacobiSmootherIterations = pMultigridJacobiSmootherIterations;
         timing.pMultigridCoarseChebyshevIterations = pMultigridCoarseChebyshevIterations;
         timing.pMultigridCoarseChebyshevLowerFraction = pMultigridCoarseChebyshevLowerFraction;
@@ -4364,6 +4388,7 @@ namespace
               << " pMultigridCoarseDofs=" << timing.pMultigridCoarseDofs
               << " pMultigridChebyshevSmootherIterations=" << timing.pMultigridChebyshevSmootherIterations
               << " pMultigridChebyshevSmootherLowerFraction=" << timing.pMultigridChebyshevSmootherLowerFraction
+              << " pMultigridFineSmootherWeight=" << timing.pMultigridFineSmootherWeight
               << " pMultigridJacobiSmootherIterations=" << timing.pMultigridJacobiSmootherIterations
               << " pMultigridCoarseChebyshevIterations=" << timing.pMultigridCoarseChebyshevIterations
               << " pMultigridCoarseChebyshevLowerFraction=" << timing.pMultigridCoarseChebyshevLowerFraction
@@ -4636,6 +4661,7 @@ int main(int argc, char *argv[])
     Scalar inverseMaxResidualReduction = -1.0;
     int inverseOperatorCheckSamples = 0;
     Scalar pMultigridChebyshevSmootherLowerFraction = 1.0 / 30.0;
+    Scalar pMultigridFineSmootherWeight = 1.0;
     // Match the assembled GMG p=2 study's effective Chebyshev smoother degree by default.
     int pMultigridChebyshevSmootherIterations = 8;
     int pMultigridJacobiSmootherIterations = 2;
@@ -4665,6 +4691,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("inversePreconditionerDegree", &inversePreconditionerDegree, "Chebyshev polynomial degree for --inverseDiagnosticAlgorithm=gmres-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherIterations", &pMultigridChebyshevSmootherIterations, "Chebyshev pre/post smoother iterations for --inverseDiagnosticAlgorithm=pmultigrid-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherLowerFraction", &pMultigridChebyshevSmootherLowerFraction, "Lower endpoint as a fraction of lambdaMax for high-frequency Chebyshev p-multigrid smoothing.");
+    cmdp.setOption("pMultigridFineSmootherWeight", &pMultigridFineSmootherWeight, "Scalar multiplier applied to each fine-level p-multigrid smoother correction; default 1.0 matches GMGOperator's default smoother weight and preserves the current matrix-free diagnostic behavior.");
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
     cmdp.setOption("pMultigridCoarseChebyshevIterations", &pMultigridCoarseChebyshevIterations, "Chebyshev iterations used as the coarsest p-multigrid solver for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
     cmdp.setOption("pMultigridCoarseChebyshevLowerFraction", &pMultigridCoarseChebyshevLowerFraction, "Coarse Chebyshev lower endpoint as a fraction of the coarse diagonal-Jacobi lambdaMax estimate.");
@@ -4848,6 +4875,7 @@ int main(int argc, char *argv[])
         inverseDiagnosticTiming = inverseDiagnosticTerms(terms, workspaces, worksetSize, cells, localDofs, dim, p,
                                                         maxAssembledEntries, inverseDiagnosticRequireAssembledReference, numInverseIterations,
                                                         pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction,
+                                                        pMultigridFineSmootherWeight,
                                                         pMultigridJacobiSmootherIterations, pMultigridCoarseChebyshevIterations,
                                                         pMultigridCoarseChebyshevLowerFraction,
                                                         inverseDiagnosticAlgorithm, inverseEigenRatio, inverseLambdaMin, inverseLambdaMax,
@@ -5018,6 +5046,11 @@ int main(int argc, char *argv[])
                 << " pMultigridFineDofs=" << inverseDiagnosticTiming.pMultigridFineDofs
                 << " pMultigridCoarseDofs=" << inverseDiagnosticTiming.pMultigridCoarseDofs
                 << " pMultigridChebyshevSmootherIterations=" << inverseDiagnosticTiming.pMultigridChebyshevSmootherIterations
+                << " pMultigridChebyshevSmootherLowerFraction=" << inverseDiagnosticTiming.pMultigridChebyshevSmootherLowerFraction
+                << " pMultigridFineSmootherWeight=" << inverseDiagnosticTiming.pMultigridFineSmootherWeight
+                << " pMultigridJacobiSmootherIterations=" << inverseDiagnosticTiming.pMultigridJacobiSmootherIterations
+                << " pMultigridCoarseChebyshevIterations=" << inverseDiagnosticTiming.pMultigridCoarseChebyshevIterations
+                << " pMultigridCoarseChebyshevLowerFraction=" << inverseDiagnosticTiming.pMultigridCoarseChebyshevLowerFraction
                 << " pMultigridCoarseSolveCount=" << inverseDiagnosticTiming.pMultigridCoarseSolveCount
                 << " pMultigridPath=" << inverseDiagnosticTiming.pMultigridPath
                 << " estimatedApplyFlopsPerCell=" << flopsPerCell

@@ -29,7 +29,7 @@
 #include <Teuchos_ArrayView.hpp>
 
 #include <chrono>
-
+#include <iomanip>
 
 #include <Ifpack2_AdditiveSchwarz.hpp>
 #include <Ifpack2_BlockRelaxation.hpp>
@@ -72,6 +72,16 @@ public:
     return std::chrono::duration<double>(Clock::now() - _start).count();
   }
 };
+
+double multiVectorInfNorm(const TVector<Scalar> &values)
+{
+  Teuchos::Array<Scalar> norms(values.getNumVectors());
+  values.normInf(norms());
+  double maxNorm = 0.0;
+  for (const auto norm : norms)
+    maxNorm = std::max(maxNorm, static_cast<double>(norm));
+  return maxNorm;
+}
 
 // TODO: move everything in this (anonymous namespace) block to some more appropriate location (AdditiveSchwarzHelpers?)
 
@@ -1878,6 +1888,12 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
   {
     numApplications = 0;
   }
+
+  const bool emitStageTrace = _emitVcycleStageTrace && _isFinest && (_multigridStrategy == V_CYCLE);
+  const double traceInitialResidualNorm = emitStageTrace ? multiVectorInfNorm(res) : -1.0;
+  double traceResidualAfterPreSmooth = traceInitialResidualNorm;
+  double traceResidualAfterCoarseCorrection = -1.0;
+  double traceResidualAfterPostSmooth = -1.0;
   
   if (_smootherType != NONE)
   {
@@ -1912,12 +1928,20 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
       }
     }
   }
+  if (emitStageTrace)
+    traceResidualAfterPreSmooth = multiVectorInfNorm(res);
   
   for (int applicationOrdinal = 0; applicationOrdinal < numApplications; applicationOrdinal++)
   {
     TVector<Scalar> Y2(Y.getMap(), Y.getNumVectors());
     this->ApplyInverseCoarseOperator(res, Y2);
     Y.update(1.0, Y2, 1.0);
+    if (emitStageTrace)
+    {
+      TVector<Scalar> traceResidual(f, Teuchos::Copy);
+      computeResidual(Y, traceResidual, A_Y);
+      traceResidualAfterCoarseCorrection = multiVectorInfNorm(traceResidual);
+    }
     
     if ((_smootherType != NONE) && (_multigridStrategy != TWO_LEVEL))
     {
@@ -1955,6 +1979,25 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
       }
     }
     
+    if (emitStageTrace)
+    {
+      TVector<Scalar> traceResidual(f, Teuchos::Copy);
+      computeResidual(Y, traceResidual, A_Y);
+      traceResidualAfterPostSmooth = multiVectorInfNorm(traceResidual);
+      if (rank == 0)
+      {
+        cout << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
+             << " initialResidualNorm=" << std::setprecision(16) << traceInitialResidualNorm
+             << " residualAfterPreSmooth=" << traceResidualAfterPreSmooth
+             << " residualAfterCoarseCorrection=" << traceResidualAfterCoarseCorrection
+             << " residualAfterPostSmooth=" << traceResidualAfterPostSmooth
+             << " smootherApplications=" << _smootherApplicationCount
+             << " smootherWeight=" << _smootherWeight
+             << " chebyshevDegree=" << _chebyshevDegree
+             << " chebyshevLowerFraction=" << (1.0 / _chebyshevEigenAutocomputeRatio)
+             << endl;
+      }
+    }
     if (_debugMode)
     {
       if (printVerboseOutput) cout << "Y:\n";
@@ -2352,6 +2395,11 @@ void GMGOperator::setCoarseSolver(SolverPtr coarseSolver)
 void GMGOperator::setDebugMode(bool value)
 {
   _debugMode = value;
+}
+
+void GMGOperator::setEmitVcycleStageTrace(bool value)
+{
+  _emitVcycleStageTrace = value;
 }
 
 void GMGOperator::setFineStiffnessMatrix(TMatrixPtr<Scalar> fineStiffness)

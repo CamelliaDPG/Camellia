@@ -40,13 +40,23 @@ add_test(NAME VlasovGramMatrixFreeStudyDriverSmoke
     --maxIterations=5
     --outputFile=vlasov-gram-matrix-free-study-smoke.txt)
 
-add_test(NAME VlasovGramMatrixFreePMultigridP2DiagnosticSmoke
+add_test(NAME TensorVlasovGramMatrixFreePMultigridP2DiagnosticSmoke
   COMMAND VlasovGramMatrixFreeStudyDriver
     --fineH1Order=2
     --quick
     --maxIterations=5
     --keepChildOutput=1
-    --outputFile=vlasov-gram-matrix-free-study-p2-pmg-diagnostic.txt)
+    --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-study.txt)
+
+add_test(NAME TensorVlasovGramAssembledGMGP2TraceSmoke
+  COMMAND VlasovGramGMGStudyDriver
+    --fineH1Order=2
+    --quick
+    --maxIterations=5
+    --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-assembled-gmg-p2-trace-smoke.txt)
+set_tests_properties(TensorVlasovGramAssembledGMGP2TraceSmoke PROPERTIES
+  ENVIRONMENT "VLASOV_ASSEMBLED_GMG_EMIT_STAGE_TRACE=1"
+  PASS_REGULAR_EXPRESSION "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE initialResidualNorm=[0-9][0-9.eE+-]* residualAfterPreSmooth=[0-9][0-9.eE+-]* residualAfterCoarseCorrection=[0-9][0-9.eE+-]* residualAfterPostSmooth=[0-9][0-9.eE+-]*")
 
 add_test(NAME TensorH1GramPAMatrixDriverSmoke
   COMMAND TensorPoissonPAMatrixDriver

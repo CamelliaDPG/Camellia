@@ -90,6 +90,7 @@ private:
   int _dimensionForSchwarzNeighborRelationship; // Applies only to Camellia Additive Schwarz
   
   bool _isFinest = true;
+  bool _emitVcycleStageTrace = false;
   bool _clearFinestCondensedDofInterpreterAfterProlongation = false;
 
   TSolutionPtr<Scalar> _coarseSolution;
@@ -325,6 +326,9 @@ public:
   
   //! sets debug mode for verbose console output on rank 0.
   void setDebugMode(bool value);
+
+  //! emits one compact finest-level V-cycle stage trace from ApplyInverse().
+  void setEmitVcycleStageTrace(bool value);
 
   //! Dimension that will be used for neighbor relationships for Schwarz blocks, if CAMELLIA_ADDITIVE_SCHWARZ is the smoother choice.
   int getDimensionForSchwarzNeighborRelationship();

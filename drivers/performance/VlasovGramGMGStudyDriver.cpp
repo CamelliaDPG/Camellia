@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -43,6 +44,7 @@ namespace
     double tolerance = 1e-8;
     double massWeight = 1.0;
     bool quick = false;
+    bool emitP2StageTrace = true;
   };
 
   struct Strategy
@@ -68,6 +70,18 @@ namespace
       case GMGOperator::SMOOTHER_ONLY: return "SMOOTHER_ONLY";
       default: return "UNKNOWN";
     }
+  }
+
+  double multiVectorInfNorm(const TVector<Scalar> &values)
+  {
+    Teuchos::Array<Scalar> norms(values.getNumVectors());
+    values.normInf(norms());
+    double maxNorm = 0.0;
+    for (const auto norm : norms)
+    {
+      maxNorm = std::max(maxNorm, static_cast<double>(norm));
+    }
+    return maxNorm;
   }
 
   std::vector<int> pCoarsenSchedule(int degree)
@@ -232,6 +246,7 @@ namespace
       op->setChebyshevMaxEigenIterations(strategy.chebyshevMaxEigenIterations);
       op->setSmootherType(strategy.smoother);
       op->setMultigridStrategy(strategy.multigridStrategy);
+      op->setEmitVcycleStageTrace(options.emitP2StageTrace && (options.fineH1Order == 2) && (strategy.multigridStrategy == GMGOperator::V_CYCLE));
     }
 
     if ((strategy.multigridStrategy != GMGOperator::SMOOTHER_ONLY) && (strategy.coarseSolver != "direct"))
@@ -267,6 +282,7 @@ namespace
     {
       strategies.push_back({"chebyshev-smoother-only-degree-16-ratio-60", GMGOperator::SMOOTHER_ONLY, GMGOperator::CHEBYSHEV, "direct", 16, 60.0, 20});
     }
+    strategies.push_back({"pmg-chebyshev-smoother-direct-coarse", GMGOperator::V_CYCLE, GMGOperator::CHEBYSHEV, "direct", 8, 30.0, 10});
     strategies.push_back({"pmg-chebyshev-smoother-chebyshev-coarse", GMGOperator::V_CYCLE, GMGOperator::CHEBYSHEV, "chebyshev", 8, 30.0, 10});
     strategies.push_back({"pmg-jacobi-smoother-chebyshev-coarse", GMGOperator::V_CYCLE, GMGOperator::POINT_JACOBI, "chebyshev", 8, 30.0, 10});
     strategies.push_back({"pmg-chebyshev-smoother-jacobi-coarse", GMGOperator::V_CYCLE, GMGOperator::CHEBYSHEV, "jacobi", 8, 30.0, 10});
@@ -322,17 +338,50 @@ int main(int argc, char *argv[])
   try
   {
     StudyOptions options;
+    if (const char *emitStageTraceEnv = std::getenv("VLASOV_ASSEMBLED_GMG_EMIT_STAGE_TRACE"))
+      options.emitP2StageTrace = (std::string(emitStageTraceEnv) != "0");
     Teuchos::CommandLineProcessor cmdp(false,true);
     cmdp.setOption("outputFile", &options.outputFile, "Human-readable study output file.");
-    cmdp.setOption("fineH1Order", &options.fineH1Order, "Maximum fine p degree/H1Order for the HGRAD_DISC Gram sweep; default studies p=1..7.");
+    cmdp.setOption("fineH1Order", &options.fineH1Order, "Maximum fine p degree/H1Order for the HGRAD_DISC Gram sweep; default studies p=1..4.");
     cmdp.setOption("deltaK", &options.deltaK, "Camellia test-space enrichment parameter used by Mesh/GMGOperator.");
     cmdp.setOption("elementsPerDim", &options.elementsPerDim, "Uniform element count in each of the four dimensions; default is the requested single element.");
     cmdp.setOption("maxIterations", &options.maxIterations, "Maximum outer Krylov iterations.");
     cmdp.setOption("smootherApplications", &options.smootherApplications, "Smoother applications per GMG level.");
     cmdp.setOption("tolerance", &options.tolerance, "Outer Krylov residual tolerance.");
     cmdp.setOption("massWeight", &options.massWeight, "L2 mass weight in the graph-norm Gram operator.");
+    std::vector<char*> filteredArgs;
+    filteredArgs.push_back(argv[0]);
+    for (int i = 1; i < argc; ++i)
+    {
+      const std::string arg(argv[i]);
+      if ((arg == "--emitStageTrace") || (arg == "--emitP2StageTrace"))
+      {
+        options.emitP2StageTrace = true;
+        continue;
+      }
+      if ((arg == "--noEmitStageTrace") || (arg == "--noEmitP2StageTrace"))
+      {
+        options.emitP2StageTrace = false;
+        continue;
+      }
+      const std::string emitStageTracePrefix = "--emitStageTrace=";
+      const std::string emitP2StageTracePrefix = "--emitP2StageTrace=";
+      if (arg.compare(0, emitStageTracePrefix.size(), emitStageTracePrefix) == 0)
+      {
+        options.emitP2StageTrace = (std::stoi(arg.substr(emitStageTracePrefix.size())) != 0);
+        continue;
+      }
+      if (arg.compare(0, emitP2StageTracePrefix.size(), emitP2StageTracePrefix) == 0)
+      {
+        options.emitP2StageTrace = (std::stoi(arg.substr(emitP2StageTracePrefix.size())) != 0);
+        continue;
+      }
+      filteredArgs.push_back(argv[i]);
+    }
+    int filteredArgc = static_cast<int>(filteredArgs.size());
+
     cmdp.setOption("quick", "full", &options.quick, "Run a reduced strategy set.");
-    if (cmdp.parse(argc, argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+    if (cmdp.parse(filteredArgc, filteredArgs.data()) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
       Camellia::finalize(false);
       Kokkos::finalize();
@@ -358,6 +407,24 @@ int main(int argc, char *argv[])
         auto solution = makeVlasovGraphGramSolution(degreeOptions);
         auto gmgSolver = makeStudySolver(solution, strategy, degreeOptions);
         SolverPtr solver = Teuchos::rcp_implicit_cast<Solver>(gmgSolver);
+
+        if ((fineP == 2) && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
+        {
+          solution->initializeStiffnessAndLoad();
+          solution->initializeLHSVector();
+          auto rhsVector = solution->getRHSVector();
+          auto lhsVector = solution->getLHSVector();
+          auto opStack = gmgSolver->getOperatorStack(false);
+          const double initialResidualNorm = (rhsVector != Teuchos::null) ? multiVectorInfNorm(*rhsVector) : -1.0;
+          // Do not emit fallback V-cycle stage traces: the smoke test requires real numeric stage values from GMGOperator.
+          if ((rhsVector != Teuchos::null) && (lhsVector != Teuchos::null) && !opStack.empty())
+          {
+            opStack.front()->setEmitVcycleStageTrace(true);
+            lhsVector->putScalar(0.0);
+            opStack.front()->ApplyInverse(*rhsVector, *lhsVector);
+            lhsVector->putScalar(0.0);
+          }
+        }
 
         const auto start = std::chrono::steady_clock::now();
         int solveResult = solution->solve(solver);
@@ -397,6 +464,9 @@ int main(int argc, char *argv[])
       output << "  The coarse Chebyshev/Jacobi variants replace the lowest-level coarse solver with\n";
       output << "  a smoother-only GMGSolver on the coarsest p mesh.\n";
       output << "  Failed strategy rows are recorded as study results; they do not make the driver fail.\n";
+      output << "  With --emitP2StageTrace, p=2 V-cycle rows also print VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE lines\n";
+      output << "  containing infinity-norm residuals at initial, post-pre-smooth, post-coarse-correction, and post-smooth stages.\n";
+      // Do not emit fallback V-cycle stage traces: the smoke test requires real numeric stage values from GMGOperator.
       std::cout << "Wrote Vlasov Gram GMG study results to " << options.outputFile << std::endl;
     }
   }

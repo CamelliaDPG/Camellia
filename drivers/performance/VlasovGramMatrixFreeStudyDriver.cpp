@@ -31,6 +31,7 @@ namespace
     int smootherApplications = 1;
     double tolerance = 1e-8;
     double massWeight = 1.0;
+    double pMultigridFineSmootherWeight = 1.0;
     long long maxAssembledEntries = 30000000;
     bool quick = false;
     bool keepChildOutput = false;
@@ -46,6 +47,7 @@ namespace
     int chebyshevDegree = 8;
     double chebyshevRatio = 30.0;
     int chebyshevMaxEigenIterations = 10;
+    double fineSmootherWeight = 1.0;
     bool supported = true;
   };
 
@@ -64,6 +66,7 @@ namespace
     int converged = 0;
     double residualReduction = -1.0;
     double finalResidualNorm = -1.0;
+    double pMultigridFineSmootherWeight = -1.0;
     std::string stoppedReason = "missing";
     std::string inversePath = "missing";
     std::string pMultigridPath = "missing";
@@ -97,18 +100,18 @@ namespace
     std::vector<Strategy> strategies;
     strategies.push_back({"diagonal-jacobi-smoother-only",
                           "gmres-jacobi", "SMOOTHER_ONLY", "POINT_JACOBI", "direct",
-                          1, 30.0, 0, true});
+                          1, 30.0, 0, 1.0, true});
     strategies.push_back({"chebyshev-smoother-only-degree-4-ratio-20",
                           "gmres-chebyshev", "SMOOTHER_ONLY", "CHEBYSHEV", "direct",
-                          4, 20.0, 10, true});
+                          4, 20.0, 10, 1.0, true});
     strategies.push_back({"chebyshev-smoother-only-degree-8-ratio-30",
                           "gmres-chebyshev", "SMOOTHER_ONLY", "CHEBYSHEV", "direct",
-                          8, 30.0, 10, true});
+                          8, 30.0, 10, 1.0, true});
     if (!quick)
     {
       strategies.push_back({"chebyshev-smoother-only-degree-16-ratio-60",
                             "gmres-chebyshev", "SMOOTHER_ONLY", "CHEBYSHEV", "direct",
-                            16, 60.0, 20, true});
+                            16, 60.0, 20, 1.0, true});
     }
 
     // These are matrix-free p-multigrid inverse diagnostics implemented in
@@ -116,22 +119,22 @@ namespace
     // matching the intended GMGOperator-style V-cycle study rows.
     strategies.push_back({"pmg-chebyshev-smoother-direct-coarse",
                           "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "direct",
-                          8, 30.0, 10, true});
+                          8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-tpetra-chebyshev-smoother-direct-coarse",
                           "gmres-pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "direct",
-                          8, 30.0, 10, true});
+                          8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-jacobi-smoother-chebyshev-coarse",
                           "pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
-                          8, 30.0, 10, true});
+                          8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-tpetra-jacobi-smoother-chebyshev-coarse",
                           "gmres-pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
-                          8, 30.0, 10, true});
+                          8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-chebyshev-smoother-chebyshev-coarse",
                           "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "chebyshev",
-                          8, 30.0, 10, true});
+                          8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-chebyshev-smoother-jacobi-coarse",
                           "pmultigrid-chebyshev-jacobi-coarse", "V_CYCLE", "CHEBYSHEV", "jacobi",
-                          8, 30.0, 10, false});
+                          8, 30.0, 10, 1.0, false});
     return strategies;
   }
 
@@ -215,7 +218,8 @@ namespace
       {
         std::cout << "Usage: VlasovGramMatrixFreeStudyDriver [--outputFile=file] [--tensorDriverPath=path] [--fineH1Order=N] [--quick]\n"
                   << "       [--elementsPerDim=N] [--maxIterations=N] [--smootherApplications=N]\n"
-                  << "       [--tolerance=tol] [--massWeight=w] [--maxAssembledEntries=N] [--keepChildOutput=0|1]\n";
+                  << "       [--tolerance=tol] [--massWeight=w] [--pMultigridFineSmootherWeight=w]\n"
+                  << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1]\n";
         std::exit(0);
       }
 
@@ -232,6 +236,7 @@ namespace
       else if (key == "smootherApplications") options.smootherApplications = std::stoi(value);
       else if (key == "tolerance") options.tolerance = std::stod(value);
       else if (key == "massWeight") options.massWeight = std::stod(value);
+      else if (key == "pMultigridFineSmootherWeight") options.pMultigridFineSmootherWeight = std::stod(value);
       else if (key == "maxAssembledEntries") options.maxAssembledEntries = std::stoll(value);
       else if (key == "quick") options.quick = parseBoolValue(value);
       else if (key == "keepChildOutput") options.keepChildOutput = parseBoolValue(value);
@@ -244,6 +249,7 @@ namespace
     if (options.smootherApplications < 1) throw std::invalid_argument("--smootherApplications must be positive");
     if (options.tolerance <= 0.0) throw std::invalid_argument("--tolerance must be positive");
     if (options.massWeight <= 0.0) throw std::invalid_argument("--massWeight must be positive");
+    if (options.pMultigridFineSmootherWeight <= 0.0) throw std::invalid_argument("--pMultigridFineSmootherWeight must be positive");
     if (options.maxAssembledEntries < 1) throw std::invalid_argument("--maxAssembledEntries must be positive");
   }
 
@@ -280,6 +286,7 @@ namespace
     diagnostic.converged = parseIntAfter(output, "inverseConverged", lineStart, 0);
     diagnostic.residualReduction = parseDoubleAfter(output, "residualReduction", lineStart, -1.0);
     diagnostic.finalResidualNorm = parseDoubleAfter(output, "finalResidualNorm", lineStart, -1.0);
+    diagnostic.pMultigridFineSmootherWeight = parseDoubleAfter(output, "pMultigridFineSmootherWeight", lineStart, -1.0);
     diagnostic.stoppedReason = keyValueAfter(output, "inverseStoppedReason", lineStart);
     diagnostic.inversePath = keyValueAfter(output, "inversePath", lineStart);
     diagnostic.pMultigridPath = keyValueAfter(output, "pMultigridPath", lineStart);
@@ -314,7 +321,7 @@ namespace
     return result;
   }
 
-  std::string commandArguments(const StudyOptions &options, const Strategy &strategy, const int p)
+  std::string commandArguments(const StudyOptions &options, const Strategy &strategy, const int p, const double fineSmootherWeight)
   {
     std::ostringstream arguments;
     arguments << "--dim=4"
@@ -339,10 +346,12 @@ namespace
                 << " --inverseSpectralEstimateIterations=" << strategy.chebyshevMaxEigenIterations
                 << " --inverseDiagnosticRequireAssembledReference=1";
     }
-    else if (strategy.matrixFreeAlgorithm == "gmres-pmultigrid-chebyshev")
+    else if ((strategy.matrixFreeAlgorithm == "gmres-pmultigrid-chebyshev") ||
+             (strategy.matrixFreeAlgorithm == "pmultigrid-chebyshev"))
     {
       arguments << " --pMultigridChebyshevSmootherIterations=" << std::max(1, options.smootherApplications * strategy.chebyshevDegree)
                 << " --pMultigridChebyshevSmootherLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
+                << " --pMultigridFineSmootherWeight=" << std::setprecision(16) << fineSmootherWeight
                 << " --inverseSpectralEstimate=assembled-gershgorin"
                 << " --inverseLowerSpectralEstimate=ratio"
                 << " --inverseEigenRatio=" << std::setprecision(16) << strategy.chebyshevRatio;
@@ -352,6 +361,7 @@ namespace
       arguments << " --pMultigridJacobiSmootherIterations=" << options.smootherApplications
                 << " --pMultigridCoarseChebyshevIterations=" << strategy.chebyshevDegree
                 << " --pMultigridCoarseChebyshevLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
+                << " --pMultigridFineSmootherWeight=" << std::setprecision(16) << fineSmootherWeight
                 << " --inverseSpectralEstimate=assembled-gershgorin"
                 << " --inverseLowerSpectralEstimate=ratio"
                 << " --inverseEigenRatio=" << std::setprecision(16) << strategy.chebyshevRatio;
@@ -386,8 +396,9 @@ namespace
     out << "  outer Krylov: Belos GMRES for smoother-only strategies\n";
     out << "  tolerance: " << options.tolerance << "\n";
     out << "  max iterations / V-cycles: " << options.maxIterations << "\n";
-    out << "  smoother applications: " << options.smootherApplications << "\n\n";
-    out << std::left << std::setw(56) << "strategy"
+    out << "  smoother applications: " << options.smootherApplications << "\n";
+    out << "  pMultigridFineSmootherWeight default: " << options.pMultigridFineSmootherWeight << "\n\n";
+    out << std::left << std::setw(68) << "strategy"
         << std::setw(16) << "status"
         << std::setw(12) << "iterations"
         << std::setw(14) << "seconds"
@@ -397,9 +408,10 @@ namespace
         << std::setw(12) << "chebDeg"
         << std::setw(12) << "chebRatio"
         << std::setw(14) << "maxEigIters"
+        << std::setw(14) << "fineWt"
         << std::setw(18) << "residualRed."
         << "path" << "\n";
-    out << std::string(220, '-') << "\n";
+    out << std::string(236, '-') << "\n";
   }
 }
 
@@ -420,7 +432,22 @@ int main(int argc, char *argv[])
     {
       for (const Strategy &strategy : defaultStrategies(options.quick))
       {
-        const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name;
+        std::vector<double> fineSmootherWeights(1, strategy.fineSmootherWeight * options.pMultigridFineSmootherWeight);
+        if ((fineP == 2) && (strategy.multigridStrategy == "V_CYCLE") && strategy.supported)
+        {
+          fineSmootherWeights.push_back(0.9 * options.pMultigridFineSmootherWeight);
+          fineSmootherWeights.push_back(0.85 * options.pMultigridFineSmootherWeight);
+          fineSmootherWeights.push_back(0.8 * options.pMultigridFineSmootherWeight);
+          fineSmootherWeights.push_back(0.75 * options.pMultigridFineSmootherWeight);
+          fineSmootherWeights.push_back(0.7 * options.pMultigridFineSmootherWeight);
+          fineSmootherWeights.push_back((2.0 / 3.0) * options.pMultigridFineSmootherWeight);
+        }
+        for (const double fineSmootherWeight : fineSmootherWeights)
+        {
+        const std::string weightSuffix = (strategy.multigridStrategy == "V_CYCLE")
+                                       ? " fineWeight=" + std::to_string(fineSmootherWeight)
+                                       : std::string();
+        const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name + weightSuffix;
         if (!strategy.supported || ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
         {
           output << std::left << std::setw(56) << strategyName
@@ -433,12 +460,13 @@ int main(int argc, char *argv[])
                  << std::setw(12) << strategy.chebyshevDegree
                  << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
                  << std::setw(14) << strategy.chebyshevMaxEigenIterations
+                 << std::setw(14) << ((strategy.multigridStrategy == "V_CYCLE") ? std::to_string(fineSmootherWeight) : std::string("n/a"))
                  << std::setw(18) << "n/a"
                  << "matrix_free_preconditioner_gap" << "\n";
           continue;
         }
 
-        const DriverRun run = runDriver(options.tensorDriverPath, commandArguments(options, strategy, fineP), options.keepChildOutput);
+        const DriverRun run = runDriver(options.tensorDriverPath, commandArguments(options, strategy, fineP, fineSmootherWeight), options.keepChildOutput);
         const Diagnostic diagnostic = parseDiagnostic(run.output);
         const bool childSucceeded = (run.status == 0);
         const std::string status = (!childSucceeded) ? "failed"
@@ -459,8 +487,27 @@ int main(int argc, char *argv[])
                << std::setw(12) << strategy.chebyshevDegree
                << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
                << std::setw(14) << strategy.chebyshevMaxEigenIterations
+               << std::setw(14) << std::setprecision(6) << std::fixed
+               << ((diagnostic.pMultigridFineSmootherWeight > 0.0) ? diagnostic.pMultigridFineSmootherWeight : fineSmootherWeight)
                << std::setw(18) << std::setprecision(6) << std::scientific << diagnostic.residualReduction
                << path << "\n";
+        if ((fineP == 2) && (strategy.multigridStrategy == "V_CYCLE"))
+        {
+          const double printedFineSmootherWeight = (diagnostic.pMultigridFineSmootherWeight > 0.0) ? diagnostic.pMultigridFineSmootherWeight : fineSmootherWeight;
+          std::ostringstream fineWtRow;
+          fineWtRow << "P2_PMG_FINEWT_RESULT"
+                    << " strategy=" << strategy.name
+                    << " fineWt=" << std::setprecision(12) << std::defaultfloat << printedFineSmootherWeight
+                    << " status=" << status
+                    << " iterations=" << diagnostic.iterations
+                    << " residualReduction=" << std::setprecision(16) << std::scientific << diagnostic.residualReduction
+                    << " finalResidualNorm=" << diagnostic.finalResidualNorm
+                    << " path=" << path
+                    << "\n";
+          output << fineWtRow.str();
+          std::cout << fineWtRow.str();
+        }
+        }
       }
     }
 
