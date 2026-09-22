@@ -35,6 +35,7 @@ namespace
     long long maxAssembledEntries = 30000000;
     bool quick = false;
     bool keepChildOutput = false;
+    bool pMultigridFineWeightSweep = false;
   };
 
   struct Strategy
@@ -107,30 +108,19 @@ namespace
     strategies.push_back({"chebyshev-smoother-only-degree-8-ratio-30",
                           "gmres-chebyshev", "SMOOTHER_ONLY", "CHEBYSHEV", "direct",
                           8, 30.0, 10, 1.0, true});
-    if (!quick)
-    {
-      strategies.push_back({"chebyshev-smoother-only-degree-16-ratio-60",
-                            "gmres-chebyshev", "SMOOTHER_ONLY", "CHEBYSHEV", "direct",
-                            16, 60.0, 20, 1.0, true});
-    }
+    strategies.push_back({"chebyshev-smoother-only-degree-16-ratio-60",
+                          "gmres-chebyshev", "SMOOTHER_ONLY", "CHEBYSHEV", "direct",
+                          16, 60.0, 20, 1.0, true});
 
-    // These are matrix-free p-multigrid inverse diagnostics implemented in
-    // TensorPoissonPAMatrixDriver as Belos GMRES right-preconditioner operators,
-    // matching the intended GMGOperator-style V-cycle study rows.
-    strategies.push_back({"pmg-chebyshev-smoother-direct-coarse",
-                          "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "direct",
-                          8, 30.0, 10, 1.0, true});
-    strategies.push_back({"pmg-tpetra-chebyshev-smoother-direct-coarse",
-                          "gmres-pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "direct",
+    // Keep the matrix-free p=2 comparison table aligned with the assembled
+    // GMG study rows.  The Tpetra/right-preconditioner and direct-coarse
+    // pMG variants are useful diagnostics, but they are not rows in the
+    // reference vlasov-gram-gmg-study.txt table.
+    strategies.push_back({"pmg-chebyshev-smoother-chebyshev-coarse",
+                          "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "chebyshev",
                           8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-jacobi-smoother-chebyshev-coarse",
                           "pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
-                          8, 30.0, 10, 1.0, true});
-    strategies.push_back({"pmg-tpetra-jacobi-smoother-chebyshev-coarse",
-                          "gmres-pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
-                          8, 30.0, 10, 1.0, true});
-    strategies.push_back({"pmg-chebyshev-smoother-chebyshev-coarse",
-                          "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "chebyshev",
                           8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-chebyshev-smoother-jacobi-coarse",
                           "pmultigrid-chebyshev-jacobi-coarse", "V_CYCLE", "CHEBYSHEV", "jacobi",
@@ -219,7 +209,7 @@ namespace
         std::cout << "Usage: VlasovGramMatrixFreeStudyDriver [--outputFile=file] [--tensorDriverPath=path] [--fineH1Order=N] [--quick]\n"
                   << "       [--elementsPerDim=N] [--maxIterations=N] [--smootherApplications=N]\n"
                   << "       [--tolerance=tol] [--massWeight=w] [--pMultigridFineSmootherWeight=w]\n"
-                  << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1]\n";
+                  << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1] [--pMultigridFineWeightSweep=0|1]\n";
         std::exit(0);
       }
 
@@ -240,6 +230,7 @@ namespace
       else if (key == "maxAssembledEntries") options.maxAssembledEntries = std::stoll(value);
       else if (key == "quick") options.quick = parseBoolValue(value);
       else if (key == "keepChildOutput") options.keepChildOutput = parseBoolValue(value);
+      else if (key == "pMultigridFineWeightSweep") options.pMultigridFineWeightSweep = parseBoolValue(value);
       else throw std::invalid_argument("Unknown option: " + argument);
     }
 
@@ -337,14 +328,19 @@ namespace
               << " --inverseRhs=constant-test-function"
               << " --massWeight=" << std::setprecision(16) << options.massWeight
               << " --stiffnessWeight=1"
-              << " --maxAssembledEntries=" << options.maxAssembledEntries;
+              << " --maxAssembledEntries=" << options.maxAssembledEntries
+              << " --printTermWeights=0";
 
-    if ((strategy.matrixFreeAlgorithm == "gmres-chebyshev") || (strategy.matrixFreeAlgorithm == "gmres-jacobi"))
+    if (strategy.matrixFreeAlgorithm == "gmres-chebyshev")
     {
       arguments << " --inversePreconditionerDegree=" << strategy.chebyshevDegree
                 << " --inverseEigenRatio=" << std::setprecision(16) << strategy.chebyshevRatio
                 << " --inverseSpectralEstimateIterations=" << strategy.chebyshevMaxEigenIterations
                 << " --inverseDiagnosticRequireAssembledReference=1";
+    }
+    else if (strategy.matrixFreeAlgorithm == "gmres-jacobi")
+    {
+      arguments << " --inverseDiagnosticRequireAssembledReference=1";
     }
     else if ((strategy.matrixFreeAlgorithm == "gmres-pmultigrid-chebyshev") ||
              (strategy.matrixFreeAlgorithm == "pmultigrid-chebyshev"))
@@ -433,7 +429,7 @@ int main(int argc, char *argv[])
       for (const Strategy &strategy : defaultStrategies(options.quick))
       {
         std::vector<double> fineSmootherWeights(1, strategy.fineSmootherWeight * options.pMultigridFineSmootherWeight);
-        if ((fineP == 2) && (strategy.multigridStrategy == "V_CYCLE") && strategy.supported)
+        if ((fineP == 2) && (strategy.multigridStrategy == "V_CYCLE") && strategy.supported && options.pMultigridFineWeightSweep)
         {
           fineSmootherWeights.push_back(0.9 * options.pMultigridFineSmootherWeight);
           fineSmootherWeights.push_back(0.85 * options.pMultigridFineSmootherWeight);
@@ -505,7 +501,7 @@ int main(int argc, char *argv[])
                     << " path=" << path
                     << "\n";
           output << fineWtRow.str();
-          std::cout << fineWtRow.str();
+          if (options.keepChildOutput) std::cout << fineWtRow.str();
         }
         }
       }

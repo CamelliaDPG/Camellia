@@ -44,8 +44,7 @@ add_test(NAME TensorVlasovGramMatrixFreePMultigridP2DiagnosticSmoke
   COMMAND VlasovGramMatrixFreeStudyDriver
     --fineH1Order=2
     --quick
-    --maxIterations=5
-    --keepChildOutput=1
+    --maxIterations=200
     --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-study.txt)
 
 add_test(NAME TensorVlasovGramAssembledGMGP2TraceSmoke

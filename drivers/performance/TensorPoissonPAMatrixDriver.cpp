@@ -1605,7 +1605,7 @@ namespace
 
     void describe(Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel) const override
     {
-      if (verbLevel != Teuchos::VERB_NONE) out << description() << std::endl;
+      if ((verbLevel == Teuchos::VERB_MEDIUM) || (verbLevel == Teuchos::VERB_HIGH) || (verbLevel == Teuchos::VERB_EXTREME)) out << description() << std::endl;
     }
   };
 
@@ -2732,7 +2732,7 @@ namespace
 
     void describe(Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel) const override
     {
-      if (verbLevel != Teuchos::VERB_NONE) out << description() << std::endl;
+      if ((verbLevel == Teuchos::VERB_MEDIUM) || (verbLevel == Teuchos::VERB_HIGH) || (verbLevel == Teuchos::VERB_EXTREME)) out << description() << std::endl;
     }
   };
 
@@ -4660,6 +4660,7 @@ int main(int argc, char *argv[])
     Scalar inverseTolerance = 1e-8;
     Scalar inverseMaxResidualReduction = -1.0;
     int inverseOperatorCheckSamples = 0;
+    int printTermWeights = 1;
     Scalar pMultigridChebyshevSmootherLowerFraction = 1.0 / 30.0;
     Scalar pMultigridFineSmootherWeight = 1.0;
     // Match the assembled GMG p=2 study's effective Chebyshev smoother degree by default.
@@ -4721,6 +4722,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("checkAssemblyAgreement", &checkAssemblyAgreement, "Set to 1 in assembly-compare mode to compare assemble2() entries against standard assemble().");
     cmdp.setOption("camelliaMatrixCompareFailOnMismatch", &camelliaMatrixCompareFailOnMismatch, "Set to 0 to make --mode=camellia-vlasov-matrix-compare report mismatches without returning failure; useful while diagnosing the current p>=2 discrepancy.");
     cmdp.setOption("maxAssembledEntries", &maxAssembledEntries, "Maximum local assembled entries allowed in assemble/assemble2/compare/factor modes.");
+    cmdp.setOption("printTermWeights", &printTermWeights, "Set to 0 to omit the long termWeights field from TENSOR_POISSON_PAMATRIX_RESULT rows.");
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
       Camellia::finalize(false);
@@ -4746,6 +4748,7 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--inverseLowerPowerSafetyFactor must be in (0,1]");
     if ((checkAssemblyAgreement != 0) && (checkAssemblyAgreement != 1)) throw std::invalid_argument("--checkAssemblyAgreement must be 0 or 1");
     if ((camelliaMatrixCompareFailOnMismatch != 0) && (camelliaMatrixCompareFailOnMismatch != 1)) throw std::invalid_argument("--camelliaMatrixCompareFailOnMismatch must be 0 or 1");
+    if ((printTermWeights != 0) && (printTermWeights != 1)) throw std::invalid_argument("--printTermWeights must be 0 or 1");
     if ((inverseDiagnosticRequireAssembledReference != 0) && (inverseDiagnosticRequireAssembledReference != 1)) throw std::invalid_argument("--inverseDiagnosticRequireAssembledReference must be 0 or 1");
     if ((compareTpetraPowerEstimate != 0) && (compareTpetraPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraPowerEstimate must be 0 or 1");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (compareTpetraRowMatrixPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate must be 0 or 1");
@@ -4949,9 +4952,9 @@ int main(int argc, char *argv[])
                 << " cells=" << cells
                 << " localDofs=" << localDofs
                 << " localPoints=" << localPoints
-                << " terms=" << terms.size()
-                << " termWeights=" << termSummary(terms)
-                << " setupSeconds=" << std::setprecision(8) << setupSeconds
+                << " terms=" << terms.size();
+      if (printTermWeights != 0) resultLine << " termWeights=" << termSummary(terms);
+      resultLine << " setupSeconds=" << std::setprecision(8) << setupSeconds
                 << " firstApplySeconds=" << firstApplySeconds
                 << " avgApplySeconds=" << avgApplySeconds
                 << " assemblySeconds=" << assemblyTiming.totalSeconds
