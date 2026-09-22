@@ -17,6 +17,7 @@ add_test(NAME runTests COMMAND runTests)
 
 set(TENSOR_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
+  MatrixFreeInfrastructureTests.cpp
   TensorBasisCacheTests.cpp
   TensorCoefficientValueEvaluatorTests.cpp
   TensorCoefficientTpetraImportTests.cpp
