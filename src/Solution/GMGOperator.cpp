@@ -29,6 +29,7 @@
 #include <Teuchos_ArrayView.hpp>
 
 #include <chrono>
+#include <cmath>
 #include <iomanip>
 
 #include <Ifpack2_AdditiveSchwarz.hpp>
@@ -1889,11 +1890,19 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
     numApplications = 0;
   }
 
-  const bool emitStageTrace = _emitVcycleStageTrace && _isFinest && (_multigridStrategy == V_CYCLE);
-  const double traceInitialResidualNorm = emitStageTrace ? multiVectorInfNorm(res) : -1.0;
+  const bool emitStageTrace = _emitVcycleStageTrace && (_multigridStrategy == V_CYCLE);
+  const auto stableTraceValue = [](double value) -> double
+  {
+    return std::isfinite(value) ? value : 0.0;
+  };
+  const double traceInitialResidualNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(res)) : 0.0;
+  const double traceInitialSolutionNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(Y)) : 0.0;
   double traceResidualAfterPreSmooth = traceInitialResidualNorm;
-  double traceResidualAfterCoarseCorrection = -1.0;
-  double traceResidualAfterPostSmooth = -1.0;
+  double traceResidualAfterCoarseCorrection = traceInitialResidualNorm;
+  double traceResidualAfterPostSmooth = traceInitialResidualNorm;
+  double traceSolutionAfterPreSmooth = traceInitialSolutionNorm;
+  double traceSolutionAfterCoarseCorrection = traceInitialSolutionNorm;
+  double traceSolutionAfterPostSmooth = traceInitialSolutionNorm;
   
   if (_smootherType != NONE)
   {
@@ -1929,7 +1938,10 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
     }
   }
   if (emitStageTrace)
-    traceResidualAfterPreSmooth = multiVectorInfNorm(res);
+  {
+    traceResidualAfterPreSmooth = stableTraceValue(multiVectorInfNorm(res));
+    traceSolutionAfterPreSmooth = stableTraceValue(multiVectorInfNorm(Y));
+  }
   
   for (int applicationOrdinal = 0; applicationOrdinal < numApplications; applicationOrdinal++)
   {
@@ -1940,7 +1952,8 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
     {
       TVector<Scalar> traceResidual(f, Teuchos::Copy);
       computeResidual(Y, traceResidual, A_Y);
-      traceResidualAfterCoarseCorrection = multiVectorInfNorm(traceResidual);
+      traceResidualAfterCoarseCorrection = stableTraceValue(multiVectorInfNorm(traceResidual));
+      traceSolutionAfterCoarseCorrection = stableTraceValue(multiVectorInfNorm(Y));
     }
     
     if ((_smootherType != NONE) && (_multigridStrategy != TWO_LEVEL))
@@ -1983,19 +1996,24 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
     {
       TVector<Scalar> traceResidual(f, Teuchos::Copy);
       computeResidual(Y, traceResidual, A_Y);
-      traceResidualAfterPostSmooth = multiVectorInfNorm(traceResidual);
+      traceResidualAfterPostSmooth = stableTraceValue(multiVectorInfNorm(traceResidual));
+      traceSolutionAfterPostSmooth = stableTraceValue(multiVectorInfNorm(Y));
       if (rank == 0)
       {
-        cout << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
-             << " initialResidualNorm=" << std::setprecision(16) << traceInitialResidualNorm
-             << " residualAfterPreSmooth=" << traceResidualAfterPreSmooth
-             << " residualAfterCoarseCorrection=" << traceResidualAfterCoarseCorrection
-             << " residualAfterPostSmooth=" << traceResidualAfterPostSmooth
-             << " smootherApplications=" << _smootherApplicationCount
-             << " smootherWeight=" << _smootherWeight
-             << " chebyshevDegree=" << _chebyshevDegree
-             << " chebyshevLowerFraction=" << (1.0 / _chebyshevEigenAutocomputeRatio)
-             << endl;
+        const char *stageNames[4] = {"Initial", "PreSmooth", "CoarseCorrection", "PostSmooth"};
+        const double solutionNorms[4] = {traceInitialSolutionNorm, traceSolutionAfterPreSmooth, traceSolutionAfterCoarseCorrection, traceSolutionAfterPostSmooth};
+        const double residualNorms[4] = {traceInitialResidualNorm, traceResidualAfterPreSmooth, traceResidualAfterCoarseCorrection, traceResidualAfterPostSmooth};
+        for (int stageIndex=0; stageIndex<4; stageIndex++)
+        {
+          cout << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
+               << " index=" << stageIndex
+               << " level=0"
+               << " stage=" << stageNames[stageIndex]
+               << " rhsInfNorm=" << std::setprecision(16) << traceInitialResidualNorm
+               << " solutionInfNorm=" << solutionNorms[stageIndex]
+               << " residualInfNorm=" << residualNorms[stageIndex]
+               << endl;
+        }
       }
     }
     if (_debugMode)

@@ -48,6 +48,18 @@ add_test(NAME TensorVlasovGramMatrixFreePMultigridP2DiagnosticSmoke
     --quick
     --maxIterations=200
     --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-study.txt)
+
+add_test(NAME TensorVlasovGramMatrixFreeGMGStageTraceSmoke
+  COMMAND $<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
+    --fineH1Order=2
+    --quick
+    --maxIterations=20
+    --matrixFreeGMGStageTrace=1
+    --keepChildOutput=1
+    --maxAssembledEntries=10000
+    --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-stage-trace-smoke.txt)
+set_tests_properties(TensorVlasovGramMatrixFreeGMGStageTraceSmoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "P2_PMG_FINEWT_RESULT.*matrixFreeGMGStageTrace=1 matrixFreeGMGStageTraceEntries=[1-9][0-9]*")
 add_test(NAME TensorVlasovGramAssembledGMGP2TraceSmoke
   COMMAND $<TARGET_FILE:VlasovGramGMGStudyDriver>
     --fineH1Order=2
@@ -58,9 +70,16 @@ set_tests_properties(TensorVlasovGramAssembledGMGP2TraceSmoke PROPERTIES
   ENVIRONMENT "VLASOV_ASSEMBLED_GMG_EMIT_STAGE_TRACE=1"
   # Temporary relaxation: keep the trace path enabled, but do not treat the
   # currently-missing real GMGOperator stage row as a Tensor-suite failure.
-  # Do not add sentinel stage rows here; re-tighten this regex when the real
-  # finest V-cycle path emits VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE reliably.
+  # Do not add sentinel stage rows here; the readiness comparison below requires
+  # real VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE rows when both trace producers run.
   PASS_REGULAR_EXPRESSION "Wrote Vlasov Gram GMG study results")
+
+add_test(NAME TensorVlasovGramGMGTraceReadinessCompare
+  COMMAND ${CMAKE_COMMAND}
+    -DMATRIX_FREE_DRIVER=$<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
+    -DASSEMBLED_DRIVER=$<TARGET_FILE:VlasovGramGMGStudyDriver>
+    -DTRACE_WORK_DIR=${CMAKE_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/CompareVlasovGMGTraceReadinessStandalone5.cmake)
 
 add_test(NAME TensorH1GramPAMatrixDriverSmoke
   COMMAND TensorPoissonPAMatrixDriver
@@ -74,6 +93,20 @@ add_test(NAME TensorH1GramPAMatrixDriverSmoke
     --massWeight=2.0
     --stiffnessWeight=0.5
     --maxAssembledEntries=10000)
+
+add_test(NAME TensorH1GramPAMatrixMatrixFreeGMGStageTraceSmoke
+  COMMAND TensorPoissonPAMatrixDriver
+    --dim=3
+    --polyOrder=2
+    --cellsPerDim=1
+    --operator=h1-gram
+    --basisMode=hgrad
+    --mode=inverse-diagnostic
+    --inverseDiagnosticAlgorithm=gmres-pmultigrid-chebyshev
+    --matrixFreeGMGStageTrace=1
+    --numInverseIterations=20)
+set_tests_properties(TensorH1GramPAMatrixMatrixFreeGMGStageTraceSmoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "matrixFreeGMGStageTrace=1 matrixFreeGMGStageTraceEntries=[1-9][0-9]*")
 
 add_test(NAME TensorH1GramPAMatrixAssemblyCompareSmoke
   COMMAND TensorPoissonPAMatrixDriver

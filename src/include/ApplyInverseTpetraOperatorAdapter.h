@@ -8,6 +8,7 @@
 #define Camellia_ApplyInverseTpetraOperatorAdapter_h
 
 #include "GMGOperator.h"
+#include "MatrixFreeGMGPreconditioner.h"
 #include "TypeDefs.h"
 
 #include "Teuchos_Exceptions.hpp"
@@ -88,6 +89,7 @@ namespace Camellia
   };
 
   using GMGApplyInversePreconditioner = ApplyInverseTpetraOperatorAdapter<GMGOperator>;
+  using MatrixFreeGMGApplyInversePreconditioner = ApplyInverseTpetraOperatorAdapter<MatrixFreeGMGPreconditioner>;
 }
 
 #endif // Camellia_ApplyInverseTpetraOperatorAdapter_h

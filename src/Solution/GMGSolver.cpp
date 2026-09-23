@@ -725,7 +725,7 @@ void GMGSolver::setReturnErrorIfMaxItersReached(bool value)
 vector<Teuchos::RCP<GMGOperator>> GMGSolver::getOperatorStack(bool coarseToFine)
 {
   Teuchos::RCP<GMGOperator> op = _gmgOperator;
-  vector<Teuchos::RCP<GMGOperator>> opStack = {op};
+  vector<Teuchos::RCP<GMGOperator>> opStack;
   while (op != Teuchos::null)
   {
     if (coarseToFine)

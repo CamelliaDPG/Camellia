@@ -187,6 +187,12 @@ namespace Camellia
       Y.update(alpha, vcycleResult, beta);
     }
 
+    int ApplyInverse(const MultiVector &X, MultiVector &Y) const
+    {
+      this->apply(X, Y);
+      return 0;
+    }
+
     TMapConstPtr getDomainMap() const override
     {
       return _levels.front().map;

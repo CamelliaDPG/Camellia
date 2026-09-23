@@ -36,6 +36,7 @@ namespace
     bool quick = false;
     bool keepChildOutput = false;
     bool pMultigridFineWeightSweep = false;
+    bool matrixFreeGMGStageTrace = false;
   };
 
   struct Strategy
@@ -68,6 +69,10 @@ namespace
     double residualReduction = -1.0;
     double finalResidualNorm = -1.0;
     double pMultigridFineSmootherWeight = -1.0;
+    int matrixFreeGMGStageTrace = 0;
+    int matrixFreeGMGStageTraceEntries = 0;
+    double localPMultigridWrapperDifferenceInfNorm = -1.0;
+    double localPMultigridWrapperRelativeDifferenceInfNorm = -1.0;
     std::string stoppedReason = "missing";
     std::string inversePath = "missing";
     std::string pMultigridPath = "missing";
@@ -117,10 +122,10 @@ namespace
     // pMG variants are useful diagnostics, but they are not rows in the
     // reference vlasov-gram-gmg-study.txt table.
     strategies.push_back({"pmg-chebyshev-smoother-chebyshev-coarse",
-                          "pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "chebyshev",
+                          "gmres-pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "chebyshev",
                           8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-jacobi-smoother-chebyshev-coarse",
-                          "pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
+                          "gmres-pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
                           8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-chebyshev-smoother-jacobi-coarse",
                           "pmultigrid-chebyshev-jacobi-coarse", "V_CYCLE", "CHEBYSHEV", "jacobi",
@@ -209,7 +214,8 @@ namespace
         std::cout << "Usage: VlasovGramMatrixFreeStudyDriver [--outputFile=file] [--tensorDriverPath=path] [--fineH1Order=N] [--quick]\n"
                   << "       [--elementsPerDim=N] [--maxIterations=N] [--smootherApplications=N]\n"
                   << "       [--tolerance=tol] [--massWeight=w] [--pMultigridFineSmootherWeight=w]\n"
-                  << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1] [--pMultigridFineWeightSweep=0|1]\n";
+                  << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1] [--pMultigridFineWeightSweep=0|1]\n"
+                  << "       [--matrixFreeGMGStageTrace=0|1]\n";
         std::exit(0);
       }
 
@@ -231,6 +237,7 @@ namespace
       else if (key == "quick") options.quick = parseBoolValue(value);
       else if (key == "keepChildOutput") options.keepChildOutput = parseBoolValue(value);
       else if (key == "pMultigridFineWeightSweep") options.pMultigridFineWeightSweep = parseBoolValue(value);
+      else if ((key == "matrixFreeGMGStageTrace") || (key == "emitMatrixFreeGMGStageTrace")) options.matrixFreeGMGStageTrace = parseBoolValue(value);
       else throw std::invalid_argument("Unknown option: " + argument);
     }
 
@@ -278,6 +285,10 @@ namespace
     diagnostic.residualReduction = parseDoubleAfter(output, "residualReduction", lineStart, -1.0);
     diagnostic.finalResidualNorm = parseDoubleAfter(output, "finalResidualNorm", lineStart, -1.0);
     diagnostic.pMultigridFineSmootherWeight = parseDoubleAfter(output, "pMultigridFineSmootherWeight", lineStart, -1.0);
+    diagnostic.matrixFreeGMGStageTrace = parseIntAfter(output, "matrixFreeGMGStageTrace", lineStart, 0);
+    diagnostic.matrixFreeGMGStageTraceEntries = parseIntAfter(output, "matrixFreeGMGStageTraceEntries", lineStart, 0);
+    diagnostic.localPMultigridWrapperDifferenceInfNorm = parseDoubleAfter(output, "localPMultigridWrapperDifferenceInfNorm", lineStart, -1.0);
+    diagnostic.localPMultigridWrapperRelativeDifferenceInfNorm = parseDoubleAfter(output, "localPMultigridWrapperRelativeDifferenceInfNorm", lineStart, -1.0);
     diagnostic.stoppedReason = keyValueAfter(output, "inverseStoppedReason", lineStart);
     diagnostic.inversePath = keyValueAfter(output, "inversePath", lineStart);
     diagnostic.pMultigridPath = keyValueAfter(output, "pMultigridPath", lineStart);
@@ -285,6 +296,27 @@ namespace
     if (diagnostic.inversePath.empty()) diagnostic.inversePath = "missing";
     if (diagnostic.pMultigridPath.empty()) diagnostic.pMultigridPath = "missing";
     return diagnostic;
+  }
+
+  void writeMatrixFreeGMGStageTraceRows(std::ostream &out,
+                                        const std::string &childOutput,
+                                        const Strategy &strategy,
+                                        const int fineP,
+                                        const double fineSmootherWeight)
+  {
+    const std::string marker = "MATRIX_FREE_GMG_STAGE_TRACE";
+    std::istringstream input(childOutput);
+    std::string line;
+    while (std::getline(input, line))
+    {
+      if (line.rfind(marker, 0) != 0) continue;
+      out << "VLASOV_MATRIX_FREE_GMG_STAGE_TRACE"
+          << " strategy=" << strategy.name
+          << " fineP=" << fineP
+          << " fineWt=" << std::setprecision(12) << std::defaultfloat << fineSmootherWeight
+          << " " << line.substr(marker.size() + 1)
+          << "\n";
+    }
   }
 
   DriverRun runDriver(const std::string &tensorDriverPath, const std::string &arguments, const bool keepChildOutput)
@@ -348,6 +380,7 @@ namespace
       arguments << " --pMultigridChebyshevSmootherIterations=" << std::max(1, options.smootherApplications * strategy.chebyshevDegree)
                 << " --pMultigridChebyshevSmootherLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
                 << " --pMultigridFineSmootherWeight=" << std::setprecision(16) << fineSmootherWeight
+                << " --diagnoseLocalPMultigridWrapperEquivalence=1"
                 << " --inverseSpectralEstimate=assembled-gershgorin"
                 << " --inverseLowerSpectralEstimate=ratio"
                 << " --inverseEigenRatio=" << std::setprecision(16) << strategy.chebyshevRatio;
@@ -358,10 +391,17 @@ namespace
                 << " --pMultigridCoarseChebyshevIterations=" << strategy.chebyshevDegree
                 << " --pMultigridCoarseChebyshevLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
                 << " --pMultigridFineSmootherWeight=" << std::setprecision(16) << fineSmootherWeight
+                << " --diagnoseLocalPMultigridWrapperEquivalence=1"
                 << " --inverseSpectralEstimate=assembled-gershgorin"
                 << " --inverseLowerSpectralEstimate=ratio"
                 << " --inverseEigenRatio=" << std::setprecision(16) << strategy.chebyshevRatio;
     }
+    const bool supportsMatrixFreeGMGStageTrace =
+      (strategy.matrixFreeAlgorithm == "gmres-pmultigrid-chebyshev") ||
+      (strategy.matrixFreeAlgorithm == "gmres-pmultigrid-jacobi-chebyshev");
+    if (options.matrixFreeGMGStageTrace && supportsMatrixFreeGMGStageTrace)
+      arguments << " --matrixFreeGMGStageTrace=1";
+
     return arguments.str();
   }
 
@@ -393,7 +433,10 @@ namespace
     out << "  tolerance: " << options.tolerance << "\n";
     out << "  max iterations / V-cycles: " << options.maxIterations << "\n";
     out << "  smoother applications: " << options.smootherApplications << "\n";
-    out << "  pMultigridFineSmootherWeight default: " << options.pMultigridFineSmootherWeight << "\n\n";
+    out << "  pMultigridFineSmootherWeight default: " << options.pMultigridFineSmootherWeight << "\n";
+    out << "  matrixFreeGMGStageTrace: " << (options.matrixFreeGMGStageTrace ? "enabled" : "disabled") << "\n";
+    out << "  Optional MatrixFreeGMG stage traces are emitted as VLASOV_MATRIX_FREE_GMG_STAGE_TRACE rows.\n";
+    out << "  P2_PMG_FINEWT_RESULT includes matrixFreeGMGStageTrace and matrixFreeGMGStageTraceEntries.\n\n";
     out << std::left << std::setw(68) << "strategy"
         << std::setw(16) << "status"
         << std::setw(12) << "iterations"
@@ -406,8 +449,10 @@ namespace
         << std::setw(14) << "maxEigIters"
         << std::setw(14) << "fineWt"
         << std::setw(18) << "residualRed."
+        << std::setw(18) << "wrapperDiff"
+        << std::setw(18) << "wrapperRelDiff"
         << "path" << "\n";
-    out << std::string(236, '-') << "\n";
+    out << std::string(272, '-') << "\n";
   }
 }
 
@@ -458,12 +503,16 @@ int main(int argc, char *argv[])
                  << std::setw(14) << strategy.chebyshevMaxEigenIterations
                  << std::setw(14) << ((strategy.multigridStrategy == "V_CYCLE") ? std::to_string(fineSmootherWeight) : std::string("n/a"))
                  << std::setw(18) << "n/a"
+                 << std::setw(18) << "n/a"
+                 << std::setw(18) << "n/a"
                  << "matrix_free_preconditioner_gap" << "\n";
           continue;
         }
 
         const DriverRun run = runDriver(options.tensorDriverPath, commandArguments(options, strategy, fineP, fineSmootherWeight), options.keepChildOutput);
         const Diagnostic diagnostic = parseDiagnostic(run.output);
+        if (options.matrixFreeGMGStageTrace && (diagnostic.matrixFreeGMGStageTraceEntries > 0))
+          writeMatrixFreeGMGStageTraceRows(output, run.output, strategy, fineP, fineSmootherWeight);
         const bool childSucceeded = (run.status == 0);
         const std::string status = (!childSucceeded) ? "failed"
                                  : (!diagnostic.found) ? "missing_diag"
@@ -486,6 +535,8 @@ int main(int argc, char *argv[])
                << std::setw(14) << std::setprecision(6) << std::fixed
                << ((diagnostic.pMultigridFineSmootherWeight > 0.0) ? diagnostic.pMultigridFineSmootherWeight : fineSmootherWeight)
                << std::setw(18) << std::setprecision(6) << std::scientific << diagnostic.residualReduction
+               << std::setw(18) << diagnostic.localPMultigridWrapperDifferenceInfNorm
+               << std::setw(18) << diagnostic.localPMultigridWrapperRelativeDifferenceInfNorm
                << path << "\n";
         if ((fineP == 2) && (strategy.multigridStrategy == "V_CYCLE"))
         {
@@ -498,6 +549,8 @@ int main(int argc, char *argv[])
                     << " iterations=" << diagnostic.iterations
                     << " residualReduction=" << std::setprecision(16) << std::scientific << diagnostic.residualReduction
                     << " finalResidualNorm=" << diagnostic.finalResidualNorm
+                    << " matrixFreeGMGStageTrace=" << diagnostic.matrixFreeGMGStageTrace
+                    << " matrixFreeGMGStageTraceEntries=" << diagnostic.matrixFreeGMGStageTraceEntries
                     << " path=" << path
                     << "\n";
           output << fineWtRow.str();
@@ -517,7 +570,7 @@ int main(int argc, char *argv[])
     output << "  Unsupported lower-degree p-multigrid rows are retained to make that remaining gap explicit.\n";
     output << "  Child command lines are echoed to stdout with VLASOV_GRAM_MATRIX_FREE_CHILD_COMMAND.\n";
 
-    std::cout << "VLASOV_GRAM_MATRIX_FREE_DRIVER_VERSION matrix_free_gmg_smoother_only" << std::endl;
+    std::cout << "VLASOV_GRAM_MATRIX_FREE_DRIVER_VERSION matrix_free_gmg_stage_trace_diagnostic" << std::endl;
     std::cout << "Wrote Vlasov Gram matrix-free study results to " << options.outputFile << std::endl;
   }
   catch (const std::exception &e)

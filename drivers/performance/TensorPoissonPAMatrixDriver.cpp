@@ -4,6 +4,7 @@
 
 #include "Intrepid2_PAMatrix.hpp"
 
+#include "ApplyInverseTpetraOperatorAdapter.h"
 #include "BF.h"
 #include "BC.h"
 #include "Basis.h"
@@ -1662,6 +1663,10 @@ namespace
   struct InverseDiagnosticTiming
   {
     double avgInverseApplySeconds = -1.0;
+    double localPMultigridWrapperApplyInfNorm = -1.0;
+    double matrixFreeGMGWrapperApplyInfNorm = -1.0;
+    double localPMultigridWrapperDifferenceInfNorm = -1.0;
+    double localPMultigridWrapperRelativeDifferenceInfNorm = -1.0;
     int inverseIterations = 0;
     int inversePreconditionerDegree = 0;
     double initialInverseAbsError = -1.0;
@@ -1738,6 +1743,8 @@ namespace
     int pMultigridCoarseChebyshevIterations = 0;
     double pMultigridCoarseChebyshevLowerFraction = -1.0;
     int pMultigridCoarseSolveCount = 0;
+    int matrixFreeGMGStageTrace = 0;
+    int matrixFreeGMGStageTraceEntries = 0;
     std::string pMultigridPath = "not_requested";
     std::string inversePath = "not_requested";
     std::string spectralEstimatePath = "not_requested";
@@ -2481,6 +2488,7 @@ namespace
   class LocalPMultigridTpetraPreconditioner : public TpetraOperator
   {
     Teuchos::RCP<const TpetraMap> map_;
+    Teuchos::RCP<const TpetraMap> coarseMap_;
     const TensorHGradPTransfer *transfer_ = nullptr;
     int cells_ = 0;
     int localDofs_ = 0;
@@ -2591,11 +2599,16 @@ namespace
         smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)),
         smootherWeight_(smootherWeight), smootherName_(smootherName)
     {
+      if (map_.is_null()) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner requires a non-null map");
       if (p < 2) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner requires p >= 2");
       if (transfer_->fineRows != localDofs) throw std::runtime_error("LocalPMultigridTpetraPreconditioner fine transfer dimension does not match local dofs");
       const size_t localLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
       if (map_->getLocalNumElements() != localLength)
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner map/local dof length mismatch");
+      coarseMap_ = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+                                              static_cast<size_t>(cells_) * static_cast<size_t>(coarseRows_),
+                                              map_->getIndexBase(),
+                                              map_->getComm()));
 
       TpetraMultiVector inverseDiagonal(map_, 1);
       fineOperator.fillInverseDiagonal(inverseDiagonal);
@@ -2676,6 +2689,145 @@ namespace
       description_ = desc.str();
     }
 
+    Teuchos::RCP<const TpetraMap> coarseMap() const { return coarseMap_; }
+
+    void applyFineOperator(const TpetraMultiVector &X, TpetraMultiVector &Y,
+                           Teuchos::ETransp mode = Teuchos::NO_TRANS,
+                           Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
+                           Scalar beta = Teuchos::ScalarTraits<Scalar>::zero()) const
+    {
+      if (mode != Teuchos::NO_TRANS) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine operator does not support transpose apply");
+      const size_t localLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
+      if ((X.getLocalLength() != localLength) || (Y.getLocalLength() != localLength))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine operator local vector length mismatch");
+      if (X.getNumVectors() != Y.getNumVectors())
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine operator multivector count mismatch");
+
+      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+      std::vector<Scalar> input(static_cast<size_t>(localDofs_), Scalar(0.0));
+      std::vector<Scalar> output(static_cast<size_t>(localDofs_), Scalar(0.0));
+      for (size_t vectorOrdinal=0; vectorOrdinal<X.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+        {
+          const size_t cellOffset = static_cast<size_t>(c) * localDofs_;
+          for (int i=0; i<localDofs_; i++) input[static_cast<size_t>(i)] = xHost(cellOffset + static_cast<size_t>(i), vectorOrdinal);
+          applyDenseCellMatrix(fineMatrices_, c, localDofs_, input, output);
+          for (int i=0; i<localDofs_; i++)
+          {
+            const size_t localOrdinal = cellOffset + static_cast<size_t>(i);
+            yHost(localOrdinal, vectorOrdinal) = alpha * output[static_cast<size_t>(i)] + beta * yHost(localOrdinal, vectorOrdinal);
+          }
+        }
+      }
+    }
+
+    void smoothFineLevel(const TpetraMultiVector &RHS, TpetraMultiVector &Solution) const
+    {
+      const size_t localLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
+      if ((RHS.getLocalLength() != localLength) || (Solution.getLocalLength() != localLength))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner smoother local vector length mismatch");
+      if (RHS.getNumVectors() != Solution.getNumVectors())
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner smoother multivector count mismatch");
+
+      auto rhsHost = RHS.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto solutionHost = Solution.getLocalViewHost(Tpetra::Access::ReadWrite);
+      std::vector<Scalar> rhs(static_cast<size_t>(localDofs_), Scalar(0.0));
+      std::vector<Scalar> solution(static_cast<size_t>(localDofs_), Scalar(0.0));
+      for (size_t vectorOrdinal=0; vectorOrdinal<RHS.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+        {
+          const size_t cellOffset = static_cast<size_t>(c) * localDofs_;
+          for (int i=0; i<localDofs_; i++)
+          {
+            const size_t localOrdinal = cellOffset + static_cast<size_t>(i);
+            rhs[static_cast<size_t>(i)] = rhsHost(localOrdinal, vectorOrdinal);
+            solution[static_cast<size_t>(i)] = solutionHost(localOrdinal, vectorOrdinal);
+          }
+          smoothFine(c, rhs, solution);
+          for (int i=0; i<localDofs_; i++) solutionHost(cellOffset + static_cast<size_t>(i), vectorOrdinal) = solution[static_cast<size_t>(i)];
+        }
+      }
+    }
+
+    void restrictFineResidual(const TpetraMultiVector &FineResidual, TpetraMultiVector &CoarseResidual) const
+    {
+      const size_t fineLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
+      const size_t coarseLength = static_cast<size_t>(cells_) * static_cast<size_t>(coarseRows_);
+      if ((FineResidual.getLocalLength() != fineLength) || (CoarseResidual.getLocalLength() != coarseLength))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner restriction local vector length mismatch");
+      if (FineResidual.getNumVectors() != CoarseResidual.getNumVectors())
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner restriction multivector count mismatch");
+
+      auto fineHost = FineResidual.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto coarseHost = CoarseResidual.getLocalViewHost(Tpetra::Access::ReadWrite);
+      std::vector<Scalar> fine(static_cast<size_t>(localDofs_), Scalar(0.0));
+      std::vector<Scalar> coarse(static_cast<size_t>(coarseRows_), Scalar(0.0));
+      for (size_t vectorOrdinal=0; vectorOrdinal<FineResidual.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+        {
+          const size_t fineOffset = static_cast<size_t>(c) * localDofs_;
+          const size_t coarseOffset = static_cast<size_t>(c) * coarseRows_;
+          for (int i=0; i<localDofs_; i++) fine[static_cast<size_t>(i)] = fineHost(fineOffset + static_cast<size_t>(i), vectorOrdinal);
+          applyTensorHGradPTransferRestriction(*transfer_, fine, coarse);
+          for (int i=0; i<coarseRows_; i++) coarseHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal) = coarse[static_cast<size_t>(i)];
+        }
+      }
+    }
+
+    void prolongateCoarseCorrection(const TpetraMultiVector &CoarseCorrection, TpetraMultiVector &FineCorrection) const
+    {
+      const size_t coarseLength = static_cast<size_t>(cells_) * static_cast<size_t>(coarseRows_);
+      const size_t fineLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
+      if ((CoarseCorrection.getLocalLength() != coarseLength) || (FineCorrection.getLocalLength() != fineLength))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner prolongation local vector length mismatch");
+      if (CoarseCorrection.getNumVectors() != FineCorrection.getNumVectors())
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner prolongation multivector count mismatch");
+
+      auto coarseHost = CoarseCorrection.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto fineHost = FineCorrection.getLocalViewHost(Tpetra::Access::ReadWrite);
+      std::vector<Scalar> coarse(static_cast<size_t>(coarseRows_), Scalar(0.0));
+      std::vector<Scalar> fine(static_cast<size_t>(localDofs_), Scalar(0.0));
+      for (size_t vectorOrdinal=0; vectorOrdinal<CoarseCorrection.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+        {
+          const size_t coarseOffset = static_cast<size_t>(c) * coarseRows_;
+          const size_t fineOffset = static_cast<size_t>(c) * localDofs_;
+          for (int i=0; i<coarseRows_; i++) coarse[static_cast<size_t>(i)] = coarseHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal);
+          applyTensorHGradPTransferProlongation(*transfer_, coarse, fine);
+          for (int i=0; i<localDofs_; i++) fineHost(fineOffset + static_cast<size_t>(i), vectorOrdinal) = fine[static_cast<size_t>(i)];
+        }
+      }
+    }
+
+    void solveCoarseLevel(const TpetraMultiVector &CoarseRHS, TpetraMultiVector &CoarseSolution) const
+    {
+      const size_t coarseLength = static_cast<size_t>(cells_) * static_cast<size_t>(coarseRows_);
+      if ((CoarseRHS.getLocalLength() != coarseLength) || (CoarseSolution.getLocalLength() != coarseLength))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner coarse solve local vector length mismatch");
+      if (CoarseRHS.getNumVectors() != CoarseSolution.getNumVectors())
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner coarse solve multivector count mismatch");
+
+      auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto solutionHost = CoarseSolution.getLocalViewHost(Tpetra::Access::ReadWrite);
+      std::vector<Scalar> coarse(static_cast<size_t>(coarseRows_), Scalar(0.0));
+      for (size_t vectorOrdinal=0; vectorOrdinal<CoarseRHS.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+        {
+          const size_t coarseOffset = static_cast<size_t>(c) * coarseRows_;
+          for (int i=0; i<coarseRows_; i++) coarse[static_cast<size_t>(i)] = rhsHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal);
+          const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices_, static_cast<size_t>(c) * coarseRows_ * coarseRows_, coarseRows_, coarse);
+          if (solveInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarse callback Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+          for (int i=0; i<coarseRows_; i++) solutionHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal) = coarse[static_cast<size_t>(i)];
+        }
+      }
+    }
+
     Teuchos::RCP<const TpetraMap> getDomainMap() const override { return map_; }
     Teuchos::RCP<const TpetraMap> getRangeMap() const override { return map_; }
     bool hasTransposeApply() const override { return false; }
@@ -2736,12 +2888,140 @@ namespace
     }
   };
 
+  struct LocalPMultigridWrapperDiagnostic
+  {
+    double directInfNorm = -1.0;
+    double wrapperInfNorm = -1.0;
+    double differenceInfNorm = -1.0;
+    double relativeDifferenceInfNorm = -1.0;
+  };
+
+  struct MatrixFreeGMGRightPreconditionerBuild
+  {
+    Teuchos::RCP<TpetraOperator> belosRightPreconditioner;
+    Teuchos::RCP<TpetraOperator> directLocalPMultigrid;
+    Teuchos::RCP<Camellia::MatrixFreeGMGPreconditioner> matrixFreeGMG;
+  };
+
+  Camellia::MatrixFreeGMGPreconditioner::Level
+  buildLocalPMultigridMatrixFreeGMGFineLevel(const Teuchos::RCP<const TpetraMap> &map,
+                                             const Teuchos::RCP<LocalPMultigridTpetraPreconditioner> &localPMultigrid)
+  {
+    Camellia::MatrixFreeGMGPreconditioner::Level level;
+    level.map = map;
+    level.applyOperator = [localPMultigrid](const TpetraMultiVector &X, TpetraMultiVector &Y)
+    {
+      localPMultigrid->applyFineOperator(X, Y);
+    };
+    level.preSmooth = [localPMultigrid](const TpetraMultiVector &RHS, TpetraMultiVector &solution)
+    {
+      localPMultigrid->smoothFineLevel(RHS, solution);
+    };
+    level.postSmooth = level.preSmooth;
+    level.restrictResidual = [localPMultigrid](const TpetraMultiVector &fineResidual, TpetraMultiVector &coarseResidual)
+    {
+      localPMultigrid->restrictFineResidual(fineResidual, coarseResidual);
+    };
+    level.prolongateCorrection = [localPMultigrid](const TpetraMultiVector &coarseCorrection, TpetraMultiVector &fineCorrection)
+    {
+      localPMultigrid->prolongateCoarseCorrection(coarseCorrection, fineCorrection);
+    };
+    return level;
+  }
+
+  Camellia::MatrixFreeGMGPreconditioner::Level
+  buildLocalPMultigridMatrixFreeGMGCoarseLevel(const Teuchos::RCP<LocalPMultigridTpetraPreconditioner> &localPMultigrid)
+  {
+    Camellia::MatrixFreeGMGPreconditioner::Level level;
+    level.map = localPMultigrid->coarseMap();
+    level.coarseSolve = [localPMultigrid](const TpetraMultiVector &coarseRHS, TpetraMultiVector &coarseSolution)
+    {
+      localPMultigrid->solveCoarseLevel(coarseRHS, coarseSolution);
+    };
+    return level;
+  }
+
+  MatrixFreeGMGRightPreconditionerBuild
+  buildMatrixFreeGMGRightPreconditioner(const Teuchos::RCP<const TpetraMap> &map,
+                                        const LocalPAMatrixTpetraOperator &fineOperator,
+                                        const int dim,
+                                        const int p,
+                                        const int cells,
+                                        const int localDofs,
+                                        const int smootherIterations,
+                                        const std::string &smootherName,
+                                        const Scalar smootherLowerFraction,
+                                        const Scalar smootherWeight)
+  {
+    auto localPMultigrid = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map,
+                                                                                fineOperator,
+                                                                                dim,
+                                                                                p,
+                                                                                cells,
+                                                                                localDofs,
+                                                                                smootherIterations,
+                                                                                smootherName,
+                                                                                smootherLowerFraction,
+                                                                                smootherWeight));
+
+    std::vector<Camellia::MatrixFreeGMGPreconditioner::Level> levels;
+    levels.push_back(buildLocalPMultigridMatrixFreeGMGFineLevel(map, localPMultigrid));
+    levels.push_back(buildLocalPMultigridMatrixFreeGMGCoarseLevel(localPMultigrid));
+    Teuchos::RCP<Camellia::MatrixFreeGMGPreconditioner> matrixFreeGMG =
+      Teuchos::rcp(new Camellia::MatrixFreeGMGPreconditioner(levels,
+                                                             "LocalPMultigridMatrixFreeGMGPreconditioner"));
+    auto belosRightPreconditioner = Teuchos::rcp(new Camellia::MatrixFreeGMGApplyInversePreconditioner(matrixFreeGMG,
+                                                                                                       "LocalPMultigridMatrixFreeGMGApplyInverseRightPreconditioner"));
+    MatrixFreeGMGRightPreconditionerBuild build;
+    build.belosRightPreconditioner = Teuchos::rcp_implicit_cast<TpetraOperator>(belosRightPreconditioner);
+    build.directLocalPMultigrid = Teuchos::rcp_implicit_cast<TpetraOperator>(localPMultigrid);
+    build.matrixFreeGMG = matrixFreeGMG;
+    return build;
+  }
+
+  LocalPMultigridWrapperDiagnostic
+  diagnoseLocalPMultigridWrapperEquivalence(const TpetraOperator &directLocalPMultigrid,
+                                            const TpetraOperator &wrapperPreconditioner,
+                                            const Teuchos::RCP<const TpetraMap> &map)
+  {
+    TpetraMultiVector rhs(map, 1);
+    TpetraMultiVector direct(map, 1);
+    TpetraMultiVector wrapped(map, 1);
+    TpetraMultiVector difference(map, 1);
+
+    auto rhsView = rhs.getLocalViewHost(Tpetra::Access::ReadWrite);
+    for (std::size_t i = 0; i < rhs.getLocalLength(); ++i)
+      rhsView(i,0) = Scalar(1.0) + Scalar(0.125) * static_cast<Scalar>((i % 7) + 1);
+
+    direct.putScalar(0.0);
+    wrapped.putScalar(0.0);
+    directLocalPMultigrid.apply(rhs, direct);
+    wrapperPreconditioner.apply(rhs, wrapped);
+
+    difference.assign(wrapped);
+    difference.update(-1.0, direct, 1.0);
+
+    Teuchos::Array<typename Teuchos::ScalarTraits<Scalar>::magnitudeType> directNorm(1), wrapperNorm(1), diffNorm(1);
+    direct.normInf(directNorm());
+    wrapped.normInf(wrapperNorm());
+    difference.normInf(diffNorm());
+
+    LocalPMultigridWrapperDiagnostic diagnostic;
+    diagnostic.directInfNorm = directNorm[0];
+    diagnostic.wrapperInfNorm = wrapperNorm[0];
+    diagnostic.differenceInfNorm = diffNorm[0];
+    diagnostic.relativeDifferenceInfNorm = diffNorm[0] / std::max(1.0, directNorm[0]);
+    return diagnostic;
+  }
+
   InverseDiagnosticTiming inverseDiagnosticTerms(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
                                                  const int worksetSize, const int cells, const int rows, const int dim, const int p,
                                                  const long long maxAssembledEntries, const int inverseDiagnosticRequireAssembledReference,
+                                                 const int diagnoseLocalPMultigridWrapperEquivalenceFlag,
                                                  const int numInverseIterations, const int pMultigridChebyshevSmootherIterations,
                                                  const Scalar pMultigridChebyshevSmootherLowerFraction,
                                                  const Scalar pMultigridFineSmootherWeight,
+                                                 const int matrixFreeGMGStageTrace,
                                                  const int pMultigridJacobiSmootherIterations,
                                                  const int pMultigridCoarseChebyshevIterations,
                                                  const Scalar pMultigridCoarseChebyshevLowerFraction,
@@ -2788,6 +3068,7 @@ namespace
     timing.lambdaMaxSafetyFactor = inversePowerSafetyFactor;
     timing.lambdaMinSafetyFactor = inverseLowerPowerSafetyFactor;
     timing.inverseLowerSpectralEstimate = inverseLowerSpectralEstimate;
+    timing.matrixFreeGMGStageTrace = matrixFreeGMGStageTrace;
     timing.inverseRhs = inverseRhs;
     timing.compareTpetraPowerEstimate = compareTpetraPowerEstimate;
     timing.compareTpetraRowMatrixPowerEstimate = compareTpetraRowMatrixPowerEstimate;
@@ -3651,6 +3932,7 @@ namespace
       }
 
       Teuchos::RCP<TpetraOperator> preconditionerOperator;
+      Teuchos::RCP<Camellia::MatrixFreeGMGPreconditioner> matrixFreeGMGForStageTrace;
       if ((inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ||
           (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev"))
       {
@@ -3661,8 +3943,23 @@ namespace
                                      : pMultigridJacobiSmootherIterations;
         const std::string smootherName = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? "chebyshev" : "jacobi";
         const TensorHGradPTransfer &transfer = cachedTensorHGradPTransfer(dim, p);
-        auto pmgPreconditioner = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map, *matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight));
-        preconditionerOperator = Teuchos::rcp_implicit_cast<TpetraOperator>(pmgPreconditioner);
+        const MatrixFreeGMGRightPreconditionerBuild preconditionerBuild =
+          buildMatrixFreeGMGRightPreconditioner(map, *matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight);
+        matrixFreeGMGForStageTrace = preconditionerBuild.matrixFreeGMG;
+        if (matrixFreeGMGStageTrace != 0)
+          matrixFreeGMGForStageTrace->setEmitStageTrace(true);
+        preconditionerOperator = preconditionerBuild.belosRightPreconditioner;
+        if (diagnoseLocalPMultigridWrapperEquivalenceFlag != 0)
+        {
+          const LocalPMultigridWrapperDiagnostic wrapperDiagnostic =
+            diagnoseLocalPMultigridWrapperEquivalence(*preconditionerBuild.directLocalPMultigrid,
+                                                      *preconditionerBuild.belosRightPreconditioner,
+                                                      map);
+          timing.localPMultigridWrapperApplyInfNorm = wrapperDiagnostic.directInfNorm;
+          timing.matrixFreeGMGWrapperApplyInfNorm = wrapperDiagnostic.wrapperInfNorm;
+          timing.localPMultigridWrapperDifferenceInfNorm = wrapperDiagnostic.differenceInfNorm;
+          timing.localPMultigridWrapperRelativeDifferenceInfNorm = wrapperDiagnostic.relativeDifferenceInfNorm;
+        }
         timing.pMultigridLevels = 2;
         timing.pMultigridFineDofs = rows;
         timing.pMultigridCoarseDofs = transfer.coarseRows;
@@ -3733,6 +4030,23 @@ namespace
 
       auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
       for (size_t i=0; i<localLength; i++) iterate[i] = xHost(i,0);
+      if ((matrixFreeGMGStageTrace != 0) && (matrixFreeGMGForStageTrace != Teuchos::null))
+      {
+        const auto &trace = matrixFreeGMGForStageTrace->lastStageTrace();
+        timing.matrixFreeGMGStageTraceEntries = static_cast<int>(trace.size());
+        for (size_t traceIndex=0; traceIndex<trace.size(); traceIndex++)
+        {
+          const auto &entry = trace[traceIndex];
+          std::cout << "MATRIX_FREE_GMG_STAGE_TRACE"
+                    << " index=" << traceIndex
+                    << " level=" << entry.levelIndex
+                    << " stage=" << entry.stageName
+                    << " rhsInfNorm=" << std::setprecision(16) << entry.rhsInfNorm
+                    << " solutionInfNorm=" << entry.solutionInfNorm
+                    << " residualInfNorm=" << entry.residualInfNorm
+                    << std::endl;
+        }
+      }
     }
     else if ((inverseDiagnosticAlgorithm == "pmultigrid-chebyshev") || (inverseDiagnosticAlgorithm == "pmultigrid-jacobi-chebyshev"))
     {
@@ -4441,6 +4755,8 @@ namespace
               << " pMultigridCoarseChebyshevIterations=" << timing.pMultigridCoarseChebyshevIterations
               << " pMultigridCoarseChebyshevLowerFraction=" << timing.pMultigridCoarseChebyshevLowerFraction
               << " pMultigridCoarseSolveCount=" << timing.pMultigridCoarseSolveCount
+              << " matrixFreeGMGStageTrace=" << timing.matrixFreeGMGStageTrace
+              << " matrixFreeGMGStageTraceEntries=" << timing.matrixFreeGMGStageTraceEntries
               << " pMultigridPath=" << timing.pMultigridPath
               << " iterations=" << timing.inverseIterations
               << " inverseInitialGuess=" << timing.inverseInitialGuess
@@ -4690,6 +5006,7 @@ int main(int argc, char *argv[])
     int inverseSpectralEstimateIterations = 8;
     int inverseLowerSpectralEstimateIterations = 0;
     int inverseDiagnosticRequireAssembledReference = 1;
+    int diagnoseLocalPMultigridWrapperEquivalence = 0;
     int compareTpetraPowerEstimate = 0;
     int compareTpetraRowMatrixPowerEstimate = 0;
     int ifpack2ChebyshevSmoke = 0;
@@ -4716,6 +5033,7 @@ int main(int argc, char *argv[])
     int pMultigridJacobiSmootherIterations = 2;
     int pMultigridCoarseChebyshevIterations = 8;
     Scalar pMultigridCoarseChebyshevLowerFraction = 0.05;
+    int matrixFreeGMGStageTrace = 0;
     std::string polyOrderText = "1:4";
     std::string operatorChoice = "mass-plus-stiffness";
     std::string mode = "apply";
@@ -4744,6 +5062,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
     cmdp.setOption("pMultigridCoarseChebyshevIterations", &pMultigridCoarseChebyshevIterations, "Chebyshev iterations used as the coarsest p-multigrid solver for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
     cmdp.setOption("pMultigridCoarseChebyshevLowerFraction", &pMultigridCoarseChebyshevLowerFraction, "Coarse Chebyshev lower endpoint as a fraction of the coarse diagonal-Jacobi lambdaMax estimate.");
+    cmdp.setOption("diagnoseLocalPMultigridWrapperEquivalence", &diagnoseLocalPMultigridWrapperEquivalence, "When nonzero, compare direct local pMG apply with MatrixFreeGMGApplyInversePreconditioner wrapping the same local pMG operator.");
+    cmdp.setOption("matrixFreeGMGStageTrace", &matrixFreeGMGStageTrace, "When nonzero, emit explicit per-level MatrixFreeGMGPreconditioner V-cycle stage norm diagnostics for GMRES p-multigrid inverse diagnostics.");
     cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm, "richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev inverse diagnostic recurrence.");
     cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, true-eigen, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
     cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free Ifpack2-style D^{-1}A spectral-radius power estimate.");
@@ -4837,6 +5157,11 @@ int main(int argc, char *argv[])
       throw std::invalid_argument("--ifpack2ChebyshevSmoke currently supports --inverseInitialGuess=zero only");
     if ((ifpack2ChebyshevSmoke != 0) && (inverseSpectralEstimate == "cell-power"))
       throw std::invalid_argument("--ifpack2ChebyshevSmoke compares against scalar Ifpack2 parameters and is not compatible with per-cell Chebyshev endpoints");
+    if ((matrixFreeGMGStageTrace != 0) &&
+        ((mode != "inverse-diagnostic") ||
+         ((inverseDiagnosticAlgorithm != "gmres-pmultigrid-chebyshev") &&
+          (inverseDiagnosticAlgorithm != "gmres-pmultigrid-jacobi-chebyshev"))))
+      throw std::invalid_argument("--matrixFreeGMGStageTrace requires --mode=inverse-diagnostic with --inverseDiagnosticAlgorithm=gmres-pmultigrid-chebyshev or gmres-pmultigrid-jacobi-chebyshev");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (inverseSpectralEstimate != "power"))
       throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate requires --inverseSpectralEstimate=power");
     if ((inverseSpectralEstimate != "assembled-gershgorin") && (inverseSpectralEstimate != "true-eigen") && (inverseSpectralEstimate != "power") && (inverseSpectralEstimate != "cell-power") && (inverseSpectralEstimate != "user"))
@@ -4936,9 +5261,10 @@ int main(int argc, char *argv[])
       if (mode == "inverse-diagnostic")
       {
         inverseDiagnosticTiming = inverseDiagnosticTerms(terms, workspaces, worksetSize, cells, localDofs, dim, p,
-                                                        maxAssembledEntries, inverseDiagnosticRequireAssembledReference, numInverseIterations,
+                                                        maxAssembledEntries, inverseDiagnosticRequireAssembledReference, diagnoseLocalPMultigridWrapperEquivalence, numInverseIterations,
                                                         pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction,
                                                         pMultigridFineSmootherWeight,
+                                                        matrixFreeGMGStageTrace,
                                                         pMultigridJacobiSmootherIterations, pMultigridCoarseChebyshevIterations,
                                                         pMultigridCoarseChebyshevLowerFraction,
                                                         inverseDiagnosticAlgorithm, inverseEigenRatio, inverseLambdaMin, inverseLambdaMax,
@@ -5131,6 +5457,11 @@ int main(int argc, char *argv[])
                 << " assemble2Path=" << assemble2Path
                 << " inversePath=" << inverseDiagnosticTiming.inversePath
                 << " spectralEstimatePath=" << inverseDiagnosticTiming.spectralEstimatePath;
+      if (diagnoseLocalPMultigridWrapperEquivalence != 0)
+        resultLine << " localPMultigridWrapperApplyInfNorm=" << inverseDiagnosticTiming.localPMultigridWrapperApplyInfNorm
+                   << " matrixFreeGMGWrapperApplyInfNorm=" << inverseDiagnosticTiming.matrixFreeGMGWrapperApplyInfNorm
+                   << " localPMultigridWrapperDifferenceInfNorm=" << inverseDiagnosticTiming.localPMultigridWrapperDifferenceInfNorm
+                   << " localPMultigridWrapperRelativeDifferenceInfNorm=" << inverseDiagnosticTiming.localPMultigridWrapperRelativeDifferenceInfNorm;
       printCompactKeyValueLine(resultLine.str());
 
       const double logP = std::log(static_cast<double>(p + 1));

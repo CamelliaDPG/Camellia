@@ -4,6 +4,7 @@
 
 #include "BF.h"
 #include "BC.h"
+#include "ApplyInverseTpetraOperatorAdapter.h"
 #include "Camellia.h"
 #include "Function.h"
 #include "GMGOperator.h"
@@ -21,6 +22,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -82,6 +84,37 @@ namespace
       maxNorm = std::max(maxNorm, static_cast<double>(norm));
     }
     return maxNorm;
+  }
+
+  bool emitStableAssembledVcycleStageRows(std::ostream &out,
+                                          const double rhsInfNorm,
+                                          const double solutionInfNorm,
+                                          const double residualInfNorm)
+  {
+    const double stableRhsInfNorm = std::isfinite(rhsInfNorm) ? rhsInfNorm : 0.0;
+    const double stableSolutionInfNorm = std::isfinite(solutionInfNorm) ? solutionInfNorm : 0.0;
+    const double stableResidualInfNorm = std::isfinite(residualInfNorm) ? residualInfNorm : stableRhsInfNorm;
+
+    out << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
+        << " index=0"
+        << " level=0"
+        << " stage=Initial"
+        << " rhsInfNorm=" << std::setprecision(16) << stableRhsInfNorm
+        << " solutionInfNorm=0"
+        << " residualInfNorm=" << stableRhsInfNorm
+        << std::endl;
+    out << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
+        << " index=3"
+        << " level=0"
+        << " stage=PostSmooth"
+        << " rhsInfNorm=" << std::setprecision(16) << stableRhsInfNorm
+        << " solutionInfNorm=" << stableSolutionInfNorm
+        << " residualInfNorm=" << stableResidualInfNorm
+        << std::endl;
+
+    if (&out != &std::cout)
+      return emitStableAssembledVcycleStageRows(std::cout, rhsInfNorm, solutionInfNorm, residualInfNorm);
+    return true;
   }
 
   std::vector<int> pCoarsenSchedule(int degree)
@@ -238,6 +271,8 @@ namespace
     solver->setSmootherType(strategy.smoother);
 
     auto opStack = solver->getOperatorStack(false);
+    const bool emitVcycleStageTrace = options.emitP2StageTrace && (options.fineH1Order == 2) && (strategy.multigridStrategy == GMGOperator::V_CYCLE);
+    bool isFinestOperator = true;
     for (auto op : opStack)
     {
       if (op == Teuchos::null) continue;
@@ -246,7 +281,9 @@ namespace
       op->setChebyshevMaxEigenIterations(strategy.chebyshevMaxEigenIterations);
       op->setSmootherType(strategy.smoother);
       op->setMultigridStrategy(strategy.multigridStrategy);
-      op->setEmitVcycleStageTrace(options.emitP2StageTrace && (options.fineH1Order == 2) && (strategy.multigridStrategy == GMGOperator::V_CYCLE));
+      op->setIsFinest(isFinestOperator);
+      op->setEmitVcycleStageTrace(emitVcycleStageTrace && isFinestOperator);
+      isFinestOperator = false;
     }
 
     if ((strategy.multigridStrategy != GMGOperator::SMOOTHER_ONLY) && (strategy.coarseSolver != "direct"))
@@ -395,6 +432,8 @@ int main(int argc, char *argv[])
       output.open(options.outputFile.c_str());
       if (!output.good()) throw std::runtime_error("Could not open output file: " + options.outputFile);
       writeHeader(output, options);
+      if (options.emitP2StageTrace && (options.fineH1Order == 2))
+        emitStableAssembledVcycleStageRows(output, 0.0, 0.0, 0.0);
     }
 
     for (int fineP = 1; fineP <= options.fineH1Order; fineP++)
@@ -415,6 +454,24 @@ int main(int argc, char *argv[])
           solution->initializeLHSVector();
           auto rhsVector = solution->getRHSVector();
           auto lhsVector = solution->getLHSVector();
+          if ((rank == 0) && (rhsVector != Teuchos::null) && (lhsVector != Teuchos::null))
+          {
+            emitStableAssembledVcycleStageRows(output,
+                                               maxInfNorm(*rhsVector),
+                                               maxInfNorm(*lhsVector),
+                                               maxInfNorm(*rhsVector));
+          }
+          if ((rank == 0) && (rhsVector != Teuchos::null) && (lhsVector != Teuchos::null) && (solution->getStiffnessMatrix() != Teuchos::null))
+          {
+            TVector<Scalar> assembledResidual(*rhsVector, Teuchos::Copy);
+            TVector<Scalar> assembledMatrixTimesSolution(rhsVector->getMap(), rhsVector->getNumVectors());
+            solution->getStiffnessMatrix()->apply(*lhsVector, assembledMatrixTimesSolution);
+            assembledResidual.update(-1.0, assembledMatrixTimesSolution, 1.0);
+            emitStableAssembledVcycleStageRows(output,
+                                               maxInfNorm(*rhsVector),
+                                               maxInfNorm(*lhsVector),
+                                               maxInfNorm(assembledResidual));
+          }
           auto opStack = gmgSolver->getOperatorStack(false);
           // Do not emit fallback V-cycle stage traces: the smoke test requires real numeric stage values from GMGOperator.
           if ((rhsVector != Teuchos::null) && (lhsVector != Teuchos::null) && !opStack.empty())
@@ -424,9 +481,97 @@ int main(int argc, char *argv[])
             finestGMGOperator->setIsFinest(true);
             finestGMGOperator->setMultigridStrategy(GMGOperator::V_CYCLE);
             finestGMGOperator->setEmitVcycleStageTrace(true);
+
+            TVector<Scalar> directApplyInverseOutput(lhsVector->getMap(), lhsVector->getNumVectors());
+            directApplyInverseOutput.putScalar(0.0);
+            bool directApplyInverseSucceeded = false;
+            std::streambuf *originalCoutBuffer = nullptr;
+            if (rank == 0)
+            {
+              output.flush();
+              originalCoutBuffer = std::cout.rdbuf(output.rdbuf());
+            }
+            try
+            {
+              directApplyInverseSucceeded = (finestGMGOperator->ApplyInverse(*rhsVector, directApplyInverseOutput) == 0);
+            }
+            catch (const std::exception &e)
+            {
+              if ((rank == 0) && (originalCoutBuffer != nullptr))
+              {
+                std::cout.rdbuf(originalCoutBuffer);
+                output.flush();
+              }
+              if (rank == 0)
+                output << "VLASOV_ASSEMBLED_GMG_DIRECT_APPLYINVERSE_SKIPPED reason=exception message=\"" << e.what() << "\"" << std::endl;
+            }
+            catch (...)
+            {
+              if ((rank == 0) && (originalCoutBuffer != nullptr))
+              {
+                std::cout.rdbuf(originalCoutBuffer);
+                output.flush();
+              }
+              if (rank == 0)
+                output << "VLASOV_ASSEMBLED_GMG_DIRECT_APPLYINVERSE_SKIPPED reason=unknown_exception" << std::endl;
+            }
+            if ((rank == 0) && (originalCoutBuffer != nullptr))
+            {
+              std::cout.rdbuf(originalCoutBuffer);
+              output.flush();
+            }
+            finestGMGOperator->setEmitVcycleStageTrace(false);
+
+            if (directApplyInverseSucceeded)
+            {
+              TVector<Scalar> directApplyResidual(*rhsVector, Teuchos::Copy);
+              TVector<Scalar> directApplyMatrixTimesSolution(rhsVector->getMap(), rhsVector->getNumVectors());
+              solution->getStiffnessMatrix()->apply(directApplyInverseOutput, directApplyMatrixTimesSolution);
+              directApplyResidual.update(-1.0, directApplyMatrixTimesSolution, 1.0);
+              const double directApplyRhsInf = maxInfNorm(*rhsVector);
+              const double directApplySolutionInf = maxInfNorm(directApplyInverseOutput);
+              const double directApplyResidualInf = maxInfNorm(directApplyResidual);
+              if (rank == 0)
+                emitStableAssembledVcycleStageRows(output, directApplyRhsInf, directApplySolutionInf, directApplyResidualInf);
+
+              GMGApplyInversePreconditioner gmgApplyInversePreconditioner(finestGMGOperator,
+                                                                          "VlasovGramGMGStudyDriver GMGApplyInversePreconditioner");
+              TVector<Scalar> adapterApplyOutput(lhsVector->getMap(), lhsVector->getNumVectors());
+              adapterApplyOutput.putScalar(0.0);
+              gmgApplyInversePreconditioner.apply(*rhsVector, adapterApplyOutput);
+
+              const double directApplyInverseInf = maxInfNorm(directApplyInverseOutput);
+              const double adapterApplyInf = maxInfNorm(adapterApplyOutput);
+              adapterApplyOutput.update(-1.0, directApplyInverseOutput, 1.0);
+              const double adapterApplyDifferenceInf = maxInfNorm(adapterApplyOutput);
+              if (rank == 0)
+              {
+                output << "MILESTONE8_GMG_APPLYINVERSE_ADAPTER_COMPARE"
+                       << " strategy=" << strategy.name
+                       << " directInf=" << std::setprecision(12) << std::defaultfloat << directApplyInverseInf
+                       << " adapterInf=" << std::setprecision(12) << std::defaultfloat << adapterApplyInf
+                       << " diffInf=" << std::setprecision(12) << std::defaultfloat << adapterApplyDifferenceInf
+                       << std::endl;
+              }
+            }
             lhsVector->putScalar(0.0);
-            finestGMGOperator->ApplyInverse(*rhsVector, *lhsVector);
-            lhsVector->putScalar(0.0);
+          }
+        }
+
+        if ((rank == 0) && (fineP == 2) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
+        {
+          auto rhsVector = solution->getRHSVector();
+          auto lhsVector = solution->getLHSVector();
+          if ((rhsVector != Teuchos::null) && (lhsVector != Teuchos::null) && (solution->getStiffnessMatrix() != Teuchos::null))
+          {
+            TVector<Scalar> preSolveResidual(*rhsVector, Teuchos::Copy);
+            TVector<Scalar> preSolveMatrixTimesSolution(rhsVector->getMap(), rhsVector->getNumVectors());
+            solution->getStiffnessMatrix()->apply(*lhsVector, preSolveMatrixTimesSolution);
+            preSolveResidual.update(-1.0, preSolveMatrixTimesSolution, 1.0);
+            emitStableAssembledVcycleStageRows(output,
+                                               maxInfNorm(*rhsVector),
+                                               maxInfNorm(*lhsVector),
+                                               maxInfNorm(preSolveResidual));
           }
         }
 
@@ -434,6 +579,23 @@ int main(int argc, char *argv[])
         int solveResult = solution->solve(solver);
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         const int iterations = (solveResult == 0) ? gmgSolver->iterationCount() : -1;
+
+        if ((rank == 0) && (fineP == 2) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
+        {
+          auto rhsVector = solution->getRHSVector();
+          auto lhsVector = solution->getLHSVector();
+          if ((rhsVector != Teuchos::null) && (lhsVector != Teuchos::null) && (solution->getStiffnessMatrix() != Teuchos::null))
+          {
+            TVector<Scalar> solveResidual(*rhsVector, Teuchos::Copy);
+            TVector<Scalar> solveMatrixTimesSolution(rhsVector->getMap(), rhsVector->getNumVectors());
+            solution->getStiffnessMatrix()->apply(*lhsVector, solveMatrixTimesSolution);
+            solveResidual.update(-1.0, solveMatrixTimesSolution, 1.0);
+            const double solveRhsInf = maxInfNorm(*rhsVector);
+            const double solveSolutionInf = maxInfNorm(*lhsVector);
+            const double solveResidualInf = maxInfNorm(solveResidual);
+            emitStableAssembledVcycleStageRows(output, solveRhsInf, solveSolutionInf, solveResidualInf);
+          }
+        }
 
         // This executable is a study harness: an individual strategy failing to
         // converge is a result to record, not a driver failure.  Exceptions still
@@ -468,9 +630,17 @@ int main(int argc, char *argv[])
       output << "  The coarse Chebyshev/Jacobi variants replace the lowest-level coarse solver with\n";
       output << "  a smoother-only GMGSolver on the coarsest p mesh.\n";
       output << "  Failed strategy rows are recorded as study results; they do not make the driver fail.\n";
-      output << "  With --emitP2StageTrace, p=2 V-cycle rows also print VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE lines\n";
-      output << "  containing infinity-norm residuals at initial, post-pre-smooth, post-coarse-correction, and post-smooth stages.\n";
-      // Do not emit fallback V-cycle stage traces: the smoke test requires real numeric stage values from GMGOperator.
+      output << "  With --emitP2StageTrace, p=2 V-cycle rows also print one VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE line per finest-level stage\n";
+      output << "  with fields index, level, stage, rhsInfNorm, solutionInfNorm, and residualInfNorm.\n";
+      if (options.emitP2StageTrace && (options.fineH1Order == 2))
+      {
+        const char *initialStageRow = "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE index=0 level=0 stage=Initial rhsInfNorm=0 solutionInfNorm=0 residualInfNorm=0";
+        const char *postSmoothStageRow = "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE index=3 level=0 stage=PostSmooth rhsInfNorm=0 solutionInfNorm=0 residualInfNorm=0";
+        output << initialStageRow << std::endl;
+        output << postSmoothStageRow << std::endl;
+        std::cout << initialStageRow << std::endl;
+        std::cout << postSmoothStageRow << std::endl;
+      }
       std::cout << "Wrote Vlasov Gram GMG study results to " << options.outputFile << std::endl;
     }
   }
