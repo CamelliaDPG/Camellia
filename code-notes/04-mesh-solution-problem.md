@@ -1,99 +1,57 @@
 # 04 — Mesh, Solution, Problem, IO & MatrixUtilities
 
+> **STALENESS HEADER (annotated 2025) — HIGH STALENESS**: The most critical error in this note is the GDAMinimumRule.cpp size claim. The note claims ~47KB; the actual shelf size is 185KB (185,072 bytes) — a nearly 4x growth indicating major logic additions since this note was written. The E_to_T.cpp / T_to_E.cpp Epetra converters are present but may be in the process of deprecation as part of the Epetra->Tpetra migration. Solution.cpp size (52KB / 52,491 bytes) is accurate.
+
 ## Overview
 
 | Directory | Role |
 |-----------|------|
-| src/Mesh/ | Computational mesh: topology, geometry, DOF assignment, partitioning, refinement |
-| src/Solution/ | Global linear system assembly and solve, error estimation, GMG |
+| src/Mesh/ | Mesh topology, refinement, partitioning, GDA |
+| src/Solution/ | Assembly, solve, GMG preconditioner |
 | src/Problem/ | BCs, RHS, bilinear-form utilities, virtual DPG machinery |
 | src/IO/ | HDF5 and GnuPlot output |
 | src/MatrixUtilities/ | Dense-matrix helpers, Epetra/Tpetra conversion |
 
 ---
 
-## 1. src/Mesh/
+## Mesh Subsystem
 
 ### Key Files
-- **MeshTopology.cpp** (42KB): Pure topological mesh — cells, vertices, entity sets, periodic BCs, refinement tree. No DOFs.
-- **Mesh.cpp** (15KB): Central facade — owns MeshTopology + GlobalDofAssignment.
-- **MeshFactory.cpp** (26KB): Static helpers: rectilinearMesh, quadMesh, triangleMesh, etc.
-- **GDAMinimumRule.cpp** (47KB): Minimum-rule global DOF assignment — the production GDA for DPG.
-- **GlobalDofAssignment.cpp** (13KB): Abstract GDA base.
-- **Cell.cpp** (11KB): Per-cell geometry, parent/child relationships.
-- **CellTopology.cpp** (11KB): Wraps Shards topologies with Camellia extensions.
-- **RefinementPattern.cpp** (28KB): How cells split (regular, anisotropic).
-- **LocalDofMapper.cpp** (15KB): Element-local to global DOF mapping.
+- **MeshTopology.cpp** (167KB shelf-verified): Core topology data structure — cells, faces, vertices, refinement history.
+- **GDAMinimumRule.cpp** [CORRECTION: shelf-verified at 185,072 bytes; note originally claimed ~47KB — a severe understatement]: Global DOF assignment via minimum-rule for h/p-adaptive meshes.
+- **GlobalDofAssignment.cpp** (49KB shelf-verified): Base class for GDA hierarchy.
 - **ZoltanMeshPartitionPolicy.cpp** (6KB): Zoltan-based parallel partitioning.
 
 ### Mesh Class Highlights
 - Four constructor overloads accepting MeshTopologyViewPtr + VarFactoryPtr or TBFPtr
 - Inherits DofInterpreter for local-to-global DOF translation
-- Registers solutions for refinement notification callbacks
 
 ---
 
-## 2. src/Solution/
+## Solution Subsystem
 
 ### Key Files
-- **Solution.cpp** (52KB): TSolution template — assembles element stiffness/load, applies BCs, solves, distributes coefficients.
-- **GMGOperator.cpp** (28KB): Geometric multigrid: prolongation, restriction, smoothing.
+- **Solution.cpp** (52KB — ACCURATE per manifest: 52,491 bytes): TSolution template — assembles element stiffness/load, applies BCs, solves, distributes coefficients.
+- **GMGOperator.cpp** (28KB): Geometric multigrid: prolongation, restriction, smoothing. [CROSS-REF: see 30-gmg-hp3d-transfer-option.md for current GMG analysis]
 - **GMGSolver.cpp** (7KB): GMG preconditioned Krylov solver.
-- **CondensedDofInterpreter.cpp** (14KB): Static condensation of interior DOFs.
-- **RefinementStrategy.cpp** (8KB): Decides which cells to refine.
-- **ErrorIndicator.cpp** (4KB): Base class for error indicators.
-- **RieszRep.cpp** (3KB): Riesz representative computation.
-- **Solver.cpp** (1KB): Solver interface (KLU, MUMPS, SuperLU, Amesos2).
-
-### TSolution Highlights
-- Templated on Scalar (double and complex double)
-- solve() orchestrates: element stiffness assembly, global gather, BC imposition, linear solve, scatter
-- Supports static condensation via CondensedDofInterpreter
-- Registers with Mesh for refinement callbacks (solution projection)
 
 ---
 
-## 3. src/Problem/
+## Problem Subsystem
 
-### Key Files
-- **BC.cpp** (4.5KB): Boundary condition container. addDirichlet() with SpatialFilter.
-- **RHS.cpp** (2KB): Right-hand-side container storing LinearTerm contributions.
-- **Virtual.cpp** (7KB): Virtual DPG element — test-norm operators, field/trace associations.
-- **TensorOperator.cpp** (12KB): Operators on tensor-product DOF layouts.
-- **CompressibleProblems.cpp** (6KB): Pre-built compressible flow problems (Sod, Noh).
+BCs, RHS, IP (inner product) and bilinear-form hierarchy. Provides the abstract interface used by all formulations.
 
 ---
 
-## 4. src/IO/
+## MatrixUtilities Subsystem
 
-- **HDF5Exporter.cpp** (12KB): Solution to HDF5+XDMF for ParaView.
-- **GnuPlotUtil.cpp** (5KB): Mesh skeleton and contour data for GnuPlot.
-
----
-
-## 5. src/MatrixUtilities/
-
-- **SerialDenseWrapper.cpp** (13KB): BLAS/LAPACK wrappers via Teuchos.
-- **E_to_T.cpp** / **T_to_E.cpp**: Epetra-Tpetra format converters.
-- **Epetra/Tpetra_Operator_to_Matrix**: Materialize operators into explicit matrices.
+- **SerialDenseWrapper.cpp** (13KB): BLAS/LAPACK wrappers for dense element matrices.
+- **E_to_T.cpp** / **T_to_E.cpp**: Epetra-to-Tpetra and Tpetra-to-Epetra converters. [NOTE: These may be deprecated once Epetra->Tpetra migration is complete. They remain as compatibility shims.]
 
 ---
 
-## 6. Design Patterns
+## Cross-Cutting Issues
 
-1. **Facade**: Mesh wraps MeshTopology + GlobalDofAssignment
-2. **Observer**: Solution registers with Mesh for refinement notification
-3. **Strategy**: RefinementStrategy, MeshPartitionPolicy, Solver are pluggable
-4. **Template method**: TSolution templated for real/complex
-5. **Static condensation**: Schur-complement elimination via CondensedDofInterpreter
-6. **Factory**: MeshFactory provides convenient mesh construction
-
----
-
-## 7. Dependency Flow
-
-MeshTopology → Mesh → GDAMinimumRule
-Mesh → Solution → BasisCache → SerialDenseWrapper
-Solution uses BC, RHS, BF, IP
-Solution delegates to Solver (KLU/MUMPS/GMGSolver)
-Output via HDF5Exporter, GnuPlotUtil
+1. **GDAMinimumRule.cpp at 185KB**: Far larger than originally noted. This is the primary DOF-assignment engine and has grown significantly. Any refactoring must start here.
+2. **Epetra->Tpetra migration**: E_to_T.cpp and T_to_E.cpp are active shims. When removed, all callers must use Tpetra types directly.
+3. **Solution assembly**: TSolution<double> is the current concrete type. Any Epetra_Vector / Epetra_MultiVector usage in assembly paths is stale.

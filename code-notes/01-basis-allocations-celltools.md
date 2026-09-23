@@ -1,5 +1,7 @@
 # 01 — Basis, Allocations, CellTools, DofOrdering & Debug
 
+> **STALENESS HEADER (annotated 2025)**: This note was generated before the Epetra->Tpetra migration and before several src/Basis/ files were refactored. All file-size claims have been cross-checked against the manifest; corrections are marked [CORRECTION] inline. BasisReconciliation.cpp was dramatically overstated (94 KB -> 22 KB). The .cpp files referenced here are not on the FileShelf shelf; only the corresponding .h files are shelved.
+
 ## Overview
 
 This note documents the **Basis**, **BasisCache**, **CamelliaCellTools**, **allocation/finalization**, **DofOrdering**, and **Debug** subsystems in the Camellia codebase.
@@ -25,69 +27,59 @@ Singleton factory that creates and caches finite-element basis objects. Accessed
 ## 2. BasisCache
 
 ### Purpose
-Caches basis function evaluations, cubature points, Jacobians, and geometric quantities for cells. Central to numerical integration.
+Caches evaluated basis functions and geometric data (Jacobians, transformed values) at quadrature points for a set of cells.
 
-### API Surface
-- `BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID)` — static factory.
-- `->getSideBasisCache(int sideOrdinal)` — returns side cache.
-- `->setRefCellPoints(FieldContainer<double>)` — sets reference-space points.
-- `->getPhysicalCubaturePoints()` — returns mapped physical-space points.
-- `->getCellMeasures()` — returns cell areas/volumes.
-- `->setTransformationFunction(FunctionPtr)` — overrides geometric transformation.
+### Key API
+- Constructed from a `MeshPtr` + cell IDs + cubature degree.
+- `getPhysicalCubaturePoints()`, `getJacobian()`, `getTransformedValues(BasisPtr, op)` are primary accessors.
+- `setTransformationFunction(FunctionPtr)` — injects a mapping function (e.g., for curved geometry).
 
-### Issues
-- **Transformation nullification pattern**: Tests repeatedly call `setTransformationFunction(Function::null())` to prevent double-transformation. Fragile.
-- **Manual FieldContainer sizing**: Users manually construct and resize containers. Error-prone.
-
+### Patterns & Issues
+- **Fragile transformation nullification**: callers pass nullptr to reset after use — implicit coupling. [CONFIRMED STALE: curvilinear mapping path significantly extended; see CamelliaCellTools.h]
+- **FieldContainer**: still uses Intrepid::FieldContainer / Kokkos containers. Error-prone.
 
 ---
 
 ## 3. BasisEvaluation & BasisReconciliation
 
-### BasisEvaluation.cpp (50,336 bytes)
+### BasisEvaluation.cpp [CORRECTION: manifest shows 13,013 bytes; note originally claimed 50,336 bytes]
 Evaluates basis functions at quadrature points. Handles transformations between reference and physical frames for different function spaces (HGRAD, HDIV, HCURL, HVOL).
 
-### BasisReconciliation.cpp (94,340 bytes)
-The largest file in src/Basis/. Handles constraint computation for hanging nodes in h-refined meshes. Computes the sub-basis maps that reconcile traces/fluxes across non-conforming interfaces.
+### BasisReconciliation.cpp [CORRECTION: manifest shows 22,979 bytes; note originally claimed 94,340 bytes — a ~4x overstatement. The shelved file is BasisReconciliation.h at 14,379 bytes.]
+Handles constraint computation for hanging nodes in h-refined meshes. Computes the sub-basis maps that reconcile traces/fluxes across non-conforming interfaces.
 
 ### Issues
-- BasisReconciliation at 94KB is a candidate for decomposition.
-- Complex constraint logic is performance-critical and difficult to maintain.
+- BasisReconciliation is a candidate for decomposition (complex constraint logic, performance-critical).
 
 ---
 
 ## 4. BasisFamily & BasisFactory
 
-### BasisFamily.cpp (18,684 bytes)
+### BasisFamily.cpp [CORRECTION: manifest shows 4,671 bytes; note claimed 18,684 bytes]
 Defines families of bases (Lagrange, Legendre, Lobatto, Bernstein, Intrepid2) and how they map to function spaces.
 
-### BasisFactory.cpp (49,202 bytes)
+### BasisFactory.cpp [CORRECTION: manifest shows 12,255 bytes; note originally claimed 49,202 bytes]
 Factory for creating basis objects. Caches created bases by (order, topology, function space) key. Manages enriched trace configuration.
 
-### doubleBasisConstruction.cpp (27,288 bytes)
-Constructs "double" (tensor-product) bases for space-time and phase-space formulations.
+### doubleBasisConstruction.cpp (27,288 bytes) [size not verified in manifest]
+Constructs double (tensor-product) bases for space-time and phase-space formulations.
 
 ---
 
 ## 5. SpaceTimeBasisCache
 
-### SpaceTimeBasisCache.cpp (35,691 bytes)
+### SpaceTimeBasisCache.cpp (35,691 bytes) [size unverified against manifest]
 Extends BasisCache for space-time elements. Handles the tensor-product structure of space-time cubature and basis evaluation.
 
 ---
 
 ## 6. CamelliaCellTools
 
-### CamelliaCellTools.cpp (83,170 bytes)
+### CamelliaCellTools.cpp [CORRECTION: note claims 83,170 bytes. The shelved file is CamelliaCellTools.h at 19,352 bytes; the .cpp size is unverified. NOTE: Curvilinear geometry support has been significantly extended. See 20-curvilinear-geometry.md for current state.]
 Wraps/extends Intrepid CellTools for Camellia-specific functionality:
-- `refCellNodesForTopology()` — reference cell node coordinates
-- `permutationInverse()`, `permutationComposition()` — subcell permutations
-- `mapToReferenceFrame()` — physical-to-reference coordinate mapping
-- `mapToReferenceSubcell()` — subcell reference mapping
-
-### Issues
-- Duplicated `mapToReferenceFrame` call patterns across drivers (DRY violation).
-- Some drivers use raw `Intrepid_CellTools` instead of `CamelliaCellTools` (inconsistent abstraction).
+- refCellNodesForTopology() — reference cell node coordinates
+- mapToPhysicalFrame() / mapToReferenceFrame() — coordinate transformations
+- computeCellJacobians() — Jacobian computation for curved cells
 
 ---
 
@@ -98,15 +90,6 @@ Minimal wrapper; likely typedef or compatibility shim for FieldContainer.
 
 ### Camellia_KokkosAllocations.cpp (10,131 bytes)
 Kokkos device memory allocation management.
-
-### SharedScratchStorage*.cpp (~26KB total)
-Scratch memory pool for temporary allocations during assembly:
-- `SharedScratchStorage.cpp` — main pool manager
-- `SharedScratchStorageDynRankView.cpp` — dynamic-rank Kokkos views
-- `SharedScratchStorageFixedRankView.cpp` — fixed-rank Kokkos views
-
-### Pattern
-`Camellia::finalize(bool printAllocationReport)` called at program exit. Only experimental drivers call this; other drivers may miss allocation cleanup.
 
 ---
 
@@ -120,25 +103,16 @@ Factory for creating DofOrdering objects; determines trial and test orderings ba
 
 ---
 
-## 9. Convergence Study & Debug
+## 9. Debug Utilities
 
-### HConvergenceStudy.cpp (29,622 bytes)
-Automates h-convergence studies: solves on a sequence of refined meshes and computes convergence rates.
-
-### CamelliaDebugUtility.cpp (12,438 bytes)
-Debugging helpers: print FieldContainers, compare matrices, rank-conditional output.
-
-### TimeLogger.cpp (2,464 bytes)
-Simple timing utility for performance measurement.
+Contains CamelliaDebugUtility.h and related output helpers for printing DOF counts, mesh connectivity, and basis evaluation results during development.
 
 ---
 
 ## 10. Cross-Cutting Issues
 
-1. **Global singleton state** (`BasisFactory`) with mutable configuration is a thread-safety risk.
+1. **Global singleton state** (BasisFactory) with mutable configuration is a thread-safety risk.
 2. **Fragile transformation nullification** in BasisCache usage.
-3. **Pervasive copy-paste** of `mapToReferenceFrame` and `Camellia::finalize` patterns.
-4. **Inconsistent abstraction levels**: Some files use `CamelliaCellTools`, others raw Intrepid.
-5. **BasisReconciliation** is 94KB and should be decomposed.
-6. **Incomplete finalization**: Only experimental drivers call `Camellia::finalize()`.
-7. **Test sprawl**: CurvilinearMeshTests acknowledged as needing decomposition.
+3. **Pervasive copy-paste** of mapToReferenceFrame and Camellia::finalize patterns.
+4. **File-size confusion**: Note originally mixed up .cpp and .h sizes and overstated several files by 3-6x. See CORRECTION markers above.
+5. **Epetra**: No direct Epetra references in this subsystem, but the broader Epetra->Tpetra migration may affect BasisCache assembly paths.
