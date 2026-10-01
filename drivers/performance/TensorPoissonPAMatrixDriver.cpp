@@ -2318,6 +2318,62 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       if (smootherWeight_ != Scalar(1.0))
         for (size_t i=0; i<solution.size(); i++) solution[i] = before[i] + smootherWeight_ * (solution[i] - before[i]);
     }
+    
+    static std::vector<Scalar> extractInverseDiagonalFromBlockDenseMatrices(
+        const std::vector<Scalar> &matrices,
+        const int cells,
+        const int rows)
+    {
+      const size_t localLength =
+          static_cast<size_t>(cells) * static_cast<size_t>(rows);
+
+      const size_t expectedEntries =
+          localLength * static_cast<size_t>(rows);
+
+      if (matrices.size() != expectedEntries)
+      {
+        std::ostringstream message;
+        message << "extractInverseDiagonalFromBlockDenseMatrices matrix size mismatch: "
+                << "matrices.size()=" << matrices.size()
+                << " expected=" << expectedEntries
+                << " cells=" << cells
+                << " rows=" << rows;
+        throw std::invalid_argument(message.str());
+      }
+
+      std::vector<Scalar> inverseDiagonal(localLength, Scalar(0.0));
+
+      for (int c=0; c<cells; c++)
+      {
+        for (int i=0; i<rows; i++)
+        {
+          const size_t localOrdinal =
+              static_cast<size_t>(c) * static_cast<size_t>(rows) +
+              static_cast<size_t>(i);
+
+          const size_t diagonalIndex =
+              localOrdinal * static_cast<size_t>(rows) +
+              static_cast<size_t>(i);
+
+          const Scalar diagonalValue = matrices[diagonalIndex];
+
+          if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
+          {
+            std::ostringstream message;
+            message << "extractInverseDiagonalFromBlockDenseMatrices found nonpositive "
+                    << "diagonal entry"
+                    << " cell=" << c
+                    << " localDof=" << i
+                    << " value=" << diagonalValue;
+            throw std::runtime_error(message.str());
+          }
+
+          inverseDiagonal[localOrdinal] = Scalar(1.0) / diagonalValue;
+        }
+      }
+
+      return inverseDiagonal;
+    }
 
   public:
     LocalPMultigridTpetraPreconditioner(const Teuchos::RCP<const TpetraMap> &map,
@@ -2357,36 +2413,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
             fineMatrices_[static_cast<size_t>((c * localDofs_ + fineI) * localDofs_ + fineJ)] = basisOutputHost(static_cast<size_t>(c * localDofs_ + fineI),0);
       }
       
-      fineInverseDiagonal_.assign(localLength, Scalar(0.0));
-
-      for (int c=0; c<cells_; c++)
-      {
-        for (int i=0; i<localDofs_; i++)
-        {
-          const size_t localOrdinal =
-              static_cast<size_t>(c) * static_cast<size_t>(localDofs_) +
-              static_cast<size_t>(i);
-
-          const size_t diagonalIndex =
-              localOrdinal * static_cast<size_t>(localDofs_) +
-              static_cast<size_t>(i);
-
-          const Scalar diagonalValue = fineMatrices_[diagonalIndex];
-
-          if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
-          {
-            std::ostringstream message;
-            message << "LocalPMultigridTpetraPreconditioner found nonpositive "
-                    << "fine diagonal entry"
-                    << " cell=" << c
-                    << " localDof=" << i
-                    << " value=" << diagonalValue;
-            throw std::runtime_error(message.str());
-          }
-
-          fineInverseDiagonal_[localOrdinal] = Scalar(1.0) / diagonalValue;
-        }
-      }
+      fineInverseDiagonal_ = extractInverseDiagonalFromBlockDenseMatrices(fineMatrices_, cells_, localDofs_);
 
       fineLambdaMaxByCell_.assign(static_cast<size_t>(cells_), Scalar(0.0));
       for (int c=0; c<cells_; c++)
