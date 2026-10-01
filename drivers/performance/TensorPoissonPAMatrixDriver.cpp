@@ -81,6 +81,7 @@ namespace
   using TpetraVector = Tpetra::Vector<Scalar>;
 
   using OperatorTerm = Camellia::TensorPAMatrixTerm<DeviceType,Scalar>;
+  using WorkspaceView = Kokkos::View<Scalar*,DeviceType>;
 
   class AnalyticGraphNormSolutionCoefficientEvaluator : public Camellia::TensorSolutionCoefficientEvaluator
   {
@@ -253,6 +254,98 @@ namespace
   bool operatorIncludesStiffness(const std::string &operatorChoice)
   {
     return (operatorChoice == "stiffness") || (operatorChoice == "mass-plus-stiffness") || (operatorChoice == "h1-gram");
+  }
+
+  std::vector<Scalar> makeConstantTestFunctionRhs(const std::vector<OperatorTerm> &terms,
+                                                  const std::vector<WorkspaceView> &workspaces,
+                                                  const int dim,
+                                                  const int p,
+                                                  const int cells,
+                                                  const int rows,
+                                                  const int worksetSize)
+  {
+    std::vector<Scalar> rhs(static_cast<size_t>(cells * rows), Scalar(0.0));
+
+    const int fieldsPerDim = p + 1;
+    std::vector<Scalar> constantCoefficients(static_cast<size_t>(rows), Scalar(0.0));
+    const std::vector<int> basisExtents(static_cast<size_t>(dim), fieldsPerDim);
+
+    for (int i=0; i<rows; i++)
+    {
+      const std::vector<int> basisOrdinal = multiIndex(i, basisExtents);
+
+      bool isVertexTensorBasis = true;
+      for (const int componentOrdinal : basisOrdinal)
+      {
+        if (componentOrdinal > 1)
+        {
+          isVertexTensorBasis = false;
+          break;
+        }
+      }
+
+      if (isVertexTensorBasis)
+      {
+        constantCoefficients[static_cast<size_t>(i)] = Scalar(1.0);
+      }
+    }
+
+    Intrepid2::ScalarView<Scalar,DeviceType> constantInput(
+        "TensorPoissonPAMatrix constant coefficient input", cells, rows);
+    Intrepid2::ScalarView<Scalar,DeviceType> massOutput(
+        "TensorPoissonPAMatrix constant test rhs output", cells, rows);
+
+    auto constantInputHost = Kokkos::create_mirror_view(constantInput);
+    for (int c=0; c<cells; c++)
+    {
+      for (int i=0; i<rows; i++)
+      {
+        constantInputHost(c,i) = constantCoefficients[static_cast<size_t>(i)];
+      }
+    }
+    Kokkos::deep_copy(constantInput, constantInputHost);
+
+    bool foundMassTerm = false;
+    for (size_t termOrdinal=0; termOrdinal<terms.size(); termOrdinal++)
+    {
+      const std::string &label = terms[termOrdinal].label;
+      if ((label.find("mass") == std::string::npos) &&
+          (label.find("l2") == std::string::npos))
+      {
+        continue;
+      }
+
+      massOutput = Intrepid2::ScalarView<Scalar,DeviceType>(
+          "TensorPoissonPAMatrix constant test rhs output term", cells, rows);
+
+      terms[termOrdinal].matrix.apply(massOutput,
+                                      constantInput,
+                                      workspaces[termOrdinal],
+                                      false,
+                                      worksetSize);
+      Kokkos::fence();
+
+      auto massOutputHost =
+          Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), massOutput);
+
+      for (int c=0; c<cells; c++)
+      {
+        for (int i=0; i<rows; i++)
+        {
+          rhs[static_cast<size_t>(c * rows + i)] += massOutputHost(c,i);
+        }
+      }
+
+      foundMassTerm = true;
+    }
+
+    if (!foundMassTerm)
+    {
+      throw std::invalid_argument(
+          "makeConstantTestFunctionRhs requires an HGRAD mass/L2 term in the operator");
+    }
+
+    return rhs;
   }
 
   std::vector<OperatorTerm> makeSyntheticOperatorTerms(const int dim, const int p, const int cells, const std::string &operatorChoice,
@@ -566,6 +659,20 @@ namespace
     int greedyColumnMatchMatchedColumn = -1;
     int localDofs = 0;
     int globalDofs = 0;
+  };
+
+  struct DenseVectorComparison
+  {
+    int localDofs = 0;
+    int globalDofs = 0;
+    double maxAbsError = 0.0;
+    double maxRelError = 0.0;
+    double l2Error = 0.0;
+    double matrixFreeNorm = 0.0;
+    double camelliaNorm = 0.0;
+    int maxErrorOrdinal = -1;
+    double matrixFreeAtMaxError = 0.0;
+    double camelliaAtMaxError = 0.0;
   };
 
   std::vector<Scalar> assembleDenseLocalMatrix(std::vector<OperatorTerm> &terms, const int cells, const int localDofs,
@@ -1227,8 +1334,6 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     }
     Kokkos::deep_copy(input, host);
   }
-
-  using WorkspaceView = Kokkos::View<Scalar*,DeviceType>;
 
   std::vector<WorkspaceView> allocateWorkspaces(const std::vector<OperatorTerm> &terms, const int worksetSize)
   {
@@ -3050,6 +3155,55 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     return build;
   }
 
+  DenseVectorComparison compareDenseVectors(const std::vector<Scalar> &matrixFree,
+                                            const std::vector<Scalar> &camellia,
+                                            const int localDofs,
+                                            const int globalDofs)
+  {
+    if (matrixFree.size() != camellia.size())
+      throw std::invalid_argument("RHS comparison requires equal vector sizes");
+
+    if (matrixFree.size() != static_cast<size_t>(globalDofs))
+      throw std::invalid_argument("RHS comparison vector size does not match globalDofs");
+
+    DenseVectorComparison comparison;
+    comparison.localDofs = localDofs;
+    comparison.globalDofs = globalDofs;
+
+    double squaredError = 0.0;
+    double matrixFreeSquaredNorm = 0.0;
+    double camelliaSquaredNorm = 0.0;
+
+    for (int i=0; i<globalDofs; i++)
+    {
+      const double matrixFreeValue = matrixFree[static_cast<size_t>(i)];
+      const double camelliaValue = camellia[static_cast<size_t>(i)];
+      const double error = matrixFreeValue - camelliaValue;
+      const double absError = std::abs(error);
+      const double scale =
+          std::max<double>(1.0, std::max(std::abs(matrixFreeValue), std::abs(camelliaValue)));
+
+      if (absError > comparison.maxAbsError)
+      {
+        comparison.maxAbsError = absError;
+        comparison.maxErrorOrdinal = i;
+        comparison.matrixFreeAtMaxError = matrixFreeValue;
+        comparison.camelliaAtMaxError = camelliaValue;
+      }
+
+      comparison.maxRelError = std::max(comparison.maxRelError, absError / scale);
+      squaredError += error * error;
+      matrixFreeSquaredNorm += matrixFreeValue * matrixFreeValue;
+      camelliaSquaredNorm += camelliaValue * camelliaValue;
+    }
+
+    comparison.l2Error = std::sqrt(squaredError);
+    comparison.matrixFreeNorm = std::sqrt(matrixFreeSquaredNorm);
+    comparison.camelliaNorm = std::sqrt(camelliaSquaredNorm);
+
+    return comparison;
+  }
+
   LocalPMultigridWrapperDiagnostic
   diagnoseLocalPMultigridWrapperEquivalence(const TpetraOperator &directLocalPMultigrid,
                                             const TpetraOperator &wrapperPreconditioner,
@@ -3085,6 +3239,94 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     return diagnostic;
   }
 
+  std::vector<Scalar> extractCamelliaRhsVectorInGlobalOrder(
+      Camellia::SolutionPtr solution,
+      const std::vector<Camellia::GlobalIndexType> &globalDofIndices)
+  {
+    solution->initializeStiffnessAndLoad();
+    solution->populateStiffnessAndLoad();
+
+    auto rhsVector = solution->getRHSVector();
+    if (rhsVector == Teuchos::null)
+    {
+      throw std::runtime_error("Camellia RHS comparison found null RHS vector");
+    }
+
+    auto rhsMap = rhsVector->getMap();
+    auto rhsHost = rhsVector->getLocalViewHost(Tpetra::Access::ReadOnly);
+
+    const int globalDofs = static_cast<int>(globalDofIndices.size());
+    std::vector<Scalar> rhs(static_cast<size_t>(globalDofs), Scalar(0.0));
+
+    using local_ordinal_type = typename TpetraMap::local_ordinal_type;
+    const local_ordinal_type invalidLocalOrdinal =
+        Teuchos::OrdinalTraits<local_ordinal_type>::invalid();
+
+    for (int ordinal=0; ordinal<globalDofs; ordinal++)
+    {
+      const auto globalDof = globalDofIndices[static_cast<size_t>(ordinal)];
+      const local_ordinal_type localOrdinal = rhsMap->getLocalElement(globalDof);
+
+      if (localOrdinal == invalidLocalOrdinal)
+      {
+        std::ostringstream message;
+        message << "Camellia RHS comparison could not find local ordinal for global dof "
+                << globalDof;
+        throw std::runtime_error(message.str());
+      }
+
+      rhs[static_cast<size_t>(ordinal)] = rhsHost(localOrdinal, 0);
+    }
+
+    return rhs;
+  }
+
+  std::vector<Scalar> interpretLocalVectorIntoCamelliaGlobalOrder(
+      Camellia::MeshPtr mesh,
+      const std::vector<Scalar> &localVector,
+      const int expectedLocalDofs,
+      std::vector<Camellia::GlobalIndexType> &globalDofIndicesVector)
+  {
+    const auto &cellIDs = mesh->cellIDsInPartition();
+    if (cellIDs.size() != 1)
+      throw std::runtime_error("Camellia RHS comparison expects exactly one locally-owned cell");
+
+    const Camellia::GlobalIndexType cellID = *cellIDs.begin();
+    const int localDofs = mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
+
+    if (localDofs != expectedLocalDofs)
+      throw std::runtime_error("Camellia RHS comparison local DOF count does not match matrix-free local DOF count");
+
+    if (localVector.size() != static_cast<size_t>(localDofs))
+      throw std::runtime_error("Camellia RHS comparison local vector size mismatch");
+
+    Camellia::FieldContainer<Scalar> localData(localDofs);
+    for (int i=0; i<localDofs; i++)
+    {
+      localData(i) = localVector[static_cast<size_t>(i)];
+    }
+
+    Camellia::FieldContainer<Scalar> globalData;
+    Camellia::FieldContainer<Camellia::GlobalIndexType> globalDofIndices;
+    mesh->interpretLocalData(cellID, localData, globalData, globalDofIndices);
+
+    const int globalDofs = globalDofIndices.dimension(0);
+    globalDofIndicesVector.resize(static_cast<size_t>(globalDofs));
+
+    for (int ordinal=0; ordinal<globalDofs; ordinal++)
+    {
+      globalDofIndicesVector[static_cast<size_t>(ordinal)] = globalDofIndices(ordinal);
+    }
+
+    std::vector<Scalar> globalVector(static_cast<size_t>(globalDofs), Scalar(0.0));
+    for (int ordinal=0; ordinal<globalDofs; ordinal++)
+    {
+      globalVector[static_cast<size_t>(ordinal)] = globalData(ordinal);
+    }
+
+    return globalVector;
+  }
+
   InverseDiagnosticTiming inverseDiagnosticTerms(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
                                                  const int worksetSize, const int cells, const int rows, const int dim, const int p,
                                                  const long long maxAssembledEntries, const int inverseDiagnosticRequireAssembledReference,
@@ -3112,7 +3354,6 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
   {
     const bool useBelosGmres = (inverseDiagnosticAlgorithm == "gmres-chebyshev") ||
                                (inverseDiagnosticAlgorithm == "gmres-jacobi") ||
-                               (inverseDiagnosticAlgorithm == "gmres-jacobi-gmg-smoother-only") ||
                                (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ||
                                (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev");
 
@@ -3127,8 +3368,6 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       timing.inversePath = "belos_gmres_right_preconditioned_by_ifpack2_chebyshev_rowmatrix_pamatrix_apply";
     else if (inverseDiagnosticAlgorithm == "gmres-jacobi")
       timing.inversePath = "belos_gmres_right_preconditioned_by_ifpack2_point_jacobi_rowmatrix_pamatrix_apply";
-    else if (inverseDiagnosticAlgorithm == "gmres-jacobi-gmg-smoother-only")
-      timing.inversePath = "belos_gmres_right_preconditioned_by_gmg_style_smoother_only_point_jacobi";
     else if (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev")
       timing.inversePath = "belos_gmres_right_preconditioned_by_tensor_hgrad_pmultigrid_operator_two_level_v_cycle_chebyshev_smoother";
     else if (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev")
@@ -3744,45 +3983,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     }
     else if (inverseRhs == "constant-test-function")
     {
-      const int fieldsPerDim = p + 1;
-      std::vector<Scalar> constantCoefficients(static_cast<size_t>(rows), Scalar(0.0));
-      const std::vector<int> basisExtents(static_cast<size_t>(dim), fieldsPerDim);
-      for (int i=0; i<rows; i++)
-      {
-        const std::vector<int> basisOrdinal = multiIndex(i, basisExtents);
-        bool isVertexTensorBasis = true;
-        for (const int componentOrdinal : basisOrdinal)
-        {
-          if (componentOrdinal > 1)
-          {
-            isVertexTensorBasis = false;
-            break;
-          }
-        }
-        if (isVertexTensorBasis) constantCoefficients[static_cast<size_t>(i)] = Scalar(1.0);
-      }
-
-      Intrepid2::ScalarView<Scalar,DeviceType> constantInput("TensorPoissonPAMatrix constant coefficient input", cells, rows);
-      Intrepid2::ScalarView<Scalar,DeviceType> massOutput("TensorPoissonPAMatrix constant test rhs output", cells, rows);
-      auto constantInputHost = Kokkos::create_mirror_view(constantInput);
-      for (int c=0; c<cells; c++)
-        for (int i=0; i<rows; i++) constantInputHost(c,i) = constantCoefficients[static_cast<size_t>(i)];
-      Kokkos::deep_copy(constantInput, constantInputHost);
-
-      bool foundMassTerm = false;
-      for (size_t termOrdinal=0; termOrdinal<terms.size(); termOrdinal++)
-      {
-        const std::string &label = terms[termOrdinal].label;
-        if ((label.find("mass") == std::string::npos) && (label.find("l2") == std::string::npos)) continue;
-        terms[termOrdinal].matrix.apply(massOutput, constantInput, workspaces[termOrdinal], false, worksetSize);
-        Kokkos::fence();
-        auto massOutputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), massOutput);
-        for (int c=0; c<cells; c++)
-          for (int i=0; i<rows; i++) rhs[static_cast<size_t>(c * rows + i)] += massOutputHost(c,i);
-        foundMassTerm = true;
-      }
-      if (!foundMassTerm)
-        throw std::invalid_argument("--inverseRhs=constant-test-function requires an HGRAD mass/L2 term in the operator");
+      rhs = makeConstantTestFunctionRhs(terms, workspaces, dim, p, cells, rows, worksetSize);
     }
     else
     {
@@ -4085,8 +4286,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           preconditionerParams.set("chebyshev: eigenvalue max iterations", inverseSpectralEstimateIterations);
           preconditionerParams.set("chebyshev: degree", inversePreconditionerDegree);
         }
-        else if ((inverseDiagnosticAlgorithm == "gmres-jacobi") ||
-                 (inverseDiagnosticAlgorithm == "gmres-jacobi-gmg-smoother-only"))
+        else if (inverseDiagnosticAlgorithm == "gmres-jacobi")
         {
           preconditioner = Ifpack2::Factory::create<TpetraRowMatrix>("RELAXATION", rowMatrixBase);
           preconditionerParams.set("relaxation: type", "Jacobi");
@@ -4132,21 +4332,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         throw std::invalid_argument("--inverseOperatorSource must be matrix-free or assembled-crs");
       }
       
-      Teuchos::RCP<TpetraOperator> rightPreconditionerOperator = preconditionerOperator;
-
-      if (inverseDiagnosticAlgorithm == "gmres-jacobi-gmg-smoother-only")
-      {
-        rightPreconditionerOperator =
-            TensorPAMatrixTpetraAdapters::localGMGSmootherOnlyJacobiOperator(
-                Teuchos::rcp_implicit_cast<const TpetraOperator>(operatorBase),
-                Teuchos::rcp_implicit_cast<const TpetraOperator>(preconditionerOperator),
-                1);
-      }
-
       auto problem = Teuchos::rcp(new BelosProblem(operatorBase,
                                                    Teuchos::rcpFromRef(X),
                                                    Teuchos::rcpFromRef(B)));
-      problem->setRightPrec(rightPreconditionerOperator);
+      problem->setRightPrec(preconditionerOperator);
       problem->setProblem();
 
       Teuchos::RCP<Teuchos::ParameterList> solverParams = Teuchos::parameterList();
@@ -4708,7 +4897,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     }
     else
     {
-      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, gmres-jacobi-gmg-smoother-only, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     }
     timing.avgInverseApplySeconds = inverseTimer.seconds() / std::max(1, timing.inverseIterations);
 
@@ -5125,7 +5314,56 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     }
     return coefficientToPoint + pointCount + pointToCoefficient;
   }
+
+  DenseVectorComparison runCamelliaVlasovRhsComparison(
+      const int p,
+      const Scalar massWeight,
+      const long long maxAssembledEntries,
+      const bool useSolutionCoefficientProxies)
+  {
+    const int dim = 4;
+    const int cells = 1;
+    const int localDofs = checkedProduct(std::vector<int>(dim, p + 1));
+    const int worksetSize = cells;
+
+    auto matrixFreeTerms =
+        makeVlasovCamelliaComparisonMatrixFreeTerms(p,
+                                                    VlasovCamelliaComparisonBlock::FullGraphNorm,
+                                                    massWeight,
+                                                    useSolutionCoefficientProxies);
+
+    auto workspaces = allocateWorkspaces(matrixFreeTerms, worksetSize);
+
+    const auto matrixFreeLocalRhs =
+        makeConstantTestFunctionRhs(matrixFreeTerms,
+                                    workspaces,
+                                    dim,
+                                    p,
+                                    cells,
+                                    localDofs,
+                                    worksetSize);
+
+    auto camelliaSolution =
+        makeCamelliaVlasovGraphGramComparisonSolution(p,
+                                                      massWeight,
+                                                      VlasovCamelliaComparisonBlock::FullGraphNorm);
+
+    std::vector<Camellia::GlobalIndexType> globalDofIndices;
+    const auto matrixFreeGlobalRhs =
+        interpretLocalVectorIntoCamelliaGlobalOrder(camelliaSolution->mesh(),
+                                                    matrixFreeLocalRhs,
+                                                    localDofs,
+                                                    globalDofIndices);
+
+    const int globalDofs = static_cast<int>(globalDofIndices.size());
+
+    const auto camelliaRhs =
+        extractCamelliaRhsVectorInGlobalOrder(camelliaSolution, globalDofIndices);
+
+    return compareDenseVectors(matrixFreeGlobalRhs, camelliaRhs, localDofs, globalDofs);
+  }
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -5191,7 +5429,10 @@ int main(int argc, char *argv[])
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, vlasov-coordinate-x1-d3, vlasov-graph-norm-1d1t2v, or vlasov-graph-norm-solution-coeff-1d1t2v.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge; vlasov-coordinate exercises the single-component coefficient bridge; vlasov-linear-x0-x1-d2 exercises a two-term separable decomposition of -0.5*(x0+x1)*value(f)*d2(w); vlasov-coordinate-x1-d3 exercises the separable -0.75*x1*value(f)*d3(w) partial term; vlasov-graph-norm-1d1t2v expands a 4D Planar MITL graph-norm proxy for Chebyshev G^{-1} calibration; vlasov-graph-norm-solution-coeff-1d1t2v routes the same proxy through TensorFunctionEvaluationContext solution-coefficient evaluators.");
     cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses Intrepid2 hypercube HGRAD hierarchical bases, tensor-product cubature, and affine geometry for dim=1..7; synthetic remains available for high-dimensional contraction stress tests.");
-    cmdp.setOption("mode", &mode, "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, tpetra-rowmatrix-compare, or camellia-vlasov-matrix-compare.");
+    cmdp.setOption("mode", &mode,
+                   "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, "
+                   "inverse-diagnostic, tpetra-operator-compare, tpetra-rowmatrix-compare, "
+                   "camellia-vlasov-matrix-compare, or camellia-vlasov-rhs-compare.");
     cmdp.setOption("numApply", &numApply, "Number of repeated applies used for steady-state timing in apply/compare modes.");
     cmdp.setOption("numDiagonal", &numDiagonal, "Number of repeated diagonal extractions used for steady-state timing in diagonal mode.");
     cmdp.setOption("numSolve", &numSolve, "Number of repeated local triangular solves used for average timing in factor mode.");
@@ -5206,7 +5447,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("diagnoseLocalPMultigridWrapperEquivalence", &diagnoseLocalPMultigridWrapperEquivalence, "When nonzero, compare direct local pMG apply with MatrixFreeGMGApplyInversePreconditioner wrapping the same local pMG operator.");
     cmdp.setOption("matrixFreeGMGStageTrace", &matrixFreeGMGStageTrace, "When nonzero, emit explicit per-level MatrixFreeGMGPreconditioner V-cycle stage norm diagnostics for GMRES p-multigrid inverse diagnostics.");
     cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm,
-                   "richardson, chebyshev, gmres-chebyshev, gmres-jacobi, gmres-jacobi-gmg-smoother-only, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev inverse diagnostic recurrence.");
+                   "richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev inverse diagnostic recurrence.");
     cmdp.setOption("inverseSpectralEstimate", &inverseSpectralEstimate, "assembled-gershgorin, true-eigen, power, cell-power, or user spectral upper-estimate path for inverse diagnostics.");
     cmdp.setOption("inverseSpectralEstimateIterations", &inverseSpectralEstimateIterations, "Iterations for the matrix-free Ifpack2-style D^{-1}A spectral-radius power estimate.");
     cmdp.setOption("inversePowerSafetyFactor", &inversePowerSafetyFactor, "Safety factor applied to matrix-free power or true-eigen lambdaMax estimates before Chebyshev use.");
@@ -5236,10 +5477,12 @@ int main(int argc, char *argv[])
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
     cmdp.setOption("checkAssemblyAgreement", &checkAssemblyAgreement, "Set to 1 in assembly-compare mode to compare assemble2() entries against standard assemble().");
-    cmdp.setOption("camelliaMatrixCompareFailOnMismatch", &camelliaMatrixCompareFailOnMismatch, "Set to 0 to make --mode=camellia-vlasov-matrix-compare report mismatches without returning failure; useful while diagnosing the current p>=2 discrepancy.");
+    cmdp.setOption("camelliaMatrixCompareFailOnMismatch",
+                   &camelliaMatrixCompareFailOnMismatch,
+                   "Set to 0 to make Camellia Vlasov matrix/RHS comparison modes report mismatches without returning failure.");
     cmdp.setOption("camelliaMatrixCompareUseSolutionCoeff",
                    &camelliaMatrixCompareUseSolutionCoeff,
-                   "Set to 1 to compare the solution-coefficient Vlasov graph-norm PAMatrix path against the same assembled Camellia graph norm.");
+                   "Set to 1 to compare the solution-coefficient Vlasov graph-norm PAMatrix/RHS path against the same assembled Camellia graph norm.");
     cmdp.setOption("maxAssembledEntries", &maxAssembledEntries, "Maximum local assembled entries allowed in assemble/assemble2/compare/factor modes.");
     cmdp.setOption("printTermWeights", &printTermWeights, "Set to 0 to omit the long termWeights field from TENSOR_POISSON_PAMATRIX_RESULT rows.");
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -5280,10 +5523,34 @@ int main(int argc, char *argv[])
     if ((compareTpetraPowerEstimate != 0) && (compareTpetraPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraPowerEstimate must be 0 or 1");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (compareTpetraRowMatrixPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate must be 0 or 1");
     if ((ifpack2ChebyshevSmoke != 0) && (ifpack2ChebyshevSmoke != 1)) throw std::invalid_argument("--ifpack2ChebyshevSmoke must be 0 or 1");
-    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") && (mode != "assembly-compare") && (mode != "diagonal") && (mode != "compare") && (mode != "factor") && (mode != "inverse-diagnostic") && (mode != "tpetra-operator-compare") && (mode != "tpetra-rowmatrix-compare") && (mode != "camellia-vlasov-matrix-compare"))
-      throw std::invalid_argument("--mode must be apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, inverse-diagnostic, tpetra-operator-compare, tpetra-rowmatrix-compare, or camellia-vlasov-matrix-compare");
-    if ((mode == "camellia-vlasov-matrix-compare") && ((dim != 4) || (cellsPerDim != 1) || (basisMode != "hgrad") || (std::abs(stiffnessWeight - 1.0) > 1e-15)))
-      throw std::invalid_argument("--mode=camellia-vlasov-matrix-compare requires --dim=4 --cellsPerDim=1 --basisMode=hgrad --stiffnessWeight=1");
+    if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") &&
+        (mode != "assembly-compare") && (mode != "diagonal") &&
+        (mode != "compare") && (mode != "factor") &&
+        (mode != "inverse-diagnostic") &&
+        (mode != "tpetra-operator-compare") &&
+        (mode != "tpetra-rowmatrix-compare") &&
+        (mode != "camellia-vlasov-matrix-compare") &&
+        (mode != "camellia-vlasov-rhs-compare"))
+    {
+      throw std::invalid_argument(
+          "--mode must be apply, assemble, assemble2, assembly-compare, diagonal, "
+          "compare, factor, inverse-diagnostic, tpetra-operator-compare, "
+          "tpetra-rowmatrix-compare, camellia-vlasov-matrix-compare, or "
+          "camellia-vlasov-rhs-compare");
+    }
+    const bool isCamelliaVlasovComparisonMode =
+        (mode == "camellia-vlasov-matrix-compare") ||
+        (mode == "camellia-vlasov-rhs-compare");
+
+    if (isCamelliaVlasovComparisonMode &&
+        ((dim != 4) || (cellsPerDim != 1) || (basisMode != "hgrad") ||
+         (std::abs(stiffnessWeight - 1.0) > 1e-15)))
+    {
+      throw std::invalid_argument(
+          "--mode=camellia-vlasov-matrix-compare and "
+          "--mode=camellia-vlasov-rhs-compare require "
+          "--dim=4 --cellsPerDim=1 --basisMode=hgrad --stiffnessWeight=1");
+    }
     if ((basisMode != "synthetic") && (basisMode != "hgrad"))
       throw std::invalid_argument("--basisMode must be synthetic or hgrad");
     if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && (basisMode != "hgrad"))
@@ -5291,14 +5558,13 @@ int main(int argc, char *argv[])
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") &&
         (inverseDiagnosticAlgorithm != "gmres-chebyshev") &&
         (inverseDiagnosticAlgorithm != "gmres-jacobi") &&
-        (inverseDiagnosticAlgorithm != "gmres-jacobi-gmg-smoother-only") &&
         (inverseDiagnosticAlgorithm != "matrix-free-gmg-chebyshev-smoother") &&
         (inverseDiagnosticAlgorithm != "matrix-free-gmg-jacobi-smoother") &&
         (inverseDiagnosticAlgorithm != "gmres-pmultigrid-chebyshev") &&
         (inverseDiagnosticAlgorithm != "gmres-pmultigrid-jacobi-chebyshev") &&
         (inverseDiagnosticAlgorithm != "pmultigrid-chebyshev") &&
         (inverseDiagnosticAlgorithm != "pmultigrid-jacobi-chebyshev"))
-      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, gmres-jacobi-gmg-smoother-only, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
+      throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     if ((inverseLowerSpectralEstimate != "ratio") && (inverseLowerSpectralEstimate != "true-eigen") && (inverseLowerSpectralEstimate != "true-eigen-safe") && (inverseLowerSpectralEstimate != "user") && (inverseLowerSpectralEstimate != "assembled-inverse-iteration"))
       throw std::invalid_argument("--inverseLowerSpectralEstimate must be ratio, true-eigen, true-eigen-safe, user, or assembled-inverse-iteration");
     if ((inverseInitialGuess != "zero") && (inverseInitialGuess != "diagonal"))
@@ -5487,6 +5753,40 @@ int main(int argc, char *argv[])
           {
             if ((comparison.maxAbsError > 1e-10) && (comparison.maxRelError > 1e-10)) returnCode = 2;
           }
+        }
+      }
+      if (mode == "camellia-vlasov-rhs-compare")
+      {
+        const auto rhsComparison =
+            runCamelliaVlasovRhsComparison(p,
+                                           massWeight,
+                                           maxAssembledEntries,
+                                           camelliaMatrixCompareUseSolutionCoeff != 0);
+
+        const double tolerance = 1e-10;
+        const int passed =
+            ((rhsComparison.maxAbsError <= tolerance) ||
+             (rhsComparison.maxRelError <= tolerance)) ? 1 : 0;
+
+        std::cout << "CAMELLIA_VLASOV_RHS_COMPARISON"
+                  << " p=" << p
+                  << " localDofs=" << rhsComparison.localDofs
+                  << " globalDofs=" << rhsComparison.globalDofs
+                  << " maxAbsError=" << std::setprecision(16) << rhsComparison.maxAbsError
+                  << " maxRelError=" << rhsComparison.maxRelError
+                  << " l2Error=" << rhsComparison.l2Error
+                  << " matrixFreeNorm=" << rhsComparison.matrixFreeNorm
+                  << " camelliaNorm=" << rhsComparison.camelliaNorm
+                  << " maxErrorOrdinal=" << rhsComparison.maxErrorOrdinal
+                  << " matrixFreeAtMaxError=" << rhsComparison.matrixFreeAtMaxError
+                  << " camelliaAtMaxError=" << rhsComparison.camelliaAtMaxError
+                  << " tolerance=" << tolerance
+                  << " passed=" << passed
+                  << std::endl;
+
+        if (camelliaMatrixCompareFailOnMismatch != 0 && passed == 0)
+        {
+          returnCode = 2;
         }
       }
 

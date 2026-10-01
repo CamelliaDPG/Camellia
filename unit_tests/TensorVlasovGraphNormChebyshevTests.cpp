@@ -254,6 +254,63 @@ std::string findCamelliaVlasovComparisonLine(const std::string &output,
   throw std::runtime_error(message.str());
 }
 
+std::string findCamelliaVlasovRhsComparisonLine(const std::string &output,
+                                                const int p)
+{
+  std::string::size_type cursor = 0;
+  while (true)
+  {
+    const std::string::size_type lineStart =
+        output.find("CAMELLIA_VLASOV_RHS_COMPARISON ", cursor);
+    if (lineStart == std::string::npos) break;
+
+    std::string::size_type lineEnd = output.find('\n', lineStart);
+    if (lineEnd == std::string::npos) lineEnd = output.size();
+
+    const std::string line = output.substr(lineStart, lineEnd - lineStart);
+    const std::string observedP = keyValueAfter(line, "p", 0);
+
+    if ((!observedP.empty()) && (std::stoi(observedP) == p))
+    {
+      return line;
+    }
+
+    cursor = lineEnd;
+  }
+
+  std::ostringstream message;
+  message << "Could not find CAMELLIA_VLASOV_RHS_COMPARISON line for p=" << p;
+  throw std::runtime_error(message.str());
+}
+
+double parseCamelliaVlasovRhsComparisonDoubleKey(const std::string &output,
+                                                 const int p,
+                                                 const std::string &key)
+{
+  const std::string line = findCamelliaVlasovRhsComparisonLine(output, p);
+  const std::string value = keyValueAfter(line, key, 0);
+  if (value.empty())
+  {
+    throw std::runtime_error("Could not find key '" + key +
+                             "' in CAMELLIA_VLASOV_RHS_COMPARISON line: " + line);
+  }
+  return std::stod(value);
+}
+
+int parseCamelliaVlasovRhsComparisonIntKey(const std::string &output,
+                                           const int p,
+                                           const std::string &key)
+{
+  const std::string line = findCamelliaVlasovRhsComparisonLine(output, p);
+  const std::string value = keyValueAfter(line, key, 0);
+  if (value.empty())
+  {
+    throw std::runtime_error("Could not find key '" + key +
+                             "' in CAMELLIA_VLASOV_RHS_COMPARISON line: " + line);
+  }
+  return std::stoi(value);
+}
+
 double parseCamelliaVlasovComparisonDoubleKey(const std::string &output,
                                               const std::string &block,
                                               const int p,
@@ -958,55 +1015,60 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
               << std::endl;
 
     TEST_COMPARE(converged.front(), ==, 1.0);
+    TEST_EQUALITY(static_cast<int>(iterations.front()), 72);
   }
 }
+
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
-                   P2GMRESJacobiGMGSmootherOnlyMatchesAssembled )
+                   P2SolutionCoeffConstantTestFunctionRhsMatchesCamelliaAssembled )
 {
   if (!shouldRunExternalDiagnosticsOnThisRank()) return;
 
   const DriverRun run = runDriver(
       "--dim=4 --polyOrder=2 --cellsPerDim=1 "
-      "--operator=vlasov-graph-norm-solution-coeff-1d1t2v "
-      "--basisMode=hgrad "
-      "--mode=inverse-diagnostic "
-      "--inverseDiagnosticAlgorithm=gmres-jacobi-gmg-smoother-only "
-      "--inverseOperatorSource=assembled-crs "
-      "--inversePreconditionerMatrixSource=assembled-crs "
-      "--numInverseIterations=200 "
-      "--inverseInitialGuess=zero "
-      "--inverseRhs=constant-test-function "
-      "--inverseTolerance=1e-8 "
-      "--massWeight=1 --stiffnessWeight=1 "
+      "--operator=vlasov-graph-norm-solution-coeff-1d1t2v --basisMode=hgrad "
+      "--mode=camellia-vlasov-rhs-compare "
+      "--camelliaMatrixCompareUseSolutionCoeff=1 "
+      "--massWeight=1.0 --stiffnessWeight=1.0 "
+      "--camelliaMatrixCompareFailOnMismatch=0 "
       "--maxAssembledEntries=1000000");
 
   TEST_EQUALITY(run.status, 0);
-  if (run.status != 0)
-  {
-    return;
-  }
+  if (run.status != 0) return;
 
-  const std::vector<double> iterations =
-      parseAllInverseDiagnosticDoubleKey(run.output, "inverseIterations");
-  const std::vector<double> converged =
-      parseAllInverseDiagnosticDoubleKey(run.output, "inverseConverged");
+  const int p = 2;
+  const int passed =
+      parseCamelliaVlasovRhsComparisonIntKey(run.output, p, "passed");
+  const double maxAbsError =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "maxAbsError");
+  const double maxRelError =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "maxRelError");
+  const double l2Error =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "l2Error");
+  const double matrixFreeNorm =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "matrixFreeNorm");
+  const double camelliaNorm =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "camelliaNorm");
 
-  TEST_EQUALITY(iterations.size(), static_cast<std::size_t>(1));
-  TEST_EQUALITY(converged.size(), static_cast<std::size_t>(1));
+  const double tolerance = 1e-10;
 
-  if ((iterations.size() != static_cast<std::size_t>(1)) ||
-      (converged.size() != static_cast<std::size_t>(1)))
-  {
-    return;
-  }
-
-  std::cout << "VLASOV_GRAPH_NORM_P2_GMRES_JACOBI_GMG_SMOOTHER_ONLY"
-            << " iterations=" << iterations.front()
-            << " converged=" << converged.front()
+  std::cout << "VLASOV_GRAPH_NORM_P2_SOLUTION_COEFF_RHS_CAMELLIA_ASSEMBLED_MATCH"
+            << " p=" << p
+            << " passed=" << passed
+            << " maxAbsError=" << std::setprecision(16) << maxAbsError
+            << " maxRelError=" << maxRelError
+            << " l2Error=" << l2Error
+            << " matrixFreeNorm=" << matrixFreeNorm
+            << " camelliaNorm=" << camelliaNorm
+            << " tolerance=" << tolerance
             << std::endl;
 
-  TEST_COMPARE(converged.front(), ==, 1.0);
+  TEST_EQUALITY(passed, 1);
+  TEST_ASSERT(std::isfinite(maxAbsError));
+  TEST_ASSERT(std::isfinite(maxRelError));
+  TEST_ASSERT(std::isfinite(l2Error));
+  TEST_ASSERT(std::isfinite(matrixFreeNorm));
+  TEST_ASSERT(std::isfinite(camelliaNorm));
 
-  // Target from assembled GMG study.
-  TEST_EQUALITY(static_cast<int>(iterations.front()), 52);
+  TEST_COMPARE(maxAbsError, <=, tolerance);
 }
