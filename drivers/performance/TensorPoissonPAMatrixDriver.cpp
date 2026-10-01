@@ -81,7 +81,9 @@ namespace
   using TpetraVector = Tpetra::Vector<Scalar>;
 
   using OperatorTerm = Camellia::TensorPAMatrixTerm<DeviceType,Scalar>;
-  using WorkspaceView = Kokkos::View<Scalar*,DeviceType>;
+
+  using TpetraAdapters = Camellia::TensorPAMatrixTpetraAdapters;
+  using WorkspaceView = TpetraAdapters::WorkspaceView;
 
   class AnalyticGraphNormSolutionCoefficientEvaluator : public Camellia::TensorSolutionCoefficientEvaluator
   {
@@ -1335,457 +1337,6 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     Kokkos::deep_copy(input, host);
   }
 
-  std::vector<WorkspaceView> allocateWorkspaces(const std::vector<OperatorTerm> &terms, const int worksetSize)
-  {
-    std::vector<WorkspaceView> workspaces;
-    workspaces.reserve(terms.size());
-    for (const auto &term : terms)
-    {
-      workspaces.push_back(term.matrix.allocateWorkspace(worksetSize));
-    }
-    return workspaces;
-  }
-
-  bool allWeightsAreOne(const std::vector<OperatorTerm> &terms)
-  {
-    for (const auto &term : terms)
-    {
-      if (term.weight != Scalar(1.0)) return false;
-    }
-    return true;
-  }
-
-  void addScaledOutput(Intrepid2::ScalarView<Scalar,DeviceType> &output,
-                       const Intrepid2::ScalarView<Scalar,DeviceType> &termOutput,
-                       const Scalar weight)
-  {
-    auto policy = Kokkos::MDRangePolicy<typename DeviceType::execution_space,Kokkos::Rank<2>>(
-        {0,0}, {output.extent_int(0), output.extent_int(1)});
-    Kokkos::parallel_for("TensorPoissonPAMatrix add weighted term", policy,
-        KOKKOS_LAMBDA(const int c, const int f)
-        {
-          output(c,f) += weight * termOutput(c,f);
-        });
-  }
-
-  double applyTerms(std::vector<OperatorTerm> &terms, const std::vector<WorkspaceView> &workspaces,
-                    const Intrepid2::ScalarView<Scalar,DeviceType> &input,
-                    Intrepid2::ScalarView<Scalar,DeviceType> &output, const int worksetSize)
-  {
-    Kokkos::Timer timer;
-    if (allWeightsAreOne(terms))
-    {
-      bool sumInto = false;
-      for (size_t termOrdinal=0; termOrdinal<terms.size(); termOrdinal++)
-      {
-        terms[termOrdinal].matrix.apply(output, input, workspaces[termOrdinal], sumInto, worksetSize);
-        sumInto = true;
-      }
-    }
-    else
-    {
-      Kokkos::deep_copy(output, Scalar(0.0));
-      Intrepid2::ScalarView<Scalar,DeviceType> termOutput("TensorPoissonPAMatrix weighted term output", output.extent_int(0), output.extent_int(1));
-      for (size_t termOrdinal=0; termOrdinal<terms.size(); termOrdinal++)
-      {
-        terms[termOrdinal].matrix.apply(termOutput, input, workspaces[termOrdinal], false, worksetSize);
-        addScaledOutput(output, termOutput, terms[termOrdinal].weight);
-      }
-    }
-    Kokkos::fence();
-    return timer.seconds();
-  }
-
-  std::vector<Scalar> extractCombinedDiagonal(std::vector<OperatorTerm> &terms, const int cells, const int localDofs)
-  {
-    std::vector<Scalar> diagonal(static_cast<size_t>(cells * localDofs), Scalar(0.0));
-    for (auto &term : terms)
-    {
-      auto diagonalData = term.matrix.allocateDiagonalStorage();
-      term.matrix.extractDiagonal(diagonalData);
-      Kokkos::fence();
-
-      if (diagonalData.getUnderlyingViewRank() == 2)
-      {
-        auto diagonalHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagonalData.template getUnderlyingView<2>());
-        for (int c=0; c<cells; c++)
-          for (int i=0; i<localDofs; i++)
-            diagonal[static_cast<size_t>(c * localDofs + i)] += term.weight * diagonalHost(c,i);
-      }
-      else if (diagonalData.getUnderlyingViewRank() == 1)
-      {
-        auto diagonalHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagonalData.template getUnderlyingView<1>());
-        for (int c=0; c<cells; c++)
-          for (int i=0; i<localDofs; i++)
-            diagonal[static_cast<size_t>(c * localDofs + i)] += term.weight * diagonalHost(i);
-      }
-      else
-      {
-        throw std::invalid_argument("Unexpected PAMatrix diagonal storage rank");
-      }
-    }
-    return diagonal;
-  }
-
-  class LocalPAMatrixTpetraOperator : public TpetraOperator
-  {
-    Teuchos::RCP<const TpetraMap> map_;
-    mutable std::vector<OperatorTerm> *terms_;
-    std::vector<WorkspaceView> workspaces_;
-    int cells_ = 0;
-    int localDofs_ = 0;
-    int worksetSize_ = 0;
-
-  public:
-    LocalPAMatrixTpetraOperator(const Teuchos::RCP<const TpetraMap> &map, std::vector<OperatorTerm> &terms,
-                                const std::vector<WorkspaceView> &workspaces, const int cells,
-                                const int localDofs, const int worksetSize)
-      : map_(map), terms_(&terms), workspaces_(workspaces), cells_(cells), localDofs_(localDofs), worksetSize_(worksetSize)
-    {}
-
-    Teuchos::RCP<const TpetraMap> getDomainMap() const override { return map_; }
-    Teuchos::RCP<const TpetraMap> getRangeMap() const override { return map_; }
-    bool hasTransposeApply() const override { return false; }
-
-    void fillInverseDiagonal(TpetraMultiVector &inverseDiagonal) const
-    {
-      const size_t localLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
-      if (inverseDiagonal.getLocalLength() != localLength)
-        throw std::invalid_argument("LocalPAMatrixTpetraOperator inverse diagonal length mismatch");
-      auto inverseDiagonalHost = inverseDiagonal.getLocalViewHost(Tpetra::Access::OverwriteAll);
-      const auto diagonal = extractCombinedDiagonal(*terms_, cells_, localDofs_);
-      for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++)
-      {
-        if (diagonal[localOrdinal] <= std::numeric_limits<Scalar>::epsilon())
-          throw std::runtime_error("LocalPAMatrixTpetraOperator found nonpositive diagonal entry");
-        for (size_t vectorOrdinal=0; vectorOrdinal<inverseDiagonal.getNumVectors(); vectorOrdinal++)
-          inverseDiagonalHost(localOrdinal, vectorOrdinal) = Scalar(1.0) / diagonal[localOrdinal];
-      }
-    }
-
-    void apply(const TpetraMultiVector &X, TpetraMultiVector &Y,
-               Teuchos::ETransp mode = Teuchos::NO_TRANS,
-               Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
-               Scalar beta = Teuchos::ScalarTraits<Scalar>::zero()) const override
-    {
-      if (mode != Teuchos::NO_TRANS) throw std::invalid_argument("LocalPAMatrixTpetraOperator does not support transpose apply");
-      const size_t localLength = static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
-      if ((X.getLocalLength() != localLength) || (Y.getLocalLength() != localLength))
-        throw std::invalid_argument("LocalPAMatrixTpetraOperator local vector length mismatch");
-      if (X.getNumVectors() != Y.getNumVectors())
-        throw std::invalid_argument("LocalPAMatrixTpetraOperator multivector count mismatch");
-
-      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
-      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
-      Intrepid2::ScalarView<Scalar,DeviceType> input("LocalPAMatrixTpetraOperator input", cells_, localDofs_);
-      Intrepid2::ScalarView<Scalar,DeviceType> output("LocalPAMatrixTpetraOperator output", cells_, localDofs_);
-      auto inputHost = Kokkos::create_mirror_view(input);
-
-      for (size_t vectorOrdinal=0; vectorOrdinal<X.getNumVectors(); vectorOrdinal++)
-      {
-        for (int c=0; c<cells_; c++)
-          for (int f=0; f<localDofs_; f++)
-            inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs_ + f), vectorOrdinal);
-        Kokkos::deep_copy(input, inputHost);
-
-        applyTerms(*terms_, workspaces_, input, output, worksetSize_);
-        auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
-
-        for (int c=0; c<cells_; c++)
-          for (int f=0; f<localDofs_; f++)
-          {
-            const size_t localOrdinal = static_cast<size_t>(c * localDofs_ + f);
-            yHost(localOrdinal, vectorOrdinal) = alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
-          }
-      }
-    }
-  };
-
-  class LocalPAMatrixTpetraRowMatrix : public TpetraRowMatrix
-  {
-    using local_ordinal_type = typename TpetraRowMatrix::local_ordinal_type;
-    using global_ordinal_type = typename TpetraRowMatrix::global_ordinal_type;
-    using node_type = typename TpetraRowMatrix::node_type;
-    using row_graph_type = Tpetra::RowGraph<local_ordinal_type, global_ordinal_type, node_type>;
-    using global_inds_host_view_type = typename TpetraRowMatrix::global_inds_host_view_type;
-    using local_inds_host_view_type = typename TpetraRowMatrix::local_inds_host_view_type;
-    using values_host_view_type = typename TpetraRowMatrix::values_host_view_type;
-    using nonconst_global_inds_host_view_type = typename TpetraRowMatrix::nonconst_global_inds_host_view_type;
-    using nonconst_local_inds_host_view_type = typename TpetraRowMatrix::nonconst_local_inds_host_view_type;
-    using nonconst_values_host_view_type = typename TpetraRowMatrix::nonconst_values_host_view_type;
-
-    Teuchos::RCP<const TpetraMap> map_;
-    mutable std::vector<OperatorTerm> *terms_;
-    std::vector<WorkspaceView> workspaces_;
-    int cells_ = 0;
-    int localDofs_ = 0;
-    int worksetSize_ = 0;
-    long long maxDenseRowEntries_ = 0;
-    mutable std::vector<Scalar> denseRows_;
-    mutable bool denseRowsBuilt_ = false;
-    mutable nonconst_local_inds_host_view_type localIndices_;
-    mutable nonconst_global_inds_host_view_type globalIndices_;
-    mutable nonconst_values_host_view_type values_;
-    Teuchos::RCP<const row_graph_type> graph_;
-
-    size_t localLength() const
-    {
-      return static_cast<size_t>(cells_) * static_cast<size_t>(localDofs_);
-    }
-
-    void checkLocalRow(const local_ordinal_type localRow) const
-    {
-      if ((localRow < 0) || (static_cast<size_t>(localRow) >= localLength()))
-        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix local row out of range");
-    }
-
-    void ensureDenseRowsBuilt() const
-    {
-      if (denseRowsBuilt_) return;
-      const size_t length = localLength();
-      const long long materializedEntries = (length > static_cast<size_t>(std::numeric_limits<long long>::max() / std::max<size_t>(size_t(1), length)))
-                                       ? std::numeric_limits<long long>::max()
-                                       : static_cast<long long>(length * length);
-      if (materializedEntries > maxDenseRowEntries_)
-        throw std::runtime_error("LocalPAMatrixTpetraRowMatrix dense row materialization is diagnostic-only and exceeded maxDenseRowEntries guard");
-      denseRows_.assign(length * length, Scalar(0.0));
-      TpetraMultiVector X(map_, 1);
-      TpetraMultiVector Y(map_, 1);
-      for (size_t column=0; column<length; column++)
-      {
-        X.putScalar(Scalar(0.0));
-        {
-          auto xHost = X.getLocalViewHost(Tpetra::Access::ReadWrite);
-          xHost(column, 0) = Scalar(1.0);
-        }
-        apply(X, Y);
-        auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadOnly);
-        for (size_t row=0; row<length; row++)
-          denseRows_[row * length + column] = yHost(row, 0);
-      }
-      denseRowsBuilt_ = true;
-    }
-
-  public:
-    LocalPAMatrixTpetraRowMatrix(const Teuchos::RCP<const TpetraMap> &map, std::vector<OperatorTerm> &terms,
-                                 const std::vector<WorkspaceView> &workspaces, const int cells,
-                                 const int localDofs, const int worksetSize, const long long maxDenseRowEntries)
-      : map_(map), terms_(&terms), workspaces_(workspaces), cells_(cells), localDofs_(localDofs), worksetSize_(worksetSize), maxDenseRowEntries_(maxDenseRowEntries)
-    {
-      const size_t length = localLength();
-      auto graph = Teuchos::rcp(new TpetraCrsGraph(map_, length));
-      Teuchos::Array<global_ordinal_type> columns(length);
-      for (size_t column=0; column<length; column++)
-        columns[static_cast<Teuchos::Ordinal>(column)] = map_->getGlobalElement(static_cast<local_ordinal_type>(column));
-      for (size_t row=0; row<length; row++)
-        graph->insertGlobalIndices(map_->getGlobalElement(static_cast<local_ordinal_type>(row)), columns());
-      graph->fillComplete(map_, map_);
-      graph_ = graph;
-    }
-
-    Teuchos::RCP<const Teuchos::Comm<int>> getComm() const override { return map_->getComm(); }
-    Teuchos::RCP<const TpetraMap> getRowMap() const override { return map_; }
-    Teuchos::RCP<const TpetraMap> getColMap() const override { return map_; }
-    Teuchos::RCP<const TpetraMap> getDomainMap() const override { return map_; }
-    Teuchos::RCP<const TpetraMap> getRangeMap() const override { return map_; }
-    Teuchos::RCP<const row_graph_type> getGraph() const override { return graph_; }
-
-    Tpetra::global_size_t getGlobalNumRows() const override { return map_->getGlobalNumElements(); }
-    Tpetra::global_size_t getGlobalNumCols() const override { return map_->getGlobalNumElements(); }
-    size_t getLocalNumRows() const override { return localLength(); }
-    size_t getLocalNumCols() const override { return localLength(); }
-    global_ordinal_type getIndexBase() const override { return map_->getIndexBase(); }
-
-    Tpetra::global_size_t getGlobalNumEntries() const override
-    {
-      const Tpetra::global_size_t localEntries = static_cast<Tpetra::global_size_t>(getLocalNumEntries());
-      Tpetra::global_size_t globalEntries = 0;
-      Teuchos::reduceAll<int, Tpetra::global_size_t>(*getComm(), Teuchos::REDUCE_SUM, 1, &localEntries, &globalEntries);
-      return globalEntries;
-    }
-
-    size_t getLocalNumEntries() const override { return localLength() * localLength(); }
-
-    size_t getNumEntriesInGlobalRow(global_ordinal_type globalRow) const override
-    {
-      const local_ordinal_type localRow = map_->getLocalElement(globalRow);
-      if (localRow == Teuchos::OrdinalTraits<local_ordinal_type>::invalid()) return Teuchos::OrdinalTraits<size_t>::invalid();
-      return getNumEntriesInLocalRow(localRow);
-    }
-
-    size_t getNumEntriesInLocalRow(local_ordinal_type localRow) const override
-    {
-      checkLocalRow(localRow);
-      return localLength();
-    }
-
-    size_t getGlobalMaxNumRowEntries() const override { return localLength(); }
-    size_t getLocalMaxNumRowEntries() const override { return localLength(); }
-    local_ordinal_type getBlockSize() const override { return 1; }
-    bool hasColMap() const override { return true; }
-    bool isLocallyIndexed() const override { return true; }
-    bool isGloballyIndexed() const override { return false; }
-    bool isFillComplete() const override { return true; }
-    bool supportsRowViews() const override { return true; }
-
-    void getGlobalRowCopy(global_ordinal_type globalRow,
-                          nonconst_global_inds_host_view_type &indices,
-                          nonconst_values_host_view_type &values,
-                          size_t &numEntries) const override
-    {
-      const local_ordinal_type localRow = map_->getLocalElement(globalRow);
-      if (localRow == Teuchos::OrdinalTraits<local_ordinal_type>::invalid())
-        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix global row is not local");
-      const size_t length = localLength();
-      if ((indices.extent(0) < length) || (values.extent(0) < length))
-        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix global row copy buffers are too small");
-      ensureDenseRowsBuilt();
-      for (size_t column=0; column<length; column++)
-      {
-        indices(column) = map_->getGlobalElement(static_cast<local_ordinal_type>(column));
-        values(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
-      }
-      numEntries = length;
-    }
-
-    void getLocalRowCopy(local_ordinal_type localRow,
-                         nonconst_local_inds_host_view_type &indices,
-                         nonconst_values_host_view_type &values,
-                         size_t &numEntries) const override
-    {
-      checkLocalRow(localRow);
-      const size_t length = localLength();
-      if ((indices.extent(0) < length) || (values.extent(0) < length))
-        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix local row copy buffers are too small");
-      ensureDenseRowsBuilt();
-      for (size_t column=0; column<length; column++)
-      {
-        indices(column) = static_cast<local_ordinal_type>(column);
-        values(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
-      }
-      numEntries = length;
-    }
-
-    void getGlobalRowView(global_ordinal_type globalRow,
-                          global_inds_host_view_type &indices,
-                          values_host_view_type &values) const override
-    {
-      const local_ordinal_type localRow = map_->getLocalElement(globalRow);
-      if (localRow == Teuchos::OrdinalTraits<local_ordinal_type>::invalid())
-      {
-        indices = global_inds_host_view_type();
-        values = values_host_view_type();
-        return;
-      }
-      const size_t length = localLength();
-      Kokkos::resize(globalIndices_, length);
-      Kokkos::resize(values_, length);
-      ensureDenseRowsBuilt();
-      for (size_t column=0; column<length; column++)
-      {
-        globalIndices_(column) = map_->getGlobalElement(static_cast<local_ordinal_type>(column));
-        values_(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
-      }
-      indices = globalIndices_;
-      values = values_;
-    }
-
-    void getLocalRowView(local_ordinal_type localRow,
-                         local_inds_host_view_type &indices,
-                         values_host_view_type &values) const override
-    {
-      checkLocalRow(localRow);
-      const size_t length = localLength();
-      Kokkos::resize(localIndices_, length);
-      Kokkos::resize(values_, length);
-      ensureDenseRowsBuilt();
-      for (size_t column=0; column<length; column++)
-      {
-        localIndices_(column) = static_cast<local_ordinal_type>(column);
-        values_(column) = denseRows_[static_cast<size_t>(localRow) * length + column];
-      }
-      indices = localIndices_;
-      values = values_;
-    }
-
-    void getLocalDiagCopy(TpetraVector &diag) const override
-    {
-      const size_t length = localLength();
-      if (diag.getLocalLength() != length)
-        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix diagonal length mismatch");
-      auto diagHost = diag.getLocalViewHost(Tpetra::Access::OverwriteAll);
-      const auto diagonal = extractCombinedDiagonal(*terms_, cells_, localDofs_);
-      for (size_t localOrdinal=0; localOrdinal<length; localOrdinal++) diagHost(localOrdinal, 0) = diagonal[localOrdinal];
-    }
-
-    void leftScale(const TpetraVector &) override
-    {
-      throw std::runtime_error("LocalPAMatrixTpetraRowMatrix does not support leftScale in the diagnostic adapter.");
-    }
-
-    void rightScale(const TpetraVector &) override
-    {
-      throw std::runtime_error("LocalPAMatrixTpetraRowMatrix does not support rightScale in the diagnostic adapter.");
-    }
-
-    typename TpetraRowMatrix::mag_type getFrobeniusNorm() const override
-    {
-      ensureDenseRowsBuilt();
-      Scalar normSquared = 0.0;
-      for (const Scalar entry : denseRows_) normSquared += entry * entry;
-      return std::sqrt(normSquared);
-    }
-
-    void apply(const TpetraMultiVector &X, TpetraMultiVector &Y,
-               Teuchos::ETransp mode = Teuchos::NO_TRANS,
-               Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
-               Scalar beta = Teuchos::ScalarTraits<Scalar>::zero()) const override
-    {
-      if (mode != Teuchos::NO_TRANS) throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix does not support transpose apply");
-      const size_t length = localLength();
-      if ((X.getLocalLength() != length) || (Y.getLocalLength() != length))
-        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix local vector length mismatch");
-      if (X.getNumVectors() != Y.getNumVectors())
-        throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix multivector count mismatch");
-
-      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
-      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
-      Intrepid2::ScalarView<Scalar,DeviceType> input("LocalPAMatrixTpetraRowMatrix input", cells_, localDofs_);
-      Intrepid2::ScalarView<Scalar,DeviceType> output("LocalPAMatrixTpetraRowMatrix output", cells_, localDofs_);
-      auto inputHost = Kokkos::create_mirror_view(input);
-
-      for (size_t vectorOrdinal=0; vectorOrdinal<X.getNumVectors(); vectorOrdinal++)
-      {
-        for (int c=0; c<cells_; c++)
-          for (int f=0; f<localDofs_; f++)
-            inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs_ + f), vectorOrdinal);
-        Kokkos::deep_copy(input, inputHost);
-
-        applyTerms(*terms_, workspaces_, input, output, worksetSize_);
-        auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
-
-        for (int c=0; c<cells_; c++)
-          for (int f=0; f<localDofs_; f++)
-          {
-            const size_t localOrdinal = static_cast<size_t>(c * localDofs_ + f);
-            yHost(localOrdinal, vectorOrdinal) = alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
-          }
-      }
-    }
-
-    bool hasTransposeApply() const override { return false; }
-
-    std::string description() const override
-    {
-      return "LocalPAMatrixTpetraRowMatrix(local_flat_map_nonproduction_rowmatrix)";
-    }
-
-    void describe(Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel) const override
-    {
-      if ((verbLevel == Teuchos::VERB_MEDIUM) || (verbLevel == Teuchos::VERB_HIGH) || (verbLevel == Teuchos::VERB_EXTREME)) out << description() << std::endl;
-    }
-  };
-
   struct AssemblyTiming
   {
     double totalSeconds = -1.0;
@@ -1976,12 +1527,17 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     comparison.ifpack2RowMatrix = "not_supported";
     auto comm = Teuchos::DefaultComm<int>::getComm();
     auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
-    LocalPAMatrixTpetraOperator op(map, terms, workspaces, cells, localDofs, worksetSize);
-    comparison.domainRangeMapSame = (op.getDomainMap().getRawPtr() == op.getRangeMap().getRawPtr()) ? 1 : 0;
+    
+    auto op = TpetraAdapters::createLocalPAMatrixTpetraOperator(map, terms, workspaces, cells, localDofs, worksetSize);
+    
+    comparison.domainRangeMapSame = (op->getDomainMap().getRawPtr() == op->getRangeMap().getRawPtr()) ? 1 : 0;
     TpetraMultiVector inverseDiagonal(map, 1);
-    op.fillInverseDiagonal(inverseDiagonal);
+    TpetraAdapters::fillInverseDiagonalFromTerms(terms,
+                                                 cells,
+                                                 localDofs,
+                                                 inverseDiagonal);
     auto inverseDiagonalHost = inverseDiagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
-    const auto expectedDiagonal = extractCombinedDiagonal(terms, cells, localDofs);
+    const auto expectedDiagonal = TpetraAdapters::extractCombinedDiagonal(terms, cells, localDofs);
     comparison.inverseDiagonalMaxAbsError = 0.0;
     comparison.inverseDiagonalMin = std::numeric_limits<Scalar>::max();
     comparison.inverseDiagonalMax = 0.0;
@@ -2015,7 +1571,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     const Scalar alpha = 0.75;
     const Scalar beta = 0.5;
     Kokkos::Timer firstApplyTimer;
-    op.apply(X, Y, Teuchos::NO_TRANS, alpha, beta);
+    op->apply(X, Y, Teuchos::NO_TRANS, alpha, beta);
     comparison.firstApplySeconds = firstApplyTimer.seconds();
     auto yResultHost = Y.getLocalViewHost(Tpetra::Access::ReadOnly);
 
@@ -2030,7 +1586,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         for (int f=0; f<localDofs; f++)
           inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs + f), v);
       Kokkos::deep_copy(input, inputHost);
-      applyTerms(terms, workspaces, input, output, worksetSize);
+      TpetraAdapters::applyTerms(terms, workspaces, input, output, worksetSize);
       auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
       for (int c=0; c<cells; c++)
         for (int f=0; f<localDofs; f++)
@@ -2045,7 +1601,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     Kokkos::Timer repeatApplyTimer;
     for (int applyOrdinal=0; applyOrdinal<numApply; applyOrdinal++)
     {
-      op.apply(X, Y, Teuchos::NO_TRANS, Scalar(1.0), Scalar(0.0));
+      op->apply(X, Y, Teuchos::NO_TRANS, Scalar(1.0), Scalar(0.0));
     }
     comparison.avgApplySeconds = repeatApplyTimer.seconds() / numApply;
 
@@ -2081,15 +1637,15 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     comparison.ifpack2RowMatrix = "local_diag_copy_only_no_global_fe_semantics";
     auto comm = Teuchos::DefaultComm<int>::getComm();
     auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
-    LocalPAMatrixTpetraRowMatrix rowMatrix(map, terms, workspaces, cells, localDofs, worksetSize, maxAssembledEntries);
-    comparison.domainRangeMapSame = (rowMatrix.getDomainMap().getRawPtr() == rowMatrix.getRangeMap().getRawPtr()) ? 1 : 0;
-    comparison.rowMatrixRowMapSame = (rowMatrix.getRowMap().getRawPtr() == rowMatrix.getRangeMap().getRawPtr()) ? 1 : 0;
-    comparison.rowMatrixColMapSame = (rowMatrix.getColMap().getRawPtr() == rowMatrix.getDomainMap().getRawPtr()) ? 1 : 0;
+    auto rowMatrix = TpetraAdapters::createLocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, localDofs, worksetSize, maxAssembledEntries);
+    comparison.domainRangeMapSame = (rowMatrix->getDomainMap().getRawPtr() == rowMatrix->getRangeMap().getRawPtr()) ? 1 : 0;
+    comparison.rowMatrixRowMapSame = (rowMatrix->getRowMap().getRawPtr() == rowMatrix->getRangeMap().getRawPtr()) ? 1 : 0;
+    comparison.rowMatrixColMapSame = (rowMatrix->getColMap().getRawPtr() == rowMatrix->getDomainMap().getRawPtr()) ? 1 : 0;
 
     TpetraVector diagonal(map);
-    rowMatrix.getLocalDiagCopy(diagonal);
+    rowMatrix->getLocalDiagCopy(diagonal);
     auto diagonalHost = diagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
-    const auto expectedDiagonal = extractCombinedDiagonal(terms, cells, localDofs);
+    const auto expectedDiagonal = TpetraAdapters::extractCombinedDiagonal(terms, cells, localDofs);
     comparison.rowMatrixDiagonalMaxAbsError = 0.0;
     comparison.rowMatrixDiagonalMin = std::numeric_limits<Scalar>::max();
     comparison.rowMatrixDiagonalMax = 0.0;
@@ -2145,7 +1701,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       for (size_t row=0; row<localLength; row++)
       {
         size_t numEntries = 0;
-        rowMatrix.getLocalRowCopy(static_cast<TpetraRowMatrix::local_ordinal_type>(row), localIndices, values, numEntries);
+        rowMatrix->getLocalRowCopy(static_cast<TpetraRowMatrix::local_ordinal_type>(row), localIndices, values, numEntries);
         if (numEntries != localLength) throw std::runtime_error("RowMatrix diagnostic returned unexpected row length");
         const int cell = static_cast<int>(row / static_cast<size_t>(localDofs));
         const int rowInCell = static_cast<int>(row % static_cast<size_t>(localDofs));
@@ -2168,7 +1724,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       comparison.rowMatrixRowViewChecked = 1;
       for (size_t row=0; row<localLength; row++)
       {
-        rowMatrix.getLocalRowView(static_cast<TpetraRowMatrix::local_ordinal_type>(row), rowViewIndices, rowViewValues);
+        rowMatrix->getLocalRowView(static_cast<TpetraRowMatrix::local_ordinal_type>(row), rowViewIndices, rowViewValues);
         if (rowViewIndices.extent(0) != localLength) throw std::runtime_error("RowMatrix diagnostic returned unexpected row-view length");
         if (rowViewValues.extent(0) != localLength) throw std::runtime_error("RowMatrix diagnostic returned unexpected row-view value length");
         const int cell = static_cast<int>(row / static_cast<size_t>(localDofs));
@@ -2216,7 +1772,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     const Scalar alpha = 0.75;
     const Scalar beta = 0.5;
     Kokkos::Timer firstApplyTimer;
-    rowMatrix.apply(X, Y, Teuchos::NO_TRANS, alpha, beta);
+    rowMatrix->apply(X, Y, Teuchos::NO_TRANS, alpha, beta);
     comparison.firstApplySeconds = firstApplyTimer.seconds();
     auto yResultHost = Y.getLocalViewHost(Tpetra::Access::ReadOnly);
 
@@ -2231,7 +1787,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         for (int f=0; f<localDofs; f++)
           inputHost(c,f) = xHost(static_cast<size_t>(c * localDofs + f), v);
       Kokkos::deep_copy(input, inputHost);
-      applyTerms(terms, workspaces, input, output, worksetSize);
+      TpetraAdapters::applyTerms(terms, workspaces, input, output, worksetSize);
       auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
       for (int c=0; c<cells; c++)
         for (int f=0; f<localDofs; f++)
@@ -2246,7 +1802,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     Kokkos::Timer repeatApplyTimer;
     for (int applyOrdinal=0; applyOrdinal<numApply; applyOrdinal++)
     {
-      rowMatrix.apply(X, Y, Teuchos::NO_TRANS, Scalar(1.0), Scalar(0.0));
+      rowMatrix->apply(X, Y, Teuchos::NO_TRANS, Scalar(1.0), Scalar(0.0));
     }
     comparison.avgApplySeconds = repeatApplyTimer.seconds() / numApply;
 
@@ -2267,10 +1823,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
               << " domainRangeMapSame=" << comparison.domainRangeMapSame
               << " rowRangeMapSame=" << comparison.rowMatrixRowMapSame
               << " colDomainMapSame=" << comparison.rowMatrixColMapSame
-              << " localNumRows=" << rowMatrix.getLocalNumRows()
-              << " localNumCols=" << rowMatrix.getLocalNumCols()
-              << " localNumEntries=" << rowMatrix.getLocalNumEntries()
-              << " localMaxNumRowEntries=" << rowMatrix.getLocalMaxNumRowEntries()
+              << " localNumRows=" << rowMatrix->getLocalNumRows()
+              << " localNumCols=" << rowMatrix->getLocalNumCols()
+              << " localNumEntries=" << rowMatrix->getLocalNumEntries()
+              << " localMaxNumRowEntries=" << rowMatrix->getLocalMaxNumRowEntries()
               << " denseRowMaterializationEntries=" << comparison.rowMatrixDenseRowMaterializationEntries
               << " maxDenseRowMaterializationEntries=" << comparison.rowMatrixMaxDenseRowMaterializationEntries
               << " adapterPath=" << comparison.adapterPath
@@ -2295,7 +1851,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       return true;
     }
 
-    applyTerms(terms, workspaces, input, output, worksetSize);
+    TpetraAdapters::applyTerms(terms, workspaces, input, output, worksetSize);
     auto inputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), input);
     auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
     std::vector<Scalar> expected(cells * rows, 0.0);
@@ -2765,7 +2321,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
   public:
     LocalPMultigridTpetraPreconditioner(const Teuchos::RCP<const TpetraMap> &map,
-                                        const LocalPAMatrixTpetraOperator &fineOperator,
+                                        const Teuchos::RCP<TpetraOperator> &fineOperator,
                                         const int dim, const int p, const int cells,
                                         const int localDofs, const int smootherIterations,
                                         const std::string &smootherName,
@@ -2786,18 +2342,6 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                               map_->getIndexBase(),
                                               map_->getComm()));
 
-      TpetraMultiVector inverseDiagonal(map_, 1);
-      fineOperator.fillInverseDiagonal(inverseDiagonal);
-      fineInverseDiagonal_.assign(localLength, Scalar(0.0));
-      auto inverseDiagonalHost = inverseDiagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
-      for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++)
-      {
-        const Scalar value = inverseDiagonalHost(localOrdinal, 0);
-        if (value <= std::numeric_limits<Scalar>::epsilon())
-          throw std::runtime_error("LocalPMultigridTpetraPreconditioner found nonpositive inverse diagonal entry");
-        fineInverseDiagonal_[localOrdinal] = value;
-      }
-
       fineMatrices_.assign(localLength * static_cast<size_t>(localDofs_), Scalar(0.0));
       TpetraMultiVector basisInput(map_, 1);
       TpetraMultiVector basisOutput(map_, 1);
@@ -2806,11 +2350,42 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       {
         for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++) basisInputHost(localOrdinal,0) = Scalar(0.0);
         for (int c=0; c<cells_; c++) basisInputHost(static_cast<size_t>(c * localDofs_ + fineJ),0) = Scalar(1.0);
-        fineOperator.apply(basisInput, basisOutput);
+        fineOperator->apply(basisInput, basisOutput);
         auto basisOutputHost = basisOutput.getLocalViewHost(Tpetra::Access::ReadOnly);
         for (int c=0; c<cells_; c++)
           for (int fineI=0; fineI<localDofs_; fineI++)
             fineMatrices_[static_cast<size_t>((c * localDofs_ + fineI) * localDofs_ + fineJ)] = basisOutputHost(static_cast<size_t>(c * localDofs_ + fineI),0);
+      }
+      
+      fineInverseDiagonal_.assign(localLength, Scalar(0.0));
+
+      for (int c=0; c<cells_; c++)
+      {
+        for (int i=0; i<localDofs_; i++)
+        {
+          const size_t localOrdinal =
+              static_cast<size_t>(c) * static_cast<size_t>(localDofs_) +
+              static_cast<size_t>(i);
+
+          const size_t diagonalIndex =
+              localOrdinal * static_cast<size_t>(localDofs_) +
+              static_cast<size_t>(i);
+
+          const Scalar diagonalValue = fineMatrices_[diagonalIndex];
+
+          if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
+          {
+            std::ostringstream message;
+            message << "LocalPMultigridTpetraPreconditioner found nonpositive "
+                    << "fine diagonal entry"
+                    << " cell=" << c
+                    << " localDof=" << i
+                    << " value=" << diagonalValue;
+            throw std::runtime_error(message.str());
+          }
+
+          fineInverseDiagonal_[localOrdinal] = Scalar(1.0) / diagonalValue;
+        }
       }
 
       fineLambdaMaxByCell_.assign(static_cast<size_t>(cells_), Scalar(0.0));
@@ -3119,7 +2694,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
   MatrixFreeGMGRightPreconditionerBuild
   buildMatrixFreeGMGRightPreconditioner(const Teuchos::RCP<const TpetraMap> &map,
-                                        const LocalPAMatrixTpetraOperator &fineOperator,
+                                        const Teuchos::RCP<TpetraOperator> &fineOperator,
                                         const int dim,
                                         const int p,
                                         const int cells,
@@ -3507,7 +3082,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         for (int i=0; i<rows; i++)
           inputHost(c,i) = inputVector[static_cast<size_t>(c * rows + i)];
       Kokkos::deep_copy(input, inputHost);
-      applyTerms(terms, workspaces, input, output, worksetSize);
+      TpetraAdapters::applyTerms(terms, workspaces, input, output, worksetSize);
       auto outputHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), output);
       for (int c=0; c<cells; c++)
         for (int i=0; i<rows; i++)
@@ -3637,8 +3212,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           }
 
         Teuchos::RCP<TpetraMap> map;
-        Teuchos::RCP<LocalPAMatrixTpetraOperator> tpetraOperator;
-        Teuchos::RCP<LocalPAMatrixTpetraRowMatrix> tpetraRowMatrix;
+        Teuchos::RCP<TpetraOperator> tpetraOperator;
+        Teuchos::RCP<TpetraRowMatrix> tpetraRowMatrix;
         Teuchos::RCP<TpetraMultiVector> X;
         Teuchos::RCP<TpetraMultiVector> Y;
         if (tpetraAdapter != "direct")
@@ -3646,9 +3221,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           auto comm = Teuchos::DefaultComm<int>::getComm();
           map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), vector.size(), 0, comm));
           if (tpetraAdapter == "operator")
-            tpetraOperator = Teuchos::rcp(new LocalPAMatrixTpetraOperator(map, terms, workspaces, cells, rows, worksetSize));
+            tpetraOperator = TpetraAdapters::createLocalPAMatrixTpetraOperator(map, terms, workspaces, cells, rows, worksetSize);
           else if (tpetraAdapter == "rowmatrix")
-            tpetraRowMatrix = Teuchos::rcp(new LocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries));
+            tpetraRowMatrix = TpetraAdapters::createLocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries);
           else
             throw std::invalid_argument("unexpected Tpetra adapter in power spectral estimate");
           X = Teuchos::rcp(new TpetraMultiVector(map, 1));
@@ -4184,7 +3759,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       const size_t localLength = rhs.size();
       auto comm = Teuchos::DefaultComm<int>::getComm();
       auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
-      auto matrixFreeOperator = Teuchos::rcp(new LocalPAMatrixTpetraOperator(map, terms, workspaces, cells, rows, worksetSize));
+      auto matrixFreeOperator = TpetraAdapters::createLocalPAMatrixTpetraOperator(map, terms, workspaces, cells, rows, worksetSize);
       
       Teuchos::RCP<TpetraCrsMatrix> assembledCrsMatrix;
 
@@ -4225,8 +3800,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       }
       else if (usePAMatrixRowMatrixPreconditioner)
       {
-        auto rowMatrix = Teuchos::rcp(new LocalPAMatrixTpetraRowMatrix(
-            map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries));
+        auto rowMatrix = TpetraAdapters::createLocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries);
         rowMatrixBase = Teuchos::rcp_implicit_cast<const TpetraRowMatrix>(rowMatrix);
       }
       else
@@ -4247,7 +3821,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         const std::string smootherName = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? "chebyshev" : "jacobi";
         const TensorHGradPTransfer &transfer = cachedTensorHGradPTransfer(dim, p);
         const MatrixFreeGMGRightPreconditionerBuild preconditionerBuild =
-          buildMatrixFreeGMGRightPreconditioner(map, *matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight);
+          buildMatrixFreeGMGRightPreconditioner(map, matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight);
         matrixFreeGMGForStageTrace = preconditionerBuild.matrixFreeGMG;
         if (matrixFreeGMGStageTrace != 0)
           matrixFreeGMGForStageTrace->setEmitStageTrace(true);
@@ -4916,7 +4490,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
       auto comm = Teuchos::DefaultComm<int>::getComm();
       auto map = Teuchos::rcp(new TpetraMap(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), localLength, 0, comm));
-      auto rowMatrix = Teuchos::rcp(new LocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries));
+      auto rowMatrix = TpetraAdapters::createLocalPAMatrixTpetraRowMatrix(map, terms, workspaces, cells, rows, worksetSize, maxAssembledEntries);
       Teuchos::RCP<const TpetraRowMatrix> rowMatrixBase = Teuchos::rcp_implicit_cast<const TpetraRowMatrix>(rowMatrix);
       auto inverseDiagonal = Teuchos::rcp(new TpetraVector(map));
       {
@@ -5332,7 +4906,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                     massWeight,
                                                     useSolutionCoefficientProxies);
 
-    auto workspaces = allocateWorkspaces(matrixFreeTerms, worksetSize);
+    auto workspaces = TpetraAdapters::allocateWorkspaces(matrixFreeTerms, worksetSize);
 
     const auto matrixFreeLocalRhs =
         makeConstantTestFunctionRhs(matrixFreeTerms,
@@ -5635,7 +5209,7 @@ int main(int argc, char *argv[])
       const int localDofs = checkedProduct(std::vector<int>(dim, p + 1));
       const int pointsPerDim = (basisMode == "hgrad") ? (p + 1) : (p + 2);
       const int localPoints = checkedProduct(std::vector<int>(dim, pointsPerDim));
-      auto workspaces = allocateWorkspaces(terms, worksetSize);
+      auto workspaces = TpetraAdapters::allocateWorkspaces(terms, worksetSize);
       Intrepid2::ScalarView<Scalar,DeviceType> input("TensorPoissonPAMatrix input", cells, localDofs);
       Intrepid2::ScalarView<Scalar,DeviceType> output("TensorPoissonPAMatrix output", cells, localDofs);
       fillInput(input);
@@ -5644,11 +5218,11 @@ int main(int argc, char *argv[])
       double avgApplySeconds = -1.0;
       if ((mode == "apply") || (mode == "compare"))
       {
-        firstApplySeconds = applyTerms(terms, workspaces, input, output, worksetSize);
+        firstApplySeconds = TpetraAdapters::applyTerms(terms, workspaces, input, output, worksetSize);
         Kokkos::Timer applyTimer;
         for (int applyOrdinal=0; applyOrdinal<numApply; applyOrdinal++)
         {
-          applyTerms(terms, workspaces, input, output, worksetSize);
+          TpetraAdapters::applyTerms(terms, workspaces, input, output, worksetSize);
         }
         avgApplySeconds = applyTimer.seconds() / numApply;
       }
