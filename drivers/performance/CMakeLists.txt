@@ -238,7 +238,7 @@ add_test(NAME TensorH1GramPAMatrixUserSpectralNoReferenceSmoke
     --inverseDiagnosticAlgorithm=richardson
     --inverseSpectralEstimate=user
     --inverseDiagnosticRequireAssembledReference=0
-    --inverseInitialGuess=diagonal
+    --inverseInitialGuess=zero
     --numInverseIterations=5
     --inverseTolerance=1e-6
     --inverseLambdaMin=0.01

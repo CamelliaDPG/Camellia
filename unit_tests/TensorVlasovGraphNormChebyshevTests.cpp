@@ -41,6 +41,27 @@ namespace
     std::string output;
   };
 
+  bool shouldEchoExternalDriverOutput()
+  {
+    const char *value = std::getenv("TENSOR_VLASOV_GRAPH_NORM_TEST_VERBOSE");
+    if (value == nullptr) return false;
+
+    const std::string setting(value);
+    return (setting != "0") &&
+           (setting != "false") &&
+           (setting != "FALSE") &&
+           (setting != "off") &&
+           (setting != "OFF");
+  }
+
+  void printDriverRun(const DriverRun &run)
+  {
+    std::cout << "VLASOV_GRAPH_NORM_DRIVER_COMMAND " << run.command << std::endl;
+    std::cout << run.output;
+    if (run.output.empty() || (run.output.back() != '\n')) std::cout << std::endl;
+    std::cout << "VLASOV_GRAPH_NORM_DRIVER_STATUS rawStatus=" << run.status << std::endl;
+  }
+
   std::string tensorPoissonPAMatrixDriverPath()
   {
 #ifdef TENSOR_POISSON_PAMATRIX_DRIVER_PATH
@@ -97,10 +118,11 @@ namespace
     result.output = buffer.str();
     std::remove(outputPath.c_str());
 
-    std::cout << "VLASOV_GRAPH_NORM_DRIVER_COMMAND " << result.command << std::endl;
-    std::cout << result.output;
-    if (result.output.empty() || (result.output.back() != '\n')) std::cout << std::endl;
-    std::cout << "VLASOV_GRAPH_NORM_DRIVER_STATUS rawStatus=" << result.status << std::endl;
+    if (shouldEchoExternalDriverOutput() || (result.status != 0))
+    {
+      printDriverRun(result);
+    }
+
     return result;
   }
 
@@ -195,6 +217,71 @@ namespace
       }
     }
   }
+}
+
+// temporary helper, for driver-backed unit tests.  Hope to excise this once we refactor comparison
+// helpers out of
+std::string findCamelliaVlasovComparisonLine(const std::string &output,
+                                             const std::string &block,
+                                             const int p)
+{
+  std::string::size_type cursor = 0;
+  while (true)
+  {
+    const std::string::size_type lineStart =
+        output.find("CAMELLIA_VLASOV_MATRIX_COMPARISON ", cursor);
+    if (lineStart == std::string::npos) break;
+
+    std::string::size_type lineEnd = output.find('\n', lineStart);
+    if (lineEnd == std::string::npos) lineEnd = output.size();
+
+    const std::string line = output.substr(lineStart, lineEnd - lineStart);
+    const std::string observedBlock = keyValueAfter(line, "block", 0);
+    const std::string observedP = keyValueAfter(line, "p", 0);
+
+    if ((observedBlock == block) && (!observedP.empty()) && (std::stoi(observedP) == p))
+    {
+      return line;
+    }
+
+    cursor = lineEnd;
+  }
+
+  std::ostringstream message;
+  message << "Could not find CAMELLIA_VLASOV_MATRIX_COMPARISON line"
+          << " for block='" << block << "'"
+          << " and p=" << p;
+  throw std::runtime_error(message.str());
+}
+
+double parseCamelliaVlasovComparisonDoubleKey(const std::string &output,
+                                              const std::string &block,
+                                              const int p,
+                                              const std::string &key)
+{
+  const std::string line = findCamelliaVlasovComparisonLine(output, block, p);
+  const std::string value = keyValueAfter(line, key, 0);
+  if (value.empty())
+  {
+    throw std::runtime_error("Could not find key '" + key +
+                             "' in CAMELLIA_VLASOV_MATRIX_COMPARISON line: " + line);
+  }
+  return std::stod(value);
+}
+
+int parseCamelliaVlasovComparisonIntKey(const std::string &output,
+                                        const std::string &block,
+                                        const int p,
+                                        const std::string &key)
+{
+  const std::string line = findCamelliaVlasovComparisonLine(output, block, p);
+  const std::string value = keyValueAfter(line, key, 0);
+  if (value.empty())
+  {
+    throw std::runtime_error("Could not find key '" + key +
+                             "' in CAMELLIA_VLASOV_MATRIX_COMPARISON line: " + line);
+  }
+  return std::stoi(value);
 }
 
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ReportsL2MassWeight )
@@ -691,4 +778,235 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, MatrixFreeCellPowerSweepFinds
             << " iterations=" << bestIterations
             << " residualReduction=" << bestReduction << std::endl;
   TEST_COMPARE(bestReduction, <, 2.0);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, P2FullGraphNormDiagonalMatchesCamelliaAssembled )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=2 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-1d1t2v --basisMode=hgrad "
+      "--mode=camellia-vlasov-matrix-compare "
+      "--massWeight=1.0 --stiffnessWeight=1.0 "
+      "--camelliaMatrixCompareFailOnMismatch=0 "
+      "--maxAssembledEntries=1000000");
+
+  TEST_EQUALITY(run.status, 0);
+
+  const int p = 2;
+  const std::string block = "full_graph_norm";
+
+  const int passed = parseCamelliaVlasovComparisonIntKey(run.output, block, p, "passed");
+  const double maxDiagonalAbsError =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "maxDiagonalAbsError");
+  const double sortedDiagonalMaxAbsError =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "sortedDiagonalMaxAbsError");
+  const double sortedDiagonalL2Error =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "sortedDiagonalL2Error");
+  const double matrixFreeDiagonalMin =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "matrixFreeDiagonalMin");
+  const double matrixFreeDiagonalMax =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "matrixFreeDiagonalMax");
+  const double camelliaDiagonalMin =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "camelliaDiagonalMin");
+  const double camelliaDiagonalMax =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "camelliaDiagonalMax");
+
+  const double tolerance = 1e-10;
+
+  std::cout << "VLASOV_GRAPH_NORM_P2_DIAGONAL_CAMELLIA_ASSEMBLED_MATCH"
+            << " block=" << block
+            << " p=" << p
+            << " fullMatrixPassed=" << passed
+            << " maxDiagonalAbsError=" << std::setprecision(16) << maxDiagonalAbsError
+            << " sortedDiagonalMaxAbsError=" << sortedDiagonalMaxAbsError
+            << " sortedDiagonalL2Error=" << sortedDiagonalL2Error
+            << " matrixFreeDiagonalMin=" << matrixFreeDiagonalMin
+            << " matrixFreeDiagonalMax=" << matrixFreeDiagonalMax
+            << " camelliaDiagonalMin=" << camelliaDiagonalMin
+            << " camelliaDiagonalMax=" << camelliaDiagonalMax
+            << " tolerance=" << tolerance
+            << std::endl;
+
+  TEST_ASSERT(std::isfinite(maxDiagonalAbsError));
+  TEST_ASSERT(std::isfinite(sortedDiagonalMaxAbsError));
+  TEST_ASSERT(std::isfinite(sortedDiagonalL2Error));
+  TEST_ASSERT(std::isfinite(matrixFreeDiagonalMin));
+  TEST_ASSERT(std::isfinite(matrixFreeDiagonalMax));
+  TEST_ASSERT(std::isfinite(camelliaDiagonalMin));
+  TEST_ASSERT(std::isfinite(camelliaDiagonalMax));
+
+  TEST_COMPARE(matrixFreeDiagonalMin, >, 0.0);
+  TEST_COMPARE(camelliaDiagonalMin, >, 0.0);
+
+  // This is the primary assertion: same diagonal in the same interpreted
+  // Camellia global dof ordering.
+  TEST_COMPARE(maxDiagonalAbsError, <=, tolerance);
+
+  // This is a secondary diagnostic assertion.  If this passes while
+  // maxDiagonalAbsError fails, the values may be right but the dof ordering
+  // may be wrong.
+  TEST_COMPARE(sortedDiagonalMaxAbsError, <=, tolerance);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
+                   P2SolutionCoeffFullGraphNormDiagonalMatchesCamelliaAssembled )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=2 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-solution-coeff-1d1t2v --basisMode=hgrad "
+      "--mode=camellia-vlasov-matrix-compare "
+      "--camelliaMatrixCompareUseSolutionCoeff=1 "
+      "--massWeight=1.0 --stiffnessWeight=1.0 "
+      "--camelliaMatrixCompareFailOnMismatch=0 "
+      "--maxAssembledEntries=1000000");
+
+  TEST_EQUALITY(run.status, 0);
+
+  const int p = 2;
+  const std::string block = "full_graph_norm";
+
+  const int passed =
+      parseCamelliaVlasovComparisonIntKey(run.output, block, p, "passed");
+
+  const double maxAbsError =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "maxAbsError");
+
+  const double maxDiagonalAbsError =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "maxDiagonalAbsError");
+
+  const double sortedDiagonalMaxAbsError =
+      parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "sortedDiagonalMaxAbsError");
+
+  const double tolerance = 1e-10;
+
+  std::cout << "VLASOV_GRAPH_NORM_P2_SOLUTION_COEFF_DIAGONAL_CAMELLIA_ASSEMBLED_MATCH"
+            << " block=" << block
+            << " p=" << p
+            << " passed=" << passed
+            << " maxAbsError=" << std::setprecision(16) << maxAbsError
+            << " maxDiagonalAbsError=" << maxDiagonalAbsError
+            << " sortedDiagonalMaxAbsError=" << sortedDiagonalMaxAbsError
+            << " tolerance=" << tolerance
+            << std::endl;
+
+  TEST_ASSERT(std::isfinite(maxAbsError));
+  TEST_ASSERT(std::isfinite(maxDiagonalAbsError));
+  TEST_ASSERT(std::isfinite(sortedDiagonalMaxAbsError));
+
+  TEST_COMPARE(maxAbsError, <=, tolerance);
+  TEST_COMPARE(maxDiagonalAbsError, <=, tolerance);
+  TEST_COMPARE(sortedDiagonalMaxAbsError, <=, tolerance);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
+                   P2GMRESJacobiOperatorPreconditionerSourceSweep )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  struct Case
+  {
+    std::string name;
+    std::string operatorSource;
+    std::string preconditionerSource;
+  };
+
+  const std::vector<Case> cases {
+    {"crs_operator_crs_jacobi", "assembled-crs", "assembled-crs"},
+    {"pa_operator_crs_jacobi", "matrix-free", "assembled-crs"},
+    {"crs_operator_pa_jacobi", "assembled-crs", "matrix-free-rowmatrix"},
+    {"pa_operator_pa_jacobi", "matrix-free", "matrix-free-rowmatrix"}
+  };
+
+  for (const auto &testCase : cases)
+  {
+    std::ostringstream args;
+    args << "--dim=4 --polyOrder=2 --cellsPerDim=1 "
+         << "--operator=vlasov-graph-norm-solution-coeff-1d1t2v "
+         << "--basisMode=hgrad "
+         << "--mode=inverse-diagnostic "
+         << "--inverseDiagnosticAlgorithm=gmres-jacobi "
+         << "--inverseOperatorSource=" << testCase.operatorSource << " "
+         << "--inversePreconditionerMatrixSource=" << testCase.preconditionerSource << " "
+         << "--numInverseIterations=200 "
+         << "--inverseInitialGuess=zero "
+         << "--inverseRhs=constant-test-function "
+         << "--inverseTolerance=1e-8 "
+         << "--massWeight=1 --stiffnessWeight=1 "
+         << "--maxAssembledEntries=1000000";
+
+    const DriverRun run = runDriver(args.str());
+    TEST_EQUALITY(run.status, 0);
+
+    const std::vector<double> iterations =
+        parseAllInverseDiagnosticDoubleKey(run.output, "inverseIterations");
+    const std::vector<double> converged =
+        parseAllInverseDiagnosticDoubleKey(run.output, "inverseConverged");
+
+    TEST_EQUALITY(iterations.size(), static_cast<std::size_t>(1));
+    TEST_EQUALITY(converged.size(), static_cast<std::size_t>(1));
+
+    std::cout << "VLASOV_GRAPH_NORM_P2_GMRES_JACOBI_SOURCE_SWEEP"
+              << " case=" << testCase.name
+              << " operatorSource=" << testCase.operatorSource
+              << " preconditionerSource=" << testCase.preconditionerSource
+              << " iterations=" << iterations.front()
+              << " converged=" << converged.front()
+              << std::endl;
+
+    TEST_COMPARE(converged.front(), ==, 1.0);
+  }
+}
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
+                   P2GMRESJacobiGMGSmootherOnlyMatchesAssembled )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      "--dim=4 --polyOrder=2 --cellsPerDim=1 "
+      "--operator=vlasov-graph-norm-solution-coeff-1d1t2v "
+      "--basisMode=hgrad "
+      "--mode=inverse-diagnostic "
+      "--inverseDiagnosticAlgorithm=gmres-jacobi-gmg-smoother-only "
+      "--inverseOperatorSource=assembled-crs "
+      "--inversePreconditionerMatrixSource=assembled-crs "
+      "--numInverseIterations=200 "
+      "--inverseInitialGuess=zero "
+      "--inverseRhs=constant-test-function "
+      "--inverseTolerance=1e-8 "
+      "--massWeight=1 --stiffnessWeight=1 "
+      "--maxAssembledEntries=1000000");
+
+  TEST_EQUALITY(run.status, 0);
+  if (run.status != 0)
+  {
+    return;
+  }
+
+  const std::vector<double> iterations =
+      parseAllInverseDiagnosticDoubleKey(run.output, "inverseIterations");
+  const std::vector<double> converged =
+      parseAllInverseDiagnosticDoubleKey(run.output, "inverseConverged");
+
+  TEST_EQUALITY(iterations.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(converged.size(), static_cast<std::size_t>(1));
+
+  if ((iterations.size() != static_cast<std::size_t>(1)) ||
+      (converged.size() != static_cast<std::size_t>(1)))
+  {
+    return;
+  }
+
+  std::cout << "VLASOV_GRAPH_NORM_P2_GMRES_JACOBI_GMG_SMOOTHER_ONLY"
+            << " iterations=" << iterations.front()
+            << " converged=" << converged.front()
+            << std::endl;
+
+  TEST_COMPARE(converged.front(), ==, 1.0);
+
+  // Target from assembled GMG study.
+  TEST_EQUALITY(static_cast<int>(iterations.front()), 52);
 }

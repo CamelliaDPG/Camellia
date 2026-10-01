@@ -350,7 +350,7 @@ namespace
     arguments << "--dim=4"
               << " --polyOrder=" << p
               << " --cellsPerDim=" << options.elementsPerDim
-              << " --operator=vlasov-graph-norm-1d1t2v"
+              << " --operator=vlasov-graph-norm-solution-coeff-1d1t2v"
               << " --basisMode=hgrad"
               << " --mode=inverse-diagnostic"
               << " --inverseDiagnosticAlgorithm=" << strategy.matrixFreeAlgorithm

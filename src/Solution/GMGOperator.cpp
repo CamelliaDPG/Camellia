@@ -1895,6 +1895,7 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
   {
     return std::isfinite(value) ? value : 0.0;
   };
+  const double traceRhsInfNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(X_in)) : 0.0;
   const double traceInitialResidualNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(res)) : 0.0;
   const double traceInitialSolutionNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(Y)) : 0.0;
   double traceResidualAfterPreSmooth = traceInitialResidualNorm;
@@ -2009,7 +2010,7 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
                << " index=" << stageIndex
                << " level=0"
                << " stage=" << stageNames[stageIndex]
-               << " rhsInfNorm=" << std::setprecision(16) << traceInitialResidualNorm
+               << " rhsInfNorm=" << std::setprecision(16) << traceRhsInfNorm
                << " solutionInfNorm=" << solutionNorms[stageIndex]
                << " residualInfNorm=" << residualNorms[stageIndex]
                << endl;

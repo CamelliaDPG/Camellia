@@ -5,7 +5,10 @@
 #include "BF.h"
 #include "BC.h"
 #include "ApplyInverseTpetraOperatorAdapter.h"
+#include "Basis.h"
 #include "Camellia.h"
+
+#include <Intrepid2_DerivedBasisFamily.hpp>
 #include "Function.h"
 #include "GMGOperator.h"
 #include "GMGSolver.h"
@@ -35,6 +38,8 @@ using namespace Camellia;
 
 namespace
 {
+  using Scalar = double;
+
   struct StudyOptions
   {
     std::string outputFile = "vlasov-gram-gmg-study.txt";
@@ -74,7 +79,7 @@ namespace
     }
   }
 
-  double multiVectorInfNorm(const TVector<Scalar> &values)
+  double maxInfNorm(const TVector<Scalar> &values)
   {
     Teuchos::Array<Scalar> norms(values.getNumVectors());
     values.normInf(norms());
@@ -95,7 +100,7 @@ namespace
     const double stableSolutionInfNorm = std::isfinite(solutionInfNorm) ? solutionInfNorm : 0.0;
     const double stableResidualInfNorm = std::isfinite(residualInfNorm) ? residualInfNorm : stableRhsInfNorm;
 
-    out << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
+    out << "VLASOV_ASSEMBLED_GMG_VCYCLE_SUMMARY_STAGE"
         << " index=0"
         << " level=0"
         << " stage=Initial"
@@ -103,7 +108,7 @@ namespace
         << " solutionInfNorm=0"
         << " residualInfNorm=" << stableRhsInfNorm
         << std::endl;
-    out << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
+    out << "VLASOV_ASSEMBLED_GMG_VCYCLE_SUMMARY_STAGE"
         << " index=3"
         << " level=0"
         << " stage=PostSmooth"
@@ -161,10 +166,23 @@ namespace
   {
     const int spaceTimePhaseDim = 4; // component ordering: x, t, ux, uy
     VarFactoryPtr vf = VarFactory::varFactory();
-    vf->setBasisFamily(BasisFamily::hierarchicalBasisFamily());
 
     VarPtr f = vf->fieldVar("f", HGRAD_DISC);
+    // Match the matrix-free Vlasov comparison path: use the explicit Intrepid2
+    // hierarchical tensor HGRAD basis wrapper before constructing the Bubnov
+    // test factory, so RHS::addTerm(1*w) and --inverseRhs=constant-test-function
+    // are expressed in the same basis.
+    using DeviceType = Kokkos::DefaultExecutionSpace::device_type;
+    using IntrepidBasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
+    auto intrepid2Basis = Intrepid2::getHypercubeBasis_HGRAD<IntrepidBasisFamily>(options.fineH1Order, spaceTimePhaseDim);
+    auto camelliaBasis = Teuchos::rcp(new Intrepid2BasisWrapper<Scalar>(intrepid2Basis,
+                                                                        spaceTimePhaseDim,
+                                                                        0,
+                                                                        FUNCTION_SPACE_HGRAD_DISC));
+    auto comparisonBasisFamily = BasisFamily::singletonBasisFamily(camelliaBasis);
+    vf->setBasisFamily(comparisonBasisFamily);
     VarFactoryPtr bubnovVF = vf->getBubnovFactory(VarFactory::BUBNOV_TRIAL);
+    bubnovVF->setBasisFamily(comparisonBasisFamily);
     BFPtr bf = BF::bf(bubnovVF);
     VarPtr w = f; // Bubnov-Galerkin: the test variable is the trial variable relabeled by the Bubnov factory.
 
@@ -432,8 +450,6 @@ int main(int argc, char *argv[])
       output.open(options.outputFile.c_str());
       if (!output.good()) throw std::runtime_error("Could not open output file: " + options.outputFile);
       writeHeader(output, options);
-      if (options.emitP2StageTrace && (options.fineH1Order == 2))
-        emitStableAssembledVcycleStageRows(output, 0.0, 0.0, 0.0);
     }
 
     for (int fineP = 1; fineP <= options.fineH1Order; fineP++)
@@ -632,15 +648,7 @@ int main(int argc, char *argv[])
       output << "  Failed strategy rows are recorded as study results; they do not make the driver fail.\n";
       output << "  With --emitP2StageTrace, p=2 V-cycle rows also print one VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE line per finest-level stage\n";
       output << "  with fields index, level, stage, rhsInfNorm, solutionInfNorm, and residualInfNorm.\n";
-      if (options.emitP2StageTrace && (options.fineH1Order == 2))
-      {
-        const char *initialStageRow = "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE index=0 level=0 stage=Initial rhsInfNorm=0 solutionInfNorm=0 residualInfNorm=0";
-        const char *postSmoothStageRow = "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE index=3 level=0 stage=PostSmooth rhsInfNorm=0 solutionInfNorm=0 residualInfNorm=0";
-        output << initialStageRow << std::endl;
-        output << postSmoothStageRow << std::endl;
-        std::cout << initialStageRow << std::endl;
-        std::cout << postSmoothStageRow << std::endl;
-      }
+      output << "  Real p=2 V-cycle stage trace rows are emitted during GMGOperator application when enabled.\n";
       std::cout << "Wrote Vlasov Gram GMG study results to " << options.outputFile << std::endl;
     }
   }
