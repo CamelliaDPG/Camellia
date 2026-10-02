@@ -372,6 +372,55 @@ namespace
     return terms;
   }
 
+  bool basisModeIsHGRAD(const std::string &basisMode)
+  {
+    return (basisMode == "hgrad") ||
+           (basisMode == "hgrad-hierarchical") ||
+           (basisMode == "hgrad-nodal");
+  }
+
+  bool inverseAlgorithmUsesPMultigrid(const std::string &algorithm)
+  {
+    return (algorithm == "matrix-free-gmg-chebyshev-smoother") ||
+           (algorithm == "matrix-free-gmg-jacobi-smoother") ||
+           (algorithm == "gmres-pmultigrid-chebyshev") ||
+           (algorithm == "gmres-pmultigrid-jacobi-chebyshev") ||
+           (algorithm == "pmultigrid-chebyshev") ||
+           (algorithm == "pmultigrid-jacobi-chebyshev");
+  }
+
+  Camellia::TensorBasisFamily TensorBasisFamilyFromMode(
+      const std::string &basisMode)
+  {
+    if ((basisMode == "hgrad") || (basisMode == "hgrad-hierarchical"))
+    {
+      return Camellia::TensorBasisFamily::Hierarchical;
+    }
+
+    if (basisMode == "hgrad-nodal")
+    {
+      return Camellia::TensorBasisFamily::Nodal;
+    }
+
+    throw std::invalid_argument(
+        "TensorBasisFamilyFromMode requires hgrad, hgrad-hierarchical, or hgrad-nodal");
+  }
+
+  std::string TensorBasisFamilyName(
+      const Camellia::TensorBasisFamily basisFamily)
+  {
+    switch (basisFamily)
+    {
+      case Camellia::TensorBasisFamily::Hierarchical:
+        return "intrepid2-hierarchical";
+      case Camellia::TensorBasisFamily::Nodal:
+        return "intrepid2-nodal";
+      default:
+        return "unknown";
+    }
+  }
+
+
   // HGRAD cubature/coefficient folding and PAMatrix construction are provided by TensorPAMatrixBridge.h.
 
   // HGRAD tensor field variable construction is provided by TensorPAMatrixBridge.h.
@@ -384,7 +433,8 @@ namespace
 
   template<int spaceDim>
   std::vector<OperatorTerm> makeHGRADOperatorTermsForDim(const int p, const int cellsPerDim, const std::string &operatorChoice,
-                                                         const Scalar massWeight, const Scalar stiffnessWeight)
+                                                         const Scalar massWeight, const Scalar stiffnessWeight,
+                                                         const Camellia::TensorBasisFamily basisFamily)
   {
     Kokkos::Array<Scalar,spaceDim> origin;
     Kokkos::Array<Scalar,spaceDim> domainExtents;
@@ -427,7 +477,7 @@ namespace
         // solution-dependent coefficient PAMatrix path is exercised before live Maxwell
         // TensorSolution coefficients are wired in.
         terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
-            geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE), massWeight, "vlasov_graph_norm_l2"});
+            geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE, basisFamily), massWeight, "vlasov_graph_norm_l2"});
 
         Camellia::TensorFunctionEvaluationContext solutionCoefficientContext;
         Camellia::TensorFunctionEvaluationContext *graphEvaluationContext = nullptr;
@@ -470,9 +520,9 @@ namespace
                                                    Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                    Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
             const size_t firstNewTerm = terms.size();
-            Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, graphTerm,
+            Camellia::appendTensorVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, graphTerm,
                                                              "vlasov_graph_norm_" + derivativeLabels[trialComponent] + "_" + derivativeLabels[testComponent],
-                                                             graphEvaluationContext);
+                                                             graphEvaluationContext, basisFamily);
             for (size_t termOrdinal=firstNewTerm; termOrdinal<terms.size(); termOrdinal++)
               terms[termOrdinal].weight *= stiffnessWeight;
           }
@@ -488,8 +538,9 @@ namespace
                                                             Camellia::TensorFunction::constant(-0.75) * Camellia::TensorFunction::componentCoordinate(1),
                                                             Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                             Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
-        Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovCoordinateD3Term,
-                                                         "vlasov_coordinate_x1_value_test_d3");
+        Camellia::appendTensorVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovCoordinateD3Term,
+                                                                                     "vlasov_coordinate_x1_value_test_d3",
+                                                                                     nullptr, basisFamily);
         return terms;
       }
       if (operatorChoice == "vlasov-linear-x0-x1-d2")
@@ -501,8 +552,9 @@ namespace
                                                       Camellia::TensorFunction::constant(-0.5) * (Camellia::TensorFunction::componentCoordinate(0) + Camellia::TensorFunction::componentCoordinate(1)),
                                                       Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                       Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
-        Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovLinearTerm,
-                                                         "vlasov_linear_x0_plus_x1_value_test_d2");
+        Camellia::appendTensorVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovLinearTerm,
+                                                                                     "vlasov_linear_x0_plus_x1_value_test_d2",
+                                                                                     nullptr, basisFamily);
         return terms;
       }
 
@@ -516,14 +568,17 @@ namespace
                                                  coefficient,
                                                  Camellia::TENSOR_BILINEAR_TERM_VOLUME,
                                                  Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
-      Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovDtTerm,
-                                                       (operatorChoice == "vlasov-coordinate") ? "vlasov_coordinate_x0_value_test_d1" : "vlasov_dt_value_test_d1");
+      Camellia::appendTensorVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(terms, geometry, p, vlasovDtTerm,
+                                                                                   (operatorChoice == "vlasov-coordinate")
+                                                                                   ? "vlasov_coordinate_x0_value_test_d1"
+                                                                                   : "vlasov_dt_value_test_d1",
+                                                                                   nullptr, basisFamily);
       return terms;
     }
     if (operatorIncludesMass(operatorChoice))
     {
       terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
-          geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE), massWeight, "mass"});
+          geometry, p, Intrepid2::OPERATOR_VALUE, Intrepid2::OPERATOR_VALUE, basisFamily), massWeight, "mass"});
     }
     if (operatorIncludesStiffness(operatorChoice))
     {
@@ -533,15 +588,18 @@ namespace
         {
           auto vectorWeight = Teuchos::rcp(new Kokkos::Array<Scalar,spaceDim>());
           for (int e=0; e<spaceDim; e++) (*vectorWeight)[e] = (e == d) ? Scalar(1.0) : Scalar(0.0);
+          
           terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
-              geometry, p, Intrepid2::OPERATOR_GRAD, vectorWeight,
-              Intrepid2::OPERATOR_GRAD, vectorWeight), stiffnessWeight, "stiffness" + std::to_string(d)});
+              geometry, p,
+              Intrepid2::OPERATOR_GRAD, vectorWeight,
+              Intrepid2::OPERATOR_GRAD, vectorWeight,
+              basisFamily), stiffnessWeight, "stiffness" + std::to_string(d)});
         }
       }
       else
       {
         terms.push_back({Camellia::constructHypercubeHGRADPAMatrix<spaceDim>(
-            geometry, p, Intrepid2::OPERATOR_GRAD, Intrepid2::OPERATOR_GRAD), stiffnessWeight, "stiffness"});
+            geometry, p, Intrepid2::OPERATOR_GRAD, Intrepid2::OPERATOR_GRAD, basisFamily), stiffnessWeight, "stiffness"});
       }
     }
     if (terms.empty())
@@ -552,19 +610,20 @@ namespace
   }
 
   std::vector<OperatorTerm> makeHGRADOperatorTerms(const int dim, const int p, const int cellsPerDim, const std::string &operatorChoice,
-                                                    const Scalar massWeight, const Scalar stiffnessWeight)
+                                                   const Scalar massWeight, const Scalar stiffnessWeight,
+                                                   const Camellia::TensorBasisFamily basisFamily)
   {
     switch (dim)
     {
-      case 1: return makeHGRADOperatorTermsForDim<1>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
-      case 2: return makeHGRADOperatorTermsForDim<2>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
-      case 3: return makeHGRADOperatorTermsForDim<3>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
-      case 4: return makeHGRADOperatorTermsForDim<4>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
-      case 5: return makeHGRADOperatorTermsForDim<5>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
-      case 6: return makeHGRADOperatorTermsForDim<6>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
-      case 7: return makeHGRADOperatorTermsForDim<7>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
+      case 1: return makeHGRADOperatorTermsForDim<1>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight, basisFamily);
+      case 2: return makeHGRADOperatorTermsForDim<2>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight, basisFamily);
+      case 3: return makeHGRADOperatorTermsForDim<3>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight, basisFamily);
+      case 4: return makeHGRADOperatorTermsForDim<4>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight, basisFamily);
+      case 5: return makeHGRADOperatorTermsForDim<5>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight, basisFamily);
+      case 6: return makeHGRADOperatorTermsForDim<6>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight, basisFamily);
+      case 7: return makeHGRADOperatorTermsForDim<7>(p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight, basisFamily);
       default:
-        throw std::invalid_argument("--basisMode=hgrad supports --dim=1 through 7");
+        throw std::invalid_argument("--basisFamily=hgrad, hgrad-hierarchical, or hgrad-nodal supports --dim=1 through 7");
     }
   }
 
@@ -572,9 +631,26 @@ namespace
                                               const std::string &operatorChoice, const std::string &basisMode,
                                               const Scalar massWeight, const Scalar stiffnessWeight)
   {
-    if (basisMode == "synthetic") return makeSyntheticOperatorTerms(dim, p, cells, operatorChoice, massWeight, stiffnessWeight);
-    if (basisMode == "hgrad")     return makeHGRADOperatorTerms(dim, p, cellsPerDim, operatorChoice, massWeight, stiffnessWeight);
-    throw std::invalid_argument("--basisMode must be synthetic or hgrad");
+    if (basisMode == "synthetic")
+    {
+      return makeSyntheticOperatorTerms(
+          dim, p, cells, operatorChoice, massWeight, stiffnessWeight);
+    }
+
+    if (basisModeIsHGRAD(basisMode))
+    {
+      return makeHGRADOperatorTerms(
+          dim,
+          p,
+          cellsPerDim,
+          operatorChoice,
+          massWeight,
+          stiffnessWeight,
+          TensorBasisFamilyFromMode(basisMode));
+    }
+
+    throw std::invalid_argument(
+        "--basisFamily must be synthetic, hgrad, hgrad-hierarchical, or hgrad-nodal");
   }
 
   enum class VlasovCamelliaComparisonBlock
@@ -817,7 +893,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         Camellia::TENSOR_BILINEAR_TERM_VOLUME,
         Camellia::TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
 
-    Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(
+    Camellia::appendTensorVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(
         terms,
         geometry,
         p,
@@ -5017,7 +5093,8 @@ int main(int argc, char *argv[])
     std::string polyOrderText = "1:4";
     std::string operatorChoice = "mass-plus-stiffness";
     std::string mode = "apply";
-    std::string basisMode = "hgrad";
+    std::string basisFamily = "hgrad-hierarchical";
+    std::string basisMode;
     std::string inverseDiagnosticAlgorithm = "richardson";
     std::string inverseSpectralEstimate = "assembled-gershgorin";
     std::string inverseLowerSpectralEstimate = "ratio";
@@ -5029,7 +5106,14 @@ int main(int argc, char *argv[])
     cmdp.setOption("polyOrder", &polyOrderText, "Polynomial order p or inclusive range pMin:pMax.");
     cmdp.setOption("cellsPerDim", &cellsPerDim, "Uniform tensor cell count per dimension.");
     cmdp.setOption("operator", &operatorChoice, "mass, stiffness, mass-plus-stiffness, h1-gram, vlasov-dt, vlasov-coordinate, vlasov-linear-x0-x1-d2, vlasov-coordinate-x1-d3, vlasov-graph-norm-1d1t2v, or vlasov-graph-norm-solution-coeff-1d1t2v.  h1-gram is the weighted mass-plus-stiffness Gram starter case; vlasov-dt is the narrow constant-coefficient HGRAD/HGRAD tensor-volume bridge; vlasov-coordinate exercises the single-component coefficient bridge; vlasov-linear-x0-x1-d2 exercises a two-term separable decomposition of -0.5*(x0+x1)*value(f)*d2(w); vlasov-coordinate-x1-d3 exercises the separable -0.75*x1*value(f)*d3(w) partial term; vlasov-graph-norm-1d1t2v expands a 4D Planar MITL graph-norm proxy for Chebyshev G^{-1} calibration; vlasov-graph-norm-solution-coeff-1d1t2v routes the same proxy through TensorFunctionEvaluationContext solution-coefficient evaluators.");
-    cmdp.setOption("basisMode", &basisMode, "synthetic or hgrad.  hgrad uses Intrepid2 hypercube HGRAD hierarchical bases, tensor-product cubature, and affine geometry for dim=1..7; synthetic remains available for high-dimensional contraction stress tests.");
+    cmdp.setOption("basisFamily", &basisFamily,
+                   "synthetic, hgrad, hgrad-hierarchical, or hgrad-nodal. "
+                   "hgrad is an alias for hgrad-hierarchical. "
+                   "hgrad-hierarchical uses Intrepid2::HierarchicalBasisFamily; "
+                   "hgrad-nodal uses Intrepid2::DerivedNodalBasisFamily. "
+                   "Both HGRAD options use Intrepid2 hypercube HGRAD tensor-product cubature and affine geometry for dim=1..7.");
+    cmdp.setOption("basisMode", &basisMode,
+                   "Deprecated alias for --basisFamily. If supplied, overrides --basisFamily for backward compatibility.");
     cmdp.setOption("mode", &mode,
                    "apply, assemble, assemble2, assembly-compare, diagonal, compare, factor, "
                    "inverse-diagnostic, tpetra-operator-compare, tpetra-rowmatrix-compare, "
@@ -5124,6 +5208,10 @@ int main(int argc, char *argv[])
     if ((compareTpetraPowerEstimate != 0) && (compareTpetraPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraPowerEstimate must be 0 or 1");
     if ((compareTpetraRowMatrixPowerEstimate != 0) && (compareTpetraRowMatrixPowerEstimate != 1)) throw std::invalid_argument("--compareTpetraRowMatrixPowerEstimate must be 0 or 1");
     if ((ifpack2ChebyshevSmoke != 0) && (ifpack2ChebyshevSmoke != 1)) throw std::invalid_argument("--ifpack2ChebyshevSmoke must be 0 or 1");
+
+    if (!basisMode.empty()) basisFamily = basisMode;
+    basisMode = basisFamily;
+
     if ((mode != "apply") && (mode != "assemble") && (mode != "assemble2") &&
         (mode != "assembly-compare") && (mode != "diagonal") &&
         (mode != "compare") && (mode != "factor") &&
@@ -5144,18 +5232,35 @@ int main(int argc, char *argv[])
         (mode == "camellia-vlasov-rhs-compare");
 
     if (isCamelliaVlasovComparisonMode &&
-        ((dim != 4) || (cellsPerDim != 1) || (basisMode != "hgrad") ||
+        ((dim != 4) || (cellsPerDim != 1) || !basisModeIsHGRAD(basisMode) ||
          (std::abs(stiffnessWeight - 1.0) > 1e-15)))
     {
       throw std::invalid_argument(
           "--mode=camellia-vlasov-matrix-compare and "
           "--mode=camellia-vlasov-rhs-compare require "
-          "--dim=4 --cellsPerDim=1 --basisMode=hgrad --stiffnessWeight=1");
+          "--dim=4 --cellsPerDim=1 "
+          "--basisFamily=hgrad, hgrad-hierarchical, or hgrad-nodal "
+          "--stiffnessWeight=1");
     }
-    if ((basisMode != "synthetic") && (basisMode != "hgrad"))
-      throw std::invalid_argument("--basisMode must be synthetic or hgrad");
-    if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && (basisMode != "hgrad"))
-      throw std::invalid_argument("--operator=vlasov-dt, --operator=vlasov-coordinate, --operator=vlasov-linear-x0-x1-d2, --operator=vlasov-coordinate-x1-d3, --operator=vlasov-graph-norm-1d1t2v, and --operator=vlasov-graph-norm-solution-coeff-1d1t2v require --basisMode=hgrad");
+    if ((basisMode != "synthetic") && !basisModeIsHGRAD(basisMode))
+    {
+      throw std::invalid_argument(
+          "--basisFamily must be synthetic, hgrad, hgrad-hierarchical, or hgrad-nodal");
+    }
+    if ((basisMode == "hgrad-nodal") &&
+        inverseAlgorithmUsesPMultigrid(inverseDiagnosticAlgorithm))
+    {
+      throw std::invalid_argument(
+          "--basisFamily=hgrad-nodal is not yet supported for p-multigrid inverse "
+          "diagnostics because nodal p-prolongation/restriction has not been implemented");
+    }
+    if (((operatorChoice == "vlasov-dt") || (operatorChoice == "vlasov-coordinate") || (operatorChoice == "vlasov-linear-x0-x1-d2") || (operatorChoice == "vlasov-coordinate-x1-d3") || (operatorChoice == "vlasov-graph-norm-1d1t2v") || (operatorChoice == "vlasov-graph-norm-solution-coeff-1d1t2v")) && !basisModeIsHGRAD(basisMode))
+      throw std::invalid_argument(
+          "--operator=vlasov-dt, --operator=vlasov-coordinate, "
+          "--operator=vlasov-linear-x0-x1-d2, --operator=vlasov-coordinate-x1-d3, "
+          "--operator=vlasov-graph-norm-1d1t2v, and "
+          "--operator=vlasov-graph-norm-solution-coeff-1d1t2v require "
+          "--basisFamily=hgrad, hgrad-hierarchical, or hgrad-nodal");
     if ((inverseDiagnosticAlgorithm != "richardson") && (inverseDiagnosticAlgorithm != "chebyshev") &&
         (inverseDiagnosticAlgorithm != "gmres-chebyshev") &&
         (inverseDiagnosticAlgorithm != "gmres-jacobi") &&
@@ -5197,7 +5302,7 @@ int main(int argc, char *argv[])
     if (inverseTolerance <= 0.0) throw std::invalid_argument("--inverseTolerance must be positive");
     if ((inverseMaxResidualReduction == 0.0) || (inverseMaxResidualReduction < -1.0))
       throw std::invalid_argument("--inverseMaxResidualReduction must be positive, or negative to disable the check");
-    // --basisMode=hgrad is supported for --dim=1..7; unsupported dimensions are rejected above and in makeHGRADOperatorTerms().
+    // --basisFamily=hgrad, hgrad-hierarchical, or hgrad-nodal is supported for --dim=1..7; unsupported dimensions are rejected above and in makeHGRADOperatorTerms().
 
     const PolyOrderRange pRange = parsePolyOrderRange(polyOrderText);
     if ((pRange.first < 1) || (pRange.last < pRange.first)) throw std::invalid_argument("invalid --polyOrder range");

@@ -25,6 +25,7 @@ namespace
   {
     std::string outputFile = "vlasov-gram-matrix-free-study.txt";
     std::string tensorDriverPath;
+    std::string basisFamily = "intrepid2-hierarchical";
     int fineH1Order = 4;
     int elementsPerDim = 1;
     int maxIterations = 200;
@@ -133,6 +134,27 @@ namespace
     return strategies;
   }
 
+  std::vector<std::string> basisFamiliesToRun(const StudyOptions &options)
+  {
+    if (options.basisFamily == "all")
+      return {"intrepid2-nodal", "intrepid2-hierarchical"};
+    return {options.basisFamily};
+  }
+
+  std::string tensorPoissonBasisFamilyArgument(const std::string &basisFamily)
+  {
+    if (basisFamily == "intrepid2-hierarchical") return "hgrad-hierarchical";
+    if (basisFamily == "intrepid2-nodal") return "hgrad-nodal";
+    throw std::invalid_argument("Unknown Vlasov Gram matrix-free basisFamily: " + basisFamily);
+  }
+
+  bool strategyRequiresPMultigrid(const Strategy &strategy)
+  {
+    return (strategy.multigridStrategy == "V_CYCLE") ||
+           (strategy.matrixFreeAlgorithm.find("pmultigrid") != std::string::npos) ||
+           (strategy.matrixFreeAlgorithm.find("matrix-free-gmg") != std::string::npos);
+  }
+
   std::string shellQuote(const std::string &value)
   {
     std::string quoted = "'";
@@ -212,6 +234,7 @@ namespace
       if ((argument == "--help") || (argument == "-h"))
       {
         std::cout << "Usage: VlasovGramMatrixFreeStudyDriver [--outputFile=file] [--tensorDriverPath=path] [--fineH1Order=N] [--quick]\n"
+                  << "       [--basisFamily=intrepid2-hierarchical|intrepid2-nodal|all]\n"
                   << "       [--elementsPerDim=N] [--maxIterations=N] [--smootherApplications=N]\n"
                   << "       [--tolerance=tol] [--massWeight=w] [--pMultigridFineSmootherWeight=w]\n"
                   << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1] [--pMultigridFineWeightSweep=0|1]\n"
@@ -226,6 +249,7 @@ namespace
       const std::string value = argument.substr(equals + 1);
       if (key == "outputFile") options.outputFile = value;
       else if (key == "tensorDriverPath") options.tensorDriverPath = value;
+      else if (key == "basisFamily") options.basisFamily = value;
       else if ((key == "fineH1Order") || (key == "maxFineP")) options.fineH1Order = std::stoi(value);
       else if (key == "elementsPerDim") options.elementsPerDim = std::stoi(value);
       else if (key == "maxIterations") options.maxIterations = std::stoi(value);
@@ -249,6 +273,12 @@ namespace
     if (options.massWeight <= 0.0) throw std::invalid_argument("--massWeight must be positive");
     if (options.pMultigridFineSmootherWeight <= 0.0) throw std::invalid_argument("--pMultigridFineSmootherWeight must be positive");
     if (options.maxAssembledEntries < 1) throw std::invalid_argument("--maxAssembledEntries must be positive");
+    if ((options.basisFamily != "intrepid2-hierarchical") &&
+        (options.basisFamily != "intrepid2-nodal") &&
+        (options.basisFamily != "all"))
+    {
+      throw std::invalid_argument("--basisFamily must be intrepid2-hierarchical, intrepid2-nodal, or all");
+    }
   }
 
   std::string keyValueAfter(const std::string &text, const std::string &key, std::string::size_type start)
@@ -344,14 +374,14 @@ namespace
     return result;
   }
 
-  std::string commandArguments(const StudyOptions &options, const Strategy &strategy, const int p, const double fineSmootherWeight)
+  std::string commandArguments(const StudyOptions &options, const Strategy &strategy, const int p, const double fineSmootherWeight, const std::string &basisFamily)
   {
     std::ostringstream arguments;
     arguments << "--dim=4"
               << " --polyOrder=" << p
               << " --cellsPerDim=" << options.elementsPerDim
               << " --operator=vlasov-graph-norm-solution-coeff-1d1t2v"
-              << " --basisMode=hgrad"
+              << " --basisFamily=" << tensorPoissonBasisFamilyArgument(basisFamily)
               << " --mode=inverse-diagnostic"
               << " --inverseDiagnosticAlgorithm=" << strategy.matrixFreeAlgorithm
               << " --numInverseIterations=" << options.maxIterations
@@ -422,7 +452,9 @@ namespace
     out << "Tensor driver: " << tensorDriverPath << "\n\n";
     out << "Discretization:\n";
     out << "  space: tensor HGRAD\n";
-    out << "  basis family: Intrepid2 hierarchical tensor HGRAD\n";
+    out << "  basis family option: " << options.basisFamily << "\n";
+    out << "  TensorPoisson basis mapping: intrepid2-hierarchical -> hgrad-hierarchical; intrepid2-nodal -> hgrad-nodal\n";
+    out << "  nodal p-multigrid rows are skipped until nodal p-prolongation/restriction is implemented\n";
     out << "  elements per dimension: " << options.elementsPerDim << "\n";
     out << "  fine p degree range: 1 .. " << options.fineH1Order << "\n";
     out << "  p coarsening schedule: for each fine p, p -> max(p/2,1) -> ... -> 1; max-p schedule is "
@@ -437,7 +469,9 @@ namespace
     out << "  matrixFreeGMGStageTrace: " << (options.matrixFreeGMGStageTrace ? "enabled" : "disabled") << "\n";
     out << "  Optional MatrixFreeGMG stage traces are emitted as VLASOV_MATRIX_FREE_GMG_STAGE_TRACE rows.\n";
     out << "  P2_PMG_FINEWT_RESULT includes matrixFreeGMGStageTrace and matrixFreeGMGStageTraceEntries.\n\n";
-    out << std::left << std::setw(68) << "strategy"
+    out << std::left << std::setw(8) << "p"
+        << std::setw(24) << "basis"
+        << std::setw(56) << "strategy"
         << std::setw(16) << "status"
         << std::setw(12) << "iterations"
         << std::setw(14) << "seconds"
@@ -452,7 +486,7 @@ namespace
         << std::setw(18) << "wrapperDiff"
         << std::setw(18) << "wrapperRelDiff"
         << "path" << "\n";
-    out << std::string(272, '-') << "\n";
+    out << std::string(296, '-') << "\n";
   }
 }
 
@@ -469,10 +503,12 @@ int main(int argc, char *argv[])
     if (!output.good()) throw std::runtime_error("Could not open output file: " + options.outputFile);
     writeHeader(output, options, options.tensorDriverPath);
 
-    for (int fineP = 1; fineP <= options.fineH1Order; fineP++)
+    for (const std::string &basisFamily : basisFamiliesToRun(options))
     {
-      for (const Strategy &strategy : defaultStrategies(options.quick))
+      for (int fineP = 1; fineP <= options.fineH1Order; fineP++)
       {
+        for (const Strategy &strategy : defaultStrategies(options.quick))
+        {
         std::vector<double> fineSmootherWeights(1, strategy.fineSmootherWeight * options.pMultigridFineSmootherWeight);
         if ((fineP == 2) && (strategy.multigridStrategy == "V_CYCLE") && strategy.supported && options.pMultigridFineWeightSweep)
         {
@@ -489,9 +525,17 @@ int main(int argc, char *argv[])
                                        ? " fineWeight=" + std::to_string(fineSmootherWeight)
                                        : std::string();
         const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name + weightSuffix;
-        if (!strategy.supported || ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
+        const bool nodalPMultigridUnsupported =
+            (basisFamily == "intrepid2-nodal") && strategyRequiresPMultigrid(strategy);
+        if (!strategy.supported || nodalPMultigridUnsupported ||
+            ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
         {
-          output << std::left << std::setw(68) << strategyName
+          const std::string unsupportedReason = nodalPMultigridUnsupported
+              ? "nodal_pmultigrid_prolongator_not_implemented"
+              : "matrix_free_preconditioner_gap";
+          output << std::left << std::setw(8) << fineP
+                 << std::setw(24) << basisFamily
+                 << std::setw(56) << strategy.name
                  << std::setw(16) << "not_supported"
                  << std::setw(12) << -1
                  << std::setw(14) << std::setprecision(6) << std::fixed << 0.0
@@ -505,11 +549,11 @@ int main(int argc, char *argv[])
                  << std::setw(18) << "n/a"
                  << std::setw(18) << "n/a"
                  << std::setw(18) << "n/a"
-                 << "matrix_free_preconditioner_gap" << "\n";
+                 << unsupportedReason << "\n";
           continue;
         }
 
-        const DriverRun run = runDriver(options.tensorDriverPath, commandArguments(options, strategy, fineP, fineSmootherWeight), options.keepChildOutput);
+        const DriverRun run = runDriver(options.tensorDriverPath, commandArguments(options, strategy, fineP, fineSmootherWeight, basisFamily), options.keepChildOutput);
         const Diagnostic diagnostic = parseDiagnostic(run.output);
         if (options.matrixFreeGMGStageTrace && (diagnostic.matrixFreeGMGStageTraceEntries > 0))
           writeMatrixFreeGMGStageTraceRows(output, run.output, strategy, fineP, fineSmootherWeight);
@@ -522,7 +566,9 @@ int main(int argc, char *argv[])
                                ? diagnostic.pMultigridPath
                                : diagnostic.inversePath;
 
-        output << std::left << std::setw(68) << strategyName
+        output << std::left << std::setw(8) << fineP
+               << std::setw(24) << basisFamily
+               << std::setw(56) << strategy.name
                << std::setw(16) << status
                << std::setw(12) << diagnostic.iterations
                << std::setw(14) << std::setprecision(6) << std::fixed << run.seconds
@@ -543,6 +589,7 @@ int main(int argc, char *argv[])
           const double printedFineSmootherWeight = (diagnostic.pMultigridFineSmootherWeight > 0.0) ? diagnostic.pMultigridFineSmootherWeight : fineSmootherWeight;
           std::ostringstream fineWtRow;
           fineWtRow << "P2_PMG_FINEWT_RESULT"
+                    << " basisFamily=" << basisFamily
                     << " strategy=" << strategy.name
                     << " fineWt=" << std::setprecision(12) << std::defaultfloat << printedFineSmootherWeight
                     << " status=" << status
@@ -558,6 +605,7 @@ int main(int argc, char *argv[])
         }
         }
       }
+    }
     }
 
     output << "\nNotes:\n";
