@@ -4335,7 +4335,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         while (levels.back().degree > 1)
         {
           const PMultigridLevel &fineLevel = levels.back();
-          const TensorHGradPTransfer &levelTransfer = cachedTensorHGradPTransfer(dim, fineLevel.degree);
+          const auto &levelTransfer = Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, fineLevel.degree);
           const int levelCoarseRows = levelTransfer.coarseRows;
           PMultigridLevel nextLevel;
           nextLevel.degree = fineLevel.degree - 1;

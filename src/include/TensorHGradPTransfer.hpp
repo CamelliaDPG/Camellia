@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Intrepid2_DerivedBasisFamily.hpp>
+#include <Intrepid2_HierarchicalBasisFamily.hpp>
 #include <Intrepid2_HierarchicalBasisProlongator.hpp>
 
 #include <Kokkos_Core.hpp>
