@@ -452,9 +452,9 @@ namespace
     out << "  This harness drives TensorPoissonPAMatrixDriver inverse diagnostics.\n";
     out << "  Outer operator applications use LocalPAMatrixTpetraOperator / PAMatrix terms.\n";
     out << "  GMRES smoother-only rows use the existing right-preconditioned Belos+Ifpack2 path.\n";
-    out << "  p-multigrid rows use the currently available local p-multigrid diagnostic recurrences;\n";
-    out << "  GMGOperator-equivalent matrix-free V-cycle-as-right-preconditioner rows remain marked\n";
-    out << "  by strategy names/paths until that lower-level preconditioner object exists.\n\n";
+    out << "  p-multigrid rows use TensorPoissonPAMatrixDriver's local two-level p-multigrid preconditioner;\n";
+    out << "  hierarchical p-multigrid uses Intrepid2::HierarchicalBasisProlongator for P and R=P^T for restriction.\n";
+    out << "  These rows are still TensorPoisson local V-cycle rows and are not yet asserted to match assembled GMGOperator stage-by-stage semantics.\n\n";
     out << "Tensor driver: " << tensorDriverPath << "\n\n";
     out << "Discretization:\n";
     out << "  space: tensor HGRAD\n";
@@ -479,7 +479,7 @@ namespace
     out << std::left << std::setw(8) << "p"
         << std::setw(24) << "basis"
         << std::setw(56) << "strategy"
-        << std::setw(16) << "status"
+        << std::setw(22) << "status"
         << std::setw(12) << "iterations"
         << std::setw(14) << "seconds"
         << std::setw(18) << "mg"
@@ -494,7 +494,7 @@ namespace
         << std::setw(18) << "wrapperDiff"
         << std::setw(18) << "wrapperRelDiff"
         << "path" << "\n";
-    out << std::string(310, '-') << "\n";
+    out << std::string(316, '-') << "\n";
   }
 }
 
@@ -544,7 +544,7 @@ int main(int argc, char *argv[])
           output << std::left << std::setw(8) << fineP
                  << std::setw(24) << basisFamily
                  << std::setw(56) << strategy.name
-                 << std::setw(16) << "not_supported"
+                 << std::setw(22) << "not_supported"
                  << std::setw(12) << -1
                  << std::setw(14) << std::setprecision(6) << std::fixed << 0.0
                  << std::setw(18) << strategy.multigridStrategy
@@ -599,7 +599,7 @@ int main(int argc, char *argv[])
         output << std::left << std::setw(8) << fineP
                << std::setw(24) << basisFamily
                << std::setw(56) << strategy.name
-               << std::setw(16) << status
+               << std::setw(22) << status
                << std::setw(12) << diagnostic.iterations
                << std::setw(14) << std::setprecision(6) << std::fixed << run.seconds
                << std::setw(18) << strategy.multigridStrategy
@@ -645,9 +645,10 @@ int main(int argc, char *argv[])
     output << "  reusing TensorPoissonPAMatrixDriver's Vlasov graph-norm PAMatrix terms.\n";
     output << "  The smoother-only rows are the closest GMGOperator-study analog currently ready:\n";
     output << "  Belos GMRES with right Ifpack2 Jacobi/Chebyshev preconditioning and the same RHS.\n";
-    output << "  The p-multigrid rows are diagnostic local V-cycle recurrences, not yet the exact\n";
-    output << "  GMGOperator semantics of a matrix-free V-cycle object used as a right preconditioner.\n";
-    output << "  Unsupported lower-degree p-multigrid rows are retained to make that remaining gap explicit.\n";
+    output << "  The p-multigrid rows are TensorPoisson local two-level V-cycle preconditioner rows;\n";
+    output << "  hierarchical transfer uses Intrepid2::HierarchicalBasisProlongator for P and R=P^T.\n";
+    output << "  They are not yet asserted to match assembled GMGOperator stage-by-stage semantics.\n";
+    output << "  Unsupported lower-degree p-multigrid rows are retained to make remaining gaps explicit.\n";
     output << "  Child command lines are echoed to stdout with VLASOV_GRAM_MATRIX_FREE_CHILD_COMMAND.\n";
 
     std::cout << "VLASOV_GRAM_MATRIX_FREE_DRIVER_VERSION matrix_free_gmg_stage_trace_diagnostic" << std::endl;

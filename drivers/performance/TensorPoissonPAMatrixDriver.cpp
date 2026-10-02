@@ -2539,6 +2539,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
            << ",fineRows=" << transfer_->fineRows << ",coarseRows=" << transfer_->coarseRows
            << ",smoother=" << smootherName_ << ",smootherIterations=" << smootherIterations_
            << ",smootherLowerFraction=" << smootherLowerFraction_
+           << ",transfer=Intrepid2_HierarchicalBasisProlongator,restriction=prolongation_transpose"
            << ",coarse=exact_cholesky)";
       description_ = desc.str();
     }
