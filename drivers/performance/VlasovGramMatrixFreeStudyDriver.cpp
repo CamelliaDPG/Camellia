@@ -68,6 +68,7 @@ namespace
     int iterations = -1;
     int converged = 0;
     double residualReduction = -1.0;
+    double initialResidualNorm = -1.0;
     double finalResidualNorm = -1.0;
     double pMultigridFineSmootherWeight = -1.0;
     int matrixFreeGMGStageTrace = 0;
@@ -249,7 +250,7 @@ namespace
       const std::string value = argument.substr(equals + 1);
       if (key == "outputFile") options.outputFile = value;
       else if (key == "tensorDriverPath") options.tensorDriverPath = value;
-      else if (key == "basisFamily") options.basisFamily = value;
+      else if ((key == "basisFamily") || (key == "basisMode")) options.basisFamily = value;
       else if ((key == "fineH1Order") || (key == "maxFineP")) options.fineH1Order = std::stoi(value);
       else if (key == "elementsPerDim") options.elementsPerDim = std::stoi(value);
       else if (key == "maxIterations") options.maxIterations = std::stoi(value);
@@ -313,6 +314,7 @@ namespace
     diagnostic.iterations = parseIntAfter(output, "iterations", lineStart, -1);
     diagnostic.converged = parseIntAfter(output, "inverseConverged", lineStart, 0);
     diagnostic.residualReduction = parseDoubleAfter(output, "residualReduction", lineStart, -1.0);
+    diagnostic.initialResidualNorm = parseDoubleAfter(output, "initialResidualNorm", lineStart, -1.0);
     diagnostic.finalResidualNorm = parseDoubleAfter(output, "finalResidualNorm", lineStart, -1.0);
     diagnostic.pMultigridFineSmootherWeight = parseDoubleAfter(output, "pMultigridFineSmootherWeight", lineStart, -1.0);
     diagnostic.matrixFreeGMGStageTrace = parseIntAfter(output, "matrixFreeGMGStageTrace", lineStart, 0);
@@ -482,11 +484,12 @@ namespace
         << std::setw(12) << "chebRatio"
         << std::setw(14) << "maxEigIters"
         << std::setw(14) << "fineWt"
-        << std::setw(18) << "residualRed."
+        << std::setw(14) << "relRes"
+        << std::setw(14) << "absRes"
         << std::setw(18) << "wrapperDiff"
         << std::setw(18) << "wrapperRelDiff"
         << "path" << "\n";
-    out << std::string(296, '-') << "\n";
+    out << std::string(310, '-') << "\n";
   }
 }
 
@@ -546,7 +549,8 @@ int main(int argc, char *argv[])
                  << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
                  << std::setw(14) << strategy.chebyshevMaxEigenIterations
                  << std::setw(14) << ((strategy.multigridStrategy == "V_CYCLE") ? std::to_string(fineSmootherWeight) : std::string("n/a"))
-                 << std::setw(18) << "n/a"
+                 << std::setw(14) << "n/a"
+                 << std::setw(14) << "n/a"
                  << std::setw(18) << "n/a"
                  << std::setw(18) << "n/a"
                  << unsupportedReason << "\n";
@@ -558,10 +562,31 @@ int main(int argc, char *argv[])
         if (options.matrixFreeGMGStageTrace && (diagnostic.matrixFreeGMGStageTraceEntries > 0))
           writeMatrixFreeGMGStageTraceRows(output, run.output, strategy, fineP, fineSmootherWeight);
         const bool childSucceeded = (run.status == 0);
-        const std::string status = (!childSucceeded) ? "failed"
-                                 : (!diagnostic.found) ? "missing_diag"
-                                 : (diagnostic.converged != 0) ? "converged"
-                                 : "not_converged";
+        std::string status;
+        if (!childSucceeded)
+        {
+          status = "failed";
+        }
+        else if (!diagnostic.found)
+        {
+          status = "missing_diag";
+        }
+        else if ((diagnostic.converged != 0) && (diagnostic.residualReduction <= options.tolerance))
+        {
+          status = "converged";
+        }
+        else if (diagnostic.iterations >= options.maxIterations)
+        {
+          status = "max_iterations";
+        }
+        else if (diagnostic.converged != 0)
+        {
+          status = "stopped_unverified";
+        }
+        else
+        {
+          status = "not_converged";
+        }
         const std::string path = (strategy.matrixFreeAlgorithm.find("pmultigrid") == 0)
                                ? diagnostic.pMultigridPath
                                : diagnostic.inversePath;
@@ -580,7 +605,8 @@ int main(int argc, char *argv[])
                << std::setw(14) << strategy.chebyshevMaxEigenIterations
                << std::setw(14) << std::setprecision(6) << std::fixed
                << ((diagnostic.pMultigridFineSmootherWeight > 0.0) ? diagnostic.pMultigridFineSmootherWeight : fineSmootherWeight)
-               << std::setw(18) << std::setprecision(6) << std::scientific << diagnostic.residualReduction
+               << std::setw(14) << std::setprecision(6) << std::scientific << diagnostic.residualReduction
+               << std::setw(14) << diagnostic.finalResidualNorm
                << std::setw(18) << diagnostic.localPMultigridWrapperDifferenceInfNorm
                << std::setw(18) << diagnostic.localPMultigridWrapperRelativeDifferenceInfNorm
                << path << "\n";
@@ -595,6 +621,7 @@ int main(int argc, char *argv[])
                     << " status=" << status
                     << " iterations=" << diagnostic.iterations
                     << " residualReduction=" << std::setprecision(16) << std::scientific << diagnostic.residualReduction
+                    << " initialResidualNorm=" << diagnostic.initialResidualNorm
                     << " finalResidualNorm=" << diagnostic.finalResidualNorm
                     << " matrixFreeGMGStageTrace=" << diagnostic.matrixFreeGMGStageTrace
                     << " matrixFreeGMGStageTraceEntries=" << diagnostic.matrixFreeGMGStageTraceEntries

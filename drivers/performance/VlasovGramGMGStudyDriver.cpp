@@ -669,6 +669,46 @@ int main(int argc, char *argv[])
           int solveResult = solution->solve(solver);
           const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
           const int iterations = (solveResult == 0) ? gmgSolver->iterationCount() : -1;
+
+          double rhsInfNorm = -1.0;
+          double residualInfNorm = -1.0;
+          double relativeResidual = -1.0;
+          bool residualAvailable = false;
+          if (solveResult == 0)
+          {
+            auto rhsVector = solution->getRHSVector();
+            auto lhsVector = solution->getLHSVector();
+            auto stiffnessMatrix = solution->getStiffnessMatrix();
+            if ((rhsVector != Teuchos::null) && (lhsVector != Teuchos::null) && (stiffnessMatrix != Teuchos::null))
+            {
+              TVector<Scalar> residual(*rhsVector, Teuchos::Copy);
+              TVector<Scalar> matrixTimesSolution(rhsVector->getMap(), rhsVector->getNumVectors());
+              stiffnessMatrix->apply(*lhsVector, matrixTimesSolution);
+              residual.update(-1.0, matrixTimesSolution, 1.0);
+              rhsInfNorm = maxInfNorm(*rhsVector);
+              residualInfNorm = maxInfNorm(residual);
+              relativeResidual = residualInfNorm / std::max(rhsInfNorm, 1e-300);
+              residualAvailable = true;
+            }
+          }
+
+          std::string solveStatus;
+          if (solveResult != 0)
+          {
+            solveStatus = "failed";
+          }
+          else if (residualAvailable && (relativeResidual <= degreeOptions.tolerance))
+          {
+            solveStatus = "converged";
+          }
+          else if (iterations >= degreeOptions.maxIterations)
+          {
+            solveStatus = "max_iterations";
+          }
+          else
+          {
+            solveStatus = "stopped_unverified";
+          }
           
           if ((rank == 0) && (fineP == 2) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
           {
