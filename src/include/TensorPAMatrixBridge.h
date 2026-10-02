@@ -23,6 +23,12 @@
 
 namespace Camellia
 {
+  enum class TensorBasisFamily
+  {
+    Hierarchical,
+    Nodal
+  };
+
   namespace detail
   {
     template<class BasisFamily>
@@ -345,7 +351,7 @@ namespace Camellia
     return Scalar(1.0);
   }
 
-  template<int spaceDim, unsigned long spaceDim2, class DeviceType, class Scalar>
+  template<class IntrepidBasisFamily, int spaceDim, unsigned long spaceDim2, class DeviceType, class Scalar>
   Intrepid2::PAMatrix<DeviceType,Scalar> constructHypercubePAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
                                                                     const int p,
                                                                     const Intrepid2::EFunctionSpace functionSpace1,
@@ -358,11 +364,10 @@ namespace Camellia
                                                                     Scalar *scalarWeight = nullptr,
                                                                     TensorFunctionEvaluationContext *evaluationContext = nullptr)
   {
-    using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
     using ExecutionSpace = typename DeviceType::execution_space;
 
-    auto basis1 = detail::getHypercubeBasisForPAMatrixBridge<BasisFamily>(functionSpace1, p, spaceDim);
-    auto basis2 = detail::getHypercubeBasisForPAMatrixBridge<BasisFamily>(functionSpace2, p, spaceDim);
+    auto basis1 = detail::getHypercubeBasisForPAMatrixBridge<IntrepidBasisFamily>(functionSpace1, p, spaceDim);
+    auto basis2 = detail::getHypercubeBasisForPAMatrixBridge<IntrepidBasisFamily>(functionSpace2, p, spaceDim);
 
     Intrepid2::TensorData<Scalar,DeviceType> tensorCubatureWeights;
     auto tensorCubaturePoints = makeHypercubeCubaturePoints<spaceDim,DeviceType,Scalar>(2 * p, tensorCubatureWeights);
@@ -437,21 +442,89 @@ namespace Camellia
   }
 
   template<int spaceDim, unsigned long spaceDim2, class DeviceType, class Scalar>
-  Intrepid2::PAMatrix<DeviceType,Scalar> constructHypercubeHGRADPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
-                                                                         const int p,
-                                                                         const Intrepid2::EOperator op1,
-                                                                         Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
-                                                                         const Intrepid2::EOperator op2,
-                                                                         Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
-                                                                         const TensorFunctionPtr &coefficient = Teuchos::null,
-                                                                         Scalar *scalarWeight = nullptr,
-                                                                         TensorFunctionEvaluationContext *evaluationContext = nullptr)
+  Intrepid2::PAMatrix<DeviceType,Scalar>
+  constructHypercubePAMatrix(
+      Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+      const int p,
+      const Intrepid2::EFunctionSpace functionSpace1,
+      const Intrepid2::EOperator op1,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
+      const Intrepid2::EFunctionSpace functionSpace2,
+      const Intrepid2::EOperator op2,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
+      const TensorFunctionPtr &coefficient = Teuchos::null,
+      Scalar *scalarWeight = nullptr,
+      TensorFunctionEvaluationContext *evaluationContext = nullptr,
+      const TensorBasisFamily basisFamily = TensorBasisFamily::Hierarchical)
   {
-    using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
+    switch (basisFamily)
+    {
+      case TensorBasisFamily::Hierarchical:
+      {
+        using IntrepidBasisFamily =
+            Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
+
+        return constructHypercubePAMatrix
+            <IntrepidBasisFamily,spaceDim,spaceDim2,DeviceType,Scalar>(
+                geometry,
+                p,
+                functionSpace1,
+                op1,
+                vectorWeight1,
+                functionSpace2,
+                op2,
+                vectorWeight2,
+                coefficient,
+                scalarWeight,
+                evaluationContext);
+      }
+
+      case TensorBasisFamily::Nodal:
+      {
+        using IntrepidBasisFamily =
+            Intrepid2::DerivedNodalBasisFamily<DeviceType,Scalar,Scalar>;
+
+        return constructHypercubePAMatrix
+            <IntrepidBasisFamily,spaceDim,spaceDim2,DeviceType,Scalar>(
+                geometry,
+                p,
+                functionSpace1,
+                op1,
+                vectorWeight1,
+                functionSpace2,
+                op2,
+                vectorWeight2,
+                coefficient,
+                scalarWeight,
+                evaluationContext);
+      }
+
+      default:
+        throw std::invalid_argument("Unknown TensorBasisFamily");
+    }
+  }
+
+  template<class IntrepidBasisFamily,
+           int spaceDim,
+           unsigned long spaceDim2,
+           class DeviceType,
+           class Scalar>
+  Intrepid2::PAMatrix<DeviceType,Scalar>
+  constructHypercubeHGRADPAMatrixForBasisFamily(
+      Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+      const int p,
+      const Intrepid2::EOperator op1,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
+      const Intrepid2::EOperator op2,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
+      const TensorFunctionPtr &coefficient = Teuchos::null,
+      Scalar *scalarWeight = nullptr,
+      TensorFunctionEvaluationContext *evaluationContext = nullptr)
+  {
     using ExecutionSpace = typename DeviceType::execution_space;
 
-    auto basis1 = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(p, spaceDim);
-    auto basis2 = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(p, spaceDim);
+    auto basis1 = Intrepid2::getHypercubeBasis_HGRAD<IntrepidBasisFamily>(p, spaceDim);
+    auto basis2 = Intrepid2::getHypercubeBasis_HGRAD<IntrepidBasisFamily>(p, spaceDim);
 
     Intrepid2::TensorData<Scalar,DeviceType> tensorCubatureWeights;
     auto tensorCubaturePoints = makeHypercubeCubaturePoints<spaceDim,DeviceType,Scalar>(2 * p, tensorCubatureWeights);
@@ -525,14 +598,110 @@ namespace Camellia
     return Intrepid2::PAMatrix<DeviceType,Scalar>(transformedBasis1Values, cellMeasures, transformedBasis2Values);
   }
 
+  template<int spaceDim, unsigned long spaceDim2, class DeviceType, class Scalar>
+  Intrepid2::PAMatrix<DeviceType,Scalar>
+  constructHypercubeHGRADPAMatrix(
+      Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+      const int p,
+      const Intrepid2::EOperator op1,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
+      const Intrepid2::EOperator op2,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
+      const TensorFunctionPtr &coefficient = Teuchos::null,
+      Scalar *scalarWeight = nullptr,
+      TensorFunctionEvaluationContext *evaluationContext = nullptr,
+      const TensorBasisFamily basisFamily = TensorBasisFamily::Hierarchical)
+  {
+    switch (basisFamily)
+    {
+      case TensorBasisFamily::Hierarchical:
+      {
+        using IntrepidBasisFamily =
+            Intrepid2::HierarchicalBasisFamily<DeviceType,Scalar,Scalar>;
+
+        return constructHypercubeHGRADPAMatrixForBasisFamily
+            <IntrepidBasisFamily,spaceDim,spaceDim2,DeviceType,Scalar>(
+                geometry,
+                p,
+                op1,
+                vectorWeight1,
+                op2,
+                vectorWeight2,
+                coefficient,
+                scalarWeight,
+                evaluationContext);
+      }
+
+      case TensorBasisFamily::Nodal:
+      {
+        using IntrepidBasisFamily =
+            Intrepid2::DerivedNodalBasisFamily<DeviceType,Scalar,Scalar>;
+
+        return constructHypercubeHGRADPAMatrixForBasisFamily
+            <IntrepidBasisFamily,spaceDim,spaceDim2,DeviceType,Scalar>(
+                geometry,
+                p,
+                op1,
+                vectorWeight1,
+                op2,
+                vectorWeight2,
+                coefficient,
+                scalarWeight,
+                evaluationContext);
+      }
+
+      default:
+        throw std::invalid_argument("Unknown TensorBasisFamily");
+    }
+  }
+
   template<int spaceDim, class DeviceType, class Scalar>
-  Intrepid2::PAMatrix<DeviceType,Scalar> constructHypercubeHGRADPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
-                                                                         const int p,
-                                                                         const Intrepid2::EOperator op1,
-                                                                         const Intrepid2::EOperator op2)
+  Intrepid2::PAMatrix<DeviceType,Scalar>
+  constructHypercubeHGRADPAMatrix(
+      Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+      const int p,
+      const Intrepid2::EOperator op1,
+      const Intrepid2::EOperator op2,
+      const TensorBasisFamily basisFamily = TensorBasisFamily::Hierarchical)
   {
     Teuchos::RCP<Kokkos::Array<Scalar,spaceDim>> nullVectorWeight = Teuchos::null;
-    return constructHypercubeHGRADPAMatrix<spaceDim,spaceDim,DeviceType,Scalar>(geometry, p, op1, nullVectorWeight, op2, nullVectorWeight);
+    return constructHypercubeHGRADPAMatrix<spaceDim,spaceDim,DeviceType,Scalar>(
+        geometry,
+        p,
+        op1,
+        nullVectorWeight,
+        op2,
+        nullVectorWeight,
+        Teuchos::null,
+        nullptr,
+        nullptr,
+        basisFamily);
+  }
+
+  template<int spaceDim, unsigned long spaceDim2, class DeviceType, class Scalar>
+  Intrepid2::PAMatrix<DeviceType,Scalar>
+  constructHypercubeHGRADPAMatrix(
+      Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+      const int p,
+      const Intrepid2::EOperator op1,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight1,
+      const Intrepid2::EOperator op2,
+      Teuchos::RCP<Kokkos::Array<Scalar,spaceDim2>> vectorWeight2,
+      const TensorBasisFamily basisFamily)
+  {
+    Scalar *nullScalarWeight = nullptr;
+
+    return constructHypercubeHGRADPAMatrix<spaceDim,spaceDim2,DeviceType,Scalar>(
+        geometry,
+        p,
+        op1,
+        vectorWeight1,
+        op2,
+        vectorWeight2,
+        Teuchos::null,
+        nullScalarWeight,
+        nullptr,
+        basisFamily);
   }
 
   template<int spaceDim>
@@ -584,11 +753,12 @@ namespace Camellia
   }
 
   template<int spaceDim, class DeviceType, class Scalar>
-  TensorPAMatrixTerm<DeviceType,Scalar> adaptTensorHGRADVolumeTermToPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
-                                                                             const int p,
-                                                                             const TensorBilinearTerm &term,
-                                                                             const std::string &label,
-                                                                             TensorFunctionEvaluationContext *evaluationContext = nullptr)
+  TensorPAMatrixTerm<DeviceType,Scalar> adaptTensorVolumeTermToPAMatrix(Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+                                                                        const int p,
+                                                                        const TensorBilinearTerm &term,
+                                                                        const std::string &label,
+                                                                        TensorFunctionEvaluationContext *evaluationContext = nullptr,
+                                                                        const TensorBasisFamily basisFamily = TensorBasisFamily::Hierarchical)
   {
     if (!term.isVolumeTerm()) throw std::invalid_argument("PAMatrix bridge only accepts tensor volume terms");
     if (!term.isPAMatrixCandidate()) throw std::invalid_argument("Tensor term does not declare PAMatrix support");
@@ -597,33 +767,52 @@ namespace Camellia
 
     const auto functionSpace1 = intrepidFunctionSpaceForTensorDescriptor(term.trialOperator());
     const auto functionSpace2 = intrepidFunctionSpaceForTensorDescriptor(term.testOperator());
+
+    const auto & HVOL  = Intrepid2::FUNCTION_SPACE_HVOL;
+    const auto & HGRAD = Intrepid2::FUNCTION_SPACE_HGRAD;
+    
+    const bool supportedTrialSpace = (functionSpace1 == HGRAD) || (functionSpace1 == HVOL);
+    const bool supportedTestSpace  = (functionSpace2 == HGRAD) || (functionSpace2 == HVOL);
+
+    if (!supportedTrialSpace || !supportedTestSpace)
+    {
+      throw std::invalid_argument(
+          "adaptTensorHGRADVolumeTermToPAMatrix currently supports HGRAD/HVOL volume terms");
+    }
+
     const auto op1 = pamatrixOperatorForTensorDescriptor(term.trialOperator());
     const auto op2 = pamatrixOperatorForTensorDescriptor(term.testOperator());
+
     auto vectorWeight1 = vectorWeightForSingleDerivative<spaceDim,Scalar>(term.trialOperator());
     auto vectorWeight2 = vectorWeightForSingleDerivative<spaceDim,Scalar>(term.testOperator());
+
     Scalar scalarWeight = Scalar(1.0);
 
-    return {constructHypercubePAMatrix<spaceDim,spaceDim,DeviceType,Scalar>(geometry, p,
-                                                                                 functionSpace1, op1, vectorWeight1,
-                                                                                 functionSpace2, op2, vectorWeight2,
-                                                                                term.coefficient(), &scalarWeight,
-                                                                                  evaluationContext),
-            scalarWeight, label};
+    return {constructHypercubePAMatrix<spaceDim,spaceDim,DeviceType,Scalar>(
+                geometry,
+                p,
+                functionSpace1, op1, vectorWeight1,
+                functionSpace2, op2, vectorWeight2,
+                term.coefficient(), &scalarWeight, evaluationContext, basisFamily),
+            scalarWeight,
+            label};
   }
 
   template<int spaceDim, class DeviceType, class Scalar>
-  void appendTensorHGRADVolumeTermsToPAMatrix(std::vector<TensorPAMatrixTerm<DeviceType,Scalar>> &terms,
-                                              Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
-                                              const int p,
-                                              const TensorBilinearTerm &term,
-                                              const std::string &label,
-                                              TensorFunctionEvaluationContext *evaluationContext = nullptr)
+  void appendTensorVolumeTermsToPAMatrix(
+      std::vector<TensorPAMatrixTerm<DeviceType,Scalar>> &terms,
+      Intrepid2::CellGeometry<Scalar,spaceDim,DeviceType> &geometry,
+      const int p,
+      const TensorBilinearTerm &term,
+      const std::string &label,
+      TensorFunctionEvaluationContext *evaluationContext = nullptr,
+      const TensorBasisFamily basisFamily = TensorBasisFamily::Hierarchical)
   {
     const auto coefficientAddends = decomposeTensorCoefficientForPAMatrixBridge<spaceDim>(term.coefficient());
     if (coefficientAddends.size() == 1)
     {
-      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, p, term, label,
-                                                                                       evaluationContext));
+      terms.push_back(adaptTensorVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, p, term, label,
+                                                                                       evaluationContext, basisFamily));
       return;
     }
 
@@ -637,9 +826,9 @@ namespace Camellia
                                               addend,
                                               term.domain(),
                                               term.capabilities());
-      terms.push_back(adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, p, addendTerm,
+      terms.push_back(adaptTensorVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, p, addendTerm,
                                                                                        label + "_addend" + std::to_string(addendOrdinal),
-                                                                                       evaluationContext));
+                                                                                       evaluationContext, basisFamily));
       addendOrdinal++;
     }
   }

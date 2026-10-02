@@ -207,7 +207,7 @@ namespace
     const int worksetSize = geometry.numCells();
 
     std::vector<TensorPAMatrixTerm<DeviceType,Scalar>> bridgeTerms;
-    Camellia::appendTensorHGRADVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(bridgeTerms, geometry, p, term, label,
+    Camellia::appendTensorVolumeTermsToPAMatrix<spaceDim,DeviceType,Scalar>(bridgeTerms, geometry, p, term, label,
                                                                                  evaluationContext);
 
     const auto fs1 = Camellia::intrepidFunctionSpaceForTensorDescriptor(term.trialOperator());
@@ -320,7 +320,7 @@ namespace
     TEST_EQUALITY(addends.size(), 1);
 
     auto geometryWithoutContext = makeUnitGeometry<spaceDim>(1);
-    TEST_THROW((Camellia::adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometryWithoutContext, 1, solutionDependentTerm,
+    TEST_THROW((Camellia::adaptTensorVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometryWithoutContext, 1, solutionDependentTerm,
                                                                                           "solution-dependent coefficient guard")),
                std::invalid_argument);
 
@@ -328,7 +328,7 @@ namespace
     TensorFunctionEvaluationContext evaluationContext;
     evaluationContext.registerSolutionCoefficientEvaluator(coefficient->dependencySources()[0], evaluator);
     auto geometryWithContext = makeUnitGeometry<spaceDim>(1);
-    auto bridgeTerm = Camellia::adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometryWithContext, 1, solutionDependentTerm,
+    auto bridgeTerm = Camellia::adaptTensorVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometryWithContext, 1, solutionDependentTerm,
                                                                                                 "solution-dependent coefficient context",
                                                                                                 &evaluationContext);
     TEST_EQUALITY(evaluator->callCount, 1);
@@ -377,7 +377,7 @@ namespace
                                     TensorOperatorCapabilitySet::matrixFreeAndPAMatrix());
 
     auto geometry = makeUnitGeometry<spaceDim>(1);
-    TEST_THROW((Camellia::adaptTensorHGRADVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, 1, boundaryTerm, "boundary guard")), std::invalid_argument);
+    TEST_THROW((Camellia::adaptTensorVolumeTermToPAMatrix<spaceDim,DeviceType,Scalar>(geometry, 1, boundaryTerm, "boundary guard")), std::invalid_argument);
   }
 
   TEUCHOS_UNIT_TEST( TensorPAMatrixBridge, DirectHCURLValuePAMatrixMatchesStandardAssembly )

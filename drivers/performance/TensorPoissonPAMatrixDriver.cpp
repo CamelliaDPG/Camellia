@@ -5617,7 +5617,7 @@ int main(int argc, char *argv[])
                 << " achievedGFlops=" << achievedGFlops
                 << " mode=" << mode
                 << " operator=" << operatorChoice
-                << " basisMode=" << basisMode
+                << " basisFamily=" << basisFamily << " basisMode=" << basisMode
                 << " diagonalPath=" << diagonalPath
                 << " assemble2Path=" << assemble2Path
                 << " inversePath=" << inverseDiagnosticTiming.inversePath
