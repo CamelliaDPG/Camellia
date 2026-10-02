@@ -22,6 +22,7 @@
 
 #include "TensorBilinearForm.h"
 #include "TensorFunction.h"
+#include "TensorHGradPTransfer.hpp"
 #include "TensorPAMatrixBridge.h"
 #include "Var.h"
 
@@ -2208,96 +2209,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     return ordinal;
   }
 
-  struct TensorHGradPTransfer
-  {
-    int dim = 0;
-    int fineP = 0;
-    int coarseP = 0;
-    int fineRows = 0;
-    int coarseRows = 0;
-    std::vector<Scalar> prolongation;
-    std::vector<Scalar> restriction;
-  };
-
-  const TensorHGradPTransfer &cachedTensorHGradPTransfer(const int dim, const int fineP)
-  {
-    if ((dim < 1) || (fineP < 2)) throw std::invalid_argument("p-multigrid diagnostic requires dim >= 1 and p >= 2");
-    using CacheKey = std::pair<int,int>;
-    static std::map<CacheKey,TensorHGradPTransfer> cache;
-    const CacheKey key(dim, fineP);
-    auto found = cache.find(key);
-    if (found != cache.end()) return found->second;
-
-    TensorHGradPTransfer transfer;
-    transfer.dim = dim;
-    transfer.fineP = fineP;
-    transfer.coarseP = fineP - 1;
-    const std::vector<int> fineExtents(static_cast<size_t>(dim), fineP + 1);
-    const std::vector<int> coarseExtents(static_cast<size_t>(dim), transfer.coarseP + 1);
-    transfer.fineRows = checkedProduct(fineExtents);
-    transfer.coarseRows = checkedProduct(coarseExtents);
-
-    using BasisFamily = Intrepid2::HierarchicalBasisFamily<DeviceType>;
-    auto coarseBasis = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(transfer.coarseP, dim);
-    auto fineBasis = Intrepid2::getHypercubeBasis_HGRAD<BasisFamily>(fineP, dim);
-    Intrepid2::HierarchicalBasisProlongator<DeviceType,Scalar> prolongator(coarseBasis, fineBasis);
-    if (coarseBasis->getCardinality() != transfer.coarseRows)
-      throw std::runtime_error("hierarchical p-multigrid coarse basis cardinality did not match tensor-product row count");
-    if (fineBasis->getCardinality() != transfer.fineRows)
-      throw std::runtime_error("hierarchical p-multigrid fine basis cardinality did not match tensor-product row count");
-
-    View2D coarseIdentity("TensorHGradPTransfer hierarchical coarse identity", transfer.coarseRows, transfer.coarseRows);
-    View2D fineProlongedIdentity("TensorHGradPTransfer hierarchical fine identity", transfer.coarseRows, transfer.fineRows);
-    Kokkos::deep_copy(coarseIdentity, Scalar(0.0));
-    auto coarseIdentityHost = Kokkos::create_mirror_view(coarseIdentity);
-    for (int coarseOrdinal=0; coarseOrdinal<transfer.coarseRows; coarseOrdinal++)
-      coarseIdentityHost(coarseOrdinal, coarseOrdinal) = Scalar(1.0);
-    Kokkos::deep_copy(coarseIdentity, coarseIdentityHost);
-    prolongator.apply(fineProlongedIdentity, coarseIdentity);
-    Kokkos::fence();
-
-    auto fineProlongedIdentityHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), fineProlongedIdentity);
-    transfer.prolongation.assign(static_cast<size_t>(transfer.fineRows) * transfer.coarseRows, Scalar(0.0));
-    transfer.restriction.assign(static_cast<size_t>(transfer.coarseRows) * transfer.fineRows, Scalar(0.0));
-    for (int coarseOrdinal=0; coarseOrdinal<transfer.coarseRows; coarseOrdinal++)
-      for (int fineOrdinal=0; fineOrdinal<transfer.fineRows; fineOrdinal++)
-      {
-        const Scalar value = fineProlongedIdentityHost(coarseOrdinal, fineOrdinal);
-        transfer.prolongation[static_cast<size_t>(fineOrdinal * transfer.coarseRows + coarseOrdinal)] = value;
-        transfer.restriction[static_cast<size_t>(coarseOrdinal * transfer.fineRows + fineOrdinal)] = value;
-      }
-
-    auto inserted = cache.emplace(key, std::move(transfer));
-    return inserted.first->second;
-  }
-
-  void applyTensorHGradPTransferProlongation(const TensorHGradPTransfer &transfer,
-                                             const std::vector<Scalar> &coarseVector,
-                                             std::vector<Scalar> &fineVector)
-  {
-    if (static_cast<int>(coarseVector.size()) != transfer.coarseRows) throw std::runtime_error("p-multigrid prolongation coarse vector has incorrect length");
-    fineVector.assign(static_cast<size_t>(transfer.fineRows), Scalar(0.0));
-    for (int fineOrdinal=0; fineOrdinal<transfer.fineRows; fineOrdinal++)
-      for (int coarseOrdinal=0; coarseOrdinal<transfer.coarseRows; coarseOrdinal++)
-        fineVector[static_cast<size_t>(fineOrdinal)] += transfer.prolongation[static_cast<size_t>(fineOrdinal * transfer.coarseRows + coarseOrdinal)] * coarseVector[static_cast<size_t>(coarseOrdinal)];
-  }
-
-  void applyTensorHGradPTransferRestriction(const TensorHGradPTransfer &transfer,
-                                            const std::vector<Scalar> &fineVector,
-                                            std::vector<Scalar> &coarseVector)
-  {
-    if (static_cast<int>(fineVector.size()) != transfer.fineRows) throw std::runtime_error("p-multigrid restriction fine vector has incorrect length");
-    coarseVector.assign(static_cast<size_t>(transfer.coarseRows), Scalar(0.0));
-    for (int coarseOrdinal=0; coarseOrdinal<transfer.coarseRows; coarseOrdinal++)
-      for (int fineOrdinal=0; fineOrdinal<transfer.fineRows; fineOrdinal++)
-        coarseVector[static_cast<size_t>(coarseOrdinal)] += transfer.restriction[static_cast<size_t>(coarseOrdinal * transfer.fineRows + fineOrdinal)] * fineVector[static_cast<size_t>(fineOrdinal)];
-  }
-
   class LocalPMultigridTpetraPreconditioner : public TpetraOperator
   {
     Teuchos::RCP<const TpetraMap> map_;
     Teuchos::RCP<const TpetraMap> coarseMap_;
-    const TensorHGradPTransfer *transfer_ = nullptr;
+    const Camellia::TensorHGradPTransfer<Scalar> *transfer_ = nullptr;
     int cells_ = 0;
     int localDofs_ = 0;
     int coarseRows_ = 0;
@@ -2458,7 +2374,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const int localDofs, const int smootherIterations,
                                         const std::string &smootherName,
                                         const Scalar smootherLowerFraction, const Scalar smootherWeight)
-      : map_(map), transfer_(&cachedTensorHGradPTransfer(dim, p)), cells_(cells), localDofs_(localDofs),
+      : map_(map), transfer_(&Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p)), cells_(cells), localDofs_(localDofs),
         coarseRows_(transfer_->coarseRows), smootherIterations_(std::max(1, smootherIterations)),
         smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)),
         smootherWeight_(smootherWeight), smootherName_(smootherName)
@@ -3923,7 +3839,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                      ? pMultigridChebyshevSmootherIterations
                                      : pMultigridJacobiSmootherIterations;
         const std::string smootherName = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? "chebyshev" : "jacobi";
-        const TensorHGradPTransfer &transfer = cachedTensorHGradPTransfer(dim, p);
+        const auto &transfer = Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p);
         const MatrixFreeGMGRightPreconditionerBuild preconditionerBuild =
           buildMatrixFreeGMGRightPreconditioner(map, matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight);
         matrixFreeGMGForStageTrace = preconditionerBuild.matrixFreeGMG;
@@ -4066,7 +3982,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         if ((pMultigridChebyshevSmootherLowerFraction <= Scalar(0.0)) || (pMultigridChebyshevSmootherLowerFraction >= Scalar(1.0)))
           throw std::invalid_argument("--pMultigridChebyshevSmootherLowerFraction must be in (0,1) for high-frequency Chebyshev smoothing");
       }
-      const TensorHGradPTransfer &transfer = cachedTensorHGradPTransfer(dim, p);
+      const auto &transfer = Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p);
       if (transfer.fineRows != rows) throw std::runtime_error("p-multigrid transfer fine dimension does not match local dofs");
       const int coarseRows = transfer.coarseRows;
 
