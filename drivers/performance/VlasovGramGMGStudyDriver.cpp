@@ -389,6 +389,8 @@ namespace
         << std::setw(56) << "strategy"
         << std::setw(16) << "status"
         << std::setw(12) << "iterations"
+        << std::setw(14) << "relRes"
+        << std::setw(14) << "absRes"
         << std::setw(14) << "seconds"
         << std::setw(18) << "mg"
         << std::setw(18) << "smoother"
@@ -400,7 +402,7 @@ namespace
         << std::setw(14) << "smoothApps"
         << std::setw(16) << "lambdaMax"
         << "lambdaMin" << "\n";
-    out << std::string(272, '-') << "\n";
+    out << std::string(300, '-') << "\n";
   }
 }
 
@@ -738,8 +740,10 @@ int main(int argc, char *argv[])
             output << std::left << std::setw(8) << fineP
             << std::setw(24) << degreeOptions.basisFamily
             << std::setw(56) << strategy.name
-            << std::setw(16) << (solveResult == 0 ? "converged" : "failed")
+            << std::setw(16) << solveStatus
             << std::setw(12) << iterations
+            << std::setw(14) << std::setprecision(6) << std::scientific << relativeResidual
+            << std::setw(14) << residualInfNorm
             << std::setw(14) << std::setprecision(6) << std::fixed << seconds
             << std::setw(18) << multigridStrategyString(strategy.multigridStrategy)
             << std::setw(18) << GMGOperator::smootherString(strategy.smoother)
