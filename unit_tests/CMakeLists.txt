@@ -22,6 +22,7 @@ set(TENSOR_TEST_SOURCES
   MatrixFreeGMGPreconditionerComparisonTests.cpp
   MatrixFreeGMGPreconditionerStageTraceComparisonTests.cpp
   TensorHGradPTransferTests.cpp
+  TensorLocalPMultigridTests.cpp
   TensorBasisCacheTests.cpp
   TensorCoefficientValueEvaluatorTests.cpp
   TensorCoefficientTpetraImportTests.cpp

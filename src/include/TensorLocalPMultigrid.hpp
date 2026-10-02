@@ -1,0 +1,318 @@
+#pragma once
+
+#include "TensorHGradPTransfer.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
+
+namespace Camellia
+{
+  template<class Scalar>
+  struct TensorLocalTwoLevelPMultigridResult
+  {
+    std::vector<Scalar> preSmoothedSolution;
+    std::vector<Scalar> residualAfterPreSmoothing;
+    std::vector<Scalar> restrictedResidual;
+    std::vector<Scalar> coarseCorrection;
+    std::vector<Scalar> prolongatedCorrection;
+    std::vector<Scalar> solutionAfterCoarseCorrection;
+    std::vector<Scalar> residualAfterCoarseCorrection;
+    std::vector<Scalar> finalSolution;
+    std::vector<Scalar> residualAfterPostSmoothing;
+  };
+
+  template<class Scalar>
+  void tensorLocalCheckDenseMatrixSize(const std::vector<Scalar> &matrix,
+                                       const int rows,
+                                       const char *label)
+  {
+    if (rows <= 0)
+      throw std::invalid_argument(std::string(label) + " requires rows > 0");
+    const size_t expectedSize = static_cast<size_t>(rows) * static_cast<size_t>(rows);
+    if (matrix.size() != expectedSize)
+    {
+      std::ostringstream message;
+      message << label << " expected dense matrix size " << expectedSize
+              << " but received " << matrix.size();
+      throw std::invalid_argument(message.str());
+    }
+  }
+
+  template<class Scalar>
+  void tensorLocalCheckVectorSize(const std::vector<Scalar> &vector,
+                                  const int rows,
+                                  const char *label)
+  {
+    if (static_cast<int>(vector.size()) != rows)
+    {
+      std::ostringstream message;
+      message << label << " expected vector size " << rows
+              << " but received " << vector.size();
+      throw std::invalid_argument(message.str());
+    }
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalApplyDenseMatrix(const std::vector<Scalar> &matrix,
+                                                  const std::vector<Scalar> &x,
+                                                  const int rows)
+  {
+    tensorLocalCheckDenseMatrixSize(matrix, rows, "tensorLocalApplyDenseMatrix");
+    tensorLocalCheckVectorSize(x, rows, "tensorLocalApplyDenseMatrix");
+
+    std::vector<Scalar> y(static_cast<size_t>(rows), Scalar(0.0));
+    for (int i=0; i<rows; i++)
+      for (int j=0; j<rows; j++)
+        y[static_cast<size_t>(i)] +=
+            matrix[static_cast<size_t>(i) * static_cast<size_t>(rows) + static_cast<size_t>(j)] *
+            x[static_cast<size_t>(j)];
+    return y;
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalSubtract(const std::vector<Scalar> &a,
+                                          const std::vector<Scalar> &b)
+  {
+    if (a.size() != b.size())
+      throw std::invalid_argument("tensorLocalSubtract requires equal vector sizes");
+
+    std::vector<Scalar> result(a.size(), Scalar(0.0));
+    for (size_t i=0; i<a.size(); i++)
+      result[i] = a[i] - b[i];
+    return result;
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalResidual(const std::vector<Scalar> &matrix,
+                                          const std::vector<Scalar> &rhs,
+                                          const std::vector<Scalar> &solution,
+                                          const int rows)
+  {
+    const auto applied = tensorLocalApplyDenseMatrix(matrix, solution, rows);
+    return tensorLocalSubtract(rhs, applied);
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalExtractInverseDiagonal(const std::vector<Scalar> &matrix,
+                                                        const int rows)
+  {
+    tensorLocalCheckDenseMatrixSize(matrix, rows, "tensorLocalExtractInverseDiagonal");
+
+    std::vector<Scalar> inverseDiagonal(static_cast<size_t>(rows), Scalar(0.0));
+    for (int i=0; i<rows; i++)
+    {
+      const Scalar diagonalValue = matrix[static_cast<size_t>(i) * static_cast<size_t>(rows) + static_cast<size_t>(i)];
+      if (!std::isfinite(diagonalValue) || (diagonalValue <= std::numeric_limits<Scalar>::epsilon()))
+      {
+        std::ostringstream message;
+        message << "tensorLocalExtractInverseDiagonal found nonpositive/nonfinite diagonal at row "
+                << i << ": " << diagonalValue;
+        throw std::runtime_error(message.str());
+      }
+      inverseDiagonal[static_cast<size_t>(i)] = Scalar(1.0) / diagonalValue;
+    }
+    return inverseDiagonal;
+  }
+
+  template<class Scalar>
+  void tensorLocalJacobiSmooth(const std::vector<Scalar> &matrix,
+                               const std::vector<Scalar> &inverseDiagonal,
+                               const std::vector<Scalar> &rhs,
+                               std::vector<Scalar> &solution,
+                               const int rows,
+                               const int iterations,
+                               const Scalar damping = Scalar(1.0))
+  {
+    tensorLocalCheckDenseMatrixSize(matrix, rows, "tensorLocalJacobiSmooth");
+    tensorLocalCheckVectorSize(inverseDiagonal, rows, "tensorLocalJacobiSmooth inverse diagonal");
+    tensorLocalCheckVectorSize(rhs, rows, "tensorLocalJacobiSmooth rhs");
+    tensorLocalCheckVectorSize(solution, rows, "tensorLocalJacobiSmooth solution");
+
+    for (int iteration=0; iteration<iterations; iteration++)
+    {
+      const auto applied = tensorLocalApplyDenseMatrix(matrix, solution, rows);
+      for (int i=0; i<rows; i++)
+      {
+        solution[static_cast<size_t>(i)] +=
+            damping * inverseDiagonal[static_cast<size_t>(i)] *
+            (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)]);
+      }
+    }
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalBuildGalerkinCoarseMatrix(const std::vector<Scalar> &fineMatrix,
+                                                           const TensorHGradPTransfer<Scalar> &transfer)
+  {
+    tensorLocalCheckDenseMatrixSize(fineMatrix, transfer.fineRows, "tensorLocalBuildGalerkinCoarseMatrix");
+
+    std::vector<Scalar> matrixTimesP(static_cast<size_t>(transfer.fineRows) * static_cast<size_t>(transfer.coarseRows),
+                                     Scalar(0.0));
+    for (int fineI=0; fineI<transfer.fineRows; fineI++)
+    {
+      for (int fineJ=0; fineJ<transfer.fineRows; fineJ++)
+      {
+        const Scalar matrixEntry =
+            fineMatrix[static_cast<size_t>(fineI) * static_cast<size_t>(transfer.fineRows) + static_cast<size_t>(fineJ)];
+        if (matrixEntry == Scalar(0.0)) continue;
+        for (int coarseJ=0; coarseJ<transfer.coarseRows; coarseJ++)
+        {
+          matrixTimesP[static_cast<size_t>(fineI) * static_cast<size_t>(transfer.coarseRows) + static_cast<size_t>(coarseJ)] +=
+              matrixEntry *
+              transfer.prolongation[static_cast<size_t>(fineJ) * static_cast<size_t>(transfer.coarseRows) + static_cast<size_t>(coarseJ)];
+        }
+      }
+    }
+
+    std::vector<Scalar> coarseMatrix(static_cast<size_t>(transfer.coarseRows) * static_cast<size_t>(transfer.coarseRows),
+                                     Scalar(0.0));
+    for (int coarseI=0; coarseI<transfer.coarseRows; coarseI++)
+    {
+      for (int fineI=0; fineI<transfer.fineRows; fineI++)
+      {
+        const Scalar restrictionEntry =
+            transfer.restriction[static_cast<size_t>(coarseI) * static_cast<size_t>(transfer.fineRows) + static_cast<size_t>(fineI)];
+        if (restrictionEntry == Scalar(0.0)) continue;
+        for (int coarseJ=0; coarseJ<transfer.coarseRows; coarseJ++)
+        {
+          coarseMatrix[static_cast<size_t>(coarseI) * static_cast<size_t>(transfer.coarseRows) + static_cast<size_t>(coarseJ)] +=
+              restrictionEntry *
+              matrixTimesP[static_cast<size_t>(fineI) * static_cast<size_t>(transfer.coarseRows) + static_cast<size_t>(coarseJ)];
+        }
+      }
+    }
+
+    return coarseMatrix;
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalSolveDenseLinearSystem(std::vector<Scalar> matrix,
+                                                        std::vector<Scalar> rhs,
+                                                        const int rows)
+  {
+    tensorLocalCheckDenseMatrixSize(matrix, rows, "tensorLocalSolveDenseLinearSystem");
+    tensorLocalCheckVectorSize(rhs, rows, "tensorLocalSolveDenseLinearSystem");
+
+    for (int pivot=0; pivot<rows; pivot++)
+    {
+      int pivotRow = pivot;
+      Scalar pivotMagnitude = std::abs(matrix[static_cast<size_t>(pivot) * static_cast<size_t>(rows) + static_cast<size_t>(pivot)]);
+      for (int row=pivot+1; row<rows; row++)
+      {
+        const Scalar candidateMagnitude = std::abs(matrix[static_cast<size_t>(row) * static_cast<size_t>(rows) + static_cast<size_t>(pivot)]);
+        if (candidateMagnitude > pivotMagnitude)
+        {
+          pivotMagnitude = candidateMagnitude;
+          pivotRow = row;
+        }
+      }
+
+      if (pivotMagnitude <= std::numeric_limits<Scalar>::epsilon())
+        throw std::runtime_error("tensorLocalSolveDenseLinearSystem encountered singular pivot");
+
+      if (pivotRow != pivot)
+      {
+        for (int col=pivot; col<rows; col++)
+          std::swap(matrix[static_cast<size_t>(pivot) * static_cast<size_t>(rows) + static_cast<size_t>(col)],
+                    matrix[static_cast<size_t>(pivotRow) * static_cast<size_t>(rows) + static_cast<size_t>(col)]);
+        std::swap(rhs[static_cast<size_t>(pivot)], rhs[static_cast<size_t>(pivotRow)]);
+      }
+
+      const Scalar pivotValue = matrix[static_cast<size_t>(pivot) * static_cast<size_t>(rows) + static_cast<size_t>(pivot)];
+      for (int row=pivot+1; row<rows; row++)
+      {
+        const Scalar factor = matrix[static_cast<size_t>(row) * static_cast<size_t>(rows) + static_cast<size_t>(pivot)] / pivotValue;
+        matrix[static_cast<size_t>(row) * static_cast<size_t>(rows) + static_cast<size_t>(pivot)] = Scalar(0.0);
+        for (int col=pivot+1; col<rows; col++)
+        {
+          matrix[static_cast<size_t>(row) * static_cast<size_t>(rows) + static_cast<size_t>(col)] -=
+              factor * matrix[static_cast<size_t>(pivot) * static_cast<size_t>(rows) + static_cast<size_t>(col)];
+        }
+        rhs[static_cast<size_t>(row)] -= factor * rhs[static_cast<size_t>(pivot)];
+      }
+    }
+
+    std::vector<Scalar> solution(static_cast<size_t>(rows), Scalar(0.0));
+    for (int row=rows-1; row>=0; row--)
+    {
+      Scalar sum = rhs[static_cast<size_t>(row)];
+      for (int col=row+1; col<rows; col++)
+        sum -= matrix[static_cast<size_t>(row) * static_cast<size_t>(rows) + static_cast<size_t>(col)] * solution[static_cast<size_t>(col)];
+      solution[static_cast<size_t>(row)] =
+          sum / matrix[static_cast<size_t>(row) * static_cast<size_t>(rows) + static_cast<size_t>(row)];
+    }
+    return solution;
+  }
+
+  template<class Scalar>
+  TensorLocalTwoLevelPMultigridResult<Scalar>
+  tensorLocalApplyTwoLevelPMultigridVcycle(const std::vector<Scalar> &fineMatrix,
+                                           const TensorHGradPTransfer<Scalar> &transfer,
+                                           const std::vector<Scalar> &rhs,
+                                           const int preSmoothIterations,
+                                           const int postSmoothIterations,
+                                           const Scalar jacobiDamping = Scalar(1.0))
+  {
+    tensorLocalCheckDenseMatrixSize(fineMatrix, transfer.fineRows, "tensorLocalApplyTwoLevelPMultigridVcycle");
+    tensorLocalCheckVectorSize(rhs, transfer.fineRows, "tensorLocalApplyTwoLevelPMultigridVcycle rhs");
+
+    TensorLocalTwoLevelPMultigridResult<Scalar> result;
+    const auto inverseDiagonal = tensorLocalExtractInverseDiagonal(fineMatrix, transfer.fineRows);
+
+    result.preSmoothedSolution.assign(static_cast<size_t>(transfer.fineRows), Scalar(0.0));
+    tensorLocalJacobiSmooth(fineMatrix,
+                            inverseDiagonal,
+                            rhs,
+                            result.preSmoothedSolution,
+                            transfer.fineRows,
+                            preSmoothIterations,
+                            jacobiDamping);
+
+    result.residualAfterPreSmoothing = tensorLocalResidual(fineMatrix,
+                                                           rhs,
+                                                           result.preSmoothedSolution,
+                                                           transfer.fineRows);
+
+    applyTensorHGradPTransferRestriction(transfer,
+                                         result.residualAfterPreSmoothing,
+                                         result.restrictedResidual);
+
+    const auto coarseMatrix = tensorLocalBuildGalerkinCoarseMatrix(fineMatrix, transfer);
+    result.coarseCorrection = tensorLocalSolveDenseLinearSystem(coarseMatrix,
+                                                                result.restrictedResidual,
+                                                                transfer.coarseRows);
+
+    applyTensorHGradPTransferProlongation(transfer,
+                                          result.coarseCorrection,
+                                          result.prolongatedCorrection);
+
+    result.solutionAfterCoarseCorrection = result.preSmoothedSolution;
+    for (int i=0; i<transfer.fineRows; i++)
+      result.solutionAfterCoarseCorrection[static_cast<size_t>(i)] +=
+          result.prolongatedCorrection[static_cast<size_t>(i)];
+
+    result.residualAfterCoarseCorrection = tensorLocalResidual(fineMatrix,
+                                                               rhs,
+                                                               result.solutionAfterCoarseCorrection,
+                                                               transfer.fineRows);
+
+    result.finalSolution = result.solutionAfterCoarseCorrection;
+    tensorLocalJacobiSmooth(fineMatrix,
+                            inverseDiagonal,
+                            rhs,
+                            result.finalSolution,
+                            transfer.fineRows,
+                            postSmoothIterations,
+                            jacobiDamping);
+
+    result.residualAfterPostSmoothing = tensorLocalResidual(fineMatrix,
+                                                            rhs,
+                                                            result.finalSolution,
+                                                            transfer.fineRows);
+    return result;
+  }
+}
