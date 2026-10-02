@@ -156,3 +156,149 @@ TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, StageResidualsAreConsistentWithFineOpe
   for (size_t i=0; i<expectedPostResidual.size(); i++)
     TEST_FLOATING_EQUALITY(result.residualAfterPostSmoothing[i], expectedPostResidual[i], 1e-12);
 }
+
+namespace
+{
+  std::vector<Scalar> buildCoarseMatrixByExplicitRAP(const std::vector<Scalar> &fineMatrix,
+                                                     const TensorHGradPTransfer<Scalar> &transfer)
+  {
+    std::vector<Scalar> coarseMatrix(static_cast<size_t>(transfer.coarseRows) * static_cast<size_t>(transfer.coarseRows),
+                                     Scalar(0.0));
+    for (int j=0; j<transfer.coarseRows; j++)
+    {
+      std::vector<Scalar> coarseBasis(static_cast<size_t>(transfer.coarseRows), Scalar(0.0));
+      coarseBasis[static_cast<size_t>(j)] = Scalar(1.0);
+      const auto coarseApplied = applyCoarseMatrixByExplicitRAP(fineMatrix, transfer, coarseBasis);
+      for (int i=0; i<transfer.coarseRows; i++)
+        coarseMatrix[static_cast<size_t>(i) * static_cast<size_t>(transfer.coarseRows) + static_cast<size_t>(j)] =
+            coarseApplied[static_cast<size_t>(i)];
+    }
+    return coarseMatrix;
+  }
+
+  TensorLocalTwoLevelPMultigridResult<Scalar>
+  expectedTensorPoissonLocalPMGStages(const std::vector<Scalar> &fineMatrix,
+                                      const TensorHGradPTransfer<Scalar> &transfer,
+                                      const std::vector<Scalar> &rhs,
+                                      const int preSmoothIterations,
+                                      const int postSmoothIterations,
+                                      const Scalar jacobiDamping)
+  {
+    TensorLocalTwoLevelPMultigridResult<Scalar> expected;
+    const auto inverseDiagonal = tensorLocalExtractInverseDiagonal(fineMatrix, transfer.fineRows);
+
+    expected.preSmoothedSolution.assign(static_cast<size_t>(transfer.fineRows), Scalar(0.0));
+    tensorLocalJacobiSmooth(fineMatrix, inverseDiagonal, rhs,
+                            expected.preSmoothedSolution, transfer.fineRows,
+                            preSmoothIterations, jacobiDamping);
+
+    expected.residualAfterPreSmoothing = tensorLocalResidual(fineMatrix, rhs,
+                                                             expected.preSmoothedSolution,
+                                                             transfer.fineRows);
+    applyTensorHGradPTransferRestriction(transfer,
+                                         expected.residualAfterPreSmoothing,
+                                         expected.restrictedResidual);
+
+    const auto coarseMatrix = buildCoarseMatrixByExplicitRAP(fineMatrix, transfer);
+    expected.coarseCorrection = tensorLocalSolveDenseLinearSystem(coarseMatrix,
+                                                                  expected.restrictedResidual,
+                                                                  transfer.coarseRows);
+    applyTensorHGradPTransferProlongation(transfer,
+                                          expected.coarseCorrection,
+                                          expected.prolongatedCorrection);
+
+    expected.solutionAfterCoarseCorrection = expected.preSmoothedSolution;
+    for (int i=0; i<transfer.fineRows; i++)
+      expected.solutionAfterCoarseCorrection[static_cast<size_t>(i)] +=
+          expected.prolongatedCorrection[static_cast<size_t>(i)];
+
+    expected.residualAfterCoarseCorrection = tensorLocalResidual(fineMatrix, rhs,
+                                                                 expected.solutionAfterCoarseCorrection,
+                                                                 transfer.fineRows);
+    expected.finalSolution = expected.solutionAfterCoarseCorrection;
+    tensorLocalJacobiSmooth(fineMatrix, inverseDiagonal, rhs,
+                            expected.finalSolution, transfer.fineRows,
+                            postSmoothIterations, jacobiDamping);
+    expected.residualAfterPostSmoothing = tensorLocalResidual(fineMatrix, rhs,
+                                                              expected.finalSolution,
+                                                              transfer.fineRows);
+    return expected;
+  }
+
+  struct LocalPMGStagePair
+  {
+    TensorLocalTwoLevelPMultigridResult<Scalar> actual;
+    TensorLocalTwoLevelPMultigridResult<Scalar> expected;
+  };
+
+  LocalPMGStagePair makeLocalPMGStagePair()
+  {
+    const auto transfer = buildTensorHGradPTransfer<DeviceType,Scalar>(2, 3);
+    const auto fineMatrix = deterministicSPDMatrix(transfer.fineRows);
+    const auto rhs = deterministicRhs(transfer.fineRows);
+    constexpr int preSmoothIterations = 2;
+    constexpr int postSmoothIterations = 2;
+    constexpr Scalar jacobiDamping = 0.75;
+
+    return {tensorLocalApplyTwoLevelPMultigridVcycle(fineMatrix, transfer, rhs,
+                                                    preSmoothIterations,
+                                                    postSmoothIterations,
+                                                    jacobiDamping),
+            expectedTensorPoissonLocalPMGStages(fineMatrix, transfer, rhs,
+                                                preSmoothIterations,
+                                                postSmoothIterations,
+                                                jacobiDamping)};
+  }
+
+  void assertVectorsNear(const std::vector<Scalar> &actual,
+                         const std::vector<Scalar> &expected,
+                         const Scalar tol,
+                         Teuchos::FancyOStream &out,
+                         bool &success)
+  {
+    TEST_EQUALITY(actual.size(), expected.size());
+    const size_t count = actual.size() < expected.size() ? actual.size() : expected.size();
+    for (size_t i=0; i<count; i++)
+      TEST_FLOATING_EQUALITY(actual[i], expected[i], tol);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, PreSmoothingMatchesTensorPoissonLocalPMG )
+{
+  const auto stages = makeLocalPMGStagePair();
+  assertVectorsNear(stages.actual.preSmoothedSolution,
+                    stages.expected.preSmoothedSolution,
+                    1e-11, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, RestrictedResidualMatchesTensorPoissonLocalPMG )
+{
+  const auto stages = makeLocalPMGStagePair();
+  assertVectorsNear(stages.actual.restrictedResidual,
+                    stages.expected.restrictedResidual,
+                    1e-11, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, CoarseCorrectionMatchesTensorPoissonLocalPMG )
+{
+  const auto stages = makeLocalPMGStagePair();
+  assertVectorsNear(stages.actual.coarseCorrection,
+                    stages.expected.coarseCorrection,
+                    1e-11, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, ProlongatedCorrectionMatchesTensorPoissonLocalPMG )
+{
+  const auto stages = makeLocalPMGStagePair();
+  assertVectorsNear(stages.actual.prolongatedCorrection,
+                    stages.expected.prolongatedCorrection,
+                    1e-11, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, PostSmoothingMatchesTensorPoissonLocalPMG )
+{
+  const auto stages = makeLocalPMGStagePair();
+  assertVectorsNear(stages.actual.finalSolution,
+                    stages.expected.finalSolution,
+                    1e-11, out, success);
+}

@@ -23,6 +23,7 @@
 #include "TensorBilinearForm.h"
 #include "TensorFunction.h"
 #include "TensorHGradPTransfer.hpp"
+#include "TensorLocalPMultigrid.hpp"
 #include "TensorPAMatrixBridge.h"
 #include "Var.h"
 
@@ -2228,15 +2229,30 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     std::vector<Scalar> factoredCoarseMatrices_;
     std::string description_;
 
+    static std::vector<Scalar> denseCellMatrix(const std::vector<Scalar> &matrices,
+                                               const int cellOrdinal,
+                                               const int rows)
+    {
+      const size_t offset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows) * static_cast<size_t>(rows);
+      return std::vector<Scalar>(matrices.begin() + offset,
+                                 matrices.begin() + offset + static_cast<size_t>(rows) * static_cast<size_t>(rows));
+    }
+
+    static std::vector<Scalar> denseCellVector(const std::vector<Scalar> &values,
+                                               const int cellOrdinal,
+                                               const int rows)
+    {
+      const size_t offset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows);
+      return std::vector<Scalar>(values.begin() + offset,
+                                 values.begin() + offset + static_cast<size_t>(rows));
+    }
+
     static void applyDenseCellMatrix(const std::vector<Scalar> &matrices, const int cellOrdinal,
                                      const int rows, const std::vector<Scalar> &input,
                                      std::vector<Scalar> &output)
     {
-      output.assign(static_cast<size_t>(rows), Scalar(0.0));
-      const size_t offset = static_cast<size_t>(cellOrdinal) * rows * rows;
-      for (int i=0; i<rows; i++)
-        for (int j=0; j<rows; j++)
-          output[static_cast<size_t>(i)] += matrices[offset + static_cast<size_t>(i * rows + j)] * input[static_cast<size_t>(j)];
+      const auto cellMatrix = denseCellMatrix(matrices, cellOrdinal, rows);
+      output = Camellia::tensorLocalApplyDenseMatrix(cellMatrix, input, rows);
     }
 
     static void runDampedJacobiSmoother(const std::vector<Scalar> &matrices, const std::vector<Scalar> &inverseDiagonal,
@@ -2244,19 +2260,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const int rows, const std::vector<Scalar> &rhs,
                                         std::vector<Scalar> &solution, const int iterations)
     {
-      std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
       const Scalar lambdaMax = std::max(lambdaMaxByCell[static_cast<size_t>(cellOrdinal)], Scalar(1.0));
       const Scalar omega = Scalar(1.0) / lambdaMax;
-      const size_t cellOffset = static_cast<size_t>(cellOrdinal) * rows;
-      for (int iteration=0; iteration<iterations; iteration++)
-      {
-        applyDenseCellMatrix(matrices, cellOrdinal, rows, solution, applied);
-        for (int i=0; i<rows; i++)
-        {
-          const size_t index = cellOffset + static_cast<size_t>(i);
-          solution[static_cast<size_t>(i)] += omega * inverseDiagonal[index] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)]);
-        }
-      }
+      const auto cellMatrix = denseCellMatrix(matrices, cellOrdinal, rows);
+      const auto cellInverseDiagonal = denseCellVector(inverseDiagonal, cellOrdinal, rows);
+      Camellia::tensorLocalJacobiSmooth(cellMatrix, cellInverseDiagonal, rhs, solution, rows, iterations, omega);
     }
 
     static void runChebyshevSmoother(const std::vector<Scalar> &matrices, const std::vector<Scalar> &inverseDiagonal,
@@ -2337,31 +2345,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
       for (int c=0; c<cells; c++)
       {
-        for (int i=0; i<rows; i++)
-        {
-          const size_t localOrdinal =
-              static_cast<size_t>(c) * static_cast<size_t>(rows) +
-              static_cast<size_t>(i);
-
-          const size_t diagonalIndex =
-              localOrdinal * static_cast<size_t>(rows) +
-              static_cast<size_t>(i);
-
-          const Scalar diagonalValue = matrices[diagonalIndex];
-
-          if (diagonalValue <= std::numeric_limits<Scalar>::epsilon())
-          {
-            std::ostringstream message;
-            message << "extractInverseDiagonalFromBlockDenseMatrices found nonpositive "
-                    << "diagonal entry"
-                    << " cell=" << c
-                    << " localDof=" << i
-                    << " value=" << diagonalValue;
-            throw std::runtime_error(message.str());
-          }
-
-          inverseDiagonal[localOrdinal] = Scalar(1.0) / diagonalValue;
-        }
+        const auto cellMatrix = denseCellMatrix(matrices, c, rows);
+        const auto cellInverseDiagonal = Camellia::tensorLocalExtractInverseDiagonal(cellMatrix, rows);
+        const size_t cellOffset = static_cast<size_t>(c) * static_cast<size_t>(rows);
+        std::copy(cellInverseDiagonal.begin(), cellInverseDiagonal.end(), inverseDiagonal.begin() + cellOffset);
       }
 
       return inverseDiagonal;
@@ -2420,26 +2407,12 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       }
 
       coarseMatrices_.assign(static_cast<size_t>(cells_) * coarseRows_ * coarseRows_, Scalar(0.0));
-      std::vector<Scalar> matrixTimesP(static_cast<size_t>(localDofs_ * coarseRows_), Scalar(0.0));
       for (int c=0; c<cells_; c++)
       {
-        std::fill(matrixTimesP.begin(), matrixTimesP.end(), Scalar(0.0));
-        for (int fineI=0; fineI<localDofs_; fineI++)
-          for (int fineJ=0; fineJ<localDofs_; fineJ++)
-          {
-            const Scalar matrixEntry = fineMatrices_[static_cast<size_t>((c * localDofs_ + fineI) * localDofs_ + fineJ)];
-            if (matrixEntry == Scalar(0.0)) continue;
-            for (int coarseJ=0; coarseJ<coarseRows_; coarseJ++)
-              matrixTimesP[static_cast<size_t>(fineI * coarseRows_ + coarseJ)] += matrixEntry * transfer_->prolongation[static_cast<size_t>(fineJ * coarseRows_ + coarseJ)];
-          }
-        for (int coarseI=0; coarseI<coarseRows_; coarseI++)
-          for (int fineI=0; fineI<localDofs_; fineI++)
-          {
-            const Scalar restrictionEntry = transfer_->restriction[static_cast<size_t>(coarseI * localDofs_ + fineI)];
-            if (restrictionEntry == Scalar(0.0)) continue;
-            for (int coarseJ=0; coarseJ<coarseRows_; coarseJ++)
-              coarseMatrices_[static_cast<size_t>((c * coarseRows_ + coarseI) * coarseRows_ + coarseJ)] += restrictionEntry * matrixTimesP[static_cast<size_t>(fineI * coarseRows_ + coarseJ)];
-          }
+        const auto fineMatrix = denseCellMatrix(fineMatrices_, c, localDofs_);
+        const auto coarseMatrix = Camellia::tensorLocalBuildGalerkinCoarseMatrix(fineMatrix, *transfer_);
+        const size_t coarseOffset = static_cast<size_t>(c) * static_cast<size_t>(coarseRows_) * static_cast<size_t>(coarseRows_);
+        std::copy(coarseMatrix.begin(), coarseMatrix.end(), coarseMatrices_.begin() + coarseOffset);
       }
 
       factoredCoarseMatrices_ = coarseMatrices_;
