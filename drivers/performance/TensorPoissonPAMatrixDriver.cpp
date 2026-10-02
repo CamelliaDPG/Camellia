@@ -4455,7 +4455,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           applyLevelMatrix(level, cellOrdinal, levelSolution, levelApplied);
           std::vector<Scalar> levelResidual(static_cast<size_t>(level.levelRows), Scalar(0.0));
           for (int i=0; i<level.levelRows; i++) levelResidual[static_cast<size_t>(i)] = levelRhs[static_cast<size_t>(i)] - levelApplied[static_cast<size_t>(i)];
-          const TensorHGradPTransfer &levelTransfer = cachedTensorHGradPTransfer(dim, level.degree);
+          const auto &levelTransfer = Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, level.degree);
           std::vector<Scalar> restrictedResidual;
           applyTensorHGradPTransferRestriction(levelTransfer, levelResidual, restrictedResidual);
           std::vector<Scalar> coarseLevelCorrection;
