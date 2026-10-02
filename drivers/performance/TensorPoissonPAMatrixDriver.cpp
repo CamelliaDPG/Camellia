@@ -5618,6 +5618,8 @@ int main(int argc, char *argv[])
                 << " mode=" << mode
                 << " operator=" << operatorChoice
                 << " basisFamily=" << basisFamily << " basisMode=" << basisMode
+                << " hgradBasisFamily="
+                << (basisModeIsHGRAD(basisMode) ? TensorBasisFamilyName(TensorBasisFamilyFromMode(basisMode)) : std::string("not_hgrad"))
                 << " diagonalPath=" << diagonalPath
                 << " assemble2Path=" << assemble2Path
                 << " inversePath=" << inverseDiagnosticTiming.inversePath

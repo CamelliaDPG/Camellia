@@ -25,7 +25,7 @@ namespace
   {
     std::string outputFile = "vlasov-gram-matrix-free-study.txt";
     std::string tensorDriverPath;
-    std::string basisFamily = "intrepid2-hierarchical";
+    std::string basisFamily = "hierarchical";
     int fineH1Order = 4;
     int elementsPerDim = 1;
     int maxIterations = 200;
@@ -138,14 +138,16 @@ namespace
   std::vector<std::string> basisFamiliesToRun(const StudyOptions &options)
   {
     if (options.basisFamily == "all")
-      return {"intrepid2-nodal", "intrepid2-hierarchical"};
+      return {"nodal", "hierarchical"};
     return {options.basisFamily};
   }
 
   std::string tensorPoissonBasisFamilyArgument(const std::string &basisFamily)
   {
-    if (basisFamily == "intrepid2-hierarchical") return "hgrad-hierarchical";
-    if (basisFamily == "intrepid2-nodal") return "hgrad-nodal";
+    if ((basisFamily == "hierarchical") || (basisFamily == "intrepid2-hierarchical"))
+      return "hgrad-hierarchical";
+    if ((basisFamily == "nodal") || (basisFamily == "intrepid2-nodal"))
+      return "hgrad-nodal";
     throw std::invalid_argument("Unknown Vlasov Gram matrix-free basisFamily: " + basisFamily);
   }
 
@@ -235,7 +237,7 @@ namespace
       if ((argument == "--help") || (argument == "-h"))
       {
         std::cout << "Usage: VlasovGramMatrixFreeStudyDriver [--outputFile=file] [--tensorDriverPath=path] [--fineH1Order=N] [--quick]\n"
-                  << "       [--basisFamily=intrepid2-hierarchical|intrepid2-nodal|all]\n"
+                  << "       [--basisFamily=hierarchical|nodal|all]\n"
                   << "       [--elementsPerDim=N] [--maxIterations=N] [--smootherApplications=N]\n"
                   << "       [--tolerance=tol] [--massWeight=w] [--pMultigridFineSmootherWeight=w]\n"
                   << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1] [--pMultigridFineWeightSweep=0|1]\n"
@@ -274,11 +276,13 @@ namespace
     if (options.massWeight <= 0.0) throw std::invalid_argument("--massWeight must be positive");
     if (options.pMultigridFineSmootherWeight <= 0.0) throw std::invalid_argument("--pMultigridFineSmootherWeight must be positive");
     if (options.maxAssembledEntries < 1) throw std::invalid_argument("--maxAssembledEntries must be positive");
-    if ((options.basisFamily != "intrepid2-hierarchical") &&
-        (options.basisFamily != "intrepid2-nodal") &&
+    if (options.basisFamily == "intrepid2-hierarchical") options.basisFamily = "hierarchical";
+    if (options.basisFamily == "intrepid2-nodal") options.basisFamily = "nodal";
+    if ((options.basisFamily != "hierarchical") &&
+        (options.basisFamily != "nodal") &&
         (options.basisFamily != "all"))
     {
-      throw std::invalid_argument("--basisFamily must be intrepid2-hierarchical, intrepid2-nodal, or all");
+      throw std::invalid_argument("--basisFamily must be hierarchical, nodal, or all");
     }
   }
 
@@ -383,7 +387,7 @@ namespace
               << " --polyOrder=" << p
               << " --cellsPerDim=" << options.elementsPerDim
               << " --operator=vlasov-graph-norm-solution-coeff-1d1t2v"
-              << " --basisFamily=" << tensorPoissonBasisFamilyArgument(basisFamily)
+              << " --basisMode=" << tensorPoissonBasisFamilyArgument(basisFamily)
               << " --mode=inverse-diagnostic"
               << " --inverseDiagnosticAlgorithm=" << strategy.matrixFreeAlgorithm
               << " --numInverseIterations=" << options.maxIterations
@@ -455,7 +459,8 @@ namespace
     out << "Discretization:\n";
     out << "  space: tensor HGRAD\n";
     out << "  basis family option: " << options.basisFamily << "\n";
-    out << "  TensorPoisson basis mapping: intrepid2-hierarchical -> hgrad-hierarchical; intrepid2-nodal -> hgrad-nodal\n";
+    out << "  TensorPoisson basis mapping: hierarchical -> --basisMode=hgrad-hierarchical; nodal -> --basisMode=hgrad-nodal\n";
+    out << "  intrepid2-hierarchical and intrepid2-nodal are accepted as legacy aliases for hierarchical and nodal\n";
     out << "  nodal p-multigrid rows are skipped until nodal p-prolongation/restriction is implemented\n";
     out << "  elements per dimension: " << options.elementsPerDim << "\n";
     out << "  fine p degree range: 1 .. " << options.fineH1Order << "\n";
@@ -529,7 +534,7 @@ int main(int argc, char *argv[])
                                        : std::string();
         const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name + weightSuffix;
         const bool nodalPMultigridUnsupported =
-            (basisFamily == "intrepid2-nodal") && strategyRequiresPMultigrid(strategy);
+            (basisFamily == "nodal") && strategyRequiresPMultigrid(strategy);
         if (!strategy.supported || nodalPMultigridUnsupported ||
             ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
         {
