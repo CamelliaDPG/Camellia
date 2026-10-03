@@ -1,3 +1,4 @@
+#include "GMGOperator.h"
 #include "MatrixFreeGMGPreconditioner.h"
 #include "MatrixFreeGMGPreconditionerComparisonHelpers.hpp"
 
@@ -35,6 +36,33 @@ TEUCHOS_UNIT_TEST( MatrixFreeGMGPreconditionerStageTraceComparison, AcceptsMatch
   expected.push_back(stageTraceEntry(1, "postCoarseCorrection", 6.0, 12.0, 1.0));
 
   const std::vector<StageTraceEntry> actual = expected;
+  Test::assertStageTracesMatch(expected, actual);
+
+  const Test::StageTraceComparisonResult result =
+    Test::compareStageTraces(expected, actual);
+  TEST_EQUALITY(result.sizeMatches, true);
+  TEST_EQUALITY(result.firstMismatchField, std::string());
+  TEST_FLOATING_EQUALITY(result.maxDifference, 0.0, 1e-14);
+}
+
+TEUCHOS_UNIT_TEST( MatrixFreeGMGPreconditionerStageTraceComparison, AcceptsGMGOperatorTraceEntries )
+{
+  using GMGStageTraceEntry = GMGOperator::VcycleStageTraceEntry;
+  using MatrixFreeStageTraceEntry = MatrixFreeGMGPreconditioner::StageTraceEntry;
+
+  GMGStageTraceEntry gmgEntry;
+  gmgEntry.levelIndex = 0;
+  gmgEntry.stageName = "Initial";
+  gmgEntry.rhsInfNorm = 8.0;
+  gmgEntry.solutionInfNorm = 0.0;
+  gmgEntry.residualInfNorm = 8.0;
+
+  std::vector<GMGStageTraceEntry> expected;
+  expected.push_back(gmgEntry);
+
+  std::vector<MatrixFreeStageTraceEntry> actual;
+  actual.push_back(stageTraceEntry(0, "Initial", 8.0, 0.0, 8.0));
+
   Test::assertStageTracesMatch(expected, actual);
 
   const Test::StageTraceComparisonResult result =

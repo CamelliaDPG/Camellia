@@ -1845,6 +1845,7 @@ void GMGOperator::apply(const TVector<Scalar> &tX, TVector<Scalar> &tY, Teuchos:
 int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) const
 {
   narrate("ApplyInverse");
+  _lastVcycleStageTrace.clear();
   //  cout << "GMGOperator::ApplyInverse.\n";
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
@@ -1999,11 +2000,22 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
       computeResidual(Y, traceResidual, A_Y);
       traceResidualAfterPostSmooth = stableTraceValue(multiVectorInfNorm(traceResidual));
       traceSolutionAfterPostSmooth = stableTraceValue(multiVectorInfNorm(Y));
-      if (rank == 0)
+      const char *stageNames[4] = {"Initial", "PreSmooth", "CoarseCorrection", "PostSmooth"};
+      const double solutionNorms[4] = {traceInitialSolutionNorm, traceSolutionAfterPreSmooth, traceSolutionAfterCoarseCorrection, traceSolutionAfterPostSmooth};
+      const double residualNorms[4] = {traceInitialResidualNorm, traceResidualAfterPreSmooth, traceResidualAfterCoarseCorrection, traceResidualAfterPostSmooth};
+      _lastVcycleStageTrace.reserve(4);
+      for (int stageIndex=0; stageIndex<4; stageIndex++)
       {
-        const char *stageNames[4] = {"Initial", "PreSmooth", "CoarseCorrection", "PostSmooth"};
-        const double solutionNorms[4] = {traceInitialSolutionNorm, traceSolutionAfterPreSmooth, traceSolutionAfterCoarseCorrection, traceSolutionAfterPostSmooth};
-        const double residualNorms[4] = {traceInitialResidualNorm, traceResidualAfterPreSmooth, traceResidualAfterCoarseCorrection, traceResidualAfterPostSmooth};
+        VcycleStageTraceEntry traceEntry;
+        traceEntry.levelIndex = 0;
+        traceEntry.stageName = stageNames[stageIndex];
+        traceEntry.rhsInfNorm = traceRhsInfNorm;
+        traceEntry.solutionInfNorm = solutionNorms[stageIndex];
+        traceEntry.residualInfNorm = residualNorms[stageIndex];
+        _lastVcycleStageTrace.push_back(traceEntry);
+      }
+      if ((rank == 0) && _printVcycleStageTrace)
+      {
         for (int stageIndex=0; stageIndex<4; stageIndex++)
         {
           cout << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
@@ -2419,6 +2431,16 @@ void GMGOperator::setDebugMode(bool value)
 void GMGOperator::setEmitVcycleStageTrace(bool value)
 {
   _emitVcycleStageTrace = value;
+}
+
+void GMGOperator::setPrintVcycleStageTrace(bool value)
+{
+  _printVcycleStageTrace = value;
+}
+
+const std::vector<GMGOperator::VcycleStageTraceEntry> &GMGOperator::lastVcycleStageTrace() const
+{
+  return _lastVcycleStageTrace;
 }
 
 void GMGOperator::setFineStiffnessMatrix(TMatrixPtr<Scalar> fineStiffness)

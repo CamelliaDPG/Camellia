@@ -19,7 +19,10 @@
 #include "Solver.h"
 
 #include "Tpetra_Operator.hpp"
+#include <cstddef>
 #include <map>
+#include <string>
+#include <vector>
 
 using namespace std;
 
@@ -46,6 +49,15 @@ class GMGOperator : public TOperator<double>, public Narrator
   using Node = TMatrix<double>::node_type;
   using Import = Tpetra::Import<LO,GO,Node>;
 public:
+  struct VcycleStageTraceEntry
+  {
+    size_t levelIndex = 0;
+    std::string stageName;
+    double rhsInfNorm = 0.0;
+    double solutionInfNorm = 0.0;
+    double residualInfNorm = 0.0;
+  };
+
   struct AdditiveSchwarzDetails
   {
     Teuchos::Array<GO> externalGIDsThisRank;
@@ -91,6 +103,8 @@ private:
   
   bool _isFinest = true;
   bool _emitVcycleStageTrace = false;
+  bool _printVcycleStageTrace = true;
+  mutable std::vector<VcycleStageTraceEntry> _lastVcycleStageTrace;
   bool _clearFinestCondensedDofInterpreterAfterProlongation = false;
 
   TSolutionPtr<Scalar> _coarseSolution;
@@ -329,6 +343,12 @@ public:
 
   //! emits one compact finest-level V-cycle stage trace from ApplyInverse().
   void setEmitVcycleStageTrace(bool value);
+
+  //! controls whether emitted V-cycle stage traces are also printed to stdout.
+  void setPrintVcycleStageTrace(bool value);
+
+  //! last finest-level V-cycle stage trace recorded by ApplyInverse().
+  const std::vector<VcycleStageTraceEntry> &lastVcycleStageTrace() const;
 
   //! Dimension that will be used for neighbor relationships for Schwarz blocks, if CAMELLIA_ADDITIVE_SCHWARZ is the smoother choice.
   int getDimensionForSchwarzNeighborRelationship();

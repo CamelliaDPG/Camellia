@@ -565,46 +565,43 @@ int main(int argc, char *argv[])
               finestGMGOperator->setIsFinest(true);
               finestGMGOperator->setMultigridStrategy(GMGOperator::V_CYCLE);
               finestGMGOperator->setEmitVcycleStageTrace(true);
+              finestGMGOperator->setPrintVcycleStageTrace(false);
               
               TVector<Scalar> directApplyInverseOutput(lhsVector->getMap(), lhsVector->getNumVectors());
               directApplyInverseOutput.putScalar(0.0);
               bool directApplyInverseSucceeded = false;
-              std::streambuf *originalCoutBuffer = nullptr;
-              if (rank == 0)
-              {
-                output.flush();
-                originalCoutBuffer = std::cout.rdbuf(output.rdbuf());
-              }
               try
               {
                 directApplyInverseSucceeded = (finestGMGOperator->ApplyInverse(*rhsVector, directApplyInverseOutput) == 0);
               }
               catch (const std::exception &e)
               {
-                if ((rank == 0) && (originalCoutBuffer != nullptr))
-                {
-                  std::cout.rdbuf(originalCoutBuffer);
-                  output.flush();
-                }
                 if (rank == 0)
                   output << "VLASOV_ASSEMBLED_GMG_DIRECT_APPLYINVERSE_SKIPPED reason=exception message=\"" << e.what() << "\"" << std::endl;
               }
               catch (...)
               {
-                if ((rank == 0) && (originalCoutBuffer != nullptr))
-                {
-                  std::cout.rdbuf(originalCoutBuffer);
-                  output.flush();
-                }
                 if (rank == 0)
                   output << "VLASOV_ASSEMBLED_GMG_DIRECT_APPLYINVERSE_SKIPPED reason=unknown_exception" << std::endl;
               }
-              if ((rank == 0) && (originalCoutBuffer != nullptr))
-              {
-                std::cout.rdbuf(originalCoutBuffer);
-                output.flush();
-              }
+              finestGMGOperator->setPrintVcycleStageTrace(true);
               finestGMGOperator->setEmitVcycleStageTrace(false);
+              if (directApplyInverseSucceeded && (rank == 0))
+              {
+                const auto &stageTrace = finestGMGOperator->lastVcycleStageTrace();
+                for (size_t stageIndex=0; stageIndex<stageTrace.size(); stageIndex++)
+                {
+                  const auto &traceEntry = stageTrace[stageIndex];
+                  output << "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE"
+                         << " index=" << stageIndex
+                         << " level=" << traceEntry.levelIndex
+                         << " stage=" << traceEntry.stageName
+                         << " rhsInfNorm=" << std::setprecision(16) << traceEntry.rhsInfNorm
+                         << " solutionInfNorm=" << traceEntry.solutionInfNorm
+                         << " residualInfNorm=" << traceEntry.residualInfNorm
+                         << std::endl;
+                }
+              }
               
               if (directApplyInverseSucceeded)
               {

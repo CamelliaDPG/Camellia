@@ -47,18 +47,20 @@ namespace Test
     double maxDifference = 0.0;
   };
 
+  template <class LeftStageTraceEntry, class RightStageTraceEntry>
   inline double maxStageTraceEntryDifference(
-      const MatrixFreeGMGPreconditioner::StageTraceEntry &left,
-      const MatrixFreeGMGPreconditioner::StageTraceEntry &right)
+      const LeftStageTraceEntry &left,
+      const RightStageTraceEntry &right)
   {
     return std::max({std::abs(left.rhsInfNorm - right.rhsInfNorm),
                      std::abs(left.solutionInfNorm - right.solutionInfNorm),
                      std::abs(left.residualInfNorm - right.residualInfNorm)});
   }
 
+  template <class ExpectedStageTraceEntry, class ActualStageTraceEntry>
   inline StageTraceComparisonResult compareStageTraces(
-      const std::vector<MatrixFreeGMGPreconditioner::StageTraceEntry> &expected,
-      const std::vector<MatrixFreeGMGPreconditioner::StageTraceEntry> &actual,
+      const std::vector<ExpectedStageTraceEntry> &expected,
+      const std::vector<ActualStageTraceEntry> &actual,
       const double tolerance = 1e-12)
   {
     StageTraceComparisonResult result;
@@ -117,9 +119,10 @@ namespace Test
     return result;
   }
 
+  template <class ExpectedStageTraceEntry, class ActualStageTraceEntry>
   inline void assertStageTracesMatch(
-      const std::vector<MatrixFreeGMGPreconditioner::StageTraceEntry> &expected,
-      const std::vector<MatrixFreeGMGPreconditioner::StageTraceEntry> &actual,
+      const std::vector<ExpectedStageTraceEntry> &expected,
+      const std::vector<ActualStageTraceEntry> &actual,
       const double tolerance = 1e-12)
   {
     const StageTraceComparisonResult result = compareStageTraces(expected, actual, tolerance);
