@@ -35,6 +35,8 @@ struct SchurSolveOptions
   size_t amen_minimum_sweeps = 7;
   size_t amen_kickrank = 4;
   bool amen_exact_initial_guess = false;
+  size_t gmres_outer_iterations = 20;
+  size_t gmres_inner_iterations = 4;
   std::string method = "block_amen";
   std::string gram_inverse = "corewise";
 };
@@ -197,7 +199,8 @@ inline int solve_compressed_schur_system(
   block_operator_t &stiffness,
   block_vector_t &exact_solution,
   block_vector_t &rhs,
-  const SchurSolveOptions &options)
+  const SchurSolveOptions &options,
+  const std::string &solution_output_file = "")
 {
   if(options.gram_inverse != "corewise")
   {
@@ -217,6 +220,8 @@ inline int solve_compressed_schur_system(
   std::cout << "amen_minimum_sweeps=" << options.amen_minimum_sweeps << "\n";
   std::cout << "amen_kickrank=" << options.amen_kickrank << "\n";
   std::cout << "amen_exact_initial_guess=" << options.amen_exact_initial_guess << "\n";
+  std::cout << "gmres_outer_iterations=" << options.gmres_outer_iterations << "\n";
+  std::cout << "gmres_inner_iterations=" << options.gmres_inner_iterations << "\n";
   std::cout << "gram_inverse=" << options.gram_inverse << "\n";
   print_ttm_summary("Loaded Gram TTM", stiffness({vlasov_vars::test, vlasov_vars::test}));
   print_tt_summary("Loaded rhs test block", rhs(vlasov_vars::test));
@@ -313,6 +318,26 @@ inline int solve_compressed_schur_system(
       return 2;
     }
   }
+  else if(options.method == "gmres")
+  {
+    try
+    {
+      ::boba::Krylov<block_operator_t, block_vector_t> gmres_solver(
+        options.gmres_outer_iterations, options.gmres_inner_iterations, options.linear_tolerance);
+      gmres_solver.linear_operator = schur_ttm;
+      gmres_solver.method = ::boba::KrylovMethods::gmres;
+      gmres_solver.verbose = true;
+      gmres_solver.solve(schur_rhs, lambda_initial, lambda_solution);
+      std::cout << "gmres_used_outer_iterations=" << gmres_solver.used_outer_iterations << "\n";
+      std::cout << "gmres_used_inner_iterations=" << gmres_solver.used_inner_iterations << "\n";
+    }
+    catch(const std::exception &error)
+    {
+      std::cout << "compressed_schur_solve_failed=1\n";
+      std::cout << "compressed_schur_solve_error=\"" << error.what() << "\"\n";
+      return 2;
+    }
+  }
   else
   {
     boba_error("Unknown Schur solve method.");
@@ -357,6 +382,11 @@ inline int solve_compressed_schur_system(
   }
   set_svd_tolerances(full_solution, options.relative_tolerance, options.absolute_tolerance);
   print_block_vector_summary("Full solution diagnostics", full_solution);
+  if(!solution_output_file.empty())
+  {
+    ::boba::write_to_hdf5_file(full_solution, solution_output_file, "soln");
+    std::cout << "full_solution_output=" << solution_output_file << "\n";
+  }
 
   const auto full_residual = stiffness * full_solution - rhs;
   std::cout << "relative_full_residual="

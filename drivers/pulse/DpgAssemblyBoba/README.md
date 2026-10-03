@@ -1,18 +1,13 @@
-# Next Items
+# DPG Assembly BoBa driver
 
-- [x] Add an integrated compressed Schur solve path to `VlasovAssemblyBobaDriver`
-- [ ] Estimate error in (F)GMRES computed solution
-- [ ] Impose non-zero Dirichlet boundary conditions
-- [ ] Convert naive loops into `boba`/`Kokkos` loops
-- [ ] Move data from `Kokkos` to `boba` directly?
-- [ ] Tensorize the $x$, $t$ and $v$ dimensions
-- [ ] Poisson solver, coupled solver
-- [ ] Tucker
+This directory contains the original space--time Vlasov DPG assembly driver
+and shared finite-element assembly support. The seven-dimensional driver has
+moved to the sibling [DpgAssemblyBoba_7d](../DpgAssemblyBoba_7d) directory.
 
-# L2 Schur Solve
+## L2 Schur solve
 
-Assemble the L2 Camellia/BOBA block matrices and solve the in-memory compressed
-Schur system from this build directory:
+From the build directory, assemble the L2 Camellia/BoBa block matrices and
+solve the compressed Schur system with:
 
 ```text
 ./VlasovAssemblyBobaDriver \
@@ -22,8 +17,6 @@ Schur system from this build directory:
   --svd_relative_tolerance=1e-12 --svd_absolute_tolerance=1e-12
 ```
 
-The current Gram inverse path is `--gram_inverse=corewise`, which assumes the
-L2 Gram block is a rank-one separable tensor-train matrix. This is appropriate
-for the current L2 study. A more general graph-norm or nonseparable Gram block
-should use an operator solve or a compressed approximate inverse instead of
-explicit corewise inversion.
+The corewise Gram-inverse path assumes a rank-one separable $L^2$ Gram matrix.
+Graph norms or nonseparable Gram blocks require an operator solve or a
+compressed approximate inverse.

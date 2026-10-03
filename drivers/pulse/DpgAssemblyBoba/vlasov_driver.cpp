@@ -11,6 +11,8 @@
 #include "Var.h"
 
 #include "boba_types.hpp"
+#include "global_assembly.hpp"
+#include "reference_integrals_1d.hpp"
 #include "schur_solver.hpp"
 #include "vlasov_system.hpp"
 
@@ -170,6 +172,46 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
                                              p, dp,
                                              test_space_norm);
 
+  // Separable FEM L2 metrics used to study mass-weighted TT compression.
+  reference_integrals_1d mass_integrals;
+  auto ref_test_mass  = mass_integrals.discretization(test_basis,  false, test_basis,  false);
+  auto ref_trace_mass = mass_integrals.discretization(trace_basis, false, trace_basis, false);
+  auto ref_field_mass = mass_integrals.discretization(field_basis, false, field_basis, false);
+
+  auto x_test_mass = global_field_assembly_1d(ref_test_mass, nx, x_min, x_max);
+  auto t_test_mass = global_field_assembly_1d(ref_test_mass, nt, t_min, t_max);
+  auto v_test_mass = global_field_assembly_1d(ref_test_mass, nv, v_min, v_max);
+  auto x_trace_mass = global_field_assembly_1d(ref_trace_mass, nx, x_min, x_max);
+  auto t_trace_mass = global_field_assembly_1d(ref_trace_mass, nt, t_min, t_max);
+  auto v_trace_mass = global_field_assembly_1d(ref_trace_mass, nv, v_min, v_max);
+  auto x_field_mass = global_field_assembly_1d(ref_field_mass, nx, x_min, x_max);
+  auto t_field_mass = global_field_assembly_1d(ref_field_mass, nt, t_min, t_max);
+  auto v_field_mass = global_field_assembly_1d(ref_field_mass, nv, v_min, v_max);
+
+  host_matrix x_face_mass({nx - 1, nx - 1});
+  host_matrix t_face_mass({nt - 1, nt - 1});
+  host_matrix v_face_mass({nv - 1, nv - 1});
+  x_face_mass.set_to_identity_matrix();
+  t_face_mass.set_to_identity_matrix();
+  v_face_mass.set_to_identity_matrix();
+
+  auto test_mass = boba::make_ttm_from_matrices<3, host_space, double>(
+    {x_test_mass, t_test_mass, v_test_mass});
+  auto trace_x_mass = boba::make_ttm_from_matrices<3, host_space, double>(
+    {x_face_mass, t_trace_mass, v_trace_mass});
+  auto trace_t_mass = boba::make_ttm_from_matrices<3, host_space, double>(
+    {x_trace_mass, t_face_mass, v_trace_mass});
+  auto trace_v_mass = boba::make_ttm_from_matrices<3, host_space, double>(
+    {x_trace_mass, t_trace_mass, v_face_mass});
+  auto field_mass = boba::make_ttm_from_matrices<3, host_space, double>(
+    {x_field_mass, t_field_mass, v_field_mass});
+
+  boba::write_to_hdf5_file(test_mass,    file_prefix + "mass_test.h5",    "mass");
+  boba::write_to_hdf5_file(trace_x_mass, file_prefix + "mass_trace_x.h5", "mass");
+  boba::write_to_hdf5_file(trace_t_mass, file_prefix + "mass_trace_t.h5", "mass");
+  boba::write_to_hdf5_file(trace_v_mass, file_prefix + "mass_trace_v.h5", "mass");
+  boba::write_to_hdf5_file(field_mass,   file_prefix + "mass_field.h5",   "mass");
+
   const double PI = 4.0 * std::atan(1.0);
 
   auto   fx_fun = [&PI](const double &x) { return       std::sin(PI * x); };
@@ -248,7 +290,8 @@ void vlasov_test_solve(const size_t &nx, const size_t &nt, const size_t &nv, con
     if (test_space_norm != TestSpaceNorm::L2) {
       boba_error("The integrated Schur solve currently supports only --test_space_norm=L2.");
     }
-    const int schur_status = dpg_boba::solve_compressed_schur_system(stiffness, exact_soln, rhs, schur_options);
+    const int schur_status = dpg_boba::solve_compressed_schur_system(
+      stiffness, exact_soln, rhs, schur_options, file_prefix + "amen_soln.h5");
     if (schur_status != 0) {
       boba_error("Integrated Schur solve failed.");
     }
@@ -279,6 +322,8 @@ int main(int argc, char **argv) {
     int         amen_max_sweeps     = static_cast<int>(schur_options.amen_max_sweeps);
     int         amen_minimum_sweeps = static_cast<int>(schur_options.amen_minimum_sweeps);
     int         amen_kickrank       = static_cast<int>(schur_options.amen_kickrank);
+    int         gmres_outer_iterations = static_cast<int>(schur_options.gmres_outer_iterations);
+    int         gmres_inner_iterations = static_cast<int>(schur_options.gmres_inner_iterations);
 
     cmdp.setOption("nx",              &nx,              "number of elements along x dimension");
     cmdp.setOption("nt",              &nt,              "number of elements along t dimension");
@@ -287,7 +332,7 @@ int main(int argc, char **argv) {
     cmdp.setOption("dp",              &dp,              "basis order enrichment for test variables");
     cmdp.setOption("test_space_norm", &test_space_norm, "test space norm choice (graph or L2)");
     cmdp.setOption("solve_schur",     "skip_schur",    &solve_schur, "solve the in-memory compressed L2 Schur system after assembly");
-    cmdp.setOption("schur_method", &schur_options.method, "Schur solve method: block_amen or exact");
+    cmdp.setOption("schur_method", &schur_options.method, "Schur solve method: block_amen, gmres, or exact");
     cmdp.setOption("schur_tolerance", &schur_options.linear_tolerance, "relative tolerance for the compressed Schur solve");
     cmdp.setOption("svd_relative_tolerance", &schur_options.relative_tolerance, "relative SVD tolerance used during compressed Schur operations");
     cmdp.setOption("svd_absolute_tolerance", &schur_options.absolute_tolerance, "absolute SVD tolerance used during compressed Schur operations");
@@ -295,6 +340,8 @@ int main(int argc, char **argv) {
     cmdp.setOption("amen_minimum_sweeps", &amen_minimum_sweeps, "minimum block AMEN sweeps before convergence");
     cmdp.setOption("amen_kickrank", &amen_kickrank, "block AMEN enrichment kick rank");
     cmdp.setOption("amen_exact_initial_guess", "amen_zero_initial_guess", &schur_options.amen_exact_initial_guess, "use exact multiplier blocks as the AMEN initial guess");
+    cmdp.setOption("gmres_outer_iterations", &gmres_outer_iterations, "maximum restarted GMRES outer iterations");
+    cmdp.setOption("gmres_inner_iterations", &gmres_inner_iterations, "GMRES Krylov dimension per restart");
     cmdp.setOption("gram_inverse", &schur_options.gram_inverse, "Gram inverse strategy; current L2 path supports corewise");
 
     if (cmdp.parse(argc, argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
@@ -303,6 +350,8 @@ int main(int argc, char **argv) {
     schur_options.amen_max_sweeps = static_cast<size_t>(amen_max_sweeps);
     schur_options.amen_minimum_sweeps = static_cast<size_t>(amen_minimum_sweeps);
     schur_options.amen_kickrank = static_cast<size_t>(amen_kickrank);
+    schur_options.gmres_outer_iterations = static_cast<size_t>(gmres_outer_iterations);
+    schur_options.gmres_inner_iterations = static_cast<size_t>(gmres_inner_iterations);
 
     vlasov_test_solve(nx, nt, nv, p, dp, test_space_norm, solve_schur, schur_options);
   }
