@@ -54,6 +54,8 @@ namespace
     bool quick = false;
     bool emitP2StageTrace = false;
     bool emitP2StageSummaryRows = false;
+    // Assembled GMGOperator Chebyshev max-eigenvalue mode: "auto" (default) or "gershgorin".
+    std::string assembledChebyshevLambdaMax = "auto";
   };
 
   struct Strategy
@@ -270,6 +272,7 @@ namespace
       op->setChebyshevDegree(strategy.chebyshevDegree);
       op->setChebyshevRatio(strategy.chebyshevRatio);
       op->setChebyshevMaxEigenIterations(strategy.chebyshevMaxEigenIterations);
+      op->setChebyshevMaxEigenvalueMode(options.assembledChebyshevLambdaMax);
       op->setMultigridStrategy(GMGOperator::SMOOTHER_ONLY);
     }
     return solver;
@@ -314,6 +317,7 @@ namespace
       op->setChebyshevDegree(strategy.chebyshevDegree);
       op->setChebyshevRatio(strategy.chebyshevRatio);
       op->setChebyshevMaxEigenIterations(strategy.chebyshevMaxEigenIterations);
+      op->setChebyshevMaxEigenvalueMode(options.assembledChebyshevLambdaMax);
       op->setSmootherType(strategy.smoother);
       op->setMultigridStrategy(strategy.multigridStrategy);
       op->setIsFinest(isFinestOperator);
@@ -483,6 +487,12 @@ int main(int argc, char *argv[])
         options.emitP2StageTrace = (std::stoi(arg.substr(emitP2StageTracePrefix.size())) != 0);
         continue;
       }
+      const std::string assembledChebyshevLambdaMaxPrefix = "--assembledChebyshevLambdaMax=";
+      if (arg.compare(0, assembledChebyshevLambdaMaxPrefix.size(), assembledChebyshevLambdaMaxPrefix) == 0)
+      {
+        options.assembledChebyshevLambdaMax = arg.substr(assembledChebyshevLambdaMaxPrefix.size());
+        continue;
+      }
       filteredArgs.push_back(argv[i]);
     }
     int filteredArgc = static_cast<int>(filteredArgs.size());
@@ -586,6 +596,23 @@ int main(int argc, char *argv[])
               }
               finestGMGOperator->setPrintVcycleStageTrace(true);
               finestGMGOperator->setEmitVcycleStageTrace(false);
+              if (rank == 0)
+              {
+                const double lambdaMaxForApply = finestGMGOperator->lastFineChebyshevLambdaMaxForApply();
+                const double gershgorinLambdaMax = finestGMGOperator->fineSmootherGershgorinBound();
+                const double boundsRatio = ((lambdaMaxForApply > 0.0) && (gershgorinLambdaMax > 0.0)) ? (lambdaMaxForApply / gershgorinLambdaMax) : -1.0;
+                const std::streamsize savedBoundsPrecision = output.precision();
+                output << "VLASOV_ASSEMBLED_GMG_CHEBYSHEV_BOUNDS"
+                       << " strategy=" << strategy.name
+                       << " fineP=" << fineP
+                       << " basisFamily=" << basisFamily
+                       << " lambdaMaxForApply=" << std::setprecision(16) << lambdaMaxForApply
+                       << " gershgorinLambdaMax=" << gershgorinLambdaMax
+                       << " ratio=" << boundsRatio
+                       << " lambdaMaxMode=" << finestGMGOperator->getChebyshevMaxEigenvalueMode()
+                       << std::endl;
+                output.precision(savedBoundsPrecision);
+              }
               if (directApplyInverseSucceeded && (rank == 0))
               {
                 const auto &stageTrace = finestGMGOperator->lastVcycleStageTrace();

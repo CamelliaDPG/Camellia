@@ -2435,6 +2435,24 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
     Teuchos::RCP<const TpetraMap> coarseMap() const { return coarseMap_; }
 
+    void writeChebyshevBoundsRow(std::ostream &out, const int fineP) const
+    {
+      // Diagnostic only: mirrors the cell-0 bounds used by runChebyshevSmoother.
+      const bool haveCell0 = !fineLambdaMaxByCell_.empty();
+      const Scalar rawGershgorinCell0 = haveCell0 ? fineLambdaMaxByCell_[0] : Scalar(-1.0);
+      const Scalar lambdaMaxCell0 = haveCell0 ? std::max(fineLambdaMaxByCell_[0], Scalar(1.0)) : Scalar(-1.0);
+      const Scalar lambdaMin = haveCell0 ? std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction_ * lambdaMaxCell0) : Scalar(-1.0);
+      const std::streamsize savedPrecision = out.precision();
+      out << "VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS"
+          << " fineP=" << fineP
+          << " lambdaMaxCell0=" << std::setprecision(16) << lambdaMaxCell0
+          << " rawGershgorinCell0=" << rawGershgorinCell0
+          << " lambdaMin=" << lambdaMin
+          << " lowerFraction=" << smootherLowerFraction_
+          << std::endl;
+      out.precision(savedPrecision);
+    }
+
     void applyFineOperator(const TpetraMultiVector &X, TpetraMultiVector &Y,
                            Teuchos::ETransp mode = Teuchos::NO_TRANS,
                            Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
@@ -3803,6 +3821,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
       Teuchos::RCP<TpetraOperator> preconditionerOperator;
       Teuchos::RCP<Camellia::MatrixFreeGMGPreconditioner> matrixFreeGMGForStageTrace;
+      Teuchos::RCP<LocalPMultigridTpetraPreconditioner> localPMultigridForStageTrace;
       if ((inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ||
           (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev"))
       {
@@ -3816,6 +3835,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         const MatrixFreeGMGRightPreconditionerBuild preconditionerBuild =
           buildMatrixFreeGMGRightPreconditioner(map, matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight);
         matrixFreeGMGForStageTrace = preconditionerBuild.matrixFreeGMG;
+        localPMultigridForStageTrace = Teuchos::rcp_dynamic_cast<LocalPMultigridTpetraPreconditioner>(preconditionerBuild.directLocalPMultigrid);
         if (matrixFreeGMGStageTrace != 0)
           matrixFreeGMGForStageTrace->setEmitStageTrace(true);
         preconditionerOperator = preconditionerBuild.belosRightPreconditioner;
@@ -3926,6 +3946,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         stageTraceOutput.putScalar(Scalar(0.0));
         matrixFreeGMGForStageTrace->apply(B, stageTraceOutput);
 
+        if (localPMultigridForStageTrace != Teuchos::null)
+          localPMultigridForStageTrace->writeChebyshevBoundsRow(std::cout, p);
         const auto &trace = matrixFreeGMGForStageTrace->lastStageTrace();
         timing.matrixFreeGMGStageTraceEntries = static_cast<int>(trace.size());
         for (size_t traceIndex=0; traceIndex<trace.size(); traceIndex++)

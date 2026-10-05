@@ -152,6 +152,11 @@ private:
   int _chebyshevDegree = 15;
   double _chebyshevEigenAutocomputeRatio = 30.0;
   int _chebyshevMaxEigenIterations = 10;
+  // Chebyshev max-eigenvalue mode: "auto" (default, Ifpack2 estimate) or "gershgorin" (Gershgorin bound of D^-1 A).
+  std::string _chebyshevMaxEigenvalueMode = "auto";
+  // Diagnostic-only fine smoother bounds recorded in setUpSmoother(); -1 when unavailable.
+  double _lastFineChebyshevLambdaMaxForApply = -1.0;
+  double _fineSmootherGershgorinBound = -1.0;
   
   void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
   
@@ -181,6 +186,11 @@ public:
   //@{
   //! Destructor
   ~GMGOperator() {}
+
+  //! Diagnostic: Ifpack2::Chebyshev getLambdaMaxForApply() of the fine smoother after compute(); -1 when unavailable.
+  double lastFineChebyshevLambdaMaxForApply() const { return _lastFineChebyshevLambdaMaxForApply; }
+  //! Diagnostic: Gershgorin bound max_i sum_j |a_ij|/|a_ii| of the fine stiffness matrix; -1 when unavailable.
+  double fineSmootherGershgorinBound() const { return _fineSmootherGershgorinBound; }
   //@}
   
   GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
@@ -394,6 +404,10 @@ public:
   void setChebyshevDegree(int chebyshevDegree);
   void setChebyshevRatio(double chebyshevRatio);
   void setChebyshevMaxEigenIterations(int maxEigenIterations);
+  //! Chebyshev max-eigenvalue mode: "auto" (default; Ifpack2 power-iteration estimate) or "gershgorin"
+  //! (lambdaMax = Gershgorin bound of D^-1 A, lambdaMin = lambdaMax/ratio, zero eigenvalue iterations).
+  void setChebyshevMaxEigenvalueMode(std::string mode);
+  std::string getChebyshevMaxEigenvalueMode() const;
   
   //! Set the multigrid strategy: two-level (additive), V-cycle, W-cycle, or full multigrid.
   void setMultigridStrategy(MultigridStrategy choice);

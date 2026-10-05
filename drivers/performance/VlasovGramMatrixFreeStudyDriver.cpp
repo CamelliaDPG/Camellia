@@ -345,6 +345,15 @@ namespace
     std::string line;
     while (std::getline(input, line))
     {
+      const std::string boundsMarker = "VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS";
+      if (line.rfind(boundsMarker, 0) == 0)
+      {
+        out << boundsMarker
+            << " strategy=" << strategy.name
+            << " " << ((line.size() > boundsMarker.size()) ? line.substr(boundsMarker.size() + 1) : std::string())
+            << "\n";
+        continue;
+      }
       if (line.rfind(marker, 0) != 0) continue;
       out << "VLASOV_MATRIX_FREE_GMG_STAGE_TRACE"
           << " strategy=" << strategy.name

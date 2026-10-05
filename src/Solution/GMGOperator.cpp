@@ -34,6 +34,7 @@
 
 #include <Ifpack2_AdditiveSchwarz.hpp>
 #include <Ifpack2_BlockRelaxation.hpp>
+#include <Ifpack2_Chebyshev.hpp>
 #include <Ifpack2_Factory.hpp>
 #include <Ifpack2_Preconditioner.hpp>
 
@@ -2411,6 +2412,18 @@ void GMGOperator::setChebyshevMaxEigenIterations(int maxEigenIterations)
   _chebyshevMaxEigenIterations = maxEigenIterations;
 }
 
+void GMGOperator::setChebyshevMaxEigenvalueMode(std::string mode)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((mode != "auto") && (mode != "gershgorin"), std::invalid_argument,
+                             "GMGOperator::setChebyshevMaxEigenvalueMode(): mode must be 'auto' or 'gershgorin'");
+  _chebyshevMaxEigenvalueMode = mode;
+}
+
+std::string GMGOperator::getChebyshevMaxEigenvalueMode() const
+{
+  return _chebyshevMaxEigenvalueMode;
+}
+
 void GMGOperator::setCoarseOperator(Teuchos::RCP<GMGOperator> coarseOperator)
 {
   _coarseOperator = coarseOperator;
@@ -2541,7 +2554,40 @@ void GMGOperator::setSmootherWeight(double weight)
 void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
 {
   narrate("setUpSmoother()");
+  _lastFineChebyshevLambdaMaxForApply = -1.0;
+  _fineSmootherGershgorinBound = -1.0;
   WallTimer smootherSetupTimer;
+
+  // Gershgorin bound max_i sum_j |a_ij|/|a_ii| of D^-1 A (global max over ranks); -1 when no row has a nonzero diagonal.
+  auto computeFineGershgorinBound = [](TMatrixPtr<double> matrix) -> double
+  {
+    using GershgorinLocalOrdinal = typename TMatrix<Scalar>::local_ordinal_type;
+    const auto gershgorinRowMap = matrix->getRowMap();
+    const auto gershgorinColMap = matrix->getColMap();
+    const size_t gershgorinMaxRowEntries = matrix->getLocalMaxNumRowEntries();
+    typename TMatrix<Scalar>::nonconst_local_inds_host_view_type gershgorinIndices("GMGOperator Gershgorin row indices", gershgorinMaxRowEntries);
+    typename TMatrix<Scalar>::nonconst_values_host_view_type gershgorinValues("GMGOperator Gershgorin row values", gershgorinMaxRowEntries);
+    double localGershgorinBound = -1.0;
+    const size_t gershgorinLocalRows = matrix->getLocalNumRows();
+    for (size_t row=0; row<gershgorinLocalRows; row++)
+    {
+      size_t numEntries = 0;
+      matrix->getLocalRowCopy(static_cast<GershgorinLocalOrdinal>(row), gershgorinIndices, gershgorinValues, numEntries);
+      const auto globalRow = gershgorinRowMap->getGlobalElement(static_cast<GershgorinLocalOrdinal>(row));
+      double absRowSum = 0.0;
+      double absDiagonal = 0.0;
+      for (size_t entry=0; entry<numEntries; entry++)
+      {
+        const double absValue = std::abs(static_cast<double>(gershgorinValues(entry)));
+        absRowSum += absValue;
+        if (gershgorinColMap->getGlobalElement(gershgorinIndices(entry)) == globalRow) absDiagonal += absValue;
+      }
+      if (absDiagonal > 0.0) localGershgorinBound = std::max(localGershgorinBound, absRowSum / absDiagonal);
+    }
+    double globalGershgorinBound = -1.0;
+    Teuchos::reduceAll(*matrix->getComm(), Teuchos::REDUCE_MAX, 1, &localGershgorinBound, &globalGershgorinBound);
+    return globalGershgorinBound;
+  };
   
   using RowMatrix = Tpetra::RowMatrix<Scalar>;
   
@@ -2686,6 +2732,17 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
       List.set("chebyshev: ratio eigenvalue", _chebyshevEigenAutocomputeRatio);
       List.set("chebyshev: eigenvalue max iterations",_chebyshevMaxEigenIterations);
       List.set("chebyshev: degree",_chebyshevDegree);
+      if ((_chebyshevMaxEigenvalueMode == "gershgorin") && (fineStiffnessMatrix != Teuchos::null))
+      {
+        // Opt-in controlled experiment: match the matrix-free side, lambdaMax = Gershgorin bound of D^-1 A.
+        const double gershgorinLambdaMax = computeFineGershgorinBound(fineStiffnessMatrix);
+        if (gershgorinLambdaMax > 0.0)
+        {
+          List.set("chebyshev: max eigenvalue", gershgorinLambdaMax);
+          List.set("chebyshev: min eigenvalue", gershgorinLambdaMax / _chebyshevEigenAutocomputeRatio);
+          List.set("chebyshev: eigenvalue max iterations", 0);
+        }
+      }
     }
       break;
 
@@ -2718,6 +2775,17 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
   {
     ifpack2Smoother->initialize();
     ifpack2Smoother->compute();
+
+    // Diagnostic only: record the fine smoother Chebyshev bounds; does not alter smoother numerics.
+    auto fineChebyshevSmoother = Teuchos::rcp_dynamic_cast< Ifpack2::Chebyshev<RowMatrix> >(smoother);
+    if (!fineChebyshevSmoother.is_null())
+    {
+      _lastFineChebyshevLambdaMaxForApply = static_cast<double>(fineChebyshevSmoother->getLambdaMaxForApply());
+    }
+    if (fineStiffnessMatrix != Teuchos::null)
+    {
+      _fineSmootherGershgorinBound = computeFineGershgorinBound(fineStiffnessMatrix);
+    }
   }
 
   if ((choice == CAMELLIA_ADDITIVE_SCHWARZ) && _useSchwarzDiagonalWeight)
