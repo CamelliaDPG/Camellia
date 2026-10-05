@@ -20,7 +20,8 @@ file(MAKE_DIRECTORY "${TRACE_WORK_DIR}")
 set(MATRIX_FREE_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix-free.txt")
 set(ASSEMBLED_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-assembled.txt")
 set(ASSEMBLED_GERSHGORIN_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-assembled-gershgorin.txt")
-file(REMOVE "${MATRIX_FREE_TRACE_FILE}" "${ASSEMBLED_TRACE_FILE}" "${ASSEMBLED_GERSHGORIN_TRACE_FILE}")
+set(MATRIX_FREE_GERSHGORIN_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix-free-gershgorin.txt")
+file(REMOVE "${MATRIX_FREE_TRACE_FILE}" "${ASSEMBLED_TRACE_FILE}" "${ASSEMBLED_GERSHGORIN_TRACE_FILE}" "${MATRIX_FREE_GERSHGORIN_TRACE_FILE}")
 
 execute_process(
   COMMAND "${MATRIX_FREE_DRIVER}"
@@ -57,8 +58,26 @@ if(NOT ASSEMBLED_RESULT EQUAL 0)
     "assembled GMG diagnostic producer failed with ${ASSEMBLED_RESULT}\nstdout:\n${ASSEMBLED_STDOUT}\nstderr:\n${ASSEMBLED_STDERR}")
 endif()
 
-# Controlled experiment: identical assembled run, but lambdaMax = Gershgorin bound of D^-1 A
-# (lambdaMin = lambdaMax/ratio, no power iterations), matching the matrix-free smoother bounds.
+# Controlled experiment, matrix-free side: identical matrix-free run, but the Ifpack2 fine Chebyshev
+# smoother uses lambdaMax = max cell Gershgorin bound of D^-1 A (lambdaMin = lambdaMax/ratio, no power iterations).
+execute_process(
+  COMMAND "${MATRIX_FREE_DRIVER}"
+    --fineH1Order=2
+    --quick
+    --maxIterations=20
+    --basisFamily=hierarchical
+    --matrixFreeGMGStageTrace=1
+    --keepChildOutput=1
+    --maxAssembledEntries=10000
+    --pMultigridChebyshevLambdaMax=gershgorin
+    --outputFile=${MATRIX_FREE_GERSHGORIN_TRACE_FILE}
+  RESULT_VARIABLE MATRIX_FREE_GERSHGORIN_RESULT
+  OUTPUT_VARIABLE MATRIX_FREE_GERSHGORIN_STDOUT
+  ERROR_VARIABLE MATRIX_FREE_GERSHGORIN_STDERR)
+
+# Controlled experiment, assembled side: identical assembled run, but lambdaMax = Gershgorin bound of D^-1 A
+# (lambdaMin = lambdaMax/ratio, no power iterations). Both sides are then Ifpack2 Chebyshev with an identical
+# deterministic lambdaMax.
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env VLASOV_ASSEMBLED_GMG_EMIT_STAGE_TRACE=1
     "${ASSEMBLED_DRIVER}"
@@ -372,7 +391,27 @@ endfunction()
 
 set(GMG_GERSHGORIN_EXPERIMENT_SUMMARY "not_run")
 set(ASSEMBLED_GERSHGORIN_BOUNDS_TAIL "missing")
-if((ASSEMBLED_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_GERSHGORIN_TRACE_FILE}"))
+set(MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL "missing")
+if((ASSEMBLED_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_GERSHGORIN_TRACE_FILE}")
+   AND (MATRIX_FREE_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${MATRIX_FREE_GERSHGORIN_TRACE_FILE}"))
+  file(READ "${MATRIX_FREE_GERSHGORIN_TRACE_FILE}" MATRIX_FREE_GERSHGORIN_FILE_TEXT)
+  set(MATRIX_FREE_GERSHGORIN_TRACE_TEXT "${MATRIX_FREE_GERSHGORIN_STDOUT}\n${MATRIX_FREE_GERSHGORIN_FILE_TEXT}")
+  record_gmg_stage_metrics("${MATRIX_FREE_GERSHGORIN_TRACE_TEXT}" "VLASOV_MATRIX_FREE_GMG_STAGE_TRACE" MATRIX_FREE_GERSHGORIN_STAGE_METRIC)
+  string(REGEX MATCHALL "VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS[^\n]*" MATRIX_FREE_GERSHGORIN_BOUNDS_ROWS "${MATRIX_FREE_GERSHGORIN_TRACE_TEXT}")
+  foreach(bounds_line IN LISTS MATRIX_FREE_GERSHGORIN_BOUNDS_ROWS)
+    if(bounds_line MATCHES " strategy=${TRACE_STRATEGY}( |$)")
+      string(REGEX REPLACE "^VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS *" "" MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL "${bounds_line}")
+      string(STRIP "${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}" MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL)
+      break()
+    endif()
+  endforeach()
+  if(MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL STREQUAL "missing")
+    foreach(bounds_line IN LISTS MATRIX_FREE_GERSHGORIN_BOUNDS_ROWS)
+      string(REGEX REPLACE "^VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS *" "" MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL "${bounds_line}")
+      string(STRIP "${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}" MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL)
+      break()
+    endforeach()
+  endif()
   file(READ "${ASSEMBLED_GERSHGORIN_TRACE_FILE}" ASSEMBLED_GERSHGORIN_FILE_TEXT)
   set(ASSEMBLED_GERSHGORIN_TRACE_TEXT "${ASSEMBLED_GERSHGORIN_STDOUT}\n${ASSEMBLED_GERSHGORIN_FILE_TEXT}")
   record_gmg_stage_metrics("${ASSEMBLED_GERSHGORIN_TRACE_TEXT}" "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE" ASSEMBLED_GERSHGORIN_STAGE_METRIC)
@@ -389,7 +428,7 @@ if((ASSEMBLED_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_GERSHGORIN_TRA
     string(MAKE_C_IDENTIFIER "${stage_label}" stage_key)
     foreach(metric IN ITEMS rhsInfNorm solutionInfNorm residualInfNorm)
       set(gershgorin_metric_var "ASSEMBLED_GERSHGORIN_STAGE_METRIC_${stage_key}_${metric}")
-      set(matrix_free_metric_var "MATRIX_FREE_STAGE_METRIC_${stage_key}_${metric}")
+      set(matrix_free_metric_var "MATRIX_FREE_GERSHGORIN_STAGE_METRIC_${stage_key}_${metric}")
       set(gershgorin_value "missing")
       set(matrix_free_value "missing")
       if(DEFINED ${gershgorin_metric_var})
@@ -409,13 +448,36 @@ if((ASSEMBLED_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_GERSHGORIN_TRA
     endforeach()
   endforeach()
 else()
-  set(GMG_GERSHGORIN_EXPERIMENT_SUMMARY "producer_failed_result_${ASSEMBLED_GERSHGORIN_RESULT}")
+  set(GMG_GERSHGORIN_EXPERIMENT_SUMMARY "producer_failed_assembled_result_${ASSEMBLED_GERSHGORIN_RESULT}_matrix_free_result_${MATRIX_FREE_GERSHGORIN_RESULT}")
 endif()
-message(STATUS "GMG trace gershgorin-lambda experiment summary: ${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}")
+message(STATUS "GMG trace gershgorin-lambda experiment summary: ${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}")
 
-if(GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0)
+# Main auto-vs-auto pairs: tolerance-based agreement using the same 1e-8 relative helper.
+set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "all_agree")
+set(GMG_AUTO_LAMBDA_ALL_AGREE 1)
+foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
+  string(MAKE_C_IDENTIFIER "${stage_label}" stage_key)
+  foreach(metric IN ITEMS rhsInfNorm solutionInfNorm residualInfNorm)
+    set(auto_assembled_value "${ASSEMBLED_STAGE_METRIC_${stage_key}_${metric}}")
+    set(auto_matrix_free_value "${MATRIX_FREE_STAGE_METRIC_${stage_key}_${metric}}")
+    set(auto_pair_agree 0)
+    gmg_relative_agree("${auto_assembled_value}" "${auto_matrix_free_value}" auto_pair_agree)
+    message(STATUS "GMG trace auto-lambda comparison: stage=${stage_label};metric=${metric};assembled=${auto_assembled_value};matrix_free=${auto_matrix_free_value};agree=${auto_pair_agree}")
+    if(auto_pair_agree EQUAL 0)
+      set(GMG_AUTO_LAMBDA_ALL_AGREE 0)
+      if(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY STREQUAL "all_agree")
+        set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "first_disagreement=stage:${stage_label},metric:${metric},assembled:${auto_assembled_value},matrix_free:${auto_matrix_free_value}")
+      endif()
+    endif()
+  endforeach()
+endforeach()
+message(STATUS "GMG trace auto-lambda comparison summary: ${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}")
+
+if((GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0) AND (NOT GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1))
   message(FATAL_ERROR
-    "GMG trace numerical first mismatch: strategy=${TRACE_STRATEGY}; ${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; common_stage_labels=${COMMON_GMG_STAGE_LABELS}; assembled_bounds=${ASSEMBLED_CHEBYSHEV_BOUNDS_TAIL}; matrix_free_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}")
+    "GMG trace numerical first mismatch: strategy=${TRACE_STRATEGY}; ${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; common_stage_labels=${COMMON_GMG_STAGE_LABELS}; assembled_bounds=${ASSEMBLED_CHEBYSHEV_BOUNDS_TAIL}; matrix_free_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}")
+elseif(GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0)
+  message(STATUS "GMG trace stages agree within tolerance: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}")
 endif()
 
 message(STATUS

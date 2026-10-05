@@ -33,6 +33,8 @@ namespace
     double tolerance = 1e-8;
     double massWeight = 1.0;
     double pMultigridFineSmootherWeight = 1.0;
+    std::string pMultigridFineSmootherImpl = "ifpack2";
+    std::string pMultigridChebyshevLambdaMax = "auto";
     long long maxAssembledEntries = 30000000;
     bool quick = false;
     bool keepChildOutput = false;
@@ -240,6 +242,7 @@ namespace
                   << "       [--basisFamily=hierarchical|nodal|all]\n"
                   << "       [--elementsPerDim=N] [--maxIterations=N] [--smootherApplications=N]\n"
                   << "       [--tolerance=tol] [--massWeight=w] [--pMultigridFineSmootherWeight=w]\n"
+                  << "       [--pMultigridFineSmootherImpl=ifpack2|local] [--pMultigridChebyshevLambdaMax=auto|gershgorin]\n"
                   << "       [--maxAssembledEntries=N] [--keepChildOutput=0|1] [--pMultigridFineWeightSweep=0|1]\n"
                   << "       [--matrixFreeGMGStageTrace=0|1]\n";
         std::exit(0);
@@ -260,6 +263,8 @@ namespace
       else if (key == "tolerance") options.tolerance = std::stod(value);
       else if (key == "massWeight") options.massWeight = std::stod(value);
       else if (key == "pMultigridFineSmootherWeight") options.pMultigridFineSmootherWeight = std::stod(value);
+      else if (key == "pMultigridFineSmootherImpl") options.pMultigridFineSmootherImpl = value;
+      else if (key == "pMultigridChebyshevLambdaMax") options.pMultigridChebyshevLambdaMax = value;
       else if (key == "maxAssembledEntries") options.maxAssembledEntries = std::stoll(value);
       else if (key == "quick") options.quick = parseBoolValue(value);
       else if (key == "keepChildOutput") options.keepChildOutput = parseBoolValue(value);
@@ -275,6 +280,10 @@ namespace
     if (options.tolerance <= 0.0) throw std::invalid_argument("--tolerance must be positive");
     if (options.massWeight <= 0.0) throw std::invalid_argument("--massWeight must be positive");
     if (options.pMultigridFineSmootherWeight <= 0.0) throw std::invalid_argument("--pMultigridFineSmootherWeight must be positive");
+    if ((options.pMultigridFineSmootherImpl != "ifpack2") && (options.pMultigridFineSmootherImpl != "local"))
+      throw std::invalid_argument("--pMultigridFineSmootherImpl must be ifpack2 or local");
+    if ((options.pMultigridChebyshevLambdaMax != "auto") && (options.pMultigridChebyshevLambdaMax != "gershgorin"))
+      throw std::invalid_argument("--pMultigridChebyshevLambdaMax must be auto or gershgorin");
     if (options.maxAssembledEntries < 1) throw std::invalid_argument("--maxAssembledEntries must be positive");
     if (options.basisFamily == "intrepid2-hierarchical") options.basisFamily = "hierarchical";
     if (options.basisFamily == "intrepid2-nodal") options.basisFamily = "nodal";
@@ -425,6 +434,9 @@ namespace
       arguments << " --pMultigridChebyshevSmootherIterations=" << std::max(1, options.smootherApplications * strategy.chebyshevDegree)
                 << " --pMultigridChebyshevSmootherLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
                 << " --pMultigridFineSmootherWeight=" << std::setprecision(16) << fineSmootherWeight
+                << " --pMultigridFineSmootherImpl=" << options.pMultigridFineSmootherImpl
+                << " --pMultigridChebyshevLambdaMax=" << options.pMultigridChebyshevLambdaMax
+                << " --pMultigridChebyshevEigenMaxIterations=" << strategy.chebyshevMaxEigenIterations
                 << " --diagnoseLocalPMultigridWrapperEquivalence=1"
                 << " --inverseSpectralEstimate=assembled-gershgorin"
                 << " --inverseLowerSpectralEstimate=ratio"
@@ -436,6 +448,9 @@ namespace
                 << " --pMultigridCoarseChebyshevIterations=" << strategy.chebyshevDegree
                 << " --pMultigridCoarseChebyshevLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
                 << " --pMultigridFineSmootherWeight=" << std::setprecision(16) << fineSmootherWeight
+                << " --pMultigridFineSmootherImpl=" << options.pMultigridFineSmootherImpl
+                << " --pMultigridChebyshevLambdaMax=" << options.pMultigridChebyshevLambdaMax
+                << " --pMultigridChebyshevEigenMaxIterations=" << strategy.chebyshevMaxEigenIterations
                 << " --diagnoseLocalPMultigridWrapperEquivalence=1"
                 << " --inverseSpectralEstimate=assembled-gershgorin"
                 << " --inverseLowerSpectralEstimate=ratio"
@@ -482,6 +497,13 @@ namespace
     out << "  max iterations / V-cycles: " << options.maxIterations << "\n";
     out << "  smoother applications: " << options.smootherApplications << "\n";
     out << "  pMultigridFineSmootherWeight default: " << options.pMultigridFineSmootherWeight << "\n";
+    out << "  pMultigrid fine Chebyshev smoother: "
+        << ((options.pMultigridFineSmootherImpl == "ifpack2")
+              ? "ifpack2 (global Ifpack2 Chebyshev on the PA-matrix RowMatrix adapter, applied in correction form)"
+              : "local (hand-written per-cell Chebyshev, diagnostic)")
+        << "; jacobi smoother stays local\n";
+    out << "  pMultigridChebyshevLambdaMax: " << options.pMultigridChebyshevLambdaMax
+        << " (auto = Ifpack2 power iteration with strategy chebyshevMaxEigenIterations; gershgorin = max cell Gershgorin bound, no power iteration)\n";
     out << "  matrixFreeGMGStageTrace: " << (options.matrixFreeGMGStageTrace ? "enabled" : "disabled") << "\n";
     out << "  Optional MatrixFreeGMG stage traces are emitted as VLASOV_MATRIX_FREE_GMG_STAGE_TRACE rows.\n";
     out << "  P2_PMG_FINEWT_RESULT includes matrixFreeGMGStageTrace and matrixFreeGMGStageTraceEntries.\n\n";

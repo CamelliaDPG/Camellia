@@ -2228,6 +2228,15 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     std::vector<Scalar> coarseMatrices_;
     std::vector<Scalar> factoredCoarseMatrices_;
     std::string description_;
+    std::string fineSmootherImpl_ = "local";
+    std::string chebyshevLambdaMaxMode_ = "auto";
+    int chebyshevEigenMaxIterations_ = 10;
+    bool useIfpack2FineSmoother_ = false;
+    using FineIfpack2Preconditioner = Ifpack2::Preconditioner<Scalar,
+                                                              typename TpetraMap::local_ordinal_type,
+                                                              typename TpetraMap::global_ordinal_type,
+                                                              typename TpetraMap::node_type>;
+    Teuchos::RCP<FineIfpack2Preconditioner> fineIfpack2Smoother_;
 
     static std::vector<Scalar> denseCellMatrix(const std::vector<Scalar> &matrices,
                                                const int cellOrdinal,
@@ -2360,11 +2369,17 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const int dim, const int p, const int cells,
                                         const int localDofs, const int smootherIterations,
                                         const std::string &smootherName,
-                                        const Scalar smootherLowerFraction, const Scalar smootherWeight)
+                                        const Scalar smootherLowerFraction, const Scalar smootherWeight,
+                                        const Teuchos::RCP<const TpetraRowMatrix> &fineRowMatrix,
+                                        const std::string &fineSmootherImpl,
+                                        const std::string &chebyshevLambdaMaxMode,
+                                        const int chebyshevEigenMaxIterations)
       : map_(map), transfer_(&Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p)), cells_(cells), localDofs_(localDofs),
         coarseRows_(transfer_->coarseRows), smootherIterations_(std::max(1, smootherIterations)),
         smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)),
-        smootherWeight_(smootherWeight), smootherName_(smootherName)
+        smootherWeight_(smootherWeight), smootherName_(smootherName),
+        fineSmootherImpl_(fineSmootherImpl), chebyshevLambdaMaxMode_(chebyshevLambdaMaxMode),
+        chebyshevEigenMaxIterations_(chebyshevEigenMaxIterations)
     {
       if (map_.is_null()) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner requires a non-null map");
       if (p < 2) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner requires p >= 2");
@@ -2406,6 +2421,41 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         }
       }
 
+      if ((fineSmootherImpl_ != "ifpack2") && (fineSmootherImpl_ != "local"))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine smoother implementation must be ifpack2 or local");
+      if ((chebyshevLambdaMaxMode_ != "auto") && (chebyshevLambdaMaxMode_ != "gershgorin"))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner Chebyshev lambdaMax mode must be auto or gershgorin");
+      // The jacobi smoother path stays on the hand-written local smoother.
+      useIfpack2FineSmoother_ = (fineSmootherImpl_ == "ifpack2") && (smootherName_ == "chebyshev");
+      if (useIfpack2FineSmoother_)
+      {
+        if (fineRowMatrix.is_null())
+          throw std::invalid_argument("LocalPMultigridTpetraPreconditioner ifpack2 fine smoother requires a non-null RowMatrix");
+        fineIfpack2Smoother_ = Ifpack2::Factory::create<TpetraRowMatrix>("CHEBYSHEV", fineRowMatrix);
+        const Scalar ratio = Scalar(1.0) / smootherLowerFraction_;
+        Teuchos::ParameterList smootherParams;
+        smootherParams.set("chebyshev: degree", smootherIterations_);
+        smootherParams.set("chebyshev: ratio eigenvalue", ratio);
+        if (chebyshevLambdaMaxMode_ == "gershgorin")
+        {
+          // Mirror GMGOperator: deterministic Gershgorin-style bound and no power iteration.
+          Scalar localLambdaMax = Scalar(0.0);
+          for (const Scalar cellLambdaMax : fineLambdaMaxByCell_) localLambdaMax = std::max(localLambdaMax, cellLambdaMax);
+          Scalar lambdaMax = localLambdaMax;
+          Teuchos::reduceAll<int, Scalar>(*map_->getComm(), Teuchos::REDUCE_MAX, localLambdaMax, Teuchos::outArg(lambdaMax));
+          smootherParams.set("chebyshev: max eigenvalue", lambdaMax);
+          smootherParams.set("chebyshev: min eigenvalue", lambdaMax / ratio);
+          smootherParams.set("chebyshev: eigenvalue max iterations", 0);
+        }
+        else
+        {
+          smootherParams.set("chebyshev: eigenvalue max iterations", chebyshevEigenMaxIterations_);
+        }
+        fineIfpack2Smoother_->setParameters(smootherParams);
+        fineIfpack2Smoother_->initialize();
+        fineIfpack2Smoother_->compute();
+      }
+
       coarseMatrices_.assign(static_cast<size_t>(cells_) * coarseRows_ * coarseRows_, Scalar(0.0));
       for (int c=0; c<cells_; c++)
       {
@@ -2435,6 +2485,14 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
     Teuchos::RCP<const TpetraMap> coarseMap() const { return coarseMap_; }
 
+    Scalar fineIfpack2LambdaMaxForApply() const
+    {
+      if (!useIfpack2FineSmoother_ || fineIfpack2Smoother_.is_null()) return Scalar(-1.0);
+      auto chebyshev = Teuchos::rcp_dynamic_cast<Ifpack2::Chebyshev<TpetraRowMatrix>>(fineIfpack2Smoother_);
+      if (chebyshev.is_null()) return Scalar(-1.0);
+      return static_cast<Scalar>(chebyshev->getLambdaMaxForApply());
+    }
+
     void writeChebyshevBoundsRow(std::ostream &out, const int fineP) const
     {
       // Diagnostic only: mirrors the cell-0 bounds used by runChebyshevSmoother.
@@ -2449,6 +2507,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           << " rawGershgorinCell0=" << rawGershgorinCell0
           << " lambdaMin=" << lambdaMin
           << " lowerFraction=" << smootherLowerFraction_
+          << " smootherImpl=" << (useIfpack2FineSmoother_ ? "ifpack2" : "local")
+          << " lambdaMaxMode=" << chebyshevLambdaMaxMode_
+          << " ifpack2LambdaMaxForApply=" << fineIfpack2LambdaMaxForApply()
           << std::endl;
       out.precision(savedPrecision);
     }
@@ -2492,6 +2553,20 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner smoother local vector length mismatch");
       if (RHS.getNumVectors() != Solution.getNumVectors())
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner smoother multivector count mismatch");
+
+      if (useIfpack2FineSmoother_)
+      {
+        // Ifpack2 Chebyshev starts from a zero solution, so apply it as a correction:
+        // Solution += smootherWeight * Cheb(RHS - A * Solution); with Solution = 0 this is Solution = w * Cheb(RHS).
+        const Scalar one = Teuchos::ScalarTraits<Scalar>::one();
+        TpetraMultiVector residual(map_, RHS.getNumVectors());
+        applyFineOperator(Solution, residual);
+        residual.update(one, RHS, -one);
+        TpetraMultiVector correction(map_, RHS.getNumVectors());
+        fineIfpack2Smoother_->apply(residual, correction);
+        Solution.update(smootherWeight_, correction, one);
+        return;
+      }
 
       auto rhsHost = RHS.getLocalViewHost(Tpetra::Access::ReadOnly);
       auto solutionHost = Solution.getLocalViewHost(Tpetra::Access::ReadWrite);
@@ -2606,6 +2681,28 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       if (X.getNumVectors() != Y.getNumVectors())
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner multivector count mismatch");
 
+      if (useIfpack2FineSmoother_)
+      {
+        // Same two-level V-cycle as below, with the fine smoother applied globally (matches the MatrixFreeGMG wrapper path).
+        const Scalar one = Teuchos::ScalarTraits<Scalar>::one();
+        const size_t numVectors = X.getNumVectors();
+        TpetraMultiVector solution(map_, numVectors);
+        smoothFineLevel(X, solution);
+        TpetraMultiVector fineResidual(map_, numVectors);
+        applyFineOperator(solution, fineResidual);
+        fineResidual.update(one, X, -one);
+        TpetraMultiVector coarseResidual(coarseMap_, numVectors);
+        restrictFineResidual(fineResidual, coarseResidual);
+        TpetraMultiVector coarseCorrection(coarseMap_, numVectors);
+        solveCoarseLevel(coarseResidual, coarseCorrection);
+        TpetraMultiVector fineCorrection(map_, numVectors);
+        prolongateCoarseCorrection(coarseCorrection, fineCorrection);
+        solution.update(one, fineCorrection, one);
+        smoothFineLevel(X, solution);
+        Y.update(alpha, solution, beta);
+        return;
+      }
+
       auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
       auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
       std::vector<Scalar> rhs(static_cast<size_t>(localDofs_), Scalar(0.0));
@@ -2713,7 +2810,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const int smootherIterations,
                                         const std::string &smootherName,
                                         const Scalar smootherLowerFraction,
-                                        const Scalar smootherWeight)
+                                        const Scalar smootherWeight,
+                                        const Teuchos::RCP<const TpetraRowMatrix> &fineRowMatrix,
+                                        const std::string &fineSmootherImpl,
+                                        const std::string &chebyshevLambdaMaxMode,
+                                        const int chebyshevEigenMaxIterations)
   {
     auto localPMultigrid = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map,
                                                                                 fineOperator,
@@ -2724,7 +2825,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                                                 smootherIterations,
                                                                                 smootherName,
                                                                                 smootherLowerFraction,
-                                                                                smootherWeight));
+                                                                                smootherWeight,
+                                                                                fineRowMatrix,
+                                                                                fineSmootherImpl,
+                                                                                chebyshevLambdaMaxMode,
+                                                                                chebyshevEigenMaxIterations));
 
     std::vector<Camellia::MatrixFreeGMGPreconditioner::Level> levels;
     levels.push_back(buildLocalPMultigridMatrixFreeGMGFineLevel(map, localPMultigrid));
@@ -2917,7 +3022,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                  const int worksetSize, const int cells, const int rows, const int dim, const int p,
                                                  const long long maxAssembledEntries, const int inverseDiagnosticRequireAssembledReference,
                                                  const int diagnoseLocalPMultigridWrapperEquivalenceFlag,
-                                                 const int numInverseIterations, const int pMultigridChebyshevSmootherIterations,
+                                                 const int numInverseIterations,
+                                                 const std::string &pMultigridFineSmootherImpl,
+                                                 const std::string &pMultigridChebyshevLambdaMax,
+                                                 const int pMultigridChebyshevEigenMaxIterations,
+                                                 const int pMultigridChebyshevSmootherIterations,
                                                  const Scalar pMultigridChebyshevSmootherLowerFraction,
                                                  const Scalar pMultigridFineSmootherWeight,
                                                  const int matrixFreeGMGStageTrace,
@@ -3833,7 +3942,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         const std::string smootherName = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? "chebyshev" : "jacobi";
         const auto &transfer = Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p);
         const MatrixFreeGMGRightPreconditionerBuild preconditionerBuild =
-          buildMatrixFreeGMGRightPreconditioner(map, matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight);
+          buildMatrixFreeGMGRightPreconditioner(map, matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight,
+                                                rowMatrixBase, pMultigridFineSmootherImpl, pMultigridChebyshevLambdaMax, pMultigridChebyshevEigenMaxIterations);
         matrixFreeGMGForStageTrace = preconditionerBuild.matrixFreeGMG;
         localPMultigridForStageTrace = Teuchos::rcp_dynamic_cast<LocalPMultigridTpetraPreconditioner>(preconditionerBuild.directLocalPMultigrid);
         if (matrixFreeGMGStageTrace != 0)
@@ -4996,6 +5106,9 @@ int main(int argc, char *argv[])
     int printTermWeights = 1;
     Scalar pMultigridChebyshevSmootherLowerFraction = 1.0 / 30.0;
     Scalar pMultigridFineSmootherWeight = 1.0;
+    std::string pMultigridFineSmootherImpl = "ifpack2";
+    std::string pMultigridChebyshevLambdaMax = "auto";
+    int pMultigridChebyshevEigenMaxIterations = 10;
     // Match the assembled GMG p=2 study's effective Chebyshev smoother degree by default.
     int pMultigridChebyshevSmootherIterations = 8;
     int pMultigridJacobiSmootherIterations = 2;
@@ -5037,6 +5150,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("inversePreconditionerDegree", &inversePreconditionerDegree, "Chebyshev polynomial degree for --inverseDiagnosticAlgorithm=gmres-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherIterations", &pMultigridChebyshevSmootherIterations, "Chebyshev pre/post smoother iterations for --inverseDiagnosticAlgorithm=pmultigrid-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherLowerFraction", &pMultigridChebyshevSmootherLowerFraction, "Lower endpoint as a fraction of lambdaMax for high-frequency Chebyshev p-multigrid smoothing.");
+    cmdp.setOption("pMultigridFineSmootherImpl", &pMultigridFineSmootherImpl, "Fine p-multigrid Chebyshev smoother implementation: ifpack2 (default; global Ifpack2 Chebyshev on the RowMatrix adapter) or local (hand-written per-cell Chebyshev, kept for diagnostics). The jacobi smoother always uses the local path.");
+    cmdp.setOption("pMultigridChebyshevLambdaMax", &pMultigridChebyshevLambdaMax, "Ifpack2 fine Chebyshev lambdaMax: auto (Ifpack2 power iteration) or gershgorin (max over cells of the local Gershgorin bound; eigenvalue max iterations = 0, mirroring GMGOperator).");
+    cmdp.setOption("pMultigridChebyshevEigenMaxIterations", &pMultigridChebyshevEigenMaxIterations, "Ifpack2 'chebyshev: eigenvalue max iterations' for the fine p-multigrid smoother in auto lambdaMax mode.");
     cmdp.setOption("pMultigridFineSmootherWeight", &pMultigridFineSmootherWeight, "Scalar multiplier applied to each fine-level p-multigrid smoother correction; default 1.0 matches GMGOperator's default smoother weight and preserves the current matrix-free diagnostic behavior.");
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
     cmdp.setOption("pMultigridCoarseChebyshevIterations", &pMultigridCoarseChebyshevIterations, "Chebyshev iterations used as the coarsest p-multigrid solver for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
@@ -5300,6 +5416,7 @@ int main(int argc, char *argv[])
       {
         inverseDiagnosticTiming = inverseDiagnosticTerms(terms, workspaces, worksetSize, cells, localDofs, dim, p,
                                                         maxAssembledEntries, inverseDiagnosticRequireAssembledReference, diagnoseLocalPMultigridWrapperEquivalence, numInverseIterations,
+                                                        pMultigridFineSmootherImpl, pMultigridChebyshevLambdaMax, pMultigridChebyshevEigenMaxIterations,
                                                         pMultigridChebyshevSmootherIterations, pMultigridChebyshevSmootherLowerFraction,
                                                         pMultigridFineSmootherWeight,
                                                         matrixFreeGMGStageTrace,
