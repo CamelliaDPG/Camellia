@@ -599,6 +599,9 @@ int main(int argc, char *argv[])
                          << " rhsInfNorm=" << std::setprecision(16) << traceEntry.rhsInfNorm
                          << " solutionInfNorm=" << traceEntry.solutionInfNorm
                          << " residualInfNorm=" << traceEntry.residualInfNorm
+                         << " strategy=" << strategy.name
+                         << " fineP=" << fineP
+                         << " basisFamily=" << basisFamily
                          << std::endl;
                 }
               }

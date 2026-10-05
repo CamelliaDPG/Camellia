@@ -2,12 +2,19 @@
 # This is intentionally a readiness/schema check rather than a numerical equivalence
 # assertion: both paths must emit nonempty p=2 GMG data that later milestones can
 # compare quantitatively once the assembled finest V-cycle stage trace is reliable.
+# Both producers are pinned to --basisFamily=hierarchical: the assembled driver
+# defaults to nodal while the matrix-free driver defaults to hierarchical, and
+# mixing them makes the Initial rhsInfNorm differ (16/81 vs 1/16).
 
 foreach(required_var IN ITEMS MATRIX_FREE_DRIVER ASSEMBLED_DRIVER TRACE_WORK_DIR)
   if(NOT DEFINED ${required_var})
     message(FATAL_ERROR "${required_var} is required")
   endif()
 endforeach()
+
+if(NOT DEFINED TRACE_STRATEGY)
+  set(TRACE_STRATEGY pmg-chebyshev-smoother-chebyshev-coarse)
+endif()
 
 file(MAKE_DIRECTORY "${TRACE_WORK_DIR}")
 set(MATRIX_FREE_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix-free.txt")
@@ -19,6 +26,7 @@ execute_process(
     --fineH1Order=2
     --quick
     --maxIterations=20
+    --basisFamily=hierarchical
     --matrixFreeGMGStageTrace=1
     --keepChildOutput=1
     --maxAssembledEntries=10000
@@ -35,6 +43,7 @@ execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env VLASOV_ASSEMBLED_GMG_EMIT_STAGE_TRACE=1
     "${ASSEMBLED_DRIVER}"
     --fineH1Order=2
+    --basisFamily=hierarchical
     --emitP2StageTrace
     --quick
     --maxIterations=5
@@ -79,6 +88,9 @@ function(require_matrix_free_stage_rows TRACE_TEXT OUT_COUNT OUT_STAGE_LABELS)
     if(NOT trace_line MATCHES "^VLASOV_MATRIX_FREE_GMG_STAGE_TRACE")
       continue()
     endif()
+    if(NOT trace_line MATCHES " strategy=${TRACE_STRATEGY}( |$)")
+      continue()
+    endif()
     if(NOT trace_line MATCHES "fineP=2")
       continue()
     endif()
@@ -106,6 +118,12 @@ function(require_assembled_vcycle_stage_rows TRACE_TEXT OUT_COUNT OUT_STAGE_LABE
   set(stage_labels)
   foreach(trace_line IN LISTS TRACE_LINES)
     if(NOT trace_line MATCHES "^VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE")
+      continue()
+    endif()
+    if(NOT trace_line MATCHES " strategy=${TRACE_STRATEGY}( |$)")
+      continue()
+    endif()
+    if(NOT trace_line MATCHES " fineP=2( |$)")
       continue()
     endif()
     foreach(required_field IN ITEMS index level rhsInfNorm solutionInfNorm residualInfNorm)
@@ -162,6 +180,12 @@ function(record_gmg_stage_metrics TRACE_TEXT ROW_PREFIX OUT_PREFIX)
     if(NOT trace_line MATCHES "^${ROW_PREFIX}")
       continue()
     endif()
+    if(NOT trace_line MATCHES " strategy=${TRACE_STRATEGY}( |$)")
+      continue()
+    endif()
+    if((ROW_PREFIX STREQUAL "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE") AND (NOT trace_line MATCHES " fineP=2( |$)"))
+      continue()
+    endif()
     if(NOT trace_line MATCHES " stage=([^ ]+)")
       message(FATAL_ERROR "${ROW_PREFIX} stage row is missing stage label: ${trace_line}")
     endif()
@@ -216,8 +240,8 @@ endforeach()
 
 if(GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0)
   message(FATAL_ERROR
-    "GMG trace numerical first mismatch: ${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; common_stage_labels=${COMMON_GMG_STAGE_LABELS}")
+    "GMG trace numerical first mismatch: strategy=${TRACE_STRATEGY}; ${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; common_stage_labels=${COMMON_GMG_STAGE_LABELS}")
 endif()
 
 message(STATUS
-  "GMG trace p=2 stage comparison: matrix_free_stage_rows=${MATRIX_FREE_TRACE_ROW_COUNT}; assembled_vcycle_stage_rows=${ASSEMBLED_VCYCLE_STAGE_ROW_COUNT}; required_common_stage_labels=Initial;PreSmooth;CoarseCorrection;PostSmooth; compared_stage_metrics=${COMPARED_GMG_STAGE_METRIC_COUNT}; numerical_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_numerical_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; rhs_inputs=assembled:RHS::addTerm(Function::constant(1.0)*w),basis=Intrepid2HierarchicalHGRAD,massWeight=1,stiffness=VlasovGraphLfLw;matrix_free:--inverseRhs=constant-test-function,--basisMode=hgrad,--operator=vlasov-graph-norm-1d1t2v,--massWeight=1,--stiffnessWeight=1")
+  "GMG trace p=2 stage comparison: strategy=${TRACE_STRATEGY}; matrix_free_stage_rows=${MATRIX_FREE_TRACE_ROW_COUNT}; assembled_vcycle_stage_rows=${ASSEMBLED_VCYCLE_STAGE_ROW_COUNT}; required_common_stage_labels=Initial;PreSmooth;CoarseCorrection;PostSmooth; compared_stage_metrics=${COMPARED_GMG_STAGE_METRIC_COUNT}; numerical_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_numerical_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; rhs_inputs=assembled:RHS::addTerm(Function::constant(1.0)*w),basis=Intrepid2HierarchicalHGRAD,massWeight=1,stiffness=VlasovGraphLfLw;matrix_free:--inverseRhs=constant-test-function,--basisMode=hgrad,--operator=vlasov-graph-norm-1d1t2v,--massWeight=1,--stiffnessWeight=1")
