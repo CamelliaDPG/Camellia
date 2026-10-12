@@ -122,9 +122,12 @@ namespace
                           16, 60.0, 20, 1.0, true});
 
     // Keep the matrix-free p=2 comparison table aligned with the assembled
-    // GMG study rows.  The Tpetra/right-preconditioner and direct-coarse
-    // pMG variants are useful diagnostics, but they are not rows in the
-    // reference vlasov-gram-gmg-study.txt table.
+    // GMG study rows. The TensorPoisson local PMG path factors the p-coarse
+    // cell matrix directly, so direct-coarse is the semantically accurate label;
+    // retain the chebyshev-coarse row for compatibility with legacy output.
+    strategies.push_back({"pmg-chebyshev-smoother-direct-coarse",
+                          "gmres-pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "direct",
+                          8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-chebyshev-smoother-chebyshev-coarse",
                           "gmres-pmultigrid-chebyshev", "V_CYCLE", "CHEBYSHEV", "chebyshev",
                           8, 30.0, 10, 1.0, true});

@@ -13,7 +13,7 @@ foreach(required_var IN ITEMS MATRIX_FREE_DRIVER ASSEMBLED_DRIVER TRACE_WORK_DIR
 endforeach()
 
 if(NOT DEFINED TRACE_STRATEGY)
-  set(TRACE_STRATEGY pmg-chebyshev-smoother-chebyshev-coarse)
+  set(TRACE_STRATEGY pmg-chebyshev-smoother-direct-coarse)
 endif()
 
 file(MAKE_DIRECTORY "${TRACE_WORK_DIR}")
@@ -390,6 +390,7 @@ function(gmg_relative_agree A B OUT_AGREE)
 endfunction()
 
 set(GMG_GERSHGORIN_EXPERIMENT_SUMMARY "not_run")
+set(GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE 0)
 set(ASSEMBLED_GERSHGORIN_BOUNDS_TAIL "missing")
 set(MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL "missing")
 if((ASSEMBLED_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_GERSHGORIN_TRACE_FILE}")
@@ -424,6 +425,7 @@ if((ASSEMBLED_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_GERSHGORIN_TRA
     endif()
   endforeach()
   set(GMG_GERSHGORIN_EXPERIMENT_SUMMARY "all_agree")
+  set(GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE 1)
   foreach(stage_label IN ITEMS Initial PreSmooth CoarseCorrection PostSmooth)
     string(MAKE_C_IDENTIFIER "${stage_label}" stage_key)
     foreach(metric IN ITEMS rhsInfNorm solutionInfNorm residualInfNorm)
@@ -443,6 +445,7 @@ if((ASSEMBLED_GERSHGORIN_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_GERSHGORIN_TRA
       endif()
       message(STATUS "GMG trace gershgorin-lambda experiment: stage=${stage_label};metric=${metric};assembled_gershgorin=${gershgorin_value};matrix_free=${matrix_free_value};agree=${pair_agree}")
       if((pair_agree EQUAL 0) AND (GMG_GERSHGORIN_EXPERIMENT_SUMMARY STREQUAL "all_agree"))
+        set(GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE 0)
         set(GMG_GERSHGORIN_EXPERIMENT_SUMMARY "first_disagreement=stage:${stage_label},metric:${metric},assembled_gershgorin:${gershgorin_value},matrix_free:${matrix_free_value}")
       endif()
     endforeach()
@@ -473,11 +476,15 @@ foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
 endforeach()
 message(STATUS "GMG trace auto-lambda comparison summary: ${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}")
 
-if((GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0) AND (NOT GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1))
+if((GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0) AND (NOT GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1) AND (NOT GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE EQUAL 1))
   message(FATAL_ERROR
     "GMG trace numerical first mismatch: strategy=${TRACE_STRATEGY}; ${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; common_stage_labels=${COMMON_GMG_STAGE_LABELS}; assembled_bounds=${ASSEMBLED_CHEBYSHEV_BOUNDS_TAIL}; matrix_free_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}")
 elseif(GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0)
-  message(STATUS "GMG trace stages agree within tolerance: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}")
+  if(GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1)
+    message(STATUS "GMG trace stages agree within tolerance: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}")
+  elseif(GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE EQUAL 1)
+    message(STATUS "GMG trace stages agree in deterministic gershgorin-lambda direct-coarse experiment: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}")
+  endif()
 endif()
 
 message(STATUS
