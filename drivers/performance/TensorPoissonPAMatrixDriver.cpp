@@ -2216,6 +2216,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     Teuchos::RCP<const TpetraMap> coarseMap_;
     const Camellia::TensorHGradPTransfer<Scalar> *transfer_ = nullptr;
     int cells_ = 0;
+    int fineP_ = 0;
     int localDofs_ = 0;
     int coarseRows_ = 0;
     int smootherIterations_ = 1;
@@ -2227,6 +2228,12 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     std::vector<Scalar> fineLambdaMaxByCell_;
     std::vector<Scalar> coarseMatrices_;
     std::vector<Scalar> factoredCoarseMatrices_;
+    std::vector<int> levelDegrees_;
+    std::vector<int> levelRows_;
+    std::vector<const Camellia::TensorHGradPTransfer<Scalar> *> levelTransfers_;
+    std::vector<std::vector<Scalar>> levelMatrices_;
+    std::vector<std::vector<Scalar>> levelInverseDiagonals_;
+    std::vector<std::vector<Scalar>> levelLambdaMaxByCell_;
     std::string description_;
     std::string fineSmootherImpl_ = "local";
     std::string chebyshevLambdaMaxMode_ = "auto";
@@ -2363,6 +2370,33 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       return inverseDiagonal;
     }
 
+    static std::vector<Scalar> extractLambdaMaxFromBlockDenseMatrices(
+        const std::vector<Scalar> &matrices,
+        const std::vector<Scalar> &inverseDiagonal,
+        const int cells,
+        const int rows)
+    {
+      const size_t localLength = static_cast<size_t>(cells) * static_cast<size_t>(rows);
+      if (inverseDiagonal.size() != localLength)
+        throw std::invalid_argument("extractLambdaMaxFromBlockDenseMatrices inverse diagonal size mismatch");
+      if (matrices.size() != localLength * static_cast<size_t>(rows))
+        throw std::invalid_argument("extractLambdaMaxFromBlockDenseMatrices matrix size mismatch");
+
+      std::vector<Scalar> lambdaMaxByCell(static_cast<size_t>(cells), Scalar(0.0));
+      for (int c=0; c<cells; c++)
+      {
+        for (int i=0; i<rows; i++)
+        {
+          const size_t rowOffset = static_cast<size_t>((c * rows + i) * rows);
+          Scalar scaledRowSum = Scalar(0.0);
+          for (int j=0; j<rows; j++)
+            scaledRowSum += std::abs(matrices[rowOffset + static_cast<size_t>(j)]) * inverseDiagonal[static_cast<size_t>(c * rows + i)];
+          lambdaMaxByCell[static_cast<size_t>(c)] = std::max(lambdaMaxByCell[static_cast<size_t>(c)], scaledRowSum);
+        }
+      }
+      return lambdaMaxByCell;
+    }
+
   public:
     LocalPMultigridTpetraPreconditioner(const Teuchos::RCP<const TpetraMap> &map,
                                         const Teuchos::RCP<TpetraOperator> &fineOperator,
@@ -2374,7 +2408,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const std::string &fineSmootherImpl,
                                         const std::string &chebyshevLambdaMaxMode,
                                         const int chebyshevEigenMaxIterations)
-      : map_(map), transfer_(&Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p)), cells_(cells), localDofs_(localDofs),
+      : map_(map), transfer_(&Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p, std::max(p / 2, 1))),
+        cells_(cells), fineP_(p), localDofs_(localDofs),
         coarseRows_(transfer_->coarseRows), smootherIterations_(std::max(1, smootherIterations)),
         smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)),
         smootherWeight_(smootherWeight), smootherName_(smootherName),
@@ -2456,34 +2491,89 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         fineIfpack2Smoother_->compute();
       }
 
-      coarseMatrices_.assign(static_cast<size_t>(cells_) * coarseRows_ * coarseRows_, Scalar(0.0));
-      for (int c=0; c<cells_; c++)
+      levelDegrees_.clear();
+      levelRows_.clear();
+      levelTransfers_.clear();
+      levelMatrices_.clear();
+      levelInverseDiagonals_.clear();
+      levelLambdaMaxByCell_.clear();
+      levelDegrees_.push_back(p);
+      levelRows_.push_back(localDofs_);
+      levelMatrices_.push_back(fineMatrices_);
+      levelInverseDiagonals_.push_back(fineInverseDiagonal_);
+      levelLambdaMaxByCell_.push_back(fineLambdaMaxByCell_);
+      while (levelDegrees_.back() > 1)
       {
-        const auto fineMatrix = denseCellMatrix(fineMatrices_, c, localDofs_);
-        const auto coarseMatrix = Camellia::tensorLocalBuildGalerkinCoarseMatrix(fineMatrix, *transfer_);
-        const size_t coarseOffset = static_cast<size_t>(c) * static_cast<size_t>(coarseRows_) * static_cast<size_t>(coarseRows_);
-        std::copy(coarseMatrix.begin(), coarseMatrix.end(), coarseMatrices_.begin() + coarseOffset);
+        const int levelIndex = static_cast<int>(levelDegrees_.size()) - 1;
+        const int levelDegree = levelDegrees_.back();
+        const int nextDegree = std::max(levelDegree / 2, 1);
+        const auto &levelTransfer = Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, levelDegree, nextDegree);
+        const int levelRows = levelRows_[static_cast<size_t>(levelIndex)];
+        const int nextRows = levelTransfer.coarseRows;
+        if (levelTransfer.fineRows != levelRows)
+          throw std::runtime_error("LocalPMultigridTpetraPreconditioner recursive transfer fine dimension mismatch");
+        std::vector<Scalar> nextMatrices(static_cast<size_t>(cells_) * static_cast<size_t>(nextRows) * static_cast<size_t>(nextRows), Scalar(0.0));
+        for (int c=0; c<cells_; c++)
+        {
+          const auto levelMatrix = denseCellMatrix(levelMatrices_[static_cast<size_t>(levelIndex)], c, levelRows);
+          const auto nextMatrix = Camellia::tensorLocalBuildGalerkinCoarseMatrix(levelMatrix, levelTransfer);
+          const size_t nextOffset = static_cast<size_t>(c) * static_cast<size_t>(nextRows) * static_cast<size_t>(nextRows);
+          std::copy(nextMatrix.begin(), nextMatrix.end(), nextMatrices.begin() + nextOffset);
+        }
+        const auto nextInverseDiagonal = extractInverseDiagonalFromBlockDenseMatrices(nextMatrices, cells_, nextRows);
+        const auto nextLambdaMaxByCell = extractLambdaMaxFromBlockDenseMatrices(nextMatrices, nextInverseDiagonal, cells_, nextRows);
+        levelTransfers_.push_back(&levelTransfer);
+        levelDegrees_.push_back(nextDegree);
+        levelRows_.push_back(nextRows);
+        levelMatrices_.push_back(nextMatrices);
+        levelInverseDiagonals_.push_back(nextInverseDiagonal);
+        levelLambdaMaxByCell_.push_back(nextLambdaMaxByCell);
       }
 
-      factoredCoarseMatrices_ = coarseMatrices_;
+      if (levelRows_.size() < 2)
+        throw std::runtime_error("LocalPMultigridTpetraPreconditioner recursive hierarchy must contain at least two levels");
+      coarseMatrices_ = levelMatrices_[1];
+      factoredCoarseMatrices_ = levelMatrices_.back();
+      const int coarsestRows = levelRows_.back();
       for (int c=0; c<cells_; c++)
       {
-        const int factorInfo = factorSPDMatrixInPlace(factoredCoarseMatrices_, static_cast<size_t>(c) * coarseRows_ * coarseRows_, coarseRows_);
-        if (factorInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarse Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+        const int factorInfo = factorSPDMatrixInPlace(factoredCoarseMatrices_, static_cast<size_t>(c) * static_cast<size_t>(coarsestRows) * static_cast<size_t>(coarsestRows), coarsestRows);
+        if (factorInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarsest Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
       }
 
       std::ostringstream desc;
-      desc << "LocalPMultigridTpetraPreconditioner(two_level_v_cycle,dim=" << dim
+      desc << "LocalPMultigridTpetraPreconditioner(recursive_v_cycle,dim=" << dim
            << ",fineP=" << p << ",coarseP=" << transfer_->coarseP
-           << ",fineRows=" << transfer_->fineRows << ",coarseRows=" << transfer_->coarseRows
+           << ",levelDegrees=";
+      for (size_t levelOrdinal=0; levelOrdinal<levelDegrees_.size(); levelOrdinal++)
+      {
+        if (levelOrdinal > 0) desc << "->";
+        desc << levelDegrees_[levelOrdinal];
+      }
+      desc << ",fineRows=" << transfer_->fineRows << ",coarseRows=" << transfer_->coarseRows
            << ",smoother=" << smootherName_ << ",smootherIterations=" << smootherIterations_
            << ",smootherLowerFraction=" << smootherLowerFraction_
            << ",transfer=Intrepid2_HierarchicalBasisProlongator,restriction=prolongation_transpose"
-           << ",coarse=exact_cholesky)";
+           << ",coarse=coarsest_exact_cholesky)";
       description_ = desc.str();
     }
 
     Teuchos::RCP<const TpetraMap> coarseMap() const { return coarseMap_; }
+
+    int levelCount() const { return static_cast<int>(levelDegrees_.size()); }
+
+    int coarsestRows() const { return levelRows_.empty() ? coarseRows_ : levelRows_.back(); }
+
+    std::string levelDegreeScheduleString() const
+    {
+      std::ostringstream schedule;
+      for (size_t levelOrdinal=0; levelOrdinal<levelDegrees_.size(); levelOrdinal++)
+      {
+        if (levelOrdinal > 0) schedule << "->";
+        schedule << levelDegrees_[levelOrdinal];
+      }
+      return schedule.str();
+    }
 
     Scalar fineIfpack2LambdaMaxForApply() const
     {
@@ -2641,6 +2731,68 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       }
     }
 
+    void smoothLevel(const int levelIndex, const int cellOrdinal,
+                     const std::vector<Scalar> &rhs, std::vector<Scalar> &solution) const
+    {
+      const int rows = levelRows_[static_cast<size_t>(levelIndex)];
+      if ((static_cast<int>(rhs.size()) != rows) || (static_cast<int>(solution.size()) != rows))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner recursive smoother vector length mismatch");
+      std::vector<Scalar> before;
+      if (smootherWeight_ != Scalar(1.0)) before = solution;
+      if (smootherName_ == "chebyshev")
+        runChebyshevSmoother(levelMatrices_[static_cast<size_t>(levelIndex)],
+                             levelInverseDiagonals_[static_cast<size_t>(levelIndex)],
+                             levelLambdaMaxByCell_[static_cast<size_t>(levelIndex)],
+                             cellOrdinal, rows, rhs, solution,
+                             smootherIterations_, smootherLowerFraction_);
+      else
+        runDampedJacobiSmoother(levelMatrices_[static_cast<size_t>(levelIndex)],
+                                levelInverseDiagonals_[static_cast<size_t>(levelIndex)],
+                                levelLambdaMaxByCell_[static_cast<size_t>(levelIndex)],
+                                cellOrdinal, rows, rhs, solution,
+                                smootherIterations_);
+      if (smootherWeight_ != Scalar(1.0))
+        for (size_t i=0; i<solution.size(); i++) solution[i] = before[i] + smootherWeight_ * (solution[i] - before[i]);
+    }
+
+    void solveRecursiveLevel(const int levelIndex, const int cellOrdinal,
+                             const std::vector<Scalar> &rhs,
+                             std::vector<Scalar> &solution) const
+    {
+      if ((levelIndex < 0) || (levelIndex >= static_cast<int>(levelRows_.size())))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner recursive level index out of bounds");
+      const int rows = levelRows_[static_cast<size_t>(levelIndex)];
+      if (static_cast<int>(rhs.size()) != rows)
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner recursive RHS vector length mismatch");
+      solution.assign(static_cast<size_t>(rows), Scalar(0.0));
+
+      if (levelIndex == static_cast<int>(levelRows_.size()) - 1)
+      {
+        solution = rhs;
+        const size_t factorOffset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows) * static_cast<size_t>(rows);
+        const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices_, factorOffset, rows, solution);
+        if (solveInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarsest Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+        return;
+      }
+
+      const auto &levelMatrix = levelMatrices_[static_cast<size_t>(levelIndex)];
+      const auto &levelTransfer = *levelTransfers_[static_cast<size_t>(levelIndex)];
+      std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
+      std::vector<Scalar> residual(static_cast<size_t>(rows), Scalar(0.0));
+      std::vector<Scalar> coarseResidual;
+      std::vector<Scalar> coarseCorrection;
+      std::vector<Scalar> fineCorrection;
+
+      smoothLevel(levelIndex, cellOrdinal, rhs, solution);
+      applyDenseCellMatrix(levelMatrix, cellOrdinal, rows, solution, applied);
+      for (int i=0; i<rows; i++) residual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+      applyTensorHGradPTransferRestriction(levelTransfer, residual, coarseResidual);
+      solveRecursiveLevel(levelIndex + 1, cellOrdinal, coarseResidual, coarseCorrection);
+      applyTensorHGradPTransferProlongation(levelTransfer, coarseCorrection, fineCorrection);
+      for (int i=0; i<rows; i++) solution[static_cast<size_t>(i)] += fineCorrection[static_cast<size_t>(i)];
+      smoothLevel(levelIndex, cellOrdinal, rhs, solution);
+    }
+
     void solveCoarseLevel(const TpetraMultiVector &CoarseRHS, TpetraMultiVector &CoarseSolution) const
     {
       const size_t coarseLength = static_cast<size_t>(cells_) * static_cast<size_t>(coarseRows_);
@@ -2651,16 +2803,16 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
       auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
       auto solutionHost = CoarseSolution.getLocalViewHost(Tpetra::Access::ReadWrite);
-      std::vector<Scalar> coarse(static_cast<size_t>(coarseRows_), Scalar(0.0));
+      std::vector<Scalar> coarseRhs(static_cast<size_t>(coarseRows_), Scalar(0.0));
+      std::vector<Scalar> coarseSolution(static_cast<size_t>(coarseRows_), Scalar(0.0));
       for (size_t vectorOrdinal=0; vectorOrdinal<CoarseRHS.getNumVectors(); vectorOrdinal++)
       {
         for (int c=0; c<cells_; c++)
         {
           const size_t coarseOffset = static_cast<size_t>(c) * coarseRows_;
-          for (int i=0; i<coarseRows_; i++) coarse[static_cast<size_t>(i)] = rhsHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal);
-          const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices_, static_cast<size_t>(c) * coarseRows_ * coarseRows_, coarseRows_, coarse);
-          if (solveInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarse callback Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
-          for (int i=0; i<coarseRows_; i++) solutionHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal) = coarse[static_cast<size_t>(i)];
+          for (int i=0; i<coarseRows_; i++) coarseRhs[static_cast<size_t>(i)] = rhsHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal);
+          solveRecursiveLevel(1, c, coarseRhs, coarseSolution);
+          for (int i=0; i<coarseRows_; i++) solutionHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal) = coarseSolution[static_cast<size_t>(i)];
         }
       }
     }
@@ -2710,6 +2862,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       std::vector<Scalar> applied(static_cast<size_t>(localDofs_), Scalar(0.0));
       std::vector<Scalar> fineResidual(static_cast<size_t>(localDofs_), Scalar(0.0));
       std::vector<Scalar> fineCorrection(static_cast<size_t>(localDofs_), Scalar(0.0));
+      std::vector<Scalar> coarseResidual(static_cast<size_t>(coarseRows_), Scalar(0.0));
       std::vector<Scalar> coarseCorrection(static_cast<size_t>(coarseRows_), Scalar(0.0));
 
       for (size_t vectorOrdinal=0; vectorOrdinal<X.getNumVectors(); vectorOrdinal++)
@@ -2723,9 +2876,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           smoothFine(c, rhs, solution);
           applyDenseCellMatrix(fineMatrices_, c, localDofs_, solution, applied);
           for (int i=0; i<localDofs_; i++) fineResidual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
-          applyTensorHGradPTransferRestriction(*transfer_, fineResidual, coarseCorrection);
-          const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices_, static_cast<size_t>(c) * coarseRows_ * coarseRows_, coarseRows_, coarseCorrection);
-          if (solveInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarse Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+          applyTensorHGradPTransferRestriction(*transfer_, fineResidual, coarseResidual);
+          solveRecursiveLevel(1, c, coarseResidual, coarseCorrection);
           applyTensorHGradPTransferProlongation(*transfer_, coarseCorrection, fineCorrection);
           for (int i=0; i<localDofs_; i++) solution[static_cast<size_t>(i)] += fineCorrection[static_cast<size_t>(i)];
           smoothFine(c, rhs, solution);
@@ -3960,14 +4112,17 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           timing.localPMultigridWrapperDifferenceInfNorm = wrapperDiagnostic.differenceInfNorm;
           timing.localPMultigridWrapperRelativeDifferenceInfNorm = wrapperDiagnostic.relativeDifferenceInfNorm;
         }
-        timing.pMultigridLevels = 2;
+        const int actualPMultigridLevels = localPMultigridForStageTrace.is_null() ? 2 : localPMultigridForStageTrace->levelCount();
+        const int actualPMultigridCoarsestDofs = localPMultigridForStageTrace.is_null() ? transfer.coarseRows : localPMultigridForStageTrace->coarsestRows();
+        const std::string actualPMultigridSchedule = localPMultigridForStageTrace.is_null() ? std::string("missing") : localPMultigridForStageTrace->levelDegreeScheduleString();
+        timing.pMultigridLevels = actualPMultigridLevels;
         timing.pMultigridFineDofs = rows;
-        timing.pMultigridCoarseDofs = transfer.coarseRows;
+        timing.pMultigridCoarseDofs = actualPMultigridCoarsestDofs;
         timing.pMultigridChebyshevSmootherIterations = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? smootherIterations : 0;
         timing.pMultigridChebyshevSmootherLowerFraction = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? pMultigridChebyshevSmootherLowerFraction : -1.0;
         timing.pMultigridFineSmootherWeight = pMultigridFineSmootherWeight;
         timing.pMultigridJacobiSmootherIterations = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev") ? smootherIterations : 0;
-        timing.pMultigridPath = "tpetra_operator_right_preconditioner_cached_tensor_hgrad_transfer_configured_chebyshev_interval";
+        timing.pMultigridPath = "tpetra_operator_right_preconditioner_recursive_v_cycle_levelDegrees=" + actualPMultigridSchedule + "_cached_tensor_hgrad_transfer_configured_chebyshev_interval";
       }
       else
       {

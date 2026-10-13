@@ -49,6 +49,17 @@ add_test(NAME TensorVlasovGramMatrixFreePMultigridP2DiagnosticSmoke
     --maxIterations=200
     --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-study.txt)
 
+add_test(NAME TensorVlasovGramMatrixFreePMultigridP4DiagnosticSmoke
+  COMMAND $<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
+    --fineH1Order=4
+    --quick
+    --maxIterations=200
+    --keepChildOutput=1
+    --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-p4-diagnostic-smoke.txt)
+set_tests_properties(TensorVlasovGramMatrixFreePMultigridP4DiagnosticSmoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "P4_PMG_JACOBI_CHEBYSHEV_COARSE_RESULT.*pMultigridLevels=3.*pLevelSchedule=4->2->1"
+  FAIL_REGULAR_EXPRESSION "P4_PMG_JACOBI_CHEBYSHEV_COARSE_RESULT.*status=converged iterations=1 ")
+
 add_test(NAME TensorVlasovGramMatrixFreeGMGStageTraceSmoke
   COMMAND $<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
     --fineH1Order=2

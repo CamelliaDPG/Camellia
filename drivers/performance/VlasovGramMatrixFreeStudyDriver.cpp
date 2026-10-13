@@ -73,6 +73,10 @@ namespace
     double initialResidualNorm = -1.0;
     double finalResidualNorm = -1.0;
     double pMultigridFineSmootherWeight = -1.0;
+    int pMultigridLevels = 0;
+    int pMultigridFineDofs = 0;
+    int pMultigridCoarseDofs = 0;
+    int pMultigridCoarseSolveCount = 0;
     int matrixFreeGMGStageTrace = 0;
     int matrixFreeGMGStageTraceEntries = 0;
     double localPMultigridWrapperDifferenceInfNorm = -1.0;
@@ -161,6 +165,39 @@ namespace
     return (strategy.multigridStrategy == "V_CYCLE") ||
            (strategy.matrixFreeAlgorithm.find("pmultigrid") != std::string::npos) ||
            (strategy.matrixFreeAlgorithm.find("matrix-free-gmg") != std::string::npos);
+  }
+
+  std::string actualCoarseSolverForStrategy(const Strategy &strategy)
+  {
+    if (strategy.multigridStrategy != "V_CYCLE") return "n/a";
+    if ((strategy.matrixFreeAlgorithm == "gmres-pmultigrid-chebyshev") ||
+        (strategy.matrixFreeAlgorithm == "pmultigrid-chebyshev"))
+      return "direct";
+    if (strategy.matrixFreeAlgorithm == "gmres-pmultigrid-jacobi-chebyshev")
+      return "chebyshev";
+    return strategy.supported ? strategy.coarseSolver : std::string("unsupported");
+  }
+
+  bool strategyCoarseSolverLabelIsAlias(const Strategy &strategy)
+  {
+    const std::string actualCoarseSolver = actualCoarseSolverForStrategy(strategy);
+    return (strategy.multigridStrategy == "V_CYCLE") &&
+           (actualCoarseSolver != "n/a") &&
+           (actualCoarseSolver != "unsupported") &&
+           (strategy.coarseSolver != actualCoarseSolver);
+  }
+
+  std::string pMultigridActualScheduleString(const int fineP, const int levels)
+  {
+    if (levels <= 0) return "missing";
+    std::string schedule = std::to_string(fineP);
+    int pLevel = fineP;
+    for (int level=1; level<levels; level++)
+    {
+      pLevel = std::max(pLevel / 2, 1);
+      schedule += "->" + std::to_string(pLevel);
+    }
+    return schedule;
   }
 
   std::string shellQuote(const std::string &value)
@@ -333,6 +370,10 @@ namespace
     diagnostic.initialResidualNorm = parseDoubleAfter(output, "initialResidualNorm", lineStart, -1.0);
     diagnostic.finalResidualNorm = parseDoubleAfter(output, "finalResidualNorm", lineStart, -1.0);
     diagnostic.pMultigridFineSmootherWeight = parseDoubleAfter(output, "pMultigridFineSmootherWeight", lineStart, -1.0);
+    diagnostic.pMultigridLevels = parseIntAfter(output, "pMultigridLevels", lineStart, 0);
+    diagnostic.pMultigridFineDofs = parseIntAfter(output, "pMultigridFineDofs", lineStart, 0);
+    diagnostic.pMultigridCoarseDofs = parseIntAfter(output, "pMultigridCoarseDofs", lineStart, 0);
+    diagnostic.pMultigridCoarseSolveCount = parseIntAfter(output, "pMultigridCoarseSolveCount", lineStart, 0);
     diagnostic.matrixFreeGMGStageTrace = parseIntAfter(output, "matrixFreeGMGStageTrace", lineStart, 0);
     diagnostic.matrixFreeGMGStageTraceEntries = parseIntAfter(output, "matrixFreeGMGStageTraceEntries", lineStart, 0);
     diagnostic.localPMultigridWrapperDifferenceInfNorm = parseDoubleAfter(output, "localPMultigridWrapperDifferenceInfNorm", lineStart, -1.0);
@@ -479,8 +520,10 @@ namespace
     out << "  This harness drives TensorPoissonPAMatrixDriver inverse diagnostics.\n";
     out << "  Outer operator applications use LocalPAMatrixTpetraOperator / PAMatrix terms.\n";
     out << "  GMRES smoother-only rows use the existing right-preconditioned Belos+Ifpack2 path.\n";
-    out << "  p-multigrid rows use TensorPoissonPAMatrixDriver's local two-level p-multigrid preconditioner;\n";
+    out << "  p-multigrid rows use TensorPoissonPAMatrixDriver's local p-multigrid diagnostics;\n";
+    out << "  requested coarse labels are reported separately from the actual coarse/path metadata.\n";
     out << "  hierarchical p-multigrid uses Intrepid2::HierarchicalBasisProlongator for P and R=P^T for restriction.\n";
+    out << "  actualCoarse/actualPLevels/pMultigridLevels distinguish two-level direct-coarse aliases from recursive paths.\n";
     out << "  These rows are still TensorPoisson local V-cycle rows and are not yet asserted to match assembled GMGOperator stage-by-stage semantics.\n\n";
     out << "Tensor driver: " << tensorDriverPath << "\n\n";
     out << "Discretization:\n";
@@ -519,6 +562,12 @@ namespace
         << std::setw(18) << "mg"
         << std::setw(18) << "smoother"
         << std::setw(14) << "coarse"
+        << std::setw(14) << "actualCoarse"
+        << std::setw(18) << "actualPLevels"
+        << std::setw(10) << "levels"
+        << std::setw(12) << "fineDofs"
+        << std::setw(12) << "coarseDofs"
+        << std::setw(14) << "coarseSolves"
         << std::setw(12) << "chebDeg"
         << std::setw(12) << "chebRatio"
         << std::setw(14) << "maxEigIters"
@@ -528,7 +577,7 @@ namespace
         << std::setw(18) << "wrapperDiff"
         << std::setw(18) << "wrapperRelDiff"
         << "path" << "\n";
-    out << std::string(316, '-') << "\n";
+    out << std::string(414, '-') << "\n";
   }
 }
 
@@ -569,6 +618,8 @@ int main(int argc, char *argv[])
         const std::string strategyName = "p=" + std::to_string(fineP) + " " + strategy.name + weightSuffix;
         const bool nodalPMultigridUnsupported =
             (basisFamily == "nodal") && strategyRequiresPMultigrid(strategy);
+        const std::string actualCoarseSolver = actualCoarseSolverForStrategy(strategy);
+        const std::string unsupportedPLevelSchedule = (strategy.multigridStrategy == "V_CYCLE") ? "not_run" : "n/a";
         if (!strategy.supported || nodalPMultigridUnsupported ||
             ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
         {
@@ -584,6 +635,12 @@ int main(int argc, char *argv[])
                  << std::setw(18) << strategy.multigridStrategy
                  << std::setw(18) << strategy.smoother
                  << std::setw(14) << strategy.coarseSolver
+                 << std::setw(14) << actualCoarseSolver
+                 << std::setw(18) << unsupportedPLevelSchedule
+                 << std::setw(10) << -1
+                 << std::setw(12) << -1
+                 << std::setw(12) << -1
+                 << std::setw(14) << -1
                  << std::setw(12) << strategy.chebyshevDegree
                  << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
                  << std::setw(14) << strategy.chebyshevMaxEigenIterations
@@ -626,9 +683,12 @@ int main(int argc, char *argv[])
         {
           status = "not_converged";
         }
-        const std::string path = (strategy.matrixFreeAlgorithm.find("pmultigrid") == 0)
+        const std::string path = strategyRequiresPMultigrid(strategy)
                                ? diagnostic.pMultigridPath
                                : diagnostic.inversePath;
+        const std::string actualPLevelSchedule = (strategy.multigridStrategy == "V_CYCLE")
+                                               ? pMultigridActualScheduleString(fineP, diagnostic.pMultigridLevels)
+                                               : std::string("n/a");
 
         output << std::left << std::setw(8) << fineP
                << std::setw(24) << basisFamily
@@ -639,6 +699,12 @@ int main(int argc, char *argv[])
                << std::setw(18) << strategy.multigridStrategy
                << std::setw(18) << strategy.smoother
                << std::setw(14) << strategy.coarseSolver
+               << std::setw(14) << actualCoarseSolver
+               << std::setw(18) << actualPLevelSchedule
+               << std::setw(10) << diagnostic.pMultigridLevels
+               << std::setw(12) << diagnostic.pMultigridFineDofs
+               << std::setw(12) << diagnostic.pMultigridCoarseDofs
+               << std::setw(14) << diagnostic.pMultigridCoarseSolveCount
                << std::setw(12) << strategy.chebyshevDegree
                << std::setw(12) << std::setprecision(3) << strategy.chebyshevRatio
                << std::setw(14) << strategy.chebyshevMaxEigenIterations
@@ -649,11 +715,11 @@ int main(int argc, char *argv[])
                << std::setw(18) << diagnostic.localPMultigridWrapperDifferenceInfNorm
                << std::setw(18) << diagnostic.localPMultigridWrapperRelativeDifferenceInfNorm
                << path << "\n";
-        if ((fineP == 2) && (strategy.multigridStrategy == "V_CYCLE"))
+        if (((fineP == 2) || (fineP == 4)) && (strategy.multigridStrategy == "V_CYCLE"))
         {
           const double printedFineSmootherWeight = (diagnostic.pMultigridFineSmootherWeight > 0.0) ? diagnostic.pMultigridFineSmootherWeight : fineSmootherWeight;
           std::ostringstream fineWtRow;
-          fineWtRow << "P2_PMG_FINEWT_RESULT"
+          fineWtRow << "P" << fineP << "_PMG_FINEWT_RESULT"
                     << " basisFamily=" << basisFamily
                     << " strategy=" << strategy.name
                     << " fineWt=" << std::setprecision(12) << std::defaultfloat << printedFineSmootherWeight
@@ -664,10 +730,41 @@ int main(int argc, char *argv[])
                     << " finalResidualNorm=" << diagnostic.finalResidualNorm
                     << " matrixFreeGMGStageTrace=" << diagnostic.matrixFreeGMGStageTrace
                     << " matrixFreeGMGStageTraceEntries=" << diagnostic.matrixFreeGMGStageTraceEntries
+                    << " requestedCoarseSolver=" << strategy.coarseSolver
+                    << " actualCoarseSolver=" << actualCoarseSolver
+                    << " coarseSolverLabelAlias=" << (strategyCoarseSolverLabelIsAlias(strategy) ? 1 : 0)
+                    << " pMultigridLevels=" << diagnostic.pMultigridLevels
+                    << " pMultigridFineDofs=" << diagnostic.pMultigridFineDofs
+                    << " pMultigridCoarseDofs=" << diagnostic.pMultigridCoarseDofs
+                    << " pMultigridCoarseSolveCount=" << diagnostic.pMultigridCoarseSolveCount
+                    << " pLevelSchedule=" << actualPLevelSchedule
                     << " path=" << path
                     << "\n";
           output << fineWtRow.str();
           if (options.keepChildOutput) std::cout << fineWtRow.str();
+          if ((fineP == 4) && (strategy.name == "pmg-jacobi-smoother-chebyshev-coarse"))
+          {
+            std::ostringstream jacobiGuardRow;
+            jacobiGuardRow << "P4_PMG_JACOBI_CHEBYSHEV_COARSE_RESULT"
+                           << " basisFamily=" << basisFamily
+                           << " strategy=" << strategy.name
+                           << " fineWt=" << std::setprecision(12) << std::defaultfloat << printedFineSmootherWeight
+                           << " status=" << status
+                           << " iterations=" << diagnostic.iterations
+                           << " residualReduction=" << std::setprecision(16) << std::scientific << diagnostic.residualReduction
+                           << " requestedCoarseSolver=" << strategy.coarseSolver
+                           << " actualCoarseSolver=" << actualCoarseSolver
+                           << " coarseSolverLabelAlias=" << (strategyCoarseSolverLabelIsAlias(strategy) ? 1 : 0)
+                           << " pMultigridLevels=" << diagnostic.pMultigridLevels
+                           << " pMultigridFineDofs=" << diagnostic.pMultigridFineDofs
+                           << " pMultigridCoarseDofs=" << diagnostic.pMultigridCoarseDofs
+                           << " pMultigridCoarseSolveCount=" << diagnostic.pMultigridCoarseSolveCount
+                           << " pLevelSchedule=" << actualPLevelSchedule
+                           << " path=" << path
+                           << "\n";
+            output << jacobiGuardRow.str();
+            if (options.keepChildOutput) std::cout << jacobiGuardRow.str();
+          }
         }
         }
       }
@@ -679,7 +776,10 @@ int main(int argc, char *argv[])
     output << "  reusing TensorPoissonPAMatrixDriver's Vlasov graph-norm PAMatrix terms.\n";
     output << "  The smoother-only rows are the closest GMGOperator-study analog currently ready:\n";
     output << "  Belos GMRES with right Ifpack2 Jacobi/Chebyshev preconditioning and the same RHS.\n";
-    output << "  The p-multigrid rows are TensorPoisson local two-level V-cycle preconditioner rows;\n";
+    output << "  The p-multigrid rows are TensorPoisson local V-cycle diagnostic rows;\n";
+    output << "  requested coarse labels are retained for compatibility, while actualCoarse and path columns\n";
+    output << "  expose direct-coarse aliases versus recursive Chebyshev-coarse paths.\n";
+    output << "  actualPLevels/pMultigridLevels expose the realized two-level or recursive p schedule.\n";
     output << "  hierarchical transfer uses Intrepid2::HierarchicalBasisProlongator for P and R=P^T.\n";
     output << "  They are not yet asserted to match assembled GMGOperator stage-by-stage semantics.\n";
     output << "  Unsupported lower-degree p-multigrid rows are retained to make remaining gaps explicit.\n";

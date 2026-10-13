@@ -8,6 +8,7 @@
 
 #include <map>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -78,15 +79,16 @@ namespace Camellia
   }
 
   template<class DeviceType, class Scalar>
-  TensorHGradPTransfer<Scalar> buildTensorHGradPTransfer(const int dim, const int fineP)
+  TensorHGradPTransfer<Scalar> buildTensorHGradPTransfer(const int dim, const int fineP,
+                                                         const int coarseP)
   {
-    if ((dim < 1) || (fineP < 2))
-      throw std::invalid_argument("buildTensorHGradPTransfer requires dim >= 1 and fineP >= 2");
+    if ((dim < 1) || (fineP < 2) || (coarseP < 1) || (coarseP >= fineP))
+      throw std::invalid_argument("buildTensorHGradPTransfer requires dim >= 1, fineP >= 2, and 1 <= coarseP < fineP");
 
     TensorHGradPTransfer<Scalar> transfer;
     transfer.dim = dim;
     transfer.fineP = fineP;
-    transfer.coarseP = fineP - 1;
+    transfer.coarseP = coarseP;
 
     const std::vector<int> fineExtents(static_cast<size_t>(dim), fineP + 1);
     const std::vector<int> coarseExtents(static_cast<size_t>(dim), transfer.coarseP + 1);
@@ -139,16 +141,29 @@ namespace Camellia
   }
 
   template<class DeviceType, class Scalar>
-  const TensorHGradPTransfer<Scalar> &cachedTensorHGradPTransfer(const int dim, const int fineP)
+  TensorHGradPTransfer<Scalar> buildTensorHGradPTransfer(const int dim, const int fineP)
   {
-    using CacheKey = std::pair<int,int>;
+    return buildTensorHGradPTransfer<DeviceType,Scalar>(dim, fineP, fineP - 1);
+  }
+
+  template<class DeviceType, class Scalar>
+  const TensorHGradPTransfer<Scalar> &cachedTensorHGradPTransfer(const int dim, const int fineP,
+                                                                const int coarseP)
+  {
+    using CacheKey = std::tuple<int,int,int>;
     static std::map<CacheKey,TensorHGradPTransfer<Scalar>> cache;
-    const CacheKey key(dim, fineP);
+    const CacheKey key(dim, fineP, coarseP);
     auto found = cache.find(key);
     if (found != cache.end()) return found->second;
 
-    auto inserted = cache.emplace(key, buildTensorHGradPTransfer<DeviceType,Scalar>(dim, fineP));
+    auto inserted = cache.emplace(key, buildTensorHGradPTransfer<DeviceType,Scalar>(dim, fineP, coarseP));
     return inserted.first->second;
+  }
+
+  template<class DeviceType, class Scalar>
+  const TensorHGradPTransfer<Scalar> &cachedTensorHGradPTransfer(const int dim, const int fineP)
+  {
+    return cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, fineP, fineP - 1);
   }
 
   template<class Scalar>
