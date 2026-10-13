@@ -5,6 +5,7 @@
 #include "Kokkos_Core.hpp"
 
 #include <cmath>
+#include <string>
 #include <vector>
 
 using namespace Camellia;
@@ -301,4 +302,101 @@ TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, PostSmoothingMatchesTensorPoissonLocal
   assertVectorsNear(stages.actual.finalSolution,
                     stages.expected.finalSolution,
                     1e-11, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, BlockDenseHelpersExtractPerCellQuantities )
+{
+  constexpr int rows = 3;
+  const auto firstCell = deterministicSPDMatrix(rows);
+  auto secondCell = deterministicSPDMatrix(rows);
+  for (size_t i=0; i<secondCell.size(); i++) secondCell[i] += Scalar(0.01) * static_cast<Scalar>(i + 1);
+
+  std::vector<Scalar> matrices;
+  matrices.insert(matrices.end(), firstCell.begin(), firstCell.end());
+  matrices.insert(matrices.end(), secondCell.begin(), secondCell.end());
+
+  const auto extractedSecondCell = tensorLocalBlockDenseCellMatrix(matrices, 1, rows);
+  assertVectorsNear(extractedSecondCell, secondCell, 1e-14, out, success);
+
+  const auto inverseDiagonal = tensorLocalExtractInverseDiagonalFromBlockDenseMatrices(matrices, 2, rows);
+  const auto expectedSecondInverseDiagonal = tensorLocalExtractInverseDiagonal(secondCell, rows);
+  for (int i=0; i<rows; i++)
+    TEST_FLOATING_EQUALITY(inverseDiagonal[static_cast<size_t>(rows + i)], expectedSecondInverseDiagonal[static_cast<size_t>(i)], 1e-14);
+
+  const auto lambdaMaxByCell = tensorLocalExtractLambdaMaxFromBlockDenseMatrices(matrices, inverseDiagonal, 2, rows);
+  Scalar expectedSecondLambdaMax = Scalar(0.0);
+  for (int i=0; i<rows; i++)
+  {
+    Scalar scaledRowSum = Scalar(0.0);
+    for (int j=0; j<rows; j++)
+      scaledRowSum += std::abs(secondCell[static_cast<size_t>(i * rows + j)]) * expectedSecondInverseDiagonal[static_cast<size_t>(i)];
+    expectedSecondLambdaMax = std::max(expectedSecondLambdaMax, scaledRowSum);
+  }
+  TEST_FLOATING_EQUALITY(lambdaMaxByCell[1], expectedSecondLambdaMax, 1e-14);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, DampedJacobiBlockSmootherMatchesCellReference )
+{
+  constexpr int rows = 3;
+  const auto firstCell = deterministicSPDMatrix(rows);
+  auto secondCell = deterministicSPDMatrix(rows);
+  for (int i=0; i<rows; i++) secondCell[static_cast<size_t>(i * rows + i)] += Scalar(0.2);
+
+  std::vector<Scalar> matrices;
+  matrices.insert(matrices.end(), firstCell.begin(), firstCell.end());
+  matrices.insert(matrices.end(), secondCell.begin(), secondCell.end());
+
+  const auto inverseDiagonal = tensorLocalExtractInverseDiagonalFromBlockDenseMatrices(matrices, 2, rows);
+  const auto lambdaMaxByCell = tensorLocalExtractLambdaMaxFromBlockDenseMatrices(matrices, inverseDiagonal, 2, rows);
+  const auto secondInverseDiagonal = tensorLocalExtractInverseDiagonal(secondCell, rows);
+  const std::vector<Scalar> rhs = {Scalar(1.0), Scalar(0.25), Scalar(-0.5)};
+  std::vector<Scalar> actual = {Scalar(0.1), Scalar(-0.2), Scalar(0.05)};
+  std::vector<Scalar> expected = actual;
+
+  tensorLocalRunDampedJacobiBlockSmoother(matrices, inverseDiagonal, lambdaMaxByCell,
+                                          1, rows, rhs, actual, 3);
+  const Scalar damping = Scalar(1.0) / std::max(lambdaMaxByCell[1], Scalar(1.0));
+  tensorLocalJacobiSmooth(secondCell, secondInverseDiagonal, rhs, expected, rows, 3, damping);
+  assertVectorsNear(actual, expected, 1e-14, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, ChebyshevBlockSmootherFirstStepMatchesReferenceFormula )
+{
+  constexpr int rows = 3;
+  const auto firstCell = deterministicSPDMatrix(rows);
+  auto secondCell = deterministicSPDMatrix(rows);
+  for (int i=0; i<rows; i++) secondCell[static_cast<size_t>(i * rows + i)] += Scalar(0.3);
+
+  std::vector<Scalar> matrices;
+  matrices.insert(matrices.end(), firstCell.begin(), firstCell.end());
+  matrices.insert(matrices.end(), secondCell.begin(), secondCell.end());
+
+  const auto inverseDiagonal = tensorLocalExtractInverseDiagonalFromBlockDenseMatrices(matrices, 2, rows);
+  const auto lambdaMaxByCell = tensorLocalExtractLambdaMaxFromBlockDenseMatrices(matrices, inverseDiagonal, 2, rows);
+  const auto secondInverseDiagonal = tensorLocalExtractInverseDiagonal(secondCell, rows);
+  const std::vector<Scalar> rhs = {Scalar(0.5), Scalar(-0.125), Scalar(0.75)};
+  const std::vector<Scalar> initial = {Scalar(0.2), Scalar(0.05), Scalar(-0.1)};
+  std::vector<Scalar> actual = initial;
+  std::vector<Scalar> expected = initial;
+
+  constexpr Scalar lowerFraction = Scalar(0.25);
+  tensorLocalRunChebyshevBlockSmoother(matrices, inverseDiagonal, lambdaMaxByCell,
+                                       1, rows, rhs, actual, 1, lowerFraction);
+
+  const auto applied = tensorLocalApplyDenseMatrix(secondCell, initial, rows);
+  const Scalar lambdaMax = std::max(lambdaMaxByCell[1], Scalar(1.0));
+  const Scalar lambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), lowerFraction * lambdaMax);
+  const Scalar theta = Scalar(0.5) * (lambdaMax + lambdaMin);
+  for (int i=0; i<rows; i++)
+    expected[static_cast<size_t>(i)] += (Scalar(1.0) / theta) * secondInverseDiagonal[static_cast<size_t>(i)] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)]);
+
+  assertVectorsNear(actual, expected, 1e-14, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, CoarseSolverPolicyParsesValidNamesAndRejectsInvalidNames )
+{
+  TEST_EQUALITY(std::string(tensorLocalPMultigridCoarseSolverPolicyName(tensorLocalPMultigridCoarseSolverPolicyFromName("direct"))), std::string("direct"));
+  TEST_EQUALITY(std::string(tensorLocalPMultigridCoarseSolverPolicyName(tensorLocalPMultigridCoarseSolverPolicyFromName("chebyshev"))), std::string("chebyshev"));
+  TEST_EQUALITY(std::string(tensorLocalPMultigridCoarseSolverPolicyName(tensorLocalPMultigridCoarseSolverPolicyFromName("jacobi"))), std::string("jacobi"));
+  TEST_THROW(tensorLocalPMultigridCoarseSolverPolicyFromName("invalid", "LocalPMultigridTpetraPreconditioner"), std::invalid_argument);
 }

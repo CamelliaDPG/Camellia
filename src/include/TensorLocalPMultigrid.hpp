@@ -7,6 +7,7 @@
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace Camellia
@@ -315,4 +316,202 @@ namespace Camellia
                                                             transfer.fineRows);
     return result;
   }
+
+  enum class TensorLocalPMultigridCoarseSolverPolicy
+  {
+    Direct,
+    Chebyshev,
+    Jacobi
+  };
+
+  inline TensorLocalPMultigridCoarseSolverPolicy
+  tensorLocalPMultigridCoarseSolverPolicyFromName(const std::string &name,
+                                                  const char *label = "tensorLocalPMultigrid")
+  {
+    if (name == "direct") return TensorLocalPMultigridCoarseSolverPolicy::Direct;
+    if (name == "chebyshev") return TensorLocalPMultigridCoarseSolverPolicy::Chebyshev;
+    if (name == "jacobi") return TensorLocalPMultigridCoarseSolverPolicy::Jacobi;
+    throw std::invalid_argument(std::string(label) + " coarse solver must be direct, chebyshev, or jacobi");
+  }
+
+  inline const char *tensorLocalPMultigridCoarseSolverPolicyName(const TensorLocalPMultigridCoarseSolverPolicy policy)
+  {
+    switch (policy)
+    {
+      case TensorLocalPMultigridCoarseSolverPolicy::Direct: return "direct";
+      case TensorLocalPMultigridCoarseSolverPolicy::Chebyshev: return "chebyshev";
+      case TensorLocalPMultigridCoarseSolverPolicy::Jacobi: return "jacobi";
+    }
+    throw std::invalid_argument("unknown TensorLocalPMultigridCoarseSolverPolicy");
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalBlockDenseCellMatrix(const std::vector<Scalar> &matrices,
+                                                      const int cellOrdinal,
+                                                      const int rows)
+  {
+    if (rows <= 0) throw std::invalid_argument("tensorLocalBlockDenseCellMatrix requires rows > 0");
+    if (cellOrdinal < 0) throw std::invalid_argument("tensorLocalBlockDenseCellMatrix requires nonnegative cell ordinal");
+    const size_t entries = static_cast<size_t>(rows) * static_cast<size_t>(rows);
+    const size_t offset = static_cast<size_t>(cellOrdinal) * entries;
+    if (offset + entries > matrices.size())
+      throw std::invalid_argument("tensorLocalBlockDenseCellMatrix cell range exceeds matrix storage");
+    return std::vector<Scalar>(matrices.begin() + offset,
+                               matrices.begin() + offset + entries);
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalBlockDenseCellVector(const std::vector<Scalar> &values,
+                                                      const int cellOrdinal,
+                                                      const int rows)
+  {
+    if (rows <= 0) throw std::invalid_argument("tensorLocalBlockDenseCellVector requires rows > 0");
+    if (cellOrdinal < 0) throw std::invalid_argument("tensorLocalBlockDenseCellVector requires nonnegative cell ordinal");
+    const size_t entries = static_cast<size_t>(rows);
+    const size_t offset = static_cast<size_t>(cellOrdinal) * entries;
+    if (offset + entries > values.size())
+      throw std::invalid_argument("tensorLocalBlockDenseCellVector cell range exceeds vector storage");
+    return std::vector<Scalar>(values.begin() + offset,
+                               values.begin() + offset + entries);
+  }
+
+  template<class Scalar>
+  void tensorLocalApplyBlockDenseCellMatrix(const std::vector<Scalar> &matrices,
+                                            const int cellOrdinal,
+                                            const int rows,
+                                            const std::vector<Scalar> &input,
+                                            std::vector<Scalar> &output)
+  {
+    const auto cellMatrix = tensorLocalBlockDenseCellMatrix(matrices, cellOrdinal, rows);
+    output = tensorLocalApplyDenseMatrix(cellMatrix, input, rows);
+  }
+
+  template<class Scalar>
+  void tensorLocalRunDampedJacobiBlockSmoother(const std::vector<Scalar> &matrices,
+                                               const std::vector<Scalar> &inverseDiagonal,
+                                               const std::vector<Scalar> &lambdaMaxByCell,
+                                               const int cellOrdinal,
+                                               const int rows,
+                                               const std::vector<Scalar> &rhs,
+                                               std::vector<Scalar> &solution,
+                                               const int iterations)
+  {
+    const Scalar lambdaMax = std::max(lambdaMaxByCell[static_cast<size_t>(cellOrdinal)], Scalar(1.0));
+    const Scalar omega = Scalar(1.0) / lambdaMax;
+    const auto cellMatrix = tensorLocalBlockDenseCellMatrix(matrices, cellOrdinal, rows);
+    const auto cellInverseDiagonal = tensorLocalBlockDenseCellVector(inverseDiagonal, cellOrdinal, rows);
+    tensorLocalJacobiSmooth(cellMatrix, cellInverseDiagonal, rhs, solution, rows, iterations, omega);
+  }
+
+  template<class Scalar>
+  void tensorLocalRunChebyshevBlockSmoother(const std::vector<Scalar> &matrices,
+                                            const std::vector<Scalar> &inverseDiagonal,
+                                            const std::vector<Scalar> &lambdaMaxByCell,
+                                            const int cellOrdinal,
+                                            const int rows,
+                                            const std::vector<Scalar> &rhs,
+                                            std::vector<Scalar> &solution,
+                                            const int iterations,
+                                            const Scalar lowerFraction)
+  {
+    if (iterations < 1) return;
+    std::vector<Scalar> correction(static_cast<size_t>(rows), Scalar(0.0));
+    std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
+    const Scalar chebyshevLambdaMax = std::max(lambdaMaxByCell[static_cast<size_t>(cellOrdinal)], Scalar(1.0));
+    const Scalar chebyshevLambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), lowerFraction * chebyshevLambdaMax);
+    const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
+    const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+    const Scalar s1 = ifpackTheta * ifpackDelta;
+    Scalar rhok = Scalar(1.0) / s1;
+    const size_t cellOffset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows);
+    tensorLocalApplyBlockDenseCellMatrix(matrices, cellOrdinal, rows, solution, applied);
+    for (int i=0; i<rows; i++)
+    {
+      const size_t index = cellOffset + static_cast<size_t>(i);
+      correction[static_cast<size_t>(i)] = (Scalar(1.0) / ifpackTheta) * inverseDiagonal[index] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)]);
+      solution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
+    }
+    for (int iteration=1; iteration<iterations; iteration++)
+    {
+      tensorLocalApplyBlockDenseCellMatrix(matrices, cellOrdinal, rows, solution, applied);
+      const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
+      const Scalar dtemp1 = rhokp1 * rhok;
+      const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
+      rhok = rhokp1;
+      for (int i=0; i<rows; i++)
+      {
+        const size_t index = cellOffset + static_cast<size_t>(i);
+        correction[static_cast<size_t>(i)] = dtemp2 * inverseDiagonal[index] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)])
+                                           + dtemp1 * correction[static_cast<size_t>(i)];
+        solution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
+      }
+    }
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalExtractInverseDiagonalFromBlockDenseMatrices(
+      const std::vector<Scalar> &matrices,
+      const int cells,
+      const int rows,
+      const char *label = "tensorLocalExtractInverseDiagonalFromBlockDenseMatrices")
+  {
+    const size_t localLength =
+        static_cast<size_t>(cells) * static_cast<size_t>(rows);
+
+    const size_t expectedEntries =
+        localLength * static_cast<size_t>(rows);
+
+    if (matrices.size() != expectedEntries)
+    {
+      std::ostringstream message;
+      message << label << " matrix size mismatch: "
+              << "matrices.size()=" << matrices.size()
+              << " expected=" << expectedEntries
+              << " cells=" << cells
+              << " rows=" << rows;
+      throw std::invalid_argument(message.str());
+    }
+
+    std::vector<Scalar> inverseDiagonal(localLength, Scalar(0.0));
+
+    for (int c=0; c<cells; c++)
+    {
+      const auto cellMatrix = tensorLocalBlockDenseCellMatrix(matrices, c, rows);
+      const auto cellInverseDiagonal = tensorLocalExtractInverseDiagonal(cellMatrix, rows);
+      const size_t cellOffset = static_cast<size_t>(c) * static_cast<size_t>(rows);
+      std::copy(cellInverseDiagonal.begin(), cellInverseDiagonal.end(), inverseDiagonal.begin() + cellOffset);
+    }
+
+    return inverseDiagonal;
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalExtractLambdaMaxFromBlockDenseMatrices(
+      const std::vector<Scalar> &matrices,
+      const std::vector<Scalar> &inverseDiagonal,
+      const int cells,
+      const int rows,
+      const char *label = "tensorLocalExtractLambdaMaxFromBlockDenseMatrices")
+  {
+    const size_t localLength = static_cast<size_t>(cells) * static_cast<size_t>(rows);
+    if (inverseDiagonal.size() != localLength)
+      throw std::invalid_argument(std::string(label) + " inverse diagonal size mismatch");
+    if (matrices.size() != localLength * static_cast<size_t>(rows))
+      throw std::invalid_argument(std::string(label) + " matrix size mismatch");
+
+    std::vector<Scalar> lambdaMaxByCell(static_cast<size_t>(cells), Scalar(0.0));
+    for (int c=0; c<cells; c++)
+    {
+      for (int i=0; i<rows; i++)
+      {
+        const size_t rowOffset = static_cast<size_t>((c * rows + i) * rows);
+        Scalar scaledRowSum = Scalar(0.0);
+        for (int j=0; j<rows; j++)
+          scaledRowSum += std::abs(matrices[rowOffset + static_cast<size_t>(j)]) * inverseDiagonal[static_cast<size_t>(c * rows + i)];
+        lambdaMaxByCell[static_cast<size_t>(c)] = std::max(lambdaMaxByCell[static_cast<size_t>(c)], scaledRowSum);
+      }
+    }
+    return lambdaMaxByCell;
+  }
 }
+

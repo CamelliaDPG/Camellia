@@ -1468,6 +1468,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
   struct InverseDiagnosticTiming
   {
     double avgInverseApplySeconds = -1.0;
+    double inverseSetupSeconds = -1.0;
+    double inverseSolveSeconds = -1.0;
     double localPMultigridWrapperApplyInfNorm = -1.0;
     double matrixFreeGMGWrapperApplyInfNorm = -1.0;
     double localPMultigridWrapperDifferenceInfNorm = -1.0;
@@ -1547,9 +1549,12 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     int pMultigridJacobiSmootherIterations = 0;
     int pMultigridCoarseChebyshevIterations = 0;
     double pMultigridCoarseChebyshevLowerFraction = -1.0;
+    std::string pMultigridCoarseSolver = "not_requested";
     int pMultigridCoarseSolveCount = 0;
     int matrixFreeGMGStageTrace = 0;
     int matrixFreeGMGStageTraceEntries = 0;
+    long long pMultigridFineMatrixEntries = -1;
+    std::string pMultigridFineMatrixMode = "not_requested";
     std::string pMultigridPath = "not_requested";
     std::string inversePath = "not_requested";
     std::string spectralEstimatePath = "not_requested";
@@ -2223,9 +2228,15 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     Scalar smootherLowerFraction_ = Scalar(0.3);
     Scalar smootherWeight_ = Scalar(1.0);
     std::string smootherName_;
+    std::string coarseSolver_ = "direct";
+    Camellia::TensorLocalPMultigridCoarseSolverPolicy coarseSolverPolicy_ = Camellia::TensorLocalPMultigridCoarseSolverPolicy::Direct;
+    int coarseSolverIterations_ = 1;
+    Scalar coarseSolverLowerFraction_ = Scalar(0.05);
+    Teuchos::RCP<TpetraOperator> fineOperator_;
     std::vector<Scalar> fineMatrices_;
     std::vector<Scalar> fineInverseDiagonal_;
     std::vector<Scalar> fineLambdaMaxByCell_;
+    std::string fineMatrixStorageMode_ = "uninitialized";
     std::vector<Scalar> coarseMatrices_;
     std::vector<Scalar> factoredCoarseMatrices_;
     std::vector<int> levelDegrees_;
@@ -2249,26 +2260,21 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                const int cellOrdinal,
                                                const int rows)
     {
-      const size_t offset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows) * static_cast<size_t>(rows);
-      return std::vector<Scalar>(matrices.begin() + offset,
-                                 matrices.begin() + offset + static_cast<size_t>(rows) * static_cast<size_t>(rows));
+      return Camellia::tensorLocalBlockDenseCellMatrix(matrices, cellOrdinal, rows);
     }
 
     static std::vector<Scalar> denseCellVector(const std::vector<Scalar> &values,
                                                const int cellOrdinal,
                                                const int rows)
     {
-      const size_t offset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows);
-      return std::vector<Scalar>(values.begin() + offset,
-                                 values.begin() + offset + static_cast<size_t>(rows));
+      return Camellia::tensorLocalBlockDenseCellVector(values, cellOrdinal, rows);
     }
 
     static void applyDenseCellMatrix(const std::vector<Scalar> &matrices, const int cellOrdinal,
                                      const int rows, const std::vector<Scalar> &input,
                                      std::vector<Scalar> &output)
     {
-      const auto cellMatrix = denseCellMatrix(matrices, cellOrdinal, rows);
-      output = Camellia::tensorLocalApplyDenseMatrix(cellMatrix, input, rows);
+      Camellia::tensorLocalApplyBlockDenseCellMatrix(matrices, cellOrdinal, rows, input, output);
     }
 
     static void runDampedJacobiSmoother(const std::vector<Scalar> &matrices, const std::vector<Scalar> &inverseDiagonal,
@@ -2276,11 +2282,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const int rows, const std::vector<Scalar> &rhs,
                                         std::vector<Scalar> &solution, const int iterations)
     {
-      const Scalar lambdaMax = std::max(lambdaMaxByCell[static_cast<size_t>(cellOrdinal)], Scalar(1.0));
-      const Scalar omega = Scalar(1.0) / lambdaMax;
-      const auto cellMatrix = denseCellMatrix(matrices, cellOrdinal, rows);
-      const auto cellInverseDiagonal = denseCellVector(inverseDiagonal, cellOrdinal, rows);
-      Camellia::tensorLocalJacobiSmooth(cellMatrix, cellInverseDiagonal, rhs, solution, rows, iterations, omega);
+      Camellia::tensorLocalRunDampedJacobiBlockSmoother(matrices, inverseDiagonal, lambdaMaxByCell,
+                                                        cellOrdinal, rows, rhs, solution, iterations);
     }
 
     static void runChebyshevSmoother(const std::vector<Scalar> &matrices, const std::vector<Scalar> &inverseDiagonal,
@@ -2289,38 +2292,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                      std::vector<Scalar> &solution, const int iterations,
                                      const Scalar lowerFraction)
     {
-      if (iterations < 1) return;
-      std::vector<Scalar> correction(static_cast<size_t>(rows), Scalar(0.0));
-      std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
-      const Scalar chebyshevLambdaMax = std::max(lambdaMaxByCell[static_cast<size_t>(cellOrdinal)], Scalar(1.0));
-      const Scalar chebyshevLambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), lowerFraction * chebyshevLambdaMax);
-      const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
-      const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
-      const Scalar s1 = ifpackTheta * ifpackDelta;
-      Scalar rhok = Scalar(1.0) / s1;
-      const size_t cellOffset = static_cast<size_t>(cellOrdinal) * rows;
-      applyDenseCellMatrix(matrices, cellOrdinal, rows, solution, applied);
-      for (int i=0; i<rows; i++)
-      {
-        const size_t index = cellOffset + static_cast<size_t>(i);
-        correction[static_cast<size_t>(i)] = (Scalar(1.0) / ifpackTheta) * inverseDiagonal[index] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)]);
-        solution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
-      }
-      for (int iteration=1; iteration<iterations; iteration++)
-      {
-        applyDenseCellMatrix(matrices, cellOrdinal, rows, solution, applied);
-        const Scalar rhokp1 = Scalar(1.0) / (Scalar(2.0) * s1 - rhok);
-        const Scalar dtemp1 = rhokp1 * rhok;
-        const Scalar dtemp2 = Scalar(2.0) * rhokp1 * ifpackDelta;
-        rhok = rhokp1;
-        for (int i=0; i<rows; i++)
-        {
-          const size_t index = cellOffset + static_cast<size_t>(i);
-          correction[static_cast<size_t>(i)] = dtemp2 * inverseDiagonal[index] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)])
-                                             + dtemp1 * correction[static_cast<size_t>(i)];
-          solution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
-        }
-      }
+      Camellia::tensorLocalRunChebyshevBlockSmoother(matrices, inverseDiagonal, lambdaMaxByCell,
+                                                     cellOrdinal, rows, rhs, solution,
+                                                     iterations, lowerFraction);
     }
 
     void smoothFine(const int cellOrdinal, const std::vector<Scalar> &rhs, std::vector<Scalar> &solution) const
@@ -2340,34 +2314,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         const int cells,
         const int rows)
     {
-      const size_t localLength =
-          static_cast<size_t>(cells) * static_cast<size_t>(rows);
-
-      const size_t expectedEntries =
-          localLength * static_cast<size_t>(rows);
-
-      if (matrices.size() != expectedEntries)
-      {
-        std::ostringstream message;
-        message << "extractInverseDiagonalFromBlockDenseMatrices matrix size mismatch: "
-                << "matrices.size()=" << matrices.size()
-                << " expected=" << expectedEntries
-                << " cells=" << cells
-                << " rows=" << rows;
-        throw std::invalid_argument(message.str());
-      }
-
-      std::vector<Scalar> inverseDiagonal(localLength, Scalar(0.0));
-
-      for (int c=0; c<cells; c++)
-      {
-        const auto cellMatrix = denseCellMatrix(matrices, c, rows);
-        const auto cellInverseDiagonal = Camellia::tensorLocalExtractInverseDiagonal(cellMatrix, rows);
-        const size_t cellOffset = static_cast<size_t>(c) * static_cast<size_t>(rows);
-        std::copy(cellInverseDiagonal.begin(), cellInverseDiagonal.end(), inverseDiagonal.begin() + cellOffset);
-      }
-
-      return inverseDiagonal;
+      return Camellia::tensorLocalExtractInverseDiagonalFromBlockDenseMatrices(matrices, cells, rows,
+                                                                              "extractInverseDiagonalFromBlockDenseMatrices");
     }
 
     static std::vector<Scalar> extractLambdaMaxFromBlockDenseMatrices(
@@ -2376,25 +2324,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         const int cells,
         const int rows)
     {
-      const size_t localLength = static_cast<size_t>(cells) * static_cast<size_t>(rows);
-      if (inverseDiagonal.size() != localLength)
-        throw std::invalid_argument("extractLambdaMaxFromBlockDenseMatrices inverse diagonal size mismatch");
-      if (matrices.size() != localLength * static_cast<size_t>(rows))
-        throw std::invalid_argument("extractLambdaMaxFromBlockDenseMatrices matrix size mismatch");
-
-      std::vector<Scalar> lambdaMaxByCell(static_cast<size_t>(cells), Scalar(0.0));
-      for (int c=0; c<cells; c++)
-      {
-        for (int i=0; i<rows; i++)
-        {
-          const size_t rowOffset = static_cast<size_t>((c * rows + i) * rows);
-          Scalar scaledRowSum = Scalar(0.0);
-          for (int j=0; j<rows; j++)
-            scaledRowSum += std::abs(matrices[rowOffset + static_cast<size_t>(j)]) * inverseDiagonal[static_cast<size_t>(c * rows + i)];
-          lambdaMaxByCell[static_cast<size_t>(c)] = std::max(lambdaMaxByCell[static_cast<size_t>(c)], scaledRowSum);
-        }
-      }
-      return lambdaMaxByCell;
+      return Camellia::tensorLocalExtractLambdaMaxFromBlockDenseMatrices(matrices, inverseDiagonal, cells, rows,
+                                                                         "extractLambdaMaxFromBlockDenseMatrices");
     }
 
   public:
@@ -2407,12 +2338,17 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const Teuchos::RCP<const TpetraRowMatrix> &fineRowMatrix,
                                         const std::string &fineSmootherImpl,
                                         const std::string &chebyshevLambdaMaxMode,
-                                        const int chebyshevEigenMaxIterations)
+                                        const int chebyshevEigenMaxIterations,
+                                        const std::string &coarseSolver,
+                                        const int coarseSolverIterations,
+                                        const Scalar coarseSolverLowerFraction)
       : map_(map), transfer_(&Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p, std::max(p / 2, 1))),
         cells_(cells), fineP_(p), localDofs_(localDofs),
         coarseRows_(transfer_->coarseRows), smootherIterations_(std::max(1, smootherIterations)),
         smootherLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), smootherLowerFraction)),
         smootherWeight_(smootherWeight), smootherName_(smootherName),
+        coarseSolver_(coarseSolver), coarseSolverIterations_(std::max(1, coarseSolverIterations)),
+        coarseSolverLowerFraction_(std::max(std::numeric_limits<Scalar>::epsilon(), coarseSolverLowerFraction)),
         fineSmootherImpl_(fineSmootherImpl), chebyshevLambdaMaxMode_(chebyshevLambdaMaxMode),
         chebyshevEigenMaxIterations_(chebyshevEigenMaxIterations)
     {
@@ -2427,41 +2363,46 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                               map_->getIndexBase(),
                                               map_->getComm()));
 
-      fineMatrices_.assign(localLength * static_cast<size_t>(localDofs_), Scalar(0.0));
-      TpetraMultiVector basisInput(map_, 1);
-      TpetraMultiVector basisOutput(map_, 1);
-      auto basisInputHost = basisInput.getLocalViewHost(Tpetra::Access::OverwriteAll);
-      for (int fineJ=0; fineJ<localDofs_; fineJ++)
-      {
-        for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++) basisInputHost(localOrdinal,0) = Scalar(0.0);
-        for (int c=0; c<cells_; c++) basisInputHost(static_cast<size_t>(c * localDofs_ + fineJ),0) = Scalar(1.0);
-        fineOperator->apply(basisInput, basisOutput);
-        auto basisOutputHost = basisOutput.getLocalViewHost(Tpetra::Access::ReadOnly);
-        for (int c=0; c<cells_; c++)
-          for (int fineI=0; fineI<localDofs_; fineI++)
-            fineMatrices_[static_cast<size_t>((c * localDofs_ + fineI) * localDofs_ + fineJ)] = basisOutputHost(static_cast<size_t>(c * localDofs_ + fineI),0);
-      }
-      
-      fineInverseDiagonal_ = extractInverseDiagonalFromBlockDenseMatrices(fineMatrices_, cells_, localDofs_);
-
-      fineLambdaMaxByCell_.assign(static_cast<size_t>(cells_), Scalar(0.0));
-      for (int c=0; c<cells_; c++)
-      {
-        for (int i=0; i<localDofs_; i++)
-        {
-          const size_t rowOffset = static_cast<size_t>((c * localDofs_ + i) * localDofs_);
-          Scalar scaledRowSum = Scalar(0.0);
-          for (int j=0; j<localDofs_; j++) scaledRowSum += std::abs(fineMatrices_[rowOffset + static_cast<size_t>(j)]) * fineInverseDiagonal_[static_cast<size_t>(c * localDofs_ + i)];
-          fineLambdaMaxByCell_[static_cast<size_t>(c)] = std::max(fineLambdaMaxByCell_[static_cast<size_t>(c)], scaledRowSum);
-        }
-      }
-
       if ((fineSmootherImpl_ != "ifpack2") && (fineSmootherImpl_ != "local"))
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine smoother implementation must be ifpack2 or local");
       if ((chebyshevLambdaMaxMode_ != "auto") && (chebyshevLambdaMaxMode_ != "gershgorin"))
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner Chebyshev lambdaMax mode must be auto or gershgorin");
+      coarseSolverPolicy_ = Camellia::tensorLocalPMultigridCoarseSolverPolicyFromName(coarseSolver_,
+                                                                                       "LocalPMultigridTpetraPreconditioner");
       // The jacobi smoother path stays on the hand-written local smoother.
       useIfpack2FineSmoother_ = (fineSmootherImpl_ == "ifpack2") && (smootherName_ == "chebyshev");
+
+      if (useIfpack2FineSmoother_)
+      {
+        if (fineOperator.is_null())
+          throw std::invalid_argument("LocalPMultigridTpetraPreconditioner ifpack2 fine smoother requires a non-null fine operator");
+        fineOperator_ = fineOperator;
+        fineMatrixStorageMode_ = "matrix_free_operator_no_dense_fine_matrix";
+        fineMatrices_.clear();
+        fineInverseDiagonal_.clear();
+        fineLambdaMaxByCell_.clear();
+      }
+      else
+      {
+        fineMatrixStorageMode_ = "dense_fine_matrix_extracted_for_local_smoother";
+        fineMatrices_.assign(localLength * static_cast<size_t>(localDofs_), Scalar(0.0));
+        TpetraMultiVector basisInput(map_, 1);
+        TpetraMultiVector basisOutput(map_, 1);
+        auto basisInputHost = basisInput.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        for (int fineJ=0; fineJ<localDofs_; fineJ++)
+        {
+          for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++) basisInputHost(localOrdinal,0) = Scalar(0.0);
+          for (int c=0; c<cells_; c++) basisInputHost(static_cast<size_t>(c * localDofs_ + fineJ),0) = Scalar(1.0);
+          fineOperator->apply(basisInput, basisOutput);
+          auto basisOutputHost = basisOutput.getLocalViewHost(Tpetra::Access::ReadOnly);
+          for (int c=0; c<cells_; c++)
+            for (int fineI=0; fineI<localDofs_; fineI++)
+              fineMatrices_[static_cast<size_t>((c * localDofs_ + fineI) * localDofs_ + fineJ)] = basisOutputHost(static_cast<size_t>(c * localDofs_ + fineI),0);
+        }
+
+        fineInverseDiagonal_ = extractInverseDiagonalFromBlockDenseMatrices(fineMatrices_, cells_, localDofs_);
+        fineLambdaMaxByCell_ = extractLambdaMaxFromBlockDenseMatrices(fineMatrices_, fineInverseDiagonal_, cells_, localDofs_);
+      }
       if (useIfpack2FineSmoother_)
       {
         if (fineRowMatrix.is_null())
@@ -2473,6 +2414,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         smootherParams.set("chebyshev: ratio eigenvalue", ratio);
         if (chebyshevLambdaMaxMode_ == "gershgorin")
         {
+          if (fineLambdaMaxByCell_.empty())
+            throw std::invalid_argument("LocalPMultigridTpetraPreconditioner --pMultigridChebyshevLambdaMax=gershgorin requires --pMultigridFineSmootherImpl=local until row-matrix Gershgorin bounds are available without dense fine extraction");
           // Mirror GMGOperator: deterministic Gershgorin-style bound and no power iteration.
           Scalar localLambdaMax = Scalar(0.0);
           for (const Scalar cellLambdaMax : fineLambdaMaxByCell_) localLambdaMax = std::max(localLambdaMax, cellLambdaMax);
@@ -2502,6 +2445,49 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       levelMatrices_.push_back(fineMatrices_);
       levelInverseDiagonals_.push_back(fineInverseDiagonal_);
       levelLambdaMaxByCell_.push_back(fineLambdaMaxByCell_);
+
+      if (fineMatrices_.empty())
+      {
+        const auto &levelTransfer = *transfer_;
+        const int nextDegree = levelTransfer.coarseP;
+        const int nextRows = levelTransfer.coarseRows;
+        std::vector<Scalar> nextMatrices(static_cast<size_t>(cells_) * static_cast<size_t>(nextRows) * static_cast<size_t>(nextRows), Scalar(0.0));
+        TpetraMultiVector basisInput(map_, 1);
+        TpetraMultiVector basisOutput(map_, 1);
+        auto basisInputHost = basisInput.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        std::vector<Scalar> fineOutput(static_cast<size_t>(localDofs_), Scalar(0.0));
+        std::vector<Scalar> coarseOutput(static_cast<size_t>(nextRows), Scalar(0.0));
+        for (int coarseJ=0; coarseJ<nextRows; coarseJ++)
+        {
+          for (size_t localOrdinal=0; localOrdinal<localLength; localOrdinal++) basisInputHost(localOrdinal,0) = Scalar(0.0);
+          for (int c=0; c<cells_; c++)
+          {
+            const size_t cellOffset = static_cast<size_t>(c) * static_cast<size_t>(localDofs_);
+            for (int fineI=0; fineI<localDofs_; fineI++)
+              basisInputHost(cellOffset + static_cast<size_t>(fineI),0) = levelTransfer.prolongation[static_cast<size_t>(fineI * nextRows + coarseJ)];
+          }
+          fineOperator_->apply(basisInput, basisOutput);
+          auto basisOutputHost = basisOutput.getLocalViewHost(Tpetra::Access::ReadOnly);
+          for (int c=0; c<cells_; c++)
+          {
+            const size_t fineOffset = static_cast<size_t>(c) * static_cast<size_t>(localDofs_);
+            const size_t coarseOffset = static_cast<size_t>(c) * static_cast<size_t>(nextRows) * static_cast<size_t>(nextRows);
+            for (int fineI=0; fineI<localDofs_; fineI++) fineOutput[static_cast<size_t>(fineI)] = basisOutputHost(fineOffset + static_cast<size_t>(fineI),0);
+            applyTensorHGradPTransferRestriction(levelTransfer, fineOutput, coarseOutput);
+            for (int coarseI=0; coarseI<nextRows; coarseI++)
+              nextMatrices[coarseOffset + static_cast<size_t>(coarseI * nextRows + coarseJ)] = coarseOutput[static_cast<size_t>(coarseI)];
+          }
+        }
+        const auto nextInverseDiagonal = extractInverseDiagonalFromBlockDenseMatrices(nextMatrices, cells_, nextRows);
+        const auto nextLambdaMaxByCell = extractLambdaMaxFromBlockDenseMatrices(nextMatrices, nextInverseDiagonal, cells_, nextRows);
+        levelTransfers_.push_back(&levelTransfer);
+        levelDegrees_.push_back(nextDegree);
+        levelRows_.push_back(nextRows);
+        levelMatrices_.push_back(nextMatrices);
+        levelInverseDiagonals_.push_back(nextInverseDiagonal);
+        levelLambdaMaxByCell_.push_back(nextLambdaMaxByCell);
+      }
+
       while (levelDegrees_.back() > 1)
       {
         const int levelIndex = static_cast<int>(levelDegrees_.size()) - 1;
@@ -2535,10 +2521,13 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       coarseMatrices_ = levelMatrices_[1];
       factoredCoarseMatrices_ = levelMatrices_.back();
       const int coarsestRows = levelRows_.back();
-      for (int c=0; c<cells_; c++)
+      if (coarseSolver_ == "direct")
       {
-        const int factorInfo = factorSPDMatrixInPlace(factoredCoarseMatrices_, static_cast<size_t>(c) * static_cast<size_t>(coarsestRows) * static_cast<size_t>(coarsestRows), coarsestRows);
-        if (factorInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarsest Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+        for (int c=0; c<cells_; c++)
+        {
+          const int factorInfo = factorSPDMatrixInPlace(factoredCoarseMatrices_, static_cast<size_t>(c) * static_cast<size_t>(coarsestRows) * static_cast<size_t>(coarsestRows), coarsestRows);
+          if (factorInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarsest Cholesky factorization failed with LAPACK info=" + std::to_string(factorInfo));
+        }
       }
 
       std::ostringstream desc;
@@ -2551,10 +2540,14 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         desc << levelDegrees_[levelOrdinal];
       }
       desc << ",fineRows=" << transfer_->fineRows << ",coarseRows=" << transfer_->coarseRows
+           << ",fineMatrixMode=" << fineMatrixStorageMode_
            << ",smoother=" << smootherName_ << ",smootherIterations=" << smootherIterations_
            << ",smootherLowerFraction=" << smootherLowerFraction_
            << ",transfer=Intrepid2_HierarchicalBasisProlongator,restriction=prolongation_transpose"
-           << ",coarse=coarsest_exact_cholesky)";
+           << ",coarseSolver=" << coarseSolver_
+           << ",coarseSolverIterations=" << coarseSolverIterations_
+           << ",coarseSolverLowerFraction=" << coarseSolverLowerFraction_
+           << ",coarse=" << ((coarseSolver_ == "direct") ? "coarsest_exact_cholesky" : "coarsest_iterative_smoother") << ")";
       description_ = desc.str();
     }
 
@@ -2598,6 +2591,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           << " lambdaMin=" << lambdaMin
           << " lowerFraction=" << smootherLowerFraction_
           << " smootherImpl=" << (useIfpack2FineSmoother_ ? "ifpack2" : "local")
+          << " fineMatrixMode=" << fineMatrixStorageMode_
           << " lambdaMaxMode=" << chebyshevLambdaMaxMode_
           << " ifpack2LambdaMaxForApply=" << fineIfpack2LambdaMaxForApply()
           << std::endl;
@@ -2615,6 +2609,14 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine operator local vector length mismatch");
       if (X.getNumVectors() != Y.getNumVectors())
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine operator multivector count mismatch");
+
+      if (fineMatrices_.empty())
+      {
+        if (fineOperator_.is_null())
+          throw std::runtime_error("LocalPMultigridTpetraPreconditioner matrix-free fine apply requires a non-null fine operator");
+        fineOperator_->apply(X, Y, mode, alpha, beta);
+        return;
+      }
 
       auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
       auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
@@ -2768,10 +2770,29 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
       if (levelIndex == static_cast<int>(levelRows_.size()) - 1)
       {
-        solution = rhs;
-        const size_t factorOffset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows) * static_cast<size_t>(rows);
-        const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices_, factorOffset, rows, solution);
-        if (solveInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarsest Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+        if (coarseSolverPolicy_ == Camellia::TensorLocalPMultigridCoarseSolverPolicy::Direct)
+        {
+          solution = rhs;
+          const size_t factorOffset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows) * static_cast<size_t>(rows);
+          const int solveInfo = solveFactoredSPDMatrix(factoredCoarseMatrices_, factorOffset, rows, solution);
+          if (solveInfo != 0) throw std::runtime_error("LocalPMultigridTpetraPreconditioner coarsest Cholesky solve failed with LAPACK info=" + std::to_string(solveInfo));
+        }
+        else if (coarseSolverPolicy_ == Camellia::TensorLocalPMultigridCoarseSolverPolicy::Chebyshev)
+        {
+          runChebyshevSmoother(levelMatrices_[static_cast<size_t>(levelIndex)],
+                               levelInverseDiagonals_[static_cast<size_t>(levelIndex)],
+                               levelLambdaMaxByCell_[static_cast<size_t>(levelIndex)],
+                               cellOrdinal, rows, rhs, solution,
+                               coarseSolverIterations_, coarseSolverLowerFraction_);
+        }
+        else
+        {
+          runDampedJacobiSmoother(levelMatrices_[static_cast<size_t>(levelIndex)],
+                                  levelInverseDiagonals_[static_cast<size_t>(levelIndex)],
+                                  levelLambdaMaxByCell_[static_cast<size_t>(levelIndex)],
+                                  cellOrdinal, rows, rhs, solution,
+                                  coarseSolverIterations_);
+        }
         return;
       }
 
@@ -2893,6 +2914,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
     std::string description() const override { return description_; }
 
+    const std::string &fineMatrixStorageMode() const { return fineMatrixStorageMode_; }
+    long long fineMatrixEntryCount() const { return static_cast<long long>(fineMatrices_.size()); }
+
     void describe(Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel) const override
     {
       if ((verbLevel == Teuchos::VERB_MEDIUM) || (verbLevel == Teuchos::VERB_HIGH) || (verbLevel == Teuchos::VERB_EXTREME)) out << description() << std::endl;
@@ -2966,7 +2990,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                         const Teuchos::RCP<const TpetraRowMatrix> &fineRowMatrix,
                                         const std::string &fineSmootherImpl,
                                         const std::string &chebyshevLambdaMaxMode,
-                                        const int chebyshevEigenMaxIterations)
+                                        const int chebyshevEigenMaxIterations,
+                                        const std::string &pMultigridCoarseSolver,
+                                        const int pMultigridCoarseChebyshevIterations,
+                                        const Scalar pMultigridCoarseChebyshevLowerFraction)
   {
     auto localPMultigrid = Teuchos::rcp(new LocalPMultigridTpetraPreconditioner(map,
                                                                                 fineOperator,
@@ -2981,7 +3008,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                                                 fineRowMatrix,
                                                                                 fineSmootherImpl,
                                                                                 chebyshevLambdaMaxMode,
-                                                                                chebyshevEigenMaxIterations));
+                                                                                chebyshevEigenMaxIterations,
+                                                                                pMultigridCoarseSolver,
+                                                                                pMultigridCoarseChebyshevIterations,
+                                                                                pMultigridCoarseChebyshevLowerFraction));
 
     std::vector<Camellia::MatrixFreeGMGPreconditioner::Level> levels;
     levels.push_back(buildLocalPMultigridMatrixFreeGMGFineLevel(map, localPMultigrid));
@@ -3185,6 +3215,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                  const int pMultigridJacobiSmootherIterations,
                                                  const int pMultigridCoarseChebyshevIterations,
                                                  const Scalar pMultigridCoarseChebyshevLowerFraction,
+                                                 const std::string &pMultigridCoarseSolver,
                                                  const std::string &inverseDiagnosticAlgorithm,
                                                  const Scalar inverseEigenRatio, const Scalar inverseLambdaMinOverride,
                                                  const Scalar inverseLambdaMaxOverride, const std::string &inverseSpectralEstimate,
@@ -4023,6 +4054,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     }
     else if (useBelosGmres)
     {
+      Kokkos::Timer inverseSetupTimer;
       if (inverseInitialGuess != "zero")
         throw std::invalid_argument("Belos GMRES inverse diagnostics currently support --inverseInitialGuess=zero only");
       if (inversePreconditionerDegree < 1)
@@ -4095,7 +4127,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         const auto &transfer = Camellia::cachedTensorHGradPTransfer<DeviceType,Scalar>(dim, p);
         const MatrixFreeGMGRightPreconditionerBuild preconditionerBuild =
           buildMatrixFreeGMGRightPreconditioner(map, matrixFreeOperator, dim, p, cells, rows, smootherIterations, smootherName, pMultigridChebyshevSmootherLowerFraction, pMultigridFineSmootherWeight,
-                                                rowMatrixBase, pMultigridFineSmootherImpl, pMultigridChebyshevLambdaMax, pMultigridChebyshevEigenMaxIterations);
+                                                rowMatrixBase, pMultigridFineSmootherImpl, pMultigridChebyshevLambdaMax, pMultigridChebyshevEigenMaxIterations,
+                                                pMultigridCoarseSolver, pMultigridCoarseChebyshevIterations, pMultigridCoarseChebyshevLowerFraction);
         matrixFreeGMGForStageTrace = preconditionerBuild.matrixFreeGMG;
         localPMultigridForStageTrace = Teuchos::rcp_dynamic_cast<LocalPMultigridTpetraPreconditioner>(preconditionerBuild.directLocalPMultigrid);
         if (matrixFreeGMGStageTrace != 0)
@@ -4122,7 +4155,15 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         timing.pMultigridChebyshevSmootherLowerFraction = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-chebyshev") ? pMultigridChebyshevSmootherLowerFraction : -1.0;
         timing.pMultigridFineSmootherWeight = pMultigridFineSmootherWeight;
         timing.pMultigridJacobiSmootherIterations = (inverseDiagnosticAlgorithm == "gmres-pmultigrid-jacobi-chebyshev") ? smootherIterations : 0;
-        timing.pMultigridPath = "tpetra_operator_right_preconditioner_recursive_v_cycle_levelDegrees=" + actualPMultigridSchedule + "_cached_tensor_hgrad_transfer_configured_chebyshev_interval";
+        timing.pMultigridCoarseSolver = pMultigridCoarseSolver;
+        timing.pMultigridCoarseChebyshevIterations = (pMultigridCoarseSolver == "chebyshev") ? pMultigridCoarseChebyshevIterations : 0;
+        timing.pMultigridCoarseChebyshevLowerFraction = (pMultigridCoarseSolver == "chebyshev") ? pMultigridCoarseChebyshevLowerFraction : -1.0;
+        if (localPMultigridForStageTrace != Teuchos::null)
+        {
+          timing.pMultigridFineMatrixMode = localPMultigridForStageTrace->fineMatrixStorageMode();
+          timing.pMultigridFineMatrixEntries = localPMultigridForStageTrace->fineMatrixEntryCount();
+        }
+        timing.pMultigridPath = "tpetra_operator_right_preconditioner_recursive_v_cycle_levelDegrees=" + actualPMultigridSchedule + "_coarseSolver=" + pMultigridCoarseSolver + "_fineMatrixMode=" + timing.pMultigridFineMatrixMode + "_cached_tensor_hgrad_transfer_configured_chebyshev_interval";
       }
       else
       {
@@ -4198,7 +4239,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       Belos::SolverFactory<Scalar,MV,OP> solverFactory;
       auto solver = solverFactory.create("GMRES", solverParams);
       solver->setProblem(problem);
+      timing.inverseSetupSeconds = inverseSetupTimer.seconds();
+      Kokkos::Timer inverseSolveTimer;
       const Belos::ReturnType belosResult = solver->solve();
+      timing.inverseSolveSeconds = inverseSolveTimer.seconds();
       timing.inverseIterations = solver->getNumIters();
       timing.inverseConverged = (belosResult == Belos::Converged) ? 1 : 0;
       timing.inverseStoppedReason = (timing.inverseConverged != 0) ? "belos_gmres_converged" : "belos_gmres_iteration_limit";
@@ -4753,7 +4797,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     {
       throw std::invalid_argument("--inverseDiagnosticAlgorithm must be richardson, chebyshev, gmres-chebyshev, gmres-jacobi, matrix-free-gmg-chebyshev-smoother, matrix-free-gmg-jacobi-smoother, gmres-pmultigrid-chebyshev, gmres-pmultigrid-jacobi-chebyshev, pmultigrid-chebyshev, or pmultigrid-jacobi-chebyshev");
     }
-    timing.avgInverseApplySeconds = inverseTimer.seconds() / std::max(1, timing.inverseIterations);
+    if (timing.inverseSolveSeconds < 0.0) timing.inverseSolveSeconds = inverseTimer.seconds();
+    timing.avgInverseApplySeconds = timing.inverseSolveSeconds / std::max(1, timing.inverseIterations);
 
     if (ifpack2ChebyshevSmoke != 0)
     {
@@ -4936,6 +4981,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
               << " pMultigridCoarseChebyshevIterations=" << timing.pMultigridCoarseChebyshevIterations
               << " pMultigridCoarseChebyshevLowerFraction=" << timing.pMultigridCoarseChebyshevLowerFraction
               << " pMultigridCoarseSolveCount=" << timing.pMultigridCoarseSolveCount
+              << " pMultigridFineMatrixMode=" << timing.pMultigridFineMatrixMode
+              << " pMultigridFineMatrixEntries=" << timing.pMultigridFineMatrixEntries
               << " matrixFreeGMGStageTrace=" << timing.matrixFreeGMGStageTrace
               << " matrixFreeGMGStageTraceEntries=" << timing.matrixFreeGMGStageTraceEntries
               << " pMultigridPath=" << timing.pMultigridPath
@@ -5269,6 +5316,7 @@ int main(int argc, char *argv[])
     int pMultigridJacobiSmootherIterations = 2;
     int pMultigridCoarseChebyshevIterations = 8;
     Scalar pMultigridCoarseChebyshevLowerFraction = 0.05;
+    std::string pMultigridCoarseSolver = "direct";
     int matrixFreeGMGStageTrace = 0;
     std::string polyOrderText = "1:4";
     std::string operatorChoice = "mass-plus-stiffness";
@@ -5310,8 +5358,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("pMultigridChebyshevEigenMaxIterations", &pMultigridChebyshevEigenMaxIterations, "Ifpack2 'chebyshev: eigenvalue max iterations' for the fine p-multigrid smoother in auto lambdaMax mode.");
     cmdp.setOption("pMultigridFineSmootherWeight", &pMultigridFineSmootherWeight, "Scalar multiplier applied to each fine-level p-multigrid smoother correction; default 1.0 matches GMGOperator's default smoother weight and preserves the current matrix-free diagnostic behavior.");
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
-    cmdp.setOption("pMultigridCoarseChebyshevIterations", &pMultigridCoarseChebyshevIterations, "Chebyshev iterations used as the coarsest p-multigrid solver for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
+    cmdp.setOption("pMultigridCoarseChebyshevIterations", &pMultigridCoarseChebyshevIterations, "Iterations used by non-direct p-multigrid coarsest solvers; Chebyshev uses this as polynomial degree and Jacobi uses this as sweep count.");
     cmdp.setOption("pMultigridCoarseChebyshevLowerFraction", &pMultigridCoarseChebyshevLowerFraction, "Coarse Chebyshev lower endpoint as a fraction of the coarse diagonal-Jacobi lambdaMax estimate.");
+    cmdp.setOption("pMultigridCoarseSolver", &pMultigridCoarseSolver, "Coarsest p-multigrid solve policy: direct, chebyshev, or jacobi.");
     cmdp.setOption("diagnoseLocalPMultigridWrapperEquivalence", &diagnoseLocalPMultigridWrapperEquivalence, "When nonzero, compare direct local pMG apply with MatrixFreeGMGApplyInversePreconditioner wrapping the same local pMG operator.");
     cmdp.setOption("matrixFreeGMGStageTrace", &matrixFreeGMGStageTrace, "When nonzero, emit explicit per-level MatrixFreeGMGPreconditioner V-cycle stage norm diagnostics for GMRES p-multigrid inverse diagnostics.");
     cmdp.setOption("inverseDiagnosticAlgorithm", &inverseDiagnosticAlgorithm,
@@ -5371,6 +5420,8 @@ int main(int argc, char *argv[])
     if (pMultigridCoarseChebyshevIterations < 1) throw std::invalid_argument("--pMultigridCoarseChebyshevIterations must be positive");
     if ((pMultigridCoarseChebyshevLowerFraction <= 0.0) || (pMultigridCoarseChebyshevLowerFraction >= 1.0))
       throw std::invalid_argument("--pMultigridCoarseChebyshevLowerFraction must be in (0,1)");
+    if ((pMultigridCoarseSolver != "direct") && (pMultigridCoarseSolver != "chebyshev") && (pMultigridCoarseSolver != "jacobi"))
+      throw std::invalid_argument("--pMultigridCoarseSolver must be direct, chebyshev, or jacobi");
     const bool inverseDiagnosticNeedsSpectralEstimate = (inverseDiagnosticAlgorithm == "chebyshev") ||
                                                         (inverseDiagnosticAlgorithm == "gmres-chebyshev") ||
                                                         (inverseDiagnosticAlgorithm == "matrix-free-gmg-chebyshev-smoother") ||
@@ -5576,7 +5627,7 @@ int main(int argc, char *argv[])
                                                         pMultigridFineSmootherWeight,
                                                         matrixFreeGMGStageTrace,
                                                         pMultigridJacobiSmootherIterations, pMultigridCoarseChebyshevIterations,
-                                                        pMultigridCoarseChebyshevLowerFraction,
+                                                        pMultigridCoarseChebyshevLowerFraction, pMultigridCoarseSolver,
                                                         inverseDiagnosticAlgorithm, inverseEigenRatio, inverseLambdaMin, inverseLambdaMax,
                                                         inverseSpectralEstimate, inverseSpectralEstimateIterations, inversePowerSafetyFactor,
                                                         inverseLowerSpectralEstimate, inverseLowerSpectralEstimateIterations, inverseLowerPowerSafetyFactor,
@@ -5732,6 +5783,8 @@ int main(int argc, char *argv[])
                 << " firstDiagonalSeconds=" << diagonalTiming.firstSeconds
                 << " avgDiagonalSeconds=" << diagonalTiming.averageSeconds
                 << " avgInverseApplySeconds=" << inverseDiagnosticTiming.avgInverseApplySeconds
+                << " inverseSetupSeconds=" << inverseDiagnosticTiming.inverseSetupSeconds
+                << " inverseSolveSeconds=" << inverseDiagnosticTiming.inverseSolveSeconds
                 << " inverseIterations=" << inverseDiagnosticTiming.inverseIterations
                 << " initialInverseAbsError=" << inverseDiagnosticTiming.initialInverseAbsError
                 << " initialInverseRelError=" << inverseDiagnosticTiming.initialInverseRelError
@@ -5789,6 +5842,7 @@ int main(int argc, char *argv[])
                 << " pMultigridJacobiSmootherIterations=" << inverseDiagnosticTiming.pMultigridJacobiSmootherIterations
                 << " pMultigridCoarseChebyshevIterations=" << inverseDiagnosticTiming.pMultigridCoarseChebyshevIterations
                 << " pMultigridCoarseChebyshevLowerFraction=" << inverseDiagnosticTiming.pMultigridCoarseChebyshevLowerFraction
+                << " pMultigridCoarseSolver=" << inverseDiagnosticTiming.pMultigridCoarseSolver
                 << " pMultigridCoarseSolveCount=" << inverseDiagnosticTiming.pMultigridCoarseSolveCount
                 << " pMultigridPath=" << inverseDiagnosticTiming.pMultigridPath
                 << " estimatedApplyFlopsPerCell=" << flopsPerCell

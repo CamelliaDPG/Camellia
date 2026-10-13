@@ -72,6 +72,9 @@ namespace
     double residualReduction = -1.0;
     double initialResidualNorm = -1.0;
     double finalResidualNorm = -1.0;
+    double avgInverseApplySeconds = -1.0;
+    double inverseSetupSeconds = -1.0;
+    double inverseSolveSeconds = -1.0;
     double pMultigridFineSmootherWeight = -1.0;
     int pMultigridLevels = 0;
     int pMultigridFineDofs = 0;
@@ -170,11 +173,6 @@ namespace
   std::string actualCoarseSolverForStrategy(const Strategy &strategy)
   {
     if (strategy.multigridStrategy != "V_CYCLE") return "n/a";
-    if ((strategy.matrixFreeAlgorithm == "gmres-pmultigrid-chebyshev") ||
-        (strategy.matrixFreeAlgorithm == "pmultigrid-chebyshev"))
-      return "direct";
-    if (strategy.matrixFreeAlgorithm == "gmres-pmultigrid-jacobi-chebyshev")
-      return "chebyshev";
     return strategy.supported ? strategy.coarseSolver : std::string("unsupported");
   }
 
@@ -369,6 +367,9 @@ namespace
     diagnostic.residualReduction = parseDoubleAfter(output, "residualReduction", lineStart, -1.0);
     diagnostic.initialResidualNorm = parseDoubleAfter(output, "initialResidualNorm", lineStart, -1.0);
     diagnostic.finalResidualNorm = parseDoubleAfter(output, "finalResidualNorm", lineStart, -1.0);
+    diagnostic.avgInverseApplySeconds = parseDoubleAfter(output, "avgInverseApplySeconds", lineStart, -1.0);
+    diagnostic.inverseSetupSeconds = parseDoubleAfter(output, "inverseSetupSeconds", lineStart, -1.0);
+    diagnostic.inverseSolveSeconds = parseDoubleAfter(output, "inverseSolveSeconds", lineStart, -1.0);
     diagnostic.pMultigridFineSmootherWeight = parseDoubleAfter(output, "pMultigridFineSmootherWeight", lineStart, -1.0);
     diagnostic.pMultigridLevels = parseIntAfter(output, "pMultigridLevels", lineStart, 0);
     diagnostic.pMultigridFineDofs = parseIntAfter(output, "pMultigridFineDofs", lineStart, 0);
@@ -481,6 +482,9 @@ namespace
                 << " --pMultigridFineSmootherImpl=" << options.pMultigridFineSmootherImpl
                 << " --pMultigridChebyshevLambdaMax=" << options.pMultigridChebyshevLambdaMax
                 << " --pMultigridChebyshevEigenMaxIterations=" << strategy.chebyshevMaxEigenIterations
+                << " --pMultigridCoarseSolver=" << strategy.coarseSolver
+                << " --pMultigridCoarseChebyshevIterations=" << strategy.chebyshevDegree
+                << " --pMultigridCoarseChebyshevLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
                 << " --diagnoseLocalPMultigridWrapperEquivalence=1"
                 << " --inverseSpectralEstimate=assembled-gershgorin"
                 << " --inverseLowerSpectralEstimate=ratio"
@@ -491,6 +495,7 @@ namespace
       arguments << " --pMultigridJacobiSmootherIterations=" << options.smootherApplications
                 << " --pMultigridCoarseChebyshevIterations=" << strategy.chebyshevDegree
                 << " --pMultigridCoarseChebyshevLowerFraction=" << std::setprecision(16) << (1.0 / strategy.chebyshevRatio)
+                << " --pMultigridCoarseSolver=" << strategy.coarseSolver
                 << " --pMultigridFineSmootherWeight=" << std::setprecision(16) << fineSmootherWeight
                 << " --pMultigridFineSmootherImpl=" << options.pMultigridFineSmootherImpl
                 << " --pMultigridChebyshevLambdaMax=" << options.pMultigridChebyshevLambdaMax
@@ -521,7 +526,7 @@ namespace
     out << "  Outer operator applications use LocalPAMatrixTpetraOperator / PAMatrix terms.\n";
     out << "  GMRES smoother-only rows use the existing right-preconditioned Belos+Ifpack2 path.\n";
     out << "  p-multigrid rows use TensorPoissonPAMatrixDriver's local p-multigrid diagnostics;\n";
-    out << "  requested coarse labels are reported separately from the actual coarse/path metadata.\n";
+    out << "  requested coarse labels are passed through as the configured coarsest solver policy.\n";
     out << "  hierarchical p-multigrid uses Intrepid2::HierarchicalBasisProlongator for P and R=P^T for restriction.\n";
     out << "  actualCoarse/actualPLevels/pMultigridLevels distinguish two-level direct-coarse aliases from recursive paths.\n";
     out << "  These rows are still TensorPoisson local V-cycle rows and are not yet asserted to match assembled GMGOperator stage-by-stage semantics.\n\n";
@@ -728,6 +733,9 @@ int main(int argc, char *argv[])
                     << " residualReduction=" << std::setprecision(16) << std::scientific << diagnostic.residualReduction
                     << " initialResidualNorm=" << diagnostic.initialResidualNorm
                     << " finalResidualNorm=" << diagnostic.finalResidualNorm
+                    << " inverseSetupSeconds=" << diagnostic.inverseSetupSeconds
+                    << " inverseSolveSeconds=" << diagnostic.inverseSolveSeconds
+                    << " avgInverseApplySeconds=" << diagnostic.avgInverseApplySeconds
                     << " matrixFreeGMGStageTrace=" << diagnostic.matrixFreeGMGStageTrace
                     << " matrixFreeGMGStageTraceEntries=" << diagnostic.matrixFreeGMGStageTraceEntries
                     << " requestedCoarseSolver=" << strategy.coarseSolver
@@ -752,6 +760,9 @@ int main(int argc, char *argv[])
                            << " status=" << status
                            << " iterations=" << diagnostic.iterations
                            << " residualReduction=" << std::setprecision(16) << std::scientific << diagnostic.residualReduction
+                           << " inverseSetupSeconds=" << diagnostic.inverseSetupSeconds
+                           << " inverseSolveSeconds=" << diagnostic.inverseSolveSeconds
+                           << " avgInverseApplySeconds=" << diagnostic.avgInverseApplySeconds
                            << " requestedCoarseSolver=" << strategy.coarseSolver
                            << " actualCoarseSolver=" << actualCoarseSolver
                            << " coarseSolverLabelAlias=" << (strategyCoarseSolverLabelIsAlias(strategy) ? 1 : 0)

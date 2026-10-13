@@ -114,10 +114,15 @@ add_test(NAME TensorH1GramPAMatrixMatrixFreeGMGStageTraceSmoke
     --basisMode=hgrad
     --mode=inverse-diagnostic
     --inverseDiagnosticAlgorithm=gmres-pmultigrid-chebyshev
+    --inverseSpectralEstimate=user
+    --inverseLambdaMin=0.01
+    --inverseLambdaMax=10.0
+    --inverseDiagnosticRequireAssembledReference=0
     --matrixFreeGMGStageTrace=1
-    --numInverseIterations=20)
+    --numInverseIterations=20
+    --maxAssembledEntries=1)
 set_tests_properties(TensorH1GramPAMatrixMatrixFreeGMGStageTraceSmoke PROPERTIES
-  PASS_REGULAR_EXPRESSION "matrixFreeGMGStageTrace=1 matrixFreeGMGStageTraceEntries=[1-9][0-9]*")
+  PASS_REGULAR_EXPRESSION "pMultigridFineMatrixMode=matrix_free_operator_no_dense_fine_matrix pMultigridFineMatrixEntries=0 matrixFreeGMGStageTrace=1 matrixFreeGMGStageTraceEntries=[1-9][0-9]*")
 
 add_test(NAME TensorH1GramPAMatrixAssemblyCompareSmoke
   COMMAND TensorPoissonPAMatrixDriver
