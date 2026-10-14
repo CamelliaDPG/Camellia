@@ -562,7 +562,7 @@ namespace
     out << "  dense fine-matrix extraction diagnostics: "
         << (options.includeDenseFineMatrixDiagnostics ? "enabled" : "disabled (production path keeps fine-level smoothing matrix-free)") << "\n";
     out << "  Optional MatrixFreeGMG stage traces are emitted as VLASOV_MATRIX_FREE_GMG_STAGE_TRACE rows.\n";
-    out << "  P2_PMG_FINEWT_RESULT includes matrixFreeGMGStageTrace and matrixFreeGMGStageTraceEntries.\n\n";
+    out << "  P2/P4 PMG_FINEWT_RESULT rows include matrixFreeGMGStageTrace and matrixFreeGMGStageTraceEntries.\n\n";
     out << std::left << std::setw(8) << "p"
         << std::setw(24) << "basis"
         << std::setw(56) << "strategy"

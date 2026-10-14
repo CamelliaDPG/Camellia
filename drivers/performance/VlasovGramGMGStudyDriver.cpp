@@ -54,6 +54,7 @@ namespace
     bool quick = false;
     bool emitP2StageTrace = false;
     bool emitP2StageSummaryRows = false;
+    int stageTraceFineP = 2;
     // Assembled GMGOperator Chebyshev max-eigenvalue mode: "auto" (default) or "gershgorin".
     std::string assembledChebyshevLambdaMax = "auto";
   };
@@ -309,7 +310,9 @@ namespace
     solver->setSmootherType(strategy.smoother);
 
     auto opStack = solver->getOperatorStack(false);
-    const bool emitVcycleStageTrace = options.emitP2StageTrace && (options.fineH1Order == 2) && (strategy.multigridStrategy == GMGOperator::V_CYCLE);
+    const bool emitVcycleStageTrace = options.emitP2StageTrace &&
+                                       (options.fineH1Order == options.stageTraceFineP) &&
+                                       (strategy.multigridStrategy == GMGOperator::V_CYCLE);
     bool isFinestOperator = true;
     for (auto op : opStack)
     {
@@ -465,9 +468,21 @@ int main(int argc, char *argv[])
         continue;
       }
       
-      if ((arg == "--emitStageTrace") || (arg == "--emitP2StageTrace"))
+      if (arg == "--emitStageTrace")
       {
         options.emitP2StageTrace = true;
+        continue;
+      }
+      if (arg == "--emitP2StageTrace")
+      {
+        options.emitP2StageTrace = true;
+        options.stageTraceFineP = 2;
+        continue;
+      }
+      if (arg == "--emitP4StageTrace")
+      {
+        options.emitP2StageTrace = true;
+        options.stageTraceFineP = 4;
         continue;
       }
       if ((arg == "--noEmitStageTrace") || (arg == "--noEmitP2StageTrace"))
@@ -485,6 +500,12 @@ int main(int argc, char *argv[])
       if (arg.compare(0, emitP2StageTracePrefix.size(), emitP2StageTracePrefix) == 0)
       {
         options.emitP2StageTrace = (std::stoi(arg.substr(emitP2StageTracePrefix.size())) != 0);
+        continue;
+      }
+      const std::string stageTraceFinePPrefix = "--stageTraceFineP=";
+      if (arg.compare(0, stageTraceFinePPrefix.size(), stageTraceFinePPrefix) == 0)
+      {
+        options.stageTraceFineP = std::stoi(arg.substr(stageTraceFinePPrefix.size()));
         continue;
       }
       const std::string assembledChebyshevLambdaMaxPrefix = "--assembledChebyshevLambdaMax=";
@@ -535,7 +556,7 @@ int main(int argc, char *argv[])
           auto gmgSolver = makeStudySolver(solution, strategy, degreeOptions);
           SolverPtr solver = Teuchos::rcp_implicit_cast<Solver>(gmgSolver);
           
-          if ((fineP == 2) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
+          if ((fineP == degreeOptions.stageTraceFineP) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
           {
             solution->initializeStiffnessAndLoad();
             solution->populateStiffnessAndLoad();
@@ -674,7 +695,7 @@ int main(int argc, char *argv[])
             }
           }
           
-          if ((rank == 0) && (fineP == 2) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
+          if ((rank == 0) && (fineP == degreeOptions.stageTraceFineP) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
           {
             auto rhsVector = solution->getRHSVector();
             auto lhsVector = solution->getLHSVector();
@@ -739,7 +760,7 @@ int main(int argc, char *argv[])
             solveStatus = "stopped_unverified";
           }
           
-          if ((rank == 0) && (fineP == 2) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
+          if ((rank == 0) && (fineP == degreeOptions.stageTraceFineP) && degreeOptions.emitP2StageTrace && (strategy.multigridStrategy == GMGOperator::V_CYCLE))
           {
             auto rhsVector = solution->getRHSVector();
             auto lhsVector = solution->getLHSVector();
@@ -796,9 +817,10 @@ int main(int argc, char *argv[])
       output << "  The coarse Chebyshev/Jacobi variants replace the lowest-level coarse solver with\n";
       output << "  a smoother-only GMGSolver on the coarsest p mesh.\n";
       output << "  Failed strategy rows are recorded as study results; they do not make the driver fail.\n";
-      output << "  With --emitP2StageTrace, p=2 V-cycle rows also print one VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE line per finest-level stage\n";
-      output << "  with fields index, level, stage, rhsInfNorm, solutionInfNorm, and residualInfNorm.\n";
-      output << "  Real p=2 V-cycle stage trace rows are emitted during GMGOperator application when enabled.\n";
+      output << "  With --emitStageTrace/--emitP2StageTrace/--emitP4StageTrace, the configured trace-p V-cycle rows also print\n";
+      output << "  one VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE line per finest-level stage with fields\n";
+      output << "  index, level, stage, rhsInfNorm, solutionInfNorm, residualInfNorm, fineP, and basisFamily.\n";
+      output << "  Real V-cycle stage trace rows are emitted during GMGOperator application when enabled; default trace p is 2.\n";
       std::cout << "Wrote Vlasov Gram GMG study results to " << options.outputFile << std::endl;
     }
   }

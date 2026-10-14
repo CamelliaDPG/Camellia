@@ -55,11 +55,10 @@ add_test(NAME TensorVlasovGramMatrixFreePMultigridP4DiagnosticSmoke
     --quick
     --maxIterations=200
     --keepChildOutput=1
-    --includeDenseFineMatrixDiagnostics=1
     --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-p4-diagnostic-smoke.txt)
 set_tests_properties(TensorVlasovGramMatrixFreePMultigridP4DiagnosticSmoke PROPERTIES
-  PASS_REGULAR_EXPRESSION "P4_PMG_JACOBI_CHEBYSHEV_COARSE_RESULT.*pMultigridLevels=3.*pLevelSchedule=4->2->1"
-  FAIL_REGULAR_EXPRESSION "P4_PMG_JACOBI_CHEBYSHEV_COARSE_RESULT.*status=converged iterations=1 ")
+  PASS_REGULAR_EXPRESSION "P4_PMG_FINEWT_RESULT.*strategy=pmg-chebyshev-smoother-direct-coarse.*matrixFreeGMGStageTrace=0.*pMultigridLevels=3.*pLevelSchedule=4->2->1"
+  FAIL_REGULAR_EXPRESSION "P4_PMG_FINEWT_RESULT.*strategy=pmg-chebyshev-smoother-direct-coarse.*status=converged iterations=1 ")
 
 add_test(NAME TensorVlasovGramMatrixFreeGMGStageTraceSmoke
   COMMAND $<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
@@ -72,6 +71,18 @@ add_test(NAME TensorVlasovGramMatrixFreeGMGStageTraceSmoke
     --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-stage-trace-smoke.txt)
 set_tests_properties(TensorVlasovGramMatrixFreeGMGStageTraceSmoke PROPERTIES
   PASS_REGULAR_EXPRESSION "P2_PMG_FINEWT_RESULT.*matrixFreeGMGStageTrace=1 matrixFreeGMGStageTraceEntries=[1-9][0-9]*")
+
+add_test(NAME TensorVlasovGramMatrixFreeGMGStageTraceP4Smoke
+  COMMAND $<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
+    --fineH1Order=4
+    --quick
+    --maxIterations=20
+    --matrixFreeGMGStageTrace=1
+    --keepChildOutput=1
+    --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-p4-stage-trace-smoke.txt)
+set_tests_properties(TensorVlasovGramMatrixFreeGMGStageTraceP4Smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "P4_PMG_FINEWT_RESULT.*strategy=pmg-chebyshev-smoother-direct-coarse.*matrixFreeGMGStageTrace=1 matrixFreeGMGStageTraceEntries=[1-9][0-9]*.*pLevelSchedule=4->2->1")
+
 add_test(NAME TensorVlasovGramAssembledGMGP2TraceSmoke
   COMMAND $<TARGET_FILE:VlasovGramGMGStudyDriver>
     --fineH1Order=2
@@ -91,6 +102,17 @@ add_test(NAME TensorVlasovGramGMGTraceReadinessCompare
     -DMATRIX_FREE_DRIVER=$<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
     -DASSEMBLED_DRIVER=$<TARGET_FILE:VlasovGramGMGStudyDriver>
     -DTRACE_WORK_DIR=${CMAKE_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/CompareVlasovGMGTraceReadinessStandalone5.cmake)
+
+add_test(NAME TensorVlasovGramGMGTraceReadinessCompareP4
+  COMMAND ${CMAKE_COMMAND}
+    -DMATRIX_FREE_DRIVER=$<TARGET_FILE:VlasovGramMatrixFreeStudyDriver>
+    -DASSEMBLED_DRIVER=$<TARGET_FILE:VlasovGramGMGStudyDriver>
+    -DTRACE_WORK_DIR=${CMAKE_BINARY_DIR}
+    -DTRACE_FINE_P=4
+    -DTRACE_MATRIX_FREE_MAX_ITERATIONS=20
+    -DTRACE_ASSEMBLED_MAX_ITERATIONS=5
+    -DTRACE_MAX_ASSEMBLED_ENTRIES=30000000
     -P ${CMAKE_CURRENT_SOURCE_DIR}/CompareVlasovGMGTraceReadinessStandalone5.cmake)
 
 add_test(NAME TensorH1GramPAMatrixDriverSmoke
