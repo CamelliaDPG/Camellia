@@ -40,6 +40,7 @@ namespace
     bool keepChildOutput = false;
     bool pMultigridFineWeightSweep = false;
     bool matrixFreeGMGStageTrace = false;
+    bool includeDenseFineMatrixDiagnostics = false;
   };
 
   struct Strategy
@@ -54,6 +55,7 @@ namespace
     int chebyshevMaxEigenIterations = 10;
     double fineSmootherWeight = 1.0;
     bool supported = true;
+    bool requiresDenseFineMatrix = false;
   };
 
   struct DriverRun
@@ -140,7 +142,7 @@ namespace
                           8, 30.0, 10, 1.0, true});
     strategies.push_back({"pmg-jacobi-smoother-chebyshev-coarse",
                           "gmres-pmultigrid-jacobi-chebyshev", "V_CYCLE", "POINT_JACOBI", "chebyshev",
-                          8, 30.0, 10, 1.0, true});
+                          8, 30.0, 10, 1.0, true, true});
     strategies.push_back({"pmg-chebyshev-smoother-jacobi-coarse",
                           "pmultigrid-chebyshev-jacobi-coarse", "V_CYCLE", "CHEBYSHEV", "jacobi",
                           8, 30.0, 10, 1.0, false});
@@ -308,6 +310,7 @@ namespace
       else if (key == "keepChildOutput") options.keepChildOutput = parseBoolValue(value);
       else if (key == "pMultigridFineWeightSweep") options.pMultigridFineWeightSweep = parseBoolValue(value);
       else if ((key == "matrixFreeGMGStageTrace") || (key == "emitMatrixFreeGMGStageTrace")) options.matrixFreeGMGStageTrace = parseBoolValue(value);
+      else if ((key == "includeDenseFineMatrixDiagnostics") || (key == "allowDenseFineMatrixDiagnostics")) options.includeDenseFineMatrixDiagnostics = parseBoolValue(value);
       else throw std::invalid_argument("Unknown option: " + argument);
     }
 
@@ -556,6 +559,8 @@ namespace
     out << "  pMultigridChebyshevLambdaMax: " << options.pMultigridChebyshevLambdaMax
         << " (auto = Ifpack2 power iteration with strategy chebyshevMaxEigenIterations; gershgorin = max cell Gershgorin bound, no power iteration)\n";
     out << "  matrixFreeGMGStageTrace: " << (options.matrixFreeGMGStageTrace ? "enabled" : "disabled") << "\n";
+    out << "  dense fine-matrix extraction diagnostics: "
+        << (options.includeDenseFineMatrixDiagnostics ? "enabled" : "disabled (production path keeps fine-level smoothing matrix-free)") << "\n";
     out << "  Optional MatrixFreeGMG stage traces are emitted as VLASOV_MATRIX_FREE_GMG_STAGE_TRACE rows.\n";
     out << "  P2_PMG_FINEWT_RESULT includes matrixFreeGMGStageTrace and matrixFreeGMGStageTraceEntries.\n\n";
     out << std::left << std::setw(8) << "p"
@@ -625,12 +630,18 @@ int main(int argc, char *argv[])
             (basisFamily == "nodal") && strategyRequiresPMultigrid(strategy);
         const std::string actualCoarseSolver = actualCoarseSolverForStrategy(strategy);
         const std::string unsupportedPLevelSchedule = (strategy.multigridStrategy == "V_CYCLE") ? "not_run" : "n/a";
-        if (!strategy.supported || nodalPMultigridUnsupported ||
+        const bool denseFineMatrixDiagnosticDisabled =
+            strategy.requiresDenseFineMatrix && !options.includeDenseFineMatrixDiagnostics;
+        if (!strategy.supported || nodalPMultigridUnsupported || denseFineMatrixDiagnosticDisabled ||
             ((strategy.multigridStrategy == "V_CYCLE") && (fineP < 2)))
         {
-          const std::string unsupportedReason = nodalPMultigridUnsupported
-              ? "nodal_pmultigrid_prolongator_not_implemented"
-              : "matrix_free_preconditioner_gap";
+          std::string unsupportedReason;
+          if (nodalPMultigridUnsupported)
+            unsupportedReason = "nodal_pmultigrid_prolongator_not_implemented";
+          else if (denseFineMatrixDiagnosticDisabled)
+            unsupportedReason = "dense_fine_matrix_diagnostic_disabled";
+          else
+            unsupportedReason = "matrix_free_preconditioner_gap";
           output << std::left << std::setw(8) << fineP
                  << std::setw(24) << basisFamily
                  << std::setw(56) << strategy.name

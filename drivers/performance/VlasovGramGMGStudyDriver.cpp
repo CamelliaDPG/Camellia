@@ -391,7 +391,7 @@ namespace
     out << std::left << std::setw(8) << "p"
         << std::setw(24) << "basis"
         << std::setw(56) << "strategy"
-        << std::setw(16) << "status"
+        << std::setw(22) << "status"
         << std::setw(12) << "iterations"
         << std::setw(14) << "relRes"
         << std::setw(14) << "absRes"
@@ -767,7 +767,7 @@ int main(int argc, char *argv[])
             output << std::left << std::setw(8) << fineP
             << std::setw(24) << degreeOptions.basisFamily
             << std::setw(56) << strategy.name
-            << std::setw(16) << solveStatus
+            << std::setw(22) << solveStatus
             << std::setw(12) << iterations
             << std::setw(14) << std::setprecision(6) << std::scientific << relativeResidual
             << std::setw(14) << residualInfNorm

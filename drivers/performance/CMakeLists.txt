@@ -55,6 +55,7 @@ add_test(NAME TensorVlasovGramMatrixFreePMultigridP4DiagnosticSmoke
     --quick
     --maxIterations=200
     --keepChildOutput=1
+    --includeDenseFineMatrixDiagnostics=1
     --outputFile=${CMAKE_BINARY_DIR}/vlasov-gram-matrix-free-p4-diagnostic-smoke.txt)
 set_tests_properties(TensorVlasovGramMatrixFreePMultigridP4DiagnosticSmoke PROPERTIES
   PASS_REGULAR_EXPRESSION "P4_PMG_JACOBI_CHEBYSHEV_COARSE_RESULT.*pMultigridLevels=3.*pLevelSchedule=4->2->1"
