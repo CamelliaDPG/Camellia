@@ -631,6 +631,12 @@ int main(int argc, char *argv[])
                        << " gershgorinLambdaMax=" << gershgorinLambdaMax
                        << " ratio=" << boundsRatio
                        << " lambdaMaxMode=" << finestGMGOperator->getChebyshevMaxEigenvalueMode()
+                       << " ifpack2EigenAnalysisType=power_method"
+                       << " ifpack2ZeroStartingSolution=1"
+                       << " ifpack2ComputeSpectralRadius=1"
+                       << " ifpack2EigenvalueMaxIterations=" << ((finestGMGOperator->getChebyshevMaxEigenvalueMode() == "gershgorin") ? 0 : strategy.chebyshevMaxEigenIterations)
+                       << " ifpack2Degree=" << strategy.chebyshevDegree
+                       << " ifpack2Ratio=" << strategy.chebyshevRatio
                        << std::endl;
                 output.precision(savedBoundsPrecision);
               }

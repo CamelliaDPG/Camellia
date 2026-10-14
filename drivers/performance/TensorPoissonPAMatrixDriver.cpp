@@ -14,6 +14,7 @@
 #include "RHS.h"
 #include "Solution.h"
 #include "TensorPAMatrixTpetraAdapters.hpp"
+#include "TensorTpetraRowMatrixDiagnostics.hpp"
 #include "VarFactory.h"
 
 #include <Intrepid2_CellGeometryTestUtils.hpp>
@@ -2331,29 +2332,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
     Scalar computeFineRowMatrixGershgorinLambdaMax(const Teuchos::RCP<const TpetraRowMatrix> &rowMatrix) const
     {
-      if (rowMatrix.is_null())
-        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner row-matrix Gershgorin bound requires a non-null RowMatrix");
-      TpetraVector diagonal(map_);
-      rowMatrix->getLocalDiagCopy(diagonal);
-      auto diagonalHost = diagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
-      TpetraRowMatrix::local_inds_host_view_type rowIndices;
-      TpetraRowMatrix::values_host_view_type rowValues;
-      Scalar localLambdaMax = Scalar(0.0);
-      const size_t localRows = rowMatrix->getLocalNumRows();
-      for (size_t row=0; row<localRows; row++)
-      {
-        const Scalar diagonalValue = diagonalHost(row,0);
-        if (std::abs(diagonalValue) <= std::numeric_limits<Scalar>::epsilon())
-          throw std::runtime_error("LocalPMultigridTpetraPreconditioner row-matrix Gershgorin bound encountered a zero diagonal entry");
-        rowMatrix->getLocalRowView(static_cast<TpetraRowMatrix::local_ordinal_type>(row), rowIndices, rowValues);
-        Scalar rowBound = Scalar(0.0);
-        for (size_t entry=0; entry<rowValues.extent(0); entry++)
-          rowBound += std::abs(rowValues(entry) / diagonalValue);
-        localLambdaMax = std::max(localLambdaMax, rowBound);
-      }
-      Scalar lambdaMax = localLambdaMax;
-      Teuchos::reduceAll<int, Scalar>(*map_->getComm(), Teuchos::REDUCE_MAX, localLambdaMax, Teuchos::outArg(lambdaMax));
-      return lambdaMax;
+      return Camellia::tensorTpetraRowMatrixDInvAGershgorinLambdaMax<TpetraRowMatrix>(
+          rowMatrix,
+          "LocalPMultigridTpetraPreconditioner row-matrix Gershgorin bound");
     }
 
   public:
@@ -2440,6 +2421,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         Teuchos::ParameterList smootherParams;
         smootherParams.set("chebyshev: degree", smootherIterations_);
         smootherParams.set("chebyshev: ratio eigenvalue", ratio);
+        smootherParams.set("eigen-analysis: type", "power method");
+        smootherParams.set("chebyshev: zero starting solution", true);
+        smootherParams.set("chebyshev: compute spectral radius", true);
         if (chebyshevLambdaMaxMode_ == "gershgorin")
         {
           // Deterministic dense-free Gershgorin bound for D^-1 A and no Ifpack2 power iteration.
@@ -2618,6 +2602,12 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           << " lambdaMaxMode=" << chebyshevLambdaMaxMode_
           << " rowMatrixGershgorinLambdaMax=" << rowMatrixGershgorinLambdaMax_
           << " ifpack2LambdaMaxForApply=" << fineIfpack2LambdaMaxForApply()
+          << " ifpack2EigenAnalysisType=power_method"
+          << " ifpack2ZeroStartingSolution=1"
+          << " ifpack2ComputeSpectralRadius=1"
+          << " ifpack2EigenvalueMaxIterations=" << ((useIfpack2FineSmoother_ && (chebyshevLambdaMaxMode_ == "gershgorin")) ? 0 : chebyshevEigenMaxIterations_)
+          << " ifpack2Degree=" << smootherIterations_
+          << " ifpack2Ratio=" << (Scalar(1.0) / smootherLowerFraction_)
           << std::endl;
       out.precision(savedPrecision);
     }

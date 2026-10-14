@@ -10,6 +10,7 @@
 //
 
 #include "GMGOperator.h"
+#include "TensorTpetraRowMatrixDiagnostics.hpp"
 
 #include "BasisFactory.h"
 #include "DofOrdering.h"
@@ -2558,38 +2559,20 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
   _fineSmootherGershgorinBound = -1.0;
   WallTimer smootherSetupTimer;
 
+  using RowMatrix = Tpetra::RowMatrix<Scalar>;
+
   // Gershgorin bound max_i sum_j |a_ij|/|a_ii| of D^-1 A (global max over ranks); -1 when no row has a nonzero diagonal.
   auto computeFineGershgorinBound = [](TMatrixPtr<double> matrix) -> double
   {
-    using GershgorinLocalOrdinal = typename TMatrix<Scalar>::local_ordinal_type;
-    const auto gershgorinRowMap = matrix->getRowMap();
-    const auto gershgorinColMap = matrix->getColMap();
-    const size_t gershgorinMaxRowEntries = matrix->getLocalMaxNumRowEntries();
-    typename TMatrix<Scalar>::nonconst_local_inds_host_view_type gershgorinIndices("GMGOperator Gershgorin row indices", gershgorinMaxRowEntries);
-    typename TMatrix<Scalar>::nonconst_values_host_view_type gershgorinValues("GMGOperator Gershgorin row values", gershgorinMaxRowEntries);
-    double localGershgorinBound = -1.0;
-    const size_t gershgorinLocalRows = matrix->getLocalNumRows();
-    for (size_t row=0; row<gershgorinLocalRows; row++)
-    {
-      size_t numEntries = 0;
-      matrix->getLocalRowCopy(static_cast<GershgorinLocalOrdinal>(row), gershgorinIndices, gershgorinValues, numEntries);
-      const auto globalRow = gershgorinRowMap->getGlobalElement(static_cast<GershgorinLocalOrdinal>(row));
-      double absRowSum = 0.0;
-      double absDiagonal = 0.0;
-      for (size_t entry=0; entry<numEntries; entry++)
-      {
-        const double absValue = std::abs(static_cast<double>(gershgorinValues(entry)));
-        absRowSum += absValue;
-        if (gershgorinColMap->getGlobalElement(gershgorinIndices(entry)) == globalRow) absDiagonal += absValue;
-      }
-      if (absDiagonal > 0.0) localGershgorinBound = std::max(localGershgorinBound, absRowSum / absDiagonal);
-    }
-    double globalGershgorinBound = -1.0;
-    Teuchos::reduceAll(*matrix->getComm(), Teuchos::REDUCE_MAX, 1, &localGershgorinBound, &globalGershgorinBound);
-    return globalGershgorinBound;
+    if (matrix == Teuchos::null) return -1.0;
+    Teuchos::RCP<const RowMatrix> rowMatrix = Teuchos::rcp_implicit_cast<const RowMatrix>(matrix);
+    return Camellia::tensorTpetraRowMatrixDInvAGershgorinLambdaMax<RowMatrix>(
+        rowMatrix,
+        "GMGOperator fine smoother Gershgorin bound",
+        false,
+        -1.0);
   };
   
-  using RowMatrix = Tpetra::RowMatrix<Scalar>;
   
   SmootherChoice choice = _smootherType;
 
@@ -2732,6 +2715,9 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
       List.set("chebyshev: ratio eigenvalue", _chebyshevEigenAutocomputeRatio);
       List.set("chebyshev: eigenvalue max iterations",_chebyshevMaxEigenIterations);
       List.set("chebyshev: degree",_chebyshevDegree);
+      List.set("eigen-analysis: type", "power method");
+      List.set("chebyshev: zero starting solution", true);
+      List.set("chebyshev: compute spectral radius", true);
       if ((_chebyshevMaxEigenvalueMode == "gershgorin") && (fineStiffnessMatrix != Teuchos::null))
       {
         // Opt-in controlled experiment: match the matrix-free side, lambdaMax = Gershgorin bound of D^-1 A.
