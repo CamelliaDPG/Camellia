@@ -497,8 +497,10 @@ message(STATUS "GMG trace gershgorin-lambda experiment summary: ${GMG_GERSHGORIN
 # Main auto-vs-auto pairs: tolerance-based agreement using the same 1e-8 relative helper.
 set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "all_agree")
 set(GMG_AUTO_LAMBDA_ALL_AGREE 1)
-set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW "none")
-set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW "none")
+set(GMG_AUTO_LAMBDA_RELATIVE_DISAGREEMENT_COUNT 0)
+set(GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT "none")
+set(GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_ASSEMBLED_ROW "none")
+set(GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_MATRIX_FREE_ROW "none")
 foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
   string(MAKE_C_IDENTIFIER "${stage_label}" stage_key)
   foreach(metric IN ITEMS rhsInfNorm solutionInfNorm residualInfNorm)
@@ -508,31 +510,33 @@ foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
     gmg_relative_agree("${auto_assembled_value}" "${auto_matrix_free_value}" auto_pair_agree)
     message(STATUS "GMG trace auto-lambda comparison: stage=${stage_label};metric=${metric};assembled=${auto_assembled_value};matrix_free=${auto_matrix_free_value};agree=${auto_pair_agree}")
     if(auto_pair_agree EQUAL 0)
+      math(EXPR GMG_AUTO_LAMBDA_RELATIVE_DISAGREEMENT_COUNT "${GMG_AUTO_LAMBDA_RELATIVE_DISAGREEMENT_COUNT} + 1")
       set(GMG_AUTO_LAMBDA_ALL_AGREE 0)
-      if(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY STREQUAL "all_agree")
-        set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "first_disagreement=stage:${stage_label},metric:${metric},assembled:${auto_assembled_value},matrix_free:${auto_matrix_free_value}")
+      if(GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT STREQUAL "none")
+        set(GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT "stage=${stage_label};metric=${metric};assembled=${auto_assembled_value};matrix_free=${auto_matrix_free_value}")
+        set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "first_relative_disagreement=${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT}")
         set(auto_assembled_raw_row_var "ASSEMBLED_STAGE_METRIC_${stage_key}_rawRow")
         set(auto_matrix_free_raw_row_var "MATRIX_FREE_STAGE_METRIC_${stage_key}_rawRow")
         if(DEFINED ${auto_assembled_raw_row_var})
-          set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW "${${auto_assembled_raw_row_var}}")
+          set(GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_ASSEMBLED_ROW "${${auto_assembled_raw_row_var}}")
         endif()
         if(DEFINED ${auto_matrix_free_raw_row_var})
-          set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW "${${auto_matrix_free_raw_row_var}}")
+          set(GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_MATRIX_FREE_ROW "${${auto_matrix_free_raw_row_var}}")
         endif()
       endif()
     endif()
   endforeach()
 endforeach()
-message(STATUS "GMG trace auto-lambda comparison summary: ${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}")
+message(STATUS "GMG trace auto-lambda comparison summary: ${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; relative_disagreements=${GMG_AUTO_LAMBDA_RELATIVE_DISAGREEMENT_COUNT}")
 
-if((GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0) AND (NOT GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1) AND (NOT GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE EQUAL 1))
+if((GMG_AUTO_LAMBDA_RELATIVE_DISAGREEMENT_COUNT GREATER 0) AND (NOT GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE EQUAL 1))
   message(STATUS
-    "GMG trace numerical first mismatch retained as readiness diagnostic: strategy=${TRACE_STRATEGY}; ${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; common_stage_labels=${COMMON_GMG_STAGE_LABELS}; assembled_bounds=${ASSEMBLED_CHEBYSHEV_BOUNDS_TAIL}; matrix_free_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}")
+    "GMG trace first relative disagreement retained as readiness diagnostic: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; ${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT}; relative_disagreements=${GMG_AUTO_LAMBDA_RELATIVE_DISAGREEMENT_COUNT}; exact_value_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; common_stage_labels=${COMMON_GMG_STAGE_LABELS}; assembled_bounds=${ASSEMBLED_CHEBYSHEV_BOUNDS_TAIL}; matrix_free_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}")
 elseif(GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0)
   if(GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1)
-    message(STATUS "GMG trace stages agree within tolerance: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}")
+    message(STATUS "GMG trace stages agree within tolerance: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_value_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_value_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}")
   elseif(GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE EQUAL 1)
-    message(STATUS "GMG trace stages agree in deterministic gershgorin-lambda direct-coarse experiment: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}")
+    message(STATUS "GMG trace stages agree in deterministic gershgorin-lambda direct-coarse experiment: strategy=${TRACE_STRATEGY}; relative_tolerance=1e-8; exact_value_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_exact_value_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}; gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}")
   endif()
 endif()
 
@@ -544,18 +548,19 @@ assembled_vcycle_stage_rows=${ASSEMBLED_VCYCLE_STAGE_ROW_COUNT}
 required_common_stage_labels=Initial;PreSmooth;CoarseCorrection;PostSmooth
 common_stage_labels=${COMMON_GMG_STAGE_LABELS}
 compared_stage_metrics=${COMPARED_GMG_STAGE_METRIC_COUNT}
-numerical_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}
-first_numerical_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}
-first_numerical_mismatch_assembled_row=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH_ASSEMBLED_ROW}
-first_numerical_mismatch_matrix_free_row=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH_MATRIX_FREE_ROW}
+relative_tolerance=1e-8
+relative_disagreements=${GMG_AUTO_LAMBDA_RELATIVE_DISAGREEMENT_COUNT}
+first_relative_disagreement=${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT}
+first_relative_disagreement_assembled_row=${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_ASSEMBLED_ROW}
+first_relative_disagreement_matrix_free_row=${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_MATRIX_FREE_ROW}
+exact_value_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}
+first_exact_value_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}
 assembled_chebyshev_bounds=${ASSEMBLED_CHEBYSHEV_BOUNDS_TAIL}
 matrix_free_chebyshev_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}
 gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}
 assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}
 matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}
 auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}
-auto_lambda_first_divergent_assembled_row=${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW}
-auto_lambda_first_divergent_matrix_free_row=${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW}
 matrix_free_trace_file=${MATRIX_FREE_TRACE_FILE}
 assembled_trace_file=${ASSEMBLED_TRACE_FILE}
 rhs_inputs=assembled:RHS::addTerm(Function::constant(1.0)*w),basis=Intrepid2HierarchicalHGRAD,massWeight=1,stiffness=VlasovGraphLfLw;matrix_free:--inverseRhs=constant-test-function,--basisMode=hgrad,--operator=vlasov-graph-norm-1d1t2v,--massWeight=1,--stiffnessWeight=1
@@ -565,5 +570,5 @@ message(STATUS "GMG trace comparison diagnostics written: ${STAGE_COMPARISON_FIL
 message(STATUS "GMG trace p=${TRACE_FINE_P} stage comparison diagnostics:\n${GMG_TRACE_COMPARISON_SUMMARY}")
 if(NOT GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1)
   message(STATUS
-    "GMG trace first divergent auto-lambda rows:\nassembled: ${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW}\nmatrix_free: ${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW}")
+    "GMG trace first relative disagreement rows:\nassembled: ${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_ASSEMBLED_ROW}\nmatrix_free: ${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_MATRIX_FREE_ROW}")
 endif()
