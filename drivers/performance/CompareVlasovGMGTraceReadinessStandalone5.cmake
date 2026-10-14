@@ -18,11 +18,14 @@ endif()
 if(NOT DEFINED TRACE_FINE_P)
   set(TRACE_FINE_P 2)
 endif()
+if(NOT DEFINED TRACE_MAX_ITERATIONS)
+  set(TRACE_MAX_ITERATIONS 20)
+endif()
 if(NOT DEFINED TRACE_MATRIX_FREE_MAX_ITERATIONS)
-  set(TRACE_MATRIX_FREE_MAX_ITERATIONS 20)
+  set(TRACE_MATRIX_FREE_MAX_ITERATIONS ${TRACE_MAX_ITERATIONS})
 endif()
 if(NOT DEFINED TRACE_ASSEMBLED_MAX_ITERATIONS)
-  set(TRACE_ASSEMBLED_MAX_ITERATIONS 5)
+  set(TRACE_ASSEMBLED_MAX_ITERATIONS ${TRACE_MAX_ITERATIONS})
 endif()
 if(NOT DEFINED TRACE_MAX_ASSEMBLED_ENTRIES)
   set(TRACE_MAX_ASSEMBLED_ENTRIES 10000)
@@ -33,7 +36,8 @@ set(MATRIX_FREE_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix
 set(ASSEMBLED_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-assembled.txt")
 set(ASSEMBLED_GERSHGORIN_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-assembled-gershgorin.txt")
 set(MATRIX_FREE_GERSHGORIN_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix-free-gershgorin.txt")
-file(REMOVE "${MATRIX_FREE_TRACE_FILE}" "${ASSEMBLED_TRACE_FILE}" "${ASSEMBLED_GERSHGORIN_TRACE_FILE}" "${MATRIX_FREE_GERSHGORIN_TRACE_FILE}")
+set(STAGE_COMPARISON_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-p${TRACE_FINE_P}-stage-comparison.txt")
+file(REMOVE "${MATRIX_FREE_TRACE_FILE}" "${ASSEMBLED_TRACE_FILE}" "${ASSEMBLED_GERSHGORIN_TRACE_FILE}" "${MATRIX_FREE_GERSHGORIN_TRACE_FILE}" "${STAGE_COMPARISON_FILE}")
 
 execute_process(
   COMMAND "${MATRIX_FREE_DRIVER}"
@@ -253,6 +257,7 @@ function(record_gmg_stage_metrics TRACE_TEXT ROW_PREFIX OUT_PREFIX)
       endif()
       set(${OUT_PREFIX}_${stage_key}_${metric} "${CMAKE_MATCH_1}" PARENT_SCOPE)
     endforeach()
+    set(${OUT_PREFIX}_${stage_key}_rawRow "${trace_line}" PARENT_SCOPE)
     list(APPEND seen_stage_labels "${stage_label}")
     math(EXPR recorded_metric_row_count "${recorded_metric_row_count} + 1")
   endforeach()
@@ -269,6 +274,8 @@ endif()
 set(COMPARED_GMG_STAGE_METRIC_COUNT 0)
 set(GMG_STAGE_NUMERICAL_MISMATCH_COUNT 0)
 set(GMG_STAGE_NUMERICAL_FIRST_MISMATCH "none")
+set(GMG_STAGE_NUMERICAL_FIRST_MISMATCH_ASSEMBLED_ROW "none")
+set(GMG_STAGE_NUMERICAL_FIRST_MISMATCH_MATRIX_FREE_ROW "none")
 foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
   string(MAKE_C_IDENTIFIER "${stage_label}" stage_key)
   foreach(metric IN ITEMS rhsInfNorm solutionInfNorm residualInfNorm)
@@ -284,6 +291,14 @@ foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
       math(EXPR GMG_STAGE_NUMERICAL_MISMATCH_COUNT "${GMG_STAGE_NUMERICAL_MISMATCH_COUNT} + 1")
       if(GMG_STAGE_NUMERICAL_FIRST_MISMATCH STREQUAL "none")
         set(GMG_STAGE_NUMERICAL_FIRST_MISMATCH "stage=${stage_label};metric=${metric};assembled=${${assembled_metric_var}};matrix_free=${${matrix_free_metric_var}}")
+        set(assembled_raw_row_var "ASSEMBLED_STAGE_METRIC_${stage_key}_rawRow")
+        set(matrix_free_raw_row_var "MATRIX_FREE_STAGE_METRIC_${stage_key}_rawRow")
+        if(DEFINED ${assembled_raw_row_var})
+          set(GMG_STAGE_NUMERICAL_FIRST_MISMATCH_ASSEMBLED_ROW "${${assembled_raw_row_var}}")
+        endif()
+        if(DEFINED ${matrix_free_raw_row_var})
+          set(GMG_STAGE_NUMERICAL_FIRST_MISMATCH_MATRIX_FREE_ROW "${${matrix_free_raw_row_var}}")
+        endif()
       endif()
     endif()
     math(EXPR COMPARED_GMG_STAGE_METRIC_COUNT "${COMPARED_GMG_STAGE_METRIC_COUNT} + 1")
@@ -474,6 +489,8 @@ message(STATUS "GMG trace gershgorin-lambda experiment summary: ${GMG_GERSHGORIN
 # Main auto-vs-auto pairs: tolerance-based agreement using the same 1e-8 relative helper.
 set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "all_agree")
 set(GMG_AUTO_LAMBDA_ALL_AGREE 1)
+set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW "none")
+set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW "none")
 foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
   string(MAKE_C_IDENTIFIER "${stage_label}" stage_key)
   foreach(metric IN ITEMS rhsInfNorm solutionInfNorm residualInfNorm)
@@ -486,6 +503,14 @@ foreach(stage_label IN LISTS COMMON_GMG_STAGE_LABELS)
       set(GMG_AUTO_LAMBDA_ALL_AGREE 0)
       if(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY STREQUAL "all_agree")
         set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "first_disagreement=stage:${stage_label},metric:${metric},assembled:${auto_assembled_value},matrix_free:${auto_matrix_free_value}")
+        set(auto_assembled_raw_row_var "ASSEMBLED_STAGE_METRIC_${stage_key}_rawRow")
+        set(auto_matrix_free_raw_row_var "MATRIX_FREE_STAGE_METRIC_${stage_key}_rawRow")
+        if(DEFINED ${auto_assembled_raw_row_var})
+          set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW "${${auto_assembled_raw_row_var}}")
+        endif()
+        if(DEFINED ${auto_matrix_free_raw_row_var})
+          set(GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW "${${auto_matrix_free_raw_row_var}}")
+        endif()
       endif()
     endif()
   endforeach()
@@ -503,5 +528,34 @@ elseif(GMG_STAGE_NUMERICAL_MISMATCH_COUNT GREATER 0)
   endif()
 endif()
 
-message(STATUS
-  "GMG trace p=${TRACE_FINE_P} stage comparison: strategy=${TRACE_STRATEGY}; matrix_free_stage_rows=${MATRIX_FREE_TRACE_ROW_COUNT}; assembled_vcycle_stage_rows=${ASSEMBLED_VCYCLE_STAGE_ROW_COUNT}; required_common_stage_labels=Initial;PreSmooth;CoarseCorrection;PostSmooth; compared_stage_metrics=${COMPARED_GMG_STAGE_METRIC_COUNT}; numerical_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}; first_numerical_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}; rhs_inputs=assembled:RHS::addTerm(Function::constant(1.0)*w),basis=Intrepid2HierarchicalHGRAD,massWeight=1,stiffness=VlasovGraphLfLw;matrix_free:--inverseRhs=constant-test-function,--basisMode=hgrad,--operator=vlasov-graph-norm-1d1t2v,--massWeight=1,--stiffnessWeight=1")
+set(GMG_TRACE_COMPARISON_SUMMARY
+"trace_fine_p=${TRACE_FINE_P}
+strategy=${TRACE_STRATEGY}
+matrix_free_stage_rows=${MATRIX_FREE_TRACE_ROW_COUNT}
+assembled_vcycle_stage_rows=${ASSEMBLED_VCYCLE_STAGE_ROW_COUNT}
+required_common_stage_labels=Initial;PreSmooth;CoarseCorrection;PostSmooth
+common_stage_labels=${COMMON_GMG_STAGE_LABELS}
+compared_stage_metrics=${COMPARED_GMG_STAGE_METRIC_COUNT}
+numerical_mismatches=${GMG_STAGE_NUMERICAL_MISMATCH_COUNT}
+first_numerical_mismatch=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH}
+first_numerical_mismatch_assembled_row=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH_ASSEMBLED_ROW}
+first_numerical_mismatch_matrix_free_row=${GMG_STAGE_NUMERICAL_FIRST_MISMATCH_MATRIX_FREE_ROW}
+assembled_chebyshev_bounds=${ASSEMBLED_CHEBYSHEV_BOUNDS_TAIL}
+matrix_free_chebyshev_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}
+gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}
+assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}
+matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}
+auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}
+auto_lambda_first_divergent_assembled_row=${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW}
+auto_lambda_first_divergent_matrix_free_row=${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW}
+matrix_free_trace_file=${MATRIX_FREE_TRACE_FILE}
+assembled_trace_file=${ASSEMBLED_TRACE_FILE}
+rhs_inputs=assembled:RHS::addTerm(Function::constant(1.0)*w),basis=Intrepid2HierarchicalHGRAD,massWeight=1,stiffness=VlasovGraphLfLw;matrix_free:--inverseRhs=constant-test-function,--basisMode=hgrad,--operator=vlasov-graph-norm-1d1t2v,--massWeight=1,--stiffnessWeight=1
+")
+file(WRITE "${STAGE_COMPARISON_FILE}" "${GMG_TRACE_COMPARISON_SUMMARY}")
+message(STATUS "GMG trace comparison diagnostics written: ${STAGE_COMPARISON_FILE}")
+message(STATUS "GMG trace p=${TRACE_FINE_P} stage comparison diagnostics:\n${GMG_TRACE_COMPARISON_SUMMARY}")
+if(NOT GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1)
+  message(STATUS
+    "GMG trace first divergent auto-lambda rows:\nassembled: ${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_ASSEMBLED_ROW}\nmatrix_free: ${GMG_AUTO_LAMBDA_FIRST_DIVERGENT_MATRIX_FREE_ROW}")
+endif()
