@@ -75,9 +75,9 @@ if(NOT ASSEMBLED_RESULT EQUAL 0)
     "assembled GMG diagnostic producer failed with ${ASSEMBLED_RESULT}\nstdout:\n${ASSEMBLED_STDOUT}\nstderr:\n${ASSEMBLED_STDERR}")
 endif()
 
-# Controlled experiment, matrix-free side: opt into the local diagnostic fine smoother so
-# lambdaMax can still use the dense per-cell Gershgorin bound while the default Ifpack2 PMG path
-# remains matrix-free and does not extract/store a dense fine matrix.
+# Controlled experiment, matrix-free side: keep the default Ifpack2 fine smoother and
+# seed its Chebyshev lambdaMax/min eigenvalue bounds from a dense-free RowMatrix
+# Gershgorin bound of D^-1 A (no Ifpack2 power iteration).
 execute_process(
   COMMAND "${MATRIX_FREE_DRIVER}"
     --fineH1Order=${TRACE_FINE_P}
@@ -87,7 +87,6 @@ execute_process(
     --matrixFreeGMGStageTrace=1
     --keepChildOutput=1
     --maxAssembledEntries=${TRACE_MAX_ASSEMBLED_ENTRIES}
-    --pMultigridFineSmootherImpl=local
     --pMultigridChebyshevLambdaMax=gershgorin
     --outputFile=${MATRIX_FREE_GERSHGORIN_TRACE_FILE}
   RESULT_VARIABLE MATRIX_FREE_GERSHGORIN_RESULT

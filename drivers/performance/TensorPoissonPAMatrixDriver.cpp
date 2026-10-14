@@ -2236,6 +2236,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     std::vector<Scalar> fineMatrices_;
     std::vector<Scalar> fineInverseDiagonal_;
     std::vector<Scalar> fineLambdaMaxByCell_;
+    Scalar rowMatrixGershgorinLambdaMax_ = Scalar(-1.0);
     std::string fineMatrixStorageMode_ = "uninitialized";
     std::vector<Scalar> coarseMatrices_;
     std::vector<Scalar> factoredCoarseMatrices_;
@@ -2328,6 +2329,33 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                                          "extractLambdaMaxFromBlockDenseMatrices");
     }
 
+    Scalar computeFineRowMatrixGershgorinLambdaMax(const Teuchos::RCP<const TpetraRowMatrix> &rowMatrix) const
+    {
+      if (rowMatrix.is_null())
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner row-matrix Gershgorin bound requires a non-null RowMatrix");
+      TpetraVector diagonal(map_);
+      rowMatrix->getLocalDiagCopy(diagonal);
+      auto diagonalHost = diagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
+      TpetraRowMatrix::local_inds_host_view_type rowIndices;
+      TpetraRowMatrix::values_host_view_type rowValues;
+      Scalar localLambdaMax = Scalar(0.0);
+      const size_t localRows = rowMatrix->getLocalNumRows();
+      for (size_t row=0; row<localRows; row++)
+      {
+        const Scalar diagonalValue = diagonalHost(row,0);
+        if (std::abs(diagonalValue) <= std::numeric_limits<Scalar>::epsilon())
+          throw std::runtime_error("LocalPMultigridTpetraPreconditioner row-matrix Gershgorin bound encountered a zero diagonal entry");
+        rowMatrix->getLocalRowView(static_cast<TpetraRowMatrix::local_ordinal_type>(row), rowIndices, rowValues);
+        Scalar rowBound = Scalar(0.0);
+        for (size_t entry=0; entry<rowValues.extent(0); entry++)
+          rowBound += std::abs(rowValues(entry) / diagonalValue);
+        localLambdaMax = std::max(localLambdaMax, rowBound);
+      }
+      Scalar lambdaMax = localLambdaMax;
+      Teuchos::reduceAll<int, Scalar>(*map_->getComm(), Teuchos::REDUCE_MAX, localLambdaMax, Teuchos::outArg(lambdaMax));
+      return lambdaMax;
+    }
+
   public:
     LocalPMultigridTpetraPreconditioner(const Teuchos::RCP<const TpetraMap> &map,
                                         const Teuchos::RCP<TpetraOperator> &fineOperator,
@@ -2414,15 +2442,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         smootherParams.set("chebyshev: ratio eigenvalue", ratio);
         if (chebyshevLambdaMaxMode_ == "gershgorin")
         {
-          if (fineLambdaMaxByCell_.empty())
-            throw std::invalid_argument("LocalPMultigridTpetraPreconditioner --pMultigridChebyshevLambdaMax=gershgorin requires --pMultigridFineSmootherImpl=local until row-matrix Gershgorin bounds are available without dense fine extraction");
-          // Mirror GMGOperator: deterministic Gershgorin-style bound and no power iteration.
-          Scalar localLambdaMax = Scalar(0.0);
-          for (const Scalar cellLambdaMax : fineLambdaMaxByCell_) localLambdaMax = std::max(localLambdaMax, cellLambdaMax);
-          Scalar lambdaMax = localLambdaMax;
-          Teuchos::reduceAll<int, Scalar>(*map_->getComm(), Teuchos::REDUCE_MAX, localLambdaMax, Teuchos::outArg(lambdaMax));
-          smootherParams.set("chebyshev: max eigenvalue", lambdaMax);
-          smootherParams.set("chebyshev: min eigenvalue", lambdaMax / ratio);
+          // Deterministic dense-free Gershgorin bound for D^-1 A and no Ifpack2 power iteration.
+          rowMatrixGershgorinLambdaMax_ = computeFineRowMatrixGershgorinLambdaMax(fineRowMatrix);
+          smootherParams.set("chebyshev: max eigenvalue", rowMatrixGershgorinLambdaMax_);
+          smootherParams.set("chebyshev: min eigenvalue", rowMatrixGershgorinLambdaMax_ / ratio);
           smootherParams.set("chebyshev: eigenvalue max iterations", 0);
         }
         else
@@ -2593,6 +2616,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           << " smootherImpl=" << (useIfpack2FineSmoother_ ? "ifpack2" : "local")
           << " fineMatrixMode=" << fineMatrixStorageMode_
           << " lambdaMaxMode=" << chebyshevLambdaMaxMode_
+          << " rowMatrixGershgorinLambdaMax=" << rowMatrixGershgorinLambdaMax_
           << " ifpack2LambdaMaxForApply=" << fineIfpack2LambdaMaxForApply()
           << std::endl;
       out.precision(savedPrecision);
@@ -5354,7 +5378,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("pMultigridChebyshevSmootherIterations", &pMultigridChebyshevSmootherIterations, "Chebyshev pre/post smoother iterations for --inverseDiagnosticAlgorithm=pmultigrid-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherLowerFraction", &pMultigridChebyshevSmootherLowerFraction, "Lower endpoint as a fraction of lambdaMax for high-frequency Chebyshev p-multigrid smoothing.");
     cmdp.setOption("pMultigridFineSmootherImpl", &pMultigridFineSmootherImpl, "Fine p-multigrid Chebyshev smoother implementation: ifpack2 (default; global Ifpack2 Chebyshev on the RowMatrix adapter) or local (hand-written per-cell Chebyshev, kept for diagnostics). The jacobi smoother always uses the local path.");
-    cmdp.setOption("pMultigridChebyshevLambdaMax", &pMultigridChebyshevLambdaMax, "Ifpack2 fine Chebyshev lambdaMax: auto (Ifpack2 power iteration) or gershgorin (max over cells of the local Gershgorin bound; eigenvalue max iterations = 0, mirroring GMGOperator).");
+    cmdp.setOption("pMultigridChebyshevLambdaMax", &pMultigridChebyshevLambdaMax, "Ifpack2 fine Chebyshev lambdaMax: auto (Ifpack2 power iteration) or gershgorin (dense-free RowMatrix Gershgorin bound of D^{-1}A; sets max/min eigenvalue and disables eigenvalue iterations).");
     cmdp.setOption("pMultigridChebyshevEigenMaxIterations", &pMultigridChebyshevEigenMaxIterations, "Ifpack2 'chebyshev: eigenvalue max iterations' for the fine p-multigrid smoother in auto lambdaMax mode.");
     cmdp.setOption("pMultigridFineSmootherWeight", &pMultigridFineSmootherWeight, "Scalar multiplier applied to each fine-level p-multigrid smoother correction; default 1.0 matches GMGOperator's default smoother weight and preserves the current matrix-free diagnostic behavior.");
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
