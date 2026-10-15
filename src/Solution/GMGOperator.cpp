@@ -2557,6 +2557,7 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
   narrate("setUpSmoother()");
   _lastFineChebyshevLambdaMaxForApply = -1.0;
   _fineSmootherGershgorinBound = -1.0;
+  _fineSmootherDeterministicPowerLambdaMax = -1.0;
   WallTimer smootherSetupTimer;
 
   using RowMatrix = Tpetra::RowMatrix<Scalar>;
@@ -2569,6 +2570,19 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
     return Camellia::tensorTpetraRowMatrixDInvAGershgorinLambdaMax<RowMatrix>(
         rowMatrix,
         "GMGOperator fine smoother Gershgorin bound",
+        false,
+        -1.0);
+  };
+
+  auto computeFineDeterministicPowerLambdaMax = [this](TMatrixPtr<double> matrix) -> double
+  {
+    if (matrix == Teuchos::null) return -1.0;
+    Teuchos::RCP<const RowMatrix> rowMatrix = Teuchos::rcp_implicit_cast<const RowMatrix>(matrix);
+    return Camellia::tensorTpetraRowMatrixDInvADeterministicPowerLambdaMax<RowMatrix>(
+        rowMatrix,
+        _chebyshevMaxEigenIterations,
+        1,
+        "GMGOperator fine smoother deterministic power bound",
         false,
         -1.0);
   };
@@ -2771,6 +2785,7 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
     if (fineStiffnessMatrix != Teuchos::null)
     {
       _fineSmootherGershgorinBound = computeFineGershgorinBound(fineStiffnessMatrix);
+      _fineSmootherDeterministicPowerLambdaMax = computeFineDeterministicPowerLambdaMax(fineStiffnessMatrix);
     }
   }
 

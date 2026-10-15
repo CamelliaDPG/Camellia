@@ -157,6 +157,7 @@ private:
   // Diagnostic-only fine smoother bounds recorded in setUpSmoother(); -1 when unavailable.
   double _lastFineChebyshevLambdaMaxForApply = -1.0;
   double _fineSmootherGershgorinBound = -1.0;
+  double _fineSmootherDeterministicPowerLambdaMax = -1.0;
   
   void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
   
@@ -191,6 +192,8 @@ public:
   double lastFineChebyshevLambdaMaxForApply() const { return _lastFineChebyshevLambdaMaxForApply; }
   //! Diagnostic: Gershgorin bound max_i sum_j |a_ij|/|a_ii| of the fine stiffness matrix; -1 when unavailable.
   double fineSmootherGershgorinBound() const { return _fineSmootherGershgorinBound; }
+  //! Diagnostic: deterministic power estimate of rho(D^-1 A) for the fine stiffness matrix; -1 when unavailable.
+  double fineSmootherDeterministicPowerLambdaMax() const { return _fineSmootherDeterministicPowerLambdaMax; }
   //@}
   
   GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,

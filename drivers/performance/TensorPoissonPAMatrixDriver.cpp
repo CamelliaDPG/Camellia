@@ -2238,6 +2238,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     std::vector<Scalar> fineInverseDiagonal_;
     std::vector<Scalar> fineLambdaMaxByCell_;
     Scalar rowMatrixGershgorinLambdaMax_ = Scalar(-1.0);
+    Scalar rowMatrixDeterministicPowerLambdaMax_ = Scalar(-1.0);
     std::string fineMatrixStorageMode_ = "uninitialized";
     std::vector<Scalar> coarseMatrices_;
     std::vector<Scalar> factoredCoarseMatrices_;
@@ -2337,6 +2338,17 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           "LocalPMultigridTpetraPreconditioner row-matrix Gershgorin bound");
     }
 
+    Scalar computeFineRowMatrixDeterministicPowerLambdaMax(const Teuchos::RCP<const TpetraRowMatrix> &rowMatrix) const
+    {
+      return Camellia::tensorTpetraRowMatrixDInvADeterministicPowerLambdaMax<TpetraRowMatrix>(
+          rowMatrix,
+          chebyshevEigenMaxIterations_,
+          1,
+          "LocalPMultigridTpetraPreconditioner row-matrix deterministic power bound",
+          false,
+          Scalar(-1.0));
+    }
+
   public:
     LocalPMultigridTpetraPreconditioner(const Teuchos::RCP<const TpetraMap> &map,
                                         const Teuchos::RCP<TpetraOperator> &fineOperator,
@@ -2412,6 +2424,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         fineInverseDiagonal_ = extractInverseDiagonalFromBlockDenseMatrices(fineMatrices_, cells_, localDofs_);
         fineLambdaMaxByCell_ = extractLambdaMaxFromBlockDenseMatrices(fineMatrices_, fineInverseDiagonal_, cells_, localDofs_);
       }
+      if (!fineRowMatrix.is_null())
+        rowMatrixDeterministicPowerLambdaMax_ = computeFineRowMatrixDeterministicPowerLambdaMax(fineRowMatrix);
+
       if (useIfpack2FineSmoother_)
       {
         if (fineRowMatrix.is_null())
@@ -2601,6 +2616,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           << " fineMatrixMode=" << fineMatrixStorageMode_
           << " lambdaMaxMode=" << chebyshevLambdaMaxMode_
           << " rowMatrixGershgorinLambdaMax=" << rowMatrixGershgorinLambdaMax_
+          << " deterministicPowerLambdaMax=" << rowMatrixDeterministicPowerLambdaMax_
+          << " deterministicPowerIterations=" << chebyshevEigenMaxIterations_
           << " ifpack2LambdaMaxForApply=" << fineIfpack2LambdaMaxForApply()
           << " ifpack2EigenAnalysisType=power_method"
           << " ifpack2ZeroStartingSolution=1"

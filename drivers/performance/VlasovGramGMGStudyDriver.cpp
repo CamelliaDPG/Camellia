@@ -621,6 +621,7 @@ int main(int argc, char *argv[])
               {
                 const double lambdaMaxForApply = finestGMGOperator->lastFineChebyshevLambdaMaxForApply();
                 const double gershgorinLambdaMax = finestGMGOperator->fineSmootherGershgorinBound();
+                const double deterministicPowerLambdaMax = finestGMGOperator->fineSmootherDeterministicPowerLambdaMax();
                 const double boundsRatio = ((lambdaMaxForApply > 0.0) && (gershgorinLambdaMax > 0.0)) ? (lambdaMaxForApply / gershgorinLambdaMax) : -1.0;
                 const std::streamsize savedBoundsPrecision = output.precision();
                 output << "VLASOV_ASSEMBLED_GMG_CHEBYSHEV_BOUNDS"
@@ -629,6 +630,8 @@ int main(int argc, char *argv[])
                        << " basisFamily=" << basisFamily
                        << " lambdaMaxForApply=" << std::setprecision(16) << lambdaMaxForApply
                        << " gershgorinLambdaMax=" << gershgorinLambdaMax
+                       << " deterministicPowerLambdaMax=" << deterministicPowerLambdaMax
+                       << " deterministicPowerIterations=" << strategy.chebyshevMaxEigenIterations
                        << " ratio=" << boundsRatio
                        << " lambdaMaxMode=" << finestGMGOperator->getChebyshevMaxEigenvalueMode()
                        << " ifpack2EigenAnalysisType=power_method"
