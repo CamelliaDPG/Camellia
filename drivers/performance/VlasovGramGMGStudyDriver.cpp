@@ -661,6 +661,24 @@ int main(int argc, char *argv[])
                          << " basisFamily=" << basisFamily
                          << std::endl;
                 }
+                const auto &coarseVcycleStageTrace = finestGMGOperator->lastCoarseVcycleStageTrace();
+                for (size_t stageIndex=0; stageIndex<coarseVcycleStageTrace.size(); stageIndex++)
+                {
+                  const auto &traceEntry = coarseVcycleStageTrace[stageIndex];
+                  output << "VLASOV_ASSEMBLED_GMG_COARSE_VCYCLE_STAGE"
+                         << " index=" << stageIndex
+                         << " level=" << traceEntry.levelIndex
+                         << " parentLevel=0"
+                         << " parentStage=CoarseCorrection"
+                         << " stage=" << traceEntry.stageName
+                         << " rhsInfNorm=" << std::setprecision(16) << traceEntry.rhsInfNorm
+                         << " solutionInfNorm=" << traceEntry.solutionInfNorm
+                         << " residualInfNorm=" << traceEntry.residualInfNorm
+                         << " strategy=" << strategy.name
+                         << " fineP=" << fineP
+                         << " basisFamily=" << basisFamily
+                         << std::endl;
+                }
                 const auto &coarseCorrectionTrace = finestGMGOperator->lastVcycleCoarseCorrectionTrace();
                 for (size_t traceIndex=0; traceIndex<coarseCorrectionTrace.size(); traceIndex++)
                 {

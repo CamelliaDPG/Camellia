@@ -2260,6 +2260,25 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                               typename TpetraMap::node_type>;
     Teuchos::RCP<FineIfpack2Preconditioner> fineIfpack2Smoother_;
 
+  public:
+    struct RecursiveTraceEntry
+    {
+      int levelIndex = 0;
+      int polynomialDegree = 0;
+      int cellOrdinal = 0;
+      std::string stageName;
+      double rhsInfNorm = 0.0;
+      double solutionInfNorm = 0.0;
+      double residualInfNorm = 0.0;
+      Camellia::TpetraMultiVectorFingerprint rhsFingerprint;
+      Camellia::TpetraMultiVectorFingerprint solutionFingerprint;
+      Camellia::TpetraMultiVectorFingerprint residualFingerprint;
+    };
+
+  private:
+    bool emitRecursiveTrace_ = false;
+    mutable std::vector<RecursiveTraceEntry> lastRecursiveTrace_;
+
     static std::vector<Scalar> denseCellMatrix(const std::vector<Scalar> &matrices,
                                                const int cellOrdinal,
                                                const int rows)
@@ -2272,6 +2291,41 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                const int rows)
     {
       return Camellia::tensorLocalBlockDenseCellVector(values, cellOrdinal, rows);
+    }
+
+    static Camellia::TpetraMultiVectorFingerprint vectorFingerprint(const std::vector<Scalar> &values)
+    {
+      Camellia::TpetraMultiVectorFingerprint fingerprint;
+      double l2Squared = 0.0;
+      for (size_t i=0; i<values.size(); i++)
+      {
+        const double value = static_cast<double>(values[i]);
+        fingerprint.infNorm = std::max(fingerprint.infNorm, std::abs(value));
+        l2Squared += value * value;
+        fingerprint.signedSum += value;
+        fingerprint.checksum += static_cast<double>(i + 1) * value;
+      }
+      fingerprint.l2Norm = std::sqrt(l2Squared);
+      return fingerprint;
+    }
+
+    void appendRecursiveTraceEntry(const int levelIndex, const int cellOrdinal, const std::string &stageName,
+                                   const std::vector<Scalar> &rhs, const std::vector<Scalar> &solution,
+                                   const std::vector<Scalar> &residual) const
+    {
+      if (!emitRecursiveTrace_) return;
+      RecursiveTraceEntry entry;
+      entry.levelIndex = levelIndex;
+      entry.polynomialDegree = ((levelIndex >= 0) && (levelIndex < static_cast<int>(levelDegrees_.size()))) ? levelDegrees_[static_cast<size_t>(levelIndex)] : -1;
+      entry.cellOrdinal = cellOrdinal;
+      entry.stageName = stageName;
+      entry.rhsFingerprint = vectorFingerprint(rhs);
+      entry.solutionFingerprint = vectorFingerprint(solution);
+      entry.residualFingerprint = vectorFingerprint(residual);
+      entry.rhsInfNorm = entry.rhsFingerprint.infNorm;
+      entry.solutionInfNorm = entry.solutionFingerprint.infNorm;
+      entry.residualInfNorm = entry.residualFingerprint.infNorm;
+      lastRecursiveTrace_.push_back(entry);
     }
 
     static void applyDenseCellMatrix(const std::vector<Scalar> &matrices, const int cellOrdinal,
@@ -2617,6 +2671,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     }
 
     Teuchos::RCP<const TpetraMap> coarseMap() const { return coarseMap_; }
+    void setEmitRecursiveTrace(const bool value) { emitRecursiveTrace_ = value; }
+    const std::vector<RecursiveTraceEntry> &lastRecursiveTrace() const { return lastRecursiveTrace_; }
 
     int levelCount() const { return static_cast<int>(levelDegrees_.size()); }
 
@@ -2870,6 +2926,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       if (static_cast<int>(rhs.size()) != rows)
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner recursive RHS vector length mismatch");
       solution.assign(static_cast<size_t>(rows), Scalar(0.0));
+      std::vector<Scalar> traceResidual = rhs;
+      appendRecursiveTraceEntry(levelIndex, cellOrdinal, "Initial", rhs, solution, traceResidual);
 
       if (levelIndex == static_cast<int>(levelRows_.size()) - 1)
       {
@@ -2896,6 +2954,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                   cellOrdinal, rows, rhs, solution,
                                   coarseSolverIterations_);
         }
+        applyDenseCellMatrix(levelMatrices_[static_cast<size_t>(levelIndex)], cellOrdinal, rows, solution, traceResidual);
+        for (int i=0; i<rows; i++) traceResidual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - traceResidual[static_cast<size_t>(i)];
+        appendRecursiveTraceEntry(levelIndex, cellOrdinal, "CoarsestSolve", rhs, solution, traceResidual);
         return;
       }
 
@@ -2910,11 +2971,18 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       smoothLevel(levelIndex, cellOrdinal, rhs, solution);
       applyDenseCellMatrix(levelMatrix, cellOrdinal, rows, solution, applied);
       for (int i=0; i<rows; i++) residual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+      appendRecursiveTraceEntry(levelIndex, cellOrdinal, "PreSmooth", rhs, solution, residual);
       applyTensorHGradPTransferRestriction(levelTransfer, residual, coarseResidual);
       solveRecursiveLevel(levelIndex + 1, cellOrdinal, coarseResidual, coarseCorrection);
       applyTensorHGradPTransferProlongation(levelTransfer, coarseCorrection, fineCorrection);
       for (int i=0; i<rows; i++) solution[static_cast<size_t>(i)] += fineCorrection[static_cast<size_t>(i)];
+      applyDenseCellMatrix(levelMatrix, cellOrdinal, rows, solution, applied);
+      for (int i=0; i<rows; i++) residual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+      appendRecursiveTraceEntry(levelIndex, cellOrdinal, "CoarseCorrection", rhs, solution, residual);
       smoothLevel(levelIndex, cellOrdinal, rhs, solution);
+      applyDenseCellMatrix(levelMatrix, cellOrdinal, rows, solution, applied);
+      for (int i=0; i<rows; i++) residual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+      appendRecursiveTraceEntry(levelIndex, cellOrdinal, "PostSmooth", rhs, solution, residual);
     }
 
     void solveCoarseLevel(const TpetraMultiVector &CoarseRHS, TpetraMultiVector &CoarseSolution) const
@@ -2956,6 +3024,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner local vector length mismatch");
       if (X.getNumVectors() != Y.getNumVectors())
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner multivector count mismatch");
+      if (emitRecursiveTrace_) lastRecursiveTrace_.clear();
 
       if (useIfpack2FineSmoother_)
       {
@@ -4235,7 +4304,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         matrixFreeGMGForStageTrace = preconditionerBuild.matrixFreeGMG;
         localPMultigridForStageTrace = Teuchos::rcp_dynamic_cast<LocalPMultigridTpetraPreconditioner>(preconditionerBuild.directLocalPMultigrid);
         if (matrixFreeGMGStageTrace != 0)
+        {
           matrixFreeGMGForStageTrace->setEmitStageTrace(true);
+          if (localPMultigridForStageTrace != Teuchos::null)
+            localPMultigridForStageTrace->setEmitRecursiveTrace(true);
+        }
         preconditionerOperator = preconditionerBuild.belosRightPreconditioner;
         if (diagnoseLocalPMultigridWrapperEquivalenceFlag != 0)
         {
@@ -4382,6 +4455,33 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                     << " residualSignedSum=" << entry.residualFingerprint.signedSum
                     << " residualChecksum=" << entry.residualFingerprint.checksum
                     << std::endl;
+        }
+        if (localPMultigridForStageTrace != Teuchos::null)
+        {
+          const auto &recursiveTrace = localPMultigridForStageTrace->lastRecursiveTrace();
+          for (size_t traceIndex=0; traceIndex<recursiveTrace.size(); traceIndex++)
+          {
+            const auto &entry = recursiveTrace[traceIndex];
+            std::cout << "MATRIX_FREE_LOCAL_PMG_RECURSIVE_STAGE"
+                      << " index=" << traceIndex
+                      << " level=" << entry.levelIndex
+                      << " p=" << entry.polynomialDegree
+                      << " cell=" << entry.cellOrdinal
+                      << " stage=" << entry.stageName
+                      << " rhsInfNorm=" << std::setprecision(15) << entry.rhsInfNorm
+                      << " solutionInfNorm=" << entry.solutionInfNorm
+                      << " residualInfNorm=" << entry.residualInfNorm
+                      << " rhsL2Norm=" << entry.rhsFingerprint.l2Norm
+                      << " rhsSignedSum=" << entry.rhsFingerprint.signedSum
+                      << " rhsChecksum=" << entry.rhsFingerprint.checksum
+                      << " solutionL2Norm=" << entry.solutionFingerprint.l2Norm
+                      << " solutionSignedSum=" << entry.solutionFingerprint.signedSum
+                      << " solutionChecksum=" << entry.solutionFingerprint.checksum
+                      << " residualL2Norm=" << entry.residualFingerprint.l2Norm
+                      << " residualSignedSum=" << entry.residualFingerprint.signedSum
+                      << " residualChecksum=" << entry.residualFingerprint.checksum
+                      << std::endl;
+          }
         }
       }
     }

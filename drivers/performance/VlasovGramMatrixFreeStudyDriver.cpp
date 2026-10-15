@@ -397,7 +397,12 @@ namespace
                                         const int fineP,
                                         const double fineSmootherWeight)
   {
-    const std::string marker = "MATRIX_FREE_GMG_STAGE_TRACE";
+    const std::string stageMarker = "MATRIX_FREE_GMG_STAGE_TRACE";
+    const std::string recursiveMarker = "MATRIX_FREE_LOCAL_PMG_RECURSIVE_STAGE";
+    const auto tailAfterMarker = [](const std::string &text, const std::string &marker) -> std::string
+    {
+      return (text.size() > marker.size()) ? text.substr(marker.size() + 1) : std::string();
+    };
     std::istringstream input(childOutput);
     std::string line;
     while (std::getline(input, line))
@@ -407,17 +412,29 @@ namespace
       {
         out << boundsMarker
             << " strategy=" << strategy.name
-            << " " << ((line.size() > boundsMarker.size()) ? line.substr(boundsMarker.size() + 1) : std::string())
+            << " " << tailAfterMarker(line, boundsMarker)
             << "\n";
         continue;
       }
-      if (line.rfind(marker, 0) != 0) continue;
-      out << "VLASOV_MATRIX_FREE_GMG_STAGE_TRACE"
-          << " strategy=" << strategy.name
-          << " fineP=" << fineP
-          << " fineWt=" << std::setprecision(12) << std::defaultfloat << fineSmootherWeight
-          << " " << line.substr(marker.size() + 1)
-          << "\n";
+      if (line.rfind(stageMarker, 0) == 0)
+      {
+        out << "VLASOV_MATRIX_FREE_GMG_STAGE_TRACE"
+            << " strategy=" << strategy.name
+            << " fineP=" << fineP
+            << " fineWt=" << std::setprecision(12) << std::defaultfloat << fineSmootherWeight
+            << " " << tailAfterMarker(line, stageMarker)
+            << "\n";
+        continue;
+      }
+      if (line.rfind(recursiveMarker, 0) == 0)
+      {
+        out << "VLASOV_MATRIX_FREE_LOCAL_PMG_RECURSIVE_STAGE"
+            << " strategy=" << strategy.name
+            << " fineP=" << fineP
+            << " fineWt=" << std::setprecision(12) << std::defaultfloat << fineSmootherWeight
+            << " " << tailAfterMarker(line, recursiveMarker)
+            << "\n";
+      }
     }
   }
 

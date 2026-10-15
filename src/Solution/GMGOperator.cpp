@@ -1848,6 +1848,7 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
 {
   narrate("ApplyInverse");
   _lastVcycleStageTrace.clear();
+  _lastCoarseVcycleStageTrace.clear();
   _lastVcycleCoarseCorrectionTrace.clear();
   //  cout << "GMGOperator::ApplyInverse.\n";
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -2132,6 +2133,7 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
   TpetraMultiVectorFingerprint coarseRhsFingerprint;
   TpetraMultiVectorFingerprint coarseCorrectionFingerprint;
   TpetraMultiVectorFingerprint prolongatedCorrectionFingerprint;
+  std::vector<VcycleStageTraceEntry> nestedCoarseVcycleStageTrace;
 
   auto tCoarseRHSVector = _coarseSolution->getRHSVector();
   TEUCHOS_TEST_FOR_EXCEPTION(tCoarseRHSVector == Teuchos::null, std::invalid_argument, "coarse RHS vector is null");
@@ -2181,6 +2183,12 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
     auto tLHSVector = _coarseSolution->getLHSVector();
     TEUCHOS_TEST_FOR_EXCEPTION(tLHSVector == Teuchos::null, std::invalid_argument, "coarse LHS vector is null");
     _coarseOperator->ApplyInverse(*tCoarseRHSVector, *tLHSVector);
+    if (emitCoarseCorrectionTrace)
+    {
+      nestedCoarseVcycleStageTrace = _coarseOperator->lastVcycleStageTrace();
+      for (auto &nestedTraceEntry : nestedCoarseVcycleStageTrace)
+        nestedTraceEntry.levelIndex += 1;
+    }
   }
   else if (!_haveSolvedOnCoarseMesh)
   {
@@ -2237,6 +2245,8 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
     traceEntry.coarseCorrectionFingerprint = coarseCorrectionFingerprint;
     traceEntry.prolongatedCorrectionFingerprint = prolongatedCorrectionFingerprint;
     _lastVcycleCoarseCorrectionTrace.push_back(traceEntry);
+    for (const auto &nestedTraceEntry : nestedCoarseVcycleStageTrace)
+      _lastCoarseVcycleStageTrace.push_back(nestedTraceEntry);
   }
   if (printVerboseOutput) cout << "finished _P->apply(*tCoarseLHSVector, Y, Teuchos::NO_TRANS)\n";
   _timeMapCoarseToFine += timer.ElapsedTime();
@@ -2496,6 +2506,8 @@ void GMGOperator::setCoarseOperator(Teuchos::RCP<GMGOperator> coarseOperator)
 {
   _coarseOperator = coarseOperator;
   _coarseOperator->setIsFinest(false);
+  _coarseOperator->_emitVcycleStageTrace = _emitVcycleStageTrace;
+  _coarseOperator->_printVcycleStageTrace = false;
 }
 
 void GMGOperator::setCoarseSolver(SolverPtr coarseSolver)
@@ -2512,16 +2524,25 @@ void GMGOperator::setDebugMode(bool value)
 void GMGOperator::setEmitVcycleStageTrace(bool value)
 {
   _emitVcycleStageTrace = value;
+  if (_coarseOperator != Teuchos::null)
+    _coarseOperator->setEmitVcycleStageTrace(value);
 }
 
 void GMGOperator::setPrintVcycleStageTrace(bool value)
 {
   _printVcycleStageTrace = value;
+  if (_coarseOperator != Teuchos::null)
+    _coarseOperator->setPrintVcycleStageTrace(false);
 }
 
 const std::vector<GMGOperator::VcycleStageTraceEntry> &GMGOperator::lastVcycleStageTrace() const
 {
   return _lastVcycleStageTrace;
+}
+
+const std::vector<GMGOperator::VcycleStageTraceEntry> &GMGOperator::lastCoarseVcycleStageTrace() const
+{
+  return _lastCoarseVcycleStageTrace;
 }
 
 const std::vector<GMGOperator::VcycleCoarseCorrectionTraceEntry> &GMGOperator::lastVcycleCoarseCorrectionTrace() const

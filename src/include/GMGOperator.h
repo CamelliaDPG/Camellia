@@ -121,6 +121,7 @@ private:
   bool _emitVcycleStageTrace = false;
   bool _printVcycleStageTrace = true;
   mutable std::vector<VcycleStageTraceEntry> _lastVcycleStageTrace;
+  mutable std::vector<VcycleStageTraceEntry> _lastCoarseVcycleStageTrace;
   mutable std::vector<VcycleCoarseCorrectionTraceEntry> _lastVcycleCoarseCorrectionTrace;
   bool _clearFinestCondensedDofInterpreterAfterProlongation = false;
 
@@ -380,6 +381,9 @@ public:
 
   //! last finest-level V-cycle stage trace recorded by ApplyInverse().
   const std::vector<VcycleStageTraceEntry> &lastVcycleStageTrace() const;
+
+  //! last nested coarse-operator V-cycle stage trace recorded during ApplyInverseCoarseOperator().
+  const std::vector<VcycleStageTraceEntry> &lastCoarseVcycleStageTrace() const;
 
   //! last finest-level coarse-correction diagnostics recorded by ApplyInverse().
   const std::vector<VcycleCoarseCorrectionTraceEntry> &lastVcycleCoarseCorrectionTrace() const;
