@@ -323,8 +323,8 @@ namespace
     if (options.pMultigridFineSmootherWeight <= 0.0) throw std::invalid_argument("--pMultigridFineSmootherWeight must be positive");
     if ((options.pMultigridFineSmootherImpl != "ifpack2") && (options.pMultigridFineSmootherImpl != "local"))
       throw std::invalid_argument("--pMultigridFineSmootherImpl must be ifpack2 or local");
-    if ((options.pMultigridChebyshevLambdaMax != "auto") && (options.pMultigridChebyshevLambdaMax != "gershgorin"))
-      throw std::invalid_argument("--pMultigridChebyshevLambdaMax must be auto or gershgorin");
+    if ((options.pMultigridChebyshevLambdaMax != "auto") && (options.pMultigridChebyshevLambdaMax != "gershgorin") && (options.pMultigridChebyshevLambdaMax != "deterministic-power"))
+      throw std::invalid_argument("--pMultigridChebyshevLambdaMax must be auto, gershgorin, or deterministic-power");
     if (options.maxAssembledEntries < 1) throw std::invalid_argument("--maxAssembledEntries must be positive");
     if (options.basisFamily == "intrepid2-hierarchical") options.basisFamily = "hierarchical";
     if (options.basisFamily == "intrepid2-nodal") options.basisFamily = "nodal";
@@ -557,7 +557,7 @@ namespace
               : "local (hand-written per-cell Chebyshev, diagnostic)")
         << "; jacobi smoother stays local\n";
     out << "  pMultigridChebyshevLambdaMax: " << options.pMultigridChebyshevLambdaMax
-        << " (auto = Ifpack2 power iteration with strategy chebyshevMaxEigenIterations; gershgorin = max cell Gershgorin bound, no power iteration)\n";
+        << " (auto = Ifpack2 power iteration with strategy chebyshevMaxEigenIterations; gershgorin = max cell Gershgorin bound, no power iteration; deterministic-power = shared deterministic D^-1 A power estimate, no power iteration)\n";
     out << "  matrixFreeGMGStageTrace: " << (options.matrixFreeGMGStageTrace ? "enabled" : "disabled") << "\n";
     out << "  dense fine-matrix extraction diagnostics: "
         << (options.includeDenseFineMatrixDiagnostics ? "enabled" : "disabled (production path keeps fine-level smoothing matrix-free)") << "\n";

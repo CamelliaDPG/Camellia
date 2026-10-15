@@ -335,6 +335,33 @@ TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, BlockDenseHelpersExtractPerCellQuantit
   TEST_FLOATING_EQUALITY(lambdaMaxByCell[1], expectedSecondLambdaMax, 1e-14);
 }
 
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, DeterministicPowerBlockLambdaMatchesCellHelper )
+{
+  constexpr int rows = 3;
+  const auto firstCell = deterministicSPDMatrix(rows);
+  auto secondCell = deterministicSPDMatrix(rows);
+  for (int i=0; i<rows; i++) secondCell[static_cast<size_t>(i * rows + i)] += Scalar(0.35);
+
+  std::vector<Scalar> matrices;
+  matrices.insert(matrices.end(), firstCell.begin(), firstCell.end());
+  matrices.insert(matrices.end(), secondCell.begin(), secondCell.end());
+
+  const auto inverseDiagonal = tensorLocalExtractInverseDiagonalFromBlockDenseMatrices(matrices, 2, rows);
+  const auto deterministicLambdaMaxByCell =
+      tensorLocalExtractDeterministicPowerLambdaMaxFromBlockDenseMatrices(matrices, inverseDiagonal,
+                                                                          2, rows, 7, 1);
+
+  const auto firstInverseDiagonal = tensorLocalBlockDenseCellVector(inverseDiagonal, 0, rows);
+  const auto secondInverseDiagonal = tensorLocalBlockDenseCellVector(inverseDiagonal, 1, rows);
+  const Scalar expectedFirst = tensorLocalDenseDInvADeterministicPowerLambdaMax(firstCell, firstInverseDiagonal,
+                                                                               rows, 7, 1);
+  const Scalar expectedSecond = tensorLocalDenseDInvADeterministicPowerLambdaMax(secondCell, secondInverseDiagonal,
+                                                                                rows, 7, 1);
+
+  TEST_FLOATING_EQUALITY(deterministicLambdaMaxByCell[0], expectedFirst, 1e-14);
+  TEST_FLOATING_EQUALITY(deterministicLambdaMaxByCell[1], expectedSecond, 1e-14);
+}
+
 TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, DampedJacobiBlockSmootherMatchesCellReference )
 {
   constexpr int rows = 3;

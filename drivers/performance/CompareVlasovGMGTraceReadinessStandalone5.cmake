@@ -36,8 +36,10 @@ set(MATRIX_FREE_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix
 set(ASSEMBLED_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-assembled.txt")
 set(ASSEMBLED_GERSHGORIN_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-assembled-gershgorin.txt")
 set(MATRIX_FREE_GERSHGORIN_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix-free-gershgorin.txt")
+set(ASSEMBLED_DETERMINISTIC_POWER_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-assembled-deterministic-power.txt")
+set(MATRIX_FREE_DETERMINISTIC_POWER_TRACE_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-matrix-free-deterministic-power.txt")
 set(STAGE_COMPARISON_FILE "${TRACE_WORK_DIR}/vlasov-gram-trace-readiness-p${TRACE_FINE_P}-stage-comparison.txt")
-file(REMOVE "${MATRIX_FREE_TRACE_FILE}" "${ASSEMBLED_TRACE_FILE}" "${ASSEMBLED_GERSHGORIN_TRACE_FILE}" "${MATRIX_FREE_GERSHGORIN_TRACE_FILE}" "${STAGE_COMPARISON_FILE}")
+file(REMOVE "${MATRIX_FREE_TRACE_FILE}" "${ASSEMBLED_TRACE_FILE}" "${ASSEMBLED_GERSHGORIN_TRACE_FILE}" "${MATRIX_FREE_GERSHGORIN_TRACE_FILE}" "${ASSEMBLED_DETERMINISTIC_POWER_TRACE_FILE}" "${MATRIX_FREE_DETERMINISTIC_POWER_TRACE_FILE}" "${STAGE_COMPARISON_FILE}")
 
 execute_process(
   COMMAND "${MATRIX_FREE_DRIVER}"
@@ -110,6 +112,40 @@ execute_process(
   RESULT_VARIABLE ASSEMBLED_GERSHGORIN_RESULT
   OUTPUT_VARIABLE ASSEMBLED_GERSHGORIN_STDOUT
   ERROR_VARIABLE ASSEMBLED_GERSHGORIN_STDERR)
+
+# Controlled experiment, matrix-free side: seed Chebyshev lambdaMax/min eigenvalue bounds
+# from the shared deterministic D^-1 A power estimate (no Ifpack2 power iteration).
+execute_process(
+  COMMAND "${MATRIX_FREE_DRIVER}"
+    --fineH1Order=${TRACE_FINE_P}
+    --quick
+    --maxIterations=${TRACE_MATRIX_FREE_MAX_ITERATIONS}
+    --basisFamily=hierarchical
+    --matrixFreeGMGStageTrace=1
+    --keepChildOutput=1
+    --maxAssembledEntries=${TRACE_MAX_ASSEMBLED_ENTRIES}
+    --pMultigridChebyshevLambdaMax=deterministic-power
+    --outputFile=${MATRIX_FREE_DETERMINISTIC_POWER_TRACE_FILE}
+  RESULT_VARIABLE MATRIX_FREE_DETERMINISTIC_POWER_RESULT
+  OUTPUT_VARIABLE MATRIX_FREE_DETERMINISTIC_POWER_STDOUT
+  ERROR_VARIABLE MATRIX_FREE_DETERMINISTIC_POWER_STDERR)
+
+# Controlled experiment, assembled side: identical assembled run, but lambdaMax = deterministic D^-1 A power estimate
+# (lambdaMin = lambdaMax/ratio, no Ifpack2 power iterations).
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -E env VLASOV_ASSEMBLED_GMG_EMIT_STAGE_TRACE=1
+    "${ASSEMBLED_DRIVER}"
+    --fineH1Order=${TRACE_FINE_P}
+    --basisFamily=hierarchical
+    --emitStageTrace
+    --stageTraceFineP=${TRACE_FINE_P}
+    --quick
+    --maxIterations=${TRACE_ASSEMBLED_MAX_ITERATIONS}
+    --assembledChebyshevLambdaMax=deterministic-power
+    --outputFile=${ASSEMBLED_DETERMINISTIC_POWER_TRACE_FILE}
+  RESULT_VARIABLE ASSEMBLED_DETERMINISTIC_POWER_RESULT
+  OUTPUT_VARIABLE ASSEMBLED_DETERMINISTIC_POWER_STDOUT
+  ERROR_VARIABLE ASSEMBLED_DETERMINISTIC_POWER_STDERR)
 
 foreach(trace_file IN ITEMS "${MATRIX_FREE_TRACE_FILE}" "${ASSEMBLED_TRACE_FILE}")
   if(NOT EXISTS "${trace_file}")
@@ -493,6 +529,129 @@ else()
 endif()
 message(STATUS "GMG trace gershgorin-lambda experiment summary: ${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}; assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}; matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}")
 
+set(GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY "not_run")
+set(GMG_DETERMINISTIC_POWER_EXPERIMENT_ALL_AGREE 0)
+set(ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_TAIL "missing")
+set(MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL "missing")
+if((ASSEMBLED_DETERMINISTIC_POWER_RESULT EQUAL 0) AND (EXISTS "${ASSEMBLED_DETERMINISTIC_POWER_TRACE_FILE}")
+   AND (MATRIX_FREE_DETERMINISTIC_POWER_RESULT EQUAL 0) AND (EXISTS "${MATRIX_FREE_DETERMINISTIC_POWER_TRACE_FILE}"))
+  file(READ "${MATRIX_FREE_DETERMINISTIC_POWER_TRACE_FILE}" MATRIX_FREE_DETERMINISTIC_POWER_FILE_TEXT)
+  set(MATRIX_FREE_DETERMINISTIC_POWER_TRACE_TEXT "${MATRIX_FREE_DETERMINISTIC_POWER_STDOUT}\n${MATRIX_FREE_DETERMINISTIC_POWER_FILE_TEXT}")
+  record_gmg_stage_metrics("${MATRIX_FREE_DETERMINISTIC_POWER_TRACE_TEXT}" "VLASOV_MATRIX_FREE_GMG_STAGE_TRACE" MATRIX_FREE_DETERMINISTIC_POWER_STAGE_METRIC)
+  string(REGEX MATCHALL "VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS[^\n]*" MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_ROWS "${MATRIX_FREE_DETERMINISTIC_POWER_TRACE_TEXT}")
+  foreach(bounds_line IN LISTS MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_ROWS)
+    if((bounds_line MATCHES " strategy=${TRACE_STRATEGY}( |$)") AND (bounds_line MATCHES " fineP=${TRACE_FINE_P}( |$)"))
+      string(REGEX REPLACE "^VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS *" "" MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL "${bounds_line}")
+      string(STRIP "${MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL}" MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL)
+      break()
+    endif()
+  endforeach()
+  if(MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL STREQUAL "missing")
+    foreach(bounds_line IN LISTS MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_ROWS)
+      if(NOT bounds_line MATCHES " fineP=${TRACE_FINE_P}( |$)")
+        continue()
+      endif()
+      string(REGEX REPLACE "^VLASOV_MATRIX_FREE_CHEBYSHEV_BOUNDS *" "" MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL "${bounds_line}")
+      string(STRIP "${MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL}" MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL)
+      break()
+    endforeach()
+  endif()
+  file(READ "${ASSEMBLED_DETERMINISTIC_POWER_TRACE_FILE}" ASSEMBLED_DETERMINISTIC_POWER_FILE_TEXT)
+  set(ASSEMBLED_DETERMINISTIC_POWER_TRACE_TEXT "${ASSEMBLED_DETERMINISTIC_POWER_STDOUT}\n${ASSEMBLED_DETERMINISTIC_POWER_FILE_TEXT}")
+  record_gmg_stage_metrics("${ASSEMBLED_DETERMINISTIC_POWER_TRACE_TEXT}" "VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE" ASSEMBLED_DETERMINISTIC_POWER_STAGE_METRIC)
+  string(REGEX MATCHALL "VLASOV_ASSEMBLED_GMG_CHEBYSHEV_BOUNDS[^\n]*" ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_ROWS "${ASSEMBLED_DETERMINISTIC_POWER_TRACE_TEXT}")
+  foreach(bounds_line IN LISTS ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_ROWS)
+    if((bounds_line MATCHES " strategy=${TRACE_STRATEGY}( |$)") AND (bounds_line MATCHES " fineP=${TRACE_FINE_P}( |$)"))
+      string(REGEX REPLACE "^VLASOV_ASSEMBLED_GMG_CHEBYSHEV_BOUNDS *" "" ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_TAIL "${bounds_line}")
+      string(STRIP "${ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_TAIL}" ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_TAIL)
+      break()
+    endif()
+  endforeach()
+  set(GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY "all_agree")
+  set(GMG_DETERMINISTIC_POWER_EXPERIMENT_ALL_AGREE 1)
+  foreach(stage_label IN ITEMS Initial PreSmooth CoarseCorrection PostSmooth)
+    string(MAKE_C_IDENTIFIER "${stage_label}" stage_key)
+    foreach(metric IN ITEMS rhsInfNorm solutionInfNorm residualInfNorm)
+      set(deterministic_power_metric_var "ASSEMBLED_DETERMINISTIC_POWER_STAGE_METRIC_${stage_key}_${metric}")
+      set(matrix_free_metric_var "MATRIX_FREE_DETERMINISTIC_POWER_STAGE_METRIC_${stage_key}_${metric}")
+      set(deterministic_power_value "missing")
+      set(matrix_free_value "missing")
+      if(DEFINED ${deterministic_power_metric_var})
+        set(deterministic_power_value "${${deterministic_power_metric_var}}")
+      endif()
+      if(DEFINED ${matrix_free_metric_var})
+        set(matrix_free_value "${${matrix_free_metric_var}}")
+      endif()
+      set(pair_agree 0)
+      if((NOT deterministic_power_value STREQUAL "missing") AND (NOT matrix_free_value STREQUAL "missing"))
+        gmg_relative_agree("${deterministic_power_value}" "${matrix_free_value}" pair_agree)
+      endif()
+      message(STATUS "GMG trace deterministic-power-lambda experiment: stage=${stage_label};metric=${metric};assembled_deterministic_power=${deterministic_power_value};matrix_free=${matrix_free_value};agree=${pair_agree}")
+      if((pair_agree EQUAL 0) AND (GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY STREQUAL "all_agree"))
+        set(GMG_DETERMINISTIC_POWER_EXPERIMENT_ALL_AGREE 0)
+        set(GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY "first_disagreement=stage:${stage_label},metric:${metric},assembled_deterministic_power:${deterministic_power_value},matrix_free:${matrix_free_value}")
+      endif()
+    endforeach()
+  endforeach()
+else()
+  set(GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY "producer_failed_assembled_result_${ASSEMBLED_DETERMINISTIC_POWER_RESULT}_matrix_free_result_${MATRIX_FREE_DETERMINISTIC_POWER_RESULT}")
+endif()
+message(STATUS "GMG trace deterministic-power-lambda experiment summary: ${GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY}; assembled_deterministic_power_bounds=${ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_TAIL}; matrix_free_deterministic_power_bounds=${MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL}")
+
+set(ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW "missing")
+if(DEFINED ASSEMBLED_DETERMINISTIC_POWER_TRACE_TEXT)
+  string(REGEX MATCHALL "VLASOV_ASSEMBLED_GMG_COARSE_CORRECTION_TRACE[^\n]*" ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_ROWS "${ASSEMBLED_DETERMINISTIC_POWER_TRACE_TEXT}")
+  foreach(trace_line IN LISTS ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_ROWS)
+    if((trace_line MATCHES " strategy=${TRACE_STRATEGY}( |$)") AND (trace_line MATCHES " fineP=${TRACE_FINE_P}( |$)"))
+      set(ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW "${trace_line}")
+      break()
+    endif()
+  endforeach()
+endif()
+set(MATRIX_FREE_DETERMINISTIC_POWER_RESTRICTED_RESIDUAL_ROW "missing")
+set(MATRIX_FREE_DETERMINISTIC_POWER_COARSE_CORRECTION_ROW "missing")
+set(MATRIX_FREE_DETERMINISTIC_POWER_PROLONGATED_CORRECTION_ROW "missing")
+set(MATRIX_FREE_DETERMINISTIC_POWER_RESIDUAL_AFTER_COARSE_ROW "missing")
+if(DEFINED MATRIX_FREE_DETERMINISTIC_POWER_TRACE_TEXT)
+  string(REGEX MATCHALL "VLASOV_MATRIX_FREE_GMG_STAGE_TRACE[^\n]*" MATRIX_FREE_DETERMINISTIC_POWER_STAGE_ROWS "${MATRIX_FREE_DETERMINISTIC_POWER_TRACE_TEXT}")
+  foreach(trace_line IN LISTS MATRIX_FREE_DETERMINISTIC_POWER_STAGE_ROWS)
+    if(NOT trace_line MATCHES " strategy=${TRACE_STRATEGY}( |$)")
+      continue()
+    endif()
+    if(NOT trace_line MATCHES " fineP=${TRACE_FINE_P}( |$)")
+      continue()
+    endif()
+    if(trace_line MATCHES " stage=restrictedResidualNorm( |$)")
+      set(MATRIX_FREE_DETERMINISTIC_POWER_RESTRICTED_RESIDUAL_ROW "${trace_line}")
+    elseif(trace_line MATCHES " stage=coarseCorrectionNorm( |$)")
+      set(MATRIX_FREE_DETERMINISTIC_POWER_COARSE_CORRECTION_ROW "${trace_line}")
+    elseif(trace_line MATCHES " stage=prolongateCorrection( |$)")
+      set(MATRIX_FREE_DETERMINISTIC_POWER_PROLONGATED_CORRECTION_ROW "${trace_line}")
+    elseif(trace_line MATCHES " stage=residualAfterCoarseCorrection( |$)")
+      set(MATRIX_FREE_DETERMINISTIC_POWER_RESIDUAL_AFTER_COARSE_ROW "${trace_line}")
+    endif()
+  endforeach()
+endif()
+message(STATUS "GMG deterministic-power coarse-correction diagnostic rows:\nassembled: ${ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW}\nmatrix_free_restricted: ${MATRIX_FREE_DETERMINISTIC_POWER_RESTRICTED_RESIDUAL_ROW}\nmatrix_free_coarse_solution: ${MATRIX_FREE_DETERMINISTIC_POWER_COARSE_CORRECTION_ROW}\nmatrix_free_prolongated: ${MATRIX_FREE_DETERMINISTIC_POWER_PROLONGATED_CORRECTION_ROW}\nmatrix_free_residual_after_coarse: ${MATRIX_FREE_DETERMINISTIC_POWER_RESIDUAL_AFTER_COARSE_ROW}")
+
+function(gmg_extract_trace_field TRACE_ROW FIELD_NAME OUT_VALUE)
+  if(TRACE_ROW MATCHES " ${FIELD_NAME}=([^ ]+)")
+    set(${OUT_VALUE} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+  else()
+    set(${OUT_VALUE} "missing" PARENT_SCOPE)
+  endif()
+endfunction()
+
+gmg_extract_trace_field("${ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW}" "restrictedResidualChecksum" ASSEMBLED_DETERMINISTIC_POWER_RESTRICTED_CHECKSUM)
+gmg_extract_trace_field("${ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW}" "coarseCorrectionChecksum" ASSEMBLED_DETERMINISTIC_POWER_COARSE_CHECKSUM)
+gmg_extract_trace_field("${ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW}" "prolongatedCorrectionChecksum" ASSEMBLED_DETERMINISTIC_POWER_PROLONGATED_CHECKSUM)
+gmg_extract_trace_field("${ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW}" "residualAfterCorrectionChecksum" ASSEMBLED_DETERMINISTIC_POWER_RESIDUAL_CHECKSUM)
+gmg_extract_trace_field("${MATRIX_FREE_DETERMINISTIC_POWER_RESTRICTED_RESIDUAL_ROW}" "solutionChecksum" MATRIX_FREE_DETERMINISTIC_POWER_RESTRICTED_CHECKSUM)
+gmg_extract_trace_field("${MATRIX_FREE_DETERMINISTIC_POWER_COARSE_CORRECTION_ROW}" "solutionChecksum" MATRIX_FREE_DETERMINISTIC_POWER_COARSE_CHECKSUM)
+gmg_extract_trace_field("${MATRIX_FREE_DETERMINISTIC_POWER_PROLONGATED_CORRECTION_ROW}" "solutionChecksum" MATRIX_FREE_DETERMINISTIC_POWER_PROLONGATED_CHECKSUM)
+gmg_extract_trace_field("${MATRIX_FREE_DETERMINISTIC_POWER_RESIDUAL_AFTER_COARSE_ROW}" "residualChecksum" MATRIX_FREE_DETERMINISTIC_POWER_RESIDUAL_CHECKSUM)
+message(STATUS "GMG deterministic-power coarse-correction checksum fingerprints: restricted assembled=${ASSEMBLED_DETERMINISTIC_POWER_RESTRICTED_CHECKSUM} matrix_free=${MATRIX_FREE_DETERMINISTIC_POWER_RESTRICTED_CHECKSUM}; coarse assembled=${ASSEMBLED_DETERMINISTIC_POWER_COARSE_CHECKSUM} matrix_free=${MATRIX_FREE_DETERMINISTIC_POWER_COARSE_CHECKSUM}; prolongated assembled=${ASSEMBLED_DETERMINISTIC_POWER_PROLONGATED_CHECKSUM} matrix_free=${MATRIX_FREE_DETERMINISTIC_POWER_PROLONGATED_CHECKSUM}; residual assembled=${ASSEMBLED_DETERMINISTIC_POWER_RESIDUAL_CHECKSUM} matrix_free=${MATRIX_FREE_DETERMINISTIC_POWER_RESIDUAL_CHECKSUM}")
+
 # Main auto-vs-auto pairs: tolerance-based agreement using the same 1e-8 relative helper.
 set(GMG_AUTO_LAMBDA_COMPARISON_SUMMARY "all_agree")
 set(GMG_AUTO_LAMBDA_ALL_AGREE 1)
@@ -559,6 +718,14 @@ matrix_free_chebyshev_bounds=${MATRIX_FREE_CHEBYSHEV_BOUNDS_TAIL}
 gershgorin_experiment=${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}
 assembled_gershgorin_bounds=${ASSEMBLED_GERSHGORIN_BOUNDS_TAIL}
 matrix_free_gershgorin_bounds=${MATRIX_FREE_GERSHGORIN_BOUNDS_TAIL}
+deterministic_power_experiment=${GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY}
+assembled_deterministic_power_bounds=${ASSEMBLED_DETERMINISTIC_POWER_BOUNDS_TAIL}
+matrix_free_deterministic_power_bounds=${MATRIX_FREE_DETERMINISTIC_POWER_BOUNDS_TAIL}
+assembled_deterministic_power_coarse_correction_row=${ASSEMBLED_DETERMINISTIC_POWER_COARSE_CORRECTION_TRACE_ROW}
+matrix_free_deterministic_power_restricted_residual_row=${MATRIX_FREE_DETERMINISTIC_POWER_RESTRICTED_RESIDUAL_ROW}
+matrix_free_deterministic_power_coarse_correction_row=${MATRIX_FREE_DETERMINISTIC_POWER_COARSE_CORRECTION_ROW}
+matrix_free_deterministic_power_prolongated_correction_row=${MATRIX_FREE_DETERMINISTIC_POWER_PROLONGATED_CORRECTION_ROW}
+matrix_free_deterministic_power_residual_after_coarse_row=${MATRIX_FREE_DETERMINISTIC_POWER_RESIDUAL_AFTER_COARSE_ROW}
 auto_lambda_comparison=${GMG_AUTO_LAMBDA_COMPARISON_SUMMARY}
 matrix_free_trace_file=${MATRIX_FREE_TRACE_FILE}
 assembled_trace_file=${ASSEMBLED_TRACE_FILE}

@@ -55,7 +55,7 @@ namespace
     bool emitP2StageTrace = false;
     bool emitP2StageSummaryRows = false;
     int stageTraceFineP = 2;
-    // Assembled GMGOperator Chebyshev max-eigenvalue mode: "auto" (default) or "gershgorin".
+    // Assembled GMGOperator Chebyshev max-eigenvalue mode: "auto" (default), "gershgorin", or "deterministic-power".
     std::string assembledChebyshevLambdaMax = "auto";
   };
 
@@ -637,7 +637,7 @@ int main(int argc, char *argv[])
                        << " ifpack2EigenAnalysisType=power_method"
                        << " ifpack2ZeroStartingSolution=1"
                        << " ifpack2ComputeSpectralRadius=1"
-                       << " ifpack2EigenvalueMaxIterations=" << ((finestGMGOperator->getChebyshevMaxEigenvalueMode() == "gershgorin") ? 0 : strategy.chebyshevMaxEigenIterations)
+                       << " ifpack2EigenvalueMaxIterations=" << (((finestGMGOperator->getChebyshevMaxEigenvalueMode() == "gershgorin") || (finestGMGOperator->getChebyshevMaxEigenvalueMode() == "deterministic-power")) ? 0 : strategy.chebyshevMaxEigenIterations)
                        << " ifpack2Degree=" << strategy.chebyshevDegree
                        << " ifpack2Ratio=" << strategy.chebyshevRatio
                        << std::endl;
@@ -656,6 +656,38 @@ int main(int argc, char *argv[])
                          << " rhsInfNorm=" << std::setprecision(16) << traceEntry.rhsInfNorm
                          << " solutionInfNorm=" << traceEntry.solutionInfNorm
                          << " residualInfNorm=" << traceEntry.residualInfNorm
+                         << " strategy=" << strategy.name
+                         << " fineP=" << fineP
+                         << " basisFamily=" << basisFamily
+                         << std::endl;
+                }
+                const auto &coarseCorrectionTrace = finestGMGOperator->lastVcycleCoarseCorrectionTrace();
+                for (size_t traceIndex=0; traceIndex<coarseCorrectionTrace.size(); traceIndex++)
+                {
+                  const auto &traceEntry = coarseCorrectionTrace[traceIndex];
+                  output << "VLASOV_ASSEMBLED_GMG_COARSE_CORRECTION_TRACE"
+                         << " index=" << traceIndex
+                         << " level=" << traceEntry.levelIndex
+                         << " restrictedResidualInfNorm=" << std::setprecision(16) << traceEntry.restrictedResidualInfNorm
+                         << " coarseRhsInfNorm=" << traceEntry.coarseRhsInfNorm
+                         << " coarseCorrectionInfNorm=" << traceEntry.coarseCorrectionInfNorm
+                         << " prolongatedCorrectionInfNorm=" << traceEntry.prolongatedCorrectionInfNorm
+                         << " residualAfterCorrectionInfNorm=" << traceEntry.residualAfterCorrectionInfNorm
+                         << " restrictedResidualL2Norm=" << traceEntry.restrictedResidualFingerprint.l2Norm
+                         << " restrictedResidualSignedSum=" << traceEntry.restrictedResidualFingerprint.signedSum
+                         << " restrictedResidualChecksum=" << traceEntry.restrictedResidualFingerprint.checksum
+                         << " coarseRhsL2Norm=" << traceEntry.coarseRhsFingerprint.l2Norm
+                         << " coarseRhsSignedSum=" << traceEntry.coarseRhsFingerprint.signedSum
+                         << " coarseRhsChecksum=" << traceEntry.coarseRhsFingerprint.checksum
+                         << " coarseCorrectionL2Norm=" << traceEntry.coarseCorrectionFingerprint.l2Norm
+                         << " coarseCorrectionSignedSum=" << traceEntry.coarseCorrectionFingerprint.signedSum
+                         << " coarseCorrectionChecksum=" << traceEntry.coarseCorrectionFingerprint.checksum
+                         << " prolongatedCorrectionL2Norm=" << traceEntry.prolongatedCorrectionFingerprint.l2Norm
+                         << " prolongatedCorrectionSignedSum=" << traceEntry.prolongatedCorrectionFingerprint.signedSum
+                         << " prolongatedCorrectionChecksum=" << traceEntry.prolongatedCorrectionFingerprint.checksum
+                         << " residualAfterCorrectionL2Norm=" << traceEntry.residualAfterCorrectionFingerprint.l2Norm
+                         << " residualAfterCorrectionSignedSum=" << traceEntry.residualAfterCorrectionFingerprint.signedSum
+                         << " residualAfterCorrectionChecksum=" << traceEntry.residualAfterCorrectionFingerprint.checksum
                          << " strategy=" << strategy.name
                          << " fineP=" << fineP
                          << " basisFamily=" << basisFamily
@@ -829,6 +861,8 @@ int main(int argc, char *argv[])
       output << "  With --emitStageTrace/--emitP2StageTrace/--emitP4StageTrace, the configured trace-p V-cycle rows also print\n";
       output << "  one VLASOV_ASSEMBLED_GMG_VCYCLE_STAGE line per finest-level stage with fields\n";
       output << "  index, level, stage, rhsInfNorm, solutionInfNorm, residualInfNorm, fineP, and basisFamily.\n";
+      output << "  One VLASOV_ASSEMBLED_GMG_COARSE_CORRECTION_TRACE row also records restrictedResidualInfNorm/coarseRhsInfNorm,\n";
+      output << "  coarseCorrectionInfNorm, prolongatedCorrectionInfNorm, and residualAfterCorrectionInfNorm for the finest coarse-correction step.\n";
       output << "  Real V-cycle stage trace rows are emitted during GMGOperator application when enabled; default trace p is 2.\n";
       std::cout << "Wrote Vlasov Gram GMG study results to " << options.outputFile << std::endl;
     }

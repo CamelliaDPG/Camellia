@@ -513,5 +513,118 @@ namespace Camellia
     }
     return lambdaMaxByCell;
   }
+
+  template<class Scalar>
+  Scalar tensorLocalDenseDInvADeterministicPowerLambdaMax(
+      const std::vector<Scalar> &matrix,
+      const std::vector<Scalar> &inverseDiagonal,
+      const int rows,
+      const int numIters,
+      const int eigNormalizationFreq = 1,
+      const char *label = "tensorLocalDenseDInvADeterministicPowerLambdaMax",
+      const Scalar unavailableValue = Scalar(-1.0),
+      const Scalar tolerance = Scalar(1.0e-7))
+  {
+    tensorLocalCheckDenseMatrixSize(matrix, rows, label);
+    tensorLocalCheckVectorSize(inverseDiagonal, rows, label);
+    if (numIters <= 0)
+      return unavailableValue;
+
+    std::vector<Scalar> x(static_cast<size_t>(rows), Scalar(0.0));
+    std::vector<Scalar> y(static_cast<size_t>(rows), Scalar(0.0));
+    const int modulus = 97;
+    for (int i=0; i<rows; i++)
+      x[static_cast<size_t>(i)] = Scalar(1.0 + (i % modulus));
+
+    auto l2Norm = [](const std::vector<Scalar> &values) -> Scalar
+    {
+      Scalar normSquared = Scalar(0.0);
+      for (const auto value : values)
+        normSquared += value * value;
+      return std::sqrt(std::max(Scalar(0.0), normSquared));
+    };
+
+    auto scale = [](std::vector<Scalar> &values, const Scalar alpha)
+    {
+      for (auto &value : values)
+        value *= alpha;
+    };
+
+    auto applyDInvA = [&](const std::vector<Scalar> &input, std::vector<Scalar> &output)
+    {
+      for (int i=0; i<rows; i++)
+      {
+        Scalar rowValue = Scalar(0.0);
+        const size_t rowOffset = static_cast<size_t>(i) * static_cast<size_t>(rows);
+        for (int j=0; j<rows; j++)
+          rowValue += matrix[rowOffset + static_cast<size_t>(j)] * input[static_cast<size_t>(j)];
+        output[static_cast<size_t>(i)] = inverseDiagonal[static_cast<size_t>(i)] * rowValue;
+      }
+    };
+
+    Scalar norm = l2Norm(x);
+    if (norm == Scalar(0.0))
+      return unavailableValue;
+    scale(x, Scalar(1.0) / norm);
+
+    const int normalizationFreq = std::max(1, eigNormalizationFreq);
+    Scalar lambdaMax = Scalar(0.0);
+    Scalar lambdaMaxOld = Scalar(1.0);
+
+    // Match the deterministic Tpetra RowMatrix D^-1 A power helper used for controlled
+    // Chebyshev lambda estimates: repeatedly apply D^-1 A, periodically normalize, and
+    // return ||D^-1 A x||_2 after the final normalized iterate.
+    for (int iter=0; iter<numIters-1; iter++)
+    {
+      applyDInvA(x, y);
+      x.swap(y);
+      if ((((iter + 1) % normalizationFreq) == 0) && (iter < numIters - 2))
+      {
+        norm = l2Norm(x);
+        if (norm == Scalar(0.0))
+          return Scalar(0.0);
+        lambdaMaxOld = lambdaMax;
+        lambdaMax = std::pow(norm, Scalar(1.0) / static_cast<Scalar>(normalizationFreq));
+        if (std::abs(lambdaMax - lambdaMaxOld) < tolerance * std::abs(lambdaMax))
+          return lambdaMax;
+        scale(x, Scalar(1.0) / norm);
+      }
+    }
+
+    norm = l2Norm(x);
+    if (norm == Scalar(0.0))
+      return Scalar(0.0);
+    scale(x, Scalar(1.0) / norm);
+    applyDInvA(x, y);
+    return l2Norm(y);
+  }
+
+  template<class Scalar>
+  std::vector<Scalar> tensorLocalExtractDeterministicPowerLambdaMaxFromBlockDenseMatrices(
+      const std::vector<Scalar> &matrices,
+      const std::vector<Scalar> &inverseDiagonal,
+      const int cells,
+      const int rows,
+      const int numIters,
+      const int eigNormalizationFreq = 1,
+      const char *label = "tensorLocalExtractDeterministicPowerLambdaMaxFromBlockDenseMatrices")
+  {
+    const size_t localLength = static_cast<size_t>(cells) * static_cast<size_t>(rows);
+    if (inverseDiagonal.size() != localLength)
+      throw std::invalid_argument(std::string(label) + " inverse diagonal size mismatch");
+    if (matrices.size() != localLength * static_cast<size_t>(rows))
+      throw std::invalid_argument(std::string(label) + " matrix size mismatch");
+
+    std::vector<Scalar> lambdaMaxByCell(static_cast<size_t>(cells), Scalar(0.0));
+    for (int c=0; c<cells; c++)
+    {
+      const auto cellMatrix = tensorLocalBlockDenseCellMatrix(matrices, c, rows);
+      const auto cellInverseDiagonal = tensorLocalBlockDenseCellVector(inverseDiagonal, c, rows);
+      lambdaMaxByCell[static_cast<size_t>(c)] =
+          tensorLocalDenseDInvADeterministicPowerLambdaMax(cellMatrix, cellInverseDiagonal, rows,
+                                                          numIters, eigNormalizationFreq, label);
+    }
+    return lambdaMaxByCell;
+  }
 }
 

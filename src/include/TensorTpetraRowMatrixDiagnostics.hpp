@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Tpetra_MultiVector.hpp>
 #include <Tpetra_Vector.hpp>
 
 #include <Teuchos_CommHelpers.hpp>
@@ -14,6 +15,65 @@
 
 namespace Camellia
 {
+  struct TpetraMultiVectorFingerprint
+  {
+    double infNorm = 0.0;
+    double l2Norm = 0.0;
+    double signedSum = 0.0;
+    double checksum = 0.0;
+  };
+
+  template<class MultiVectorType>
+  TpetraMultiVectorFingerprint tpetraMultiVectorFingerprint(const MultiVectorType &values)
+  {
+    using Scalar = typename MultiVectorType::scalar_type;
+    using LocalOrdinal = typename MultiVectorType::local_ordinal_type;
+
+    TpetraMultiVectorFingerprint fingerprint;
+    const auto map = values.getMap();
+    if (map.is_null())
+      return fingerprint;
+
+    auto valuesHost = values.getLocalViewHost(Tpetra::Access::ReadOnly);
+    double localInfNorm = 0.0;
+    double localL2NormSquared = 0.0;
+    double localSignedSum = 0.0;
+    double localChecksum = 0.0;
+
+    const size_t localLength = values.getLocalLength();
+    const size_t numVectors = values.getNumVectors();
+    for (size_t localIndex=0; localIndex<localLength; localIndex++)
+    {
+      const auto globalIndex = map->getGlobalElement(static_cast<LocalOrdinal>(localIndex));
+      const double globalWeight = static_cast<double>(globalIndex) + 1.0;
+      const double localWeight = static_cast<double>(localIndex) + 1.0;
+      for (size_t vectorIndex=0; vectorIndex<numVectors; vectorIndex++)
+      {
+        const double value = static_cast<double>(valuesHost(localIndex, vectorIndex));
+        const double absValue = std::abs(value);
+        localInfNorm = std::max(localInfNorm, absValue);
+        localL2NormSquared += value * value;
+        localSignedSum += value;
+
+        const double vectorWeight = static_cast<double>(vectorIndex) + 1.0;
+        const double deterministicWeight = globalWeight * (vectorWeight + 0.125) + 0.001 * localWeight;
+        localChecksum += value * deterministicWeight;
+      }
+    }
+
+    Teuchos::reduceAll<int, double>(*map->getComm(), Teuchos::REDUCE_MAX,
+                                    localInfNorm, Teuchos::outArg(fingerprint.infNorm));
+    double globalL2NormSquared = 0.0;
+    Teuchos::reduceAll<int, double>(*map->getComm(), Teuchos::REDUCE_SUM,
+                                    localL2NormSquared, Teuchos::outArg(globalL2NormSquared));
+    fingerprint.l2Norm = std::sqrt(std::max(0.0, globalL2NormSquared));
+    Teuchos::reduceAll<int, double>(*map->getComm(), Teuchos::REDUCE_SUM,
+                                    localSignedSum, Teuchos::outArg(fingerprint.signedSum));
+    Teuchos::reduceAll<int, double>(*map->getComm(), Teuchos::REDUCE_SUM,
+                                    localChecksum, Teuchos::outArg(fingerprint.checksum));
+    return fingerprint;
+  }
+
   template<class RowMatrixType>
   typename Teuchos::ScalarTraits<typename RowMatrixType::scalar_type>::magnitudeType
   tensorTpetraRowMatrixDInvAGershgorinLambdaMax(

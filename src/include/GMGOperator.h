@@ -17,6 +17,7 @@
 #include "RefinementPattern.h"
 #include "Solution.h"
 #include "Solver.h"
+#include "TensorTpetraRowMatrixDiagnostics.hpp"
 
 #include "Tpetra_Operator.hpp"
 #include <cstddef>
@@ -56,6 +57,21 @@ public:
     double rhsInfNorm = 0.0;
     double solutionInfNorm = 0.0;
     double residualInfNorm = 0.0;
+  };
+
+  struct VcycleCoarseCorrectionTraceEntry
+  {
+    size_t levelIndex = 0;
+    double restrictedResidualInfNorm = 0.0;
+    double coarseRhsInfNorm = 0.0;
+    double coarseCorrectionInfNorm = 0.0;
+    double prolongatedCorrectionInfNorm = 0.0;
+    double residualAfterCorrectionInfNorm = 0.0;
+    TpetraMultiVectorFingerprint restrictedResidualFingerprint;
+    TpetraMultiVectorFingerprint coarseRhsFingerprint;
+    TpetraMultiVectorFingerprint coarseCorrectionFingerprint;
+    TpetraMultiVectorFingerprint prolongatedCorrectionFingerprint;
+    TpetraMultiVectorFingerprint residualAfterCorrectionFingerprint;
   };
 
   struct AdditiveSchwarzDetails
@@ -105,6 +121,7 @@ private:
   bool _emitVcycleStageTrace = false;
   bool _printVcycleStageTrace = true;
   mutable std::vector<VcycleStageTraceEntry> _lastVcycleStageTrace;
+  mutable std::vector<VcycleCoarseCorrectionTraceEntry> _lastVcycleCoarseCorrectionTrace;
   bool _clearFinestCondensedDofInterpreterAfterProlongation = false;
 
   TSolutionPtr<Scalar> _coarseSolution;
@@ -152,7 +169,8 @@ private:
   int _chebyshevDegree = 15;
   double _chebyshevEigenAutocomputeRatio = 30.0;
   int _chebyshevMaxEigenIterations = 10;
-  // Chebyshev max-eigenvalue mode: "auto" (default, Ifpack2 estimate) or "gershgorin" (Gershgorin bound of D^-1 A).
+  // Chebyshev max-eigenvalue mode: "auto" (default, Ifpack2 estimate), "gershgorin" (Gershgorin bound of D^-1 A),
+  // or "deterministic-power" (shared deterministic D^-1 A power estimate with Ifpack2 iterations disabled).
   std::string _chebyshevMaxEigenvalueMode = "auto";
   // Diagnostic-only fine smoother bounds recorded in setUpSmoother(); -1 when unavailable.
   double _lastFineChebyshevLambdaMaxForApply = -1.0;
@@ -362,6 +380,9 @@ public:
 
   //! last finest-level V-cycle stage trace recorded by ApplyInverse().
   const std::vector<VcycleStageTraceEntry> &lastVcycleStageTrace() const;
+
+  //! last finest-level coarse-correction diagnostics recorded by ApplyInverse().
+  const std::vector<VcycleCoarseCorrectionTraceEntry> &lastVcycleCoarseCorrectionTrace() const;
 
   //! Dimension that will be used for neighbor relationships for Schwarz blocks, if CAMELLIA_ADDITIVE_SCHWARZ is the smoother choice.
   int getDimensionForSchwarzNeighborRelationship();

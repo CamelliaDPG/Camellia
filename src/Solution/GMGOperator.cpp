@@ -1848,6 +1848,7 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
 {
   narrate("ApplyInverse");
   _lastVcycleStageTrace.clear();
+  _lastVcycleCoarseCorrectionTrace.clear();
   //  cout << "GMGOperator::ApplyInverse.\n";
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
@@ -1958,6 +1959,11 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
       computeResidual(Y, traceResidual, A_Y);
       traceResidualAfterCoarseCorrection = stableTraceValue(multiVectorInfNorm(traceResidual));
       traceSolutionAfterCoarseCorrection = stableTraceValue(multiVectorInfNorm(Y));
+      if (!_lastVcycleCoarseCorrectionTrace.empty())
+      {
+        _lastVcycleCoarseCorrectionTrace.back().residualAfterCorrectionInfNorm = traceResidualAfterCoarseCorrection;
+        _lastVcycleCoarseCorrectionTrace.back().residualAfterCorrectionFingerprint = tpetraMultiVectorFingerprint(traceResidual);
+      }
     }
     
     if ((_smootherType != NONE) && (_multigridStrategy != TWO_LEVEL))
@@ -2029,6 +2035,34 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
                << " residualInfNorm=" << residualNorms[stageIndex]
                << endl;
         }
+        for (size_t traceIndex=0; traceIndex<_lastVcycleCoarseCorrectionTrace.size(); traceIndex++)
+        {
+          const auto &traceEntry = _lastVcycleCoarseCorrectionTrace[traceIndex];
+          cout << "VLASOV_ASSEMBLED_GMG_COARSE_CORRECTION_TRACE"
+               << " index=" << traceIndex
+               << " level=" << traceEntry.levelIndex
+               << " restrictedResidualInfNorm=" << std::setprecision(16) << traceEntry.restrictedResidualInfNorm
+               << " coarseRhsInfNorm=" << traceEntry.coarseRhsInfNorm
+               << " coarseCorrectionInfNorm=" << traceEntry.coarseCorrectionInfNorm
+               << " prolongatedCorrectionInfNorm=" << traceEntry.prolongatedCorrectionInfNorm
+               << " residualAfterCorrectionInfNorm=" << traceEntry.residualAfterCorrectionInfNorm
+               << " restrictedResidualL2Norm=" << traceEntry.restrictedResidualFingerprint.l2Norm
+               << " restrictedResidualSignedSum=" << traceEntry.restrictedResidualFingerprint.signedSum
+               << " restrictedResidualChecksum=" << traceEntry.restrictedResidualFingerprint.checksum
+               << " coarseRhsL2Norm=" << traceEntry.coarseRhsFingerprint.l2Norm
+               << " coarseRhsSignedSum=" << traceEntry.coarseRhsFingerprint.signedSum
+               << " coarseRhsChecksum=" << traceEntry.coarseRhsFingerprint.checksum
+               << " coarseCorrectionL2Norm=" << traceEntry.coarseCorrectionFingerprint.l2Norm
+               << " coarseCorrectionSignedSum=" << traceEntry.coarseCorrectionFingerprint.signedSum
+               << " coarseCorrectionChecksum=" << traceEntry.coarseCorrectionFingerprint.checksum
+               << " prolongatedCorrectionL2Norm=" << traceEntry.prolongatedCorrectionFingerprint.l2Norm
+               << " prolongatedCorrectionSignedSum=" << traceEntry.prolongatedCorrectionFingerprint.signedSum
+               << " prolongatedCorrectionChecksum=" << traceEntry.prolongatedCorrectionFingerprint.checksum
+               << " residualAfterCorrectionL2Norm=" << traceEntry.residualAfterCorrectionFingerprint.l2Norm
+               << " residualAfterCorrectionSignedSum=" << traceEntry.residualAfterCorrectionFingerprint.signedSum
+               << " residualAfterCorrectionChecksum=" << traceEntry.residualAfterCorrectionFingerprint.checksum
+               << endl;
+        }
       }
     }
     if (_debugMode)
@@ -2091,6 +2125,13 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
+  const bool emitCoarseCorrectionTrace = _emitVcycleStageTrace && (_multigridStrategy == V_CYCLE);
+  double coarseRhsInfNorm = 0.0;
+  double coarseCorrectionInfNorm = 0.0;
+  double prolongatedCorrectionInfNorm = 0.0;
+  TpetraMultiVectorFingerprint coarseRhsFingerprint;
+  TpetraMultiVectorFingerprint coarseCorrectionFingerprint;
+  TpetraMultiVectorFingerprint prolongatedCorrectionFingerprint;
 
   auto tCoarseRHSVector = _coarseSolution->getRHSVector();
   TEUCHOS_TEST_FOR_EXCEPTION(tCoarseRHSVector == Teuchos::null, std::invalid_argument, "coarse RHS vector is null");
@@ -2117,6 +2158,11 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
     res.describe(*fos, Teuchos::VERB_EXTREME);
   }
   _P->apply(res, *tCoarseRHSVector, Teuchos::TRANS, 1.0, 0.0);
+  if (emitCoarseCorrectionTrace)
+  {
+    coarseRhsFingerprint = tpetraMultiVectorFingerprint(*tCoarseRHSVector);
+    coarseRhsInfNorm = coarseRhsFingerprint.infNorm;
+  }
   if (printVerboseOutput) cout << "finished _P->apply(res, *tCoarseRHSVector, Teuchos::TRANS);\n";
   if (_debugMode)
   {
@@ -2158,6 +2204,11 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
   if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
   auto tCoarseLHSVector = _coarseSolution->getLHSVector();
   TEUCHOS_TEST_FOR_EXCEPTION(tCoarseLHSVector == Teuchos::null, std::invalid_argument, "coarse LHS vector is null");
+  if (emitCoarseCorrectionTrace)
+  {
+    coarseCorrectionFingerprint = tpetraMultiVectorFingerprint(*tCoarseLHSVector);
+    coarseCorrectionInfNorm = coarseCorrectionFingerprint.infNorm;
+  }
   
   if (_debugMode)
   {
@@ -2171,6 +2222,22 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
   narrate("multiply _P * tCoarseLHSVector");
 
   _P->apply(*tCoarseLHSVector, Y, Teuchos::NO_TRANS, 1.0, 0.0);
+  if (emitCoarseCorrectionTrace)
+  {
+    prolongatedCorrectionFingerprint = tpetraMultiVectorFingerprint(Y);
+    prolongatedCorrectionInfNorm = prolongatedCorrectionFingerprint.infNorm;
+    VcycleCoarseCorrectionTraceEntry traceEntry;
+    traceEntry.levelIndex = 0;
+    traceEntry.restrictedResidualInfNorm = coarseRhsInfNorm;
+    traceEntry.coarseRhsInfNorm = coarseRhsInfNorm;
+    traceEntry.coarseCorrectionInfNorm = coarseCorrectionInfNorm;
+    traceEntry.prolongatedCorrectionInfNorm = prolongatedCorrectionInfNorm;
+    traceEntry.restrictedResidualFingerprint = coarseRhsFingerprint;
+    traceEntry.coarseRhsFingerprint = coarseRhsFingerprint;
+    traceEntry.coarseCorrectionFingerprint = coarseCorrectionFingerprint;
+    traceEntry.prolongatedCorrectionFingerprint = prolongatedCorrectionFingerprint;
+    _lastVcycleCoarseCorrectionTrace.push_back(traceEntry);
+  }
   if (printVerboseOutput) cout << "finished _P->apply(*tCoarseLHSVector, Y, Teuchos::NO_TRANS)\n";
   _timeMapCoarseToFine += timer.ElapsedTime();
   
@@ -2415,8 +2482,8 @@ void GMGOperator::setChebyshevMaxEigenIterations(int maxEigenIterations)
 
 void GMGOperator::setChebyshevMaxEigenvalueMode(std::string mode)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION((mode != "auto") && (mode != "gershgorin"), std::invalid_argument,
-                             "GMGOperator::setChebyshevMaxEigenvalueMode(): mode must be 'auto' or 'gershgorin'");
+  TEUCHOS_TEST_FOR_EXCEPTION((mode != "auto") && (mode != "gershgorin") && (mode != "deterministic-power"), std::invalid_argument,
+                             "GMGOperator::setChebyshevMaxEigenvalueMode(): mode must be 'auto', 'gershgorin', or 'deterministic-power'");
   _chebyshevMaxEigenvalueMode = mode;
 }
 
@@ -2455,6 +2522,11 @@ void GMGOperator::setPrintVcycleStageTrace(bool value)
 const std::vector<GMGOperator::VcycleStageTraceEntry> &GMGOperator::lastVcycleStageTrace() const
 {
   return _lastVcycleStageTrace;
+}
+
+const std::vector<GMGOperator::VcycleCoarseCorrectionTraceEntry> &GMGOperator::lastVcycleCoarseCorrectionTrace() const
+{
+  return _lastVcycleCoarseCorrectionTrace;
 }
 
 void GMGOperator::setFineStiffnessMatrix(TMatrixPtr<Scalar> fineStiffness)
@@ -2740,6 +2812,17 @@ void GMGOperator::setUpSmoother(TMatrixPtr<double> fineStiffnessMatrix)
         {
           List.set("chebyshev: max eigenvalue", gershgorinLambdaMax);
           List.set("chebyshev: min eigenvalue", gershgorinLambdaMax / _chebyshevEigenAutocomputeRatio);
+          List.set("chebyshev: eigenvalue max iterations", 0);
+        }
+      }
+      else if ((_chebyshevMaxEigenvalueMode == "deterministic-power") && (fineStiffnessMatrix != Teuchos::null))
+      {
+        // Opt-in controlled experiment: match the matrix-free side, lambdaMax = shared deterministic D^-1 A power estimate.
+        const double deterministicPowerLambdaMax = computeFineDeterministicPowerLambdaMax(fineStiffnessMatrix);
+        if (deterministicPowerLambdaMax > 0.0)
+        {
+          List.set("chebyshev: max eigenvalue", deterministicPowerLambdaMax);
+          List.set("chebyshev: min eigenvalue", deterministicPowerLambdaMax / _chebyshevEigenAutocomputeRatio);
           List.set("chebyshev: eigenvalue max iterations", 0);
         }
       }

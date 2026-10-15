@@ -7,6 +7,7 @@
 #ifndef Camellia_MatrixFreeGMGPreconditioner_h
 #define Camellia_MatrixFreeGMGPreconditioner_h
 
+#include "TensorTpetraRowMatrixDiagnostics.hpp"
 #include "TypeDefs.h"
 
 #include "Teuchos_Exceptions.hpp"
@@ -61,6 +62,9 @@ namespace Camellia
       Magnitude rhsInfNorm = Magnitude(0.0);
       Magnitude solutionInfNorm = Magnitude(0.0);
       Magnitude residualInfNorm = Magnitude(0.0);
+      TpetraMultiVectorFingerprint rhsFingerprint;
+      TpetraMultiVectorFingerprint solutionFingerprint;
+      TpetraMultiVectorFingerprint residualFingerprint;
     };
 
     struct Level
@@ -231,9 +235,12 @@ namespace Camellia
       StageTraceEntry entry;
       entry.levelIndex = levelIndex;
       entry.stageName = stageName;
-      entry.rhsInfNorm = vectorInfNorm(rhs);
-      entry.solutionInfNorm = vectorInfNorm(solution);
-      entry.residualInfNorm = residual == nullptr ? Magnitude(0.0) : vectorInfNorm(*residual);
+      entry.rhsFingerprint = tpetraMultiVectorFingerprint(rhs);
+      entry.solutionFingerprint = tpetraMultiVectorFingerprint(solution);
+      entry.residualFingerprint = residual == nullptr ? TpetraMultiVectorFingerprint() : tpetraMultiVectorFingerprint(*residual);
+      entry.rhsInfNorm = entry.rhsFingerprint.infNorm;
+      entry.solutionInfNorm = entry.solutionFingerprint.infNorm;
+      entry.residualInfNorm = entry.residualFingerprint.infNorm;
       _lastStageTrace.push_back(entry);
     }
 

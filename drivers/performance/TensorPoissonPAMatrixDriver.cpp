@@ -2248,6 +2248,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     std::vector<std::vector<Scalar>> levelMatrices_;
     std::vector<std::vector<Scalar>> levelInverseDiagonals_;
     std::vector<std::vector<Scalar>> levelLambdaMaxByCell_;
+    std::vector<std::string> levelLambdaMaxModes_;
     std::string description_;
     std::string fineSmootherImpl_ = "local";
     std::string chebyshevLambdaMaxMode_ = "auto";
@@ -2331,6 +2332,36 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                                                          "extractLambdaMaxFromBlockDenseMatrices");
     }
 
+    static std::vector<Scalar> extractDeterministicPowerLambdaMaxFromBlockDenseMatrices(
+        const std::vector<Scalar> &matrices,
+        const std::vector<Scalar> &inverseDiagonal,
+        const int cells,
+        const int rows,
+        const int iterations)
+    {
+      return Camellia::tensorLocalExtractDeterministicPowerLambdaMaxFromBlockDenseMatrices(
+          matrices, inverseDiagonal, cells, rows, iterations, 1,
+          "extractDeterministicPowerLambdaMaxFromBlockDenseMatrices");
+    }
+
+    std::string localDenseLambdaMaxMode() const
+    {
+      return (chebyshevLambdaMaxMode_ == "deterministic-power") ? "deterministic-power" : "gershgorin";
+    }
+
+    std::vector<Scalar> extractLocalLambdaMaxFromBlockDenseMatrices(
+        const std::vector<Scalar> &matrices,
+        const std::vector<Scalar> &inverseDiagonal,
+        const int cells,
+        const int rows) const
+    {
+      if (chebyshevLambdaMaxMode_ == "deterministic-power")
+        return extractDeterministicPowerLambdaMaxFromBlockDenseMatrices(matrices, inverseDiagonal,
+                                                                        cells, rows,
+                                                                        chebyshevEigenMaxIterations_);
+      return extractLambdaMaxFromBlockDenseMatrices(matrices, inverseDiagonal, cells, rows);
+    }
+
     Scalar computeFineRowMatrixGershgorinLambdaMax(const Teuchos::RCP<const TpetraRowMatrix> &rowMatrix) const
     {
       return Camellia::tensorTpetraRowMatrixDInvAGershgorinLambdaMax<TpetraRowMatrix>(
@@ -2386,8 +2417,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
       if ((fineSmootherImpl_ != "ifpack2") && (fineSmootherImpl_ != "local"))
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner fine smoother implementation must be ifpack2 or local");
-      if ((chebyshevLambdaMaxMode_ != "auto") && (chebyshevLambdaMaxMode_ != "gershgorin"))
-        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner Chebyshev lambdaMax mode must be auto or gershgorin");
+      if ((chebyshevLambdaMaxMode_ != "auto") && (chebyshevLambdaMaxMode_ != "gershgorin") && (chebyshevLambdaMaxMode_ != "deterministic-power"))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner Chebyshev lambdaMax mode must be auto, gershgorin, or deterministic-power");
       coarseSolverPolicy_ = Camellia::tensorLocalPMultigridCoarseSolverPolicyFromName(coarseSolver_,
                                                                                        "LocalPMultigridTpetraPreconditioner");
       // The jacobi smoother path stays on the hand-written local smoother.
@@ -2422,7 +2453,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         }
 
         fineInverseDiagonal_ = extractInverseDiagonalFromBlockDenseMatrices(fineMatrices_, cells_, localDofs_);
-        fineLambdaMaxByCell_ = extractLambdaMaxFromBlockDenseMatrices(fineMatrices_, fineInverseDiagonal_, cells_, localDofs_);
+        fineLambdaMaxByCell_ = extractLocalLambdaMaxFromBlockDenseMatrices(fineMatrices_, fineInverseDiagonal_, cells_, localDofs_);
       }
       if (!fineRowMatrix.is_null())
         rowMatrixDeterministicPowerLambdaMax_ = computeFineRowMatrixDeterministicPowerLambdaMax(fineRowMatrix);
@@ -2447,6 +2478,13 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           smootherParams.set("chebyshev: min eigenvalue", rowMatrixGershgorinLambdaMax_ / ratio);
           smootherParams.set("chebyshev: eigenvalue max iterations", 0);
         }
+        else if (chebyshevLambdaMaxMode_ == "deterministic-power")
+        {
+          // Shared deterministic D^-1 A power estimate, with Ifpack2 eigenvalue iterations disabled.
+          smootherParams.set("chebyshev: max eigenvalue", rowMatrixDeterministicPowerLambdaMax_);
+          smootherParams.set("chebyshev: min eigenvalue", rowMatrixDeterministicPowerLambdaMax_ / ratio);
+          smootherParams.set("chebyshev: eigenvalue max iterations", 0);
+        }
         else
         {
           smootherParams.set("chebyshev: eigenvalue max iterations", chebyshevEigenMaxIterations_);
@@ -2462,11 +2500,13 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       levelMatrices_.clear();
       levelInverseDiagonals_.clear();
       levelLambdaMaxByCell_.clear();
+      levelLambdaMaxModes_.clear();
       levelDegrees_.push_back(p);
       levelRows_.push_back(localDofs_);
       levelMatrices_.push_back(fineMatrices_);
       levelInverseDiagonals_.push_back(fineInverseDiagonal_);
       levelLambdaMaxByCell_.push_back(fineLambdaMaxByCell_);
+      levelLambdaMaxModes_.push_back(fineMatrices_.empty() ? (std::string("ifpack2-") + chebyshevLambdaMaxMode_) : localDenseLambdaMaxMode());
 
       if (fineMatrices_.empty())
       {
@@ -2501,13 +2541,14 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           }
         }
         const auto nextInverseDiagonal = extractInverseDiagonalFromBlockDenseMatrices(nextMatrices, cells_, nextRows);
-        const auto nextLambdaMaxByCell = extractLambdaMaxFromBlockDenseMatrices(nextMatrices, nextInverseDiagonal, cells_, nextRows);
+        const auto nextLambdaMaxByCell = extractLocalLambdaMaxFromBlockDenseMatrices(nextMatrices, nextInverseDiagonal, cells_, nextRows);
         levelTransfers_.push_back(&levelTransfer);
         levelDegrees_.push_back(nextDegree);
         levelRows_.push_back(nextRows);
         levelMatrices_.push_back(nextMatrices);
         levelInverseDiagonals_.push_back(nextInverseDiagonal);
         levelLambdaMaxByCell_.push_back(nextLambdaMaxByCell);
+        levelLambdaMaxModes_.push_back(localDenseLambdaMaxMode());
       }
 
       while (levelDegrees_.back() > 1)
@@ -2529,13 +2570,14 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           std::copy(nextMatrix.begin(), nextMatrix.end(), nextMatrices.begin() + nextOffset);
         }
         const auto nextInverseDiagonal = extractInverseDiagonalFromBlockDenseMatrices(nextMatrices, cells_, nextRows);
-        const auto nextLambdaMaxByCell = extractLambdaMaxFromBlockDenseMatrices(nextMatrices, nextInverseDiagonal, cells_, nextRows);
+        const auto nextLambdaMaxByCell = extractLocalLambdaMaxFromBlockDenseMatrices(nextMatrices, nextInverseDiagonal, cells_, nextRows);
         levelTransfers_.push_back(&levelTransfer);
         levelDegrees_.push_back(nextDegree);
         levelRows_.push_back(nextRows);
         levelMatrices_.push_back(nextMatrices);
         levelInverseDiagonals_.push_back(nextInverseDiagonal);
         levelLambdaMaxByCell_.push_back(nextLambdaMaxByCell);
+        levelLambdaMaxModes_.push_back(localDenseLambdaMaxMode());
       }
 
       if (levelRows_.size() < 2)
@@ -2561,6 +2603,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         if (levelOrdinal > 0) desc << "->";
         desc << levelDegrees_[levelOrdinal];
       }
+      desc << ",levelLambdaMaxModes=" << levelLambdaMaxModeScheduleString();
       desc << ",fineRows=" << transfer_->fineRows << ",coarseRows=" << transfer_->coarseRows
            << ",fineMatrixMode=" << fineMatrixStorageMode_
            << ",smoother=" << smootherName_ << ",smootherIterations=" << smootherIterations_
@@ -2590,6 +2633,32 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       return schedule.str();
     }
 
+    std::string levelLambdaMaxModeScheduleString() const
+    {
+      std::ostringstream schedule;
+      for (size_t levelOrdinal=0; levelOrdinal<levelLambdaMaxModes_.size(); levelOrdinal++)
+      {
+        if (levelOrdinal > 0) schedule << "->";
+        schedule << levelLambdaMaxModes_[levelOrdinal];
+      }
+      return schedule.str();
+    }
+
+    std::string levelLambdaMaxCell0ScheduleString() const
+    {
+      std::ostringstream schedule;
+      schedule << std::setprecision(16);
+      for (size_t levelOrdinal=0; levelOrdinal<levelLambdaMaxByCell_.size(); levelOrdinal++)
+      {
+        if (levelOrdinal > 0) schedule << "->";
+        if (levelLambdaMaxByCell_[levelOrdinal].empty())
+          schedule << "n/a";
+        else
+          schedule << levelLambdaMaxByCell_[levelOrdinal][0];
+      }
+      return schedule.str();
+    }
+
     Scalar fineIfpack2LambdaMaxForApply() const
     {
       if (!useIfpack2FineSmoother_ || fineIfpack2Smoother_.is_null()) return Scalar(-1.0);
@@ -2615,6 +2684,9 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           << " smootherImpl=" << (useIfpack2FineSmoother_ ? "ifpack2" : "local")
           << " fineMatrixMode=" << fineMatrixStorageMode_
           << " lambdaMaxMode=" << chebyshevLambdaMaxMode_
+          << " pLevelSchedule=" << levelDegreeScheduleString()
+          << " pLevelLambdaMaxModes=" << levelLambdaMaxModeScheduleString()
+          << " pLevelLambdaMaxCell0=" << levelLambdaMaxCell0ScheduleString()
           << " rowMatrixGershgorinLambdaMax=" << rowMatrixGershgorinLambdaMax_
           << " deterministicPowerLambdaMax=" << rowMatrixDeterministicPowerLambdaMax_
           << " deterministicPowerIterations=" << chebyshevEigenMaxIterations_
@@ -2622,7 +2694,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           << " ifpack2EigenAnalysisType=power_method"
           << " ifpack2ZeroStartingSolution=1"
           << " ifpack2ComputeSpectralRadius=1"
-          << " ifpack2EigenvalueMaxIterations=" << ((useIfpack2FineSmoother_ && (chebyshevLambdaMaxMode_ == "gershgorin")) ? 0 : chebyshevEigenMaxIterations_)
+          << " ifpack2EigenvalueMaxIterations=" << ((useIfpack2FineSmoother_ && ((chebyshevLambdaMaxMode_ == "gershgorin") || (chebyshevLambdaMaxMode_ == "deterministic-power"))) ? 0 : chebyshevEigenMaxIterations_)
           << " ifpack2Degree=" << smootherIterations_
           << " ifpack2Ratio=" << (Scalar(1.0) / smootherLowerFraction_)
           << std::endl;
@@ -4300,6 +4372,15 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                     << " rhsInfNorm=" << std::setprecision(15) << entry.rhsInfNorm
                     << " solutionInfNorm=" << entry.solutionInfNorm
                     << " residualInfNorm=" << entry.residualInfNorm
+                    << " rhsL2Norm=" << entry.rhsFingerprint.l2Norm
+                    << " rhsSignedSum=" << entry.rhsFingerprint.signedSum
+                    << " rhsChecksum=" << entry.rhsFingerprint.checksum
+                    << " solutionL2Norm=" << entry.solutionFingerprint.l2Norm
+                    << " solutionSignedSum=" << entry.solutionFingerprint.signedSum
+                    << " solutionChecksum=" << entry.solutionFingerprint.checksum
+                    << " residualL2Norm=" << entry.residualFingerprint.l2Norm
+                    << " residualSignedSum=" << entry.residualFingerprint.signedSum
+                    << " residualChecksum=" << entry.residualFingerprint.checksum
                     << std::endl;
         }
       }
@@ -5385,7 +5466,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("pMultigridChebyshevSmootherIterations", &pMultigridChebyshevSmootherIterations, "Chebyshev pre/post smoother iterations for --inverseDiagnosticAlgorithm=pmultigrid-chebyshev.");
     cmdp.setOption("pMultigridChebyshevSmootherLowerFraction", &pMultigridChebyshevSmootherLowerFraction, "Lower endpoint as a fraction of lambdaMax for high-frequency Chebyshev p-multigrid smoothing.");
     cmdp.setOption("pMultigridFineSmootherImpl", &pMultigridFineSmootherImpl, "Fine p-multigrid Chebyshev smoother implementation: ifpack2 (default; global Ifpack2 Chebyshev on the RowMatrix adapter) or local (hand-written per-cell Chebyshev, kept for diagnostics). The jacobi smoother always uses the local path.");
-    cmdp.setOption("pMultigridChebyshevLambdaMax", &pMultigridChebyshevLambdaMax, "Ifpack2 fine Chebyshev lambdaMax: auto (Ifpack2 power iteration) or gershgorin (dense-free RowMatrix Gershgorin bound of D^{-1}A; sets max/min eigenvalue and disables eigenvalue iterations).");
+    cmdp.setOption("pMultigridChebyshevLambdaMax", &pMultigridChebyshevLambdaMax, "Ifpack2 fine Chebyshev lambdaMax: auto (Ifpack2 power iteration), gershgorin (dense-free RowMatrix Gershgorin bound of D^{-1}A), or deterministic-power (shared deterministic D^{-1}A power estimate); controlled modes set max/min eigenvalue and disable Ifpack2 eigenvalue iterations.");
     cmdp.setOption("pMultigridChebyshevEigenMaxIterations", &pMultigridChebyshevEigenMaxIterations, "Ifpack2 'chebyshev: eigenvalue max iterations' for the fine p-multigrid smoother in auto lambdaMax mode.");
     cmdp.setOption("pMultigridFineSmootherWeight", &pMultigridFineSmootherWeight, "Scalar multiplier applied to each fine-level p-multigrid smoother correction; default 1.0 matches GMGOperator's default smoother weight and preserves the current matrix-free diagnostic behavior.");
     cmdp.setOption("pMultigridJacobiSmootherIterations", &pMultigridJacobiSmootherIterations, "Diagonal Jacobi pre/post smoother iterations per level for --inverseDiagnosticAlgorithm=pmultigrid-jacobi-chebyshev.");
