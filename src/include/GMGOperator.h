@@ -57,6 +57,9 @@ public:
     double rhsInfNorm = 0.0;
     double solutionInfNorm = 0.0;
     double residualInfNorm = 0.0;
+    TpetraMultiVectorFingerprint rhsFingerprint;
+    TpetraMultiVectorFingerprint solutionFingerprint;
+    TpetraMultiVectorFingerprint residualFingerprint;
   };
 
   struct VcycleCoarseCorrectionTraceEntry

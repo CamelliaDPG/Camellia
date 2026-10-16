@@ -301,7 +301,18 @@ namespace Camellia
       if (coarsest)
       {
         level.coarseSolve(rhs, solution);
-        recordStage(levelIndex, "CoarseSolve", rhs, solution);
+        if (_emitStageTrace && level.applyOperator)
+        {
+          const size_t numVectors = rhs.getNumVectors();
+          MultiVector operatorSolution(level.map, numVectors);
+          MultiVector residual(level.map, numVectors);
+          computeResidual(level, rhs, solution, operatorSolution, residual);
+          recordStage(levelIndex, "CoarseSolve", rhs, solution, &residual, &operatorSolution);
+        }
+        else
+        {
+          recordStage(levelIndex, "CoarseSolve", rhs, solution);
+        }
         return;
       }
 

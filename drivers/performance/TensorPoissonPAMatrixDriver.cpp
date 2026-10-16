@@ -2275,9 +2275,23 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       Camellia::TpetraMultiVectorFingerprint residualFingerprint;
     };
 
+    struct CoarseSolveStageTraceEntry
+    {
+      int levelIndex = 0;
+      int polynomialDegree = 0;
+      std::string stageName;
+      double rhsInfNorm = 0.0;
+      double solutionInfNorm = 0.0;
+      double residualInfNorm = 0.0;
+      Camellia::TpetraMultiVectorFingerprint rhsFingerprint;
+      Camellia::TpetraMultiVectorFingerprint solutionFingerprint;
+      Camellia::TpetraMultiVectorFingerprint residualFingerprint;
+    };
+
   private:
     bool emitRecursiveTrace_ = false;
     mutable std::vector<RecursiveTraceEntry> lastRecursiveTrace_;
+    mutable std::vector<CoarseSolveStageTraceEntry> lastCoarseSolveStageTrace_;
 
     static std::vector<Scalar> denseCellMatrix(const std::vector<Scalar> &matrices,
                                                const int cellOrdinal,
@@ -2326,6 +2340,24 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       entry.solutionInfNorm = entry.solutionFingerprint.infNorm;
       entry.residualInfNorm = entry.residualFingerprint.infNorm;
       lastRecursiveTrace_.push_back(entry);
+    }
+
+    void appendCoarseSolveStageTraceEntry(const int levelIndex, const std::string &stageName,
+                                          const TpetraMultiVector &rhs, const TpetraMultiVector &solution,
+                                          const TpetraMultiVector &residual) const
+    {
+      if (!emitRecursiveTrace_) return;
+      CoarseSolveStageTraceEntry entry;
+      entry.levelIndex = levelIndex;
+      entry.polynomialDegree = ((levelIndex >= 0) && (levelIndex < static_cast<int>(levelDegrees_.size()))) ? levelDegrees_[static_cast<size_t>(levelIndex)] : -1;
+      entry.stageName = stageName;
+      entry.rhsFingerprint = Camellia::tpetraMultiVectorFingerprint(rhs);
+      entry.solutionFingerprint = Camellia::tpetraMultiVectorFingerprint(solution);
+      entry.residualFingerprint = Camellia::tpetraMultiVectorFingerprint(residual);
+      entry.rhsInfNorm = entry.rhsFingerprint.infNorm;
+      entry.solutionInfNorm = entry.solutionFingerprint.infNorm;
+      entry.residualInfNorm = entry.residualFingerprint.infNorm;
+      lastCoarseSolveStageTrace_.push_back(entry);
     }
 
     static void applyDenseCellMatrix(const std::vector<Scalar> &matrices, const int cellOrdinal,
@@ -2673,6 +2705,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     Teuchos::RCP<const TpetraMap> coarseMap() const { return coarseMap_; }
     void setEmitRecursiveTrace(const bool value) { emitRecursiveTrace_ = value; }
     const std::vector<RecursiveTraceEntry> &lastRecursiveTrace() const { return lastRecursiveTrace_; }
+    const std::vector<CoarseSolveStageTraceEntry> &lastCoarseSolveStageTrace() const { return lastCoarseSolveStageTrace_; }
 
     int levelCount() const { return static_cast<int>(levelDegrees_.size()); }
 
@@ -3025,6 +3058,163 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       if (CoarseRHS.getNumVectors() != CoarseSolution.getNumVectors())
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner coarse solve multivector count mismatch");
 
+      const bool emitCommonP2CoarseSolveTrace =
+          emitRecursiveTrace_ &&
+          (levelRows_.size() > 2) &&
+          (levelTransfers_.size() > 1) &&
+          (levelDegrees_.size() > 1) &&
+          (levelRows_[1] == coarseRows_) &&
+          (levelDegrees_[1] == 2);
+      if (emitCommonP2CoarseSolveTrace)
+      {
+        lastCoarseSolveStageTrace_.clear();
+        const int levelIndex = 1;
+        const int rows = coarseRows_;
+        const int coarseChildRows = levelRows_[static_cast<size_t>(levelIndex + 1)];
+        const auto &levelMatrix = levelMatrices_[static_cast<size_t>(levelIndex)];
+        const auto &levelTransfer = *levelTransfers_[static_cast<size_t>(levelIndex)];
+        const size_t numVectors = CoarseRHS.getNumVectors();
+        TpetraMultiVector solution(coarseMap_, numVectors);
+        solution.putScalar(Scalar(0.0));
+        TpetraMultiVector residual(CoarseRHS, Teuchos::Copy);
+
+        {
+          auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
+          std::vector<Scalar> rhs(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> zeroSolution(static_cast<size_t>(rows), Scalar(0.0));
+          for (size_t vectorOrdinal=0; vectorOrdinal<numVectors; vectorOrdinal++)
+          {
+            for (int c=0; c<cells_; c++)
+            {
+              const size_t coarseOffset = static_cast<size_t>(c) * static_cast<size_t>(rows);
+              for (int i=0; i<rows; i++) rhs[static_cast<size_t>(i)] = rhsHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal);
+              appendRecursiveTraceEntry(levelIndex, c, "Initial", rhs, zeroSolution, rhs);
+            }
+          }
+        }
+        appendCoarseSolveStageTraceEntry(levelIndex, "Initial", CoarseRHS, solution, residual);
+
+        {
+          auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
+          auto solutionHost = solution.getLocalViewHost(Tpetra::Access::ReadWrite);
+          auto residualHost = residual.getLocalViewHost(Tpetra::Access::ReadWrite);
+          std::vector<Scalar> rhs(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> localSolution(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> localResidual(static_cast<size_t>(rows), Scalar(0.0));
+          for (size_t vectorOrdinal=0; vectorOrdinal<numVectors; vectorOrdinal++)
+          {
+            for (int c=0; c<cells_; c++)
+            {
+              const size_t coarseOffset = static_cast<size_t>(c) * static_cast<size_t>(rows);
+              for (int i=0; i<rows; i++)
+              {
+                const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
+                rhs[static_cast<size_t>(i)] = rhsHost(localOrdinal, vectorOrdinal);
+                localSolution[static_cast<size_t>(i)] = solutionHost(localOrdinal, vectorOrdinal);
+              }
+              smoothLevel(levelIndex, c, rhs, localSolution);
+              applyDenseCellMatrix(levelMatrix, c, rows, localSolution, applied);
+              for (int i=0; i<rows; i++)
+              {
+                localResidual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+                const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
+                solutionHost(localOrdinal, vectorOrdinal) = localSolution[static_cast<size_t>(i)];
+                residualHost(localOrdinal, vectorOrdinal) = localResidual[static_cast<size_t>(i)];
+              }
+              appendRecursiveTraceEntry(levelIndex, c, "PreSmooth", rhs, localSolution, localResidual);
+            }
+          }
+        }
+        appendCoarseSolveStageTraceEntry(levelIndex, "PreSmooth", CoarseRHS, solution, residual);
+
+        {
+          auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
+          auto solutionHost = solution.getLocalViewHost(Tpetra::Access::ReadWrite);
+          auto residualHost = residual.getLocalViewHost(Tpetra::Access::ReadWrite);
+          std::vector<Scalar> rhs(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> localSolution(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> localResidual(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> coarseChildResidual(static_cast<size_t>(coarseChildRows), Scalar(0.0));
+          std::vector<Scalar> coarseChildCorrection(static_cast<size_t>(coarseChildRows), Scalar(0.0));
+          std::vector<Scalar> fineCorrection(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
+          for (size_t vectorOrdinal=0; vectorOrdinal<numVectors; vectorOrdinal++)
+          {
+            for (int c=0; c<cells_; c++)
+            {
+              const size_t coarseOffset = static_cast<size_t>(c) * static_cast<size_t>(rows);
+              for (int i=0; i<rows; i++)
+              {
+                const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
+                rhs[static_cast<size_t>(i)] = rhsHost(localOrdinal, vectorOrdinal);
+                localSolution[static_cast<size_t>(i)] = solutionHost(localOrdinal, vectorOrdinal);
+                localResidual[static_cast<size_t>(i)] = residualHost(localOrdinal, vectorOrdinal);
+              }
+              applyTensorHGradPTransferRestriction(levelTransfer, localResidual, coarseChildResidual);
+              solveRecursiveLevel(levelIndex + 1, c, coarseChildResidual, coarseChildCorrection);
+              applyTensorHGradPTransferProlongation(levelTransfer, coarseChildCorrection, fineCorrection);
+              for (int i=0; i<rows; i++) localSolution[static_cast<size_t>(i)] += fineCorrection[static_cast<size_t>(i)];
+              applyDenseCellMatrix(levelMatrix, c, rows, localSolution, applied);
+              for (int i=0; i<rows; i++)
+              {
+                localResidual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+                const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
+                solutionHost(localOrdinal, vectorOrdinal) = localSolution[static_cast<size_t>(i)];
+                residualHost(localOrdinal, vectorOrdinal) = localResidual[static_cast<size_t>(i)];
+              }
+              appendRecursiveTraceEntry(levelIndex, c, "CoarseCorrection", rhs, localSolution, localResidual);
+            }
+          }
+        }
+        appendCoarseSolveStageTraceEntry(levelIndex, "CoarseCorrection", CoarseRHS, solution, residual);
+
+        {
+          auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
+          auto solutionHost = solution.getLocalViewHost(Tpetra::Access::ReadWrite);
+          auto residualHost = residual.getLocalViewHost(Tpetra::Access::ReadWrite);
+          std::vector<Scalar> rhs(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> localSolution(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> localResidual(static_cast<size_t>(rows), Scalar(0.0));
+          for (size_t vectorOrdinal=0; vectorOrdinal<numVectors; vectorOrdinal++)
+          {
+            for (int c=0; c<cells_; c++)
+            {
+              const size_t coarseOffset = static_cast<size_t>(c) * static_cast<size_t>(rows);
+              for (int i=0; i<rows; i++)
+              {
+                const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
+                rhs[static_cast<size_t>(i)] = rhsHost(localOrdinal, vectorOrdinal);
+                localSolution[static_cast<size_t>(i)] = solutionHost(localOrdinal, vectorOrdinal);
+              }
+              smoothLevel(levelIndex, c, rhs, localSolution);
+              applyDenseCellMatrix(levelMatrix, c, rows, localSolution, applied);
+              for (int i=0; i<rows; i++)
+              {
+                localResidual[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+                const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
+                solutionHost(localOrdinal, vectorOrdinal) = localSolution[static_cast<size_t>(i)];
+                residualHost(localOrdinal, vectorOrdinal) = localResidual[static_cast<size_t>(i)];
+              }
+              appendRecursiveTraceEntry(levelIndex, c, "PostSmooth", rhs, localSolution, localResidual);
+            }
+          }
+        }
+        appendCoarseSolveStageTraceEntry(levelIndex, "PostSmooth", CoarseRHS, solution, residual);
+
+        {
+          auto solutionHost = solution.getLocalViewHost(Tpetra::Access::ReadOnly);
+          auto coarseSolutionHost = CoarseSolution.getLocalViewHost(Tpetra::Access::ReadWrite);
+          for (size_t vectorOrdinal=0; vectorOrdinal<numVectors; vectorOrdinal++)
+          {
+            for (size_t localOrdinal=0; localOrdinal<coarseLength; localOrdinal++)
+              coarseSolutionHost(localOrdinal, vectorOrdinal) = solutionHost(localOrdinal, vectorOrdinal);
+          }
+        }
+        return;
+      }
+
       auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
       auto solutionHost = CoarseSolution.getLocalViewHost(Tpetra::Access::ReadWrite);
       std::vector<Scalar> coarseRhs(static_cast<size_t>(coarseRows_), Scalar(0.0));
@@ -3056,7 +3246,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner local vector length mismatch");
       if (X.getNumVectors() != Y.getNumVectors())
         throw std::invalid_argument("LocalPMultigridTpetraPreconditioner multivector count mismatch");
-      if (emitRecursiveTrace_) lastRecursiveTrace_.clear();
+      if (emitRecursiveTrace_)
+      {
+        lastRecursiveTrace_.clear();
+        lastCoarseSolveStageTrace_.clear();
+      }
 
       if (useIfpack2FineSmoother_)
       {
@@ -4498,6 +4692,29 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         }
         if (localPMultigridForStageTrace != Teuchos::null)
         {
+          const auto &coarseSolveStageTrace = localPMultigridForStageTrace->lastCoarseSolveStageTrace();
+          for (size_t traceIndex=0; traceIndex<coarseSolveStageTrace.size(); traceIndex++)
+          {
+            const auto &entry = coarseSolveStageTrace[traceIndex];
+            std::cout << "MATRIX_FREE_LOCAL_PMG_COARSE_SOLVE_STAGE"
+                      << " index=" << traceIndex
+                      << " level=" << entry.levelIndex
+                      << " p=" << entry.polynomialDegree
+                      << " stage=" << entry.stageName
+                      << " rhsInfNorm=" << std::setprecision(15) << entry.rhsInfNorm
+                      << " solutionInfNorm=" << entry.solutionInfNorm
+                      << " residualInfNorm=" << entry.residualInfNorm
+                      << " rhsL2Norm=" << entry.rhsFingerprint.l2Norm
+                      << " rhsSignedSum=" << entry.rhsFingerprint.signedSum
+                      << " rhsChecksum=" << entry.rhsFingerprint.checksum
+                      << " solutionL2Norm=" << entry.solutionFingerprint.l2Norm
+                      << " solutionSignedSum=" << entry.solutionFingerprint.signedSum
+                      << " solutionChecksum=" << entry.solutionFingerprint.checksum
+                      << " residualL2Norm=" << entry.residualFingerprint.l2Norm
+                      << " residualSignedSum=" << entry.residualFingerprint.signedSum
+                      << " residualChecksum=" << entry.residualFingerprint.checksum
+                      << std::endl;
+          }
           const auto &recursiveTrace = localPMultigridForStageTrace->lastRecursiveTrace();
           for (size_t traceIndex=0; traceIndex<recursiveTrace.size(); traceIndex++)
           {

@@ -1911,14 +1911,23 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
     return std::isfinite(value) ? value : 0.0;
   };
   const double traceRhsInfNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(X_in)) : 0.0;
+  const TpetraMultiVectorFingerprint traceRhsFingerprint = emitStageTrace ? tpetraMultiVectorFingerprint(X_in) : TpetraMultiVectorFingerprint();
   const double traceInitialResidualNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(res)) : 0.0;
+  const TpetraMultiVectorFingerprint traceInitialResidualFingerprint = emitStageTrace ? tpetraMultiVectorFingerprint(res) : TpetraMultiVectorFingerprint();
   const double traceInitialSolutionNorm = emitStageTrace ? stableTraceValue(multiVectorInfNorm(Y)) : 0.0;
+  const TpetraMultiVectorFingerprint traceInitialSolutionFingerprint = emitStageTrace ? tpetraMultiVectorFingerprint(Y) : TpetraMultiVectorFingerprint();
   double traceResidualAfterPreSmooth = traceInitialResidualNorm;
   double traceResidualAfterCoarseCorrection = traceInitialResidualNorm;
   double traceResidualAfterPostSmooth = traceInitialResidualNorm;
   double traceSolutionAfterPreSmooth = traceInitialSolutionNorm;
   double traceSolutionAfterCoarseCorrection = traceInitialSolutionNorm;
   double traceSolutionAfterPostSmooth = traceInitialSolutionNorm;
+  TpetraMultiVectorFingerprint traceResidualAfterPreSmoothFingerprint = traceInitialResidualFingerprint;
+  TpetraMultiVectorFingerprint traceResidualAfterCoarseCorrectionFingerprint = traceInitialResidualFingerprint;
+  TpetraMultiVectorFingerprint traceResidualAfterPostSmoothFingerprint = traceInitialResidualFingerprint;
+  TpetraMultiVectorFingerprint traceSolutionAfterPreSmoothFingerprint = traceInitialSolutionFingerprint;
+  TpetraMultiVectorFingerprint traceSolutionAfterCoarseCorrectionFingerprint = traceInitialSolutionFingerprint;
+  TpetraMultiVectorFingerprint traceSolutionAfterPostSmoothFingerprint = traceInitialSolutionFingerprint;
   
   if (_smootherType != NONE)
   {
@@ -1956,7 +1965,9 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
   if (emitStageTrace)
   {
     traceResidualAfterPreSmooth = stableTraceValue(multiVectorInfNorm(res));
+    traceResidualAfterPreSmoothFingerprint = tpetraMultiVectorFingerprint(res);
     traceSolutionAfterPreSmooth = stableTraceValue(multiVectorInfNorm(Y));
+    traceSolutionAfterPreSmoothFingerprint = tpetraMultiVectorFingerprint(Y);
   }
   
   for (int applicationOrdinal = 0; applicationOrdinal < numApplications; applicationOrdinal++)
@@ -1969,7 +1980,9 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
       TVector<Scalar> traceResidual(f, Teuchos::Copy);
       computeResidual(Y, traceResidual, A_Y);
       traceResidualAfterCoarseCorrection = stableTraceValue(multiVectorInfNorm(traceResidual));
+      traceResidualAfterCoarseCorrectionFingerprint = tpetraMultiVectorFingerprint(traceResidual);
       traceSolutionAfterCoarseCorrection = stableTraceValue(multiVectorInfNorm(Y));
+      traceSolutionAfterCoarseCorrectionFingerprint = tpetraMultiVectorFingerprint(Y);
       if (!_lastVcycleCoarseCorrectionTrace.empty())
       {
         _lastVcycleCoarseCorrectionTrace.back().residualAfterCorrectionInfNorm = traceResidualAfterCoarseCorrection;
@@ -2018,10 +2031,14 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
       TVector<Scalar> traceResidual(f, Teuchos::Copy);
       computeResidual(Y, traceResidual, A_Y);
       traceResidualAfterPostSmooth = stableTraceValue(multiVectorInfNorm(traceResidual));
+      traceResidualAfterPostSmoothFingerprint = tpetraMultiVectorFingerprint(traceResidual);
       traceSolutionAfterPostSmooth = stableTraceValue(multiVectorInfNorm(Y));
+      traceSolutionAfterPostSmoothFingerprint = tpetraMultiVectorFingerprint(Y);
       const char *stageNames[4] = {"Initial", "PreSmooth", "CoarseCorrection", "PostSmooth"};
       const double solutionNorms[4] = {traceInitialSolutionNorm, traceSolutionAfterPreSmooth, traceSolutionAfterCoarseCorrection, traceSolutionAfterPostSmooth};
       const double residualNorms[4] = {traceInitialResidualNorm, traceResidualAfterPreSmooth, traceResidualAfterCoarseCorrection, traceResidualAfterPostSmooth};
+      const TpetraMultiVectorFingerprint solutionFingerprints[4] = {traceInitialSolutionFingerprint, traceSolutionAfterPreSmoothFingerprint, traceSolutionAfterCoarseCorrectionFingerprint, traceSolutionAfterPostSmoothFingerprint};
+      const TpetraMultiVectorFingerprint residualFingerprints[4] = {traceInitialResidualFingerprint, traceResidualAfterPreSmoothFingerprint, traceResidualAfterCoarseCorrectionFingerprint, traceResidualAfterPostSmoothFingerprint};
       _lastVcycleStageTrace.reserve(4);
       for (int stageIndex=0; stageIndex<4; stageIndex++)
       {
@@ -2031,6 +2048,9 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
         traceEntry.rhsInfNorm = traceRhsInfNorm;
         traceEntry.solutionInfNorm = solutionNorms[stageIndex];
         traceEntry.residualInfNorm = residualNorms[stageIndex];
+        traceEntry.rhsFingerprint = traceRhsFingerprint;
+        traceEntry.solutionFingerprint = solutionFingerprints[stageIndex];
+        traceEntry.residualFingerprint = residualFingerprints[stageIndex];
         _lastVcycleStageTrace.push_back(traceEntry);
       }
       if ((rank == 0) && _printVcycleStageTrace)
@@ -2044,6 +2064,15 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
                << " rhsInfNorm=" << std::setprecision(16) << traceRhsInfNorm
                << " solutionInfNorm=" << solutionNorms[stageIndex]
                << " residualInfNorm=" << residualNorms[stageIndex]
+               << " rhsL2Norm=" << traceRhsFingerprint.l2Norm
+               << " rhsSignedSum=" << traceRhsFingerprint.signedSum
+               << " rhsChecksum=" << traceRhsFingerprint.checksum
+               << " solutionL2Norm=" << solutionFingerprints[stageIndex].l2Norm
+               << " solutionSignedSum=" << solutionFingerprints[stageIndex].signedSum
+               << " solutionChecksum=" << solutionFingerprints[stageIndex].checksum
+               << " residualL2Norm=" << residualFingerprints[stageIndex].l2Norm
+               << " residualSignedSum=" << residualFingerprints[stageIndex].signedSum
+               << " residualChecksum=" << residualFingerprints[stageIndex].checksum
                << endl;
         }
         for (size_t traceIndex=0; traceIndex<_lastVcycleCoarseCorrectionTrace.size(); traceIndex++)

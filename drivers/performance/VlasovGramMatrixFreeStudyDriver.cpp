@@ -398,6 +398,7 @@ namespace
                                         const double fineSmootherWeight)
   {
     const std::string stageMarker = "MATRIX_FREE_GMG_STAGE_TRACE";
+    const std::string coarseSolveMarker = "MATRIX_FREE_LOCAL_PMG_COARSE_SOLVE_STAGE";
     const std::string recursiveMarker = "MATRIX_FREE_LOCAL_PMG_RECURSIVE_STAGE";
     const auto tailAfterMarker = [](const std::string &text, const std::string &marker) -> std::string
     {
@@ -423,6 +424,16 @@ namespace
             << " fineP=" << fineP
             << " fineWt=" << std::setprecision(12) << std::defaultfloat << fineSmootherWeight
             << " " << tailAfterMarker(line, stageMarker)
+            << "\n";
+        continue;
+      }
+      if (line.rfind(coarseSolveMarker, 0) == 0)
+      {
+        out << "VLASOV_MATRIX_FREE_LOCAL_PMG_COARSE_SOLVE_STAGE"
+            << " strategy=" << strategy.name
+            << " fineP=" << fineP
+            << " fineWt=" << std::setprecision(12) << std::defaultfloat << fineSmootherWeight
+            << " " << tailAfterMarker(line, coarseSolveMarker)
             << "\n";
         continue;
       }
