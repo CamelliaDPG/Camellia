@@ -62,9 +62,11 @@ namespace Camellia
       Magnitude rhsInfNorm = Magnitude(0.0);
       Magnitude solutionInfNorm = Magnitude(0.0);
       Magnitude residualInfNorm = Magnitude(0.0);
+      Magnitude operatorEffectInfNorm = Magnitude(0.0);
       TpetraMultiVectorFingerprint rhsFingerprint;
       TpetraMultiVectorFingerprint solutionFingerprint;
       TpetraMultiVectorFingerprint residualFingerprint;
+      TpetraMultiVectorFingerprint operatorEffectFingerprint;
     };
 
     struct Level
@@ -227,7 +229,8 @@ namespace Camellia
 
     void recordStage(const size_t levelIndex, const std::string &stageName,
                      const MultiVector &rhs, const MultiVector &solution,
-                     const MultiVector *residual = nullptr) const
+                     const MultiVector *residual = nullptr,
+                     const MultiVector *operatorEffect = nullptr) const
     {
       if (!_emitStageTrace)
         return;
@@ -238,9 +241,11 @@ namespace Camellia
       entry.rhsFingerprint = tpetraMultiVectorFingerprint(rhs);
       entry.solutionFingerprint = tpetraMultiVectorFingerprint(solution);
       entry.residualFingerprint = residual == nullptr ? TpetraMultiVectorFingerprint() : tpetraMultiVectorFingerprint(*residual);
+      entry.operatorEffectFingerprint = operatorEffect == nullptr ? TpetraMultiVectorFingerprint() : tpetraMultiVectorFingerprint(*operatorEffect);
       entry.rhsInfNorm = entry.rhsFingerprint.infNorm;
       entry.solutionInfNorm = entry.solutionFingerprint.infNorm;
       entry.residualInfNorm = entry.residualFingerprint.infNorm;
+      entry.operatorEffectInfNorm = entry.operatorEffectFingerprint.infNorm;
       _lastStageTrace.push_back(entry);
     }
 
@@ -320,7 +325,39 @@ namespace Camellia
       recordStage(levelIndex, "coarseCorrectionNorm", coarseRhs, coarseCorrection);
 
       level.prolongateCorrection(coarseCorrection, fineCorrection);
-      recordStage(levelIndex, "prolongateCorrection", coarseCorrection, fineCorrection);
+      if (_emitStageTrace)
+      {
+        level.applyOperator(fineCorrection, operatorSolution);
+        recordStage(levelIndex, "prolongateCorrection", coarseCorrection, fineCorrection, nullptr, &operatorSolution);
+
+        const Level &coarseLevel = _levels[levelIndex+1];
+        if (coarseLevel.applyOperator)
+        {
+          MultiVector coarseRhsOperatorEffect(coarseLevel.map, numVectors);
+          MultiVector coarseOperatorEffect(coarseLevel.map, numVectors);
+          MultiVector coarseSolveResidual(coarseLevel.map, numVectors);
+          MultiVector restrictedProlongatedOperatorEffect(coarseLevel.map, numVectors);
+          MultiVector coarseGalerkinActionDefect(coarseLevel.map, numVectors);
+
+          coarseLevel.applyOperator(coarseRhs, coarseRhsOperatorEffect);
+          recordStage(levelIndex, "coarseRhsOperatorEffect", coarseRhs, coarseRhsOperatorEffect);
+
+          coarseLevel.applyOperator(coarseCorrection, coarseOperatorEffect);
+          coarseSolveResidual.update(Teuchos::ScalarTraits<Scalar>::one(), coarseRhs,
+                                     Teuchos::ScalarTraits<Scalar>::zero());
+          coarseSolveResidual.update(-Teuchos::ScalarTraits<Scalar>::one(), coarseOperatorEffect,
+                                     Teuchos::ScalarTraits<Scalar>::one());
+          recordStage(levelIndex, "coarseOperatorEffect", coarseRhs, coarseOperatorEffect, &coarseSolveResidual);
+
+          level.restrictResidual(operatorSolution, restrictedProlongatedOperatorEffect);
+          coarseGalerkinActionDefect.update(Teuchos::ScalarTraits<Scalar>::one(), restrictedProlongatedOperatorEffect,
+                                            Teuchos::ScalarTraits<Scalar>::zero());
+          coarseGalerkinActionDefect.update(-Teuchos::ScalarTraits<Scalar>::one(), coarseOperatorEffect,
+                                            Teuchos::ScalarTraits<Scalar>::one());
+          recordStage(levelIndex, "restrictedProlongatedOperatorEffect", coarseOperatorEffect,
+                      restrictedProlongatedOperatorEffect, &coarseGalerkinActionDefect);
+        }
+      }
 
       solution.update(Teuchos::ScalarTraits<Scalar>::one(), fineCorrection,
                       Teuchos::ScalarTraits<Scalar>::one());

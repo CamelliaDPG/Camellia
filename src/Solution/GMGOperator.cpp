@@ -86,6 +86,16 @@ double multiVectorInfNorm(const TVector<Scalar> &values)
   return maxNorm;
 }
 
+double multiVectorDot(const TVector<Scalar> &left, const TVector<Scalar> &right)
+{
+  Teuchos::Array<Scalar> dotValues(left.getNumVectors());
+  left.dot(right, dotValues());
+  double dotSum = 0.0;
+  for (const auto dotValue : dotValues)
+    dotSum += static_cast<double>(dotValue);
+  return dotSum;
+}
+
 // TODO: move everything in this (anonymous namespace) block to some more appropriate location (AdditiveSchwarzHelpers?)
 
 std::set<GlobalIndexType> overlappingCells(GlobalIndexType cellID, MeshPtr mesh,
@@ -2044,8 +2054,14 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
                << " level=" << traceEntry.levelIndex
                << " restrictedResidualInfNorm=" << std::setprecision(16) << traceEntry.restrictedResidualInfNorm
                << " coarseRhsInfNorm=" << traceEntry.coarseRhsInfNorm
+               << " coarseRhsOperatorEffectInfNorm=" << traceEntry.coarseRhsOperatorEffectInfNorm
                << " coarseCorrectionInfNorm=" << traceEntry.coarseCorrectionInfNorm
                << " prolongatedCorrectionInfNorm=" << traceEntry.prolongatedCorrectionInfNorm
+               << " coarseOperatorEffectInfNorm=" << traceEntry.coarseOperatorEffectInfNorm
+               << " coarseSolveResidualInfNorm=" << traceEntry.coarseSolveResidualInfNorm
+               << " prolongatedCorrectionOperatorEffectInfNorm=" << traceEntry.prolongatedCorrectionOperatorEffectInfNorm
+               << " restrictedProlongatedOperatorEffectInfNorm=" << traceEntry.restrictedProlongatedOperatorEffectInfNorm
+               << " coarseGalerkinActionDefectInfNorm=" << traceEntry.coarseGalerkinActionDefectInfNorm
                << " residualAfterCorrectionInfNorm=" << traceEntry.residualAfterCorrectionInfNorm
                << " restrictedResidualL2Norm=" << traceEntry.restrictedResidualFingerprint.l2Norm
                << " restrictedResidualSignedSum=" << traceEntry.restrictedResidualFingerprint.signedSum
@@ -2053,15 +2069,39 @@ int GMGOperator::ApplyInverse(const TVector<Scalar> &X_in, TVector<Scalar> &Y) c
                << " coarseRhsL2Norm=" << traceEntry.coarseRhsFingerprint.l2Norm
                << " coarseRhsSignedSum=" << traceEntry.coarseRhsFingerprint.signedSum
                << " coarseRhsChecksum=" << traceEntry.coarseRhsFingerprint.checksum
+               << " coarseRhsOperatorEffectL2Norm=" << traceEntry.coarseRhsOperatorEffectFingerprint.l2Norm
+               << " coarseRhsOperatorEffectSignedSum=" << traceEntry.coarseRhsOperatorEffectFingerprint.signedSum
+               << " coarseRhsOperatorEffectChecksum=" << traceEntry.coarseRhsOperatorEffectFingerprint.checksum
                << " coarseCorrectionL2Norm=" << traceEntry.coarseCorrectionFingerprint.l2Norm
                << " coarseCorrectionSignedSum=" << traceEntry.coarseCorrectionFingerprint.signedSum
                << " coarseCorrectionChecksum=" << traceEntry.coarseCorrectionFingerprint.checksum
                << " prolongatedCorrectionL2Norm=" << traceEntry.prolongatedCorrectionFingerprint.l2Norm
                << " prolongatedCorrectionSignedSum=" << traceEntry.prolongatedCorrectionFingerprint.signedSum
                << " prolongatedCorrectionChecksum=" << traceEntry.prolongatedCorrectionFingerprint.checksum
+               << " coarseOperatorEffectL2Norm=" << traceEntry.coarseOperatorEffectFingerprint.l2Norm
+               << " coarseOperatorEffectSignedSum=" << traceEntry.coarseOperatorEffectFingerprint.signedSum
+               << " coarseOperatorEffectChecksum=" << traceEntry.coarseOperatorEffectFingerprint.checksum
+               << " coarseSolveResidualL2Norm=" << traceEntry.coarseSolveResidualFingerprint.l2Norm
+               << " coarseSolveResidualSignedSum=" << traceEntry.coarseSolveResidualFingerprint.signedSum
+               << " coarseSolveResidualChecksum=" << traceEntry.coarseSolveResidualFingerprint.checksum
+               << " prolongatedCorrectionOperatorEffectL2Norm=" << traceEntry.prolongatedCorrectionOperatorEffectFingerprint.l2Norm
+               << " prolongatedCorrectionOperatorEffectSignedSum=" << traceEntry.prolongatedCorrectionOperatorEffectFingerprint.signedSum
+               << " prolongatedCorrectionOperatorEffectChecksum=" << traceEntry.prolongatedCorrectionOperatorEffectFingerprint.checksum
+               << " restrictedProlongatedOperatorEffectL2Norm=" << traceEntry.restrictedProlongatedOperatorEffectFingerprint.l2Norm
+               << " restrictedProlongatedOperatorEffectSignedSum=" << traceEntry.restrictedProlongatedOperatorEffectFingerprint.signedSum
+               << " restrictedProlongatedOperatorEffectChecksum=" << traceEntry.restrictedProlongatedOperatorEffectFingerprint.checksum
+               << " coarseGalerkinActionDefectL2Norm=" << traceEntry.coarseGalerkinActionDefectFingerprint.l2Norm
+               << " coarseGalerkinActionDefectSignedSum=" << traceEntry.coarseGalerkinActionDefectFingerprint.signedSum
+               << " coarseGalerkinActionDefectChecksum=" << traceEntry.coarseGalerkinActionDefectFingerprint.checksum
                << " residualAfterCorrectionL2Norm=" << traceEntry.residualAfterCorrectionFingerprint.l2Norm
                << " residualAfterCorrectionSignedSum=" << traceEntry.residualAfterCorrectionFingerprint.signedSum
                << " residualAfterCorrectionChecksum=" << traceEntry.residualAfterCorrectionFingerprint.checksum
+               << " restrictedResidualDotCoarseCorrection=" << traceEntry.restrictedResidualDotCoarseCorrection
+               << " coarseCorrectionEnergy=" << traceEntry.coarseCorrectionEnergy
+               << " fineResidualDotProlongatedCorrection=" << traceEntry.fineResidualDotProlongatedCorrection
+               << " fineCorrectionEnergy=" << traceEntry.fineCorrectionEnergy
+               << " coarsePredictedEnergyReduction=" << traceEntry.coarsePredictedEnergyReduction
+               << " finePredictedEnergyReduction=" << traceEntry.finePredictedEnergyReduction
                << endl;
         }
       }
@@ -2128,11 +2168,29 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
   bool printVerboseOutput = (rank==0) && _debugMode;
   const bool emitCoarseCorrectionTrace = _emitVcycleStageTrace && (_multigridStrategy == V_CYCLE);
   double coarseRhsInfNorm = 0.0;
+  double coarseRhsOperatorEffectInfNorm = 0.0;
   double coarseCorrectionInfNorm = 0.0;
   double prolongatedCorrectionInfNorm = 0.0;
+  double coarseOperatorEffectInfNorm = 0.0;
+  double coarseSolveResidualInfNorm = 0.0;
+  double prolongatedCorrectionOperatorEffectInfNorm = 0.0;
+  double restrictedProlongatedOperatorEffectInfNorm = 0.0;
+  double coarseGalerkinActionDefectInfNorm = 0.0;
   TpetraMultiVectorFingerprint coarseRhsFingerprint;
+  TpetraMultiVectorFingerprint coarseRhsOperatorEffectFingerprint;
   TpetraMultiVectorFingerprint coarseCorrectionFingerprint;
   TpetraMultiVectorFingerprint prolongatedCorrectionFingerprint;
+  TpetraMultiVectorFingerprint coarseOperatorEffectFingerprint;
+  TpetraMultiVectorFingerprint coarseSolveResidualFingerprint;
+  TpetraMultiVectorFingerprint prolongatedCorrectionOperatorEffectFingerprint;
+  TpetraMultiVectorFingerprint restrictedProlongatedOperatorEffectFingerprint;
+  TpetraMultiVectorFingerprint coarseGalerkinActionDefectFingerprint;
+  double restrictedResidualDotCoarseCorrection = 0.0;
+  double coarseCorrectionEnergy = 0.0;
+  double fineResidualDotProlongatedCorrection = 0.0;
+  double fineCorrectionEnergy = 0.0;
+  double coarsePredictedEnergyReduction = 0.0;
+  double finePredictedEnergyReduction = 0.0;
   std::vector<VcycleStageTraceEntry> nestedCoarseVcycleStageTrace;
 
   auto tCoarseRHSVector = _coarseSolution->getRHSVector();
@@ -2234,16 +2292,74 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
   {
     prolongatedCorrectionFingerprint = tpetraMultiVectorFingerprint(Y);
     prolongatedCorrectionInfNorm = prolongatedCorrectionFingerprint.infNorm;
+
+    auto tCoarseStiffnessMatrix = _coarseSolution->getStiffnessMatrix();
+    TEUCHOS_TEST_FOR_EXCEPTION(tCoarseStiffnessMatrix == Teuchos::null, std::invalid_argument, "coarse stiffness matrix is null");
+    TVector<Scalar> coarseRhsOperatorEffect(tCoarseRHSVector->getMap(), tCoarseRHSVector->getNumVectors());
+    tCoarseStiffnessMatrix->apply(*tCoarseRHSVector, coarseRhsOperatorEffect);
+    coarseRhsOperatorEffectFingerprint = tpetraMultiVectorFingerprint(coarseRhsOperatorEffect);
+    coarseRhsOperatorEffectInfNorm = coarseRhsOperatorEffectFingerprint.infNorm;
+
+    TVector<Scalar> coarseOperatorEffect(tCoarseLHSVector->getMap(), tCoarseLHSVector->getNumVectors());
+    tCoarseStiffnessMatrix->apply(*tCoarseLHSVector, coarseOperatorEffect);
+    coarseOperatorEffectFingerprint = tpetraMultiVectorFingerprint(coarseOperatorEffect);
+    coarseOperatorEffectInfNorm = coarseOperatorEffectFingerprint.infNorm;
+
+    TVector<Scalar> coarseSolveResidual(*tCoarseRHSVector, Teuchos::Copy);
+    coarseSolveResidual.update(-1.0, coarseOperatorEffect, 1.0); // r_c - A_c*c
+    coarseSolveResidualFingerprint = tpetraMultiVectorFingerprint(coarseSolveResidual);
+    coarseSolveResidualInfNorm = coarseSolveResidualFingerprint.infNorm;
+
+    TVector<Scalar> prolongatedCorrectionOperatorEffect(Y.getMap(), Y.getNumVectors());
+    _fineStiffnessMatrix->apply(Y, prolongatedCorrectionOperatorEffect);
+    prolongatedCorrectionOperatorEffectFingerprint = tpetraMultiVectorFingerprint(prolongatedCorrectionOperatorEffect);
+    prolongatedCorrectionOperatorEffectInfNorm = prolongatedCorrectionOperatorEffectFingerprint.infNorm;
+
+    TVector<Scalar> restrictedProlongatedOperatorEffect(tCoarseRHSVector->getMap(), tCoarseRHSVector->getNumVectors());
+    _P->apply(prolongatedCorrectionOperatorEffect, restrictedProlongatedOperatorEffect, Teuchos::TRANS, 1.0, 0.0);
+    restrictedProlongatedOperatorEffectFingerprint = tpetraMultiVectorFingerprint(restrictedProlongatedOperatorEffect);
+    restrictedProlongatedOperatorEffectInfNorm = restrictedProlongatedOperatorEffectFingerprint.infNorm;
+
+    TVector<Scalar> coarseGalerkinActionDefect(restrictedProlongatedOperatorEffect, Teuchos::Copy);
+    coarseGalerkinActionDefect.update(-1.0, coarseOperatorEffect, 1.0); // P^T*A_f*P*c - A_c*c
+    coarseGalerkinActionDefectFingerprint = tpetraMultiVectorFingerprint(coarseGalerkinActionDefect);
+    coarseGalerkinActionDefectInfNorm = coarseGalerkinActionDefectFingerprint.infNorm;
+
+    restrictedResidualDotCoarseCorrection = multiVectorDot(*tCoarseRHSVector, *tCoarseLHSVector);
+    coarseCorrectionEnergy = multiVectorDot(*tCoarseLHSVector, coarseOperatorEffect);
+    fineResidualDotProlongatedCorrection = multiVectorDot(res, Y);
+    fineCorrectionEnergy = multiVectorDot(Y, prolongatedCorrectionOperatorEffect);
+    coarsePredictedEnergyReduction = 2.0 * restrictedResidualDotCoarseCorrection - coarseCorrectionEnergy;
+    finePredictedEnergyReduction = 2.0 * fineResidualDotProlongatedCorrection - fineCorrectionEnergy;
+
     VcycleCoarseCorrectionTraceEntry traceEntry;
     traceEntry.levelIndex = 0;
     traceEntry.restrictedResidualInfNorm = coarseRhsInfNorm;
     traceEntry.coarseRhsInfNorm = coarseRhsInfNorm;
+    traceEntry.coarseRhsOperatorEffectInfNorm = coarseRhsOperatorEffectInfNorm;
     traceEntry.coarseCorrectionInfNorm = coarseCorrectionInfNorm;
     traceEntry.prolongatedCorrectionInfNorm = prolongatedCorrectionInfNorm;
+    traceEntry.coarseOperatorEffectInfNorm = coarseOperatorEffectInfNorm;
+    traceEntry.coarseSolveResidualInfNorm = coarseSolveResidualInfNorm;
+    traceEntry.prolongatedCorrectionOperatorEffectInfNorm = prolongatedCorrectionOperatorEffectInfNorm;
+    traceEntry.restrictedProlongatedOperatorEffectInfNorm = restrictedProlongatedOperatorEffectInfNorm;
+    traceEntry.coarseGalerkinActionDefectInfNorm = coarseGalerkinActionDefectInfNorm;
     traceEntry.restrictedResidualFingerprint = coarseRhsFingerprint;
     traceEntry.coarseRhsFingerprint = coarseRhsFingerprint;
+    traceEntry.coarseRhsOperatorEffectFingerprint = coarseRhsOperatorEffectFingerprint;
     traceEntry.coarseCorrectionFingerprint = coarseCorrectionFingerprint;
     traceEntry.prolongatedCorrectionFingerprint = prolongatedCorrectionFingerprint;
+    traceEntry.coarseOperatorEffectFingerprint = coarseOperatorEffectFingerprint;
+    traceEntry.coarseSolveResidualFingerprint = coarseSolveResidualFingerprint;
+    traceEntry.prolongatedCorrectionOperatorEffectFingerprint = prolongatedCorrectionOperatorEffectFingerprint;
+    traceEntry.restrictedProlongatedOperatorEffectFingerprint = restrictedProlongatedOperatorEffectFingerprint;
+    traceEntry.coarseGalerkinActionDefectFingerprint = coarseGalerkinActionDefectFingerprint;
+    traceEntry.restrictedResidualDotCoarseCorrection = restrictedResidualDotCoarseCorrection;
+    traceEntry.coarseCorrectionEnergy = coarseCorrectionEnergy;
+    traceEntry.fineResidualDotProlongatedCorrection = fineResidualDotProlongatedCorrection;
+    traceEntry.fineCorrectionEnergy = fineCorrectionEnergy;
+    traceEntry.coarsePredictedEnergyReduction = coarsePredictedEnergyReduction;
+    traceEntry.finePredictedEnergyReduction = finePredictedEnergyReduction;
     _lastVcycleCoarseCorrectionTrace.push_back(traceEntry);
     for (const auto &nestedTraceEntry : nestedCoarseVcycleStageTrace)
       _lastCoarseVcycleStageTrace.push_back(nestedTraceEntry);

@@ -2985,6 +2985,38 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       appendRecursiveTraceEntry(levelIndex, cellOrdinal, "PostSmooth", rhs, solution, residual);
     }
 
+    void applyCoarseOperator(const TpetraMultiVector &X, TpetraMultiVector &Y,
+                             Teuchos::ETransp mode = Teuchos::NO_TRANS,
+                             Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
+                             Scalar beta = Teuchos::ScalarTraits<Scalar>::zero()) const
+    {
+      if (mode != Teuchos::NO_TRANS) throw std::invalid_argument("LocalPMultigridTpetraPreconditioner coarse operator does not support transpose apply");
+      const size_t coarseLength = static_cast<size_t>(cells_) * static_cast<size_t>(coarseRows_);
+      if ((X.getLocalLength() != coarseLength) || (Y.getLocalLength() != coarseLength))
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner coarse operator local vector length mismatch");
+      if (X.getNumVectors() != Y.getNumVectors())
+        throw std::invalid_argument("LocalPMultigridTpetraPreconditioner coarse operator multivector count mismatch");
+
+      auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+      std::vector<Scalar> input(static_cast<size_t>(coarseRows_), Scalar(0.0));
+      std::vector<Scalar> output(static_cast<size_t>(coarseRows_), Scalar(0.0));
+      for (size_t vectorOrdinal=0; vectorOrdinal<X.getNumVectors(); vectorOrdinal++)
+      {
+        for (int c=0; c<cells_; c++)
+        {
+          const size_t coarseOffset = static_cast<size_t>(c) * coarseRows_;
+          for (int i=0; i<coarseRows_; i++) input[static_cast<size_t>(i)] = xHost(coarseOffset + static_cast<size_t>(i), vectorOrdinal);
+          applyDenseCellMatrix(coarseMatrices_, c, coarseRows_, input, output);
+          for (int i=0; i<coarseRows_; i++)
+          {
+            const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
+            yHost(localOrdinal, vectorOrdinal) = alpha * output[static_cast<size_t>(i)] + beta * yHost(localOrdinal, vectorOrdinal);
+          }
+        }
+      }
+    }
+
     void solveCoarseLevel(const TpetraMultiVector &CoarseRHS, TpetraMultiVector &CoarseSolution) const
     {
       const size_t coarseLength = static_cast<size_t>(cells_) * static_cast<size_t>(coarseRows_);
@@ -3141,6 +3173,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
   {
     Camellia::MatrixFreeGMGPreconditioner::Level level;
     level.map = localPMultigrid->coarseMap();
+    level.applyOperator = [localPMultigrid](const TpetraMultiVector &X, TpetraMultiVector &Y)
+    {
+      localPMultigrid->applyCoarseOperator(X, Y);
+    };
     level.coarseSolve = [localPMultigrid](const TpetraMultiVector &coarseRHS, TpetraMultiVector &coarseSolution)
     {
       localPMultigrid->solveCoarseLevel(coarseRHS, coarseSolution);
@@ -4454,6 +4490,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                     << " residualL2Norm=" << entry.residualFingerprint.l2Norm
                     << " residualSignedSum=" << entry.residualFingerprint.signedSum
                     << " residualChecksum=" << entry.residualFingerprint.checksum
+                    << " operatorEffectInfNorm=" << entry.operatorEffectInfNorm
+                    << " operatorEffectL2Norm=" << entry.operatorEffectFingerprint.l2Norm
+                    << " operatorEffectSignedSum=" << entry.operatorEffectFingerprint.signedSum
+                    << " operatorEffectChecksum=" << entry.operatorEffectFingerprint.checksum
                     << std::endl;
         }
         if (localPMultigridForStageTrace != Teuchos::null)

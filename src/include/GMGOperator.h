@@ -64,14 +64,32 @@ public:
     size_t levelIndex = 0;
     double restrictedResidualInfNorm = 0.0;
     double coarseRhsInfNorm = 0.0;
+    double coarseRhsOperatorEffectInfNorm = 0.0;
     double coarseCorrectionInfNorm = 0.0;
     double prolongatedCorrectionInfNorm = 0.0;
+    double coarseOperatorEffectInfNorm = 0.0;
+    double coarseSolveResidualInfNorm = 0.0;
+    double prolongatedCorrectionOperatorEffectInfNorm = 0.0;
+    double restrictedProlongatedOperatorEffectInfNorm = 0.0;
+    double coarseGalerkinActionDefectInfNorm = 0.0;
     double residualAfterCorrectionInfNorm = 0.0;
     TpetraMultiVectorFingerprint restrictedResidualFingerprint;
     TpetraMultiVectorFingerprint coarseRhsFingerprint;
+    TpetraMultiVectorFingerprint coarseRhsOperatorEffectFingerprint;
     TpetraMultiVectorFingerprint coarseCorrectionFingerprint;
     TpetraMultiVectorFingerprint prolongatedCorrectionFingerprint;
+    TpetraMultiVectorFingerprint coarseOperatorEffectFingerprint;
+    TpetraMultiVectorFingerprint coarseSolveResidualFingerprint;
+    TpetraMultiVectorFingerprint prolongatedCorrectionOperatorEffectFingerprint;
+    TpetraMultiVectorFingerprint restrictedProlongatedOperatorEffectFingerprint;
+    TpetraMultiVectorFingerprint coarseGalerkinActionDefectFingerprint;
     TpetraMultiVectorFingerprint residualAfterCorrectionFingerprint;
+    double restrictedResidualDotCoarseCorrection = 0.0;
+    double coarseCorrectionEnergy = 0.0;
+    double fineResidualDotProlongatedCorrection = 0.0;
+    double fineCorrectionEnergy = 0.0;
+    double coarsePredictedEnergyReduction = 0.0;
+    double finePredictedEnergyReduction = 0.0;
   };
 
   struct AdditiveSchwarzDetails
