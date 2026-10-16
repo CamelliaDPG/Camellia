@@ -412,7 +412,12 @@ namespace Camellia
                                             const std::vector<Scalar> &rhs,
                                             std::vector<Scalar> &solution,
                                             const int iterations,
-                                            const Scalar lowerFraction)
+                                            const Scalar lowerFraction,
+                                            Scalar *iter1LambdaUsed = nullptr,
+                                            std::vector<Scalar> *iter1InverseDiagonal = nullptr,
+                                            std::vector<Scalar> *iter1ResidualBefore = nullptr,
+                                            std::vector<Scalar> *iter1Correction = nullptr,
+                                            std::vector<Scalar> *iter1ResidualAfter = nullptr)
   {
     if (iterations < 1) return;
     std::vector<Scalar> correction(static_cast<size_t>(rows), Scalar(0.0));
@@ -425,11 +430,29 @@ namespace Camellia
     Scalar rhok = Scalar(1.0) / s1;
     const size_t cellOffset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows);
     tensorLocalApplyBlockDenseCellMatrix(matrices, cellOrdinal, rows, solution, applied);
+    std::vector<Scalar> iter1ResidualBeforeCapture;
+    if (iter1ResidualBefore != nullptr) iter1ResidualBeforeCapture.assign(static_cast<size_t>(rows), Scalar(0.0));
     for (int i=0; i<rows; i++)
     {
       const size_t index = cellOffset + static_cast<size_t>(i);
-      correction[static_cast<size_t>(i)] = (Scalar(1.0) / ifpackTheta) * inverseDiagonal[index] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)]);
+      const Scalar residualBefore = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
+      if (iter1ResidualBefore != nullptr) iter1ResidualBeforeCapture[static_cast<size_t>(i)] = residualBefore;
+      correction[static_cast<size_t>(i)] = (Scalar(1.0) / ifpackTheta) * inverseDiagonal[index] * residualBefore;
       solution[static_cast<size_t>(i)] += correction[static_cast<size_t>(i)];
+    }
+    if (iter1LambdaUsed != nullptr) *iter1LambdaUsed = chebyshevLambdaMax;
+    if (iter1InverseDiagonal != nullptr)
+    {
+      iter1InverseDiagonal->assign(static_cast<size_t>(rows), Scalar(0.0));
+      for (int i=0; i<rows; i++) (*iter1InverseDiagonal)[static_cast<size_t>(i)] = inverseDiagonal[cellOffset + static_cast<size_t>(i)];
+    }
+    if (iter1ResidualBefore != nullptr) *iter1ResidualBefore = iter1ResidualBeforeCapture;
+    if (iter1Correction != nullptr) *iter1Correction = correction;
+    if (iter1ResidualAfter != nullptr)
+    {
+      tensorLocalApplyBlockDenseCellMatrix(matrices, cellOrdinal, rows, solution, applied);
+      iter1ResidualAfter->assign(static_cast<size_t>(rows), Scalar(0.0));
+      for (int i=0; i<rows; i++) (*iter1ResidualAfter)[static_cast<size_t>(i)] = rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)];
     }
     for (int iteration=1; iteration<iterations; iteration++)
     {

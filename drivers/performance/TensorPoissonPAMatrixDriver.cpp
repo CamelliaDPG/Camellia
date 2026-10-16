@@ -2286,6 +2286,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       Camellia::TpetraMultiVectorFingerprint rhsFingerprint;
       Camellia::TpetraMultiVectorFingerprint solutionFingerprint;
       Camellia::TpetraMultiVectorFingerprint residualFingerprint;
+      double preSmoothLambdaUsed = -1.0;
+      Camellia::TpetraMultiVectorFingerprint preSmoothInverseDiagonalFingerprint;
+      Camellia::TpetraMultiVectorFingerprint preSmoothResidualBeforeFingerprint;
+      Camellia::TpetraMultiVectorFingerprint preSmoothCorrectionFingerprint;
+      Camellia::TpetraMultiVectorFingerprint preSmoothResidualAfterFingerprint;
     };
 
   private:
@@ -2344,7 +2349,12 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
 
     void appendCoarseSolveStageTraceEntry(const int levelIndex, const std::string &stageName,
                                           const TpetraMultiVector &rhs, const TpetraMultiVector &solution,
-                                          const TpetraMultiVector &residual) const
+                                          const TpetraMultiVector &residual,
+                                          const Scalar preSmoothLambdaUsed = Scalar(-1.0),
+                                          const Camellia::TpetraMultiVectorFingerprint *preSmoothInverseDiagonalFingerprint = nullptr,
+                                          const Camellia::TpetraMultiVectorFingerprint *preSmoothResidualBeforeFingerprint = nullptr,
+                                          const Camellia::TpetraMultiVectorFingerprint *preSmoothCorrectionFingerprint = nullptr,
+                                          const Camellia::TpetraMultiVectorFingerprint *preSmoothResidualAfterFingerprint = nullptr) const
     {
       if (!emitRecursiveTrace_) return;
       CoarseSolveStageTraceEntry entry;
@@ -2357,6 +2367,11 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
       entry.rhsInfNorm = entry.rhsFingerprint.infNorm;
       entry.solutionInfNorm = entry.solutionFingerprint.infNorm;
       entry.residualInfNorm = entry.residualFingerprint.infNorm;
+      entry.preSmoothLambdaUsed = static_cast<double>(preSmoothLambdaUsed);
+      if (preSmoothInverseDiagonalFingerprint != nullptr) entry.preSmoothInverseDiagonalFingerprint = *preSmoothInverseDiagonalFingerprint;
+      if (preSmoothResidualBeforeFingerprint != nullptr) entry.preSmoothResidualBeforeFingerprint = *preSmoothResidualBeforeFingerprint;
+      if (preSmoothCorrectionFingerprint != nullptr) entry.preSmoothCorrectionFingerprint = *preSmoothCorrectionFingerprint;
+      if (preSmoothResidualAfterFingerprint != nullptr) entry.preSmoothResidualAfterFingerprint = *preSmoothResidualAfterFingerprint;
       lastCoarseSolveStageTrace_.push_back(entry);
     }
 
@@ -2380,11 +2395,19 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                                      const std::vector<Scalar> &lambdaMaxByCell, const int cellOrdinal,
                                      const int rows, const std::vector<Scalar> &rhs,
                                      std::vector<Scalar> &solution, const int iterations,
-                                     const Scalar lowerFraction)
+                                     const Scalar lowerFraction,
+                                     Scalar *iter1LambdaUsed = nullptr,
+                                     std::vector<Scalar> *iter1InverseDiagonal = nullptr,
+                                     std::vector<Scalar> *iter1ResidualBefore = nullptr,
+                                     std::vector<Scalar> *iter1Correction = nullptr,
+                                     std::vector<Scalar> *iter1ResidualAfter = nullptr)
     {
       Camellia::tensorLocalRunChebyshevBlockSmoother(matrices, inverseDiagonal, lambdaMaxByCell,
                                                      cellOrdinal, rows, rhs, solution,
-                                                     iterations, lowerFraction);
+                                                     iterations, lowerFraction,
+                                                     iter1LambdaUsed, iter1InverseDiagonal,
+                                                     iter1ResidualBefore, iter1Correction,
+                                                     iter1ResidualAfter);
     }
 
     void smoothFine(const int cellOrdinal, const std::vector<Scalar> &rhs, std::vector<Scalar> &solution) const
@@ -2926,7 +2949,12 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     }
 
     void smoothLevel(const int levelIndex, const int cellOrdinal,
-                     const std::vector<Scalar> &rhs, std::vector<Scalar> &solution) const
+                     const std::vector<Scalar> &rhs, std::vector<Scalar> &solution,
+                     Scalar *iter1LambdaUsed = nullptr,
+                     std::vector<Scalar> *iter1InverseDiagonal = nullptr,
+                     std::vector<Scalar> *iter1ResidualBefore = nullptr,
+                     std::vector<Scalar> *iter1Correction = nullptr,
+                     std::vector<Scalar> *iter1ResidualAfter = nullptr) const
     {
       const int rows = levelRows_[static_cast<size_t>(levelIndex)];
       if ((static_cast<int>(rhs.size()) != rows) || (static_cast<int>(solution.size()) != rows))
@@ -2938,7 +2966,10 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                              levelInverseDiagonals_[static_cast<size_t>(levelIndex)],
                              levelLambdaMaxByCell_[static_cast<size_t>(levelIndex)],
                              cellOrdinal, rows, rhs, solution,
-                             smootherIterations_, smootherLowerFraction_);
+                             smootherIterations_, smootherLowerFraction_,
+                             iter1LambdaUsed, iter1InverseDiagonal,
+                             iter1ResidualBefore, iter1Correction,
+                             iter1ResidualAfter);
       else
         runDampedJacobiSmoother(levelMatrices_[static_cast<size_t>(levelIndex)],
                                 levelInverseDiagonals_[static_cast<size_t>(levelIndex)],
@@ -3095,13 +3126,30 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         appendCoarseSolveStageTraceEntry(levelIndex, "Initial", CoarseRHS, solution, residual);
 
         {
+          TpetraMultiVector preSmoothInverseDiagonal(coarseMap_, numVectors);
+          TpetraMultiVector preSmoothResidualBefore(coarseMap_, numVectors);
+          TpetraMultiVector preSmoothCorrection(coarseMap_, numVectors);
+          TpetraMultiVector preSmoothResidualAfter(coarseMap_, numVectors);
+          preSmoothInverseDiagonal.putScalar(Scalar(0.0));
+          preSmoothResidualBefore.putScalar(Scalar(0.0));
+          preSmoothCorrection.putScalar(Scalar(0.0));
+          preSmoothResidualAfter.putScalar(Scalar(0.0));
+          Scalar preSmoothLambdaUsed = Scalar(-1.0);
           auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
           auto solutionHost = solution.getLocalViewHost(Tpetra::Access::ReadWrite);
           auto residualHost = residual.getLocalViewHost(Tpetra::Access::ReadWrite);
+          auto preSmoothInverseDiagonalHost = preSmoothInverseDiagonal.getLocalViewHost(Tpetra::Access::ReadWrite);
+          auto preSmoothResidualBeforeHost = preSmoothResidualBefore.getLocalViewHost(Tpetra::Access::ReadWrite);
+          auto preSmoothCorrectionHost = preSmoothCorrection.getLocalViewHost(Tpetra::Access::ReadWrite);
+          auto preSmoothResidualAfterHost = preSmoothResidualAfter.getLocalViewHost(Tpetra::Access::ReadWrite);
           std::vector<Scalar> rhs(static_cast<size_t>(rows), Scalar(0.0));
           std::vector<Scalar> localSolution(static_cast<size_t>(rows), Scalar(0.0));
           std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
           std::vector<Scalar> localResidual(static_cast<size_t>(rows), Scalar(0.0));
+          std::vector<Scalar> localPreSmoothInverseDiagonal;
+          std::vector<Scalar> localPreSmoothResidualBefore;
+          std::vector<Scalar> localPreSmoothCorrection;
+          std::vector<Scalar> localPreSmoothResidualAfter;
           for (size_t vectorOrdinal=0; vectorOrdinal<numVectors; vectorOrdinal++)
           {
             for (int c=0; c<cells_; c++)
@@ -3113,7 +3161,14 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                 rhs[static_cast<size_t>(i)] = rhsHost(localOrdinal, vectorOrdinal);
                 localSolution[static_cast<size_t>(i)] = solutionHost(localOrdinal, vectorOrdinal);
               }
-              smoothLevel(levelIndex, c, rhs, localSolution);
+              Scalar localPreSmoothLambdaUsed = Scalar(-1.0);
+              smoothLevel(levelIndex, c, rhs, localSolution,
+                          &localPreSmoothLambdaUsed,
+                          &localPreSmoothInverseDiagonal,
+                          &localPreSmoothResidualBefore,
+                          &localPreSmoothCorrection,
+                          &localPreSmoothResidualAfter);
+              if ((preSmoothLambdaUsed < Scalar(0.0)) && (localPreSmoothLambdaUsed >= Scalar(0.0))) preSmoothLambdaUsed = localPreSmoothLambdaUsed;
               applyDenseCellMatrix(levelMatrix, c, rows, localSolution, applied);
               for (int i=0; i<rows; i++)
               {
@@ -3121,12 +3176,25 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                 const size_t localOrdinal = coarseOffset + static_cast<size_t>(i);
                 solutionHost(localOrdinal, vectorOrdinal) = localSolution[static_cast<size_t>(i)];
                 residualHost(localOrdinal, vectorOrdinal) = localResidual[static_cast<size_t>(i)];
+                if (static_cast<int>(localPreSmoothInverseDiagonal.size()) == rows) preSmoothInverseDiagonalHost(localOrdinal, vectorOrdinal) = localPreSmoothInverseDiagonal[static_cast<size_t>(i)];
+                if (static_cast<int>(localPreSmoothResidualBefore.size()) == rows) preSmoothResidualBeforeHost(localOrdinal, vectorOrdinal) = localPreSmoothResidualBefore[static_cast<size_t>(i)];
+                if (static_cast<int>(localPreSmoothCorrection.size()) == rows) preSmoothCorrectionHost(localOrdinal, vectorOrdinal) = localPreSmoothCorrection[static_cast<size_t>(i)];
+                if (static_cast<int>(localPreSmoothResidualAfter.size()) == rows) preSmoothResidualAfterHost(localOrdinal, vectorOrdinal) = localPreSmoothResidualAfter[static_cast<size_t>(i)];
               }
               appendRecursiveTraceEntry(levelIndex, c, "PreSmooth", rhs, localSolution, localResidual);
             }
           }
+          const auto preSmoothInverseDiagonalFingerprint = Camellia::tpetraMultiVectorFingerprint(preSmoothInverseDiagonal);
+          const auto preSmoothResidualBeforeFingerprint = Camellia::tpetraMultiVectorFingerprint(preSmoothResidualBefore);
+          const auto preSmoothCorrectionFingerprint = Camellia::tpetraMultiVectorFingerprint(preSmoothCorrection);
+          const auto preSmoothResidualAfterFingerprint = Camellia::tpetraMultiVectorFingerprint(preSmoothResidualAfter);
+          appendCoarseSolveStageTraceEntry(levelIndex, "PreSmooth", CoarseRHS, solution, residual,
+                                           preSmoothLambdaUsed,
+                                           &preSmoothInverseDiagonalFingerprint,
+                                           &preSmoothResidualBeforeFingerprint,
+                                           &preSmoothCorrectionFingerprint,
+                                           &preSmoothResidualAfterFingerprint);
         }
-        appendCoarseSolveStageTraceEntry(levelIndex, "PreSmooth", CoarseRHS, solution, residual);
 
         {
           auto rhsHost = CoarseRHS.getLocalViewHost(Tpetra::Access::ReadOnly);
@@ -4712,8 +4780,28 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
                       << " solutionChecksum=" << entry.solutionFingerprint.checksum
                       << " residualL2Norm=" << entry.residualFingerprint.l2Norm
                       << " residualSignedSum=" << entry.residualFingerprint.signedSum
-                      << " residualChecksum=" << entry.residualFingerprint.checksum
-                      << std::endl;
+                      << " residualChecksum=" << entry.residualFingerprint.checksum;
+            if (entry.preSmoothLambdaUsed >= 0.0)
+            {
+              std::cout << " preSmoothLambdaUsed=" << entry.preSmoothLambdaUsed
+                        << " preSmoothInverseDiagonalInfNorm=" << entry.preSmoothInverseDiagonalFingerprint.infNorm
+                        << " preSmoothInverseDiagonalL2Norm=" << entry.preSmoothInverseDiagonalFingerprint.l2Norm
+                        << " preSmoothInverseDiagonalSignedSum=" << entry.preSmoothInverseDiagonalFingerprint.signedSum
+                        << " preSmoothInverseDiagonalChecksum=" << entry.preSmoothInverseDiagonalFingerprint.checksum
+                        << " preSmoothResidualBeforeInfNorm=" << entry.preSmoothResidualBeforeFingerprint.infNorm
+                        << " preSmoothResidualBeforeL2Norm=" << entry.preSmoothResidualBeforeFingerprint.l2Norm
+                        << " preSmoothResidualBeforeSignedSum=" << entry.preSmoothResidualBeforeFingerprint.signedSum
+                        << " preSmoothResidualBeforeChecksum=" << entry.preSmoothResidualBeforeFingerprint.checksum
+                        << " preSmoothCorrectionInfNorm=" << entry.preSmoothCorrectionFingerprint.infNorm
+                        << " preSmoothCorrectionL2Norm=" << entry.preSmoothCorrectionFingerprint.l2Norm
+                        << " preSmoothCorrectionSignedSum=" << entry.preSmoothCorrectionFingerprint.signedSum
+                        << " preSmoothCorrectionChecksum=" << entry.preSmoothCorrectionFingerprint.checksum
+                        << " preSmoothResidualAfterInfNorm=" << entry.preSmoothResidualAfterFingerprint.infNorm
+                        << " preSmoothResidualAfterL2Norm=" << entry.preSmoothResidualAfterFingerprint.l2Norm
+                        << " preSmoothResidualAfterSignedSum=" << entry.preSmoothResidualAfterFingerprint.signedSum
+                        << " preSmoothResidualAfterChecksum=" << entry.preSmoothResidualAfterFingerprint.checksum;
+            }
+            std::cout << std::endl;
           }
           const auto &recursiveTrace = localPMultigridForStageTrace->lastRecursiveTrace();
           for (size_t traceIndex=0; traceIndex<recursiveTrace.size(); traceIndex++)
