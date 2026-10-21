@@ -98,6 +98,11 @@ if (DEFINED BOBA_ROOT)
   link_libraries(BOBA::BOBA)
 endif()
 
+# Find HDF5 (required; set HDF5_ROOT to point at a non-system install)
+find_package(HDF5 REQUIRED COMPONENTS C)
+MESSAGE("Found HDF5 ${HDF5_VERSION}; HDF5_IS_PARALLEL = ${HDF5_IS_PARALLEL}")
+link_libraries(HDF5::HDF5)
+
 MESSAGE(" Looking for Trilinos in ${TRILINOS_PATH}/lib/cmake/Trilinos
   ${TRILINOS_PATH} $ENV{TRILINOS_DIR}")
 
