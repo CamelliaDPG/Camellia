@@ -19,7 +19,6 @@
 
 #include <Teuchos_RCP.hpp>
 
-#include "Amesos_config.h"
 #include "Amesos2.hpp"
 
 using namespace std;

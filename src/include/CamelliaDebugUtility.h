@@ -138,9 +138,6 @@ namespace Camellia
 
   //! print all values on a single line, labeled with label.
   void print2DArray(std::ostream &out, std::string &label, const Camellia::FieldContainer<double> &array, int precision = 3, double nonzeroThreshold = 0);
-  
-  // ! Prints out a summary of the rank-local map information.  Not an MPI collective operation.
-  void printMapSummary(const Epetra_BlockMap &map, std::string mapName);
 }
 
 #endif
