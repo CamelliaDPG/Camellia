@@ -9,19 +9,7 @@ add_executable(VlasovGramMatrixFreeStudyDriver "VlasovGramMatrixFreeStudyDriver.
 target_compile_definitions(VlasovGramMatrixFreeStudyDriver PRIVATE VLASOV_MF_DRIVER_CURRENT_SOURCE=1)
 set_target_properties(VlasovGramMatrixFreeStudyDriver PROPERTIES EXCLUDE_FROM_ALL FALSE)
 target_link_libraries(VlasovGramGMGStudyDriver Camellia ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
-set(TENSOR_INTREPID2_SOURCE_DIR
-  "/Users/nvrober/fork-Trilinos/packages/intrepid2/src"
-  CACHE PATH "Intrepid2 source directory from the PAMatrix-enabled Trilinos fork")
-set(TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR
-  "${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Integration"
-  CACHE PATH "Directory containing experimental Intrepid2 PAMatrix headers")
-target_include_directories(TensorPoissonPAMatrixDriver BEFORE PRIVATE
-  ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIR}
-  ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Basis
-  ${TENSOR_INTREPID2_SOURCE_DIR}/Shared
-  ${TENSOR_INTREPID2_SOURCE_DIR}/Cell
-  ${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples
-)
+target_include_directories(TensorPoissonPAMatrixDriver BEFORE PRIVATE ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIRS})
 target_link_libraries(TensorPoissonPAMatrixDriver Camellia ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
 
 add_test(NAME TensorPoissonPAMatrixDriverSmoke

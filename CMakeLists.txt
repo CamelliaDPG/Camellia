@@ -154,6 +154,29 @@ ELSE()
   MESSAGE(FATAL_ERROR "Could not find Trilinos!")
 ENDIF()
 
+# The tensor PAMatrix tests and drivers use experimental Intrepid2 headers
+# (e.g. assembly-examples/PAMatrixAssembly.hpp) that Trilinos does not install,
+# so we need the source tree of the PAMatrix-enabled Trilinos fork.
+set(TRILINOS_SOURCE_DIR "$ENV{TRILINOS_SOURCE_DIR}"
+  CACHE PATH "Source directory of the PAMatrix-enabled Trilinos fork (or set the TRILINOS_SOURCE_DIR environment variable)")
+file(TO_CMAKE_PATH "${TRILINOS_SOURCE_DIR}" TRILINOS_SOURCE_DIR_NORMALIZED)
+set(TENSOR_INTREPID2_SOURCE_DIR "${TRILINOS_SOURCE_DIR_NORMALIZED}/packages/intrepid2/src")
+IF(NOT EXISTS "${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples/PAMatrixAssembly.hpp")
+  MESSAGE(FATAL_ERROR "Could not find packages/intrepid2/assembly-examples/PAMatrixAssembly.hpp "
+    "under TRILINOS_SOURCE_DIR = '${TRILINOS_SOURCE_DIR}'. "
+    "Set TRILINOS_SOURCE_DIR (CMake cache or environment variable) to the root of the "
+    "PAMatrix-enabled Trilinos source tree.")
+ENDIF()
+# Consumers should add these with target_include_directories(... BEFORE PRIVATE ...)
+# so that they take precedence over the installed Intrepid2 headers.
+set(TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIRS
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Integration
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Basis
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Shared
+  ${TENSOR_INTREPID2_SOURCE_DIR}/Cell
+  ${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples
+)
+
 # If you haven't already set the C++ compiler, use the same compiler
 # that was used to build Trilinos on your machine.  
 IF(NOT CMAKE_CXX_COMPILER)
