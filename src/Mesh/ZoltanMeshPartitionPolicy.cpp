@@ -17,12 +17,6 @@
 
 #include "Solution.h"
 
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#else
-#include "Epetra_SerialComm.h"
-#endif
-
 using namespace Camellia;
 
 ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Teuchos_CommPtr Comm) : MeshPartitionPolicy(Comm)

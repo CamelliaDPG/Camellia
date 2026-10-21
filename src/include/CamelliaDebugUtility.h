@@ -15,7 +15,6 @@
 #include <ostream>
 #include <string>
 
-#include "Epetra_Map.h"
 #include "Teuchos_RCP.hpp"
 #include "Camellia_FieldContainer.hpp"
 #include "Teuchos_FancyOStream.hpp"
