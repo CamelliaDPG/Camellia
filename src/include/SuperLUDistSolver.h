@@ -15,8 +15,7 @@
 #ifndef Camellia_SuperLUDistSolver_h
 #define Camellia_SuperLUDistSolver_h
 
-#include "Amesos_config.h"
-#include "Amesos.h"
+// TODO: update this interface for Amesos2, Tpetra
 #ifdef HAVE_AMESOS_SUPERLUDIST
 #include "Amesos_Superludist.h"
 
