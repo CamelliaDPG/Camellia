@@ -5123,7 +5123,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
           const Scalar restrictedResidualL2Norm = std::sqrt(restrictedResidualL2NormSquared);
           const Scalar coarsePredictedEnergyReduction = coarseResidualDotCorrection - Scalar(0.5) * coarseCorrectionEnergy;
           const Scalar finePredictedEnergyReduction = fineResidualDotCorrection - Scalar(0.5) * fineCorrectionEnergy;
-          if (p == 2)
+          if ((p == 2) || (p == 4))
           {
             std::cout << "VLASOV_GRAPH_NORM_PMULTIGRID_STAGE p=" << p
                       << " cycle=" << (cycle + 1)

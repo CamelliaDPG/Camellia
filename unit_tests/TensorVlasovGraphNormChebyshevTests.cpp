@@ -341,6 +341,41 @@ int parseCamelliaVlasovComparisonIntKey(const std::string &output,
   return std::stoi(value);
 }
 
+std::string deterministicP4VlasovGraphNormFixtureArguments(const std::string &mode)
+{
+  std::ostringstream args;
+  args << "--dim=4 --polyOrder=4 --cellsPerDim=1 "
+       << "--operator=vlasov-graph-norm-solution-coeff-1d1t2v "
+       << "--basisMode=hgrad "
+       << "--mode=" << mode << " "
+       << "--camelliaMatrixCompareUseSolutionCoeff=1 "
+       << "--massWeight=1.0 --stiffnessWeight=1.0 "
+       << "--maxAssembledEntries=30000000";
+  return args.str();
+}
+
+std::vector<std::string> deterministicP4VlasovGraphNormOperatorBlocks()
+{
+  return {"mass",
+          "dt_dt",
+          "dt_dx",
+          "dt_dux",
+          "dt_duy",
+          "dx_dt",
+          "dx_dx",
+          "dx_dux",
+          "dx_duy",
+          "dux_dt",
+          "dux_dx",
+          "dux_dux",
+          "dux_duy",
+          "duy_dt",
+          "duy_dx",
+          "duy_dux",
+          "duy_duy",
+          "full_graph_norm"};
+}
+
 TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev, ReportsL2MassWeight )
 {
   if (!shouldRunExternalDiagnosticsOnThisRank()) return;
@@ -1071,4 +1106,193 @@ TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
   TEST_ASSERT(std::isfinite(camelliaNorm));
 
   TEST_COMPARE(maxAbsError, <=, tolerance);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
+                   P4DeterministicFixtureAssembledReferenceApplyParity )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      deterministicP4VlasovGraphNormFixtureArguments("inverse-diagnostic") +
+      " --inverseDiagnosticAlgorithm=chebyshev"
+      " --inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20"
+      " --inverseLowerSpectralEstimate=ratio --inverseEigenRatio=30"
+      " --inverseOperatorCheckSamples=3"
+      " --numInverseIterations=1 --inverseInitialGuess=zero"
+      " --inverseRhs=constant-test-function");
+
+  TEST_EQUALITY(run.status, 0);
+  if (run.status != 0) return;
+
+  const std::vector<double> actionRel =
+      parseAllInverseDiagnosticDoubleKey(run.output, "operatorActionMaxRelDiff");
+  const std::vector<double> symmetry =
+      parseAllInverseDiagnosticDoubleKey(run.output, "operatorBilinearSymmetryAbsError");
+  const std::vector<double> minRayleigh =
+      parseAllInverseDiagnosticDoubleKey(run.output, "operatorMinRayleighQuotient");
+
+  TEST_EQUALITY(actionRel.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(symmetry.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(minRayleigh.size(), static_cast<std::size_t>(1));
+  if (actionRel.empty() || symmetry.empty() || minRayleigh.empty()) return;
+
+  std::cout << "VLASOV_GRAPH_NORM_P4_DETERMINISTIC_FIXTURE_APPLY_PARITY"
+            << " operatorActionMaxRelDiff=" << std::setprecision(16) << actionRel.front()
+            << " operatorBilinearSymmetryAbsError=" << symmetry.front()
+            << " operatorMinRayleighQuotient=" << minRayleigh.front()
+            << " inverseInitialGuess=zero"
+            << " inverseRhs=constant-test-function"
+            << std::endl;
+
+  TEST_ASSERT(std::isfinite(actionRel.front()));
+  TEST_ASSERT(std::isfinite(symmetry.front()));
+  TEST_ASSERT(std::isfinite(minRayleigh.front()));
+  TEST_COMPARE(actionRel.front(), <, 1e-10);
+  TEST_COMPARE(symmetry.front(), <, 2e-10);
+  TEST_COMPARE(minRayleigh.front(), >, 0.0);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
+                   P4DeterministicFixtureOperatorTermsMatchCamelliaAssembled )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      deterministicP4VlasovGraphNormFixtureArguments("camellia-vlasov-matrix-compare") +
+      " --camelliaMatrixCompareFailOnMismatch=0");
+
+  TEST_EQUALITY(run.status, 0);
+  if (run.status != 0) return;
+
+  const int p = 4;
+  const double tolerance = 1e-8;
+  const std::vector<std::string> blocks = deterministicP4VlasovGraphNormOperatorBlocks();
+  for (const std::string &block : blocks)
+  {
+    const int passed = parseCamelliaVlasovComparisonIntKey(run.output, block, p, "passed");
+    const double maxAbsError =
+        parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "maxAbsError");
+    const double maxRelError =
+        parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "maxRelError");
+    const double maxDiagonalAbsError =
+        parseCamelliaVlasovComparisonDoubleKey(run.output, block, p, "maxDiagonalAbsError");
+
+    std::cout << "VLASOV_GRAPH_NORM_P4_OPERATOR_TERM_CAMELLIA_ASSEMBLED_MATCH"
+              << " block=" << block
+              << " p=" << p
+              << " passed=" << passed
+              << " maxAbsError=" << std::setprecision(16) << maxAbsError
+              << " maxRelError=" << maxRelError
+              << " maxDiagonalAbsError=" << maxDiagonalAbsError
+              << " tolerance=" << tolerance
+              << std::endl;
+
+    TEST_EQUALITY(passed, 1);
+    TEST_ASSERT(std::isfinite(maxAbsError));
+    TEST_ASSERT(std::isfinite(maxRelError));
+    TEST_ASSERT(std::isfinite(maxDiagonalAbsError));
+    TEST_COMPARE(maxAbsError, <=, tolerance);
+    TEST_COMPARE(maxDiagonalAbsError, <=, tolerance);
+  }
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
+                   P4DeterministicFixtureConstantTestFunctionRhsMatchesCamelliaAssembled )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      deterministicP4VlasovGraphNormFixtureArguments("camellia-vlasov-rhs-compare") +
+      " --camelliaMatrixCompareFailOnMismatch=0");
+
+  TEST_EQUALITY(run.status, 0);
+  if (run.status != 0) return;
+
+  const int p = 4;
+  const int passed =
+      parseCamelliaVlasovRhsComparisonIntKey(run.output, p, "passed");
+  const double maxAbsError =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "maxAbsError");
+  const double maxRelError =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "maxRelError");
+  const double matrixFreeNorm =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "matrixFreeNorm");
+  const double camelliaNorm =
+      parseCamelliaVlasovRhsComparisonDoubleKey(run.output, p, "camelliaNorm");
+
+  const double tolerance = 1e-8;
+  std::cout << "VLASOV_GRAPH_NORM_P4_DETERMINISTIC_FIXTURE_RHS_CAMELLIA_ASSEMBLED_MATCH"
+            << " p=" << p
+            << " passed=" << passed
+            << " maxAbsError=" << std::setprecision(16) << maxAbsError
+            << " maxRelError=" << maxRelError
+            << " matrixFreeNorm=" << matrixFreeNorm
+            << " camelliaNorm=" << camelliaNorm
+            << " inverseRhs=constant-test-function"
+            << " tolerance=" << tolerance
+            << std::endl;
+
+  TEST_EQUALITY(passed, 1);
+  TEST_ASSERT(std::isfinite(maxAbsError));
+  TEST_ASSERT(std::isfinite(maxRelError));
+  TEST_ASSERT(std::isfinite(matrixFreeNorm));
+  TEST_ASSERT(std::isfinite(camelliaNorm));
+  TEST_COMPARE(maxAbsError, <=, tolerance);
+}
+
+TEUCHOS_UNIT_TEST( TensorVlasovGraphNormChebyshev,
+                   P4DeterministicFixtureRunsOnePMultigridPreSmoothingStage )
+{
+  if (!shouldRunExternalDiagnosticsOnThisRank()) return;
+
+  const DriverRun run = runDriver(
+      deterministicP4VlasovGraphNormFixtureArguments("inverse-diagnostic") +
+      " --inverseDiagnosticAlgorithm=pmultigrid-chebyshev"
+      " --inverseSpectralEstimate=power --inverseSpectralEstimateIterations=20"
+      " --inverseLowerSpectralEstimate=ratio --inverseEigenRatio=30"
+      " --numInverseIterations=1"
+      " --pMultigridChebyshevSmootherIterations=1"
+      " --pMultigridChebyshevSmootherLowerFraction=0.033333333333333333"
+      " --inverseInitialGuess=zero --inverseRhs=constant-test-function");
+
+  TEST_EQUALITY(run.status, 0);
+  if (run.status != 0) return;
+
+  const std::vector<double> initialResiduals =
+      parseAllPMultigridStageDoubleKey(run.output, "initialResidualNorm");
+  const std::vector<double> afterPreSmooth =
+      parseAllPMultigridStageDoubleKey(run.output, "residualAfterPreSmooth");
+  const std::vector<double> afterPostSmooth =
+      parseAllPMultigridStageDoubleKey(run.output, "residualAfterPostSmooth");
+  const std::vector<double> actionDiffs =
+      parseAllPMultigridStageDoubleKey(run.output, "assembledProxyOperatorActionMaxRelDiff");
+  const std::vector<double> smootherIterations =
+      parseAllPMultigridStageDoubleKey(run.output, "smootherIterations");
+
+  TEST_EQUALITY(initialResiduals.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(afterPreSmooth.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(afterPostSmooth.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(actionDiffs.size(), static_cast<std::size_t>(1));
+  TEST_EQUALITY(smootherIterations.size(), static_cast<std::size_t>(1));
+  if (initialResiduals.empty() || afterPreSmooth.empty() || afterPostSmooth.empty() ||
+      actionDiffs.empty() || smootherIterations.empty()) return;
+
+  std::cout << "VLASOV_GRAPH_NORM_P4_DETERMINISTIC_FIXTURE_ONE_PRE_SMOOTH_STAGE"
+            << " initialResidualNorm=" << std::setprecision(16) << initialResiduals.front()
+            << " residualAfterPreSmooth=" << afterPreSmooth.front()
+            << " residualAfterPostSmooth=" << afterPostSmooth.front()
+            << " assembledProxyOperatorActionMaxRelDiff=" << actionDiffs.front()
+            << " smootherIterations=" << smootherIterations.front()
+            << std::endl;
+
+  TEST_ASSERT(std::isfinite(initialResiduals.front()));
+  TEST_ASSERT(std::isfinite(afterPreSmooth.front()));
+  TEST_ASSERT(std::isfinite(afterPostSmooth.front()));
+  TEST_ASSERT(std::isfinite(actionDiffs.front()));
+  TEST_FLOATING_EQUALITY(smootherIterations.front(), 1.0, 1e-12);
+  TEST_COMPARE(initialResiduals.front(), >, 0.0);
+  TEST_COMPARE(afterPreSmooth.front(), >=, 0.0);
+  TEST_COMPARE(afterPostSmooth.front(), >=, 0.0);
+  TEST_COMPARE(actionDiffs.front(), <, 1e-10);
 }
