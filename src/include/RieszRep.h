@@ -16,9 +16,6 @@
 
 #include "TypeDefs.h"
 
-// Epetra includes
-#include <Epetra_Map.h>
-
 #include "Camellia_FieldContainer.hpp"
 
 #include "Mesh.h"
