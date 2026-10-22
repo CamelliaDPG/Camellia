@@ -8,6 +8,8 @@ add_executable(VlasovGramGMGStudyDriver "VlasovGramGMGStudyDriver.cpp")
 add_executable(VlasovGramMatrixFreeStudyDriver "VlasovGramMatrixFreeStudyDriver.cpp")
 target_compile_definitions(VlasovGramMatrixFreeStudyDriver PRIVATE VLASOV_MF_DRIVER_CURRENT_SOURCE=1)
 set_target_properties(VlasovGramMatrixFreeStudyDriver PROPERTIES EXCLUDE_FROM_ALL FALSE)
+# The assembled study driver is required by the TensorVlasovGramAssembledGMG* and TraceReadinessCompare* tests.
+set_target_properties(VlasovGramGMGStudyDriver PROPERTIES EXCLUDE_FROM_ALL FALSE)
 target_link_libraries(VlasovGramGMGStudyDriver Camellia ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
 target_include_directories(TensorPoissonPAMatrixDriver BEFORE PRIVATE ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIRS})
 target_link_libraries(TensorPoissonPAMatrixDriver Camellia ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})

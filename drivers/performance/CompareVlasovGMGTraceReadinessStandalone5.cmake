@@ -1,3 +1,6 @@
+# Script mode (-P) needs an explicit policy level for if(... IN_LIST ...) (CMP0057).
+cmake_minimum_required(VERSION 3.5)
+
 # Standalone readiness smoke for comparing p=${TRACE_FINE_P} matrix-free and assembled GMG diagnostics.
 # This is intentionally a readiness/schema check rather than a numerical equivalence
 # assertion: both paths must emit nonempty p=${TRACE_FINE_P} GMG data that later milestones can
@@ -941,3 +944,14 @@ if(NOT GMG_AUTO_LAMBDA_ALL_AGREE EQUAL 1)
   message(STATUS
     "GMG trace first relative disagreement rows:\nassembled: ${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_ASSEMBLED_ROW}\nmatrix_free: ${GMG_AUTO_LAMBDA_FIRST_RELATIVE_DISAGREEMENT_MATRIX_FREE_ROW}")
 endif()
+
+# Parity gate.  With a deterministic Chebyshev lambda_max, the assembled and matrix-free V-cycles should agree
+# stage-by-stage to round-off.  The auto-lambda comparison above is diagnostic only: Ifpack2's power method uses a
+# randomized starting vector, so its lambda_max (and every stage after the first smoother) differs run-to-run.
+if(NOT GMG_GERSHGORIN_EXPERIMENT_ALL_AGREE EQUAL 1)
+  message(FATAL_ERROR "assembled and matrix-free GMG V-cycle stages disagree with deterministic gershgorin lambda_max: ${GMG_GERSHGORIN_EXPERIMENT_SUMMARY}")
+endif()
+if(NOT GMG_DETERMINISTIC_POWER_EXPERIMENT_ALL_AGREE EQUAL 1)
+  message(FATAL_ERROR "assembled and matrix-free GMG V-cycle stages disagree with deterministic power-method lambda_max: ${GMG_DETERMINISTIC_POWER_EXPERIMENT_SUMMARY}")
+endif()
+message(STATUS "GMG trace parity gate passed: deterministic gershgorin and power-method lambda_max experiments agree at every stage")
