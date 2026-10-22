@@ -4,6 +4,12 @@
 
 #include "Kokkos_Core.hpp"
 
+#include "Ifpack2_Chebyshev.hpp"
+#include "Teuchos_DefaultSerialComm.hpp"
+#include "Tpetra_CrsMatrix.hpp"
+#include "Tpetra_Map.hpp"
+#include "Tpetra_MultiVector.hpp"
+
 #include <cmath>
 #include <string>
 #include <vector>
@@ -413,11 +419,87 @@ TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, ChebyshevBlockSmootherFirstStepMatches
   const auto applied = tensorLocalApplyDenseMatrix(secondCell, initial, rows);
   const Scalar lambdaMax = std::max(lambdaMaxByCell[1], Scalar(1.0));
   const Scalar lambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), lowerFraction * lambdaMax);
-  const Scalar theta = Scalar(0.5) * (lambdaMax + lambdaMin);
+  const Scalar boostFactor = Scalar(1.1); // Ifpack2 default
+  const Scalar theta = Scalar(0.5) * (boostFactor * lambdaMax + lambdaMin);
   for (int i=0; i<rows; i++)
     expected[static_cast<size_t>(i)] += (Scalar(1.0) / theta) * secondInverseDiagonal[static_cast<size_t>(i)] * (rhs[static_cast<size_t>(i)] - applied[static_cast<size_t>(i)]);
 
   assertVectorsNear(actual, expected, 1e-14, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, ChebyshevBlockSmootherMatchesIfpack2Chebyshev )
+{
+  // The p-multigrid coarse levels use tensorLocalRunChebyshevBlockSmoother, while the fine level uses Ifpack2::Chebyshev;
+  // with the same lambdaMax, ratio, and initial guess, the two should produce the same iterate to round-off.
+  constexpr int rows = 12;
+  std::vector<Scalar> matrix(static_cast<size_t>(rows) * rows, Scalar(0.0));
+  for (int i=0; i<rows; i++)
+  {
+    // 1D Laplacian plus a varying reaction term: a wide D^{-1} A spectrum, unlike deterministicSPDMatrix()
+    matrix[static_cast<size_t>(i) * rows + i] = Scalar(2.0) + Scalar(0.1) * Scalar(i % 3);
+    if (i > 0)        matrix[static_cast<size_t>(i) * rows + (i-1)] = Scalar(-1.0);
+    if (i < rows - 1) matrix[static_cast<size_t>(i) * rows + (i+1)] = Scalar(-1.0);
+  }
+  const auto inverseDiagonal = tensorLocalExtractInverseDiagonalFromBlockDenseMatrices(matrix, 1, rows);
+  const Scalar lambdaMax = Scalar(2.5); // a user-supplied bound, as both p-multigrid paths provide
+  const std::vector<Scalar> lambdaMaxByCell = {lambdaMax};
+  const Scalar ratio = Scalar(30.0);
+  const int degree = 8;
+
+  std::vector<Scalar> rhs(rows), initial(rows);
+  for (int i=0; i<rows; i++)
+  {
+    rhs[static_cast<size_t>(i)]     = Scalar(1.0) + Scalar(0.25) * std::sin(Scalar(i));
+    initial[static_cast<size_t>(i)] = Scalar(0.1) * std::cos(Scalar(2 * i));
+  }
+  std::vector<Scalar> actual = initial;
+  tensorLocalRunChebyshevBlockSmoother(matrix, inverseDiagonal, lambdaMaxByCell, 0, rows, rhs, actual, degree, Scalar(1.0) / ratio);
+
+  using Map = Tpetra::Map<>;
+  using CrsMatrix = Tpetra::CrsMatrix<Scalar>;
+  using MV = Tpetra::MultiVector<Scalar>;
+  using RowMatrix = Tpetra::RowMatrix<Scalar>;
+  Teuchos::RCP<const Teuchos::Comm<int>> serialComm = Teuchos::rcp(new Teuchos::SerialComm<int>());
+  auto map = Teuchos::rcp(new Map(rows, 0, serialComm));
+  auto A = Teuchos::rcp(new CrsMatrix(map, 3));
+  for (int i=0; i<rows; i++)
+  {
+    std::vector<Map::global_ordinal_type> cols;
+    std::vector<Scalar> values;
+    for (int j=0; j<rows; j++)
+    {
+      const Scalar value = matrix[static_cast<size_t>(i) * rows + j];
+      if (value != Scalar(0.0)) { cols.push_back(j); values.push_back(value); }
+    }
+    A->insertGlobalValues(i, Teuchos::ArrayView<const Map::global_ordinal_type>(cols), Teuchos::ArrayView<const Scalar>(values));
+  }
+  A->fillComplete();
+
+  Ifpack2::Chebyshev<RowMatrix> chebyshev(A);
+  Teuchos::ParameterList params;
+  params.set("chebyshev: degree", degree);
+  params.set("chebyshev: ratio eigenvalue", ratio);
+  params.set("chebyshev: max eigenvalue", lambdaMax);
+  params.set("chebyshev: min eigenvalue", lambdaMax / ratio);
+  params.set("chebyshev: eigenvalue max iterations", 0);
+  params.set("chebyshev: zero starting solution", false);
+  chebyshev.setParameters(params);
+  chebyshev.initialize();
+  chebyshev.compute();
+
+  MV B(map, 1), X(map, 1);
+  {
+    auto bView = B.getLocalViewHost(Tpetra::Access::OverwriteAll);
+    auto xView = X.getLocalViewHost(Tpetra::Access::OverwriteAll);
+    for (int i=0; i<rows; i++) { bView(i,0) = rhs[static_cast<size_t>(i)]; xView(i,0) = initial[static_cast<size_t>(i)]; }
+  }
+  chebyshev.apply(B, X);
+  std::vector<Scalar> expected(rows);
+  {
+    auto xView = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+    for (int i=0; i<rows; i++) expected[static_cast<size_t>(i)] = xView(i,0);
+  }
+  assertVectorsNear(actual, expected, 1e-13, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorLocalPMultigrid, CoarseSolverPolicyParsesValidNamesAndRejectsInvalidNames )

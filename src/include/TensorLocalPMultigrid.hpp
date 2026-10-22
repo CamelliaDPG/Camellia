@@ -417,15 +417,19 @@ namespace Camellia
                                             std::vector<Scalar> *iter1InverseDiagonal = nullptr,
                                             std::vector<Scalar> *iter1ResidualBefore = nullptr,
                                             std::vector<Scalar> *iter1Correction = nullptr,
-                                            std::vector<Scalar> *iter1ResidualAfter = nullptr)
+                                            std::vector<Scalar> *iter1ResidualAfter = nullptr,
+                                            const Scalar boostFactor = Scalar(1.1))
   {
+    // Matches Ifpack2::Details::Chebyshev's "first" algorithm: the interval is [lambdaMax * lowerFraction,
+    // boostFactor * lambdaMax], where Ifpack2's default "chebyshev: boost factor" is 1.1.
     if (iterations < 1) return;
     std::vector<Scalar> correction(static_cast<size_t>(rows), Scalar(0.0));
     std::vector<Scalar> applied(static_cast<size_t>(rows), Scalar(0.0));
     const Scalar chebyshevLambdaMax = std::max(lambdaMaxByCell[static_cast<size_t>(cellOrdinal)], Scalar(1.0));
     const Scalar chebyshevLambdaMin = std::max(std::numeric_limits<Scalar>::epsilon(), lowerFraction * chebyshevLambdaMax);
-    const Scalar ifpackDelta = Scalar(2.0) / (chebyshevLambdaMax - chebyshevLambdaMin);
-    const Scalar ifpackTheta = Scalar(0.5) * (chebyshevLambdaMax + chebyshevLambdaMin);
+    const Scalar chebyshevUpper = boostFactor * chebyshevLambdaMax;
+    const Scalar ifpackDelta = Scalar(2.0) / (chebyshevUpper - chebyshevLambdaMin);
+    const Scalar ifpackTheta = Scalar(0.5) * (chebyshevUpper + chebyshevLambdaMin);
     const Scalar s1 = ifpackTheta * ifpackDelta;
     Scalar rhok = Scalar(1.0) / s1;
     const size_t cellOffset = static_cast<size_t>(cellOrdinal) * static_cast<size_t>(rows);
