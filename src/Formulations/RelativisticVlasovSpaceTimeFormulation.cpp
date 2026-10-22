@@ -33,7 +33,8 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const double testSpaceL2Weight,
                                                                                const EBasisFamily &basisFamily,
                                                                                const int maxMomentNumberForDriver,
-                                                                               const bool enforcePositivity)
+                                                                               const bool enforcePositivity,
+                                                                               const bool useSumFactorizedGramAssembly)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
@@ -50,13 +51,24 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            true, // true: defer initialization; we call initialize() below.
                            enforcePositivity)
 {
-  this->_useSumFactorizedAssembly = false; // set base class's flag: we don't (yet) support sum-factorized assembly here.
+  // Sum-factorized assembly applies to the graph-norm Gram matrix (the bilinear form uses standard assembly), and
+  // requires a full tensor-product test basis.
+  TEUCHOS_TEST_FOR_EXCEPTION(useSumFactorizedGramAssembly && (basisFamily == BASIS_FAMILY_SERENDIPITY), std::invalid_argument,
+                             "Sum-factorized Gram assembly requires a full tensor-product basis; serendipity bases are not supported.");
+  this->_useSumFactorizedAssembly = useSumFactorizedGramAssembly;
   this->initialize();
 }
 
 IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const bool sumFactorizedAssembly)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(sumFactorizedAssembly, std::invalid_argument, "RelativisticVlasovSpaceTimeFormulation does not support sum-factorized Gram assembly.");
+  if (sumFactorizedAssembly)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_testSpaceInnerProduct != GraphTestSpaceInnerProduct, std::invalid_argument,
+                               "RelativisticVlasovSpaceTimeFormulation supports sum-factorized Gram assembly only for the graph test-space inner product.");
+    TEUCHOS_TEST_FOR_EXCEPTION(this->numSpecies() != 1, std::invalid_argument,
+                               "RelativisticVlasovSpaceTimeFormulation supports sum-factorized Gram assembly only for a single species.");
+    return this->constructSumFactorizedVlasovInnerProduct(_testSpaceL2Weight, this->enforcePositivity());
+  }
   
   const int spaceDim    = this->spaceDim();
   const int velocityDim = this->velocityDim();
@@ -250,7 +262,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               H1Order(), delta_k(), numUniformRefinements(),
                                                                               _testSpaceInnerProduct, _testSpaceL2Weight,
                                                                               basisFamily(),
-                                                                              0, this->enforcePositivity()));
+                                                                              0, this->enforcePositivity(),
+                                                                              this->useSumFactorizedAssembly()));
   
   configureNextSlab(nextSlabForm);
   

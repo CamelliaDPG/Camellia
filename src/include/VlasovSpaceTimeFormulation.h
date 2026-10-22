@@ -246,6 +246,11 @@ public:
   
   //! called from constructor, after Vlasov BF object is initialized.
   virtual IPPtr constructVlasovInnerProduct(const bool useSumFactorizedAssembly);
+
+  //! Sum-factorized graph-norm Gram assembly: (Lw,Lw) + massWeight (w,w), plus (phi,phi) if includePositivityTestVariable.
+  //! L uses v_i() and a(), so subclasses that override v_i() (e.g., relativistic) get their own operator.  Single species,
+  //! full tensor-product test basis.
+  IPPtr constructSumFactorizedVlasovInnerProduct(double massWeight, bool includePositivityTestVariable);
   
   // field variables:
   virtual VarPtr f(int i=0);         // Vlasov distribution (species i)

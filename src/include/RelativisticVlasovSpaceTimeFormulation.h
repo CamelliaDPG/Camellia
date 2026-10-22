@@ -53,7 +53,8 @@ public:
                                          const double testSpaceL2Weight = 1.0,
                                          const EBasisFamily &basisFamily = BASIS_FAMILY_HIERARCHICAL,
                                          const int maxMomentNumberForDriver = 0,
-                                         const bool enforcePositivity = false);
+                                         const bool enforcePositivity = false,
+                                         const bool useSumFactorizedGramAssembly = false);
   
   //! called during initialization of Vlasov Solution objects.  Subclasses must define a distribution field variable (f) with name VlasovSpaceTimeFormulation::S_F, a trace variable (t_n) with name VlasovSpaceTimeFormulation::S_T_N_HAT.  The former is used for moment computations, conservation diagnostics, and convergence criteria for the fixed-point iteration; the latter is used for boundary condition imposition.
   VarFactoryPtr constructVlasovVarFactory() override;

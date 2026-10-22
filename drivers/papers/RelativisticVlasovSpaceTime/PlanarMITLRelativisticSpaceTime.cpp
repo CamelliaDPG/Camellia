@@ -763,7 +763,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const double L2WeightGraph,
                                                               const bool usePeriodicBCs, const bool useSerendipity,
                                                               const bool useGradedSpatialMesh,
-                                                              const int numUniformRefinements)
+                                                              const int numUniformRefinements,
+                                                              const bool useSumFactorizedGramAssembly)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -815,7 +816,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  L2WeightGraph,
                                                                  basisFamily,
                                                                  0,
-                                                                 gEnforcePositivity));
+                                                                 gEnforcePositivity,
+                                                                 useSumFactorizedGramAssembly));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -968,11 +970,14 @@ int main(int argc, char *argv[])
     bool enforceQuasiNeutrality = false;
     bool useL2Trace             = true;
     bool useSerendipityBasis    = false;
+    bool useSumFactorizedGramAssembly = false;
     
     cmdp.setOption("ratio", &minMagneticFluxRatio, "magnetic flux ratio; values above 1 are insulated");
     
     cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
+    cmdp.setOption("useSumFactorizedGramAssembly", "useStandardGramAssembly", &useSumFactorizedGramAssembly,
+                   "Assemble the graph-norm Gram matrix with sum factorization (requires --useFullTensorBasis).");
     
     int delta_k = 2;
     int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
@@ -1307,7 +1312,8 @@ int main(int argc, char *argv[])
     auto phase0FormulationSetupStart = phase0.now();
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, uxMin, uxMax-uxMin, uyMin, uyMax-uyMin, xElements, tElements, vxElements, vyElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
-                                     useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements);
+                                     useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
+                                     useSumFactorizedGramAssembly);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
 

@@ -41,6 +41,7 @@
 #include "Intrepid2_DerivedBasisFamily.hpp"
 #include "Intrepid2_FunctionSpaceTools.hpp"
 #include "Intrepid2_IntegrationTools.hpp"
+#include "Intrepid2_PAMatrix.hpp"
 #include "Intrepid2_NodalBasisFamily.hpp"
 
 #include <algorithm>
@@ -831,6 +832,10 @@ namespace
     VlasovSpaceTimeFormulation & _form;
     int _numConfigSpaceDims;
     int _numVelocitySpaceDims;
+    double _massWeight;   // weight on (w,w); the graph-norm term (Lw,Lw) has unit weight
+    int _wID;
+    int _phiID;           // -1 if there is no latent positivity test variable; otherwise (phi,phi) is added
+    IPPtr _phiIP;         // (phi,phi), assembled with the standard IP machinery
     
     std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataValueValue; // key: (basis polyOrder, numCells)
     std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataGradGrad; // key: (basis polyOrder, numCells)
@@ -838,13 +843,23 @@ namespace
     std::function<void(int numElements, double timeG_integrate,
                                                                 double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> _gramAssemblyTimingCallback;
   public:
-    VlasovSpaceTimeIP(VlasovSpaceTimeFormulation & form)
+    //! Sum-factorized assembly of (Lw,Lw) + massWeight (w,w) [+ (phi,phi)], with L w = dw/dt + v . grad_x w + a . grad_v w.
+    //! The velocity v is form.v_i() (so relativistic formulations supply u/gamma), and the acceleration is form.a().
+    VlasovSpaceTimeIP(VlasovSpaceTimeFormulation & form, double massWeight = 1.0, bool includePositivityTestVariable = false)
     :
     TIP<double>(),
-    _form(form)
+    _form(form),
+    _massWeight(massWeight)
     {
       _numConfigSpaceDims   = form.configurationSpaceMesh()->getDimension(); // note this includes time dimension
       _numVelocitySpaceDims = form.velocityDim();
+      _wID   = form.w(0)->ID();
+      _phiID = includePositivityTestVariable ? form.phi(0)->ID() : -1;
+      if (includePositivityTestVariable)
+      {
+        _phiIP = IP::ip();
+        _phiIP->addTerm(form.phi(0));
+      }
       
       if (form.numSpecies() != 1)
       {
@@ -854,13 +869,35 @@ namespace
       _acceleration = form.a(speciesOrdinal);
     }
     
+    //! symmetric (basisValues, basisValues) integral, weighted by cellMeasures; PAMatrix assembly by default, or
+    //! Intrepid2::IntegrationTools::integrate() if CAMELLIA_VLASOV_GRAM_BACKEND=integrate
+    void integrateGram(Intrepid2::Data<double,DeviceType> &integrals,
+                       const Intrepid2::TransformedBasisValues<double,DeviceType> &basisValues,
+                       const Intrepid2::TensorData<double,DeviceType> &cellMeasures,
+                       const bool sumInto, double *flopEstimate) const
+    {
+      static const bool useIntegrate = []() {
+        const char *backend = getenv("CAMELLIA_VLASOV_GRAM_BACKEND");
+        return (backend != NULL) && (std::string(backend) == "integrate");
+      }();
+      if (useIntegrate)
+      {
+        Intrepid2::IntegrationTools<DeviceType>::integrate(integrals, basisValues, cellMeasures, basisValues, sumInto, flopEstimate);
+        return;
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(sumInto, std::invalid_argument, "PAMatrix Gram assembly does not support sumInto");
+      Intrepid2::PAMatrix<DeviceType,double> paMatrix(basisValues, cellMeasures, basisValues);
+      paMatrix.assemble2(integrals);
+    }
+    
     void computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
                                    Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache) override
     {
-      // the dof ordering should have just one entry, for a single H^1 test function w
-      TEUCHOS_TEST_FOR_EXCEPTION(dofOrdering->getVarIDs().size() != 1, std::invalid_argument, "Unexpected number of test variables");
-      auto wID = *dofOrdering->getVarIDs().begin();
+      // the dof ordering should have an H^1 test function w, and (with positivity enforcement) an L^2 test function phi
+      const int expectedVarCount = (_phiID >= 0) ? 2 : 1;
+      TEUCHOS_TEST_FOR_EXCEPTION(dofOrdering->getVarIDs().size() != expectedVarCount, std::invalid_argument, "Unexpected number of test variables");
+      const int wID = _wID;
       
       auto timerStart = std::chrono::steady_clock::now();
       auto elapsedTime = [&timerStart]()
@@ -884,14 +921,15 @@ namespace
       
       auto & scratchStorage = SharedScratchStorage<double>::sharedScratchStorage();
       
-//      Kokkos::Array< DeviceView<double>, 3> accelerationValues; // at most 3 components
-      Kokkos::Array< Intrepid2::Data<double, DeviceType>, 3> accelerationValues; // at most 3 components
+      // Flat (C,P) values; indexing an Intrepid2::Data with a fixed number of arguments is only valid when that number
+      // matches the Data's logical rank, which depends on the coefficient (e.g., rank 5 for a 1D2V Maxwell acceleration).
+      Kokkos::Array< DeviceView<double>, 3> accelerationValues; // at most 3 components
       
-      auto numAccelerationComponents = _acceleration.size();
+      const int numAccelerationComponents = _acceleration.size();
       for (int vd=0; vd<numAccelerationComponents; vd++)
       {
-        accelerationValues[vd] = _acceleration[vd]->checkoutValuesData(basisCache);
-        _acceleration[vd]->values(accelerationValues[vd], basisCache);
+        accelerationValues[vd] = scratchStorage.checkoutScratchStorage({numCells, numPoints}, "accelerationValues");
+        _acceleration[vd]->values(accelerationValues[vd], ASSIGN, basisCache);
       }
       
       Kokkos::Array< DeviceView<double>, 3> velocityValues; // at most 3 components
@@ -945,7 +983,7 @@ namespace
       bool sumInto = false;
       // (w1, w2)
       resetTimer();
-      Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataValueValue, transformedBasisValues, cellMeasures, transformedBasisValues, sumInto, &flopEstimateValueValue);
+      integrateGram(integralDataValueValue, transformedBasisValues, cellMeasures, sumInto, &flopEstimateValueValue);
       coreIntegrationTime = elapsedTime();
       resetTimer();
       
@@ -955,29 +993,23 @@ namespace
       // fill container:
       using ExecutionSpace = typename DeviceType::execution_space;
       int numVelocitySpaceDims = _numVelocitySpaceDims;
-      auto extents_7 = accelerationValues[0].getExtents();
-      Kokkos::Array<int,6> extents_6 {extents_7[0],extents_7[1],extents_7[2],extents_7[3],extents_7[4],extents_7[5]};
+      // coordinates are (x_1,...,x_s, t, u_1,...,u_v); s = spatial dimension (the configuration mesh includes time)
+      const int numSpatialDims = _numConfigSpaceDims - 1;
       Kokkos::parallel_for(
-        Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<6>>({0,0,0,0,0,0},extents_6),
-        KOKKOS_LAMBDA (const int &cellOrdinal, const int &i0, const int &i1, const int &i2, const int &i3, const int &i4)
+        Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{numCells,numPoints}),
+        KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointOrdinal)
         {
-          for (int i5=0; i5<extents_7[6]; i5++)
+          // velocity weights the spatial gradient; only the first numSpatialDims velocity components pair with x:
+          for (int d=0; d<numSpatialDims; d++)
           {
-            const int pointOrdinal = pointOrdinalFromComponents(extents_7, i0, i1, i2, i3, i4, i5);
-            // velocity first (weights spatial gradient):
-            for (int d=0; d<numVelocitySpaceDims; d++)
-            {
-              const auto & vd = velocityValues[d](cellOrdinal,pointOrdinal);
-              gradientWeightsView(cellOrdinal,pointOrdinal,d) = vd;
-            }
-            // temporal gradient weight is unit:
-            gradientWeightsView(cellOrdinal,pointOrdinal,numVelocitySpaceDims) = 1.0;
-            // acceleration weights velocity gradient
-            for (int d=0; d<numAccelerationComponents; d++)
-            {
-              const auto & ad = accelerationValues[d](cellOrdinal, i0, i1, i2, i3, i4, i5);
-              gradientWeightsView(cellOrdinal,pointOrdinal,d+numVelocitySpaceDims+1) = ad;
-            }
+            gradientWeightsView(cellOrdinal,pointOrdinal,d) = velocityValues[d](cellOrdinal,pointOrdinal);
+          }
+          // temporal gradient weight is unit:
+          gradientWeightsView(cellOrdinal,pointOrdinal,numSpatialDims) = 1.0;
+          // acceleration weights velocity gradient
+          for (int d=0; d<numAccelerationComponents; d++)
+          {
+            gradientWeightsView(cellOrdinal,pointOrdinal,d+numSpatialDims+1) = accelerationValues[d](cellOrdinal,pointOrdinal);
           }
         });
       
@@ -1004,19 +1036,27 @@ namespace
       sumInto = false;
       double flopEstimateGradGrad = 0;
       resetTimer();
-      Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataGradGrad, transformedBasisGradients, cellMeasures, transformedBasisGradients, sumInto, &flopEstimateGradGrad);
+      integrateGram(integralDataGradGrad, transformedBasisGradients, cellMeasures, sumInto, &flopEstimateGradGrad);
       coreIntegrationTime += elapsedTime();
       resetTimer();
 //      std::cout << "flop estimate for (value, value): " << flopEstimateValueValue << std::endl;
 //      std::cout << "flop estimate for ( grad,  grad): " << flopEstimateGradGrad   << std::endl;
 
+      // scatter the w block (and the phi block, if present) into the test-space ordering
+      const auto &wDofIndicesHost = dofOrdering->getDofIndices(wID);
+      DeviceView<int> wDofIndices("VlasovSpaceTimeIP w dof indices", basisCardinality);
+      {
+        auto wDofIndicesMirror = Kokkos::create_mirror_view(wDofIndices);
+        for (int i=0; i<basisCardinality; i++) wDofIndicesMirror(i) = wDofIndicesHost[i];
+        Kokkos::deep_copy(wDofIndices, wDofIndicesMirror);
+      }
+      const double massWeight = _massWeight;
       auto ipView = innerProduct.checkoutDeviceView();
+      Kokkos::deep_copy(ipView, 0.0);
       Kokkos::parallel_for(
                            Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,basisCardinality,basisCardinality}),
       KOKKOS_LAMBDA (int cellOrdinal, int i, int j) {
-//        std::cout << "integralDataValueValue(" << cellOrdinal << "," << i << "," << j << ") = " << integralDataValueValue(cellOrdinal,i,j) << std::endl;
-//        std::cout << "  integralDataGradGrad(" << cellOrdinal << "," << i << "," << j << ") = " << integralDataGradGrad(cellOrdinal,i,j) << std::endl;
-        ipView(cellOrdinal,i,j) = integralDataValueValue(cellOrdinal,i,j) + integralDataGradGrad(cellOrdinal,i,j);
+        ipView(cellOrdinal,wDofIndices(i),wDofIndices(j)) = massWeight * integralDataValueValue(cellOrdinal,i,j) + integralDataGradGrad(cellOrdinal,i,j);
       });
       Kokkos::fence();
       double time_block3 = elapsedTime();
@@ -1024,9 +1064,28 @@ namespace
       
       innerProduct.checkinDeviceView(true); // true: deep copy to host.  If we could guarantee that caller wouldn't try to access on host, we could eliminate this.  But we can't, and probably shouldn't until we've changed the method signature here to have a DeviceView passed in.  Basically the contract for Camellia::FieldContainer is that it should always be accessible on host.
 
-      for (int vd=0; vd<_acceleration.size(); vd++)
+      if (_phiID >= 0)
       {
-        _acceleration[vd]->checkinValuesData(accelerationValues[vd]);
+        // (phi,phi) is an L^2 mass matrix with no coefficient: assemble it with the standard IP machinery (it is small
+        // and cheap relative to the w block), and copy just the phi block into the result.
+        Camellia::FieldContainer<double> phiInnerProduct(numCells, innerProduct.dimension(1), innerProduct.dimension(2));
+        _phiIP->computeInnerProductMatrix(phiInnerProduct, dofOrdering, basisCache);
+        const auto &phiDofIndices = dofOrdering->getDofIndices(_phiID);
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+        {
+          for (int i : phiDofIndices)
+          {
+            for (int j : phiDofIndices)
+            {
+              innerProduct(cellOrdinal,i,j) = phiInnerProduct(cellOrdinal,i,j);
+            }
+          }
+        }
+      }
+
+      for (int vd=0; vd<numAccelerationComponents; vd++)
+      {
+        scratchStorage.checkinScratchStorage(accelerationValues[vd]);
       }
       
       for (int vd=0; vd<_numVelocitySpaceDims; vd++)
@@ -1466,12 +1525,21 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
+bool VlasovSpaceTimeFormulation::useSumFactorizedAssembly() const
+{
+  return _useSumFactorizedAssembly;
+}
+
+IPPtr VlasovSpaceTimeFormulation::constructSumFactorizedVlasovInnerProduct(double massWeight, bool includePositivityTestVariable)
+{
+  return Teuchos::rcp( new VlasovSpaceTimeIP(*this, massWeight, includePositivityTestVariable) );
+}
+
 IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct(const bool useSumFactorizedAssembly)
 {
   if (useSumFactorizedAssembly)
   {
-    auto ip = Teuchos::rcp( new VlasovSpaceTimeIP(*this) );
-    return ip;
+    return constructSumFactorizedVlasovInnerProduct(1.0, _enforcePositivity);
   }
   else
   {
