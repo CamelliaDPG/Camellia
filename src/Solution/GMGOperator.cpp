@@ -655,8 +655,6 @@ TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator(Teuchos::RCP<DofIn
   // row indices belong to the fine grid, columns to the coarse
   // maps coefficients from coarse to fine
   
-  const size_t maxRowSizeToPrescribe = static_cast<size_t>(coarseMap->getGlobalNumElements());
-  
   CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
   CondensedDofInterpreter<double>* condensedDofInterpreterFine = NULL;
   
@@ -670,7 +668,10 @@ TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator(Teuchos::RCP<DofIn
     varsToExclude = condensedDofInterpreterCoarse->condensibleVariableIDs();
   }
   
-  TMatrixPtr<Scalar> P = Teuchos::rcp( new TMatrix<Scalar>(tFineMap, maxRowSizeToPrescribe) );
+  // P is allocated below, once each row's nonzero count is known.  (Allocating every row for all
+  // coarse columns, as was done previously, asks for (fine rows) x (coarse dofs) storage, which
+  // exhausts memory on moderately sized meshes.)
+  TMatrixPtr<Scalar> P;
   
   // by convention, all constraints come at the end.  (Element and global lagrange constraints, zero-mean constraints.)
   // There should be the same number in the coarse and the fine Solution objects, and the mapping is taken to be the identity.
@@ -723,8 +724,6 @@ TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator(Teuchos::RCP<DofIn
     TVectorPtr<Scalar> tXLocal = Teuchos::rcp(new TVector<Scalar>(localXMap, 1));
     
     // to (possibly) reduce the cost of allocating these containers, declare them outside and resize inside as needed
-    Camellia::FieldContainer<GO> coarseGlobalIndices;
-    Camellia::FieldContainer<double> coarseGlobalValues;
     Camellia::FieldContainer<double> coarseCellCoefficients;
     Camellia::FieldContainer<double> mappedCoarseCellCoefficients;
     Camellia::FieldContainer<double> globalCoefficients;
@@ -733,6 +732,10 @@ TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator(Teuchos::RCP<DofIn
     Camellia::FieldContainer<double> basisCoefficients;
     
     const int vectorOrdinal = 0;
+    
+    // nonzero entries of each owned row of P, in local row order
+    std::vector<std::vector<GO>> rowIndices(numOwnedFineDofs);
+    std::vector<std::vector<Scalar>> rowValues(numOwnedFineDofs);
     
     for (size_t localID=0; localID < numOwnedFineDofs; localID++)
     {
@@ -893,30 +896,30 @@ TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator(Teuchos::RCP<DofIn
         }
       }
       
-      coarseGlobalIndices.resize(coarseXVectorLocal.size());
-      coarseGlobalValues.resize(coarseXVectorLocal.size());
-      int nnz = 0; // nonzero entries
       double tol = 1e-13; // count anything less as a zero entry
-//            cout << "P global row " << globalRow << ": ";
       for (auto & entry : coarseXVectorLocal)
       {
-        if (abs(entry.second) > tol)
+        if (std::abs(entry.second) > tol)
         {
-          coarseGlobalIndices[nnz] = entry.first;
-          coarseGlobalValues[nnz] = entry.second;
-//                    cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
-          nnz++;
+          rowIndices[localID].push_back(entry.first);
+          rowValues[localID].push_back(entry.second);
         }
       }
-//            cout << endl;
-      if (nnz > 0)
-      {
-        const Teuchos::ArrayView<const GO> indices(&coarseGlobalIndices[0], nnz);
-        const Teuchos::ArrayView<const Scalar> values(&coarseGlobalValues[0], nnz);
-        P->insertGlobalValues(globalRow, indices, values);
-//                cout << "Inserting values for row " << globalRow << endl;
-      }
       tXLocal->replaceLocalValue(localID, vectorOrdinal, 0.0);
+    }
+    
+    Teuchos::Array<size_t> numEntriesPerRow(numOwnedFineDofs);
+    for (size_t localID=0; localID < numOwnedFineDofs; localID++)
+    {
+      numEntriesPerRow[localID] = rowIndices[localID].size();
+    }
+    P = Teuchos::rcp( new TMatrix<Scalar>(tFineMap, numEntriesPerRow()) );
+    for (size_t localID=0; localID < numOwnedFineDofs; localID++)
+    {
+      if (rowIndices[localID].size() == 0) continue;
+      const Teuchos::ArrayView<const GO> indices(rowIndices[localID].data(), rowIndices[localID].size());
+      const Teuchos::ArrayView<const Scalar> values(rowValues[localID].data(), rowValues[localID].size());
+      P->insertGlobalValues(fineMapGIDs[localID], indices, values);
     }
   }
   
