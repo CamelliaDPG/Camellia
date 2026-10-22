@@ -1,0 +1,243 @@
+// @HEADER
+//
+// © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
+//
+// @HEADER
+
+//
+//  TensorVlasovMomentSampling1D2V.cpp
+//  Camellia
+//
+
+#include "TensorVlasovMomentSampling1D2V.h"
+
+#include "BasisCache.h"
+#include "CamelliaCellTools.h"
+#include "Camellia_FieldContainerConversion.hpp"
+#include "CubatureFactory.h"
+#include "ExtrudedMeshTopology.h"
+#include "GlobalDofAssignment.h"
+#include "Mesh.h"
+#include "MPIWrapper.h"
+#include "Solution.h"
+#include "TensorMaxwell1D2VMomentReductionPipeline.h"
+#include "Var.h"
+
+#include <map>
+
+using namespace Camellia;
+
+namespace
+{
+  // 1D Gauss rule on the reference line [-1,1].
+  void referenceLineRule(int degree, std::vector<double> &points, std::vector<double> &weights)
+  {
+    CubatureFactory cubatureFactory;
+    auto cubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{degree});
+    auto refPoints = cubature->allocateCubaturePoints();
+    auto refWeights = cubature->allocateCubatureWeights();
+    cubature->getCubature(refPoints, refWeights);
+    auto refPointsFC = FieldContainerConversion<double>::fromTensorPoints(refPoints);
+    auto refWeightsFC = FieldContainerConversion<double>::fromTensorData(refWeights);
+    const int pointCount = refPointsFC.dimension(0);
+    points.resize(pointCount);
+    weights.resize(pointCount);
+    for (int i=0; i<pointCount; i++)
+    {
+      points[i] = refPointsFC(i,0);
+      weights[i] = refWeightsFC(i);
+    }
+  }
+
+  // physical (x,t) cubature points for a configuration cell, as (P,2)
+  Camellia::FieldContainer<double> configurationCubaturePoints(MeshPtr configurationMesh, GlobalIndexType cellID)
+  {
+    auto basisCache = BasisCache::basisCacheForCell(configurationMesh, cellID);
+    const auto &points = basisCache->getPhysicalCubaturePointsFC(); // (1,P,2)
+    const int pointCount = points.dimension(1);
+    TEUCHOS_TEST_FOR_EXCEPTION(points.dimension(2) != 2, std::invalid_argument,
+                               "computeVlasovMomentsByPhaseSpaceCell1D2V expects a 1D space-time configuration mesh.");
+    Camellia::FieldContainer<double> cellPoints(pointCount, 2);
+    for (int p=0; p<pointCount; p++)
+    {
+      cellPoints(p,0) = points(0,p,0);
+      cellPoints(p,1) = points(0,p,1);
+    }
+    return cellPoints;
+  }
+}
+
+TensorVlasovMoments1D2V Camellia::computeVlasovMomentsByPhaseSpaceCell1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                                                           MeshPtr configurationMesh,
+                                                                           SolutionPtr phaseSpaceSolution,
+                                                                           VarPtr fVar,
+                                                                           int velocityQuadratureDegree,
+                                                                           bool useRelativisticCurrentMoments,
+                                                                           double lightSpeed)
+{
+  using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
+  TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument, "configurationMesh is null");
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument, "phaseSpaceSolution is null");
+  TEUCHOS_TEST_FOR_EXCEPTION(fVar == Teuchos::null, std::invalid_argument, "fVar is null");
+  TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree <= 0, std::invalid_argument, "velocityQuadratureDegree must be positive");
+
+  MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
+  auto extrudedTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology());
+  TEUCHOS_TEST_FOR_EXCEPTION(extrudedTopology == NULL, std::invalid_argument,
+                             "computeVlasovMomentsByPhaseSpaceCell1D2V requires an ExtrudedMeshTopology phase-space mesh.");
+  TEUCHOS_TEST_FOR_EXCEPTION(extrudedTopology->numExtrusionDimensions() != 2, std::invalid_argument,
+                             "computeVlasovMomentsByPhaseSpaceCell1D2V requires exactly two velocity extrusions.");
+
+  std::vector<double> refLinePoints, refLineWeights;
+  referenceLineRule(velocityQuadratureDegree, refLinePoints, refLineWeights);
+  const int linePointCount = static_cast<int>(refLinePoints.size());
+  const int velocityPointsPerCell = linePointCount * linePointCount;
+
+  // Global, rank-independent indexing of active configuration cells; partial moments are summed in this layout.
+  std::set<GlobalIndexType> activeConfigurationCells = configurationMesh->getActiveCellIDsGlobal();
+  std::map<GlobalIndexType,int> configurationCellOrdinal;
+  for (GlobalIndexType cellID : activeConfigurationCells)
+  {
+    const int ordinal = static_cast<int>(configurationCellOrdinal.size());
+    configurationCellOrdinal[cellID] = ordinal;
+  }
+  const int globalConfigurationCellCount = static_cast<int>(configurationCellOrdinal.size());
+
+  // Uniform cubature point count is assumed (as in the Maxwell RHS adapter); determined from the first cell
+  // whose points we evaluate, and checked thereafter.  Agreed across ranks below.
+  int pointsPerConfigurationCell = -1;
+  std::map<GlobalIndexType,Camellia::FieldContainer<double>> configurationPointsCache;
+  auto configurationPointsForCell = [&](GlobalIndexType cellID) -> const Camellia::FieldContainer<double> & {
+    auto entry = configurationPointsCache.find(cellID);
+    if (entry != configurationPointsCache.end()) return entry->second;
+    auto cellPoints = configurationCubaturePoints(configurationMesh, cellID);
+    if (pointsPerConfigurationCell < 0) pointsPerConfigurationCell = cellPoints.dimension(0);
+    TEUCHOS_TEST_FOR_EXCEPTION(cellPoints.dimension(0) != pointsPerConfigurationCell, std::invalid_argument,
+                               "computeVlasovMomentsByPhaseSpaceCell1D2V requires a uniform configuration cubature point count.");
+    return configurationPointsCache.emplace(cellID, cellPoints).first->second;
+  };
+  for (GlobalIndexType cellID : configurationCellIDs) configurationPointsForCell(cellID);
+  pointsPerConfigurationCell = MPIWrapper::max(phaseSpaceMesh->Comm(), pointsPerConfigurationCell);
+
+  // (globalCellOrdinal, point, moment) with moment = density, x moment, z moment
+  const int momentCount = 3;
+  std::vector<double> globalMoments(static_cast<size_t>(globalConfigurationCellCount) * std::max(pointsPerConfigurationCell,0) * momentCount, 0.0);
+
+  // velocity points/weights for one velocity cell, in the (ux-major, uz-minor) order used by the reduction pipeline
+  Pipeline::HostMatrix cellVelocityPoints("velocity cell points", velocityPointsPerCell, 2);
+  Pipeline::HostVector cellVelocityWeights("velocity cell weights", velocityPointsPerCell);
+
+  const int fID = fVar->ID();
+  const set<GlobalIndexType> &ownedPhaseSpaceCells = phaseSpaceMesh->cellIDsInPartition();
+  for (GlobalIndexType phaseSpaceCellID : ownedPhaseSpaceCells)
+  {
+    double ux0, ux1, uz0, uz1;
+    extrudedTopology->extrusionVerticesForPhaseSpaceCell(ux0, ux1, phaseSpaceCellID, 0);
+    extrudedTopology->extrusionVerticesForPhaseSpaceCell(uz0, uz1, phaseSpaceCellID, 1);
+    const double uxCenter = 0.5 * (ux0 + ux1), uxScale = 0.5 * std::abs(ux1 - ux0);
+    const double uzCenter = 0.5 * (uz0 + uz1), uzScale = 0.5 * std::abs(uz1 - uz0);
+    for (int i=0; i<linePointCount; i++)
+    {
+      for (int j=0; j<linePointCount; j++)
+      {
+        const int v = i * linePointCount + j;
+        cellVelocityPoints(v,0) = uxCenter + uxScale * refLinePoints[i];
+        cellVelocityPoints(v,1) = uzCenter + uzScale * refLinePoints[j];
+        cellVelocityWeights(v) = uxScale * refLineWeights[i] * uzScale * refLineWeights[j];
+      }
+    }
+
+    // The phase-space cell's configuration cell may have been refined (via other phase-space cells over it); then this
+    // phase-space cell spans several active configuration cells, and contributes at each of their cubature points.
+    const GlobalIndexType configurationCellID = extrudedTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID);
+    std::vector<GlobalIndexType> activeConfigurationCells;
+    if (configurationCellOrdinal.find(configurationCellID) != configurationCellOrdinal.end())
+    {
+      activeConfigurationCells.push_back(configurationCellID);
+    }
+    else
+    {
+      CellPtr configurationCell = configurationMesh->getTopology()->getCell(configurationCellID);
+      for (IndexType descendant : configurationCell->getDescendants(configurationMesh->getTopology()))
+      {
+        activeConfigurationCells.push_back(descendant);
+      }
+    }
+
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(phaseSpaceMesh, phaseSpaceCellID);
+    const int cubatureDegree = phaseSpaceMesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID);
+    for (GlobalIndexType activeConfigurationCellID : activeConfigurationCells)
+    {
+      auto ordinalEntry = configurationCellOrdinal.find(activeConfigurationCellID);
+      TEUCHOS_TEST_FOR_EXCEPTION(ordinalEntry == configurationCellOrdinal.end(), std::invalid_argument,
+                                 "phase-space cell's configuration cell has no active configuration-mesh descendant");
+      const auto &configurationPoints = configurationPointsForCell(activeConfigurationCellID);
+      const int configurationPointCount = configurationPoints.dimension(0);
+
+      // physical points in this phase-space cell: (configuration point) x (velocity point)
+      const int cellPointCount = configurationPointCount * velocityPointsPerCell;
+      Camellia::FieldContainer<double> physicalPoints(1, cellPointCount, 4);
+      for (int c=0; c<configurationPointCount; c++)
+      {
+        for (int v=0; v<velocityPointsPerCell; v++)
+        {
+          const int p = c * velocityPointsPerCell + v;
+          physicalPoints(0,p,0) = configurationPoints(c,0);
+          physicalPoints(0,p,1) = configurationPoints(c,1);
+          physicalPoints(0,p,2) = cellVelocityPoints(v,0);
+          physicalPoints(0,p,3) = cellVelocityPoints(v,1);
+        }
+      }
+
+      // One batched inverse map and one evaluation per (phase-space cell, configuration cell): the points are known
+      // to lie in this phase-space cell.
+      Camellia::FieldContainer<double> refPoints(1, cellPointCount, 4);
+      CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, phaseSpaceMesh->getTopology(), phaseSpaceCellID, cubatureDegree);
+      refPoints.resize(cellPointCount, 4);
+      basisCache->setRefCellPointsFC(refPoints);
+      Camellia::FieldContainer<double> fValues(1, cellPointCount);
+      phaseSpaceSolution->solutionValues(fValues, fID, basisCache);
+
+      Pipeline::HostMatrix cellFValues("phase-space cell f values", configurationPointCount, velocityPointsPerCell);
+      for (int c=0; c<configurationPointCount; c++)
+      {
+        for (int v=0; v<velocityPointsPerCell; v++)
+        {
+          cellFValues(c,v) = fValues(0, c * velocityPointsPerCell + v);
+        }
+      }
+      auto cellMoments = Pipeline::reduceSpeciesMoments(cellFValues, cellVelocityPoints, cellVelocityWeights,
+                                                        useRelativisticCurrentMoments, lightSpeed);
+      const size_t cellOffset = static_cast<size_t>(ordinalEntry->second) * pointsPerConfigurationCell * momentCount;
+      for (int c=0; c<configurationPointCount; c++)
+      {
+        globalMoments[cellOffset + c * momentCount + 0] += cellMoments._density[c];
+        globalMoments[cellOffset + c * momentCount + 1] += cellMoments._xProperVelocityMoment[c];
+        globalMoments[cellOffset + c * momentCount + 2] += cellMoments._zProperVelocityMoment[c];
+      }
+    }
+  }
+
+  MPIWrapper::entryWiseSum(phaseSpaceMesh->Comm(), globalMoments);
+
+  TensorVlasovMoments1D2V result;
+  result.numConfigurationCells = static_cast<int>(configurationCellIDs.size());
+  result.numPointsPerConfigurationCell = pointsPerConfigurationCell;
+  result.numVelocityPoints = static_cast<int>(extrudedTopology->extrusionMeshTopology(0)->activeCellCount()
+                                              * extrudedTopology->extrusionMeshTopology(1)->activeCellCount()) * velocityPointsPerCell;
+  const int entryCount = result.numConfigurationCells * std::max(pointsPerConfigurationCell,0);
+  std::vector<double> density(entryCount), xMoment(entryCount), zMoment(entryCount);
+  for (int cellOrdinal=0; cellOrdinal<result.numConfigurationCells; cellOrdinal++)
+  {
+    const size_t cellOffset = static_cast<size_t>(configurationCellOrdinal[configurationCellIDs[cellOrdinal]]) * pointsPerConfigurationCell * momentCount;
+    for (int c=0; c<pointsPerConfigurationCell; c++)
+    {
+      const int entry = cellOrdinal * pointsPerConfigurationCell + c;
+      density[entry] = globalMoments[cellOffset + c * momentCount + 0];
+      xMoment[entry] = globalMoments[cellOffset + c * momentCount + 1];
+      zMoment[entry] = globalMoments[cellOffset + c * momentCount + 2];
+    }
+  }
+  result.moments = TensorPlanar1D2VSpeciesMoments(density, xMoment, zMoment);
+  return result;
+}

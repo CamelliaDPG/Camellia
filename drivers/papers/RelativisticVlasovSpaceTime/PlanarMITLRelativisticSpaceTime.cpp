@@ -40,6 +40,7 @@
 #include "TensorPlanarMITLMomentComparisonAdapter.h"
 #include "TensorVar.h"
 #include "TensorVarDiscretization.h"
+#include "TensorVlasovMomentSampling1D2V.h"
 #include "TrigFunctions.h"
 
 #include <algorithm>
@@ -250,149 +251,6 @@ namespace
       referenceData = TensorMaxwellRHSMomentData(0, 0);
     }
     return referenceData;
-  }
-
-  struct Phase8SampledVlasovMomentInput1D2V
-  {
-    TensorMaxwell1D2VMomentReductionPipeline::HostMatrix speciesVlasovValues;
-    TensorMaxwell1D2VMomentReductionPipeline::HostMatrix velocityPoints;
-    TensorMaxwell1D2VMomentReductionPipeline::HostVector velocityWeights;
-    int numConfigurationCells = 0;
-    int numPointsPerConfigurationCell = 0;
-  };
-
-  Phase8SampledVlasovMomentInput1D2V phase8SampleVlasovSolutionIntoMomentInput1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
-                                                                                  MeshPtr configurationMesh,
-                                                                                  SolutionPtr phaseSpaceSolution,
-                                                                                  VarPtr vlasovFieldVar,
-                                                                                  double uxMin,
-                                                                                  double uxMax,
-                                                                                  double uzMin,
-                                                                                  double uzMax,
-                                                                                  int uxElementCount,
-                                                                                  int uzElementCount,
-                                                                                  int velocityQuadratureDegree)
-  {
-    using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
-    TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument,
-                               "Phase 8 Vlasov HostMatrix sampling requires a non-null configuration mesh.");
-    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
-                               "Phase 8 Vlasov HostMatrix sampling requires a non-null phase-space solution.");
-    TEUCHOS_TEST_FOR_EXCEPTION(vlasovFieldVar == Teuchos::null, std::invalid_argument,
-                               "Phase 8 Vlasov HostMatrix sampling requires a non-null Vlasov field variable.");
-    TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree <= 0, std::invalid_argument,
-                               "Phase 8 Vlasov HostMatrix sampling requires a positive velocity quadrature degree.");
-    TEUCHOS_TEST_FOR_EXCEPTION((uxElementCount <= 0) || (uzElementCount <= 0), std::invalid_argument,
-                               "Phase 8 Vlasov HostMatrix sampling requires positive velocity element counts.");
-    TEUCHOS_TEST_FOR_EXCEPTION((uxMax <= uxMin) || (uzMax <= uzMin), std::invalid_argument,
-                               "Phase 8 Vlasov HostMatrix sampling requires nonempty velocity intervals.");
-
-    Phase8SampledVlasovMomentInput1D2V input;
-    input.numConfigurationCells = static_cast<int>(configurationCellIDs.size());
-
-    int expectedPointCount = -1;
-    std::vector<double> configurationPointCoordinates;
-    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(configurationCellIDs.size()); cellOrdinal++)
-    {
-      const auto cellID = configurationCellIDs[cellOrdinal];
-      auto basisCache = BasisCache::basisCacheForCell(configurationMesh, cellID);
-      const auto &points = basisCache->getPhysicalCubaturePointsFC();
-      const int pointCount = points.dimension(1);
-      const int spaceTimeDim = points.dimension(2);
-      TEUCHOS_TEST_FOR_EXCEPTION(spaceTimeDim != 2, std::invalid_argument,
-                                 "Phase 8 sampled Planar MITL comparison expects 1D space-time configuration points.");
-      if (expectedPointCount < 0)
-      {
-        expectedPointCount = pointCount;
-        input.numPointsPerConfigurationCell = pointCount;
-        configurationPointCoordinates.resize(static_cast<size_t>(configurationCellIDs.size()) * pointCount * spaceTimeDim);
-      }
-      TEUCHOS_TEST_FOR_EXCEPTION(pointCount != expectedPointCount, std::invalid_argument,
-                                 "Phase 8 Vlasov HostMatrix sampling requires a uniform configuration point count per cell.");
-
-      for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
-      {
-        const int configurationEntry = cellOrdinal * expectedPointCount + pointOrdinal;
-        configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2]     = points(0, pointOrdinal, 0);
-        configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2 + 1] = points(0, pointOrdinal, 1);
-      }
-    }
-
-    CubatureFactory cubatureFactory;
-    auto velocityCubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{velocityQuadratureDegree});
-    auto velocityRefPoints = velocityCubature->allocateCubaturePoints();
-    auto velocityRefWeights = velocityCubature->allocateCubatureWeights();
-    velocityCubature->getCubature(velocityRefPoints, velocityRefWeights);
-    auto velocityRefPointsFC = FieldContainerConversion<double>::fromTensorPoints(velocityRefPoints);
-    auto velocityRefWeightsFC = FieldContainerConversion<double>::fromTensorData(velocityRefWeights);
-
-    const int velocityPointCount1D = velocityRefPointsFC.dimension(0);
-    const int velocityPointCount = uxElementCount * uzElementCount * velocityPointCount1D * velocityPointCount1D;
-    input.velocityPoints = Pipeline::HostMatrix("Phase 8 sampled velocity points", velocityPointCount, 2);
-    input.velocityWeights = Pipeline::HostVector("Phase 8 sampled velocity weights", velocityPointCount);
-
-    const double uxElementWidth = (uxMax - uxMin) / static_cast<double>(uxElementCount);
-    const double uzElementWidth = (uzMax - uzMin) / static_cast<double>(uzElementCount);
-    int velocityEntry = 0;
-    for (int uxElementOrdinal=0; uxElementOrdinal<uxElementCount; uxElementOrdinal++)
-    {
-      const double uxCellLeft = uxMin + uxElementWidth * uxElementOrdinal;
-      const double uxCenter = uxCellLeft + 0.5 * uxElementWidth;
-      const double uxScale = 0.5 * uxElementWidth;
-      for (int uzElementOrdinal=0; uzElementOrdinal<uzElementCount; uzElementOrdinal++)
-      {
-        const double uzCellLeft = uzMin + uzElementWidth * uzElementOrdinal;
-        const double uzCenter = uzCellLeft + 0.5 * uzElementWidth;
-        const double uzScale = 0.5 * uzElementWidth;
-        for (int uxOrdinal=0; uxOrdinal<velocityPointCount1D; uxOrdinal++)
-        {
-          const double ux = uxCenter + uxScale * velocityRefPointsFC(uxOrdinal, 0);
-          const double uxWeight = uxScale * velocityRefWeightsFC(uxOrdinal);
-          for (int uzOrdinal=0; uzOrdinal<velocityPointCount1D; uzOrdinal++)
-          {
-            const double uz = uzCenter + uzScale * velocityRefPointsFC(uzOrdinal, 0);
-            const double uzWeight = uzScale * velocityRefWeightsFC(uzOrdinal);
-            input.velocityPoints(velocityEntry, 0) = ux;
-            input.velocityPoints(velocityEntry, 1) = uz;
-            input.velocityWeights(velocityEntry) = uxWeight * uzWeight;
-            velocityEntry++;
-          }
-        }
-      }
-    }
-
-    const int configurationEntryCount = input.numConfigurationCells * input.numPointsPerConfigurationCell;
-    input.speciesVlasovValues = Pipeline::HostMatrix("Phase 8 sampled Vlasov f", configurationEntryCount, velocityPointCount);
-    if ((configurationEntryCount == 0) || (velocityPointCount == 0)) return input;
-
-    Camellia::FieldContainer<double> phaseSpacePoints(configurationEntryCount * velocityPointCount, 4);
-    for (int configurationEntry=0; configurationEntry<configurationEntryCount; configurationEntry++)
-    {
-      const double x = configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2];
-      const double t = configurationPointCoordinates[static_cast<size_t>(configurationEntry) * 2 + 1];
-      for (int velocityEntry=0; velocityEntry<velocityPointCount; velocityEntry++)
-      {
-        const int phaseSpacePointOrdinal = configurationEntry * velocityPointCount + velocityEntry;
-        phaseSpacePoints(phaseSpacePointOrdinal, 0) = x;
-        phaseSpacePoints(phaseSpacePointOrdinal, 1) = t;
-        phaseSpacePoints(phaseSpacePointOrdinal, 2) = input.velocityPoints(velocityEntry, 0);
-        phaseSpacePoints(phaseSpacePointOrdinal, 3) = input.velocityPoints(velocityEntry, 1);
-      }
-    }
-
-    Camellia::FieldContainer<double> fValues(configurationEntryCount * velocityPointCount);
-    phaseSpaceSolution->solutionValues(fValues, vlasovFieldVar->ID(), phaseSpacePoints);
-
-    for (int configurationEntry=0; configurationEntry<configurationEntryCount; configurationEntry++)
-    {
-      for (int velocityEntry=0; velocityEntry<velocityPointCount; velocityEntry++)
-      {
-        const int phaseSpacePointOrdinal = configurationEntry * velocityPointCount + velocityEntry;
-        input.speciesVlasovValues(configurationEntry, velocityEntry) = fValues(phaseSpacePointOrdinal);
-      }
-    }
-
-    return input;
   }
 
   std::vector<double> phase0UniformVertices(double left, double right, int elementCount)
@@ -1452,6 +1310,52 @@ int main(int argc, char *argv[])
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
+
+    // Per-substep Vlasov solve breakdown.  G/B/K come from the BF's optimal-test timing callback (rank-local; summed over
+    // ranks below to match the Solution timers): G = Gram matrix assembly, B = enriched stiffness assembly,
+    // K = per-element Cholesky solve of G and formation of B^T G^{-1} B.
+    double phase0TimeG = 0, phase0TimeB = 0, phase0TimeK = 0;
+    int phase0OptimalTestElementCount = 0;
+    std::function<void(int, double, double, double, double, ElementTypePtr)> phase0OptimalTestTimingCallback =
+      [&](int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType) {
+        phase0OptimalTestElementCount += numElements;
+        phase0TimeG += timeG;
+        phase0TimeB += timeB;
+        phase0TimeK += timeT + timeK;
+      };
+    if (phase0.enabled())
+    {
+      form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback);
+      form->setSubstepSolveProfileCallback([&](const VlasovSpaceTimeFormulation::SubstepSolveProfile &profile) {
+        auto comm = MPIWrapper::TeuchosCommWorld();
+        Phase0Fields fields;
+        fields.push_back({"substep",               std::to_string(profile.substepOrdinal)});
+        fields.push_back({"solver",                profile.usedGeometricMultigrid ? "gmg" : "direct"});
+        fields.push_back({"iterations",            std::to_string(profile.iterationCount)});
+        fields.push_back({"global_dofs",           std::to_string(profile.numGlobalDofs)});
+        fields.push_back({"optimal_test_elements", std::to_string(MPIWrapper::sum(comm, phase0OptimalTestElementCount))});
+        fields.push_back({"sum_G",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeG))});
+        fields.push_back({"sum_B",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeB))});
+        fields.push_back({"sum_K",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeK))});
+        fields.push_back({"sum_local_stiffness",   phase0DoubleString(profile.totalTimeLocalStiffness)});
+        fields.push_back({"sum_global_assembly",   phase0DoubleString(profile.totalTimeGlobalAssembly)});
+        fields.push_back({"sum_bc_imposition",     phase0DoubleString(profile.totalTimeBCImposition)});
+        fields.push_back({"sum_linear_solve",      phase0DoubleString(profile.totalTimeSolve)});
+        fields.push_back({"gmg_construction",      phase0DoubleString(profile.wallTimeGMGConstruction)});
+        fields.push_back({"moment_update",         phase0DoubleString(profile.wallTimeMomentUpdate)});
+        fields.push_back({"configuration_solve",   phase0DoubleString(profile.wallTimeConfigurationSolve)});
+        fields.push_back({"configuration_update",  phase0DoubleString(profile.wallTimeConfigurationUpdate)});
+        for (const auto &entry : profile.gmgTimings)
+        {
+          std::string key = "gmg_" + entry.first;
+          std::replace(key.begin(), key.end(), ' ', '_');
+          fields.push_back({key, phase0DoubleString(entry.second)});
+        }
+        phase0.logDuration("vlasov_substep", profile.wallTimeVlasovSolve, fields);
+        phase0TimeG = phase0TimeB = phase0TimeK = 0;
+        phase0OptimalTestElementCount = 0;
+      });
+    }
     runPhase0TensorGraphSchurMicroApply(phase0TensorGraphSchurBackend,
                                         cScaled,
                                         x0,
@@ -1761,29 +1665,21 @@ int main(int argc, char *argv[])
         const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
                                                                                                : phase8DefaultVelocityQuadratureDegree(form->vlasovSolution(),
                                                                                                                                        configurationCellIDs);
-        auto sampledInput = phase8SampleVlasovSolutionIntoMomentInput1D2V(configurationCellIDs,
-                                                                          form->configurationSpaceMesh(),
-                                                                          form->vlasovSolution(),
-                                                                          form->f(speciesOrdinal),
-                                                                          uxMin,
-                                                                          uxMax,
-                                                                          uyMin,
-                                                                          uyMax,
-                                                                          vxElements,
-                                                                          vyElements,
-                                                                          phase8VelocityQuadratureDegree);
-        const int numTensorEntries = sampledInput.numConfigurationCells * sampledInput.numPointsPerConfigurationCell;
+        auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
+                                                                      form->configurationSpaceMesh(),
+                                                                      form->vlasovSolution(),
+                                                                      form->f(speciesOrdinal),
+                                                                      phase8VelocityQuadratureDegree,
+                                                                      true,
+                                                                      cScaled);
+        const int numTensorEntries = vlasovMoments.numConfigurationCells * vlasovMoments.numPointsPerConfigurationCell;
         std::vector<double> n0Values(numTensorEntries, n0);
-        auto tensorMomentData = TensorMaxwell1D2VMomentReductionPipeline::buildRHSMomentData(sampledInput.numConfigurationCells,
-                                                                                            sampledInput.numPointsPerConfigurationCell,
-                                                                                            {q},
-                                                                                            eps0,
-                                                                                            {sampledInput.speciesVlasovValues},
-                                                                                            sampledInput.velocityPoints,
-                                                                                            sampledInput.velocityWeights,
-                                                                                            n0Values,
-                                                                                            true,
-                                                                                            cScaled);
+        auto tensorMomentData = TensorMaxwell1D2VMomentAdapter::buildRHSMomentData(vlasovMoments.numConfigurationCells,
+                                                                                  vlasovMoments.numPointsPerConfigurationCell,
+                                                                                  {q},
+                                                                                  eps0,
+                                                                                  {vlasovMoments.moments},
+                                                                                  n0Values);
         auto rhoRHS = TensorMaxwellRHSFunctionAdapter::rhoRHSFunction(tensorMomentData);
         density = (eps0 / q) * rhoRHS + Function::constant(n0);
         Jx = TensorMaxwellRHSFunctionAdapter::JxFunction(tensorMomentData);
@@ -1798,9 +1694,9 @@ int main(int argc, char *argv[])
         phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),
                            {{"slab", std::to_string(timeSlabOrdinal)},
                             {"moment_backend", "tensor_native"},
-                            {"local_config_cells", std::to_string(sampledInput.numConfigurationCells)},
-                            {"points_per_cell", std::to_string(sampledInput.numPointsPerConfigurationCell)},
-                            {"velocity_points", std::to_string(sampledInput.velocityWeights.extent(0))},
+                            {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
+                            {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
+                            {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
                             {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
         
         if (rank == 0)
@@ -2044,29 +1940,21 @@ int main(int argc, char *argv[])
           const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
                                                                                                  : phase8DefaultVelocityQuadratureDegree(form->vlasovSolution(),
                                                                                                                                          configurationCellIDs);
-          auto sampledInput = phase8SampleVlasovSolutionIntoMomentInput1D2V(configurationCellIDs,
-                                                                            form->configurationSpaceMesh(),
-                                                                            form->vlasovSolution(),
-                                                                            form->f(speciesOrdinal),
-                                                                            uxMin,
-                                                                            uxMax,
-                                                                            uyMin,
-                                                                            uyMax,
-                                                                            vxElements,
-                                                                            vyElements,
-                                                                            phase8VelocityQuadratureDegree);
-          const int numTensorEntries = sampledInput.numConfigurationCells * sampledInput.numPointsPerConfigurationCell;
+          auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
+                                                                        form->configurationSpaceMesh(),
+                                                                        form->vlasovSolution(),
+                                                                        form->f(speciesOrdinal),
+                                                                        phase8VelocityQuadratureDegree,
+                                                                        true,
+                                                                        cScaled);
+          const int numTensorEntries = vlasovMoments.numConfigurationCells * vlasovMoments.numPointsPerConfigurationCell;
           std::vector<double> n0Values(numTensorEntries, n0);
-          auto tensorMomentData = TensorMaxwell1D2VMomentReductionPipeline::buildRHSMomentData(sampledInput.numConfigurationCells,
-                                                                                              sampledInput.numPointsPerConfigurationCell,
-                                                                                              {q},
-                                                                                              eps0,
-                                                                                              {sampledInput.speciesVlasovValues},
-                                                                                              sampledInput.velocityPoints,
-                                                                                              sampledInput.velocityWeights,
-                                                                                              n0Values,
-                                                                                              true,
-                                                                                              cScaled);
+          auto tensorMomentData = TensorMaxwell1D2VMomentAdapter::buildRHSMomentData(vlasovMoments.numConfigurationCells,
+                                                                                    vlasovMoments.numPointsPerConfigurationCell,
+                                                                                    {q},
+                                                                                    eps0,
+                                                                                    {vlasovMoments.moments},
+                                                                                    n0Values);
           auto rhoRHS = TensorMaxwellRHSFunctionAdapter::rhoRHSFunction(tensorMomentData);
           density = (eps0 / q) * rhoRHS + Function::constant(n0);
           Jx = TensorMaxwellRHSFunctionAdapter::JxFunction(tensorMomentData);
@@ -2081,9 +1969,9 @@ int main(int argc, char *argv[])
                              {{"slab", std::to_string(timeSlabOrdinal)},
                               {"refinement", std::to_string(refinementNumber)},
                               {"moment_backend", "tensor_native"},
-                              {"local_config_cells", std::to_string(sampledInput.numConfigurationCells)},
-                              {"points_per_cell", std::to_string(sampledInput.numPointsPerConfigurationCell)},
-                              {"velocity_points", std::to_string(sampledInput.velocityWeights.extent(0))},
+                              {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
+                              {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
+                              {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
                               {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
           
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction

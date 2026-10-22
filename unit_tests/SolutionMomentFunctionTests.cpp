@@ -26,6 +26,7 @@
 #include "SubExtrudedMeshTopology.h"
 #include "MeshFactory.h"
 #include "TensorBasis.h"
+#include "TensorVlasovMomentSampling1D2V.h"
 
 using namespace Camellia;
 using namespace std;
@@ -3077,5 +3078,136 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBy
 {
   testRelativisticFirstMomentZeroBySymmetry(1, 2, true, true, true, 1, 0, out, success);
 }
+
+  // computeVlasovMomentsByPhaseSpaceCell1D2V(): moments of f = (1 + x + t)(1 + ux/2 + uz^2/4) on a 1D space-time x 2V mesh.
+  // The velocity dependence is exactly integrated by the Gauss rule, so density and proper-velocity moments match
+  // closed-form integrals; the relativistic currents are compared with a high-order reference quadrature.
+  // Also exercises the MPI path when run on multiple ranks (phase-space and configuration partitions are independent).
+  void testVlasovMomentsByPhaseSpaceCell1D1T2V(bool refineVelocity, Teuchos::FancyOStream &out, bool &success)
+  {
+    const int numPhysicalDims  = 1;
+    const int numExtrusionDims = 2;
+    const bool useSpaceTime    = true;
+    const int polyOrder = 2; // f is quadratic in uz, linear elsewhere
+    const int delta_k   = 0;
+    const double c = 2.0;
+    const int numTimeDimensions = 1;
+
+    std::vector<int> H1Order(1 + numExtrusionDims + numTimeDimensions, polyOrder + 1);
+    auto meshTopo = makeTestMeshTopology(numPhysicalDims, numExtrusionDims, useSpaceTime);
+
+    VarFactoryPtr vf = VarFactory::varFactory();
+    auto f = vf->fieldVar("f");
+    auto v = vf->testVar("v", HGRAD);
+    BFPtr bf = BF::bf(vf);
+
+    Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
+    const bool allowPruning = false;
+    MeshPtr mesh = MeshFactory::minRuleMesh(meshTopo, bf, H1Order, delta_k, comm, allowPruning);
+    MeshPtr physicalMesh = MeshFactory::minRuleMesh(meshTopo->physicalMeshTopology(), bf, std::vector<int>{polyOrder + 1}, delta_k, comm, allowPruning);
+    PhysicalMeshUpdater::registerForUpdates(mesh, physicalMesh);
+
+    SolutionPtr soln = Solution::solution(mesh);
+    mesh->registerSolution(soln);
+
+    if (refineVelocity)
+    {
+      // refine one phase-space cell, giving velocity cells of different sizes over the refined configuration cell
+      std::set<GlobalIndexType> cellsToRefine = {0};
+      mesh->hRefine(cellsToRefine);
+    }
+
+    auto x  = MonomialFunction::xi_n(0,1);
+    auto t  = MonomialFunction::xi_n(1,1);
+    auto ux = MonomialFunction::xi_n(2,1);
+    auto uz = MonomialFunction::xi_n(3,1);
+    FunctionPtr spaceTimeFactor = 1.0 + x + t;
+    FunctionPtr phaseSpaceFxn = spaceTimeFactor * (1.0 + 0.5 * ux + 0.25 * uz * uz);
+    std::map<int, FunctionPtr> functionMap;
+    functionMap[f->ID()] = phaseSpaceFxn;
+    soln->projectOntoMesh(functionMap);
+
+    // exact 1D integrals of u^n over the velocity interval
+    const double a = EXTRUSION_ORIGIN, b = EXTRUSION_ORIGIN + EXTRUSION_EXTENT;
+    auto I = [&](int n) { return (std::pow(b, n+1) - std::pow(a, n+1)) / (n+1); };
+    // velocity factor g(ux,uz) = 1 + ux/2 + uz^2/4
+    const double densityFactor = I(0)*I(0) + 0.5*I(1)*I(0) + 0.25*I(0)*I(2);
+    const double xMomentFactor = I(1)*I(0) + 0.5*I(2)*I(0) + 0.25*I(1)*I(2);
+    const double zMomentFactor = I(0)*I(1) + 0.5*I(1)*I(1) + 0.25*I(0)*I(3);
+
+    const auto &myCellSet = physicalMesh->cellIDsInPartition();
+    std::vector<GlobalIndexType> myCells(myCellSet.begin(), myCellSet.end());
+    const int velocityQuadratureDegree = 12; // high enough that the non-polynomial 1/gamma weight is integrated to ~1e-10
+
+    auto properMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(myCells, physicalMesh, soln, f, velocityQuadratureDegree, false, c);
+    auto relativisticMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(myCells, physicalMesh, soln, f, velocityQuadratureDegree, true, c);
+    TEST_EQUALITY(properMoments.numConfigurationCells, static_cast<int>(myCells.size()));
+
+    // Relativistic current factors: integral over velocity of g(u) u_i / gamma.  The integrand is smooth but not
+    // polynomial, so compare against a high-order rule on each velocity cell of the (uniform) test mesh; the
+    // function under test uses velocityQuadratureDegree, so agreement is to quadrature accuracy.
+    CubatureFactory cubatureFactory;
+    auto lineCubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{30});
+    auto lineRefPoints = lineCubature->allocateCubaturePoints();
+    auto lineRefWeights = lineCubature->allocateCubatureWeights();
+    lineCubature->getCubature(lineRefPoints, lineRefWeights);
+    auto lineRefPointsFC  = FieldContainerConversion<double>::fromTensorPoints(lineRefPoints);
+    auto lineRefWeightsFC = FieldContainerConversion<double>::fromTensorData(lineRefWeights);
+    const int linePointCount = lineRefPointsFC.dimension(0);
+    double jxFactor = 0.0, jzFactor = 0.0;
+    const double h = EXTRUSION_EXTENT / EXTRUSION_MESH_WIDTH;
+    for (int cellX=0; cellX<EXTRUSION_MESH_WIDTH; cellX++)
+    {
+      for (int cellZ=0; cellZ<EXTRUSION_MESH_WIDTH; cellZ++)
+      {
+        for (int i=0; i<linePointCount; i++)
+        {
+          for (int j=0; j<linePointCount; j++)
+          {
+            const double u0 = a + h * (cellX + 0.5 * (lineRefPointsFC(i,0) + 1.0));
+            const double u1 = a + h * (cellZ + 0.5 * (lineRefPointsFC(j,0) + 1.0));
+            const double weight = 0.25 * h * h * lineRefWeightsFC(i) * lineRefWeightsFC(j);
+            const double g = 1.0 + 0.5 * u0 + 0.25 * u1 * u1;
+            const double gamma = std::sqrt(1.0 + (u0*u0 + u1*u1) / (c*c));
+            jxFactor += weight * g * u0 / gamma;
+            jzFactor += weight * g * u1 / gamma;
+          }
+        }
+      }
+    }
+
+    const double tol = 1e-12;
+    const double quadratureTol = 1e-8;
+    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(myCells.size()); cellOrdinal++)
+    {
+      const GlobalIndexType physicalCellID = myCells[cellOrdinal];
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, physicalCellID);
+      const auto &configurationPoints = basisCache->getPhysicalCubaturePointsFC();
+      const int numPoints = configurationPoints.dimension(1);
+      TEST_EQUALITY(properMoments.numPointsPerConfigurationCell, numPoints);
+
+      for (int p=0; p<numPoints; p++)
+      {
+        const int entry = cellOrdinal * numPoints + p;
+        const double spaceTime = 1.0 + configurationPoints(0,p,0) + configurationPoints(0,p,1);
+        TEST_FLOATING_EQUALITY(properMoments.moments._density[entry],               spaceTime * densityFactor, tol);
+        TEST_FLOATING_EQUALITY(properMoments.moments._xProperVelocityMoment[entry], spaceTime * xMomentFactor, tol);
+        TEST_FLOATING_EQUALITY(properMoments.moments._zProperVelocityMoment[entry], spaceTime * zMomentFactor, tol);
+        TEST_FLOATING_EQUALITY(relativisticMoments.moments._density[entry],         spaceTime * densityFactor, tol);
+        TEST_FLOATING_EQUALITY(relativisticMoments.moments._xProperVelocityMoment[entry], spaceTime * jxFactor, quadratureTol);
+        TEST_FLOATING_EQUALITY(relativisticMoments.moments._zProperVelocityMoment[entry], spaceTime * jzFactor, quadratureTol);
+      }
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( TensorVlasovMomentSampling, MomentsByPhaseSpaceCell_1D1T2V )
+  {
+    testVlasovMomentsByPhaseSpaceCell1D1T2V(false, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorVlasovMomentSampling, MomentsByPhaseSpaceCell_1D1T2V_Refined )
+  {
+    testVlasovMomentsByPhaseSpaceCell1D1T2V(true, out, success);
+  }
 
 } // end anonymous namespace

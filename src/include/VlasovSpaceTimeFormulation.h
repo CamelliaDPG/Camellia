@@ -33,6 +33,26 @@ namespace Camellia
   class VlasovSpaceTimeFormulation
 {
 public:
+  //! Per-substep timing breakdown for the Vlasov solve; reported via setSubstepSolveProfileCallback().
+  //! Solution timers are summed over MPI ranks (as Solution reports them); wall times are rank-local.
+  struct SubstepSolveProfile
+  {
+    int substepOrdinal = -1;
+    bool usedGeometricMultigrid = false;
+    int iterationCount = -1; // -1 for direct solves
+    GlobalIndexType numGlobalDofs = 0;
+    double wallTimeGMGConstruction = 0;     // GMGSolver constructor (mesh hierarchy; not operator setup)
+    double wallTimeVlasovSolve = 0;         // _vlasovSoln->solve(...), including assembly and GMG operator setup
+    double wallTimeMomentUpdate = 0;        // Vlasov moments -> configuration-space sources (positivity limiter excluded)
+    double wallTimeConfigurationSolve = 0;  // configuration-space (Maxwell/Poisson) solve
+    double wallTimeConfigurationUpdate = 0; // updateConfigurationSpaceFunctions() and tensor-context notification
+    double totalTimeLocalStiffness = 0;     // local stiffness determination (G, B, and local Schur), summed over ranks
+    double totalTimeGlobalAssembly = 0;
+    double totalTimeBCImposition = 0;
+    double totalTimeSolve = 0;              // linear solve, including GMG operator setup for iterative solves
+    std::map<std::string, double> gmgTimings; // GMGOperator::timingReportSumOfOperators(), rank-local; empty for direct solves
+  };
+
   // strings naming variables:
   static const string S_F;       // trial variable - distribution function f
   static const string S_F_HAT;   // trace variable
@@ -94,7 +114,9 @@ private:
   double _cgTol = 1e-6;
   std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
   int _maxIters = 10000;
-  
+
+  std::function<void(const SubstepSolveProfile &)> _substepSolveProfileCallback;
+
   // tags for BCs:
   static const int VLASOV_TAG_SPATIAL_INFLOW = 0; // region where (v \cdot n_x) < 0
   static const int VLASOV_TAG_TMIN           = 1; // initial time
@@ -527,6 +549,9 @@ public:
   
   void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
                                                               double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);
+
+  //! Called once per fixed-point substep in solve(), after the Vlasov and configuration-space solves.
+  void setSubstepSolveProfileCallback(std::function<void(const SubstepSolveProfile &)> callback);
 };
 
 }
