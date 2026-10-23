@@ -494,11 +494,7 @@ bool Camellia::integrateLinearTermsSumFactorized(Camellia::FieldContainer<double
       auto vValues = transformedValues(vEntry.second, vBases[vEntry.first], basisCache, jacobianDet, jacobianInv);
       const auto &vDofIndices = vOrdering->getDofIndices(vEntry.first, VOLUME_INTERIOR_SIDE_INDEX);
 
-      // PAMatrix supports a contracted vector (gradient) transform on the right, or on both sides, but not on the left
-      // alone; for (derivative, value) pairs, integrate (value, derivative) and transpose.
-      const bool swapSides = uEntry.second.isDerivative && !vEntry.second.isDerivative;
-      Intrepid2::PAMatrix<DeviceType,double> paMatrix = swapSides ? Intrepid2::PAMatrix<DeviceType,double>(vValues, cellMeasures, uValues)
-                                                                  : Intrepid2::PAMatrix<DeviceType,double>(uValues, cellMeasures, vValues);
+      Intrepid2::PAMatrix<DeviceType,double> paMatrix(uValues, cellMeasures, vValues);
       auto integrals = paMatrix.allocateMatrixStorage();
       paMatrix.assemble2(integrals);
 
@@ -508,7 +504,7 @@ bool Camellia::integrateLinearTermsSumFactorized(Camellia::FieldContainer<double
       Kokkos::View<double***,DeviceType> integralsView("LinearTerm sum-factorized integrals", numCells, uCardinality, vCardinality);
       Kokkos::parallel_for(Kokkos::MDRangePolicy<typename DeviceType::execution_space,Kokkos::Rank<3>>({0,0,0},{numCells,uCardinality,vCardinality}),
                            KOKKOS_LAMBDA(const int c, const int i, const int j) {
-        integralsView(c,i,j) = swapSides ? integrals(c,j,i) : integrals(c,i,j);
+        integralsView(c,i,j) = integrals(c,i,j);
       });
       auto integralsHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), integralsView);
       for (int c=0; c<numCells; c++)
