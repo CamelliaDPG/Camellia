@@ -1730,21 +1730,19 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContai
       }
     }
 
-    // Average L2 error for a multiple sets of physical points: error is rank-2 (C,P) array
-    double totalError = 0.0;
-    Camellia::FieldContainer<double> cellWiseError(numCells);
+    // Largest Newton step over all points.  (A sum over points would make the absolute tolerance stricter the more
+    // points are mapped at once, so that large batches never "converge" even at machine precision.)
+    double maxError = 0.0;
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
     {
-      cellWiseError(cellOrdinal) = 0.0;
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
-        cellWiseError(cellOrdinal) += abs(error(cellOrdinal,pointOrdinal));
+        maxError = std::max(maxError, abs(error(cellOrdinal,pointOrdinal)));
       }
-      totalError += abs(cellWiseError(cellOrdinal));
     }
 
     // Stopping criterion:
-    if (totalError < Intrepid2::tolerence<double>())
+    if (maxError < Intrepid2::tolerence<double>())
     {
       break;
     }
