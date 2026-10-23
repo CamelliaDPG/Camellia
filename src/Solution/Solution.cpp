@@ -8,6 +8,7 @@
 #include "Camellia_FieldContainerConversion.hpp"
 #include "Camellia_Integrate.hpp"
 
+#include <algorithm>
 #include <chrono>
 
 // Shards includes
@@ -1157,123 +1158,95 @@ void TSolution<Scalar>::initializeStiffnessAndLoad()
   narrate("initializeStiffnessAndLoad");
   auto tPartMap = getPartitionMap();
 
-  // Preallocate the sparse graph row-by-row.  The scalar CrsMatrix constructor's
-  // second argument is a per-row allocation hint, not a matrix dimension; using
-  // getGlobalNumElements() here asks Tpetra to allocate every owned row as dense
-  // and can overflow/exhaust Kokkos storage for medium-sized problems.  A single
-  // element-sized hint is also insufficient with Tpetra's static allocation path,
-  // since shared/interface DOF rows receive entries from multiple element stencils.
-  // Build a conservative exact local graph pattern from the rank-local cells.
+  // Preallocate the sparse graph row-by-row, with each owned row's exact entry count from the rank-local element
+  // stencils (and constraint couplings).  The scalar CrsMatrix constructor's second argument is a per-row allocation
+  // hint applied to every row; neither getGlobalNumElements() (dense rows) nor the longest row (which pads every row to
+  // the size of the most-coupled trace row) is acceptable at scale.  Counts are computed without materializing column
+  // sets: a row's columns are the union of the global dofs of the cells containing it.
   using GO = typename TMatrix<Scalar>::global_ordinal_type;
   using LO = typename TMatrix<Scalar>::local_ordinal_type;
   const size_t numLocalRows = tPartMap->getLocalNumElements();
-  std::vector<std::set<GO>> localRowColumns(numLocalRows);
-
-  auto addLocalGraphEntry = [&](GlobalIndexType rowIndex, GlobalIndexType colIndex)
-  {
-    GO rowIndexT = static_cast<GO>(rowIndex);
-    if (tPartMap->isNodeGlobalElement(rowIndexT))
-    {
-      LO localRowOrdinal = tPartMap->getLocalElement(rowIndexT);
-      localRowColumns[localRowOrdinal].insert(static_cast<GO>(colIndex));
-    }
-  };
 
   const std::set<GlobalIndexType> &myCellIDs = _mesh->cellIDsInPartition();
+  const int numElementConstraints = _lagrangeConstraints->numElementConstraints();
+
+  // sorted global dof indices (plus element Lagrange constraint indices) for each local cell, and the cells
+  // incident on each owned row
+  std::vector<std::vector<GO>> cellColumns;
+  cellColumns.reserve(myCellIDs.size());
+  std::vector<std::vector<int>> rowCells(numLocalRows);
   for (GlobalIndexType cellID : myCellIDs)
   {
+    const int cellOrdinal = static_cast<int>(cellColumns.size());
     std::set<GlobalIndexType> cellDofIndices = _dofInterpreter->globalDofIndicesForCell(cellID);
-    for (GlobalIndexType rowIndex : cellDofIndices)
+    std::vector<GO> columns(cellDofIndices.begin(), cellDofIndices.end());
+    for (int elementConstraintIndex = 0; elementConstraintIndex < numElementConstraints; elementConstraintIndex++)
     {
-      for (GlobalIndexType colIndex : cellDofIndices)
+      columns.push_back(static_cast<GO>(elementLagrangeIndex(cellID, elementConstraintIndex)));
+    }
+    std::sort(columns.begin(), columns.end());
+    columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
+    for (GO rowIndex : columns) // dof rows and element-constraint rows
+    {
+      if (tPartMap->isNodeGlobalElement(rowIndex))
       {
-        addLocalGraphEntry(rowIndex, colIndex);
+        rowCells[tPartMap->getLocalElement(rowIndex)].push_back(cellOrdinal);
       }
     }
-
-    for (int elementConstraintIndex = 0; elementConstraintIndex < _lagrangeConstraints->numElementConstraints(); elementConstraintIndex++)
-    {
-      GlobalIndexType constraintIndex = elementLagrangeIndex(cellID, elementConstraintIndex);
-      addLocalGraphEntry(constraintIndex, constraintIndex);
-      for (GlobalIndexType dofIndex : cellDofIndices)
-      {
-        addLocalGraphEntry(constraintIndex, dofIndex);
-        addLocalGraphEntry(dofIndex, constraintIndex);
-      }
-    }
+    cellColumns.push_back(std::move(columns));
   }
 
-  // Zero-mean constraints and global Lagrange constraints are appended to the
-  // partition map after the regular and element-local Lagrange DOFs.  They are
-  // not present in any element-local stiffness stencil above, but
-  // populateStiffnessAndLoad() may later insert full constraint rows on rank 0
-  // and constraint columns into locally owned regular DOF rows.  Account for
-  // that explicitly so Tpetra's static graph allocation is large enough.
+  // Zero-mean constraints and global Lagrange constraints are appended to the partition map after the regular and
+  // element-local Lagrange DOFs.  They are not present in any element-local stiffness stencil above, but
+  // populateStiffnessAndLoad() may later insert full constraint rows on rank 0 and constraint columns into locally
+  // owned regular DOF rows.  Account for that explicitly so Tpetra's static graph allocation is large enough.
   const GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
-  const int numElementConstraints = _lagrangeConstraints->numElementConstraints();
   const int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
   const int zeroMeanConstraintsSize = _zmcsAsRankOneUpdate ? 0 : getZeroMeanConstraints().size();
   const GlobalIndexType globalNumElementLagrange = numElementConstraints * _mesh->numActiveElements();
   const GlobalIndexType firstGlobalLagrangeIndex = numGlobalDofs + globalNumElementLagrange;
-  const GlobalIndexType firstZMCIndex = firstGlobalLagrangeIndex + numGlobalConstraints;
-  const std::set<GlobalIndexType> myRegularDofIndices = _dofInterpreter->globalDofIndicesForPartition(_mesh->Comm()->getRank());
+  const GlobalIndexType numDenseConstraints = numGlobalConstraints + zeroMeanConstraintsSize; // global Lagrange, then zero-mean
 
-  for (int constraintOrdinal = 0; constraintOrdinal < numGlobalConstraints; constraintOrdinal++)
-  {
-    GlobalIndexType constraintIndex = firstGlobalLagrangeIndex + constraintOrdinal;
-    addLocalGraphEntry(constraintIndex, constraintIndex);
-    for (GlobalIndexType dofIndex = 0; dofIndex < numGlobalDofs; dofIndex++)
-    {
-      addLocalGraphEntry(constraintIndex, dofIndex);
-    }
-    for (GlobalIndexType dofIndex : myRegularDofIndices)
-    {
-      addLocalGraphEntry(dofIndex, constraintIndex);
-    }
-  }
-
-  for (int zmcOrdinal = 0; zmcOrdinal < zeroMeanConstraintsSize; zmcOrdinal++)
-  {
-    GlobalIndexType zmcIndex = firstZMCIndex + zmcOrdinal;
-    addLocalGraphEntry(zmcIndex, zmcIndex);
-    for (GlobalIndexType dofIndex = 0; dofIndex < numGlobalDofs; dofIndex++)
-    {
-      addLocalGraphEntry(zmcIndex, dofIndex);
-    }
-    for (GlobalIndexType dofIndex : myRegularDofIndices)
-    {
-      addLocalGraphEntry(dofIndex, zmcIndex);
-    }
-  }
-
-  size_t maxElementEntryCount = 1;
-  for (ElementTypePtr elemTypePtr : _mesh->elementTypes(_mesh->Comm()->getRank()))
-  {
-    maxElementEntryCount = std::max(maxElementEntryCount, static_cast<size_t>(elemTypePtr->trialOrderPtr->totalDofs()));
-  }
-
-  size_t maxNonzeroEntriesPerLocalRow = maxElementEntryCount;
+  Teuchos::Array<size_t> numEntriesPerLocalRow(numLocalRows, 0);
+  std::vector<GO> merged, scratch;
   for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
   {
-    maxNonzeroEntriesPerLocalRow = std::max(maxNonzeroEntriesPerLocalRow, localRowColumns[localRowOrdinal].size());
+    const GlobalIndexType globalRow = static_cast<GlobalIndexType>(tPartMap->getGlobalElement(static_cast<LO>(localRowOrdinal)));
+    if ((globalRow >= firstGlobalLagrangeIndex) && (globalRow < firstGlobalLagrangeIndex + numDenseConstraints))
+    {
+      // a global Lagrange or zero-mean constraint row couples to every regular dof, and to itself
+      numEntriesPerLocalRow[localRowOrdinal] = numGlobalDofs + 1;
+      continue;
+    }
+    const auto &cells = rowCells[localRowOrdinal];
+    size_t count = 0;
+    if (cells.size() == 1)
+    {
+      count = cellColumns[cells[0]].size();
+    }
+    else if (cells.size() > 1)
+    {
+      merged.clear();
+      for (int cellOrdinal : cells)
+      {
+        const auto &columns = cellColumns[cellOrdinal];
+        scratch.resize(merged.size() + columns.size());
+        auto end = std::set_union(merged.begin(), merged.end(), columns.begin(), columns.end(), scratch.begin());
+        scratch.resize(end - scratch.begin());
+        merged.swap(scratch);
+      }
+      count = merged.size();
+    }
+    // regular dof rows also receive a column for each dense (global Lagrange / zero-mean) constraint
+    if (globalRow < numGlobalDofs) count += numDenseConstraints;
+    numEntriesPerLocalRow[localRowOrdinal] = std::max(count, size_t(1));
   }
+  rowCells.clear();
+  rowCells.shrink_to_fit();
+  cellColumns.clear();
+  cellColumns.shrink_to_fit();
 
-  Teuchos::Array<size_t> numEntriesPerLocalRow(numLocalRows);
-  for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
-  {
-    // Leave enough slots for rows whose precise structure is not captured by
-    // the static graph estimate (for example, constraint rows/columns that are
-    // driven by interpreted data computed later).  This is still far smaller
-    // than the old dense-per-row getGlobalNumElements() allocation, but avoids
-    // one-entry rows that cannot accept a full element stencil.
-    size_t rowEntryCount = localRowColumns[localRowOrdinal].size();
-    numEntriesPerLocalRow[localRowOrdinal] = std::max(rowEntryCount, maxNonzeroEntriesPerLocalRow);
-  }
-
-  // Build the matrix after all row allocation hints have been computed.  Use
-  // the local maximum as Tpetra's per-row static allocation so every owned row
-  // can accept at least one complete element/constraint stencil.
-  _globalStiffMatrix = Teuchos::rcp(new TMatrix<Scalar>(tPartMap, maxNonzeroEntriesPerLocalRow));
+  _globalStiffMatrix = Teuchos::rcp(new TMatrix<Scalar>(tPartMap, numEntriesPerLocalRow()));
   
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we
