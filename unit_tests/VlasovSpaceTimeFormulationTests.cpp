@@ -23,6 +23,8 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "LinearTermSumFactorized.h"
+
 #include <chrono>
 
 #include "CamelliaTestingHelpers.h"
@@ -2808,6 +2810,72 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
         << legacyTime << " s, sum-factorized (" << ((backend != NULL) ? backend : "pamatrix") << ") " << sfTime << " s\n";
     bool localSuccess = compareFloatingArraysCamellia(paMatrix, "sum-factorized", legacyMatrix, "legacy", 1e-10, 1e-10, out);
     TEST_ASSERT(localSuccess);
+  }
+
+  // LinearTerm sum-factorized volume integration vs. the standard path: the relativistic 1D2V Vlasov bilinear form
+  // (volume terms (coef f, d/dx_k w), plus the trace term, which uses the standard path either way) and graph-norm IP.
+  void testRelativisticLinearTermSumFactorization1D2V(const EBasisFamily basisFamily, Teuchos::FancyOStream &out, bool &success)
+  {
+    const double c = 2.0;
+    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(0.0, 0.7, 2, false);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(0.0, 0.2, 1);
+    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(-1.5, 2.5, 2);
+    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(-0.5, 1.25, 1);
+    std::vector<double> velocitySpaceVertices_z;
+    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(TEST_Q, TEST_EPS0));
+    auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, TEST_Q, TEST_M, configForm, spatialMeshTopo, temporalVertices,
+                                                                           velocitySpaceVertices_x, velocitySpaceVertices_y,
+                                                                           velocitySpaceVertices_z, 2, 1, 0,
+                                                                           RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,
+                                                                           0.3, basisFamily));
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr t = Function::yn(1);
+    std::map<int,FunctionPtr> configProjection;
+    configProjection[configForm->E_fieldVar(0)->ID()] = 1.0 + 0.5 * x * t + 0.25 * x * x;
+    configProjection[configForm->B_fieldVar(1)->ID()] = 0.75 - 0.5 * x + t;
+    relForm->configurationSpaceSolution()->projectOntoMesh(configProjection);
+    relForm->configurationSpaceFormulation()->updateConfigurationSpaceFunctions();
+
+    auto mesh = relForm->vlasovMesh();
+    auto bf = relForm->vlasovBF();
+    auto ip = relForm->constructVlasovInnerProduct(false);
+    for (auto cellID : mesh->cellIDsInPartition())
+    {
+      auto elemType = mesh->getElementType(cellID);
+      const int numTrialDofs = elemType->trialOrderPtr->totalDofs();
+      const int numTestDofs  = elemType->testOrderPtr->totalDofs();
+      auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, false, 0);
+      auto ipBasisCache = BasisCache::basisCacheForCell(mesh, cellID, true, 0);
+      const auto &parities = basisCache->getCellSideParities();
+
+      FieldContainer<double> bStandard(1,numTrialDofs,numTestDofs), bSumFactorized(1,numTrialDofs,numTestDofs); // with rowMajor, integrate() fills (C,FTrial,FTest)
+      FieldContainer<double> gStandard(1,numTestDofs,numTestDofs),  gSumFactorized(1,numTestDofs,numTestDofs);
+      setSumFactorizedLinearTermIntegrationEnabled(false);
+      bf->stiffnessMatrix(bStandard, elemType, parities, basisCache, true, false);
+      ip->computeInnerProductMatrix(gStandard, elemType->testOrderPtr, ipBasisCache);
+      setSumFactorizedLinearTermIntegrationEnabled(true);
+      bf->stiffnessMatrix(bSumFactorized, elemType, parities, basisCache, true, false);
+      ip->computeInnerProductMatrix(gSumFactorized, elemType->testOrderPtr, ipBasisCache);
+
+      const double relTol = 1e-11, absTol = 1e-11;
+      bool bOK = compareFloatingArraysCamellia(bSumFactorized, "sum-factorized B", bStandard, "standard B", relTol, absTol, out);
+      bool gOK = compareFloatingArraysCamellia(gSumFactorized, "sum-factorized G", gStandard, "standard G", relTol, absTol, out);
+      if (!bOK || !gOK)
+      {
+        out << "comparison failed on cell " << cellID << " (B " << bOK << ", G " << gOK << ")\n";
+        success = false;
+      }
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorization_Relativistic1D2V_Hierarchical )
+  {
+    testRelativisticLinearTermSumFactorization1D2V(BASIS_FAMILY_HIERARCHICAL, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorization_Relativistic1D2V_Nodal )
+  {
+    testRelativisticLinearTermSumFactorization1D2V(BASIS_FAMILY_NODAL, out, success);
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticMaxwell1D2V_ZeroCurrentSymmetry )
