@@ -20,6 +20,7 @@
 #include "Var.h"
 
 #include "Intrepid2_PAMatrix.hpp"
+#include "Intrepid2_SerendipityBasis.hpp"
 #include "Intrepid2_TensorBasis.hpp"
 #include "Intrepid2_TransformedBasisValues.hpp"
 
@@ -94,6 +95,9 @@ namespace
     auto intrepid2Basis = basis->intrepid2Basis();
     if (intrepid2Basis == Teuchos::null) return false;
     using IntrepidBasis = Intrepid2::Basis<DeviceType,double,double>;
+    // a Serendipity basis is an ordinal-filtered tensor basis; PAMatrix applies the filter to its sum-factorized assembly
+    auto serendipityBasis = dynamic_cast<const Intrepid2::SerendipityBasis<IntrepidBasis>*>(intrepid2Basis.get());
+    if (serendipityBasis != NULL) intrepid2Basis = serendipityBasis->getUnderlyingBasis();
     auto tensorBasis = dynamic_cast<const Intrepid2::Basis_TensorBasis<IntrepidBasis>*>(intrepid2Basis.get());
     if (tensorBasis == NULL) return numComponents == 1 && intrepid2Basis->getDomainDimension() == 1;
     const auto components = tensorBasis->getTensorBasisComponents();
@@ -211,6 +215,8 @@ namespace
       else components.push_back(sideTensorData.getTensorComponent(sideComponent++));
     }
     result = Intrepid2::BasisValues<double,DeviceType>(TensorData<double,DeviceType>(components));
+    // the singleton component has one field, so full tensor-basis ordinals (and hence any Serendipity ordinal filter) are unchanged
+    result.setOrdinalFilter(sideValues.ordinalFilter());
     return true;
   }
 }

@@ -26,6 +26,7 @@
 #include "LinearTermSumFactorized.h"
 
 #include <chrono>
+#include <functional>
 
 #include "CamelliaTestingHelpers.h"
 
@@ -2876,6 +2877,89 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorization_Relativistic1D2V_Nodal )
   {
     testRelativisticLinearTermSumFactorization1D2V(BASIS_FAMILY_NODAL, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorization_Relativistic1D2V_Serendipity )
+  {
+    testRelativisticLinearTermSumFactorization1D2V(BASIS_FAMILY_SERENDIPITY, out, success);
+  }
+
+  // Opt-in timing (set CAMELLIA_LINEAR_TERM_SF_TIMING=<H1Order>): B and G assembly for a workset of relativistic 1D2V
+  // cells, standard vs. sum-factorized LinearTerm integration, for full tensor and Serendipity bases.
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorizationTiming_Relativistic1D2V )
+  {
+    const char *timingOrder = getenv("CAMELLIA_LINEAR_TERM_SF_TIMING");
+    if (timingOrder == NULL) return;
+    const int H1Order = atoi(timingOrder);
+    const int delta_k = 2;
+    const double c = 2.0;
+    const int numCells = 8;
+
+    for (auto basisFamily : {BASIS_FAMILY_HIERARCHICAL, BASIS_FAMILY_SERENDIPITY})
+    {
+      auto spatialMeshTopo = MeshFactory::intervalMeshTopology(0.0, 0.7, numCells, false);
+      std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(0.0, 0.2, 1);
+      std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(-1.5, 2.5, 1);
+      std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(-0.5, 1.25, 1);
+      std::vector<double> velocitySpaceVertices_z;
+      auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(TEST_Q, TEST_EPS0));
+      auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, TEST_Q, TEST_M, configForm, spatialMeshTopo, temporalVertices,
+                                                                             velocitySpaceVertices_x, velocitySpaceVertices_y,
+                                                                             velocitySpaceVertices_z, H1Order, delta_k, 0,
+                                                                             RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,
+                                                                             0.3, basisFamily));
+      FunctionPtr x = Function::xn(1);
+      FunctionPtr t = Function::yn(1);
+      std::map<int,FunctionPtr> configProjection;
+      configProjection[configForm->E_fieldVar(0)->ID()] = 1.0 + 0.5 * x * t;
+      configProjection[configForm->B_fieldVar(1)->ID()] = 0.75 - 0.5 * x + t;
+      relForm->configurationSpaceSolution()->projectOntoMesh(configProjection);
+      relForm->configurationSpaceFormulation()->updateConfigurationSpaceFunctions();
+
+      auto mesh = relForm->vlasovMesh();
+      auto bf = relForm->vlasovBF();
+      auto ip = relForm->constructVlasovInnerProduct(false);
+      auto cellIDSet = mesh->cellIDsInPartition();
+      std::vector<GlobalIndexType> cellIDs(cellIDSet.begin(), cellIDSet.end());
+      auto elemType = mesh->getElementType(cellIDs[0]);
+      const int numTrialDofs = elemType->trialOrderPtr->totalDofs();
+      const int numTestDofs  = elemType->testOrderPtr->totalDofs();
+      auto basisCache   = BasisCache::basisCacheForCellType(mesh, elemType, false);
+      auto ipBasisCache = BasisCache::basisCacheForCellType(mesh, elemType, true);
+      auto firstNodes = mesh->physicalCellNodesForCell(cellIDs[0]); // (1,N,D)
+      const int numNodes = firstNodes.dimension(1), nodeDim = firstNodes.dimension(2);
+      FieldContainer<double> cellNodes(numCells, numNodes, nodeDim);
+      FieldContainer<double> parities(numCells, elemType->cellTopoPtr->getSideCount());
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        auto nodes = mesh->physicalCellNodesForCell(cellIDs[cellOrdinal]);
+        for (int n=0; n<numNodes; n++) for (int d=0; d<nodeDim; d++) cellNodes(cellOrdinal,n,d) = nodes(0,n,d);
+        auto cellParities = mesh->cellSideParitiesForCell(cellIDs[cellOrdinal]);
+        for (int s=0; s<parities.dimension(1); s++) parities(cellOrdinal,s) = cellParities(0,s);
+      }
+      basisCache->setPhysicalCellNodes(cellNodes, cellIDs, true);
+      ipBasisCache->setPhysicalCellNodes(cellNodes, cellIDs, false);
+
+      FieldContainer<double> bStandard(numCells,numTrialDofs,numTestDofs), bSumFactorized(numCells,numTrialDofs,numTestDofs);
+      FieldContainer<double> gStandard(numCells,numTestDofs,numTestDofs),  gSumFactorized(numCells,numTestDofs,numTestDofs);
+      auto seconds = [](std::function<void()> f) {
+        auto start = std::chrono::steady_clock::now();
+        f();
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+      };
+      setSumFactorizedLinearTermIntegrationEnabled(false);
+      const double bStandardTime = seconds([&]{ bf->stiffnessMatrix(bStandard, elemType, parities, basisCache, true, false); });
+      const double gStandardTime = seconds([&]{ ip->computeInnerProductMatrix(gStandard, elemType->testOrderPtr, ipBasisCache); });
+      setSumFactorizedLinearTermIntegrationEnabled(true);
+      const double bSumFactorizedTime = seconds([&]{ bf->stiffnessMatrix(bSumFactorized, elemType, parities, basisCache, true, false); });
+      const double gSumFactorizedTime = seconds([&]{ ip->computeInnerProductMatrix(gSumFactorized, elemType->testOrderPtr, ipBasisCache); });
+
+      out << ((basisFamily == BASIS_FAMILY_SERENDIPITY) ? "Serendipity" : "full tensor") << ", H1Order " << H1Order << ", dp " << delta_k
+          << ", " << numTrialDofs << " trial / " << numTestDofs << " test dofs, " << numCells << " cells: B standard " << bStandardTime
+          << " s, sum-factorized " << bSumFactorizedTime << " s; G standard " << gStandardTime << " s, sum-factorized " << gSumFactorizedTime << " s\n";
+      TEST_ASSERT(compareFloatingArraysCamellia(bSumFactorized, "sum-factorized B", bStandard, "standard B", 1e-10, 1e-10, out));
+      TEST_ASSERT(compareFloatingArraysCamellia(gSumFactorized, "sum-factorized G", gStandard, "standard G", 1e-10, 1e-10, out));
+    }
   }
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticMaxwell1D2V_ZeroCurrentSymmetry )
