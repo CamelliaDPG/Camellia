@@ -186,7 +186,10 @@ private:
       {
         const GlobalOrdinal originalColGID = rowColMap->getGlobalElement(localCols(entryOrdinal));
         auto localCol = localGIDForOriginalGID.find(originalColGID);
-        if (localCol != localGIDForOriginalGID.end())
+        // skip stored zeros (e.g., Dirichlet rows/columns zeroed in place), which would only add fill to the
+        // factorization; always keep the diagonal
+        const bool isDiagonal = (localCol != localGIDForOriginalGID.end()) && (localCol->second == static_cast<GlobalOrdinal>(rowOrdinal));
+        if ((localCol != localGIDForOriginalGID.end()) && (isDiagonal || (rowVals(entryOrdinal) != Scalar(0.0))))
         {
           compactCols.push_back(localCol->second);
           compactVals.push_back(rowVals(entryOrdinal));

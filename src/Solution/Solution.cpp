@@ -99,67 +99,53 @@ namespace {
                           TMatrixPtr<Scalar> &matrix)
   {
     using GO = typename TMatrix<Scalar>::global_ordinal_type;
-    using ValuesViewHost = typename TMatrix<Scalar>::nonconst_values_host_view_type;
-    using GlobalIndicesHostView = typename TMatrix<Scalar>::nonconst_global_inds_host_view_type;
 
     if (matrix == Teuchos::null) return;
 
-    auto oldMatrix = matrix;
-    auto rowMap    = oldMatrix->getRowMap();
-    auto domainMap = oldMatrix->getDomainMap();
-    auto rangeMap  = oldMatrix->getRangeMap();
-
-    const size_t numLocalRows = rowMap->getLocalNumElements();
-    std::vector<size_t> oldRowEntryCounts(numLocalRows);
-    size_t newRowAllocation = 1;
-    for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
+    // Zero the Dirichlet rows (putting 1 on the diagonal) and the Dirichlet columns, in place: the graph is unchanged,
+    // so this needs no second copy of the matrix.  The diagonal is in each row's stencil, since a dof couples to itself.
+    using LO = typename TMatrix<Scalar>::local_ordinal_type;
+    auto rowMap = matrix->getRowMap();
+    auto colMap = matrix->getColMap();
+    const LO numLocalColumns = static_cast<LO>(colMap->getLocalNumElements());
+    std::vector<char> isDirichletColumn(numLocalColumns, 0);
+    for (GO colGID : dirichletCols)
     {
-      oldRowEntryCounts[localRowOrdinal] = oldMatrix->getNumEntriesInLocalRow(localRowOrdinal);
-      newRowAllocation = std::max(newRowAllocation, oldRowEntryCounts[localRowOrdinal]);
+      const LO localCol = colMap->getLocalElement(colGID);
+      if (localCol != Teuchos::OrdinalTraits<LO>::invalid()) isDirichletColumn[localCol] = 1;
     }
 
-    auto newMatrix = Teuchos::rcp(new TMatrix<Scalar>(rowMap, newRowAllocation));
-
-    for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
+    matrix->resumeFill();
     {
-      GO rowGID = rowMap->getGlobalElement(localRowOrdinal);
-      bool isDirichletRow = (dirichletRows.find(rowGID) != dirichletRows.end());
-
-      if (isDirichletRow)
+      // the matrix's (device) storage is modified directly, which requires that it be host-accessible
+      static_assert(Kokkos::SpaceAccessibility<Kokkos::HostSpace, typename TMatrix<Scalar>::device_type::memory_space>::accessible,
+                    "Apply_OAZToMatrix() requires host-accessible matrix storage");
+      auto localMatrix = matrix->getLocalMatrixDevice();
+      const LO numLocalRows = static_cast<LO>(rowMap->getLocalNumElements());
+      for (LO localRow=0; localRow<numLocalRows; localRow++)
       {
-        Teuchos::Array<GO> cols(1, rowGID);
-        Teuchos::Array<Scalar> vals(1, Scalar(1.0));
-        newMatrix->insertGlobalValues(rowGID, cols(), vals());
-      }
-      else
-      {
-        size_t numRowEntries = 0;
-        const size_t rowEntryCapacity = std::max<size_t>(oldRowEntryCounts[localRowOrdinal], 1);
-        GlobalIndicesHostView oldCols("Tpetra OAZ old column gids", rowEntryCapacity);
-        ValuesViewHost oldVals("Tpetra OAZ old values", rowEntryCapacity);
-        oldMatrix->getGlobalRowCopy(rowGID, oldCols, oldVals, numRowEntries);
-        Teuchos::Array<GO> cols;
-        Teuchos::Array<Scalar> vals;
-        cols.reserve(numRowEntries);
-        vals.reserve(numRowEntries);
-        for (size_t entryOrdinal=0; entryOrdinal<numRowEntries; entryOrdinal++)
+        const GO rowGID = rowMap->getGlobalElement(localRow);
+        const bool isDirichletRow = (dirichletRows.find(rowGID) != dirichletRows.end());
+        const LO diagonalCol = colMap->getLocalElement(rowGID);
+        bool foundDiagonal = false;
+        for (auto entry=localMatrix.graph.row_map(localRow); entry<localMatrix.graph.row_map(localRow+1); entry++)
         {
-          GO colGID = oldCols(entryOrdinal);
-          if (dirichletCols.find(colGID) == dirichletCols.end())
+          const LO localCol = localMatrix.graph.entries(entry);
+          if (isDirichletRow)
           {
-            cols.push_back(colGID);
-            vals.push_back(oldVals(entryOrdinal));
+            localMatrix.values(entry) = (localCol == diagonalCol) ? Scalar(1.0) : Scalar(0.0);
+            foundDiagonal = foundDiagonal || (localCol == diagonalCol);
+          }
+          else if (isDirichletColumn[localCol])
+          {
+            localMatrix.values(entry) = Scalar(0.0);
           }
         }
-        if (cols.size() > 0)
-        {
-          newMatrix->insertGlobalValues(rowGID, cols(), vals());
-        }
+        TEUCHOS_TEST_FOR_EXCEPTION(isDirichletRow && !foundDiagonal, std::logic_error,
+                                   "Apply_OAZToMatrix(): Dirichlet row has no diagonal entry in the matrix graph");
       }
     }
-
-    newMatrix->fillComplete(domainMap, rangeMap);
-    matrix = newMatrix;
+    matrix->fillComplete(matrix->getDomainMap(), matrix->getRangeMap());
   }
 
 } // end anonymous namespace
@@ -1204,6 +1190,51 @@ void TSolution<Scalar>::initializeStiffnessAndLoad()
       }
     }
     cellColumns.push_back(std::move(columns));
+  }
+
+  // An owned row on a partition boundary also receives entries from off-rank cells (via exportSharedRowStiffness());
+  // count those columns too, or the export overflows the row allocation and Tpetra reallocates the matrix.  Send each
+  // cell that contributes to off-rank rows to those rows' owners, once per owner, as
+  // (number of columns, columns..., number of rows, rows...).
+  {
+    std::map<int,std::vector<GO>> cellStencilsToSend;
+    std::vector<std::map<int,std::vector<GO>>> cellOwnerRows(cellColumns.size());
+    for (const auto &entry : sharedRowCells)
+    {
+      const int owner = _dofInterpreter->partitionForGlobalDofIndex(static_cast<GlobalIndexType>(entry.first));
+      for (int cellOrdinal : entry.second) cellOwnerRows[cellOrdinal][owner].push_back(entry.first);
+    }
+    for (size_t cellOrdinal=0; cellOrdinal<cellColumns.size(); cellOrdinal++)
+    {
+      for (const auto &ownerRows : cellOwnerRows[cellOrdinal])
+      {
+        auto &message = cellStencilsToSend[ownerRows.first];
+        const auto &columns = cellColumns[cellOrdinal];
+        message.push_back(static_cast<GO>(columns.size()));
+        message.insert(message.end(), columns.begin(), columns.end());
+        message.push_back(static_cast<GO>(ownerRows.second.size()));
+        message.insert(message.end(), ownerRows.second.begin(), ownerRows.second.end());
+      }
+    }
+    cellOwnerRows.clear();
+    std::vector<GO> receivedStencils;
+    MPIWrapper::sendDataVectors(tPartMap->getComm(), cellStencilsToSend, receivedStencils);
+    cellStencilsToSend.clear();
+    size_t position = 0;
+    while (position < receivedStencils.size())
+    {
+      const int cellOrdinal = static_cast<int>(cellColumns.size());
+      const size_t numColumns = static_cast<size_t>(receivedStencils[position++]);
+      cellColumns.emplace_back(receivedStencils.begin() + position, receivedStencils.begin() + position + numColumns);
+      position += numColumns;
+      const size_t numRows = static_cast<size_t>(receivedStencils[position++]);
+      for (size_t i=0; i<numRows; i++)
+      {
+        const GO rowIndex = receivedStencils[position++];
+        TEUCHOS_TEST_FOR_EXCEPTION(!tPartMap->isNodeGlobalElement(rowIndex), std::logic_error, "received a shared-row stencil for a row this rank does not own");
+        rowCells[tPartMap->getLocalElement(rowIndex)].push_back(cellOrdinal);
+      }
+    }
   }
 
   // Zero-mean constraints and global Lagrange constraints are appended to the partition map after the regular and
