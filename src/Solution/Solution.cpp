@@ -24,6 +24,7 @@
 #include "BasisSumFunction.h"
 #include "Camellia_HDF5.hpp"
 #include "CamelliaCellTools.h"
+#include "CamelliaMemoryTools.h"
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
@@ -1577,6 +1578,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
       }
       TimeLogger::sharedInstance()->stopTimer(interpretLocalDataTimerHandle);
       localStiffnessInterpretationTime += subTimer.ElapsedTime();
+      MemoryCheckpoints::checkLimit("local_stiffness_batch");
       startCellIndexForBatch += numCells;
     }
   }
@@ -1606,6 +1608,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 
   TimeLogger::sharedInstance()->stopTimer(localStiffnessTimerHandle);
   double timeLocalStiffness = timer.ElapsedTime();
+  MemoryCheckpoints::record("local_stiffness_done");
   //  cout << "Done computing local matrices" << endl;
   int localRowIndex = myGlobalIndicesSet.size(); // starts where the dofs left off
 
@@ -1790,7 +1793,9 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   timer.ResetStartTime();
 
   exportSharedRowStiffness();
+  MemoryCheckpoints::record("shared_rows_exported");
   _globalStiffMatrix->fillComplete();
+  MemoryCheckpoints::record("stiffness_fill_complete");
 
   double timeGlobalAssembly = timer.ElapsedTime();
 
@@ -1979,11 +1984,15 @@ int TSolution<Scalar>::solve(TSolverPtr<Scalar> solver)
       }
     }
 
+    MemoryCheckpoints::record("solve_start");
     initializeStiffnessAndLoad();
+    MemoryCheckpoints::record("stiffness_initialized");
     setProblem(solver);
     applyDGJumpTerms();
     populateStiffnessAndLoad();
+    MemoryCheckpoints::record("stiffness_populated");
     int solveSuccess = solveWithPrepopulatedStiffnessAndLoad(solver);
+    MemoryCheckpoints::record("linear_solve_done");
     importSolution();
 
     clearComputedResiduals(); // now that we've solved, will need to recompute residuals...

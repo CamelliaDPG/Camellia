@@ -15,6 +15,7 @@
 #ifndef Camellia_VlasovSpaceTimeFormulation_h
 #define Camellia_VlasovSpaceTimeFormulation_h
 
+#include "CamelliaMemoryTools.h"
 #include "TypeDefs.h"
 
 #include "BF.h"
@@ -51,6 +52,7 @@ public:
     double totalTimeBCImposition = 0;
     double totalTimeSolve = 0;              // linear solve, including GMG operator setup for iterative solves
     std::map<std::string, double> gmgTimings; // GMGOperator::timingReportSumOfOperators(), rank-local; empty for direct solves
+    std::vector<MemoryCheckpoint> memoryCheckpoints; // rank-local resident size / high-water mark at phase boundaries of the Vlasov solve
   };
 
   // strings naming variables:

@@ -11,6 +11,7 @@
 
 #include "GMGOperator.h"
 #include "TensorTpetraRowMatrixDiagnostics.hpp"
+#include "CamelliaMemoryTools.h"
 
 #include "BasisFactory.h"
 #include "DofOrdering.h"
@@ -591,6 +592,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(TMatrixPtr<Scalar> tFineStiffness
   }
 
   _timeComputeCoarseStiffnessMatrix = coarseStiffnessTimer.ElapsedTime();
+  MemoryCheckpoints::record("gmg_level" + std::to_string(getOperatorLevel()) + "_coarse_stiffness");
 
   _haveSolvedOnCoarseMesh = false; // having recomputed coarseStiffness, any existing factorization is invalid
 }
@@ -2285,6 +2287,7 @@ int GMGOperator::ApplyInverseCoarseOperator(const TVector<Scalar> &res, TVector<
     if (printVerboseOutput) cout << "solving on coarse mesh\n";
     narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false)");
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
+    MemoryCheckpoints::record("gmg_coarse_factorization");
     if (printVerboseOutput) cout << "finished solving on coarse mesh\n";
     _haveSolvedOnCoarseMesh = true;
   }
@@ -2706,6 +2709,7 @@ void GMGOperator::setFineStiffnessMatrix(TMatrixPtr<Scalar> fineStiffness)
     computeCoarseStiffnessMatrix(fineStiffness);
   }
   setUpSmoother(fineStiffness);
+  MemoryCheckpoints::record("gmg_level" + std::to_string(getOperatorLevel()) + "_smoother");
   
   if (_coarseOperator != Teuchos::null)
   {

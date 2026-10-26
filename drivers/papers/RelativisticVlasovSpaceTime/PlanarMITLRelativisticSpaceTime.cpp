@@ -1358,6 +1358,22 @@ int main(int argc, char *argv[])
           fields.push_back({key, phase0DoubleString(entry.second)});
         }
         phase0.logDuration("vlasov_substep", profile.wallTimeVlasovSolve, fields);
+        // memory at phase boundaries of the Vlasov solve: max and sum of current resident size over ranks, and max high-water mark
+        const int numCheckpoints = profile.memoryCheckpoints.size();
+        if (MPIWrapper::min(comm, numCheckpoints) == MPIWrapper::max(comm, numCheckpoints))
+        {
+          for (int i=0; i<numCheckpoints; i++)
+          {
+            const auto &checkpoint = profile.memoryCheckpoints[i];
+            Phase0Fields memoryFields;
+            memoryFields.push_back({"substep",       std::to_string(profile.substepOrdinal)});
+            memoryFields.push_back({"checkpoint",    checkpoint.name});
+            memoryFields.push_back({"max_rss_gb",    phase0DoubleString(MPIWrapper::max(comm, checkpoint.currentGB))});
+            memoryFields.push_back({"sum_rss_gb",    phase0DoubleString(MPIWrapper::sum(comm, checkpoint.currentGB))});
+            memoryFields.push_back({"max_hwm_gb",    phase0DoubleString(MPIWrapper::max(comm, checkpoint.highWaterMarkGB))});
+            phase0.logDuration("vlasov_memory", 0.0, memoryFields);
+          }
+        }
         phase0TimeG = phase0TimeB = phase0TimeK = 0;
         phase0OptimalTestElementCount = 0;
       });

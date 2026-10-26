@@ -2601,6 +2601,12 @@ void VlasovSpaceTimeFormulation::solve()
       return std::chrono::duration<double>(ProfileClock::now() - start).count();
     };
     
+    // memory checkpoints recorded during the Vlasov solve (see Solution::solve(), GMGOperator) go into the profile
+    const bool recordMemory = static_cast<bool>(_substepSolveProfileCallback);
+    MemoryCheckpoints::setEnabled(recordMemory);
+    MemoryCheckpoints::clear();
+    MemoryCheckpoints::record("substep_start");
+
     // solve for f:
     if (!_useGeometricMultigrid)
     {
@@ -2614,6 +2620,7 @@ void VlasovSpaceTimeFormulation::solve()
       const auto constructionStart = ProfileClock::now();
       Teuchos::RCP<GMGSolver> gmgSolver = constructGMGSolver();
       profile.wallTimeGMGConstruction = profileSeconds(constructionStart);
+      MemoryCheckpoints::record("gmg_constructed");
       if (_cgTols.size() > 0) // then we should have one per substep
       {
         gmgSolver->setTolerance(_cgTols[substepOrdinal]);
@@ -2631,6 +2638,13 @@ void VlasovSpaceTimeFormulation::solve()
       }
     }
     profile.iterationCount = substepIterationCounts[substepOrdinal];
+    MemoryCheckpoints::record("vlasov_solve_done"); // after the GMG solver (and its operators) have been released
+    if (recordMemory)
+    {
+      profile.memoryCheckpoints = MemoryCheckpoints::checkpoints();
+      MemoryCheckpoints::clear();
+      MemoryCheckpoints::setEnabled(false);
+    }
     if (_substepSolveProfileCallback)
     {
       profile.numGlobalDofs           = _vlasovSoln->mesh()->numGlobalDofs();
