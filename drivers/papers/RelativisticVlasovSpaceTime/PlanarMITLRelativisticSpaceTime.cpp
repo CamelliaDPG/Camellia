@@ -1115,6 +1115,9 @@ int main(int argc, char *argv[])
     int phase0TensorGraphSchurTestEnrichment = 1;
     cmdp.setOption("phase0Instrumentation", "noPhase0Instrumentation", &phase0Instrumentation,
                    "Emit grep-friendly Phase 0 timing lines for Planar MITL baseline/performance runs.");
+    bool accuracyDiagnostics = false;
+    cmdp.setOption("accuracyDiagnostics", "noAccuracyDiagnostics", &accuracyDiagnostics,
+                   "At the end of each time slab, print integral quantities (f, E^2, Jx over the slab) for comparing discretizations.");
     cmdp.setOption("phase0TimingFile", &phase0TimingFile,
                    "Optional rank-0 file for Phase 0 timing lines; stdout is always used when instrumentation is enabled.");
     cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
@@ -1764,6 +1767,24 @@ int main(int argc, char *argv[])
         // floating-point / point-location boundary ambiguity at the time-slab boundary.
         const double tEval = std::nextafter(form->t1(), form->t0());
         double E_left = E_soln->evaluate(configMesh, x0, tEval); // when called with mesh arg, evaluate() locates the owning rank, evaluates there, and then MPI-communicates the result to all (without mesh arg, it will silently get a wrong (0.0) answer on some ranks!)
+
+        if (accuracyDiagnostics)
+        {
+          // integrals over the slab (phase space for f; configuration space-time for E^2, Jx); all collective
+          const int cubatureEnrichment = 2;
+          const double fIntegral   = f_soln->integrate(form->vlasovMesh(), cubatureEnrichment);
+          const double E2Integral  = (E_soln * E_soln)->integrate(configMesh, cubatureEnrichment);
+          // the tensor-native moment functions are only defined at the configuration cubature points they were sampled on
+          const double JxIntegral  = Jx->integrate(configMesh, 0);
+          const double nIntegral   = density->integrate(configMesh, 0);
+          if (rank == 0)
+          {
+            std::cout << std::setprecision(10);
+            std::cout << "ACCURACY slab=" << timeSlabOrdinal << " int_f=" << fIntegral << " int_E2=" << E2Integral
+                      << " int_Jx=" << JxIntegral << " int_n=" << nIntegral << " E0_end=" << E_left << std::endl;
+            std::cout << std::setprecision(6);
+          }
+        }
         
 //        {
 //          // DEBUGGING:
