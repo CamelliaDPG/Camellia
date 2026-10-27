@@ -750,13 +750,62 @@ void checkMesh( MeshPtr mesh)
   }
 }
 
+//! Vertices on [left, right] that resolve a feature at center: a uniform core of elements of width coreElementWidth
+//! covering [center - coreHalfWidth, center + coreHalfWidth] (clipped to the domain), and element widths growing
+//! geometrically by growthRatio from the core out to each boundary.  A final element narrower than half its
+//! predecessor is merged into it.
+std::vector<double> gradedVertices(const double left, const double right, const double center,
+                                   const double coreElementWidth, const double coreHalfWidth, const double growthRatio)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((coreElementWidth <= 0) || (growthRatio < 1) || (right <= left), std::invalid_argument,
+                             "gradedVertices(): invalid arguments");
+  const double coreLeft  = std::max(left,  center - coreHalfWidth);
+  const double coreRight = std::min(right, center + coreHalfWidth);
+  // geometrically graded vertices from start (exclusive) to end (inclusive), first width growthRatio * coreElementWidth
+  auto gradedSide = [&](const double start, const double end) {
+    std::vector<double> sideVertices;
+    const double length = std::abs(end - start);
+    const double direction = (end > start) ? 1.0 : -1.0;
+    double position = 0, width = coreElementWidth * growthRatio;
+    while (length - position > 0)
+    {
+      const double remaining = length - position;
+      if (remaining <= width * 1.5)
+      {
+        sideVertices.push_back(end); // last element absorbs the remainder (at most 1.5x its nominal width)
+        break;
+      }
+      position += width;
+      sideVertices.push_back(start + direction * position);
+      width *= growthRatio;
+    }
+    return sideVertices;
+  };
+  std::vector<double> vertices;
+  auto leftSide = gradedSide(coreLeft, left);
+  for (auto it = leftSide.rbegin(); it != leftSide.rend(); it++) vertices.push_back(*it);
+  const int numCoreElements = std::max(1, int(std::ceil((coreRight - coreLeft) / coreElementWidth - 1e-10)));
+  for (int i=0; i<=numCoreElements; i++)
+  {
+    vertices.push_back(coreLeft + (coreRight - coreLeft) * double(i) / double(numCoreElements));
+  }
+  for (double vertex : gradedSide(coreRight, right)) vertices.push_back(vertex);
+  return vertices;
+}
+
+std::vector<double> uniformVertices(const double left, const double width, const int numElements)
+{
+  std::vector<double> vertices(numElements+1);
+  for (int i=0; i<=numElements; i++) vertices[i] = left + double(i) / double(numElements) * width;
+  return vertices;
+}
+
 Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const double  x0, const double  xWidth,
                                                               const double  t0, const double  tWidth,
-                                                              const double vx0, const double vxWidth,
-                                                              const double vy0, const double vyWidth,
+                                                              const std::vector<double> &velocitySpaceVertices_x,
+                                                              const std::vector<double> &velocitySpaceVertices_y,
                                                               const int xElements,  const int tElements,
-                                                              const int vxElements, const int vyElements,
                                                               double q, double eps0, double m,
                                                               const int H1Order, const int delta_k,
                                                               const RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct testIP,
@@ -783,20 +832,6 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
   {
     const double t = double(i) / double(tElements) * tWidth + t0;
     temporalVertices[i] = t;
-  }
-  
-  std::vector<double> velocitySpaceVertices_x(vxElements+1);
-  for (int i=0; i<=vxElements; i++)
-  {
-    const double vx = double(i) / double(vxElements) * vxWidth + vx0;
-    velocitySpaceVertices_x[i] = vx;
-  }
-  
-  std::vector<double> velocitySpaceVertices_y(vyElements+1);
-  for (int i=0; i<=vyElements; i++)
-  {
-    const double vy = double(i) / double(vyElements) * vyWidth + vy0;
-    velocitySpaceVertices_y[i] = vy;
   }
   
   std::vector<double> velocitySpaceVertices_z; // empty -- 1D2V
@@ -995,6 +1030,16 @@ int main(int argc, char *argv[])
     cmdp.setOption("vElements", &vElements);
     cmdp.setOption("numUniformRefinements", &numUniformRefinements, "number of uniform refinements applied to the base mesh");
 
+    bool gradedVelocityMesh = false;
+    double velocityCoreWidthFactor = 1.0, velocityCoreHalfWidthFactor = 3.0, velocityGrowthRatio = 2.0;
+    cmdp.setOption("gradedVelocityMesh", "uniformVelocityMesh", &gradedVelocityMesh,
+                   "grade the velocity mesh around the inflow beam (ignores vElements); see velocityCore* and velocityGrowthRatio.  "
+                   "The graded mesh is the base mesh: combine a coarse grading with numUniformRefinements, since GMG's h-coarsening "
+                   "uses only the uniform refinements (otherwise GMG coarsens in p alone).");
+    cmdp.setOption("velocityCoreWidthFactor", &velocityCoreWidthFactor, "graded velocity mesh: core element width, in units of sigma");
+    cmdp.setOption("velocityCoreHalfWidthFactor", &velocityCoreHalfWidthFactor, "graded velocity mesh: half-width of the uniform core around the beam, in units of sigma");
+    cmdp.setOption("velocityGrowthRatio", &velocityGrowthRatio, "graded velocity mesh: geometric growth ratio of element widths outside the core");
+
     double x0        = 0.0;
     double t0        = 0.0;
     double tWidth    = 1.0;
@@ -1188,7 +1233,7 @@ int main(int argc, char *argv[])
     phase0.logDuration("start", 0.0,
                        {{"mpi_ranks", std::to_string(mpiSession.getNProc())},
                         {"x_elements", std::to_string(xElements)},
-                        {"v_elements", std::to_string(vElements)},
+                        {"v_elements", gradedVelocityMesh ? std::string("graded") : std::to_string(vElements)},
                         {"t_elements", std::to_string(tElements)},
                         {"uniform_refinements", std::to_string(numUniformRefinements)},
                         {"p", std::to_string(H1Order)},
@@ -1277,8 +1322,19 @@ int main(int argc, char *argv[])
     const double uyMin = -uMax;
     const double uyMax =  uMax;
     
-    const auto vxElements = vElements;
-    const auto vyElements = vElements;
+    std::vector<double> velocitySpaceVertices_x, velocitySpaceVertices_y;
+    if (gradedVelocityMesh)
+    {
+      velocitySpaceVertices_x = gradedVertices(uxMin, uxMax, ux0, velocityCoreWidthFactor * sigma, velocityCoreHalfWidthFactor * sigma, velocityGrowthRatio);
+      velocitySpaceVertices_y = gradedVertices(uyMin, uyMax, uy0, velocityCoreWidthFactor * sigma, velocityCoreHalfWidthFactor * sigma, velocityGrowthRatio);
+    }
+    else
+    {
+      velocitySpaceVertices_x = uniformVertices(uxMin, uxMax - uxMin, vElements);
+      velocitySpaceVertices_y = uniformVertices(uyMin, uyMax - uyMin, vElements);
+    }
+    const int vxElements = int(velocitySpaceVertices_x.size()) - 1;
+    const int vyElements = int(velocitySpaceVertices_y.size()) - 1;
     
     const double E0 = -V_scaled / xWidth;
     
@@ -1304,6 +1360,13 @@ int main(int argc, char *argv[])
       std::cout << "uMin:     " << uMin << " (" << beta0 << " c)\n";
       std::cout << "uMax:     " << uMax << " (" << betaMax << " c)\n";
       std::cout << "uy range: [" << uyMin << ", " << uyMax << "]\n";
+      auto printVertices = [](const std::string &name, const std::vector<double> &vertices) {
+        std::cout << name << " vertices (" << vertices.size() - 1 << " elements):";
+        for (double v : vertices) std::cout << " " << v;
+        std::cout << std::endl;
+      };
+      printVertices("ux", velocitySpaceVertices_x);
+      printVertices("uy", velocitySpaceVertices_y);
       std::cout << "sigma:    " << sigma << std::endl;
       std::cout << "u0:       " << ux0 << std::endl;
       std::cout << "v0:       " << v0 << std::endl;
@@ -1315,7 +1378,7 @@ int main(int argc, char *argv[])
     const bool useGeometricGradedSpatialMesh = true;
     
     auto phase0FormulationSetupStart = phase0.now();
-    auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, uxMin, uxMax-uxMin, uyMin, uyMax-uyMin, xElements, tElements, vxElements, vyElements,
+    auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
                                      useSumFactorizedGramAssembly);
@@ -1506,7 +1569,7 @@ int main(int argc, char *argv[])
     }
     suffix << "_p" << H1Order;
     suffix << "_dp" << delta_k;
-    suffix << "_" << xElements << "x" << tElements << "x" << vElements;
+    suffix << "_" << xElements << "x" << tElements << "x" << vxElements << "x" << vyElements;
     suffix << "_ratio" << minMagneticFluxRatio;
     if (initialTimeDivision > 0)
     {
