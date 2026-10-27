@@ -1273,8 +1273,9 @@ int main(int argc, char *argv[])
     const double uxMin = uMin;
     const double uxMax = uMax;
     
-    const double uyMin = uMin;
-    const double uyMax = uMax;
+    // the beam is centered at uy0 = 0, so the uy domain is symmetric about 0
+    const double uyMin = -uMax;
+    const double uyMax =  uMax;
     
     const auto vxElements = vElements;
     const auto vyElements = vElements;
@@ -1302,6 +1303,7 @@ int main(int argc, char *argv[])
       std::cout << "v_beam:   " << v_beam << " [m/s] (" << v_beam / c  << " c)" << std::endl;
       std::cout << "uMin:     " << uMin << " (" << beta0 << " c)\n";
       std::cout << "uMax:     " << uMax << " (" << betaMax << " c)\n";
+      std::cout << "uy range: [" << uyMin << ", " << uyMax << "]\n";
       std::cout << "sigma:    " << sigma << std::endl;
       std::cout << "u0:       " << ux0 << std::endl;
       std::cout << "v0:       " << v0 << std::endl;
