@@ -1160,6 +1160,12 @@ int main(int argc, char *argv[])
     int phase0TensorGraphSchurTestEnrichment = 1;
     cmdp.setOption("phase0Instrumentation", "noPhase0Instrumentation", &phase0Instrumentation,
                    "Emit grep-friendly Phase 0 timing lines for Planar MITL baseline/performance runs.");
+    bool taperInjection = true;
+    double taperUpperThreshold = 0.50, taperLowerThreshold = 0.10;
+    cmdp.setOption("taperInjection", "noTaperInjection", &taperInjection,
+                   "reduce the inflow current as E(0) falls (to mitigate virtual cathode formation); see taperUpperThreshold and taperLowerThreshold");
+    cmdp.setOption("taperUpperThreshold", &taperUpperThreshold, "injection taper starts when E(0)/E0 falls below this fraction");
+    cmdp.setOption("taperLowerThreshold", &taperLowerThreshold, "injection is off when E(0)/E0 falls below this fraction");
     bool accuracyDiagnostics = false;
     cmdp.setOption("accuracyDiagnostics", "noAccuracyDiagnostics", &accuracyDiagnostics,
                    "At the end of each time slab, print integral quantities (f, E^2, Jx over the slab) for comparing discretizations.");
@@ -1857,10 +1863,14 @@ int main(int argc, char *argv[])
 //        }
         
         // reduce the inflow current when E_left / E0 gets small -- want to avoid/mitigate virtual cathode creation.
-        double lowerThreshold = 0.10; // turn off once we get here
-        double upperThreshold = 0.50; // start tapering here
+        const double lowerThreshold = taperLowerThreshold; // turn off once we get here
+        const double upperThreshold = taperUpperThreshold; // start tapering here
         double ratio = E_left / E0; // E0 is negative -> if E_left is negative, ratio will be positive
-        if (ratio < lowerThreshold)
+        if (!taperInjection)
+        {
+          ratio = 1.0;
+        }
+        else if (ratio < lowerThreshold)
         {
           ratio = 0;
         }
@@ -1873,8 +1883,6 @@ int main(int argc, char *argv[])
           // shift and scale so that ratio will be 1 at upperThreshold, and 0 at lower
           ratio = (ratio - lowerThreshold) / (upperThreshold - lowerThreshold);
         }
-        // DEBUGGING: for now, we turn off tapering by setting ratio to 1.0
-        ratio = 1.0;
         double n = n0 * ratio;
         
         fM_u0->set_n(n);
@@ -1884,9 +1892,14 @@ int main(int argc, char *argv[])
           double percent = int(ratio * 10000) / 100.0; // keep two digits after the decimal point
           double upperThresholdPercent = int(upperThreshold * 100);
           double lowerThresholdPercent = int(lowerThreshold * 100);
-          std::cout << "E(0) at final time is " << E_left << "; setting injection current to " << percent << "%.\n";
+          std::cout << "E(0) at final time is " << E_left << "; setting injection current to " << percent << "%";
+          std::cout << (taperInjection ? ".\n" : " (injection taper disabled).\n");
           double EPercent = int(E_left / E0 * 100);
-          if (ratio >= 1)
+          if (!taperInjection)
+          {
+            // no taper messages
+          }
+          else if (ratio >= 1)
           {
             std::cout << "Will begin reducing injection current once E(0) is at " << upperThresholdPercent << "% of initial E(0) value (now at ";
             std::cout << EPercent << "%)\n";
@@ -1895,6 +1908,10 @@ int main(int argc, char *argv[])
           {
             std::cout << "Will turn off injection once E(0) is at " << lowerThresholdPercent << "% of initial E(0) value (now at ";
             std::cout << EPercent << "%)\n";
+          }
+          else
+          {
+            std::cout << "Injection is off: E(0) is below " << lowerThresholdPercent << "% of initial E(0) value (now at " << EPercent << "%)\n";
           }
         }
         
