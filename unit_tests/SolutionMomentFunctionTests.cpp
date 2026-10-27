@@ -3083,7 +3083,11 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBy
   // The velocity dependence is exactly integrated by the Gauss rule, so density and proper-velocity moments match
   // closed-form integrals; the relativistic currents are compared with a high-order reference quadrature.
   // Also exercises the MPI path when run on multiple ranks (phase-space and configuration partitions are independent).
-  void testVlasovMomentsByPhaseSpaceCell1D1T2V(bool refineVelocity, Teuchos::FancyOStream &out, bool &success)
+  // With useDefaultVelocityQuadratureDegree, the degree comes from defaultVlasovMomentVelocityQuadratureDegree1D2V(),
+  // which must agree across ranks even when a rank owns phase-space cells but no configuration cells (e.g., on more than
+  // 4 ranks for this 4-cell configuration mesh); only the exactly-integrated moments are checked then.
+  void testVlasovMomentsByPhaseSpaceCell1D1T2V(bool refineVelocity, bool useDefaultVelocityQuadratureDegree,
+                                               Teuchos::FancyOStream &out, bool &success)
   {
     const int numPhysicalDims  = 1;
     const int numExtrusionDims = 2;
@@ -3137,7 +3141,8 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBy
 
     const auto &myCellSet = physicalMesh->cellIDsInPartition();
     std::vector<GlobalIndexType> myCells(myCellSet.begin(), myCellSet.end());
-    const int velocityQuadratureDegree = 12; // high enough that the non-polynomial 1/gamma weight is integrated to ~1e-10
+    // degree 12 is high enough that the non-polynomial 1/gamma weight is integrated to ~1e-10
+    const int velocityQuadratureDegree = useDefaultVelocityQuadratureDegree ? defaultVlasovMomentVelocityQuadratureDegree1D2V(soln) : 12;
 
     auto properMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(myCells, physicalMesh, soln, f, velocityQuadratureDegree, false, c);
     auto relativisticMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(myCells, physicalMesh, soln, f, velocityQuadratureDegree, true, c);
@@ -3194,6 +3199,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBy
         TEST_FLOATING_EQUALITY(properMoments.moments._xProperVelocityMoment[entry], spaceTime * xMomentFactor, tol);
         TEST_FLOATING_EQUALITY(properMoments.moments._zProperVelocityMoment[entry], spaceTime * zMomentFactor, tol);
         TEST_FLOATING_EQUALITY(relativisticMoments.moments._density[entry],         spaceTime * densityFactor, tol);
+        if (useDefaultVelocityQuadratureDegree) continue; // the default degree need not integrate 1/gamma to quadratureTol
         TEST_FLOATING_EQUALITY(relativisticMoments.moments._xProperVelocityMoment[entry], spaceTime * jxFactor, quadratureTol);
         TEST_FLOATING_EQUALITY(relativisticMoments.moments._zProperVelocityMoment[entry], spaceTime * jzFactor, quadratureTol);
       }
@@ -3202,12 +3208,17 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBy
 
   TEUCHOS_UNIT_TEST( TensorVlasovMomentSampling, MomentsByPhaseSpaceCell_1D1T2V )
   {
-    testVlasovMomentsByPhaseSpaceCell1D1T2V(false, out, success);
+    testVlasovMomentsByPhaseSpaceCell1D1T2V(false, false, out, success);
   }
 
   TEUCHOS_UNIT_TEST( TensorVlasovMomentSampling, MomentsByPhaseSpaceCell_1D1T2V_Refined )
   {
-    testVlasovMomentsByPhaseSpaceCell1D1T2V(true, out, success);
+    testVlasovMomentsByPhaseSpaceCell1D1T2V(true, false, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorVlasovMomentSampling, MomentsByPhaseSpaceCell_1D1T2V_DefaultVelocityQuadratureDegree )
+  {
+    testVlasovMomentsByPhaseSpaceCell1D1T2V(false, true, out, success);
   }
 
 } // end anonymous namespace

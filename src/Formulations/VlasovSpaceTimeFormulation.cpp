@@ -702,29 +702,6 @@ namespace
     return std::vector<GlobalIndexType>(cellIDSet.begin(), cellIDSet.end());
   }
 
-  int tensorNativeDefaultVelocityQuadratureDegree(SolutionPtr phaseSpaceSolution,
-                                                  const std::vector<GlobalIndexType> &configurationCellIDs)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
-                               "Tensor-native Maxwell current-source sampling requires a non-null phase-space solution.");
-    MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
-    auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology());
-    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopology == NULL, std::invalid_argument,
-                               "Tensor-native Maxwell current-source sampling requires an ExtrudedMeshTopology phase-space mesh.");
-
-    int velocityQuadratureDegree = 1;
-    for (const auto &configurationCellID : configurationCellIDs)
-    {
-      const auto &phaseSpaceCellIDs = phaseSpaceMeshTopology->phaseSpaceCellIDsForPhysicalCell(configurationCellID);
-      for (const auto &phaseSpaceCellID : phaseSpaceCellIDs)
-      {
-        velocityQuadratureDegree = std::max(velocityQuadratureDegree,
-                                            phaseSpaceMesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID));
-      }
-    }
-    return std::max(1, velocityQuadratureDegree);
-  }
-
   bool applyTensorNativeMaxwellCurrentSourcesIfSupported(VlasovSpaceTimeFormulation &form)
   {
     auto configurationFormulation = form.configurationSpaceFormulation();
@@ -740,7 +717,7 @@ namespace
 
     auto configurationMesh = form.configurationSpaceMesh();
     auto configurationCellIDs = rankLocalConfigurationCellIDs(configurationMesh);
-    const int velocityQuadratureDegree = tensorNativeDefaultVelocityQuadratureDegree(form.vlasovSolution(), configurationCellIDs);
+    const int velocityQuadratureDegree = defaultVlasovMomentVelocityQuadratureDegree1D2V(form.vlasovSolution());
 
     std::vector<double> speciesCharges;
     std::vector<TensorPlanar1D2VSpeciesMoments> speciesMoments;

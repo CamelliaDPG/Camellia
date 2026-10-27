@@ -173,29 +173,6 @@ namespace
            (backend == "compare");
   }
 
-  int phase8DefaultVelocityQuadratureDegree(SolutionPtr phaseSpaceSolution,
-                                            const std::vector<GlobalIndexType> &configurationCellIDs)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument,
-                               "Phase 8 default velocity quadrature selection requires a non-null phase-space solution.");
-    MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
-    auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology());
-    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopology == NULL, std::invalid_argument,
-                               "Phase 8 default velocity quadrature selection requires an ExtrudedMeshTopology phase-space mesh.");
-
-    int velocityQuadratureDegree = 1;
-    for (const auto &configurationCellID : configurationCellIDs)
-    {
-      const auto &phaseSpaceCellIDs = phaseSpaceMeshTopology->phaseSpaceCellIDsForPhysicalCell(configurationCellID);
-      for (const auto &phaseSpaceCellID : phaseSpaceCellIDs)
-      {
-        velocityQuadratureDegree = std::max(velocityQuadratureDegree,
-                                            phaseSpaceMesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID));
-      }
-    }
-    return std::max(1, velocityQuadratureDegree);
-  }
-
   TensorMaxwellRHSMomentData phase8BuildLegacyMomentReferenceData(const std::vector<GlobalIndexType> &configurationCellIDs,
                                                                   MeshPtr configurationMesh,
                                                                   FunctionPtr densityFunction,
@@ -1759,8 +1736,7 @@ int main(int argc, char *argv[])
         const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
         std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
         const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                                                               : phase8DefaultVelocityQuadratureDegree(form->vlasovSolution(),
-                                                                                                                                       configurationCellIDs);
+                                                                                               : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
         auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                       form->configurationSpaceMesh(),
                                                                       form->vlasovSolution(),
@@ -2063,8 +2039,7 @@ int main(int argc, char *argv[])
           const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
           std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
           const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                                                                 : phase8DefaultVelocityQuadratureDegree(form->vlasovSolution(),
-                                                                                                                                         configurationCellIDs);
+                                                                                                 : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
           auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                         form->configurationSpaceMesh(),
                                                                         form->vlasovSolution(),

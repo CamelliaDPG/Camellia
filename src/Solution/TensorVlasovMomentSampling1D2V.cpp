@@ -67,6 +67,19 @@ namespace
   }
 }
 
+int Camellia::defaultVlasovMomentVelocityQuadratureDegree1D2V(SolutionPtr phaseSpaceSolution)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument, "phaseSpaceSolution is null");
+  MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
+  int velocityQuadratureDegree = 1;
+  for (GlobalIndexType phaseSpaceCellID : phaseSpaceMesh->cellIDsInPartition())
+  {
+    velocityQuadratureDegree = std::max(velocityQuadratureDegree,
+                                        phaseSpaceMesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID));
+  }
+  return MPIWrapper::max(phaseSpaceMesh->Comm(), velocityQuadratureDegree);
+}
+
 TensorVlasovMoments1D2V Camellia::computeVlasovMomentsByPhaseSpaceCell1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
                                                                            MeshPtr configurationMesh,
                                                                            SolutionPtr phaseSpaceSolution,

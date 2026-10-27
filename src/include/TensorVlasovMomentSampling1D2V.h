@@ -62,6 +62,14 @@ namespace Camellia
                                                                    int velocityQuadratureDegree,
                                                                    bool useRelativisticCurrentMoments,
                                                                    double lightSpeed);
+
+  /** \brief Default velocityQuadratureDegree for computeVlasovMomentsByPhaseSpaceCell1D2V(): the maximum cubature degree
+   *         over the phase-space cells (which the sampler integrates over), agreed across ranks.
+   *
+   * A rank may own phase-space cells but no configuration cells, so the degree must not be derived from the
+   * configuration cells a rank owns.  Must be called collectively on all ranks of the phase-space mesh communicator.
+   */
+  int defaultVlasovMomentVelocityQuadratureDegree1D2V(SolutionPtr phaseSpaceSolution);
 }
 
 #endif
