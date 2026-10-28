@@ -3,6 +3,7 @@
 //
 
 #include "Intrepid2_PAMatrix.hpp"
+#include "PAMatrixAssembly.hpp" // referenceAssembly()
 
 #include "ApplyInverseTpetraOperatorAdapter.h"
 #include "BF.h"
@@ -1588,7 +1589,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
     bool sawApplyFallback = false;
     for (const auto &term : terms)
     {
-      if (Intrepid2::pamatrixAssemble2UsesUnitColumnPath(term.matrix)) sawUnitColumn = true;
+      if (Intrepid2::pamatrixAssembleUsesUnitColumnPath(term.matrix)) sawUnitColumn = true;
       else sawApplyFallback = true;
     }
 
@@ -2016,7 +2017,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         return timing;
       }
       Kokkos::Timer timer;
-      term.matrix.assemble(matrixData);
+      referenceAssembly(term.matrix, matrixData); // IntegrationTools reference
       Kokkos::fence();
       addTermSeconds(timing, term.label, timer.seconds());
     }
@@ -2040,7 +2041,7 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         return timing;
       }
       Kokkos::Timer timer;
-      term.matrix.assemble2(matrixData);
+      term.matrix.assemble(matrixData); // sum-factorized
       Kokkos::fence();
       addTermSeconds(timing, term.label, timer.seconds());
     }
@@ -2070,8 +2071,8 @@ std::vector<OperatorTerm> makeVlasovCamelliaComparisonMatrixFreeTerms(const int 
         return comparison;
       }
 
-      term.matrix.assemble(expectedData);
-      term.matrix.assemble2(actualData);
+      referenceAssembly(term.matrix, expectedData); // IntegrationTools reference
+      term.matrix.assemble(actualData);             // sum-factorized
       Kokkos::fence();
 
       if (expectedData.getUnderlyingViewRank() == 3)
@@ -5950,7 +5951,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("massWeight", &massWeight, "Scalar coefficient alpha for mass or h1-gram value-value terms.");
     cmdp.setOption("stiffnessWeight", &stiffnessWeight, "Scalar coefficient beta for stiffness or h1-gram grad-grad terms.");
     cmdp.setOption("worksetSize", &worksetSize, "PAMatrix apply workset size; <=0 uses all cells.");
-    cmdp.setOption("checkAssemblyAgreement", &checkAssemblyAgreement, "Set to 1 in assembly-compare mode to compare assemble2() entries against standard assemble().");
+    cmdp.setOption("checkAssemblyAgreement", &checkAssemblyAgreement, "Set to 1 in assembly-compare mode to compare sum-factorized assemble() entries against the IntegrationTools reference.");
     cmdp.setOption("camelliaMatrixCompareFailOnMismatch",
                    &camelliaMatrixCompareFailOnMismatch,
                    "Set to 0 to make Camellia Vlasov matrix/RHS comparison modes report mismatches without returning failure.");

@@ -256,11 +256,11 @@ namespace
                                  "cachedBasisEvaluationAtPoint point ordinal out of range.");
       if (descriptor.takesDerivativeInComponent(d))
       {
-        value *= componentCache.derivativesAtQuadrature().h_view(basisOrdinal, pointOrdinal) * componentCache.derivativeScale();
+        value *= componentCache.derivativesAtQuadrature().view_host()(basisOrdinal, pointOrdinal) * componentCache.derivativeScale();
       }
       else
       {
-        value *= componentCache.valuesAtQuadrature().h_view(basisOrdinal, pointOrdinal);
+        value *= componentCache.valuesAtQuadrature().view_host()(basisOrdinal, pointOrdinal);
       }
     }
     return value;
@@ -295,7 +295,7 @@ namespace
       {
         pointsHost(pointOrdinal,d) = 0.0;
       }
-      const double xi = componentCache.referencePoints().h_view(pointOrdinal);
+      const double xi = componentCache.referencePoints().view_host()(pointOrdinal);
       pointsHost(pointOrdinal,componentOrdinal) = componentCache.cellLeft() + 0.5 * (xi + 1.0) * componentCache.cellWidth();
     }
     Kokkos::deep_copy(points, pointsHost);
@@ -532,7 +532,7 @@ namespace
       geometryData.retainedCellWidth.assign(componentCount, 1.0);
 
       auto orthogonalTopo = _tensorMesh->topology()->componentMeshTopology(entity.orthogonalComponentOrdinal());
-      geometryData.fixedCoordinates[entity.orthogonalComponentOrdinal()] = orthogonalTopo->activeVertexCoordinates().h_view(entity.vertexOrdinal());
+      geometryData.fixedCoordinates[entity.orthogonalComponentOrdinal()] = orthogonalTopo->activeVertexCoordinates().view_host()(entity.vertexOrdinal());
       const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
       const IndexType incidentEnd   = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal() + 1);
       TEUCHOS_TEST_FOR_EXCEPTION(incidentBegin >= incidentEnd, std::logic_error,
@@ -799,7 +799,7 @@ namespace
         const IndexType tensorPointCount = trialBasisCache.tensorPointCount();
         const auto coefficientEvaluationStart = std::chrono::steady_clock::now();
         TensorFunction::ValueView coefficientValues("MatrixFreeTensorOperator::coefficientValues", tensorPointCount);
-        term.coefficient()->values(trialBasisCache.physicalPoints().d_view, coefficientValues);
+        term.coefficient()->values(trialBasisCache.physicalPoints().view_device(), coefficientValues);
         auto coefficientValuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), coefficientValues);
         recordTensorOperatorStage(&_instrumentation,
                                   TensorOperatorInstrumentation::COEFFICIENT_EVALUATION,
@@ -871,7 +871,7 @@ namespace
                                                                   testBasisCache,
                                                                   term.testOperator(),
                                                                   pointOrdinals);
-            contribution += quadratureWeights.h_view(flatPointOrdinal)
+            contribution += quadratureWeights.view_host()(flatPointOrdinal)
                             * coefficientValuesHost(flatPointOrdinal)
                             * trialPointValues[flatPointOrdinal]
                             * testValue;

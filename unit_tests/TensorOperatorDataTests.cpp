@@ -77,11 +77,11 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, ComponentGeometryCompiledToViews )
   jacobians.sync_host();
   polyOrders.sync_host();
 
-  TEST_FLOATING_EQUALITY(widths.h_view(0), 1.0, 1e-15);
-  TEST_FLOATING_EQUALITY(widths.h_view(1), 0.5, 1e-15);
-  TEST_FLOATING_EQUALITY(widths.h_view(2), 0.5, 1e-15);
-  TEST_FLOATING_EQUALITY(jacobians.h_view(1), 0.25, 1e-15);
-  TEST_EQUALITY(polyOrders.h_view(0), 3);
+  TEST_FLOATING_EQUALITY(widths.view_host()(0), 1.0, 1e-15);
+  TEST_FLOATING_EQUALITY(widths.view_host()(1), 0.5, 1e-15);
+  TEST_FLOATING_EQUALITY(widths.view_host()(2), 0.5, 1e-15);
+  TEST_FLOATING_EQUALITY(jacobians.view_host()(1), 0.25, 1e-15);
+  TEST_EQUALITY(polyOrders.view_host()(0), 3);
 }
 
 TEUCHOS_UNIT_TEST( TensorOperatorData, DeviceViewsExposeComponentGeometry )
@@ -93,9 +93,9 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, DeviceViewsExposeComponentGeometry )
   auto widths = data.componentData(1).cellWidths();
   auto jacobians = data.componentData(1).cellJacobians();
   auto polyOrders = data.componentData(1).cellPolyOrders();
-  auto widthsDevice = widths.d_view;
-  auto jacobiansDevice = jacobians.d_view;
-  auto polyOrdersDevice = polyOrders.d_view;
+  auto widthsDevice = widths.view_device();
+  auto jacobiansDevice = jacobians.view_device();
+  auto polyOrdersDevice = polyOrders.view_device();
 
   double widthSum = 0.0;
   double jacobianSum = 0.0;
@@ -201,11 +201,11 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, VolumeLocalToGlobalViewsMatchCoefficientM
   {
     auto expectedIndices = coefficientMap.indicesForVolumeCell(tensorMesh->topology()->tensorCellTuple(cellOrdinal));
     TEST_EQUALITY(data.volumeLocalDofCount(TENSOR_TRIAL_SPACE, "u", cellOrdinal), static_cast<IndexType>(expectedIndices.size()));
-    TEST_EQUALITY(localCounts.h_view(cellOrdinal), static_cast<IndexType>(expectedIndices.size()));
+    TEST_EQUALITY(localCounts.view_host()(cellOrdinal), static_cast<IndexType>(expectedIndices.size()));
     for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(expectedIndices.size()); localOrdinal++)
     {
       TEST_EQUALITY(data.volumeLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "u", cellOrdinal, localOrdinal), expectedIndices[localOrdinal]);
-      TEST_EQUALITY(localToGlobal.h_view(cellOrdinal,localOrdinal), expectedIndices[localOrdinal]);
+      TEST_EQUALITY(localToGlobal.view_host()(cellOrdinal,localOrdinal), expectedIndices[localOrdinal]);
     }
   }
 }
@@ -229,8 +229,8 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, DeviceViewsExposeVolumeLocalToGlobalMaps 
   const auto &variableData = data.variableData(TENSOR_TRIAL_SPACE, "u");
   auto localCounts = variableData.volumeLocalDofCounts();
   auto localToGlobal = variableData.volumeLocalToGlobalIndices();
-  auto localCountsDevice = localCounts.d_view;
-  auto localToGlobalDevice = localToGlobal.d_view;
+  auto localCountsDevice = localCounts.view_device();
+  auto localToGlobalDevice = localToGlobal.view_device();
 
   IndexType actualCountSum = 0;
   IndexType actualIndexSum = 0;
@@ -279,8 +279,8 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, TraceSkeletonLocalToGlobalViewsAndParityM
     const auto &entity = skeleton.entity(entityOrdinal);
     auto expectedIndices = coefficientMap.indicesForSkeletonEntity(entity);
     TEST_EQUALITY(data.skeletonLocalDofCount(TENSOR_TRIAL_SPACE, "tn", entityOrdinal), static_cast<IndexType>(expectedIndices.size()));
-    TEST_EQUALITY(localCounts.h_view(entityOrdinal), static_cast<IndexType>(expectedIndices.size()));
-    TEST_EQUALITY(vertexOrdinals.h_view(entityOrdinal), entity.vertexOrdinal());
+    TEST_EQUALITY(localCounts.view_host()(entityOrdinal), static_cast<IndexType>(expectedIndices.size()));
+    TEST_EQUALITY(vertexOrdinals.view_host()(entityOrdinal), entity.vertexOrdinal());
 
     const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
     const ComponentCellID1D &incidentCell = orthogonalTopo->activeCells()[orthogonalTopo->vertexToCellOrdinalHost(incidentBegin)];
@@ -288,13 +288,13 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, TraceSkeletonLocalToGlobalViewsAndParityM
     const int expectedParity = (entity.vertexOrdinal() == leftVertex) ? -1 : 1;
     TEST_EQUALITY(data.skeletonEntitySideParity(TENSOR_TRIAL_SPACE, "tn", entityOrdinal), expectedParity);
     TEST_EQUALITY(data.skeletonEntityOutwardNormalSign(TENSOR_TRIAL_SPACE, "tn", entityOrdinal), expectedParity);
-    TEST_EQUALITY(sideParities.h_view(entityOrdinal), expectedParity);
-    TEST_EQUALITY(outwardNormalSigns.h_view(entityOrdinal), expectedParity);
+    TEST_EQUALITY(sideParities.view_host()(entityOrdinal), expectedParity);
+    TEST_EQUALITY(outwardNormalSigns.view_host()(entityOrdinal), expectedParity);
 
     for (IndexType localOrdinal=0; localOrdinal<static_cast<IndexType>(expectedIndices.size()); localOrdinal++)
     {
       TEST_EQUALITY(data.skeletonLocalToGlobalIndex(TENSOR_TRIAL_SPACE, "tn", entityOrdinal, localOrdinal), expectedIndices[localOrdinal]);
-      TEST_EQUALITY(localToGlobal.h_view(entityOrdinal,localOrdinal), expectedIndices[localOrdinal]);
+      TEST_EQUALITY(localToGlobal.view_host()(entityOrdinal,localOrdinal), expectedIndices[localOrdinal]);
     }
   }
 }
@@ -323,9 +323,9 @@ TEUCHOS_UNIT_TEST( TensorOperatorData, DeviceViewsExposeSkeletonTraceMapsAndNorm
   auto localCounts = traceData.skeletonLocalDofCounts();
   auto localToGlobal = traceData.skeletonLocalToGlobalIndices();
   auto outwardNormalSigns = traceData.skeletonEntityOutwardNormalSigns();
-  auto localCountsDevice = localCounts.d_view;
-  auto localToGlobalDevice = localToGlobal.d_view;
-  auto outwardNormalSignsDevice = outwardNormalSigns.d_view;
+  auto localCountsDevice = localCounts.view_device();
+  auto localToGlobalDevice = localToGlobal.view_device();
+  auto outwardNormalSignsDevice = outwardNormalSigns.view_device();
 
   IndexType actualCountSum = 0;
   IndexType actualIndexSum = 0;

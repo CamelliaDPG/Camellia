@@ -48,7 +48,7 @@ namespace
       {
         pointsHost(pointOrdinal,d) = 0.0;
       }
-      const double xi = componentCache.referencePoints().h_view(pointOrdinal);
+      const double xi = componentCache.referencePoints().view_host()(pointOrdinal);
       pointsHost(pointOrdinal,componentOrdinal) = componentCache.cellLeft() + 0.5 * (xi + 1.0) * componentCache.cellWidth();
     }
     Kokkos::deep_copy(points, pointsHost);
@@ -95,8 +95,8 @@ namespace
       const int basisOrdinal = componentBasisOrdinals[d];
       const int pointOrdinal = pointOrdinals[d];
       value *= descriptor.takesDerivativeInComponent(d)
-          ? derivatives.h_view(basisOrdinal, pointOrdinal) * componentCache.derivativeScale()
-          : values.h_view(basisOrdinal, pointOrdinal);
+          ? derivatives.view_host()(basisOrdinal, pointOrdinal) * componentCache.derivativeScale()
+          : values.view_host()(basisOrdinal, pointOrdinal);
     }
     return value;
   }
@@ -106,7 +106,7 @@ namespace
   {
     TensorFunction::ValueView values("TensorLocalSchurComplementBuilder::fullTensorCoefficientValues",
                                      basisCache.tensorPointCount());
-    coefficient->values(basisCache.physicalPoints().d_view, values);
+    coefficient->values(basisCache.physicalPoints().view_device(), values);
     auto valuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), values);
     std::vector<double> result(basisCache.tensorPointCount(), 0.0);
     for (IndexType pointOrdinal=0; pointOrdinal<basisCache.tensorPointCount(); pointOrdinal++)
@@ -134,9 +134,9 @@ namespace
         double entry = 0.0;
         for (int pointOrdinal=0; pointOrdinal<testCache.pointCount(); pointOrdinal++)
         {
-          const double rowValue = derivative ? derivatives.h_view(row, pointOrdinal) * testCache.derivativeScale() : values.h_view(row, pointOrdinal);
-          const double colValue = derivative ? derivatives.h_view(col, pointOrdinal) * testCache.derivativeScale() : values.h_view(col, pointOrdinal);
-          entry += weights.h_view(pointOrdinal) * testCache.jacobian() * rowValue * colValue;
+          const double rowValue = derivative ? derivatives.view_host()(row, pointOrdinal) * testCache.derivativeScale() : values.view_host()(row, pointOrdinal);
+          const double colValue = derivative ? derivatives.view_host()(col, pointOrdinal) * testCache.derivativeScale() : values.view_host()(col, pointOrdinal);
+          entry += weights.view_host()(pointOrdinal) * testCache.jacobian() * rowValue * colValue;
         }
         matrix[row * testCache.basisCardinality() + col] = entry;
       }
@@ -473,7 +473,7 @@ namespace
             pointOrdinals[d] = workingOrdinal % pointCounts[d];
             workingOrdinal /= pointCounts[d];
           }
-          entry += weights.h_view(flatPointOrdinal)
+          entry += weights.view_host()(flatPointOrdinal)
                    * coefficientValues[flatPointOrdinal]
                    * cachedBasisEvaluationAtPoint(trialBasisOrdinals, trialBasisCache, term.trialOperator(), pointOrdinals)
                    * cachedBasisEvaluationAtPoint(testBasisOrdinals,  testBasisCache,  term.testOperator(),  pointOrdinals);
@@ -538,13 +538,13 @@ TensorProductLocalOperator TensorLocalSchurComplementBuilder::buildVolumeBOperat
         for (int pointOrdinal=0; pointOrdinal<trialCache.pointCount(); pointOrdinal++)
         {
           const double trialValue = term.trialOperator().takesDerivativeInComponent(d)
-              ? trialDerivatives.h_view(trialOrdinal,pointOrdinal) * trialCache.derivativeScale()
-              : trialValues.h_view(trialOrdinal,pointOrdinal);
+              ? trialDerivatives.view_host()(trialOrdinal,pointOrdinal) * trialCache.derivativeScale()
+              : trialValues.view_host()(trialOrdinal,pointOrdinal);
           const double testValue = term.testOperator().takesDerivativeInComponent(d)
-              ? testDerivatives.h_view(testOrdinal,pointOrdinal) * testCache.derivativeScale()
-              : testValues.h_view(testOrdinal,pointOrdinal);
+              ? testDerivatives.view_host()(testOrdinal,pointOrdinal) * testCache.derivativeScale()
+              : testValues.view_host()(testOrdinal,pointOrdinal);
           const double coefficientValue = (coefficientFactors[d] != Teuchos::null) ? coefficientValues[pointOrdinal] : 1.0;
-          entry += weights.h_view(pointOrdinal) * trialCache.jacobian() * coefficientValue * trialValue * testValue;
+          entry += weights.view_host()(pointOrdinal) * trialCache.jacobian() * coefficientValue * trialValue * testValue;
         }
         componentMatrix[testOrdinal * trialCache.basisCardinality() + trialOrdinal] = entry;
       }
@@ -588,8 +588,8 @@ std::vector<std::vector<double>> TensorLocalSchurComplementBuilder::l2TestMassDi
       double entry = 0.0;
       for (int pointOrdinal=0; pointOrdinal<testCache.pointCount(); pointOrdinal++)
       {
-        const double value = testValues.h_view(testOrdinal, pointOrdinal);
-        entry += weights.h_view(pointOrdinal) * testCache.jacobian() * value * value;
+        const double value = testValues.view_host()(testOrdinal, pointOrdinal);
+        entry += weights.view_host()(pointOrdinal) * testCache.jacobian() * value * value;
       }
       componentDiagonals[d][testOrdinal] = entry;
     }
@@ -1773,7 +1773,7 @@ TensorLocalSchurComplementBuilder::affineBoundaryBBlocks(const TensorMeshPtr &te
       std::vector<double> measureScales(term.componentCount(), 1.0);
       std::vector<double> fixedCoordinates(term.componentCount(), 0.0);
       auto orthogonalTopo = tensorMesh->topology()->componentMeshTopology(orthogonalComponentOrdinal);
-      fixedCoordinates[orthogonalComponentOrdinal] = orthogonalTopo->activeVertexCoordinates().h_view(entity.vertexOrdinal());
+      fixedCoordinates[orthogonalComponentOrdinal] = orthogonalTopo->activeVertexCoordinates().view_host()(entity.vertexOrdinal());
       const IndexType leftVertex  = orthogonalTopo->cellVertexIndex(incidentCell, 0);
       const IndexType rightVertex = orthogonalTopo->cellVertexIndex(incidentCell, 1);
       double orthogonalReferenceCoordinate = 0.0;

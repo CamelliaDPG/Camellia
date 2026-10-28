@@ -662,7 +662,7 @@ std::vector<double> applyReferenceBoundaryOperator(const TensorMeshPtr &tensorMe
       std::vector<double> cellWidth(componentCount, 1.0);
 
       auto orthogonalTopo = tensorMesh->topology()->componentMeshTopology(orthogonalComponentOrdinal);
-      fixedCoordinates[orthogonalComponentOrdinal] = orthogonalTopo->activeVertexCoordinates().h_view(entity.vertexOrdinal());
+      fixedCoordinates[orthogonalComponentOrdinal] = orthogonalTopo->activeVertexCoordinates().view_host()(entity.vertexOrdinal());
       const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
       const IndexType incidentEnd   = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal() + 1);
       TEUCHOS_TEST_FOR_EXCEPTION(incidentBegin >= incidentEnd, std::logic_error,

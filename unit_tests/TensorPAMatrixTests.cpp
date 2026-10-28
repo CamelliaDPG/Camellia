@@ -5,6 +5,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Intrepid2_PAMatrix.hpp"
+#include "PAMatrixAssembly.hpp" // referenceAssembly()
 
 #include "Kokkos_Core.hpp"
 
@@ -133,7 +134,7 @@ namespace
   void testApplyMatchesAssembled(Intrepid2::PAMatrix<DeviceType,Scalar> &op, Teuchos::FancyOStream &out, bool &success)
   {
     auto matrixData = op.allocateMatrixStorage();
-    op.assemble(matrixData);
+    referenceAssembly(op, matrixData);
     auto matrix = matrixData.getUnderlyingView();
     TEUCHOS_TEST_FOR_EXCEPTION(matrix.rank() != 3, std::invalid_argument, "PAMatrix matrix storage should expose a rank-3 underlying view for GENERAL cell weights");
 
@@ -265,13 +266,13 @@ namespace
     }
   }
 
-  void testAssemble2MatchesAssemble(Intrepid2::PAMatrix<DeviceType,Scalar> &op,
+  void testAssembleMatchesReferenceAssembly(Intrepid2::PAMatrix<DeviceType,Scalar> &op,
                                     Teuchos::FancyOStream &out, bool &success)
   {
     auto expectedData = op.allocateMatrixStorage();
     auto actualData   = op.allocateMatrixStorage();
-    op.assemble(expectedData);
-    op.assemble2(actualData);
+    referenceAssembly(op, expectedData);
+    op.assemble(actualData);
 
     TEUCHOS_TEST_FOR_EXCEPTION(expectedData.getUnderlyingViewRank() != 3 || actualData.getUnderlyingViewRank() != 3,
                                std::invalid_argument,
@@ -291,7 +292,7 @@ namespace
           const Scalar error = std::abs(actual(c,i,j) - expected(c,i,j));
           if (error > 1e-10)
           {
-            out << "PAMatrix assemble2/assemble mismatch at cell " << c << ", row " << i
+            out << "PAMatrix assemble/reference-assembly mismatch at cell " << c << ", row " << i
                 << ", column " << j << ": expected=" << expected(c,i,j)
                 << ", actual=" << actual(c,i,j) << ", error=" << error << std::endl;
             success = false;
@@ -305,7 +306,7 @@ namespace
                                    Teuchos::FancyOStream &out, bool &success)
   {
     auto matrixData = op.allocateMatrixStorage();
-    op.assemble(matrixData);
+    referenceAssembly(op, matrixData);
     auto diagonalData = op.allocateDiagonalStorage();
     op.extractDiagonal(diagonalData);
 
@@ -372,22 +373,22 @@ TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixApplyMatchesExplicitTensorReferenc
   testApplyMatchesExplicitReference(3, 3, 4, false, 2, out, success);
 }
 
-TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixAssemble2MatchesAssemble)
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixAssembleMatchesReferenceAssembly)
 {
   auto op = makeRealPAMatrix(3, 3, 4, false, 2);
-  testAssemble2MatchesAssemble(op, out, success);
+  testAssembleMatchesReferenceAssembly(op, out, success);
 }
 
-TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixRectangularAssemble2MatchesAssemble)
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixRectangularAssembleMatchesReferenceAssembly)
 {
   auto op = makeRealPAMatrix(2, 3, 4, true, 2);
-  testAssemble2MatchesAssemble(op, out, success);
+  testAssembleMatchesReferenceAssembly(op, out, success);
 }
 
-TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixAssemble2MultipleColumnBlocksMatchesAssemble)
+TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixAssembleMultipleColumnBlocksMatchesReferenceAssembly)
 {
   auto op = makeRealPAMatrix(3, 5, 6, false, 1);
-  testAssemble2MatchesAssemble(op, out, success);
+  testAssembleMatchesReferenceAssembly(op, out, success);
 }
 
 TEUCHOS_UNIT_TEST(TensorPAMatrix, RealPAMatrixExtractDiagonalMatchesAssembledDiagonal)

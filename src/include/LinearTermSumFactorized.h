@@ -18,7 +18,7 @@
 namespace Camellia
 {
   /**
-   * \brief Sum-factorized integration of a pair of LinearTerms, using Intrepid2::PAMatrix::assemble2().
+   * \brief Sum-factorized integration of a pair of LinearTerms, using Intrepid2::PAMatrix::assemble().
    *
    * Computes values(c,i,j) += \int (u-term i-th basis contribution) * (v-term j-th basis contribution), the same quantity
    * as TLinearTerm::integrate(values, u, uOrdering, v, vOrdering, basisCache), over the cell (volume cache) or one of its

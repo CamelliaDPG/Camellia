@@ -140,8 +140,8 @@ namespace Camellia
   public:
     using ValueView = Kokkos::View<double*, DeviceType>;
     using PointView = Kokkos::View<double**, DeviceType>; // (P,D)
-    using ValueViewHost = typename ValueView::HostMirror;
-    using PointViewHost = typename PointView::HostMirror;
+    using ValueViewHost = typename ValueView::host_mirror_type;
+    using PointViewHost = typename PointView::host_mirror_type;
 
   private:
     TensorFunctionDependencyScope _dependencyScope;

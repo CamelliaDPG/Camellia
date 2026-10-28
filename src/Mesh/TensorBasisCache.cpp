@@ -88,8 +88,8 @@ TensorBasisCache1D::TensorBasisCache1D(const TensorMeshPtr &tensorMesh,
   Camellia::FieldContainer<double> refPointContainer(_pointCount, 1);
   for (int pointOrdinal=0; pointOrdinal<_pointCount; pointOrdinal++)
   {
-    _referencePoints.h_view(pointOrdinal) = quadrature.points[pointOrdinal];
-    _referenceWeights.h_view(pointOrdinal) = quadrature.weights[pointOrdinal];
+    _referencePoints.view_host()(pointOrdinal) = quadrature.points[pointOrdinal];
+    _referenceWeights.view_host()(pointOrdinal) = quadrature.weights[pointOrdinal];
     refPointContainer(pointOrdinal,0) = quadrature.points[pointOrdinal];
   }
 
@@ -99,7 +99,7 @@ TensorBasisCache1D::TensorBasisCache1D(const TensorMeshPtr &tensorMesh,
   {
     for (int pointOrdinal=0; pointOrdinal<_pointCount; pointOrdinal++)
     {
-      _valuesAtQuadrature.h_view(basisOrdinal,pointOrdinal) = basisValues(basisOrdinal,pointOrdinal);
+      _valuesAtQuadrature.view_host()(basisOrdinal,pointOrdinal) = basisValues(basisOrdinal,pointOrdinal);
     }
   }
 
@@ -109,7 +109,7 @@ TensorBasisCache1D::TensorBasisCache1D(const TensorMeshPtr &tensorMesh,
   {
     for (int pointOrdinal=0; pointOrdinal<_pointCount; pointOrdinal++)
     {
-      _derivativesAtQuadrature.h_view(basisOrdinal,pointOrdinal) = basisDerivatives(basisOrdinal,pointOrdinal,0);
+      _derivativesAtQuadrature.view_host()(basisOrdinal,pointOrdinal) = basisDerivatives(basisOrdinal,pointOrdinal,0);
     }
   }
 
@@ -225,7 +225,7 @@ void TensorBasisCacheND::buildTensorPointData()
   _tensorPointCount = 1;
   for (int d=0; d<componentCount; d++)
   {
-    _pointStrides.h_view(d) = _tensorPointCount;
+    _pointStrides.view_host()(d) = _tensorPointCount;
     _tensorPointCount *= _componentCaches[d].pointCount();
   }
 
@@ -244,11 +244,11 @@ void TensorBasisCacheND::buildTensorPointData()
       workingOrdinal /= cache.pointCount();
       pointOrdinals[d] = pointOrdinal;
 
-      const double xi = cache.referencePoints().h_view(pointOrdinal);
-      _physicalPoints.h_view(tensorPointOrdinal,d) = cache.cellLeft() + 0.5 * (xi + 1.0) * cache.cellWidth();
-      tensorWeight *= cache.referenceWeights().h_view(pointOrdinal) * cache.jacobian();
+      const double xi = cache.referencePoints().view_host()(pointOrdinal);
+      _physicalPoints.view_host()(tensorPointOrdinal,d) = cache.cellLeft() + 0.5 * (xi + 1.0) * cache.cellWidth();
+      tensorWeight *= cache.referenceWeights().view_host()(pointOrdinal) * cache.jacobian();
     }
-    _quadratureWeights.h_view(tensorPointOrdinal) = tensorWeight;
+    _quadratureWeights.view_host()(tensorPointOrdinal) = tensorWeight;
   }
 
   _pointStrides.modify_host();
@@ -280,7 +280,7 @@ IndexType TensorBasisCacheND::pointStride(int componentOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION((componentOrdinal < 0) || (componentOrdinal >= componentCount()), std::invalid_argument,
                              "TensorBasisCacheND::pointStride component ordinal out of range.");
-  return _pointStrides.h_view(componentOrdinal);
+  return _pointStrides.view_host()(componentOrdinal);
 }
 
 IndexType TensorBasisCacheND::tensorPointCount() const

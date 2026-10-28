@@ -39,9 +39,9 @@ void TensorOperatorData::buildComponentData()
     {
       const auto &cellID = componentTopo->activeCells()[cellOrdinal];
       const double width = componentTopo->cellWidth(cellID);
-      data._cellWidths.h_view(cellOrdinal) = width;
-      data._cellJacobians.h_view(cellOrdinal) = 0.5 * width;
-      data._cellPolyOrders.h_view(cellOrdinal) = componentTopo->cellPolyOrder(cellID);
+      data._cellWidths.view_host()(cellOrdinal) = width;
+      data._cellJacobians.view_host()(cellOrdinal) = 0.5 * width;
+      data._cellPolyOrders.view_host()(cellOrdinal) = componentTopo->cellPolyOrder(cellID);
     }
 
     data._cellWidths.modify_host();
@@ -66,7 +66,7 @@ void TensorOperatorData::buildActiveTensorCellData()
     const auto cellTuple = _tensorMesh->topology()->tensorCellTuple(tensorCellOrdinal);
     for (int d=0; d<componentCount; d++)
     {
-      _activeTensorCellComponentOrdinals.h_view(tensorCellOrdinal,d) = _tensorMesh->topology()->componentMeshTopology(d)->activeCellOrdinal(cellTuple[d]);
+      _activeTensorCellComponentOrdinals.view_host()(tensorCellOrdinal,d) = _tensorMesh->topology()->componentMeshTopology(d)->activeCellOrdinal(cellTuple[d]);
     }
   }
 
@@ -91,7 +91,7 @@ void TensorOperatorData::buildBoundarySideData()
       {
         const int tensorSideOrdinal = 2 * d + sideOrdinalInComponent;
         TensorMeshTopology::TensorSide side(cellTuple, d, sideOrdinalInComponent);
-        _boundarySideFlags.h_view(tensorCellOrdinal,tensorSideOrdinal) = _tensorMesh->topology()->isBoundarySide(side) ? 1 : 0;
+        _boundarySideFlags.view_host()(tensorCellOrdinal,tensorSideOrdinal) = _tensorMesh->topology()->isBoundarySide(side) ? 1 : 0;
       }
     }
   }
@@ -144,10 +144,10 @@ void TensorOperatorData::buildVolumeLocalToGlobalData(VariableData &data,
                                                                data._maxVolumeLocalDofCount);
   for (IndexType cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
   {
-    data._volumeLocalDofCounts.h_view(cellOrdinal) = static_cast<IndexType>(indicesByCell[cellOrdinal].size());
+    data._volumeLocalDofCounts.view_host()(cellOrdinal) = static_cast<IndexType>(indicesByCell[cellOrdinal].size());
     for (IndexType localOrdinal=0; localOrdinal<data._maxVolumeLocalDofCount; localOrdinal++)
     {
-      data._volumeLocalToGlobalIndices.h_view(cellOrdinal,localOrdinal) = (localOrdinal < static_cast<IndexType>(indicesByCell[cellOrdinal].size()))
+      data._volumeLocalToGlobalIndices.view_host()(cellOrdinal,localOrdinal) = (localOrdinal < static_cast<IndexType>(indicesByCell[cellOrdinal].size()))
           ? indicesByCell[cellOrdinal][localOrdinal]
           : -1;
     }
@@ -188,12 +188,12 @@ void TensorOperatorData::buildSkeletonLocalToGlobalData(VariableData &data,
   for (IndexType entityOrdinal=0; entityOrdinal<data._skeletonEntityCount; entityOrdinal++)
   {
     const auto &entity = skeleton.entity(entityOrdinal);
-    data._skeletonLocalDofCounts.h_view(entityOrdinal) = static_cast<IndexType>(indicesByEntity[entityOrdinal].size());
-    data._skeletonEntityVertexOrdinals.h_view(entityOrdinal) = entity.vertexOrdinal();
-    data._skeletonEntitySideParities.h_view(entityOrdinal) = firstIncidentCellSideParity(componentTopo, entity.vertexOrdinal());
+    data._skeletonLocalDofCounts.view_host()(entityOrdinal) = static_cast<IndexType>(indicesByEntity[entityOrdinal].size());
+    data._skeletonEntityVertexOrdinals.view_host()(entityOrdinal) = entity.vertexOrdinal();
+    data._skeletonEntitySideParities.view_host()(entityOrdinal) = firstIncidentCellSideParity(componentTopo, entity.vertexOrdinal());
     for (IndexType localOrdinal=0; localOrdinal<data._maxSkeletonLocalDofCount; localOrdinal++)
     {
-      data._skeletonLocalToGlobalIndices.h_view(entityOrdinal,localOrdinal) = (localOrdinal < static_cast<IndexType>(indicesByEntity[entityOrdinal].size()))
+      data._skeletonLocalToGlobalIndices.view_host()(entityOrdinal,localOrdinal) = (localOrdinal < static_cast<IndexType>(indicesByEntity[entityOrdinal].size()))
           ? indicesByEntity[entityOrdinal][localOrdinal]
           : -1;
     }
@@ -298,7 +298,7 @@ IndexType TensorOperatorData::activeTensorCellComponentOrdinal(IndexType tensorC
                              "TensorOperatorData::activeTensorCellComponentOrdinal tensor cell ordinal out of range.");
   TEUCHOS_TEST_FOR_EXCEPTION((componentOrdinal < 0) || (componentOrdinal >= componentCount()), std::invalid_argument,
                              "TensorOperatorData::activeTensorCellComponentOrdinal component ordinal out of range.");
-  return _activeTensorCellComponentOrdinals.h_view(tensorCellOrdinal, componentOrdinal);
+  return _activeTensorCellComponentOrdinals.view_host()(tensorCellOrdinal, componentOrdinal);
 }
 
 const TensorOperatorData::BoundarySideFlagDualView &TensorOperatorData::boundarySideFlags() const
@@ -313,7 +313,7 @@ bool TensorOperatorData::isBoundarySide(IndexType tensorCellOrdinal,
                              "TensorOperatorData::isBoundarySide tensor cell ordinal out of range.");
   TEUCHOS_TEST_FOR_EXCEPTION((tensorSideOrdinal < 0) || (tensorSideOrdinal >= tensorSideCount()), std::invalid_argument,
                              "TensorOperatorData::isBoundarySide tensor side ordinal out of range.");
-  return _boundarySideFlags.h_view(tensorCellOrdinal, tensorSideOrdinal) != 0;
+  return _boundarySideFlags.view_host()(tensorCellOrdinal, tensorSideOrdinal) != 0;
 }
 
 IndexType TensorOperatorData::variableCount() const
@@ -364,7 +364,7 @@ IndexType TensorOperatorData::volumeLocalDofCount(TensorSpaceRole role,
                              "TensorOperatorData::volumeLocalDofCount is only valid for volume variables.");
   TEUCHOS_TEST_FOR_EXCEPTION((tensorCellOrdinal < 0) || (tensorCellOrdinal >= activeCellCount()), std::invalid_argument,
                              "TensorOperatorData::volumeLocalDofCount tensor cell ordinal out of range.");
-  return variable.volumeLocalDofCounts().h_view(tensorCellOrdinal);
+  return variable.volumeLocalDofCounts().view_host()(tensorCellOrdinal);
 }
 
 IndexType TensorOperatorData::volumeLocalToGlobalIndex(TensorSpaceRole role,
@@ -376,7 +376,7 @@ IndexType TensorOperatorData::volumeLocalToGlobalIndex(TensorSpaceRole role,
   const IndexType localDofCount = volumeLocalDofCount(role, varName, tensorCellOrdinal);
   TEUCHOS_TEST_FOR_EXCEPTION((localOrdinal < 0) || (localOrdinal >= localDofCount), std::invalid_argument,
                              "TensorOperatorData::volumeLocalToGlobalIndex local ordinal out of range.");
-  return variable.volumeLocalToGlobalIndices().h_view(tensorCellOrdinal, localOrdinal);
+  return variable.volumeLocalToGlobalIndices().view_host()(tensorCellOrdinal, localOrdinal);
 }
 
 IndexType TensorOperatorData::skeletonEntityCount(TensorSpaceRole role,
@@ -397,7 +397,7 @@ IndexType TensorOperatorData::skeletonLocalDofCount(TensorSpaceRole role,
                              "TensorOperatorData::skeletonLocalDofCount is only valid for trace variables.");
   TEUCHOS_TEST_FOR_EXCEPTION((skeletonEntityOrdinal < 0) || (skeletonEntityOrdinal >= variable.skeletonEntityCount()), std::invalid_argument,
                              "TensorOperatorData::skeletonLocalDofCount skeleton entity ordinal out of range.");
-  return variable.skeletonLocalDofCounts().h_view(skeletonEntityOrdinal);
+  return variable.skeletonLocalDofCounts().view_host()(skeletonEntityOrdinal);
 }
 
 IndexType TensorOperatorData::skeletonLocalToGlobalIndex(TensorSpaceRole role,
@@ -409,7 +409,7 @@ IndexType TensorOperatorData::skeletonLocalToGlobalIndex(TensorSpaceRole role,
   const IndexType localDofCount = skeletonLocalDofCount(role, varName, skeletonEntityOrdinal);
   TEUCHOS_TEST_FOR_EXCEPTION((localOrdinal < 0) || (localOrdinal >= localDofCount), std::invalid_argument,
                              "TensorOperatorData::skeletonLocalToGlobalIndex local ordinal out of range.");
-  return variable.skeletonLocalToGlobalIndices().h_view(skeletonEntityOrdinal, localOrdinal);
+  return variable.skeletonLocalToGlobalIndices().view_host()(skeletonEntityOrdinal, localOrdinal);
 }
 
 int TensorOperatorData::skeletonEntitySideParity(TensorSpaceRole role,
@@ -421,7 +421,7 @@ int TensorOperatorData::skeletonEntitySideParity(TensorSpaceRole role,
                              "TensorOperatorData::skeletonEntitySideParity is only valid for trace variables.");
   TEUCHOS_TEST_FOR_EXCEPTION((skeletonEntityOrdinal < 0) || (skeletonEntityOrdinal >= variable.skeletonEntityCount()), std::invalid_argument,
                              "TensorOperatorData::skeletonEntitySideParity skeleton entity ordinal out of range.");
-  return variable.skeletonEntitySideParities().h_view(skeletonEntityOrdinal);
+  return variable.skeletonEntitySideParities().view_host()(skeletonEntityOrdinal);
 }
 
 int TensorOperatorData::skeletonEntityOutwardNormalSign(TensorSpaceRole role,

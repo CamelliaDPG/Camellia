@@ -256,9 +256,9 @@ TEUCHOS_UNIT_TEST( ComponentMeshTopology1D, VertexCoordinates )
   auto coords = topo.activeVertexCoordinates();
   coords.sync_host();
 
-  TEST_FLOATING_EQUALITY(coords.h_view(0), 0.0, 1e-15);
-  TEST_FLOATING_EQUALITY(coords.h_view(1), 1.0, 1e-15);
-  TEST_FLOATING_EQUALITY(coords.h_view(2), 1.5, 1e-15);
-  TEST_FLOATING_EQUALITY(coords.h_view(3), 2.0, 1e-15);
+  TEST_FLOATING_EQUALITY(coords.view_host()(0), 0.0, 1e-15);
+  TEST_FLOATING_EQUALITY(coords.view_host()(1), 1.0, 1e-15);
+  TEST_FLOATING_EQUALITY(coords.view_host()(2), 1.5, 1e-15);
+  TEST_FLOATING_EQUALITY(coords.view_host()(3), 2.0, 1e-15);
 }
 }

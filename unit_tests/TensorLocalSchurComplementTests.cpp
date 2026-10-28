@@ -326,8 +326,8 @@ double cachedBasisEvaluationAtPoint(const std::vector<int> &componentBasisOrdina
     const int basisOrdinal = componentBasisOrdinals[d];
     const int pointOrdinal = pointOrdinals[d];
     value *= descriptor.takesDerivativeInComponent(d)
-        ? derivatives.h_view(basisOrdinal, pointOrdinal) * componentCache.derivativeScale()
-        : values.h_view(basisOrdinal, pointOrdinal);
+        ? derivatives.view_host()(basisOrdinal, pointOrdinal) * componentCache.derivativeScale()
+        : values.view_host()(basisOrdinal, pointOrdinal);
   }
   return value;
 }
@@ -336,7 +336,7 @@ std::vector<double> coefficientValues(const TensorFunctionPtr &coefficient,
                                       const TensorBasisCacheND &basisCache)
 {
   TensorFunction::ValueView values("local-schur-test-coefficient-values", basisCache.tensorPointCount());
-  coefficient->values(basisCache.physicalPoints().d_view, values);
+  coefficient->values(basisCache.physicalPoints().view_device(), values);
   auto valuesHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), values);
   std::vector<double> result(basisCache.tensorPointCount(), 0.0);
   for (IndexType pointOrdinal=0; pointOrdinal<basisCache.tensorPointCount(); pointOrdinal++)
@@ -451,7 +451,7 @@ double explicitCachedBEntry(const TensorBilinearTerm &term,
       pointOrdinals[d] = workingOrdinal % trialCache.componentCache(d).pointCount();
       workingOrdinal /= trialCache.componentCache(d).pointCount();
     }
-    entry += weights.h_view(flatPointOrdinal)
+    entry += weights.view_host()(flatPointOrdinal)
              * coefficientValues[flatPointOrdinal]
              * cachedBasisEvaluationAtPoint(trialBasisOrdinals, trialCache, term.trialOperator(), pointOrdinals)
              * cachedBasisEvaluationAtPoint(testBasisOrdinals,  testCache,  term.testOperator(),  pointOrdinals);
@@ -488,13 +488,13 @@ double explicitCachedGraphGEntry(const TensorDofLayoutPtr &dofLayout,
     const auto valueDescriptor = TensorComponentOperatorDescriptor::valueOnly(testShape.componentCount());
     const double rowValue = cachedBasisEvaluationAtPoint(rowBasisOrdinals, testCache, valueDescriptor, pointOrdinals);
     const double colValue = cachedBasisEvaluationAtPoint(colBasisOrdinals, testCache, valueDescriptor, pointOrdinals);
-    entry += weights.h_view(flatPointOrdinal) * l2Weight * rowValue * colValue;
+    entry += weights.view_host()(flatPointOrdinal) * l2Weight * rowValue * colValue;
     for (int derivativeComponent=0; derivativeComponent<testShape.componentCount(); derivativeComponent++)
     {
       const auto derivativeDescriptor = TensorComponentOperatorDescriptor::singleDerivative(testShape.componentCount(), derivativeComponent);
       const double rowDerivative = cachedBasisEvaluationAtPoint(rowBasisOrdinals, testCache, derivativeDescriptor, pointOrdinals);
       const double colDerivative = cachedBasisEvaluationAtPoint(colBasisOrdinals, testCache, derivativeDescriptor, pointOrdinals);
-      entry += weights.h_view(flatPointOrdinal) * rowDerivative * colDerivative;
+      entry += weights.view_host()(flatPointOrdinal) * rowDerivative * colDerivative;
     }
   }
   return entry;

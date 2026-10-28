@@ -1742,7 +1742,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContai
     }
 
     // Stopping criterion:
-    if (maxError < Intrepid2::tolerence<double>())
+    if (maxError < 100.0 * Intrepid2::epsilon<double>()) // Intrepid2's tolerance (spelled tolerence() in older Trilinos)
     {
       break;
     }

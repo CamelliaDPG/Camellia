@@ -233,8 +233,8 @@ namespace Camellia
     if (pointCount != tensorCubatureWeights.extent_int(0))
       throw std::invalid_argument("Tensor cubature points and weights have inconsistent point extents");
 
-    using PointComponentHostView = typename Intrepid2::ScalarView<Scalar,DeviceType>::HostMirror;
-    using WeightComponentHostView = typename Kokkos::View<Scalar*,DeviceType>::HostMirror;
+    using PointComponentHostView = typename Intrepid2::ScalarView<Scalar,DeviceType>::host_mirror_type;
+    using WeightComponentHostView = typename Kokkos::View<Scalar*,DeviceType>::host_mirror_type;
     std::vector<int> componentPointCounts(spaceDim);
     std::vector<PointComponentHostView> pointComponentHosts(spaceDim);
     std::vector<WeightComponentHostView> weightComponentHosts(spaceDim);

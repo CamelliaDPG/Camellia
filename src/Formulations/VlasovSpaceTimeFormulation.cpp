@@ -42,6 +42,17 @@
 #include "Intrepid2_FunctionSpaceTools.hpp"
 #include "Intrepid2_IntegrationTools.hpp"
 #include "Intrepid2_PAMatrix.hpp"
+
+// Camellia requires the PAMatrix API from Trilinos' intrepid2-pamatrix branch, in which assemble() is sum-factorized.  (In
+// older PAMatrix versions, assemble() was an IntegrationTools-based placeholder, and the sum-factorized method was named
+// assemble2(); building against those would silently fall back to the slow path.)
+namespace
+{
+  template<class PAMatrixType>
+  constexpr bool hasSumFactorizedPAMatrixAPI = requires(const PAMatrixType &m) { m.leftBasisValues(); };
+}
+static_assert(hasSumFactorizedPAMatrixAPI<Intrepid2::PAMatrix<Kokkos::DefaultExecutionSpace::device_type,double>>,
+              "Camellia requires the PAMatrix API from Trilinos' intrepid2-pamatrix branch (PAMatrix::assemble() sum-factorized)");
 #include "Intrepid2_NodalBasisFamily.hpp"
 
 #include <algorithm>
@@ -864,7 +875,7 @@ namespace
       }
       TEUCHOS_TEST_FOR_EXCEPTION(sumInto, std::invalid_argument, "PAMatrix Gram assembly does not support sumInto");
       Intrepid2::PAMatrix<DeviceType,double> paMatrix(basisValues, cellMeasures, basisValues);
-      paMatrix.assemble2(integrals);
+      paMatrix.assemble(integrals);
     }
     
     void computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,

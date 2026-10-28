@@ -186,7 +186,7 @@ TensorCoefficientValueEvaluator::volumeValuesOnTensorCell(const TensorCoefficien
         const auto &componentCache = basisCache.componentCache(d);
         const int basisOrdinal = static_cast<int>(workingLocalOrdinal % componentCache.basisCardinality());
         workingLocalOrdinal /= componentCache.basisCardinality();
-        basisProduct *= componentCache.valuesAtQuadrature().h_view(basisOrdinal, pointOrdinals[d]);
+        basisProduct *= componentCache.valuesAtQuadrature().view_host()(basisOrdinal, pointOrdinals[d]);
       }
       value += globalCoefficients[localToGlobal[localOrdinal]] * basisProduct;
     }
@@ -243,7 +243,7 @@ TensorCoefficientValueEvaluator::volumeValuesOnTensorCell(const TensorCoefficien
         const auto &componentCache = basisCache.componentCache(d);
         const int basisOrdinal = static_cast<int>(workingLocalOrdinal % componentCache.basisCardinality());
         workingLocalOrdinal /= componentCache.basisCardinality();
-        basisProduct *= componentCache.valuesAtQuadrature().h_view(basisOrdinal, pointOrdinals[d]);
+        basisProduct *= componentCache.valuesAtQuadrature().view_host()(basisOrdinal, pointOrdinals[d]);
       }
       value += coefficientValue(localToGlobal[localOrdinal], ownedValues) * basisProduct;
     }
@@ -315,7 +315,7 @@ TensorCoefficientValueEvaluator::volumeValuesOnTensorCellDevice(const TensorCoef
     {
       for (int pointOrdinal=0; pointOrdinal<componentCache.pointCount(); pointOrdinal++)
       {
-        basisValuesHost(d,basisOrdinal,pointOrdinal) = componentCache.valuesAtQuadrature().h_view(basisOrdinal, pointOrdinal);
+        basisValuesHost(d,basisOrdinal,pointOrdinal) = componentCache.valuesAtQuadrature().view_host()(basisOrdinal, pointOrdinal);
       }
     }
   }

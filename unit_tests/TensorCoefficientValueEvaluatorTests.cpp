@@ -83,7 +83,7 @@ TEUCHOS_UNIT_TEST( TensorCoefficientValueEvaluator, VolumeValuesOnTensorCellMatc
         const auto &componentCache = basisCache.componentCache(d);
         const int basisOrdinal = static_cast<int>(workingLocalOrdinal % componentCache.basisCardinality());
         workingLocalOrdinal /= componentCache.basisCardinality();
-        basisProduct *= componentCache.valuesAtQuadrature().h_view(basisOrdinal, pointOrdinals[d]);
+        basisProduct *= componentCache.valuesAtQuadrature().view_host()(basisOrdinal, pointOrdinals[d]);
       }
       expected += coefficients[localToGlobal[localOrdinal]] * basisProduct;
     }
@@ -264,10 +264,10 @@ TEUCHOS_UNIT_TEST( TensorCoefficientValueEvaluator, ConfigurationVelocityMatrixF
       const int velocityOrdinal = uxPoint + basisCache.componentCache(1).pointCount() * uzPoint;
       const auto &uxCache = basisCache.componentCache(1);
       const auto &uzCache = basisCache.componentCache(2);
-      velocityPoints(velocityOrdinal,0) = uxCache.cellLeft() + 0.5 * (uxCache.referencePoints().h_view(uxPoint) + 1.0) * uxCache.cellWidth();
-      velocityPoints(velocityOrdinal,1) = uzCache.cellLeft() + 0.5 * (uzCache.referencePoints().h_view(uzPoint) + 1.0) * uzCache.cellWidth();
-      velocityWeights(velocityOrdinal) = uxCache.referenceWeights().h_view(uxPoint) * uxCache.jacobian()
-                                       * uzCache.referenceWeights().h_view(uzPoint) * uzCache.jacobian();
+      velocityPoints(velocityOrdinal,0) = uxCache.cellLeft() + 0.5 * (uxCache.referencePoints().view_host()(uxPoint) + 1.0) * uxCache.cellWidth();
+      velocityPoints(velocityOrdinal,1) = uzCache.cellLeft() + 0.5 * (uzCache.referencePoints().view_host()(uzPoint) + 1.0) * uzCache.cellWidth();
+      velocityWeights(velocityOrdinal) = uxCache.referenceWeights().view_host()(uxPoint) * uxCache.jacobian()
+                                       * uzCache.referenceWeights().view_host()(uzPoint) * uzCache.jacobian();
     }
   }
 

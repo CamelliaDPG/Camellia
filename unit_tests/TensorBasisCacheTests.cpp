@@ -93,14 +93,14 @@ TEUCHOS_UNIT_TEST( TensorBasisCache, NDCacheUsesLowerIndexedComponentFastestPoin
   {
     const int pointOrdinal0 = tensorPointOrdinal % cache0.pointCount();
     const int pointOrdinal1 = tensorPointOrdinal / cache0.pointCount();
-    const double expectedX = cache0.cellLeft() + 0.5 * (points0.h_view(pointOrdinal0) + 1.0) * cache0.cellWidth();
-    const double expectedT = cache1.cellLeft() + 0.5 * (points1.h_view(pointOrdinal1) + 1.0) * cache1.cellWidth();
-    const double expectedWeight = weights0.h_view(pointOrdinal0) * cache0.jacobian()
-                                * weights1.h_view(pointOrdinal1) * cache1.jacobian();
+    const double expectedX = cache0.cellLeft() + 0.5 * (points0.view_host()(pointOrdinal0) + 1.0) * cache0.cellWidth();
+    const double expectedT = cache1.cellLeft() + 0.5 * (points1.view_host()(pointOrdinal1) + 1.0) * cache1.cellWidth();
+    const double expectedWeight = weights0.view_host()(pointOrdinal0) * cache0.jacobian()
+                                * weights1.view_host()(pointOrdinal1) * cache1.jacobian();
 
-    TEST_FLOATING_EQUALITY(physicalPoints.h_view(tensorPointOrdinal,0), expectedX, 1e-15);
-    TEST_FLOATING_EQUALITY(physicalPoints.h_view(tensorPointOrdinal,1), expectedT, 1e-15);
-    TEST_FLOATING_EQUALITY(quadratureWeights.h_view(tensorPointOrdinal), expectedWeight, 1e-15);
+    TEST_FLOATING_EQUALITY(physicalPoints.view_host()(tensorPointOrdinal,0), expectedX, 1e-15);
+    TEST_FLOATING_EQUALITY(physicalPoints.view_host()(tensorPointOrdinal,1), expectedT, 1e-15);
+    TEST_FLOATING_EQUALITY(quadratureWeights.view_host()(tensorPointOrdinal), expectedWeight, 1e-15);
   }
 }
 }

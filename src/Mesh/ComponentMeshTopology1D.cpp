@@ -121,7 +121,7 @@ void ComponentMeshTopology1D::rebuildVertexIncidence()
     const double x1 = rootCellRight(vertexDesc._rootOrdinal);
     const double width = x1 - x0;
     const double denom = static_cast<double>(1ULL << vertexDesc._level);
-    _activeVertexCoordinates.h_view(vertexOrdinal) = x0 + width * static_cast<double>(vertexDesc._address) / denom;
+    _activeVertexCoordinates.view_host()(vertexOrdinal) = x0 + width * static_cast<double>(vertexDesc._address) / denom;
   }
 
   std::vector<std::vector<IndexType>> incidentCellOrdinals(vertexCount_);
@@ -132,8 +132,8 @@ void ComponentMeshTopology1D::rebuildVertexIncidence()
     ActiveVertexDescriptor right = canonicalizeVertexDescriptor({cellID.rootOrdinal(), cellID.level(), cellID.address() + 1ULL});
     const IndexType leftVertexOrdinal  = vertexOrdinalMap[left];
     const IndexType rightVertexOrdinal = vertexOrdinalMap[right];
-    _cellVertices.h_view(cellOrdinal,0) = leftVertexOrdinal;
-    _cellVertices.h_view(cellOrdinal,1) = rightVertexOrdinal;
+    _cellVertices.view_host()(cellOrdinal,0) = leftVertexOrdinal;
+    _cellVertices.view_host()(cellOrdinal,1) = rightVertexOrdinal;
     incidentCellOrdinals[leftVertexOrdinal].push_back(cellOrdinal);
     incidentCellOrdinals[rightVertexOrdinal].push_back(cellOrdinal);
   }
@@ -144,10 +144,10 @@ void ComponentMeshTopology1D::rebuildVertexIncidence()
   IndexType runningOffset = 0;
   for (IndexType vertexOrdinal=0; vertexOrdinal<vertexCount_; vertexOrdinal++)
   {
-    _vertexToCellOffsets.h_view(vertexOrdinal) = runningOffset;
+    _vertexToCellOffsets.view_host()(vertexOrdinal) = runningOffset;
     runningOffset += static_cast<IndexType>(incidentCellOrdinals[vertexOrdinal].size());
   }
-  _vertexToCellOffsets.h_view(vertexCount_) = runningOffset;
+  _vertexToCellOffsets.view_host()(vertexCount_) = runningOffset;
 
   _vertexToCellOrdinals = VertexToCellOrdinalsDualView("component_vertex_to_cell_ordinals", runningOffset);
   IndexType entryOrdinal = 0;
@@ -156,7 +156,7 @@ void ComponentMeshTopology1D::rebuildVertexIncidence()
     _activeCellsForVertexHost[vertexOrdinal].reserve(incidentCellOrdinals[vertexOrdinal].size());
     for (const auto &cellOrdinal : incidentCellOrdinals[vertexOrdinal])
     {
-      _vertexToCellOrdinals.h_view(entryOrdinal) = cellOrdinal;
+      _vertexToCellOrdinals.view_host()(entryOrdinal) = cellOrdinal;
       _vertexToActiveCellsHost.push_back(_activeCells[cellOrdinal]);
       _activeCellsForVertexHost[vertexOrdinal].push_back(_activeCells[cellOrdinal]);
       entryOrdinal++;
@@ -327,7 +327,7 @@ IndexType ComponentMeshTopology1D::cellVertexIndex(const ComponentCellID1D &cell
                              "ComponentMeshTopology1D::cellVertexIndex requires an active cell in the topology.");
   TEUCHOS_TEST_FOR_EXCEPTION((vertexOrdinal < 0) || (vertexOrdinal > 1), std::invalid_argument,
                              "ComponentMeshTopology1D::cellVertexIndex vertex ordinal must be 0 or 1.");
-  return _cellVertices.h_view(_activeCellOrdinals.find(cellID)->second, vertexOrdinal);
+  return _cellVertices.view_host()(_activeCellOrdinals.find(cellID)->second, vertexOrdinal);
 }
 
 const ComponentMeshTopology1D::VertexCoordinateDualView &ComponentMeshTopology1D::activeVertexCoordinates() const
@@ -354,14 +354,14 @@ IndexType ComponentMeshTopology1D::vertexToCellOffsetHost(IndexType vertexIndex)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((vertexIndex < 0) || (vertexIndex > vertexCount()), std::invalid_argument,
                              "ComponentMeshTopology1D::vertexToCellOffsetHost vertex index out of range.");
-  return _vertexToCellOffsets.h_view(vertexIndex);
+  return _vertexToCellOffsets.view_host()(vertexIndex);
 }
 
 IndexType ComponentMeshTopology1D::vertexToCellOrdinalHost(IndexType entryOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION((entryOrdinal < 0) || (entryOrdinal >= static_cast<IndexType>(_vertexToCellOrdinals.extent(0))), std::invalid_argument,
                              "ComponentMeshTopology1D::vertexToCellOrdinalHost entry ordinal out of range.");
-  return _vertexToCellOrdinals.h_view(entryOrdinal);
+  return _vertexToCellOrdinals.view_host()(entryOrdinal);
 }
 
 double ComponentMeshTopology1D::cellLeft(const ComponentCellID1D &cellID) const

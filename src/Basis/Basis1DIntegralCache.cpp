@@ -84,7 +84,7 @@ Basis1DIntegralCache<Scalar>::getReferenceSpaceIntegral(BasisPtr basis1, bool di
     const int numPoints = refPoints.extent_int(0);
     
     using View2D     = Kokkos::View<Scalar**, Camellia::DeviceType>;
-    using HostView2D = typename View2D::HostMirror;
+    using HostView2D = typename View2D::host_mirror_type;
     
     auto basisValues1 = computeBasisValues(basis1, differentiateBasis1, refPoints);
     auto basisValues2 = computeBasisValues(basis2, differentiateBasis2, refPoints);
@@ -158,7 +158,7 @@ Basis1DIntegralCache<Scalar>::getReferenceSpaceIntegral(BasisPtr basis1, bool di
     const int numPoints = refPoints.extent_int(0);
     
     using View2D     = Kokkos::View<Scalar**, Camellia::DeviceType>;
-    using HostView2D = typename View2D::HostMirror;
+    using HostView2D = typename View2D::host_mirror_type;
     
     auto basisValues1 = computeBasisValues(basis1, differentiateBasis1, refPoints);
     auto basisValues2 = computeBasisValues(basis2, differentiateBasis2, refPoints);
@@ -238,7 +238,7 @@ Basis1DIntegralCache<Scalar>::getReferenceSpaceIntegral(BasisPtr basis1, bool di
     const int numPoints = refPoints.extent_int(0);
     
     using View2D     = Kokkos::View<Scalar**, Camellia::DeviceType>;
-    using HostView2D = typename View2D::HostMirror;
+    using HostView2D = typename View2D::host_mirror_type;
     
     auto basisValues1 = computeBasisValues(basis1, differentiateBasis1, refPoints);
     auto basisValues2 = computeBasisValues(basis2, differentiateBasis2, refPoints);

@@ -1792,7 +1792,10 @@ int main(int argc, char *argv[])
           int num1DPoints = 20; // hardcoded, fine resolution for now.
           //            maxwellVizSlab->exportSolution(form->configurationSpaceSolution(),{density}, {"n_e"}, vizTimeValue, num1DPoints);
           //            maxwellVizSlab->exportSolution(form->configurationSpaceSolution());
-          maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_z,Jx,Jz,vx_rel_mean,vz_rel_mean,vx_rel_mean_clipped,vz_rel_mean_clipped,cellIDFunction}, {"n_e","ux_mean","uz_mean_raw","Jx","Jz","vx_rel_mean_signed","vz_rel_mean_signed","vx_rel_mean_clipped","vz_rel_mean_clipped","cell ID (Maxwell)"}, vizTimeValue, num1DPoints);
+          // The tensor-native moment functions (density, Jx, Jz, and the mean velocities derived from them) are defined
+          // only at the configuration-space cubature points of the rank-local cells they were sampled on, so the exporter
+          // cannot evaluate them at its own points; export the Maxwell solution fields only.
+          maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {cellIDFunction}, {"cell ID (Maxwell)"}, vizTimeValue, num1DPoints);
           //            vlasovVizSlab->exportSolution(form->vlasovSolution(), {cellIDFunction}, {"cell ID (Vlasov)"});
           
           const bool exportVlasov = false; // PhaseSpaceVisualization is not working in 1D1T2V -- unclear where the issue lies.
@@ -2150,7 +2153,8 @@ int main(int argc, char *argv[])
                     
           if (saveViz)
           {
-            maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_z,Jx,Jz,vx_rel_mean,vz_rel_mean,vx_rel_mean_clipped,vz_rel_mean_clipped,cellIDFunction}, {"n_e","ux_mean","uz_mean_raw","Jx","Jz","vx_rel_mean_signed","vz_rel_mean_signed","vx_rel_mean_clipped","vz_rel_mean_clipped","cell ID (Maxwell)"}, refinementNumber);
+            // (moment-derived functions cannot be evaluated by the exporter; see the uniform-mesh export above)
+            maxwellVizSlab->exportSolution(form->configurationSpaceSolution(), {cellIDFunction}, {"cell ID (Maxwell)"}, refinementNumber);
             if (exportVlasov)
             {
               vlasovVizSlab->exportTimeStep(refinementNumber);
