@@ -102,7 +102,10 @@ namespace
         throw std::invalid_argument("LocalPAMatrixTpetraOperator multivector count mismatch");
 
       auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
-      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+      // With beta == 0, Y's prior contents must be ignored, not scaled by zero: Y may be uninitialized (e.g., a fresh
+      // Belos Krylov vector), and 0 * NaN or 0 * Inf would produce NaN.
+      const bool overwriteY = (beta == Teuchos::ScalarTraits<Scalar>::zero());
+      auto yHost = overwriteY ? Y.getLocalViewHost(Tpetra::Access::OverwriteAll) : Y.getLocalViewHost(Tpetra::Access::ReadWrite);
       Intrepid2::ScalarView<Scalar,DeviceType> input("LocalPAMatrixTpetraOperator input", cells_, localDofs_);
       Intrepid2::ScalarView<Scalar,DeviceType> output("LocalPAMatrixTpetraOperator output", cells_, localDofs_);
       auto inputHost = Kokkos::create_mirror_view(input);
@@ -121,7 +124,8 @@ namespace
           for (int f=0; f<localDofs_; f++)
           {
             const size_t localOrdinal = static_cast<size_t>(c * localDofs_ + f);
-            yHost(localOrdinal, vectorOrdinal) = alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
+            yHost(localOrdinal, vectorOrdinal) = overwriteY ? alpha * outputHost(c,f)
+                                                            : alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
           }
       }
     }
@@ -375,7 +379,10 @@ namespace
         throw std::invalid_argument("LocalPAMatrixTpetraRowMatrix multivector count mismatch");
 
       auto xHost = X.getLocalViewHost(Tpetra::Access::ReadOnly);
-      auto yHost = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+      // With beta == 0, Y's prior contents must be ignored, not scaled by zero: Y may be uninitialized (e.g., a fresh
+      // Belos Krylov vector), and 0 * NaN or 0 * Inf would produce NaN.
+      const bool overwriteY = (beta == Teuchos::ScalarTraits<Scalar>::zero());
+      auto yHost = overwriteY ? Y.getLocalViewHost(Tpetra::Access::OverwriteAll) : Y.getLocalViewHost(Tpetra::Access::ReadWrite);
       Intrepid2::ScalarView<Scalar,DeviceType> input("LocalPAMatrixTpetraRowMatrix input", cells_, localDofs_);
       Intrepid2::ScalarView<Scalar,DeviceType> output("LocalPAMatrixTpetraRowMatrix output", cells_, localDofs_);
       auto inputHost = Kokkos::create_mirror_view(input);
@@ -394,7 +401,8 @@ namespace
           for (int f=0; f<localDofs_; f++)
           {
             const size_t localOrdinal = static_cast<size_t>(c * localDofs_ + f);
-            yHost(localOrdinal, vectorOrdinal) = alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
+            yHost(localOrdinal, vectorOrdinal) = overwriteY ? alpha * outputHost(c,f)
+                                                            : alpha * outputHost(c,f) + beta * yHost(localOrdinal, vectorOrdinal);
           }
       }
     }
