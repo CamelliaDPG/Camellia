@@ -133,7 +133,7 @@ public:
     }
     TSolver<Scalar>::setProblem(stiffnessMatrix, lhs, rhs);
   }
-  int solve()
+  int solve() override
   {
     TEUCHOS_TEST_FOR_EXCEPTION(this->_stiffnessMatrix.get() == NULL, std::invalid_argument, "stiffness matrix is unset.");
     TEUCHOS_TEST_FOR_EXCEPTION(this->_lhs.get() == NULL, std::invalid_argument, "lhs is unset.");
@@ -151,7 +151,7 @@ public:
     }
     return 0;
   }
-  int resolve()
+  int resolve() override
   {
     if (_savedSolver.get() != NULL)
     {
@@ -165,7 +165,7 @@ public:
     }
     return 0;
   }
-  virtual void stiffnessMatrixChanged()
+  void stiffnessMatrixChanged() override
   {
     _savedSolver = Teuchos::null;
   }
