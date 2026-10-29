@@ -10,6 +10,8 @@
 //
 
 #include "VlasovSpaceTimeFormulation.h"
+#include "BasisCache.h"
+#include "CamelliaCellTools.h"
 #include "CamelliaMemoryTools.h"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
@@ -58,11 +60,61 @@ static_assert(hasSumFactorizedPAMatrixAPI<Intrepid2::PAMatrix<Kokkos::DefaultExe
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 
 using namespace Camellia;
 
 using std::string;
 using std::vector;
+
+namespace
+{
+  //! The values of a field of a previous slab's configuration-space solution at that slab's final time, as a function of
+  //! the spatial coordinates only: evaluated at (x, t), it returns the previous solution at (x, t1 - delta).  Used to seed
+  //! the next slab's configuration-space solution, so that its first Vlasov solve does not see zero fields.  Requires the
+  //! previous solution's coefficients on every cell that contains a final-time point (see the constructor).
+  class FinalTimeSolutionFunction : public TFunction<double>
+  {
+    SolutionPtr _previousSoln;
+    VarPtr _var;
+    double _finalTime;
+  public:
+    FinalTimeSolutionFunction(SolutionPtr previousSoln, VarPtr var, double finalTime)
+    : TFunction<double>("FinalTimeSolutionFunction"), _previousSoln(previousSoln), _var(var), _finalTime(finalTime) {}
+
+    using TFunction<double>::values;
+    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const auto &points = basisCache->getPhysicalCubaturePointsFC(); // (C,P,D); the last coordinate is time
+      const int numCells = points.dimension(0), numPoints = points.dimension(1), spaceTimeDim = points.dimension(2);
+      MeshPtr previousMesh = _previousSoln->mesh();
+      const double tEval = std::nextafter(_finalTime, -std::numeric_limits<double>::max()); // just inside the previous slab
+      Camellia::FieldContainer<double> point(1, spaceTimeDim);
+      for (int c=0; c<numCells; c++)
+      {
+        for (int p=0; p<numPoints; p++)
+        {
+          for (int d=0; d<spaceTimeDim-1; d++) point(0,d) = points(c,p,d);
+          point(0,spaceTimeDim-1) = tEval;
+          const GlobalIndexType cellID = previousMesh->getTopology()->cellIDsForPoints(point)[0];
+          values(c,p) = 0.0;
+          if (cellID == (GlobalIndexType)-1) continue;
+          Camellia::FieldContainer<double> physicalPoint(1, 1, spaceTimeDim);
+          for (int d=0; d<spaceTimeDim; d++) physicalPoint(0,0,d) = point(0,d);
+          Camellia::FieldContainer<double> refPoint(1, 1, spaceTimeDim);
+          CamelliaCellTools::mapToReferenceFrame(refPoint, physicalPoint, previousMesh->getTopology(), cellID,
+                                                 previousMesh->globalDofAssignment()->getCubatureDegree(cellID));
+          refPoint.resize(1, spaceTimeDim);
+          BasisCachePtr previousCache = BasisCache::basisCacheForCell(previousMesh, cellID);
+          previousCache->setRefCellPointsFC(refPoint);
+          Camellia::FieldContainer<double> value(1, 1);
+          _previousSoln->solutionValues(value, _var->ID(), previousCache);
+          values(c,p) = value(0,0);
+        }
+      }
+    }
+  };
+}
 
 const string VlasovSpaceTimeFormulation::S_F = "f";
 
@@ -1715,6 +1767,10 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   {
     nextSlabForm->setInitialConditions(f0_next);
   }
+
+  // Seed the next slab's configuration-space solution with this slab's final-time fields, held constant in time, so that
+  // the next slab's first Vlasov solve does not see zero fields.  (It is overwritten by the first configuration solve.)
+  nextSlabForm->seedConfigurationSolution(this->configurationSpaceSolution(), _t1);
   _vlasovSoln->setBC(Teuchos::null);
 }
 
@@ -2413,6 +2469,35 @@ void VlasovSpaceTimeFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
   _aztecOutputLevel = azOutputLevel;
 }
 
+void VlasovSpaceTimeFormulation::seedConfigurationSolution(SolutionPtr previousConfigurationSolution, double previousFinalTime)
+{
+  // the previous slab's final-time data must be available locally for every cell we need; the configuration-space mesh
+  // geometry is not distributed, so import all active cells
+  MeshPtr previousMesh = previousConfigurationSolution->mesh();
+  const auto activeCells = previousMesh->getActiveCellIDsGlobal();
+  previousConfigurationSolution->importSolutionForOffRankCells(activeCells);
+
+  std::map<int,FunctionPtr> seedMap;
+  auto addSeed = [&](VarPtr var) {
+    if (var == Teuchos::null) return;
+    seedMap[var->ID()] = Teuchos::rcp(new FinalTimeSolutionFunction(previousConfigurationSolution, var, previousFinalTime));
+  };
+  for (int d=0; d<3; d++)
+  {
+    // E_fieldVar() and B_fieldVar() return null or throw for components a formulation does not have
+    VarPtr E_var = Teuchos::null, B_var = Teuchos::null;
+    try { E_var = _configurationSpaceFormulation->E_fieldVar(d); } catch (std::invalid_argument &) {}
+    try { B_var = _configurationSpaceFormulation->B_fieldVar(d); } catch (std::invalid_argument &) {}
+    addSeed(E_var);
+    addSeed(B_var);
+  }
+  if (seedMap.empty()) return;
+  _configurationSpaceFormulation->solution()->projectOntoMesh(seedMap);
+  _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  noteTensorConfigurationSolutionChangedIfNeeded(*this);
+  _configurationSolutionSeeded = true;
+}
+
 void VlasovSpaceTimeFormulation::setCoarseSolverChoice(Solver::SolverChoice coarseSolverChoice)
 {
   _coarseSolverChoice = coarseSolverChoice;
@@ -2578,6 +2663,14 @@ void VlasovSpaceTimeFormulation::solve()
   const int alphaUpdateFrequency = 4; // let alpha stay same for this many substeps
   std::vector<double> prior_fRelDiffs(alphaUpdateFrequency, std::numeric_limits<double>::max());
   
+  if (!_configurationSolutionSeeded)
+  {
+    // First slab (or a slab without a predecessor): solve for the fields of the current f (e.g., the vacuum field set
+    // by the potential BCs, when f is zero inside the slab) before the first Vlasov solve, rather than starting it from
+    // zero fields.  Later slabs are seeded by configureNextSlab().
+    configurationSpaceSolve();
+  }
+
   for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
   {
     beginTensorFixedPointSubstepIfNeeded(*this, substepOrdinal);
