@@ -1730,19 +1730,37 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContai
       }
     }
 
-    // Largest Newton step over all points.  (A sum over points would make the absolute tolerance stricter the more
-    // points are mapped at once, so that large batches never "converge" even at machine precision.)
-    double maxError = 0.0;
+    // Converged when every point's Newton step is below 100 epsilon (Intrepid2's tolerance), scaled by the size of the
+    // step that rounding in the physical coordinates alone produces: |x| * |J^{-1}|.  Without that scaling, points far
+    // from the origin relative to the cell size (e.g., late times in a thin time slab) cannot meet the tolerance even
+    // when the map is exact.  (Each point is tested separately: a sum over points would make the tolerance stricter the
+    // more points are mapped at once.)
+    bool converged = true;
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
     {
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
-        maxError = std::max(maxError, abs(error(cellOrdinal,pointOrdinal)));
+        double physicalMagnitude = 0.0, jacobianInvNorm = 0.0;
+        for (int row=0; row<spaceDim; row++)
+        {
+          physicalMagnitude = std::max(physicalMagnitude, abs(physPoints(cellOrdinal,pointOrdinal,row)));
+          double rowSum = 0.0;
+          for (int col=0; col<spaceDim; col++)
+          {
+            rowSum += abs(jacobianInv(cellOrdinal,pointOrdinal,row,col));
+          }
+          jacobianInvNorm = std::max(jacobianInvNorm, rowSum);
+        }
+        const double tolerance = 100.0 * Intrepid2::epsilon<double>() * std::max(1.0, physicalMagnitude * jacobianInvNorm);
+        if (abs(error(cellOrdinal,pointOrdinal)) >= tolerance)
+        {
+          converged = false;
+        }
       }
     }
 
     // Stopping criterion:
-    if (maxError < 100.0 * Intrepid2::epsilon<double>()) // Intrepid2's tolerance (spelled tolerence() in older Trilinos)
+    if (converged)
     {
       break;
     }
