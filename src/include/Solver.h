@@ -119,6 +119,20 @@ public:
   // Solver options available: klu superlu_dist superlu_mt superlu lapack amesos2_cholmod
   // May require specific instructions while building Trilinos
   TAmesos2Solver(bool saveFactorization = false, std::string solverString="klu"): _saveFactorization(saveFactorization), _solverString(solverString) {}
+  //! Keeps a saved factorization when the stiffness matrix is unchanged, so that resolve() can reuse it.  Solution passes
+  //! the problem before every solve, including the resolve() calls (e.g., GMG coarse solves) meant to reuse it.
+  void setProblem(TMatrixPtr<Scalar> stiffnessMatrix, TVectorPtr<Scalar> lhs, TVectorPtr<Scalar> rhs) override
+  {
+    if ((_savedSolver != Teuchos::null) && (stiffnessMatrix.get() == this->_stiffnessMatrix.get()))
+    {
+      this->_lhs = lhs;
+      this->_rhs = rhs;
+      _savedSolver->setX(lhs);
+      _savedSolver->setB(rhs);
+      return;
+    }
+    TSolver<Scalar>::setProblem(stiffnessMatrix, lhs, rhs);
+  }
   int solve()
   {
     TEUCHOS_TEST_FOR_EXCEPTION(this->_stiffnessMatrix.get() == NULL, std::invalid_argument, "stiffness matrix is unset.");
@@ -141,6 +155,8 @@ public:
   {
     if (_savedSolver.get() != NULL)
     {
+      _savedSolver->setX(this->_lhs);
+      _savedSolver->setB(this->_rhs);
       _savedSolver->solve();
     }
     else
