@@ -176,7 +176,8 @@ namespace
   //! Writes the electron density n_e = int f du (and Jx and E_x) on a dense, uniform (pointsPerDim x pointsPerDim) grid of
   //! points on each configuration (x,t) cell, as CSV gathered to rank 0.  The density is the exact velocity moment of the
   //! polynomial f at each point (not an interpolant), so plotting it at fine resolution shows the actual discrete solution.
-  //! Collective.  Columns: cell, x, t, n_e, Jx, E_x; rows are ordered cell, then t-major, x-minor reference point.
+  //! Collective.  Columns: cell, x, t, n_e, Jx, E_x; rows are ordered cell, then t-major, x-minor reference point.  The
+  //! header records pointsPerDim and the polynomial degree of f.
   void writeDensityDiagnostic(const std::string &path, Teuchos::RCP<VlasovSpaceTimeFormulation> form,
                               int speciesOrdinal, int pointsPerDim, int velocityQuadratureDegree, double lightSpeed, double q)
   {
@@ -196,6 +197,18 @@ namespace
     }
     auto moments = computeVlasovMomentsByPhaseSpaceCell1D2V(cellIDs, configurationMesh, form->vlasovSolution(), form->f(speciesOrdinal),
                                                             velocityQuadratureDegree, true, lightSpeed, refPoints);
+
+    // Polynomial degree of f (max over cells and directions): on each configuration cell, n_e is a polynomial of at most this
+    // degree in each of x and t (configuration cells are everywhere at least as fine as the phase-space cells over them), so
+    // plot_density.py can recover it exactly from the samples when pointsPerDim > degree.
+    MeshPtr phaseSpaceMesh = form->vlasovMesh();
+    const int fID = form->f(speciesOrdinal)->ID();
+    int fDegree = 0;
+    for (GlobalIndexType phaseSpaceCellID : phaseSpaceMesh->cellIDsInPartition())
+    {
+      fDegree = std::max(fDegree, phaseSpaceMesh->getElementType(phaseSpaceCellID)->trialOrderPtr->getBasis(fID)->getDegree());
+    }
+    fDegree = MPIWrapper::max(phaseSpaceMesh->Comm(), fDegree);
 
     FunctionPtr E = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
     const int columnCount = 6;
@@ -222,7 +235,7 @@ namespace
     if (configurationMesh->Comm()->getRank() != 0) return;
     std::ofstream out(path);
     TEUCHOS_TEST_FOR_EXCEPTION(!out, std::runtime_error, "could not open density diagnostic file " + path);
-    out << "# pointsPerDim=" << pointsPerDim << "\n";
+    out << "# pointsPerDim=" << pointsPerDim << " degree=" << fDegree << "\n";
     out << "cell,x,t,n_e,Jx,E_x\n";
     out << std::setprecision(12);
     for (size_t row=0; row<allRows.size() / columnCount; row++)
