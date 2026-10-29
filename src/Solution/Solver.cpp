@@ -88,9 +88,10 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
 
 template <typename Scalar>
 TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization) {
-#if defined(HAVE_AMESOS2_SUPERLUDIST)
-  return TSolver<Scalar>::getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
-#elif defined(HAVE_AMESOS2_MUMPS)
+  // SuperLU_DIST is not used here: through Amesos2, it uses static pivoting without iterative refinement, and so solves
+  // systems with zero diagonal entries (e.g., Lagrange-multiplier constraints) only approximately.  Request it explicitly
+  // where an approximate solve suffices (e.g., GMG coarse solves).
+#if defined(HAVE_AMESOS2_MUMPS)
   return TSolver<Scalar>::getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
 #else
   return TSolver<Scalar>::getSolver(TSolver<Scalar>::KLU, saveFactorization);

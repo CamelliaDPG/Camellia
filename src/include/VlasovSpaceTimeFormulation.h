@@ -116,6 +116,7 @@ private:
   double _cgTol = 1e-6;
   std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
   int _maxIters = 10000;
+  int _coarseSolverChoice = -1; // a Solver::SolverChoice; -1 means Solver::getDirectSolver()
 
   std::function<void(const SubstepSolveProfile &)> _substepSolveProfileCallback;
 
@@ -390,6 +391,11 @@ public:
       \param  maxIters   [in]  - the maximum number of conjugate gradient iterations to take; will stop if either maxIters are reached, or the relative residual falls below the CG tolerance.
   */
   void setIterativeSolveMaxIterations(const int maxIters);
+
+  //! Direct solver for the coarsest GMG level (default: Solver::getDirectSolver(), i.e. KLU2 unless MUMPS is available).
+  //! SuperLUDist distributes the coarse factorization and uses a fill-reducing nested-dissection ordering; it requires
+  //! Trilinos built with SuperLU_DIST.
+  void setCoarseSolverChoice(Solver::SolverChoice coarseSolverChoice);
   int iterativeSolveMaxIterations() const;
   
   void setUseGeometricMultigrid(bool useGeometricMultigrid);

@@ -1220,6 +1220,9 @@ int main(int argc, char *argv[])
     bool accuracyDiagnostics = false;
     cmdp.setOption("accuracyDiagnostics", "noAccuracyDiagnostics", &accuracyDiagnostics,
                    "At the end of each time slab, print integral quantities (f, E^2, Jx over the slab) for comparing discretizations.");
+    std::string coarseSolver = "default";
+    cmdp.setOption("coarseSolver", &coarseSolver,
+                   "Direct solver for the coarsest GMG level: default (KLU2, or MUMPS if available), KLU, SuperLUDist, or MUMPS.  SuperLUDist distributes the coarse factorization and uses nested-dissection ordering (requires Trilinos built with SuperLU_DIST).");
     bool densityDiagnostic = false;
     int densityDiagnosticPointsPerDim = 16;
     cmdp.setOption("densityDiagnostic", "noDensityDiagnostic", &densityDiagnostic,
@@ -1728,6 +1731,7 @@ int main(int argc, char *argv[])
     
     const std::string directoryPath = outputDir;
     
+    if (coarseSolver != "default") form->setCoarseSolverChoice(Solver::solverChoiceFromString(coarseSolver)); // carried to later slabs by nextTimeSlab()
     form->setFixedPointTolerance(fixedPointTol);
     form->setFixedPointMinSubsteps(minSubsteps);
     form->setFixedPointMaxSubsteps(maxSubsteps);

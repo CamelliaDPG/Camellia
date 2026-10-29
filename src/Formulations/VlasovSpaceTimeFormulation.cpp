@@ -1498,9 +1498,12 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
       meshes = vector<MeshPtr> {_vlasovSoln->mesh()};
     }
     
+    const bool saveFactorization = true;
+    SolverPtr coarseSolver = (_coarseSolverChoice < 0) ? Solver::getDirectSolver(saveFactorization)
+                                                       : Solver::getSolver(Solver::SolverChoice(_coarseSolverChoice), saveFactorization);
     auto gmgSolver = Teuchos::rcp( new GMGSolver(_vlasovSoln, meshes, _maxIters, _cgTol, multigridStrategy,
                                                  smootherChoice,
-                                                 Solver::getDirectSolver(true), useCondensedSolve) );
+                                                 coarseSolver, useCondensedSolve) );
     
     gmgSolver->setSmootherType(smootherChoice);
     
@@ -1604,6 +1607,7 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
     nextSlabForm->setProximalGalerkinParameters(_alpha0, _alphaMultiplier);
   }
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
+  nextSlabForm->_coarseSolverChoice = _coarseSolverChoice;
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
   nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);
@@ -2406,6 +2410,11 @@ void VlasovSpaceTimeFormulation::setFixedPointTolerance(const double fTol)
 void VlasovSpaceTimeFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
 {
   _aztecOutputLevel = azOutputLevel;
+}
+
+void VlasovSpaceTimeFormulation::setCoarseSolverChoice(Solver::SolverChoice coarseSolverChoice)
+{
+  _coarseSolverChoice = coarseSolverChoice;
 }
 
 void VlasovSpaceTimeFormulation::setIterativeSolveMaxIterations(const int maxIters)

@@ -115,6 +115,9 @@ class TAmesos2Solver : public TSolver<Scalar>
   bool _saveFactorization;
   std::string _solverString;
   Teuchos::RCP<Amesos2::Solver< TMatrix<Scalar>,TVector<Scalar> > > _savedSolver;
+protected:
+  //! Amesos2 solver name used by subsequent calls to solve()
+  void setSolverString(const std::string &solverString) { _solverString = solverString; }
 public:
   // Solver options available: klu superlu_dist superlu_mt superlu lapack amesos2_cholmod
   // May require specific instructions while building Trilinos
