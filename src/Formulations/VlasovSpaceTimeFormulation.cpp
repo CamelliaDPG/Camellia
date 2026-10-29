@@ -1608,6 +1608,7 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   }
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
   nextSlabForm->_coarseSolverChoice = _coarseSolverChoice;
+  nextSlabForm->_substepSolveProfileCallback = _substepSolveProfileCallback;
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
   nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);

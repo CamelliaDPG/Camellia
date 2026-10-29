@@ -2003,6 +2003,7 @@ int main(int argc, char *argv[])
         form = form->nextTimeSlab(tWidth, tElements);
         phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
                            {{"completed_slab", std::to_string(timeSlabOrdinal)}});
+        if (phase0.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
         
         {
           // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
@@ -2315,6 +2316,7 @@ int main(int argc, char *argv[])
           form = form->nextTimeSlab(tWidth, tElements);
           phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
                              {{"completed_slab", std::to_string(timeSlabOrdinal)}});
+          if (phase0.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
           
           {
             // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
