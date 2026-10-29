@@ -173,6 +173,67 @@ namespace
            (backend == "compare");
   }
 
+  //! Writes the electron density n_e = int f du (and Jx and E_x) on a dense, uniform (pointsPerDim x pointsPerDim) grid of
+  //! points on each configuration (x,t) cell, as CSV gathered to rank 0.  The density is the exact velocity moment of the
+  //! polynomial f at each point (not an interpolant), so plotting it at fine resolution shows the actual discrete solution.
+  //! Collective.  Columns: cell, x, t, n_e, Jx, E_x; rows are ordered cell, then t-major, x-minor reference point.
+  void writeDensityDiagnostic(const std::string &path, Teuchos::RCP<VlasovSpaceTimeFormulation> form,
+                              int speciesOrdinal, int pointsPerDim, int velocityQuadratureDegree, double lightSpeed, double q)
+  {
+    MeshPtr configurationMesh = form->configurationSpaceMesh();
+    const auto &cellIDSet = configurationMesh->cellIDsInPartition();
+    std::vector<GlobalIndexType> cellIDs(cellIDSet.begin(), cellIDSet.end());
+
+    const int pointCount = pointsPerDim * pointsPerDim;
+    FieldContainer<double> refPoints(pointCount, 2);
+    for (int i=0; i<pointsPerDim; i++) // t
+    {
+      for (int j=0; j<pointsPerDim; j++) // x
+      {
+        refPoints(i * pointsPerDim + j, 0) = -1.0 + 2.0 * j / (pointsPerDim - 1);
+        refPoints(i * pointsPerDim + j, 1) = -1.0 + 2.0 * i / (pointsPerDim - 1);
+      }
+    }
+    auto moments = computeVlasovMomentsByPhaseSpaceCell1D2V(cellIDs, configurationMesh, form->vlasovSolution(), form->f(speciesOrdinal),
+                                                            velocityQuadratureDegree, true, lightSpeed, refPoints);
+
+    FunctionPtr E = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
+    const int columnCount = 6;
+    std::vector<double> myRows;
+    myRows.reserve(cellIDs.size() * pointCount * columnCount);
+    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(cellIDs.size()); cellOrdinal++)
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(configurationMesh, cellIDs[cellOrdinal]);
+      basisCache->setRefCellPointsFC(refPoints);
+      const auto &physicalPoints = basisCache->getPhysicalCubaturePointsFC();
+      FieldContainer<double> EValues(1, pointCount);
+      E->values(EValues, basisCache);
+      for (int p=0; p<pointCount; p++)
+      {
+        const int entry = cellOrdinal * pointCount + p;
+        myRows.insert(myRows.end(), {double(cellIDs[cellOrdinal]), physicalPoints(0,p,0), physicalPoints(0,p,1),
+                                     moments.moments._density[entry], q * moments.moments._xProperVelocityMoment[entry], EValues(0,p)});
+      }
+    }
+    std::vector<double> allRows;
+    std::vector<int> offsets;
+    MPIWrapper::allGatherVariable(configurationMesh->Comm(), allRows, myRows, offsets);
+
+    if (configurationMesh->Comm()->getRank() != 0) return;
+    std::ofstream out(path);
+    TEUCHOS_TEST_FOR_EXCEPTION(!out, std::runtime_error, "could not open density diagnostic file " + path);
+    out << "# pointsPerDim=" << pointsPerDim << "\n";
+    out << "cell,x,t,n_e,Jx,E_x\n";
+    out << std::setprecision(12);
+    for (size_t row=0; row<allRows.size() / columnCount; row++)
+    {
+      const double *values = &allRows[row * columnCount];
+      out << static_cast<long>(values[0]);
+      for (int column=1; column<columnCount; column++) out << "," << values[column];
+      out << "\n";
+    }
+  }
+
   TensorMaxwellRHSMomentData phase8BuildLegacyMomentReferenceData(const std::vector<GlobalIndexType> &configurationCellIDs,
                                                                   MeshPtr configurationMesh,
                                                                   FunctionPtr densityFunction,
@@ -1146,6 +1207,12 @@ int main(int argc, char *argv[])
     bool accuracyDiagnostics = false;
     cmdp.setOption("accuracyDiagnostics", "noAccuracyDiagnostics", &accuracyDiagnostics,
                    "At the end of each time slab, print integral quantities (f, E^2, Jx over the slab) for comparing discretizations.");
+    bool densityDiagnostic = false;
+    int densityDiagnosticPointsPerDim = 16;
+    cmdp.setOption("densityDiagnostic", "noDensityDiagnostic", &densityDiagnostic,
+                   "At the end of each time slab, write the electron density (exact velocity moment of f), Jx, and E_x on a dense grid of points per (x,t) cell to <outputDir>/density_slab<N>.csv; plot with plot_density.py.");
+    cmdp.setOption("densityDiagnosticPointsPerDim", &densityDiagnosticPointsPerDim,
+                   "Points per dimension (x and t, including cell boundaries) on each configuration cell for densityDiagnostic.");
     cmdp.setOption("phase0TimingFile", &phase0TimingFile,
                    "Optional rank-0 file for Phase 0 timing lines; stdout is always used when instrumentation is enabled.");
     cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
@@ -1810,6 +1877,13 @@ int main(int argc, char *argv[])
           }
         }
         
+        if (densityDiagnostic)
+        {
+          const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
+          writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, phase8VelocityQuadratureDegree, cScaled, q);
+          if (rank == 0) std::cout << "Wrote density diagnostic to " << densityPath << ".\n";
+        }
+
         auto configMesh = form->configurationSpaceMesh();
         FunctionPtr E_soln = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
         

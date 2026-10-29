@@ -13,9 +13,11 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Camellia_TensorIndices.h"
+#include "CamelliaCellTools.h"
 #include "CamelliaDataHelpers.h"
 #include "CamelliaTestingHelpers.h"
 #include "doubleBasisConstruction.h"
+#include "ElementType.h"
 #include "ExtrudedMeshTopology.h"
 #include "MaxwellianFunction.h"
 #include "MonomialFunctions.h"
@@ -3202,6 +3204,35 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, RelativisticFirstMoment_1D1T2V_ZeroBy
         if (useDefaultVelocityQuadratureDegree) continue; // the default degree need not integrate 1/gamma to quadratureTol
         TEST_FLOATING_EQUALITY(relativisticMoments.moments._xProperVelocityMoment[entry], spaceTime * jxFactor, quadratureTol);
         TEST_FLOATING_EQUALITY(relativisticMoments.moments._zProperVelocityMoment[entry], spaceTime * jzFactor, quadratureTol);
+      }
+    }
+
+    // caller-specified reference points, including cell corners and edges (as used for dense visualization sampling)
+    const std::vector<double> refCoords = {-1.0, -0.3, 1.0};
+    FieldContainer<double> configurationRefPoints(refCoords.size() * refCoords.size(), 2);
+    for (int i=0; i<static_cast<int>(refCoords.size()); i++)
+    {
+      for (int j=0; j<static_cast<int>(refCoords.size()); j++)
+      {
+        configurationRefPoints(i * refCoords.size() + j, 0) = refCoords[j];
+        configurationRefPoints(i * refCoords.size() + j, 1) = refCoords[i];
+      }
+    }
+    auto pointMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(myCells, physicalMesh, soln, f, velocityQuadratureDegree, false, c,
+                                                                 configurationRefPoints);
+    const int numRefPoints = configurationRefPoints.dimension(0);
+    TEST_EQUALITY(pointMoments.numPointsPerConfigurationCell, numRefPoints);
+    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(myCells.size()); cellOrdinal++)
+    {
+      FieldContainer<double> physicalPoints(1, numRefPoints, 2);
+      CamelliaCellTools::mapToPhysicalFrame(physicalPoints, configurationRefPoints, physicalMesh->physicalCellNodesForCell(myCells[cellOrdinal]),
+                                            physicalMesh->getElementType(myCells[cellOrdinal])->cellTopoPtr);
+      for (int p=0; p<numRefPoints; p++)
+      {
+        const int entry = cellOrdinal * numRefPoints + p;
+        const double spaceTime = 1.0 + physicalPoints(0,p,0) + physicalPoints(0,p,1);
+        TEST_FLOATING_EQUALITY(pointMoments.moments._density[entry],               spaceTime * densityFactor, tol);
+        TEST_FLOATING_EQUALITY(pointMoments.moments._xProperVelocityMoment[entry], spaceTime * xMomentFactor, tol);
       }
     }
   }

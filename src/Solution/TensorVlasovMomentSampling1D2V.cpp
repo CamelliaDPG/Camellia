@@ -23,6 +23,7 @@
 #include "TensorMaxwell1D2VMomentReductionPipeline.h"
 #include "Var.h"
 
+#include <functional>
 #include <map>
 
 using namespace Camellia;
@@ -65,6 +66,19 @@ namespace
     }
     return cellPoints;
   }
+
+  // physical (x,t) images, as (P,2), of the reference points (P,2) on a configuration cell
+  Camellia::FieldContainer<double> configurationPhysicalPoints(MeshPtr configurationMesh, GlobalIndexType cellID,
+                                                               const Camellia::FieldContainer<double> &referencePoints)
+  {
+    const int pointCount = referencePoints.dimension(0);
+    Camellia::FieldContainer<double> physicalPoints(1, pointCount, 2);
+    Camellia::FieldContainer<double> cellNodes = configurationMesh->physicalCellNodesForCell(cellID);
+    CellTopoPtr cellTopo = configurationMesh->getElementType(cellID)->cellTopoPtr;
+    CamelliaCellTools::mapToPhysicalFrame(physicalPoints, referencePoints, cellNodes, cellTopo);
+    physicalPoints.resize(pointCount, 2);
+    return physicalPoints;
+  }
 }
 
 int Camellia::defaultVlasovMomentVelocityQuadratureDegree1D2V(SolutionPtr phaseSpaceSolution)
@@ -80,13 +94,18 @@ int Camellia::defaultVlasovMomentVelocityQuadratureDegree1D2V(SolutionPtr phaseS
   return MPIWrapper::max(phaseSpaceMesh->Comm(), velocityQuadratureDegree);
 }
 
-TensorVlasovMoments1D2V Camellia::computeVlasovMomentsByPhaseSpaceCell1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
-                                                                           MeshPtr configurationMesh,
-                                                                           SolutionPtr phaseSpaceSolution,
-                                                                           VarPtr fVar,
-                                                                           int velocityQuadratureDegree,
-                                                                           bool useRelativisticCurrentMoments,
-                                                                           double lightSpeed)
+namespace
+{
+  using ConfigurationPointsFunction = std::function<Camellia::FieldContainer<double>(MeshPtr, GlobalIndexType)>;
+
+  TensorVlasovMoments1D2V computeMoments(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                         MeshPtr configurationMesh,
+                                         SolutionPtr phaseSpaceSolution,
+                                         VarPtr fVar,
+                                         int velocityQuadratureDegree,
+                                         bool useRelativisticCurrentMoments,
+                                         double lightSpeed,
+                                         const ConfigurationPointsFunction &configurationPointsFunction)
 {
   using Pipeline = TensorMaxwell1D2VMomentReductionPipeline;
   TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument, "configurationMesh is null");
@@ -123,7 +142,7 @@ TensorVlasovMoments1D2V Camellia::computeVlasovMomentsByPhaseSpaceCell1D2V(const
   auto configurationPointsForCell = [&](GlobalIndexType cellID) -> const Camellia::FieldContainer<double> & {
     auto entry = configurationPointsCache.find(cellID);
     if (entry != configurationPointsCache.end()) return entry->second;
-    auto cellPoints = configurationCubaturePoints(configurationMesh, cellID);
+    auto cellPoints = configurationPointsFunction(configurationMesh, cellID);
     if (pointsPerConfigurationCell < 0) pointsPerConfigurationCell = cellPoints.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(cellPoints.dimension(0) != pointsPerConfigurationCell, std::invalid_argument,
                                "computeVlasovMomentsByPhaseSpaceCell1D2V requires a uniform configuration cubature point count.");
@@ -253,4 +272,35 @@ TensorVlasovMoments1D2V Camellia::computeVlasovMomentsByPhaseSpaceCell1D2V(const
   }
   result.moments = TensorPlanar1D2VSpeciesMoments(density, xMoment, zMoment);
   return result;
+}
+}
+
+TensorVlasovMoments1D2V Camellia::computeVlasovMomentsByPhaseSpaceCell1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                                                           MeshPtr configurationMesh,
+                                                                           SolutionPtr phaseSpaceSolution,
+                                                                           VarPtr fVar,
+                                                                           int velocityQuadratureDegree,
+                                                                           bool useRelativisticCurrentMoments,
+                                                                           double lightSpeed)
+{
+  return computeMoments(configurationCellIDs, configurationMesh, phaseSpaceSolution, fVar, velocityQuadratureDegree,
+                        useRelativisticCurrentMoments, lightSpeed, configurationCubaturePoints);
+}
+
+TensorVlasovMoments1D2V Camellia::computeVlasovMomentsByPhaseSpaceCell1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                                                           MeshPtr configurationMesh,
+                                                                           SolutionPtr phaseSpaceSolution,
+                                                                           VarPtr fVar,
+                                                                           int velocityQuadratureDegree,
+                                                                           bool useRelativisticCurrentMoments,
+                                                                           double lightSpeed,
+                                                                           const Camellia::FieldContainer<double> &configurationReferencePoints)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((configurationReferencePoints.rank() != 2) || (configurationReferencePoints.dimension(1) != 2),
+                             std::invalid_argument, "configurationReferencePoints must have shape (P,2)");
+  auto mappedPoints = [&configurationReferencePoints](MeshPtr mesh, GlobalIndexType cellID) {
+    return configurationPhysicalPoints(mesh, cellID, configurationReferencePoints);
+  };
+  return computeMoments(configurationCellIDs, configurationMesh, phaseSpaceSolution, fVar, velocityQuadratureDegree,
+                        useRelativisticCurrentMoments, lightSpeed, mappedPoints);
 }

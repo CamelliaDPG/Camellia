@@ -14,6 +14,7 @@
 
 #include "TensorMaxwellRHSMomentData.h"
 #include "TypeDefs.h"
+#include "Camellia_FieldContainer.hpp"
 
 #include <vector>
 
@@ -62,6 +63,25 @@ namespace Camellia
                                                                    int velocityQuadratureDegree,
                                                                    bool useRelativisticCurrentMoments,
                                                                    double lightSpeed);
+
+  /**
+   * \brief As above, but at caller-specified points on each configuration cell rather than at its cubature points.
+   *
+   * \param configurationReferencePoints [in] - (P,2) points on the reference configuration cell; the moments are
+   *                                      evaluated at their physical images in each of configurationCellIDs.  This
+   *                                      allows the moments of the polynomial f to be sampled densely (e.g., for
+   *                                      visualization), rather than only at the points the Maxwell RHS uses.
+   *
+   * Entries are ordered configuration cell then reference point.  Must be called collectively.
+   */
+  TensorVlasovMoments1D2V computeVlasovMomentsByPhaseSpaceCell1D2V(const std::vector<GlobalIndexType> &configurationCellIDs,
+                                                                   MeshPtr configurationMesh,
+                                                                   SolutionPtr phaseSpaceSolution,
+                                                                   VarPtr fVar,
+                                                                   int velocityQuadratureDegree,
+                                                                   bool useRelativisticCurrentMoments,
+                                                                   double lightSpeed,
+                                                                   const Camellia::FieldContainer<double> &configurationReferencePoints);
 
   /** \brief Default velocityQuadratureDegree for computeVlasovMomentsByPhaseSpaceCell1D2V(): the maximum cubature degree
    *         over the phase-space cells (which the sampler integrates over), agreed across ranks.
