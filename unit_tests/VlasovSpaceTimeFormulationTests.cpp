@@ -23,6 +23,8 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "Intrepid2_PAMatrix.hpp"
+
 #include "LinearTermSumFactorized.h"
 
 #include <chrono>
@@ -2951,12 +2953,28 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
       const double bStandardTime = seconds([&]{ bf->stiffnessMatrix(bStandard, elemType, parities, basisCache, true, false); });
       const double gStandardTime = seconds([&]{ ip->computeInnerProductMatrix(gStandard, elemType->testOrderPtr, ipBasisCache); });
       setSumFactorizedLinearTermIntegrationEnabled(true);
+      // GEMM statistics for the sum-factorized path: time spent in, and flops issued to, BLAS GEMM
+      // GEMMs record their statistics under Intrepid2::Impl::GemmDeviceType (the execution space BLAS is called on)
+      using PAMatrixType = Intrepid2::PAMatrix<Intrepid2::Impl::GemmDeviceType,double>;
+      const bool gemmStatisticsWereEnabled = PAMatrixType::gemmStatisticsEnabled();
+      PAMatrixType::setGEMMStatisticsEnabled(true);
+      double gemmFlops0 = PAMatrixType::gemmFlopCount(), gemmTime0 = PAMatrixType::gemmTimeSeconds();
       const double bSumFactorizedTime = seconds([&]{ bf->stiffnessMatrix(bSumFactorized, elemType, parities, basisCache, true, false); });
+      const double bGEMMFlops = PAMatrixType::gemmFlopCount() - gemmFlops0, bGEMMTime = PAMatrixType::gemmTimeSeconds() - gemmTime0;
+      gemmFlops0 = PAMatrixType::gemmFlopCount(); gemmTime0 = PAMatrixType::gemmTimeSeconds();
       const double gSumFactorizedTime = seconds([&]{ ip->computeInnerProductMatrix(gSumFactorized, elemType->testOrderPtr, ipBasisCache); });
+      const double gGEMMFlops = PAMatrixType::gemmFlopCount() - gemmFlops0, gGEMMTime = PAMatrixType::gemmTimeSeconds() - gemmTime0;
+      PAMatrixType::setGEMMStatisticsEnabled(gemmStatisticsWereEnabled);
 
       out << ((basisFamily == BASIS_FAMILY_SERENDIPITY) ? "Serendipity" : "full tensor") << ", H1Order " << H1Order << ", dp " << delta_k
           << ", " << numTrialDofs << " trial / " << numTestDofs << " test dofs, " << numCells << " cells: B standard " << bStandardTime
           << " s, sum-factorized " << bSumFactorizedTime << " s; G standard " << gStandardTime << " s, sum-factorized " << gSumFactorizedTime << " s\n";
+      auto gemmLine = [&](const char *name, double flops, double gemmTime, double totalTime) {
+        out << "  " << name << " sum-factorized: GEMM " << gemmTime << " s of " << totalTime << " s (" << 100.0 * gemmTime / totalTime
+            << "%), " << flops << " flops, " << ((gemmTime > 0) ? flops / gemmTime * 1e-9 : 0.0) << " GFLOP/s in GEMM\n";
+      };
+      gemmLine("B", bGEMMFlops, bGEMMTime, bSumFactorizedTime);
+      gemmLine("G", gGEMMFlops, gGEMMTime, gSumFactorizedTime);
       TEST_ASSERT(compareFloatingArraysCamellia(bSumFactorized, "sum-factorized B", bStandard, "standard B", 1e-10, 1e-10, out));
       TEST_ASSERT(compareFloatingArraysCamellia(gSumFactorized, "sum-factorized G", gStandard, "standard G", 1e-10, 1e-10, out));
     }
