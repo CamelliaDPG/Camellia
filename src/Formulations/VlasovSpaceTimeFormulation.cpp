@@ -1661,6 +1661,7 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
   nextSlabForm->_coarseSolverChoice = _coarseSolverChoice;
   nextSlabForm->_substepSolveProfileCallback = _substepSolveProfileCallback;
+  nextSlabForm->_substepConfigurationCallback = _substepConfigurationCallback;
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
   nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);
@@ -2787,6 +2788,7 @@ void VlasovSpaceTimeFormulation::solve()
     _configurationSpaceFormulation->updateConfigurationSpaceFunctions(); // update/MPI-communicate (Poisson/Maxwell) values to make available for phase-space solution
     noteTensorConfigurationSolutionChangedIfNeeded(*this);
     profile.wallTimeConfigurationUpdate = profileSeconds(configurationUpdateStart);
+    const bool configurationCallbackConverged = _substepConfigurationCallback ? _substepConfigurationCallback(*this, substepOrdinal) : true;
     if (_substepSolveProfileCallback)
     {
       _substepSolveProfileCallback(profile);
@@ -2860,7 +2862,7 @@ void VlasovSpaceTimeFormulation::solve()
         prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)] = fRelDiff;
       }
       
-      if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1))
+      if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1) && configurationCallbackConverged)
       {
         // tolerance reached, min substeps taken
         break;
@@ -3175,6 +3177,11 @@ void VlasovSpaceTimeFormulation::setMaxMomentForConservationDiagnostics(const in
       }
     }
   }
+}
+
+void VlasovSpaceTimeFormulation::setSubstepConfigurationCallback(std::function<bool(VlasovSpaceTimeFormulation &, int)> callback)
+{
+  _substepConfigurationCallback = callback;
 }
 
 void VlasovSpaceTimeFormulation::setSubstepSolveProfileCallback(std::function<void(const SubstepSolveProfile &)> callback)

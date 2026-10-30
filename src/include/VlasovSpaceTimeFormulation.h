@@ -120,6 +120,7 @@ private:
   bool _configurationSolutionSeeded = false; // true once seedConfigurationSolution() has been called
 
   std::function<void(const SubstepSolveProfile &)> _substepSolveProfileCallback;
+  std::function<bool(VlasovSpaceTimeFormulation &, int)> _substepConfigurationCallback; // see setSubstepConfigurationCallback()
 
   // tags for BCs:
   static const int VLASOV_TAG_SPATIAL_INFLOW = 0; // region where (v \cdot n_x) < 0
@@ -571,6 +572,12 @@ public:
 
   //! Called once per fixed-point substep in solve(), after the Vlasov and configuration-space solves.
   void setSubstepSolveProfileCallback(std::function<void(const SubstepSolveProfile &)> callback);
+
+  //! Called in each fixed-point substep, after the configuration-space solve, with this formulation and the substep
+  //! ordinal.  The callback may update data the next Vlasov solve depends on (e.g., an emission boundary condition); it
+  //! returns whether its own iteration has converged, and the fixed-point iteration does not stop (before
+  //! fixedPointMaxSubsteps) until it has.  Carried to later slabs by nextTimeSlab().
+  void setSubstepConfigurationCallback(std::function<bool(VlasovSpaceTimeFormulation &, int)> callback);
 };
 
 }

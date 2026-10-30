@@ -501,7 +501,7 @@ public:
     const double ux    =    _ux->getConstantValue();
     const double uy    =    _uy->getConstantValue();
     
-    const double weight = n / (sqrt(2. * M_PI) * sigma);
+    const double weight = n / (2. * M_PI * sigma * sigma); // 2V normalization: the integral over (ux, uy) is n
 //    std::cout << "weight: " << weight << std::endl;
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
     {
@@ -572,6 +572,11 @@ public:
   void set_n(double nValue)
   {
     _n->setValue(nValue);
+  }
+  
+  double get_n() const
+  {
+    return _n->getConstantValue();
   }
   
   void set_sigma(double sigmaValue)
@@ -844,6 +849,24 @@ std::vector<double> gradedVertices(const double left, const double right, const 
   return vertices;
 }
 
+//! Ensures that value is a vertex, if it lies strictly inside the vertex range: moves the nearer vertex of the interval
+//! containing it if that vertex is within a quarter of the interval width, and otherwise inserts value.  (The inflow
+//! boundary condition is imposed on whole mesh sides, so a side straddling u_x = 0 on the cathode or anode would receive
+//! it on its outflow part too.)
+void ensureVertexAt(std::vector<double> &vertices, const double value)
+{
+  for (size_t i=0; i+1<vertices.size(); i++)
+  {
+    const double left = vertices[i], right = vertices[i+1];
+    if ((value <= left) || (value >= right)) continue;
+    const double width = right - left;
+    if      ((value - left) < 0.25 * width) vertices[i]   = value;
+    else if ((right - value) < 0.25 * width) vertices[i+1] = value;
+    else    vertices.insert(vertices.begin() + i + 1, value);
+    return;
+  }
+}
+
 std::vector<double> uniformVertices(const double left, const double width, const int numElements)
 {
   std::vector<double> vertices(numElements+1);
@@ -1047,7 +1070,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("L2WeightGraph", &L2WeightGraph, "Weight for the L^2 part of the graph norm");
     
     // proper velocity domain, specified as fraction of speed of light:
-    double beta0                = 0.00;
+    double beta0                = -0.995; // negative: electrons turned around by the magnetic field can return to the cathode
     double betaMax              = 0.995;
     double cScaleFactor         = 0.5; // velocity will be scaled by cScaleFactor * c.
     
@@ -1211,6 +1234,13 @@ int main(int argc, char *argv[])
     int phase0TensorGraphSchurTestEnrichment = 1;
     cmdp.setOption("phase0Instrumentation", "noPhase0Instrumentation", &phase0Instrumentation,
                    "Emit grep-friendly Phase 0 timing lines for Planar MITL baseline/performance runs.");
+    std::string emissionModel = "spaceChargeLimited";
+    cmdp.setOption("emissionModel", &emissionModel,
+                   "cathode emission: spaceChargeLimited (adjust the emitted density within each slab's fixed-point iteration so "
+                   "that E(0) = 0 at the slab's final time), taper (fixed per-slab injection with the E(0) taper), or constant");
+    double sclEmissionTolerance = 1e-3;
+    cmdp.setOption("sclEmissionTolerance", &sclEmissionTolerance,
+                   "spaceChargeLimited: converged when |E(0)| at the slab's final time is below this fraction of |E0|");
     bool taperInjection = true;
     double taperUpperThreshold = 0.50, taperLowerThreshold = 0.10;
     cmdp.setOption("taperInjection", "noTaperInjection", &taperInjection,
@@ -1399,6 +1429,8 @@ int main(int argc, char *argv[])
       velocitySpaceVertices_x = uniformVertices(uxMin, uxMax - uxMin, vElements);
       velocitySpaceVertices_y = uniformVertices(uyMin, uyMax - uyMin, vElements);
     }
+    ensureVertexAt(velocitySpaceVertices_x, 0.0);
+    ensureVertexAt(velocitySpaceVertices_y, 0.0);
     const int vxElements = int(velocitySpaceVertices_x.size()) - 1;
     const int vyElements = int(velocitySpaceVertices_y.size()) - 1;
     
@@ -1732,6 +1764,55 @@ int main(int argc, char *argv[])
     const std::string directoryPath = outputDir;
     
     if (coarseSolver != "default") form->setCoarseSolverChoice(Solver::solverChoiceFromString(coarseSolver)); // carried to later slabs by nextTimeSlab()
+
+    // Space-charge-limited emission: within each slab's fixed-point iteration, after each configuration-space solve, adjust
+    // the emitted density so that the cathode field at the slab's final time vanishes.  Secant iteration on
+    // (n_emit, E(0)), safeguarded to keep n_emit >= 0; the fixed-point iteration does not stop until |E(0)| < tol |E0|.
+    // The emitted density then persists into the next slab as its starting value.
+    const bool spaceChargeLimitedEmission = (emissionModel == "spaceChargeLimited");
+    TEUCHOS_TEST_FOR_EXCEPTION(!spaceChargeLimitedEmission && (emissionModel != "taper") && (emissionModel != "constant"),
+                               std::invalid_argument, "emissionModel must be spaceChargeLimited, taper, or constant");
+    if (emissionModel == "constant") taperInjection = false;
+    if (spaceChargeLimitedEmission)
+    {
+      auto sclState = std::make_shared<std::vector<double>>(); // per slab: (n, E(0)) pairs from this slab's substeps
+      form->setSubstepConfigurationCallback([=](VlasovSpaceTimeFormulation &slabForm, int substepOrdinal) -> bool {
+        if (substepOrdinal == 0) sclState->clear();
+        FunctionPtr E = Function::solution(slabForm.configurationSpaceFormulation()->E_fieldVar(0), slabForm.configurationSpaceSolution());
+        const double tEval = std::nextafter(slabForm.t1(), slabForm.t0());
+        const double E_cathode = E->evaluate(slabForm.configurationSpaceMesh(), x0, tEval); // collective
+        const double nCurrent = fM_u0->get_n();
+        const bool converged = std::abs(E_cathode) < sclEmissionTolerance * std::abs(E0);
+        sclState->push_back(nCurrent);
+        sclState->push_back(E_cathode);
+        // E0 < 0; too little emitted charge leaves E(0) < 0 (same sign as E0), too much reverses it.  E(0) increases with n.
+        double nNext;
+        const int numPairs = int(sclState->size()) / 2;
+        if (numPairs >= 2)
+        {
+          const double n1 = (*sclState)[2*numPairs-4], E1 = (*sclState)[2*numPairs-3];
+          const double n2 = nCurrent, E2 = E_cathode;
+          nNext = (std::abs(E2 - E1) > 1e-14 * std::abs(E0)) ? n2 - E2 * (n2 - n1) / (E2 - E1) : n2;
+          if (!(nNext > 0) || (nNext > 4.0 * std::max(n2, n0))) nNext = (E2 < 0) ? 2.0 * std::max(n2, 1e-3 * n0) : 0.5 * n2;
+        }
+        else
+        {
+          // first substep of the slab: a proportional step from the current density (or n0 when off).  E(0)/E0 is 1 in
+          // vacuum (emit more), 0 when space-charge limited, and negative when the cathode field has reversed (emit less).
+          const double nBase = (nCurrent > 0) ? nCurrent : n0;
+          nNext = nBase * std::max(0.25, std::min(4.0, 1.0 + E_cathode / E0));
+        }
+        if (!converged) fM_u0->set_n(nNext);
+        if (rank == 0)
+        {
+          std::cout << "space-charge-limited emission: substep " << substepOrdinal+1 << ", E(0) = " << E_cathode
+                    << " (" << E_cathode / E0 << " E0), n_emit = " << nCurrent / n0 << " n0";
+          if (!converged) std::cout << " -> " << nNext / n0 << " n0";
+          std::cout << (converged ? " (converged)\n" : "\n");
+        }
+        return converged;
+      });
+    }
     form->setFixedPointTolerance(fixedPointTol);
     form->setFixedPointMinSubsteps(minSubsteps);
     form->setFixedPointMaxSubsteps(maxSubsteps);
@@ -1932,6 +2013,13 @@ int main(int argc, char *argv[])
 //          std::cout << "On rank " << rank << ", E_left: " << E_left << std::endl;
 //        }
         
+        if (spaceChargeLimitedEmission)
+        {
+          if (rank == 0) std::cout << "E(0) at final time is " << E_left << " (" << E_left / E0 << " E0); emitted density "
+                                   << fM_u0->get_n() / n0 << " n0 (space-charge-limited emission).\n";
+        }
+        else
+        {
         // reduce the inflow current when E_left / E0 gets small -- want to avoid/mitigate virtual cathode creation.
         const double lowerThreshold = taperLowerThreshold; // turn off once we get here
         const double upperThreshold = taperUpperThreshold; // start tapering here
@@ -1984,6 +2072,7 @@ int main(int argc, char *argv[])
             std::cout << "Injection is off: E(0) is below " << lowerThresholdPercent << "% of initial E(0) value (now at " << EPercent << "%)\n";
           }
         }
+        } // !spaceChargeLimitedEmission
         
         // clear solution-backed diagnostic functions before advancing slabs to avoid stale listener / solution lifetimes
         Jx = Teuchos::null;
