@@ -1766,49 +1766,79 @@ int main(int argc, char *argv[])
     if (coarseSolver != "default") form->setCoarseSolverChoice(Solver::solverChoiceFromString(coarseSolver)); // carried to later slabs by nextTimeSlab()
 
     // Space-charge-limited emission: within each slab's fixed-point iteration, after each configuration-space solve, adjust
-    // the emitted density so that the cathode field at the slab's final time vanishes.  Secant iteration on
-    // (n_emit, E(0)), safeguarded to keep n_emit >= 0; the fixed-point iteration does not stop until |E(0)| < tol |E0|.
-    // The emitted density then persists into the next slab as its starting value.
+    // the emitted density so that the cathode field at the slab's final time vanishes.  Newton iteration on E(0)(n_emit),
+    // with a slope s = dE(0)/dn_emit that is
+    //   - estimated from the last two (n_emit, E(0)) pairs only when n_emit changed appreciably between them (a secant step
+    //     between equal densities is undefined; this is what stalled the previous secant iteration),
+    //   - kept, rather than replaced, when the estimate is unavailable or non-positive (E(0) increases with n_emit), and
+    //   - carried from slab to slab, since the sheath's response changes slowly.
+    // The density is held while |E(0)| is within tolerance (so that the slab's final f is consistent with the final
+    // density), and updated whenever it is not -- including after an earlier substep converged, since E(0) can drift as f
+    // relaxes -- limited per substep as described below.  The fixed-point iteration does not stop until |E(0)| < sclEmissionTolerance |E0|.  The emitted density
+    // persists into the next slab as its starting value.
     const bool spaceChargeLimitedEmission = (emissionModel == "spaceChargeLimited");
     TEUCHOS_TEST_FOR_EXCEPTION(!spaceChargeLimitedEmission && (emissionModel != "taper") && (emissionModel != "constant"),
                                std::invalid_argument, "emissionModel must be spaceChargeLimited, taper, or constant");
     if (emissionModel == "constant") taperInjection = false;
     if (spaceChargeLimitedEmission)
     {
-      auto sclState = std::make_shared<std::vector<double>>(); // per slab: (n, E(0)) pairs from this slab's substeps
+      struct SCLState
+      {
+        double slope = -1;                      // dE(0)/dn_emit; negative until first estimated
+        bool havePrevious = false;              // previous substep's (n, E) available (within this slab)
+        double nPrevious = 0, EPrevious = 0;
+      };
+      auto sclState = std::make_shared<SCLState>();
       form->setSubstepConfigurationCallback([=](VlasovSpaceTimeFormulation &slabForm, int substepOrdinal) -> bool {
-        if (substepOrdinal == 0) sclState->clear();
+        if (substepOrdinal == 0) sclState->havePrevious = false; // the slope is kept across slabs
         FunctionPtr E = Function::solution(slabForm.configurationSpaceFormulation()->E_fieldVar(0), slabForm.configurationSpaceSolution());
         const double tEval = std::nextafter(slabForm.t1(), slabForm.t0());
         const double E_cathode = E->evaluate(slabForm.configurationSpaceMesh(), x0, tEval); // collective
         const double nCurrent = fM_u0->get_n();
         const bool converged = std::abs(E_cathode) < sclEmissionTolerance * std::abs(E0);
-        sclState->push_back(nCurrent);
-        sclState->push_back(E_cathode);
-        // E0 < 0; too little emitted charge leaves E(0) < 0 (same sign as E0), too much reverses it.  E(0) increases with n.
-        double nNext;
-        const int numPairs = int(sclState->size()) / 2;
-        if (numPairs >= 2)
+
+        // slope estimate from the last two substeps, if the density changed appreciably between them
+        if (sclState->havePrevious)
         {
-          const double n1 = (*sclState)[2*numPairs-4], E1 = (*sclState)[2*numPairs-3];
-          const double n2 = nCurrent, E2 = E_cathode;
-          nNext = (std::abs(E2 - E1) > 1e-14 * std::abs(E0)) ? n2 - E2 * (n2 - n1) / (E2 - E1) : n2;
-          if (!(nNext > 0) || (nNext > 4.0 * std::max(n2, n0))) nNext = (E2 < 0) ? 2.0 * std::max(n2, 1e-3 * n0) : 0.5 * n2;
+          // Accept a slope only from an appreciable change in n_emit (E(0) also moves as f relaxes, independent of n_emit, so
+          // small changes give noise-dominated estimates), and, once a slope is known, only within a factor of four of it.
+          const double dn = nCurrent - sclState->nPrevious;
+          if (std::abs(dn) > 0.02 * std::max(std::max(nCurrent, sclState->nPrevious), 1e-3 * n0))
+          {
+            const double measuredSlope = (E_cathode - sclState->EPrevious) / dn;
+            const bool plausible = (measuredSlope > 0) &&
+                                   ((sclState->slope <= 0) || ((measuredSlope > 0.25 * sclState->slope) && (measuredSlope < 4.0 * sclState->slope)));
+            if (plausible) sclState->slope = measuredSlope;
+          }
+        }
+        sclState->havePrevious = true;
+        sclState->nPrevious = nCurrent;
+        sclState->EPrevious = E_cathode;
+
+        // E0 < 0; too little emitted charge leaves E(0) < 0 (same sign as E0), too much reverses it.
+        double nNext;
+        const double nBase = (nCurrent > 0) ? nCurrent : 1e-3 * n0;
+        if (sclState->slope > 0)
+        {
+          nNext = nCurrent - E_cathode / sclState->slope;
         }
         else
         {
-          // first substep of the slab: a proportional step from the current density (or n0 when off).  E(0)/E0 is 1 in
-          // vacuum (emit more), 0 when space-charge limited, and negative when the cathode field has reversed (emit less).
-          const double nBase = (nCurrent > 0) ? nCurrent : n0;
-          nNext = nBase * std::max(0.25, std::min(4.0, 1.0 + E_cathode / E0));
+          // no slope yet: a proportional step.  E(0)/E0 is 1 in vacuum (emit more), 0 when space-charge limited, and negative
+          // when the cathode field has reversed (emit less).
+          nNext = nBase * (1.0 + E_cathode / E0);
         }
-        if (!converged) fM_u0->set_n(nNext);
+        // Step limits, relative to n0 rather than to the current density (which can be far below its target): the density
+        // can fall to a tenth of its current value or rise by up to half of n0 per substep; never negative.
+        nNext = std::max(0.1 * nCurrent, std::min(nCurrent + std::max(nBase, 0.5 * n0), nNext));
+        if (converged) nNext = nCurrent;
+        fM_u0->set_n(nNext);
         if (rank == 0)
         {
           std::cout << "space-charge-limited emission: substep " << substepOrdinal+1 << ", E(0) = " << E_cathode
-                    << " (" << E_cathode / E0 << " E0), n_emit = " << nCurrent / n0 << " n0";
-          if (!converged) std::cout << " -> " << nNext / n0 << " n0";
-          std::cout << (converged ? " (converged)\n" : "\n");
+                    << " (" << E_cathode / E0 << " E0), n_emit = " << nCurrent / n0 << " n0 -> " << nNext / n0 << " n0"
+                    << ", dE(0)/dn = " << ((sclState->slope > 0) ? sclState->slope * n0 : 0.0) << " per n0"
+                    << (converged ? " (converged)\n" : "\n");
         }
         return converged;
       });
