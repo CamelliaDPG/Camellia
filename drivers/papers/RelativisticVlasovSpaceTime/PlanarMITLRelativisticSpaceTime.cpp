@@ -595,6 +595,72 @@ public:
   }
 };
 
+//! Time profile of the emitted density for space-charge-limited emission:
+//!   n(t) = sum_j a_j B_j(s),  s = (t - t0)/(t1 - t0),
+//! with B_j the degree-m Bernstein polynomials on the current time slab [t0, t1] (set per slab with setSlab()).  The
+//! Bernstein basis is nonnegative and sums to one, so a_j >= 0 gives n >= 0; a_0 and a_m are the slab-start and slab-end
+//! values.  Multiplies the inflow Maxwellian, whose amplitude is then 1.  Time is the second coordinate in 1D1T2V.
+class EmissionTimeProfile : public TFunction<double>
+{
+  std::vector<double> _coefficients;
+  double _t0 = 0, _t1 = 1;
+public:
+  explicit EmissionTimeProfile(int degree, double n) : _coefficients(degree + 1, n) {}
+
+  static double bernstein(int m, int j, double s)
+  {
+    double binomial = 1;
+    for (int i=1; i<=j; i++) binomial = binomial * (m - j + i) / i;
+    return binomial * std::pow(s, j) * std::pow(1.0 - s, m - j);
+  }
+
+  void setSlab(double t0, double t1) { _t0 = t0; _t1 = t1; }
+  int degree() const { return int(_coefficients.size()) - 1; }
+  const std::vector<double> &coefficients() const { return _coefficients; }
+  void setCoefficients(const std::vector<double> &a) { _coefficients = a; }
+  double mean() const
+  {
+    double sum = 0;
+    for (double a : _coefficients) sum += a;
+    return sum / _coefficients.size();
+  }
+
+  double valueAtS(double s) const
+  {
+    const int m = degree();
+    double value = 0;
+    for (int j=0; j<=m; j++) value += _coefficients[j] * bernstein(m, j, s);
+    return value;
+  }
+  double value(double t) const { return valueAtS((t - _t0) / (_t1 - _t0)); }
+
+  //! Re-expands the profile for the next slab, of the same width, as the constant equal to its value at the current
+  //! slab's end (the emission at the start of the next slab continues from the end of this one).
+  void advanceToNextSlab(double nextT0, double nextT1)
+  {
+    const double endValue = _coefficients.back();
+    std::fill(_coefficients.begin(), _coefficients.end(), endValue);
+    setSlab(nextT0, nextT1);
+  }
+
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+  {
+    auto & points = basisCache->getPhysicalCubaturePointsFC();
+    const int numCells  = points.dimension(0);
+    const int numPoints = points.dimension(1);
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        values(cellOrdinal,pointOrdinal) = value(points(cellOrdinal,pointOrdinal,1));
+      }
+    }
+  }
+  TFunctionPtr<double> dx() override { return Function::zero(); }
+  TFunctionPtr<double> dy() override { return Function::zero(); }
+  TFunctionPtr<double> dz() override { return Function::zero(); }
+};
+
 class TemporalRamp1D1T : public TFunction<double>
 {
   double _rampWidth; // amount of time before the value is 1.0
@@ -1238,9 +1304,20 @@ int main(int argc, char *argv[])
     cmdp.setOption("emissionModel", &emissionModel,
                    "cathode emission: spaceChargeLimited (adjust the emitted density within each slab's fixed-point iteration so "
                    "that E(0) = 0 at the slab's final time), taper (fixed per-slab injection with the E(0) taper), or constant");
+    int sclEmissionDegree = -1;
+    cmdp.setOption("sclEmissionDegree", &sclEmissionDegree,
+                   "spaceChargeLimited: -1 (default) holds the emitted density constant within each slab and drives E(0) to zero "
+                   "at the slab's final time; m >= 0 lets the emitted density be a nonnegative degree-m polynomial in time within "
+                   "each slab (Bernstein coefficients a_j >= 0) and imposes the complementarity condition a_j >= 0, g_j <= 0, "
+                   "a_j g_j = 0 on the Bernstein-weighted means g_j of E(0,t)/E0 (with every a_j > 0, the first m+1 Legendre "
+                   "moments of E(0,t) vanish; m = 0: the slab-mean of E(0)).");
+    int sclEmissionQuadraturePoints = 6;
+    cmdp.setOption("sclEmissionQuadraturePoints", &sclEmissionQuadraturePoints,
+                   "spaceChargeLimited with sclEmissionDegree >= 0: Gauss-Legendre points in time for the weighted means of E(0,t)");
     double sclEmissionTolerance = 1e-3;
     cmdp.setOption("sclEmissionTolerance", &sclEmissionTolerance,
-                   "spaceChargeLimited: converged when |E(0)| at the slab's final time is below this fraction of |E0|");
+                   "spaceChargeLimited: converged when |E(0)| at the slab's final time (or, for sclEmissionDegree >= 0, each "
+                   "weighted mean of E(0,t)/E0 off its bound) is below this fraction of |E0|");
     bool taperInjection = true;
     double taperUpperThreshold = 0.50, taperLowerThreshold = 0.10;
     cmdp.setOption("taperInjection", "noTaperInjection", &taperInjection,
@@ -1595,6 +1672,7 @@ int main(int argc, char *argv[])
     FunctionPtr f_leftInflow;
     
     Teuchos::RCP<Maxwellian1T2V> fM_u0;
+    Teuchos::RCP<EmissionTimeProfile> emissionProfile; // spaceChargeLimited with sclEmissionDegree >= 0
     
     {
       {
@@ -1615,6 +1693,13 @@ int main(int argc, char *argv[])
         
         // set a Maxwellian at the inflow:
         fM_u0 = Teuchos::rcp(new Maxwellian1T2V( ux0, uy0, sigma, n0) );
+        if ((emissionModel == "spaceChargeLimited") && (sclEmissionDegree >= 0))
+        {
+          // the Maxwellian has unit amplitude; the (time-varying) emitted density is carried by the profile
+          emissionProfile = Teuchos::rcp(new EmissionTimeProfile(sclEmissionDegree, n0));
+          emissionProfile->setSlab(t0, t0 + tWidth);
+          fM_u0->set_n(1.0);
+        }
         FunctionPtr positiveRestriction = Function::heaviside(0,2); // don't impose right-going conditions for negative velocities, even when Maxwellian extends past v=0
         
         if (temporalRampDuration > 0)
@@ -1626,6 +1711,7 @@ int main(int argc, char *argv[])
         {
           f_leftInflow = FunctionPtr(fM_u0) * positiveRestriction;
         }
+        if (emissionProfile != Teuchos::null) f_leftInflow = f_leftInflow * FunctionPtr(emissionProfile);
         
         form->setInitialAndInflowConditions(f0, f_leftInflow, initialTimeDivision); // no right BC is only for negative velocity, so won't actually get triggered on our mesh
         
@@ -1789,6 +1875,207 @@ int main(int argc, char *argv[])
         double nPrevious = 0, EPrevious = 0;
       };
       auto sclState = std::make_shared<SCLState>();
+      if (emissionProfile != Teuchos::null)
+      {
+        // Time-varying emission: n_emit(t) = sum_j a_j B_j(s) on each slab (Bernstein basis, a_j >= 0).  Space-charge-
+        // limited emission is a complementarity condition: n_emit >= 0, the cathode field not accelerating electrons off
+        // the cathode (E(0)/E0 <= 0), and n_emit E(0) = 0 -- where the field has reversed, no emission.  Weakly, with
+        //   g_j = (m+1) int_0^1 (E(0, t(s)) / E0) B_j(s) ds,
+        // a weighted mean of E(0)/E0 near the time of coefficient j,
+        //   a_j >= 0,  g_j <= 0,  a_j g_j = 0,  j = 0..m.
+        // When every a_j > 0 this is the vanishing of the first m+1 Legendre moments of E(0, t).  Solved with a semismooth
+        // (active-set) Newton step on min(sigma a_j, -g_j) = 0, with a Jacobian dg/da carried from substep to substep and
+        // slab to slab, initialized as sigma W (W the normalized Bernstein Gram matrix: the field responding locally in time
+        // to the emitted density, with gain sigma estimated from the mean) and refined by Broyden updates.
+        std::vector<double> gaussPoints, gaussWeights;
+        {
+          CubatureFactory cubatureFactory;
+          auto cubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{2 * sclEmissionQuadraturePoints - 1});
+          auto refPoints = cubature->allocateCubaturePoints();
+          auto refWeights = cubature->allocateCubatureWeights();
+          cubature->getCubature(refPoints, refWeights);
+          auto refPointsFC  = FieldContainerConversion<double>::fromTensorPoints(refPoints);
+          auto refWeightsFC = FieldContainerConversion<double>::fromTensorData(refWeights);
+          for (int i=0; i<refPointsFC.dimension(0); i++) { gaussPoints.push_back(refPointsFC(i,0)); gaussWeights.push_back(refWeightsFC(i)); }
+        }
+        struct SCLProfileState
+        {
+          std::vector<double> J;                  // dg/d(a/n0), row major; empty until the gain is first estimated
+          bool havePrevious = false;              // previous substep's (a, g) available (within this slab)
+          std::vector<double> aPrevious, gPrevious;
+        };
+        auto profileState = std::make_shared<SCLProfileState>();
+        auto profile = emissionProfile;
+        form->setSubstepConfigurationCallback([=](VlasovSpaceTimeFormulation &slabForm, int substepOrdinal) -> bool {
+          if (substepOrdinal == 0) profileState->havePrevious = false;
+          const int m = profile->degree();
+          const int N = m + 1;
+          FunctionPtr E = Function::solution(slabForm.configurationSpaceFormulation()->E_fieldVar(0), slabForm.configurationSpaceSolution());
+          const double t0Slab = slabForm.t0(), t1Slab = slabForm.t1();
+          std::vector<double> g(N, 0.0);
+          double maxAbsE = 0;
+          for (size_t q=0; q<gaussPoints.size(); q++)
+          {
+            const double s = 0.5 * (gaussPoints[q] + 1.0);
+            const double Eq = E->evaluate(slabForm.configurationSpaceMesh(), x0, t0Slab + s * (t1Slab - t0Slab)); // collective
+            maxAbsE = std::max(maxAbsE, std::abs(Eq));
+            for (int j=0; j<N; j++) g[j] += 0.5 * N * gaussWeights[q] * (Eq / E0) * EmissionTimeProfile::bernstein(m, j, s);
+          }
+          std::vector<double> a = profile->coefficients();
+          for (double &aj : a) aj /= n0;
+          const double tol = sclEmissionTolerance;
+          bool converged = true;
+          for (int j=0; j<N; j++) converged = converged && ((a[j] > 0) ? (std::abs(g[j]) < tol) : (g[j] < tol));
+
+          // Jacobian: initialized from the gain of the mean, then Broyden updates (accepted only for appreciable changes in
+          // a, since g also moves as f relaxes independently of a, and only if the mean-mode gain stays within a factor of
+          // four of its previous value and negative).
+          auto meanGain = [N](const std::vector<double> &J) { double sum = 0; for (double Jij : J) sum += Jij; return sum / N; };
+          if (profileState->havePrevious)
+          {
+            std::vector<double> da(N), dg(N);
+            double daNorm2 = 0, aMax = 1e-3;
+            for (int j=0; j<N; j++)
+            {
+              da[j] = a[j] - profileState->aPrevious[j];
+              dg[j] = g[j] - profileState->gPrevious[j];
+              daNorm2 += da[j] * da[j];
+              aMax = std::max(aMax, std::max(a[j], profileState->aPrevious[j]));
+            }
+            if (std::sqrt(daNorm2) > 0.02 * aMax)
+            {
+              std::vector<double> JNew = profileState->J;
+              if (JNew.empty())
+              {
+                double daSum = 0, dgSum = 0;
+                for (int j=0; j<N; j++) { daSum += da[j]; dgSum += dg[j]; }
+                const double sigma = (std::abs(daSum) > 0) ? dgSum / daSum : 0.0;
+                if (sigma < 0)
+                {
+                  JNew.assign(N * N, 0.0);
+                  for (int i=0; i<N; i++)
+                    for (int j=0; j<N; j++)
+                    {
+                      // (m+1) int_0^1 B_i B_j ds = (m+1) C(m,i) C(m,j) / ((2m+1) C(2m, i+j))
+                      auto binomial = [](int n, int k) { double b = 1; for (int l=1; l<=k; l++) b = b * (n - k + l) / l; return b; };
+                      JNew[i*N+j] = sigma * N * binomial(m,i) * binomial(m,j) / ((2*m + 1) * binomial(2*m, i+j));
+                    }
+                }
+              }
+              else
+              {
+                for (int i=0; i<N; i++)
+                {
+                  double predicted = 0;
+                  for (int j=0; j<N; j++) predicted += JNew[i*N+j] * da[j];
+                  for (int j=0; j<N; j++) JNew[i*N+j] += (dg[i] - predicted) * da[j] / daNorm2;
+                }
+                const double oldGain = meanGain(profileState->J), newGain = meanGain(JNew);
+                if (!((newGain < 0) && (newGain > 4.0 * oldGain) && (newGain < 0.25 * oldGain))) JNew = profileState->J;
+              }
+              profileState->J = JNew;
+            }
+          }
+          profileState->havePrevious = true;
+          profileState->aPrevious = a;
+          profileState->gPrevious = g;
+
+          std::vector<double> aNext = a;
+          std::vector<bool> active(N, false);
+          if (!converged)
+          {
+            if (profileState->J.empty())
+            {
+              // no gain yet: a proportional step.  g_j is 1 in vacuum (emit more), 0 when space-charge limited, and
+              // negative when the field has reversed (emit less).
+              for (int j=0; j<N; j++) aNext[j] = ((a[j] > 0) ? a[j] : 1e-3) * (1.0 + g[j]);
+            }
+            else
+            {
+              // semismooth Newton on min(sigma a_j, -g_j) = 0: coefficients with sigma a_j <= -g_j are set to zero (the
+              // bound is active), the rest solve g + J da = 0 with the active ones' da = -a.  A coefficient the step
+              // would make negative joins the active set, and the step is recomputed.
+              const double sigma = -meanGain(profileState->J);
+              for (int j=0; j<N; j++) active[j] = (sigma * a[j] <= -g[j]);
+              std::vector<double> da(N, 0.0);
+              for (int pass=0; pass<=N; pass++)
+              {
+                std::vector<double> A(N * N, 0.0), b(N, 0.0);
+                for (int i=0; i<N; i++)
+                {
+                  if (active[i]) { A[i*N+i] = 1; b[i] = -a[i]; continue; }
+                  for (int j=0; j<N; j++) A[i*N+j] = profileState->J[i*N+j];
+                  b[i] = -g[i];
+                }
+                // Gaussian elimination with partial pivoting (N is small)
+                bool singular = false;
+                for (int k=0; k<N && !singular; k++)
+                {
+                  int pivot = k;
+                  for (int i=k+1; i<N; i++) if (std::abs(A[i*N+k]) > std::abs(A[pivot*N+k])) pivot = i;
+                  if (std::abs(A[pivot*N+k]) < 1e-14) { singular = true; break; }
+                  for (int j=0; j<N; j++) std::swap(A[k*N+j], A[pivot*N+j]);
+                  std::swap(b[k], b[pivot]);
+                  for (int i=k+1; i<N; i++)
+                  {
+                    const double factor = A[i*N+k] / A[k*N+k];
+                    for (int j=k; j<N; j++) A[i*N+j] -= factor * A[k*N+j];
+                    b[i] -= factor * b[k];
+                  }
+                }
+                if (!singular)
+                {
+                  for (int i=N-1; i>=0; i--)
+                  {
+                    double sum = b[i];
+                    for (int j=i+1; j<N; j++) sum -= A[i*N+j] * da[j];
+                    da[i] = sum / A[i*N+i];
+                  }
+                }
+                else
+                {
+                  for (int j=0; j<N; j++) da[j] = active[j] ? -a[j] : g[j] / sigma;
+                }
+                bool activeSetChanged = false;
+                for (int j=0; j<N; j++)
+                {
+                  if (!active[j] && (a[j] + da[j] < 0)) { active[j] = true; activeSetChanged = true; }
+                }
+                if (!activeSetChanged) break;
+              }
+              // Step limits as in the constant-in-slab controller: a coefficient can rise by up to half of n0 (or double)
+              // per substep; never negative.
+              for (int j=0; j<N; j++)
+              {
+                const double aBase = (a[j] > 0) ? a[j] : 1e-3;
+                aNext[j] = std::max(0.0, std::min(a[j] + std::max(aBase, 0.5), a[j] + da[j]));
+              }
+            }
+            std::vector<double> aNextScaled = aNext;
+            for (double &aj : aNextScaled) aj *= n0;
+            profile->setCoefficients(aNextScaled);
+          }
+          if (rank == 0)
+          {
+            std::cout << "space-charge-limited emission (degree " << m << "): substep " << substepOrdinal+1 << ", g =";
+            for (int j=0; j<N; j++) std::cout << " " << g[j];
+            std::cout << ", max |E(0,t)|/|E0| = " << maxAbsE / std::abs(E0) << ", n_emit coefficients/n0 =";
+            for (int j=0; j<N; j++) std::cout << " " << a[j];
+            if (!converged)
+            {
+              std::cout << " ->";
+              for (int j=0; j<N; j++) std::cout << " " << aNext[j] << (active[j] ? "*" : "");
+            }
+            std::cout << ", dg/dn = ";
+            if (profileState->J.empty()) std::cout << "(not yet estimated)";
+            else for (int i=0; i<N*N; i++) std::cout << (i == 0 ? "[" : (i % N == 0 ? "; " : " ")) << profileState->J[i] << (i == N*N-1 ? "]" : "");
+            std::cout << " per n0"
+                      << (converged ? " (converged)\n" : "\n");
+          }
+          return converged;
+        });
+      }
+      else
       form->setSubstepConfigurationCallback([=](VlasovSpaceTimeFormulation &slabForm, int substepOrdinal) -> bool {
         if (substepOrdinal == 0) sclState->havePrevious = false; // the slope is kept across slabs
         FunctionPtr E = Function::solution(slabForm.configurationSpaceFormulation()->E_fieldVar(0), slabForm.configurationSpaceSolution());
@@ -2045,8 +2332,21 @@ int main(int argc, char *argv[])
         
         if (spaceChargeLimitedEmission)
         {
-          if (rank == 0) std::cout << "E(0) at final time is " << E_left << " (" << E_left / E0 << " E0); emitted density "
-                                   << fM_u0->get_n() / n0 << " n0 (space-charge-limited emission).\n";
+          if (rank == 0)
+          {
+            if (emissionProfile == Teuchos::null)
+            {
+              std::cout << "E(0) at final time is " << E_left << " (" << E_left / E0 << " E0); emitted density "
+                        << fM_u0->get_n() / n0 << " n0 (space-charge-limited emission).\n";
+            }
+            else
+            {
+              // slab-start, slab-mean, and slab-end emitted density, and the slab-end field
+              std::cout << "E(0) at final time is " << E_left << " (" << E_left / E0 << " E0); emitted density "
+                        << emissionProfile->valueAtS(0.0) / n0 << " -> " << emissionProfile->valueAtS(1.0) / n0
+                        << " n0 (mean " << emissionProfile->mean() / n0 << " n0; space-charge-limited emission, degree " << emissionProfile->degree() << ").\n";
+            }
+          }
         }
         else
         {
@@ -2119,6 +2419,7 @@ int main(int argc, char *argv[])
 
         // next time slab
         auto phase0NextTimeSlabStart = phase0.now();
+        if (emissionProfile != Teuchos::null) emissionProfile->advanceToNextSlab(form->t1(), form->t1() + tWidth);
         form = form->nextTimeSlab(tWidth, tElements);
         phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
                            {{"completed_slab", std::to_string(timeSlabOrdinal)}});
