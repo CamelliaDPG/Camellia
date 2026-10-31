@@ -1992,57 +1992,82 @@ int main(int argc, char *argv[])
             }
             else
             {
-              // semismooth Newton on min(sigma a_j, -g_j) = 0: coefficients with sigma a_j <= -g_j are set to zero (the
-              // bound is active), the rest solve g + J da = 0 with the active ones' da = -a.  A coefficient the step
-              // would make negative joins the active set, and the step is recomputed.
-              const double sigma = -meanGain(profileState->J);
-              for (int j=0; j<N; j++) active[j] = (sigma * a[j] <= -g[j]);
-              std::vector<double> da(N, 0.0);
-              for (int pass=0; pass<=N; pass++)
-              {
-                std::vector<double> A(N * N, 0.0), b(N, 0.0);
-                for (int i=0; i<N; i++)
+              // Newton step for the complementarity problem, with the linear model g' = g + J (a' - a): the linear
+              // complementarity problem a' >= 0, g' <= 0, a'_j g'_j = 0, solved exactly by trying each active set
+              // (2^N of them; N <= 3 or so).  Choosing the active set from the sign of the unconstrained step instead
+              // can fix the wrong coefficient at zero: the field responds mainly to the slab's total emitted charge,
+              // so J is nearly singular and the unconstrained step can make an early coefficient negative even when
+              // the solution needs it positive (and a late one zero).
+              auto solveFree = [&](const std::vector<bool> &isActive, std::vector<double> &aTrial) -> bool {
+                // solve J_FF a'_F = J_FF a_F - g_F + J_FA a_A, with a'_A = 0
+                std::vector<int> F;
+                for (int j=0; j<N; j++) if (!isActive[j]) F.push_back(j);
+                const int nF = int(F.size());
+                aTrial.assign(N, 0.0);
+                if (nF == 0) return true;
+                std::vector<double> A(nF * nF), b(nF);
+                for (int r=0; r<nF; r++)
                 {
-                  if (active[i]) { A[i*N+i] = 1; b[i] = -a[i]; continue; }
-                  for (int j=0; j<N; j++) A[i*N+j] = profileState->J[i*N+j];
-                  b[i] = -g[i];
+                  const int i = F[r];
+                  b[r] = -g[i];
+                  for (int j=0; j<N; j++) b[r] += profileState->J[i*N+j] * a[j];
+                  for (int c=0; c<nF; c++) A[r*nF+c] = profileState->J[i*N+F[c]];
                 }
-                // Gaussian elimination with partial pivoting (N is small)
-                bool singular = false;
-                for (int k=0; k<N && !singular; k++)
+                // Gaussian elimination with partial pivoting
+                for (int k=0; k<nF; k++)
                 {
                   int pivot = k;
-                  for (int i=k+1; i<N; i++) if (std::abs(A[i*N+k]) > std::abs(A[pivot*N+k])) pivot = i;
-                  if (std::abs(A[pivot*N+k]) < 1e-14) { singular = true; break; }
-                  for (int j=0; j<N; j++) std::swap(A[k*N+j], A[pivot*N+j]);
+                  for (int r=k+1; r<nF; r++) if (std::abs(A[r*nF+k]) > std::abs(A[pivot*nF+k])) pivot = r;
+                  if (std::abs(A[pivot*nF+k]) < 1e-14) return false;
+                  for (int c=0; c<nF; c++) std::swap(A[k*nF+c], A[pivot*nF+c]);
                   std::swap(b[k], b[pivot]);
-                  for (int i=k+1; i<N; i++)
+                  for (int r=k+1; r<nF; r++)
                   {
-                    const double factor = A[i*N+k] / A[k*N+k];
-                    for (int j=k; j<N; j++) A[i*N+j] -= factor * A[k*N+j];
-                    b[i] -= factor * b[k];
+                    const double factor = A[r*nF+k] / A[k*nF+k];
+                    for (int c=k; c<nF; c++) A[r*nF+c] -= factor * A[k*nF+c];
+                    b[r] -= factor * b[k];
                   }
                 }
-                if (!singular)
+                std::vector<double> x(nF);
+                for (int r=nF-1; r>=0; r--)
                 {
-                  for (int i=N-1; i>=0; i--)
-                  {
-                    double sum = b[i];
-                    for (int j=i+1; j<N; j++) sum -= A[i*N+j] * da[j];
-                    da[i] = sum / A[i*N+i];
-                  }
+                  double sum = b[r];
+                  for (int c=r+1; c<nF; c++) sum -= A[r*nF+c] * x[c];
+                  x[r] = sum / A[r*nF+r];
                 }
-                else
-                {
-                  for (int j=0; j<N; j++) da[j] = active[j] ? -a[j] : g[j] / sigma;
-                }
-                bool activeSetChanged = false;
+                for (int r=0; r<nF; r++) aTrial[F[r]] = x[r];
+                return true;
+              };
+              // among the active sets satisfying the linearized conditions (there is one when -J is a P-matrix), take
+              // the one with the smallest step; if none does (J inaccurate), the one with the smallest violation
+              std::vector<double> best;
+              double bestViolation = std::numeric_limits<double>::max(), bestStep = std::numeric_limits<double>::max();
+              const double scale = std::max(1e-3, *std::max_element(a.begin(), a.end()));
+              for (int mask=0; mask<(1<<N); mask++)
+              {
+                std::vector<bool> isActive(N);
+                for (int j=0; j<N; j++) isActive[j] = (mask >> j) & 1;
+                std::vector<double> aTrial;
+                if (!solveFree(isActive, aTrial)) continue;
+                double violation = 0, step = 0;
                 for (int j=0; j<N; j++)
                 {
-                  if (!active[j] && (a[j] + da[j] < 0)) { active[j] = true; activeSetChanged = true; }
+                  double gPredicted = g[j];
+                  for (int k=0; k<N; k++) gPredicted += profileState->J[j*N+k] * (aTrial[k] - a[k]);
+                  if (isActive[j]) violation = std::max(violation, gPredicted);        // need g'_j <= 0
+                  else             violation = std::max(violation, -aTrial[j] / scale); // need a'_j >= 0
+                  step += (aTrial[j] - a[j]) * (aTrial[j] - a[j]);
                 }
-                if (!activeSetChanged) break;
+                const bool better = (violation <= 1e-12) ? ((bestViolation > 1e-12) || (step < bestStep))
+                                                         : ((bestViolation > 1e-12) && (violation < bestViolation));
+                if (better)
+                {
+                  best = aTrial; bestViolation = violation; bestStep = step;
+                  active = isActive;
+                }
               }
+              std::vector<double> da(N, 0.0);
+              if (!best.empty()) for (int j=0; j<N; j++) da[j] = std::max(0.0, best[j]) - a[j];
               // Step limits as in the constant-in-slab controller: a coefficient can rise by up to half of n0 (or double)
               // per substep; never negative.
               for (int j=0; j<N; j++)
