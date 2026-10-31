@@ -5,3 +5,4 @@ add_subdirectory(SpaceTimeMixedVlasovBoba)
 
 add_subdirectory(DpgAssemblyBoba)
 add_subdirectory(CompareTestNormsDPGBoBa)
+add_subdirectory(PlanarMITLBoba)

@@ -3,6 +3,12 @@
 //
 
 #include "Camellia.h"
+#include "../../PlanarMITL/PlanarMITLCommon.hpp"
+#include "../../PlanarMITL/ConventionalComparison.hpp"
+
+using PlanarMITL::gradedVertices;
+using PlanarMITL::ensureVertexAt;
+using PlanarMITL::uniformVertices;
 
 #include "AbsFunction.h"
 #include "BasisSumFunction.h"
@@ -806,74 +812,6 @@ void checkMesh( MeshPtr mesh)
   }
 }
 
-//! Vertices on [left, right] that resolve a feature at center: a uniform core of elements of width coreElementWidth
-//! covering [center - coreHalfWidth, center + coreHalfWidth] (clipped to the domain), and element widths growing
-//! geometrically by growthRatio from the core out to each boundary.  A final element narrower than half its
-//! predecessor is merged into it.
-std::vector<double> gradedVertices(const double left, const double right, const double center,
-                                   const double coreElementWidth, const double coreHalfWidth, const double growthRatio)
-{
-  TEUCHOS_TEST_FOR_EXCEPTION((coreElementWidth <= 0) || (growthRatio < 1) || (right <= left), std::invalid_argument,
-                             "gradedVertices(): invalid arguments");
-  const double coreLeft  = std::max(left,  center - coreHalfWidth);
-  const double coreRight = std::min(right, center + coreHalfWidth);
-  // geometrically graded vertices from start (exclusive) to end (inclusive), first width growthRatio * coreElementWidth
-  auto gradedSide = [&](const double start, const double end) {
-    std::vector<double> sideVertices;
-    const double length = std::abs(end - start);
-    const double direction = (end > start) ? 1.0 : -1.0;
-    double position = 0, width = coreElementWidth * growthRatio;
-    while (length - position > 0)
-    {
-      const double remaining = length - position;
-      if (remaining <= width * 1.5)
-      {
-        sideVertices.push_back(end); // last element absorbs the remainder (at most 1.5x its nominal width)
-        break;
-      }
-      position += width;
-      sideVertices.push_back(start + direction * position);
-      width *= growthRatio;
-    }
-    return sideVertices;
-  };
-  std::vector<double> vertices;
-  auto leftSide = gradedSide(coreLeft, left);
-  for (auto it = leftSide.rbegin(); it != leftSide.rend(); it++) vertices.push_back(*it);
-  const int numCoreElements = std::max(1, int(std::ceil((coreRight - coreLeft) / coreElementWidth - 1e-10)));
-  for (int i=0; i<=numCoreElements; i++)
-  {
-    vertices.push_back(coreLeft + (coreRight - coreLeft) * double(i) / double(numCoreElements));
-  }
-  for (double vertex : gradedSide(coreRight, right)) vertices.push_back(vertex);
-  return vertices;
-}
-
-//! Ensures that value is a vertex, if it lies strictly inside the vertex range: moves the nearer vertex of the interval
-//! containing it if that vertex is within a quarter of the interval width, and otherwise inserts value.  (The inflow
-//! boundary condition is imposed on whole mesh sides, so a side straddling u_x = 0 on the cathode or anode would receive
-//! it on its outflow part too.)
-void ensureVertexAt(std::vector<double> &vertices, const double value)
-{
-  for (size_t i=0; i+1<vertices.size(); i++)
-  {
-    const double left = vertices[i], right = vertices[i+1];
-    if ((value <= left) || (value >= right)) continue;
-    const double width = right - left;
-    if      ((value - left) < 0.25 * width) vertices[i]   = value;
-    else if ((right - value) < 0.25 * width) vertices[i+1] = value;
-    else    vertices.insert(vertices.begin() + i + 1, value);
-    return;
-  }
-}
-
-std::vector<double> uniformVertices(const double left, const double width, const int numElements)
-{
-  std::vector<double> vertices(numElements+1);
-  for (int i=0; i<=numElements; i++) vertices[i] = left + double(i) / double(numElements) * width;
-  return vertices;
-}
-
 Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const double  x0, const double  xWidth,
                                                               const double  t0, const double  tWidth,
@@ -1038,6 +976,15 @@ int main(int argc, char *argv[])
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   
   Kokkos::initialize(argc, argv); // initialize Kokkos
+
+  if (PlanarMITL::comparisonRequested(argc, argv))
+  {
+    int status = 0;
+    try { status = PlanarMITL::runConventionalComparison(argc, argv); }
+    catch (const std::exception &error) { std::cerr << error.what() << std::endl; status = 1; }
+    Camellia::finalize(false);
+    return status;
+  }
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
@@ -1408,8 +1355,8 @@ int main(int argc, char *argv[])
         
     double xWidth = D / spatialScaling;
     
-    const double uMin = beta0   * cScaled / sqrt(1-beta0*beta0);
-    const double uMax = betaMax * cScaled / sqrt(1-betaMax*betaMax);
+    const double uMin = PlanarMITL::properVelocityFromBeta(beta0, cScaled);
+    const double uMax = PlanarMITL::properVelocityFromBeta(betaMax, cScaled);
     
     const double uxMin = uMin;
     const double uxMax = uMax;

@@ -7,6 +7,7 @@ option(BUILD_PAPERS_DRIVERS "Build drivers in papers directory" ON)
 option(BUILD_PERFORMANCE_TEST_DRIVERS "Build drivers in performance directory" ON)
 option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" OFF)
 option(BUILD_PULSE_DRIVERS "Build drivers in pulse directory" OFF)
+option(BUILD_PLANAR_MITL_BOBA_DRIVER "Build the standalone tensorized planar MITL driver" OFF)
 option(BUILD_STEFAN_DRIVERS "Build drivers in Stefan directory" ON)
 
 # Add each driver
@@ -48,6 +49,10 @@ if (BUILD_PULSE_DRIVERS)
 else()
   MESSAGE("Not setting up makefiles for drivers in drivers/pulse, because BUILD_PULSE_DRIVERS is OFF.")
 endif(BUILD_PULSE_DRIVERS)
+
+if (BUILD_PLANAR_MITL_BOBA_DRIVER AND NOT BUILD_PULSE_DRIVERS)
+  add_subdirectory(pulse/PlanarMITLBoba)
+endif()
 
 if (BUILD_EXPERIMENTAL_DRIVERS)
   MESSAGE("Setting up makefiles for drivers in drivers/experimental, because BUILD_EXPERIMENTAL_DRIVERS is ON.")
