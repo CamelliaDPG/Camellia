@@ -21,7 +21,7 @@ class Basis1DIntegralCache
   using     ViewType = Kokkos::View<Scalar*, Camellia::DeviceType>;
   using HostViewType = Kokkos::View<Scalar*, Kokkos::HostSpace>;
   using       View2D = Kokkos::View<Scalar**, Camellia::DeviceType>;
-  using   HostView2D = typename View2D::HostMirror;
+  using   HostView2D = typename View2D::host_mirror_type;
   
   using BasisKey = std::tuple<std::string,bool,int>; // bool: whether to differentiate basis; int: polynomial degree, as reported by basis
   using RefIntegralKey = std::tuple<std::vector<BasisKey>,int,bool>; // int: the power of x degree to integrate against bases; bool: true indicates LayoutLeft (first basis function has contiguous memory); false LayoutRight

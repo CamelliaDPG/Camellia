@@ -316,7 +316,7 @@ namespace
       geometryData.retainedCellWidth.assign(componentCount, 1.0);
 
       auto orthogonalTopo = _tensorMesh->topology()->componentMeshTopology(entity.orthogonalComponentOrdinal());
-      geometryData.fixedCoordinates[entity.orthogonalComponentOrdinal()] = orthogonalTopo->activeVertexCoordinates().h_view(entity.vertexOrdinal());
+      geometryData.fixedCoordinates[entity.orthogonalComponentOrdinal()] = orthogonalTopo->activeVertexCoordinates().view_host()(entity.vertexOrdinal());
       const IndexType incidentBegin = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal());
       const IndexType incidentEnd   = orthogonalTopo->vertexToCellOffsetHost(entity.vertexOrdinal() + 1);
       TEUCHOS_TEST_FOR_EXCEPTION(incidentBegin >= incidentEnd, std::logic_error,

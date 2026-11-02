@@ -116,9 +116,24 @@ namespace Camellia
       }
       else
       {
-        _hostView = HostView(_dualView.view_host(), rank);
+        // construct from pointer and extents: HostView is unmanaged, so it cannot be converted from the DualView's
+        // (managed) host view directly (Kokkos 5's View/DynRankView require matching accessors)
+        _hostView = HostView(_dualView.view_host().data(),
+                             extentOrInvalidFor(_dimensions,0), extentOrInvalidFor(_dimensions,1),
+                             extentOrInvalidFor(_dimensions,2), extentOrInvalidFor(_dimensions,3),
+                             extentOrInvalidFor(_dimensions,4), extentOrInvalidFor(_dimensions,5),
+                             extentOrInvalidFor(_dimensions,6));
       }
-      _deviceView = DeviceView(_dualView.view_device(), rank);
+      if (rank > 0)
+      {
+        _deviceView = DeviceView(_dualView.view_device(), rank);
+      }
+      else
+      {
+        // An empty (rank-0, size-0) container: its DualView has extent 0 in dimension 0, which a rank-0 DynRankView cannot
+        // represent (Kokkos 5 requires dropped extents to be 1).  It has no entries, so it needs no device view.
+        _deviceView = DeviceView();
+      }
     }
 
     void recordAllocation(AllocationRecord &record, long long entryCount) const
@@ -564,8 +579,11 @@ namespace Camellia
 
       if ((_externalData != nullptr) && (newSize == oldSize))
       {
-        _dimensions = newDimensions;
-        cacheDims();
+        // Reshape in place: the external data is unchanged, but the DualView (the device-side mirror of the external
+        // data) must take the new shape, since a DynRankView cannot reinterpret a DualView of a different shape.
+        Scalar* externalData = _externalData;
+        allocateStorage(newDimensions, false);
+        _externalData = externalData;
         refreshViews();
         clearModifiedFlags();
         return;
