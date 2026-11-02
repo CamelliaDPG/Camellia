@@ -10,6 +10,7 @@
 //
 
 #include "CamelliaDebugUtility.h"
+#include "CamelliaMemoryTools.h"
 #include "ConvergenceTestOpNorm.hpp"
 #include "GDAMinimumRule.h"
 #include "GMGSolver.h"
@@ -658,7 +659,9 @@ int GMGSolver::solve(bool buildCoarseStiffness)
 //    Teuchos::RCP<Belos::StatusTest<Scalar,MV,OP> > smootherTestNorm = Teuchos::rcp(new ConvergenceTestOpNorm<Scalar, MV, OP>(gmgOperator()->getSmoother(), _tol));
 //    cgSolver->setUserConvStatusTest(smootherTestNorm);
   
+  MemoryCheckpoints::record("gmg_setup_done");
   Belos::ReturnType belosResult = solver->solve();
+  MemoryCheckpoints::record("gmg_iterations_done");
   
   if (belosResult == Belos::Converged)
   {
