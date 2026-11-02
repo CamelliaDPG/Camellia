@@ -79,6 +79,10 @@ private:
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
   TMatrixPtr<Scalar> _globalStiffMatrix;
+  // element-stiffness rows owned by other ranks, assembled locally and exported (in bounded chunks) to their owners
+  // before _globalStiffMatrix is fill-completed; null outside of assembly
+  TMatrixPtr<Scalar> _sharedRowStiffness;
+  void exportSharedRowStiffness();
   TVectorPtr<Scalar> _rhsVector;
   TVectorPtr<Scalar> _lhsVector; // 1 or 2 wide for steady; for RK schemes, this is numStages + 1 wide (assuming no goal-oriented RHS)
   TVectorPtr<Scalar> _lhsVectorCurrentStage; // for RK schemes, this is numRHSes wide for the active stage

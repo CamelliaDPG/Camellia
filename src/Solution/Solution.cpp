@@ -8,6 +8,7 @@
 #include "Camellia_FieldContainerConversion.hpp"
 #include "Camellia_Integrate.hpp"
 
+#include <algorithm>
 #include <chrono>
 
 // Shards includes
@@ -44,6 +45,7 @@
 #include "Var.h"
 
 #include <MatrixMarket_Tpetra.hpp>
+#include <Tpetra_Export.hpp>
 #include <Tpetra_Import.hpp>
 
 using namespace Camellia;
@@ -97,61 +99,53 @@ namespace {
                           TMatrixPtr<Scalar> &matrix)
   {
     using GO = typename TMatrix<Scalar>::global_ordinal_type;
-    using ValuesViewHost = typename TMatrix<Scalar>::nonconst_values_host_view_type;
-    using GlobalIndicesHostView = typename TMatrix<Scalar>::nonconst_global_inds_host_view_type;
 
     if (matrix == Teuchos::null) return;
 
-    auto oldMatrix = matrix;
-    auto rowMap    = oldMatrix->getRowMap();
-    auto domainMap = oldMatrix->getDomainMap();
-    auto rangeMap  = oldMatrix->getRangeMap();
-
-    const size_t maxEntries = oldMatrix->getLocalMaxNumRowEntries() + 1;
-    auto newMatrix = Teuchos::rcp(new TMatrix<Scalar>(rowMap, maxEntries));
-
-    GlobalIndicesHostView oldCols("Tpetra OAZ old column gids", maxEntries);
-    ValuesViewHost oldVals("Tpetra OAZ old values", maxEntries);
-
-    const size_t numLocalRows = rowMap->getLocalNumElements();
-    for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
+    // Zero the Dirichlet rows (putting 1 on the diagonal) and the Dirichlet columns, in place: the graph is unchanged,
+    // so this needs no second copy of the matrix.  The diagonal is in each row's stencil, since a dof couples to itself.
+    using LO = typename TMatrix<Scalar>::local_ordinal_type;
+    auto rowMap = matrix->getRowMap();
+    auto colMap = matrix->getColMap();
+    const LO numLocalColumns = static_cast<LO>(colMap->getLocalNumElements());
+    std::vector<char> isDirichletColumn(numLocalColumns, 0);
+    for (GO colGID : dirichletCols)
     {
-      GO rowGID = rowMap->getGlobalElement(localRowOrdinal);
-      bool isDirichletRow = (dirichletRows.find(rowGID) != dirichletRows.end());
-
-      if (isDirichletRow)
-      {
-        Teuchos::Array<GO> cols(1, rowGID);
-        Teuchos::Array<Scalar> vals(1, Scalar(1.0));
-        newMatrix->insertGlobalValues(rowGID, cols(), vals());
-      }
-      else
-      {
-        size_t numRowEntries = 0;
-        oldMatrix->getGlobalRowCopy(rowGID, oldCols, oldVals, numRowEntries);
-
-        Teuchos::Array<GO> cols;
-        Teuchos::Array<Scalar> vals;
-        cols.reserve(numRowEntries);
-        vals.reserve(numRowEntries);
-        for (size_t entryOrdinal=0; entryOrdinal<numRowEntries; entryOrdinal++)
-        {
-          GO colGID = oldCols(entryOrdinal);
-          if (dirichletCols.find(colGID) == dirichletCols.end())
-          {
-            cols.push_back(colGID);
-            vals.push_back(oldVals(entryOrdinal));
-          }
-        }
-        if (cols.size() > 0)
-        {
-          newMatrix->insertGlobalValues(rowGID, cols(), vals());
-        }
-      }
+      const LO localCol = colMap->getLocalElement(colGID);
+      if (localCol != Teuchos::OrdinalTraits<LO>::invalid()) isDirichletColumn[localCol] = 1;
     }
 
-    newMatrix->fillComplete(domainMap, rangeMap);
-    matrix = newMatrix;
+    matrix->resumeFill();
+    {
+      // the matrix's (device) storage is modified directly, which requires that it be host-accessible
+      static_assert(Kokkos::SpaceAccessibility<Kokkos::HostSpace, typename TMatrix<Scalar>::device_type::memory_space>::accessible,
+                    "Apply_OAZToMatrix() requires host-accessible matrix storage");
+      auto localMatrix = matrix->getLocalMatrixDevice();
+      const LO numLocalRows = static_cast<LO>(rowMap->getLocalNumElements());
+      for (LO localRow=0; localRow<numLocalRows; localRow++)
+      {
+        const GO rowGID = rowMap->getGlobalElement(localRow);
+        const bool isDirichletRow = (dirichletRows.find(rowGID) != dirichletRows.end());
+        const LO diagonalCol = colMap->getLocalElement(rowGID);
+        bool foundDiagonal = false;
+        for (auto entry=localMatrix.graph.row_map(localRow); entry<localMatrix.graph.row_map(localRow+1); entry++)
+        {
+          const LO localCol = localMatrix.graph.entries(entry);
+          if (isDirichletRow)
+          {
+            localMatrix.values(entry) = (localCol == diagonalCol) ? Scalar(1.0) : Scalar(0.0);
+            foundDiagonal = foundDiagonal || (localCol == diagonalCol);
+          }
+          else if (isDirichletColumn[localCol])
+          {
+            localMatrix.values(entry) = Scalar(0.0);
+          }
+        }
+        TEUCHOS_TEST_FOR_EXCEPTION(isDirichletRow && !foundDiagonal, std::logic_error,
+                                   "Apply_OAZToMatrix(): Dirichlet row has no diagonal entry in the matrix graph");
+      }
+    }
+    matrix->fillComplete(matrix->getDomainMap(), matrix->getRangeMap());
   }
 
 } // end anonymous namespace
@@ -1047,7 +1041,7 @@ GlobalIndexType TSolution<Scalar>::elementLagrangeIndex(GlobalIndexType cellID, 
   TEUCHOS_TEST_FOR_EXCEPTION(!_mesh->myCellsInclude(cellID), std::invalid_argument, "elementLagrangeIndices() requires that the cellID be rank-local");
   
   GlobalIndexType cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
-  GlobalIndexType numGlobalDofs = _mesh->numGlobalDofs();
+  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
   GlobalIndexType globalIndex = cellOffset + numGlobalDofs;
   int numElementConstraints = _lagrangeConstraints->numElementConstraints();
   
@@ -1151,9 +1145,182 @@ void TSolution<Scalar>::initializeStiffnessAndLoad()
 {
   narrate("initializeStiffnessAndLoad");
   auto tPartMap = getPartitionMap();
-  const size_t maxTpetraRowSize = tPartMap->getGlobalNumElements();
-  
-  _globalStiffMatrix = Teuchos::rcp(new TMatrix<Scalar>(tPartMap, maxTpetraRowSize));
+
+  // Preallocate the sparse graph row-by-row, with each owned row's exact entry count from the rank-local element
+  // stencils (and constraint couplings).  The scalar CrsMatrix constructor's second argument is a per-row allocation
+  // hint applied to every row; neither getGlobalNumElements() (dense rows) nor the longest row (which pads every row to
+  // the size of the most-coupled trace row) is acceptable at scale.  Counts are computed without materializing column
+  // sets: a row's columns are the union of the global dofs of the cells containing it.
+  using GO = typename TMatrix<Scalar>::global_ordinal_type;
+  using LO = typename TMatrix<Scalar>::local_ordinal_type;
+  const size_t numLocalRows = tPartMap->getLocalNumElements();
+
+  const std::set<GlobalIndexType> &myCellIDs = _mesh->cellIDsInPartition();
+  const int numElementConstraints = _lagrangeConstraints->numElementConstraints();
+
+  // sorted global dof indices (plus element Lagrange constraint indices) for each local cell, and the cells
+  // incident on each owned row
+  std::vector<std::vector<GO>> cellColumns;
+  cellColumns.reserve(myCellIDs.size());
+  std::vector<std::vector<int>> rowCells(numLocalRows);
+  // rows owned by other ranks that local cells contribute to: these are assembled into _sharedRowStiffness
+  std::map<GO,std::vector<int>> sharedRowCells;
+  // (globalDofCount() may be collective, e.g. for CondensedDofInterpreter, so call it once, on every rank)
+  const GlobalIndexType numGlobalDofsForSharedRows = _dofInterpreter->globalDofCount();
+  for (GlobalIndexType cellID : myCellIDs)
+  {
+    const int cellOrdinal = static_cast<int>(cellColumns.size());
+    std::set<GlobalIndexType> cellDofIndices = _dofInterpreter->globalDofIndicesForCell(cellID);
+    std::vector<GO> columns(cellDofIndices.begin(), cellDofIndices.end());
+    for (int elementConstraintIndex = 0; elementConstraintIndex < numElementConstraints; elementConstraintIndex++)
+    {
+      columns.push_back(static_cast<GO>(elementLagrangeIndex(cellID, elementConstraintIndex)));
+    }
+    std::sort(columns.begin(), columns.end());
+    columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
+    for (GO rowIndex : columns) // dof rows and element-constraint rows
+    {
+      if (tPartMap->isNodeGlobalElement(rowIndex))
+      {
+        rowCells[tPartMap->getLocalElement(rowIndex)].push_back(cellOrdinal);
+      }
+      else if (static_cast<GlobalIndexType>(rowIndex) < numGlobalDofsForSharedRows)
+      {
+        sharedRowCells[rowIndex].push_back(cellOrdinal); // (element-constraint rows stay on the direct path)
+      }
+    }
+    cellColumns.push_back(std::move(columns));
+  }
+
+  // An owned row on a partition boundary also receives entries from off-rank cells (via exportSharedRowStiffness());
+  // count those columns too, or the export overflows the row allocation and Tpetra reallocates the matrix.  Send each
+  // cell that contributes to off-rank rows to those rows' owners, once per owner, as
+  // (number of columns, columns..., number of rows, rows...).
+  {
+    std::map<int,std::vector<GO>> cellStencilsToSend;
+    std::vector<std::map<int,std::vector<GO>>> cellOwnerRows(cellColumns.size());
+    for (const auto &entry : sharedRowCells)
+    {
+      const int owner = _dofInterpreter->partitionForGlobalDofIndex(static_cast<GlobalIndexType>(entry.first));
+      for (int cellOrdinal : entry.second) cellOwnerRows[cellOrdinal][owner].push_back(entry.first);
+    }
+    for (size_t cellOrdinal=0; cellOrdinal<cellColumns.size(); cellOrdinal++)
+    {
+      for (const auto &ownerRows : cellOwnerRows[cellOrdinal])
+      {
+        auto &message = cellStencilsToSend[ownerRows.first];
+        const auto &columns = cellColumns[cellOrdinal];
+        message.push_back(static_cast<GO>(columns.size()));
+        message.insert(message.end(), columns.begin(), columns.end());
+        message.push_back(static_cast<GO>(ownerRows.second.size()));
+        message.insert(message.end(), ownerRows.second.begin(), ownerRows.second.end());
+      }
+    }
+    cellOwnerRows.clear();
+    std::vector<GO> receivedStencils;
+    MPIWrapper::sendDataVectors(tPartMap->getComm(), cellStencilsToSend, receivedStencils);
+    cellStencilsToSend.clear();
+    size_t position = 0;
+    while (position < receivedStencils.size())
+    {
+      const int cellOrdinal = static_cast<int>(cellColumns.size());
+      const size_t numColumns = static_cast<size_t>(receivedStencils[position++]);
+      cellColumns.emplace_back(receivedStencils.begin() + position, receivedStencils.begin() + position + numColumns);
+      position += numColumns;
+      const size_t numRows = static_cast<size_t>(receivedStencils[position++]);
+      for (size_t i=0; i<numRows; i++)
+      {
+        const GO rowIndex = receivedStencils[position++];
+        TEUCHOS_TEST_FOR_EXCEPTION(!tPartMap->isNodeGlobalElement(rowIndex), std::logic_error, "received a shared-row stencil for a row this rank does not own");
+        rowCells[tPartMap->getLocalElement(rowIndex)].push_back(cellOrdinal);
+      }
+    }
+  }
+
+  // Zero-mean constraints and global Lagrange constraints are appended to the partition map after the regular and
+  // element-local Lagrange DOFs.  They are not present in any element-local stiffness stencil above, but
+  // populateStiffnessAndLoad() may later insert full constraint rows on rank 0 and constraint columns into locally
+  // owned regular DOF rows.  Account for that explicitly so Tpetra's static graph allocation is large enough.
+  const GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
+  const int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
+  const int zeroMeanConstraintsSize = _zmcsAsRankOneUpdate ? 0 : getZeroMeanConstraints().size();
+  const GlobalIndexType globalNumElementLagrange = numElementConstraints * _mesh->numActiveElements();
+  const GlobalIndexType firstGlobalLagrangeIndex = numGlobalDofs + globalNumElementLagrange;
+  const GlobalIndexType numDenseConstraints = numGlobalConstraints + zeroMeanConstraintsSize; // global Lagrange, then zero-mean
+
+  Teuchos::Array<size_t> numEntriesPerLocalRow(numLocalRows, 0);
+  std::vector<GO> merged, scratch;
+  for (size_t localRowOrdinal=0; localRowOrdinal<numLocalRows; localRowOrdinal++)
+  {
+    const GlobalIndexType globalRow = static_cast<GlobalIndexType>(tPartMap->getGlobalElement(static_cast<LO>(localRowOrdinal)));
+    if ((globalRow >= firstGlobalLagrangeIndex) && (globalRow < firstGlobalLagrangeIndex + numDenseConstraints))
+    {
+      // a global Lagrange or zero-mean constraint row couples to every regular dof, and to itself
+      numEntriesPerLocalRow[localRowOrdinal] = numGlobalDofs + 1;
+      continue;
+    }
+    const auto &cells = rowCells[localRowOrdinal];
+    size_t count = 0;
+    if (cells.size() == 1)
+    {
+      count = cellColumns[cells[0]].size();
+    }
+    else if (cells.size() > 1)
+    {
+      merged.clear();
+      for (int cellOrdinal : cells)
+      {
+        const auto &columns = cellColumns[cellOrdinal];
+        scratch.resize(merged.size() + columns.size());
+        auto end = std::set_union(merged.begin(), merged.end(), columns.begin(), columns.end(), scratch.begin());
+        scratch.resize(end - scratch.begin());
+        merged.swap(scratch);
+      }
+      count = merged.size();
+    }
+    // regular dof rows also receive a column for each dense (global Lagrange / zero-mean) constraint
+    if (globalRow < numGlobalDofs) count += numDenseConstraints;
+    numEntriesPerLocalRow[localRowOrdinal] = std::max(count, size_t(1));
+  }
+
+  // the shared rows' (local-cell) entry counts, computed the same way
+  std::vector<GO> sharedRows;
+  Teuchos::Array<size_t> numEntriesPerSharedRow;
+  sharedRows.reserve(sharedRowCells.size());
+  numEntriesPerSharedRow.reserve(sharedRowCells.size());
+  for (const auto &entry : sharedRowCells)
+  {
+    const auto &cells = entry.second;
+    size_t count = cellColumns[cells[0]].size();
+    if (cells.size() > 1)
+    {
+      merged.clear();
+      for (int cellOrdinal : cells)
+      {
+        const auto &columns = cellColumns[cellOrdinal];
+        scratch.resize(merged.size() + columns.size());
+        auto end = std::set_union(merged.begin(), merged.end(), columns.begin(), columns.end(), scratch.begin());
+        scratch.resize(end - scratch.begin());
+        merged.swap(scratch);
+      }
+      count = merged.size();
+    }
+    sharedRows.push_back(entry.first);
+    numEntriesPerSharedRow.push_back(count);
+  }
+  sharedRowCells.clear();
+  rowCells.clear();
+  rowCells.shrink_to_fit();
+  cellColumns.clear();
+  cellColumns.shrink_to_fit();
+
+  _globalStiffMatrix = Teuchos::rcp(new TMatrix<Scalar>(tPartMap, numEntriesPerLocalRow()));
+  {
+    const Tpetra::global_size_t invalid = Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid();
+    auto sharedRowMap = Teuchos::rcp(new TMap(invalid, Teuchos::ArrayView<const GO>(sharedRows.data(), sharedRows.size()),
+                                              tPartMap->getIndexBase(), tPartMap->getComm()));
+    _sharedRowStiffness = Teuchos::rcp(new TMatrix<Scalar>(sharedRowMap, numEntriesPerSharedRow()));
+  }
   
   // for now, we assume that we will have a "standard" _rhs (whether that means DPG or
   // some Bubnov-Galerkin RHS depends on whether we have an _ip defined); and that we
@@ -1173,6 +1340,74 @@ void TSolution<Scalar>::invalidateCachedBasisCoefficientsForFields()
 {
   _cachedCellBasisCoefficientsForFields.clear();
   _cachedCellBasisCoefficientsForFieldsCellIDs.clear();
+}
+
+template <typename Scalar>
+void TSolution<Scalar>::exportSharedRowStiffness()
+{
+  // Element-stiffness rows owned by other ranks were assembled locally into _sharedRowStiffness (merged, one entry per
+  // column).  Export them to their owners, ADDing into _globalStiffMatrix.  A single Tpetra transfer packs everything
+  // for one destination into one MPI message, whose size is limited to INT_MAX bytes, so export in chunks of rows; every
+  // rank performs the same number of (collective) chunk exports.
+  if (_sharedRowStiffness == Teuchos::null) return;
+  using GO = typename TMatrix<Scalar>::global_ordinal_type;
+  using LO = typename TMatrix<Scalar>::local_ordinal_type;
+  auto ownedMap = getPartitionMap();
+  auto comm = ownedMap->getComm();
+  _sharedRowStiffness->fillComplete(ownedMap, ownedMap);
+
+  const size_t maxEntriesPerChunk = 50 * 1000 * 1000; // ~800 MB packed (global column + value per entry)
+  auto sharedRowMap = _sharedRowStiffness->getRowMap();
+  const LO numSharedRows = static_cast<LO>(sharedRowMap->getLocalNumElements());
+  std::vector<LO> chunkStarts {0};
+  size_t entriesInChunk = 0;
+  for (LO row=0; row<numSharedRows; row++)
+  {
+    const size_t rowEntries = _sharedRowStiffness->getNumEntriesInLocalRow(row);
+    if ((entriesInChunk > 0) && (entriesInChunk + rowEntries > maxEntriesPerChunk))
+    {
+      chunkStarts.push_back(row);
+      entriesInChunk = 0;
+    }
+    entriesInChunk += rowEntries;
+  }
+  chunkStarts.push_back(numSharedRows);
+  const int myNumChunks = static_cast<int>(chunkStarts.size()) - 1;
+  const int numChunks = MPIWrapper::max<int>(comm, myNumChunks);
+
+  const Tpetra::global_size_t invalid = Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid();
+  for (int chunk=0; chunk<numChunks; chunk++)
+  {
+    const LO rowStart = (chunk < myNumChunks) ? chunkStarts[chunk]   : numSharedRows;
+    const LO rowEnd   = (chunk < myNumChunks) ? chunkStarts[chunk+1] : numSharedRows;
+    std::vector<GO> chunkRows;
+    Teuchos::Array<size_t> chunkRowEntries;
+    for (LO row=rowStart; row<rowEnd; row++)
+    {
+      chunkRows.push_back(sharedRowMap->getGlobalElement(row));
+      chunkRowEntries.push_back(_sharedRowStiffness->getNumEntriesInLocalRow(row));
+    }
+    auto chunkMap = Teuchos::rcp(new TMap(invalid, Teuchos::ArrayView<const GO>(chunkRows.data(), chunkRows.size()),
+                                          ownedMap->getIndexBase(), comm));
+    auto chunkMatrix = Teuchos::rcp(new TMatrix<Scalar>(chunkMap, chunkRowEntries()));
+    typename TMatrix<Scalar>::nonconst_global_inds_host_view_type cols;
+    typename TMatrix<Scalar>::nonconst_values_host_view_type vals;
+    for (LO row=rowStart; row<rowEnd; row++)
+    {
+      const size_t rowEntries = _sharedRowStiffness->getNumEntriesInLocalRow(row);
+      Kokkos::resize(cols, rowEntries);
+      Kokkos::resize(vals, rowEntries);
+      size_t numEntries = 0;
+      const GO globalRow = sharedRowMap->getGlobalElement(row);
+      _sharedRowStiffness->getGlobalRowCopy(globalRow, cols, vals, numEntries);
+      chunkMatrix->insertGlobalValues(globalRow, Teuchos::ArrayView<const GO>(cols.data(), numEntries),
+                                      Teuchos::ArrayView<const Scalar>(vals.data(), numEntries));
+    }
+    chunkMatrix->fillComplete(ownedMap, ownedMap);
+    Tpetra::Export<LO,GO,typename TMatrix<Scalar>::node_type> exporter(chunkMap, ownedMap);
+    _globalStiffMatrix->doExport(*chunkMatrix, exporter, Tpetra::ADD);
+  }
+  _sharedRowStiffness = Teuchos::null;
 }
 
 template <typename Scalar>
@@ -1349,7 +1584,10 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
             // from the raw FieldContainer buffer when assembling one Tpetra row at a time.
             rowValues[colOrdinal] = interpretedStiffness(colOrdinal,rowOrdinal);
           }
-          _globalStiffMatrix->insertGlobalValues(globalDofIndicesT[rowOrdinal], globalDofIndicesT(), rowValues());
+          // rows owned elsewhere go to _sharedRowStiffness (local rows there); see exportSharedRowStiffness()
+          const bool sharedRow = _sharedRowStiffness->getRowMap()->isNodeGlobalElement(globalDofIndicesT[rowOrdinal]);
+          if (sharedRow) _sharedRowStiffness->insertGlobalValues(globalDofIndicesT[rowOrdinal], globalDofIndicesT(), rowValues());
+          else           _globalStiffMatrix ->insertGlobalValues(globalDofIndicesT[rowOrdinal], globalDofIndicesT(), rowValues());
         }
 
         const int STANDARD_RHS_INDEX = 0; // to distinguish from the "goal-oriented" index...
@@ -1585,6 +1823,8 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
   Comm->barrier();  // for cleaner time measurements, let everyone else catch up before calling ResetStartTime() and GlobalAssemble()
   timer.ResetStartTime();
 
+  exportSharedRowStiffness();
+  MemoryCheckpoints::record("shared_rows_exported");
   _globalStiffMatrix->fillComplete();
   MemoryCheckpoints::record("stiffness_fill_complete");
 
