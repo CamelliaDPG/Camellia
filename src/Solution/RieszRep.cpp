@@ -3,11 +3,6 @@
 //
 
 #include "RieszRep.h"
-#include "Epetra_Vector.h"
-#include "Epetra_Import.h"
-
-#include "Epetra_SerialSymDenseMatrix.h"
-#include "Epetra_SerialSpdDenseSolver.h"
 
 #include "SerialDenseWrapper.h"
 #include "CamelliaDebugUtility.h"

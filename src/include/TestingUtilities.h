@@ -17,14 +17,6 @@
 
 #include "TypeDefs.h"
 
-// Epetra includes
-#include <Epetra_Map.h>
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#else
-#include "Epetra_SerialComm.h"
-#endif
-
 #include "Mesh.h"
 #include "Solution.h"
 

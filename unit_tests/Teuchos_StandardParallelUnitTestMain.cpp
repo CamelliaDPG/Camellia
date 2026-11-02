@@ -57,12 +57,6 @@ specific unit test suites.
 #include "Teuchos_StackedTimer.hpp"
 #include "Teuchos_UnitTestRepository.hpp"
 
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#else
-#include "Epetra_SerialComm.h"
-#endif
-
 #include "Kokkos_Core.hpp"
 
 #include "Camellia.h"

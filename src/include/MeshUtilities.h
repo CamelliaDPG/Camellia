@@ -11,9 +11,6 @@
 
 #include "TypeDefs.h"
 
-// Epetra includes
-#include <Epetra_Map.h>
-
 #include "Mesh.h"
 #include "SpatialFilter.h"
 

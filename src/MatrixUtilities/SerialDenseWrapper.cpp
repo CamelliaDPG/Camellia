@@ -9,6 +9,8 @@
 
 #include "SerialDenseWrapper.h"
 
+#include <cmath>
+
 #include "Camellia_FieldContainer.hpp"
 #include "Camellia_matrix.hpp"
 
@@ -63,7 +65,7 @@ namespace Camellia {
       {
         col_sum += A(i,j);
       }
-      A_norm = std::max(A_norm, abs(col_sum));
+      A_norm = std::max(A_norm, std::abs(col_sum));
     }
     
     double condest;
@@ -642,7 +644,7 @@ namespace Camellia {
       if (ignoreZeroEigenvalues)
       {
         int index = N-1;
-        while ((abs(minSingularValue) < tol) && (index > 0))
+        while ((std::abs(minSingularValue) < tol) && (index > 0))
         {
           index--;
           minSingularValue = singularValues[index];
@@ -671,10 +673,10 @@ namespace Camellia {
     {
       for (int j=0; j<i; j++)
       {
-        double absDiff = abs(A(i,j)-A(j,i));
+        double absDiff = std::abs(A(i,j)-A(j,i));
         if (absDiff > absTol)
         {
-          double relDiff = absDiff / std::min(abs(A(i,j)),abs(A(j,i)));
+          double relDiff = absDiff / std::min(std::abs(A(i,j)),std::abs(A(j,i)));
           if (relDiff > relTol)
           {
             return false;
@@ -697,10 +699,10 @@ namespace Camellia {
     {
       for (int j=0; j<i; j++)
       {
-        double absDiff = abs(A(i,j)-A(j,i));
+        double absDiff = std::abs(A(i,j)-A(j,i));
         if (absDiff > absTol)
         {
-          double relDiff = absDiff / std::min(abs(A(i,j)),abs(A(j,i)));
+          double relDiff = absDiff / std::min(std::abs(A(i,j)),std::abs(A(j,i)));
           if (relDiff > relTol)
           {
             asymmetricEntries.push_back({i,j});
@@ -833,7 +835,7 @@ namespace Camellia {
           if (colIndices.find(j) == colIndices.end())
           {
             double val = A(*rowIndexIt,j);
-            if (abs(val) > tol)
+            if (std::abs(val) > tol)
             {
               std::cout << "WARNING: off-block entry (" << *rowIndexIt << "," << j << ") = " << val << " is non-zero.\n";
             }
@@ -847,7 +849,7 @@ namespace Camellia {
           if (rowIndices.find(i) == rowIndices.end())
           {
             double val = A(i,*colIndexIt);
-            if (abs(val) > tol)
+            if (std::abs(val) > tol)
             {
               std::cout << "WARNING: off-block entry (" << i <<  "," << *colIndexIt << ") = " << val << " is non-zero.\n";
             }
@@ -862,7 +864,7 @@ namespace Camellia {
   {
     for (int i=0; i<A.size(); i++)
     {
-      if (abs(A[i]) < tol) A[i] = 0;
+      if (std::abs(A[i]) < tol) A[i] = 0;
     }
   }
   
@@ -1062,7 +1064,7 @@ namespace Camellia {
         {
           for (int j=0; j<N; j++)
           {
-            if (abs(A(i,j)) > tol)
+            if (std::abs(A(i,j)) > tol)
             {
               nnz++;
             }
