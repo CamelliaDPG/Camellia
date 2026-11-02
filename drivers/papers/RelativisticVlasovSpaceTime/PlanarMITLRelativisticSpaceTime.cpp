@@ -2107,7 +2107,13 @@ int main(int argc, char *argv[])
         const double tEval = std::nextafter(slabForm.t1(), slabForm.t0());
         const double E_cathode = E->evaluate(slabForm.configurationSpaceMesh(), x0, tEval); // collective
         const double nCurrent = fM_u0->get_n();
-        const bool converged = std::abs(E_cathode) < sclEmissionTolerance * std::abs(E0);
+        // Space-charge-limited emission is a complementarity condition: n_emit >= 0, the cathode field not accelerating
+        // electrons off the cathode, and n_emit E(0) = 0.  So the state with emission (effectively) off and the field
+        // reversed (E(0)/E0 < 0: more electron charge near the cathode than emission would put there) is converged, as is
+        // E(0) = 0 with emission on.
+        const double nOff = 1e-3 * n0; // emission at or below this is "off"
+        const bool emissionOffFieldReversed = (nCurrent <= nOff) && (E_cathode / E0 < 0);
+        const bool converged = (std::abs(E_cathode) < sclEmissionTolerance * std::abs(E0)) || emissionOffFieldReversed;
 
         // slope estimate from the last two substeps, if the density changed appreciably between them
         if (sclState->havePrevious)
@@ -2141,8 +2147,12 @@ int main(int argc, char *argv[])
           nNext = nBase * (1.0 + E_cathode / E0);
         }
         // Step limits, relative to n0 rather than to the current density (which can be far below its target): the density
-        // can fall to a tenth of its current value or rise by up to half of n0 per substep; never negative.
-        nNext = std::max(0.1 * nCurrent, std::min(nCurrent + std::max(nBase, 0.5 * n0), nNext));
+        // can fall by half, or to the "off" level nOff, per substep, or rise by up to half of n0; never negative.  (A
+        // geometric limit alone, e.g. a factor of ten per substep, lets the density collapse to 1e-30 n0 and below over a
+        // few slabs while the field stays reversed; from there it cannot restart.)
+        const double nMax = nCurrent + std::max(nBase, 0.5 * n0);
+        const double nMin = std::min(nCurrent, std::max(0.5 * nCurrent, nOff));
+        nNext = std::max(nMin, std::min(nMax, nNext));
         if (converged) nNext = nCurrent;
         fM_u0->set_n(nNext);
         if (rank == 0)
