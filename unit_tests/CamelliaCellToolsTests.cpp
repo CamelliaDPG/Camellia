@@ -23,6 +23,7 @@
 #include "CellTopology.h"
 
 #include "CamelliaCellTools.h"
+#include "MeshFactory.h"
 
 using namespace Camellia;
 
@@ -378,6 +379,57 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame)
 
     }
   }
+}
+
+TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceFrame_ThinCellFarFromOrigin )
+{
+  // A thin space-time cell at late time (as in a late time slab): rounding in the physical coordinates alone produces a
+  // Newton step of about epsilon * |t| / h_t in reference coordinates, which can exceed an absolute 100 epsilon even
+  // though the (affine) map is inverted exactly.  The map must still be accurate.
+  const double x0 = 0.0, xWidth = 1.0 / 64.0;
+  const double t0 = 9.9, tWidth = 1.0 / 512.0;
+  auto spatialTopo  = MeshFactory::intervalMeshTopology(x0, x0 + xWidth, 1);
+  auto meshTopo     = MeshFactory::spaceTimeMeshTopology(spatialTopo, t0, t0 + tWidth, 1);
+  const IndexType cellID = 0;
+
+  const int numPoints = 25;
+  Camellia::FieldContainer<double> refPoints(numPoints, 2);
+  for (int i=0; i<5; i++)
+  {
+    for (int j=0; j<5; j++)
+    {
+      refPoints(i*5+j, 0) = -1.0 + 0.5 * j;
+      refPoints(i*5+j, 1) = -1.0 + 0.5 * i;
+    }
+  }
+  Camellia::FieldContainer<double> physicalPoints(1, numPoints, 2);
+  const bool includeCellDimension = true;
+  CamelliaCellTools::mapToPhysicalFrame(physicalPoints, refPoints, meshTopo->physicalCellNodesForCell(cellID, includeCellDimension),
+                                        meshTopo->getCell(cellID)->topology());
+
+  // Perturb by an ulp, as physical points computed elsewhere (e.g., from another mesh's cubature) generally are not the
+  // exact floating-point images of reference points under this cell's map.
+  for (int p=0; p<numPoints; p++)
+  {
+    for (int d=0; d<2; d++)
+    {
+      physicalPoints(0,p,d) = std::nextafter(physicalPoints(0,p,d), (p % 2 == 0) ? 1e300 : -1e300);
+    }
+  }
+
+  Camellia::FieldContainer<double> mappedRefPoints(1, numPoints, 2);
+  const int cubatureDegree = 2;
+  CamelliaCellTools::mapToReferenceFrame(mappedRefPoints, physicalPoints, meshTopo, cellID, cubatureDegree);
+  mappedRefPoints.resize(numPoints, 2);
+  for (int p=0; p<numPoints; p++)
+  {
+    for (int d=0; d<2; d++)
+    {
+      TEST_COMPARE(std::abs(refPoints(p,d) - mappedRefPoints(p,d)), <, 1e-10); // absolute: some reference coordinates are 0
+    }
+  }
+
+  // (Before the convergence test was scaled, this case printed "mapToReferenceFrameInitGuess failed to converge".)
 }
 
 TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSimpleShardsTopologies )

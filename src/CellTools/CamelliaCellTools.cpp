@@ -1730,21 +1730,37 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContai
       }
     }
 
-    // Average L2 error for a multiple sets of physical points: error is rank-2 (C,P) array
-    double totalError = 0.0;
-    Camellia::FieldContainer<double> cellWiseError(numCells);
+    // Converged when every point's Newton step is below 100 epsilon (Intrepid2's tolerance), scaled by the size of the
+    // step that rounding in the physical coordinates alone produces: |x| * |J^{-1}|.  Without that scaling, points far
+    // from the origin relative to the cell size (e.g., late times in a thin time slab) cannot meet the tolerance even
+    // when the map is exact.  (Each point is tested separately: a sum over points would make the tolerance stricter the
+    // more points are mapped at once.)
+    bool converged = true;
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
     {
-      cellWiseError(cellOrdinal) = 0.0;
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
-        cellWiseError(cellOrdinal) += abs(error(cellOrdinal,pointOrdinal));
+        double physicalMagnitude = 0.0, jacobianInvNorm = 0.0;
+        for (int row=0; row<spaceDim; row++)
+        {
+          physicalMagnitude = std::max(physicalMagnitude, abs(physPoints(cellOrdinal,pointOrdinal,row)));
+          double rowSum = 0.0;
+          for (int col=0; col<spaceDim; col++)
+          {
+            rowSum += abs(jacobianInv(cellOrdinal,pointOrdinal,row,col));
+          }
+          jacobianInvNorm = std::max(jacobianInvNorm, rowSum);
+        }
+        const double tolerance = 100.0 * Intrepid2::epsilon<double>() * std::max(1.0, physicalMagnitude * jacobianInvNorm);
+        if (abs(error(cellOrdinal,pointOrdinal)) >= tolerance)
+        {
+          converged = false;
+        }
       }
-      totalError += abs(cellWiseError(cellOrdinal));
     }
 
     // Stopping criterion:
-    if (totalError < Intrepid2::tolerence<double>())
+    if (converged)
     {
       break;
     }
