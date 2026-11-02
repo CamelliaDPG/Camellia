@@ -19,7 +19,6 @@
 
 #include <Teuchos_RCP.hpp>
 
-#include "Amesos_config.h"
 #include "Amesos2.hpp"
 
 using namespace std;
@@ -116,11 +115,28 @@ class TAmesos2Solver : public TSolver<Scalar>
   bool _saveFactorization;
   std::string _solverString;
   Teuchos::RCP<Amesos2::Solver< TMatrix<Scalar>,TVector<Scalar> > > _savedSolver;
+protected:
+  //! Amesos2 solver name used by subsequent calls to solve()
+  void setSolverString(const std::string &solverString) { _solverString = solverString; }
 public:
   // Solver options available: klu superlu_dist superlu_mt superlu lapack amesos2_cholmod
   // May require specific instructions while building Trilinos
   TAmesos2Solver(bool saveFactorization = false, std::string solverString="klu"): _saveFactorization(saveFactorization), _solverString(solverString) {}
-  int solve()
+  //! Keeps a saved factorization when the stiffness matrix is unchanged, so that resolve() can reuse it.  Solution passes
+  //! the problem before every solve, including the resolve() calls (e.g., GMG coarse solves) meant to reuse it.
+  void setProblem(TMatrixPtr<Scalar> stiffnessMatrix, TVectorPtr<Scalar> lhs, TVectorPtr<Scalar> rhs) override
+  {
+    if ((_savedSolver != Teuchos::null) && (stiffnessMatrix.get() == this->_stiffnessMatrix.get()))
+    {
+      this->_lhs = lhs;
+      this->_rhs = rhs;
+      _savedSolver->setX(lhs);
+      _savedSolver->setB(rhs);
+      return;
+    }
+    TSolver<Scalar>::setProblem(stiffnessMatrix, lhs, rhs);
+  }
+  int solve() override
   {
     TEUCHOS_TEST_FOR_EXCEPTION(this->_stiffnessMatrix.get() == NULL, std::invalid_argument, "stiffness matrix is unset.");
     TEUCHOS_TEST_FOR_EXCEPTION(this->_lhs.get() == NULL, std::invalid_argument, "lhs is unset.");
@@ -138,10 +154,12 @@ public:
     }
     return 0;
   }
-  int resolve()
+  int resolve() override
   {
     if (_savedSolver.get() != NULL)
     {
+      _savedSolver->setX(this->_lhs);
+      _savedSolver->setB(this->_rhs);
       _savedSolver->solve();
     }
     else
@@ -150,7 +168,7 @@ public:
     }
     return 0;
   }
-  virtual void stiffnessMatrixChanged()
+  void stiffnessMatrixChanged() override
   {
     _savedSolver = Teuchos::null;
   }

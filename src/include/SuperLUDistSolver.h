@@ -15,106 +15,41 @@
 #ifndef Camellia_SuperLUDistSolver_h
 #define Camellia_SuperLUDistSolver_h
 
-#include "Amesos_config.h"
-#include "Amesos.h"
-#ifdef HAVE_AMESOS_SUPERLUDIST
-#include "Amesos_Superludist.h"
+#include "Solver.h"
 
-#include "CamelliaDebugUtility.h"
-#include "MPIWrapper.h"
+#include "Teuchos_CommHelpers.hpp"
 
+#if defined(HAVE_AMESOS2_SUPERLUDIST)
 namespace Camellia {
 
-  class SuperLUDistSolver : public Solver
+  //! SuperLU_DIST through Amesos2 (ParMETIS fill-reducing ordering by default), distributed over all ranks of the matrix's
+  //! communicator.  Amesos2's defaults use static pivoting without a row permutation or iterative refinement, so systems
+  //! with zero diagonal entries (e.g., Lagrange-multiplier constraints) are solved only approximately; Amesos2's
+  //! LargeDiag_MC64 row permutation crashes (in pddistribute) with SuperLU_DIST 9.2.  Suitable for preconditioning,
+  //! e.g. GMG coarse solves; Solver::getDirectSolver() returns KLU2 for exact direct solves.
+  class SuperLUDistSolver : public TAmesos2Solver<double>
   {
-    Teuchos::RCP<Amesos_Superludist> _savedSolver;
-    Teuchos::RCP<Epetra_LinearProblem> _savedProblem;
-    bool _saveFactorization;
-    bool _havePrintedStatus;
-    bool _runSilent; // true by default -- false outputs when reuse is requested
-    int _maxProcsToUse;
   public:
     SuperLUDistSolver(bool saveFactorization)
+    : TAmesos2Solver<double>(saveFactorization, "superlu_dist") {}
+
+    //! ParMETIS (SuperLU_DIST's default column ordering) fails with a floating-point exception when a rank owns no
+    //! rows, as can happen for small coarse matrices; such matrices are solved with KLU2 instead.
+    int solve() override
     {
-      _saveFactorization = saveFactorization;
-      _havePrintedStatus = false;
-      _runSilent = true;
-      _maxProcsToUse = 256;
+      auto comm = this->_stiffnessMatrix->getComm();
+      const int myRowCount = (this->_stiffnessMatrix->getLocalNumRows() > 0) ? 1 : 0;
+      int everyRankHasRows = 0;
+      Teuchos::reduceAll(*comm, Teuchos::REDUCE_MIN, 1, &myRowCount, &everyRankHasRows);
+      this->setSolverString(everyRankHasRows ? "superlu_dist" : "klu");
+      return TAmesos2Solver<double>::solve();
     }
-    
-    // ! Positive number will be the maximum number used.  -3 means all processors will be used; -2 means square root of the number of processors available will be used
-    void setMaxProcsToUse(int maxProcs)
-    {
-      _maxProcsToUse = maxProcs;
-    }
-    
-    int solve() {
-      Teuchos::ParameterList paramList;
-      
-      int numRanks = this->_stiffnessMatrix->Comm().NumProc();
-      int maxProcs = min(numRanks,_maxProcsToUse);
-      paramList.set("MaxProcs",maxProcs); // -3 means all processors will be used; -2 means square root of the number of processors available will be used
-      
-//      if (!_havePrintedStatus)
-//      {
-//        if (MPIWrapper::rank() == 0)
-//        {
-//          cout << "SuperLUDist, about to solve with a matrix of " << this->_stiffnessMatrix->RowMap().NumGlobalElements() << " rows:\n";
-//        }
-//      }
-      
-      if (!_saveFactorization)
-      {
-        _havePrintedStatus = true;
-        Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
-        Amesos_Superludist slu(problem);
-        slu.SetParameters(paramList);
-        return slu.Solve();
-      }
-      else
-      {
-        _savedProblem = Teuchos::rcp( new Epetra_LinearProblem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get()) );
-        _savedSolver = Teuchos::rcp( new Amesos_Superludist(*_savedProblem) );
-        
-        paramList.set("ReuseSymbolic",true);
-        paramList.set("Fact", "SamePattern_SameRowPerm");
-        _savedSolver->SetParameters(paramList);
-        
-        int err = _savedSolver->Solve();
-        
-        if (!_havePrintedStatus && !_runSilent)
-        { // print status for diagnostic purposes
-          if (MPIWrapper::rank() == 0) cout << "SuperLUDistSolver.h : SuperLU_Dist factorization reuse requested.  Details of solver:\n";
-          _savedSolver->PrintStatus();
-          _havePrintedStatus = true;
-        }
-        
-        return err;
-      }
-    }
-    
-    int resolve() {
-      if (_savedSolver.get() != NULL)
-      {
-        return _savedSolver->Solve();
-      }
-      else
-      {
-        return solve();
-      }
-    }
-    
-    void setRunSilent(bool value)
-    {
-      _runSilent = value;
-    }
-    
-    virtual void stiffnessMatrixChanged()
-    {
-      _savedSolver = Teuchos::null;
-      _savedProblem = Teuchos::null;
-      _havePrintedStatus = false;
-    }
+
+    //! Retained for interface compatibility; Amesos2 uses a process grid over all ranks of the matrix's communicator.
+    void setMaxProcsToUse(int maxProcs) { (void) maxProcs; }
+
+    //! Retained for interface compatibility; Amesos2's SuperLU_DIST interface does not print by default.
+    void setRunSilent(bool value) { (void) value; }
   };
 }
 #endif
