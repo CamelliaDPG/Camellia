@@ -191,6 +191,9 @@ int run(int argc, char **argv)
   cmd.setOption("tolerance", &options.tolerance);
   cmd.setOption("maxSweeps", &options.maxSweeps);
   cmd.setOption("kickrank", &options.kickrank); cmd.setOption("maxRank", &options.maxRank);
+  cmd.setOption("localSolver", &options.localSolver, "0=COD, 1=QR, 2=LU, 3=Eigen GMRES, 4=matrix-free BoBa GMRES");
+  cmd.setOption("localTolerance", &options.localTolerance);
+  cmd.setOption("maxLocalIterations", &options.maxLocalIterations);
   cmd.setOption("verbose", "quiet", &options.verbose);
   cmd.setOption("solve", "no-solve", &doSolve);
   cmd.setOption("validate", "no-validate", &doValidate);

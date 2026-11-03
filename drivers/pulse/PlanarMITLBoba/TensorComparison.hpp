@@ -68,6 +68,9 @@ inline int runTensorComparison(int argc, char **argv)
   options.tolerance = problem.tolerance; options.roundingTolerance = problem.svdTolerance;
   options.maxSweeps = problem.maxSweeps; options.kickrank = problem.kickrank;
   options.maxRank = problem.maxRank; options.verbose = problem.verbose;
+  options.localSolver = problem.localSolver;
+  options.localTolerance = problem.localTolerance;
+  options.maxLocalIterations = problem.maxLocalIterations;
   const auto start = ComparisonClock::now();
   const auto vertices = problem.vertices();
   std::vector<Axis> axes;

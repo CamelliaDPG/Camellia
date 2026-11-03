@@ -15,6 +15,10 @@ struct AmenOptions
   int maxSweeps = 100;
   int kickrank = 4;
   int maxRank = 64;
+  // Coupled site solver: COD, pivoted QR, LU, Eigen GMRES, matrix-free BoBa GMRES.
+  int localSolver = 0;
+  double localTolerance = 1e-6;
+  int maxLocalIterations = 300;
   unsigned seed = 7;
   bool verbose = true;
 };
@@ -81,7 +85,9 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
     const AmenOptions &options)
 {
   if (!(options.tolerance > 0) || !(options.roundingTolerance > 0) ||
-      options.maxSweeps < 1 || options.kickrank < 1 || options.maxRank < 1)
+      options.maxSweeps < 1 || options.kickrank < 1 || options.maxRank < 1 ||
+      options.localSolver < 0 || options.localSolver > 4 ||
+      !(options.localTolerance > 0) || options.maxLocalIterations < 1)
   {
     throw std::invalid_argument("Invalid AMEn tolerances, sweep count, or ranks");
   }
@@ -93,6 +99,13 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.max_allowed_ranks = options.maxRank;
   solver.local_solution_svd_tolerance_relative = options.roundingTolerance;
   solver.residual_enrichment_svd_tolerance_relative = options.roundingTolerance;
+  solver.coupled_site_direct_solver_method = options.localSolver < 3 ? options.localSolver : 0;
+  solver.use_eigen_gmres_for_coupled_site_solve = options.localSolver == 3;
+  solver.use_boba_gmres_for_coupled_site_solve = options.localSolver == 4;
+  solver.solve3d_2ml_options.tolerance_relative = options.localTolerance;
+  solver.solve3d_2ml_options.tolerance_absolute = 0.0;
+  solver.solve3d_2ml_options.eigen_gmres_max_iterations = options.maxLocalIterations;
+  solver.solve3d_2ml_options.eigen_gmres_sparsity = 0.0;
   solver.verbose = options.verbose;
   std::mt19937 generator(options.seed);
   return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator);
