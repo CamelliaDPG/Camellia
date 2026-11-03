@@ -379,11 +379,9 @@ namespace Camellia
 
     auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
     basis1->getValues(basis1Values, tensorCubaturePoints, op1);
-    basis1Values.setBasis(basis1);
 
     auto basis2Values = basis2->allocateBasisValues(tensorCubaturePoints, op2);
     basis2->getValues(basis2Values, tensorCubaturePoints, op2);
-    basis2Values.setBasis(basis2);
 
     const int numCells = geometry.numCells();
     auto jacobian       = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
@@ -536,11 +534,9 @@ namespace Camellia
 
     auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
     basis1->getValues(basis1Values, tensorCubaturePoints, op1);
-    basis1Values.setBasis(basis1);
 
     auto basis2Values = basis2->allocateBasisValues(tensorCubaturePoints, op2);
     basis2->getValues(basis2Values, tensorCubaturePoints, op2);
-    basis2Values.setBasis(basis2);
 
     const int numCells = geometry.numCells();
     auto jacobian       = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
