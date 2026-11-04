@@ -953,7 +953,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const bool usePeriodicBCs, const bool useSerendipity,
                                                               const bool useGradedSpatialMesh,
                                                               const int numUniformRefinements,
-                                                              const bool useSumFactorizedGramAssembly)
+                                                              const double L2WeightGraphMeshScale)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -992,7 +992,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  basisFamily,
                                                                  0,
                                                                  gEnforcePositivity,
-                                                                 useSumFactorizedGramAssembly));
+                                                                 L2WeightGraphMeshScale));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -1134,6 +1134,9 @@ int main(int argc, char *argv[])
     
     double L2WeightGraph    = 1e6; // this is much larger than our usual 1.0 factor, but it yields better conditioning for this problem, better fixed-point iteration convergence, and reduced non-physical f negativity.  It appears 1e6 is preferable in each of these regards to 1e4, the value we used for relativistic cold diode, though more careful testing might be warranted.
     cmdp.setOption("L2WeightGraph", &L2WeightGraph, "Weight for the L^2 part of the graph norm");
+    double L2WeightGraphMeshScale = 0; // the transport part of the graph norm scales like (|beta|/h)^2, so on the graded spatial mesh a fixed weight that controls the large elements under-weights the small ones near the cathode (production-scl-graph4e2-x16 blew up there).
+    cmdp.setOption("L2WeightGraphMeshScale", &L2WeightGraphMeshScale,
+                   "If positive, the weight for the L^2 part of the graph norm on element K is max(L2WeightGraph, L2WeightGraphMeshScale / h_x(K)^2)");
     
     // proper velocity domain, specified as fraction of speed of light:
     double beta0                = -0.995; // negative: electrons turned around by the magnetic field can return to the cathode
@@ -1145,15 +1148,12 @@ int main(int argc, char *argv[])
     bool enforceQuasiNeutrality = false;
     bool useL2Trace             = true;
     bool useSerendipityBasis    = false;
-    bool useSumFactorizedGramAssembly = false;
-    
+
     cmdp.setOption("ratio", &minMagneticFluxRatio, "magnetic flux ratio; values above 1 are insulated");
-    
+
     cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
-    cmdp.setOption("useSumFactorizedGramAssembly", "useStandardGramAssembly", &useSumFactorizedGramAssembly,
-                   "Assemble the graph-norm Gram matrix with sum factorization (requires --useFullTensorBasis).");
-    
+
     int delta_k = 2;
     int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
 
@@ -1556,7 +1556,7 @@ int main(int argc, char *argv[])
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
-                                     useSumFactorizedGramAssembly);
+                                     L2WeightGraphMeshScale);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
 
@@ -1766,6 +1766,7 @@ int main(int argc, char *argv[])
     else
     {
       suffix << "_GraphL2" << L2WeightGraph;
+      if (L2WeightGraphMeshScale > 0) suffix << "_hScale" << L2WeightGraphMeshScale;
     }
     
     const std::string problemPrefix = "relativistic-planar-MITL";

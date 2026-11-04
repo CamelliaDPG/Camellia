@@ -63,7 +63,6 @@ public:
   static const string S_PSI;     // latent trial variable for positivity preservation
   static const string S_PHI;     // latent test variable for positivity preservation
 protected:
-  bool _useSumFactorizedAssembly = false; // TODO: change this to "true" after Trilinos PR 13391 has propagated to master
 private:
   int _spaceDim;
   int _velocityDim;
@@ -249,13 +248,8 @@ public:
   //! called from constructor, after Vlasov Solution and Mesh objects are constructed from the passed-in BF object.  Subclasses should fill this appropriately by calling addTerm().
   virtual void initializeVlasovBilinearForm(BFPtr emptyVlasovBF);
   
-  //! called from constructor, after Vlasov BF object is initialized.
-  virtual IPPtr constructVlasovInnerProduct(const bool useSumFactorizedAssembly);
-
-  //! Sum-factorized graph-norm Gram assembly: (Lw,Lw) + massWeight (w,w), plus (phi,phi) if includePositivityTestVariable.
-  //! L uses v_i() and a(), so subclasses that override v_i() (e.g., relativistic) get their own operator.  Single species,
-  //! full tensor-product test basis.
-  IPPtr constructSumFactorizedVlasovInnerProduct(double massWeight, bool includePositivityTestVariable);
+  //! called from constructor, after Vlasov BF object is initialized.  Returns the graph norm for the Vlasov BF.
+  virtual IPPtr constructVlasovInnerProduct();
   
   // field variables:
   virtual VarPtr f(int i=0);         // Vlasov distribution (species i)
@@ -552,8 +546,6 @@ public:
   /** \brief Returns the basis family employed by the discretizations.  */
   EBasisFamily basisFamily() const;
   
-  bool useSumFactorizedAssembly() const;
-  
   /** \brief  Returns a Function representing the specified velocity-space coordinate.*/
   virtual FunctionPtr v_i(const int zeroBasedComp) const;
   
@@ -567,9 +559,6 @@ public:
   virtual bool useRelativisticCurrentMoments() const;
   virtual double currentMomentLightSpeed() const;
   
-  void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
-                                                              double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);
-
   //! Called once per fixed-point substep in solve(), after the Vlasov and configuration-space solves.
   void setSubstepSolveProfileCallback(std::function<void(const SubstepSolveProfile &)> callback);
 

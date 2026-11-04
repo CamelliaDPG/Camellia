@@ -31,6 +31,7 @@ public:
 protected:
   const double _c; // speed of light.  Must be consistent with the momentum discretization
   const double _testSpaceL2Weight; // weight for "stabilization term" in graph norm.
+  const double _testSpaceL2WeightMeshScale; // if positive, the weight on element K is max(_testSpaceL2Weight, _testSpaceL2WeightMeshScale / h_x(K)^2)
   const TestSpaceInnerProduct _testSpaceInnerProduct;
   
   // Cache one relativistic first-moment Function per (velocity component, species).
@@ -54,7 +55,7 @@ public:
                                          const EBasisFamily &basisFamily = BASIS_FAMILY_HIERARCHICAL,
                                          const int maxMomentNumberForDriver = 0,
                                          const bool enforcePositivity = false,
-                                         const bool useSumFactorizedGramAssembly = false);
+                                         const double testSpaceL2WeightMeshScale = 0.0);
   
   //! called during initialization of Vlasov Solution objects.  Subclasses must define a distribution field variable (f) with name VlasovSpaceTimeFormulation::S_F, a trace variable (t_n) with name VlasovSpaceTimeFormulation::S_T_N_HAT.  The former is used for moment computations, conservation diagnostics, and convergence criteria for the fixed-point iteration; the latter is used for boundary condition imposition.
   VarFactoryPtr constructVlasovVarFactory() override;
@@ -62,8 +63,8 @@ public:
   //! called from constructor, after Vlasov Solution and Mesh objects are constructed from the passed-in BF object.  Subclasses should fill this appropriately by calling addTerm().
   void initializeVlasovBilinearForm(BFPtr emptyVlasovBF) override;
   
-  //! called from constructor, after Vlasov BF object is initialized.
-  IPPtr constructVlasovInnerProduct(const bool sumFactorizedAssembly) override;
+  //! called from constructor, after Vlasov BF object is initialized.  Returns the inner product for the Vlasov BF.
+  IPPtr constructVlasovInnerProduct() override;
   
   //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.  Subclasses should override.
   Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements) override;
