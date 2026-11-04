@@ -34,7 +34,7 @@ struct ComparisonProblem
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
   double localTolerance = 1e-6;
-  bool verbose = false, comparison = true;
+  bool verbose = false, comparison = true, splitModes = false;
   std::string outputPrefix;
 
   int parse(int argc, char **argv, const std::string &backend)
@@ -60,6 +60,8 @@ struct ComparisonProblem
     cmd.setOption("localSolver", &localSolver, "Tensor coupled site solver: 0=COD, 1=QR, 2=LU, 3=Eigen GMRES, 4=matrix-free BoBa GMRES");
     cmd.setOption("localTolerance", &localTolerance);
     cmd.setOption("maxLocalIterations", &maxLocalIterations);
+    cmd.setOption("splitModes", "no-splitModes", &splitModes,
+                  "Tensor backend: split each (cell*basis) mode into basis and cell modes (eight TT modes)");
     cmd.setOption("outputPrefix", &outputPrefix);
     auto result = cmd.parse(argc, argv);
     if (result == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 2;
@@ -97,7 +99,7 @@ struct ComparisonProblem
             {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},
             {"target",tolerance},{"svd_tolerance",svdTolerance},{"coefficient_tolerance",coefficientTolerance},
             {"max_sweeps",maxSweeps},{"kickrank",kickrank},{"max_rank",maxRank},
-            {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations}};
+            {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)}};
   }
 };
 

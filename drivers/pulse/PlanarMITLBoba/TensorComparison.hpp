@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ModeSplitting.hpp"
+#include <cstdlib>
 #include "TensorProductAssembly.hpp"
 #include "../../PlanarMITL/ComparisonProblem.hpp"
 
@@ -80,7 +82,35 @@ inline int runTensorComparison(int argc, char **argv)
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
   const auto solveStart = ComparisonClock::now();
-  auto solution = DpgBoba::solveAmen(system.matrix,rhs,options);
+  BlockVector solution;
+  if (problem.splitModes)
+  {
+    SplitBlockMatrix splitMatrix; SplitBlockVector splitRHS; ModeSplit split;
+    splitSystem(system,rhs,axes,problem.svdTolerance,splitMatrix,splitRHS,split);
+    for (size_t b = 0; b < system.names.size(); ++b)
+      std::cout << "split block=" << system.names[b] << " sizes=" << splitRHS(b).sizes()
+                << " test_row_ranks=" << splitMatrix({0,b}).ranks_string() << '\n';
+    if (std::getenv("PLANAR_MITL_CHECK_SPLIT"))
+    {
+      // Consistency check: (split A)(split x) merged must equal A x for a random four-mode x.
+      auto x = DpgBoba::initialGuess(rhs,3);
+      SplitBlockVector sx(x.block_size);
+      for (size_t b = 0; b < x.block_size; ++b) sx(b) = splitVector(x(b),split.basisSizes[b],1e-14);
+      auto merged = mergeSolution(sx);
+      for (size_t i = 0; i < x.block_size; ++i)
+      {
+        auto d = merged(i); d -= x(i);
+        auto Ax = system.matrix({i,0})*x(0); auto SAx = splitMatrix({i,0})*sx(0);
+        for (size_t j = 1; j < x.block_size; ++j) { Ax += system.matrix({i,j})*x(j); SAx += splitMatrix({i,j})*sx(j); }
+        BlockVector one(1); SplitBlockVector sone(1); sone(0) = SAx; one = mergeSolution(sone);
+        auto e = one(0); e -= Ax;
+        std::cout << "split_check block=" << system.names[i] << " vector_roundtrip=" << boba::norm_frobenius(d)/boba::norm_frobenius(x(i))
+                  << " apply_difference=" << boba::norm_frobenius(e)/(boba::norm_frobenius(Ax)+1e-300) << '\n';
+      }
+    }
+    solution = mergeSolution(DpgBoba::solveAmen(splitMatrix,splitRHS,options));
+  }
+  else solution = DpgBoba::solveAmen(system.matrix,rhs,options);
   const double solveSeconds = elapsed(solveStart);
   const double totalSeconds = elapsed(start);
 
