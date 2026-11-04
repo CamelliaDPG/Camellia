@@ -30,7 +30,7 @@ inline int runConventionalComparison(int argc, char **argv)
     throw std::invalid_argument("Matched comparison currently requires one MPI rank");
   const auto start = ComparisonClock::now();
   const auto vertices = problem.vertices();
-  auto spatial = MeshFactory::intervalMeshTopology(0,problem.xWidth,problem.nx);
+  auto spatial = MeshFactory::intervalMeshTopology(vertices[0]);
   auto fields = Teuchos::rcp(new PrescribedFields(problem));
   RelativisticVlasovSpaceTimeFormulation form(problem.c,problem.qOverM,1,fields,spatial,
       vertices[1],vertices[2],vertices[3],{},problem.p,problem.dp,0,
@@ -96,12 +96,11 @@ inline int runConventionalComparison(int argc, char **argv)
   int n = q.extent_int(0), nq = n*n*n*n;
   FieldContainer<double> refPoints(nq,4);
   std::vector<double> weights(nq);
-  double jacobian = 1;
-  for (int d = 0; d < 4; ++d) jacobian *= (vertices[d][1]-vertices[d][0])/2;
+  // Reference weights; each cell's Jacobian (product of half-widths) is applied below, so graded meshes are handled.
   for (int k = 0; k < nq; ++k)
   {
     int ordinal = k;
-    weights[k] = jacobian;
+    weights[k] = 1;
     for (int d = 0; d < 4; ++d)
     {
       int i = ordinal%n; ordinal /= n;
@@ -117,6 +116,14 @@ inline int runConventionalComparison(int argc, char **argv)
   {
     auto cache = BasisCache::basisCacheForCell(mesh,cellID);
     cache->setRefCellPointsFC(refPoints);
+    const auto &nodes = cache->getPhysicalCellNodes();
+    double jacobian = 1;
+    for (int d = 0; d < 4; ++d)
+    {
+      double lo = nodes(0,0,d), hi = nodes(0,0,d);
+      for (int node = 1; node < nodes.dimension(1); ++node) { lo = std::min(lo,nodes(0,node,d)); hi = std::max(hi,nodes(0,node,d)); }
+      jacobian *= (hi-lo)/2;
+    }
     const auto &points = cache->getPhysicalCubaturePointsFC();
     FieldContainer<double> values(1,nq);
     f->values(values,cache);
@@ -129,9 +136,10 @@ inline int runConventionalComparison(int argc, char **argv)
         exact *= ComparisonProblem::bubble(points(0,k,d),vertices[d].front(),vertices[d].back());
       }
       const double value = values(0,k);
-      out << weights[k] << ',' << value << ',' << exact << '\n';
-      norm2 += weights[k]*exact*exact;
-      error2 += weights[k]*(value-exact)*(value-exact);
+      const double weight = jacobian*weights[k];
+      out << weight << ',' << value << ',' << exact << '\n';
+      norm2 += weight*exact*exact;
+      error2 += weight*(value-exact)*(value-exact);
     }
   }
   metrics["relative_exact_l2_error"] = std::sqrt(error2/norm2);

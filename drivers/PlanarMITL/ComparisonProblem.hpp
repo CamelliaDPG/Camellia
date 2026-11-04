@@ -1,4 +1,5 @@
 #pragma once
+#include <set>
 
 #include "PlanarMITLCommon.hpp"
 #include "Teuchos_CommandLineProcessor.hpp"
@@ -34,7 +35,8 @@ struct ComparisonProblem
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
   double localTolerance = 1e-6, rieszSvdTolerance = 0;
-  bool verbose = false, comparison = true, splitModes = false, infSupEnrichment = false;
+  bool verbose = false, comparison = true, splitModes = false, infSupEnrichment = false, gradedX = false;
+  int xRefinements = 0;
   std::string outputPrefix;
 
   int parse(int argc, char **argv, const std::string &backend)
@@ -52,6 +54,9 @@ struct ComparisonProblem
     cmd.setOption("c", &c); cmd.setOption("qOverM", &qOverM);
     cmd.setOption("Ex", &Ex); cmd.setOption("By", &By);
     cmd.setOption("xWidth", &xWidth); cmd.setOption("tWidth", &tWidth);
+    cmd.setOption("gradedX", "uniformX", &gradedX,
+                  "Geometric x grading toward x=0 by bisection (as MeshFactory::geometricGradedIntervalMeshTopology): nx base cells");
+    cmd.setOption("xRefinements", &xRefinements, "Uniform bisections of every x cell after building the base mesh");
     cmd.setOption("alpha", &alpha);
     cmd.setOption("alphaMeshScale", &alphaMeshScale,
                   "If positive, the graph-norm L^2 weight on x-cell K is max(alpha, alphaMeshScale / h_x(K)^2)");
@@ -81,11 +86,32 @@ struct ComparisonProblem
     return 0;
   }
 
-  std::array<int,4> counts() const { return {nx, nt, nux, nuz}; }
+  std::array<int,4> counts() const { return {int(xVertices().size()) - 1, nt, nux, nuz}; }
+  //! x vertices: uniform, or bisection-graded toward x = 0 (widths 1/2, 1/4, ..., two cells of 2^{1-nx}), then
+  //! xRefinements uniform bisections of every cell.
+  std::vector<double> xVertices() const
+  {
+    std::vector<double> v;
+    if (!gradedX || nx == 1) v = uniformVertices(0,xWidth,nx);
+    else
+    {
+      std::set<double> s {0.0, xWidth};
+      double right = xWidth;
+      for (int i = 2; i <= nx; ++i) { right /= 2; s.insert(right); }
+      v.assign(s.begin(), s.end());
+    }
+    for (int r = 0; r < xRefinements; ++r)
+    {
+      std::vector<double> refined {v.front()};
+      for (size_t i = 1; i < v.size(); ++i) { refined.push_back(0.5*(v[i-1]+v[i])); refined.push_back(v[i]); }
+      v = refined;
+    }
+    return v;
+  }
   std::vector<std::vector<double>> vertices() const
   {
     double uMax = properVelocityFromBeta(betaMax,c), uMin = properVelocityFromBeta(beta0,c);
-    return {uniformVertices(0,xWidth,nx), uniformVertices(0,tWidth,nt),
+    return {xVertices(), uniformVertices(0,tWidth,nt),
             uniformVertices(uMin,uMax-uMin,nux), uniformVertices(-uMax,2*uMax,nuz)};
   }
   static double bubble(double y, double a, double b)
@@ -99,7 +125,7 @@ struct ComparisonProblem
   }
   std::map<std::string,double> metadata() const
   {
-    return {{"nx",nx},{"nt",nt},{"nux",nux},{"nuz",nuz},{"p",p},{"dp",dp},
+    return {{"nx",int(xVertices().size()) - 1},{"graded_x",double(gradedX)},{"x_refinements",double(xRefinements)},{"nt",nt},{"nux",nux},{"nuz",nuz},{"p",p},{"dp",dp},
             {"quadrature_degree",quadratureDegree},{"sample_degree",sampleDegree},
             {"beta0",beta0},{"betaMax",betaMax},{"c",c},{"q_over_m",qOverM},
             {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},
