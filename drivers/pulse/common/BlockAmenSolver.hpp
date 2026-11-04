@@ -21,6 +21,8 @@ struct AmenOptions
   int maxLocalIterations = 300;
   unsigned seed = 7;
   bool verbose = true;
+  // Saddle-point enrichment of block 0 (the Riesz block) with the projected image of the trial blocks.
+  bool infSupEnrichment = false;
 };
 
 template <class Tensor>
@@ -107,6 +109,7 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.solve3d_2ml_options.eigen_gmres_max_iterations = options.maxLocalIterations;
   solver.solve3d_2ml_options.eigen_gmres_sparsity = 0.0;
   solver.verbose = options.verbose;
+  solver.inf_sup_enrichment_block = options.infSupEnrichment ? 0 : -1;
   std::mt19937 generator(options.seed);
   return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator);
 }
