@@ -144,6 +144,92 @@ def element_matrices(h, beta, k, dp, alpha):
     return G, Bf, faces, Mf
 
 
+def element_matrices_varying(h, origin, beta_fn, k, dp, alpha, nq_extra=3):
+    """As element_matrices(), for beta varying within the element: beta_fn(points) -> (npts, d) array, points in
+    physical coordinates (npts, d).  Assembled by full tensor-product Gauss quadrature, so affordable only for small
+    test spaces (d = 4: test degree <= 5)."""
+    d = len(h)
+    r = k + dp
+    kf = k - 1
+    nf, nt = kf + 1, k + 1
+    nq = r + kf + nq_extra
+    q, wq = leggauss(nq)
+    xs, ws, V, dV, F, Ft = [], [], [], [], [], []
+    for m in range(d):
+        x = origin[m] + 0.5 * h[m] * (q + 1.0)
+        xs.append(x)
+        ws.append(0.5 * h[m] * wq)
+        Vm, dVm = legendre_values(r, x - origin[m], h[m])
+        Fm, _ = legendre_values(max(kf, k), x - origin[m], h[m])
+        V.append(Vm); dV.append(dVm); F.append(Fm[:nf]); Ft.append(Fm[:nt])
+    grids = np.meshgrid(*xs, indexing="ij")
+    pts = np.stack([g.ravel() for g in grids], axis=1)
+    W = ws[0]
+    for m in range(1, d):
+        W = np.multiply.outer(W, ws[m])
+    W = W.ravel()
+    b = beta_fn(pts)                                         # (npts, d)
+    # test values and transport derivative at points: (ntest, npts)
+    Vall = V[0]
+    for m in range(1, d):
+        Vall = np.einsum("ip,jq->ijpq", Vall.reshape(-1, Vall.shape[-1]) if Vall.ndim == 2 else Vall, V[m]) \
+            if False else None
+    # build by Kronecker-structured einsum, direction by direction
+    def tensor_eval(factors):
+        out = factors[0]
+        for f in factors[1:]:
+            out = np.einsum("ap,bq->abpq", out, f).reshape(out.shape[0] * f.shape[0], out.shape[1] * f.shape[1])
+        return out
+    Vt = tensor_eval(V)                                      # (ntest, npts)
+    LV = np.zeros_like(Vt)
+    for m in range(d):
+        Dm = tensor_eval([dV[j] if j == m else V[j] for j in range(d)])
+        LV += Dm * b[:, m][None, :]
+    G = (LV * W) @ LV.T
+    Mtest = (Vt * W) @ Vt.T
+    G = Mtest.copy() if not np.isfinite(alpha) else G + alpha * Mtest
+    Fv = tensor_eval(F)                                      # (nfield, npts)
+    Bf = -(LV * W) @ Fv.T                                    # (test, field)
+    Mf = (Fv * W) @ Fv.T
+    faces = []
+    for i in range(d):
+        for side in (0, 1):
+            xf = origin[i] + (h[i] if side == 1 else 0.0)
+            Ve, _ = legendre_values(r, np.array([xf - origin[i]]), h[i])
+            tang = [m for m in range(d) if m != i]
+            fac_test = [Ve if m == i else V[m] for m in range(d)]
+            Vface = tensor_eval(fac_test)                    # (ntest, nq^(d-1))
+            Tface = tensor_eval([Ft[m] for m in tang])       # (ntrace, nq^(d-1))
+            Wf = ws[tang[0]]
+            for m in tang[1:]:
+                Wf = np.multiply.outer(Wf, ws[m])
+            Wf = Wf.ravel()
+            fgrids = np.meshgrid(*[np.array([xf]) if m == i else xs[m] for m in range(d)], indexing="ij")
+            fpts = np.stack([g.ravel() for g in fgrids], axis=1)
+            bn = beta_fn(fpts)[:, i] * (1.0 if side == 1 else -1.0)
+            Bt = (Vface * Wf) @ Tface.T
+            Mt = (Tface * Wf) @ Tface.T
+            faces.append(dict(dir=i, side=side, bn=float(np.mean(bn)), bn_min=float(bn.min()), bn_max=float(bn.max()),
+                              B=Bt, M=Mt, Mw=(Tface * (Wf / np.abs(bn))) @ Tface.T))
+    return G, Bf, faces, Mf
+
+
+def constants_varying(h, origin, beta_fn, k, dp, alpha):
+    """constants() for varying beta: outflow faces are those with b_n > 0 throughout (faces where b_n changes sign
+    are reported and skipped); trace norm weight 1/b_n pointwise"""
+    G, Bf, faces, Mf = element_matrices_varying(h, origin, beta_fn, k, dp, alpha)
+    mixed = [f for f in faces if f["bn_min"] < 0 < f["bn_max"]]
+    outflow = [f for f in faces if f["bn_min"] > 0]
+    factor = cho_factor(G)
+    Bo = np.hstack([f["B"] for f in outflow])
+    Mo = block_mass([f["Mw"] for f in outflow])
+    GiBo = cho_solve(factor, Bo)
+    beta_h = smallest_sqrt_eig(Bo.T @ GiBo, Mo)
+    Ball = np.hstack([Bf, Bo])
+    gamma_h = smallest_sqrt_eig(Ball.T @ cho_solve(factor, Ball), block_mass([Mf, Mo]))
+    return np.array([beta_h, gamma_h]), len(outflow), len(mixed)
+
+
 def smallest_sqrt_eig(S, M):
     S = 0.5 * (S + S.T)
     lam = eigh(S, 0.5 * (M + M.T), eigvals_only=True, subset_by_index=[0, 0])
