@@ -12,13 +12,54 @@
 #include "RelativisticVlasovSpaceTimeFormulation.h"
 
 #include "AbsFunction.h"
+#include "BasisCache.h"
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
 #include "SolutionMomentFunction.h"
+#include "SqrtFunction.h"
 
 using namespace Camellia;
 using std::vector;
 using std::string;
+
+namespace
+{
+  //! alpha_K = max(alpha, scale / h_x^2) on each element, where h_x is the element's extent in the first (spatial)
+  //! coordinate.  The transport part of the graph norm scales like (|beta| / h)^2, so on a graded spatial mesh a fixed
+  //! alpha that controls the large elements leaves the small ones under-weighted; this keeps alpha at least that
+  //! large on every element.
+  class MeshScaledL2Weight : public TFunction<double>
+  {
+    double _alpha, _scale;
+  public:
+    MeshScaledL2Weight(double alpha, double scale) : TFunction<double>(0), _alpha(alpha), _scale(scale) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
+      const int numCells  = values.dimension(0);
+      const int numPoints = values.dimension(1);
+      const int numNodes  = nodes.dimension(1);
+      TEUCHOS_TEST_FOR_EXCEPTION((nodes.rank() != 3) || (nodes.dimension(0) != numCells) || (numNodes == 0), std::invalid_argument,
+                                 "MeshScaledL2Weight: the BasisCache's physical cell nodes do not match the requested values");
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        double xMin = nodes(cellOrdinal,0,0), xMax = nodes(cellOrdinal,0,0);
+        for (int node=1; node<numNodes; node++)
+        {
+          xMin = std::min(xMin, nodes(cellOrdinal,node,0));
+          xMax = std::max(xMax, nodes(cellOrdinal,node,0));
+        }
+        const double h = xMax - xMin;
+        const double weight = std::max(_alpha, _scale / (h * h));
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          values(cellOrdinal,pointOrdinal) = weight;
+        }
+      }
+    }
+    string displayString() override { return "alpha_K"; }
+  };
+}
 
 RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(const double c, const double q, const double m,
                                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -34,11 +75,13 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const EBasisFamily &basisFamily,
                                                                                const int maxMomentNumberForDriver,
                                                                                const bool enforcePositivity,
-                                                                               const bool useSumFactorizedGramAssembly)
+                                                                               const bool useSumFactorizedGramAssembly,
+                                                                               const double testSpaceL2WeightMeshScale)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
 _testSpaceL2Weight(testSpaceL2Weight),
+_testSpaceL2WeightMeshScale(testSpaceL2WeightMeshScale),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocityVertices_x,
@@ -104,7 +147,16 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const 
       }
       ip->addTerm(f_term);
       
-      LinearTermPtr stabilization_term = sqrt(_testSpaceL2Weight) * w;
+      LinearTermPtr stabilization_term;
+      if (_testSpaceL2WeightMeshScale > 0.0)
+      {
+        FunctionPtr weight = Teuchos::rcp(new MeshScaledL2Weight(_testSpaceL2Weight, _testSpaceL2WeightMeshScale));
+        stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
+      }
+      else
+      {
+        stabilization_term = sqrt(_testSpaceL2Weight) * w;
+      }
       ip->addTerm(stabilization_term);
     }
     else if (_testSpaceInnerProduct == L2TestSpaceInnerProduct)
@@ -263,7 +315,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               _testSpaceInnerProduct, _testSpaceL2Weight,
                                                                               basisFamily(),
                                                                               0, this->enforcePositivity(),
-                                                                              this->useSumFactorizedAssembly()));
+                                                                              this->useSumFactorizedAssembly(),
+                                                                              _testSpaceL2WeightMeshScale));
   
   configureNextSlab(nextSlabForm);
   

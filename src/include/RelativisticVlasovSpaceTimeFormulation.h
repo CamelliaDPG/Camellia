@@ -31,6 +31,7 @@ public:
 protected:
   const double _c; // speed of light.  Must be consistent with the momentum discretization
   const double _testSpaceL2Weight; // weight for "stabilization term" in graph norm.
+  const double _testSpaceL2WeightMeshScale; // if positive, the weight on element K is max(_testSpaceL2Weight, _testSpaceL2WeightMeshScale / h_x(K)^2)
   const TestSpaceInnerProduct _testSpaceInnerProduct;
   
   // Cache one relativistic first-moment Function per (velocity component, species).
@@ -54,7 +55,8 @@ public:
                                          const EBasisFamily &basisFamily = BASIS_FAMILY_HIERARCHICAL,
                                          const int maxMomentNumberForDriver = 0,
                                          const bool enforcePositivity = false,
-                                         const bool useSumFactorizedGramAssembly = false);
+                                         const bool useSumFactorizedGramAssembly = false,
+                                         const double testSpaceL2WeightMeshScale = 0.0);
   
   //! called during initialization of Vlasov Solution objects.  Subclasses must define a distribution field variable (f) with name VlasovSpaceTimeFormulation::S_F, a trace variable (t_n) with name VlasovSpaceTimeFormulation::S_T_N_HAT.  The former is used for moment computations, conservation diagnostics, and convergence criteria for the fixed-point iteration; the latter is used for boundary condition imposition.
   VarFactoryPtr constructVlasovVarFactory() override;

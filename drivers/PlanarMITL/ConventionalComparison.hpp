@@ -35,7 +35,7 @@ inline int runConventionalComparison(int argc, char **argv)
   RelativisticVlasovSpaceTimeFormulation form(problem.c,problem.qOverM,1,fields,spatial,
       vertices[1],vertices[2],vertices[3],{},problem.p,problem.dp,0,
       RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,problem.alpha,
-      BASIS_FAMILY_HIERARCHICAL,0,false,false);
+      BASIS_FAMILY_HIERARCHICAL,0,false,false,problem.alphaMeshScale);
   auto solution = form.vlasovSolution();
   auto mesh = solution->mesh();
   auto bc = BC::bc();

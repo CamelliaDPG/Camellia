@@ -29,11 +29,11 @@ struct ComparisonProblem
   int nx = 1, nt = 1, nux = 1, nuz = 1, p = 2, dp = 1;
   int quadratureDegree = 20, sampleDegree = 10;
   double beta0 = 0, betaMax = 0.5, c = 1, qOverM = -1, Ex = -1, By = 0.5;
-  double xWidth = 1, tWidth = 1, alpha = 1;
+  double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0;
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
-  double localTolerance = 1e-6;
+  double localTolerance = 1e-6, rieszSvdTolerance = 0;
   bool verbose = false, comparison = true, splitModes = false, infSupEnrichment = false;
   std::string outputPrefix;
 
@@ -53,6 +53,8 @@ struct ComparisonProblem
     cmd.setOption("Ex", &Ex); cmd.setOption("By", &By);
     cmd.setOption("xWidth", &xWidth); cmd.setOption("tWidth", &tWidth);
     cmd.setOption("alpha", &alpha);
+    cmd.setOption("alphaMeshScale", &alphaMeshScale,
+                  "If positive, the graph-norm L^2 weight on x-cell K is max(alpha, alphaMeshScale / h_x(K)^2)");
     cmd.setOption("tolerance", &tolerance); cmd.setOption("svdTolerance", &svdTolerance);
     cmd.setOption("coefficientTolerance", &coefficientTolerance);
     cmd.setOption("maxSweeps", &maxSweeps); cmd.setOption("kickrank", &kickrank);
@@ -64,6 +66,8 @@ struct ComparisonProblem
                   "Tensor backend: split each (cell*basis) mode into basis and cell modes (eight TT modes)");
     cmd.setOption("infSupEnrichment", "no-infSupEnrichment", &infSupEnrichment,
                   "Tensor backend: kick the Riesz block with the projected image of the trial blocks");
+    cmd.setOption("rieszSvdTolerance", &rieszSvdTolerance,
+                  "Tensor backend: relative SVD tolerance for the Riesz block's local splits (<= 0: svdTolerance)");
     cmd.setOption("outputPrefix", &outputPrefix);
     auto result = cmd.parse(argc, argv);
     if (result == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 2;
@@ -98,10 +102,10 @@ struct ComparisonProblem
     return {{"nx",nx},{"nt",nt},{"nux",nux},{"nuz",nuz},{"p",p},{"dp",dp},
             {"quadrature_degree",quadratureDegree},{"sample_degree",sampleDegree},
             {"beta0",beta0},{"betaMax",betaMax},{"c",c},{"q_over_m",qOverM},
-            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},
+            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},
             {"target",tolerance},{"svd_tolerance",svdTolerance},{"coefficient_tolerance",coefficientTolerance},
             {"max_sweeps",maxSweeps},{"kickrank",kickrank},{"max_rank",maxRank},
-            {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"inf_sup_enrichment",double(infSupEnrichment)}};
+            {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"inf_sup_enrichment",double(infSupEnrichment)},{"riesz_svd_tolerance",rieszSvdTolerance}};
   }
 };
 

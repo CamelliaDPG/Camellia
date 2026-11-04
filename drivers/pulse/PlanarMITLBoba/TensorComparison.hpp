@@ -74,12 +74,14 @@ inline int runTensorComparison(int argc, char **argv)
   options.localTolerance = problem.localTolerance;
   options.maxLocalIterations = problem.maxLocalIterations;
   options.infSupEnrichment = problem.infSupEnrichment;
+  options.rieszTolerance = problem.rieszSvdTolerance;
   const auto start = ComparisonClock::now();
   const auto vertices = problem.vertices();
   std::vector<Axis> axes;
   for (const auto &mesh : vertices) axes.emplace_back(mesh,problem.p,problem.dp,problem.quadratureDegree);
   LorentzFactors h(axes[2],axes[3],problem.c,problem.coefficientTolerance);
-  auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,problem.alpha,problem.svdTolerance);
+  auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,problem.alpha,problem.svdTolerance,
+                         problem.alphaMeshScale);
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
   const auto solveStart = ComparisonClock::now();

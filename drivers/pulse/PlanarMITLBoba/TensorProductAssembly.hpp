@@ -176,7 +176,8 @@ struct System
 /// Build sqrt(W)*L, then B=-L^T W F and G=L^T W L+alpha*M.
 /// The four TT modes are (cell*basis) for x,t,ux,uz, with x fastest.
 inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
-                       double qOverM, double Ex, double By, double alpha, double tolerance)
+                       double qOverM, double Ex, double By, double alpha, double tolerance,
+                       double alphaMeshScale = 0.0)
 {
   boba::Array<host_matrix, 4> evaluation, fieldEvaluation;
   Sizes testSizes, fieldSizes;
@@ -188,7 +189,22 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
     testSizes[d] = axes[d].test.cols();
     fieldSizes[d] = axes[d].field.cols();
   }
-  auto massEvaluation = boba::make_ttm_from_matrices<4, host_space, double>(evaluation);
+  // Graph-norm L^2 weight alpha_K = max(alpha, alphaMeshScale / h_x(K)^2), constant on each x cell: a diagonal
+  // weight on the x factor of the (rank-one) mass term, so the Gram ranks are unchanged.
+  boba::Array<host_matrix, 4> massFactors = evaluation;
+  {
+    const auto &x = axes[0];
+    const int cells = int(x.vertices.size()) - 1, nq = int(x.points.size()) / cells;
+    Eigen::VectorXd weight(x.points.size());
+    for (int cell = 0; cell < cells; ++cell)
+    {
+      const double hx = x.vertices[cell + 1] - x.vertices[cell];
+      const double alphaK = alphaMeshScale > 0.0 ? std::max(alpha, alphaMeshScale / (hx * hx)) : alpha;
+      weight.segment(cell * nq, nq) = (alphaK * x.weights.segment(cell * nq, nq).array()).sqrt().matrix();
+    }
+    massFactors[0] = hostMatrix(weight.asDiagonal() * x.test);
+  }
+  auto massEvaluation = boba::make_ttm_from_matrices<4, host_space, double>(massFactors);
   auto fieldValues = boba::make_ttm_from_matrices<4, host_space, double>(fieldEvaluation);
   auto term = [&](size_t derivativeAxis, const Eigen::VectorXd &ux,
                   const Eigen::VectorXd &uz, double coefficient) {
@@ -219,7 +235,7 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
     }
     DpgBoba::round(transport, tolerance);
   }
-  auto gram = transport.transpose() * transport + alpha * (massEvaluation.transpose() * massEvaluation);
+  auto gram = transport.transpose() * transport + massEvaluation.transpose() * massEvaluation;
   DpgBoba::round(gram, tolerance);
   auto volume = -1.0 * (transport.transpose() * fieldValues);
   DpgBoba::round(volume, tolerance);
