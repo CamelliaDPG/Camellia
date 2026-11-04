@@ -221,3 +221,200 @@ inline BlockVector mergeSolution(const SplitBlockVector &solution)
   return result;
 }
 } // namespace PlanarMITLBoba
+
+namespace PlanarMITLBoba
+{
+/// Split only the axes flagged in `split` (basis mode, then cell mode); unsplit axes stay one TT mode each.  D is the
+/// resulting number of modes, 4 + (number of split axes).  With one cell in a direction an extra cell mode would be
+/// trivial (size 1), which made block AMEn diverge in the all-axes split, so only multi-cell axes should be split.
+/// Built from the eight-mode split, contracting each unsplit axis's (mode, size-1) pair back into one core.
+template <size_t D>
+host_tt_matrix<D> splitMatrixAxes(const TTMatrix &matrix, const std::array<bool, 4> &split,
+                                  const std::array<size_t, 4> &rowBasis, const std::array<size_t, 4> &colBasis,
+                                  double tolerance)
+{
+  std::array<size_t, 4> rb, cb;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    rb[d] = split[d] ? rowBasis[d] : matrix.core_rows(d);
+    cb[d] = split[d] ? colBasis[d] : matrix.core_cols(d);
+  }
+  auto eight = splitMatrix(matrix, rb, cb, tolerance);
+  boba::Array<size_t, D> rows, cols;
+  std::vector<boba::Tensor<4, host_space, double>> cores;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    if (split[d])
+    {
+      cores.push_back(eight.cores[2 * d]);
+      cores.push_back(eight.cores[2 * d + 1]);
+      continue;
+    }
+    const auto &A = eight.cores[2 * d], &B = eight.cores[2 * d + 1];
+    const size_t rL = A.sizes(0), n = A.sizes(1), m = A.sizes(2), k = A.sizes(3), rR = B.sizes(3);
+    auto a = A.const_view(); auto b = B.const_view();
+    boba::Tensor<4, host_space, double> core({rL, n, m, rR});
+    auto out = core.view();
+    for (size_t r = 0; r < rR; ++r)
+      for (size_t j = 0; j < m; ++j)
+        for (size_t i = 0; i < n; ++i)
+          for (size_t l = 0; l < rL; ++l)
+          {
+            double sum = 0.0;
+            for (size_t q = 0; q < k; ++q) { sum += a({l, i, j, q}) * b({q, 0, 0, r}); }
+            out({l, i, j, r}) = sum;
+          }
+    cores.push_back(core);
+  }
+  if (cores.size() != D) { throw std::invalid_argument("splitMatrixAxes: D does not match the split mask"); }
+  for (size_t e = 0; e < D; ++e) { rows[e] = cores[e].sizes(1); cols[e] = cores[e].sizes(2); }
+  host_tt_matrix<D> result(rows, cols);
+  for (size_t e = 0; e < D; ++e) { result.cores[e] = cores[e]; }
+  return result;
+}
+
+template <size_t D>
+host_tt_vector<D> splitVectorAxes(const TTVector &vector, const std::array<bool, 4> &split,
+                                  const std::array<size_t, 4> &basis, double tolerance)
+{
+  std::array<size_t, 4> nb;
+  for (size_t d = 0; d < 4; ++d) { nb[d] = split[d] ? basis[d] : vector.sizes(d); }
+  auto eight = splitVector(vector, nb, tolerance);
+  std::vector<boba::Tensor<3, host_space, double>> cores;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    if (split[d])
+    {
+      cores.push_back(eight.cores[2 * d]);
+      cores.push_back(eight.cores[2 * d + 1]);
+      continue;
+    }
+    const auto &A = eight.cores[2 * d], &B = eight.cores[2 * d + 1];
+    const size_t rL = A.sizes(0), n = A.sizes(1), k = A.sizes(2), rR = B.sizes(2);
+    auto a = A.const_view(); auto b = B.const_view();
+    boba::Tensor<3, host_space, double> core({rL, n, rR});
+    auto out = core.view();
+    for (size_t r = 0; r < rR; ++r)
+      for (size_t i = 0; i < n; ++i)
+        for (size_t l = 0; l < rL; ++l)
+        {
+          double sum = 0.0;
+          for (size_t q = 0; q < k; ++q) { sum += a({l, i, q}) * b({q, 0, r}); }
+          out({l, i, r}) = sum;
+        }
+    cores.push_back(core);
+  }
+  if (cores.size() != D) { throw std::invalid_argument("splitVectorAxes: D does not match the split mask"); }
+  boba::Array<size_t, D> sizes;
+  for (size_t e = 0; e < D; ++e) { sizes[e] = cores[e].sizes(1); }
+  host_tt_vector<D> result(sizes);
+  for (size_t e = 0; e < D; ++e) { result.cores[e] = cores[e]; }
+  return result;
+}
+
+/// Merge each split axis's (basis, cell) pair back into one (cell*basis) mode, exactly.
+template <size_t D>
+TTVector mergeVectorAxes(const host_tt_vector<D> &vector, const std::array<bool, 4> &split)
+{
+  std::vector<boba::Tensor<3, host_space, double>> cores;
+  size_t e = 0;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    if (!split[d]) { cores.push_back(vector.cores[e++]); continue; }
+    const auto &A = vector.cores[e], &B = vector.cores[e + 1];
+    e += 2;
+    const size_t rL = A.sizes(0), nb = A.sizes(1), k = A.sizes(2), nc = B.sizes(1), rR = B.sizes(2);
+    auto a = A.const_view(); auto b = B.const_view();
+    boba::Tensor<3, host_space, double> core({rL, nb * nc, rR});
+    auto out = core.view();
+    for (size_t r = 0; r < rR; ++r)
+      for (size_t c = 0; c < nc; ++c)
+        for (size_t i = 0; i < nb; ++i)
+          for (size_t l = 0; l < rL; ++l)
+          {
+            double sum = 0.0;
+            for (size_t q = 0; q < k; ++q) { sum += a({l, i, q}) * b({q, c, r}); }
+            out({l, i + nb * c, r}) = sum;
+          }
+    cores.push_back(core);
+  }
+  Sizes sizes;
+  for (size_t d = 0; d < 4; ++d) { sizes[d] = cores[d].sizes(1); }
+  TTVector result(sizes);
+  for (size_t d = 0; d < 4; ++d) { result.cores[d] = cores[d]; }
+  return result;
+}
+
+/// Per-block basis counts along each axis: mode size / cells; a flux block's normal mode holds (cells - 1) faces of
+/// one "basis function" each.
+inline std::vector<std::array<size_t, 4>> axisBasisCounts(const System &system, const std::vector<Axis> &axes)
+{
+  std::vector<std::array<size_t, 4>> result(system.sizes.size());
+  for (size_t b = 0; b < system.sizes.size(); ++b)
+    for (size_t d = 0; d < 4; ++d)
+    {
+      const size_t cells = axes[d].vertices.size() - 1, n = system.sizes[b][d];
+      result[b][d] = (n % cells == 0) ? n / cells : 1;
+    }
+  return result;
+}
+
+/// Split the flagged axes of every block, solve with block AMEn in D modes, and merge back to four modes.
+template <size_t D>
+BlockVector solveSplitAxes(const System &system, const BlockVector &rhs, const std::vector<Axis> &axes,
+                           const std::array<bool, 4> &split, double tolerance, const DpgBoba::AmenOptions &options,
+                           bool check)
+{
+  const size_t blocks = system.sizes.size();
+  const auto basis = axisBasisCounts(system, axes);
+  boba::BlockOperator<host_tt_matrix<D>> matrix(blocks, blocks);
+  for (size_t i = 0; i < blocks; ++i)
+    for (size_t j = 0; j < blocks; ++j)
+      matrix({i, j}) = splitMatrixAxes<D>(system.matrix({i, j}), split, basis[i], basis[j], tolerance);
+  boba::BlockVector<host_tt_vector<D>> splitRHS(blocks);
+  for (size_t b = 0; b < blocks; ++b) { splitRHS(b) = splitVectorAxes<D>(rhs(b), split, basis[b], tolerance); }
+  for (size_t b = 0; b < blocks; ++b)
+    std::cout << "split block=" << system.names[b] << " sizes=" << splitRHS(b).sizes()
+              << " test_row_ranks=" << matrix({0, b}).ranks_string() << '\n';
+  if (check)
+  {
+    // (split A)(split x), merged, must equal A x for a random four-mode x.
+    auto x = DpgBoba::initialGuess(rhs, 3);
+    boba::BlockVector<host_tt_vector<D>> sx(blocks);
+    for (size_t b = 0; b < blocks; ++b) { sx(b) = splitVectorAxes<D>(x(b), split, basis[b], 1e-14); }
+    for (size_t i = 0; i < blocks; ++i)
+    {
+      auto roundtrip = mergeVectorAxes<D>(sx(i), split);
+      roundtrip -= x(i);
+      auto Ax = system.matrix({i, 0}) * x(0);
+      auto SAx = matrix({i, 0}) * sx(0);
+      for (size_t j = 1; j < blocks; ++j) { Ax += system.matrix({i, j}) * x(j); SAx += matrix({i, j}) * sx(j); }
+      auto difference = mergeVectorAxes<D>(SAx, split);
+      difference -= Ax;
+      std::cout << "split_check block=" << system.names[i]
+                << " vector_roundtrip=" << boba::norm_frobenius(roundtrip) / boba::norm_frobenius(x(i))
+                << " apply_difference=" << boba::norm_frobenius(difference) / (boba::norm_frobenius(Ax) + 1e-300) << '\n';
+    }
+  }
+  auto solution = DpgBoba::solveAmen(matrix, splitRHS, options);
+  BlockVector result(blocks);
+  for (size_t b = 0; b < blocks; ++b) { result(b) = mergeVectorAxes<D>(solution(b), split); }
+  return result;
+}
+
+/// Dispatch on the number of split axes.
+inline BlockVector solveSplitAxes(const System &system, const BlockVector &rhs, const std::vector<Axis> &axes,
+                                  const std::array<bool, 4> &split, double tolerance,
+                                  const DpgBoba::AmenOptions &options, bool check)
+{
+  const int count = int(split[0]) + int(split[1]) + int(split[2]) + int(split[3]);
+  switch (count)
+  {
+  case 1: return solveSplitAxes<5>(system, rhs, axes, split, tolerance, options, check);
+  case 2: return solveSplitAxes<6>(system, rhs, axes, split, tolerance, options, check);
+  case 3: return solveSplitAxes<7>(system, rhs, axes, split, tolerance, options, check);
+  case 4: return solveSplitAxes<8>(system, rhs, axes, split, tolerance, options, check);
+  default: throw std::invalid_argument("solveSplitAxes: split at least one axis");
+  }
+}
+} // namespace PlanarMITLBoba

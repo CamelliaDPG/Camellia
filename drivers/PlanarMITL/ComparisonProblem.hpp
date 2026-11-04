@@ -35,8 +35,9 @@ struct ComparisonProblem
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
   double localTolerance = 1e-6, rieszSvdTolerance = 0;
-  bool verbose = false, comparison = true, splitModes = false, infSupEnrichment = false, gradedX = false;
+  bool verbose = false, comparison = true, splitModes = false, splitX = false, infSupEnrichment = false, gradedX = false;
   int xRefinements = 0;
+  std::string splitAxes = "";
   std::string outputPrefix;
 
   int parse(int argc, char **argv, const std::string &backend)
@@ -69,6 +70,10 @@ struct ComparisonProblem
     cmd.setOption("maxLocalIterations", &maxLocalIterations);
     cmd.setOption("splitModes", "no-splitModes", &splitModes,
                   "Tensor backend: split each (cell*basis) mode into basis and cell modes (eight TT modes)");
+    cmd.setOption("splitX", "no-splitX", &splitX,
+                  "Tensor backend: split only the x (cell*basis) mode into x-basis and x-cell modes (five TT modes)");
+    cmd.setOption("splitAxes", &splitAxes,
+                  "Tensor backend: split (basis, cell) modes of these axes: a 4-digit mask in (x,t,ux,uz), or \"auto\" for every multi-cell axis");
     cmd.setOption("infSupEnrichment", "no-infSupEnrichment", &infSupEnrichment,
                   "Tensor backend: kick the Riesz block with the projected image of the trial blocks");
     cmd.setOption("rieszSvdTolerance", &rieszSvdTolerance,
@@ -131,7 +136,7 @@ struct ComparisonProblem
             {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},
             {"target",tolerance},{"svd_tolerance",svdTolerance},{"coefficient_tolerance",coefficientTolerance},
             {"max_sweeps",maxSweeps},{"kickrank",kickrank},{"max_rank",maxRank},
-            {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"inf_sup_enrichment",double(infSupEnrichment)},{"riesz_svd_tolerance",rieszSvdTolerance}};
+            {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"split_x",double(splitX)},{"inf_sup_enrichment",double(infSupEnrichment)},{"riesz_svd_tolerance",rieszSvdTolerance}};
   }
 };
 

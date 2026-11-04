@@ -86,7 +86,22 @@ inline int runTensorComparison(int argc, char **argv)
   const double assemblySeconds = elapsed(start);
   const auto solveStart = ComparisonClock::now();
   BlockVector solution;
-  if (problem.splitModes)
+  std::array<bool,4> splitMask{false,false,false,false};
+  if (problem.splitX) splitMask[0] = true;
+  if (problem.splitAxes == "auto")
+    for (size_t d = 0; d < 4; ++d) splitMask[d] = axes[d].vertices.size() > 2;
+  else if (!problem.splitAxes.empty())
+  {
+    if (problem.splitAxes.size() != 4) throw std::invalid_argument("--splitAxes takes a 4-digit mask or auto");
+    for (size_t d = 0; d < 4; ++d) splitMask[d] = problem.splitAxes[d] == '1';
+  }
+  if (splitMask[0] || splitMask[1] || splitMask[2] || splitMask[3])
+  {
+    std::cout << "split_axes=" << splitMask[0] << splitMask[1] << splitMask[2] << splitMask[3] << '\n';
+    solution = solveSplitAxes(system,rhs,axes,splitMask,problem.svdTolerance,options,
+                              std::getenv("PLANAR_MITL_CHECK_SPLIT") != nullptr);
+  }
+  else if (problem.splitModes)
   {
     SplitBlockMatrix splitMatrix; SplitBlockVector splitRHS; ModeSplit split;
     splitSystem(system,rhs,axes,problem.svdTolerance,splitMatrix,splitRHS,split);
