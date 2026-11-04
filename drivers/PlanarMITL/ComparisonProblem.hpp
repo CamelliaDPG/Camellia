@@ -65,7 +65,7 @@ struct ComparisonProblem
     cmd.setOption("coefficientTolerance", &coefficientTolerance);
     cmd.setOption("maxSweeps", &maxSweeps); cmd.setOption("kickrank", &kickrank);
     cmd.setOption("maxRank", &maxRank); cmd.setOption("verbose", "quiet", &verbose);
-    cmd.setOption("localSolver", &localSolver, "Tensor coupled site solver: 0=COD, 1=QR, 2=LU, 3=Eigen GMRES, 4=matrix-free BoBa GMRES");
+    cmd.setOption("localSolver", &localSolver, "Tensor coupled site solver: 0=COD, 1=QR, 2=LU, 3=Eigen GMRES, 4=matrix-free BoBa GMRES, 5=sparse LU");
     cmd.setOption("localTolerance", &localTolerance);
     cmd.setOption("maxLocalIterations", &maxLocalIterations);
     cmd.setOption("splitModes", "no-splitModes", &splitModes,
