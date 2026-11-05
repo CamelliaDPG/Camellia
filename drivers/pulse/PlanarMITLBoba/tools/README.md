@@ -16,6 +16,7 @@ The tensor driver and BoBa have debug hooks, all off by default:
 | `BOBA_AMEN_DUMP_DIR=<dir>` | BoBa writes scaled dense site systems: `site<i>_sweep<s>_n<N>_{A,b,phiL,Acore,phiR}.bin` + `_meta.txt` |
 | `BOBA_AMEN_DUMP_MIN_SIZE=<N>` | only dump sites with at least N unknowns (default 0) |
 | `BOBA_AMEN_DUMP_MAX=<k>` | at most k dumps per run (default 4) |
+| `PLANAR_MITL_DUMP_SPARSE=<prefix>` | the driver writes G as element blocks (`_Gelem.{txt,bin}`, `_Gelem_idx.bin`), the test x trial blocks as COO (`_0_<j>.coo`), RHS blocks, and TT modes; scales to large meshes |
 | `PLANAR_MITL_DUMP_GLOBAL=<prefix>` | the driver writes the decompressed global blocks `<prefix>_<i>_<j>.bin` + `<prefix>_blocks.txt` |
 | `PLANAR_MITL_CHECK_SPLIT=1` | with `--splitX`/`--splitAxes`, check that the mode split is exact |
 
@@ -55,7 +56,10 @@ PlanarMITLBobaDriver --comparison --p=3 --tWidth=0.1 --alpha=1e2 --alphaMeshScal
   S = B^T G^{-1} B (G^{-1} by element-block Cholesky of the memory-mapped Gram block) with TT rank measurement and rank
   control: exact CG, truncated CG, truncated subspace projection (Sands et al.), and the perturbed (rank-reduced) step.
   Needs a global dump with RHS and mode files (PLANAR_MITL_DUMP_GLOBAL; the driver writes `_rhs_<b>.bin`, `_modes.txt`).
-  Memory: ~3x the dense Gram file plus S; (16,1,2,2) needs ~35 GB.
+  Memory: dense S is n_trial^2 doubles; use `--matfree` (element-local S, never formed) for large cases such as
+  (16,1,4,4).
+- `gram_block_sharing.py <prefix>` -- counts distinct element Gram blocks (up to a scalar and up to diagonal
+  congruence) in an element-block dump, and which cell indices they depend on.
 - `element_gram_inverse_rank.py` -- single-element study of whether G^{-1} = M^{-1}/alpha + (low rank): (K, M)
   spectrum, rank of the correction, and Kronecker ranks of G^{-1} across (t,x)|(u_x,u_z).  Imports
   `element_stability.py` (drivers/papers/RelativisticVlasovSpaceTime, branch 316); set `ELEMENT_STABILITY_DIR`

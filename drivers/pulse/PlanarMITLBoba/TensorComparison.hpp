@@ -67,6 +67,72 @@ inline Eigen::SparseMatrix<double> sparseMatrix(const TTMatrix &matrix, double d
   return partial[0];
 }
 
+/// Element blocks of a TT matrix whose cores are block diagonal in each axis's cell index (the Gram matrix): for each
+/// element (cell multi-index), contract the cores restricted to that cell's rows/cols.  Writes all blocks, in element
+/// order (x cell fastest), to <prefix>_Gelem.bin, plus each block's global row indices to <prefix>_Gelem_idx.bin.
+inline void writeElementBlocks(const TTMatrix &matrix, const std::vector<Axis> &axes, const std::string &prefix)
+{
+  std::array<size_t, 4> cells, nb;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    cells[d] = axes[d].vertices.size() - 1;
+    nb[d] = matrix.core_rows(d) / cells[d];
+    if (nb[d] * cells[d] != matrix.core_rows(d) || matrix.core_cols(d) != matrix.core_rows(d))
+      throw std::invalid_argument("writeElementBlocks: matrix is not square and cell-blocked");
+  }
+  std::ofstream out(prefix + "_Gelem.bin", std::ios::binary), idxOut(prefix + "_Gelem_idx.bin", std::ios::binary);
+  std::ofstream meta(prefix + "_Gelem.txt");
+  const size_t blockSize = nb[0] * nb[1] * nb[2] * nb[3];
+  meta << cells[0] << ' ' << cells[1] << ' ' << cells[2] << ' ' << cells[3] << ' '
+       << nb[0] << ' ' << nb[1] << ' ' << nb[2] << ' ' << nb[3] << ' ' << blockSize << '\n';
+  const size_t rowStride1 = matrix.core_rows(0), rowStride2 = rowStride1 * matrix.core_rows(1),
+               rowStride3 = rowStride2 * matrix.core_rows(2);
+  std::vector<double> block(blockSize * blockSize);
+  std::vector<int> idx(blockSize);
+  for (size_t c3 = 0; c3 < cells[3]; ++c3)
+    for (size_t c2 = 0; c2 < cells[2]; ++c2)
+      for (size_t c1 = 0; c1 < cells[1]; ++c1)
+        for (size_t c0 = 0; c0 < cells[0]; ++c0)
+        {
+          const std::array<size_t, 4> c{c0, c1, c2, c3};
+          // partial[a] is the (rows x cols) block over the first d axes, for right rank index a
+          std::vector<Eigen::MatrixXd> partial(1, Eigen::MatrixXd::Ones(1, 1));
+          for (size_t d = 0; d < 4; ++d)
+          {
+            const auto &core = matrix.cores[d];
+            auto v = core.const_view();
+            const size_t rl = core.sizes(0), rr = core.sizes(3), n = nb[d];
+            const size_t base = c[d] * n;
+            std::vector<Eigen::MatrixXd> next(rr, Eigen::MatrixXd::Zero(partial[0].rows() * n, partial[0].cols() * n));
+            for (size_t b = 0; b < rr; ++b)
+              for (size_t a = 0; a < rl; ++a)
+              {
+                Eigen::MatrixXd local(n, n);
+                for (size_t j = 0; j < n; ++j)
+                  for (size_t i = 0; i < n; ++i) local(i, j) = v({a, base + i, base + j, b});
+                if (local.isZero(0.0)) continue;
+                // Kronecker product kron(local, partial[a]): earlier axes fastest
+                const auto &P = partial[a];
+                for (size_t j = 0; j < n; ++j)
+                  for (size_t i = 0; i < n; ++i)
+                    if (local(i, j) != 0.0)
+                      next[b].block(i * P.rows(), j * P.cols(), P.rows(), P.cols()) += local(i, j) * P;
+              }
+            partial = std::move(next);
+          }
+          const Eigen::MatrixXd &K = partial[0];
+          out.write(reinterpret_cast<const char*>(K.data()), std::streamsize(blockSize * blockSize * sizeof(double)));
+          size_t k = 0;
+          for (size_t i3 = 0; i3 < nb[3]; ++i3)
+            for (size_t i2 = 0; i2 < nb[2]; ++i2)
+              for (size_t i1 = 0; i1 < nb[1]; ++i1)
+                for (size_t i0 = 0; i0 < nb[0]; ++i0)
+                  idx[k++] = int((c0 * nb[0] + i0) + rowStride1 * (c1 * nb[1] + i1) + rowStride2 * (c2 * nb[2] + i2) +
+                                 rowStride3 * (c3 * nb[3] + i3));
+          idxOut.write(reinterpret_cast<const char*>(idx.data()), std::streamsize(blockSize * sizeof(int)));
+        }
+}
+
 inline void writeSparse(const Eigen::SparseMatrix<double> &A, const std::string &name)
 {
   std::ofstream out(name, std::ios::binary);
@@ -165,9 +231,10 @@ inline int runTensorComparison(int argc, char **argv)
   {
     // Debug: row-0 blocks (Gram G and test x trial blocks B_j) as sparse COO files, RHS blocks, TT mode sizes.
     std::ofstream meta(std::string(sparsePrefix) + "_blocks.txt");
-    for (size_t j = 0; j < system.names.size(); ++j)
+    writeElementBlocks(system.matrix({0,0}), axes, sparsePrefix);
+    for (size_t j = 1; j < system.names.size(); ++j)
     {
-      auto A = (j == 0) ? sparseMatrixRounded(system.matrix({0,0}), 1e-13, 1e-14) : sparseMatrix(system.matrix({0,j}), 1e-14);
+      auto A = sparseMatrix(system.matrix({0,j}), 1e-14);
       writeSparse(A, std::string(sparsePrefix) + "_0_" + std::to_string(j) + ".coo");
       meta << 0 << ' ' << j << ' ' << A.rows() << ' ' << A.cols() << ' ' << system.names[0] << ' ' << system.names[j]
            << ' ' << A.nonZeros() << '\n';

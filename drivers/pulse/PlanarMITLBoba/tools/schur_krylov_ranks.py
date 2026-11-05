@@ -31,8 +31,16 @@ def load_sparse(prefix):
             v = np.fromfile(f, dtype=np.float64, count=n)
         return sp.csr_matrix((v, (ri, ci)), shape=(r, c))
     meta = [l.split() for l in open(prefix + "_blocks.txt")]
-    nb = len(meta)
     blk = {(0, int(m[1])): coo(f"{prefix}_0_{m[1]}.coo") for m in meta}
+    nb = 1 + len([m for m in meta if int(m[1]) > 0])
+    import os
+    if os.path.exists(prefix + "_Gelem.txt"):
+        # element blocks of G: list of (global indices, dense block); G itself is never assembled
+        info = [int(x) for x in open(prefix + "_Gelem.txt").read().split()]
+        bs = info[8]; ne = info[0] * info[1] * info[2] * info[3]
+        data = np.fromfile(prefix + "_Gelem.bin").reshape(ne, bs, bs)          # each block column-major
+        idx = np.fromfile(prefix + "_Gelem_idx.bin", dtype=np.int32).reshape(ne, bs)
+        blk[0, 0] = [(idx[k], data[k].T) for k in range(ne)]
     rhs = [np.fromfile(f"{prefix}_rhs_{b}.bin") for b in range(nb)]
     modes = {int(l.split()[0]): [int(x) for x in l.split()[2:6]] for l in open(prefix + "_modes.txt")}
     return blk, rhs, modes, nb
@@ -91,16 +99,20 @@ def main():
     ap.add_argument("--iters", type=int, default=150); ap.add_argument("--methods", default="cg,tcg,tproj,pstep")
     ap.add_argument("--noprec", action="store_true"); ap.add_argument("--every", type=int, default=10)
     ap.add_argument("--m", type=int, default=8, help="subspace size for tproj")
+    ap.add_argument("--matfree", action="store_true", help="never form S: apply sum_K B_K^T G_K^{-1} B_K (large cases)")
     a = ap.parse_args()
     import os, scipy.sparse as sp, scipy.sparse.csgraph as csg
-    sparse = os.path.exists(a.prefix + "_0_0.coo")
+    sparse = os.path.exists(a.prefix + "_0_1.coo")
     blk, rhs, modes, nb = (load_sparse if sparse else load)(a.prefix)
     G = blk[0, 0]; l = rhs[0]
     B = sp.hstack([blk[0, j] for j in range(1, nb)]).tocsr() if sparse else np.hstack([blk[0, j] for j in range(1, nb)])
     # G is block diagonal over elements in a suitable ordering; factor it sparsely (it is far too large to factor
     # densely at 40k).  Connected components of its sparsity graph are the element blocks.
-    n_test = G.shape[0]
-    if sparse:
+    n_test = len(l)
+    if isinstance(G, list):
+        factors = [(idx, sla.cho_factor(0.5 * (Gk + Gk.T))) for idx, Gk in G]
+        ncomp = len(factors)
+    elif sparse:
         Gs = G
     else:
         rows, cols = [], []
@@ -110,18 +122,34 @@ def main():
             rows.append(ii); cols.append(jj + j0)
         rows = np.concatenate(rows); cols = np.concatenate(cols)
         Gs = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=G.shape)
-    ncomp, labels = csg.connected_components(Gs, directed=False)
-    factors = []
-    for k in range(ncomp):
-        idx = np.flatnonzero(labels == k)
-        Gk = (G[idx][:, idx].toarray() if sparse else np.asarray(G[np.ix_(idx, idx)]))
-        factors.append((idx, sla.cho_factor(0.5 * (Gk + Gk.T))))
+    if not isinstance(G, list):
+        ncomp, labels = csg.connected_components(Gs, directed=False)
+        factors = []
+        for k in range(ncomp):
+            idx = np.flatnonzero(labels == k)
+            Gk = (G[idx][:, idx].toarray() if sparse else np.asarray(G[np.ix_(idx, idx)]))
+            factors.append((idx, sla.cho_factor(0.5 * (Gk + Gk.T))))
     def Ginv(v):
         out = np.empty_like(v)
         for idx, f in factors: out[idx] = sla.cho_solve(f, v[idx])
         return out
-    print(f"G: {G.shape[0]} dofs in {ncomp} diagonal blocks (sizes {min(len(i) for i,_ in factors)}-{max(len(i) for i,_ in factors)})", flush=True)
-    if sparse:
+    print(f"G: {n_test} dofs in {ncomp} diagonal blocks (sizes {min(len(i) for i,_ in factors)}-{max(len(i) for i,_ in factors)})", flush=True)
+    if a.matfree:
+        # Element-local, matrix-free S p = sum_K B_K^T G_K^{-1} B_K p (B_K = rows of B on element K, sparse).
+        Bks = [(idx, B[idx], f) for idx, f in factors]
+        class MatFreeS:
+            shape = (B.shape[1], B.shape[1])
+            def __matmul__(self, v):
+                out = np.zeros(B.shape[1])
+                for idx, Bk, f in Bks: out += Bk.T @ sla.cho_solve(f, Bk @ v)
+                return out
+            def diagonal(self):
+                d = np.zeros(B.shape[1])
+                for idx, Bk, f in Bks:
+                    Bd = Bk.toarray(); d += np.einsum('ij,ij->j', Bd, sla.cho_solve(f, Bd))
+                return d
+        S = MatFreeS()
+    elif sparse:
         # S = B^T G^{-1} B, built by element blocks (G^{-1} block diagonal): sum_k B_k^T G_k^{-1} B_k
         S = np.zeros((B.shape[1], B.shape[1]))
         for idx, f in factors:
@@ -130,15 +158,27 @@ def main():
         S = B.T @ Ginv(B)
     c = B.T @ Ginv(l)
     test_sizes = modes[0]
-    u_star = np.linalg.solve(S, c)
+    if a.matfree:
+        # reference solution: Jacobi-PCG on the matrix-free S to a tight tolerance
+        dS0 = S.diagonal(); u_star = np.zeros_like(c); r0 = c.copy(); z0 = r0 / dS0; p0 = z0.copy(); rz0 = r0 @ z0
+        for it in range(5000):
+            Sp0 = S @ p0; al = rz0 / (p0 @ Sp0); u_star += al * p0; r0 -= al * Sp0
+            if np.linalg.norm(r0) <= 1e-13 * np.linalg.norm(c): break
+            z0 = r0 / dS0; rzn = r0 @ z0; p0 = z0 + (rzn / rz0) * p0; rz0 = rzn
+        print(f"reference solution: {it+1} Jacobi-PCG iterations to 1e-13", flush=True)
+    else:
+        u_star = np.linalg.solve(S, c)
     T = Trial(modes, nb)
     fseg = slice(T.offsets[0], T.offsets[1])
     ferr = lambda u: np.linalg.norm(u[fseg] - u_star[fseg]) / np.linalg.norm(u_star[fseg])
-    eS = lambda u: np.sqrt((u - u_star) @ S @ (u - u_star) / (u_star @ S @ u_star))
-    dS = np.diag(S); M = (lambda r: r) if a.noprec else (lambda r: r / dS)
-    ev = np.linalg.eigvalsh(S); evp = np.linalg.eigvalsh(S / np.sqrt(np.outer(dS, dS)))
-    print(f"S: n={S.shape[0]}, cond {ev.max()/ev.min():.2e}, Jacobi-scaled cond {evp.max()/evp.min():.2e}; "
-          f"exact solution ranks (tau={a.tau:g}): {T.ranks(u_star, a.tau)}", flush=True)
+    eS = lambda u: np.sqrt((u - u_star) @ (S @ (u - u_star)) / (u_star @ (S @ u_star)))
+    dS = S.diagonal() if a.matfree else np.diag(S); M = (lambda r: r) if a.noprec else (lambda r: r / dS)
+    if a.matfree:
+        print(f"S: n={S.shape[0]} (matrix-free); exact solution ranks (tau={a.tau:g}): {T.ranks(u_star, a.tau)}", flush=True)
+    else:
+        ev = np.linalg.eigvalsh(S); evp = np.linalg.eigvalsh(S / np.sqrt(np.outer(dS, dS)))
+        print(f"S: n={S.shape[0]}, cond {ev.max()/ev.min():.2e}, Jacobi-scaled cond {evp.max()/evp.min():.2e}; "
+              f"exact solution ranks (tau={a.tau:g}): {T.ranks(u_star, a.tau)}", flush=True)
     for method in a.methods.split(','):
         u = np.zeros_like(c); r = c.copy(); z = M(r); p = z.copy(); rz = r @ z
         P, SP = [], []
