@@ -59,6 +59,51 @@ namespace
     }
     string displayString() override { return "alpha_K"; }
   };
+
+  //! alpha_K = alpha * prod_d (1 + s_d / (alpha h_d(K)^2)) on each element, where h_d is the element's extent in
+  //! coordinate d (x, t, u_x, u_y, ...) and s_d >= 0 is the scale for that direction (zero, or omitted, to leave d out).
+  //! Each factor depends only on the element's cell in one coordinate direction, so on a tensor-product mesh the
+  //! weighted mass term is a Kronecker product of one-dimensional diagonally scaled masses: it adds no tensor rank.
+  //! Since prod_d (1 + a_d) >= 1 + sum_d a_d, alpha_K is at least alpha + sum_d s_d / h_d^2, the sum over directions of
+  //! the transport scale (|beta_d| / h_d)^2 when s_d ~ C beta_d^2.
+  class DirectionProductL2Weight : public TFunction<double>
+  {
+    double _alpha;
+    vector<double> _scales;
+  public:
+    DirectionProductL2Weight(double alpha, const vector<double> &scales) : TFunction<double>(0), _alpha(alpha), _scales(scales) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
+      const int numCells  = values.dimension(0);
+      const int numPoints = values.dimension(1);
+      const int numNodes  = nodes.dimension(1);
+      TEUCHOS_TEST_FOR_EXCEPTION((nodes.rank() != 3) || (nodes.dimension(0) != numCells) || (numNodes == 0), std::invalid_argument,
+                                 "DirectionProductL2Weight: the BasisCache's physical cell nodes do not match the requested values");
+      const int numScales = std::min(int(_scales.size()), nodes.dimension(2));
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        double weight = _alpha;
+        for (int d=0; d<numScales; d++)
+        {
+          if (_scales[d] == 0.0) continue;
+          double dMin = nodes(cellOrdinal,0,d), dMax = nodes(cellOrdinal,0,d);
+          for (int node=1; node<numNodes; node++)
+          {
+            dMin = std::min(dMin, nodes(cellOrdinal,node,d));
+            dMax = std::max(dMax, nodes(cellOrdinal,node,d));
+          }
+          const double h = dMax - dMin;
+          weight *= 1.0 + _scales[d] / (_alpha * h * h);
+        }
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          values(cellOrdinal,pointOrdinal) = weight;
+        }
+      }
+    }
+    string displayString() override { return "alpha_K (direction product)"; }
+  };
 }
 
 RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(const double c, const double q, const double m,
@@ -75,12 +120,14 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const EBasisFamily &basisFamily,
                                                                                const int maxMomentNumberForDriver,
                                                                                const bool enforcePositivity,
-                                                                               const double testSpaceL2WeightMeshScale)
+                                                                               const double testSpaceL2WeightMeshScale,
+                                                                               const vector<double> &testSpaceL2WeightDirectionScales)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
 _testSpaceL2Weight(testSpaceL2Weight),
 _testSpaceL2WeightMeshScale(testSpaceL2WeightMeshScale),
+_testSpaceL2WeightDirectionScales(testSpaceL2WeightDirectionScales),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocityVertices_x,
@@ -93,6 +140,14 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            true, // true: defer initialization; we call initialize() below.
                            enforcePositivity)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION((testSpaceL2WeightMeshScale > 0.0) && !testSpaceL2WeightDirectionScales.empty(), std::invalid_argument,
+                             "Specify at most one of testSpaceL2WeightMeshScale and testSpaceL2WeightDirectionScales");
+  for (double scale : testSpaceL2WeightDirectionScales)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(scale < 0.0, std::invalid_argument, "testSpaceL2WeightDirectionScales must be nonnegative");
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(!testSpaceL2WeightDirectionScales.empty() && (testSpaceL2Weight <= 0.0), std::invalid_argument,
+                             "testSpaceL2WeightDirectionScales requires a positive testSpaceL2Weight");
   this->initialize();
 }
 
@@ -133,7 +188,12 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
       ip->addTerm(f_term);
       
       LinearTermPtr stabilization_term;
-      if (_testSpaceL2WeightMeshScale > 0.0)
+      if (!_testSpaceL2WeightDirectionScales.empty())
+      {
+        FunctionPtr weight = Teuchos::rcp(new DirectionProductL2Weight(_testSpaceL2Weight, _testSpaceL2WeightDirectionScales));
+        stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
+      }
+      else if (_testSpaceL2WeightMeshScale > 0.0)
       {
         FunctionPtr weight = Teuchos::rcp(new MeshScaledL2Weight(_testSpaceL2Weight, _testSpaceL2WeightMeshScale));
         stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
@@ -300,7 +360,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               _testSpaceInnerProduct, _testSpaceL2Weight,
                                                                               basisFamily(),
                                                                               0, this->enforcePositivity(),
-                                                                              _testSpaceL2WeightMeshScale));
+                                                                              _testSpaceL2WeightMeshScale,
+                                                                              _testSpaceL2WeightDirectionScales));
   
   configureNextSlab(nextSlabForm);
   

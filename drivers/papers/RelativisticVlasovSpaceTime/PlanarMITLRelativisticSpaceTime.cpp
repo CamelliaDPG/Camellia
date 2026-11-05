@@ -953,7 +953,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const bool usePeriodicBCs, const bool useSerendipity,
                                                               const bool useGradedSpatialMesh,
                                                               const int numUniformRefinements,
-                                                              const double L2WeightGraphMeshScale)
+                                                              const double L2WeightGraphMeshScale,
+                                                              const std::vector<double> &L2WeightGraphDirectionScales)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -992,7 +993,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  basisFamily,
                                                                  0,
                                                                  gEnforcePositivity,
-                                                                 L2WeightGraphMeshScale));
+                                                                 L2WeightGraphMeshScale,
+                                                                 L2WeightGraphDirectionScales));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -1137,6 +1139,10 @@ int main(int argc, char *argv[])
     double L2WeightGraphMeshScale = 0; // the transport part of the graph norm scales like (|beta|/h)^2, so on the graded spatial mesh a fixed weight that controls the large elements under-weights the small ones near the cathode (production-scl-graph4e2-x16 blew up there).
     cmdp.setOption("L2WeightGraphMeshScale", &L2WeightGraphMeshScale,
                    "If positive, the weight for the L^2 part of the graph norm on element K is max(L2WeightGraph, L2WeightGraphMeshScale / h_x(K)^2)");
+    std::string L2WeightGraphDirectionScalesString = ""; // tensor-product alternative to L2WeightGraphMeshScale: a product of one-dimensional factors adds no tensor rank (matters for low-rank tensor solvers)
+    cmdp.setOption("L2WeightGraphDirectionScales", &L2WeightGraphDirectionScalesString,
+                   "Comma-separated scales s_d for the coordinates (x, t, u_x, u_y); if given, the weight for the L^2 part of the graph norm on element K is "
+                   "L2WeightGraph * prod_d (1 + s_d / (L2WeightGraph h_d(K)^2)).  Omitted trailing scales are zero.  Exclusive with L2WeightGraphMeshScale.");
     
     // proper velocity domain, specified as fraction of speed of light:
     double beta0                = -0.995; // negative: electrons turned around by the magnetic field can return to the cathode
@@ -1363,6 +1369,15 @@ int main(int argc, char *argv[])
     {
       return -1;
     }
+    std::vector<double> L2WeightGraphDirectionScales;
+    {
+      std::istringstream scalesStream(L2WeightGraphDirectionScalesString);
+      std::string scaleString;
+      while (std::getline(scalesStream, scaleString, ','))
+      {
+        L2WeightGraphDirectionScales.push_back(std::stod(scaleString));
+      }
+    }
     if (!phase0TensorGraphSchurBackendIsValid(phase0TensorGraphSchurBackend))
     {
       if (rank == 0)
@@ -1556,7 +1571,7 @@ int main(int argc, char *argv[])
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
-                                     L2WeightGraphMeshScale);
+                                     L2WeightGraphMeshScale, L2WeightGraphDirectionScales);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
 
@@ -1767,6 +1782,11 @@ int main(int argc, char *argv[])
     {
       suffix << "_GraphL2" << L2WeightGraph;
       if (L2WeightGraphMeshScale > 0) suffix << "_hScale" << L2WeightGraphMeshScale;
+      if (!L2WeightGraphDirectionScales.empty())
+      {
+        suffix << "_hScales";
+        for (double scale : L2WeightGraphDirectionScales) suffix << "_" << scale;
+      }
     }
     
     const std::string problemPrefix = "relativistic-planar-MITL";

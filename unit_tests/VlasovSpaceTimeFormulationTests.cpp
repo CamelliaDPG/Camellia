@@ -2679,9 +2679,11 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
 
   // Graph-norm Gram: compare sum-factorized LinearTerm integration enabled vs. disabled for the relativistic 1D1T2V
   // formulation.  Uses non-unit, non-square element sizes and a non-unit L2 weight, and a nonzero Maxwell field so the
-  // acceleration terms contribute.  testSpaceL2WeightMeshScale > 0 activates the per-element mesh-scaled L2 weight.
+  // acceleration terms contribute.  testSpaceL2WeightMeshScale > 0 activates the per-element mesh-scaled L2 weight;
+  // nonempty directionScales activates the direction-product L2 weight.
   void testRelativisticGraphNormGramSumFactorization1D2V(const bool enforcePositivity, const double testSpaceL2WeightMeshScale,
-                                                         const EBasisFamily basisFamily, Teuchos::FancyOStream &out, bool &success)
+                                                         const EBasisFamily basisFamily, Teuchos::FancyOStream &out, bool &success,
+                                                         const std::vector<double> &directionScales = {})
   {
     const double q = TEST_Q;
     const double m = TEST_M;
@@ -2708,7 +2710,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
                                                                            numUniformRefinements,
                                                                            RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,
                                                                            testSpaceL2Weight, basisFamily, 0,
-                                                                           enforcePositivity, testSpaceL2WeightMeshScale));
+                                                                           enforcePositivity, testSpaceL2WeightMeshScale,
+                                                                           directionScales));
 
     // nonzero, spatially varying Maxwell fields, so that a = q/m (E + v x B) varies over each cell
     FunctionPtr x = Function::xn(1);
@@ -2766,6 +2769,70 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, GraphNormGramSumFactorization_Relativistic1D2V_Serendipity )
   {
     testRelativisticGraphNormGramSumFactorization1D2V(false, 0.0, BASIS_FAMILY_SERENDIPITY, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, GraphNormGramSumFactorization_Relativistic1D2V_DirectionScales )
+  {
+    // a nonzero scale in every direction (x, t, u_x, u_y), so every factor of the direction-product weight is active
+    const std::vector<double> directionScales = {0.05, 0.002, 0.3, 0.1};
+    testRelativisticGraphNormGramSumFactorization1D2V(false, 0.0, BASIS_FAMILY_SERENDIPITY, out, success, directionScales);
+  }
+
+  // The direction-product L2 weight: on one element the Gram matrix's (w,w) part is alpha_K times the alpha = 1 mass
+  // matrix, with alpha_K = alpha prod_d (1 + s_d / (alpha h_d^2)).  Checked by the difference of two graph norms that
+  // share the transport term.
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, GraphNormDirectionProductL2WeightValue_Relativistic1D2V )
+  {
+    const double c = 2.0;
+    const double alpha = 0.3;
+    // one element of size h = (0.7, 0.2, 2.5, 1.25) (verticesFor1DIntervalMesh takes the start and the width)
+    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(0.0, 0.7, 1, false);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(0.0, 0.2, 1);
+    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(-1.5, 2.5, 1);
+    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(-0.5, 1.25, 1);
+    std::vector<double> velocitySpaceVertices_z;
+    const std::vector<double> h = {0.7, 0.2, 2.5, 1.25};
+    const std::vector<double> directionScales = {0.05, 0.002, 0.3, 0.1};
+    double expectedWeight = alpha;
+    for (int d=0; d<4; d++) expectedWeight *= 1.0 + directionScales[d] / (alpha * h[d] * h[d]);
+
+    auto makeForm = [&](double testSpaceL2Weight, const std::vector<double> &scales)
+    {
+      auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(TEST_Q, TEST_EPS0));
+      return Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, TEST_Q, TEST_M, configForm, spatialMeshTopo, temporalVertices,
+                                                                     velocitySpaceVertices_x, velocitySpaceVertices_y,
+                                                                     velocitySpaceVertices_z, 2, 1, 0,
+                                                                     RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,
+                                                                     testSpaceL2Weight, BASIS_FAMILY_HIERARCHICAL, 0, false, 0.0, scales));
+    };
+    auto productForm = makeForm(alpha, directionScales);
+    auto zeroForm    = makeForm(0.0, {}); // transport term only
+    auto unitForm    = makeForm(1.0, {});
+
+    auto mesh = productForm->vlasovMesh();
+    auto cellID = *mesh->cellIDsInPartition().begin();
+    const bool testVsTest = true;
+    auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
+    auto testOrdering = mesh->getElementType(cellID)->testOrderPtr;
+    const int n = testOrdering->totalDofs();
+    FieldContainer<double> G_product(1,n,n), G_zero(1,n,n), G_unit(1,n,n);
+    productForm->constructVlasovInnerProduct()->computeInnerProductMatrix(G_product, testOrdering, basisCache);
+    zeroForm   ->constructVlasovInnerProduct()->computeInnerProductMatrix(G_zero,    testOrdering, basisCache);
+    unitForm   ->constructVlasovInnerProduct()->computeInnerProductMatrix(G_unit,    testOrdering, basisCache);
+
+    // G_product - G_zero = alpha_K M, and G_unit - G_zero = M
+    double maxError = 0, maxEntry = 0;
+    for (int i=0; i<n; i++)
+    {
+      for (int j=0; j<n; j++)
+      {
+        const double M_ij = G_unit(0,i,j) - G_zero(0,i,j);
+        maxError = std::max(maxError, std::abs((G_product(0,i,j) - G_zero(0,i,j)) - expectedWeight * M_ij));
+        maxEntry = std::max(maxEntry, std::abs(expectedWeight * M_ij));
+      }
+    }
+    TEST_COMPARE(maxEntry, >, 0.0);
+    TEST_COMPARE(maxError, <=, 1e-10 * maxEntry);
   }
 
   // LinearTerm sum-factorized volume integration vs. the standard path: the relativistic 1D2V Vlasov bilinear form
