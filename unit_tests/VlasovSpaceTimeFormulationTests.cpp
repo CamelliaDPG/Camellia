@@ -2683,7 +2683,9 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
   // nonempty directionScales activates the direction-product L2 weight.
   void testRelativisticGraphNormGramSumFactorization1D2V(const bool enforcePositivity, const double testSpaceL2WeightMeshScale,
                                                          const EBasisFamily basisFamily, Teuchos::FancyOStream &out, bool &success,
-                                                         const std::vector<double> &directionScales = {})
+                                                         const std::vector<double> &directionScales = {},
+                                                         const double transportScale = 0.0,
+                                                         const std::vector<double> &accelerationBounds = {})
   {
     const double q = TEST_Q;
     const double m = TEST_M;
@@ -2711,7 +2713,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
                                                                            RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,
                                                                            testSpaceL2Weight, basisFamily, 0,
                                                                            enforcePositivity, testSpaceL2WeightMeshScale,
-                                                                           directionScales));
+                                                                           directionScales, transportScale, accelerationBounds));
 
     // nonzero, spatially varying Maxwell fields, so that a = q/m (E + v x B) varies over each cell
     FunctionPtr x = Function::xn(1);
@@ -2776,6 +2778,67 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     // a nonzero scale in every direction (x, t, u_x, u_y), so every factor of the direction-product weight is active
     const std::vector<double> directionScales = {0.05, 0.002, 0.3, 0.1};
     testRelativisticGraphNormGramSumFactorization1D2V(false, 0.0, BASIS_FAMILY_SERENDIPITY, out, success, directionScales);
+  }
+
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, GraphNormGramSumFactorization_Relativistic1D2V_TransportScale )
+  {
+    testRelativisticGraphNormGramSumFactorization1D2V(false, 0.0, BASIS_FAMILY_SERENDIPITY, out, success, {}, 0.05, {1.5, 0.7});
+  }
+
+  // The transport-scale L2 weight on one element of size (0.7, 0.2, 2.5, 1.75), velocity box u_x in [-1.5, 1.0],
+  // u_y in [-0.5, 1.25] (straddling u_y = 0): alpha_K = alpha + C [ (v_x,max / h_x)^2 + 1/h_t^2 + (a_x/h_ux)^2 + (a_y/h_uy)^2 ],
+  // v_x,max = 1.5 / sqrt(1 + 1.5^2 / c^2) (u_y = 0 on the element).  Checked as in the direction-product test.
+  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, GraphNormTransportScaleL2WeightValue_Relativistic1D2V )
+  {
+    const double c = 2.0;
+    const double alpha = 0.3, C = 0.05;
+    const std::vector<double> a = {1.5, 0.7};
+    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(0.0, 0.7, 1, false);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(0.0, 0.2, 1);
+    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(-1.5, 2.5, 1); // [-1.5, 1.0]
+    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(-0.5, 1.75, 1); // [-0.5, 1.25]
+    std::vector<double> velocitySpaceVertices_z;
+    const double vxMax = 1.5 / sqrt(1.0 + 1.5 * 1.5 / (c * c));
+    const double expectedWeight = alpha + C * ( (vxMax / 0.7) * (vxMax / 0.7) + 1.0 / (0.2 * 0.2)
+                                              + (a[0] / 2.5) * (a[0] / 2.5) + (a[1] / 1.75) * (a[1] / 1.75) );
+
+    auto makeForm = [&](double testSpaceL2Weight, double transportScale)
+    {
+      auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(TEST_Q, TEST_EPS0));
+      return Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, TEST_Q, TEST_M, configForm, spatialMeshTopo, temporalVertices,
+                                                                     velocitySpaceVertices_x, velocitySpaceVertices_y,
+                                                                     velocitySpaceVertices_z, 2, 1, 0,
+                                                                     RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,
+                                                                     testSpaceL2Weight, BASIS_FAMILY_HIERARCHICAL, 0, false, 0.0, {},
+                                                                     transportScale, a));
+    };
+    auto transportForm = makeForm(alpha, C);
+    auto zeroForm      = makeForm(0.0, 0.0); // transport term only
+    auto unitForm      = makeForm(1.0, 0.0);
+
+    auto mesh = transportForm->vlasovMesh();
+    auto cellID = *mesh->cellIDsInPartition().begin();
+    const bool testVsTest = true;
+    auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
+    auto testOrdering = mesh->getElementType(cellID)->testOrderPtr;
+    const int n = testOrdering->totalDofs();
+    FieldContainer<double> G_transport(1,n,n), G_zero(1,n,n), G_unit(1,n,n);
+    transportForm->constructVlasovInnerProduct()->computeInnerProductMatrix(G_transport, testOrdering, basisCache);
+    zeroForm     ->constructVlasovInnerProduct()->computeInnerProductMatrix(G_zero,      testOrdering, basisCache);
+    unitForm     ->constructVlasovInnerProduct()->computeInnerProductMatrix(G_unit,      testOrdering, basisCache);
+
+    double maxError = 0, maxEntry = 0;
+    for (int i=0; i<n; i++)
+    {
+      for (int j=0; j<n; j++)
+      {
+        const double M_ij = G_unit(0,i,j) - G_zero(0,i,j);
+        maxError = std::max(maxError, std::abs((G_transport(0,i,j) - G_zero(0,i,j)) - expectedWeight * M_ij));
+        maxEntry = std::max(maxEntry, std::abs(expectedWeight * M_ij));
+      }
+    }
+    TEST_COMPARE(maxEntry, >, 0.0);
+    TEST_COMPARE(maxError, <=, 1e-10 * maxEntry);
   }
 
   // The direction-product L2 weight: on one element the Gram matrix's (w,w) part is alpha_K times the alpha = 1 mass
