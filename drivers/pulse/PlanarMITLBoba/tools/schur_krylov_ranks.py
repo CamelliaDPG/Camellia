@@ -21,6 +21,22 @@ Usage: schur_krylov_ranks.py <prefix> [--tau 1e-4] [--iters 150] [--methods cg,t
 """
 import argparse, numpy as np, scipy.linalg as sla
 
+def load_sparse(prefix):
+    """Sparse row-0 dump (PLANAR_MITL_DUMP_SPARSE): G and test x trial blocks as COO, RHS blocks, TT modes."""
+    import scipy.sparse as sp
+    def coo(name):
+        with open(name, 'rb') as f:
+            r, c, n = np.fromfile(f, dtype=np.int64, count=3)
+            ri = np.fromfile(f, dtype=np.int32, count=n); ci = np.fromfile(f, dtype=np.int32, count=n)
+            v = np.fromfile(f, dtype=np.float64, count=n)
+        return sp.csr_matrix((v, (ri, ci)), shape=(r, c))
+    meta = [l.split() for l in open(prefix + "_blocks.txt")]
+    nb = len(meta)
+    blk = {(0, int(m[1])): coo(f"{prefix}_0_{m[1]}.coo") for m in meta}
+    rhs = [np.fromfile(f"{prefix}_rhs_{b}.bin") for b in range(nb)]
+    modes = {int(l.split()[0]): [int(x) for x in l.split()[2:6]] for l in open(prefix + "_modes.txt")}
+    return blk, rhs, modes, nb
+
 def load(prefix):
     meta = [l.split() for l in open(prefix + "_blocks.txt")]
     nb = max(int(m[0]) for m in meta) + 1
@@ -76,32 +92,44 @@ def main():
     ap.add_argument("--noprec", action="store_true"); ap.add_argument("--every", type=int, default=10)
     ap.add_argument("--m", type=int, default=8, help="subspace size for tproj")
     a = ap.parse_args()
-    blk, rhs, modes, nb = load(a.prefix)
-    G = blk[0, 0]; B = np.hstack([blk[0, j] for j in range(1, nb)])          # test x trial
-    l = rhs[0]
+    import os, scipy.sparse as sp, scipy.sparse.csgraph as csg
+    sparse = os.path.exists(a.prefix + "_0_0.coo")
+    blk, rhs, modes, nb = (load_sparse if sparse else load)(a.prefix)
+    G = blk[0, 0]; l = rhs[0]
+    B = sp.hstack([blk[0, j] for j in range(1, nb)]).tocsr() if sparse else np.hstack([blk[0, j] for j in range(1, nb)])
     # G is block diagonal over elements in a suitable ordering; factor it sparsely (it is far too large to factor
     # densely at 40k).  Connected components of its sparsity graph are the element blocks.
-    import scipy.sparse as sp, scipy.sparse.csgraph as csg
-    n_test = G.shape[0]; rows, cols = [], []
-    for j0 in range(0, n_test, 2000):                     # scan column chunks of the memory-mapped G for nonzeros
-        chunk = np.asarray(G[:, j0:j0 + 2000])
-        ii, jj = np.nonzero(np.abs(chunk) > 0)
-        rows.append(ii); cols.append(jj + j0)
-    rows = np.concatenate(rows); cols = np.concatenate(cols)
-    Gs = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=G.shape)
+    n_test = G.shape[0]
+    if sparse:
+        Gs = G
+    else:
+        rows, cols = [], []
+        for j0 in range(0, n_test, 2000):                 # scan column chunks of the memory-mapped G for nonzeros
+            chunk = np.asarray(G[:, j0:j0 + 2000])
+            ii, jj = np.nonzero(np.abs(chunk) > 0)
+            rows.append(ii); cols.append(jj + j0)
+        rows = np.concatenate(rows); cols = np.concatenate(cols)
+        Gs = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=G.shape)
     ncomp, labels = csg.connected_components(Gs, directed=False)
     factors = []
     for k in range(ncomp):
         idx = np.flatnonzero(labels == k)
-        Gk = np.asarray(G[np.ix_(idx, idx)])
+        Gk = (G[idx][:, idx].toarray() if sparse else np.asarray(G[np.ix_(idx, idx)]))
         factors.append((idx, sla.cho_factor(0.5 * (Gk + Gk.T))))
-    del Gs, rows, cols
     def Ginv(v):
         out = np.empty_like(v)
         for idx, f in factors: out[idx] = sla.cho_solve(f, v[idx])
         return out
     print(f"G: {G.shape[0]} dofs in {ncomp} diagonal blocks (sizes {min(len(i) for i,_ in factors)}-{max(len(i) for i,_ in factors)})", flush=True)
-    S = B.T @ Ginv(B); c = B.T @ Ginv(l)
+    if sparse:
+        # S = B^T G^{-1} B, built by element blocks (G^{-1} block diagonal): sum_k B_k^T G_k^{-1} B_k
+        S = np.zeros((B.shape[1], B.shape[1]))
+        for idx, f in factors:
+            Bk = B[idx].toarray(); S += Bk.T @ sla.cho_solve(f, Bk)
+    else:
+        S = B.T @ Ginv(B)
+    c = B.T @ Ginv(l)
+    test_sizes = modes[0]
     u_star = np.linalg.solve(S, c)
     T = Trial(modes, nb)
     fseg = slice(T.offsets[0], T.offsets[1])
@@ -157,9 +185,15 @@ def main():
                 z = M(r); rz_new = r @ z; p = z + (rz_new / rz) * p; rz = rz_new
                 p, _ = T.round(p, a.tau)
             if k % a.every == 0 or k == 1:
+                # rank of the intermediate G^{-1} B p (the vector a TT code must form to apply S), test-space modes
+                if method in ("cg", "tcg", "pstep", "pstepr"):
+                    _, rGBp = tt_round(Ginv(B @ p), test_sizes, a.tau)
+                else:
+                    rGBp = '-'
+                extra0 = f"  rank(G^-1 B p) {rGBp}  rank(S p) {T.ranks(S @ p, a.tau)}" if rGBp != '-' else ""
                 extra = f"  rank(r) {T.ranks(r, a.tau)} rank(p) {T.ranks(p, a.tau)}" if method in ("cg", "tcg", "pstep", "pstepr") else ""
                 print(f"  it {k:4d}  f err {ferr(u):.2e}  S-err {eS(u):.2e}  |r|/|c| {np.linalg.norm(c - S @ u)/np.linalg.norm(c):.2e}"
-                      f"  rank(x) {T.ranks(u, a.tau)}{extra}", flush=True)
+                      f"  rank(x) {T.ranks(u, a.tau)}{extra}{extra0}", flush=True)
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModeSplitting.hpp"
+#include <Eigen/Sparse>
 #include <cstdlib>
 #include "TensorProductAssembly.hpp"
 #include "../../PlanarMITL/ComparisonProblem.hpp"
@@ -9,6 +10,79 @@ namespace PlanarMITLBoba
 {
 /// Integrate s=beta.grad(product of bubbles), including the continuous internal flux.
 /// This is a continuum manufactured RHS, independently of the trial basis.
+/// Assemble a four-mode TT matrix as a sparse matrix without forming it densely.  Each core C_d(r_{d-1}, n, m, r_d) is
+/// sparse in practice (block structure in the cell index), so the product is built core by core as sparse Kronecker
+/// products carrying the rank index: after core d the partial matrix has rows (r_d, rows_1..d) and cols (cols_1..d).
+/// Linear index convention matches the TT (first mode fastest).
+inline Eigen::SparseMatrix<double> sparseMatrix(const TTMatrix &matrix, double drop = 0.0);
+
+/// Lower-memory variant: TT-round a copy of the matrix first (rank paths are what multiply the partial products), then
+/// assemble.  Used for the large Gram block.
+inline Eigen::SparseMatrix<double> sparseMatrixRounded(const TTMatrix &matrix, double tolerance, double drop = 0.0)
+{
+  auto copy = matrix;
+  DpgBoba::round(copy, tolerance);
+  return sparseMatrix(copy, drop);
+}
+
+inline Eigen::SparseMatrix<double> sparseMatrix(const TTMatrix &matrix, double drop)
+{
+  using Sp = Eigen::SparseMatrix<double>;
+  // partial[r] : sparse matrix (rows_1..d x cols_1..d), one per current right rank index r
+  std::vector<Sp> partial(1, Sp(1, 1));
+  partial[0].insert(0, 0) = 1.0;
+  size_t rowsSoFar = 1, colsSoFar = 1;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    const auto &core = matrix.cores[d];
+    const size_t rl = core.sizes(0), n = core.sizes(1), m = core.sizes(2), rr = core.sizes(3);
+    auto v = core.const_view();
+    std::vector<Sp> next(rr, Sp(rowsSoFar * n, colsSoFar * m));
+    std::vector<Eigen::Triplet<double>> trip;
+    for (size_t b = 0; b < rr; ++b)
+    {
+      trip.clear();
+      for (size_t a = 0; a < rl; ++a)
+      {
+        const Sp &P = partial[a];
+        if (P.nonZeros() == 0) continue;
+        for (size_t j = 0; j < m; ++j)
+          for (size_t i = 0; i < n; ++i)
+          {
+            const double c = v({a, i, j, b});
+            if (c == 0.0) continue;
+            // new linear indices: old index fastest, then this mode's index
+            for (int k = 0; k < P.outerSize(); ++k)
+              for (Sp::InnerIterator it(P, k); it; ++it)
+                trip.emplace_back(int(it.row() + rowsSoFar * i), int(it.col() + colsSoFar * j), it.value() * c);
+          }
+      }
+      next[b].setFromTriplets(trip.begin(), trip.end());
+      if (drop > 0) next[b].prune(drop, 1.0);
+      next[b].makeCompressed();
+    }
+    partial = std::move(next);
+    rowsSoFar *= n; colsSoFar *= m;
+  }
+  return partial[0];
+}
+
+inline void writeSparse(const Eigen::SparseMatrix<double> &A, const std::string &name)
+{
+  std::ofstream out(name, std::ios::binary);
+  const long long rows = A.rows(), cols = A.cols(), nnz = A.nonZeros();
+  out.write(reinterpret_cast<const char*>(&rows), sizeof rows);
+  out.write(reinterpret_cast<const char*>(&cols), sizeof cols);
+  out.write(reinterpret_cast<const char*>(&nnz), sizeof nnz);
+  std::vector<int> ri, ci; std::vector<double> vals; ri.reserve(nnz); ci.reserve(nnz); vals.reserve(nnz);
+  for (int k = 0; k < A.outerSize(); ++k)
+    for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it)
+    { ri.push_back(int(it.row())); ci.push_back(int(it.col())); vals.push_back(it.value()); }
+  out.write(reinterpret_cast<const char*>(ri.data()), std::streamsize(nnz * sizeof(int)));
+  out.write(reinterpret_cast<const char*>(ci.data()), std::streamsize(nnz * sizeof(int)));
+  out.write(reinterpret_cast<const char*>(vals.data()), std::streamsize(nnz * sizeof(double)));
+}
+
 inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &axes,
                                 const LorentzFactors &h, const PlanarMITL::ComparisonProblem &problem)
 {
@@ -87,6 +161,28 @@ inline int runTensorComparison(int argc, char **argv)
                          problem.alphaMeshScale);
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
+  if (const char* sparsePrefix = std::getenv("PLANAR_MITL_DUMP_SPARSE"))
+  {
+    // Debug: row-0 blocks (Gram G and test x trial blocks B_j) as sparse COO files, RHS blocks, TT mode sizes.
+    std::ofstream meta(std::string(sparsePrefix) + "_blocks.txt");
+    for (size_t j = 0; j < system.names.size(); ++j)
+    {
+      auto A = (j == 0) ? sparseMatrixRounded(system.matrix({0,0}), 1e-13, 1e-14) : sparseMatrix(system.matrix({0,j}), 1e-14);
+      writeSparse(A, std::string(sparsePrefix) + "_0_" + std::to_string(j) + ".coo");
+      meta << 0 << ' ' << j << ' ' << A.rows() << ' ' << A.cols() << ' ' << system.names[0] << ' ' << system.names[j]
+           << ' ' << A.nonZeros() << '\n';
+    }
+    std::ofstream modes(std::string(sparsePrefix) + "_modes.txt");
+    for (size_t b = 0; b < system.names.size(); ++b)
+    {
+      auto full = rhs(b).decompress();
+      std::ofstream out(std::string(sparsePrefix) + "_rhs_" + std::to_string(b) + ".bin", std::ios::binary);
+      out.write(reinterpret_cast<const char*>(full.data()), std::streamsize(rhs(b).get_full_size()*sizeof(double)));
+      modes << b << ' ' << system.names[b];
+      for (size_t d = 0; d < 4; ++d) modes << ' ' << system.sizes[b][d];
+      modes << '\n';
+    }
+  }
   if (const char* dumpPrefix = std::getenv("PLANAR_MITL_DUMP_GLOBAL"))
   {
     // Debug: write the decompressed global blocks (row-major per block (i,j), raw doubles) for conditioning studies.
