@@ -49,6 +49,20 @@ inline Eigen::MatrixXd denseMatrix(const TTMatrix &matrix)
   return result;
 }
 
+/// 1D basis families for the test, field, and trace spaces ("nodal" or "hierarchical"; default nodal).  These span
+/// the same spaces; the choice changes only the conditioning of the assembled blocks.
+struct BasisChoice
+{
+  std::string test = "nodal", field = "nodal", trace = "nodal";
+  static Camellia::BasisFamilyPtr family(const std::string &name)
+  {
+    if (name == "nodal") return Camellia::BasisFamily::nodalBasisFamily();
+    if (name == "hierarchical") return Camellia::BasisFamily::hierarchicalBasisFamily();
+    throw std::invalid_argument("basis family must be nodal or hierarchical, got " + name);
+  }
+};
+inline BasisChoice &basisChoice() { static BasisChoice choice; return choice; }
+
 /// Broken 1D bases on arbitrary increasing vertices; physical derivatives and weights.
 struct Axis
 {
@@ -58,12 +72,12 @@ struct Axis
 
   Axis(const std::vector<double> &mesh, int p, int dp, int quadratureDegree) : vertices(mesh)
   {
-    auto family = Camellia::BasisFamily::nodalBasisFamily();
     auto line = Camellia::CellTopology::line();
-    auto w = family->getBasis(line, Camellia::efsForSpace(Camellia::HGRAD_DISC), p + dp);
+    const auto &choice = basisChoice();
+    auto w = BasisChoice::family(choice.test)->getBasis(line, Camellia::efsForSpace(Camellia::HGRAD_DISC), p + dp);
     // BasisFamily takes H1 order, including for L2 bases (whose degree is one less).
-    auto f = family->getBasis(line, Camellia::efsForSpace(Camellia::L2), p);
-    auto j = family->getBasis(line, Camellia::efsForSpace(Camellia::L2), p + 1);
+    auto f = BasisChoice::family(choice.field)->getBasis(line, Camellia::efsForSpace(Camellia::L2), p);
+    auto j = BasisChoice::family(choice.trace)->getBasis(line, Camellia::efsForSpace(Camellia::L2), p + 1);
     if (w->getCardinality() != p + dp + 1 || f->getCardinality() != p || j->getCardinality() != p + 1)
     {
       throw std::runtime_error("Unexpected Camellia one-dimensional basis order convention");

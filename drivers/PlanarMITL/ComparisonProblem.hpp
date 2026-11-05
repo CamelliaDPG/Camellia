@@ -38,6 +38,7 @@ struct ComparisonProblem
   bool verbose = false, comparison = true, splitModes = false, splitX = false, infSupEnrichment = false, gradedX = false;
   int xRefinements = 0;
   std::string splitAxes = "";
+  std::string testBasis = "nodal", fieldBasis = "nodal", traceBasis = "nodal";
   std::string outputPrefix;
 
   int parse(int argc, char **argv, const std::string &backend)
@@ -80,6 +81,9 @@ struct ComparisonProblem
                   "Tensor backend: relative SVD tolerance for the Riesz block's local splits (<= 0: svdTolerance)");
     cmd.setOption("denseFillThreshold", &denseFillThreshold,
                   "Tensor backend, localSolver 5/6: site systems above this fill use a dense solve (> 1: never)");
+    cmd.setOption("testBasis", &testBasis, "Tensor backend: 1D test basis family, nodal or hierarchical");
+    cmd.setOption("fieldBasis", &fieldBasis, "Tensor backend: 1D field (f) basis family, nodal or hierarchical");
+    cmd.setOption("traceBasis", &traceBasis, "Tensor backend: 1D trace basis family, nodal or hierarchical");
     cmd.setOption("outputPrefix", &outputPrefix);
     auto result = cmd.parse(argc, argv);
     if (result == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 2;

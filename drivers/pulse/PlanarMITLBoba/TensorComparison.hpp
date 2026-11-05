@@ -77,6 +77,8 @@ inline int runTensorComparison(int argc, char **argv)
   options.rieszTolerance = problem.rieszSvdTolerance;
   options.denseFillThreshold = problem.denseFillThreshold;
   const auto start = ComparisonClock::now();
+  basisChoice() = BasisChoice{problem.testBasis, problem.fieldBasis, problem.traceBasis};
+  std::cout << "bases test=" << problem.testBasis << " field=" << problem.fieldBasis << " trace=" << problem.traceBasis << '\n';
   const auto vertices = problem.vertices();
   std::vector<Axis> axes;
   for (const auto &mesh : vertices) axes.emplace_back(mesh,problem.p,problem.dp,problem.quadratureDegree);
@@ -85,6 +87,21 @@ inline int runTensorComparison(int argc, char **argv)
                          problem.alphaMeshScale);
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
+  if (const char* dumpPrefix = std::getenv("PLANAR_MITL_DUMP_GLOBAL"))
+  {
+    // Debug: write the decompressed global blocks (row-major per block (i,j), raw doubles) for conditioning studies.
+    std::ofstream meta(std::string(dumpPrefix) + "_blocks.txt");
+    for (size_t i = 0; i < system.names.size(); ++i)
+      for (size_t j = 0; j < system.names.size(); ++j)
+      {
+        const auto &block = system.matrix({i,j});
+        Eigen::MatrixXd dense = denseMatrix(block);
+        const std::string name = std::string(dumpPrefix) + "_" + std::to_string(i) + "_" + std::to_string(j) + ".bin";
+        std::ofstream out(name, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(dense.data()), std::streamsize(dense.size()*sizeof(double)));
+        meta << i << ' ' << j << ' ' << dense.rows() << ' ' << dense.cols() << ' ' << system.names[i] << ' ' << system.names[j] << '\n';
+      }
+  }
   const auto solveStart = ComparisonClock::now();
   BlockVector solution;
   std::array<bool,4> splitMask{false,false,false,false};
