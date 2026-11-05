@@ -43,10 +43,14 @@ PlanarMITLBobaDriver --comparison --p=3 --tWidth=0.1 --alpha=1e2 --alphaMeshScal
   Jacobi, dominant Kronecker term); outer GMRES with inexact inner PCG and exact or approximate Schur complement.
 - `site_direct_cost.py <dump base>` -- wall time of dense LU of the whole site vs Cholesky of the Riesz block plus an
   exact Schur complement.
+- `site_eps_structure.py <dump base>` -- splits the site's exact Riesz solution into G^{-1} l and -G^{-1} B u and
+  reports the singular-value ranks of each across the AMEn cut (eps is a small difference of two large terms).
 - `basis_conditioning.py <dir>` -- condition numbers of G, the mixed matrix, the DPG matrix K = B^T G^{-1} B, and the
   Jacobi-scaled K, for the eight basis-family combinations dumped as `<dir>/{N,H}{N,H}{N,H}_*` (test, field, trace;
   N = nodal, H = hierarchical).  Produce them with `PLANAR_MITL_DUMP_GLOBAL=<dir>/<tag>` and
   `--testBasis/--fieldBasis/--traceBasis`, e.g. on `--nx=4 --nux=2 --maxSweeps=1`.
+- `basis_conditioning_mixed.py <dir> <tag>...` -- condition number of the mixed matrix, unscaled and after
+  diag(G)^{-1/2} / diag(K)^{-1/2} block scaling (the Krylov-relevant measure), for the given tags (e.g. NNN NHH).
 - `element_gram_inverse_rank.py` -- single-element study of whether G^{-1} = M^{-1}/alpha + (low rank): (K, M)
   spectrum, rank of the correction, and Kronecker ranks of G^{-1} across (t,x)|(u_x,u_z).  Imports
   `element_stability.py` (drivers/papers/RelativisticVlasovSpaceTime, branch 316); set `ELEMENT_STABILITY_DIR`
