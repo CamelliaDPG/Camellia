@@ -141,6 +141,18 @@ inline int runTensorComparison(int argc, char **argv)
   metrics["inverse_gamma_svd_error"] = h.relativeError;
   metrics["mixed_residual"] = DpgBoba::reportResidual(system.matrix,rhs,solution,
                                                     std::min(1e-14,problem.svdTolerance*0.01));
+  // Diagnostic: true TT ranks of each returned block, by rounding a copy at several relative tolerances.
+  for (size_t b = 0; b < solution.block_size; ++b)
+  {
+    std::cout << "rounded_ranks block=" << system.names[b];
+    for (double tol : {1e-8, 1e-5, 1e-3, 1e-2})
+    {
+      auto copy = solution(b);
+      DpgBoba::round(copy, tol);
+      std::cout << " tol" << tol << "=" << copy.ranks_string();
+    }
+    std::cout << '\n';
+  }
   double storedMatrix = 0, storedSolution = 0, storedRHS = 0, fullTrial = 0, fullMixed = 0;
   for (size_t b = 0; b < solution.block_size; ++b)
   {
