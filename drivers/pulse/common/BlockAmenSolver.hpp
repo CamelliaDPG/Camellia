@@ -26,6 +26,8 @@ struct AmenOptions
   bool infSupEnrichment = false;
   // Separate relative SVD tolerance for splitting block 0 (the Riesz block); <= 0 uses roundingTolerance.
   double rieszTolerance = 0.0;
+  // Sparse-LU site solves (localSolver 5, 6): sites above this fill use a dense solve; > 1 never.
+  double denseFillThreshold = 1.1;
 };
 
 template <class Tensor>
@@ -113,6 +115,7 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.solve3d_2ml_options.eigen_gmres_sparsity = 0.0;
   solver.verbose = options.verbose;
   solver.inf_sup_enrichment_block = options.infSupEnrichment ? 0 : -1;
+  solver.coupled_site_dense_fill_threshold = options.denseFillThreshold;
   if (options.rieszTolerance > 0) { solver.local_solution_svd_tolerance_relative_per_block = {options.rieszTolerance}; }
   std::mt19937 generator(options.seed);
   return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator);

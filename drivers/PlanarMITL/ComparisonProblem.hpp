@@ -34,7 +34,7 @@ struct ComparisonProblem
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
-  double localTolerance = 1e-6, rieszSvdTolerance = 0;
+  double localTolerance = 1e-6, rieszSvdTolerance = 0, denseFillThreshold = 1.1;
   bool verbose = false, comparison = true, splitModes = false, splitX = false, infSupEnrichment = false, gradedX = false;
   int xRefinements = 0;
   std::string splitAxes = "";
@@ -78,6 +78,8 @@ struct ComparisonProblem
                   "Tensor backend: kick the Riesz block with the projected image of the trial blocks");
     cmd.setOption("rieszSvdTolerance", &rieszSvdTolerance,
                   "Tensor backend: relative SVD tolerance for the Riesz block's local splits (<= 0: svdTolerance)");
+    cmd.setOption("denseFillThreshold", &denseFillThreshold,
+                  "Tensor backend, localSolver 5/6: site systems above this fill use a dense solve (> 1: never)");
     cmd.setOption("outputPrefix", &outputPrefix);
     auto result = cmd.parse(argc, argv);
     if (result == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 2;

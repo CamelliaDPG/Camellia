@@ -75,6 +75,7 @@ inline int runTensorComparison(int argc, char **argv)
   options.maxLocalIterations = problem.maxLocalIterations;
   options.infSupEnrichment = problem.infSupEnrichment;
   options.rieszTolerance = problem.rieszSvdTolerance;
+  options.denseFillThreshold = problem.denseFillThreshold;
   const auto start = ComparisonClock::now();
   const auto vertices = problem.vertices();
   std::vector<Axis> axes;
