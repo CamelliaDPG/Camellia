@@ -101,6 +101,18 @@ inline int runTensorComparison(int argc, char **argv)
         out.write(reinterpret_cast<const char*>(dense.data()), std::streamsize(dense.size()*sizeof(double)));
         meta << i << ' ' << j << ' ' << dense.rows() << ' ' << dense.cols() << ' ' << system.names[i] << ' ' << system.names[j] << '\n';
       }
+    // RHS blocks (full vectors) and per-block TT mode sizes (x, t, ux, uz; x fastest in the linear index).
+    std::ofstream modes(std::string(dumpPrefix) + "_modes.txt");
+    for (size_t b = 0; b < system.names.size(); ++b)
+    {
+      auto full = rhs(b).decompress();
+      const size_t count = rhs(b).get_full_size();
+      std::ofstream out(std::string(dumpPrefix) + "_rhs_" + std::to_string(b) + ".bin", std::ios::binary);
+      out.write(reinterpret_cast<const char*>(full.data()), std::streamsize(count*sizeof(double)));
+      modes << b << ' ' << system.names[b];
+      for (size_t d = 0; d < 4; ++d) modes << ' ' << system.sizes[b][d];
+      modes << '\n';
+    }
   }
   const auto solveStart = ComparisonClock::now();
   BlockVector solution;

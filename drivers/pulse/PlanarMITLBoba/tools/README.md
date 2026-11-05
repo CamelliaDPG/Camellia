@@ -51,6 +51,11 @@ PlanarMITLBobaDriver --comparison --p=3 --tWidth=0.1 --alpha=1e2 --alphaMeshScal
   `--testBasis/--fieldBasis/--traceBasis`, e.g. on `--nx=4 --nux=2 --maxSweeps=1`.
 - `basis_conditioning_mixed.py <dir> <tag>...` -- condition number of the mixed matrix, unscaled and after
   diag(G)^{-1/2} / diag(K)^{-1/2} block scaling (the Krylov-relevant measure), for the given tags (e.g. NNN NHH).
+- `schur_krylov_ranks.py <prefix> [--methods cg,tcg,tproj,pstep,pstepr] [--tau 1e-4]` -- Krylov on the Schur complement
+  S = B^T G^{-1} B (G^{-1} by element-block Cholesky of the memory-mapped Gram block) with TT rank measurement and rank
+  control: exact CG, truncated CG, truncated subspace projection (Sands et al.), and the perturbed (rank-reduced) step.
+  Needs a global dump with RHS and mode files (PLANAR_MITL_DUMP_GLOBAL; the driver writes `_rhs_<b>.bin`, `_modes.txt`).
+  Memory: ~3x the dense Gram file plus S; (16,1,2,2) needs ~35 GB.
 - `element_gram_inverse_rank.py` -- single-element study of whether G^{-1} = M^{-1}/alpha + (low rank): (K, M)
   spectrum, rank of the correction, and Kronecker ranks of G^{-1} across (t,x)|(u_x,u_z).  Imports
   `element_stability.py` (drivers/papers/RelativisticVlasovSpaceTime, branch 316); set `ELEMENT_STABILITY_DIR`
