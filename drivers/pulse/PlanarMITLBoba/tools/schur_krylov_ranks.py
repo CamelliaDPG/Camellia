@@ -77,6 +77,7 @@ def tt_round(v, sizes, tau):
     out = cores[0].reshape(sizes[0], -1, order='F')
     for k in range(1, d):
         out = (out @ cores[k].reshape(cores[k].shape[0], -1, order='F')).reshape(-1, cores[k].shape[2], order='F')
+    tt_round.last_ranks = ranks
     return out.reshape(-1, order='F'), max(ranks) if ranks else 1
 
 class Trial:
@@ -92,6 +93,15 @@ class Trial:
         return out, ranks
     def ranks(self, v, tau):
         return self.round(v, tau)[1]
+    def cut_ranks(self, v, tau):
+        """Per block: list of (rank, max possible rank) at each of the three cuts."""
+        out = []
+        for b, sz in enumerate(self.sizes):
+            seg = slice(self.offsets[b], self.offsets[b + 1])
+            tt_round(v[seg], sz, tau)
+            mx = [min(int(np.prod(sz[:k + 1])), int(np.prod(sz[k + 1:]))) for k in range(len(sz) - 1)]
+            out.append(list(zip(tt_round.last_ranks, mx)))
+        return out
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -99,7 +109,9 @@ def main():
     ap.add_argument("--iters", type=int, default=150); ap.add_argument("--methods", default="cg,tcg,tproj,pstep")
     ap.add_argument("--noprec", action="store_true"); ap.add_argument("--every", type=int, default=10)
     ap.add_argument("--m", type=int, default=8, help="subspace size for tproj")
+    ap.add_argument("--percut", action="store_true", help="print per-cut ranks with the maximum possible rank")
     ap.add_argument("--matfree", action="store_true", help="never form S: apply sum_K B_K^T G_K^{-1} B_K (large cases)")
+    ap.add_argument("--noref", action="store_true", help="with --matfree: skip the reference solve (errors reported as nan)")
     a = ap.parse_args()
     import os, scipy.sparse as sp, scipy.sparse.csgraph as csg
     sparse = os.path.exists(a.prefix + "_0_1.coo")
@@ -158,7 +170,9 @@ def main():
         S = B.T @ Ginv(B)
     c = B.T @ Ginv(l)
     test_sizes = modes[0]
-    if a.matfree:
+    if a.matfree and a.noref:
+        u_star = None
+    elif a.matfree:
         # reference solution: Jacobi-PCG on the matrix-free S to a tight tolerance
         dS0 = S.diagonal(); u_star = np.zeros_like(c); r0 = c.copy(); z0 = r0 / dS0; p0 = z0.copy(); rz0 = r0 @ z0
         for it in range(5000):
@@ -170,11 +184,11 @@ def main():
         u_star = np.linalg.solve(S, c)
     T = Trial(modes, nb)
     fseg = slice(T.offsets[0], T.offsets[1])
-    ferr = lambda u: np.linalg.norm(u[fseg] - u_star[fseg]) / np.linalg.norm(u_star[fseg])
-    eS = lambda u: np.sqrt((u - u_star) @ (S @ (u - u_star)) / (u_star @ (S @ u_star)))
+    ferr = lambda u: np.nan if u_star is None else np.linalg.norm(u[fseg] - u_star[fseg]) / np.linalg.norm(u_star[fseg])
+    eS = lambda u: np.nan if u_star is None else np.sqrt((u - u_star) @ (S @ (u - u_star)) / (u_star @ (S @ u_star)))
     dS = S.diagonal() if a.matfree else np.diag(S); M = (lambda r: r) if a.noprec else (lambda r: r / dS)
     if a.matfree:
-        print(f"S: n={S.shape[0]} (matrix-free); exact solution ranks (tau={a.tau:g}): {T.ranks(u_star, a.tau)}", flush=True)
+        print(f"S: n={S.shape[0]} (matrix-free); exact solution ranks (tau={a.tau:g}): {T.ranks(u_star, a.tau) if u_star is not None else '-'}", flush=True)
     else:
         ev = np.linalg.eigvalsh(S); evp = np.linalg.eigvalsh(S / np.sqrt(np.outer(dS, dS)))
         print(f"S: n={S.shape[0]}, cond {ev.max()/ev.min():.2e}, Jacobi-scaled cond {evp.max()/evp.min():.2e}; "
@@ -224,6 +238,14 @@ def main():
                 u = best[1]; r = c - S @ u
                 z = M(r); rz_new = r @ z; p = z + (rz_new / rz) * p; rz = rz_new
                 p, _ = T.round(p, a.tau)
+            if a.percut and (k % a.every == 0):
+                for name, vec in (("x", u), ("r", r)):
+                    cr = T.cut_ranks(vec, a.tau)
+                    print(f"    per-cut (rank/max) {name}: " + "  ".join(
+                        "[" + ",".join(f"{rk}/{mx}" for rk, mx in blk) + "]" for blk in cr), flush=True)
+                tst = tt_round(Ginv(B @ p), test_sizes, a.tau)
+                mxt = [min(int(np.prod(test_sizes[:k + 1])), int(np.prod(test_sizes[k + 1:]))) for k in range(3)]
+                print("    per-cut (rank/max) G^-1 B p: [" + ",".join(f"{rk}/{mx}" for rk, mx in zip(tt_round.last_ranks, mxt)) + "]", flush=True)
             if k % a.every == 0 or k == 1:
                 # rank of the intermediate G^{-1} B p (the vector a TT code must form to apply S), test-space modes
                 if method in ("cg", "tcg", "pstep", "pstepr"):
