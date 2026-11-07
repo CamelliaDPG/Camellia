@@ -33,6 +33,10 @@ struct ComparisonProblem
   double beta0 = 0, betaMax = 0.5, c = 1, qOverM = -1, Ex = -1, By = 0.5;
   double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0, alphaTransportScale = 0;
   std::string accelerationBounds = "auto";
+  bool schurChebyshev = false;
+  double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0;
+  int chebIterations = 200, chebEvery = 10;
+  std::string chebKronecker;
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
@@ -91,6 +95,15 @@ struct ComparisonProblem
     cmd.setOption("testBasis", &testBasis, "Tensor backend: 1D test basis family, nodal or hierarchical");
     cmd.setOption("fieldBasis", &fieldBasis, "Tensor backend: 1D field (f) basis family, nodal or hierarchical");
     cmd.setOption("traceBasis", &traceBasis, "Tensor backend: 1D trace basis family, nodal or hierarchical");
+    cmd.setOption("schurChebyshev", "no-schurChebyshev", &schurChebyshev,
+                  "Tensor backend: Chebyshev on the Schur complement with S applied only to iterates, cells-first TT layout and "
+                  "structured G^-1 (uniform x and t; hierarchical trial bases recommended; use a small --svdTolerance)");
+    cmd.setOption("chebLmin", &chebLmin, "Chebyshev: lower spectrum bound of M^-1 S");
+    cmd.setOption("chebLmax", &chebLmax, "Chebyshev: upper spectrum bound of M^-1 S");
+    cmd.setOption("chebTolerance", &chebTolerance, "Chebyshev: TT rounding tolerance for iterates and intermediates");
+    cmd.setOption("chebRtol", &chebRtol, "Chebyshev: stop when the TT residual |r|/|c| falls below this");
+    cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
+    cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
     cmd.setOption("outputPrefix", &outputPrefix);
     auto result = cmd.parse(argc, argv);
     if (result == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 2;

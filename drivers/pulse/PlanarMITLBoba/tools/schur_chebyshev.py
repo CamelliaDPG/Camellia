@@ -106,6 +106,30 @@ def main():
                         f.write(f"{b} {d} {len(fs[d])} " + " ".join(f"{np.exp(mean/4 + v):.17g}" for v in fs[d]) + "\n")
             print(f"wrote {a.write_kron}", flush=True)
         Minv = lambda r: r / dK
+    elif a.prec == 'kron8':
+        # rank-one Kronecker Jacobi in the cells-first 8-mode layout (c_x, c_t, c_ux, c_uz, b_x, b_t, b_ux, b_uz):
+        # log diag S fitted by main effects (least squares on the full grid); flux normal axes: c = faces, b = 1
+        cells = [int(t) for t in open(a.prefix + "_Gelem.txt").read().split()][0:4]
+        dK = np.empty(n); lines = []
+        for b, sz in enumerate(T.sizes):
+            seg = slice(T.offsets[b], T.offsets[b + 1]); shp = []
+            for d in range(4):
+                face = cells[d] > 1 and sz[d] == cells[d] - 1
+                nbd, ncd = (1, sz[d]) if face else (sz[d] // cells[d], cells[d]); shp += [nbd, ncd]
+            L = np.log(dS[seg]).reshape(shp, order='F'); mean = L.mean(); fit = np.full(L.shape, mean)
+            eff = {}
+            for ax in range(8):
+                e = L.mean(axis=tuple(q for q in range(8) if q != ax)) - mean; eff[ax] = e
+                fit = fit + np.expand_dims(e, tuple(q for q in range(8) if q != ax))
+            dK[seg] = np.exp(fit).reshape(-1, order='F')
+            order = [1, 3, 5, 7, 0, 2, 4, 6]          # cells-first mode m <- tensor axis order[m]
+            for m, ax in enumerate(order):
+                lines.append(f"{b} {m} {len(eff[ax])} " + " ".join(f"{np.exp(mean / 8 + v):.17g}" for v in eff[ax]))
+        rel = np.abs(dK / dS - 1)
+        print(f"rank-one 8-mode Kronecker Jacobi: |d_K/d - 1| median {np.median(rel):.2f}, max {rel.max():.2f}", flush=True)
+        if a.write_kron:
+            open(a.write_kron, 'w').write("\n".join(lines) + "\n"); print(f"wrote {a.write_kron}", flush=True)
+        Minv = lambda r: r / dK
     else:
         Minv = lambda r: r / dS
 
