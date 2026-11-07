@@ -16,6 +16,7 @@ import numpy as np, scipy.linalg as sla, scipy.sparse as sp
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from schur_krylov_ranks import load_sparse, tt_round, Trial
 from schur_multilevel import h_prolongation
+from tt_ginv_structured import StructuredGinv
 
 
 def main():
@@ -30,6 +31,8 @@ def main():
     ap.add_argument("--continuation", default="", help="comma-separated tolerances, e.g. 1e-4,1e-5,1e-6: converge at "
                     "each (tx = ty = tol) until |r|/|c| < 2 tol or --stage-iters, restarting the recurrence from the iterate")
     ap.add_argument("--stage-iters", type=int, default=200)
+    ap.add_argument("--ginv", default="exact", help="exact (element-wise; y rounded in 4-mode TT) or structured (z = B x "
+                    "rounded in cells-first TT, structured TT G^-1, y rounded there)")
     ap.add_argument("--write-kron", default="", help="with --prec kron1: write the per-mode diagonal factors here")
     ap.add_argument("--x0", default="zero", help="zero, or coarse = P S_c^-1 P^T c (nested iteration warm start)")
     a = ap.parse_args()
@@ -47,7 +50,15 @@ def main():
         for (idx, f), Bi in zip(elems, Bk): o += Bi.T @ sla.cho_solve(f, Bi @ v)
         return o
     yr = []
+    sg = StructuredGinv(a.prefix, blk, modes) if a.ginv == 'structured' else None
+    zr, tg = [], []
     def S_tt(x):                               # S x as a TT code would form it: y = G^-1 B x rounded, then B^T y
+        if sg is not None:
+            import time as _t
+            zc = sg.to_tt(B @ x, a.ty if a.ty > 0 else 1e-14); t0 = _t.time()
+            yc = sg.apply(zc, a.ty if a.ty > 0 else 1e-14); tg.append(_t.time() - t0)
+            zr.append(max(c.shape[2] for c in zc[:-1])); yr.append(max(c.shape[2] for c in yc[:-1]))
+            return B.T @ sg.from_tt(yc)
         y = Ginv(B @ x)
         if a.ty > 0:
             y, rk = tt_round(y, ts, a.ty); yr.append(rk)
@@ -139,7 +150,8 @@ def main():
             if k % a.every == 0 or k == 1:
                 true = np.linalg.norm(c - S(x)) / nc
                 print(f"  it {k:4d} (total {total:4d})  true |r|/|c| {true:.2e}  rank(x) {T.ranks(x, 1e-4)}"
-                      + (f"  rank(G^-1 B x) {yr[-1]} (stage max {max(yr[stage_peak0:])})" if yr else ""), flush=True)
+                      + (f"  rank(G^-1 B x) {yr[-1]} (stage max {max(yr[stage_peak0:])})" if yr else "")
+                      + (f"  [cells-first: max rank B x {zr[-1]}, structured G^-1 {tg[-1]:.2f} s]" if zr else ""), flush=True)
                 if true < (2 * tol if tol is not None else a.rtol): break
 
 

@@ -57,6 +57,40 @@ def tt_round(cores, tol):
     return cores
 
 
+class StructuredGinv:
+    """G^-1 applied to TT vectors (cells-first mode order) using one Cholesky factor per velocity cell."""
+    def __init__(self, prefix, blk, modes):
+        info = [int(x) for x in open(prefix + "_Gelem.txt").read().split()]
+        self.cells = cells = info[0:4]; ne = int(np.prod(cells)); tsz = modes[0]
+        self.nbt = nbt = [tsz[d] // cells[d] for d in range(4)]; self.shape8 = cells + nbt
+        grid = np.indices(self.shape8).reshape(8, -1, order='F')
+        self.gidx = np.zeros(grid.shape[1], dtype=np.int64); stride = 1
+        for d in range(4):
+            self.gidx += (grid[d] * nbt[d] + grid[4 + d]) * stride; stride *= tsz[d]
+        self.Gv_f = {}
+        for k, (_, Gk) in enumerate(blk[0, 0]):
+            c = np.unravel_index(k, cells, order='F')
+            if (c[2], c[3]) not in self.Gv_f: self.Gv_f[(c[2], c[3])] = sla.cho_factor(0.5 * (Gk + Gk.T))
+    def to_tt(self, z, tau):
+        return tt_svd(z[self.gidx].reshape(self.shape8, order='F'), tau)
+    def from_tt(self, cores):
+        y = np.empty(len(self.gidx)); y[self.gidx] = tt_full(cores).reshape(-1, order='F'); return y
+    def apply(self, cores, tau):
+        cells, nbt = self.cells, self.nbt; rcb = cores[3].shape[2]
+        Z = tt_full([cores[4]] + cores[5:]).reshape(rcb, -1, order='F')
+        C3, C4 = cores[2], cores[3]; nux, nuz = cells[2], cells[3]; r2, r3 = C3.shape[0], C3.shape[2]
+        K3 = np.zeros((r2, nux, nux * r3))
+        for i in range(nux): K3[:, i, i * r3:(i + 1) * r3] = C3[:, i, :]
+        K4 = np.zeros((nux * r3, nuz, nux * nuz * rcb)); W = np.zeros((nux * nuz * rcb, Z.shape[1]))
+        for i in range(nux):
+            for j in range(nuz):
+                col = (j * nux + i) * rcb
+                K4[i * r3:(i + 1) * r3, j, col:col + rcb] = C4[:, j, :]
+                W[col:col + rcb] = sla.cho_solve(self.Gv_f[(i, j)], Z.T).T
+        Wc = tt_svd(W.reshape([W.shape[0]] + nbt, order='F'), 1e-15)
+        return tt_round([cores[0], cores[1], K3, np.einsum('abc,cd->abd', K4, Wc[0][0])] + Wc[1:], tau)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("prefix"); ap.add_argument("--tau", type=float, default=1e-6)
