@@ -1,5 +1,6 @@
 #pragma once
 
+#include <sstream>
 #include "ModeSplitting.hpp"
 #include <Eigen/Sparse>
 #include <cstdlib>
@@ -229,6 +230,25 @@ inline int runTensorComparison(int argc, char **argv)
   auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,norm,problem.svdTolerance);
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
+  if (const char* gTest = std::getenv("PLANAR_MITL_G_SOLVE_TEST"))
+  {
+    // Cost of the inner TT solve a Schur-complement method needs every iteration: single-block AMEn on G e = l
+    // (G^{-1} l has the rank profile of G^{-1} B x for an iterate).  Value: comma-separated local solvers to try.
+    BlockMatrix gram(1, 1); gram({0, 0}) = system.matrix({0, 0});
+    BlockVector l(1); l(0) = rhs(0);
+    std::stringstream solvers(gTest); std::string item;
+    while (std::getline(solvers, item, ','))
+    {
+      auto gOptions = options; gOptions.localSolver = std::stoi(item); gOptions.infSupEnrichment = false;
+      const auto t0 = ComparisonClock::now();
+      auto e = DpgBoba::solveAmen(gram, l, gOptions);
+      const double seconds = elapsed(t0);
+      auto residual = l(0); residual -= gram({0, 0}) * e(0); DpgBoba::round(residual, 1e-14);
+      std::cout << "g_solve_test local_solver=" << item << " seconds=" << seconds << " ranks=" << e(0).ranks_string()
+                << " relative_residual=" << boba::norm_frobenius(residual) / boba::norm_frobenius(l(0)) << std::endl;
+    }
+    return 0;
+  }
   if (const char* sparsePrefix = std::getenv("PLANAR_MITL_DUMP_SPARSE"))
   {
     // Debug: row-0 blocks (Gram G and test x trial blocks B_j) as sparse COO files, RHS blocks, TT mode sizes.
