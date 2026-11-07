@@ -136,14 +136,40 @@ static bool cellHasCurvedEdges(MeshTopologyViewPtr meshTopo, GlobalIndexType cel
   return false;
 }
 
+//! A file-name-safe form of a variable name.  Names may be LaTeX (e.g., PoissonFormulation's traces "\widehat{u}" and
+//! "\widehat{\sigma}_n"): a \widehat{...} or \hat{...} decoration becomes a "_hat" suffix ("u_hat", "sigma_n_hat"),
+//! other TeX commands keep their letters ("\sigma" -> "sigma"), and remaining characters other than letters, digits,
+//! '_', '-', and '.' are dropped.
 static string fileSafe(const string &name)
 {
+  string undecorated = name;
+  bool hat = false;
+  for (const string &command : {string("\\widehat{"), string("\\hat{")})
+  {
+    size_t start;
+    while ((start = undecorated.find(command)) != string::npos)
+    {
+      // remove the command and its matching closing brace, keeping the argument
+      size_t argStart = start + command.size(), depth = 1, end = argStart;
+      while ((end < undecorated.size()) && (depth > 0))
+      {
+        if (undecorated[end] == '{') depth++;
+        else if (undecorated[end] == '}') depth--;
+        if (depth > 0) end++;
+      }
+      const string argument = undecorated.substr(argStart, end - argStart);
+      const string rest = (end < undecorated.size()) ? undecorated.substr(end + 1) : "";
+      undecorated = undecorated.substr(0, start) + argument + rest;
+      hat = true;
+    }
+  }
   string safe;
-  for (char c : name)
+  for (char c : undecorated)
   {
     if (isalnum((unsigned char) c) || (c == '_') || (c == '-') || (c == '.')) safe += c;
   }
-  return safe.empty() ? "var" : safe;
+  if (safe.empty()) safe = "var";
+  return hat ? safe + "_hat" : safe;
 }
 
 struct GLVisSideKey
