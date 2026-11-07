@@ -72,6 +72,8 @@ def read_csvs(paths):
             cells.append({"x": cell[:, 1].reshape(shape), "t": cell[:, 2].reshape(shape),
                           "n_e": cell[:, 3].reshape(shape), "Jx": cell[:, 4].reshape(shape),
                           "E_x": cell[:, 5].reshape(shape)})
+            if data.shape[-1] > 6:  # Jz (written since 2026-11-07)
+                cells[-1]["Jz"] = cell[:, 6].reshape(shape)
     return pointsPerDim, degree, cells
 
 

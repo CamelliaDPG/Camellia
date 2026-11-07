@@ -45,8 +45,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -176,7 +179,7 @@ namespace
   //! Writes the electron density n_e = int f du (and Jx and E_x) on a dense, uniform (pointsPerDim x pointsPerDim) grid of
   //! points on each configuration (x,t) cell, as CSV gathered to rank 0.  The density is the exact velocity moment of the
   //! polynomial f at each point (not an interpolant), so plotting it at fine resolution shows the actual discrete solution.
-  //! Collective.  Columns: cell, x, t, n_e, Jx, E_x; rows are ordered cell, then t-major, x-minor reference point.  The
+  //! Collective.  Columns: cell, x, t, n_e, Jx, E_x, Jz; rows are ordered cell, then t-major, x-minor reference point.  The
   //! header records pointsPerDim and the polynomial degree of f.
   void writeDensityDiagnostic(const std::string &path, Teuchos::RCP<VlasovSpaceTimeFormulation> form,
                               int speciesOrdinal, int pointsPerDim, int velocityQuadratureDegree, double lightSpeed, double q)
@@ -211,7 +214,7 @@ namespace
     fDegree = MPIWrapper::max(phaseSpaceMesh->Comm(), fDegree);
 
     FunctionPtr E = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
-    const int columnCount = 6;
+    const int columnCount = 7;
     std::vector<double> myRows;
     myRows.reserve(cellIDs.size() * pointCount * columnCount);
     for (int cellOrdinal=0; cellOrdinal<static_cast<int>(cellIDs.size()); cellOrdinal++)
@@ -225,7 +228,8 @@ namespace
       {
         const int entry = cellOrdinal * pointCount + p;
         myRows.insert(myRows.end(), {double(cellIDs[cellOrdinal]), physicalPoints(0,p,0), physicalPoints(0,p,1),
-                                     moments.moments._density[entry], q * moments.moments._xProperVelocityMoment[entry], EValues(0,p)});
+                                     moments.moments._density[entry], q * moments.moments._xProperVelocityMoment[entry], EValues(0,p),
+                                     q * moments.moments._zProperVelocityMoment[entry]});
       }
     }
     std::vector<double> allRows;
@@ -236,7 +240,7 @@ namespace
     std::ofstream out(path);
     TEUCHOS_TEST_FOR_EXCEPTION(!out, std::runtime_error, "could not open density diagnostic file " + path);
     out << "# pointsPerDim=" << pointsPerDim << " degree=" << fDegree << "\n";
-    out << "cell,x,t,n_e,Jx,E_x\n";
+    out << "cell,x,t,n_e,Jx,E_x,Jz\n";
     out << std::setprecision(12);
     for (size_t row=0; row<allRows.size() / columnCount; row++)
     {
@@ -244,6 +248,160 @@ namespace
       out << static_cast<long>(values[0]);
       for (int column=1; column<columnCount; column++) out << "," << values[column];
       out << "\n";
+    }
+  }
+
+  //! Writes a 2D float64 array as a NumPy .npy file (format 1.0, C order), so the post-processing can np.load() it.
+  void writeNpy(const std::string &path, const std::vector<double> &values, size_t numRows, size_t numColumns)
+  {
+    std::ostringstream header;
+    header << "{'descr': '<f8', 'fortran_order': False, 'shape': (" << numRows << ", " << numColumns << "), }";
+    std::string headerString = header.str();
+    const size_t preamble = 10; // magic (6) + version (2) + header length (2)
+    headerString.append(64 - (preamble + headerString.size() + 1) % 64, ' ');
+    headerString += '\n';
+    std::ofstream out(path, std::ios::binary);
+    TEUCHOS_TEST_FOR_EXCEPTION(!out, std::runtime_error, "could not open " + path);
+    out.write("\x93NUMPY\x01\x00", 8);
+    const uint16_t headerLength = static_cast<uint16_t>(headerString.size());
+    const char lengthBytes[2] = {static_cast<char>(headerLength & 0xff), static_cast<char>(headerLength >> 8)};
+    out.write(lengthBytes, 2);
+    out.write(headerString.data(), headerString.size());
+    out.write(reinterpret_cast<const char *>(values.data()), sizeof(double) * values.size());
+  }
+
+  //! Newton-Cotes weights for n equally spaced points on [-1,1], endpoints included: exact for polynomials of degree
+  //! n-1 (n if n is odd).  Used to integrate f over (x, u_x, u_y) from the uniform phase-space samples.
+  std::vector<double> newtonCotesWeights(int n)
+  {
+    // solve sum_j w_j s_j^k = int_{-1}^{1} s^k ds, k = 0..n-1 (Vandermonde, small n)
+    std::vector<double> s(n), A(n * n), b(n);
+    for (int j=0; j<n; j++) s[j] = -1.0 + 2.0 * j / (n - 1);
+    for (int k=0; k<n; k++)
+    {
+      for (int j=0; j<n; j++) A[k * n + j] = std::pow(s[j], k);
+      b[k] = (k % 2 == 0) ? 2.0 / (k + 1) : 0.0;
+    }
+    for (int col=0; col<n; col++) // Gaussian elimination with partial pivoting
+    {
+      int pivot = col;
+      for (int row=col+1; row<n; row++) if (std::abs(A[row * n + col]) > std::abs(A[pivot * n + col])) pivot = row;
+      for (int j=0; j<n; j++) std::swap(A[col * n + j], A[pivot * n + j]);
+      std::swap(b[col], b[pivot]);
+      for (int row=col+1; row<n; row++)
+      {
+        const double factor = A[row * n + col] / A[col * n + col];
+        for (int j=col; j<n; j++) A[row * n + j] -= factor * A[col * n + j];
+        b[row] -= factor * b[col];
+      }
+    }
+    std::vector<double> w(n);
+    for (int row=n-1; row>=0; row--)
+    {
+      double sum = b[row];
+      for (int j=row+1; j<n; j++) sum -= A[row * n + j] * w[j];
+      w[row] = sum / A[row * n + row];
+    }
+    return w;
+  }
+
+  //! Phase-space diagnostic: samples f at the slab's final time on a uniform (pointsPerDim)^3 grid of reference points in
+  //! (x, u_x, u_y) on every phase-space cell (cell boundaries included), so that with pointsPerDim > degree the
+  //! post-processing can reconstruct each cell's polynomial exactly (as plot_density.py does for n_e).  Only cells whose
+  //! time extent ends at the slab's final time are sampled (one layer when a slab has several time cells).  If writeSamples,
+  //! each rank writes its cells to <prefix>_part<rank>.npy, columns (cell, x, u_x, u_y, f), and rank 0 writes
+  //! <prefix>_meta.txt (pointsPerDim, degree, t).  Every call appends one line of integrals over (x, u) at the slab end,
+  //! from Newton-Cotes weights on the samples, to reductionsPath (rank 0):
+  //!   int f; int f over u_x < 0 (electrons moving back toward the cathode); the same two over x < xNear; and the
+  //!   integral of the negative part of f (sampled, so approximate).
+  //! Collective.
+  void writePhaseSpaceDiagnostic(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int speciesOrdinal, int pointsPerDim,
+                                 bool writeSamples, const std::string &prefix, const std::string &reductionsPath,
+                                 int slabOrdinal, double xNear)
+  {
+    MeshPtr mesh = form->vlasovMesh();
+    const int rank = mesh->Comm()->getRank();
+    const int fID = form->f(speciesOrdinal)->ID();
+    FunctionPtr fFunction = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+    const int n = pointsPerDim;
+    const int pointCount = n * n * n;
+    // reference coordinates (x, t, u_x, u_y), t = +1 (slab end); x fastest, then u_x, then u_y
+    FieldContainer<double> refPoints(pointCount, 4);
+    for (int k=0; k<n; k++)
+      for (int j=0; j<n; j++)
+        for (int i=0; i<n; i++)
+        {
+          const int p = (k * n + j) * n + i;
+          refPoints(p, 0) = -1.0 + 2.0 * i / (n - 1);
+          refPoints(p, 1) = 1.0;
+          refPoints(p, 2) = -1.0 + 2.0 * j / (n - 1);
+          refPoints(p, 3) = -1.0 + 2.0 * k / (n - 1);
+        }
+    const std::vector<double> w1 = newtonCotesWeights(n);
+
+    const auto &cellIDs = mesh->cellIDsInPartition();
+    std::vector<double> samples;
+    if (writeSamples) samples.reserve(cellIDs.size() * pointCount * 5);
+    double sums[5] = {0, 0, 0, 0, 0}; // int f, int f (u_x < 0), int f (x < xNear), int f (x < xNear, u_x < 0), int f^-
+    int degree = 0;
+    const double t1 = form->t1();
+    for (GlobalIndexType cellID : cellIDs)
+    {
+      degree = std::max(degree, mesh->getElementType(cellID)->trialOrderPtr->getBasis(fID)->getDegree());
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      basisCache->setRefCellPointsFC(refPoints);
+      const auto &physicalPoints = basisCache->getPhysicalCubaturePointsFC(); // (1, P, 4): x, t, u_x, u_y
+      // with several time cells per slab, only those ending at the slab's final time carry the slab-end f
+      if (std::abs(physicalPoints(0, 0, 1) - t1) > 1e-10 * std::max(1.0, std::abs(t1))) continue;
+      FieldContainer<double> fValues(1, pointCount);
+      fFunction->values(fValues, basisCache);
+      // the cell's extent in x, u_x, u_y (affine hypercube cells: corners are the first and last sample points)
+      const double hx  = physicalPoints(0, pointCount - 1, 0) - physicalPoints(0, 0, 0);
+      const double hux = physicalPoints(0, pointCount - 1, 2) - physicalPoints(0, 0, 2);
+      const double huy = physicalPoints(0, pointCount - 1, 3) - physicalPoints(0, 0, 3);
+      const double xCenter  = physicalPoints(0, 0, 0) + 0.5 * hx;
+      const double uxCenter = physicalPoints(0, 0, 2) + 0.5 * hux;
+      const double scale = 0.125 * hx * hux * huy;
+      for (int k=0; k<n; k++)
+        for (int j=0; j<n; j++)
+          for (int i=0; i<n; i++)
+          {
+            const int p = (k * n + j) * n + i;
+            const double f = fValues(0, p);
+            const double weighted = scale * w1[i] * w1[j] * w1[k] * f;
+            sums[0] += weighted;
+            if (uxCenter < 0) sums[1] += weighted;
+            if (xCenter < xNear) sums[2] += weighted;
+            if ((xCenter < xNear) && (uxCenter < 0)) sums[3] += weighted;
+            if (f < 0) sums[4] += weighted;
+            if (writeSamples)
+            {
+              samples.insert(samples.end(), {double(cellID), physicalPoints(0, p, 0), physicalPoints(0, p, 2),
+                                             physicalPoints(0, p, 3), f});
+            }
+          }
+    }
+    double globalSums[5];
+    for (int i=0; i<5; i++) globalSums[i] = MPIWrapper::sum(mesh->Comm(), sums[i]);
+    degree = MPIWrapper::max(mesh->Comm(), degree);
+    if (writeSamples)
+    {
+      writeNpy(prefix + "_part" + std::to_string(rank) + ".npy", samples, samples.size() / 5, 5);
+      if (rank == 0)
+      {
+        std::ofstream meta(prefix + "_meta.txt");
+        meta << "pointsPerDim " << n << "\ndegree " << degree << "\nt " << std::setprecision(12) << t1 << "\nslab " << slabOrdinal
+             << "\nranks " << mesh->Comm()->getSize() << "\ncolumns cell x u_x u_y f\n";
+      }
+    }
+    if (rank == 0)
+    {
+      const bool newFile = !std::ifstream(reductionsPath).good();
+      std::ofstream out(reductionsPath, std::ios::app);
+      if (newFile) out << "slab,t,int_f,int_f_ux_neg,int_f_near,int_f_near_ux_neg,int_f_negative_part,x_near\n";
+      out << std::setprecision(12) << slabOrdinal << "," << t1;
+      for (int i=0; i<5; i++) out << "," << globalSums[i];
+      out << "," << xNear << "\n";
     }
   }
 
@@ -1352,6 +1510,21 @@ int main(int argc, char *argv[])
     int densityDiagnosticPointsPerDim = 16;
     cmdp.setOption("densityDiagnostic", "noDensityDiagnostic", &densityDiagnostic,
                    "At the end of each time slab, write the electron density (exact velocity moment of f), Jx, and E_x on a dense grid of points per (x,t) cell to <outputDir>/density_slab<N>.csv; plot with plot_density.py.");
+    bool phaseSpaceDiagnostic = false;
+    std::string phaseSpaceDiagnosticSlabsString = "";
+    int phaseSpaceDiagnosticPointsPerDim = -1;
+    double phaseSpaceDiagnosticXNear = 0.0625;
+    cmdp.setOption("phaseSpaceDiagnostic", "noPhaseSpaceDiagnostic", &phaseSpaceDiagnostic,
+                   "At the end of each time slab, append integrals of f at the slab end (total, u_x < 0, near the cathode, negative "
+                   "part) to <outputDir>/phase_reductions.csv; for the slabs in phaseSpaceDiagnosticSlabs, also write samples of f "
+                   "on every phase-space cell to <outputDir>/phase_slab<N>_part<rank>.npy (plot with plot_phase_space.py).");
+    cmdp.setOption("phaseSpaceDiagnosticSlabs", &phaseSpaceDiagnosticSlabsString,
+                   "Comma-separated slab ordinals at whose end f is sampled for phaseSpaceDiagnostic (e.g. 0,1,2,5,10,19); 'all' for every slab.");
+    cmdp.setOption("phaseSpaceDiagnosticPointsPerDim", &phaseSpaceDiagnosticPointsPerDim,
+                   "Sample points per dimension (x, u_x, u_y) on each phase-space cell for phaseSpaceDiagnostic; -1 (default): degree + 1, "
+                   "the fewest that determine the polynomial.");
+    cmdp.setOption("phaseSpaceDiagnosticXNear", &phaseSpaceDiagnosticXNear,
+                   "phaseSpaceDiagnostic: the near-cathode integrals are over phase-space cells with center x below this.");
     cmdp.setOption("densityDiagnosticPointsPerDim", &densityDiagnosticPointsPerDim,
                    "Points per dimension (x and t, including cell boundaries) on each configuration cell for densityDiagnostic.");
     cmdp.setOption("phase0TimingFile", &phase0TimingFile,
@@ -1394,6 +1567,12 @@ int main(int argc, char *argv[])
     };
     const std::vector<double> L2WeightGraphDirectionScales    = parseCommaSeparatedDoubles(L2WeightGraphDirectionScalesString);
     const std::vector<double> L2WeightGraphAccelerationBounds = parseCommaSeparatedDoubles(L2WeightGraphAccelerationBoundsString);
+    const bool phaseSpaceDiagnosticAllSlabs = (phaseSpaceDiagnosticSlabsString == "all");
+    std::set<int> phaseSpaceDiagnosticSlabs;
+    if (!phaseSpaceDiagnosticAllSlabs)
+    {
+      for (double slab : parseCommaSeparatedDoubles(phaseSpaceDiagnosticSlabsString)) phaseSpaceDiagnosticSlabs.insert(int(slab));
+    }
     if (!phase0TensorGraphSchurBackendIsValid(phase0TensorGraphSchurBackend))
     {
       if (rank == 0)
@@ -2375,6 +2554,23 @@ int main(int argc, char *argv[])
           const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
           writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, phase8VelocityQuadratureDegree, cScaled, q);
           if (rank == 0) std::cout << "Wrote density diagnostic to " << densityPath << ".\n";
+        }
+        if (phaseSpaceDiagnostic)
+        {
+          int pointsPerDim = phaseSpaceDiagnosticPointsPerDim;
+          if (pointsPerDim < 2)
+          {
+            int fDegree = 0;
+            for (GlobalIndexType cellID : form->vlasovMesh()->cellIDsInPartition())
+            {
+              fDegree = std::max(fDegree, form->vlasovMesh()->getElementType(cellID)->trialOrderPtr->getBasis(form->f(speciesOrdinal)->ID())->getDegree());
+            }
+            pointsPerDim = MPIWrapper::max(form->vlasovMesh()->Comm(), fDegree) + 1;
+          }
+          const bool writeSamples = phaseSpaceDiagnosticAllSlabs || (phaseSpaceDiagnosticSlabs.count(timeSlabOrdinal) > 0);
+          writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, writeSamples,
+                                    outputDir + "/phase_slab" + to_string(timeSlabOrdinal), outputDir + "/phase_reductions.csv",
+                                    timeSlabOrdinal, phaseSpaceDiagnosticXNear);
         }
 
         auto configMesh = form->configurationSpaceMesh();
