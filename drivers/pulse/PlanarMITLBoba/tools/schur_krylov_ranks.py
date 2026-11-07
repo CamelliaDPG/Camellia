@@ -17,6 +17,8 @@ Methods (all on S u = c, c = B^T G^{-1} l, which is SPD):
 Preconditioner: Jacobi (diagonal of S) unless --noprec.
 
   pstepr   pstep with the residual updated recursively and rounded (true residual every 10 its), as a TT code must.
+--tau-y applies S inexactly in every method (the test-space intermediate G^-1 B p rounded in TT); the printed residual
+and errors always use the exact S.
 Usage: schur_krylov_ranks.py <prefix> [--tau 1e-4] [--iters 150] [--methods cg,tcg,tproj,pstep,pstepr] [--noprec]
 """
 import argparse, numpy as np, scipy.linalg as sla
@@ -111,6 +113,12 @@ def main():
     ap.add_argument("--m", type=int, default=8, help="subspace size for tproj")
     ap.add_argument("--percut", action="store_true", help="print per-cut ranks with the maximum possible rank")
     ap.add_argument("--matfree", action="store_true", help="never form S: apply sum_K B_K^T G_K^{-1} B_K (large cases)")
+    ap.add_argument("--tau-y", type=float, default=0.0,
+                    help="inexact S, as a TT code would apply it: round y = G^-1 B p in the test-space TT modes at this "
+                         "relative tolerance before B^T y (0: exact).  Convergence is still reported with the exact S.")
+    ap.add_argument("--relax", action="store_true",
+                    help="with --tau-y: relaxed inexact Krylov (Simoncini-Szyld), tau_y,k = min(tau_y |c| / |r_k|, 0.5)")
+    ap.add_argument("--diag-ranks", action="store_true", help="report TT ranks of the Jacobi diagonal of S per block")
     ap.add_argument("--noref", action="store_true", help="with --matfree: skip the reference solve (errors reported as nan)")
     a = ap.parse_args()
     import os, scipy.sparse as sp, scipy.sparse.csgraph as csg
@@ -187,6 +195,16 @@ def main():
     ferr = lambda u: np.nan if u_star is None else np.linalg.norm(u[fseg] - u_star[fseg]) / np.linalg.norm(u_star[fseg])
     eS = lambda u: np.nan if u_star is None else np.sqrt((u - u_star) @ (S @ (u - u_star)) / (u_star @ (S @ u_star)))
     dS = S.diagonal() if a.matfree else np.diag(S); M = (lambda r: r) if a.noprec else (lambda r: r / dS)
+    class InexactS:
+        """S p = B^T T_tau_y(G^-1 B p): the test-space intermediate rounded in TT, as a TT implementation must form it."""
+        shape = (B.shape[1], B.shape[1]); ranks = []; tol = a.tau_y
+        def __matmul__(self, v):
+            y, r = tt_round(Ginv(B @ v), test_sizes, self.tol); self.ranks.append(r)
+            return B.T @ y
+    Sit = InexactS() if a.tau_y > 0 else S
+    if a.diag_ranks:
+        for t in (1e-2, 1e-3, 1e-4):
+            print(f"Jacobi diagonal TT ranks (tau {t:g}): {T.ranks(dS, t)}", flush=True)
     if a.matfree:
         print(f"S: n={S.shape[0]} (matrix-free); exact solution ranks (tau={a.tau:g}): {T.ranks(u_star, a.tau) if u_star is not None else '-'}", flush=True)
     else:
@@ -196,46 +214,50 @@ def main():
     for method in a.methods.split(','):
         u = np.zeros_like(c); r = c.copy(); z = M(r); p = z.copy(); rz = r @ z
         P, SP = [], []
-        print(f"--- {method} (tau {a.tau:g}{', no preconditioner' if a.noprec else ', Jacobi'})", flush=True)
+        print(f"--- {method} (tau {a.tau:g}{', no preconditioner' if a.noprec else ', Jacobi'}"
+              f"{f', inexact S: tau_y {a.tau_y:g}' if a.tau_y > 0 else ''})", flush=True)
+        if a.tau_y > 0: Sit.ranks.clear()
         for k in range(1, a.iters + 1):
+            if a.tau_y > 0 and a.relax:
+                Sit.tol = min(a.tau_y * np.linalg.norm(c) / max(np.linalg.norm(r), 1e-300), 0.5)
             if method in ("cg", "tcg"):
-                Sp = S @ p; beta = rz / (p @ Sp)
+                Sp = Sit @ p; beta = rz / (p @ Sp)
                 u = u + beta * p; r = r - beta * Sp
                 if method == "tcg":
-                    u, _ = T.round(u, a.tau); r = c - S @ u                     # rounded iterate, true residual
+                    u, _ = T.round(u, a.tau); r = c - Sit @ u                     # rounded iterate, true residual
                 z = M(r); rz_new = r @ z; p = z + (rz_new / rz) * p; rz = rz_new
                 if method == "tcg": p, _ = T.round(p, a.tau)
             elif method == "tproj":
                 d, _ = T.round(M(r), a.tau)
-                P.append(d); SP.append(S @ d); P, SP = P[-a.m:], SP[-a.m:]
+                P.append(d); SP.append(Sit @ d); P, SP = P[-a.m:], SP[-a.m:]
                 Pm = np.column_stack(P); SPm = np.column_stack(SP)
                 y = np.linalg.lstsq(Pm.T @ SPm, Pm.T @ r, rcond=None)[0]        # S-Galerkin on span(P)
-                u, _ = T.round(u + Pm @ y, a.tau); r = c - S @ u
+                u, _ = T.round(u + Pm @ y, a.tau); r = c - Sit @ u
             elif method == "pstepr":
                 # perturbed step, with the residual updated recursively and rounded (as a TT code would have to),
                 # plus a true-residual replacement every 10 iterations.
-                Sp = S @ p; beta = rz / (p @ Sp)
+                Sp = Sit @ p; beta = rz / (p @ Sp)
                 best = None
                 for s_ in (0.5, 0.75, 1.0, 1.25):
                     for t in (a.tau, a.tau / 10):
                         cand, _ = T.round(u + s_ * beta * p, t)
-                        res = c - S @ cand; score = res @ (res / dS)
+                        res = c - Sit @ cand; score = res @ (res / dS)
                         if best is None or score < best[0]: best = (score, cand, s_)
                 u_new = best[1]
-                r = r - S @ (u_new - u); u = u_new
+                r = r - Sit @ (u_new - u); u = u_new
                 r, _ = T.round(r, a.tau)
-                if k % 10 == 0: r = c - S @ u
+                if k % 10 == 0: r = c - Sit @ u
                 z = M(r); rz_new = r @ z; p = z + (rz_new / rz) * p; rz = rz_new
                 p, _ = T.round(p, a.tau)
             elif method == "pstep":
-                Sp = S @ p; beta = rz / (p @ Sp)
+                Sp = Sit @ p; beta = rz / (p @ Sp)
                 best = None
                 for s in (0.5, 0.75, 1.0, 1.25):
                     for t in (a.tau, a.tau / 10):
                         cand, rk = T.round(u + s * beta * p, t)
-                        res = c - S @ cand; score = res @ (res / dS)            # Jacobi-weighted residual norm
+                        res = c - Sit @ cand; score = res @ (res / dS)            # Jacobi-weighted residual norm
                         if best is None or score < best[0]: best = (score, cand, s, t)
-                u = best[1]; r = c - S @ u
+                u = best[1]; r = c - Sit @ u
                 z = M(r); rz_new = r @ z; p = z + (rz_new / rz) * p; rz = rz_new
                 p, _ = T.round(p, a.tau)
             if a.percut and (k % a.every == 0):
@@ -254,6 +276,9 @@ def main():
                     rGBp = '-'
                 extra0 = f"  rank(G^-1 B p) {rGBp}  rank(S p) {T.ranks(S @ p, a.tau)}" if rGBp != '-' else ""
                 extra = f"  rank(r) {T.ranks(r, a.tau)} rank(p) {T.ranks(p, a.tau)}" if method in ("cg", "tcg", "pstep", "pstepr") else ""
+                if a.tau_y > 0 and Sit.ranks:
+                    print(f"    inexact S: rank of rounded G^-1 B p: max {max(Sit.ranks)}, last {Sit.ranks[-1]} (tol {Sit.tol:.1e}); "
+                          f"{len(Sit.ranks)} applications", flush=True)
                 print(f"  it {k:4d}  f err {ferr(u):.2e}  S-err {eS(u):.2e}  |r|/|c| {np.linalg.norm(c - S @ u)/np.linalg.norm(c):.2e}"
                       f"  rank(x) {T.ranks(u, a.tau)}{extra}{extra0}", flush=True)
 
