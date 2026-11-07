@@ -28,8 +28,6 @@ inline int runConventionalComparison(int argc, char **argv)
   if (parsed) return parsed == 2 ? 0 : parsed;
   if (Teuchos::GlobalMPISession::getNProc() != 1)
     throw std::invalid_argument("Matched comparison currently requires one MPI rank");
-  if (problem.alphaTransportScale > 0)
-    throw std::invalid_argument("--alphaTransportScale is implemented for the tensor backend only");
   const auto start = ComparisonClock::now();
   const auto vertices = problem.vertices();
   auto spatial = MeshFactory::intervalMeshTopology(vertices[0]);
@@ -37,7 +35,8 @@ inline int runConventionalComparison(int argc, char **argv)
   RelativisticVlasovSpaceTimeFormulation form(problem.c,problem.qOverM,1,fields,spatial,
       vertices[1],vertices[2],vertices[3],{},problem.p,problem.dp,0,
       RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,problem.alpha,
-      BASIS_FAMILY_HIERARCHICAL,0,false,false,problem.alphaMeshScale);
+      BASIS_FAMILY_HIERARCHICAL,0,false,false,problem.alphaMeshScale,problem.alphaTransportScale,
+      [&]{ auto a = problem.accelerationBoundValues(); return std::vector<double>(a.begin(), a.end()); }());
   auto solution = form.vlasovSolution();
   auto mesh = solution->mesh();
   auto bc = BC::bc();

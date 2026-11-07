@@ -65,7 +65,7 @@ struct ComparisonProblem
     cmd.setOption("alphaMeshScale", &alphaMeshScale,
                   "If positive, the graph-norm L^2 weight on x-cell K is max(alpha, alphaMeshScale / h_x(K)^2)");
     cmd.setOption("alphaTransportScale", &alphaTransportScale,
-                  "Tensor backend: if positive, the production transport-scale weight alpha_K = alpha + C [ (v_x,max(K)/h_x)^2 "
+                  "If positive, the production transport-scale weight alpha_K = alpha + C [ (v_x,max(K)/h_x)^2 "
                   "+ 1/h_t^2 + (a_x/h_ux)^2 + (a_z/h_uz)^2 ] (Camellia --L2WeightGraphTransportScale); exclusive with alphaMeshScale");
     cmd.setOption("accelerationBounds", &accelerationBounds,
                   "Bounds a_x,a_z on |acceleration| for alphaTransportScale, or \"auto\": |q/m| (|Ex| + v_max |By|), |q/m| v_max |By|");
