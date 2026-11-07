@@ -223,8 +223,10 @@ inline int runTensorComparison(int argc, char **argv)
   std::vector<Axis> axes;
   for (const auto &mesh : vertices) axes.emplace_back(mesh,problem.p,problem.dp,problem.quadratureDegree);
   LorentzFactors h(axes[2],axes[3],problem.c,problem.coefficientTolerance);
-  auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,problem.alpha,problem.svdTolerance,
-                         problem.alphaMeshScale);
+  TestNormWeight norm;
+  norm.alpha = problem.alpha; norm.meshScale = problem.alphaMeshScale; norm.transportScale = problem.alphaTransportScale;
+  norm.c = problem.c; norm.accelerationBounds = problem.accelerationBoundValues();
+  auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,norm,problem.svdTolerance);
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
   if (const char* sparsePrefix = std::getenv("PLANAR_MITL_DUMP_SPARSE"))

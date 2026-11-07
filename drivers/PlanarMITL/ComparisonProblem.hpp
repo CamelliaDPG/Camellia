@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <map>
+#include <sstream>
 #include <string>
 
 namespace PlanarMITL
@@ -30,7 +31,8 @@ struct ComparisonProblem
   int nx = 1, nt = 1, nux = 1, nuz = 1, p = 2, dp = 1;
   int quadratureDegree = 20, sampleDegree = 10;
   double beta0 = 0, betaMax = 0.5, c = 1, qOverM = -1, Ex = -1, By = 0.5;
-  double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0;
+  double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0, alphaTransportScale = 0;
+  std::string accelerationBounds = "auto";
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
@@ -62,6 +64,11 @@ struct ComparisonProblem
     cmd.setOption("alpha", &alpha);
     cmd.setOption("alphaMeshScale", &alphaMeshScale,
                   "If positive, the graph-norm L^2 weight on x-cell K is max(alpha, alphaMeshScale / h_x(K)^2)");
+    cmd.setOption("alphaTransportScale", &alphaTransportScale,
+                  "Tensor backend: if positive, the production transport-scale weight alpha_K = alpha + C [ (v_x,max(K)/h_x)^2 "
+                  "+ 1/h_t^2 + (a_x/h_ux)^2 + (a_z/h_uz)^2 ] (Camellia --L2WeightGraphTransportScale); exclusive with alphaMeshScale");
+    cmd.setOption("accelerationBounds", &accelerationBounds,
+                  "Bounds a_x,a_z on |acceleration| for alphaTransportScale, or \"auto\": |q/m| (|Ex| + v_max |By|), |q/m| v_max |By|");
     cmd.setOption("tolerance", &tolerance); cmd.setOption("svdTolerance", &svdTolerance);
     cmd.setOption("coefficientTolerance", &coefficientTolerance);
     cmd.setOption("maxSweeps", &maxSweeps); cmd.setOption("kickrank", &kickrank);
@@ -90,13 +97,27 @@ struct ComparisonProblem
     if (result != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) return 1;
     if (nx < 1 || nt < 1 || nux < 1 || nuz < 1 || p < 1 || dp < 0 ||
         !(c > 0) || !(betaMax > 0 && betaMax < 1) || !(beta0 > -1 && beta0 < betaMax) ||
-        !(xWidth > 0) || !(tWidth > 0) || !(alpha > 0) ||
+        !(xWidth > 0) || !(tWidth > 0) || !(alpha > 0) || (alphaMeshScale > 0 && alphaTransportScale > 0) ||
         quadratureDegree < 2*(p+dp) || sampleDegree < 2*std::max(2,p-1) ||
         !(tolerance > 0) || !(svdTolerance > 0) || !(coefficientTolerance > 0))
       throw std::invalid_argument("Invalid comparison parameters or underintegrated mass/error quadrature");
     return 0;
   }
 
+  //! Acceleration bounds (u_x, u_z) for the transport-scale weight: parsed, or bounds of |q/m| (E + v x B) over the
+  //! velocity box (|v| <= betaMax c).
+  std::array<double,2> accelerationBoundValues() const
+  {
+    if (accelerationBounds != "auto")
+    {
+      std::array<double,2> a {0,0};
+      std::stringstream in(accelerationBounds); std::string item;
+      for (int i = 0; i < 2 && std::getline(in, item, ','); ++i) a[i] = std::stod(item);
+      return a;
+    }
+    const double vMax = betaMax * c;
+    return {std::abs(qOverM) * (std::abs(Ex) + vMax * std::abs(By)), std::abs(qOverM) * vMax * std::abs(By)};
+  }
   std::array<int,4> counts() const { return {int(xVertices().size()) - 1, nt, nux, nuz}; }
   //! x vertices: uniform, or bisection-graded toward x = 0 (widths 1/2, 1/4, ..., two cells of 2^{1-nx}), then
   //! xRefinements uniform bisections of every cell.
@@ -139,7 +160,7 @@ struct ComparisonProblem
     return {{"nx",int(xVertices().size()) - 1},{"graded_x",double(gradedX)},{"x_refinements",double(xRefinements)},{"nt",nt},{"nux",nux},{"nuz",nuz},{"p",p},{"dp",dp},
             {"quadrature_degree",quadratureDegree},{"sample_degree",sampleDegree},
             {"beta0",beta0},{"betaMax",betaMax},{"c",c},{"q_over_m",qOverM},
-            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},
+            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},
             {"target",tolerance},{"svd_tolerance",svdTolerance},{"coefficient_tolerance",coefficientTolerance},
             {"max_sweeps",maxSweeps},{"kickrank",kickrank},{"max_rank",maxRank},
             {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"split_x",double(splitX)},{"inf_sup_enrichment",double(infSupEnrichment)},{"riesz_svd_tolerance",rieszSvdTolerance}};

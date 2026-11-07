@@ -28,6 +28,8 @@ inline int runConventionalComparison(int argc, char **argv)
   if (parsed) return parsed == 2 ? 0 : parsed;
   if (Teuchos::GlobalMPISession::getNProc() != 1)
     throw std::invalid_argument("Matched comparison currently requires one MPI rank");
+  if (problem.alphaTransportScale > 0)
+    throw std::invalid_argument("--alphaTransportScale is implemented for the tensor backend only");
   const auto start = ComparisonClock::now();
   const auto vertices = problem.vertices();
   auto spatial = MeshFactory::intervalMeshTopology(vertices[0]);

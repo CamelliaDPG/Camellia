@@ -189,9 +189,122 @@ struct System
 
 /// Build sqrt(W)*L, then B=-L^T W F and G=L^T W L+alpha*M.
 /// The four TT modes are (cell*basis) for x,t,ux,uz, with x fastest.
+/// Graph-norm L^2 weight options.  meshScale > 0: alpha_K = max(alpha, meshScale / h_x^2).  transportScale > 0 (the
+/// production weight, Camellia aa406de0): alpha_K = alpha + C [ (v_x,max(K) / h_x)^2 + 1 / h_t^2 + sum_u (a_u / h_u)^2 ],
+/// v_x,max(K) = max |u_x| / gamma over K's velocity box, a_u fixed bounds on the acceleration per velocity direction.
+struct TestNormWeight
+{
+  double alpha = 1, meshScale = 0, transportScale = 0, c = 1;
+  std::array<double, 2> accelerationBounds = {0, 0}; // (u_x, u_z)
+};
+
+/// Values per cell, expanded to the axis's quadrature points.
+inline Eigen::VectorXd cellValues(const Axis &axis, const std::vector<double> &perCell)
+{
+  const int cells = int(axis.vertices.size()) - 1, nq = int(axis.points.size()) / cells;
+  Eigen::VectorXd values(axis.points.size());
+  for (int cell = 0; cell < cells; ++cell) values.segment(cell * nq, nq).setConstant(perCell[cell]);
+  return values;
+}
+
+/// Weighted test mass matrix: a sum of Kronecker terms, each a product of per-axis weights (given at quadrature points).
+inline TTMatrix weightedTestMass(const std::vector<Axis> &axes, const std::vector<std::array<Eigen::VectorXd, 4>> &terms,
+                                 double tolerance)
+{
+  TTMatrix mass;
+  for (size_t k = 0; k < terms.size(); ++k)
+  {
+    boba::Array<host_matrix, 4> factors;
+    for (size_t d = 0; d < 4; ++d)
+    {
+      const Eigen::VectorXd w = axes[d].weights.array() * terms[k][d].array();
+      factors[d] = hostMatrix(axes[d].test.transpose() * w.asDiagonal() * axes[d].test);
+    }
+    auto term = boba::make_ttm_from_matrices<4, host_space, double>(factors);
+    if (k == 0) mass = term; else { mass += term; DpgBoba::round(mass, tolerance); }
+  }
+  return mass;
+}
+
+/// The Kronecker terms of the L^2 weight alpha_K (see TestNormWeight).
+inline std::vector<std::array<Eigen::VectorXd, 4>> testNormWeightTerms(const std::vector<Axis> &axes,
+                                                                       const TestNormWeight &norm)
+{
+  std::array<Eigen::VectorXd, 4> ones;
+  std::array<std::vector<double>, 4> widths;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    ones[d] = Eigen::VectorXd::Ones(axes[d].points.size());
+    for (size_t i = 0; i + 1 < axes[d].vertices.size(); ++i) widths[d].push_back(axes[d].vertices[i + 1] - axes[d].vertices[i]);
+  }
+  auto inverseSquares = [&](size_t d, double scale) {
+    std::vector<double> values;
+    for (double h : widths[d]) values.push_back(scale / (h * h));
+    return cellValues(axes[d], values);
+  };
+  std::vector<std::array<Eigen::VectorXd, 4>> terms;
+  if (norm.transportScale > 0.0)
+  {
+    const double C = norm.transportScale;
+    terms.push_back(ones); terms.back()[0] *= norm.alpha;
+    terms.push_back(ones); terms.back()[1] = inverseSquares(1, C);
+    for (int u = 0; u < 2; ++u)
+    {
+      const double a = norm.accelerationBounds[u];
+      if (a == 0.0) continue;
+      terms.push_back(ones); terms.back()[2 + u] = inverseSquares(2 + u, C * a * a);
+    }
+    // (v_x,max(K) / h_x)^2: v_x,max depends on the (u_x, u_z) cell pair; split that small matrix exactly by SVD.
+    const size_t nux = widths[2].size(), nuz = widths[3].size();
+    Eigen::MatrixXd vmax2(nux, nuz);
+    for (size_t i = 0; i < nux; ++i)
+    {
+      const double ux = std::max(std::abs(axes[2].vertices[i]), std::abs(axes[2].vertices[i + 1]));
+      for (size_t j = 0; j < nuz; ++j)
+      {
+        const double z0 = axes[3].vertices[j], z1 = axes[3].vertices[j + 1];
+        const double uz = (z0 <= 0.0 && z1 >= 0.0) ? 0.0 : std::min(std::abs(z0), std::abs(z1));
+        const double v = ux * PlanarMITL::inverseGamma(ux, uz, norm.c);
+        vmax2(i, j) = v * v;
+      }
+    }
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(vmax2, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    const auto sigma = svd.singularValues();
+    for (Eigen::Index k = 0; k < sigma.size(); ++k)
+    {
+      if (sigma(k) <= 1e-14 * sigma(0)) break;
+      terms.push_back(ones);
+      terms.back()[0] = inverseSquares(0, C);
+      std::vector<double> left(nux), right(nuz);
+      for (size_t i = 0; i < nux; ++i) left[i] = sigma(k) * svd.matrixU()(i, k);
+      for (size_t j = 0; j < nuz; ++j) right[j] = svd.matrixV()(j, k);
+      terms.back()[2] = cellValues(axes[2], left);
+      terms.back()[3] = cellValues(axes[3], right);
+    }
+    double lo = 1e300, hi = 0;
+    for (size_t ix = 0; ix < widths[0].size(); ++ix)
+      for (size_t it = 0; it < widths[1].size(); ++it)
+        for (size_t i = 0; i < nux; ++i)
+          for (size_t j = 0; j < nuz; ++j)
+          {
+            const double w = norm.alpha + C * (vmax2(i, j) / std::pow(widths[0][ix], 2) + 1.0 / std::pow(widths[1][it], 2) +
+                             std::pow(norm.accelerationBounds[0] / widths[2][i], 2) +
+                             std::pow(norm.accelerationBounds[1] / widths[3][j], 2));
+            lo = std::min(lo, w); hi = std::max(hi, w);
+          }
+    std::cout << "transport_scale_weight terms=" << terms.size() << " alpha_K range " << lo << " .. " << hi << '\n';
+  }
+  else
+  {
+    std::vector<double> values;
+    for (double h : widths[0]) values.push_back(norm.meshScale > 0.0 ? std::max(norm.alpha, norm.meshScale / (h * h)) : norm.alpha);
+    terms.push_back(ones); terms.back()[0] = cellValues(axes[0], values);
+  }
+  return terms;
+}
+
 inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
-                       double qOverM, double Ex, double By, double alpha, double tolerance,
-                       double alphaMeshScale = 0.0)
+                       double qOverM, double Ex, double By, const TestNormWeight &norm, double tolerance)
 {
   boba::Array<host_matrix, 4> evaluation, fieldEvaluation;
   Sizes testSizes, fieldSizes;
@@ -203,22 +316,8 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
     testSizes[d] = axes[d].test.cols();
     fieldSizes[d] = axes[d].field.cols();
   }
-  // Graph-norm L^2 weight alpha_K = max(alpha, alphaMeshScale / h_x(K)^2), constant on each x cell: a diagonal
-  // weight on the x factor of the (rank-one) mass term, so the Gram ranks are unchanged.
-  boba::Array<host_matrix, 4> massFactors = evaluation;
-  {
-    const auto &x = axes[0];
-    const int cells = int(x.vertices.size()) - 1, nq = int(x.points.size()) / cells;
-    Eigen::VectorXd weight(x.points.size());
-    for (int cell = 0; cell < cells; ++cell)
-    {
-      const double hx = x.vertices[cell + 1] - x.vertices[cell];
-      const double alphaK = alphaMeshScale > 0.0 ? std::max(alpha, alphaMeshScale / (hx * hx)) : alpha;
-      weight.segment(cell * nq, nq) = (alphaK * x.weights.segment(cell * nq, nq).array()).sqrt().matrix();
-    }
-    massFactors[0] = hostMatrix(weight.asDiagonal() * x.test);
-  }
-  auto massEvaluation = boba::make_ttm_from_matrices<4, host_space, double>(massFactors);
+  // Graph-norm L^2 term: a weighted test mass matrix, alpha_K constant on each element (TestNormWeight).
+  auto mass = weightedTestMass(axes, testNormWeightTerms(axes, norm), tolerance);
   auto fieldValues = boba::make_ttm_from_matrices<4, host_space, double>(fieldEvaluation);
   auto term = [&](size_t derivativeAxis, const Eigen::VectorXd &ux,
                   const Eigen::VectorXd &uz, double coefficient) {
@@ -249,7 +348,7 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
     }
     DpgBoba::round(transport, tolerance);
   }
-  auto gram = transport.transpose() * transport + massEvaluation.transpose() * massEvaluation;
+  auto gram = transport.transpose() * transport + mass;
   DpgBoba::round(gram, tolerance);
   auto volume = -1.0 * (transport.transpose() * fieldValues);
   DpgBoba::round(volume, tolerance);

@@ -237,7 +237,9 @@ int run(int argc, char **argv)
   std::vector<Axis> axes;
   for (const auto &mesh : vertices) { axes.emplace_back(mesh, p, dp, quadratureDegree); }
   LorentzFactors h(axes[2], axes[3], c, coefficientTolerance);
-  auto system = assemble(axes, h, qOverM, Ex, By, alpha, options.roundingTolerance);
+  TestNormWeight norm;
+  norm.alpha = alpha;
+  auto system = assemble(axes, h, qOverM, Ex, By, norm, options.roundingTolerance);
   for (size_t b = 0; b < system.names.size(); ++b)
   {
     std::cout << "block=" << b << " name=" << system.names[b] << " sizes=" << system.sizes[b]
