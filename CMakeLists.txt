@@ -154,6 +154,28 @@ ELSE()
   MESSAGE(FATAL_ERROR "Could not find Trilinos!")
 ENDIF()
 
+# Intrepid2::PAMatrix (partial assembly, with sum-factorized assemble()) enables sum-factorized integration of
+# LinearTerms on tensor-product cells (LinearTermSumFactorized).  Without it, Camellia integrates by quadrature.
+#   CAMELLIA_ENABLE_PAMATRIX = AUTO (default): use PAMatrix if the Trilinos install provides it
+#                              ON: require it (configure fails if it is missing); OFF: do not use it
+SET(CAMELLIA_ENABLE_PAMATRIX "AUTO" CACHE STRING "Use Intrepid2::PAMatrix for sum-factorized integration (AUTO, ON, OFF)")
+SET_PROPERTY(CACHE CAMELLIA_ENABLE_PAMATRIX PROPERTY STRINGS AUTO ON OFF)
+SET(CAMELLIA_HAVE_PAMATRIX OFF)
+IF(NOT CAMELLIA_ENABLE_PAMATRIX STREQUAL "OFF")
+  FIND_FILE(CAMELLIA_INTREPID2_PAMATRIX_HEADER Intrepid2_PAMatrix.hpp PATHS ${Trilinos_INCLUDE_DIRS} NO_DEFAULT_PATH)
+  IF(CAMELLIA_INTREPID2_PAMATRIX_HEADER)
+    SET(CAMELLIA_HAVE_PAMATRIX ON)
+  ELSEIF(CAMELLIA_ENABLE_PAMATRIX STREQUAL "ON")
+    MESSAGE(FATAL_ERROR "CAMELLIA_ENABLE_PAMATRIX=ON, but Intrepid2_PAMatrix.hpp was not found in ${Trilinos_INCLUDE_DIRS}")
+  ENDIF()
+ENDIF()
+IF(CAMELLIA_HAVE_PAMATRIX)
+  MESSAGE("Using Intrepid2::PAMatrix (${CAMELLIA_INTREPID2_PAMATRIX_HEADER}): sum-factorized LinearTerm integration enabled")
+  add_compile_definitions(CAMELLIA_HAVE_PAMATRIX)
+ELSE()
+  MESSAGE("Not using Intrepid2::PAMatrix (CAMELLIA_ENABLE_PAMATRIX=${CAMELLIA_ENABLE_PAMATRIX}): LinearTerms are integrated by quadrature")
+ENDIF()
+
 # If you haven't already set the C++ compiler, use the same compiler
 # that was used to build Trilinos on your machine.  
 IF(NOT CMAKE_CXX_COMPILER)

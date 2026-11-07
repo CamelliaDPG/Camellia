@@ -9,6 +9,7 @@
 #include "ConstantVectorFunction.h"
 #include "Function.h"
 #include "LinearTerm.h"
+#include "LinearTermSumFactorized.h"
 #include "Mesh.h"
 #include "MPIWrapper.h"
 #include "RieszRep.h"
@@ -473,6 +474,16 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &valuesFC,
   TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(0) != numCells, std::invalid_argument, "values.dim(0) != numCells");
   TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(1) != uOrdering->totalDofs(), std::invalid_argument, "values.dim(1) != uOrdering->totalDofs()");
   TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(2) != vOrdering->totalDofs(), std::invalid_argument, "values.dim(2) != vOrdering->totalDofs()");
+
+  // sum-factorized integration (volume or side), when the terms, bases, and cell support it
+  if constexpr (std::is_same<Scalar,double>::value)
+  {
+    if (integrateLinearTermsSumFactorized(valuesFC, u, uOrdering, v, vOrdering, basisCache))
+    {
+      TimeLogger::sharedInstance()->stopTimer(timerHandle);
+      return;
+    }
+  }
 
   bool symmetric = false; // turning off a so far buggy attempt at optimization
   //  bool symmetric = (u.get()==v.get()) && (uOrdering.get() == vOrdering.get());
