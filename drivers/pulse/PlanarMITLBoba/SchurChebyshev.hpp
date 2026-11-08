@@ -576,6 +576,35 @@ inline std::vector<Eigen::VectorXd> jacobiDiagonal(const System &system, const s
   return diag;
 }
 
+/// Diagonal TT matrix diag(v) for a TT vector v (same ranks as v).
+inline TTMatrix8 diagonalMatrix(const TTVector8 &v)
+{
+  Size8 n = v.sizes(); TTMatrix8 M(n, n);
+  for (size_t m = 0; m < 8; ++m)
+  {
+    const size_t r0 = v.cores[m].sizes(0), r1 = v.cores[m].sizes(2);
+    M.cores[m].resize({r0, n[m], n[m], r1}); M.cores[m].fill_with_zeros();
+    auto out = M.cores[m].view(); auto in = v.cores[m].const_view();
+    for (size_t b = 0; b < r1; ++b) for (size_t i = 0; i < n[m]; ++i) for (size_t a = 0; a < r0; ++a) out({a, i, i, b}) = in({a, i, b});
+  }
+  return M;
+}
+
+/// Inverse Jacobi diagonal as a low-rank TT (1/d compressed at a loose tolerance), applied as a diagonal TT matrix.
+inline TTMatrix8 lowRankInverseDiagonal(const Eigen::VectorXd &d, const Size8 &sz, double tolerance, std::string &ranks)
+{
+  host_tensor<8> t(sz); auto v = t.view();
+  std::array<size_t, 8> stride; stride[0] = 1; for (size_t m = 1; m < 8; ++m) stride[m] = stride[m - 1] * sz[m - 1];
+  for (Eigen::Index g = 0; g < d.size(); ++g)
+  {
+    std::array<size_t, 8> i; for (size_t m = 0; m < 8; ++m) i[m] = (size_t(g) / stride[m]) % sz[m];
+    v({i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]}) = 1.0 / d(g);
+  }
+  TTVector8 inv(sz); inv.svd_tolerance_relative = tolerance; inv.svd_tolerance_absolute = 0.0; inv.compress(t);
+  ranks = inv.ranks_string();
+  return diagonalMatrix(inv);
+}
+
 /// Rank-one Kronecker approximation of a diagonal (cells-first layout): log d fitted by main effects over the 8 modes.
 inline TTMatrix8 kroneckerInverseDiagonal(const Eigen::VectorXd &d, const Size8 &sz, double &medianRelErr, double &maxRelErr)
 {
@@ -610,6 +639,7 @@ struct ChebyshevOptions
   bool structuredField = true;  // apply B_f and B_f^T element-locally per velocity cell (no rank multiplication)
   int boundsSteps = 30;          // TT Lanczos steps for the spectrum bounds when lmin/lmax are not given
   double boundsTolerance = 1e-4, lminSafety = 0.8;
+  double jacobiTolerance = 0.0;  // > 0: Jacobi diagonal as a TT of this tolerance; 0: rank-one Kronecker fit
   int iterations = 200, every = 10;
   std::string kroneckerFile;
 };
@@ -668,8 +698,16 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
     const auto diag = jacobiDiagonal(system, sys.trialSizes, sys.cells, nbT, ec, *Gfactors);
     for (size_t j = 0; j < diag.size(); ++j)
     {
-      double med, mx; Minv.push_back(kroneckerInverseDiagonal(diag[j], sys.trialSizes[j], med, mx));
-      std::cout << "kronecker_jacobi block=" << system.names[j + 1] << " |d_K/d - 1| median=" << med << " max=" << mx << '\n';
+      if (opt.jacobiTolerance > 0)
+      {
+        std::string ranks; Minv.push_back(lowRankInverseDiagonal(diag[j], sys.trialSizes[j], opt.jacobiTolerance, ranks));
+        std::cout << "tt_jacobi block=" << system.names[j + 1] << " tol=" << opt.jacobiTolerance << " ranks=" << ranks << '\n';
+      }
+      else
+      {
+        double med, mx; Minv.push_back(kroneckerInverseDiagonal(diag[j], sys.trialSizes[j], med, mx));
+        std::cout << "kronecker_jacobi block=" << system.names[j + 1] << " |d_K/d - 1| median=" << med << " max=" << mx << '\n';
+      }
     }
     std::cout << "kronecker_jacobi seconds=" << seconds(tj) << '\n';
   }

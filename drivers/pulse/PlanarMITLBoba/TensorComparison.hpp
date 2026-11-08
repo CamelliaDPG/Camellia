@@ -317,7 +317,7 @@ inline int runTensorComparison(int argc, char **argv)
     cheb.lmin = problem.chebLmin; cheb.lmax = problem.chebLmax; cheb.tolerance = problem.chebTolerance;
     cheb.operatorTolerance = problem.svdTolerance; cheb.iterations = problem.chebIterations; cheb.every = problem.chebEvery;
     cheb.kroneckerFile = problem.chebKronecker; cheb.rtol = problem.chebRtol; cheb.factoredField = problem.chebFactoredField;
-    cheb.boundsTolerance = problem.chebBoundsTolerance; cheb.boundsSteps = problem.chebBoundsSteps; cheb.lminSafety = problem.chebLminSafety;
+    cheb.boundsTolerance = problem.chebBoundsTolerance; cheb.boundsSteps = problem.chebBoundsSteps; cheb.lminSafety = problem.chebLminSafety; cheb.jacobiTolerance = problem.chebJacobiTolerance;
     solution = solveSchurChebyshev(system,rhs,axes,h,problem.qOverM,problem.Ex,problem.By,cheb);
   }
   else if (splitMask[0] || splitMask[1] || splitMask[2] || splitMask[3])
