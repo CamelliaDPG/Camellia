@@ -215,8 +215,26 @@ def draw_portrait(ax, blocks, norm, uxlim):
 
 
 def signed_norm(lo, hi):
-    lo = min(lo, -1e-12 * max(abs(hi), 1.0)); hi = max(hi, 1e-12)
-    return TwoSlopeNorm(vmin=lo, vcenter=0.0, vmax=hi)
+    """Symmetric diverging scale, +-hi: equal colour intensity means equal |f| on both sides (negative values below -hi
+    are clipped; the colorbars extend).  An asymmetric scale stretched the small negative values (~1% of the peak)
+    to the full red range and made them look as large as the peak."""
+    r = max(hi, -lo if hi <= 0 else 0.0, 1e-12)
+    return TwoSlopeNorm(vmin=-r, vcenter=0.0, vmax=r)
+
+
+UX_LABEL = r"$u_x = \gamma v_x$  (units of $c$)"
+UZ_LABEL = r"$u_z = \gamma v_z$  (units of $c$)"
+U_NOTE = ("u = γv is the proper velocity: |u| = 1 is |v| = 0.71c, |u| = 1.5 is 0.83c; "
+          "the velocity domain is |u| ≤ 9.96 (|v| ≤ 0.995c), where f = 0 is imposed")
+
+
+def u_to_v(u):
+    return np.asarray(u) / np.sqrt(1.0 + np.asarray(u) ** 2)
+
+
+def v_to_u(v):
+    v = np.clip(np.asarray(v), -0.999999, 0.999999)
+    return v / np.sqrt(1.0 - v ** 2)
 
 
 def portrait_figures(slabs, out, uxlim, m=9):
@@ -226,11 +244,12 @@ def portrait_figures(slabs, out, uxlim, m=9):
         lo = min(b[2].min() for b in blocks); hi = max(b[2].max() for b in blocks)
         fig, ax = styled((7.5, 4.2))
         mesh = draw_portrait(ax, data[s.slab], signed_norm(lo, hi), uxlim)
-        cb = fig.colorbar(mesh, ax=ax); cb.set_label(r"$\int f\, du_z$")
-        ax.set_xlabel("x / D"); ax.set_ylabel(r"$u_x / c$")
+        cb = fig.colorbar(mesh, ax=ax, extend="both"); cb.set_label(r"$\int f\, du_z$")
+        ax.set_xlabel("x / D"); ax.set_ylabel(UX_LABEL)
         ax.set_title(f"Phase portrait at t = {s.t:.2f} (end of slab {s.slab}); red: negative", loc="left", fontsize=10,
                      color=pd.TEXT_PRIMARY)
-        fig.tight_layout(); fig.savefig(os.path.join(out, f"portrait_slab{s.slab}.png"), dpi=200); plt.close(fig)
+        fig.text(0.01, 0.005, U_NOTE, fontsize=6.5, color=pd.TEXT_SECONDARY)
+        fig.tight_layout(rect=(0, 0.03, 1, 1)); fig.savefig(os.path.join(out, f"portrait_slab{s.slab}.png"), dpi=200); plt.close(fig)
     # formation sequence, shared scale (clip the colour range to the later slabs' maximum so the sheath is visible)
     k = len(slabs); cols = min(3, k); rows = int(np.ceil(k / cols))
     plt.rcParams.update({"font.size": 9, "figure.facecolor": pd.SURFACE})
@@ -246,8 +265,10 @@ def portrait_figures(slabs, out, uxlim, m=9):
     for idx in range(k, rows * cols):
         axes[idx // cols][idx % cols].axis("off")
     for ax in axes[-1]: ax.set_xlabel("x / D")
-    for row in axes: row[0].set_ylabel(r"$u_x / c$")
-    fig.colorbar(mesh, ax=axes, shrink=0.9, aspect=30, extend="max", label=r"$\int f\, du_z$ (red: negative)")
+    for row in axes: row[0].set_ylabel(UX_LABEL)
+    fig.colorbar(mesh, ax=axes, shrink=0.9, aspect=30, extend="both", label=r"$\int f\, du_z$ (red: negative)")
+    fig.get_layout_engine().set(rect=(0, 0.04, 1, 0.96))
+    fig.text(0.01, 0.005, U_NOTE, fontsize=6.5, color=pd.TEXT_SECONDARY)
     fig.savefig(os.path.join(out, "portraits.png"), dpi=200); plt.close(fig)
 
 
@@ -264,7 +285,7 @@ def negative_figures(slabs, out, uxlim, m=9):
                                  rasterized=True)
         ax.set_xlim(0, 1); ax.set_ylim(*uxlim); ax.axhline(0, color=pd.TEXT_SECONDARY, lw=0.6, ls=":")
         cb = fig.colorbar(mesh, ax=ax); cb.set_label(r"$-\int \min(f, 0)\, du_z$")
-        ax.set_xlabel("x / D"); ax.set_ylabel(r"$u_x / c$")
+        ax.set_xlabel("x / D"); ax.set_ylabel(UX_LABEL)
         ax.set_title(f"Where f < 0, t = {s.t:.2f}", loc="left", fontsize=10, color=pd.TEXT_PRIMARY)
         fig.tight_layout(); fig.savefig(os.path.join(out, f"negative_slab{s.slab}.png"), dpi=200); plt.close(fig)
 
@@ -272,7 +293,7 @@ def negative_figures(slabs, out, uxlim, m=9):
 def velocity_figures(slabs, out, xs, uxlim, uzlim, m=9):
     for s in slabs:
         plt.rcParams.update({"font.size": 9, "figure.facecolor": pd.SURFACE})
-        fig, axes = plt.subplots(1, len(xs), figsize=(3.2 * len(xs), 3.2), squeeze=False, sharey=True)
+        fig, axes = plt.subplots(1, len(xs), figsize=(3.3 * len(xs), 3.9), squeeze=False, sharey=True)
         for a, x in zip(axes[0], xs):
             pd.style_axes(a)
             blocks = [b for b in s.at_x(x, m) if b[0][-1] >= uxlim[0] and b[0][0] <= uxlim[1]
@@ -285,12 +306,16 @@ def velocity_figures(slabs, out, xs, uxlim, uzlim, m=9):
             a.set_xlim(*uxlim); a.set_ylim(-uzlim, uzlim); a.set_aspect("equal")
             a.axhline(0, color=pd.TEXT_SECONDARY, lw=0.5, ls=":"); a.axvline(0, color=pd.TEXT_SECONDARY, lw=0.5, ls=":")
             a.set_title(f"x = {x:g}", loc="left", fontsize=9, color=pd.TEXT_PRIMARY)
-            a.set_xlabel(r"$u_x / c$")
-            fig.colorbar(mesh, ax=a, shrink=0.75)
-        axes[0][0].set_ylabel(r"$u_z / c$")
-        fig.suptitle(f"f(u_x, u_z) at t = {s.t:.2f} (end of slab {s.slab}); red: negative", x=0.01, ha="left",
-                     fontsize=10, color=pd.TEXT_PRIMARY)
-        fig.tight_layout(); fig.savefig(os.path.join(out, f"velocity_slab{s.slab}.png"), dpi=200); plt.close(fig)
+            a.set_xlabel(UX_LABEL)
+            top = a.secondary_xaxis("top", functions=(u_to_v, v_to_u))
+            top.set_xticks([-0.6, 0, 0.6]); top.tick_params(labelsize=7, colors=pd.TEXT_SECONDARY)
+            top.set_xlabel(r"$v_x / c$ at $u_z = 0$", fontsize=7, color=pd.TEXT_SECONDARY)
+            fig.colorbar(mesh, ax=a, shrink=0.75, extend="both")
+        axes[0][0].set_ylabel(UZ_LABEL)
+        fig.suptitle(f"f(u_x, u_z) at t = {s.t:.2f} (end of slab {s.slab}); red: negative; each panel has its own scale",
+                     x=0.01, y=0.99, ha="left", fontsize=10, color=pd.TEXT_PRIMARY)
+        fig.text(0.01, 0.01, U_NOTE, fontsize=6.5, color=pd.TEXT_SECONDARY)
+        fig.tight_layout(rect=(0, 0.05, 1, 0.93)); fig.savefig(os.path.join(out, f"velocity_slab{s.slab}.png"), dpi=200); plt.close(fig)
 
 
 def moment_figures(slabs, out, kappa, x_b):
