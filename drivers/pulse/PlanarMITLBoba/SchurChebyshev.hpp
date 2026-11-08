@@ -291,7 +291,7 @@ struct StructuredLocalOperator
   std::vector<size_t> xClass;   // class of each x cell (empty: one class)
   size_t nClass = 1;
 
-  TTVector8 apply(const TTVector8 &z, double tolerance) const
+  TTVector8 apply(const TTVector8 &z, double tolerance, const TTMatrix8 *post = nullptr) const
   {
     const auto &zc = z.cores;
     const size_t rcb = zc[3].sizes(2), nlocIn = nbIn[0] * nbIn[1] * nbIn[2] * nbIn[3], nlocOut = nbOut[0] * nbOut[1] * nbOut[2] * nbOut[3];
@@ -398,6 +398,7 @@ struct StructuredLocalOperator
         for (size_t bm = 0; bm < n; ++bm)
           for (size_t kk = 0; kk < Kin; ++kk) out({kk, bm, q}) = basisCores[m](kk + Kin * bm, q);
     }
+    if (post) y = (*post) * y;    // rank-one diagonal scaling: exact, ranks unchanged
     DpgBoba::round(y, tolerance);
     return y;
   }
@@ -483,7 +484,8 @@ inline std::vector<Eigen::MatrixXd> classBlocks(const TTMatrix &M, const std::ar
 
 inline StructuredLocalOperator structuredGramInverse(const TTMatrix &G4, const std::array<size_t, 4> &cells, const ElementClasses &ec,
                                                      const std::array<size_t, 4> &nb,
-                                                     std::shared_ptr<std::vector<Eigen::LLT<Eigen::MatrixXd>>> &factorsOut)
+                                                     std::shared_ptr<std::vector<Eigen::LLT<Eigen::MatrixXd>>> &factorsOut,
+                                                     std::vector<double> scale = {})
 {
   auto blocks = classBlocks(G4, cells, ec, nb, nb, "G^-1");
   auto factors = std::make_shared<std::vector<Eigen::LLT<Eigen::MatrixXd>>>();
@@ -493,19 +495,23 @@ inline StructuredLocalOperator structuredGramInverse(const TTMatrix &G4, const s
     if (factors->back().info() != Eigen::Success) throw std::runtime_error("structured G^-1: G_v not SPD");
   }
   factorsOut = factors;
-  StructuredLocalOperator op{cells, nb, nb, [factors](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*factors)[v].solve(rhs)); }};
+  StructuredLocalOperator op{cells, nb, nb, [factors, scale](size_t v, const Eigen::MatrixXd &rhs) {
+    Eigen::MatrixXd out = (*factors)[v].solve(rhs); if (!scale.empty()) out *= scale[v]; return out; }};
   op.xClass = ec.xClass; op.nClass = ec.nClass;
   return op;
 }
 
 /// B (or B^T) for an element-local block (the field block): local matrices per element class.
 inline StructuredLocalOperator structuredBlock(const TTMatrix &B4, const std::array<size_t, 4> &cells, const ElementClasses &ec,
-                                               const std::array<size_t, 4> &nbRow, const std::array<size_t, 4> &nbCol, bool transpose)
+                                               const std::array<size_t, 4> &nbRow, const std::array<size_t, 4> &nbCol, bool transpose,
+                                               std::vector<double> scale = {})
 {
   auto blocks = std::make_shared<std::vector<Eigen::MatrixXd>>(classBlocks(B4, cells, ec, nbRow, nbCol, transpose ? "B_f^T" : "B_f"));
   StructuredLocalOperator op = transpose
-    ? StructuredLocalOperator{cells, nbRow, nbCol, [blocks](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*blocks)[v].transpose() * rhs); }}
-    : StructuredLocalOperator{cells, nbCol, nbRow, [blocks](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*blocks)[v] * rhs); }};
+    ? StructuredLocalOperator{cells, nbRow, nbCol, [blocks, scale](size_t v, const Eigen::MatrixXd &rhs) {
+        Eigen::MatrixXd out = (*blocks)[v].transpose() * rhs; if (!scale.empty()) out *= scale[v]; return out; }}
+    : StructuredLocalOperator{cells, nbCol, nbRow, [blocks, scale](size_t v, const Eigen::MatrixXd &rhs) {
+        Eigen::MatrixXd out = (*blocks)[v] * rhs; if (!scale.empty()) out *= scale[v]; return out; }};
   op.xClass = ec.xClass; op.nClass = ec.nClass;
   return op;
 }
@@ -606,7 +612,8 @@ inline TTMatrix8 lowRankInverseDiagonal(const Eigen::VectorXd &d, const Size8 &s
 }
 
 /// Rank-one Kronecker approximation of a diagonal (cells-first layout): log d fitted by main effects over the 8 modes.
-inline TTMatrix8 kroneckerInverseDiagonal(const Eigen::VectorXd &d, const Size8 &sz, double &medianRelErr, double &maxRelErr)
+inline TTMatrix8 kroneckerInverseDiagonal(const Eigen::VectorXd &d, const Size8 &sz, double &medianRelErr, double &maxRelErr,
+                                          double power = -1.0)
 {
   std::array<size_t, 8> stride; stride[0] = 1; for (size_t m = 1; m < 8; ++m) stride[m] = stride[m - 1] * sz[m - 1];
   const Eigen::ArrayXd L = d.array().log(); const double mean = L.mean();
@@ -627,7 +634,7 @@ inline TTMatrix8 kroneckerInverseDiagonal(const Eigen::VectorXd &d, const Size8 
   for (size_t m = 0; m < 8; ++m)
   {
     factors[m] = host_matrix({sz[m], sz[m]}); factors[m].fill_with_zeros(); auto v = factors[m].view();
-    for (size_t i = 0; i < sz[m]; ++i) v({i, i}) = std::exp(-(mean / 8.0 + eff[m](i)));
+    for (size_t i = 0; i < sz[m]; ++i) v({i, i}) = std::exp(power * (mean / 8.0 + eff[m](i)));
   }
   return boba::make_ttm_from_matrices<8, host_space, double>(factors);
 }
@@ -640,6 +647,9 @@ struct ChebyshevOptions
   int boundsSteps = 30;          // TT Lanczos steps for the spectrum bounds when lmin/lmax are not given
   double boundsTolerance = 1e-4, lminSafety = 0.8;
   double jacobiTolerance = 0.0;  // > 0: Jacobi diagonal as a TT of this tolerance; 0: rank-one Kronecker fit
+  // scaled: iterate on D^{1/2} x and D^{-1/2} r (D: Kronecker Jacobi) and divide test-space vectors by the element
+  // measure, so TT rounding sees cells of all sizes alike (graded meshes); requires the in-solver Jacobi
+  bool scaled = true;
   int iterations = 200, every = 10;
   std::string kroneckerFile;
 };
@@ -690,7 +700,34 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   std::array<size_t, 4> nbF; for (size_t d = 0; d < 4; ++d) nbF[d] = sys.trialSizes[0][4 + d];
   auto Bf = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false);
   auto BfT = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, true);
-  std::vector<TTMatrix8> Minv;
+  if (opt.scaled && (!opt.kroneckerFile.empty() || opt.jacobiTolerance > 0))
+    throw std::invalid_argument("scaled Schur-Chebyshev uses the in-solver Kronecker Jacobi (no --chebKronecker, --chebJacobiTolerance)");
+  // element measure |K| per local-operator index v = c + nClass (i + n_ux j)
+  std::vector<double> measure, invMeasure;
+  {
+    auto width = [&](size_t d, size_t cell) { return axes[d].vertices[cell + 1] - axes[d].vertices[cell]; };
+    for (size_t j = 0; j < sys.cells[3]; ++j)
+      for (size_t i = 0; i < sys.cells[2]; ++i)
+        for (size_t c = 0; c < ec.nClass; ++c)
+        {
+          measure.push_back(width(0, ec.representative[c]) * width(1, 0) * width(2, i) * width(3, j));
+          invMeasure.push_back(1.0 / measure.back());
+        }
+  }
+  // test-space scaling W^{-1} = diag(1/|K|) as a rank-one cells-first TT matrix
+  TTMatrix8 Winv;
+  {
+    boba::Array<host_matrix, 8> f;
+    for (size_t m = 0; m < 8; ++m)
+    {
+      const size_t n = sys.testSizes[m]; f[m] = host_matrix({n, n}); f[m].fill_with_zeros(); auto v = f[m].view();
+      for (size_t i = 0; i < n; ++i) v({i, i}) = m < 4 ? 1.0 / (axes[m].vertices[i + 1] - axes[m].vertices[i]) : 1.0;
+    }
+    Winv = boba::make_ttm_from_matrices<8, host_space, double>(f);
+  }
+  auto GinvScaled = structuredGramInverse(system.matrix({0, 0}), sys.cells, ec, nbT, Gfactors, measure);
+  auto BfScaled = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false, invMeasure);
+  std::vector<TTMatrix8> Minv, Dmh;      // M^{-1} (unscaled mode) or D^{-1/2} (scaled mode)
   if (!opt.kroneckerFile.empty()) Minv = readKroneckerJacobi(opt.kroneckerFile, sys.trialSizes);
   else
   {
@@ -706,6 +743,7 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
       else
       {
         double med, mx; Minv.push_back(kroneckerInverseDiagonal(diag[j], sys.trialSizes[j], med, mx));
+        Dmh.push_back(kroneckerInverseDiagonal(diag[j], sys.trialSizes[j], med, mx, -0.5));
         std::cout << "kronecker_jacobi block=" << system.names[j + 1] << " |d_K/d - 1| median=" << med << " max=" << mx << '\n';
       }
     }
@@ -713,7 +751,10 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   }
   const double tol = opt.tolerance;
   auto l = toCellsFirst(rhs(0), sys.testSizes, opt.operatorTolerance);
-  auto e = Ginv.apply(l, opt.operatorTolerance);                 // G^{-1} l
+  // G^{-1} l (scaled: l / |K| is rounded, and the local maps restore |K|)
+  auto e = opt.scaled ? GinvScaled.apply([&] { TTVector8 w = Winv * l; DpgBoba::round(w, opt.operatorTolerance); return w; }(),
+                                         opt.operatorTolerance)
+                      : Ginv.apply(l, opt.operatorTolerance);
   const size_t nt = sys.B.size();
   std::vector<TTVector8> c(nt), x(nt), r(nt), d(nt);
   double cNorm2 = 0;
@@ -731,20 +772,43 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
     TTVector8 out = sys.FT * ty; out *= -1.0; DpgBoba::round(out, t); return out;
   };
   std::cout << "transport T ranks=" << sys.T.ranks_string() << " field F ranks=" << sys.F.ranks_string() << '\n';
+  // scaled mode: z~ = W^{-1} B D^{-1/2} x~ (rounded), y = G^{-1} W z~, r~ = D^{-1/2} (c - B^T y)
+  std::vector<TTMatrix8> Bs(nt), BTs(nt);
+  if (opt.scaled)
+    for (size_t j = 1; j < nt; ++j)
+    {
+      Bs[j] = Winv * (sys.B[j] * Dmh[j]); DpgBoba::round(Bs[j], opt.operatorTolerance);
+      BTs[j] = Dmh[j] * sys.BT[j]; DpgBoba::round(BTs[j], opt.operatorTolerance);
+    }
+  auto applyBs = [&](size_t j, const TTVector8 &v, double t) {
+    if (!opt.scaled) return applyB(j, v, t);
+    if (j == 0) return BfScaled.apply(Dmh[0] * v, t);
+    TTVector8 out = Bs[j] * v; DpgBoba::round(out, t); return out;
+  };
+  auto applyBTs = [&](size_t j, const TTVector8 &v, double t) {
+    if (!opt.scaled) return applyBT(j, v, t);
+    if (j == 0) return BfT.apply(v, t, &Dmh[0]);
+    TTVector8 out = BTs[j] * v; DpgBoba::round(out, t); return out;
+  };
+  auto applyGs = [&](const TTVector8 &z, double t) { return opt.scaled ? GinvScaled.apply(z, t) : Ginv.apply(z, t); };
+  auto applyM = [&](size_t j, const TTVector8 &v, double t) {
+    if (opt.scaled) return v;
+    TTVector8 out = Minv[j] * v; DpgBoba::round(out, t); return out;
+  };
   for (size_t j = 0; j < nt; ++j)
   {
-    c[j] = applyBT(j, e, opt.operatorTolerance);
+    c[j] = applyBTs(j, e, opt.operatorTolerance);
     cNorm2 += std::pow(boba::norm_frobenius(c[j]), 2);
     x[j] = zero_tt_vector<8>(sys.trialSizes[j]);
   }
   const double cNorm = std::sqrt(cNorm2);
   // S applied to a trial block vector: out_j = B_j^T G^{-1} sum_i B_i v_i
   auto applyS = [&](const std::vector<TTVector8> &v, double t) {
-    TTVector8 z = applyB(0, v[0], t);
-    for (size_t j = 1; j < nt; ++j) { z += applyB(j, v[j], t); DpgBoba::round(z, t); }
-    const TTVector8 y = Ginv.apply(z, t);
+    TTVector8 z = applyBs(0, v[0], t);
+    for (size_t j = 1; j < nt; ++j) { z += applyBs(j, v[j], t); DpgBoba::round(z, t); }
+    const TTVector8 y = applyGs(z, t);
     std::vector<TTVector8> out(nt);
-    for (size_t j = 0; j < nt; ++j) out[j] = applyBT(j, y, t);
+    for (size_t j = 0; j < nt; ++j) out[j] = applyBTs(j, y, t);
     return out;
   };
   auto dot = [&](const std::vector<TTVector8> &a, const std::vector<TTVector8> &b) {
@@ -756,14 +820,14 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
     // spectrum of M^{-1} S from the coefficients of a short TT PCG run (Lanczos), at a loose rounding tolerance
     const auto tb = clock::now(); const double bt = opt.boundsTolerance;
     std::vector<TTVector8> rr = c, zz(nt), pp(nt);
-    for (size_t j = 0; j < nt; ++j) { zz[j] = Minv[j] * rr[j]; DpgBoba::round(zz[j], bt); }
+    for (size_t j = 0; j < nt; ++j) zz[j] = applyM(j, rr[j], bt);
     pp = zz; double rz = dot(rr, zz), alphaPrev = 0, betaPrev = 0;
     std::vector<double> dd, ee;
     for (int k = 0; k < opt.boundsSteps; ++k)
     {
       auto q = applyS(pp, bt);
       const double alpha = rz / dot(pp, q);
-      for (size_t j = 0; j < nt; ++j) { auto aq = q[j]; aq *= -alpha; rr[j] += aq; DpgBoba::round(rr[j], bt); zz[j] = Minv[j] * rr[j]; DpgBoba::round(zz[j], bt); }
+      for (size_t j = 0; j < nt; ++j) { auto aq = q[j]; aq *= -alpha; rr[j] += aq; DpgBoba::round(rr[j], bt); zz[j] = applyM(j, rr[j], bt); }
       const double rzNew = dot(rr, zz), beta = rzNew / rz;
       dd.push_back(1.0 / alpha + (k > 0 ? betaPrev / alphaPrev : 0.0)); ee.push_back(std::sqrt(std::abs(beta)) / alpha);
       for (size_t j = 0; j < nt; ++j) { pp[j] *= beta; pp[j] += zz[j]; DpgBoba::round(pp[j], bt); }
@@ -781,7 +845,7 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
             << " lmin=" << lmin << " lmax=" << lmax << " tol=" << tol << '\n';
   const double theta = 0.5 * (lmax + lmin), delta = 0.5 * (lmax - lmin), sigma = theta / delta;
   double rho = 1.0 / sigma;
-  for (size_t j = 0; j < nt; ++j) { r[j] = c[j]; d[j] = Minv[j] * r[j]; d[j] *= 1.0 / theta; DpgBoba::round(d[j], tol); }
+  for (size_t j = 0; j < nt; ++j) { r[j] = c[j]; d[j] = applyM(j, r[j], tol); d[j] *= 1.0 / theta; DpgBoba::round(d[j], tol); }
   TTVector8 y;
   double tBx = 0, tG = 0, tBT = 0, tUp = 0;
   std::vector<double> history;
@@ -790,15 +854,15 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   {
     auto ta = clock::now();
     for (size_t j = 0; j < nt; ++j) { x[j] += d[j]; DpgBoba::round(x[j], tol); }
-    TTVector8 z = applyB(0, x[0], tol);
-    for (size_t j = 1; j < nt; ++j) { z += applyB(j, x[j], tol); DpgBoba::round(z, tol); }
+    TTVector8 z = applyBs(0, x[0], tol);
+    for (size_t j = 1; j < nt; ++j) { z += applyBs(j, x[j], tol); DpgBoba::round(z, tol); }
     tBx += seconds(ta); ta = clock::now();
-    y = Ginv.apply(z, tol);
+    y = applyGs(z, tol);
     tG += seconds(ta); ta = clock::now();
     double rNorm2 = 0;
     for (size_t j = 0; j < nt; ++j)
     {
-      r[j] = c[j]; r[j] -= applyBT(j, y, tol); DpgBoba::round(r[j], tol);
+      r[j] = c[j]; r[j] -= applyBTs(j, y, tol); DpgBoba::round(r[j], tol);
       rNorm2 += std::pow(boba::norm_frobenius(r[j]), 2);
     }
     tBT += seconds(ta); ta = clock::now();
@@ -806,14 +870,20 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
     for (size_t j = 0; j < nt; ++j)
     {
       d[j] *= rhoNew * rho;
-      auto mr = Minv[j] * r[j]; mr *= 2.0 * rhoNew / delta;
+      auto mr = applyM(j, r[j], tol); mr *= 2.0 * rhoNew / delta;
       d[j] += mr; DpgBoba::round(d[j], tol);
     }
     rho = rhoNew;
     tUp += seconds(ta);
     history.push_back(std::sqrt(rNorm2) / cNorm);
     // converged: below rtol, or stagnated at the rounding floor (no 10% decrease over the last 25 iterations)
-    const bool stagnated = k >= 50 && history.back() > 0.9 * history[history.size() - 26];
+    // (Chebyshev residuals are not monotone: compare the best of the last 25 with the best before)
+    bool stagnated = false;
+    if (k >= 50)
+    {
+      const auto split = history.end() - 25;
+      stagnated = *std::min_element(split, history.end()) > 0.9 * *std::min_element(history.begin(), split);
+    }
     const bool converged = history.back() < opt.rtol || stagnated;
     if (k % opt.every == 0 || k == 1 || k == opt.iterations || converged)
     {
@@ -829,7 +899,12 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   BlockVector solution(system.names.size());
   auto eps = e; eps -= y; DpgBoba::round(eps, opt.operatorTolerance);
   solution(0) = toFourMode(eps, opt.operatorTolerance);
-  for (size_t j = 0; j < nt; ++j) solution(j + 1) = toFourMode(x[j], opt.operatorTolerance);
+  for (size_t j = 0; j < nt; ++j)
+  {
+    TTVector8 xj = x[j];
+    if (opt.scaled) { xj = Dmh[j] * x[j]; DpgBoba::round(xj, opt.operatorTolerance); }   // x = D^{-1/2} x~
+    solution(j + 1) = toFourMode(xj, opt.operatorTolerance);
+  }
   std::cout << "schur_chebyshev total_seconds=" << seconds(t0) << '\n';
   return solution;
 }

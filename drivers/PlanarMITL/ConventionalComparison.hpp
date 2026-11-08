@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GMGSolver.h"
 #include "ComparisonProblem.hpp"
 #include "Camellia.h"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
@@ -29,11 +30,12 @@ inline int runConventionalComparison(int argc, char **argv)
   if (Teuchos::GlobalMPISession::getNProc() != 1)
     throw std::invalid_argument("Matched comparison currently requires one MPI rank");
   const auto start = ComparisonClock::now();
-  const auto vertices = problem.vertices();
-  auto spatial = MeshFactory::intervalMeshTopology(vertices[0]);
+  const auto vertices = problem.vertices();            // final mesh (for the exact solution's domain)
+  const auto base = problem.baseVertices();            // refined uniformRefinements times by the formulation
+  auto spatial = MeshFactory::intervalMeshTopology(base[0]);
   auto fields = Teuchos::rcp(new PrescribedFields(problem));
   RelativisticVlasovSpaceTimeFormulation form(problem.c,problem.qOverM,1,fields,spatial,
-      vertices[1],vertices[2],vertices[3],{},problem.p,problem.dp,0,
+      base[1],base[2],base[3],{},problem.p,problem.dp,problem.uniformRefinements,
       RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,problem.alpha,
       BASIS_FAMILY_HIERARCHICAL,0,false,false,problem.alphaMeshScale,problem.alphaTransportScale,
       [&]{ auto a = problem.accelerationBoundValues(); return std::vector<double>(a.begin(), a.end()); }());
@@ -68,10 +70,26 @@ inline int runConventionalComparison(int argc, char **argv)
   solution->setCubatureEnrichmentDegree(enrichment);
   const double setupSeconds = elapsed(start);
   const auto solveStart = ComparisonClock::now();
-  // conventional local Riesz elimination + sparse direct solve
-  if (problem.conventionalSolver != "KLU" && problem.conventionalSolver != "SuperLUDist")
-    throw std::invalid_argument("--conventionalSolver must be KLU or SuperLUDist");
-  const int status = solution->solve(Solver::getSolver(problem.conventionalSolver == "KLU" ? Solver::KLU : Solver::SuperLUDist, false));
+  // conventional local Riesz elimination + sparse direct solve, or production-style GMG-preconditioned CG
+  int status = 0, gmgIterations = -1;
+  if (problem.conventionalSolver == "GMG")
+  {
+    // as VlasovSpaceTimeFormulation::constructGMGSolver: h-levels from the refinement history, p-coarsening to order 0,
+    // V-cycle, additive Schwarz smoothing, direct coarse solve, CG on the statically condensed system
+    solution->setUseCondensedSolve(true);
+    auto meshes = GMGSolver::meshesForMultigrid(mesh, 0, 1);
+    auto gmg = Teuchos::rcp(new GMGSolver(solution, meshes, problem.gmgMaxIterations, problem.gmgTolerance,
+                                          GMGOperator::V_CYCLE, GMGOperator::DEFAULT_ADDITIVE_SCHWARZ,
+                                          Solver::getDirectSolver(true), true));
+    gmg->setSmootherType(GMGOperator::DEFAULT_ADDITIVE_SCHWARZ);
+    std::cout << "conventional GMG levels=" << meshes.size() << " tolerance=" << problem.gmgTolerance << '\n';
+    status = solution->solve(gmg);
+    gmgIterations = gmg->iterationCount();
+    std::cout << "conventional GMG iterations=" << gmgIterations << '\n';
+  }
+  else if (problem.conventionalSolver == "KLU" || problem.conventionalSolver == "SuperLUDist")
+    status = solution->solve(Solver::getSolver(problem.conventionalSolver == "KLU" ? Solver::KLU : Solver::SuperLUDist, false));
+  else throw std::invalid_argument("--conventionalSolver must be KLU, SuperLUDist, or GMG");
   const double assemblySolveSeconds = elapsed(solveStart);
   const double totalSeconds = elapsed(start);
   if (status) throw std::runtime_error("Conventional MITL comparison solve failed");
@@ -86,6 +104,7 @@ inline int runConventionalComparison(int argc, char **argv)
   metrics["global_assembly_seconds"] = solution->totalTimeGlobalAssembly();
   metrics["bc_seconds"] = solution->totalTimeBCImposition();
   metrics["linear_solve_seconds"] = solution->totalTimeSolve();
+  metrics["gmg_iterations"] = gmgIterations;
   metrics["trial_dofs_with_boundary"] = mesh->numGlobalDofs();
   metrics["boundary_dofs"] = solution->getBCDofCount();
   metrics["sparse_rows"] = matrix->getGlobalNumRows();

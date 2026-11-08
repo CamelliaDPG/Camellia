@@ -37,9 +37,17 @@ struct ComparisonProblem
   double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0, chebBoundsTolerance = 1e-4, chebLminSafety = 0.8;
   int chebBoundsSteps = 30;
   double chebJacobiTolerance = 0;
+  bool chebScaled = true;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
+  double gmgTolerance = 1e-9; int gmgMaxIterations = 5000;
+  // production-like meshes: graded velocity (PlanarMITL::gradedVertices, production parameters by default) and uniform
+  // refinement of the whole base mesh (as production's --numUniformRefinements; conventional GMG uses it as an h-level)
+  bool gradedVelocity = false;
+  double velocityCenter = 0.198801, velocitySigma = 0.0497003, velocityCoreWidthFactor = 2, velocityCoreHalfWidthFactor = 2,
+         velocityGrowthRatio = 3;
+  int uniformRefinements = 0;
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
@@ -109,10 +117,24 @@ struct ComparisonProblem
     cmd.setOption("chebBoundsTolerance", &chebBoundsTolerance, "Chebyshev: TT rounding tolerance of the Lanczos bound estimate");
     cmd.setOption("chebBoundsSteps", &chebBoundsSteps, "Chebyshev: Lanczos steps for the bound estimate (without --chebLmin/--chebLmax)");
     cmd.setOption("chebJacobiTolerance", &chebJacobiTolerance, "Chebyshev: > 0: Jacobi diagonal as a TT at this tolerance (else rank-one Kronecker)");
+    cmd.setOption("chebScaled", "no-chebScaled", &chebScaled, "Chebyshev: scaled rounding (D^{1/2} x, D^{-1/2} r, test vectors / |K|)");
     cmd.setOption("chebLminSafety", &chebLminSafety, "Chebyshev: factor on the smallest Ritz value");
     cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
-    cmd.setOption("conventionalSolver", &conventionalSolver, "Conventional backend: sparse direct solver, KLU or SuperLUDist");
+    cmd.setOption("conventionalSolver", &conventionalSolver,
+                  "Conventional backend: KLU or SuperLUDist (direct), or GMG (production-style GMG-preconditioned CG on the condensed system)");
+    cmd.setOption("gmgTolerance", &gmgTolerance, "Conventional GMG: CG tolerance (production 1e-9)");
+    cmd.setOption("gmgMaxIterations", &gmgMaxIterations);
+    cmd.setOption("gradedVelocity", "uniformVelocity", &gradedVelocity,
+                  "Production graded velocity mesh (PlanarMITL::gradedVertices; nux/nuz ignored): u_x centered at velocityCenter, "
+                  "u_z at 0, core width/half-width in units of velocitySigma, geometric growth; vertex at 0 ensured");
+    cmd.setOption("velocityCenter", &velocityCenter); cmd.setOption("velocitySigma", &velocitySigma);
+    cmd.setOption("velocityCoreWidthFactor", &velocityCoreWidthFactor);
+    cmd.setOption("velocityCoreHalfWidthFactor", &velocityCoreHalfWidthFactor);
+    cmd.setOption("velocityGrowthRatio", &velocityGrowthRatio);
+    cmd.setOption("uniformRefinements", &uniformRefinements,
+                  "Uniform bisections of every cell in all four directions after building the base mesh (tensor backend: the "
+                  "refined vertices; conventional: the formulation's numUniformRefinements, so GMG has an h-level)");
     cmd.setOption("outputPrefix", &outputPrefix);
     auto result = cmd.parse(argc, argv);
     if (result == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 2;
@@ -140,7 +162,11 @@ struct ComparisonProblem
     const double vMax = betaMax * c;
     return {std::abs(qOverM) * (std::abs(Ex) + vMax * std::abs(By)), std::abs(qOverM) * vMax * std::abs(By)};
   }
-  std::array<int,4> counts() const { return {int(xVertices().size()) - 1, nt, nux, nuz}; }
+  std::array<int,4> counts() const
+  {
+    const auto v = vertices();
+    return {int(v[0].size()) - 1, int(v[1].size()) - 1, int(v[2].size()) - 1, int(v[3].size()) - 1};
+  }
   //! x vertices: uniform, or bisection-graded toward x = 0 (widths 1/2, 1/4, ..., two cells of 2^{1-nx}), then
   //! xRefinements uniform bisections of every cell.
   std::vector<double> xVertices() const
@@ -162,11 +188,32 @@ struct ComparisonProblem
     }
     return v;
   }
-  std::vector<std::vector<double>> vertices() const
+  //! Base mesh vertices (before --uniformRefinements).
+  std::vector<std::vector<double>> baseVertices() const
   {
     double uMax = properVelocityFromBeta(betaMax,c), uMin = properVelocityFromBeta(beta0,c);
-    return {xVertices(), uniformVertices(0,tWidth,nt),
-            uniformVertices(uMin,uMax-uMin,nux), uniformVertices(-uMax,2*uMax,nuz)};
+    if (!gradedVelocity)
+      return {xVertices(), uniformVertices(0,tWidth,nt),
+              uniformVertices(uMin,uMax-uMin,nux), uniformVertices(-uMax,2*uMax,nuz)};
+    auto ux = gradedVertices(uMin, uMax, velocityCenter, velocityCoreWidthFactor * velocitySigma,
+                             velocityCoreHalfWidthFactor * velocitySigma, velocityGrowthRatio);
+    auto uz = gradedVertices(-uMax, uMax, 0.0, velocityCoreWidthFactor * velocitySigma,
+                             velocityCoreHalfWidthFactor * velocitySigma, velocityGrowthRatio);
+    ensureVertexAt(ux, 0.0); ensureVertexAt(uz, 0.0);
+    return {xVertices(), uniformVertices(0,tWidth,nt), ux, uz};
+  }
+  //! Mesh vertices: the base mesh with every cell bisected uniformRefinements times in every direction.
+  std::vector<std::vector<double>> vertices() const
+  {
+    auto v = baseVertices();
+    for (int r = 0; r < uniformRefinements; ++r)
+      for (auto &axis : v)
+      {
+        std::vector<double> refined {axis.front()};
+        for (size_t i = 1; i < axis.size(); ++i) { refined.push_back(0.5*(axis[i-1]+axis[i])); refined.push_back(axis[i]); }
+        axis = refined;
+      }
+    return v;
   }
   static double bubble(double y, double a, double b)
   {
@@ -179,7 +226,9 @@ struct ComparisonProblem
   }
   std::map<std::string,double> metadata() const
   {
-    return {{"nx",int(xVertices().size()) - 1},{"graded_x",double(gradedX)},{"x_refinements",double(xRefinements)},{"nt",nt},{"nux",nux},{"nuz",nuz},{"p",p},{"dp",dp},
+    const auto n = counts();
+    return {{"nx",n[0]},{"graded_x",double(gradedX)},{"x_refinements",double(xRefinements)},{"nt",n[1]},{"nux",n[2]},{"nuz",n[3]},
+            {"graded_velocity",double(gradedVelocity)},{"uniform_refinements",double(uniformRefinements)},{"p",p},{"dp",dp},
             {"quadrature_degree",quadratureDegree},{"sample_degree",sampleDegree},
             {"beta0",beta0},{"betaMax",betaMax},{"c",c},{"q_over_m",qOverM},
             {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},
