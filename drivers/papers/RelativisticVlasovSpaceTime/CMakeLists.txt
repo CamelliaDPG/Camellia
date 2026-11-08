@@ -19,3 +19,6 @@ MESSAGE("Adding executable for PlanarMITLRelativisticSpaceTime.")
 add_executable( PlanarMITLRelativisticSpaceTime "PlanarMITLRelativisticSpaceTime.cpp" )
 
 target_link_libraries( PlanarMITLRelativisticSpaceTime Camellia )
+
+add_executable( PrescribedFieldTransport "PrescribedFieldTransport.cpp" )
+target_link_libraries( PrescribedFieldTransport Camellia )
