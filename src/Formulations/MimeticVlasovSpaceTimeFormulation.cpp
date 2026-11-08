@@ -65,14 +65,11 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            maxMomentNumberForDriver,
                            true) // true: defer initialization; we call it below.
 {
-  this->_useSumFactorizedAssembly = false; // set base class's flag: we don't (yet) support sum-factorized assembly here.
   this->initialize();
 }
 
-IPPtr MimeticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const bool sumFactorizedAssembly)
+IPPtr MimeticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(sumFactorizedAssembly, std::invalid_argument, "MimeticVlasovSpaceTimeFormulation does not support sum-factorized Gram assembly.");
-  
   const int spaceDim    = this->spaceDim();
   const int velocityDim = this->velocityDim();
   

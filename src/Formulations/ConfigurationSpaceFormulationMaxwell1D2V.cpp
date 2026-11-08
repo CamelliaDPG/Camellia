@@ -10,6 +10,7 @@
 #include "BC.h"
 #include "PhysicalSolutionExtrusion.hpp"
 #include "RHS.h"
+#include "TensorFunctionEvaluationContext.h"
 
 using namespace Camellia;
 
@@ -43,6 +44,78 @@ ConfigurationSpaceFormulationMaxwell1D2V::ConfigurationSpaceFormulationMaxwell1D
 :
 ConfigurationSpaceFormulationMaxwell1D2V(std::vector<double>{q},eps0)
 {}
+
+std::vector<TensorTraceDescriptor> ConfigurationSpaceFormulationMaxwell1D2V::tensorH1PointTraceDescriptors1D()
+{
+  return TensorTraceDescriptor::maxwell1D2VH1PointValueTraces(S_EX,  S_EX_HAT,
+                                                             S_BY,  S_BY_HAT,
+                                                             S_PHI, S_PHI_HAT,
+                                                             S_A,   S_A_HAT);
+}
+
+void ConfigurationSpaceFormulationMaxwell1D2V::registerTensorH1PointTraceDescriptors(TensorMeshPtr tensorMesh) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorMesh == Teuchos::null, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V requires a non-null tensor mesh for trace descriptor registration.");
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorMesh->topology()->componentCount() != 1, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V H1 point traces are currently defined only for 1D configuration-space tensor meshes.");
+
+  for (const auto &descriptor : tensorH1PointTraceDescriptors1D())
+  {
+    if (!tensorMesh->hasTraceDescriptor(descriptor.traceName()))
+    {
+      tensorMesh->registerTraceDescriptor(descriptor);
+    }
+  }
+}
+
+TensorH1PointTraceLayout1D ConfigurationSpaceFormulationMaxwell1D2V::h1PointTraceLayout1D(TensorDofLayoutPtr dofLayout,
+                                                                                          const std::string &fieldName) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(dofLayout == Teuchos::null, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V requires a non-null tensor dof layout for H1 point trace lookup.");
+
+  for (const auto &descriptor : tensorH1PointTraceDescriptors1D())
+  {
+    if (descriptor.fieldName() == fieldName)
+    {
+      return dofLayout->h1PointTraceLayout1D(descriptor.traceName(), TENSOR_TRIAL_SPACE);
+    }
+  }
+
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V does not define a tensor H1 point trace for the requested field.");
+  return TensorH1PointTraceLayout1D(TensorTraceDescriptor::h1PointValueTrace1D(fieldName, fieldName), 0);
+}
+
+std::vector<TensorH1PointTraceLayout1D> ConfigurationSpaceFormulationMaxwell1D2V::h1PointTraceLayouts1D(TensorDofLayoutPtr dofLayout) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(dofLayout == Teuchos::null, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V requires a non-null tensor dof layout for H1 point trace lookup.");
+
+  std::vector<TensorH1PointTraceLayout1D> layouts;
+  for (const auto &descriptor : tensorH1PointTraceDescriptors1D())
+  {
+    layouts.push_back(dofLayout->h1PointTraceLayout1D(descriptor.traceName(), TENSOR_TRIAL_SPACE));
+  }
+  return layouts;
+}
+
+void ConfigurationSpaceFormulationMaxwell1D2V::registerSolutionCoefficientEvaluators(TensorFunctionEvaluationContext &context)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_configurationSoln == Teuchos::null, std::invalid_argument,
+                             "ConfigurationSpaceFormulationMaxwell1D2V requires an initialized configuration solution before registering tensor coefficient evaluators.");
+  MeshPtr configurationMesh = _configurationSoln->mesh();
+
+  context.registerSolutionCoefficientEvaluator(TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, S_EX),
+      Teuchos::rcp(new TensorLegacyFunctionSolutionCoefficientEvaluator(Function::solution(E_fieldVar(0), _configurationSoln), configurationMesh, 1)));
+  context.registerSolutionCoefficientEvaluator(TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, S_BY),
+      Teuchos::rcp(new TensorLegacyFunctionSolutionCoefficientEvaluator(Function::solution(B_fieldVar(1), _configurationSoln), configurationMesh, 1)));
+  context.registerSolutionCoefficientEvaluator(TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, S_PHI),
+      Teuchos::rcp(new TensorLegacyFunctionSolutionCoefficientEvaluator(Function::solution(VE_fieldVar(), _configurationSoln), configurationMesh, 1)));
+  context.registerSolutionCoefficientEvaluator(TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, S_A),
+      Teuchos::rcp(new TensorLegacyFunctionSolutionCoefficientEvaluator(Function::solution(A_fieldVar(1), _configurationSoln), configurationMesh, 1)));
+}
 
 void ConfigurationSpaceFormulationMaxwell1D2V::initializeMesh(MeshTopologyPtr meshTopo, const int H1Order, const int delta_k)
 {
@@ -356,6 +429,19 @@ void ConfigurationSpaceFormulationMaxwell1D2V::setCurrentSources(FunctionPtr rho
   rhs->addTerm(-Jx / _eps0 * w_Jx());
   rhs->addTerm( Jz / _eps0 * w_Jz());
   _configurationSoln->setRHS(rhs);
+}
+
+void ConfigurationSpaceFormulationMaxwell1D2V::setCurrentSources(const TensorMaxwellRHSMomentData &momentData)
+{
+  setCurrentSources(TensorMaxwellRHSFunctionAdapter::rhoRHSFunction(momentData),
+                    TensorMaxwellRHSFunctionAdapter::JxFunction(momentData),
+                    Function::zero(),
+                    TensorMaxwellRHSFunctionAdapter::JzFunction(momentData));
+}
+
+double ConfigurationSpaceFormulationMaxwell1D2V::eps0() const
+{
+  return _eps0;
 }
 
 void ConfigurationSpaceFormulationMaxwell1D2V::setRHSForTesting(FunctionPtr rho_over_eps0,

@@ -61,8 +61,7 @@ namespace
     auto form = relativisticForm1D2V(basisFamily);
     auto mesh = form->vlasovMesh();
     auto bf = form->vlasovBF();
-    const bool useSumFactorizedGramAssembly = false; // the graph norm as a LinearTerm inner product
-    auto ip = form->constructVlasovInnerProduct(useSumFactorizedGramAssembly);
+    auto ip = form->constructVlasovInnerProduct(); // the graph norm, as a LinearTerm inner product
     const bool initiallyEnabled = sumFactorizedLinearTermIntegrationEnabled();
     for (auto cellID : mesh->cellIDsInPartition())
     {

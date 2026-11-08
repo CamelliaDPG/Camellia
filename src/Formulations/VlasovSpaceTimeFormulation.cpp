@@ -10,6 +10,8 @@
 //
 
 #include "VlasovSpaceTimeFormulation.h"
+#include "BasisCache.h"
+#include "CamelliaCellTools.h"
 #include "CamelliaMemoryTools.h"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
@@ -29,6 +31,9 @@
 #include "RHS.h"
 #include "SimpleSolutionFunction.h"
 #include "Solution.h"
+#include "TensorFunctionEvaluationContext.h"
+#include "TensorMaxwellRHSMomentData.h"
+#include "TensorVlasovMomentSampling1D2V.h"
 #include "SolutionStage.h"
 #include "TypeDefs.h"
 
@@ -40,12 +45,64 @@
 #include "Intrepid2_IntegrationTools.hpp"
 #include "Intrepid2_NodalBasisFamily.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <limits>
 
 using namespace Camellia;
 
 using std::string;
 using std::vector;
+
+namespace
+{
+  //! The values of a field of a previous slab's configuration-space solution at that slab's final time, as a function of
+  //! the spatial coordinates only: evaluated at (x, t), it returns the previous solution at (x, t1 - delta).  Used to seed
+  //! the next slab's configuration-space solution, so that its first Vlasov solve does not see zero fields.  Requires the
+  //! previous solution's coefficients on every cell that contains a final-time point (see the constructor).
+  class FinalTimeSolutionFunction : public TFunction<double>
+  {
+    SolutionPtr _previousSoln;
+    VarPtr _var;
+    double _finalTime;
+  public:
+    FinalTimeSolutionFunction(SolutionPtr previousSoln, VarPtr var, double finalTime)
+    : TFunction<double>("FinalTimeSolutionFunction"), _previousSoln(previousSoln), _var(var), _finalTime(finalTime) {}
+
+    using TFunction<double>::values;
+    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const auto &points = basisCache->getPhysicalCubaturePointsFC(); // (C,P,D); the last coordinate is time
+      const int numCells = points.dimension(0), numPoints = points.dimension(1), spaceTimeDim = points.dimension(2);
+      MeshPtr previousMesh = _previousSoln->mesh();
+      const double tEval = std::nextafter(_finalTime, -std::numeric_limits<double>::max()); // just inside the previous slab
+      Camellia::FieldContainer<double> point(1, spaceTimeDim);
+      for (int c=0; c<numCells; c++)
+      {
+        for (int p=0; p<numPoints; p++)
+        {
+          for (int d=0; d<spaceTimeDim-1; d++) point(0,d) = points(c,p,d);
+          point(0,spaceTimeDim-1) = tEval;
+          const GlobalIndexType cellID = previousMesh->getTopology()->cellIDsForPoints(point)[0];
+          values(c,p) = 0.0;
+          if (cellID == (GlobalIndexType)-1) continue;
+          Camellia::FieldContainer<double> physicalPoint(1, 1, spaceTimeDim);
+          for (int d=0; d<spaceTimeDim; d++) physicalPoint(0,0,d) = point(0,d);
+          Camellia::FieldContainer<double> refPoint(1, 1, spaceTimeDim);
+          CamelliaCellTools::mapToReferenceFrame(refPoint, physicalPoint, previousMesh->getTopology(), cellID,
+                                                 previousMesh->globalDofAssignment()->getCubatureDegree(cellID));
+          refPoint.resize(1, spaceTimeDim);
+          BasisCachePtr previousCache = BasisCache::basisCacheForCell(previousMesh, cellID);
+          previousCache->setRefCellPointsFC(refPoint);
+          Camellia::FieldContainer<double> value(1, 1);
+          _previousSoln->solutionValues(value, _var->ID(), previousCache);
+          values(c,p) = value(0,0);
+        }
+      }
+    }
+  };
+}
 
 const string VlasovSpaceTimeFormulation::S_F = "f";
 
@@ -690,6 +747,61 @@ namespace
     }
   };
 
+  std::vector<GlobalIndexType> rankLocalConfigurationCellIDs(MeshPtr configurationMesh)
+  {
+    const auto &cellIDSet = configurationMesh->cellIDsInPartition();
+    return std::vector<GlobalIndexType>(cellIDSet.begin(), cellIDSet.end());
+  }
+
+  bool applyTensorNativeMaxwellCurrentSourcesIfSupported(VlasovSpaceTimeFormulation &form)
+  {
+    auto configurationFormulation = form.configurationSpaceFormulation();
+    auto maxwell1D2V = Teuchos::rcp_dynamic_cast<ConfigurationSpaceFormulationMaxwell1D2V>(configurationFormulation);
+    if (maxwell1D2V == Teuchos::null)
+    {
+      return false;
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(form.velocityDim() != 2, std::invalid_argument,
+                               "Tensor-native Maxwell current-source handoff currently requires a 1D2V Vlasov formulation.");
+    TEUCHOS_TEST_FOR_EXCEPTION(form.enforceQuasiNeutrality(), std::invalid_argument,
+                               "Tensor-native Maxwell current-source handoff does not yet support enforceQuasiNeutrality=true.");
+
+    auto configurationMesh = form.configurationSpaceMesh();
+    auto configurationCellIDs = rankLocalConfigurationCellIDs(configurationMesh);
+    const int velocityQuadratureDegree = defaultVlasovMomentVelocityQuadratureDegree1D2V(form.vlasovSolution());
+
+    std::vector<double> speciesCharges;
+    std::vector<TensorPlanar1D2VSpeciesMoments> speciesMoments;
+    speciesCharges.reserve(form.numSpecies());
+    speciesMoments.reserve(form.numSpecies());
+
+    TensorVlasovMoments1D2V firstMoments;
+    for (int speciesOrdinal=0; speciesOrdinal<form.numSpecies(); speciesOrdinal++)
+    {
+      auto moments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
+                                                             configurationMesh,
+                                                             form.vlasovSolution(),
+                                                             form.f(speciesOrdinal),
+                                                             velocityQuadratureDegree,
+                                                             form.useRelativisticCurrentMoments(),
+                                                             form.currentMomentLightSpeed());
+      if (speciesOrdinal == 0) firstMoments = moments;
+      speciesCharges.push_back(form.q(speciesOrdinal));
+      speciesMoments.push_back(moments.moments);
+    }
+
+    const int numTensorEntries = firstMoments.numConfigurationCells * firstMoments.numPointsPerConfigurationCell;
+    std::vector<double> n0Values(numTensorEntries, 0.0);
+    auto tensorMomentData = TensorMaxwell1D2VMomentAdapter::buildRHSMomentData(firstMoments.numConfigurationCells,
+                                                                              firstMoments.numPointsPerConfigurationCell,
+                                                                              speciesCharges,
+                                                                              maxwell1D2V->eps0(),
+                                                                              speciesMoments,
+                                                                              n0Values);
+    maxwell1D2V->setCurrentSources(tensorMomentData);
+    return true;
+  }
+
   void applyExplicitCurrentSourcesIfSupported(VlasovSpaceTimeFormulation &form)
   {
     auto configurationFormulation = form.configurationSpaceFormulation();
@@ -706,232 +818,43 @@ namespace
     maxwell1D2V->setCurrentSources(rho, Jx, Jy, Jz);
   }
 
-  class VlasovSpaceTimeIP : public TIP<double>
+  void registerTensorSolutionCoefficientEvaluatorsIfSupported(VlasovSpaceTimeFormulation &form)
   {
-    vector<FunctionPtr> _acceleration;
-    VlasovSpaceTimeFormulation & _form;
-    int _numConfigSpaceDims;
-    int _numVelocitySpaceDims;
-    
-    std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataValueValue; // key: (basis polyOrder, numCells)
-    std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataGradGrad; // key: (basis polyOrder, numCells)
-    
-    std::function<void(int numElements, double timeG_integrate,
-                                                                double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> _gramAssemblyTimingCallback;
-  public:
-    VlasovSpaceTimeIP(VlasovSpaceTimeFormulation & form)
-    :
-    TIP<double>(),
-    _form(form)
+    auto configurationFormulation = form.configurationSpaceFormulation();
+    auto maxwell1D2V = Teuchos::rcp_dynamic_cast<ConfigurationSpaceFormulationMaxwell1D2V>(configurationFormulation);
+    if (maxwell1D2V == Teuchos::null)
     {
-      _numConfigSpaceDims   = form.configurationSpaceMesh()->getDimension(); // note this includes time dimension
-      _numVelocitySpaceDims = form.velocityDim();
-      
-      if (form.numSpecies() != 1)
-      {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "VlasovSpaceTimeIP does not yet support multiple species");
-      }
-      int speciesOrdinal = 0;
-      _acceleration = form.a(speciesOrdinal);
+      return;
     }
-    
-    void computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
-                                   Teuchos::RCP<DofOrdering> dofOrdering,
-                                   Teuchos::RCP<BasisCache> basisCache) override
-    {
-      // the dof ordering should have just one entry, for a single H^1 test function w
-      TEUCHOS_TEST_FOR_EXCEPTION(dofOrdering->getVarIDs().size() != 1, std::invalid_argument, "Unexpected number of test variables");
-      auto wID = *dofOrdering->getVarIDs().begin();
-      
-      auto timerStart = std::chrono::steady_clock::now();
-      auto elapsedTime = [&timerStart]()
-      {
-        return std::chrono::duration<double>(std::chrono::steady_clock::now() - timerStart).count();
-      };
-      auto resetTimer = [&timerStart]()
-      {
-        timerStart = std::chrono::steady_clock::now();
-      };
-      
-      // evaluate acceleration at quadrature points
-      // we could speed this up for Poisson by only evaluating at physical points
-      // we could also speed it up for Maxwell by evaluating B and v separately, and doing the cross product, etc.
-      
-      const auto & refPoints = basisCache->getRefCellPoints();
-      
-      const int numCells  = innerProduct.dimension(0); // (C,F,F)
-      const int numPoints = refPoints.extent_int(0); // (P,D)
-      const int spaceDim  = refPoints.extent_int(1);
-      
-      auto & scratchStorage = SharedScratchStorage<double>::sharedScratchStorage();
-      
-//      Kokkos::Array< DeviceView<double>, 3> accelerationValues; // at most 3 components
-      Kokkos::Array< Intrepid2::Data<double, DeviceType>, 3> accelerationValues; // at most 3 components
-      
-      auto numAccelerationComponents = _acceleration.size();
-      for (int vd=0; vd<numAccelerationComponents; vd++)
-      {
-        accelerationValues[vd] = _acceleration[vd]->checkoutValuesData(basisCache);
-        _acceleration[vd]->values(accelerationValues[vd], basisCache);
-      }
-      
-      Kokkos::Array< DeviceView<double>, 3> velocityValues; // at most 3 components
-      for (int vd=0; vd<_numVelocitySpaceDims; vd++)
-      {
-        velocityValues[vd] = scratchStorage.checkoutScratchStorage({numCells, numPoints}, "velocityValues");
-        auto vdFxn = _form.v_i(vd);
-        vdFxn->values(velocityValues[vd], ASSIGN, basisCache);
-      }
-      
-      auto wBasis = dofOrdering->getBasis(wID);
-//      auto wBasis = wBasisWrapper->intrepid2Basis();
-      const int basisCardinality = wBasis->getCardinality();
-  
-      const auto & basisValues    = basisCache->getValues(wBasis, Intrepid2::OPERATOR_VALUE, false);
-      const auto & basisGradients = basisCache->getValues(wBasis, Intrepid2::OPERATOR_GRAD,  false);
-      
-//      auto basisValues    = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_VALUE);
-//      auto basisGradients = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_GRAD);
-//      
-//      wBasis->getValues(basisValues,    refPoints, Intrepid2::OPERATOR_VALUE);
-//      wBasis->getValues(basisGradients, refPoints, Intrepid2::OPERATOR_GRAD);
-      
-      auto jacobian    = getJacobianData(basisCache, _numConfigSpaceDims);
-      
-      auto jacobianDet = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
-      auto jacobianInv = Intrepid2::CellTools<DeviceType>::allocateJacobianInv(jacobian);
-      Intrepid2::CellTools<DeviceType>::setJacobianDet(jacobianDet, jacobian);
-      Intrepid2::CellTools<DeviceType>::setJacobianInv(jacobianInv, jacobian);
-      
-      using fst = Intrepid2::FunctionSpaceTools<DeviceType>;
-      auto transformedBasisValues    = fst::getHGRADtransformVALUE(numCells, basisValues);
-      
-      auto cellMeasures = allocateCellMeasure(jacobianDet, basisCache->getCubatureWeights());
-      computeCellMeasure(cellMeasures, jacobianDet, basisCache->getCubatureWeights());
-      
-      std::pair<int,int> integralDataKey {wBasis->getDegree(),numCells};
-      if (_integralDataValueValue.find(integralDataKey) == _integralDataValueValue.end())
-      {
-        _integralDataValueValue[integralDataKey] = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisValues, cellMeasures, transformedBasisValues);
-      }
-      auto & integralDataValueValue = _integralDataValueValue[integralDataKey];
-//      auto integralDataValueValue = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisValues, cellMeasures, transformedBasisValues);
-      
-      double time_block1 = elapsedTime();
-      resetTimer();
-      
-      double coreIntegrationTime = 0;
-      
-      double flopEstimateValueValue = 0;
-      bool sumInto = false;
-      // (w1, w2)
-      resetTimer();
-      Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataValueValue, transformedBasisValues, cellMeasures, transformedBasisValues, sumInto, &flopEstimateValueValue);
-      coreIntegrationTime = elapsedTime();
-      resetTimer();
-      
-      // (v \cdot grad_x w1 + d/dt w1 + a \cdot grad_v w1, v \cdot grad_x w2 + d/dt w2 + a \cdot grad_v w2)
-      // allocate container for [v 1 a], with shape (C,P,D)
-      auto gradientWeightsView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov gradient vector weights");
-      // fill container:
-      using ExecutionSpace = typename DeviceType::execution_space;
-      int numVelocitySpaceDims = _numVelocitySpaceDims;
-      auto extents_7 = accelerationValues[0].getExtents();
-      Kokkos::Array<int,6> extents_6 {extents_7[0],extents_7[1],extents_7[2],extents_7[3],extents_7[4],extents_7[5]};
-      Kokkos::parallel_for(
-        Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<6>>({0,0,0,0,0,0},extents_6),
-        KOKKOS_LAMBDA (const int &cellOrdinal, const int &i0, const int &i1, const int &i2, const int &i3, const int &i4)
-        {
-          for (int i5=0; i5<extents_7[6]; i5++)
-          {
-            const int pointOrdinal = pointOrdinalFromComponents(extents_7, i0, i1, i2, i3, i4, i5);
-            // velocity first (weights spatial gradient):
-            for (int d=0; d<numVelocitySpaceDims; d++)
-            {
-              const auto & vd = velocityValues[d](cellOrdinal,pointOrdinal);
-              gradientWeightsView(cellOrdinal,pointOrdinal,d) = vd;
-            }
-            // temporal gradient weight is unit:
-            gradientWeightsView(cellOrdinal,pointOrdinal,numVelocitySpaceDims) = 1.0;
-            // acceleration weights velocity gradient
-            for (int d=0; d<numAccelerationComponents; d++)
-            {
-              const auto & ad = accelerationValues[d](cellOrdinal, i0, i1, i2, i3, i4, i5);
-              gradientWeightsView(cellOrdinal,pointOrdinal,d+numVelocitySpaceDims+1) = ad;
-            }
-          }
-        });
-      
-      // compute mat-vec result between gradientWeightsView and the jacobianInv.  Be careful about the direction of the multiplication.
-      
-      Intrepid2::Data<double,DeviceType> gradientWeightsData(gradientWeightsView);
-      
-      auto transformVectorView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov transform vector");
-      Intrepid2::Data<double,DeviceType> transformVectorData(transformVectorView);
-      
-      transformVectorData.storeMatVec(jacobianInv, gradientWeightsData, true); // true: transpose jacobianInv when multiplying
-      
-      Intrepid2::TransformedBasisValues<double, DeviceType> transformedBasisGradients(transformVectorData, basisGradients);
-      
-      if (_integralDataGradGrad.find(integralDataKey) == _integralDataGradGrad.end())
-      {
-        _integralDataGradGrad[integralDataKey] = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisGradients, cellMeasures, transformedBasisGradients);
-      }
-      auto & integralDataGradGrad = _integralDataGradGrad[integralDataKey];
-//      auto integralDataGradGrad = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisGradients, cellMeasures, transformedBasisGradients);
-      double time_block2 = elapsedTime();
-      resetTimer();
-      
-      sumInto = false;
-      double flopEstimateGradGrad = 0;
-      resetTimer();
-      Intrepid2::IntegrationTools<DeviceType>::integrate(integralDataGradGrad, transformedBasisGradients, cellMeasures, transformedBasisGradients, sumInto, &flopEstimateGradGrad);
-      coreIntegrationTime += elapsedTime();
-      resetTimer();
-//      std::cout << "flop estimate for (value, value): " << flopEstimateValueValue << std::endl;
-//      std::cout << "flop estimate for ( grad,  grad): " << flopEstimateGradGrad   << std::endl;
 
-      auto ipView = innerProduct.checkoutDeviceView();
-      Kokkos::parallel_for(
-                           Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,basisCardinality,basisCardinality}),
-      KOKKOS_LAMBDA (int cellOrdinal, int i, int j) {
-//        std::cout << "integralDataValueValue(" << cellOrdinal << "," << i << "," << j << ") = " << integralDataValueValue(cellOrdinal,i,j) << std::endl;
-//        std::cout << "  integralDataGradGrad(" << cellOrdinal << "," << i << "," << j << ") = " << integralDataGradGrad(cellOrdinal,i,j) << std::endl;
-        ipView(cellOrdinal,i,j) = integralDataValueValue(cellOrdinal,i,j) + integralDataGradGrad(cellOrdinal,i,j);
-      });
-      Kokkos::fence();
-      double time_block3 = elapsedTime();
-      resetTimer();
-      
-      innerProduct.checkinDeviceView(true); // true: deep copy to host.  If we could guarantee that caller wouldn't try to access on host, we could eliminate this.  But we can't, and probably shouldn't until we've changed the method signature here to have a DeviceView passed in.  Basically the contract for Camellia::FieldContainer is that it should always be accessible on host.
-
-      for (int vd=0; vd<_acceleration.size(); vd++)
-      {
-        _acceleration[vd]->checkinValuesData(accelerationValues[vd]);
-      }
-      
-      for (int vd=0; vd<_numVelocitySpaceDims; vd++)
-      {
-        scratchStorage.checkinScratchStorage(velocityValues[vd]);
-      }
-      scratchStorage.checkinScratchStorage(gradientWeightsView);
-      scratchStorage.checkinScratchStorage(transformVectorView);
-      
-      double time_block4 = elapsedTime();
-      
-      if (_gramAssemblyTimingCallback)
-      {
-        _gramAssemblyTimingCallback(numCells,coreIntegrationTime, time_block1, time_block2, time_block3, time_block4);
-      }
-    }
-    
-    void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
-                                                                double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback)
+    auto tensorContext = form.tensorFunctionEvaluationContext();
+    if (tensorContext != Teuchos::null)
     {
-      _gramAssemblyTimingCallback = gramAssemblyTimingCallback;
+      maxwell1D2V->registerSolutionCoefficientEvaluators(*tensorContext);
     }
-  };
-}
+  }
+
+  void noteTensorConfigurationSolutionChangedIfNeeded(VlasovSpaceTimeFormulation &form)
+  {
+    auto tensorContext = form.tensorFunctionEvaluationContext();
+    if (tensorContext != Teuchos::null)
+    {
+      tensorContext->configurationSolutionChanged();
+    }
+    registerTensorSolutionCoefficientEvaluatorsIfSupported(form);
+  }
+
+  void beginTensorFixedPointSubstepIfNeeded(VlasovSpaceTimeFormulation &form,
+                                            int substepOrdinal)
+  {
+    auto tensorContext = form.tensorFunctionEvaluationContext();
+    if (tensorContext != Teuchos::null)
+    {
+      tensorContext->beginFixedPointSubstep(substepOrdinal);
+    }
+  }
+
+} // end anonymous namespace
 
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -996,12 +919,9 @@ _numUniformRefinements(numUniformRefinements)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_q.size() != _m.size(), std::invalid_argument, "q and m arguments must agree in length");
   TEUCHOS_TEST_FOR_EXCEPTION(_numSpecies == 0, std::invalid_argument, "Must have at least one species");
-  
-  if (_basisFamily == BASIS_FAMILY_SERENDIPITY)
-  {
-    // at the moment, Intrepid2's sum factorization does not allow us to use Serendipity basis
-    _useSumFactorizedAssembly = false;
-  }
+
+  _tensorFunctionEvaluationContext = Teuchos::rcp(new TensorFunctionEvaluationContext(
+      TensorFixedPointLifecycle::planarMITLDefaults(_minSubsteps, _maxSubsteps, _fixedPointTolerance)));
   
   if (_speciesLabels.size() == 0)
   {
@@ -1244,6 +1164,11 @@ Teuchos::RCP<ConfigurationSpaceFormulation> VlasovSpaceTimeFormulation::configur
   return _configurationSpaceFormulation;
 }
 
+Teuchos::RCP<TensorFunctionEvaluationContext> VlasovSpaceTimeFormulation::tensorFunctionEvaluationContext()
+{
+  return _tensorFunctionEvaluationContext;
+}
+
 MeshPtr VlasovSpaceTimeFormulation::configurationSpaceMesh()
 {
   return _configurationSpaceFormulation->configurationSpaceMesh();
@@ -1256,36 +1181,40 @@ SolutionPtr VlasovSpaceTimeFormulation::configurationSpaceSolution()
 
 void VlasovSpaceTimeFormulation::configurationSpaceSolve()
 {
-  for (int i=0; i<_numSpecies; i++)
+  if (!applyTensorNativeMaxwellCurrentSourcesIfSupported(*this))
   {
-    _solutionMoments[i]->update();
-  }
-  {
-    double n0;
-    if (_enforceQuasiNeutrality)
+    for (int i=0; i<_numSpecies; i++)
     {
-      // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
-      FunctionPtr zeroMoment;
-      if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
-      else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
-      else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
-      else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
-      auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
-      const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
-      const double f_integral  = zeroMoment->integrate(configurationMesh);
-      n0 = f_integral / meshMeasure;
+      _solutionMoments[i]->update();
     }
-    else
     {
-      n0 = 0;
+      double n0;
+      if (_enforceQuasiNeutrality)
+      {
+        // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
+        FunctionPtr zeroMoment;
+        if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
+        else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
+        else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
+        else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
+        auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+        const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+        const double f_integral  = zeroMoment->integrate(configurationMesh);
+        n0 = f_integral / meshMeasure;
+      }
+      else
+      {
+        n0 = 0;
+      }
+      _n0->setValue(n0);
     }
-    _n0->setValue(n0);
+
+    applyExplicitCurrentSourcesIfSupported(*this);
   }
 
-  applyExplicitCurrentSourcesIfSupported(*this);
-
-  _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
+  _configurationSpaceFormulation->solve(false); // false: tensor-native or legacy moments have already provided the current sources.
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  noteTensorConfigurationSolutionChangedIfNeeded(*this);
 }
 
 const double &VlasovSpaceTimeFormulation::conservationLawResidualNorm(int slabOrdinal, int speciesOrdinal)
@@ -1320,9 +1249,12 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
       meshes = vector<MeshPtr> {_vlasovSoln->mesh()};
     }
     
+    const bool saveFactorization = true;
+    SolverPtr coarseSolver = (_coarseSolverChoice < 0) ? Solver::getDirectSolver(saveFactorization)
+                                                       : Solver::getSolver(Solver::SolverChoice(_coarseSolverChoice), saveFactorization);
     auto gmgSolver = Teuchos::rcp( new GMGSolver(_vlasovSoln, meshes, _maxIters, _cgTol, multigridStrategy,
                                                  smootherChoice,
-                                                 Solver::getDirectSolver(true), useCondensedSolve) );
+                                                 coarseSolver, useCondensedSolve) );
     
     gmgSolver->setSmootherType(smootherChoice);
     
@@ -1335,18 +1267,10 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
-IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct(const bool useSumFactorizedAssembly)
+IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct()
 {
-  if (useSumFactorizedAssembly)
-  {
-    auto ip = Teuchos::rcp( new VlasovSpaceTimeIP(*this) );
-    return ip;
-  }
-  else
-  {
-    auto vlasovBF = this->vlasovSolution()->bf();
-    return vlasovBF->graphNorm();
-  }
+  auto vlasovBF = this->vlasovSolution()->bf();
+  return vlasovBF->graphNorm();
 }
 
 VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
@@ -1417,6 +1341,9 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
     nextSlabForm->setProximalGalerkinParameters(_alpha0, _alphaMultiplier);
   }
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
+  nextSlabForm->_coarseSolverChoice = _coarseSolverChoice;
+  nextSlabForm->_substepSolveProfileCallback = _substepSolveProfileCallback;
+  nextSlabForm->_substepConfigurationCallback = _substepConfigurationCallback;
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
   nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);
@@ -1523,6 +1450,10 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   {
     nextSlabForm->setInitialConditions(f0_next);
   }
+
+  // Seed the next slab's configuration-space solution with this slab's final-time fields, held constant in time, so that
+  // the next slab's first Vlasov solve does not see zero fields.  (It is overwritten by the first configuration solve.)
+  nextSlabForm->seedConfigurationSolution(this->configurationSpaceSolution(), _t1);
   _vlasovSoln->setBC(Teuchos::null);
 }
 
@@ -1856,7 +1787,7 @@ void VlasovSpaceTimeFormulation::initialize()
   }
   _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
     
-  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct(_useSumFactorizedAssembly);
+  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct();
   _vlasovSoln->setIP(vlasovTestNorm);
   
   SpatialFilterPtr inflowFilter = Teuchos::rcp(new SpatialFilterSpatialInflow(_spaceDim,indexOffsetVelocityZeroBased) );
@@ -2221,6 +2152,43 @@ void VlasovSpaceTimeFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
   _aztecOutputLevel = azOutputLevel;
 }
 
+void VlasovSpaceTimeFormulation::seedConfigurationSolution(SolutionPtr previousConfigurationSolution, double previousFinalTime)
+{
+  std::map<int,FunctionPtr> seedMap;
+  auto addSeed = [&](VarPtr var) {
+    if (var == Teuchos::null) return;
+    seedMap[var->ID()] = Teuchos::rcp(new FinalTimeSolutionFunction(previousConfigurationSolution, var, previousFinalTime));
+  };
+  for (int d=0; d<3; d++)
+  {
+    // E_fieldVar() and B_fieldVar() return null or throw for components a formulation does not have
+    VarPtr E_var = Teuchos::null, B_var = Teuchos::null;
+    try { E_var = _configurationSpaceFormulation->E_fieldVar(d); } catch (std::invalid_argument &) {}
+    try { B_var = _configurationSpaceFormulation->B_fieldVar(d); } catch (std::invalid_argument &) {}
+    addSeed(E_var);
+    addSeed(B_var);
+  }
+  // (Formulations without E and B fields, e.g. ConfigurationSpaceFormulationTrivial with prescribed fields, have nothing to
+  // seed, and no solution coefficients to import.  The decision is the same on every rank, so the import stays collective.)
+  if (seedMap.empty()) return;
+
+  // the previous slab's final-time data must be available locally for every cell we need; the configuration-space mesh
+  // geometry is not distributed, so import all active cells
+  MeshPtr previousMesh = previousConfigurationSolution->mesh();
+  const auto activeCells = previousMesh->getActiveCellIDsGlobal();
+  previousConfigurationSolution->importSolutionForOffRankCells(activeCells);
+
+  _configurationSpaceFormulation->solution()->projectOntoMesh(seedMap);
+  _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  noteTensorConfigurationSolutionChangedIfNeeded(*this);
+  _configurationSolutionSeeded = true;
+}
+
+void VlasovSpaceTimeFormulation::setCoarseSolverChoice(Solver::SolverChoice coarseSolverChoice)
+{
+  _coarseSolverChoice = coarseSolverChoice;
+}
+
 void VlasovSpaceTimeFormulation::setIterativeSolveMaxIterations(const int maxIters)
 {
   _maxIters = maxIters;
@@ -2288,7 +2256,7 @@ void VlasovSpaceTimeFormulation::applyPositivityLimiter()
       psi_value = std::min(PSI_MAX, psi_value);
       
       Projector<double>::projectFunctionOntoBasis(psiBasisCoefficients, Function::constant(psi_value), psiBasis, basisCache);
-      const double exp_psi_value = exp(psi_value);
+      const double exp_psi_value = std::exp(psi_value);
       
       const int psi_ID = this->psi(i)->ID();
       for (int dofOrdinal=0; dofOrdinal < psiBasis->getCardinality(); dofOrdinal++)
@@ -2369,6 +2337,7 @@ void VlasovSpaceTimeFormulation::solve()
   // get the PhysicalSolutionExtrusions ready to evaluate (in context of Vlasov BF)
   // updateConfigurationSpaceFunctions() will do MPI communication of configuration-space solution values so they're where they need to be for phase space mesh:
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
+  registerTensorSolutionCoefficientEvaluatorsIfSupported(*this);
   
   if (_enforcePositivity)
   {
@@ -2380,8 +2349,18 @@ void VlasovSpaceTimeFormulation::solve()
   const int alphaUpdateFrequency = 4; // let alpha stay same for this many substeps
   std::vector<double> prior_fRelDiffs(alphaUpdateFrequency, std::numeric_limits<double>::max());
   
+  if (!_configurationSolutionSeeded)
+  {
+    // First slab (or a slab without a predecessor): solve for the fields of the current f (e.g., the vacuum field set
+    // by the potential BCs, when f is zero inside the slab) before the first Vlasov solve, rather than starting it from
+    // zero fields.  Later slabs are seeded by configureNextSlab().
+    configurationSpaceSolve();
+  }
+
   for (int substepOrdinal=0; substepOrdinal < _maxSubsteps; substepOrdinal++)
   {
+    beginTensorFixedPointSubstepIfNeeded(*this, substepOrdinal);
+
     if (_enforcePositivity)
     {
       _alphaPG->setValue(alpha);
@@ -2391,15 +2370,34 @@ void VlasovSpaceTimeFormulation::solve()
     {
       std::cout << "\n\nSolving substep " << substepOrdinal+1 << " of up to " << _maxSubsteps << " (with early stop when f update is below " << _fixedPointTolerance << ")" << std::endl;
     }
+    SubstepSolveProfile profile;
+    profile.substepOrdinal = substepOrdinal;
+    profile.usedGeometricMultigrid = _useGeometricMultigrid;
+    using ProfileClock = std::chrono::steady_clock;
+    auto profileSeconds = [](ProfileClock::time_point start) {
+      return std::chrono::duration<double>(ProfileClock::now() - start).count();
+    };
+    
+    // memory checkpoints recorded during the Vlasov solve (see Solution::solve(), GMGOperator) go into the profile
+    const bool recordMemory = static_cast<bool>(_substepSolveProfileCallback);
+    MemoryCheckpoints::setEnabled(recordMemory);
+    MemoryCheckpoints::clear();
+    MemoryCheckpoints::record("substep_start");
+
     // solve for f:
     if (!_useGeometricMultigrid)
     {
+      const auto solveStart = ProfileClock::now();
       _vlasovSoln->solve();
+      profile.wallTimeVlasovSolve = profileSeconds(solveStart);
       substepIterationCounts[substepOrdinal] = -1; // -1 to indicate not an iterative solver
     }
     else
     {
+      const auto constructionStart = ProfileClock::now();
       Teuchos::RCP<GMGSolver> gmgSolver = constructGMGSolver();
+      profile.wallTimeGMGConstruction = profileSeconds(constructionStart);
+      MemoryCheckpoints::record("gmg_constructed");
       if (_cgTols.size() > 0) // then we should have one per substep
       {
         gmgSolver->setTolerance(_cgTols[substepOrdinal]);
@@ -2407,43 +2405,79 @@ void VlasovSpaceTimeFormulation::solve()
       {
 //        gmgSolver->gmgOperator()->setDebugMode(true);
       }
+      const auto solveStart = ProfileClock::now();
       _vlasovSoln->solve(gmgSolver);
+      profile.wallTimeVlasovSolve = profileSeconds(solveStart);
       substepIterationCounts[substepOrdinal] = gmgSolver->iterationCount();
+      if (_substepSolveProfileCallback && (gmgSolver->gmgOperator() != Teuchos::null))
+      {
+        profile.gmgTimings = gmgSolver->gmgOperator()->timingReportSumOfOperators();
+      }
     }
-    
+    profile.iterationCount = substepIterationCounts[substepOrdinal];
+    MemoryCheckpoints::record("vlasov_solve_done"); // after the GMG solver (and its operators) have been released
+    if (recordMemory)
+    {
+      profile.memoryCheckpoints = MemoryCheckpoints::checkpoints();
+      MemoryCheckpoints::clear();
+      MemoryCheckpoints::setEnabled(false);
+    }
+    if (_substepSolveProfileCallback)
+    {
+      profile.numGlobalDofs           = _vlasovSoln->mesh()->numGlobalDofs();
+      profile.totalTimeLocalStiffness = _vlasovSoln->totalTimeLocalStiffness();
+      profile.totalTimeGlobalAssembly = _vlasovSoln->totalTimeGlobalAssembly();
+      profile.totalTimeBCImposition   = _vlasovSoln->totalTimeBCImposition();
+      profile.totalTimeSolve          = _vlasovSoln->totalTimeSolve();
+    }
     if (_enforcePositivity)
     {
       applyPositivityLimiter();
     }
     
-    for (auto & solnMoments : _solutionMoments)
+    const auto momentUpdateStart = ProfileClock::now();
+    if (!applyTensorNativeMaxwellCurrentSourcesIfSupported(*this))
     {
-      solnMoments->update();
-    }
-    {
-      double n0;
-      if (_enforceQuasiNeutrality)
+      for (auto & solnMoments : _solutionMoments)
       {
-        // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
-        FunctionPtr zeroMoment;
-        if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
-        else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
-        else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
-        else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
-        auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
-        const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
-        const double f_integral  = zeroMoment->integrate(configurationMesh);
-        n0 = f_integral / meshMeasure;
+        solnMoments->update();
       }
-      else
       {
-        n0 = 0;
+        double n0;
+        if (_enforceQuasiNeutrality)
+        {
+          // _enforceQuasiNeutrality ==  true only supported for single-species, so we use _solutionMoments[0]
+          FunctionPtr zeroMoment;
+          if (_velocityDim == 1)      zeroMoment = _solutionMoments[0]->solutionMomentFunction(0);
+          else if (_velocityDim == 2) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0);
+          else if (_velocityDim == 3) zeroMoment = _solutionMoments[0]->solutionMomentFunction(0,0,0);
+          else TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported velocity dimension");
+          auto configurationMesh   = _configurationSpaceFormulation->configurationSpaceMesh();
+          const double meshMeasure = Function::constant(1.0)->integrate(configurationMesh);
+          const double f_integral  = zeroMoment->integrate(configurationMesh);
+          n0 = f_integral / meshMeasure;
+        }
+        else
+        {
+          n0 = 0;
+        }
+        _n0->setValue(n0);
       }
-      _n0->setValue(n0);
+      applyExplicitCurrentSourcesIfSupported(*this);
     }
-    applyExplicitCurrentSourcesIfSupported(*this);
-    _configurationSpaceFormulation->solve(false); // false: don't update solution moments (we just did so, above)
+    profile.wallTimeMomentUpdate = profileSeconds(momentUpdateStart);
+    const auto configurationStart = ProfileClock::now();
+    _configurationSpaceFormulation->solve(false); // false: tensor-native or legacy moments have already provided the current sources.
+    profile.wallTimeConfigurationSolve = profileSeconds(configurationStart);
+    const auto configurationUpdateStart = ProfileClock::now();
     _configurationSpaceFormulation->updateConfigurationSpaceFunctions(); // update/MPI-communicate (Poisson/Maxwell) values to make available for phase-space solution
+    noteTensorConfigurationSolutionChangedIfNeeded(*this);
+    profile.wallTimeConfigurationUpdate = profileSeconds(configurationUpdateStart);
+    const bool configurationCallbackConverged = _substepConfigurationCallback ? _substepConfigurationCallback(*this, substepOrdinal) : true;
+    if (_substepSolveProfileCallback)
+    {
+      _substepSolveProfileCallback(profile);
+    }
     
     // Copy vlasov, Poisson solution to Prev solutions.  For substepOrdinal > 0, measure difference between the two solutions first.
     if (substepOrdinal > 0)
@@ -2457,8 +2491,8 @@ void VlasovSpaceTimeFormulation::solve()
         fDiff_L2_squared += fDiff_L2_i * fDiff_L2_i;
         f_L2_squared     += f_L2_i * f_L2_i;
       }
-      const double fDiff_L2 = sqrt(fDiff_L2_squared);
-      const double f_L2 = sqrt(f_L2_squared);
+      const double fDiff_L2 = std::sqrt(fDiff_L2_squared);
+      const double f_L2 = std::sqrt(f_L2_squared);
       const double fRelDiff = fDiff_L2 / f_L2;
       
       substepStepSizesVlasov.push_back(fRelDiff);
@@ -2513,7 +2547,7 @@ void VlasovSpaceTimeFormulation::solve()
         prior_fRelDiffs[(substepOrdinal % alphaUpdateFrequency)] = fRelDiff;
       }
       
-      if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1))
+      if ((fRelDiff < _fixedPointTolerance) && (substepOrdinal >= _minSubsteps-1) && configurationCallbackConverged)
       {
         // tolerance reached, min substeps taken
         break;
@@ -2830,15 +2864,16 @@ void VlasovSpaceTimeFormulation::setMaxMomentForConservationDiagnostics(const in
   }
 }
 
-void VlasovSpaceTimeFormulation::setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
-                                                                                        double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback)
+void VlasovSpaceTimeFormulation::setSubstepConfigurationCallback(std::function<bool(VlasovSpaceTimeFormulation &, int)> callback)
 {
-  VlasovSpaceTimeIP* ip = dynamic_cast<VlasovSpaceTimeIP*>(_vlasovSoln->ip().get());
-  if (ip != NULL)
-  {
-    ip->setVlasovGramAssemblyTimingCallback(gramAssemblyTimingCallback);
-  }
+  _substepConfigurationCallback = callback;
 }
+
+void VlasovSpaceTimeFormulation::setSubstepSolveProfileCallback(std::function<void(const SubstepSolveProfile &)> callback)
+{
+  _substepSolveProfileCallback = callback;
+}
+
 
 Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments(int i)
 {
@@ -3234,6 +3269,16 @@ FunctionPtr VlasovSpaceTimeFormulation::currentZ() const
   if (_velocityDim == 3) return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,0,1);
   else if (_velocityDim == 2) return _q[0] * _solutionMoments[0]->solutionMomentFunction(0,1);
   else return Function::zero();
+}
+
+bool VlasovSpaceTimeFormulation::useRelativisticCurrentMoments() const
+{
+  return false;
+}
+
+double VlasovSpaceTimeFormulation::currentMomentLightSpeed() const
+{
+  return 1.0;
 }
 
 VarPtr VlasovSpaceTimeFormulation::VE_configurationSpaceTrace()

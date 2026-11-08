@@ -15,6 +15,7 @@
 #ifndef Camellia_VlasovSpaceTimeFormulation_h
 #define Camellia_VlasovSpaceTimeFormulation_h
 
+#include "CamelliaMemoryTools.h"
 #include "TypeDefs.h"
 
 #include "BF.h"
@@ -28,10 +29,32 @@
 
 namespace Camellia
 {
+  class TensorFunctionEvaluationContext;
 
   class VlasovSpaceTimeFormulation
 {
 public:
+  //! Per-substep timing breakdown for the Vlasov solve; reported via setSubstepSolveProfileCallback().
+  //! Solution timers are summed over MPI ranks (as Solution reports them); wall times are rank-local.
+  struct SubstepSolveProfile
+  {
+    int substepOrdinal = -1;
+    bool usedGeometricMultigrid = false;
+    int iterationCount = -1; // -1 for direct solves
+    GlobalIndexType numGlobalDofs = 0;
+    double wallTimeGMGConstruction = 0;     // GMGSolver constructor (mesh hierarchy; not operator setup)
+    double wallTimeVlasovSolve = 0;         // _vlasovSoln->solve(...), including assembly and GMG operator setup
+    double wallTimeMomentUpdate = 0;        // Vlasov moments -> configuration-space sources (positivity limiter excluded)
+    double wallTimeConfigurationSolve = 0;  // configuration-space (Maxwell/Poisson) solve
+    double wallTimeConfigurationUpdate = 0; // updateConfigurationSpaceFunctions() and tensor-context notification
+    double totalTimeLocalStiffness = 0;     // local stiffness determination (G, B, and local Schur), summed over ranks
+    double totalTimeGlobalAssembly = 0;
+    double totalTimeBCImposition = 0;
+    double totalTimeSolve = 0;              // linear solve, including GMG operator setup for iterative solves
+    std::map<std::string, double> gmgTimings; // GMGOperator::timingReportSumOfOperators(), rank-local; empty for direct solves
+    std::vector<MemoryCheckpoint> memoryCheckpoints; // rank-local resident size / high-water mark at phase boundaries of the Vlasov solve
+  };
+
   // strings naming variables:
   static const string S_F;       // trial variable - distribution function f
   static const string S_F_HAT;   // trace variable
@@ -40,7 +63,6 @@ public:
   static const string S_PSI;     // latent trial variable for positivity preservation
   static const string S_PHI;     // latent test variable for positivity preservation
 protected:
-  bool _useSumFactorizedAssembly = false; // TODO: change this to "true" after Trilinos PR 13391 has propagated to master
 private:
   int _spaceDim;
   int _velocityDim;
@@ -66,6 +88,7 @@ private:
   SolutionPtr _vlasovSolnPrev; // solution at the previous fixed point iteration; can be used to check convergence of fixed point iteration
   
   Teuchos::RCP<ConfigurationSpaceFormulation> _configurationSpaceFormulation; // could be Poisson or Maxwell (among others)
+  Teuchos::RCP<TensorFunctionEvaluationContext> _tensorFunctionEvaluationContext; // tensor-native coefficient evaluator/cache state for coupled Vlasov/Maxwell paths
   MeshTopologyPtr _configurationSpaceMeshTopology; // space-time mesh, created during VlasovSpaceTimeFormulation construction
   
   std::vector<std::pair<SpatialFilterPtr,bool>> _configurationSpaceSideSetFilters; // we append one each time that createConfigurationMeshSideSetTag() is called.
@@ -92,7 +115,12 @@ private:
   double _cgTol = 1e-6;
   std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
   int _maxIters = 10000;
-  
+  int _coarseSolverChoice = -1; // a Solver::SolverChoice; -1 means Solver::getDirectSolver()
+  bool _configurationSolutionSeeded = false; // true once seedConfigurationSolution() has been called
+
+  std::function<void(const SubstepSolveProfile &)> _substepSolveProfileCallback;
+  std::function<bool(VlasovSpaceTimeFormulation &, int)> _substepConfigurationCallback; // see setSubstepConfigurationCallback()
+
   // tags for BCs:
   static const int VLASOV_TAG_SPATIAL_INFLOW = 0; // region where (v \cdot n_x) < 0
   static const int VLASOV_TAG_TMIN           = 1; // initial time
@@ -220,8 +248,8 @@ public:
   //! called from constructor, after Vlasov Solution and Mesh objects are constructed from the passed-in BF object.  Subclasses should fill this appropriately by calling addTerm().
   virtual void initializeVlasovBilinearForm(BFPtr emptyVlasovBF);
   
-  //! called from constructor, after Vlasov BF object is initialized.
-  virtual IPPtr constructVlasovInnerProduct(const bool useSumFactorizedAssembly);
+  //! called from constructor, after Vlasov BF object is initialized.  Returns the graph norm for the Vlasov BF.
+  virtual IPPtr constructVlasovInnerProduct();
   
   // field variables:
   virtual VarPtr f(int i=0);         // Vlasov distribution (species i)
@@ -259,6 +287,9 @@ public:
   int numUniformRefinements() const;
   
   Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation();
+
+  //! Returns the tensor-native evaluation context used for solution-dependent coefficient sampling.
+  Teuchos::RCP<TensorFunctionEvaluationContext> tensorFunctionEvaluationContext();
   
   Teuchos::RCP<SolutionMoments> solutionMoments(int i=0);
       
@@ -356,6 +387,16 @@ public:
       \param  maxIters   [in]  - the maximum number of conjugate gradient iterations to take; will stop if either maxIters are reached, or the relative residual falls below the CG tolerance.
   */
   void setIterativeSolveMaxIterations(const int maxIters);
+
+  //! Direct solver for the coarsest GMG level (default: Solver::getDirectSolver(), i.e. KLU2 unless MUMPS is available).
+  //! SuperLUDist distributes the coarse factorization and uses a fill-reducing nested-dissection ordering; it requires
+  //! Trilinos built with SuperLU_DIST.
+  void setCoarseSolverChoice(Solver::SolverChoice coarseSolverChoice);
+
+  //! Sets this slab's configuration-space E and B fields to those of previousConfigurationSolution at previousFinalTime,
+  //! constant in time; called by configureNextSlab().  Without a seed, solve() first does a configuration-space solve
+  //! for the current f, so that the first Vlasov solve does not see zero fields.  Collective.
+  void seedConfigurationSolution(SolutionPtr previousConfigurationSolution, double previousFinalTime);
   int iterativeSolveMaxIterations() const;
   
   void setUseGeometricMultigrid(bool useGeometricMultigrid);
@@ -505,8 +546,6 @@ public:
   /** \brief Returns the basis family employed by the discretizations.  */
   EBasisFamily basisFamily() const;
   
-  bool useSumFactorizedAssembly() const;
-  
   /** \brief  Returns a Function representing the specified velocity-space coordinate.*/
   virtual FunctionPtr v_i(const int zeroBasedComp) const;
   
@@ -515,9 +554,19 @@ public:
   virtual FunctionPtr currentX() const;
   virtual FunctionPtr currentY() const;
   virtual FunctionPtr currentZ() const;
+
+  //! Tensor-native current-source reduction hooks; relativistic formulations override these.
+  virtual bool useRelativisticCurrentMoments() const;
+  virtual double currentMomentLightSpeed() const;
   
-  void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
-                                                              double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);
+  //! Called once per fixed-point substep in solve(), after the Vlasov and configuration-space solves.
+  void setSubstepSolveProfileCallback(std::function<void(const SubstepSolveProfile &)> callback);
+
+  //! Called in each fixed-point substep, after the configuration-space solve, with this formulation and the substep
+  //! ordinal.  The callback may update data the next Vlasov solve depends on (e.g., an emission boundary condition); it
+  //! returns whether its own iteration has converged, and the fixed-point iteration does not stop (before
+  //! fixedPointMaxSubsteps) until it has.  Carried to later slabs by nextTimeSlab().
+  void setSubstepConfigurationCallback(std::function<bool(VlasovSpaceTimeFormulation &, int)> callback);
 };
 
 }

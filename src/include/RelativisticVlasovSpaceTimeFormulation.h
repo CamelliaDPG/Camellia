@@ -31,6 +31,10 @@ public:
 protected:
   const double _c; // speed of light.  Must be consistent with the momentum discretization
   const double _testSpaceL2Weight; // weight for "stabilization term" in graph norm.
+  const double _testSpaceL2WeightMeshScale; // if positive, the weight on element K is max(_testSpaceL2Weight, _testSpaceL2WeightMeshScale / h_x(K)^2)
+  const std::vector<double> _testSpaceL2WeightDirectionScales; // if nonempty, the weight on element K is _testSpaceL2Weight * prod_d (1 + s_d / (_testSpaceL2Weight h_d(K)^2)), d over (x, t, u_x, ...)
+  const double _testSpaceL2WeightTransportScale; // if positive, the weight on element K is _testSpaceL2Weight + C sum_d (|beta_d|max(K) / h_d(K))^2, beta = (v, 1, a)
+  const std::vector<double> _testSpaceL2WeightAccelerationBounds; // |a_d| bounds per velocity direction, for the transport-scale weight
   const TestSpaceInnerProduct _testSpaceInnerProduct;
   
   // Cache one relativistic first-moment Function per (velocity component, species).
@@ -53,7 +57,11 @@ public:
                                          const double testSpaceL2Weight = 1.0,
                                          const EBasisFamily &basisFamily = BASIS_FAMILY_HIERARCHICAL,
                                          const int maxMomentNumberForDriver = 0,
-                                         const bool enforcePositivity = false);
+                                         const bool enforcePositivity = false,
+                                         const double testSpaceL2WeightMeshScale = 0.0,
+                                         const std::vector<double> &testSpaceL2WeightDirectionScales = {},
+                                         const double testSpaceL2WeightTransportScale = 0.0,
+                                         const std::vector<double> &testSpaceL2WeightAccelerationBounds = {});
   
   //! called during initialization of Vlasov Solution objects.  Subclasses must define a distribution field variable (f) with name VlasovSpaceTimeFormulation::S_F, a trace variable (t_n) with name VlasovSpaceTimeFormulation::S_T_N_HAT.  The former is used for moment computations, conservation diagnostics, and convergence criteria for the fixed-point iteration; the latter is used for boundary condition imposition.
   VarFactoryPtr constructVlasovVarFactory() override;
@@ -61,8 +69,8 @@ public:
   //! called from constructor, after Vlasov Solution and Mesh objects are constructed from the passed-in BF object.  Subclasses should fill this appropriately by calling addTerm().
   void initializeVlasovBilinearForm(BFPtr emptyVlasovBF) override;
   
-  //! called from constructor, after Vlasov BF object is initialized.
-  IPPtr constructVlasovInnerProduct(const bool sumFactorizedAssembly) override;
+  //! called from constructor, after Vlasov BF object is initialized.  Returns the inner product for the Vlasov BF.
+  IPPtr constructVlasovInnerProduct() override;
   
   //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.  Subclasses should override.
   Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements) override;
@@ -89,6 +97,9 @@ public:
   FunctionPtr currentX() const override;
   FunctionPtr currentY() const override;
   FunctionPtr currentZ() const override;
+
+  bool useRelativisticCurrentMoments() const override;
+  double currentMomentLightSpeed() const override;
 };
 
 }
