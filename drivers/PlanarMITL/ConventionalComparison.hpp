@@ -68,7 +68,10 @@ inline int runConventionalComparison(int argc, char **argv)
   solution->setCubatureEnrichmentDegree(enrichment);
   const double setupSeconds = elapsed(start);
   const auto solveStart = ComparisonClock::now();
-  const int status = solution->solve(); // conventional local Riesz elimination + sparse direct solve
+  // conventional local Riesz elimination + sparse direct solve
+  if (problem.conventionalSolver != "KLU" && problem.conventionalSolver != "SuperLUDist")
+    throw std::invalid_argument("--conventionalSolver must be KLU or SuperLUDist");
+  const int status = solution->solve(Solver::getSolver(problem.conventionalSolver == "KLU" ? Solver::KLU : Solver::SuperLUDist, false));
   const double assemblySolveSeconds = elapsed(solveStart);
   const double totalSeconds = elapsed(start);
   if (status) throw std::runtime_error("Conventional MITL comparison solve failed");

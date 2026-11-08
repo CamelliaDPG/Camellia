@@ -39,6 +39,7 @@ struct ComparisonProblem
   double chebJacobiTolerance = 0;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
+  std::string conventionalSolver = "KLU";
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
   int localSolver = 0, maxLocalIterations = 300;
@@ -111,6 +112,7 @@ struct ComparisonProblem
     cmd.setOption("chebLminSafety", &chebLminSafety, "Chebyshev: factor on the smallest Ritz value");
     cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
+    cmd.setOption("conventionalSolver", &conventionalSolver, "Conventional backend: sparse direct solver, KLU or SuperLUDist");
     cmd.setOption("outputPrefix", &outputPrefix);
     auto result = cmd.parse(argc, argv);
     if (result == Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED) return 2;
