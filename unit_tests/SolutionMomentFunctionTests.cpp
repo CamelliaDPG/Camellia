@@ -1207,7 +1207,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
     const bool refine          = false;
     const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
+    const double tol = 1e-14; // the integral is exact up to rounding, which can slightly exceed 1e-15 relative
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
@@ -1279,7 +1279,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
     const bool refine          = true;
     const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
-    const double tol = 1e-15;
+    const double tol = 1e-14; // the integral is exact up to rounding, which can slightly exceed 1e-15 relative
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
@@ -1849,7 +1849,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
     const bool refine          = false;
     const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
+    const double tol = 1e-14; // the integral is exact up to rounding, which can slightly exceed 1e-15 relative
     
     FunctionPtr x   = MonomialFunction::xi_n(0,1);
     FunctionPtr t   = MonomialFunction::xi_n(1,1);
