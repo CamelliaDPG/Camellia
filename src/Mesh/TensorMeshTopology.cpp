@@ -114,9 +114,28 @@ IndexType TensorMeshTopology::tensorCellOrdinal(const TensorCellTuple &cellTuple
   TEUCHOS_TEST_FOR_EXCEPTION(!containsTensorCell(cellTuple), std::invalid_argument,
                              "TensorMeshTopology::tensorCellOrdinal requires a tensor cell in the topology.");
 
-  for (IndexType ordinal=0; ordinal<static_cast<IndexType>(_activeCellTuples.size()); ordinal++)
+  IndexType ordinal = 0;
+  IndexType stride = 1;
+  IndexType fullProductCellCount = 1;
+  for (int d=0; d<componentCount(); d++)
   {
-    if (_activeCellTuples[ordinal] == cellTuple) return ordinal;
+    const auto componentOrdinal = _components[d]->activeCellOrdinal(cellTuple[d]);
+    ordinal += componentOrdinal * stride;
+    stride *= _components[d]->activeCellCount();
+    fullProductCellCount *= _components[d]->activeCellCount();
+  }
+
+  if ((static_cast<IndexType>(_activeCellTuples.size()) == fullProductCellCount)
+      && (ordinal >= 0)
+      && (ordinal < static_cast<IndexType>(_activeCellTuples.size()))
+      && (_activeCellTuples[ordinal] == cellTuple))
+  {
+    return ordinal;
+  }
+
+  for (IndexType searchOrdinal=0; searchOrdinal<static_cast<IndexType>(_activeCellTuples.size()); searchOrdinal++)
+  {
+    if (_activeCellTuples[searchOrdinal] == cellTuple) return searchOrdinal;
   }
 
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error,

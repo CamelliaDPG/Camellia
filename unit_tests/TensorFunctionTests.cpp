@@ -61,6 +61,32 @@ TEUCHOS_UNIT_TEST( TensorFunction, BatchedPointViewEvaluation )
   TEST_FLOATING_EQUALITY(valuesHost(2), 30.0, 1e-14);
 }
 
+TEUCHOS_UNIT_TEST( TensorFunction, HostPointViewEvaluationUsesOverloadDispatchGuard )
+{
+  auto x0 = TensorFunction::componentCoordinate(0);
+  auto x1 = TensorFunction::componentCoordinate(1);
+  auto f = x0 * x1 + TensorFunction::constant(2.0);
+
+  TensorFunction::PointViewHost points("host points", 3, 2);
+  points(0,0) = 1.0; points(0,1) = 2.0;
+  points(1,0) = 3.0; points(1,1) = 4.0;
+  points(2,0) = 5.0; points(2,1) = 6.0;
+
+  TensorFunction::ValueViewHost valuesFromNamedGuard("values from named host guard", 3);
+  f->valuesOnHost(points, valuesFromNamedGuard);
+
+  TensorFunction::ValueViewHost valuesFromHostOverload("values from host overload", 3);
+  f->values(points, valuesFromHostOverload);
+
+  TEST_FLOATING_EQUALITY(valuesFromNamedGuard(0),  4.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromNamedGuard(1), 14.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromNamedGuard(2), 32.0, 1e-14);
+
+  TEST_FLOATING_EQUALITY(valuesFromHostOverload(0),  4.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromHostOverload(1), 14.0, 1e-14);
+  TEST_FLOATING_EQUALITY(valuesFromHostOverload(2), 32.0, 1e-14);
+}
+
 TEUCHOS_UNIT_TEST( TensorFunction, SumAndProductExposeChildStructure )
 {
   auto x0 = TensorFunction::componentCoordinate(0);
@@ -108,6 +134,35 @@ TEUCHOS_UNIT_TEST( TensorFunction, CompositionCarriesDependencySources )
 
   TEST_ASSERT(product->hasSolutionDependencies());
   TEST_EQUALITY(product->dependencySources().size(), 2);
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, SolutionCoefficient1DDeclaresPlanarSourceMetadata )
+{
+  auto electricField = TensorFunction::configurationSpaceSolutionCoefficient1D(0, "E_x");
+
+  TEST_ASSERT(electricField->hasSolutionDependencies());
+  TEST_ASSERT(electricField->dependencyScope().dependsOnComponent(0));
+  TEST_ASSERT(!electricField->dependencyScope().dependsOnComponent(1));
+  TEST_EQUALITY(electricField->dependencySources().size(), 1);
+  TEST_EQUALITY(electricField->dependencySources()[0],
+                TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_CONFIGURATION_SPACE_MESH, "E_x"));
+  TEST_FLOATING_EQUALITY(electricField->value({2.5, -1.0}), 2.5, 1e-14);
+
+  auto derivative = electricField->derivativeFunction(0);
+  TEST_ASSERT(derivative->hasSolutionDependencies());
+  TEST_EQUALITY(derivative->dependencySources().size(), 1);
+  TEST_EQUALITY(derivative->dependencySources()[0], electricField->dependencySources()[0]);
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, NamedSolutionCoefficient1DDeclaresFrozenStateMetadata )
+{
+  auto frozenMagneticField = TensorFunction::namedSolutionCoefficient1D(0, "B_y^n");
+
+  TEST_ASSERT(frozenMagneticField->hasSolutionDependencies());
+  TEST_EQUALITY(frozenMagneticField->dependencySources().size(), 1);
+  TEST_EQUALITY(frozenMagneticField->dependencySources()[0],
+                TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, "B_y^n"));
+  TEST_THROW(TensorFunction::namedSolutionCoefficient1D(-1, "invalid"), std::invalid_argument);
 }
 
 TEUCHOS_UNIT_TEST( TensorFunction, ProductOfDisjointComponentsIsFullySeparable )
@@ -219,6 +274,32 @@ TEUCHOS_UNIT_TEST( TensorFunction, UnaryCompositionPreservesDependencySources )
   TEST_ASSERT(g->hasSolutionDependencies());
   TEST_EQUALITY(g->dependencySources().size(), 1);
   TEST_EQUALITY(g->dependencySources()[0], TensorFunctionDependencySource(TENSOR_FUNCTION_SOURCE_NAMED_SOLUTION, "E"));
+}
+
+TEUCHOS_UNIT_TEST( TensorFunction, SqrtAndReciprocalRepresentRelativisticVelocityCoefficient )
+{
+  const double c = 5.0;
+  auto gamma = TensorFunction::relativisticGamma({2, 3}, c);
+  auto vx = TensorFunction::relativisticVelocityComponent(2, {2, 3}, c);
+
+  TEST_ASSERT(vx->isFullyCoupled());
+  TEST_ASSERT(vx->dependencyScope().dependsOnComponent(2));
+  TEST_ASSERT(vx->dependencyScope().dependsOnComponent(3));
+
+  const double uxValue = 3.0;
+  const double uyValue = 4.0;
+  const double expectedGamma = std::sqrt(1.0 + (uxValue * uxValue + uyValue * uyValue) / (c * c));
+  TEST_FLOATING_EQUALITY(gamma->value({0.0, 0.0, uxValue, uyValue}), expectedGamma, 1e-14);
+  TEST_FLOATING_EQUALITY(vx->value({0.0, 0.0, uxValue, uyValue}), uxValue / expectedGamma, 1e-14);
+
+  auto dvxdux = vx->derivativeFunction(2);
+  const double expectedDerivative = 1.0 / expectedGamma - uxValue * uxValue / (c * c * expectedGamma * expectedGamma * expectedGamma);
+  TEST_FLOATING_EQUALITY(dvxdux->value({0.0, 0.0, uxValue, uyValue}), expectedDerivative, 1e-12);
+
+  TEST_THROW(TensorFunction::relativisticGamma({}, c), std::invalid_argument);
+  TEST_THROW(TensorFunction::relativisticGamma({2}, 0.0), std::invalid_argument);
+  TEST_THROW(TensorFunction::relativisticGamma({-1}, c), std::invalid_argument);
+  TEST_THROW(TensorFunction::relativisticVelocityComponent(1, {2, 3}, c), std::invalid_argument);
 }
 
 TEUCHOS_UNIT_TEST( TensorFunction, CenteredMaxwellianDependsOnlyOnVelocityComponent )

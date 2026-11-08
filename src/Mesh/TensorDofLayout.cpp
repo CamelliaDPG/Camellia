@@ -3,7 +3,6 @@
 #include "Var.h"
 
 #include <algorithm>
-#include <functional>
 #include <stdexcept>
 
 #include "Teuchos_TestForException.hpp"
@@ -24,29 +23,8 @@ namespace
     return TensorFactorSpaceShape(componentCardinalities, componentStrides, runningStride);
   }
 
-  std::vector<std::vector<int>> enumerateComponentOrdinalsByCellOrdering(const TensorFactorSpaceShape &shape)
-  {
-    const int componentCount = shape.componentCount();
-    std::vector<std::vector<int>> tuples;
-    std::vector<int> current(componentCount, 0);
-
-    std::function<void(int)> recurse = [&](int componentOrdinal)
-    {
-      if (componentOrdinal < 0)
-      {
-        tuples.push_back(current);
-        return;
-      }
-      for (int basisOrdinal=0; basisOrdinal<shape.componentCardinality(componentOrdinal); basisOrdinal++)
-      {
-        current[componentOrdinal] = basisOrdinal;
-        recurse(componentOrdinal - 1);
-      }
-    };
-
-    recurse(componentCount - 1);
-    return tuples;
-  }
+  // Cell-order local DOF numbering uses the same lower-component-fastest
+  // mixed-radix strides stored in TensorFactorSpaceShape.
 }
 
 TensorDofLayout::VariableLayout TensorDofLayout::buildVariableLayout(const TensorVarDiscretizationPtr &discretization,
@@ -248,6 +226,22 @@ std::vector<TensorDofLayout::VariableLayout> TensorDofLayout::testLayouts() cons
   return layouts;
 }
 
+TensorH1PointTraceLayout1D TensorDofLayout::h1PointTraceLayout1D(const std::string &traceName,
+                                                                 TensorSpaceRole role) const
+{
+  (void) layout(traceName, role);
+  TEUCHOS_TEST_FOR_EXCEPTION(!_tensorMesh->hasTraceDescriptor(traceName), std::invalid_argument,
+                             "TensorDofLayout requires a registered TensorTraceDescriptor for an H1 point trace layout.");
+  const auto &descriptor = _tensorMesh->traceDescriptor(traceName);
+  TEUCHOS_TEST_FOR_EXCEPTION(!descriptor.isH1PointValueTrace(), std::invalid_argument,
+                             "TensorDofLayout can only build H1 point trace layouts for H1 point-value descriptors.");
+  const int componentOrdinal = descriptor.orthogonalComponentOrdinal();
+  TEUCHOS_TEST_FOR_EXCEPTION((componentOrdinal < 0) || (componentOrdinal >= _tensorMesh->topology()->componentCount()), std::invalid_argument,
+                             "TensorDofLayout H1 point trace descriptor component ordinal is out of range.");
+  const auto componentTopology = _tensorMesh->topology()->componentMeshTopology(componentOrdinal);
+  return TensorH1PointTraceLayout1D(descriptor, static_cast<int>(componentTopology->vertexCount()));
+}
+
 TensorFactorSpaceShape TensorDofLayout::factorSpaceShape(const std::string &name,
                                                          TensorSpaceRole role,
                                                          const std::vector<ComponentCellID1D> &componentCells,
@@ -357,18 +351,7 @@ IndexType TensorDofLayout::cellLocalDofOrdinal(const VariableLayout &layout,
                                                const TensorFactorSpaceShape &shape,
                                                const std::vector<int> &componentBasisOrdinals) const
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(static_cast<int>(componentBasisOrdinals.size()) != layout.componentCount(), std::invalid_argument,
-                             "TensorDofLayout::cellLocalDofOrdinal requires one component basis ordinal per component.");
-  TEUCHOS_TEST_FOR_EXCEPTION(shape.componentCount() != layout.componentCount(), std::invalid_argument,
-                             "TensorDofLayout::cellLocalDofOrdinal shape rank must match layout rank.");
-
-  const auto tuples = enumerateComponentOrdinalsByCellOrdering(shape);
-  for (IndexType ordinal=0; ordinal<static_cast<IndexType>(tuples.size()); ordinal++)
-  {
-    if (tuples[ordinal] == componentBasisOrdinals) return ordinal;
-  }
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
-                             "TensorDofLayout::cellLocalDofOrdinal basis ordinal tuple out of range.");
+  return variableLocalDofOrdinal(layout, shape, componentBasisOrdinals);
 }
 
 IndexType TensorDofLayout::localDofCount(const TensorFactorSpaceShape &shape,
@@ -424,12 +407,7 @@ void TensorDofLayout::decodeCellLocalDofOrdinal(const VariableLayout &layout,
                                                 IndexType ordinal,
                                                 std::vector<int> &componentBasisOrdinals) const
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(shape.componentCount() != layout.componentCount(), std::invalid_argument,
-                             "TensorDofLayout::decodeCellLocalDofOrdinal shape rank must match layout rank.");
-  TEUCHOS_TEST_FOR_EXCEPTION((ordinal < 0) || (ordinal >= shape.totalDofs()), std::invalid_argument,
-                             "TensorDofLayout::decodeCellLocalDofOrdinal ordinal out of range.");
-  const auto tuples = enumerateComponentOrdinalsByCellOrdering(shape);
-  componentBasisOrdinals = tuples[ordinal];
+  decodeVariableLocalDofOrdinal(layout, shape, ordinal, componentBasisOrdinals);
 }
 
 void TensorDofLayout::decodeLocalDofOrdinal(const VariableLayout &layout,

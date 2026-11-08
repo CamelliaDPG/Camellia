@@ -113,7 +113,9 @@ namespace Camellia
   {
     TENSOR_UNARY_EXP,
     TENSOR_UNARY_SIN,
-    TENSOR_UNARY_COS
+    TENSOR_UNARY_COS,
+    TENSOR_UNARY_SQRT,
+    TENSOR_UNARY_RECIPROCAL
   };
 
   /**
@@ -173,14 +175,35 @@ namespace Camellia
     virtual void values(PointView pointsIn, ValueView valuesOut) const = 0;
     virtual void values(PointViewHost pointsIn, ValueViewHost valuesOut) const;
 
+    /**
+     * \brief Evaluate from host views while guarding overload dispatch.
+     *
+     * This entry point is intentionally named so callers and the host overload can avoid
+     * accidentally re-entering values(PointViewHost, ValueViewHost) when the implementation
+     * needs to dispatch to the device-view overload.
+     */
+    void valuesOnHost(PointViewHost pointsIn, ValueViewHost valuesOut) const;
+
     virtual double value(const std::vector<double> &coordVector) const;
     virtual TensorFunctionPtr derivativeFunction(int componentOrdinal) const = 0;
 
     virtual std::vector<TensorFunctionPtr> childFunctions() const;
+    virtual TensorUnaryFunctionType unaryFunctionType() const;
     virtual std::string displayString() const = 0;
 
     static TensorFunctionPtr constant(double value);
     static TensorFunctionPtr componentCoordinate(int componentOrdinal);
+    static TensorFunctionPtr solutionCoefficient1D(int componentOrdinal,
+                                                   const TensorFunctionDependencySource &dependencySource);
+    static TensorFunctionPtr configurationSpaceSolutionCoefficient1D(int componentOrdinal,
+                                                                     const std::string &name);
+    static TensorFunctionPtr namedSolutionCoefficient1D(int componentOrdinal,
+                                                       const std::string &name);
+    static TensorFunctionPtr relativisticGamma(const std::vector<int> &velocityComponentOrdinals,
+                                               double c);
+    static TensorFunctionPtr relativisticVelocityComponent(int velocityComponentOrdinal,
+                                                           const std::vector<int> &velocityComponentOrdinals,
+                                                           double c);
     static TensorFunctionPtr centeredMaxwellian1D(int velocityComponentOrdinal,
                                                   double density,
                                                   double mean,
@@ -199,6 +222,8 @@ namespace Camellia
   TensorFunctionPtr exp(TensorFunctionPtr arg);
   TensorFunctionPtr sin(TensorFunctionPtr arg);
   TensorFunctionPtr cos(TensorFunctionPtr arg);
+  TensorFunctionPtr sqrt(TensorFunctionPtr arg);
+  TensorFunctionPtr reciprocal(TensorFunctionPtr arg);
 
   inline std::ostream &operator<<(std::ostream &os, const TensorFunction &f)
   {

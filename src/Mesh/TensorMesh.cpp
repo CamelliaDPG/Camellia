@@ -136,6 +136,27 @@ std::vector<TensorVarDiscretizationPtr> TensorMesh::testDiscretizations() const
   return discretizations;
 }
 
+void TensorMesh::registerTraceDescriptor(const TensorTraceDescriptor &descriptor)
+{
+  const std::string &traceName = descriptor.traceName();
+  TEUCHOS_TEST_FOR_EXCEPTION(_traceDescriptors.find(traceName) != _traceDescriptors.end(), std::invalid_argument,
+                             "TensorMesh already has a trace descriptor with the requested trace name.");
+  _traceDescriptors[traceName] = descriptor;
+}
+
+bool TensorMesh::hasTraceDescriptor(const std::string &traceName) const
+{
+  return _traceDescriptors.find(traceName) != _traceDescriptors.end();
+}
+
+const TensorTraceDescriptor &TensorMesh::traceDescriptor(const std::string &traceName) const
+{
+  auto entry = _traceDescriptors.find(traceName);
+  TEUCHOS_TEST_FOR_EXCEPTION(entry == _traceDescriptors.end(), std::invalid_argument,
+                             "Unknown TensorMesh trace descriptor name.");
+  return entry->second;
+}
+
 BasisFamilyPtr TensorMesh::effectiveBasisFamily(const TensorVarDiscretizationPtr &discretization) const
 {
   validateDiscretization(discretization);

@@ -7,6 +7,7 @@
 
 #include "BasisFamily.h"
 #include "TensorMeshTopology.h"
+#include "TensorTraceDescriptor.h"
 #include "TensorVarDiscretization.h"
 #include "TensorVarFactory.h"
 
@@ -36,6 +37,7 @@ namespace Camellia
 
     std::map<std::string, TensorVarDiscretizationPtr> _trialDiscretizations;
     std::map<std::string, TensorVarDiscretizationPtr> _testDiscretizations;
+    std::map<std::string, TensorTraceDescriptor> _traceDescriptors;
 
     void validateConstructorInputs() const;
     void validateDiscretization(const TensorVarDiscretizationPtr &discretization) const;
@@ -64,6 +66,10 @@ namespace Camellia
 
     std::vector<TensorVarDiscretizationPtr> trialDiscretizations() const;
     std::vector<TensorVarDiscretizationPtr> testDiscretizations() const;
+
+    void registerTraceDescriptor(const TensorTraceDescriptor &descriptor);
+    bool hasTraceDescriptor(const std::string &traceName) const;
+    const TensorTraceDescriptor &traceDescriptor(const std::string &traceName) const;
 
     BasisFamilyPtr effectiveBasisFamily(const TensorVarDiscretizationPtr &discretization) const;
     int effectivePolyOrderDelta(const TensorVarDiscretizationPtr &discretization, int componentOrdinal, bool isTest) const;

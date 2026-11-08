@@ -227,4 +227,31 @@ TEUCHOS_UNIT_TEST( TensorMesh, CreateDofLayout )
   TEST_ASSERT(dofLayout != Teuchos::null);
   TEST_EQUALITY(dofLayout->tensorMesh().get(), &tensorMesh);
 }
+
+TEUCHOS_UNIT_TEST( TensorMesh, CellLocalDofOrdinalUsesMixedRadixOrdering )
+{
+  auto topology = makeSimpleTensorTopology();
+  auto factory = TensorVarFactory::factory();
+  auto basisFamily = BasisFamily::hierarchicalBasisFamily();
+  TensorMesh tensorMesh(topology, factory, basisFamily, 1, 1);
+
+  auto trialVar = makeFieldTensorVar("u");
+  auto trialDisc = Teuchos::rcp(new TensorVarDiscretization(trialVar, Teuchos::null, std::vector<int>{0,0}));
+  tensorMesh.addTrialDiscretization(trialDisc);
+
+  auto dofLayout = tensorMesh.createDofLayout();
+  const auto &layout = dofLayout->layout("u", TENSOR_TRIAL_SPACE);
+  TensorFactorSpaceShape shape(std::vector<int>{2,3}, std::vector<IndexType>{1,2}, 6);
+
+  TEST_EQUALITY(dofLayout->cellLocalDofOrdinal(layout, shape, std::vector<int>{0,0}), 0);
+  TEST_EQUALITY(dofLayout->cellLocalDofOrdinal(layout, shape, std::vector<int>{1,0}), 1);
+  TEST_EQUALITY(dofLayout->cellLocalDofOrdinal(layout, shape, std::vector<int>{0,1}), 2);
+  TEST_EQUALITY(dofLayout->cellLocalDofOrdinal(layout, shape, std::vector<int>{1,2}), 5);
+
+  std::vector<int> decoded;
+  dofLayout->decodeCellLocalDofOrdinal(layout, shape, 5, decoded);
+  TEST_EQUALITY(decoded.size(), 2);
+  TEST_EQUALITY(decoded[0], 1);
+  TEST_EQUALITY(decoded[1], 2);
+}
 }
