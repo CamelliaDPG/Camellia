@@ -33,7 +33,7 @@ struct ComparisonProblem
   double beta0 = 0, betaMax = 0.5, c = 1, qOverM = -1, Ex = -1, By = 0.5;
   double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0, alphaTransportScale = 0;
   std::string accelerationBounds = "auto";
-  bool schurChebyshev = false;
+  bool schurChebyshev = false, chebFactoredField = false;
   double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
@@ -102,6 +102,7 @@ struct ComparisonProblem
     cmd.setOption("chebLmax", &chebLmax, "Chebyshev: upper spectrum bound of M^-1 S");
     cmd.setOption("chebTolerance", &chebTolerance, "Chebyshev: TT rounding tolerance for iterates and intermediates");
     cmd.setOption("chebRtol", &chebRtol, "Chebyshev: stop when the TT residual |r|/|c| falls below this");
+    cmd.setOption("chebFactoredField", "no-chebFactoredField", &chebFactoredField, "Chebyshev: apply B_f as -T^T F");
     cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
     cmd.setOption("outputPrefix", &outputPrefix);
