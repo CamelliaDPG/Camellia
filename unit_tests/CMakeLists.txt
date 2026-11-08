@@ -8,12 +8,17 @@ set(TENSOR_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   TensorBasisCacheTests.cpp
   TensorCoefficientValueEvaluatorTests.cpp
+  TensorCoefficientTpetraImportTests.cpp
   TensorSolutionTests.cpp
   TensorBasisTests.cpp
   TensorFunctionTests.cpp
   TensorFunctionEvaluationContextTests.cpp
   TensorFixedPointLifecycleTests.cpp
   TensorMeshTests.cpp
+  TensorMomentDescriptorTests.cpp
+  TensorMomentReductionTests.cpp
+  TensorMaxwellRHSMomentDataTests.cpp
+  TensorMaxwell1D2VMomentReductionPipelineTests.cpp
   TensorTraceDescriptorTests.cpp
   TensorTraceLayoutTests.cpp
 )

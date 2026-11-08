@@ -46,10 +46,6 @@ namespace Camellia
     MeshPtr _configurationSpaceMesh;
     double _c;
     int _velocityComponent;
-    FunctionPtr _weightedF;
-    Teuchos::RCP<SolutionMoments> _weightedMoments;
-    SolutionPtr _weightedSolution;
-    FunctionPtr _zeroMomentFunction;
     bool _hasBeenUpdated = false;
   public:
     RelativisticFirstMomentFunction(SolutionMoments* drivingMoments,
