@@ -34,7 +34,8 @@ struct ComparisonProblem
   double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0, alphaTransportScale = 0;
   std::string accelerationBounds = "auto";
   bool schurChebyshev = false, chebFactoredField = false;
-  double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0;
+  double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0, chebBoundsTolerance = 1e-4, chebLminSafety = 0.8;
+  int chebBoundsSteps = 30;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
@@ -103,6 +104,9 @@ struct ComparisonProblem
     cmd.setOption("chebTolerance", &chebTolerance, "Chebyshev: TT rounding tolerance for iterates and intermediates");
     cmd.setOption("chebRtol", &chebRtol, "Chebyshev: stop when the TT residual |r|/|c| falls below this");
     cmd.setOption("chebFactoredField", "no-chebFactoredField", &chebFactoredField, "Chebyshev: apply B_f as -T^T F");
+    cmd.setOption("chebBoundsTolerance", &chebBoundsTolerance, "Chebyshev: TT rounding tolerance of the Lanczos bound estimate");
+    cmd.setOption("chebBoundsSteps", &chebBoundsSteps, "Chebyshev: Lanczos steps for the bound estimate (without --chebLmin/--chebLmax)");
+    cmd.setOption("chebLminSafety", &chebLminSafety, "Chebyshev: factor on the smallest Ritz value");
     cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
     cmd.setOption("outputPrefix", &outputPrefix);

@@ -23,6 +23,8 @@
 #include <chrono>
 #include <fstream>
 #include <functional>
+#include <map>
+#include <algorithm>
 #include <memory>
 #include <sstream>
 
@@ -284,7 +286,10 @@ inline Eigen::MatrixXd elementBlock(const TTMatrix &matrix, const std::array<siz
 struct StructuredLocalOperator
 {
   std::array<size_t, 4> cells, nbIn, nbOut;
-  std::function<Eigen::MatrixXd(size_t v, const Eigen::MatrixXd &rhs)> local;   // v = i + n_ux j; rhs: nlocIn x m
+  // local map for element class v = c + nClass (i + n_ux j): c the x-width class, (i, j) the velocity cell
+  std::function<Eigen::MatrixXd(size_t v, const Eigen::MatrixXd &rhs)> local;   // rhs: nlocIn x m
+  std::vector<size_t> xClass;   // class of each x cell (empty: one class)
+  size_t nClass = 1;
 
   TTVector8 apply(const TTVector8 &z, double tolerance) const
   {
@@ -305,8 +310,9 @@ struct StructuredLocalOperator
       T = std::move(next);
     }
     Eigen::MatrixXd Z = Eigen::Map<Eigen::MatrixXd>(T.data(), rcb, nlocIn);
-    const size_t nux = cells[2], nuz = cells[3], nv = nux * nuz;
-    // all local solutions W_v = G_v^{-1} Z^T (nloc x rcb), stacked; their span has dimension k <= nloc
+    const size_t nux = cells[2], nuz = cells[3], nC = nClass, nv = nC * nux * nuz;
+    auto classOf = [&](size_t cx) { return xClass.empty() ? size_t(0) : xClass[cx]; };
+    // all local results W_v (nlocOut x rcb) for every (x class, velocity cell), stacked; their span has dimension <= nlocOut
     Eigen::MatrixXd Wall(nlocOut, nv * rcb);
     for (size_t v = 0; v < nv; ++v) Wall.middleCols(v * rcb, rcb) = local(v, Z.transpose());
     Eigen::BDCSVD<Eigen::MatrixXd> svd(Wall, Eigen::ComputeThinU);
@@ -344,15 +350,31 @@ struct StructuredLocalOperator
     // cell cores: c_ux carries i in the rank; c_uz slice j for block i is zc3[:, j, :] C_(i,j)^T, C_v = U^T W_v
     Size8 outSizes = z.sizes(); for (size_t m = 0; m < 4; ++m) outSizes[4 + m] = nbOut[m];
     TTVector8 y(outSizes);
-    y.cores[0] = zc[0]; y.cores[1] = zc[1];
-    const size_t r2 = zc[2].sizes(0), r3 = zc[2].sizes(2);
-    y.cores[2].resize({r2, nux, nux * r3}); y.cores[2].fill_with_zeros();
+    // cell cores: c_x routes each cell to its class block; c_t and c_ux carry (class, i) in the rank; the c_uz slice j
+    // of block (c, i) is zc3[:, j, :] C_(c,i,j)^T with C_v = U^T W_v
+    const size_t nx = cells[0], nt = cells[1];
+    const size_t r1 = zc[0].sizes(2), r2 = zc[1].sizes(2), r3 = zc[2].sizes(2);
+    y.cores[0].resize({1, nx, nC * r1}); y.cores[0].fill_with_zeros();
+    {
+      auto out = y.cores[0].view(); auto in = zc[0].const_view();
+      for (size_t cx = 0; cx < nx; ++cx)
+        for (size_t q = 0; q < r1; ++q) out({0, cx, classOf(cx) * r1 + q}) = in({0, cx, q});
+    }
+    y.cores[1].resize({nC * r1, nt, nC * r2}); y.cores[1].fill_with_zeros();
+    {
+      auto out = y.cores[1].view(); auto in = zc[1].const_view();
+      for (size_t c = 0; c < nC; ++c)
+        for (size_t ct = 0; ct < nt; ++ct)
+          for (size_t q = 0; q < r2; ++q) for (size_t p = 0; p < r1; ++p) out({c * r1 + p, ct, c * r2 + q}) = in({p, ct, q});
+    }
+    y.cores[2].resize({nC * r2, nux, nC * nux * r3}); y.cores[2].fill_with_zeros();
     {
       auto out = y.cores[2].view(); auto in = zc[2].const_view();
-      for (size_t i = 0; i < nux; ++i)
-        for (size_t q = 0; q < r3; ++q) for (size_t p = 0; p < r2; ++p) out({p, i, i * r3 + q}) = in({p, i, q});
+      for (size_t c = 0; c < nC; ++c)
+        for (size_t i = 0; i < nux; ++i)
+          for (size_t q = 0; q < r3; ++q) for (size_t p = 0; p < r2; ++p) out({c * r2 + p, i, (c + nC * i) * r3 + q}) = in({p, i, q});
     }
-    y.cores[3].resize({nux * r3, nuz, size_t(k)}); y.cores[3].fill_with_zeros();
+    y.cores[3].resize({nC * nux * r3, nuz, size_t(k)}); y.cores[3].fill_with_zeros();
     {
       auto out = y.cores[3].view(); auto in = zc[3].const_view();
       Eigen::MatrixXd slice(r3, rcb);
@@ -360,11 +382,12 @@ struct StructuredLocalOperator
       {
         for (size_t q = 0; q < rcb; ++q) for (size_t p = 0; p < r3; ++p) slice(p, q) = in({p, j, q});
         for (size_t i = 0; i < nux; ++i)
-        {
-          const size_t v = i + nux * j;
-          const Eigen::MatrixXd block = slice * (U.transpose() * Wall.middleCols(v * rcb, rcb)).transpose();  // r3 x k
-          for (Eigen::Index q = 0; q < k; ++q) for (size_t p = 0; p < r3; ++p) out({i * r3 + p, j, size_t(q)}) = block(p, q);
-        }
+          for (size_t c = 0; c < nC; ++c)
+          {
+            const size_t v = c + nC * (i + nux * j), row0 = (c + nC * i) * r3;
+            const Eigen::MatrixXd block = slice * (U.transpose() * Wall.middleCols(v * rcb, rcb)).transpose();  // r3 x k
+            for (Eigen::Index q = 0; q < k; ++q) for (size_t p = 0; p < r3; ++p) out({row0 + p, j, size_t(q)}) = block(p, q);
+          }
       }
     }
     for (size_t m = 0; m < 4; ++m)
@@ -380,44 +403,204 @@ struct StructuredLocalOperator
   }
 };
 
-/// Element blocks of a four-mode TT matrix at (0, 0, i, j) for every velocity cell; checks they do not vary with x, t.
-inline std::vector<Eigen::MatrixXd> velocityCellBlocks(const TTMatrix &M, const std::array<size_t, 4> &cells,
-                                                       const std::array<size_t, 4> &nbR, const std::array<size_t, 4> &nbC,
-                                                       const std::string &name)
+/// A dense block of a four-mode TT matrix: rows rowIdx[d], cols colIdx[d] in each mode (first mode fastest).
+inline Eigen::MatrixXd tensorBlock(const TTMatrix &matrix, const std::array<std::vector<size_t>, 4> &rowIdx,
+                                   const std::array<std::vector<size_t>, 4> &colIdx)
 {
+  std::vector<Eigen::MatrixXd> partial(1, Eigen::MatrixXd::Ones(1, 1));
+  for (size_t d = 0; d < 4; ++d)
+  {
+    const auto &core = matrix.cores[d]; auto v = core.const_view();
+    const size_t rl = core.sizes(0), rr = core.sizes(3), nr = rowIdx[d].size(), nc = colIdx[d].size();
+    std::vector<Eigen::MatrixXd> next(rr, Eigen::MatrixXd::Zero(partial[0].rows() * nr, partial[0].cols() * nc));
+    for (size_t b = 0; b < rr; ++b)
+      for (size_t a = 0; a < rl; ++a)
+      {
+        const auto &P = partial[a];
+        for (size_t j = 0; j < nc; ++j)
+          for (size_t i = 0; i < nr; ++i)
+          {
+            const double value = v({a, rowIdx[d][i], colIdx[d][j], b});
+            if (value != 0.0) next[b].block(i * P.rows(), j * P.cols(), P.rows(), P.cols()) += value * P;
+          }
+      }
+    partial = std::move(next);
+  }
+  return partial[0];
+}
+
+/// x-width classes of the x cells (cells of equal width share element blocks); t must be uniform.
+struct ElementClasses
+{
+  std::vector<size_t> xClass, representative;   // class of each x cell; first x cell of each class
+  size_t nClass = 0;
+  explicit ElementClasses(const std::vector<Axis> &axes)
+  {
+    const auto &xv = axes[0].vertices; std::vector<double> widths;
+    for (size_t c = 0; c + 1 < xv.size(); ++c)
+    {
+      const double h = xv[c + 1] - xv[c]; size_t k = 0;
+      while (k < widths.size() && std::abs(widths[k] - h) > 1e-12 * h) ++k;
+      if (k == widths.size()) { widths.push_back(h); representative.push_back(c); }
+      xClass.push_back(k);
+    }
+    nClass = widths.size();
+    const auto &tv = axes[1].vertices;
+    for (size_t c = 0; c + 1 < tv.size(); ++c)
+      if (std::abs((tv[c + 1] - tv[c]) - (tv[1] - tv[0])) > 1e-12 * (tv[1] - tv[0]))
+        throw std::invalid_argument("Schur-Chebyshev: the t mesh must be uniform");
+  }
+};
+
+/// Element blocks (rows nbR, cols nbC per axis, cell-blocked) for every (x class, velocity cell), index
+/// c + nClass (i + n_ux j); checked against another element of the same class (last x cell of the class, last t cell).
+inline std::vector<Eigen::MatrixXd> classBlocks(const TTMatrix &M, const std::array<size_t, 4> &cells, const ElementClasses &ec,
+                                                const std::array<size_t, 4> &nbR, const std::array<size_t, 4> &nbC,
+                                                const std::string &name)
+{
+  auto cellIdx = [](size_t c, size_t nb) { std::vector<size_t> v(nb); for (size_t b = 0; b < nb; ++b) v[b] = c * nb + b; return v; };
+  auto block = [&](const std::array<size_t, 4> &c) {
+    std::array<std::vector<size_t>, 4> r, k;
+    for (size_t d = 0; d < 4; ++d) { r[d] = cellIdx(c[d], nbR[d]); k[d] = cellIdx(c[d], nbC[d]); }
+    return tensorBlock(M, r, k);
+  };
   std::vector<Eigen::MatrixXd> blocks; double worst = 0.0;
   for (size_t j = 0; j < cells[3]; ++j)
     for (size_t i = 0; i < cells[2]; ++i)
-    {
-      blocks.push_back(elementBlock(M, nbR, nbC, {0, 0, i, j}));
-      Eigen::MatrixXd other = elementBlock(M, nbR, nbC, {cells[0] - 1, cells[1] - 1, i, j});
-      worst = std::max(worst, (other - blocks.back()).norm() / blocks.back().norm());
-    }
-  std::cout << "structured " << name << " velocity_cells=" << blocks.size() << " block=" << blocks[0].rows() << "x"
-            << blocks[0].cols() << " max_x_t_variation=" << worst << '\n';
-  if (worst > 1e-8) throw std::invalid_argument("structured " + name + ": element blocks vary with the x or t cell (graded mesh?)");
+      for (size_t c = 0; c < ec.nClass; ++c)
+      {
+        blocks.push_back(block({ec.representative[c], 0, i, j}));
+        size_t last = ec.representative[c];
+        for (size_t cx = 0; cx < cells[0]; ++cx) if (ec.xClass[cx] == c) last = cx;
+        Eigen::MatrixXd other = block({last, cells[1] - 1, i, j});
+        worst = std::max(worst, (other - blocks.back()).norm() / blocks.back().norm());
+      }
+  std::cout << "structured " << name << " x_classes=" << ec.nClass << " velocity_cells=" << cells[2] * cells[3]
+            << " block=" << blocks[0].rows() << "x" << blocks[0].cols() << " max_within_class_variation=" << worst << '\n';
+  if (worst > 1e-8) throw std::invalid_argument("structured " + name + ": element blocks vary within an x-width class");
   return blocks;
 }
 
-inline StructuredLocalOperator structuredGramInverse(const TTMatrix &G4, const std::array<size_t, 4> &cells, const std::array<size_t, 4> &nb)
+inline StructuredLocalOperator structuredGramInverse(const TTMatrix &G4, const std::array<size_t, 4> &cells, const ElementClasses &ec,
+                                                     const std::array<size_t, 4> &nb,
+                                                     std::shared_ptr<std::vector<Eigen::LLT<Eigen::MatrixXd>>> &factorsOut)
 {
-  auto blocks = velocityCellBlocks(G4, cells, nb, nb, "G^-1");
+  auto blocks = classBlocks(G4, cells, ec, nb, nb, "G^-1");
   auto factors = std::make_shared<std::vector<Eigen::LLT<Eigen::MatrixXd>>>();
   for (const auto &Gv : blocks)
   {
     factors->emplace_back(0.5 * (Gv + Gv.transpose()));
     if (factors->back().info() != Eigen::Success) throw std::runtime_error("structured G^-1: G_v not SPD");
   }
-  return {cells, nb, nb, [factors](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*factors)[v].solve(rhs)); }};
+  factorsOut = factors;
+  StructuredLocalOperator op{cells, nb, nb, [factors](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*factors)[v].solve(rhs)); }};
+  op.xClass = ec.xClass; op.nClass = ec.nClass;
+  return op;
 }
 
-/// B (or B^T) for an element-local block (the field block): local matrices per velocity cell.
-inline StructuredLocalOperator structuredBlock(const TTMatrix &B4, const std::array<size_t, 4> &cells,
+/// B (or B^T) for an element-local block (the field block): local matrices per element class.
+inline StructuredLocalOperator structuredBlock(const TTMatrix &B4, const std::array<size_t, 4> &cells, const ElementClasses &ec,
                                                const std::array<size_t, 4> &nbRow, const std::array<size_t, 4> &nbCol, bool transpose)
 {
-  auto blocks = std::make_shared<std::vector<Eigen::MatrixXd>>(velocityCellBlocks(B4, cells, nbRow, nbCol, transpose ? "B_f^T" : "B_f"));
-  if (transpose) return {cells, nbRow, nbCol, [blocks](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*blocks)[v].transpose() * rhs); }};
-  return {cells, nbCol, nbRow, [blocks](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*blocks)[v] * rhs); }};
+  auto blocks = std::make_shared<std::vector<Eigen::MatrixXd>>(classBlocks(B4, cells, ec, nbRow, nbCol, transpose ? "B_f^T" : "B_f"));
+  StructuredLocalOperator op = transpose
+    ? StructuredLocalOperator{cells, nbRow, nbCol, [blocks](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*blocks)[v].transpose() * rhs); }}
+    : StructuredLocalOperator{cells, nbCol, nbRow, [blocks](size_t v, const Eigen::MatrixXd &rhs) { return Eigen::MatrixXd((*blocks)[v] * rhs); }};
+  op.xClass = ec.xClass; op.nClass = ec.nClass;
+  return op;
+}
+
+/// Jacobi diagonal of S = B^T G^{-1} B for each trial block, as full vectors in the cells-first layout (setup only).
+/// A trial dof's diagonal entry is the sum over the elements it touches of e^T B_K^T G_K^{-1} B_K e, which depends on K
+/// only through its class, its velocity cell, and which of its faces exist; one local computation per distinct key.
+inline std::vector<Eigen::VectorXd> jacobiDiagonal(const System &system, const std::vector<Size8> &trialSizes,
+                                                   const std::array<size_t, 4> &cells, const std::array<size_t, 4> &nbT,
+                                                   const ElementClasses &ec,
+                                                   const std::vector<Eigen::LLT<Eigen::MatrixXd>> &Gfactors)
+{
+  const size_t nt = trialSizes.size();
+  std::vector<Eigen::VectorXd> diag(nt);
+  for (size_t b = 0; b < nt; ++b)
+  {
+    const Size8 &sz = trialSizes[b];
+    size_t total = 1; for (size_t m = 0; m < 8; ++m) total *= sz[m];
+    diag[b] = Eigen::VectorXd::Zero(total);
+    std::array<size_t, 8> stride; stride[0] = 1; for (size_t m = 1; m < 8; ++m) stride[m] = stride[m - 1] * sz[m - 1];
+    std::array<bool, 4> face;
+    for (size_t d = 0; d < 4; ++d) face[d] = sz[4 + d] == 1 && cells[d] > 1 && sz[d] == cells[d] - 1;
+    std::map<std::vector<size_t>, Eigen::VectorXd> cache;
+    for (size_t cz = 0; cz < cells[3]; ++cz)
+      for (size_t cu = 0; cu < cells[2]; ++cu)
+        for (size_t ct = 0; ct < cells[1]; ++ct)
+          for (size_t cx = 0; cx < cells[0]; ++cx)
+          {
+            const std::array<size_t, 4> c{cx, ct, cu, cz};
+            // local trial entries per mode: (cell-or-face index, basis index)
+            std::array<std::vector<std::pair<size_t, size_t>>, 4> loc;
+            std::vector<size_t> key{ec.xClass[cx], cu, cz};
+            for (size_t d = 0; d < 4; ++d)
+            {
+              if (face[d])
+              {
+                const bool left = c[d] > 0, right = c[d] + 1 < cells[d];
+                if (left) loc[d].push_back({c[d] - 1, 0});
+                if (right) loc[d].push_back({c[d], 0});
+                key.push_back(size_t(left) + 2 * size_t(right));
+              }
+              else for (size_t bb = 0; bb < sz[4 + d]; ++bb) loc[d].push_back({c[d], bb});
+            }
+            auto it = cache.find(key);
+            if (it == cache.end())
+            {
+              std::array<std::vector<size_t>, 4> rows, cols;
+              for (size_t d = 0; d < 4; ++d)
+              {
+                for (size_t bb = 0; bb < nbT[d]; ++bb) rows[d].push_back(c[d] * nbT[d] + bb);
+                for (const auto &e : loc[d]) cols[d].push_back(face[d] ? e.first : e.first * sz[4 + d] + e.second);
+              }
+              const Eigen::MatrixXd E = tensorBlock(system.matrix({0, b + 1}), rows, cols);
+              const size_t v = ec.xClass[cx] + ec.nClass * (cu + cells[2] * cz);
+              const Eigen::MatrixXd GE = Gfactors[v].solve(E);
+              it = cache.emplace(key, (E.array() * GE.array()).colwise().sum().transpose()).first;
+            }
+            const Eigen::VectorXd &local = it->second;
+            size_t q = 0;
+            for (const auto &e3 : loc[3]) for (const auto &e2 : loc[2]) for (const auto &e1 : loc[1]) for (const auto &e0 : loc[0])
+            {
+              const size_t g = e0.first * stride[0] + e1.first * stride[1] + e2.first * stride[2] + e3.first * stride[3] +
+                               e0.second * stride[4] + e1.second * stride[5] + e2.second * stride[6] + e3.second * stride[7];
+              diag[b](g) += local(q++);
+            }
+          }
+  }
+  return diag;
+}
+
+/// Rank-one Kronecker approximation of a diagonal (cells-first layout): log d fitted by main effects over the 8 modes.
+inline TTMatrix8 kroneckerInverseDiagonal(const Eigen::VectorXd &d, const Size8 &sz, double &medianRelErr, double &maxRelErr)
+{
+  std::array<size_t, 8> stride; stride[0] = 1; for (size_t m = 1; m < 8; ++m) stride[m] = stride[m - 1] * sz[m - 1];
+  const Eigen::ArrayXd L = d.array().log(); const double mean = L.mean();
+  std::array<Eigen::VectorXd, 8> eff;
+  for (size_t m = 0; m < 8; ++m) eff[m] = Eigen::VectorXd::Zero(sz[m]);
+  for (Eigen::Index g = 0; g < L.size(); ++g)
+    for (size_t m = 0; m < 8; ++m) eff[m]((g / stride[m]) % sz[m]) += L(g);
+  for (size_t m = 0; m < 8; ++m) eff[m] = eff[m] / double(L.size() / sz[m]) - Eigen::VectorXd::Constant(sz[m], mean);
+  std::vector<double> rel(L.size());
+  for (Eigen::Index g = 0; g < L.size(); ++g)
+  {
+    double fit = mean; for (size_t m = 0; m < 8; ++m) fit += eff[m]((g / stride[m]) % sz[m]);
+    rel[g] = std::abs(std::exp(fit) / d(g) - 1.0);
+  }
+  std::nth_element(rel.begin(), rel.begin() + rel.size() / 2, rel.end()); medianRelErr = rel[rel.size() / 2];
+  maxRelErr = *std::max_element(rel.begin(), rel.end());
+  boba::Array<host_matrix, 8> factors;
+  for (size_t m = 0; m < 8; ++m)
+  {
+    factors[m] = host_matrix({sz[m], sz[m]}); factors[m].fill_with_zeros(); auto v = factors[m].view();
+    for (size_t i = 0; i < sz[m]; ++i) v({i, i}) = std::exp(-(mean / 8.0 + eff[m](i)));
+  }
+  return boba::make_ttm_from_matrices<8, host_space, double>(factors);
 }
 
 struct ChebyshevOptions
@@ -425,6 +608,8 @@ struct ChebyshevOptions
   double lmin = 0, lmax = 0, tolerance = 1e-5, operatorTolerance = 1e-12, rtol = 0.0;
   bool factoredField = false;   // apply B_f as -T^T F (pays off when rank(B_f) >> rank(T))
   bool structuredField = true;  // apply B_f and B_f^T element-locally per velocity cell (no rank multiplication)
+  int boundsSteps = 30;          // TT Lanczos steps for the spectrum bounds when lmin/lmax are not given
+  double boundsTolerance = 1e-4, lminSafety = 0.8;
   int iterations = 200, every = 10;
   std::string kroneckerFile;
 };
@@ -463,18 +648,31 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
 {
   using clock = std::chrono::steady_clock;
   auto seconds = [](clock::time_point t) { return std::chrono::duration<double>(clock::now() - t).count(); };
-  if (!(opt.lmin > 0) || !(opt.lmax > opt.lmin)) throw std::invalid_argument("Chebyshev needs spectrum bounds 0 < lmin < lmax");
   auto t0 = clock::now();
   auto sys = assembleCellsFirst(axes, h, qOverM, Ex, By, opt.operatorTolerance, system.names);
   std::cout << "cells_first";
   for (size_t j = 0; j < sys.B.size(); ++j) std::cout << " B_" << system.names[j + 1] << " ranks=" << sys.B[j].ranks_string();
   std::cout << " assembly_seconds=" << seconds(t0) << '\n';
   std::array<size_t, 4> nbT = sys.nbTest;
-  auto Ginv = structuredGramInverse(system.matrix({0, 0}), sys.cells, nbT);
+  const ElementClasses ec(axes);
+  std::shared_ptr<std::vector<Eigen::LLT<Eigen::MatrixXd>>> Gfactors;
+  auto Ginv = structuredGramInverse(system.matrix({0, 0}), sys.cells, ec, nbT, Gfactors);
   std::array<size_t, 4> nbF; for (size_t d = 0; d < 4; ++d) nbF[d] = sys.trialSizes[0][4 + d];
-  auto Bf = structuredBlock(system.matrix({0, 1}), sys.cells, nbT, nbF, false);
-  auto BfT = structuredBlock(system.matrix({0, 1}), sys.cells, nbT, nbF, true);
-  const auto Minv = readKroneckerJacobi(opt.kroneckerFile, sys.trialSizes);
+  auto Bf = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false);
+  auto BfT = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, true);
+  std::vector<TTMatrix8> Minv;
+  if (!opt.kroneckerFile.empty()) Minv = readKroneckerJacobi(opt.kroneckerFile, sys.trialSizes);
+  else
+  {
+    const auto tj = clock::now();
+    const auto diag = jacobiDiagonal(system, sys.trialSizes, sys.cells, nbT, ec, *Gfactors);
+    for (size_t j = 0; j < diag.size(); ++j)
+    {
+      double med, mx; Minv.push_back(kroneckerInverseDiagonal(diag[j], sys.trialSizes[j], med, mx));
+      std::cout << "kronecker_jacobi block=" << system.names[j + 1] << " |d_K/d - 1| median=" << med << " max=" << mx << '\n';
+    }
+    std::cout << "kronecker_jacobi seconds=" << seconds(tj) << '\n';
+  }
   const double tol = opt.tolerance;
   auto l = toCellsFirst(rhs(0), sys.testSizes, opt.operatorTolerance);
   auto e = Ginv.apply(l, opt.operatorTolerance);                 // G^{-1} l
@@ -502,9 +700,48 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
     x[j] = zero_tt_vector<8>(sys.trialSizes[j]);
   }
   const double cNorm = std::sqrt(cNorm2);
+  // S applied to a trial block vector: out_j = B_j^T G^{-1} sum_i B_i v_i
+  auto applyS = [&](const std::vector<TTVector8> &v, double t) {
+    TTVector8 z = applyB(0, v[0], t);
+    for (size_t j = 1; j < nt; ++j) { z += applyB(j, v[j], t); DpgBoba::round(z, t); }
+    const TTVector8 y = Ginv.apply(z, t);
+    std::vector<TTVector8> out(nt);
+    for (size_t j = 0; j < nt; ++j) out[j] = applyBT(j, y, t);
+    return out;
+  };
+  auto dot = [&](const std::vector<TTVector8> &a, const std::vector<TTVector8> &b) {
+    double sum = 0; for (size_t j = 0; j < nt; ++j) sum += a[j].inner_product(b[j]); return sum;
+  };
+  double lmin = opt.lmin, lmax = opt.lmax;
+  if (!(lmin > 0) || !(lmax > lmin))
+  {
+    // spectrum of M^{-1} S from the coefficients of a short TT PCG run (Lanczos), at a loose rounding tolerance
+    const auto tb = clock::now(); const double bt = opt.boundsTolerance;
+    std::vector<TTVector8> rr = c, zz(nt), pp(nt);
+    for (size_t j = 0; j < nt; ++j) { zz[j] = Minv[j] * rr[j]; DpgBoba::round(zz[j], bt); }
+    pp = zz; double rz = dot(rr, zz), alphaPrev = 0, betaPrev = 0;
+    std::vector<double> dd, ee;
+    for (int k = 0; k < opt.boundsSteps; ++k)
+    {
+      auto q = applyS(pp, bt);
+      const double alpha = rz / dot(pp, q);
+      for (size_t j = 0; j < nt; ++j) { auto aq = q[j]; aq *= -alpha; rr[j] += aq; DpgBoba::round(rr[j], bt); zz[j] = Minv[j] * rr[j]; DpgBoba::round(zz[j], bt); }
+      const double rzNew = dot(rr, zz), beta = rzNew / rz;
+      dd.push_back(1.0 / alpha + (k > 0 ? betaPrev / alphaPrev : 0.0)); ee.push_back(std::sqrt(std::abs(beta)) / alpha);
+      for (size_t j = 0; j < nt; ++j) { pp[j] *= beta; pp[j] += zz[j]; DpgBoba::round(pp[j], bt); }
+      rz = rzNew; alphaPrev = alpha; betaPrev = beta;
+    }
+    const size_t m = dd.size();
+    Eigen::MatrixXd Tm = Eigen::MatrixXd::Zero(m, m);
+    for (size_t i = 0; i < m; ++i) { Tm(i, i) = dd[i]; if (i + 1 < m) Tm(i, i + 1) = Tm(i + 1, i) = ee[i]; }
+    const Eigen::VectorXd ritz = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd>(Tm).eigenvalues();
+    lmin = ritz(0) * opt.lminSafety; lmax = ritz(m - 1) * 1.05;
+    std::cout << "spectrum Ritz [" << ritz(0) << ", " << ritz(m - 1) << "] from " << m << " TT Lanczos steps (tol " << bt
+              << ", " << seconds(tb) << " s); using [" << lmin << ", " << lmax << "] kappa " << lmax / lmin << '\n';
+  }
   std::cout << "schur_chebyshev setup_seconds=" << seconds(t0) << " G^-1 l ranks=" << e.ranks_string()
-            << " lmin=" << opt.lmin << " lmax=" << opt.lmax << " tol=" << tol << '\n';
-  const double theta = 0.5 * (opt.lmax + opt.lmin), delta = 0.5 * (opt.lmax - opt.lmin), sigma = theta / delta;
+            << " lmin=" << lmin << " lmax=" << lmax << " tol=" << tol << '\n';
+  const double theta = 0.5 * (lmax + lmin), delta = 0.5 * (lmax - lmin), sigma = theta / delta;
   double rho = 1.0 / sigma;
   for (size_t j = 0; j < nt; ++j) { r[j] = c[j]; d[j] = Minv[j] * r[j]; d[j] *= 1.0 / theta; DpgBoba::round(d[j], tol); }
   TTVector8 y;
