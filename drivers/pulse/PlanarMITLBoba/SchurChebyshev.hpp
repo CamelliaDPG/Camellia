@@ -292,6 +292,9 @@ struct StructuredLocalOperator
   std::function<Eigen::MatrixXd(size_t v, const Eigen::MatrixXd &rhs)> local;   // rhs: nlocIn x m
   std::vector<size_t> xClass;   // class of each x cell (empty: one class)
   size_t nClass = 1;
+  // optional cell weights per group g (replacing the classes when set): the element map of element (c_x, c_t, i, j) is
+  // sum_g xWeight[g](c_x) tWeight[g](c_t) local(g + nGroup (i + n_ux j)); the classes are the case of 0/1 x weights
+  std::vector<Eigen::VectorXd> xWeight, tWeight;
 
   TTVector8 apply(const TTVector8 &z, double tolerance, const TTMatrix8 *post = nullptr) const
   {
@@ -312,13 +315,33 @@ struct StructuredLocalOperator
       T = std::move(next);
     }
     Eigen::MatrixXd Z = Eigen::Map<Eigen::MatrixXd>(T.data(), rcb, nlocIn);
-    const size_t nux = cells[2], nuz = cells[3], nC = nClass, nv = nC * nux * nuz;
+    const bool weighted = !xWeight.empty();
+    const size_t nux = cells[2], nuz = cells[3], nC = weighted ? xWeight.size() : nClass, nv = nC * nux * nuz;
     auto classOf = [&](size_t cx) { return xClass.empty() ? size_t(0) : xClass[cx]; };
+    auto wx = [&](size_t g, size_t cx) { return weighted ? xWeight[g](cx) : (classOf(cx) == g ? 1.0 : 0.0); };
+    auto wt = [&](size_t g, size_t ct) { return weighted ? tWeight[g](ct) : 1.0; };
     // all local results W_v (nlocOut x rcb) for every (x class, velocity cell), stacked; their span has dimension <= nlocOut
+    using pclock = std::chrono::steady_clock; const auto p0 = pclock::now();
+    static const bool profile = std::getenv("PLANAR_MITL_PROFILE_STRUCTURED") != nullptr;
+    auto since = [](pclock::time_point t) { return std::chrono::duration<double>(pclock::now() - t).count(); };
     Eigen::MatrixXd Wall(nlocOut, nv * rcb);
     for (size_t v = 0; v < nv; ++v) Wall.middleCols(v * rcb, rcb) = local(v, Z.transpose());
-    Eigen::BDCSVD<Eigen::MatrixXd> svd(Wall, Eigen::ComputeThinU);
-    const auto sv = svd.singularValues();
+    const double tLocal = since(p0); const auto p1 = pclock::now();
+    // left singular vectors of the wide Wall: Householder QR of Wall^T, then the SVD of the small R^T (same U, sv)
+    Eigen::MatrixXd Uw; Eigen::VectorXd sv;
+    if (Wall.cols() > 2 * Wall.rows())
+    {
+      Eigen::HouseholderQR<Eigen::MatrixXd> qr(Wall.transpose());
+      const Eigen::MatrixXd Rt = qr.matrixQR().topRows(Wall.rows()).triangularView<Eigen::Upper>().transpose();
+      Eigen::BDCSVD<Eigen::MatrixXd> small(Rt, Eigen::ComputeThinU);
+      Uw = small.matrixU(); sv = small.singularValues();
+    }
+    else
+    {
+      Eigen::BDCSVD<Eigen::MatrixXd> svd(Wall, Eigen::ComputeThinU);
+      Uw = svd.matrixU(); sv = svd.singularValues();
+    }
+    const double tSvd = since(p1); const auto p2 = pclock::now();
     Eigen::Index k = 0;
     {
       // drop singular values below tolerance/10 of the total (the final rounding applies the tolerance itself)
@@ -326,7 +349,8 @@ struct StructuredLocalOperator
       while (k < sv.size() && tail > std::pow(0.1 * tolerance, 2) * total) { tail -= sv(k) * sv(k); ++k; }
       k = std::max<Eigen::Index>(k, 1);
     }
-    const Eigen::MatrixXd U = svd.matrixU().leftCols(k);                        // nloc x k, orthonormal
+    const Eigen::MatrixXd U = Uw.leftCols(k);                                   // nloc x k, orthonormal
+    const Eigen::MatrixXd Call = U.transpose() * Wall;                          // C_v = U^T W_v, all v
     // basis cores: TT of U^T (k x nloc) over the local modes, the k index as the left rank
     std::array<Eigen::MatrixXd, 4> basisCores; std::array<size_t, 4> kin{};
     {
@@ -342,7 +366,7 @@ struct StructuredLocalOperator
             for (size_t kk = 0; kk < K; ++kk) M(kk + K * bm, rest) = rem(kk, bm + n * rest);
         kin[m] = K;
         if (m == 3) { basisCores[m] = M; break; }
-        Eigen::JacobiSVD<Eigen::MatrixXd> s2(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::BDCSVD<Eigen::MatrixXd> s2(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
         const Eigen::Index rk = keep(s2.singularValues());
         basisCores[m] = s2.matrixU().leftCols(rk);
         rem = s2.singularValues().head(rk).asDiagonal() * s2.matrixV().leftCols(rk).transpose();
@@ -359,15 +383,22 @@ struct StructuredLocalOperator
     y.cores[0].resize({1, nx, nC * r1}); y.cores[0].fill_with_zeros();
     {
       auto out = y.cores[0].view(); auto in = zc[0].const_view();
-      for (size_t cx = 0; cx < nx; ++cx)
-        for (size_t q = 0; q < r1; ++q) out({0, cx, classOf(cx) * r1 + q}) = in({0, cx, q});
+      for (size_t g = 0; g < nC; ++g)
+        for (size_t cx = 0; cx < nx; ++cx)
+        {
+          const double w = wx(g, cx);
+          if (w != 0.0) for (size_t q = 0; q < r1; ++q) out({0, cx, g * r1 + q}) = w * in({0, cx, q});
+        }
     }
     y.cores[1].resize({nC * r1, nt, nC * r2}); y.cores[1].fill_with_zeros();
     {
       auto out = y.cores[1].view(); auto in = zc[1].const_view();
       for (size_t c = 0; c < nC; ++c)
         for (size_t ct = 0; ct < nt; ++ct)
-          for (size_t q = 0; q < r2; ++q) for (size_t p = 0; p < r1; ++p) out({c * r1 + p, ct, c * r2 + q}) = in({p, ct, q});
+        {
+          const double w = wt(c, ct);
+          for (size_t q = 0; q < r2; ++q) for (size_t p = 0; p < r1; ++p) out({c * r1 + p, ct, c * r2 + q}) = w * in({p, ct, q});
+        }
     }
     y.cores[2].resize({nC * r2, nux, nC * nux * r3}); y.cores[2].fill_with_zeros();
     {
@@ -376,20 +407,43 @@ struct StructuredLocalOperator
         for (size_t i = 0; i < nux; ++i)
           for (size_t q = 0; q < r3; ++q) for (size_t p = 0; p < r2; ++p) out({c * r2 + p, i, (c + nC * i) * r3 + q}) = in({p, i, q});
     }
-    y.cores[3].resize({nC * nux * r3, nuz, size_t(k)}); y.cores[3].fill_with_zeros();
+    // Left-orthogonalize cores 0..2 exactly (QR) before forming core 3: their left unfolding at the 2|3 cut has at most
+    // n_x n_t n_ux rows, while the routed rank there is nC n_ux r3; core 3 is formed directly in the reduced rank.
+    Eigen::MatrixXd Rcarry = Eigen::MatrixXd::Identity(1, 1);
+    for (size_t m = 0; m < 3; ++m)
+    {
+      auto &core = y.cores[m]; auto v = core.const_view();
+      const size_t rl = core.sizes(0), n = core.sizes(1), rr = core.sizes(2), kl = Rcarry.rows();
+      Eigen::MatrixXd M = Eigen::MatrixXd::Zero(kl * n, rr);   // rows a' + kl i
+      for (size_t i = 0; i < n; ++i)
+      {
+        Eigen::MatrixXd slice(rl, rr);
+        for (size_t b = 0; b < rr; ++b) for (size_t a = 0; a < rl; ++a) slice(a, b) = v({a, i, b});
+        M.middleRows(i * kl, kl) = Rcarry * slice;
+      }
+      const Eigen::Index kq = std::min<Eigen::Index>(M.rows(), M.cols());
+      Eigen::HouseholderQR<Eigen::MatrixXd> qr(M);
+      const Eigen::MatrixXd Q = qr.householderQ() * Eigen::MatrixXd::Identity(M.rows(), kq);
+      Rcarry = qr.matrixQR().topRows(kq).triangularView<Eigen::Upper>();
+      core.resize({kl, n, size_t(kq)}); auto out = core.view();
+      for (Eigen::Index q = 0; q < kq; ++q) for (size_t i = 0; i < n; ++i) for (size_t a = 0; a < kl; ++a) out({a, i, size_t(q)}) = Q(a + kl * i, q);
+    }
+    const size_t k2 = Rcarry.rows();
+    y.cores[3].resize({k2, nuz, size_t(k)}); y.cores[3].fill_with_zeros();
     {
       auto out = y.cores[3].view(); auto in = zc[3].const_view();
       Eigen::MatrixXd slice(r3, rcb);
       for (size_t j = 0; j < nuz; ++j)
       {
         for (size_t q = 0; q < rcb; ++q) for (size_t p = 0; p < r3; ++p) slice(p, q) = in({p, j, q});
+        Eigen::MatrixXd acc = Eigen::MatrixXd::Zero(k2, k);
         for (size_t i = 0; i < nux; ++i)
           for (size_t c = 0; c < nC; ++c)
           {
             const size_t v = c + nC * (i + nux * j), row0 = (c + nC * i) * r3;
-            const Eigen::MatrixXd block = slice * (U.transpose() * Wall.middleCols(v * rcb, rcb)).transpose();  // r3 x k
-            for (Eigen::Index q = 0; q < k; ++q) for (size_t p = 0; p < r3; ++p) out({row0 + p, j, size_t(q)}) = block(p, q);
+            acc.noalias() += (Rcarry.middleCols(row0, r3) * slice) * Call.middleCols(v * rcb, rcb).transpose();
           }
+        for (Eigen::Index q = 0; q < k; ++q) for (size_t p = 0; p < k2; ++p) out({p, j, size_t(q)}) = acc(p, q);
       }
     }
     for (size_t m = 0; m < 4; ++m)
@@ -401,7 +455,11 @@ struct StructuredLocalOperator
           for (size_t kk = 0; kk < Kin; ++kk) out({kk, bm, q}) = basisCores[m](kk + Kin * bm, q);
     }
     if (post) y = (*post) * y;    // rank-one diagonal scaling: exact, ranks unchanged
+    const double tBuild = since(p2); const auto p3 = pclock::now();
     DpgBoba::round(y, tolerance);
+    if (profile)
+      std::cout << "structured_apply nloc " << nlocIn << "->" << nlocOut << " groups " << nC << " rcb " << rcb << " k " << k
+                << " local " << tLocal << " svd " << tSvd << " build " << tBuild << " round " << since(p3) << '\n';
     return y;
   }
 };
@@ -515,6 +573,110 @@ inline StructuredLocalOperator structuredBlock(const TTMatrix &B4, const std::ar
     : StructuredLocalOperator{cells, nbCol, nbRow, [blocks, scale](size_t v, const Eigen::MatrixXd &rhs) {
         Eigen::MatrixXd out = (*blocks)[v] * rhs; if (!scale.empty()) out *= scale[v]; return out; }};
   op.xClass = ec.xClass; op.nClass = ec.nClass;
+  return op;
+}
+
+inline Eigen::MatrixXd kroneckerApply(const std::array<Eigen::MatrixXd, 4> &A, Eigen::MatrixXd X);
+
+/// B_f (test x field; or B_f^T) with (x, t)-varying fields, element-locally.  B_f = -T^T F is a sum over transport terms
+/// tau of Kronecker products of cell-blocked 1D factors Q_d^tau = (test or derivative)^T diag(W w_d^tau) field.  The terms
+/// fall into groups sharing their x and t factors -- d_t, v_x d_x, the E_x term (profile eX eT) and the B_y terms (bX bT)
+/// -- and each shared x (t) factor splits exactly over the cells as sum_s w_s(c) Qhat_s (splitCellBasis).  So
+///   B_f,K = sum_(group, s, s') w_s(c_x) w_s'(c_t) Qhat_s (x) Qhat_s' (x) sum_(tau in group) Q_2^tau(i) (x) Q_3^tau(j),
+/// a StructuredLocalOperator with cell weights; every local map is a short sum of Kronecker products (no element blocks).
+/// scaleByMeasure: the element map divided by |K| (the scaled solver's B_f): 1/h in the x and t weights, 1/(h_ux h_uz) in
+/// the local maps.
+inline StructuredLocalOperator structuredVaryingFieldBlock(const std::vector<Axis> &axes, const LorentzFactors &h, double qOverM,
+                                                           double Ex, double By, bool transpose, bool scaleByMeasure)
+{
+  std::array<Eigen::Index, 4> cells, nq, nbT, nbF;
+  std::array<size_t, 4> cellsU;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    cells[d] = Eigen::Index(axes[d].vertices.size()) - 1; cellsU[d] = size_t(cells[d]); nq[d] = axes[d].points.size() / cells[d];
+    nbT[d] = axes[d].test.cols() / cells[d]; nbF[d] = axes[d].field.cols() / cells[d];
+  }
+  const auto &profile = fieldProfile();
+  // cell-blocked factor (test x field) for axis d: (derivative or test)^T diag(W w) field
+  auto factor = [&](size_t d, bool derivative, const Eigen::VectorXd &w) {
+    const Eigen::MatrixXd &A = derivative ? axes[d].derivative : axes[d].test;
+    return Eigen::MatrixXd(A.transpose() * (axes[d].weights.array() * w.array()).matrix().asDiagonal() * axes[d].field);
+  };
+  auto block = [&](const Eigen::MatrixXd &Q, size_t d, size_t c) { return Eigen::MatrixXd(Q.block(c * nbT[d], c * nbF[d], nbT[d], nbF[d])); };
+  struct VelocityTerm { double coefficient; Eigen::MatrixXd Q2, Q3; };
+  struct Group { Eigen::MatrixXd Q0, Q1; std::vector<VelocityTerm> terms; };
+  std::vector<Group> groups(4);
+  const Eigen::VectorXd onesX = Eigen::VectorXd::Ones(axes[0].points.size()), onesT = Eigen::VectorXd::Ones(axes[1].points.size());
+  const Eigen::VectorXd onesUx = Eigen::VectorXd::Ones(axes[2].points.size()), onesUz = Eigen::VectorXd::Ones(axes[3].points.size());
+  auto profileOr1 = [&](size_t d, int field) { return profile.varying() ? profile.values(axes[d].points, field, int(d)) : Eigen::VectorXd(d == 0 ? onesX : onesT); };
+  groups[0].Q0 = factor(0, false, onesX); groups[0].Q1 = factor(1, true, onesT);                       // d_t
+  groups[0].terms.push_back({1.0, factor(2, false, onesUx), factor(3, false, onesUz)});
+  groups[1].Q0 = factor(0, true, onesX); groups[1].Q1 = factor(1, false, onesT);                       // v_x d_x
+  groups[2].Q0 = factor(0, false, profileOr1(0, 0)); groups[2].Q1 = factor(1, false, profileOr1(1, 0)); // E_x
+  if (Ex != 0.0) groups[2].terms.push_back({qOverM * Ex, factor(2, true, onesUx), factor(3, false, onesUz)});
+  groups[3].Q0 = factor(0, false, profileOr1(0, 1)); groups[3].Q1 = factor(1, false, profileOr1(1, 1)); // B_y
+  for (Eigen::Index k = 0; k < h.left.cols(); ++k)
+  {
+    const Eigen::VectorXd vx = h.left.col(k).array() * axes[2].points.array();
+    const Eigen::VectorXd vz = h.right.col(k).array() * axes[3].points.array();
+    groups[1].terms.push_back({1.0, factor(2, false, vx), factor(3, false, h.right.col(k))});
+    if (By != 0.0)
+    {
+      groups[3].terms.push_back({-qOverM * By, factor(2, true, h.left.col(k)), factor(3, false, vz)});
+      groups[3].terms.push_back({qOverM * By, factor(2, false, vx), factor(3, true, h.right.col(k))});
+    }
+  }
+  auto width = [&](size_t d, size_t c) { return axes[d].vertices[c + 1] - axes[d].vertices[c]; };
+  // split the x and t factors over cells; one operator group per (group, s, s')
+  struct OpGroup { Eigen::VectorXd wx, wt; Eigen::MatrixXd X, T; size_t group; };
+  std::vector<OpGroup> ops;
+  for (size_t g = 0; g < groups.size(); ++g)
+  {
+    if (groups[g].terms.empty()) continue;
+    const auto sx = splitCellBasis(groups[g].Q0, cells[0], nbT[0], cells[0], nbF[0]);
+    const auto st = splitCellBasis(groups[g].Q1, cells[1], nbT[1], cells[1], nbF[1]);
+    for (size_t a = 0; a < sx.cell.size(); ++a)
+      for (size_t b = 0; b < st.cell.size(); ++b)
+      {
+        OpGroup op{sx.cell[a].diagonal(), st.cell[b].diagonal(), sx.basis[a], st.basis[b], g};
+        // the split of a block-diagonal factor has diagonal cell matrices
+        if ((sx.cell[a].norm() - op.wx.norm()) > 1e-12 * sx.cell[a].norm() || (st.cell[b].norm() - op.wt.norm()) > 1e-12 * st.cell[b].norm())
+          throw std::runtime_error("structuredVaryingFieldBlock: factor is not block diagonal over cells");
+        if (scaleByMeasure)
+        {
+          for (Eigen::Index c = 0; c < cells[0]; ++c) op.wx(c) /= width(0, size_t(c));
+          for (Eigen::Index c = 0; c < cells[1]; ++c) op.wt(c) /= width(1, size_t(c));
+        }
+        ops.push_back(op);
+      }
+  }
+  // local maps: index v = g + nG (i + n_ux j)
+  auto data = std::make_shared<std::vector<std::vector<std::array<Eigen::MatrixXd, 4>>>>();   // per v: Kronecker terms
+  const size_t nG = ops.size();
+  for (size_t j = 0; j < cellsU[3]; ++j)
+    for (size_t i = 0; i < cellsU[2]; ++i)
+      for (size_t g = 0; g < nG; ++g)
+      {
+        std::vector<std::array<Eigen::MatrixXd, 4>> terms;
+        const double scale = scaleByMeasure ? 1.0 / (width(2, i) * width(3, j)) : 1.0;
+        for (const auto &t : groups[ops[g].group].terms)
+        {
+          // B_f = -T^T F: the minus sign and the coefficient on the u_x factor
+          std::array<Eigen::MatrixXd, 4> f{ops[g].X, ops[g].T, (-t.coefficient * scale) * block(t.Q2, 2, i), block(t.Q3, 3, j)};
+          if (transpose) for (auto &m : f) m.transposeInPlace();
+          terms.push_back(f);
+        }
+        data->push_back(terms);
+      }
+  std::array<size_t, 4> nbIn, nbOut;
+  for (size_t d = 0; d < 4; ++d) { nbIn[d] = size_t(transpose ? nbT[d] : nbF[d]); nbOut[d] = size_t(transpose ? nbF[d] : nbT[d]); }
+  StructuredLocalOperator op{cellsU, nbIn, nbOut, [data](size_t v, const Eigen::MatrixXd &rhs) {
+    Eigen::MatrixXd out;
+    for (const auto &f : (*data)[v]) { Eigen::MatrixXd y = kroneckerApply(f, rhs); if (out.size() == 0) out = y; else out += y; }
+    return out; }};
+  for (const auto &o : ops) { op.xWeight.push_back(o.wx); op.tWeight.push_back(o.wt); }
+  std::cout << "structured varying-field B_f" << (transpose ? "^T" : "") << ": " << nG << " weight groups (x,t splits), "
+            << data->size() << " local maps\n";
   return op;
 }
 
@@ -917,8 +1079,8 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   // varying fields: the B_f element blocks differ across x and t, so B_f is applied in TT form; G must be the
   // field-independent N5 Gram (the graph-norm G varies with the fields, and classBlocks() rejects it)
   const bool varying = fieldProfile().varying();
-  const bool structuredField = opt.structuredField && !varying;
-  if (opt.structuredField && varying) std::cout << "varying fields: B_f applied in TT form\n";
+  const bool structuredField = opt.structuredField;
+  if (varying) std::cout << "varying fields: B_f " << (structuredField ? "element-local with (x, t) cell weights" : "applied in TT form") << "\n";
   std::array<size_t, 4> nbF; for (size_t d = 0; d < 4; ++d) nbF[d] = sys.trialSizes[0][4 + d];
   if (opt.scaled && (!opt.kroneckerFile.empty() || opt.jacobiTolerance > 0))
     throw std::invalid_argument("scaled Schur-Chebyshev uses the in-solver Kronecker Jacobi (no --chebKronecker, --chebJacobiTolerance)");
@@ -967,7 +1129,13 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
     GinvScaled = structuredGramInverse(system.matrix({0, 0}), sys.cells, ec, nbT, Gfactors, measure);
     Gsolve = [Gfactors](size_t v, const Eigen::MatrixXd &E) { return Eigen::MatrixXd((*Gfactors)[v].solve(E)); };
   }
-  if (structuredField)
+  if (structuredField && varying)
+  {
+    Bf = structuredVaryingFieldBlock(axes, h, qOverM, Ex, By, false, false);
+    BfT = structuredVaryingFieldBlock(axes, h, qOverM, Ex, By, true, false);
+    BfScaled = structuredVaryingFieldBlock(axes, h, qOverM, Ex, By, false, true);
+  }
+  else if (structuredField)
   {
     Bf = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false);
     BfT = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, true);
