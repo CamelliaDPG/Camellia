@@ -295,6 +295,9 @@ struct StructuredLocalOperator
   // optional cell weights per group g (replacing the classes when set): the element map of element (c_x, c_t, i, j) is
   // sum_g xWeight[g](c_x) tWeight[g](c_t) local(g + nGroup (i + n_ux j)); the classes are the case of 0/1 x weights
   std::vector<Eigen::VectorXd> xWeight, tWeight;
+  // skip the joint SVD of the local results and use the full local output basis (when the joint span is nearly full,
+  // e.g. B_f with varying fields: k ~ 0.8 nloc); the final rounding truncates
+  bool fullLocalBasis = false;
 
   TTVector8 apply(const TTVector8 &z, double tolerance, const TTMatrix8 *post = nullptr) const
   {
@@ -329,7 +332,16 @@ struct StructuredLocalOperator
     const double tLocal = since(p0); const auto p1 = pclock::now();
     // left singular vectors of the wide Wall: Householder QR of Wall^T, then the SVD of the small R^T (same U, sv)
     Eigen::MatrixXd Uw; Eigen::VectorXd sv;
-    if (Wall.cols() > 2 * Wall.rows())
+    // default: the full local output basis for every structured operator -- the joint SVD of the stacked local results
+    // cost ~nloc^2 (groups x velocity cells x rank) per apply and the final TT rounding truncates anyway (4^4 p = 3:
+    // 60 -> 16 s constant fields, 94 -> 20 s varying); PLANAR_MITL_COMPRESS_LOCAL_BASIS restores the SVD
+    static const bool fullForAll = std::getenv("PLANAR_MITL_COMPRESS_LOCAL_BASIS") == nullptr;
+    const bool full = fullLocalBasis || fullForAll;
+    if (full)
+    {
+      Uw = Eigen::MatrixXd::Identity(nlocOut, nlocOut); sv = Eigen::VectorXd::Ones(nlocOut);
+    }
+    else if (Wall.cols() > 2 * Wall.rows())
     {
       Eigen::HouseholderQR<Eigen::MatrixXd> qr(Wall.transpose());
       const Eigen::MatrixXd Rt = qr.matrixQR().topRows(Wall.rows()).triangularView<Eigen::Upper>().transpose();
@@ -343,6 +355,8 @@ struct StructuredLocalOperator
     }
     const double tSvd = since(p1); const auto p2 = pclock::now();
     Eigen::Index k = 0;
+    if (full) k = Eigen::Index(nlocOut);
+    else
     {
       // drop singular values below tolerance/10 of the total (the final rounding applies the tolerance itself)
       const double total = sv.squaredNorm(); double tail = total;
@@ -350,7 +364,7 @@ struct StructuredLocalOperator
       k = std::max<Eigen::Index>(k, 1);
     }
     const Eigen::MatrixXd U = Uw.leftCols(k);                                   // nloc x k, orthonormal
-    const Eigen::MatrixXd Call = U.transpose() * Wall;                          // C_v = U^T W_v, all v
+    const Eigen::MatrixXd Call = full ? Wall : Eigen::MatrixXd(U.transpose() * Wall);   // C_v = U^T W_v, all v
     // basis cores: TT of U^T (k x nloc) over the local modes, the k index as the left rank
     std::array<Eigen::MatrixXd, 4> basisCores; std::array<size_t, 4> kin{};
     {
@@ -650,31 +664,51 @@ inline StructuredLocalOperator structuredVaryingFieldBlock(const std::vector<Axi
         ops.push_back(op);
       }
   }
-  // local maps: index v = g + nG (i + n_ux j)
-  auto data = std::make_shared<std::vector<std::vector<std::array<Eigen::MatrixXd, 4>>>>();   // per v: Kronecker terms
+  // local maps, index v = g + nG (i + n_ux j): X (x) T (x) V with the velocity part summed over the group's terms,
+  // V = sum_tau -c_tau Q_3^tau(j) (x) Q_2^tau(i) (one dense matrix on the joint (b_ux, b_uz) index)
+  struct LocalMap { Eigen::MatrixXd XT, V; };
+  auto data = std::make_shared<std::vector<LocalMap>>();
   const size_t nG = ops.size();
+  auto kron = [](const Eigen::MatrixXd &outer, const Eigen::MatrixXd &inner) {
+    Eigen::MatrixXd K(outer.rows() * inner.rows(), outer.cols() * inner.cols());
+    for (Eigen::Index a = 0; a < outer.rows(); ++a) for (Eigen::Index b = 0; b < outer.cols(); ++b)
+      K.block(a * inner.rows(), b * inner.cols(), inner.rows(), inner.cols()) = outer(a, b) * inner;
+    return K;
+  };
   for (size_t j = 0; j < cellsU[3]; ++j)
     for (size_t i = 0; i < cellsU[2]; ++i)
       for (size_t g = 0; g < nG; ++g)
       {
-        std::vector<std::array<Eigen::MatrixXd, 4>> terms;
         const double scale = scaleByMeasure ? 1.0 / (width(2, i) * width(3, j)) : 1.0;
+        Eigen::MatrixXd V;
         for (const auto &t : groups[ops[g].group].terms)
         {
-          // B_f = -T^T F: the minus sign and the coefficient on the u_x factor
-          std::array<Eigen::MatrixXd, 4> f{ops[g].X, ops[g].T, (-t.coefficient * scale) * block(t.Q2, 2, i), block(t.Q3, 3, j)};
-          if (transpose) for (auto &m : f) m.transposeInPlace();
-          terms.push_back(f);
+          // B_f = -T^T F: the minus sign and the coefficient
+          const Eigen::MatrixXd term = (-t.coefficient * scale) * kron(block(t.Q3, 3, j), block(t.Q2, 2, i));
+          if (V.size() == 0) V = term; else V += term;
         }
-        data->push_back(terms);
+        LocalMap map{kron(ops[g].T, ops[g].X), V};
+        if (transpose) { map.XT.transposeInPlace(); map.V.transposeInPlace(); }
+        data->push_back(map);
       }
   std::array<size_t, 4> nbIn, nbOut;
   for (size_t d = 0; d < 4; ++d) { nbIn[d] = size_t(transpose ? nbT[d] : nbF[d]); nbOut[d] = size_t(transpose ? nbF[d] : nbT[d]); }
   StructuredLocalOperator op{cellsU, nbIn, nbOut, [data](size_t v, const Eigen::MatrixXd &rhs) {
-    Eigen::MatrixXd out;
-    for (const auto &f : (*data)[v]) { Eigen::MatrixXd y = kroneckerApply(f, rhs); if (out.size() == 0) out = y; else out += y; }
+    const auto &L = (*data)[v];
+    // (V (x) XT) rhs with XT = T (x) X on the leading (b_x, b_t) index and V on the joint (b_ux, b_uz) index: two GEMMs
+    const Eigen::Index nIn01 = L.XT.cols(), nOut01 = L.XT.rows(), n23 = L.V.cols(), nOut23 = L.V.rows(), m = rhs.cols();
+    Eigen::Map<const Eigen::MatrixXd> R(rhs.data(), nIn01, n23 * m);
+    const Eigen::MatrixXd w = L.XT * R;                                 // nOut01 x (n23 m)
+    Eigen::MatrixXd out(nOut01 * nOut23, m);
+    for (Eigen::Index c = 0; c < m; ++c)
+    {
+      Eigen::Map<const Eigen::MatrixXd> W(w.data() + c * nOut01 * n23, nOut01, n23);
+      Eigen::Map<Eigen::MatrixXd> O(out.col(c).data(), nOut01, nOut23);
+      O.noalias() = W * L.V.transpose();
+    }
     return out; }};
   for (const auto &o : ops) { op.xWeight.push_back(o.wx); op.tWeight.push_back(o.wt); }
+  op.fullLocalBasis = !transpose;
   std::cout << "structured varying-field B_f" << (transpose ? "^T" : "") << ": " << nG << " weight groups (x,t splits), "
             << data->size() << " local maps\n";
   return op;
