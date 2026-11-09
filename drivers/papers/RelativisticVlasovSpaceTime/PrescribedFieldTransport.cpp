@@ -19,6 +19,7 @@
 // Reported per slab: relative L^2 error of f, max |f - f_exact|, min f, and the relative error in the integral of f.
 //
 
+#include <sstream>
 #include "Camellia.h"
 #include "ConfigurationSpaceFormulationTrivial.h"
 #include "RelativisticVlasovSpaceTimeFormulation.h"
@@ -144,7 +145,8 @@ int main(int argc, char *argv[])
   int H1Order = 3, deltaP = 2, xElements = 8, tElements = 1, uxElements = 8, uzElements = 8, numSlabs = 3;
   double tWidth = 0.1, Ex = 2.0, By = 0.0, L2WeightGraph = 1e6;
   double uMax = 3.0, sigmaX = 0.1, sigmaU = 0.5;
-  bool useL2TestNorm = false, useSerendipity = true, printPoints = false;
+  bool useL2TestNorm = false, useSerendipity = true, printPoints = false, separableGraphTestNorm = false;
+  double L2WeightGraphTransportScale = 0.0; std::string accelerationBoundsString = "";
   cmdp.setOption("p", &H1Order, "H1 order (field degree p-1, trace degree p)");
   cmdp.setOption("dp", &deltaP, "test-space enrichment");
   cmdp.setOption("xElements", &xElements);
@@ -160,6 +162,9 @@ int main(int argc, char *argv[])
   cmdp.setOption("By", &By, "uniform magnetic field (scaled)");
   cmdp.setOption("L2WeightGraph", &L2WeightGraph, "alpha, the weight of the L^2 term in the graph norm");
   cmdp.setOption("useL2TestNorm", "useGraphTestNorm", &useL2TestNorm);
+  cmdp.setOption("L2WeightGraphTransportScale", &L2WeightGraphTransportScale, "transport-scale L^2 weight constant C (0: fixed alpha)");
+  cmdp.setOption("L2WeightGraphAccelerationBounds", &accelerationBoundsString, "comma-separated |a| bounds (u_x, u_z)");
+  cmdp.setOption("separableGraphTestNorm", "fullGraphTestNorm", &separableGraphTestNorm, "direction-separable graph norm (no cross terms)");
   cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipity);
   cmdp.setOption("printPoints", "noPrintPoints", &printPoints, "print computed and exact f along a line (diagnostic)");
   if (cmdp.parse(argc, argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) return -1;
@@ -187,7 +192,11 @@ int main(int argc, char *argv[])
   Teuchos::RCP<VlasovSpaceTimeFormulation> form =
     Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m, configForm, spatialMeshTopo, temporalVertices, ux, uz, none,
                                                             H1Order, deltaP, 0, testIP, L2WeightGraph,
-                                                            useSerendipity ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL));
+                                                            useSerendipity ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL,
+                                                            0, false, 0.0, {}, L2WeightGraphTransportScale,
+                                                            [&]{ std::vector<double> b; std::stringstream in(accelerationBoundsString); std::string item;
+                                                                 while (std::getline(in, item, ',')) if (!item.empty()) b.push_back(std::stod(item));
+                                                                 return b; }(), separableGraphTestNorm));
   FunctionPtr fInitial = Teuchos::rcp(new PulseInitialCondition(f0));
   form->setInitialAndInflowConditions(fInitial, Function::zero());
 
@@ -209,6 +218,8 @@ int main(int argc, char *argv[])
               << (useL2TestNorm ? std::string("L^2 test norm") : "graph test norm, alpha = " + std::to_string(L2WeightGraph))
               << ", " << (useSerendipity ? "Serendipity" : "full tensor") << ", mesh " << xElements << " x " << tElements << " x "
               << uxElements << " x " << uzElements << ", Ex = " << Ex << ", By = " << By << "\n";
+    std::cout << "test norm: " << (useL2TestNorm ? "L2" : (separableGraphTestNorm ? "separable graph" : "graph")) << ", alpha " << L2WeightGraph
+              << ", transport scale C " << L2WeightGraphTransportScale << ", acceleration bounds '" << accelerationBoundsString << "'\n";
     std::cout << "slab   t_end   rel_L2_err   max_err      min_f        rel_mass_err  vlasov_dofs\n";
   }
   for (int slab=0; slab<numSlabs; slab++)

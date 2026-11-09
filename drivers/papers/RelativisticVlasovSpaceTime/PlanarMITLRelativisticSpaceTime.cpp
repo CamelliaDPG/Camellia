@@ -1114,7 +1114,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const double L2WeightGraphMeshScale,
                                                               const std::vector<double> &L2WeightGraphDirectionScales,
                                                               const double L2WeightGraphTransportScale,
-                                                              const std::vector<double> &L2WeightGraphAccelerationBounds)
+                                                              const std::vector<double> &L2WeightGraphAccelerationBounds,
+                                                              const bool separableGraphTestNorm = false)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -1156,7 +1157,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  L2WeightGraphMeshScale,
                                                                  L2WeightGraphDirectionScales,
                                                                  L2WeightGraphTransportScale,
-                                                                 L2WeightGraphAccelerationBounds));
+                                                                 L2WeightGraphAccelerationBounds, separableGraphTestNorm));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -1311,6 +1312,10 @@ int main(int argc, char *argv[])
                    "L2WeightGraph + C [ (v_x,max(K) / h_x)^2 + (1 / h_t)^2 + sum_u (a_u,max / h_u)^2 ], with v = u / gamma bounded over the element's "
                    "velocity box and a_u,max from L2WeightGraphAccelerationBounds.  Exclusive with the other L2WeightGraph scalings.");
     std::string L2WeightGraphAccelerationBoundsString = "";
+    bool separableGraphTestNorm = false;
+    cmdp.setOption("separableGraphTestNorm", "fullGraphTestNorm", &separableGraphTestNorm,
+                   "Direction-separable graph norm: sum_d s_d(K)^2 |dw/dz_d|^2 (s = v_x,max(K), 1, acceleration bounds) instead of "
+                   "|beta . grad w|^2 (no cross terms; exactly invertible element Grams).  Needs --L2WeightGraphAccelerationBounds.");
     cmdp.setOption("L2WeightGraphAccelerationBounds", &L2WeightGraphAccelerationBoundsString,
                    "Comma-separated bounds on |a| in the velocity directions (u_x, u_y), for L2WeightGraphTransportScale; omitted ones are zero.");
     
@@ -1767,7 +1772,7 @@ int main(int argc, char *argv[])
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
                                      L2WeightGraphMeshScale, L2WeightGraphDirectionScales,
-                                     L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds);
+                                     L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds, separableGraphTestNorm);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
 
