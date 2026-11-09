@@ -1540,6 +1540,8 @@ int main(int argc, char *argv[])
             memoryFields.push_back({"max_rss_gb",    timingString(MPIWrapper::max(comm, checkpoint.currentGB))});
             memoryFields.push_back({"sum_rss_gb",    timingString(MPIWrapper::sum(comm, checkpoint.currentGB))});
             memoryFields.push_back({"max_hwm_gb",    timingString(MPIWrapper::max(comm, checkpoint.highWaterMarkGB))});
+            memoryFields.push_back({"max_footprint_gb", timingString(MPIWrapper::max(comm, checkpoint.footprintGB))});
+            memoryFields.push_back({"sum_footprint_gb", timingString(MPIWrapper::sum(comm, checkpoint.footprintGB))});
             timing.logDuration("vlasov_memory", 0.0, memoryFields);
           }
         }
