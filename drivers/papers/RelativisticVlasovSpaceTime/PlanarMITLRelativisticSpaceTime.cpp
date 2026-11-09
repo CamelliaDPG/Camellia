@@ -1115,7 +1115,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const std::vector<double> &L2WeightGraphDirectionScales,
                                                               const double L2WeightGraphTransportScale,
                                                               const std::vector<double> &L2WeightGraphAccelerationBounds,
-                                                              const bool separableGraphTestNorm = false)
+                                                              const bool separableGraphTestNorm = false,
+                                                              const int numSpatialRefinements = 0)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -1123,10 +1124,26 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
   if (useGradedSpatialMesh)
   {
     spatialMeshTopo = MeshFactory::geometricGradedIntervalMeshTopology(x0, x0+xWidth, xElements);
+    if (numSpatialRefinements > 0)
+    {
+      // bisect every element of the graded mesh numSpatialRefinements times (same grading ratios, h_min halved each time)
+      std::set<double> vertexSet {x0, x0+xWidth};
+      double right = x0 + xWidth;
+      for (int i=2; i<=xElements; i++) { right = (x0 + right) / 2.0; vertexSet.insert(right); } // as geometricGradedIntervalMeshTopology
+      std::vector<double> vertices(vertexSet.begin(), vertexSet.end());
+      for (int r=0; r<numSpatialRefinements; r++)
+      {
+        std::vector<double> refined;
+        for (int i=0; i+1<(int)vertices.size(); i++) { refined.push_back(vertices[i]); refined.push_back((vertices[i] + vertices[i+1]) / 2.0); }
+        refined.push_back(vertices.back());
+        vertices = refined;
+      }
+      spatialMeshTopo = MeshFactory::intervalMeshTopology(vertices);
+    }
   }
   else
   {
-    spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements, usePeriodicBCs);
+    spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements << std::max(0, numSpatialRefinements), usePeriodicBCs);
   }
   
   std::vector<double> temporalVertices(tElements + 1);
@@ -1350,6 +1367,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("tElements", &tElements);
     cmdp.setOption("vElements", &vElements);
     cmdp.setOption("numUniformRefinements", &numUniformRefinements, "number of uniform refinements applied to the base mesh");
+    int numSpatialRefinements = 0;
+    cmdp.setOption("numSpatialRefinements", &numSpatialRefinements,
+                   "bisect every spatial element of the base mesh this many times (x only; before numUniformRefinements)");
 
     bool gradedVelocityMesh = false;
     double velocityCoreWidthFactor = 1.0, velocityCoreHalfWidthFactor = 3.0, velocityGrowthRatio = 2.0;
@@ -1624,6 +1644,7 @@ int main(int argc, char *argv[])
                         {"v_elements", gradedVelocityMesh ? std::string("graded") : std::to_string(vElements)},
                         {"t_elements", std::to_string(tElements)},
                         {"uniform_refinements", std::to_string(numUniformRefinements)},
+                        {"spatial_refinements", std::to_string(numSpatialRefinements)},
                         {"p", std::to_string(H1Order)},
                         {"dp", std::to_string(delta_k)},
                         {"num_time_slabs", std::to_string(numTimeSlabs)},
@@ -1772,7 +1793,8 @@ int main(int argc, char *argv[])
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
                                      L2WeightGraphMeshScale, L2WeightGraphDirectionScales,
-                                     L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds, separableGraphTestNorm);
+                                     L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds, separableGraphTestNorm,
+                                     numSpatialRefinements);
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
 
