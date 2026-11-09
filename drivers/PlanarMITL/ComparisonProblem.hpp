@@ -33,6 +33,10 @@ struct ComparisonProblem
   double beta0 = 0, betaMax = 0.5, c = 1, qOverM = -1, Ex = -1, By = 0.5;
   double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0, alphaTransportScale = 0;
   std::string accelerationBounds = "auto";
+  // (x, t)-varying prescribed fields (tensor backend; PlanarMITLBoba::FieldProfile): E_x = Ex (1 + v cos(pi x/L)) (1 + v t/T),
+  // B_y = By (1 + v (2x/L - 1)) (1 - 0.6 v t/T); 0: constant
+  double fieldVariation = 0;
+  bool separableTestNorm = false;   // N5: direction-separable graph norm (tensor backend)
   bool schurChebyshev = false, chebFactoredField = false;
   double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0, chebBoundsTolerance = 1e-4, chebLminSafety = 0.8;
   int chebBoundsSteps = 30;
@@ -84,6 +88,12 @@ struct ComparisonProblem
                   "+ 1/h_t^2 + (a_x/h_ux)^2 + (a_z/h_uz)^2 ] (Camellia --L2WeightGraphTransportScale); exclusive with alphaMeshScale");
     cmd.setOption("accelerationBounds", &accelerationBounds,
                   "Bounds a_x,a_z on |acceleration| for alphaTransportScale, or \"auto\": |q/m| (|Ex| + v_max |By|), |q/m| v_max |By|");
+    cmd.setOption("fieldVariation", &fieldVariation,
+                  "Tensor backend: relative (x, t) variation v of the prescribed fields, E_x = Ex (1 + v cos(pi x/L))(1 + v t/T), "
+                  "B_y = By (1 + v (2x/L - 1))(1 - 0.6 v t/T); 0: constant fields");
+    cmd.setOption("separableTestNorm", "graphTestNorm", &separableTestNorm,
+                  "Tensor backend: N5 direction-separable graph norm alpha_K |w|^2 + sum_d s_d^2 |d_d w|^2, s = (v_x,max, 1, a_x, a_z) "
+                  "(the acceleration bounds; needs alphaTransportScale)");
     cmd.setOption("tolerance", &tolerance); cmd.setOption("svdTolerance", &svdTolerance);
     cmd.setOption("coefficientTolerance", &coefficientTolerance);
     cmd.setOption("maxSweeps", &maxSweeps); cmd.setOption("kickrank", &kickrank);
@@ -143,7 +153,8 @@ struct ComparisonProblem
         !(c > 0) || !(betaMax > 0 && betaMax < 1) || !(beta0 > -1 && beta0 < betaMax) ||
         !(xWidth > 0) || !(tWidth > 0) || !(alpha > 0) || (alphaMeshScale > 0 && alphaTransportScale > 0) ||
         quadratureDegree < 2*(p+dp) || sampleDegree < 2*std::max(2,p-1) ||
-        !(tolerance > 0) || !(svdTolerance > 0) || !(coefficientTolerance > 0))
+        !(tolerance > 0) || !(svdTolerance > 0) || !(coefficientTolerance > 0) ||
+        fieldVariation < 0 || fieldVariation >= 1 || (separableTestNorm && !(alphaTransportScale > 0)))
       throw std::invalid_argument("Invalid comparison parameters or underintegrated mass/error quadrature");
     return 0;
   }
@@ -159,8 +170,8 @@ struct ComparisonProblem
       for (int i = 0; i < 2 && std::getline(in, item, ','); ++i) a[i] = std::stod(item);
       return a;
     }
-    const double vMax = betaMax * c;
-    return {std::abs(qOverM) * (std::abs(Ex) + vMax * std::abs(By)), std::abs(qOverM) * vMax * std::abs(By)};
+    const double vMax = betaMax * c, eMax = std::pow(1 + fieldVariation, 2), bMax = 1 + fieldVariation;
+    return {std::abs(qOverM) * (std::abs(Ex) * eMax + vMax * std::abs(By) * bMax), std::abs(qOverM) * vMax * std::abs(By) * bMax};
   }
   std::array<int,4> counts() const
   {
@@ -231,7 +242,7 @@ struct ComparisonProblem
             {"graded_velocity",double(gradedVelocity)},{"uniform_refinements",double(uniformRefinements)},{"p",p},{"dp",dp},
             {"quadrature_degree",quadratureDegree},{"sample_degree",sampleDegree},
             {"beta0",beta0},{"betaMax",betaMax},{"c",c},{"q_over_m",qOverM},
-            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},
+            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},{"field_variation",fieldVariation},{"separable_test_norm",double(separableTestNorm)},
             {"target",tolerance},{"svd_tolerance",svdTolerance},{"coefficient_tolerance",coefficientTolerance},
             {"max_sweeps",maxSweeps},{"kickrank",kickrank},{"max_rank",maxRank},
             {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"split_x",double(splitX)},{"inf_sup_enrichment",double(infSupEnrichment)},{"riesz_svd_tolerance",rieszSvdTolerance}};

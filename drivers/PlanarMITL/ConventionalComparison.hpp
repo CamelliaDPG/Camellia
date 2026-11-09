@@ -27,6 +27,8 @@ inline int runConventionalComparison(int argc, char **argv)
   ComparisonProblem problem;
   int parsed = problem.parse(argc, argv, "vanilla");
   if (parsed) return parsed == 2 ? 0 : parsed;
+  if (problem.fieldVariation != 0 || problem.separableTestNorm)
+    throw std::invalid_argument("conventional comparison: --fieldVariation and --separableTestNorm are tensor-backend options");
   if (Teuchos::GlobalMPISession::getNProc() != 1)
     throw std::invalid_argument("Matched comparison currently requires one MPI rank");
   const auto start = ComparisonClock::now();

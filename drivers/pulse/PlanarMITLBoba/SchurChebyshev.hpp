@@ -149,13 +149,15 @@ inline CellsFirstSystem assembleCellsFirst(const std::vector<Axis> &axes, const 
   };
   // transport (rows: quadrature points, cols: test), as in assemble()
   TTMatrix8 transport; bool first = true;
-  auto term = [&](size_t derivativeAxis, const Eigen::VectorXd &ux, const Eigen::VectorXd &uz, double coefficient) {
+  const auto &profile = fieldProfile();
+  auto term = [&](size_t derivativeAxis, const Eigen::VectorXd &ux, const Eigen::VectorXd &uz, double coefficient, int field = -1) {
     std::array<CellBasisSplit, 4> f;
     for (size_t d = 0; d < 4; ++d)
     {
       Eigen::VectorXd weight = Eigen::VectorXd::Ones(axes[d].points.size());
       if (d == 2) weight = ux;
       if (d == 3) weight = uz;
+      if (field >= 0 && profile.varying() && d < 2) weight.array() *= profile.values(axes[d].points, field, int(d)).array();
       if (d == 0) weight *= coefficient;
       f[d] = evaluated(d, d == derivativeAxis ? axes[d].derivative : axes[d].test, weight, nbT[d]);
     }
@@ -164,13 +166,13 @@ inline CellsFirstSystem assembleCellsFirst(const std::vector<Axis> &axes, const 
   const Eigen::VectorXd onesX = Eigen::VectorXd::Ones(axes[2].points.size());
   const Eigen::VectorXd onesZ = Eigen::VectorXd::Ones(axes[3].points.size());
   term(1, onesX, onesZ, 1.0);
-  if (Ex != 0.0) term(2, onesX, onesZ, qOverM * Ex);
+  if (Ex != 0.0) term(2, onesX, onesZ, qOverM * Ex, 0);
   for (Eigen::Index k = 0; k < h.left.cols(); ++k)
   {
     Eigen::VectorXd vx = h.left.col(k).array() * axes[2].points.array();
     Eigen::VectorXd vz = h.right.col(k).array() * axes[3].points.array();
     term(0, vx, h.right.col(k), 1.0);
-    if (By != 0.0) { term(2, h.left.col(k), vz, -qOverM * By); term(3, vx, h.right.col(k), qOverM * By); }
+    if (By != 0.0) { term(2, h.left.col(k), vz, -qOverM * By, 1); term(3, vx, h.right.col(k), qOverM * By, 1); }
   }
   // field block: B_f = -T^T F
   {
@@ -516,13 +518,138 @@ inline StructuredLocalOperator structuredBlock(const TTMatrix &B4, const std::ar
   return op;
 }
 
+/// Y = (A_3 (x) A_2 (x) A_1 (x) A_0) X for X with nloc = prod n_d rows (local index b_0 fastest) and any number of columns.
+inline Eigen::MatrixXd kroneckerApply(const std::array<Eigen::MatrixXd, 4> &A, Eigen::MatrixXd X)
+{
+  const Eigen::Index m = X.cols();
+  std::array<Eigen::Index, 4> n; Eigen::Index nloc = 1;
+  for (size_t d = 0; d < 4; ++d) { n[d] = A[d].cols(); nloc *= n[d]; }
+  if (X.rows() != nloc) throw std::invalid_argument("kroneckerApply: size mismatch");
+  Eigen::Index stride = 1;
+  for (size_t d = 0; d < 4; ++d)
+  {
+    // slabs of stride x n_d (column-major, contiguous): Y_o = X_o A_d^T
+    const Eigen::Index nOut = A[d].rows(), slabs = nloc * m / (stride * n[d]);
+    Eigen::MatrixXd Y(nloc / n[d] * nOut, m);
+    for (Eigen::Index o = 0; o < slabs; ++o)
+    {
+      Eigen::Map<const Eigen::MatrixXd> Xo(X.data() + o * stride * n[d], stride, n[d]);
+      Eigen::Map<Eigen::MatrixXd> Yo(Y.data() + o * stride * nOut, stride, nOut);
+      Yo.noalias() = Xo * A[d].transpose();
+    }
+    nloc = nloc / n[d] * nOut; n[d] = nOut; X = std::move(Y);
+    stride *= nOut;
+  }
+  return X;
+}
+
+/// The N5 (direction-separable) Gram's element inverse by fast diagonalization.  With the reference 1D test mass and
+/// stiffness (M^, K^) and K^ V = M^ V Lambda, V^T M^ V = I (the same on every cell of every axis),
+///   G_K = prod_e (h_e/2) [alpha_K M^ (x4) + sum_d s_d(K)^2 (2/h_d)^2 K^_d (x) M^_others],
+///   G_K^{-1} = prod_e (2/h_e) V (x4) diag(1 / (alpha_K + sum_d s_d(K)^2 (2/h_d)^2 lambda_{d, b_d})) V^T (x4),
+/// so the element inverse is a diagonal in a basis shared by all elements: no factors are stored, and G_K depends on the
+/// element only through its widths and velocity cell (never on the fields).  Element classes as for the structured G^-1.
+struct SeparableGramInverseData
+{
+  std::array<Eigen::MatrixXd, 4> V, VT;
+  std::vector<Eigen::VectorXd> diagonal;   // per class v = c + nClass (i + n_ux j): prod(2/h) / (alpha_K + sum ...)
+};
+
+inline std::shared_ptr<SeparableGramInverseData> separableGramInverseData(const std::vector<Axis> &axes, const std::array<size_t, 4> &cells,
+                                                                          const ElementClasses &ec, const std::array<size_t, 4> &nb,
+                                                                          const TestNormWeight &norm)
+{
+  auto data = std::make_shared<SeparableGramInverseData>();
+  std::array<Eigen::VectorXd, 4> lambda;
+  auto width = [&](size_t d, size_t c) { return axes[d].vertices[c + 1] - axes[d].vertices[c]; };
+  for (size_t d = 0; d < 4; ++d)
+  {
+    const Eigen::Index nq = axes[d].points.size() / cells[d], n = nb[d];
+    auto refBlock = [&](const Eigen::MatrixXd &A, size_t c, double power) {
+      const Eigen::MatrixXd Ac = A.block(c * nq, c * n, nq, n);
+      const Eigen::VectorXd w = axes[d].weights.segment(c * nq, nq);
+      return Eigen::MatrixXd((Ac.transpose() * w.asDiagonal() * Ac) * std::pow(width(d, c) / 2.0, power));
+    };
+    const Eigen::MatrixXd Mref = refBlock(axes[d].test, 0, -1.0), Kref = refBlock(axes[d].derivative, 0, 1.0);
+    const size_t last = cells[d] - 1;
+    const double dM = (refBlock(axes[d].test, last, -1.0) - Mref).norm() / Mref.norm();
+    const double dK = (refBlock(axes[d].derivative, last, 1.0) - Kref).norm() / Kref.norm();
+    if (dM > 1e-10 || dK > 1e-10) throw std::runtime_error("separable G^-1: reference 1D matrices differ between cells");
+    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(0.5 * (Kref + Kref.transpose()), 0.5 * (Mref + Mref.transpose()));
+    if (ges.info() != Eigen::Success) throw std::runtime_error("separable G^-1: generalized eigenproblem failed");
+    data->V[d] = ges.eigenvectors(); data->VT[d] = data->V[d].transpose(); lambda[d] = ges.eigenvalues();
+  }
+  Eigen::MatrixXd vmax2; vxMaxSquaredTerms(axes, norm.c, &vmax2);
+  const size_t nloc = nb[0] * nb[1] * nb[2] * nb[3];
+  for (size_t j = 0; j < cells[3]; ++j)
+    for (size_t i = 0; i < cells[2]; ++i)
+      for (size_t c = 0; c < ec.nClass; ++c)
+      {
+        const std::array<double, 4> h{width(0, ec.representative[c]), width(1, 0), width(2, i), width(3, j)};
+        const std::array<double, 4> s2{vmax2(i, j), 1.0, std::pow(norm.accelerationBounds[0], 2), std::pow(norm.accelerationBounds[1], 2)};
+        double aK = norm.alpha;
+        if (norm.transportScale > 0)
+          aK += norm.transportScale * (s2[0] / (h[0] * h[0]) + 1.0 / (h[1] * h[1]) + s2[2] / (h[2] * h[2]) + s2[3] / (h[3] * h[3]));
+        else if (norm.meshScale > 0) aK = std::max(norm.alpha, norm.meshScale / (h[0] * h[0]));
+        const double jac = 16.0 / (h[0] * h[1] * h[2] * h[3]);
+        Eigen::VectorXd dgl(nloc);
+        for (size_t b3 = 0; b3 < nb[3]; ++b3)
+          for (size_t b2 = 0; b2 < nb[2]; ++b2)
+            for (size_t b1 = 0; b1 < nb[1]; ++b1)
+              for (size_t b0 = 0; b0 < nb[0]; ++b0)
+              {
+                const double denominator = aK + 4.0 * (s2[0] * lambda[0](b0) / (h[0] * h[0]) + s2[1] * lambda[1](b1) / (h[1] * h[1]) +
+                                                       s2[2] * lambda[2](b2) / (h[2] * h[2]) + s2[3] * lambda[3](b3) / (h[3] * h[3]));
+                dgl(b0 + nb[0] * (b1 + nb[1] * (b2 + nb[2] * b3))) = jac / denominator;
+              }
+        data->diagonal.push_back(dgl);
+      }
+  return data;
+}
+
+inline Eigen::MatrixXd separableGramSolve(const SeparableGramInverseData &data, size_t v, const Eigen::MatrixXd &rhs)
+{
+  Eigen::MatrixXd w = kroneckerApply(data.VT, rhs);
+  w.array().colwise() *= data.diagonal[v].array();
+  return kroneckerApply(data.V, w);
+}
+
+inline StructuredLocalOperator separableGramInverse(std::shared_ptr<SeparableGramInverseData> data, const std::array<size_t, 4> &cells,
+                                                    const ElementClasses &ec, const std::array<size_t, 4> &nb, std::vector<double> scale = {})
+{
+  StructuredLocalOperator op{cells, nb, nb, [data, scale](size_t v, const Eigen::MatrixXd &rhs) {
+    Eigen::MatrixXd out = separableGramSolve(*data, v, rhs); if (!scale.empty()) out *= scale[v]; return out; }};
+  op.xClass = ec.xClass; op.nClass = ec.nClass;
+  return op;
+}
+
+/// Check of the fast-diagonalization inverse against the assembled four-mode Gram, for the first, a middle and the last
+/// element class: max |G_K X - I| / |I| with X the computed inverse.
+inline double checkSeparableGramInverse(const SeparableGramInverseData &data, const TTMatrix &G4, const std::array<size_t, 4> &cells,
+                                        const ElementClasses &ec, const std::array<size_t, 4> &nb)
+{
+  auto cellIdx = [](size_t c, size_t n) { std::vector<size_t> v(n); for (size_t b = 0; b < n; ++b) v[b] = c * n + b; return v; };
+  const size_t nv = ec.nClass * cells[2] * cells[3];
+  double worst = 0;
+  for (size_t v : {size_t(0), nv / 2, nv - 1})
+  {
+    const size_t c = v % ec.nClass, i = (v / ec.nClass) % cells[2], j = v / (ec.nClass * cells[2]);
+    const std::array<size_t, 4> cell{ec.representative[c], 0, i, j};
+    std::array<std::vector<size_t>, 4> idx; for (size_t d = 0; d < 4; ++d) idx[d] = cellIdx(cell[d], nb[d]);
+    const Eigen::MatrixXd G = tensorBlock(G4, idx, idx);
+    const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(G.rows(), G.cols());
+    worst = std::max(worst, (G * separableGramSolve(data, v, I) - I).norm() / I.norm());
+  }
+  return worst;
+}
+
 /// Jacobi diagonal of S = B^T G^{-1} B for each trial block, as full vectors in the cells-first layout (setup only).
 /// A trial dof's diagonal entry is the sum over the elements it touches of e^T B_K^T G_K^{-1} B_K e, which depends on K
 /// only through its class, its velocity cell, and which of its faces exist; one local computation per distinct key.
 inline std::vector<Eigen::VectorXd> jacobiDiagonal(const System &system, const std::vector<Size8> &trialSizes,
                                                    const std::array<size_t, 4> &cells, const std::array<size_t, 4> &nbT,
                                                    const ElementClasses &ec,
-                                                   const std::vector<Eigen::LLT<Eigen::MatrixXd>> &Gfactors)
+                                                   const std::function<Eigen::MatrixXd(size_t, const Eigen::MatrixXd &)> &Gsolve)
 {
   const size_t nt = trialSizes.size();
   std::vector<Eigen::VectorXd> diag(nt);
@@ -566,7 +693,7 @@ inline std::vector<Eigen::VectorXd> jacobiDiagonal(const System &system, const s
               }
               const Eigen::MatrixXd E = tensorBlock(system.matrix({0, b + 1}), rows, cols);
               const size_t v = ec.xClass[cx] + ec.nClass * (cu + cells[2] * cz);
-              const Eigen::MatrixXd GE = Gfactors[v].solve(E);
+              const Eigen::MatrixXd GE = Gsolve(v, E);
               it = cache.emplace(key, (E.array() * GE.array()).colwise().sum().transpose()).first;
             }
             const Eigen::VectorXd &local = it->second;
@@ -713,7 +840,7 @@ inline std::string maxRank(const TTVector8 &v) { size_t r = 0; for (size_t d = 1
 /// (block 0: eps = G^{-1}(l - B x); blocks 1..: trial).
 inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &rhs, const std::vector<Axis> &axes,
                                        const LorentzFactors &h, double qOverM, double Ex, double By,
-                                       const ChebyshevOptions &opt)
+                                       const ChebyshevOptions &opt, const TestNormWeight &norm = TestNormWeight())
 {
   using clock = std::chrono::steady_clock;
   auto seconds = [](clock::time_point t) { return std::chrono::duration<double>(clock::now() - t).count(); };
@@ -724,11 +851,12 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   std::cout << " assembly_seconds=" << seconds(t0) << '\n';
   std::array<size_t, 4> nbT = sys.nbTest;
   const ElementClasses ec(axes);
-  std::shared_ptr<std::vector<Eigen::LLT<Eigen::MatrixXd>>> Gfactors;
-  auto Ginv = structuredGramInverse(system.matrix({0, 0}), sys.cells, ec, nbT, Gfactors);
+  // varying fields: the B_f element blocks differ across x and t, so B_f is applied in TT form; G must be the
+  // field-independent N5 Gram (the graph-norm G varies with the fields, and classBlocks() rejects it)
+  const bool varying = fieldProfile().varying();
+  const bool structuredField = opt.structuredField && !varying;
+  if (opt.structuredField && varying) std::cout << "varying fields: B_f applied in TT form\n";
   std::array<size_t, 4> nbF; for (size_t d = 0; d < 4; ++d) nbF[d] = sys.trialSizes[0][4 + d];
-  auto Bf = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false);
-  auto BfT = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, true);
   if (opt.scaled && (!opt.kroneckerFile.empty() || opt.jacobiTolerance > 0))
     throw std::invalid_argument("scaled Schur-Chebyshev uses the in-solver Kronecker Jacobi (no --chebKronecker, --chebJacobiTolerance)");
   // element measure |K| per local-operator index v = c + nClass (i + n_ux j)
@@ -754,14 +882,50 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
     }
     Winv = boba::make_ttm_from_matrices<8, host_space, double>(f);
   }
-  auto GinvScaled = structuredGramInverse(system.matrix({0, 0}), sys.cells, ec, nbT, Gfactors, measure);
-  auto BfScaled = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false, invMeasure);
+  StructuredLocalOperator Ginv, GinvScaled, Bf, BfT, BfScaled;
+  std::function<Eigen::MatrixXd(size_t, const Eigen::MatrixXd &)> Gsolve;
+  if (norm.separable)
+  {
+    const auto ts = clock::now();
+    auto sep = separableGramInverseData(axes, sys.cells, ec, nbT, norm);
+    const double check = checkSeparableGramInverse(*sep, system.matrix({0, 0}), sys.cells, ec, nbT);
+    std::cout << "separable G^-1 (fast diagonalization) classes=" << sep->diagonal.size() << " stored_scalars="
+              << sep->diagonal.size() * sep->diagonal[0].size() << " check |G_K X - I|/|I|=" << check
+              << " seconds=" << seconds(ts) << '\n';
+    if (check > 1e-8) throw std::runtime_error("separable G^-1 does not invert the assembled Gram");
+    Ginv = separableGramInverse(sep, sys.cells, ec, nbT);
+    GinvScaled = separableGramInverse(sep, sys.cells, ec, nbT, measure);
+    Gsolve = [sep](size_t v, const Eigen::MatrixXd &E) { return separableGramSolve(*sep, v, E); };
+  }
+  else
+  {
+    std::shared_ptr<std::vector<Eigen::LLT<Eigen::MatrixXd>>> Gfactors;
+    Ginv = structuredGramInverse(system.matrix({0, 0}), sys.cells, ec, nbT, Gfactors);
+    GinvScaled = structuredGramInverse(system.matrix({0, 0}), sys.cells, ec, nbT, Gfactors, measure);
+    Gsolve = [Gfactors](size_t v, const Eigen::MatrixXd &E) { return Eigen::MatrixXd((*Gfactors)[v].solve(E)); };
+  }
+  if (structuredField)
+  {
+    Bf = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false);
+    BfT = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, true);
+    BfScaled = structuredBlock(system.matrix({0, 1}), sys.cells, ec, nbT, nbF, false, invMeasure);
+  }
+  // Jacobi diagonal: from the constant-field system when the fields vary (a preconditioner only; its element blocks are
+  // shared per class, so the diagonal costs one local computation per class)
+  std::unique_ptr<System> frozen;
+  if (varying)
+  {
+    auto &profile = fieldProfile(); const double v0 = profile.variation; profile.variation = 0;
+    frozen = std::make_unique<System>(assemble(axes, h, qOverM, Ex, By, norm, opt.operatorTolerance));
+    profile.variation = v0;
+  }
+  const System &jacobiSystem = varying ? *frozen : system;
   std::vector<TTMatrix8> Minv, Dmh;      // M^{-1} (unscaled mode) or D^{-1/2} (scaled mode)
   if (!opt.kroneckerFile.empty()) Minv = readKroneckerJacobi(opt.kroneckerFile, sys.trialSizes);
   else
   {
     const auto tj = clock::now();
-    const auto diag = jacobiDiagonal(system, sys.trialSizes, sys.cells, nbT, ec, *Gfactors);
+    const auto diag = jacobiDiagonal(jacobiSystem, sys.trialSizes, sys.cells, nbT, ec, Gsolve);
     for (size_t j = 0; j < diag.size(); ++j)
     {
       if (opt.jacobiTolerance > 0)
@@ -789,13 +953,13 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   double cNorm2 = 0;
   // B_f x = -T^T (F x),  B_f^T y = -F^T (T y)
   auto applyB = [&](size_t j, const TTVector8 &v, double t) {
-    if (j == 0 && opt.structuredField) return Bf.apply(v, t);
+    if (j == 0 && structuredField) return Bf.apply(v, t);
     if (j > 0 || !opt.factoredField) { TTVector8 out = sys.B[j] * v; DpgBoba::round(out, t); return out; }
     TTVector8 fx = sys.F * v; DpgBoba::round(fx, t);
     TTVector8 out = sys.TT * fx; out *= -1.0; DpgBoba::round(out, t); return out;
   };
   auto applyBT = [&](size_t j, const TTVector8 &v, double t) {
-    if (j == 0 && opt.structuredField) return BfT.apply(v, t);
+    if (j == 0 && structuredField) return BfT.apply(v, t);
     if (j > 0 || !opt.factoredField) { TTVector8 out = sys.BT[j] * v; DpgBoba::round(out, t); return out; }
     TTVector8 ty = sys.T * v; DpgBoba::round(ty, t);
     TTVector8 out = sys.FT * ty; out *= -1.0; DpgBoba::round(out, t); return out;
@@ -804,19 +968,19 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   // scaled mode: z~ = W^{-1} B D^{-1/2} x~ (rounded), y = G^{-1} W z~, r~ = D^{-1/2} (c - B^T y)
   std::vector<TTMatrix8> Bs(nt), BTs(nt);
   if (opt.scaled)
-    for (size_t j = 1; j < nt; ++j)
+    for (size_t j = structuredField ? 1 : 0; j < nt; ++j)
     {
       Bs[j] = Winv * (sys.B[j] * Dmh[j]); DpgBoba::round(Bs[j], opt.operatorTolerance);
       BTs[j] = Dmh[j] * sys.BT[j]; DpgBoba::round(BTs[j], opt.operatorTolerance);
     }
   auto applyBs = [&](size_t j, const TTVector8 &v, double t) {
     if (!opt.scaled) return applyB(j, v, t);
-    if (j == 0) return BfScaled.apply(Dmh[0] * v, t);
+    if (j == 0 && structuredField) return BfScaled.apply(Dmh[0] * v, t);
     TTVector8 out = Bs[j] * v; DpgBoba::round(out, t); return out;
   };
   auto applyBTs = [&](size_t j, const TTVector8 &v, double t) {
     if (!opt.scaled) return applyBT(j, v, t);
-    if (j == 0) return BfT.apply(v, t, &Dmh[0]);
+    if (j == 0 && structuredField) return BfT.apply(v, t, &Dmh[0]);
     TTVector8 out = BTs[j] * v; DpgBoba::round(out, t); return out;
   };
   auto applyGs = [&](const TTVector8 &z, double t) { return opt.scaled ? GinvScaled.apply(z, t) : Ginv.apply(z, t); };

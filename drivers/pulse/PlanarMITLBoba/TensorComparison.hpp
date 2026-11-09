@@ -165,14 +165,16 @@ inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &
       derivative[d](i) = problem.bubbleDerivative(axis.points(i),axis.vertices.front(),axis.vertices.back());
     }
   }
+  const auto &profile = fieldProfile();
   auto term = [&](size_t direction, const Eigen::VectorXd &ux,
-                  const Eigen::VectorXd &uz, double coefficient) {
+                  const Eigen::VectorXd &uz, double coefficient, int field = -1) {
     boba::Array<host_vector,4> factors;
     for (size_t d = 0; d < 4; ++d)
     {
       Eigen::VectorXd weighted = axes[d].weights.array()*(d == direction ? derivative[d] : value[d]).array();
       if (d == 2) weighted.array() *= ux.array();
       if (d == 3) weighted.array() *= uz.array();
+      if (field >= 0 && profile.varying() && d < 2) weighted.array() *= profile.values(axes[d].points, field, int(d)).array();
       Eigen::VectorXd integral = axes[d].test.transpose()*weighted;
       factors[d] = host_vector({size_t(integral.size())});
       auto view = factors[d].view();
@@ -183,7 +185,7 @@ inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &
   const Eigen::VectorXd onesX = Eigen::VectorXd::Ones(axes[2].points.size());
   const Eigen::VectorXd onesZ = Eigen::VectorXd::Ones(axes[3].points.size());
   auto source = term(1,onesX,onesZ,1);
-  if (problem.Ex != 0) source += term(2,onesX,onesZ,problem.qOverM*problem.Ex);
+  if (problem.Ex != 0) source += term(2,onesX,onesZ,problem.qOverM*problem.Ex,0);
   for (Eigen::Index k = 0; k < h.left.cols(); ++k)
   {
     Eigen::VectorXd vx = h.left.col(k).array()*axes[2].points.array();
@@ -191,8 +193,8 @@ inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &
     source += term(0,vx,h.right.col(k),1);
     if (problem.By != 0)
     {
-      source += term(2,h.left.col(k),vz,-problem.qOverM*problem.By);
-      source += term(3,vx,h.right.col(k),problem.qOverM*problem.By);
+      source += term(2,h.left.col(k),vz,-problem.qOverM*problem.By,1);
+      source += term(3,vx,h.right.col(k),problem.qOverM*problem.By,1);
     }
     DpgBoba::round(source,problem.svdTolerance);
   }
@@ -227,7 +229,15 @@ inline int runTensorComparison(int argc, char **argv)
   LorentzFactors h(axes[2],axes[3],problem.c,problem.coefficientTolerance);
   TestNormWeight norm;
   norm.alpha = problem.alpha; norm.meshScale = problem.alphaMeshScale; norm.transportScale = problem.alphaTransportScale;
-  norm.c = problem.c; norm.accelerationBounds = problem.accelerationBoundValues();
+  norm.c = problem.c; norm.accelerationBounds = problem.accelerationBoundValues(); norm.separable = problem.separableTestNorm;
+  {
+    auto &profile = fieldProfile();
+    profile.variation = problem.fieldVariation;
+    profile.x0 = vertices[0].front(); profile.x1 = vertices[0].back(); profile.t0 = vertices[1].front(); profile.t1 = vertices[1].back();
+    std::cout << "fields: Ex=" << problem.Ex << " By=" << problem.By << " variation=" << profile.variation
+              << " test_norm=" << (norm.separable ? "separable (N5)" : "graph") << " acceleration_bounds=" << norm.accelerationBounds[0]
+              << "," << norm.accelerationBounds[1] << '\n';
+  }
   auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,norm,problem.svdTolerance);
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
@@ -323,7 +333,7 @@ inline int runTensorComparison(int argc, char **argv)
     cheb.operatorTolerance = problem.svdTolerance; cheb.iterations = problem.chebIterations; cheb.every = problem.chebEvery;
     cheb.kroneckerFile = problem.chebKronecker; cheb.rtol = problem.chebRtol; cheb.factoredField = problem.chebFactoredField;
     cheb.boundsTolerance = problem.chebBoundsTolerance; cheb.boundsSteps = problem.chebBoundsSteps; cheb.lminSafety = problem.chebLminSafety; cheb.jacobiTolerance = problem.chebJacobiTolerance; cheb.scaled = problem.chebScaled;
-    solution = solveSchurChebyshev(system,rhs,axes,h,problem.qOverM,problem.Ex,problem.By,cheb);
+    solution = solveSchurChebyshev(system,rhs,axes,h,problem.qOverM,problem.Ex,problem.By,cheb,norm);
   }
   else if (splitMask[0] || splitMask[1] || splitMask[2] || splitMask[3])
   {
