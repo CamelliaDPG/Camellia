@@ -179,6 +179,44 @@ namespace
   };
 }
 
+namespace
+{
+  //! The largest |v_d| = |u_d| / gamma over the element's velocity box, for spatial direction d: the per-element scale of the
+  //! x-transport term in the direction-separable graph norm (as in TransportScaleL2Weight).
+  class VelocityComponentMax : public TFunction<double>
+  {
+    double _c; int _spaceDim, _velocityDim, _d;
+  public:
+    VelocityComponentMax(double c, int spaceDim, int velocityDim, int d)
+    : TFunction<double>(0), _c(c), _spaceDim(spaceDim), _velocityDim(velocityDim), _d(d) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
+      const int numCells = values.dimension(0), numPoints = values.dimension(1), numNodes = nodes.dimension(1);
+      const int dim = _spaceDim + 1 + _velocityDim;
+      vector<double> lo(dim), hi(dim);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        for (int k=0; k<dim; k++)
+        {
+          lo[k] = hi[k] = nodes(cellOrdinal,0,k);
+          for (int node=1; node<numNodes; node++) { lo[k] = std::min(lo[k], nodes(cellOrdinal,node,k)); hi[k] = std::max(hi[k], nodes(cellOrdinal,node,k)); }
+        }
+        double uSquared = 0.0, uMaxD = 0.0;
+        for (int j=0; j<_velocityDim; j++)
+        {
+          const double a = lo[_spaceDim+1+j], b = hi[_spaceDim+1+j];
+          const double uMax = std::max(std::abs(a), std::abs(b)), uMin = (a <= 0.0 && b >= 0.0) ? 0.0 : std::min(std::abs(a), std::abs(b));
+          if (j == _d) { uMaxD = uMax; uSquared += uMax * uMax; } else uSquared += uMin * uMin;
+        }
+        const double vMax = uMaxD / sqrt(1.0 + uSquared / (_c * _c));
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) values(cellOrdinal,pointOrdinal) = vMax;
+      }
+    }
+    string displayString() override { return "v_d,max(K)"; }
+  };
+}
+
 RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(const double c, const double q, const double m,
                                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                                MeshTopologyPtr spatialMeshTopology,
@@ -196,7 +234,8 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const double testSpaceL2WeightMeshScale,
                                                                                const vector<double> &testSpaceL2WeightDirectionScales,
                                                                                const double testSpaceL2WeightTransportScale,
-                                                                               const vector<double> &testSpaceL2WeightAccelerationBounds)
+                                                                               const vector<double> &testSpaceL2WeightAccelerationBounds,
+                                                                               const bool testSpaceSeparableGraphNorm)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
@@ -205,6 +244,7 @@ _testSpaceL2WeightMeshScale(testSpaceL2WeightMeshScale),
 _testSpaceL2WeightDirectionScales(testSpaceL2WeightDirectionScales),
 _testSpaceL2WeightTransportScale(testSpaceL2WeightTransportScale),
 _testSpaceL2WeightAccelerationBounds(testSpaceL2WeightAccelerationBounds),
+_testSpaceSeparableGraphNorm(testSpaceSeparableGraphNorm),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocityVertices_x,
@@ -225,6 +265,8 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
   {
     TEUCHOS_TEST_FOR_EXCEPTION(bound < 0.0, std::invalid_argument, "testSpaceL2WeightAccelerationBounds must be nonnegative");
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(testSpaceSeparableGraphNorm && (testSpaceIP != GraphTestSpaceInnerProduct), std::invalid_argument,
+                             "testSpaceSeparableGraphNorm applies to the graph test-space inner product");
   for (double scale : testSpaceL2WeightDirectionScales)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(scale < 0.0, std::invalid_argument, "testSpaceL2WeightDirectionScales must be nonnegative");
@@ -256,19 +298,42 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
     
     if (_testSpaceInnerProduct == GraphTestSpaceInnerProduct)
     {
-      LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
-      for (int d=0; d<spaceDim; d++)
+      if (_testSpaceSeparableGraphNorm)
       {
-        auto  v_d    = v_i(d);
-        auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
-        f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+        // Direction-separable graph norm: sum_d s_d(K)^2 |dw/dz_d|^2 with s_d >= |beta_d| on K (v_x,max(K) in space, 1 in
+        // time, the fixed acceleration bounds in velocity), instead of |beta . grad w|^2.  No cross terms, so each element
+        // Gram matrix is a sum of single-direction Kronecker products (exactly invertible by fast diagonalization), and
+        // by Cauchy-Schwarz it dominates the graph norm: |beta . grad w|^2 <= (spaceDim+1+velocityDim) sum_d s_d^2 |dw/dz_d|^2.
+        ip->addTerm(w->di(indexOffsetTimeOneBased));
+        for (int d=0; d<spaceDim; d++)
+        {
+          FunctionPtr s_d = Teuchos::rcp(new VelocityComponentMax(_c, spaceDim, velocityDim, d));
+          ip->addTerm(s_d * w->di(indexOffsetSpaceOneBased + d));
+        }
+        for (int vd=0; vd<velocityDim; vd++)
+        {
+          const double bound = (vd < int(_testSpaceL2WeightAccelerationBounds.size())) ? _testSpaceL2WeightAccelerationBounds[vd] : 0.0;
+          TEUCHOS_TEST_FOR_EXCEPTION(bound <= 0.0, std::invalid_argument,
+                                     "testSpaceSeparableGraphNorm needs a positive acceleration bound in every velocity direction");
+          ip->addTerm(bound * w->di(indexOffsetVelocityOneBased + vd));
+        }
       }
-      for (int vd=0; vd<velocityDim; vd++)
+      else
       {
-        auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
-        f_term = f_term - a[vd] * dw_dv_vd;
+        LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
+        for (int d=0; d<spaceDim; d++)
+        {
+          auto  v_d    = v_i(d);
+          auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
+          f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+        }
+        for (int vd=0; vd<velocityDim; vd++)
+        {
+          auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
+          f_term = f_term - a[vd] * dw_dv_vd;
+        }
+        ip->addTerm(f_term);
       }
-      ip->addTerm(f_term);
       
       LinearTermPtr stabilization_term;
       if (_testSpaceL2WeightTransportScale > 0.0)
@@ -452,7 +517,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               _testSpaceL2WeightMeshScale,
                                                                               _testSpaceL2WeightDirectionScales,
                                                                               _testSpaceL2WeightTransportScale,
-                                                                              _testSpaceL2WeightAccelerationBounds));
+                                                                              _testSpaceL2WeightAccelerationBounds,
+                                                                              _testSpaceSeparableGraphNorm));
   
   configureNextSlab(nextSlabForm);
   
