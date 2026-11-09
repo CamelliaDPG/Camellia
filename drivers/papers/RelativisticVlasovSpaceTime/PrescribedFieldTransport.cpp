@@ -132,6 +132,30 @@ namespace
     for (int i=0; i<=n; i++) v[i] = a + (b - a) * double(i) / n;
     return v;
   }
+
+  //! Graded vertices on [a, b]: a uniform core of width-w elements on [center - halfWidth, center + halfWidth] (clipped),
+  //! widths growing by ratio outward; a final element narrower than 1.5x nominal absorbs the remainder.  (As in
+  //! PlanarMITLRelativisticSpaceTime's gradedVertices.)
+  std::vector<double> gradedVertices(double a, double b, double center, double w, double halfWidth, double ratio)
+  {
+    const double lo = std::max(a, center - halfWidth), hi = std::min(b, center + halfWidth);
+    auto side = [&](double start, double end) {
+      std::vector<double> v; const double length = std::abs(end - start), dir = (end > start) ? 1.0 : -1.0;
+      double pos = 0, width = w * ratio;
+      while (length - pos > 0)
+      {
+        if (length - pos <= 1.5 * width) { v.push_back(end); break; }
+        pos += width; v.push_back(start + dir * pos); width *= ratio;
+      }
+      return v;
+    };
+    std::vector<double> v; auto left = side(lo, a);
+    for (auto it = left.rbegin(); it != left.rend(); it++) v.push_back(*it);
+    const int n = std::max(1, int(std::ceil((hi - lo) / w - 1e-10)));
+    for (int i=0; i<=n; i++) v.push_back(lo + (hi - lo) * double(i) / n);
+    for (double x : side(hi, b)) v.push_back(x);
+    return v;
+  }
 }
 
 int main(int argc, char *argv[])
@@ -165,6 +189,12 @@ int main(int argc, char *argv[])
   cmdp.setOption("L2WeightGraphTransportScale", &L2WeightGraphTransportScale, "transport-scale L^2 weight constant C (0: fixed alpha)");
   cmdp.setOption("L2WeightGraphAccelerationBounds", &accelerationBoundsString, "comma-separated |a| bounds (u_x, u_z)");
   cmdp.setOption("separableGraphTestNorm", "fullGraphTestNorm", &separableGraphTestNorm, "direction-separable graph norm (no cross terms)");
+  bool gradedVelocity = false; double coreCenterUx = 0.0, coreWidth = 0.1, coreHalfWidth = 0.5, growthRatio = 4.0;
+  cmdp.setOption("gradedVelocityMesh", "uniformVelocityMesh", &gradedVelocity, "graded velocity mesh (ignores ux/uzElements)");
+  cmdp.setOption("velocityCoreCenterUx", &coreCenterUx, "graded: u_x center of the core (u_z center is 0)");
+  cmdp.setOption("velocityCoreWidth", &coreWidth, "graded: core element width");
+  cmdp.setOption("velocityCoreHalfWidth", &coreHalfWidth, "graded: core half-width");
+  cmdp.setOption("velocityGrowthRatio", &growthRatio, "graded: geometric growth ratio outside the core");
   cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipity);
   cmdp.setOption("printPoints", "noPrintPoints", &printPoints, "print computed and exact f along a line (diagnostic)");
   if (cmdp.parse(argc, argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) return -1;
@@ -182,8 +212,11 @@ int main(int argc, char *argv[])
 
   MeshTopologyPtr spatialMeshTopo = MeshFactory::intervalMeshTopology(0.0, 1.0, xElements, false);
   std::vector<double> temporalVertices = uniformVertices(0.0, tWidth, tElements);
-  std::vector<double> ux = uniformVertices(-uMax, uMax, uxElements);
-  std::vector<double> uz = uniformVertices(-uMax, uMax, uzElements);
+  std::vector<double> ux = gradedVelocity ? gradedVertices(-uMax, uMax, coreCenterUx, coreWidth, coreHalfWidth, growthRatio)
+                                          : uniformVertices(-uMax, uMax, uxElements);
+  std::vector<double> uz = gradedVelocity ? gradedVertices(-uMax, uMax, 0.0, coreWidth, coreHalfWidth, growthRatio)
+                                          : uniformVertices(-uMax, uMax, uzElements);
+  uxElements = int(ux.size()) - 1; uzElements = int(uz.size()) - 1;
   std::vector<double> none;
 
   using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
