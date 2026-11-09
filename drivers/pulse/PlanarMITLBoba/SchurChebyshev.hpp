@@ -709,6 +709,68 @@ inline std::vector<Eigen::VectorXd> jacobiDiagonal(const System &system, const s
   return diag;
 }
 
+/// y ~ A x by the zip-up algorithm: the product's cores are contracted and truncated one at a time, left to right, so the
+/// rank-(r_A r_x) product is never formed or orthogonalized (rounding it costs O(n (r_A r_x)^3) per core; zip-up
+/// O(n^2 r_y r_A^2 r_x^2) plus one SVD of an (r_y n) x (r_A r_x) matrix).  Each truncation keeps the singular values
+/// above localTolerance relative to the core's norm; the result should be rounded afterwards (at its own, small rank).
+inline TTVector8 zipUpApply(const TTMatrix8 &A, const TTVector8 &x, double localTolerance)
+{
+  Size8 outSizes; for (size_t m = 0; m < 8; ++m) outSizes[m] = A.cores[m].sizes(1);
+  TTVector8 y(outSizes);
+  Eigen::MatrixXd C = Eigen::MatrixXd::Ones(1, 1);   // carry: (r_y) x (r_A r_x), column b + r_A c
+  size_t ry = 1;
+  for (size_t m = 0; m < 8; ++m)
+  {
+    const auto &Ac = A.cores[m]; const auto &Xc = x.cores[m];
+    auto av = Ac.const_view(); auto xv = Xc.const_view();
+    const size_t rA = Ac.sizes(0), nI = Ac.sizes(1), nJ = Ac.sizes(2), rA1 = Ac.sizes(3);
+    const size_t rX = Xc.sizes(0), rX1 = Xc.sizes(2);
+    if (Xc.sizes(1) != nJ) throw std::invalid_argument("zipUpApply: size mismatch");
+    // M_j = C (as (ry rA) x rX, row a + ry b') times X_j (rX x rX1)
+    Eigen::Map<const Eigen::MatrixXd> Cm(C.data(), Eigen::Index(ry * rA), Eigen::Index(rX));
+    std::vector<Eigen::MatrixXd> Mj(nJ);
+    for (size_t j = 0; j < nJ; ++j)
+    {
+      Eigen::MatrixXd Xj(rX, rX1);
+      for (size_t c = 0; c < rX1; ++c) for (size_t cp = 0; cp < rX; ++cp) Xj(cp, c) = xv({cp, j, c});
+      Mj[j] = Cm * Xj;
+    }
+    // W(a + ry i, b + rA1 c) = sum_j sum_b' M_j(a + ry b', c) A(b', i, j, b)
+    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(ry * nI, rA1 * rX1);
+    Eigen::MatrixXd Aij(rA, rA1);
+    for (size_t i = 0; i < nI; ++i)
+      for (size_t j = 0; j < nJ; ++j)
+      {
+        bool nonzero = false;
+        for (size_t b = 0; b < rA1; ++b) for (size_t bp = 0; bp < rA; ++bp) { Aij(bp, b) = av({bp, i, j, b}); nonzero |= Aij(bp, b) != 0.0; }
+        if (!nonzero) continue;
+        for (size_t c = 0; c < rX1; ++c)
+        {
+          Eigen::Map<const Eigen::MatrixXd> Pc(Mj[j].col(c).data(), Eigen::Index(ry), Eigen::Index(rA));
+          // rows a + ry i (stride 1 within block i), columns b + rA1 c
+          W.block(i * ry, c * rA1, ry, rA1).noalias() += Pc * Aij;
+        }
+      }
+    // W rows are (a + ry i) with a fastest: the TT core (ry, nI, r) in view order ({a, i, q})
+    if (m == 7)
+    {
+      y.cores[m].resize({ry, nI, 1}); auto out = y.cores[m].view();
+      for (size_t i = 0; i < nI; ++i) for (size_t a = 0; a < ry; ++a) out({a, i, 0}) = W(a + ry * i, 0);
+      break;
+    }
+    Eigen::BDCSVD<Eigen::MatrixXd> svd(W, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    const auto sv = svd.singularValues();
+    const double total = sv.squaredNorm(); double tail = total; Eigen::Index k = 0;
+    while (k < sv.size() && tail > localTolerance * localTolerance * total) { tail -= sv(k) * sv(k); ++k; }
+    k = std::max<Eigen::Index>(k, 1);
+    y.cores[m].resize({ry, nI, size_t(k)}); auto out = y.cores[m].view();
+    for (Eigen::Index q = 0; q < k; ++q) for (size_t i = 0; i < nI; ++i) for (size_t a = 0; a < ry; ++a) out({a, i, size_t(q)}) = svd.matrixU()(a + ry * i, q);
+    C = sv.head(k).asDiagonal() * svd.matrixV().leftCols(k).transpose();
+    ry = size_t(k);
+  }
+  return y;
+}
+
 /// Diagonal TT matrix diag(v) for a TT vector v (same ranks as v).
 inline TTMatrix8 diagonalMatrix(const TTVector8 &v)
 {
@@ -806,6 +868,7 @@ struct ChebyshevOptions
   // scaled: iterate on D^{1/2} x and D^{-1/2} r (D: Kronecker Jacobi) and divide test-space vectors by the element
   // measure, so TT rounding sees cells of all sizes alike (graded meshes); requires the in-solver Jacobi
   bool scaled = true;
+  bool zipUp = false;            // apply the TT blocks B_j, B_j^T by zip-up (contract and truncate core by core)
   int iterations = 200, every = 10;
   std::string kroneckerFile;
 };
@@ -954,13 +1017,13 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   // B_f x = -T^T (F x),  B_f^T y = -F^T (T y)
   auto applyB = [&](size_t j, const TTVector8 &v, double t) {
     if (j == 0 && structuredField) return Bf.apply(v, t);
-    if (j > 0 || !opt.factoredField) { TTVector8 out = sys.B[j] * v; DpgBoba::round(out, t); return out; }
+    if (j > 0 || !opt.factoredField) { TTVector8 out = opt.zipUp ? zipUpApply(sys.B[j], v, 0.1 * t) : sys.B[j] * v; DpgBoba::round(out, t); return out; }
     TTVector8 fx = sys.F * v; DpgBoba::round(fx, t);
     TTVector8 out = sys.TT * fx; out *= -1.0; DpgBoba::round(out, t); return out;
   };
   auto applyBT = [&](size_t j, const TTVector8 &v, double t) {
     if (j == 0 && structuredField) return BfT.apply(v, t);
-    if (j > 0 || !opt.factoredField) { TTVector8 out = sys.BT[j] * v; DpgBoba::round(out, t); return out; }
+    if (j > 0 || !opt.factoredField) { TTVector8 out = opt.zipUp ? zipUpApply(sys.BT[j], v, 0.1 * t) : sys.BT[j] * v; DpgBoba::round(out, t); return out; }
     TTVector8 ty = sys.T * v; DpgBoba::round(ty, t);
     TTVector8 out = sys.FT * ty; out *= -1.0; DpgBoba::round(out, t); return out;
   };
@@ -976,12 +1039,12 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   auto applyBs = [&](size_t j, const TTVector8 &v, double t) {
     if (!opt.scaled) return applyB(j, v, t);
     if (j == 0 && structuredField) return BfScaled.apply(Dmh[0] * v, t);
-    TTVector8 out = Bs[j] * v; DpgBoba::round(out, t); return out;
+    TTVector8 out = opt.zipUp ? zipUpApply(Bs[j], v, 0.1 * t) : Bs[j] * v; DpgBoba::round(out, t); return out;
   };
   auto applyBTs = [&](size_t j, const TTVector8 &v, double t) {
     if (!opt.scaled) return applyBT(j, v, t);
     if (j == 0 && structuredField) return BfT.apply(v, t, &Dmh[0]);
-    TTVector8 out = BTs[j] * v; DpgBoba::round(out, t); return out;
+    TTVector8 out = opt.zipUp ? zipUpApply(BTs[j], v, 0.1 * t) : BTs[j] * v; DpgBoba::round(out, t); return out;
   };
   auto applyGs = [&](const TTVector8 &z, double t) { return opt.scaled ? GinvScaled.apply(z, t) : Ginv.apply(z, t); };
   auto applyM = [&](size_t j, const TTVector8 &v, double t) {

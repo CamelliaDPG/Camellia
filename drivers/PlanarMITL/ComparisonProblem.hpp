@@ -41,7 +41,7 @@ struct ComparisonProblem
   double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0, chebBoundsTolerance = 1e-4, chebLminSafety = 0.8;
   int chebBoundsSteps = 30;
   double chebJacobiTolerance = 0;
-  bool chebScaled = true;
+  bool chebScaled = true, chebZipUp = false;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
@@ -129,6 +129,7 @@ struct ComparisonProblem
     cmd.setOption("chebJacobiTolerance", &chebJacobiTolerance, "Chebyshev: > 0: Jacobi diagonal as a TT at this tolerance (else rank-one Kronecker)");
     cmd.setOption("chebScaled", "no-chebScaled", &chebScaled, "Chebyshev: scaled rounding (D^{1/2} x, D^{-1/2} r, test vectors / |K|)");
     cmd.setOption("chebLminSafety", &chebLminSafety, "Chebyshev: factor on the smallest Ritz value");
+    cmd.setOption("chebZipUp", "no-chebZipUp", &chebZipUp, "Chebyshev: apply the TT blocks B_j, B_j^T by zip-up (core-by-core truncation)");
     cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
     cmd.setOption("conventionalSolver", &conventionalSolver,
