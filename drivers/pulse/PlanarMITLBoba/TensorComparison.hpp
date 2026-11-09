@@ -231,6 +231,11 @@ inline int runTensorComparison(int argc, char **argv)
   auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,norm,problem.svdTolerance);
   auto rhs = comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
+  if (std::getenv("PLANAR_MITL_G8_RANKS"))
+  {
+    reportCellsFirstGramRanks(axes, h, problem.qOverM, problem.Ex, problem.By, norm, system.names);
+    return 0;
+  }
   if (const char* gTest = std::getenv("PLANAR_MITL_G_SOLVE_TEST"))
   {
     // Cost of the inner TT solve a Schur-complement method needs every iteration: single-block AMEn on G e = l

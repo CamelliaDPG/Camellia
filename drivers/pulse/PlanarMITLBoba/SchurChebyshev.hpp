@@ -639,6 +639,35 @@ inline TTMatrix8 kroneckerInverseDiagonal(const Eigen::VectorXd &d, const Size8 
   return boba::make_ttm_from_matrices<8, host_space, double>(factors);
 }
 
+/// Measurement: G = T^T T + (weighted test mass) in the cells-first layout, and its TT ranks at several tolerances.  The
+/// rank at the cells|basis cut (after mode 4) is the number R of local operators A_s with G_K = sum_s c_s(K) A_s; the
+/// ranks inside the basis part give the cost of applying each A_s by sum factorization.
+inline void reportCellsFirstGramRanks(const std::vector<Axis> &axes, const LorentzFactors &h, double qOverM, double Ex, double By,
+                                      const TestNormWeight &norm, const std::vector<std::string> &names)
+{
+  auto sys = assembleCellsFirst(axes, h, qOverM, Ex, By, 1e-13, names);
+  std::array<Eigen::Index, 4> cells, nbT;
+  for (size_t d = 0; d < 4; ++d) { cells[d] = Eigen::Index(axes[d].vertices.size()) - 1; nbT[d] = axes[d].test.cols() / cells[d]; }
+  TTMatrix8 mass; bool first = true;
+  for (const auto &weights : testNormWeightTerms(axes, norm))
+  {
+    std::array<CellBasisSplit, 4> f;
+    for (size_t d = 0; d < 4; ++d)
+    {
+      const Eigen::VectorXd w = axes[d].weights.array() * weights[d].array();
+      f[d] = splitCellBasis(axes[d].test.transpose() * w.asDiagonal() * axes[d].test, cells[d], nbT[d], cells[d], nbT[d]);
+    }
+    accumulate(mass, first, cellsFirstMatrix(f), 1e-13);
+  }
+  std::cout << "cells_first transport T ranks=" << sys.T.ranks_string() << " mass ranks=" << mass.ranks_string() << '\n';
+  TTMatrix8 G = sys.TT * sys.T; G += mass;
+  for (double tol : {1e-12, 1e-10, 1e-8, 1e-6, 1e-4})
+  {
+    TTMatrix8 Gr = G; DpgBoba::round(Gr, tol);
+    std::cout << "cells_first G tol=" << tol << " ranks=" << Gr.ranks_string() << " (cells|basis cut: " << Gr.cores[3].sizes(3) << ")\n";
+  }
+}
+
 struct ChebyshevOptions
 {
   double lmin = 0, lmax = 0, tolerance = 1e-5, operatorTolerance = 1e-12, rtol = 0.0;
