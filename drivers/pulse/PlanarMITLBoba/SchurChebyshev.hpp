@@ -327,16 +327,23 @@ struct StructuredLocalOperator
     using pclock = std::chrono::steady_clock; const auto p0 = pclock::now();
     static const bool profile = std::getenv("PLANAR_MITL_PROFILE_STRUCTURED") != nullptr;
     auto since = [](pclock::time_point t) { return std::chrono::duration<double>(pclock::now() - t).count(); };
-    Eigen::MatrixXd Wall(nlocOut, nv * rcb);
-    for (size_t v = 0; v < nv; ++v) Wall.middleCols(v * rcb, rcb) = local(v, Z.transpose());
+    // default: the full local output basis for every structured operator -- the joint SVD of the stacked local results
+    // cost ~nloc^2 (groups x velocity cells x rank) per apply and the final TT rounding truncates anyway (4^4 p = 3:
+    // 60 -> 16 s constant fields, 94 -> 20 s varying); PLANAR_MITL_COMPRESS_LOCAL_BASIS restores the SVD.  With the full
+    // basis the local results W_v are formed on the fly when core 3 is built, never stacked (the stack is
+    // nloc x (groups n_v rank): 7.8 GB at production shape for rank 510).
+    static const bool fullForAll = std::getenv("PLANAR_MITL_COMPRESS_LOCAL_BASIS") == nullptr;
+    const bool full = fullLocalBasis || fullForAll;
+    const Eigen::MatrixXd Zt = Z.transpose();
+    Eigen::MatrixXd Wall;
+    if (!full)
+    {
+      Wall.resize(nlocOut, nv * rcb);
+      for (size_t v = 0; v < nv; ++v) Wall.middleCols(v * rcb, rcb) = local(v, Zt);
+    }
     const double tLocal = since(p0); const auto p1 = pclock::now();
     // left singular vectors of the wide Wall: Householder QR of Wall^T, then the SVD of the small R^T (same U, sv)
     Eigen::MatrixXd Uw; Eigen::VectorXd sv;
-    // default: the full local output basis for every structured operator -- the joint SVD of the stacked local results
-    // cost ~nloc^2 (groups x velocity cells x rank) per apply and the final TT rounding truncates anyway (4^4 p = 3:
-    // 60 -> 16 s constant fields, 94 -> 20 s varying); PLANAR_MITL_COMPRESS_LOCAL_BASIS restores the SVD
-    static const bool fullForAll = std::getenv("PLANAR_MITL_COMPRESS_LOCAL_BASIS") == nullptr;
-    const bool full = fullLocalBasis || fullForAll;
     if (full)
     {
       Uw = Eigen::MatrixXd::Identity(nlocOut, nlocOut); sv = Eigen::VectorXd::Ones(nlocOut);
@@ -364,7 +371,7 @@ struct StructuredLocalOperator
       k = std::max<Eigen::Index>(k, 1);
     }
     const Eigen::MatrixXd U = Uw.leftCols(k);                                   // nloc x k, orthonormal
-    const Eigen::MatrixXd Call = full ? Wall : Eigen::MatrixXd(U.transpose() * Wall);   // C_v = U^T W_v, all v
+    const Eigen::MatrixXd Call = full ? Eigen::MatrixXd() : Eigen::MatrixXd(U.transpose() * Wall);   // C_v = U^T W_v, all v
     // basis cores: TT of U^T (k x nloc) over the local modes, the k index as the left rank
     std::array<Eigen::MatrixXd, 4> basisCores; std::array<size_t, 4> kin{};
     {
@@ -455,7 +462,8 @@ struct StructuredLocalOperator
           for (size_t c = 0; c < nC; ++c)
           {
             const size_t v = c + nC * (i + nux * j), row0 = (c + nC * i) * r3;
-            acc.noalias() += (Rcarry.middleCols(row0, r3) * slice) * Call.middleCols(v * rcb, rcb).transpose();
+            if (full) acc.noalias() += (Rcarry.middleCols(row0, r3) * slice) * local(v, Zt).transpose();
+            else acc.noalias() += (Rcarry.middleCols(row0, r3) * slice) * Call.middleCols(v * rcb, rcb).transpose();
           }
         for (Eigen::Index q = 0; q < k; ++q) for (size_t p = 0; p < k2; ++p) out({p, j, size_t(q)}) = acc(p, q);
       }
