@@ -1097,6 +1097,11 @@ void MeshTopologyView::verticesForCell(Camellia::FieldContainer<double>& vertice
   _meshTopo->verticesForCell(vertices, cellID);
 }
 
+std::vector<IndexType> MeshTopologyView::refineCellInDirections(IndexType cellIndex, unsigned directionMask)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "this mesh topology does not support refinement by direction mask");
+}
+
 MeshTopologyViewPtr MeshTopologyView::getView(const set<IndexType> &activeCells) const
 {
   return Teuchos::rcp( new MeshTopologyView(_meshTopo, activeCells) );

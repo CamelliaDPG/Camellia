@@ -154,6 +154,14 @@ GlobalIndexType GlobalDofAssignment::activeCellOffset()
 
 void GlobalDofAssignment::assignParities( GlobalIndexType cellID )
 {
+  {
+    vector<int> topologyParities;
+    if (_mesh->getTopology()->getCellSideParities(cellID, topologyParities))
+    {
+      _cellSideParitiesForCellID[cellID] = topologyParities;
+      return;
+    }
+  }
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
 
   unsigned sideCount = cell->getSideCount();

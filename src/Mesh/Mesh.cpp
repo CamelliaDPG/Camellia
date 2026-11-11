@@ -138,6 +138,27 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1
   _meshTopology->setGlobalDofAssignment(_gda.get());
 }
 
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest, GDAFactory gdaFactory,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy, Teuchos_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+{
+  _meshTopology = meshTopology;
+  _pToAddToTest = pToAddTest;
+
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  initializePartitionPolicyIfNull(partitionPolicy, Comm);
+
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = gdaFactory(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr, partitionPolicy, H1Order, pToAddTest);
+  _gda->repartitionAndMigrate();
+
+  setBilinearForm(bilinearForm);
+  _varFactory = bilinearForm->varFactory();
+  _boundary.setMesh(Teuchos::rcp(this,false));
+
+  _meshTopology->setGlobalDofAssignment(_gda.get());
+}
+
 // private constructor for use by deepCopy()
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
            int pToAddToTest, bool useConformingTraces)
@@ -747,8 +768,37 @@ void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs, bool repartitionAndRe
   hRefine(cellSet, repartitionAndRebuild);
 }
 
+void Mesh::hRefine(const std::map<GlobalIndexType,unsigned> &cellDirectionMasks, bool repartitionAndRebuild)
+{
+  if (cellDirectionMasks.size() == 0) return;
+  set<GlobalIndexType> cellIDs;
+  for (const auto &entry : cellDirectionMasks)
+  {
+    _meshTopology->refineCellInDirections(entry.first, entry.second);
+    cellIDs.insert(entry.first);
+  }
+  _gda->didHRefine(cellIDs);
+  for (auto observer : _registeredObservers)
+  {
+    observer->didHRefineInDirections(cellDirectionMasks, repartitionAndRebuild);
+  }
+  if (repartitionAndRebuild)
+  {
+    this->repartitionAndRebuild();
+  }
+}
+
 void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
 {
+  if (dynamic_cast<MeshTopology*>(_meshTopology.get()) == NULL)
+  {
+    // no RefinementPatterns: bisect in every direction
+    std::map<GlobalIndexType,unsigned> cellDirectionMasks;
+    const unsigned allDirections = (1u << _meshTopology->getDimension()) - 1;
+    for (GlobalIndexType cellID : cellIDs) cellDirectionMasks[cellID] = allDirections;
+    hRefine(cellDirectionMasks, repartitionAndRebuild);
+    return;
+  }
   // let the owner of the cellID tell us what the topology of the cell is, so we can choose the right regular refinement pattern
   vector<pair<GlobalIndexType,CellTopologyKey>> myCellTopologyKeys;
   const set<GlobalIndexType> *myCellIDs = &this->cellIDsInPartition();

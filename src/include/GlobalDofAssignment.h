@@ -202,6 +202,13 @@ public:
   // project the children of the specified cells onto their parents in any registered solutions -- one use case is immediately prior to unrefinement
   void projectChildCoefficientsOntoParents(const std::set<GlobalIndexType> &parentCellIDs);
   
+  //! For subclasses that carry out the parent-to-child projection of solution coefficients themselves (rather than
+  //! through RefinementPatterns, as Solution::projectOldCellOntoNewCells() does): fills childCoefficients, one container
+  //! per entry of childIDs (left empty where the child ID is -1), in each child's trial ordering, and returns true.
+  //! The default returns false.
+  virtual bool projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID, const Camellia::FieldContainer<double> &parentCoefficients,
+                                                     const std::vector<GlobalIndexType> &childIDs,
+                                                     std::vector<Camellia::FieldContainer<double>> &childCoefficients) { return false; }
   // project parent values onto any child elements that do not have coefficients specified in any registered solutions -- one use case is immediately after refinement
   void projectParentCoefficientsOntoUnsetChildren();
   

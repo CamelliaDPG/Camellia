@@ -80,6 +80,8 @@ public:
   GlobalIndexType cellIndex();
   virtual const vector< Teuchos::RCP< Cell > > &children();
   void setChildren(const vector<GlobalIndexType> &childIndices);
+  //! For Cell subclasses that do not belong to a MeshTopology: sets the children (and their parent) directly.
+  void setChildCells(const vector< Teuchos::RCP< Cell > > &children);
   virtual vector<IndexType> getChildIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   vector< pair<IndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
   // !! returns the ordinal of the specified child in the parent's children container (which matches the order in RefinementPattern).  Returns -1 if the cell has no child with the specified cellIndex.
@@ -87,7 +89,7 @@ public:
   int numChildren();
 
   set<IndexType> getDescendants(ConstMeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
-  vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
+  virtual vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
   virtual IndexType entityIndex(unsigned subcdim, unsigned subcord);
   vector<IndexType> getEntityIndices(unsigned subcdim);
 
@@ -142,7 +144,7 @@ public:
   virtual void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal, bool allowSameCellIndex = false);
   std::vector< Teuchos::RCP<Cell> > getNeighbors(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   
-  std::set<GlobalIndexType> getActiveNeighborIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
+  virtual std::set<GlobalIndexType> getActiveNeighborIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   std::set<GlobalIndexType> getActiveNeighborIndices(unsigned dimensionForNeighborRelation, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   std::set<GlobalIndexType> getPeerNeighborIndices(unsigned dimensionForNeighborRelation, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   virtual std::vector<IndexType> entitiesOnNeighborInterfaces(unsigned dimensionOfInterest, bool peersOnly,

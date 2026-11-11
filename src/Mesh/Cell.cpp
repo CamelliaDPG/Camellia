@@ -470,6 +470,18 @@ void Cell::setChildren(const vector<GlobalIndexType> &childIndices)
   }
 }
 
+void Cell::setChildCells(const vector<CellPtr> &children)
+{
+  Teuchos::RCP< Cell > thisPtr = Teuchos::rcp( this, false ); // doesn't own memory
+  _children = children;
+  _childIndices.clear();
+  for (CellPtr child : children)
+  {
+    _childIndices.push_back(child->cellIndex());
+    child->setParent(thisPtr);
+  }
+}
+
 vector<IndexType> Cell::getChildIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   // if the mesh topo doesn't think we're a parent, then no children
@@ -870,7 +882,7 @@ vector<unsigned> Cell::boundarySides()
   vector<unsigned> sides;
   for (unsigned sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
   {
-    if (_neighbors[sideOrdinal].first == -1) sides.push_back(sideOrdinal);
+    if (isBoundary(sideOrdinal)) sides.push_back(sideOrdinal); // isBoundary() is virtual
   }
   return sides;
 }

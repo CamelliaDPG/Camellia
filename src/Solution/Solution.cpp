@@ -4677,6 +4677,20 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
                                                    const Camellia::FieldContainer<Scalar> &oldData,
                                                    const vector<GlobalIndexType> &childIDs, int solutionOrdinal)
 {
+  {
+    // some GlobalDofAssignments (those for meshes without RefinementPatterns) carry out the projection themselves
+    std::vector<Camellia::FieldContainer<double>> childCoefficients;
+    if (_mesh->globalDofAssignment()->projectParentCoefficientsOntoChildren(cellID, oldData, childIDs, childCoefficients))
+    {
+      for (int childOrdinal=0; childOrdinal < childIDs.size(); childOrdinal++)
+      {
+        if (childIDs[childOrdinal] == -1) continue;
+        replaceMapEntry(_solutionForCellID[solutionOrdinal], childIDs[childOrdinal], childCoefficients[childOrdinal]);
+      }
+      clearComputedResiduals();
+      return;
+    }
+  }
   VarFactoryPtr vf;
   if (_bf != Teuchos::null)
     vf = _bf->varFactory();

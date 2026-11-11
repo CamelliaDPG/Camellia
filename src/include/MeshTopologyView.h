@@ -31,6 +31,7 @@
 #include "Camellia_FieldContainer.hpp"
 
 #include <set>
+#include <string>
 #include <vector>
 
 namespace Camellia {
@@ -104,6 +105,20 @@ namespace Camellia {
     
     virtual CellPtr getCell(IndexType cellIndex) const;
     virtual std::vector<double> getCellCentroid(IndexType cellIndex) const;
+
+    //! For topologies that determine flux side parities themselves (rather than through peer neighbours, side entities
+    //! and refinement patterns, as GlobalDofAssignment does by default): fills parities, one per side of the cell, and
+    //! returns true.  The default returns false.
+    virtual bool getCellSideParities(IndexType cellIndex, std::vector<int> &parities) const { return false; }
+
+    //! For topologies that refine cells by bisection in a set of coordinate directions (bit k of directionMask set means
+    //! bisect in direction k) rather than by RefinementPattern: refines the active cell and returns the child cell IDs.
+    //! The default throws.  Called by Mesh::hRefine(const std::map<GlobalIndexType,unsigned> &, bool).
+    virtual std::vector<IndexType> refineCellInDirections(IndexType cellIndex, unsigned directionMask);
+
+    //! For topologies that are not a MeshTopology and so have no entity sets: the sides of the cell that carry the
+    //! given tag.  Used for tag-based BC imposition.  The default returns no sides.
+    virtual std::vector<unsigned> getSidesMatchingTag(IndexType cellIndex, const std::string &tagName, int tagID) const { return std::vector<unsigned>(); }
     //! Each entry in tagEntitySets is understood to specify a tag.  If the searched-for entity is contained in some of those tags, then it is required that the matching cell contains a side that matches each such tag.
     virtual std::set< std::pair<IndexType, unsigned> >
     getCellsContainingEntity(unsigned d, IndexType entityIndex,
