@@ -3,6 +3,7 @@
 #include <sstream>
 #include "ModeSplitting.hpp"
 #include "SchurChebyshev.hpp"
+#include "ExplicitSchur.hpp"
 #include <Eigen/Sparse>
 #include <cstdlib>
 #include "TensorProductAssembly.hpp"
@@ -326,7 +327,15 @@ inline int runTensorComparison(int argc, char **argv)
     if (problem.splitAxes.size() != 4) throw std::invalid_argument("--splitAxes takes a 4-digit mask or auto");
     for (size_t d = 0; d < 4; ++d) splitMask[d] = problem.splitAxes[d] == '1';
   }
-  if (problem.schurChebyshev)
+  if (problem.explicitSchur)
+  {
+    ExplicitSchurOptions ex;
+    ex.sTolerance = problem.explicitSchurTolerance; ex.tolerance = problem.chebTolerance; ex.rtol = problem.chebRtol;
+    ex.iterations = problem.chebIterations; ex.every = problem.chebEvery; ex.boundsSteps = problem.chebBoundsSteps;
+    ex.boundsTolerance = problem.chebBoundsTolerance; ex.lminSafety = problem.chebLminSafety;
+    solution = solveExplicitSchur(system,rhs,axes,h,problem.qOverM,problem.Ex,problem.By,ex,norm);
+  }
+  else if (problem.schurChebyshev)
   {
     ChebyshevOptions cheb;
     cheb.lmin = problem.chebLmin; cheb.lmax = problem.chebLmax; cheb.tolerance = problem.chebTolerance;

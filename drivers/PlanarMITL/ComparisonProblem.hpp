@@ -42,6 +42,7 @@ struct ComparisonProblem
   int chebBoundsSteps = 30;
   double chebJacobiTolerance = 0;
   bool chebScaled = true, chebZipUp = false, chebStructuredField = true;
+  bool explicitSchur = false; double explicitSchurTolerance = 1e-6;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
@@ -131,6 +132,10 @@ struct ComparisonProblem
     cmd.setOption("chebLminSafety", &chebLminSafety, "Chebyshev: factor on the smallest Ritz value");
     cmd.setOption("chebStructuredField", "no-chebStructuredField", &chebStructuredField,
                   "Chebyshev: apply B_f element-locally (varying fields: with (x, t) cell weights); else as a TT matrix");
+    cmd.setOption("explicitSchur", "no-explicitSchur", &explicitSchur,
+                  "Tensor backend (N5 only): form S = B^T G^-1 B once as a four-mode TT matrix and run Chebyshev on the trial "
+                  "space (chebTolerance: iterate rounding; chebRtol, chebIterations, chebEvery, chebBounds*, chebLminSafety)");
+    cmd.setOption("explicitSchurTolerance", &explicitSchurTolerance, "Explicit Schur: TT-SVD / rounding tolerance of the S blocks");
     cmd.setOption("chebZipUp", "no-chebZipUp", &chebZipUp, "Chebyshev: apply the TT blocks B_j, B_j^T by zip-up (core-by-core truncation)");
     cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");

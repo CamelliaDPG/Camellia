@@ -917,13 +917,14 @@ inline std::vector<Eigen::VectorXd> jacobiDiagonal(const System &system, const s
 /// rank-(r_A r_x) product is never formed or orthogonalized (rounding it costs O(n (r_A r_x)^3) per core; zip-up
 /// O(n^2 r_y r_A^2 r_x^2) plus one SVD of an (r_y n) x (r_A r_x) matrix).  Each truncation keeps the singular values
 /// above localTolerance relative to the core's norm; the result should be rounded afterwards (at its own, small rank).
-inline TTVector8 zipUpApply(const TTMatrix8 &A, const TTVector8 &x, double localTolerance)
+template <size_t D>
+inline host_tt_vector<D> zipUpApply(const host_tt_matrix<D> &A, const host_tt_vector<D> &x, double localTolerance)
 {
-  Size8 outSizes; for (size_t m = 0; m < 8; ++m) outSizes[m] = A.cores[m].sizes(1);
-  TTVector8 y(outSizes);
+  boba::Array<size_t, D> outSizes; for (size_t m = 0; m < D; ++m) outSizes[m] = A.cores[m].sizes(1);
+  host_tt_vector<D> y(outSizes);
   Eigen::MatrixXd C = Eigen::MatrixXd::Ones(1, 1);   // carry: (r_y) x (r_A r_x), column b + r_A c
   size_t ry = 1;
-  for (size_t m = 0; m < 8; ++m)
+  for (size_t m = 0; m < D; ++m)
   {
     const auto &Ac = A.cores[m]; const auto &Xc = x.cores[m];
     auto av = Ac.const_view(); auto xv = Xc.const_view();
@@ -956,7 +957,7 @@ inline TTVector8 zipUpApply(const TTMatrix8 &A, const TTVector8 &x, double local
         }
       }
     // W rows are (a + ry i) with a fastest: the TT core (ry, nI, r) in view order ({a, i, q})
-    if (m == 7)
+    if (m == D - 1)
     {
       y.cores[m].resize({ry, nI, 1}); auto out = y.cores[m].view();
       for (size_t i = 0; i < nI; ++i) for (size_t a = 0; a < ry; ++a) out({a, i, 0}) = W(a + ry * i, 0);
