@@ -236,6 +236,13 @@ public:
                              const bool deferInitialization = false,
                              const bool enforcePositivity = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
 
+  //! If true, formulations constructed afterwards build their phase-space mesh on a BoxMeshTopology (with a BoxGDA)
+  //! instead of an ExtrudedMeshTopology.  Box meshes support anisotropic refinement, e.g. in the velocity directions
+  //! only: vlasovMesh()->hRefine(std::map<GlobalIndexType,unsigned>).  Requires a non-periodic 1D spatial mesh given by
+  //! its root cells.  Default: false.  See notes/anisotropic-refinement-design.md for what is supported.
+  static void setUseBoxMeshForPhaseSpace(bool value);
+  static bool useBoxMeshForPhaseSpace();
+
   //! take time step.
   void solve();
   

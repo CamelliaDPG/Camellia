@@ -43,14 +43,15 @@ namespace
 }
 
 MeshPtr BoxGDA::mesh(Teuchos::RCP<BoxMeshTopology> topology, BFPtr bf, int H1Order, int delta_k,
-                     MeshPartitionPolicyPtr partitionPolicy, Teuchos_CommPtr Comm)
+                     MeshPartitionPolicyPtr partitionPolicy, Teuchos_CommPtr Comm,
+                     std::map<int,int> trialOrderEnhancements, std::map<int,int> testOrderEnhancements)
 {
   Mesh::GDAFactory factory = [](MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                 MeshPartitionPolicyPtr policy, std::vector<int> H1OrderVector, int pToAddTest) -> Teuchos::RCP<GlobalDofAssignment>
   {
     return Teuchos::rcp(new BoxGDA(mesh, varFactory, dofOrderingFactory, policy, H1OrderVector, pToAddTest));
   };
-  return Teuchos::rcp(new Mesh(topology, bf, vector<int>{H1Order}, delta_k, factory, map<int,int>(), map<int,int>(), partitionPolicy, Comm));
+  return Teuchos::rcp(new Mesh(topology, bf, vector<int>{H1Order}, delta_k, factory, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, Comm));
 }
 
 BoxGDA::BoxGDA(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
@@ -615,4 +616,124 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
     }
   }
   return true;
+}
+
+// ---------------------------------------------------------------- BoxConfigurationMeshUpdater
+
+BoxConfigurationMeshUpdater::BoxConfigurationMeshUpdater(MeshPtr phaseSpaceMesh, MeshPtr configurationMesh)
+{
+  _phaseSpaceMesh = Teuchos::rcp(phaseSpaceMesh.get(), false);
+  _configurationMesh = Teuchos::rcp(configurationMesh.get(), false);
+  _boxTopology = dynamic_cast<BoxMeshTopology*>(phaseSpaceMesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(_boxTopology == NULL, std::invalid_argument, "phaseSpaceMesh must use a BoxMeshTopology");
+  TEUCHOS_TEST_FOR_EXCEPTION(_boxTopology->configurationTopology() == Teuchos::null, std::invalid_argument,
+                             "the BoxMeshTopology has no configuration topology set");
+}
+
+void BoxConfigurationMeshUpdater::registerForUpdates(MeshPtr phaseSpaceMesh, MeshPtr configurationMesh)
+{
+  Teuchos::RCP<RefinementObserver> updater = Teuchos::rcp(new BoxConfigurationMeshUpdater(phaseSpaceMesh, configurationMesh));
+  phaseSpaceMesh->registerObserver(updater);
+}
+
+void BoxConfigurationMeshUpdater::didHRefineInDirections(const std::map<GlobalIndexType,unsigned> &cellDirectionMasks, bool didRepartitionAndRebuild)
+{
+  const int configurationDimensionCount = _boxTopology->configurationDimensionCount();
+  const unsigned configurationMask = (1u << configurationDimensionCount) - 1;
+  // repeat, because a configuration cell may need more than one level to catch up with the phase-space children
+  bool refinedSome = false;
+  while (true)
+  {
+    std::set<GlobalIndexType> configurationCellsToRefine;
+    for (const auto &entry : cellDirectionMasks)
+    {
+      const unsigned mask = entry.second & configurationMask;
+      if (mask == 0) continue; // velocity directions only
+      TEUCHOS_TEST_FOR_EXCEPTION(mask != configurationMask, std::invalid_argument,
+                                 "phase-space cells must be bisected in all configuration directions together, or in none");
+      // the configuration cell matching the refined phase-space cell must itself be refined
+      const IndexType configurationCellID = _boxTopology->phaseSpaceConfigurationCellID(entry.first);
+      if (!_configurationMesh->getTopology()->isParent(configurationCellID)) configurationCellsToRefine.insert(configurationCellID);
+    }
+    if (configurationCellsToRefine.empty()) break;
+    _configurationMesh->hRefine(configurationCellsToRefine, false);
+    refinedSome = true;
+  }
+  if (refinedSome)
+  {
+    _configurationMesh->enforceOneIrregularity(false);
+    _configurationMesh->repartitionAndRebuild();
+  }
+}
+
+// ---------------------------------------------------------------- matching two box meshes at a boundary
+
+void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap,
+                                      MeshPtr meshFrom, MeshPtr meshTo, int direction)
+{
+  BoxMeshTopology* fromTopology = dynamic_cast<BoxMeshTopology*>(meshFrom->getTopology().get());
+  BoxMeshTopology* toTopology = dynamic_cast<BoxMeshTopology*>(meshTo->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION((fromTopology == NULL) || (toTopology == NULL), std::invalid_argument, "both meshes must use a BoxMeshTopology");
+  const int dim = fromTopology->getDimension();
+  TEUCHOS_TEST_FOR_EXCEPTION(int(toTopology->getDimension()) != dim, std::invalid_argument, "mesh dimensions must match");
+
+  // meshTo's upper bound in the direction
+  double toUpperBound = 0;
+  bool first = true;
+  for (IndexType root : toTopology->getRootCellIndicesLocal())
+  {
+    const double upper = toTopology->cellExtents(root)[direction].second;
+    toUpperBound = first ? upper : std::max(toUpperBound, upper);
+    first = false;
+  }
+
+  // phase-space meshes bisect in all configuration directions together
+  auto completeMask = [dim](const BoxMeshTopology* topology, unsigned mask)
+  {
+    if (topology->configurationTopology() == Teuchos::null) return mask;
+    const unsigned configurationMask = (1u << topology->configurationDimensionCount()) - 1;
+    return (mask & configurationMask) ? (mask | configurationMask) : mask;
+  };
+
+  const unsigned lowerSide = unsigned(fromTopology->sideOrdinalForFace(2 * direction));
+  auto counterpart = [&](IndexType fromCellID)
+  {
+    std::vector<double> centroid = fromTopology->getCellCentroid(fromCellID);
+    FC point(1, dim);
+    for (int k=0; k<dim; k++) point(0,k) = (k == direction) ? toUpperBound : centroid[k];
+    const IndexType toCellID = toTopology->cellIDsForPoints(point)[0];
+    TEUCHOS_TEST_FOR_EXCEPTION(toCellID == -1, std::invalid_argument, "no matching cell found across the boundary; do the meshes share root cells?");
+    return toCellID;
+  };
+
+  while (true)
+  {
+    std::map<GlobalIndexType,unsigned> fromMasks, toMasks;
+    for (IndexType fromCellID : fromTopology->getLocallyKnownActiveCellIndices())
+    {
+      if (!fromTopology->sideIsOnBoundary(fromCellID, lowerSide)) continue;
+      const IndexType toCellID = counterpart(fromCellID);
+      const BoxForest::Box &fromBox = fromTopology->forest().node(fromCellID).box;
+      const BoxForest::Box &toBox = toTopology->forest().node(toCellID).box;
+      for (int j=0; j<dim; j++)
+      {
+        if (j == direction) continue;
+        if (fromBox.level[j] < toBox.level[j]) fromMasks[fromCellID] |= (1u << j);
+        else if (toBox.level[j] < fromBox.level[j]) toMasks[toCellID] |= (1u << j);
+      }
+    }
+    if (fromMasks.empty() && toMasks.empty()) break;
+    for (auto &entry : fromMasks) entry.second = completeMask(fromTopology, entry.second);
+    for (auto &entry : toMasks) entry.second = completeMask(toTopology, entry.second);
+    meshFrom->hRefine(fromMasks);
+    meshTo->hRefine(toMasks);
+  }
+
+  cellIDMap.clear();
+  for (IndexType fromCellID : fromTopology->getLocallyKnownActiveCellIndices())
+  {
+    if (fromTopology->sideIsOnBoundary(fromCellID, lowerSide)) cellIDMap[fromCellID] = counterpart(fromCellID);
+  }
+  sideOrdinalMap.clear();
+  sideOrdinalMap[int(lowerSide)] = toTopology->sideOrdinalForFace(2 * direction + 1);
 }

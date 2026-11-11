@@ -13,6 +13,7 @@
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
+#include "BoxMeshTopology.h"
 #include "DoerflerRefinementStrategy.h"
 #include "EnergyErrorFunction.h"
 #include "ErrorIndicator.h"
@@ -1390,6 +1391,15 @@ int main(int argc, char *argv[])
     double relErrorTargetFinalSlab = -1.0; // defaults to same as relErrorTarget
 
     cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
+    // Box phase-space mesh (BoxMeshTopology): supports anisotropic refinement.  See notes/anisotropic-refinement-design.md.
+    bool useBoxMesh = false;
+    int boxVelocityRefinements = 0;       // rounds of u_x-only bisection applied to the first slab
+    double boxVelocityBandCenter = 0.0;   // cells whose u_x interval meets [center - halfWidth, center + halfWidth] are bisected;
+    double boxVelocityBandHalfWidth = 0.0; // the half-width halves each round.  A non-positive half-width selects every cell.
+    cmdp.setOption("useBoxMesh", "useExtrudedMesh", &useBoxMesh, "phase-space mesh on a BoxMeshTopology (anisotropic refinement; direct solves only; no unrefinement)");
+    cmdp.setOption("boxVelocityRefinements", &boxVelocityRefinements, "with --useBoxMesh: rounds of u_x-only bisection of the first slab's cells within a band of u_x");
+    cmdp.setOption("boxVelocityBandCenter", &boxVelocityBandCenter);
+    cmdp.setOption("boxVelocityBandHalfWidth", &boxVelocityBandHalfWidth);
     cmdp.setOption("maxRefinements", &maxRefinements);
     cmdp.setOption("maxRefinementsFinalSlab", &maxRefinementsFinalSlab);
     cmdp.setOption("relErrorTarget", &relErrorTarget);
@@ -1763,11 +1773,41 @@ int main(int argc, char *argv[])
     const bool useGeometricGradedSpatialMesh = true;
     
     auto phase0FormulationSetupStart = phase0.now();
+    VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(useBoxMesh);
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
                                      L2WeightGraphMeshScale, L2WeightGraphDirectionScales,
                                      L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds);
+    if (useBoxMesh && (boxVelocityRefinements > 0))
+    {
+      // anisotropic refinement of the first slab: bisect in u_x only, within a band of u_x that narrows each round.
+      // (Later slabs are refined to match at the slab interface.)  The configuration-space mesh is unaffected.
+      auto boxTopology = dynamic_cast<BoxMeshTopology*>(form->vlasovMesh()->getTopology().get());
+      TEUCHOS_TEST_FOR_EXCEPTION(boxTopology == NULL, std::invalid_argument, "expected a BoxMeshTopology");
+      const int uxDirection = 2; // (x, t, u_x, u_z)
+      double halfWidth = boxVelocityBandHalfWidth;
+      for (int round=0; round<boxVelocityRefinements; round++, halfWidth /= 2)
+      {
+        std::map<GlobalIndexType,unsigned> masks;
+        for (GlobalIndexType cellID : form->vlasovMesh()->getActiveCellIDsGlobal())
+        {
+          const auto extents = boxTopology->cellExtents(cellID);
+          const bool inBand = (boxVelocityBandHalfWidth <= 0)
+                            || ((extents[uxDirection].second > boxVelocityBandCenter - halfWidth) && (extents[uxDirection].first < boxVelocityBandCenter + halfWidth));
+          if (inBand) masks[cellID] = 1u << uxDirection;
+        }
+        form->vlasovMesh()->hRefine(masks, false);
+      }
+      form->vlasovMesh()->enforceOneIrregularity(false);
+      form->vlasovMesh()->repartitionAndRebuild();
+      if (rank == 0)
+      {
+        std::cout << "Box mesh: after " << boxVelocityRefinements << " round(s) of u_x-only refinement, "
+                  << form->vlasovMesh()->numActiveElements() << " phase-space cells; "
+                  << form->configurationSpaceMesh()->numActiveElements() << " configuration-space cells.\n";
+      }
+    }
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
     phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
 
@@ -2752,7 +2792,7 @@ int main(int argc, char *argv[])
         if (doerflerTarget <= 0)
         {
           refStrategy = Teuchos::rcp(new RefinementStrategy(form->vlasovSolution(), refinementThreshold));
-          refStrategy->setMaxElements(maxElements); // allow unrefinements
+          if (!useBoxMesh) refStrategy->setMaxElements(maxElements); // allow unrefinements (not supported on box meshes)
         }
         else
         {

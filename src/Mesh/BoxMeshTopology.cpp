@@ -230,6 +230,19 @@ vector<pair<IndexType,unsigned>> BoxMeshTopology::cellsToRefineForBalance(int ma
   return result;
 }
 
+map<IndexType,unsigned> BoxMeshTopology::cellsToRefineForRegularity() const
+{
+  map<IndexType,unsigned> result;
+  const unsigned configurationMask = (_configurationTopology == Teuchos::null) ? 0u : ((1u << _configurationDimensionCount) - 1);
+  for (const auto &entry : cellsToRefineForBalance())
+  {
+    unsigned mask = entry.second;
+    if (mask & configurationMask) mask |= configurationMask;
+    result[entry.first] = mask;
+  }
+  return result;
+}
+
 void BoxMeshTopology::applyTag(const string &tagName, int tagID, SideSelector selector)
 {
   _sideTags[{tagName, tagID}].push_back(selector);
@@ -385,4 +398,56 @@ const vector< Teuchos::RCP<PeriodicBC> > & BoxMeshTopology::getPeriodicBCs() con
 {
   static const vector< Teuchos::RCP<PeriodicBC> > noPeriodicBCs;
   return noPeriodicBCs;
+}
+
+// ---------------------------------------------------------------- phase space
+
+void BoxMeshTopology::setConfigurationTopology(MeshTopologyViewPtr configurationTopology, int configurationDimensionCount)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((configurationDimensionCount < 1) || (configurationDimensionCount >= _dim), std::invalid_argument,
+                             "invalid configurationDimensionCount");
+  TEUCHOS_TEST_FOR_EXCEPTION(int(configurationTopology->getDimension()) != configurationDimensionCount, std::invalid_argument,
+                             "configurationTopology dimension does not match configurationDimensionCount");
+  _configurationTopology = configurationTopology;
+  _configurationDimensionCount = configurationDimensionCount;
+  _configurationCellForCell.clear();
+}
+
+int BoxMeshTopology::phaseSpaceVelocityDimensionCount() const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_configurationTopology == Teuchos::null, std::invalid_argument, "BoxMeshTopology: no configuration topology has been set");
+  return _dim - _configurationDimensionCount;
+}
+
+void BoxMeshTopology::phaseSpaceVelocityExtents(double &v0, double &v1, IndexType phaseSpaceCellID, int velocityDimension) const
+{
+  const int k = _configurationDimensionCount + velocityDimension;
+  const BoxForest::Box &box = _forest.node(phaseSpaceCellID).box;
+  v0 = coordinate(k, box.lo[k]);
+  v1 = coordinate(k, box.hi(k));
+}
+
+IndexType BoxMeshTopology::phaseSpaceConfigurationCellID(IndexType phaseSpaceCellID) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_configurationTopology == Teuchos::null, std::invalid_argument, "BoxMeshTopology: no configuration topology has been set");
+  auto cached = _configurationCellForCell.find(phaseSpaceCellID);
+  if (cached != _configurationCellForCell.end()) return cached->second;
+
+  const BoxForest::Box &box = _forest.node(phaseSpaceCellID).box;
+  const int level = box.level[0];
+  for (int k=1; k<_configurationDimensionCount; k++)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(int(box.level[k]) != level, std::invalid_argument,
+                               "BoxMeshTopology: phase-space cells must be at the same refinement level in every configuration direction");
+  }
+  // the active configuration cell at the centroid of the projection, then up the tree to the projection's level
+  Camellia::FieldContainer<double> centroid(1, _configurationDimensionCount);
+  for (int k=0; k<_configurationDimensionCount; k++) centroid(0,k) = 0.5 * (coordinate(k, box.lo[k]) + coordinate(k, box.hi(k)));
+  IndexType configurationCellID = _configurationTopology->cellIDsForPoints(centroid)[0];
+  TEUCHOS_TEST_FOR_EXCEPTION(configurationCellID == -1, std::invalid_argument, "BoxMeshTopology: no configuration cell found under phase-space cell");
+  CellPtr configurationCell = _configurationTopology->getCell(configurationCellID);
+  TEUCHOS_TEST_FOR_EXCEPTION(configurationCell->level() < level, std::invalid_argument,
+                             "BoxMeshTopology: the configuration mesh is coarser than the phase-space mesh");
+  while (configurationCell->level() > level) configurationCell = configurationCell->getParent();
+  return _configurationCellForCell[phaseSpaceCellID] = configurationCell->cellIndex();
 }

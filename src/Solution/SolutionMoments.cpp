@@ -66,8 +66,9 @@ _basisReconciliation(true) // true: cache results
   const int numDimensionsPhaseSpace   = phaseSpaceSoln->mesh()->getDimension();
   
   int numSurvivingExtrusionDimensions = (_survivingExtrusionDimension == -1) ? 0 : 1;
-  ExtrudedMeshTopology* phaseSpaceExtrudedMeshTopology = dynamic_cast<ExtrudedMeshTopology*>(phaseSpaceSoln->mesh()->getTopology().get());
-  _numExtrusionDimensions = phaseSpaceExtrudedMeshTopology->numExtrusionDimensions();
+  const PhaseSpaceTopology* phaseSpaceTopology = PhaseSpaceTopology::phaseSpaceTopology(phaseSpaceSoln->mesh()->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceTopology == NULL, std::invalid_argument, "phase-space mesh must use an ExtrudedMeshTopology or a BoxMeshTopology");
+  _numExtrusionDimensions = phaseSpaceTopology->phaseSpaceVelocityDimensionCount();
   _numDimensionsPhysicalMesh = numDimensionsPhaseSpace - _numExtrusionDimensions + numSurvivingExtrusionDimensions;
   
   setMesh(physicalMesh);

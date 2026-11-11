@@ -16,6 +16,8 @@
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
+#include "BoxGDA.h"
+#include "BoxMeshTopology.h"
 #include "ExtrudedMeshTopology.h"
 #include "GlobalDofAssignment.h"
 #include "GMGSolver.h"
@@ -1314,7 +1316,16 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   std::map<IndexType,IndexType> cellIDMap;
   std::map<int,int> sideOrdinalMap;
   
-  MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
+  const bool boxMeshes = (dynamic_cast<BoxMeshTopology*>(thisSlabVlasovMesh->getTopology().get()) != NULL);
+  if (boxMeshes)
+  {
+    const int timeDirection = _spaceDim; // coordinates are (x, t, velocity)
+    BoxGDA::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, thisSlabVlasovMesh, timeDirection);
+  }
+  else
+  {
+    MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
+  }
   
   for (auto sideSetTagFilter : _configurationSpaceSideSetFilters)
   {
@@ -1384,15 +1395,25 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   
   // find cells on next slab's initial-time boundary
   auto initialTimeTag = nextSlabForm->tagVlasovInitialTime();
-  auto meshTopo = Teuchos::rcp(nextSlabForm->vlasovMesh()->getTopology()->baseMeshTopology(), false);
-  auto entitySets = meshTopo->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, initialTimeTag);
-  
   const auto & myCells = nextSlabForm->vlasovMesh()->cellIDsInPartition();
   std::set<IndexType> myInitialTimeCells; // those owned by this MPI rank
-  for (auto entitySet : entitySets)
+  if (boxMeshes)
   {
-    std::set<IndexType> matchingCells = entitySet->cellIDsThatMatch(meshTopo, myCells);
-    myInitialTimeCells.insert(matchingCells.begin(),matchingCells.end());
+    auto nextTopology = nextSlabForm->vlasovMesh()->getTopology();
+    for (IndexType cellID : myCells)
+    {
+      if (nextTopology->getSidesMatchingTag(cellID, DIRICHLET_SET_TAG_NAME, initialTimeTag).size() > 0) myInitialTimeCells.insert(cellID);
+    }
+  }
+  else
+  {
+    auto meshTopo = Teuchos::rcp(nextSlabForm->vlasovMesh()->getTopology()->baseMeshTopology(), false);
+    auto entitySets = meshTopo->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, initialTimeTag);
+    for (auto entitySet : entitySets)
+    {
+      std::set<IndexType> matchingCells = entitySet->cellIDsThatMatch(meshTopo, myCells);
+      myInitialTimeCells.insert(matchingCells.begin(),matchingCells.end());
+    }
   }
   
   auto nextVlasovSoln = nextSlabForm->vlasovSolution();
@@ -1609,6 +1630,14 @@ int VlasovSpaceTimeFormulation::H1Order() const
   return _H1Order;
 }
 
+namespace
+{
+  bool s_useBoxMeshForPhaseSpace = false;
+}
+
+void VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(bool value) { s_useBoxMeshForPhaseSpace = value; }
+bool VlasovSpaceTimeFormulation::useBoxMeshForPhaseSpace() { return s_useBoxMeshForPhaseSpace; }
+
 void VlasovSpaceTimeFormulation::initialize()
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_initialized, std::invalid_argument, "initialize() should only be called once, during construction");
@@ -1638,7 +1667,28 @@ void VlasovSpaceTimeFormulation::initialize()
     TEUCHOS_TEST_FOR_EXCEPTION(_velocitySpaceVertices_y.size() > 0, std::invalid_argument, "if velocitySpaceVertices_y is empty, then velocitySpaceVertices_z must also be empty");
   }
   
-  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(_configurationSpaceMeshTopology, velocitySpaceVertices);
+  MeshTopologyPtr extrudedMeshTopology;         // phase-space topology, unless a box mesh is used
+  Teuchos::RCP<BoxMeshTopology> boxMeshTopology; // phase-space topology when a box mesh is used
+  if (!s_useBoxMeshForPhaseSpace)
+  {
+    extrudedMeshTopology = MeshFactory::extrudedMeshTopology(_configurationSpaceMeshTopology, velocitySpaceVertices);
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_spatialMeshTopology->getDimension() != 1, std::invalid_argument, "box phase-space meshes require a 1D spatial mesh");
+    TEUCHOS_TEST_FOR_EXCEPTION(_spatialMeshTopology->getPeriodicBCs().size() > 0, std::invalid_argument, "box phase-space meshes do not support periodic BCs");
+    std::set<double> spatialVertexSet;
+    for (IndexType cellID : _spatialMeshTopology->getLocallyKnownActiveCellIndices())
+    {
+      for (IndexType vertexIndex : _spatialMeshTopology->getCell(cellID)->vertices()) spatialVertexSet.insert(_spatialMeshTopology->getVertex(vertexIndex)[0]);
+    }
+    std::vector<std::vector<double>> rootVertices;
+    rootVertices.push_back(std::vector<double>(spatialVertexSet.begin(), spatialVertexSet.end()));
+    rootVertices.push_back(_temporalVertices);
+    for (const auto &vertices : velocitySpaceVertices) rootVertices.push_back(vertices);
+    boxMeshTopology = Teuchos::rcp(new BoxMeshTopology(rootVertices));
+    boxMeshTopology->setConfigurationTopology(_configurationSpaceMeshTopology, _spatialMeshTopology->getDimension() + 1);
+  }
   
   _spaceDim = _spatialMeshTopology->getDimension();
   _velocityDim = velocitySpaceVertices.size();
@@ -1682,7 +1732,15 @@ void VlasovSpaceTimeFormulation::initialize()
   const bool allowPruning = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
   Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
-  MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements(), testOrderEnhancements(), partitionPolicy, comm, allowPruning) );
+  MeshPtr vlasovMesh;
+  if (boxMeshTopology == Teuchos::null)
+  {
+    vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements(), testOrderEnhancements(), partitionPolicy, comm, allowPruning) );
+  }
+  else
+  {
+    vlasovMesh = BoxGDA::mesh(boxMeshTopology, _vlasovBF, _H1Order, _delta_k, partitionPolicy, comm, trialOrderEnhancements(), testOrderEnhancements());
+  }
   
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
   
@@ -1815,6 +1873,32 @@ void VlasovSpaceTimeFormulation::initialize()
   std::vector<int> maxVelocityTags {VLASOV_TAG_VXMAX, VLASOV_TAG_VYMAX, VLASOV_TAG_VZMAX};
   
   // create entity sets for BCs:
+  if (boxMeshTopology != Teuchos::null)
+  {
+    // A box mesh has no side entities; boundary sides are tagged by which face of the domain they lie on.
+    using Extents = BoxMeshTopology::Extents;
+    const int timeDirection = indexOffsetTimeZeroBased;
+    boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_TMIN,
+                              [timeDirection](int direction, bool upper, const Extents &) { return (direction == timeDirection) && !upper; });
+    // inflow: (v . n_x) < 0, judged at the cell's velocity centre.  (Cells should not straddle v = 0.)
+    const int spaceDim = _spaceDim, velocityStart = indexOffsetVelocityZeroBased;
+    boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_SPATIAL_INFLOW,
+                              [spaceDim, velocityStart](int direction, bool upper, const Extents &extents)
+    {
+      if (direction >= spaceDim) return false;
+      const double v = 0.5 * (extents[velocityStart + direction].first + extents[velocityStart + direction].second);
+      return upper ? (v < 0) : (v > 0);
+    });
+    for (int i=0; i<_velocityDim; i++)
+    {
+      const int velocityDirection = indexOffsetVelocityZeroBased + i;
+      boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, minVelocityTags[i],
+                                [velocityDirection](int direction, bool upper, const Extents &) { return (direction == velocityDirection) && !upper; });
+      boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, maxVelocityTags[i],
+                                [velocityDirection](int direction, bool upper, const Extents &) { return (direction == velocityDirection) && upper; });
+    }
+  }
+  else
   {
     // Vlasov side sets
     
@@ -1867,7 +1951,14 @@ void VlasovSpaceTimeFormulation::initialize()
     _configurationSpaceMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, CONFIGURATION_TAG_TMIN, initialTimeSideSet);
   }
   
-  PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  if (boxMeshTopology != Teuchos::null)
+  {
+    BoxConfigurationMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  }
+  else
+  {
+    PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  }
   
   for (int uniformRefinementNumber=0; uniformRefinementNumber < _numUniformRefinements; uniformRefinementNumber++)
   {
@@ -2382,7 +2473,18 @@ void VlasovSpaceTimeFormulation::solve()
     MemoryCheckpoints::record("substep_start");
 
     // solve for f:
-    if (!_useGeometricMultigrid)
+    // geometric multigrid builds its hierarchy from refinement patterns, which box meshes do not have: solve directly
+    const bool boxMesh = (dynamic_cast<BoxMeshTopology*>(_vlasovSoln->mesh()->getTopology().get()) != NULL);
+    if (boxMesh && _useGeometricMultigrid)
+    {
+      static bool haveWarned = false;
+      if (!haveWarned && (_vlasovSoln->mesh()->Comm()->getRank() == 0))
+      {
+        std::cout << "NOTE: geometric multigrid is not yet supported on box phase-space meshes; using the direct solver.\n";
+        haveWarned = true;
+      }
+    }
+    if (!_useGeometricMultigrid || boxMesh)
     {
       const auto solveStart = ProfileClock::now();
       _vlasovSoln->solve();

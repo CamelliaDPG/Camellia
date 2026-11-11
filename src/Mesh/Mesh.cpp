@@ -367,6 +367,21 @@ vector<ElementPtr> Mesh::elementsForPoints(const Camellia::FieldContainer<double
 
 void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
 {
+  if (dynamic_cast<MeshTopology*>(_meshTopology.get()) == NULL)
+  {
+    // no entities or RefinementPatterns: the topology says which cells to bisect, and in which directions
+    bool meshChanged = false;
+    while (true)
+    {
+      std::map<IndexType,unsigned> cellsToRefine = _meshTopology->cellsToRefineForRegularity();
+      if (cellsToRefine.empty()) break;
+      std::map<GlobalIndexType,unsigned> cellDirectionMasks(cellsToRefine.begin(), cellsToRefine.end());
+      hRefine(cellDirectionMasks, false);
+      meshChanged = true;
+    }
+    if (meshChanged && repartitionAndMigrate) this->repartitionAndRebuild();
+    return;
+  }
   int rank = Comm()->getRank();
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   bool meshChanged = false;

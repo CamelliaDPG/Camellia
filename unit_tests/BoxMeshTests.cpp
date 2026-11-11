@@ -5,6 +5,7 @@
 #include "BoxGDA.h"
 #include "BoxMeshTopology.h"
 #include "MeshFactory.h"
+#include "RefinementStrategy.h"
 #include "Solution.h"
 #include "SpatialFilter.h"
 #include "VarFactory.h"
@@ -286,5 +287,68 @@ TEUCHOS_UNIT_TEST( BoxMesh, IsotropicRefinementThroughMesh )
   MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 2, 2);
   mesh->hRefine(set<GlobalIndexType>{0});
   TEST_EQUALITY(mesh->numActiveElements(), 8);
+}
+TEUCHOS_UNIT_TEST( BoxMesh, EnforceOneIrregularityIsDirectional )
+{
+  // Mesh::enforceOneIrregularity() on a box mesh bisects neighbours only in the direction in which they are too coarse
+  Convection form(3);
+  auto topology = Teuchos::rcp(new BoxMeshTopology({{0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 2.0, 3.0}}));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 2, 2);
+  vector<IndexType> cells = {13}; // the centre cell
+  for (int level=0; level<3; level++)
+  {
+    std::map<GlobalIndexType,unsigned> masks;
+    for (IndexType cell : cells) masks[cell] = 4u; // z only
+    mesh->hRefine(masks);
+    vector<IndexType> children;
+    for (IndexType cell : cells) for (IndexType child : topology->getCell(cell)->getChildIndices(topology)) children.push_back(child);
+    cells = children;
+  }
+  TEST_EQUALITY(mesh->numActiveElements(), 26 + 8);
+  mesh->enforceOneIrregularity();
+  TEST_EQUALITY(topology->forest().maxTangentialLevelDifference(), 1);
+  TEST_EQUALITY(mesh->numActiveElements(), 8 + 4 * 4 + 4 * 2 + 18);
+  for (IndexType cellID : topology->getLocallyKnownActiveCellIndices())
+  {
+    TEST_EQUALITY(int(topology->forest().node(cellID).box.level[0]), 0);
+    TEST_EQUALITY(int(topology->forest().node(cellID).box.level[1]), 0);
+  }
+  TEST_ASSERT(topology->cellsToRefineForRegularity().empty());
+}
+TEUCHOS_UNIT_TEST( BoxMesh, RefinementStrategyAdaptsBoxMesh )
+{
+  // The existing energy-error-driven RefinementStrategy on a box mesh (isotropic marking; one-irregularity enforced by
+  // the box rule).  A solution with a sharp layer in y: the error should fall as the mesh adapts.
+  const int dim = 2, H1Order = 2, delta_k = 2;
+  Convection form(dim);
+  auto uExact = [](const double *x) { return std::tanh(20 * (x[1] - 0.5)) * (1 + x[0]); };
+  vector<double> beta = form.beta;
+  auto f = [beta](const double *x)
+  {
+    const double th = std::tanh(20 * (x[1] - 0.5));
+    return beta[0] * th + beta[1] * 20 * (1 - th * th) * (1 + x[0]);
+  };
+  auto topology = Teuchos::rcp(new BoxMeshTopology({{0.0, 0.5, 1.0}, {0.0, 0.5, 1.0}}));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, H1Order, delta_k);
+  BCPtr bc = form.inflowBC(topology, uExact);
+  SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(f), form.bf->graphNorm());
+  mesh->registerSolution(solution);
+  RefinementStrategyPtr refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution, 0.3));
+  FunctionPtr error = Function::solution(form.u, solution) - BoxDPG::function(uExact);
+
+  solution->solve();
+  const double initialError = error->l2norm(mesh, 4);
+  const GlobalIndexType initialCells = mesh->numActiveElements();
+  double finalError = initialError;
+  for (int step=0; step<4; step++)
+  {
+    refinementStrategy->refine(false);
+    solution->solve();
+    finalError = error->l2norm(mesh, 4);
+    out << "step " << step << ": " << mesh->numActiveElements() << " cells, L2 error " << finalError << endl;
+    TEST_COMPARE(topology->forest().maxTangentialLevelDifference(), <=, 1);
+  }
+  TEST_COMPARE(mesh->numActiveElements(), >, initialCells);
+  TEST_COMPARE(finalError, <, 0.5 * initialError);
 }
 } // namespace

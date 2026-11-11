@@ -30,6 +30,7 @@
 #include "Camellia_HDF5.hpp"
 #include "Camellia_FieldContainer.hpp"
 
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -115,6 +116,11 @@ namespace Camellia {
     //! bisect in direction k) rather than by RefinementPattern: refines the active cell and returns the child cell IDs.
     //! The default throws.  Called by Mesh::hRefine(const std::map<GlobalIndexType,unsigned> &, bool).
     virtual std::vector<IndexType> refineCellInDirections(IndexType cellIndex, unsigned directionMask);
+
+    //! For topologies that refine by direction mask: the active cells that must be bisected, and in which directions,
+    //! for the mesh to satisfy its regularity rule (one pass; refining may expose further cells).  The default returns
+    //! an empty map.  Called by Mesh::enforceOneIrregularity().
+    virtual std::map<IndexType,unsigned> cellsToRefineForRegularity() const { return std::map<IndexType,unsigned>(); }
 
     //! For topologies that are not a MeshTopology and so have no entity sets: the sides of the cell that carry the
     //! given tag.  Used for tag-based BC imposition.  The default returns no sides.

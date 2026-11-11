@@ -24,6 +24,7 @@
 #include "Cell.h"
 #include "CellTopology.h"
 #include "MeshTopologyView.h"
+#include "PhaseSpaceTopology.h"
 #include "TypeDefs.h"
 
 namespace Camellia
@@ -53,7 +54,7 @@ namespace Camellia
     RefinementBranch refinementBranch(IndexType ancestralCellID = -1) override;
   };
 
-  class BoxMeshTopology : public MeshTopologyView
+  class BoxMeshTopology : public MeshTopologyView, public PhaseSpaceTopology
   {
   public:
     //! (lower, upper) physical coordinates of a cell in each direction
@@ -73,6 +74,9 @@ namespace Camellia
     mutable bool _skeletonValid = false;
     mutable std::map<IndexType,std::vector<double>> _vertexCache;
     std::map<std::pair<std::string,int>, std::vector<SideSelector>> _sideTags;
+    MeshTopologyViewPtr _configurationTopology; // when this is a phase-space mesh
+    int _configurationDimensionCount = 0;
+    mutable std::map<IndexType,IndexType> _configurationCellForCell;
 
     CellPtr createCell(IndexType cellIndex);
   public:
@@ -105,6 +109,23 @@ namespace Camellia
     //! Tags the boundary sides picked by the selector.  Tags with name DIRICHLET_SET_TAG_NAME are used by BC::addDirichlet(var, tagID, f).
     void applyTag(const std::string &tagName, int tagID, SideSelector selector);
 
+    /**
+     \brief  Declares this to be a phase-space mesh whose first configurationDimensionCount directions are those of
+             the given configuration-space mesh topology (which must have the same root cells in those directions).
+
+     The configuration mesh must be kept at least as fine as this mesh, and a cell of this mesh must be at the same
+     refinement level in every configuration direction, so that its projection is a cell of the configuration mesh's
+     refinement tree (given regular refinement there).  See phaseSpaceConfigurationCellID().
+     */
+    void setConfigurationTopology(MeshTopologyViewPtr configurationTopology, int configurationDimensionCount);
+    MeshTopologyViewPtr configurationTopology() const { return _configurationTopology; }
+    int configurationDimensionCount() const { return _configurationDimensionCount; }
+
+    // PhaseSpaceTopology interface
+    int phaseSpaceVelocityDimensionCount() const override;
+    void phaseSpaceVelocityExtents(double &v0, double &v1, IndexType phaseSpaceCellID, int velocityDimension) const override;
+    IndexType phaseSpaceConfigurationCellID(IndexType phaseSpaceCellID) const override;
+
     // MeshTopologyView interface
     long long approximateMemoryFootprint() const override;
     std::vector<IndexType> cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints) const override;
@@ -121,6 +142,8 @@ namespace Camellia
     std::vector<unsigned> getSidesMatchingTag(IndexType cellIndex, const std::string &tagName, int tagID) const override;
     unsigned getDimension() const override;
     std::vector<IndexType> refineCellInDirections(IndexType cellIndex, unsigned directionMask) override;
+    //! cellsToRefineForBalance(), with masks completed so that phase-space cells are bisected in all configuration directions together
+    std::map<IndexType,unsigned> cellsToRefineForRegularity() const override;
     const std::set<IndexType> &getRootCellIndicesLocal() const override;
     bool isDistributed() const override;
     bool isParent(IndexType cellIndex) const override;

@@ -237,6 +237,73 @@ code rather than to the mesh.  The first useful target that avoids the hard part
 refinement of the phase-space mesh**: it needs stages 1-2 and items 1, 2, 4 and 5, and leaves the configuration mesh
 and the Maxwell solve alone.
 
+### What has been implemented (stages 1-3)
+
+**Stage 1 and 2: `BoxMeshTopology`, `BoxCell`, `BoxGDA`.**  `BoxGDA::mesh(topology, bf, H1Order, delta_k)` gives a `Mesh`
+on which the existing `Solution` runs.  Edits to existing classes (no change for `MeshTopology`-based meshes):
+
+- `Mesh`: a public constructor taking a GDA factory; `hRefine(std::map<cellID, directionMask>)`; `hRefine(cellIDs)` and
+  `enforceOneIrregularity()` work on topologies without `RefinementPattern`s (all directions; the box rule).
+- `MeshTopologyView`: virtuals `getCellSideParities`, `getSidesMatchingTag`, `refineCellInDirections`,
+  `cellsToRefineForRegularity`, each with a default.
+- `GlobalDofAssignment`: parities from the topology when it supplies them; virtual
+  `projectParentCoefficientsOntoChildren`, consulted by `Solution::projectOldCellOntoNewCells`.
+- `Boundary` and `Function::meshSideSetCharacteristic`: tagged sides from the topology when there are no entity sets.
+- `Cell`: `boundarySides()` through the virtual `isBoundary()`; virtual `getDescendantsForSide` and
+  `getActiveNeighborIndices`; `setChildCells`.
+- `RefinementObserver`: `didHRefineInDirections`.
+
+Side parities on a box mesh: +1 on boundary sides and on upper faces, -1 on lower faces.  The topology is replicated
+on every rank; a rank owns the field dofs of its cells and the flux dofs of the patches whose first face belongs to
+one of its cells, numbered contiguously per rank without communication.  On refinement, fields are restricted
+exactly to the children; fluxes are restricted on child sides that lie on a parent side and are zero on sides
+interior to the parent.
+
+Tests (`BoxMesh` group, 1 and 4 ranks): polynomial reproduction through `Solution` in 2D, 3D and 4D with tag BCs on
+meshes with crossed anisotropic refinements; agreement with a `MeshTopology` mesh with hanging nodes (spatial-filter
+BCs); exact projection through `Mesh::hRefine`; directional `enforceOneIrregularity`; the existing
+`RefinementStrategy` driving a box mesh.
+
+**Stage 3: the Vlasov formulation.**  `VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(true)` makes formulations
+constructed afterwards build their phase-space mesh on a `BoxMeshTopology` (a static switch, to avoid threading an
+argument through three constructors; it could become one).  The configuration-space mesh is unchanged.
+
+- Boundary tags (initial time, spatial inflow, velocity bounds) are side selectors on the box topology.
+- `PhaseSpaceTopology` is the small interface the moment and field-extrusion code needs (velocity extents of a phase
+  cell; the configuration cell beneath it).  `ExtrudedMeshTopology` and `BoxMeshTopology` implement it;
+  `TensorVlasovMomentSampling1D2V`, `PhysicalSolutionExtrusion` and the `SolutionMoments` constructors use it.
+- `BoxConfigurationMeshUpdater` keeps the configuration mesh at least as fine as the phase-space mesh: when phase
+  cells are bisected in x and t, the configuration cells beneath them are refined (regular refinement), then
+  one-irregularity of the configuration mesh is enforced.
+- `BoxGDA::hRefineToMatchAtBoundary` replaces `MeshTools::hRefineToMatchAtBoundary` between time slabs: each side is
+  bisected only in the directions in which it is coarser than its counterpart.
+- Geometric multigrid falls back to the direct solver on box meshes, with a note.
+- `PlanarMITLRelativisticSpaceTime`: `--useBoxMesh`, and `--boxVelocityRefinements=N` with
+  `--boxVelocityBandCenter` / `--boxVelocityBandHalfWidth` for u_x-only bisection of the first slab in a band.
+  Unrefinement (`setMaxElements`) is skipped on box meshes.
+
+Supported refinement of phase-space cells: any subset of the velocity directions; x and t together (not x alone or t
+alone: `PhysicalSolutionExtrusion` reuses the phase cell's (x,t) reference points on the configuration cell, so the
+phase cell's projection must be a cell of the configuration mesh's refinement tree).  The moment code would already
+accept the general rule "configuration mesh at least as fine"; the field extrusion is what needs generalising (project
+the configuration solution onto the phase cell's projection) to allow x-only or t-only.
+
+Tests (`BoxVlasov` group, relativistic Vlasov-Maxwell 1D2V, 1 and 4 ranks), each against the extruded mesh:
+
+- same root mesh: identical dof counts; ||f||, ||E_x|| and the Vlasov energy error agree to 1e-15 relative;
+- every box cell bisected in u_x only, against the extruded mesh with twice as many u_x cells: agree to 1e-15, and the
+  configuration mesh is untouched;
+- one cell refined in all four directions (hanging faces everywhere, configuration mesh refined beneath): agree to
+  1e-15, with and without charge;
+- two time slabs, the second slab's mesh refined in u_x to match at the interface: agree;
+- local u_x-only and u_y-only refinement (hanging and crossed faces): runs, fields stay zero for zero charge;
+- bisecting in x and t refines the configuration mesh; x alone is rejected.
+
+Not done: geometric multigrid on box meshes (needs the Kronecker transfer between nested box meshes); unrefinement;
+p-refinement; serendipity bases (the flux space must be a full tensor product); mesh save/load; x-only or t-only
+refinement of phase cells; periodic directions; a spatial mesh that is not a 1D set of root cells; the legacy
+`SolutionMoments` paths other than construction (the tensor-native moment path is the one that works).
+
 ### Kokkos
 
 None of this is on device today, and neither is `MeshTopology`.  The box representation is the device-friendly one:

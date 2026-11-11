@@ -26,6 +26,7 @@
 #include "BasisCache.h"
 #include "BoxMeshTopology.h"
 #include "GlobalDofAssignment.h"
+#include "RefinementObserver.h"
 
 namespace Camellia
 {
@@ -105,9 +106,43 @@ namespace Camellia
     //! The number of trace patches (flux supports) in the mesh.
     IndexType patchCount() const;
 
+    /**
+     \brief  The box-mesh counterpart of MeshTools::hRefineToMatchAtBoundary(), for two box meshes with the same root
+             cells in every direction but one (e.g. successive time slabs).
+
+     Refines both meshes until each active cell of meshFrom on its lower boundary in the given direction has the same
+     extent, in the other directions, as the active cell of meshTo across from it on meshTo's upper boundary.  A cell
+     is bisected only in the directions in which it is coarser than its counterpart (plus whatever the phase-space
+     rule for configuration directions requires).  On return, cellIDMap maps meshFrom's boundary cells to meshTo's, and
+     sideOrdinalMap has the single entry (side ordinal in meshFrom, side ordinal in meshTo).  MPI-collective.
+     */
+    static void hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap,
+                                         MeshPtr meshFrom, MeshPtr meshTo, int direction);
+
     //! A Mesh on a box topology, with a BoxGDA.
     static MeshPtr mesh(Teuchos::RCP<BoxMeshTopology> topology, BFPtr bf, int H1Order, int delta_k,
-                        MeshPartitionPolicyPtr partitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null);
+                        MeshPartitionPolicyPtr partitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null,
+                        std::map<int,int> trialOrderEnhancements = std::map<int,int>(),
+                        std::map<int,int> testOrderEnhancements = std::map<int,int>());
+  };
+
+  /**
+   \brief  Keeps a configuration-space mesh at least as fine as a phase-space mesh on a BoxMeshTopology.
+
+   When phase-space cells are bisected in the configuration directions (which must be all of them together, so that
+   a phase-space cell's projection stays a cell of the configuration mesh's refinement tree), the configuration cells
+   under them that are not yet that fine are refined (regular refinement), and one-irregularity of the configuration
+   mesh is then enforced.  Bisection in velocity directions alone leaves the configuration mesh untouched.
+   */
+  class BoxConfigurationMeshUpdater : public RefinementObserver
+  {
+    MeshPtr _phaseSpaceMesh;       // weak
+    MeshPtr _configurationMesh;    // weak
+    BoxMeshTopology* _boxTopology;
+  public:
+    BoxConfigurationMeshUpdater(MeshPtr phaseSpaceMesh, MeshPtr configurationMesh);
+    void didHRefineInDirections(const std::map<GlobalIndexType,unsigned> &cellDirectionMasks, bool didRepartitionAndRebuild) override;
+    static void registerForUpdates(MeshPtr phaseSpaceMesh, MeshPtr configurationMesh);
   };
 }
 

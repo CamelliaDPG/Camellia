@@ -18,6 +18,7 @@
 #include "MeshFactory.h"
 #include "MeshTopology.h"
 
+#include "PhaseSpaceTopology.h"
 #include "Intrepid2_Data.hpp"
 #include "Intrepid2_TensorArgumentIterator.hpp"
 #include "Intrepid2_TensorData.hpp"
@@ -33,7 +34,7 @@ namespace Camellia {
  particular, it's worth noting that for our intended (non-conforming) Boltzmann discretization we do not require any logic relating lower-dimensional
  neighbor relationships (no vertex/edge neighbors; we only need full side neighbors).  Taking advantage of that fact would result in improved performance.
  */
-  class ExtrudedMeshTopology : public MeshTopology {
+  class ExtrudedMeshTopology : public MeshTopology, public PhaseSpaceTopology {
     using CellDataHost = Intrepid2::Data<IndexType,Kokkos::HostSpace>;
     using CellTensorDataHost = Intrepid2::TensorData<IndexType,Kokkos::HostSpace>;
     
@@ -105,6 +106,13 @@ namespace Camellia {
     double extrusionMeasureForPhaseSpaceCell(const IndexType &phaseSpaceCellID, int extrusionDimensionToExclude=-1) const;
     
     int numExtrusionDimensions() const;
+    // PhaseSpaceTopology interface
+    int phaseSpaceVelocityDimensionCount() const override { return numExtrusionDimensions(); }
+    void phaseSpaceVelocityExtents(double &v0, double &v1, IndexType phaseSpaceCellID, int velocityDimension) const override
+    {
+      extrusionVerticesForPhaseSpaceCell(v0, v1, phaseSpaceCellID, velocityDimension);
+    }
+    IndexType phaseSpaceConfigurationCellID(IndexType phaseSpaceCellID) const override { return physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID); }
     
     const std::set<IndexType> & phaseSpaceCellIDsForPhysicalCell(const IndexType &componentCellID) const;
     

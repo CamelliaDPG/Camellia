@@ -114,10 +114,11 @@ namespace
   TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree <= 0, std::invalid_argument, "velocityQuadratureDegree must be positive");
 
   MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
-  auto extrudedTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology());
-  TEUCHOS_TEST_FOR_EXCEPTION(extrudedTopology == NULL, std::invalid_argument,
-                             "computeVlasovMomentsByPhaseSpaceCell1D2V requires an ExtrudedMeshTopology phase-space mesh.");
-  TEUCHOS_TEST_FOR_EXCEPTION(extrudedTopology->numExtrusionDimensions() != 2, std::invalid_argument,
+  auto phaseSpaceTopology = PhaseSpaceTopology::phaseSpaceTopology(phaseSpaceMesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceTopology == NULL, std::invalid_argument,
+                             "computeVlasovMomentsByPhaseSpaceCell1D2V requires a phase-space mesh topology (ExtrudedMeshTopology or BoxMeshTopology).");
+  auto extrudedTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology()); // may be NULL
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceTopology->phaseSpaceVelocityDimensionCount() != 2, std::invalid_argument,
                              "computeVlasovMomentsByPhaseSpaceCell1D2V requires exactly two velocity extrusions.");
 
   std::vector<double> refLinePoints, refLineWeights;
@@ -164,8 +165,8 @@ namespace
   for (GlobalIndexType phaseSpaceCellID : ownedPhaseSpaceCells)
   {
     double ux0, ux1, uz0, uz1;
-    extrudedTopology->extrusionVerticesForPhaseSpaceCell(ux0, ux1, phaseSpaceCellID, 0);
-    extrudedTopology->extrusionVerticesForPhaseSpaceCell(uz0, uz1, phaseSpaceCellID, 1);
+    phaseSpaceTopology->phaseSpaceVelocityExtents(ux0, ux1, phaseSpaceCellID, 0);
+    phaseSpaceTopology->phaseSpaceVelocityExtents(uz0, uz1, phaseSpaceCellID, 1);
     const double uxCenter = 0.5 * (ux0 + ux1), uxScale = 0.5 * std::abs(ux1 - ux0);
     const double uzCenter = 0.5 * (uz0 + uz1), uzScale = 0.5 * std::abs(uz1 - uz0);
     for (int i=0; i<linePointCount; i++)
@@ -181,7 +182,7 @@ namespace
 
     // The phase-space cell's configuration cell may have been refined (via other phase-space cells over it); then this
     // phase-space cell spans several active configuration cells, and contributes at each of their cubature points.
-    const GlobalIndexType configurationCellID = extrudedTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID);
+    const GlobalIndexType configurationCellID = phaseSpaceTopology->phaseSpaceConfigurationCellID(phaseSpaceCellID);
     std::vector<GlobalIndexType> activeConfigurationCells;
     if (configurationCellOrdinal.find(configurationCellID) != configurationCellOrdinal.end())
     {
@@ -255,7 +256,9 @@ namespace
   TensorVlasovMoments1D2V result;
   result.numConfigurationCells = static_cast<int>(configurationCellIDs.size());
   result.numPointsPerConfigurationCell = pointsPerConfigurationCell;
-  result.numVelocityPoints = static_cast<int>(extrudedTopology->extrusionMeshTopology(0)->activeCellCount()
+  // informational; defined only when the velocity mesh is a product of 1D meshes
+  result.numVelocityPoints = (extrudedTopology == NULL) ? 0
+                           : static_cast<int>(extrudedTopology->extrusionMeshTopology(0)->activeCellCount()
                                               * extrudedTopology->extrusionMeshTopology(1)->activeCellCount()) * velocityPointsPerCell;
   const int entryCount = result.numConfigurationCells * std::max(pointsPerConfigurationCell,0);
   std::vector<double> density(entryCount), xMoment(entryCount), zMoment(entryCount);

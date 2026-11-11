@@ -354,15 +354,24 @@ public:
     int numCells  = values.extent_int(0);
     int sideOrdinal = basisCache->getSideIndex();
     MeshPtr mesh = basisCache->mesh();
-    auto meshTopo = mesh->getTopology()->baseMeshTopology();
-    auto entitySets = meshTopo->getEntitySetsForTagID(_tagName, _sideSetTag);
-    unsigned sideDim = mesh->getDimension() - 1;
     TEUCHOS_TEST_FOR_EXCEPTION(mesh.get() == NULL, std::invalid_argument, "MeshSideSetCharacteristicFunction requires a mesh!");
     TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinal == -1, std::invalid_argument, "MeshSideSetCharacteristicFunction is only defined on cell boundaries");
+    auto meshTopo = mesh->getTopology()->baseMeshTopology();
     Camellia::FieldContainer<bool> cellMatches(numCells);
+    std::vector<EntitySetPtr> entitySets;
+    if (meshTopo != NULL) entitySets = meshTopo->getEntitySetsForTagID(_tagName, _sideSetTag);
+    unsigned sideDim = mesh->getDimension() - 1;
     for (int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++)
     {
       int cellID = basisCache->cellIDs()[cellOrdinal];
+      if (meshTopo == NULL)
+      {
+        // the topology has no entity sets; it identifies tagged sides itself
+        bool sideMatchesTag = false;
+        for (unsigned taggedSide : mesh->getTopology()->getSidesMatchingTag(cellID, _tagName, _sideSetTag)) sideMatchesTag |= (int(taggedSide) == sideOrdinal);
+        cellMatches[cellOrdinal] = sideMatchesTag;
+        continue;
+      }
       auto sideEntityIndex = mesh->getTopology()->getCell(cellID)->entityIndex(sideDim, sideOrdinal);
       bool sideMatchesTag = false;
       for (const auto entitySet : entitySets)

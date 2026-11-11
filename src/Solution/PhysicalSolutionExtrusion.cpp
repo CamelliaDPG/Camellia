@@ -39,14 +39,14 @@ void PhysicalSolutionExtrusion::updateValues()
   
   vector< set<GlobalIndexType> > parentCellsForLevel;
   auto physicalMeshTopo = _physicalSoln->mesh()->getTopology();
-  ExtrudedMeshTopology* phaseSpaceMeshTopo = dynamic_cast<ExtrudedMeshTopology*>(_phaseMesh->getTopology().get());
+  const PhaseSpaceTopology* phaseSpaceMeshTopo = PhaseSpaceTopology::phaseSpaceTopology(_phaseMesh->getTopology().get());
   
-  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopo == NULL, std::invalid_argument, "Phase-space MeshTopology must be an ExtrudedMeshTopology");
+  TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopo == NULL, std::invalid_argument, "Phase-space MeshTopology must be an ExtrudedMeshTopology or a BoxMeshTopology");
   
   set<GlobalIndexType> physicalCellIDs;
   for (const auto & phaseSpaceCellID : phaseSpaceCellIDs)
   {
-    auto physicalCellID = phaseSpaceMeshTopo->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID);
+    auto physicalCellID = phaseSpaceMeshTopo->phaseSpaceConfigurationCellID(phaseSpaceCellID);
     physicalCellIDs.insert(physicalCellID);
   }
   
@@ -166,8 +166,8 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> &valu
   // be reused beyond the body of this method…
   
   
-  auto extrudedMeshTopology = dynamic_cast<ExtrudedMeshTopology*>(_phaseMesh->getTopology().get());
-  TEUCHOS_TEST_FOR_EXCEPTION(extrudedMeshTopology == NULL, std::invalid_argument, "phase-space mesh must use an ExtrudedMeshTopology");
+  auto extrudedMeshTopology = PhaseSpaceTopology::phaseSpaceTopology(_phaseMesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(extrudedMeshTopology == NULL, std::invalid_argument, "phase-space mesh must use an ExtrudedMeshTopology or a BoxMeshTopology");
   
   auto physicalMeshTopology = physicalMesh->getTopology();
   
@@ -194,9 +194,9 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> &valu
   
   for (int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++)
   {
-    auto physicalCellID = extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellIDs[cellOrdinal]);
+    auto physicalCellID = extrudedMeshTopology->phaseSpaceConfigurationCellID(phaseSpaceCellIDs[cellOrdinal]);
     physicalCellIDs.insert(physicalCellID);
-    extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseSpaceCellIDs[cellOrdinal]);
+    extrudedMeshTopology->phaseSpaceConfigurationCellID(phaseSpaceCellIDs[cellOrdinal]);
     phaseSpaceCellOrdinalsForPhysicalCellID[physicalCellID].push_back(cellOrdinal);
   }
   
