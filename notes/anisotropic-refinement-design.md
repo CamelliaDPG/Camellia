@@ -144,6 +144,107 @@ projections are computed with plain loops, cell by cell, and fields are not cond
 
 Not done yet: parallel assembly; static condensation and iterative solvers; solution transfer between meshes.
 
+## Scoping: a box mesh under `Mesh` / `Solution`, and under the Vlasov formulation
+
+Question: what must a box-mesh topology, its cells and its dof assignment present so that the existing `Solution`,
+and then `VlasovSpaceTimeFormulation`, run on it?  Method: a tally of every `MeshTopologyView` / `MeshTopology` /
+`Cell` method called outside the core mesh classes, then a read of each consumer.  Line numbers are at 62d349c2.
+
+### Shape of the adapter
+
+There is a precedent: `SubExtrudedMeshTopology` subclasses `MeshTopologyView` with composite cell indices and its own
+`SubExtrudedCell`, and has no base `MeshTopology`.  The box version is three classes:
+
+- `BoxMeshTopology : MeshTopologyView`, wrapping a `BoxForest` and per-direction root vertices.  Cell ID = tree node
+  index (dense, 32-bit `GlobalIndexType` is enough).  Replicated on every rank (`Comm()` null, `isDistributed()` false),
+  which is also how the phase-space topology is used today (`allowPruning = false`, VlasovSpaceTimeFormulation.cpp:1682).
+- `BoxCell : Cell`, overriding the neighbour, boundary, child and entity methods.
+- `BoxGDA : GlobalDofAssignment`, holding what `BoxDPG` computes now (numbering, side-to-patch maps).
+
+About 15 `MeshTopologyView` virtuals must be overridden because the defaults dereference the null base topology or
+private counters (`getCell`, `getDimension`, `cellCount`, `activeCellCount`, `isValidCellIndex`, `getCellCentroid`,
+`physicalCellNodesForCell`, `verticesForCell`, `getMyActiveCellIndices`, `getLocallyKnownActiveCellIndices`,
+`getPeriodicBCs`, `Comm`, `isDistributed`, `isParent`, `getRootCellIndicesLocal`).  The dof assignment has 14 pure
+virtuals plus 3 from `DofInterpreter`; `Solution` calls nothing that exists only on `GDAMinimumRule`.
+
+### Stage 1: solve and evaluate on a fixed box mesh.  Small.
+
+Caller changes needed (all verified in the source):
+
+| Where | Problem | Change |
+|---|---|---|
+| Mesh.h:57, Mesh.cpp:55-190 | every public constructor does `new GDAMinimumRule`; the one taking a GDA is private and skips partitioning | a public constructor taking a GDA factory |
+| GlobalDofAssignment.h:93, .cpp:155-282 | `assignParities` is non-virtual and uses a reciprocal peer neighbour, side entity indices, and the parent's `RefinementPattern`; it is called from the base constructor | make side parities virtual; box rule: +1 on the boundary and on upper faces, -1 on lower faces |
+| Boundary.cpp:71-74 | `bcsToImpose` throws for any non-`MeshTopology`, even with no tag BCs | move the cast inside the tag-BC branch (or see stage 3) |
+| Cell.cpp:867-876 | `boundarySides()` is non-virtual and reads stored neighbours, unlike the virtual `isBoundary()` | loop over `isBoundary()` |
+| Cell.h | `getActiveNeighborIndices`, `getDescendantsForSide`, `refinementPattern`, `getParent`, `level` are non-virtual and read stored data | make the first two virtual; supply parent and level through `setParent` |
+
+With those, assembly (`interpretLocalData`), legacy spatial-filter BCs, `importSolution`, energy error, `Function::solution`,
+`l2norm`, point evaluation, Zoltan HSFC partitioning (centroids only) and `HDF5Exporter` work unchanged.  MPI comes
+for free in replicated mode: `CellDataMigration` skips geometry packing when the topology is not distributed.
+
+### Stage 2: refinement.  Moderate.
+
+- `Mesh::hRefine` casts to `MeshTopology` and takes a `RefinementPattern` (Mesh.cpp:808).  Needs a new entry point,
+  "refine these cells in these directions", and a virtual on the topology; `RefinementObserver` signatures carry
+  `MeshTopologyPtr` and `RefinementPatternPtr`.
+- Parent-to-child solution projection uses `parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent`
+  (Solution.cpp:4811) and `GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren` (.cpp:1077-1137).  For
+  boxes this is the Kronecker restriction; `BoxGDA` should own it.
+- `RefinementStrategy` and `Mesh::enforceOneIrregularity` (Mesh.cpp:347-464) are entity- and pattern-based and choose
+  the regular pattern.  Replace with a box-aware strategy plus `BoxForest::balance()`.  Energy and function error
+  indicators work unchanged.  Unrefinement: leave unsupported at first.
+
+### Stage 3: the Vlasov formulation.  The bulk of the work, and mostly not about `Solution`.
+
+1. **Boundary tags.**  All Vlasov BCs are attached through entity sets of side entity indices
+   (`getBoundarySidesThatMatch`, `createEntitySet`, `applyTag`; VlasovSpaceTimeFormulation.cpp:1817-1857), imposed in
+   Boundary.cpp:71-130, and read again in `configureNextSlab` (:1387) and `Function::meshSideSetCharacteristic`.  A box
+   mesh answers "is this side of this cell on root face d-min / d-max" by arithmetic.  Change: one virtual
+   `sideMatchesTag(cellID, sideOrdinal, tag)` on the topology view, and route those three consumers through it.
+   The inflow set is exact as "x-min faces with u_x >= 0, x-max faces with u_x <= 0" because the driver forces a vertex
+   at u_x = 0.
+2. **Phase-space to configuration-space maps.**  Ten `dynamic_cast<ExtrudedMeshTopology*>` sites (moments,
+   `PhysicalSolutionExtrusion`, `TensorVlasovMomentSampling1D2V`, visualization) ask for the configuration cell under a
+   phase cell and the cell's velocity extents.  Change: a small projection interface implemented by both
+   `ExtrudedMeshTopology` and the box topology.  The velocity extents are the box's intervals.
+3. **The configuration mesh is the phase mesh's base, and is refined in lockstep** (ExtrudedMeshTopology.cpp:203-219,
+   `PhysicalMeshUpdater` :434-464).  The moment code needs each phase cell's (x,t) projection to be a node of the
+   configuration refinement tree.  Consequences:
+   - velocity-only refinement of phase cells needs nothing from the configuration mesh;
+   - the moment code does not need a full tensor product of velocity cells over a configuration cell, so different
+     velocity refinement at different x is fine for the paths the MITL driver uses
+     (`RelativisticFirstMomentFunction`, not on that path, would double count);
+   - refinement in x or t must be mirrored in the configuration `MeshTopology`, which stays pattern-based.  Two phase
+     cells over one configuration cell cut in different orders (x then t, t then x) cannot both be tree nodes there.
+     Either restrict (x,t) refinement of phase cells to what the configuration tree can mirror, or change the moment
+     code to "configuration cells overlapping the projection, with an affine sub-box map".
+4. **Slab-to-slab transfer** (`MeshTools::hRefineToMatchAtBoundary`, :92-301) matches vertices and side entities and
+   refines isotropically until sides are one to one.  Replace with a match of t-max faces to t-min faces by their
+   (x, u) intervals.
+5. **Multigrid.**  The h-hierarchy (`getView`, `RefinementBranch`, `BasisReconciliation`; GMGOperator.cpp:1140-1737) must
+   be replaced for box meshes; the Kronecker transfer is the replacement.  The p-only path needs little
+   (`getActiveNeighborIndices`, parities, the interpret methods) if the caller supplies the mesh list.  The MITL
+   driver turns GMG on above a dof threshold, so this is needed for production sizes.
+6. Not needed for the MITL path: static condensation (never enabled), `MeshTransferFunction`, save/load of the mesh
+   (must be replaced if wanted), phase-space visualization.
+
+### Assessment
+
+Stages 1 and 2 are contained: about a thousand lines of new code and half a dozen small edits to existing classes,
+with `BoxDPG` as the reference to test against.  Stage 3 is where the cost is, and items 1-4 are changes to the Vlasov
+code rather than to the mesh.  The first useful target that avoids the hard part of item 3 is **velocity-only
+refinement of the phase-space mesh**: it needs stages 1-2 and items 1, 2, 4 and 5, and leaves the configuration mesh
+and the Maxwell solve alone.
+
+### Kokkos
+
+None of this is on device today, and neither is `MeshTopology`.  The box representation is the device-friendly one:
+the active cells are flat arrays (lower coordinates and levels), the skeleton is a CSR list of faces per patch, and
+the constraints are small 1D matrices indexed by (level difference, child position).  Building the tree and the
+skeleton stays on the host; assembly and operator application would consume those arrays as Views.  The dense
+side-to-patch projection in `BoxDPG` is the piece to replace by the Kronecker form before then.
+
 ## Getting from prototype to production
 
 In increasing order of commitment; each step is useful on its own.
