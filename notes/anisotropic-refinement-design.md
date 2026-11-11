@@ -299,6 +299,11 @@ Tests (`BoxVlasov` group, relativistic Vlasov-Maxwell 1D2V, 1 and 4 ranks), each
 - local u_x-only and u_y-only refinement (hanging and crossed faces): runs, fields stay zero for zero charge;
 - bisecting in x and t refines the configuration mesh; x alone is rejected.
 
+The MITL driver itself, on a tiny case (2 x 1 x 4 x 4 cells, p = 1, two slabs, space-charge-limited emission, 35 and 9
+fixed-point substeps): `--useBoxMesh` and `--useExtrudedMesh` print the same log, apart from the last digit of two
+residuals.  With `--boxVelocityRefinements=2` and a band, the first slab goes from 32 to 64 phase-space cells with the
+configuration mesh still at 2 cells, and the second slab is refined to match (11,176 dofs in both).
+
 Not done: geometric multigrid on box meshes (needs the Kronecker transfer between nested box meshes); unrefinement;
 p-refinement; serendipity bases (the flux space must be a full tensor product); mesh save/load; x-only or t-only
 refinement of phase cells; periodic directions; a spatial mesh that is not a 1D set of root cells; the legacy
