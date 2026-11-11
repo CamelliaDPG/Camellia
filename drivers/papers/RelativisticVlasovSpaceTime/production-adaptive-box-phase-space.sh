@@ -17,9 +17,9 @@
 #     bisected only in the directions in which f is least resolved on it (--boxAnisotropicAdaptivity).  To resolve the
 #     inflow and initial data, cells are bisected only tangentially to the boundary carrying the data.
 #
-# REQUIRES Camellia branch anisotropic-refinement (github.com/CamelliaDPG/Camellia) at the commit that adds
-# "--maxRefinementsFirstSlab" (after b1950a04), the Intrepid2 of trilinos/Trilinos PR 15871, and a python3 with numpy
-# and matplotlib.  Run from the Camellia build directory.  The branch is 316-tensor-native-mesh-for-planar-mitl-and-more
+# REQUIRES Camellia branch anisotropic-refinement (github.com/CamelliaDPG/Camellia) at e9ca597e or later, the
+# Intrepid2 of trilinos/Trilinos PR 15871 (b93efd4b798), a Trilinos with SuperLU_DIST (for --coarseSolver), and a
+# python3 with numpy and matplotlib.  Run from the Camellia build directory.  The branch is 316-tensor-native-mesh-for-planar-mitl-and-more
 # plus the box-mesh work; it does NOT have n5-separable-test-norm's additions, so:
 #   --numSpatialRefinements is not available (not needed here: x is refined adaptively);
 #   CAMELLIA_RELEASE_FREED_MEMORY has no effect and the sum_footprint_gb field is absent (memory is reported as RSS).
