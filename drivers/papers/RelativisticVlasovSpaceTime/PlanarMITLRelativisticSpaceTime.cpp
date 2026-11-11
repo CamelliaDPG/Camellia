@@ -13,6 +13,7 @@
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
+#include "BoxGDA.h"
 #include "BoxMeshTopology.h"
 #include <Teuchos_TimeMonitor.hpp>
 #include "DoerflerRefinementStrategy.h"
@@ -1186,6 +1187,10 @@ std::vector<std::pair<std::pair<FunctionPtr,FunctionPtr>,int> > bcFunctions(Teuc
   return functions;
 }
 
+// Box-mesh adaptivity settings (set in main from the command line; see --useBoxMesh)
+static bool   s_boxAnisotropicAdaptivity = false; // choose refinement directions per cell
+static double s_boxAnisotropyThreshold   = 0.5;   // see BoxGDA::anisotropicRefinementMasks()
+
 void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair<FunctionPtr,FunctionPtr>,int> > &bcFunctionsToResolve,
                  int maxElements, double bcResolutionTolerance)
 {
@@ -1216,6 +1221,14 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
     double refinementThresholdForInitialData = 0.80;
     auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
     refStrategy->setMaxP(H1Order);
+    if (s_boxAnisotropicAdaptivity)
+    {
+      // To resolve boundary data, bisect only in the directions tangential to the boundary side that carries it.
+      refStrategy->setCellRefiner([mesh, tagName, bcTag](std::vector<GlobalIndexType> &cellIDs) {
+        mesh->hRefine(BoxGDA::masksTangentialToTaggedSides(mesh, tagName, bcTag, cellIDs), false);
+        return static_cast<int>(cellIDs.size());
+      });
+    }
     
     double bc_norm = (bcFxnExact * bcRestriction)->l2norm(mesh, quadratureEnrichment);
     double relErr = bc_err->l2norm(mesh, quadratureEnrichment) / bc_norm;
@@ -1400,11 +1413,20 @@ int main(int argc, char *argv[])
     bool timeMonitorSummary = false;
     cmdp.setOption("timeMonitorSummary", "noTimeMonitorSummary", &timeMonitorSummary, "print the Teuchos::TimeMonitor summary (all TEUCHOS_FUNC_TIME_MONITOR timers) at the end of the run");
     cmdp.setOption("useBoxMesh", "useExtrudedMesh", &useBoxMesh, "phase-space mesh on a BoxMeshTopology (anisotropic refinement; no unrefinement)");
+    bool boxAnisotropicAdaptivity = true;
+    double boxAnisotropyThreshold = 0.5;
+    cmdp.setOption("boxAnisotropicAdaptivity", "boxIsotropicAdaptivity", &boxAnisotropicAdaptivity,
+                   "with --useBoxMesh --useAdaptivity: bisect each marked cell only in the directions in which f is least resolved (and, when resolving boundary data, only tangentially to the boundary)");
+    cmdp.setOption("boxAnisotropyThreshold", &boxAnisotropyThreshold,
+                   "with --boxAnisotropicAdaptivity: bisect in direction k if its indicator is at least this fraction of the largest direction's (0: all directions; near 1: only the worst)");
     cmdp.setOption("boxVelocityRefinements", &boxVelocityRefinements, "with --useBoxMesh: rounds of u_x-only bisection of the first slab's cells within a band of u_x");
     cmdp.setOption("boxVelocityBandCenter", &boxVelocityBandCenter);
     cmdp.setOption("boxVelocityBandHalfWidth", &boxVelocityBandHalfWidth);
     cmdp.setOption("maxRefinements", &maxRefinements);
     cmdp.setOption("maxRefinementsFinalSlab", &maxRefinementsFinalSlab);
+    int maxRefinementsFirstSlab = -1; // defaults to maxRefinements
+    cmdp.setOption("maxRefinementsFirstSlab", &maxRefinementsFirstSlab,
+                   "adaptive runs: refinement steps on the first slab (default: maxRefinements).  Later slabs start from a mesh matched to the previous slab at the interface, and usually need fewer.");
     cmdp.setOption("relErrorTarget", &relErrorTarget);
     cmdp.setOption("relErrorTargetFinalSlab", &relErrorTargetFinalSlab);
     cmdp.setOption("refinementThreshold", &refinementThreshold);
@@ -1777,6 +1799,8 @@ int main(int argc, char *argv[])
     
     auto phase0FormulationSetupStart = phase0.now();
     VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(useBoxMesh);
+    s_boxAnisotropicAdaptivity = useBoxMesh && boxAnisotropicAdaptivity;
+    s_boxAnisotropyThreshold = boxAnisotropyThreshold;
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
@@ -2804,9 +2828,27 @@ int main(int argc, char *argv[])
           refStrategy = Teuchos::rcp(new DoerflerRefinementStrategy(errorIndicator, doerflerTarget) );
         }
         
+        if (s_boxAnisotropicAdaptivity)
+        {
+          // bisect each marked cell only in the directions in which f is least resolved there
+          MeshPtr vlasovMesh = form->vlasovMesh();
+          FunctionPtr fSolution = Function::solution(form->f(), form->vlasovSolution());
+          const double anisotropyThreshold = s_boxAnisotropyThreshold;
+          refStrategy->setCellRefiner([vlasovMesh, fSolution, anisotropyThreshold](std::vector<GlobalIndexType> &cellIDs) {
+            fSolution->importCellData(cellIDs);
+            vlasovMesh->hRefine(BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cellIDs, anisotropyThreshold), false);
+            return static_cast<int>(cellIDs.size());
+          });
+        }
+        
         double energyError;
         auto energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form->vlasovSolution());
         
+        const int maxRefinementsLaterSlabs = maxRefinements;
+        if ((timeSlabOrdinal == 0) && (maxRefinementsFirstSlab >= 0))
+        {
+          maxRefinements = maxRefinementsFirstSlab; // restored after this slab's refinement loop
+        }
         if (timeSlabOrdinal == numTimeSlabs - 1)
         {
           // final time slab
@@ -3022,7 +3064,10 @@ int main(int argc, char *argv[])
               
               const int refNumber = 0; // "time" for ParaView
               const int defaultNum1DPoints = 2 * H1Order;
-              maxwellVizSlabFinalRef->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_z,Jx,Jz,vx_rel_mean,vz_rel_mean,vx_rel_mean_clipped,vz_rel_mean_clipped,cellIDFunction}, {"n_e","ux_mean","uz_mean_raw","Jx","Jz","vx_rel_mean_signed","vz_rel_mean_signed","vx_rel_mean_clipped","vz_rel_mean_clipped","cell ID (Maxwell)"}, refNumber, defaultNum1DPoints);
+              // As for the uniform-mesh export above: the tensor-native moment functions are defined only at the
+              // configuration-space cubature points of the rank-local cells they were sampled on, so the exporter cannot
+              // evaluate them; export the Maxwell solution fields only.
+              maxwellVizSlabFinalRef->exportSolution(form->configurationSpaceSolution(), {cellIDFunction}, {"cell ID (Maxwell)"}, refNumber, defaultNum1DPoints);
               
               if (exportVlasov)
               {
@@ -3032,6 +3077,57 @@ int main(int argc, char *argv[])
             break; // exits loop early if error target met
           }
         } // refinement loop
+        if ((timeSlabOrdinal == 0) && (timeSlabOrdinal < numTimeSlabs - 1)) maxRefinements = maxRefinementsLaterSlabs;
+        {
+          // The same per-slab diagnostics as the uniform-mesh branch writes, on the slab's final (adapted) mesh.
+          const int diagnosticVelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
+                                                       : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
+          if (densityDiagnostic)
+          {
+            const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
+            writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, diagnosticVelocityQuadratureDegree, cScaled, q);
+            if (rank == 0) std::cout << "Wrote density diagnostic to " << densityPath << ".\n";
+          }
+          if (phaseSpaceDiagnostic)
+          {
+            int pointsPerDim = phaseSpaceDiagnosticPointsPerDim;
+            if (pointsPerDim < 2)
+            {
+              int fDegree = 0;
+              for (GlobalIndexType cellID : form->vlasovMesh()->cellIDsInPartition())
+              {
+                fDegree = std::max(fDegree, form->vlasovMesh()->getElementType(cellID)->trialOrderPtr->getBasis(form->f(speciesOrdinal)->ID())->getDegree());
+              }
+              pointsPerDim = MPIWrapper::max(form->vlasovMesh()->Comm(), fDegree) + 1;
+            }
+            const bool writeSamples = phaseSpaceDiagnosticAllSlabs || (phaseSpaceDiagnosticSlabs.count(timeSlabOrdinal) > 0);
+            writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, writeSamples,
+                                      outputDir + "/phase_slab" + to_string(timeSlabOrdinal), outputDir + "/phase_reductions.csv",
+                                      timeSlabOrdinal, phaseSpaceDiagnosticXNear);
+          }
+          if (accuracyDiagnostics)
+          {
+            auto diagnosticConfigMesh = form->configurationSpaceMesh();
+            FunctionPtr E_diagnostic = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
+            FunctionPtr f_diagnostic = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+            const double tEval = std::nextafter(form->t1(), form->t0());
+            const double E_left = E_diagnostic->evaluate(diagnosticConfigMesh, x0, tEval);
+            const int cubatureEnrichment = 2;
+            const double fIntegral  = f_diagnostic->integrate(form->vlasovMesh(), cubatureEnrichment);
+            const double E2Integral = (E_diagnostic * E_diagnostic)->integrate(diagnosticConfigMesh, cubatureEnrichment);
+            // the tensor-native moment functions are only defined at the configuration cubature points they were sampled on
+            const double JxIntegral = (Jx != Teuchos::null) ? Jx->integrate(diagnosticConfigMesh, 0) : 0.0;
+            const double nIntegral  = (density != Teuchos::null) ? density->integrate(diagnosticConfigMesh, 0) : 0.0;
+            if (rank == 0)
+            {
+              std::cout << std::setprecision(10);
+              std::cout << "ACCURACY slab=" << timeSlabOrdinal << " int_f=" << fIntegral << " int_E2=" << E2Integral
+                        << " int_Jx=" << JxIntegral << " int_n=" << nIntegral << " E0_end=" << E_left
+                        << " vlasov_elements=" << form->vlasovMesh()->numActiveElements() << " vlasov_dofs=" << form->vlasovMesh()->numGlobalDofs() << std::endl;
+              std::cout << std::setprecision(6);
+            }
+          }
+        }
         
         if (timeSlabOrdinal < numTimeSlabs - 1)
         {

@@ -9,6 +9,7 @@
 #ifndef Camellia_RefinementStrategy_h
 #define Camellia_RefinementStrategy_h
 
+#include <functional>
 #include "Teuchos_RCP.hpp"
 
 #include "ErrorIndicator.h"
@@ -46,6 +47,7 @@ protected:
   double _relativeErrorThreshold;
   int _maxElementCount = std::numeric_limits<int>::max();
   bool _enforceOneIrregularity;
+  std::function<int(std::vector<GlobalIndexType> &cellIDs)> _cellRefiner; // optional; see setCellRefiner()
   bool _reportPerCellErrors;
   vector< RefinementResults > _results;
   double _min_h;
@@ -89,6 +91,11 @@ public:
 
   //! request to refine the specified cells; the return value indicates the number of cells that were refined (may be different than the number requested, depending on a subclass's implementation).
   virtual int refineCells(vector<GlobalIndexType> &cellIDs);
+
+  //! If set, refineCells() calls this instead of h-refining the cells with the regular pattern.  The function
+  //! refines the cells it is given (without repartitioning) and returns the number refined.  Use it e.g. to refine
+  //! box meshes in directions chosen per cell (BoxGDA::anisotropicRefinementMasks()).
+  void setCellRefiner(std::function<int(std::vector<GlobalIndexType> &cellIDs)> cellRefiner) { _cellRefiner = cellRefiner; }
   
   //! request to unrefine the specified cells; the return value indicates the number of cells that were refined (may be different than the number requested, depending on a subclass's implementation).
   virtual int unrefineCells(const std::set<GlobalIndexType> &cellIDs);

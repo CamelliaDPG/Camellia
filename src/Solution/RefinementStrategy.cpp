@@ -406,6 +406,7 @@ void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalInde
 template <typename Scalar>
 int TRefinementStrategy<Scalar>::refineCells(vector<GlobalIndexType> &cellIDs)
 {
+  if (_cellRefiner) return _cellRefiner(cellIDs);
   MeshPtr mesh = this->mesh();
   hRefineCells(mesh, cellIDs);
   return static_cast<int>(cellIDs.size());

@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "BC.h"
+#include "BasisFamily.h"
 #include "BoxDPG.h"
 #include "BoxGDA.h"
 #include "BoxMeshTopology.h"
@@ -28,7 +29,7 @@ namespace
     VarPtr u, t_n, v;
     BFPtr bf;
 
-    Convection(int dim_) : dim(dim_)
+    Convection(int dim_, bool serendipity = false) : dim(dim_)
     {
       beta = {1.0, 0.5, -0.75, 0.3};
       beta.resize(dim);
@@ -36,6 +37,7 @@ namespace
       t_n = vf->fluxVar("t_n_hat");
       u = vf->fieldVar("u", L2);
       v = vf->testVar("v", HGRAD);
+      if (serendipity) vf->setBasisFamily(BasisFamily::serendipityBasisFamily());
       bf = Teuchos::rcp(new BF(vf));
       for (int k=0; k<dim; k++) bf->addTerm(-beta[k] * u, v->di(k+1));
       bf->addTerm(t_n, v);
@@ -526,5 +528,154 @@ TEUCHOS_UNIT_TEST( BoxMesh, GeometricMultigridMatchesMeshTopology_2D )
   TEST_EQUALITY(dofCounts[0], dofCounts[1]);
   TEST_FLOATING_EQUALITY(errors[0], errors[1], 1e-5);
   TEST_COMPARE(iterationCounts[1], <=, int(1.15 * iterationCounts[0]));
+}
+TEUCHOS_UNIT_TEST( BoxMesh, SerendipityBasis )
+{
+  // Serendipity trial and test spaces (polynomials of superlinear degree <= p): the flux on a patch is then a
+  // serendipity polynomial.  Polynomial reproduction on anisotropically refined meshes, directly and by multigrid,
+  // and exact projection on refinement.
+  for (int dim : {3, 4})
+  {
+    const int H1Order = 4, p = H1Order - 1, delta_k = (dim == 4) ? 1 : 2; // p = 3: S_3 is a proper subspace of Q_3
+    Convection form(dim, true);
+    // in Camellia's serendipity space of degree p: pure powers up to x_k^p, and the product of two linear factors
+    BoxDPG::PointFunction uExact = [dim, p](const double *x)
+    {
+      double value = 1 + (1 + 0.5 * x[0]) * (1 - 0.25 * x[dim-1]);
+      for (int k=0; k<dim; k++) value += (k+1) * std::pow(x[k], p);
+      return value;
+    };
+    vector<double> betaCopy = form.beta;
+    BoxDPG::PointFunction f = [dim, p, betaCopy](const double *x)
+    {
+      double value = betaCopy[0] * 0.5 * (1 - 0.25 * x[dim-1]) + betaCopy[dim-1] * (1 + 0.5 * x[0]) * (-0.25);
+      for (int k=0; k<dim; k++) value += betaCopy[k] * (k+1) * p * std::pow(x[k], p-1);
+      return value;
+    };
+    auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.6, 1.0})));
+    MeshPtr mesh = BoxGDA::mesh(topology, form.bf, H1Order, delta_k);
+    // fewer dofs per cell than the full tensor space
+    const int fluxCardinality = mesh->getElementType(0)->trialOrderPtr->getBasisCardinality(form.t_n->ID(), 0);
+    int fullTensorCardinality = 1;
+    for (int k=0; k<dim-1; k++) fullTensorCardinality *= (p + 1);
+    TEST_COMPARE(fluxCardinality, <, fullTensorCardinality);
+
+    BCPtr bc = form.inflowBC(topology, uExact);
+    SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(f), form.bf->graphNorm());
+    mesh->registerSolution(solution);
+    FunctionPtr error = Function::solution(form.u, solution) - BoxDPG::function(uExact);
+    solution->solve();
+    TEST_COMPARE(error->l2norm(mesh), <, 1e-9);
+
+    mesh->hRefine(std::map<GlobalIndexType,unsigned>{{0, 2u}, {1, 1u << (dim-1)}});
+    const double projectedError = error->l2norm(mesh);
+    TEST_COMPARE(projectedError, <, 1e-9);
+    solution->solve();
+    const double directError = error->l2norm(mesh);
+    TEST_COMPARE(directError, <, 1e-9);
+
+    vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(mesh, 0, 1);
+    Teuchos::RCP<GMGSolver> gmgSolver = GMGSolver::gmgSolver(solution, true, meshes, 400, 1e-11, GMGOperator::V_CYCLE, Solver::getDirectSolver(true));
+    gmgSolver->setAztecOutput(0);
+    solution->solve(gmgSolver);
+    const double gmgError = error->l2norm(mesh);
+    out << dim << "D serendipity p=" << p << ": flux cardinality " << fluxCardinality << " (full tensor " << fullTensorCardinality << "); "
+        << mesh->numGlobalDofs() << " dofs; L2 errors: projected " << projectedError << ", direct " << directError << ", multigrid " << gmgError
+        << " (" << gmgSolver->iterationCount() << " iterations)" << endl;
+    TEST_COMPARE(gmgError, <, 1e-7);
+  }
+}
+
+TEUCHOS_UNIT_TEST( BoxMesh, AnisotropicRefinementMasks )
+{
+  const int dim = 3;
+  Convection form(dim);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.5, 1.0})));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 4, 1); // p = 3: the indicator uses the quadratic and cubic modes
+  set<GlobalIndexType> activeCells = mesh->getActiveCellIDsGlobal();
+  vector<GlobalIndexType> cellIDs(activeCells.begin(), activeCells.end());
+
+  // varies in y only
+  FunctionPtr fy = BoxDPG::function([](const double *x) { return std::sin(9 * x[1]); });
+  for (const auto &entry : BoxGDA::anisotropicRefinementMasks(mesh, fy, cellIDs, 0.5)) { TEST_EQUALITY(entry.second, 2u); }
+  // the same quadratic in x and in z (the linear parts differ from cell to cell, and must not matter)
+  FunctionPtr fxz = BoxDPG::function([](const double *x) { return x[0] * x[0] + x[2] * x[2] + 3 * x[1]; });
+  auto masks = BoxGDA::anisotropicRefinementMasks(mesh, fxz, cellIDs, 0.5);
+  TEST_EQUALITY(masks.size(), cellIDs.size());
+  for (const auto &entry : masks) { TEST_EQUALITY(entry.second, 1u | 4u); }
+  // strongly in x, weakly in z: z drops out at a high threshold and comes back at a low one
+  FunctionPtr fStrongX = BoxDPG::function([](const double *x) { return x[0] * x[0] + 0.05 * x[2] * x[2]; });
+  for (const auto &entry : BoxGDA::anisotropicRefinementMasks(mesh, fStrongX, cellIDs, 0.5)) { TEST_EQUALITY(entry.second, 1u); }
+  for (const auto &entry : BoxGDA::anisotropicRefinementMasks(mesh, fStrongX, cellIDs, 0.01)) { TEST_EQUALITY(entry.second, 1u | 4u); }
+  // restricted to allowed directions
+  for (const auto &entry : BoxGDA::anisotropicRefinementMasks(mesh, fxz, cellIDs, 0.5, 4u | 2u)) { TEST_EQUALITY(entry.second, 4u); }
+  // linear: nothing in the high modes, so no information, and every allowed direction is chosen
+  FunctionPtr linear = BoxDPG::function([](const double *x) { return 1 + x[0] - 2 * x[2]; });
+  for (const auto &entry : BoxGDA::anisotropicRefinementMasks(mesh, linear, cellIDs, 0.5)) { TEST_EQUALITY(entry.second, 7u); }
+
+  // tangential to tagged sides: cells on the x-min boundary must not be bisected in x
+  topology->applyTag(DIRICHLET_SET_TAG_NAME, 17, [](int direction, bool upper, const BoxMeshTopology::Extents &) { return (direction == 0) && !upper; });
+  for (const auto &entry : BoxGDA::masksTangentialToTaggedSides(mesh, DIRICHLET_SET_TAG_NAME, 17, cellIDs))
+  {
+    const bool onXMin = (topology->cellExtents(entry.first)[0].first == 0.0);
+    TEST_EQUALITY(entry.second, onXMin ? (2u | 4u) : 7u);
+  }
+}
+
+TEUCHOS_UNIT_TEST( BoxMesh, AnisotropicAdaptivity )
+{
+  // A layer in y: energy-error marking, with each marked cell bisected in the directions in which the solution is least
+  // resolved, against the same marking with every marked cell bisected in both directions.
+  const int dim = 2, H1Order = 3, delta_k = 2;
+  auto uExact = [](const double *x) { return std::tanh(20 * (x[1] - 0.5)) * (1 + x[0]); };
+  double errors[2];
+  GlobalIndexType cellCounts[2], dofCounts[2];
+  int maxXLevel[2];
+  for (int anisotropic=0; anisotropic<2; anisotropic++)
+  {
+    Convection form(dim);
+    vector<double> beta = form.beta;
+    auto f = [beta](const double *x)
+    {
+      const double th = std::tanh(20 * (x[1] - 0.5));
+      return beta[0] * th + beta[1] * 20 * (1 - th * th) * (1 + x[0]);
+    };
+    auto topology = Teuchos::rcp(new BoxMeshTopology({{0.0, 0.5, 1.0}, {0.0, 0.5, 1.0}}));
+    MeshPtr mesh = BoxGDA::mesh(topology, form.bf, H1Order, delta_k);
+    BCPtr bc = form.inflowBC(topology, uExact);
+    SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(f), form.bf->graphNorm());
+    mesh->registerSolution(solution);
+    RefinementStrategyPtr refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution, 0.3));
+    if (anisotropic)
+    {
+      FunctionPtr uSolution = Function::solution(form.u, solution);
+      refinementStrategy->setCellRefiner([mesh, uSolution](std::vector<GlobalIndexType> &cellIDs) {
+        uSolution->importCellData(cellIDs);
+        mesh->hRefine(BoxGDA::anisotropicRefinementMasks(mesh, uSolution, cellIDs, 0.5), false);
+        return static_cast<int>(cellIDs.size());
+      });
+    }
+    FunctionPtr error = Function::solution(form.u, solution) - BoxDPG::function(uExact);
+    solution->solve();
+    // isotropic: five marking steps.  anisotropic: as many steps as it takes to reach the isotropic error.
+    const int maxSteps = anisotropic ? 20 : 5;
+    for (int step=0; step<maxSteps; step++)
+    {
+      refinementStrategy->refine(false);
+      solution->solve();
+      if (anisotropic && (error->l2norm(mesh, 4) <= errors[0])) break;
+    }
+    errors[anisotropic] = error->l2norm(mesh, 4);
+    cellCounts[anisotropic] = mesh->numActiveElements();
+    dofCounts[anisotropic] = mesh->numGlobalDofs();
+    maxXLevel[anisotropic] = 0;
+    for (IndexType cellID : topology->getLocallyKnownActiveCellIndices()) maxXLevel[anisotropic] = std::max(maxXLevel[anisotropic], int(topology->forest().node(cellID).box.level[0]));
+    out << (anisotropic ? "anisotropic: " : "isotropic:   ") << cellCounts[anisotropic] << " cells, " << dofCounts[anisotropic] << " dofs, max x level "
+        << maxXLevel[anisotropic] << ", L2 error " << errors[anisotropic] << endl;
+  }
+  // the anisotropic mesh reaches the isotropic mesh's error with fewer cells, and with less refinement in x
+  TEST_COMPARE(errors[1], <=, errors[0]);
+  TEST_COMPARE(cellCounts[1], <, cellCounts[0]);
+  TEST_COMPARE(maxXLevel[1], <, maxXLevel[0]);
 }
 } // namespace

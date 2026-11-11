@@ -8,6 +8,7 @@
 #include "BoxGDA.h"
 
 #include "InducedMeshPartitionPolicy.h"
+#include "MPIWrapper.h"
 #include "Mesh.h"
 #include "VarFactory.h"
 
@@ -36,12 +37,6 @@ namespace
     return P1;
   }
 
-  int intPower(int base, int exponent)
-  {
-    int result = 1;
-    for (int i=0; i<exponent; i++) result *= base;
-    return result;
-  }
 }
 
 MeshPtr BoxGDA::mesh(Teuchos::RCP<BoxMeshTopology> topology, BFPtr bf, int H1Order, int delta_k,
@@ -86,16 +81,100 @@ void BoxGDA::initializeVariables()
   for (VarPtr flux : _fluxVars)
   {
     const int cardinality = trialOrdering->getBasisCardinality(flux->ID(), 0);
+    // Identify the flux space: find which products of Legendre polynomials (one degree per tangential direction) the
+    // side basis reproduces.  They must account for the whole basis, and the set of multi-indices must be downward
+    // closed, which makes the space invariant under the axis-aligned affine maps between a patch and its faces.
+    // (Q_p and Camellia's serendipity spaces are both of this kind.)
+    const int tangentialCount = dim - 1;
+    std::vector<std::vector<int>> indexSet;
     int degree = 0;
-    while (intPower(degree + 1, dim - 1) < cardinality) degree++;
-    TEUCHOS_TEST_FOR_EXCEPTION(intPower(degree + 1, dim - 1) != cardinality, std::invalid_argument,
-                               "BoxGDA: flux basis is not a full tensor-product polynomial space");
+    {
+      const IndexType sampleCellID = *_boxTopology->getLocallyKnownActiveCellIndices().begin();
+      const int maxDegree = _initialH1OrderTrial[0] + 2; // comfortably above the flux degree
+      // enough quadrature points that a product the basis does not contain cannot match it at all of them
+      const int cubatureEnrichment = 2 * maxDegree;
+      BasisCachePtr sampleCache = Teuchos::rcp(new BasisCache(elemType, MeshPtr(Teuchos::null), false, cubatureEnrichment));
+      FC sampleNodes = _boxTopology->physicalCellNodesForCell(sampleCellID, true);
+      sampleCache->setPhysicalCellNodes(sampleNodes, {GlobalIndexType(sampleCellID)}, true);
+      const BoxMeshTopology::Extents extents = _boxTopology->cellExtents(sampleCellID);
+      const int side = 0, normal = _boxTopology->faceForSideOrdinal(side) / 2;
+      BasisCachePtr sideCache = sampleCache->getSideBasisCache(side);
+      BasisPtr basis = trialOrdering->getBasis(flux->ID(), side);
+      auto basisValues = sideCache->getTransformedValues(basis, OP_VALUE);
+      const FC &points = sideCache->getPhysicalCubaturePointsFC();
+      const FC &weightedMeasures = sideCache->getWeightedMeasures();
+      const int P = points.dimension(1), n = cardinality;
+      std::vector<double> M(n*n, 0.0), g(P), c(n);
+      for (int i=0; i<n; i++)
+        for (int j=0; j<n; j++)
+          for (int q=0; q<P; q++)
+            M[j*n+i] += (*basisValues)(0,i,q) * (*basisValues)(0,j,q) * weightedMeasures(0,q);
+      Teuchos::LAPACK<int,double> lapack;
+      int info;
+      lapack.POTRF('U', n, M.data(), n, &info);
+      TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA: could not factor the flux side mass matrix");
+      std::vector<int> index(tangentialCount, 0);
+      while (true) // the first tangential direction is the most significant digit
+      {
+        double maxValue = 0;
+        for (int q=0; q<P; q++)
+        {
+          double value = 1.0;
+          int t = 0;
+          for (int k=0; k<dim; k++)
+          {
+            if (k == normal) continue;
+            value *= legendre(index[t++], -1 + 2 * (points(0,q,k) - extents[k].first) / (extents[k].second - extents[k].first));
+          }
+          g[q] = value;
+          maxValue = std::max(maxValue, std::abs(value));
+        }
+        std::fill(c.begin(), c.end(), 0.0);
+        for (int i=0; i<n; i++) for (int q=0; q<P; q++) c[i] += (*basisValues)(0,i,q) * g[q] * weightedMeasures(0,q);
+        lapack.POTRS('U', n, 1, M.data(), n, c.data(), n, &info);
+        double maxResidual = 0;
+        for (int q=0; q<P; q++)
+        {
+          double value = 0;
+          for (int i=0; i<n; i++) value += c[i] * (*basisValues)(0,i,q);
+          maxResidual = std::max(maxResidual, std::abs(value - g[q]));
+        }
+        if (maxResidual < 1e-9 * maxValue)
+        {
+          indexSet.push_back(index);
+          for (int i : index) degree = std::max(degree, i);
+        }
+        int t = tangentialCount - 1;
+        for (; t>=0; t--)
+        {
+          if (++index[t] <= maxDegree) break;
+          index[t] = 0;
+        }
+        if (t < 0) break;
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(int(indexSet.size()) != cardinality, std::invalid_argument,
+                                 "BoxGDA: the flux side basis is not spanned by products of Legendre polynomials (found "
+                                 << indexSet.size() << " such products in a basis of cardinality " << cardinality << ")");
+      std::set<std::vector<int>> members(indexSet.begin(), indexSet.end());
+      for (const std::vector<int> &member : indexSet)
+      {
+        for (int t=0; t<tangentialCount; t++)
+        {
+          if (member[t] == 0) continue;
+          std::vector<int> lower = member;
+          lower[t]--;
+          TEUCHOS_TEST_FOR_EXCEPTION(members.find(lower) == members.end(), std::invalid_argument,
+                                     "BoxGDA: the flux polynomial space is not invariant under restriction to sub-boxes");
+        }
+      }
+    }
     for (int side=1; side<sideCount; side++)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(trialOrdering->getBasisCardinality(flux->ID(), side) != cardinality, std::invalid_argument,
                                  "BoxGDA: flux basis cardinality varies from side to side");
     }
     _fluxDegrees.push_back(degree);
+    _fluxIndexSets.push_back(indexSet);
     _fluxOffsets.push_back(_fluxDofsPerPatch);
     _fluxDofsPerPatch += cardinality;
   }
@@ -212,22 +291,29 @@ GlobalIndexType BoxGDA::numPartitionOwnedGlobalFluxIndices() { return _myFluxDof
 GlobalIndexType BoxGDA::numPartitionOwnedGlobalTraceIndices() { return 0; }
 IndexType BoxGDA::localDofCount() { return IndexType(_myFieldDofCount + _myFluxDofCount); }
 
-void BoxGDA::patchBasisValues(const BoxForest::Patch &patch, int degree, const double *x, vector<double> &values) const
+void BoxGDA::patchBasisValues(const BoxForest::Patch &patch, int fluxOrdinal, const double *x, vector<double> &values) const
 {
-  // tensor Legendre in the tangential physical coordinates, on the patch's bounding box
+  // products of Legendre polynomials in the tangential physical coordinates, on the patch's bounding box, for the
+  // multi-indices of the flux variable's space
   const int dim = _boxTopology->getDimension();
-  values.assign(1, 1.0);
-  vector<double> next;
+  const int degree = _fluxDegrees[fluxOrdinal];
+  const std::vector<std::vector<int>> &indexSet = _fluxIndexSets[fluxOrdinal];
+  double legendreValues[BoxForest::MAX_DIM][32];
+  int t = 0;
   for (int k=0; k<dim; k++)
   {
     if (k == patch.normal) continue;
     const double a = _boxTopology->coordinate(k, patch.lo[k]), b = _boxTopology->coordinate(k, patch.hi[k]);
     const double xi = -1 + 2 * (x[k] - a) / (b - a);
-    next.resize(values.size() * (degree + 1));
-    for (size_t j=0; j<values.size(); j++)
-      for (int i=0; i<=degree; i++)
-        next[j*(degree+1)+i] = values[j] * legendre(i, xi);
-    values.swap(next);
+    for (int i=0; i<=degree; i++) legendreValues[t][i] = legendre(i, xi);
+    t++;
+  }
+  values.resize(indexSet.size());
+  for (size_t j=0; j<indexSet.size(); j++)
+  {
+    double value = 1.0;
+    for (int tangential=0; tangential<t; tangential++) value *= legendreValues[tangential][indexSet[j][tangential]];
+    values[j] = value;
   }
 }
 
@@ -290,7 +376,7 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
       for (int q=0; q<P; q++)
       {
         for (int i=0; i<n; i++) phiValues[i*P+q] = (*fluxValues)(0,i,q);
-        patchBasisValues(patch, _fluxDegrees[fluxOrdinal], &points(0,q,0), psi);
+        patchBasisValues(patch, int(fluxOrdinal), &points(0,q,0), psi);
         for (int j=0; j<m; j++) psiValues[j*P+q] = psi[j];
       }
       // weights(i,j): patch basis function j = sum_i weights(i,j) * side basis function i, on this side (L2 projection, exact)
@@ -309,6 +395,24 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
       int info;
       lapack.POSV('U', n, m, M.data(), n, basisMap.weights.data(), n, &info);
       TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA: side-to-patch projection failed");
+      if (!_haveVerifiedFluxSpaces)
+      {
+        // once: the side basis must reproduce the patch basis functions exactly (it does if the flux space is what
+        // initializeVariables() took it to be)
+        double maxResidual = 0, maxValue = 0;
+        for (int q=0; q<P; q++)
+        {
+          for (int j=0; j<m; j++)
+          {
+            double value = 0;
+            for (int i=0; i<n; i++) value += basisMap.weights[j*n+i] * phiValues[i*P+q];
+            maxResidual = std::max(maxResidual, std::abs(value - psiValues[j*P+q]));
+            maxValue = std::max(maxValue, std::abs(psiValues[j*P+q]));
+          }
+        }
+        TEUCHOS_TEST_FOR_EXCEPTION(maxResidual > 1e-8 * maxValue, std::invalid_argument,
+                                   "BoxGDA: the flux side basis does not span the expected polynomial space (Q_p or serendipity S_p)");
+      }
 
       basisMap.localDofIndices = trialOrdering->getDofIndices(varID, side);
       const GlobalIndexType offset = _fluxDofOffsetForPatch[patchOrdinal] + _fluxOffsets[fluxOrdinal];
@@ -324,6 +428,7 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
           if (std::abs(basisMap.weights[j*n+i]) > 1e-14) map.rows[basisMap.localDofIndices[i]].push_back({base + j, basisMap.weights[j*n+i]});
     }
   }
+  _haveVerifiedFluxSpaces = true;
   return map;
 }
 
@@ -540,7 +645,7 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
       for (int q=0; q<P; q++)
       {
         for (int i=0; i<n; i++) values[q] += parentCoefficients[dofIndices[i]] * (*basisValues)(0,i,q);
-        patchBasisValues(patch, _fluxDegrees[fluxOrdinal], &points(0,q,0), psi);
+        patchBasisValues(patch, int(fluxOrdinal), &points(0,q,0), psi);
         for (int j=0; j<n; j++) psiValues[j*P+q] = psi[j];
       }
       project(psiValues, values, weights, n, parentSideLegendre[side][fluxOrdinal]);
@@ -615,7 +720,7 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
         for (int q=0; q<P; q++)
         {
           for (int i=0; i<n; i++) phiValues[i*P+q] = (*childValues)(0,i,q);
-          patchBasisValues(sideBox[side], _fluxDegrees[fluxOrdinal], &points(0,q,0), psi);
+          patchBasisValues(sideBox[side], int(fluxOrdinal), &points(0,q,0), psi);
           for (int j=0; j<n; j++) values[q] += parentSideLegendre[side][fluxOrdinal][j] * psi[j];
         }
         project(phiValues, values, weights, n, c);
@@ -915,24 +1020,20 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
         const double a = -1 + 2 * (fineLo - coarseLo) / (coarseHi - coarseLo), b = -1 + 2 * (fineHi - coarseLo) / (coarseHi - coarseLo);
         R.push_back(BoxForest::legendreRestriction(fineDegree, a, b)); // (fineDegree+1)^2, row-major
       }
-      const int tangentialCount = dim - 1, nf = fineDegree + 1, nc = coarseDegree + 1;
-      int fineCardinality = 1, coarseCardinality = 1;
-      for (int t=0; t<tangentialCount; t++) { fineCardinality *= nf; coarseCardinality *= nc; }
+      const int tangentialCount = dim - 1, nf = fineDegree + 1;
+      const std::vector<std::vector<int>> &fineIndexSet = _fluxIndexSets[fluxOrdinal];
+      const std::vector<std::vector<int>> &coarseIndexSet = coarseGDA->_fluxIndexSets[fluxOrdinal];
       const GlobalIndexType fineOffset = _fluxDofOffsetForPatch[patchOrdinal] + _fluxOffsets[fluxOrdinal];
       const GlobalIndexType coarseOffset = coarseGDA->_fluxDofOffsetForPatch[coarsePatchOrdinal] + coarseGDA->_fluxOffsets[fluxOrdinal];
-      // multi-indices: the first tangential direction is the most significant digit (as in patchBasisValues())
-      std::vector<int> fineIndex(tangentialCount), coarseIndex(tangentialCount);
-      for (int i=0; i<fineCardinality; i++)
+      // The coarse function, restricted, has a unique expansion in the full tensor Legendre basis of the fine box, with
+      // coefficients that are products of the 1D restrictions; it lies in the fine space, so those are its coefficients there.
+      for (size_t i=0; i<fineIndexSet.size(); i++)
       {
-        int remainder = i;
-        for (int t=tangentialCount-1; t>=0; t--) { fineIndex[t] = remainder % nf; remainder /= nf; }
-        for (int j=0; j<coarseCardinality; j++)
+        for (size_t j=0; j<coarseIndexSet.size(); j++)
         {
-          remainder = j;
-          for (int t=tangentialCount-1; t>=0; t--) { coarseIndex[t] = remainder % nc; remainder /= nc; }
           double value = 1.0;
-          for (int t=0; t<tangentialCount; t++) value *= R[t][fineIndex[t] * nf + coarseIndex[t]];
-          addEntry(fineOffset + i, coarseOffset + j, value);
+          for (int t=0; t<tangentialCount; t++) value *= R[t][fineIndexSet[i][t] * nf + coarseIndexSet[j][t]];
+          addEntry(fineOffset + GlobalIndexType(i), coarseOffset + GlobalIndexType(j), value);
         }
       }
     }
@@ -962,4 +1063,141 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
   }
   P->fillComplete(coarseMap, fineMap);
   return P;
+}
+
+// ---------------------------------------------------------------- choosing refinement directions
+
+namespace
+{
+  void gaussLegendre(int n, std::vector<double> &x, std::vector<double> &w)
+  {
+    x.resize(n);
+    w.resize(n);
+    for (int q=0; q<n; q++)
+    {
+      double xi = std::cos(M_PI * (q + 0.75) / (n + 0.5));
+      double dP = 1;
+      for (int iteration=0; iteration<100; iteration++)
+      {
+        const double Pn = legendre(n, xi), Pnm1 = legendre(n-1, xi);
+        dP = n * (xi * Pn - Pnm1) / (xi * xi - 1.0);
+        const double dx = Pn / dP;
+        xi -= dx;
+        if (std::abs(dx) < 1e-15) break;
+      }
+      const double Pn = legendre(n, xi), Pnm1 = legendre(n-1, xi);
+      dP = n * (xi * Pn - Pnm1) / (xi * xi - 1.0);
+      x[q] = xi;
+      w[q] = 2.0 / ((1.0 - xi * xi) * dP * dP);
+    }
+  }
+}
+
+std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr mesh, FunctionPtr f, const std::vector<GlobalIndexType> &cellIDs,
+                                                                      double threshold, unsigned allowedDirections)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::anisotropicRefinementMasks");
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  const int dim = topology->getDimension();
+  const unsigned allDirections = (1u << dim) - 1;
+  allowedDirections &= allDirections;
+  TEUCHOS_TEST_FOR_EXCEPTION(allowedDirections == 0, std::invalid_argument, "no refinement directions allowed");
+
+  std::vector<std::pair<GlobalIndexType,GlobalIndexType>> myMasks; // (cellID, mask), for cells this rank owns
+  const std::set<GlobalIndexType> &myCells = mesh->cellIDsInPartition();
+  for (GlobalIndexType cellID : cellIDs)
+  {
+    if (myCells.find(cellID) == myCells.end()) continue;
+    const int p = std::max(mesh->globalDofAssignment()->getH1Order(cellID)[0] - 1, 0); // degree of L2 fields
+    unsigned mask = allowedDirections;
+    if (p >= 1)
+    {
+      // sample f at tensor Gauss points, and find its Legendre coefficients c(i_0, ..., i_{d-1}) on the cell
+      const int n = p + 1;
+      std::vector<double> x, w;
+      gaussLegendre(n, x, w);
+      int numPoints = 1;
+      for (int k=0; k<dim; k++) numPoints *= n;
+      FC refPoints(numPoints, dim);
+      std::vector<int> index(dim);
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        int remainder = pointOrdinal;
+        for (int k=dim-1; k>=0; k--) { index[k] = remainder % n; remainder /= n; }
+        for (int k=0; k<dim; k++) refPoints(pointOrdinal,k) = x[index[k]];
+      }
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      basisCache->setRefCellPointsFC(refPoints);
+      FC values(1, numPoints);
+      f->values(values, basisCache);
+      std::vector<double> coefficients(numPoints), next(numPoints);
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) coefficients[pointOrdinal] = values(0,pointOrdinal);
+      // A(i,q) = (2i+1)/2 w_q P_i(x_q): values at the points -> Legendre coefficients, one direction at a time
+      std::vector<double> A(n*n);
+      for (int i=0; i<n; i++) for (int q=0; q<n; q++) A[i*n+q] = 0.5 * (2*i+1) * w[q] * legendre(i, x[q]);
+      int stride = numPoints;
+      for (int k=0; k<dim; k++)
+      {
+        stride /= n; // direction k is digit k, the first being the most significant
+        std::fill(next.begin(), next.end(), 0.0);
+        for (int ordinal=0; ordinal<numPoints; ordinal++)
+        {
+          const int digit = (ordinal / stride) % n;
+          const int base = ordinal - digit * stride;
+          for (int i=0; i<n; i++) next[base + i * stride] += A[i*n+digit] * coefficients[ordinal];
+        }
+        coefficients.swap(next);
+      }
+      // eta_k^2: the L2 norm (on the reference cell) of the part of f in the highest Legendre modes of direction k: the
+      // top two for p >= 3, the top one below that (so that the linear mode, which says nothing about resolution, never
+      // counts once there is a quadratic one)
+      std::vector<double> eta(dim, 0.0);
+      const int lowestHighMode = std::max(std::min(p, 2), p - 1); // p = 1: 1; p = 2: 2; p = 3: 2; p = 4: 3; ...
+      for (int ordinal=0; ordinal<numPoints; ordinal++)
+      {
+        int remainder = ordinal;
+        double weight = 1.0;
+        for (int k=dim-1; k>=0; k--) { index[k] = remainder % n; remainder /= n; weight *= 2.0 / (2 * index[k] + 1); }
+        const double contribution = coefficients[ordinal] * coefficients[ordinal] * weight;
+        for (int k=0; k<dim; k++) if (index[k] >= lowestHighMode) eta[k] += contribution;
+      }
+      double maxEta = 0;
+      for (int k=0; k<dim; k++) if (allowedDirections & (1u << k)) maxEta = std::max(maxEta, std::sqrt(eta[k]));
+      if (maxEta > 0)
+      {
+        mask = 0;
+        for (int k=0; k<dim; k++)
+        {
+          if ((allowedDirections & (1u << k)) && (std::sqrt(eta[k]) >= threshold * maxEta)) mask |= (1u << k);
+        }
+      }
+    }
+    myMasks.push_back({cellID, GlobalIndexType(mask)});
+  }
+  std::vector<std::pair<GlobalIndexType,GlobalIndexType>> gatheredMasks;
+  std::vector<int> offsets;
+  MPIWrapper::allGatherVariable(mesh->Comm(), gatheredMasks, myMasks, offsets);
+  std::map<GlobalIndexType,unsigned> masks;
+  for (const auto &entry : gatheredMasks) masks[entry.first] = unsigned(entry.second);
+  return masks;
+}
+
+std::map<GlobalIndexType,unsigned> BoxGDA::masksTangentialToTaggedSides(MeshPtr mesh, const std::string &tagName, int tagID,
+                                                                        const std::vector<GlobalIndexType> &cellIDs)
+{
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  const unsigned allDirections = (1u << topology->getDimension()) - 1;
+  std::map<GlobalIndexType,unsigned> masks;
+  for (GlobalIndexType cellID : cellIDs)
+  {
+    unsigned mask = allDirections;
+    for (unsigned side : topology->getSidesMatchingTag(cellID, tagName, tagID))
+    {
+      mask &= ~(1u << (topology->faceForSideOrdinal(side) / 2)); // not in the direction normal to the tagged side
+    }
+    masks[cellID] = (mask != 0) ? mask : allDirections;
+  }
+  return masks;
 }

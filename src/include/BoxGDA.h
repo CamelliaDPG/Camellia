@@ -17,6 +17,11 @@
 //  one of its cells.  Global numbers are contiguous per rank.  Because the topology is replicated, every rank
 //  computes the whole numbering without communication.
 //
+//  The flux space on a side may be any space spanned by products of Legendre polynomials whose multi-indices form a
+//  downward-closed set: the full tensor-product space Q_p, or Camellia's serendipity spaces.  Such a space is
+//  invariant under the axis-aligned affine maps between a patch and the faces in it, which is what makes the patch
+//  polynomial representable on every face.  The index set is found numerically from the side basis.
+//
 //  Limitations: uniform polynomial order (no p-refinement); no continuous traces.
 //
 
@@ -25,6 +30,7 @@
 
 #include "BasisCache.h"
 #include "BoxMeshTopology.h"
+#include "Function.h"
 #include "GlobalDofAssignment.h"
 #include "RefinementObserver.h"
 
@@ -49,6 +55,8 @@ namespace Camellia
     BoxMeshTopology* _boxTopology;
     std::vector<VarPtr> _fieldVars, _fluxVars;
     std::vector<int> _fieldOffsets, _fluxOffsets, _fluxDegrees;
+    // For each flux variable, the multi-indices (one Legendre degree per tangential direction) of its patch basis
+    std::vector<std::vector<std::vector<int>>> _fluxIndexSets;
     int _fieldDofsPerCell = 0, _fluxDofsPerPatch = 0;
     bool _allowPruning = false;
 
@@ -58,10 +66,11 @@ namespace Camellia
     GlobalIndexType _myFieldDofCount = 0, _myFluxDofCount = 0;
     std::map<GlobalIndexType, CellMap> _cellMaps;
     BasisCachePtr _basisCache, _parentBasisCache;
+    bool _haveVerifiedFluxSpaces = false;
 
     void initializeVariables();
     const CellMap &cellMap(GlobalIndexType cellID);
-    void patchBasisValues(const BoxForest::Patch &patch, int degree, const double *x, std::vector<double> &values) const;
+    void patchBasisValues(const BoxForest::Patch &patch, int fluxOrdinal, const double *x, std::vector<double> &values) const;
   public:
     BoxGDA(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
            std::vector<int> initialH1OrderTrial, int testOrderEnhancement);
@@ -138,6 +147,27 @@ namespace Camellia
      (Lagrange constraints) map one to one.
      */
     TMatrixPtr<double> prolongationOperator(MeshPtr coarseMesh, TMapPtr coarseMap, TMapPtr fineMap);
+
+    /**
+     \brief  For each of the given active cells, the directions in which to bisect it: those in which f is least
+             resolved on the cell.  MPI-collective; each rank evaluates f on the cells it owns.
+
+     On each cell, f is sampled at tensor Gauss points and expanded in tensor Legendre polynomials.  eta_k is the L2
+     norm of the part of the expansion in the highest modes of direction k (the top two for p >= 3, the top one
+     below that); direction k is selected if
+     eta_k >= threshold * max_j eta_j, over the allowed directions (bit k of allowedDirections).  A threshold of 0
+     selects every allowed direction; a threshold near 1, only the worst.
+
+     This is a cheap indicator of anisotropy based on the solution's own high modes.  It is not the DPG indicator
+     based on local residual reduction.
+     */
+    static std::map<GlobalIndexType,unsigned> anisotropicRefinementMasks(MeshPtr mesh, FunctionPtr f, const std::vector<GlobalIndexType> &cellIDs,
+                                                                         double threshold, unsigned allowedDirections = ~0u);
+
+    //! For each given cell, every direction except those normal to its sides carrying the tag: the directions in which
+    //! refinement improves the resolution of boundary data on those sides.
+    static std::map<GlobalIndexType,unsigned> masksTangentialToTaggedSides(MeshPtr mesh, const std::string &tagName, int tagID,
+                                                                           const std::vector<GlobalIndexType> &cellIDs);
 
     //! A Mesh on a box topology, with a BoxGDA.
     static MeshPtr mesh(Teuchos::RCP<BoxMeshTopology> topology, BFPtr bf, int H1Order, int delta_k,

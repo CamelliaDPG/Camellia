@@ -35,7 +35,8 @@ namespace
     Teuchos::RCP<RelativisticVlasovSpaceTimeFormulation> form;
   };
 
-  Problem problem(bool boxMesh, int xElements, int vxElements, int vyElements, int H1Order, FunctionPtr f0, double q = Q, int tElements = 1)
+  Problem problem(bool boxMesh, int xElements, int vxElements, int vyElements, int H1Order, FunctionPtr f0, double q = Q, int tElements = 1,
+                  EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL)
   {
     UseBoxMesh useBoxMesh(boxMesh);
     const int delta_k = 1, numUniformRefinements = 0;
@@ -49,7 +50,8 @@ namespace
     p.configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, EPS0));
     p.form = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(C, q, M, p.configForm, spatialMeshTopo, temporalVertices,
                                                                      velocityVertices_x, velocityVertices_y, velocityVertices_z,
-                                                                     H1Order, delta_k, numUniformRefinements));
+                                                                     H1Order, delta_k, numUniformRefinements,
+                                                                     RelativisticVlasovSpaceTimeFormulation::L2TestSpaceInnerProduct, 1.0, basisFamily));
     SpatialFilterPtr xLeftFilter  = SpatialFilter::matchingX(X0);
     SpatialFilterPtr xRightFilter = SpatialFilter::matchingX(X0 + XWIDTH);
     auto xLeftRightTag = p.form->createConfigurationMeshSideSetTag(xLeftFilter | xRightFilter, true);
@@ -448,5 +450,29 @@ TEUCHOS_UNIT_TEST( BoxVlasov, GeometricMultigridMatchesDirectSolve )
   }
   TEST_FLOATING_EQUALITY(results[0].fNorm, results[1].fNorm, 1e-7);
   TEST_FLOATING_EQUALITY(results[0].ExNorm, results[1].ExNorm, 1e-6);
+}
+TEUCHOS_UNIT_TEST( BoxVlasov, SerendipityMatchesExtrudedMesh )
+{
+  // serendipity bases at p = 2 (a proper subspace of the tensor-product space), with one cell refined in all four
+  // directions so that there are hanging faces: box against extruded
+  const int xElements = 2, vxElements = 2, vyElements = 1, H1Order = 3;
+  Diagnostics results[2];
+  for (int useBox=0; useBox<2; useBox++)
+  {
+    Problem p = problem(useBox == 1, xElements, vxElements, vyElements, H1Order, drivenDistribution(), Q, 1, BASIS_FAMILY_SERENDIPITY);
+    auto vlasovMesh = p.form->vlasovMesh();
+    Camellia::FieldContainer<double> point(1, 4);
+    point(0,0) = X0 + 0.1 * XWIDTH; point(0,1) = T0 + 0.1 * TWIDTH; point(0,2) = V0 + 0.1 * VWIDTH; point(0,3) = V0 + 0.1 * VWIDTH;
+    vlasovMesh->hRefine(std::set<GlobalIndexType>{GlobalIndexType(vlasovMesh->getTopology()->cellIDsForPoints(point)[0])});
+    p.form->setInitialAndInflowConditions(drivenDistribution(), drivenDistribution());
+    p.form->solve();
+    results[useBox] = diagnostics(p);
+    print(out, (useBox == 1) ? "box     " : "extruded", results[useBox]);
+  }
+  TEST_EQUALITY(results[0].vlasovCells, results[1].vlasovCells);
+  TEST_EQUALITY(results[0].vlasovDofs, results[1].vlasovDofs);
+  TEST_FLOATING_EQUALITY(results[0].fNorm, results[1].fNorm, 1e-8);
+  TEST_FLOATING_EQUALITY(results[0].ExNorm, results[1].ExNorm, 1e-7);
+  TEST_FLOATING_EQUALITY(results[0].fEnergyError, results[1].fEnergyError, 1e-6);
 }
 } // namespace
