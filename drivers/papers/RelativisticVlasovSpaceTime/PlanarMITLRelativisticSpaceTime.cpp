@@ -1396,7 +1396,7 @@ int main(int argc, char *argv[])
     int boxVelocityRefinements = 0;       // rounds of u_x-only bisection applied to the first slab
     double boxVelocityBandCenter = 0.0;   // cells whose u_x interval meets [center - halfWidth, center + halfWidth] are bisected;
     double boxVelocityBandHalfWidth = 0.0; // the half-width halves each round.  A non-positive half-width selects every cell.
-    cmdp.setOption("useBoxMesh", "useExtrudedMesh", &useBoxMesh, "phase-space mesh on a BoxMeshTopology (anisotropic refinement; direct solves only; no unrefinement)");
+    cmdp.setOption("useBoxMesh", "useExtrudedMesh", &useBoxMesh, "phase-space mesh on a BoxMeshTopology (anisotropic refinement; no unrefinement)");
     cmdp.setOption("boxVelocityRefinements", &boxVelocityRefinements, "with --useBoxMesh: rounds of u_x-only bisection of the first slab's cells within a band of u_x");
     cmdp.setOption("boxVelocityBandCenter", &boxVelocityBandCenter);
     cmdp.setOption("boxVelocityBandHalfWidth", &boxVelocityBandHalfWidth);

@@ -7,6 +7,7 @@
 
 #include "BoxGDA.h"
 
+#include "InducedMeshPartitionPolicy.h"
 #include "Mesh.h"
 #include "VarFactory.h"
 
@@ -736,4 +737,223 @@ void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, 
   }
   sideOrdinalMap.clear();
   sideOrdinalMap[int(lowerSide)] = toTopology->sideOrdinalForFace(2 * direction + 1);
+}
+
+// ---------------------------------------------------------------- multigrid
+
+std::vector<MeshPtr> BoxGDA::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k)
+{
+  BoxMeshTopology* fineTopology = dynamic_cast<BoxMeshTopology*>(fineMesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(fineTopology == NULL, std::invalid_argument, "fineMesh must use a BoxMeshTopology");
+  if (delta_k == -1) delta_k = fineMesh->globalDofAssignment()->getTestOrderEnrichment();
+  const int dim = fineTopology->getDimension();
+  const int depth = fineTopology->refinementDepth();
+  BFPtr bf = fineMesh->bilinearForm();
+  map<int,int> trialOrderEnhancements = fineMesh->getDofOrderingFactory().getTrialOrderEnhancements();
+
+  std::vector<MeshPtr> meshesCoarseToFine;
+  for (int level=0; level<=depth; level++)
+  {
+    Teuchos::RCP<BoxMeshTopology> levelTopology = fineTopology->copyTruncatedAtDepth(level);
+    // a coarse cell goes to the rank owning the fine cell at its lower corner
+    map<GlobalIndexType,GlobalIndexType> cellIDMap;
+    for (IndexType cellID : levelTopology->getLocallyKnownActiveCellIndices())
+    {
+      BoxMeshTopology::Extents extents = levelTopology->cellExtents(cellID);
+      FC point(1, dim);
+      for (int k=0; k<dim; k++) point(0,k) = extents[k].first + 1e-9 * (extents[k].second - extents[k].first);
+      cellIDMap[cellID] = fineTopology->cellIDsForPoints(point)[0];
+    }
+    MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp(new InducedMeshPartitionPolicy(fineMesh, cellIDMap));
+    meshesCoarseToFine.push_back(BoxGDA::mesh(levelTopology, bf, kCoarse + 1, delta_k, partitionPolicy, Teuchos::null,
+                                              trialOrderEnhancements, map<int,int>()));
+  }
+  meshesCoarseToFine.push_back(fineMesh);
+  return meshesCoarseToFine;
+}
+
+TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coarseMap, TMapPtr fineMap)
+{
+  using GO = TMap::global_ordinal_type;
+  BoxGDA* coarseGDA = dynamic_cast<BoxGDA*>(coarseMesh->globalDofAssignment().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(coarseGDA == NULL, std::invalid_argument, "the coarse mesh must also have a BoxGDA");
+  BoxMeshTopology* coarseTopology = coarseGDA->_boxTopology;
+  initializeVariables();
+  coarseGDA->initializeVariables();
+  TEUCHOS_TEST_FOR_EXCEPTION((_fieldVars.size() != coarseGDA->_fieldVars.size()) || (_fluxVars.size() != coarseGDA->_fluxVars.size()),
+                             std::invalid_argument, "coarse and fine meshes must have the same variables");
+
+  const int dim = _boxTopology->getDimension();
+  const BoxForest &fineForest = _boxTopology->forest();
+  const BoxForest &coarseForest = coarseTopology->forest();
+  const BoxForest::Skeleton &fineSkeleton = _boxTopology->skeleton();
+  const BoxForest::Skeleton &coarseSkeleton = coarseTopology->skeleton();
+  const int rank = _partitionPolicy->Comm()->getRank();
+
+  const GlobalIndexType fineDofCount = globalDofCount(), coarseDofCount = coarseGDA->globalDofCount();
+  const size_t numOwnedRows = fineMap->getLocalNumElements();
+  std::vector<std::vector<GO>> rowIndices(numOwnedRows);
+  std::vector<std::vector<double>> rowValues(numOwnedRows);
+  auto addEntry = [&](GlobalIndexType fineDof, GlobalIndexType coarseDof, double value)
+  {
+    if (std::abs(value) < 1e-13) return;
+    const auto localRow = fineMap->getLocalElement(GO(fineDof));
+    TEUCHOS_TEST_FOR_EXCEPTION(localRow == Teuchos::OrdinalTraits<TMap::local_ordinal_type>::invalid(), std::logic_error,
+                               "BoxGDA::prolongationOperator: an owned fine dof is not in the fine map");
+    rowIndices[localRow].push_back(GO(coarseDof));
+    rowValues[localRow].push_back(value);
+  };
+
+  auto coarseCellContaining = [&](GlobalIndexType fineCellID)
+  {
+    std::vector<double> centroid = _boxTopology->getCellCentroid(fineCellID);
+    FC point(1, dim);
+    for (int k=0; k<dim; k++) point(0,k) = centroid[k];
+    const IndexType coarseCellID = coarseTopology->cellIDsForPoints(point)[0];
+    TEUCHOS_TEST_FOR_EXCEPTION(coarseCellID == -1, std::invalid_argument, "no coarse cell found for fine cell");
+    return GlobalIndexType(coarseCellID);
+  };
+
+  // ---- fields: the coarse cell's basis functions, expressed in the fine cell's basis (L2 projection; exact)
+  ElementTypePtr coarseElemType = coarseGDA->elementType(*coarseTopology->getLocallyKnownActiveCellIndices().begin());
+  BasisCachePtr coarseBasisCache = Teuchos::rcp(new BasisCache(coarseElemType));
+  Teuchos::LAPACK<int,double> lapack;
+  std::vector<double> phi, psi, weights, M, C;
+  for (GlobalIndexType fineCellID : _partitions[rank])
+  {
+    const GlobalIndexType coarseCellID = coarseCellContaining(fineCellID);
+    DofOrderingPtr fineOrdering = elementType(fineCellID)->trialOrderPtr;
+    DofOrderingPtr coarseOrdering = coarseGDA->elementType(coarseCellID)->trialOrderPtr;
+    const BoxMeshTopology::Extents coarseExtents = coarseTopology->cellExtents(coarseCellID);
+
+    FC fineNodes = _boxTopology->physicalCellNodesForCell(fineCellID, true);
+    _basisCache->setPhysicalCellNodes(fineNodes, {fineCellID}, false);
+    const FC &points = _basisCache->getPhysicalCubaturePointsFC();
+    const FC &weightedMeasures = _basisCache->getWeightedMeasures();
+    const int P = points.dimension(1);
+    weights.resize(P);
+    for (int q=0; q<P; q++) weights[q] = weightedMeasures(0,q);
+    FC coarseRefPoints(P, dim);
+    for (int q=0; q<P; q++)
+      for (int k=0; k<dim; k++)
+        coarseRefPoints(q,k) = -1 + 2 * (points(0,q,k) - coarseExtents[k].first) / (coarseExtents[k].second - coarseExtents[k].first);
+    FC coarseNodes = coarseTopology->physicalCellNodesForCell(coarseCellID, true);
+    coarseBasisCache->setPhysicalCellNodes(coarseNodes, {coarseCellID}, false);
+    coarseBasisCache->setRefCellPointsFC(coarseRefPoints);
+
+    for (size_t fieldOrdinal=0; fieldOrdinal<_fieldVars.size(); fieldOrdinal++)
+    {
+      const int varID = _fieldVars[fieldOrdinal]->ID();
+      BasisPtr fineBasis = fineOrdering->getBasis(varID), coarseBasis = coarseOrdering->getBasis(varID);
+      const int n = fineBasis->getCardinality(), m = coarseBasis->getCardinality();
+      auto fineValues = _basisCache->getTransformedValues(fineBasis, OP_VALUE);
+      auto coarseValues = coarseBasisCache->getTransformedValues(coarseBasis, OP_VALUE);
+      M.assign(n*n, 0.0);
+      C.assign(n*m, 0.0);
+      for (int i=0; i<n; i++)
+      {
+        for (int j=0; j<n; j++)
+          for (int q=0; q<P; q++)
+            M[j*n+i] += (*fineValues)(0,i,q) * (*fineValues)(0,j,q) * weights[q];
+        for (int j=0; j<m; j++)
+          for (int q=0; q<P; q++)
+            C[j*n+i] += (*fineValues)(0,i,q) * (*coarseValues)(0,j,q) * weights[q];
+      }
+      int info;
+      lapack.POSV('U', n, m, M.data(), n, C.data(), n, &info);
+      TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA::prolongationOperator: field projection failed");
+      const GlobalIndexType fineOffset = _fieldDofOffsetForCell[fineCellID] + _fieldOffsets[fieldOrdinal];
+      const GlobalIndexType coarseOffset = coarseGDA->_fieldDofOffsetForCell[coarseCellID] + coarseGDA->_fieldOffsets[fieldOrdinal];
+      for (int i=0; i<n; i++)
+        for (int j=0; j<m; j++)
+          addEntry(fineOffset + i, coarseOffset + j, C[j*n+i]);
+    }
+  }
+
+  // ---- fluxes: the coarse patch's polynomial restricted to the fine patch, where the fine patch is on the coarse skeleton
+  const int numPartitions = int(_partitions.size());
+  std::vector<int> partitionForCell(_boxTopology->cellCount(), -1);
+  for (int partition=0; partition<numPartitions; partition++)
+    for (GlobalIndexType cellID : _partitions[partition]) partitionForCell[cellID] = partition;
+
+  for (int patchOrdinal=0; patchOrdinal<int(fineSkeleton.patches.size()); patchOrdinal++)
+  {
+    const BoxForest::Patch &finePatch = fineSkeleton.patches[patchOrdinal];
+    const BoxForest::Face &face = finePatch.minusFaces.empty() ? finePatch.plusFaces[0] : finePatch.minusFaces[0];
+    if (partitionForCell[face.cell] != rank) continue; // not mine
+    const int normal = finePatch.normal;
+    const GlobalIndexType coarseCellID = coarseCellContaining(face.cell);
+    // is the fine face on the coarse cell's boundary?  Compare physical coordinates of the two cells' faces.
+    const bool upper = (face.side % 2 == 1);
+    const BoxMeshTopology::Extents fineExtents = _boxTopology->cellExtents(face.cell);
+    const BoxMeshTopology::Extents coarseExtents = coarseTopology->cellExtents(coarseCellID);
+    const double fineCoordinate = upper ? fineExtents[normal].second : fineExtents[normal].first;
+    const double coarseCoordinate = upper ? coarseExtents[normal].second : coarseExtents[normal].first;
+    const double tolerance = 1e-12 * std::max(1.0, std::abs(coarseExtents[normal].second - coarseExtents[normal].first));
+    if (std::abs(fineCoordinate - coarseCoordinate) > tolerance) continue; // inside a coarse cell: no coarse flux here
+
+    const int coarsePatchOrdinal = coarseSkeleton.patchForFace[coarseForest.faceOrdinal(coarseForest.leafOrdinal(coarseCellID), face.side)];
+    const BoxForest::Patch &coarsePatch = coarseSkeleton.patches[coarsePatchOrdinal];
+
+    for (size_t fluxOrdinal=0; fluxOrdinal<_fluxVars.size(); fluxOrdinal++)
+    {
+      const int fineDegree = _fluxDegrees[fluxOrdinal], coarseDegree = coarseGDA->_fluxDegrees[fluxOrdinal];
+      TEUCHOS_TEST_FOR_EXCEPTION(coarseDegree > fineDegree, std::invalid_argument, "the coarse mesh must not have a higher polynomial order than the fine mesh");
+      // one 1D restriction matrix per tangential direction: fine coefficients from coarse ones
+      std::vector<std::vector<double>> R;
+      for (int k=0; k<dim; k++)
+      {
+        if (k == normal) continue;
+        const double coarseLo = coarseTopology->coordinate(k, coarsePatch.lo[k]), coarseHi = coarseTopology->coordinate(k, coarsePatch.hi[k]);
+        const double fineLo = _boxTopology->coordinate(k, finePatch.lo[k]), fineHi = _boxTopology->coordinate(k, finePatch.hi[k]);
+        const double a = -1 + 2 * (fineLo - coarseLo) / (coarseHi - coarseLo), b = -1 + 2 * (fineHi - coarseLo) / (coarseHi - coarseLo);
+        R.push_back(BoxForest::legendreRestriction(fineDegree, a, b)); // (fineDegree+1)^2, row-major
+      }
+      const int tangentialCount = dim - 1, nf = fineDegree + 1, nc = coarseDegree + 1;
+      int fineCardinality = 1, coarseCardinality = 1;
+      for (int t=0; t<tangentialCount; t++) { fineCardinality *= nf; coarseCardinality *= nc; }
+      const GlobalIndexType fineOffset = _fluxDofOffsetForPatch[patchOrdinal] + _fluxOffsets[fluxOrdinal];
+      const GlobalIndexType coarseOffset = coarseGDA->_fluxDofOffsetForPatch[coarsePatchOrdinal] + coarseGDA->_fluxOffsets[fluxOrdinal];
+      // multi-indices: the first tangential direction is the most significant digit (as in patchBasisValues())
+      std::vector<int> fineIndex(tangentialCount), coarseIndex(tangentialCount);
+      for (int i=0; i<fineCardinality; i++)
+      {
+        int remainder = i;
+        for (int t=tangentialCount-1; t>=0; t--) { fineIndex[t] = remainder % nf; remainder /= nf; }
+        for (int j=0; j<coarseCardinality; j++)
+        {
+          remainder = j;
+          for (int t=tangentialCount-1; t>=0; t--) { coarseIndex[t] = remainder % nc; remainder /= nc; }
+          double value = 1.0;
+          for (int t=0; t<tangentialCount; t++) value *= R[t][fineIndex[t] * nf + coarseIndex[t]];
+          addEntry(fineOffset + i, coarseOffset + j, value);
+        }
+      }
+    }
+  }
+
+  // ---- rows beyond the dof count (Lagrange constraints): one to one, as GMGOperator does
+  auto fineGIDs = fineMap->getMyGlobalIndices();
+  for (size_t localRow=0; localRow<numOwnedRows; localRow++)
+  {
+    const GO globalRow = fineGIDs[localRow];
+    if (globalRow >= GO(fineDofCount))
+    {
+      rowIndices[localRow].push_back(GO(coarseDofCount) + (globalRow - GO(fineDofCount)));
+      rowValues[localRow].push_back(1.0);
+    }
+  }
+
+  Teuchos::Array<size_t> numEntriesPerRow(numOwnedRows);
+  for (size_t localRow=0; localRow<numOwnedRows; localRow++) numEntriesPerRow[localRow] = rowIndices[localRow].size();
+  TMatrixPtr<double> P = Teuchos::rcp(new TMatrix<double>(fineMap, numEntriesPerRow()));
+  for (size_t localRow=0; localRow<numOwnedRows; localRow++)
+  {
+    if (rowIndices[localRow].empty()) continue;
+    const Teuchos::ArrayView<const GO> indices(rowIndices[localRow].data(), rowIndices[localRow].size());
+    const Teuchos::ArrayView<const double> values(rowValues[localRow].data(), rowValues[localRow].size());
+    P->insertGlobalValues(fineGIDs[localRow], indices, values);
+  }
+  P->fillComplete(coarseMap, fineMap);
+  return P;
 }

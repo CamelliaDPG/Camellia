@@ -119,6 +119,27 @@ namespace Camellia
     static void hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap,
                                          MeshPtr meshFrom, MeshPtr meshTo, int direction);
 
+    /**
+     \brief  Meshes for geometric multigrid on a box mesh, coarsest first, ending with fineMesh itself.
+
+     As GMGSolver::meshesForMultigrid() does for other meshes: the root cells at polynomial order kCoarse, then one
+     more refinement generation per level at order kCoarse up to the fine mesh's cells, then the fine mesh.  Each
+     coarse mesh has its own BoxMeshTopology (a truncated copy of the fine one) and is partitioned so that a coarse
+     cell lives on the rank that owns the fine cell at its lower corner.
+     */
+    static std::vector<MeshPtr> meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k);
+
+    /**
+     \brief  The prolongation from a coarser box mesh (larger cells and/or lower polynomial order) to this GDA's mesh.
+
+     Exact: the coarse space is a subspace of the fine one wherever both are defined.  A fine cell's field
+     coefficients are those of the coarse cell's polynomial; a fine patch's flux coefficients are those of the coarse
+     patch's polynomial, where the fine patch lies on the coarse mesh's skeleton, and zero where it lies inside a coarse
+     cell (the coarse space has no flux there).  Rows follow fineMap, columns coarseMap; any rows beyond the dof count
+     (Lagrange constraints) map one to one.
+     */
+    TMatrixPtr<double> prolongationOperator(MeshPtr coarseMesh, TMapPtr coarseMap, TMapPtr fineMap);
+
     //! A Mesh on a box topology, with a BoxGDA.
     static MeshPtr mesh(Teuchos::RCP<BoxMeshTopology> topology, BFPtr bf, int H1Order, int delta_k,
                         MeshPartitionPolicyPtr partitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null,

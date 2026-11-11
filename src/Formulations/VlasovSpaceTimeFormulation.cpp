@@ -2473,18 +2473,7 @@ void VlasovSpaceTimeFormulation::solve()
     MemoryCheckpoints::record("substep_start");
 
     // solve for f:
-    // geometric multigrid builds its hierarchy from refinement patterns, which box meshes do not have: solve directly
-    const bool boxMesh = (dynamic_cast<BoxMeshTopology*>(_vlasovSoln->mesh()->getTopology().get()) != NULL);
-    if (boxMesh && _useGeometricMultigrid)
-    {
-      static bool haveWarned = false;
-      if (!haveWarned && (_vlasovSoln->mesh()->Comm()->getRank() == 0))
-      {
-        std::cout << "NOTE: geometric multigrid is not yet supported on box phase-space meshes; using the direct solver.\n";
-        haveWarned = true;
-      }
-    }
-    if (!_useGeometricMultigrid || boxMesh)
+    if (!_useGeometricMultigrid)
     {
       const auto solveStart = ProfileClock::now();
       _vlasovSoln->solve();

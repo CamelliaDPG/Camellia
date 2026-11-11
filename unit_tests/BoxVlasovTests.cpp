@@ -264,4 +264,31 @@ TEUCHOS_UNIT_TEST( BoxVlasov, IsotropicHangingRefinementMatchesExtrudedMesh )
     if (q != 0.0) { TEST_FLOATING_EQUALITY(results[0].ExNorm, results[1].ExNorm, 1e-7); }
   }
 }
+TEUCHOS_UNIT_TEST( BoxVlasov, GeometricMultigridMatchesDirectSolve )
+{
+  // the Vlasov solve on a box mesh with local u_x-only refinement, by multigrid-preconditioned iteration and directly
+  const int xElements = 2, vxElements = 2, vyElements = 2, H1Order = 2;
+  Diagnostics results[2];
+  for (int useGMG=0; useGMG<2; useGMG++)
+  {
+    Problem box = problem(true, xElements, vxElements, vyElements, H1Order, drivenDistribution());
+    auto vlasovMesh = box.form->vlasovMesh();
+    std::map<GlobalIndexType,unsigned> masks;
+    int ordinal = 0;
+    for (GlobalIndexType cellID : vlasovMesh->getActiveCellIDsGlobal())
+    {
+      if (ordinal++ % 2 == 0) masks[cellID] = 1u << 2; // u_x
+    }
+    vlasovMesh->hRefine(masks);
+    box.form->setInitialAndInflowConditions(drivenDistribution(), drivenDistribution());
+    box.form->setUseGeometricMultigrid(useGMG == 1);
+    box.form->setIterativeSolveTolerance(1e-12);
+    box.form->setIterativeSolveMaxIterations(2000);
+    box.form->solve();
+    results[useGMG] = diagnostics(box);
+    print(out, (useGMG == 1) ? "multigrid" : "direct   ", results[useGMG]);
+  }
+  TEST_FLOATING_EQUALITY(results[0].fNorm, results[1].fNorm, 1e-7);
+  TEST_FLOATING_EQUALITY(results[0].ExNorm, results[1].ExNorm, 1e-6);
+}
 } // namespace

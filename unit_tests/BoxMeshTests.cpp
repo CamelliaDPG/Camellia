@@ -4,6 +4,7 @@
 #include "BoxDPG.h"
 #include "BoxGDA.h"
 #include "BoxMeshTopology.h"
+#include "GMGSolver.h"
 #include "MeshFactory.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
@@ -350,5 +351,180 @@ TEUCHOS_UNIT_TEST( BoxMesh, RefinementStrategyAdaptsBoxMesh )
   }
   TEST_COMPARE(mesh->numActiveElements(), >, initialCells);
   TEST_COMPARE(finalError, <, 0.5 * initialError);
+}
+  //! applies y = P x, with x and y the solution vectors of the coarse and fine Solutions
+  void prolong(TMatrixPtr<double> P, SolutionPtr coarseSolution, SolutionPtr fineSolution, TVectorPtr<double> &result)
+  {
+    result = Teuchos::rcp(new TVector<double>(P->getRangeMap(), 1));
+    P->apply(*coarseSolution->getLHSVector(), *result);
+  }
+
+TEUCHOS_UNIT_TEST( BoxMesh, MultigridHierarchy )
+{
+  Convection form(3);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(3, vector<double>{0.0, 0.6, 1.0})));
+  refineAnisotropically(3, [&](IndexType cell, unsigned mask) { return topology->refineCell(cell, mask); });
+  TEST_EQUALITY(topology->refinementDepth(), 2);
+  MeshPtr fineMesh = BoxGDA::mesh(topology, form.bf, 3, 2);
+  vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(fineMesh, 0, 1);
+  TEST_EQUALITY(meshes.size(), 4); // depths 0, 1, 2 at k = 0, then the fine mesh
+  TEST_EQUALITY(meshes[0]->numActiveElements(), 8);
+  TEST_EQUALITY(meshes[2]->numActiveElements(), fineMesh->numActiveElements());
+  TEST_ASSERT(meshes[3].get() == fineMesh.get());
+  for (size_t i=0; i+1<meshes.size(); i++)
+  {
+    TEST_COMPARE(meshes[i]->numActiveElements(), <=, meshes[i+1]->numActiveElements());
+    TEST_COMPARE(meshes[i]->numGlobalDofs(), <, meshes[i+1]->numGlobalDofs());
+  }
+  // every rank's cells in a coarse mesh contain cells that rank owns in the fine mesh
+  auto coarseTopology = meshes[0]->getTopology();
+  for (GlobalIndexType coarseCellID : meshes[0]->cellIDsInPartition())
+  {
+    vector<double> centroid = coarseTopology->getCellCentroid(coarseCellID);
+    bool ownsSomeFineCell = false;
+    for (GlobalIndexType fineCellID : fineMesh->cellIDsInPartition())
+    {
+      auto extents = topology->cellExtents(fineCellID);
+      auto coarseExtents = dynamic_cast<BoxMeshTopology*>(coarseTopology.get())->cellExtents(coarseCellID);
+      bool inside = true;
+      for (int k=0; k<3; k++) inside = inside && (extents[k].first >= coarseExtents[k].first - 1e-12) && (extents[k].second <= coarseExtents[k].second + 1e-12);
+      ownsSomeFineCell = ownsSomeFineCell || inside;
+    }
+    TEST_ASSERT(ownsSomeFineCell);
+  }
+}
+
+TEUCHOS_UNIT_TEST( BoxMesh, ProlongationIsExact )
+{
+  // Solve a problem whose solution is a polynomial of the coarse degree on a coarse and on a fine mesh (both exact).
+  // Prolonging the coarse solution vector must give the fine solution vector, wherever the prolongation has a row
+  // (everywhere except fluxes on fine faces interior to a coarse cell).
+  for (int dim : {2, 3})
+  {
+    for (int coarseH1Order : {1, 2})
+    {
+      const int fineH1Order = 3, delta_k = 2, coarseDegree = coarseH1Order - 1;
+      Convection form(dim);
+      BoxDPG::PointFunction uExact = polynomial(dim, coarseDegree), f = polynomialConvectiveDerivative(dim, coarseDegree, form.beta);
+      if (coarseDegree == 0)
+      {
+        uExact = [](const double *x) { return 3.0; };
+        f = [](const double *x) { return 0.0; };
+      }
+      vector<vector<double>> rootVertices(dim, vector<double>{0.0, 0.6, 1.0});
+
+      auto fineTopology = Teuchos::rcp(new BoxMeshTopology(rootVertices));
+      refineAnisotropically(dim, [&](IndexType cell, unsigned mask) { return fineTopology->refineCell(cell, mask); });
+      MeshPtr fineMesh = BoxGDA::mesh(fineTopology, form.bf, fineH1Order, delta_k);
+      BCPtr fineBC = form.inflowBC(fineTopology, uExact);
+      SolutionPtr fineSolution = Solution::solution(form.bf, fineMesh, fineBC, form.rhs(f), form.bf->graphNorm());
+      fineSolution->solve();
+      TEST_COMPARE((Function::solution(form.u, fineSolution) - BoxDPG::function(uExact))->l2norm(fineMesh), <, 1e-10);
+
+      for (int coarseDepth : {0, 1, 2})
+      {
+        auto coarseTopology = fineTopology->copyTruncatedAtDepth(coarseDepth);
+        MeshPtr coarseMesh = BoxGDA::mesh(coarseTopology, form.bf, coarseH1Order, delta_k);
+        BCPtr coarseBC = form.inflowBC(coarseTopology, uExact);
+        SolutionPtr coarseSolution = Solution::solution(form.bf, coarseMesh, coarseBC, form.rhs(f), form.bf->graphNorm());
+        coarseSolution->solve();
+        TEST_COMPARE((Function::solution(form.u, coarseSolution) - BoxDPG::function(uExact))->l2norm(coarseMesh), <, 1e-10);
+
+        BoxGDA* fineGDA = dynamic_cast<BoxGDA*>(fineMesh->globalDofAssignment().get());
+        TMatrixPtr<double> P = fineGDA->prolongationOperator(coarseMesh, coarseSolution->getPartitionMap(), fineSolution->getPartitionMap());
+        TVectorPtr<double> prolonged;
+        prolong(P, coarseSolution, fineSolution, prolonged);
+
+        auto prolongedData = prolonged->getData(0);
+        auto fineData = fineSolution->getLHSVector()->getData(0);
+        // A row is empty for a fine flux on a face interior to a coarse cell (skip those), and for a fine mode of higher
+        // degree than the coarse space (whose exact coefficient is zero).  With the same cells in both meshes (depth 2)
+        // only the second kind occurs, so every row can be compared.
+        double maxDifference = 0;
+        int emptyRows = 0, rows = int(P->getLocalNumRows());
+        for (int row=0; row<rows; row++)
+        {
+          const bool emptyRow = (P->getNumEntriesInLocalRow(row) == 0);
+          if (emptyRow) emptyRows++;
+          if (emptyRow && (coarseDepth < 2)) continue;
+          maxDifference = std::max(maxDifference, std::abs(prolongedData[row] - fineData[row]));
+        }
+        out << dim << "D, coarse degree " << coarseDegree << ", coarse depth " << coarseDepth << ": " << coarseMesh->numGlobalDofs() << " -> "
+            << fineMesh->numGlobalDofs() << " dofs; " << emptyRows << " of " << rows << " rows empty; max difference " << maxDifference << endl;
+        TEST_COMPARE(maxDifference, <, 1e-9);
+      }
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( BoxMesh, GeometricMultigridSolve )
+{
+  // conjugate gradients preconditioned by a geometric multigrid V-cycle, against the direct solve
+  for (int dim : {2, 3, 4})
+  {
+    const int H1Order = (dim == 4) ? 2 : 3, p = H1Order - 1, delta_k = 2;
+    Convection form(dim);
+    auto uExact = polynomial(dim, p);
+    auto f = polynomialConvectiveDerivative(dim, p, form.beta);
+    auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.6, 1.0})));
+    refineAnisotropically(dim, [&](IndexType cell, unsigned mask) { return topology->refineCell(cell, mask); });
+    MeshPtr mesh = BoxGDA::mesh(topology, form.bf, H1Order, delta_k);
+    BCPtr bc = form.inflowBC(topology, uExact);
+    SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(f), form.bf->graphNorm());
+
+    vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(mesh, 0, 1);
+    const int maxIters = 200;
+    const double tol = 1e-10;
+    Teuchos::RCP<GMGSolver> gmgSolver = GMGSolver::gmgSolver(solution, true, meshes, maxIters, tol, GMGOperator::V_CYCLE, Solver::getDirectSolver(true));
+    gmgSolver->setAztecOutput(0);
+    solution->solve(gmgSolver);
+    const double error = (Function::solution(form.u, solution) - BoxDPG::function(uExact))->l2norm(mesh);
+    out << dim << "D: " << meshes.size() << " levels, " << mesh->numGlobalDofs() << " dofs; " << gmgSolver->iterationCount()
+        << " CG iterations; L2 error " << error << endl;
+    TEST_COMPARE(gmgSolver->iterationCount(), <, 100);
+    TEST_COMPARE(error, <, 1e-7);
+  }
+}
+TEUCHOS_UNIT_TEST( BoxMesh, GeometricMultigridMatchesMeshTopology_2D )
+{
+  // The same problem and the same meshes (2 x 2 quads refined uniformly twice, then one cell once more, so with hanging
+  // nodes) on a MeshTopology and on a BoxMeshTopology: multigrid-preconditioned CG should need about as many iterations.
+  const int dim = 2, H1Order = 3, delta_k = 2;
+  Convection form(dim);
+  auto uExact = [](const double *x) { return std::exp(x[0] + 2 * x[1]) + std::sin(3 * x[0]); };
+  vector<double> beta = form.beta;
+  auto f = [beta](const double *x) { return beta[0] * (std::exp(x[0] + 2 * x[1]) + 3 * std::cos(3 * x[0])) + beta[1] * 2 * std::exp(x[0] + 2 * x[1]); };
+  BCPtr bc = BC::bc();
+  FunctionPtr n = Function::normal();
+  bc->addDirichlet(form.t_n, SpatialFilter::matchingX(0.0) | SpatialFilter::matchingY(0.0), (beta[0] * n->x() + beta[1] * n->y()) * BoxDPG::function(uExact));
+
+  Camellia::FieldContainer<double> point(1, 2);
+  point(0,0) = 0.3;
+  point(0,1) = 0.3;
+  int iterationCounts[2];
+  double errors[2];
+  GlobalIndexType dofCounts[2];
+  for (int useBox=0; useBox<2; useBox++)
+  {
+    MeshPtr mesh;
+    if (useBox == 0) mesh = MeshFactory::quadMesh(form.bf, H1Order, delta_k, 1.0, 1.0, 2, 2);
+    else mesh = BoxGDA::mesh(Teuchos::rcp(new BoxMeshTopology({{0.0, 0.5, 1.0}, {0.0, 0.5, 1.0}})), form.bf, H1Order, delta_k);
+    mesh->hRefine(mesh->getActiveCellIDsGlobal());
+    mesh->hRefine(mesh->getActiveCellIDsGlobal());
+    mesh->hRefine(set<GlobalIndexType>{GlobalIndexType(mesh->getTopology()->cellIDsForPoints(point)[0])});
+    SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(f), form.bf->graphNorm());
+    vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(mesh, 0, 1);
+    Teuchos::RCP<GMGSolver> gmgSolver = GMGSolver::gmgSolver(solution, true, meshes, 300, 1e-10, GMGOperator::V_CYCLE, Solver::getDirectSolver(true));
+    gmgSolver->setAztecOutput(0);
+    solution->solve(gmgSolver);
+    iterationCounts[useBox] = gmgSolver->iterationCount();
+    errors[useBox] = (Function::solution(form.u, solution) - BoxDPG::function(uExact))->l2norm(mesh);
+    dofCounts[useBox] = mesh->numGlobalDofs();
+    out << ((useBox == 0) ? "MeshTopology:    " : "BoxMeshTopology: ") << mesh->numActiveElements() << " cells, " << dofCounts[useBox] << " dofs, "
+        << meshes.size() << " levels; " << iterationCounts[useBox] << " CG iterations; L2 error " << errors[useBox] << endl;
+  }
+  TEST_EQUALITY(dofCounts[0], dofCounts[1]);
+  TEST_FLOATING_EQUALITY(errors[0], errors[1], 1e-5);
+  TEST_COMPARE(iterationCounts[1], <=, int(1.15 * iterationCounts[0]));
 }
 } // namespace

@@ -106,6 +106,13 @@ namespace Camellia
     //! Returns the cells that were refined, each with its direction mask.
     std::vector<std::pair<IndexType,unsigned>> cellsToRefineForBalance(int maxLevelDifference = 1) const;
 
+    //! The number of refinement generations in the mesh (0 for an unrefined mesh).
+    int refinementDepth() const;
+    //! A new topology with the same root cells, tags and refinements, except that cells at generation maxDepth are
+    //! left unrefined.  (maxDepth >= refinementDepth() gives a full copy.)  Cell IDs in the copy differ from those here
+    //! in general; cells correspond by geometry.  Used to build multigrid hierarchies.  The copy has no configuration topology.
+    Teuchos::RCP<BoxMeshTopology> copyTruncatedAtDepth(int maxDepth) const;
+
     //! Tags the boundary sides picked by the selector.  Tags with name DIRICHLET_SET_TAG_NAME are used by BC::addDirichlet(var, tagID, f).
     void applyTag(const std::string &tagName, int tagID, SideSelector selector);
 

@@ -21,6 +21,7 @@
 #include "CamelliaDebugUtility.h"
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
+#include "BoxGDA.h"
 #include "GDAMinimumRule.h"
 #include "SerialDenseWrapper.h"
 #include "TimeLogger.h"
@@ -636,6 +637,7 @@ double GMGOperator::computeSchwarzSmootherWeight()
 void GMGOperator::constructLocalCoefficientMaps()
 {
   narrate("constructLocalCoefficientMaps()");
+  if (dynamic_cast<BoxGDA*>(_fineMesh->globalDofAssignment().get()) != NULL) return; // not used for box meshes
   WallTimer timer;
 
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
@@ -656,6 +658,13 @@ TMatrixPtr<Scalar> GMGOperator::constructProlongationOperator(Teuchos::RCP<DofIn
 {
   // row indices belong to the fine grid, columns to the coarse
   // maps coefficients from coarse to fine
+  
+  if (BoxGDA* boxGDA = dynamic_cast<BoxGDA*>(fineMesh->globalDofAssignment().get()))
+  {
+    // box meshes have no refinement patterns; their GDA builds the prolongation from geometry
+    TEUCHOS_TEST_FOR_EXCEPTION(useStaticCondensation, std::invalid_argument, "static condensation is not supported with geometric multigrid on box meshes");
+    return boxGDA->prolongationOperator(coarseMesh, coarseMap, tFineMap);
+  }
   
   CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
   CondensedDofInterpreter<double>* condensedDofInterpreterFine = NULL;

@@ -277,7 +277,7 @@ argument through three constructors; it could become one).  The configuration-sp
   one-irregularity of the configuration mesh is enforced.
 - `BoxGDA::hRefineToMatchAtBoundary` replaces `MeshTools::hRefineToMatchAtBoundary` between time slabs: each side is
   bisected only in the directions in which it is coarser than its counterpart.
-- Geometric multigrid falls back to the direct solver on box meshes, with a note.
+- Geometric multigrid works on box meshes (see below).
 - `PlanarMITLRelativisticSpaceTime`: `--useBoxMesh`, and `--boxVelocityRefinements=N` with
   `--boxVelocityBandCenter` / `--boxVelocityBandHalfWidth` for u_x-only bisection of the first slab in a band.
   Unrefinement (`setMaxElements`) is skipped on box meshes.
@@ -304,7 +304,30 @@ fixed-point substeps): `--useBoxMesh` and `--useExtrudedMesh` print the same log
 residuals.  With `--boxVelocityRefinements=2` and a band, the first slab goes from 32 to 64 phase-space cells with the
 configuration mesh still at 2 cells, and the second slab is refined to match (11,176 dofs in both).
 
-Not done: geometric multigrid on box meshes (needs the Kronecker transfer between nested box meshes); unrefinement;
+**Geometric multigrid on box meshes.**  The existing `GMGSolver` / `GMGOperator` cycle, smoothers and coarse solves are
+used unchanged; box meshes supply the two things that were built from refinement patterns:
+
+- *Hierarchy* (`BoxGDA::meshesForMultigrid`, reached through `GMGSolver::meshesForMultigrid`): as for other meshes,
+  the root cells at order `kCoarse`, one more refinement generation per level, then the fine mesh.  Each coarse mesh
+  has its own `BoxMeshTopology`, a copy of the fine one truncated at a generation
+  (`BoxMeshTopology::copyTruncatedAtDepth`); cells correspond by geometry, not by ID.  A coarse cell is assigned to the
+  rank owning the fine cell at its lower corner.
+- *Prolongation* (`BoxGDA::prolongationOperator`, used by `GMGOperator::constructProlongationOperator`): exact, since
+  the coarse space is a subspace of the fine one wherever both are defined.  Fields: the coarse cell's polynomial in
+  the fine cell's basis.  Fluxes: the coarse patch's polynomial restricted to the fine patch, as a Kronecker product
+  of 1D Legendre restrictions, where the fine patch lies on the coarse skeleton; zero where it lies inside a coarse
+  cell.  (The existing multigrid does the same for fluxes without a `termTraced`, which is the Vlasov case.)
+
+Static condensation with multigrid is not supported on box meshes.
+
+Tests: the prolongation maps the coarse solution vector of a polynomial problem onto the fine one to 1e-13, for
+coarse meshes at each generation and coarse orders 0 and 1, in 2D and 3D; multigrid-preconditioned CG converges on
+anisotropically refined meshes in 2D, 3D and 4D (30, 70 and 51 iterations to 1e-10 for pure convection with the graph
+norm, with 120, 864 and 1312 dofs); on a 2D mesh with hanging nodes that both topologies can represent, box multigrid
+takes 162 iterations where the existing multigrid takes 156; the Vlasov solve on a box mesh with local u_x-only
+refinement agrees with the direct solve to 1e-13 relative.  All on 1 and 4 ranks.
+
+Not done: unrefinement;
 p-refinement; serendipity bases (the flux space must be a full tensor product); mesh save/load; x-only or t-only
 refinement of phase cells; periodic directions; a spatial mesh that is not a 1D set of root cells; the legacy
 `SolutionMoments` paths other than construction (the tensor-native moment path is the one that works).

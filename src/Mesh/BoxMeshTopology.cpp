@@ -451,3 +451,30 @@ IndexType BoxMeshTopology::phaseSpaceConfigurationCellID(IndexType phaseSpaceCel
   while (configurationCell->level() > level) configurationCell = configurationCell->getParent();
   return _configurationCellForCell[phaseSpaceCellID] = configurationCell->cellIndex();
 }
+
+// ---------------------------------------------------------------- copies for multigrid
+
+int BoxMeshTopology::refinementDepth() const
+{
+  int depth = 0;
+  for (IndexType cellIndex : _activeCells) depth = std::max(depth, _cells[cellIndex]->level());
+  return depth;
+}
+
+Teuchos::RCP<BoxMeshTopology> BoxMeshTopology::copyTruncatedAtDepth(int maxDepth) const
+{
+  Teuchos::RCP<BoxMeshTopology> copy = Teuchos::rcp(new BoxMeshTopology(_rootVertices));
+  copy->_sideTags = _sideTags;
+  // children are created after their parents, so a pass in node order sees every parent's copy before its children
+  vector<IndexType> copyIndex(_forest.nodeCount(), -1);
+  for (IndexType root : _rootCells) copyIndex[root] = root; // roots are numbered identically
+  for (int node=0; node<_forest.nodeCount(); node++)
+  {
+    if (_forest.isLeaf(node) || (copyIndex[node] == -1)) continue;
+    if (_cells[node]->level() >= maxDepth) continue;
+    const BoxForest::Node &forestNode = _forest.node(node);
+    vector<IndexType> copyChildren = copy->refineCell(copyIndex[node], forestNode.mask);
+    for (size_t j=0; j<copyChildren.size(); j++) copyIndex[forestNode.firstChild + int(j)] = copyChildren[j];
+  }
+  return copy;
+}
