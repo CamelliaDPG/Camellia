@@ -282,11 +282,20 @@ argument through three constructors; it could become one).  The configuration-sp
   `--boxVelocityBandCenter` / `--boxVelocityBandHalfWidth` for u_x-only bisection of the first slab in a band.
   Unrefinement (`setMaxElements`) is skipped on box meshes.
 
-Supported refinement of phase-space cells: any subset of the velocity directions; x and t together (not x alone or t
-alone: `PhysicalSolutionExtrusion` reuses the phase cell's (x,t) reference points on the configuration cell, so the
-phase cell's projection must be a cell of the configuration mesh's refinement tree).  The moment code would already
-accept the general rule "configuration mesh at least as fine"; the field extrusion is what needs generalising (project
-the configuration solution onto the phase cell's projection) to allow x-only or t-only.
+Supported refinement of phase-space cells: any subset of directions, including x alone or t alone.  The rule is that
+the configuration mesh is everywhere at least as fine as the phase-space mesh, so the projection of a phase-space
+cell onto (x,t) is tiled by active configuration cells:
+
+- `BoxConfigurationMeshUpdater` refines the active configuration cells under a refined phase-space cell until they are
+  as fine as its children in every configuration direction.  The configuration mesh is refined regularly (in x and t
+  together), so it can end up finer than the phase-space mesh in one direction; it keeps its existing
+  `MeshTopology`, patterns and `GDAMinimumRule`.
+- `PhaseSpaceTopology::phaseSpaceActiveConfigurationCells()` gives the configuration cells that tile a phase-space
+  cell's projection; the moment code deposits on those.  `phaseSpaceConfigurationCellID()` returns the single matching
+  configuration cell when there is one, and -1 otherwise (a cell at different levels in x and t).
+- `PhysicalSolutionExtrusion` evaluates E and B on such cells point by point, in the configuration cell containing
+  each point (`valuesForUnmatchedCells`).  This is a host implementation, and it builds a `BasisCache` per
+  configuration cell on each call; cells that do match a configuration cell take the existing path.
 
 Tests (`BoxVlasov` group, relativistic Vlasov-Maxwell 1D2V, 1 and 4 ranks), each against the extruded mesh:
 
@@ -297,7 +306,14 @@ Tests (`BoxVlasov` group, relativistic Vlasov-Maxwell 1D2V, 1 and 4 ranks), each
   1e-15, with and without charge;
 - two time slabs, the second slab's mesh refined in u_x to match at the interface: agree;
 - local u_x-only and u_y-only refinement (hanging and crossed faces): runs, fields stay zero for zero charge;
-- bisecting in x and t refines the configuration mesh; x alone is rejected.
+- bisecting in x and t refines the configuration mesh beneath;
+- every cell bisected in x alone, and in t alone, with zero charge: agree to 1e-15 with the extruded mesh that has
+  twice as many x (or t) cells;
+- a configuration field that is a polynomial in (x,t), extruded to a phase-space mesh with cells bisected in x alone
+  and in t alone: reproduced to 5e-15;
+- moments of the same polynomial f on a mesh bisected in x alone and on one bisected in x and t (same configuration
+  mesh): the fields they drive agree to 1e-9;
+- the coupled solve with every cell bisected in x alone, in t alone, and in both: all run and land near each other.
 
 The MITL driver itself, on a tiny case (2 x 1 x 4 x 4 cells, p = 1, two slabs, space-charge-limited emission, 35 and 9
 fixed-point substeps): `--useBoxMesh` and `--useExtrudedMesh` print the same log, apart from the last digit of two
@@ -328,9 +344,34 @@ takes 162 iterations where the existing multigrid takes 156; the Vlasov solve on
 refinement agrees with the direct solve to 1e-13 relative.  All on 1 and 4 ranks.
 
 Not done: unrefinement;
-p-refinement; serendipity bases (the flux space must be a full tensor product); mesh save/load; x-only or t-only
-refinement of phase cells; periodic directions; a spatial mesh that is not a 1D set of root cells; the legacy
+p-refinement; serendipity bases (the flux space must be a full tensor product); mesh save/load; periodic directions; a spatial mesh that is not a 1D set of root cells; the legacy
 `SolutionMoments` paths other than construction (the tensor-native moment path is the one that works).
+
+### Cost on the MITL driver
+
+`PlanarMITLRelativisticSpaceTime` on 4 ranks, one slab, three fixed-point substeps, multigrid on (`--timeMonitorSummary`
+prints the timers).  Times are seconds; "constraint work" is per rank and adds the side-to-patch maps
+(`BoxGDA::cellMap`), their application (`interpretLocalData`, `interpretLocalBasisCoefficients`) and the multigrid
+prolongation; "legacy equivalent" adds `GDAMinimumRule::getDofMapper`, `interpretLocalData`,
+`interpretLocalBasisCoefficients` and `interpretGlobalCoefficients`.
+
+| case             | dofs    | wall, extruded | wall, box | box constraint work | legacy equivalent |
+|------------------|--------:|---------------:|----------:|--------------------:|------------------:|
+| p = 1, 256 cells | 42,112  | 47             | 42        | 1.4                 | 4.4               |
+| p = 1, 1024 cells| 164,992 | 202            | 180       | 6.2                 | (not captured)    |
+| p = 1, 2304 cells| 368,640 | 708            | 562       | 12.2                | (not captured)    |
+| p = 2, 256 cells | 110,848 | 221            | 202       | 3.0                 | 16                |
+
+The two larger extruded runs finished their solves and then aborted in the HDF5 export, before printing timers:
+OpenMPI's file layer overflows a buffer on a long output path, which is a property of the scratch path used, not of
+the code.  The dense side-to-patch projection is 2-3% of the run and already cheaper than what it replaces, so it is
+not the next thing to optimise.  Element matrices and the multigrid-preconditioned solve dominate, and the solve
+grows fastest (14, 70, 324 s on the box mesh).
+
+If it is optimised later: the map from Camellia's flux side basis to tensor Legendre on a face is a dense matrix, but
+it is the same for every cell up to a scalar (the face measure on hexes; no scaling on the 4D tensor-topology cells).
+So the constraint factors as one fixed matrix per side ordinal, a scalar per cell, and a Kronecker product of 1D
+restrictions that is the identity on conforming faces.
 
 ### Kokkos
 

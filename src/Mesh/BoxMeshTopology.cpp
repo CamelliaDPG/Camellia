@@ -11,6 +11,8 @@
 #include "MeshTopology.h"
 #include "PeriodicBC.h"
 
+#include <Teuchos_TimeMonitor.hpp>
+
 #include <algorithm>
 #include <cmath>
 
@@ -147,6 +149,7 @@ const BoxForest::Skeleton &BoxMeshTopology::skeleton() const
 {
   if (!_skeletonValid)
   {
+    TEUCHOS_FUNC_TIME_MONITOR("BoxMeshTopology::skeleton construction");
     _skeleton = _forest.skeleton();
     _skeletonValid = true;
   }
@@ -233,13 +236,7 @@ vector<pair<IndexType,unsigned>> BoxMeshTopology::cellsToRefineForBalance(int ma
 map<IndexType,unsigned> BoxMeshTopology::cellsToRefineForRegularity() const
 {
   map<IndexType,unsigned> result;
-  const unsigned configurationMask = (_configurationTopology == Teuchos::null) ? 0u : ((1u << _configurationDimensionCount) - 1);
-  for (const auto &entry : cellsToRefineForBalance())
-  {
-    unsigned mask = entry.second;
-    if (mask & configurationMask) mask |= configurationMask;
-    result[entry.first] = mask;
-  }
+  for (const auto &entry : cellsToRefineForBalance()) result[entry.first] = entry.second;
   return result;
 }
 
@@ -427,19 +424,38 @@ void BoxMeshTopology::phaseSpaceVelocityExtents(double &v0, double &v1, IndexTyp
   v1 = coordinate(k, box.hi(k));
 }
 
+BoxMeshTopology::Extents BoxMeshTopology::configurationCellExtents(IndexType configurationCellID) const
+{
+  // (MeshTopology::verticesForCell() expects the container to be sized already)
+  CellPtr configurationCell = _configurationTopology->getCell(configurationCellID);
+  Camellia::FieldContainer<double> vertices(int(configurationCell->vertices().size()), _configurationDimensionCount);
+  _configurationTopology->verticesForCell(vertices, configurationCellID);
+  Extents extents(_configurationDimensionCount);
+  for (int k=0; k<_configurationDimensionCount; k++)
+  {
+    extents[k] = {vertices(0,k), vertices(0,k)};
+    for (int n=1; n<vertices.dimension(0); n++)
+    {
+      extents[k].first = std::min(extents[k].first, vertices(n,k));
+      extents[k].second = std::max(extents[k].second, vertices(n,k));
+    }
+  }
+  return extents;
+}
+
 IndexType BoxMeshTopology::phaseSpaceConfigurationCellID(IndexType phaseSpaceCellID) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_configurationTopology == Teuchos::null, std::invalid_argument, "BoxMeshTopology: no configuration topology has been set");
-  auto cached = _configurationCellForCell.find(phaseSpaceCellID);
-  if (cached != _configurationCellForCell.end()) return cached->second;
-
   const BoxForest::Box &box = _forest.node(phaseSpaceCellID).box;
   const int level = box.level[0];
   for (int k=1; k<_configurationDimensionCount; k++)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(int(box.level[k]) != level, std::invalid_argument,
-                               "BoxMeshTopology: phase-space cells must be at the same refinement level in every configuration direction");
+    // the configuration mesh is refined regularly, so its cells are at one level in all directions: no match
+    if (int(box.level[k]) != level) return -1;
   }
+  auto cached = _configurationCellForCell.find(phaseSpaceCellID);
+  if (cached != _configurationCellForCell.end()) return cached->second;
+
   // the active configuration cell at the centroid of the projection, then up the tree to the projection's level
   Camellia::FieldContainer<double> centroid(1, _configurationDimensionCount);
   for (int k=0; k<_configurationDimensionCount; k++) centroid(0,k) = 0.5 * (coordinate(k, box.lo[k]) + coordinate(k, box.hi(k)));
@@ -450,6 +466,46 @@ IndexType BoxMeshTopology::phaseSpaceConfigurationCellID(IndexType phaseSpaceCel
                              "BoxMeshTopology: the configuration mesh is coarser than the phase-space mesh");
   while (configurationCell->level() > level) configurationCell = configurationCell->getParent();
   return _configurationCellForCell[phaseSpaceCellID] = configurationCell->cellIndex();
+}
+
+vector<IndexType> BoxMeshTopology::phaseSpaceActiveConfigurationCells(IndexType phaseSpaceCellID) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_configurationTopology == Teuchos::null, std::invalid_argument, "BoxMeshTopology: no configuration topology has been set");
+  const Extents projection = cellExtents(phaseSpaceCellID); // the first entries are the configuration directions
+  auto contains = [&](const Extents &outer, const Extents &inner)
+  {
+    for (int k=0; k<_configurationDimensionCount; k++)
+    {
+      const double tolerance = 1e-10 * (outer[k].second - outer[k].first);
+      if ((inner[k].first < outer[k].first - tolerance) || (inner[k].second > outer[k].second + tolerance)) return false;
+    }
+    return true;
+  };
+  // the active configuration cell at the centroid of the projection; then up the tree until the cell contains the projection
+  Camellia::FieldContainer<double> centroid(1, _configurationDimensionCount);
+  for (int k=0; k<_configurationDimensionCount; k++) centroid(0,k) = 0.5 * (projection[k].first + projection[k].second);
+  const IndexType leafID = _configurationTopology->cellIDsForPoints(centroid)[0];
+  TEUCHOS_TEST_FOR_EXCEPTION(leafID == -1, std::invalid_argument, "BoxMeshTopology: no configuration cell found under phase-space cell");
+  CellPtr ancestor = _configurationTopology->getCell(leafID);
+  while (!contains(configurationCellExtents(ancestor->cellIndex()), projection))
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(ancestor->getParent() == Teuchos::null, std::invalid_argument,
+                               "BoxMeshTopology: no configuration cell contains the phase-space cell's projection");
+    ancestor = ancestor->getParent();
+  }
+  vector<IndexType> activeCells;
+  for (IndexType descendant : ancestor->getDescendants(_configurationTopology))
+  {
+    const Extents extents = configurationCellExtents(descendant);
+    // inside the projection, or (if the configuration mesh is too coarse) sticking out of it
+    Extents centre(_configurationDimensionCount);
+    for (int k=0; k<_configurationDimensionCount; k++) centre[k].first = centre[k].second = 0.5 * (extents[k].first + extents[k].second);
+    if (!contains(projection, centre)) continue;
+    TEUCHOS_TEST_FOR_EXCEPTION(!contains(projection, extents), std::invalid_argument,
+                               "BoxMeshTopology: the configuration mesh is coarser than the phase-space mesh");
+    activeCells.push_back(descendant);
+  }
+  return activeCells;
 }
 
 // ---------------------------------------------------------------- copies for multigrid

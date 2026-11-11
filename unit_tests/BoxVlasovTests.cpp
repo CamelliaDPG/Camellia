@@ -5,6 +5,7 @@
 #include "MeshFactory.h"
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
+#include "PhysicalSolutionExtrusion.hpp"
 #include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "SpatialFilter.h"
 
@@ -34,10 +35,10 @@ namespace
     Teuchos::RCP<RelativisticVlasovSpaceTimeFormulation> form;
   };
 
-  Problem problem(bool boxMesh, int xElements, int vxElements, int vyElements, int H1Order, FunctionPtr f0, double q = Q)
+  Problem problem(bool boxMesh, int xElements, int vxElements, int vyElements, int H1Order, FunctionPtr f0, double q = Q, int tElements = 1)
   {
     UseBoxMesh useBoxMesh(boxMesh);
-    const int tElements = 1, delta_k = 1, numUniformRefinements = 0;
+    const int delta_k = 1, numUniformRefinements = 0;
     auto spatialMeshTopo = MeshFactory::intervalMeshTopology(X0, X0 + XWIDTH, xElements, false);
     std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(T0, TWIDTH, tElements);
     std::vector<double> velocityVertices_x = MeshTools::verticesFor1DIntervalMesh(V0, VWIDTH, vxElements);
@@ -190,9 +191,166 @@ TEUCHOS_UNIT_TEST( BoxVlasov, SpaceTimeRefinementRefinesConfigurationMesh )
   const GlobalIndexType cellID = *vlasovMesh->getActiveCellIDsGlobal().begin();
   vlasovMesh->hRefine(std::map<GlobalIndexType,unsigned>{{cellID, 1u | 2u}});
   TEST_COMPARE(configMesh->numActiveElements(), >=, configCellsBefore + 3);
-  // x alone is rejected, for now
-  const GlobalIndexType otherCellID = *vlasovMesh->getActiveCellIDsGlobal().rbegin();
-  TEST_THROW(vlasovMesh->hRefine(std::map<GlobalIndexType,unsigned>{{otherCellID, 1u}}), std::invalid_argument);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, SingleDirectionSpaceTimeRefinement )
+{
+  // Bisecting a phase-space cell in x alone, or in t alone, refines the configuration cells beneath it (regularly, so
+  // in both directions): the configuration mesh stays at least as fine as the phase-space mesh.
+  const int xElements = 2, vxElements = 2, vyElements = 1, H1Order = 2;
+  Problem box = problem(true, xElements, vxElements, vyElements, H1Order, Function::constant(1.0));
+  auto vlasovMesh = box.form->vlasovMesh();
+  auto configMesh = box.form->configurationSpaceMesh();
+  auto topology = dynamic_cast<BoxMeshTopology*>(vlasovMesh->getTopology().get());
+  const std::set<GlobalIndexType> activeCellSet = vlasovMesh->getActiveCellIDsGlobal(); // returned by value: keep one copy
+  std::vector<GlobalIndexType> cells(activeCellSet.begin(), activeCellSet.end());
+  TEST_EQUALITY(configMesh->numActiveElements(), 2);
+  for (GlobalIndexType cellID : cells) { TEST_EQUALITY(topology->phaseSpaceActiveConfigurationCells(cellID).size(), 1); }
+
+  // x only, for a cell over the first configuration cell
+  vlasovMesh->hRefine(std::map<GlobalIndexType,unsigned>{{cells.front(), 1u}});
+  TEST_EQUALITY(configMesh->numActiveElements(), 5);
+  for (IndexType childID : topology->getCell(cells.front())->getChildIndices(vlasovMesh->getTopology()))
+  {
+    TEST_EQUALITY(topology->phaseSpaceConfigurationCellID(childID), -1);               // half in x, whole in t: not a configuration cell
+    TEST_EQUALITY(topology->phaseSpaceActiveConfigurationCells(childID).size(), 2);    // but two of them tile it
+  }
+  // the other cells over that configuration cell were not refined; four configuration cells tile each
+  int cellsOverFourConfigurationCells = 0;
+  for (GlobalIndexType cellID : vlasovMesh->getActiveCellIDsGlobal())
+  {
+    if (topology->phaseSpaceActiveConfigurationCells(cellID).size() == 4) cellsOverFourConfigurationCells++;
+  }
+  TEST_EQUALITY(cellsOverFourConfigurationCells, 1);
+
+  // t only, for a cell over the second configuration cell
+  vlasovMesh->hRefine(std::map<GlobalIndexType,unsigned>{{cells.back(), 2u}});
+  TEST_EQUALITY(configMesh->numActiveElements(), 8);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, FieldExtrusionOnUnmatchedCells )
+{
+  // A configuration-space field that is a polynomial of the field degree in (x,t), extruded to a phase-space mesh in
+  // which some cells are bisected in x alone and some in t alone, must be reproduced at every phase-space point.
+  const int xElements = 2, vxElements = 2, vyElements = 1, H1Order = 2;
+  Problem box = problem(true, xElements, vxElements, vyElements, H1Order, Function::constant(1.0));
+  auto vlasovMesh = box.form->vlasovMesh();
+  const std::set<GlobalIndexType> activeCellSet = vlasovMesh->getActiveCellIDsGlobal(); // returned by value: keep one copy
+  std::vector<GlobalIndexType> cells(activeCellSet.begin(), activeCellSet.end());
+  std::map<GlobalIndexType,unsigned> masks;
+  masks[cells[0]] = 1u;          // x
+  masks[cells[1]] = 2u;          // t
+  masks[cells[2]] = 1u | 4u;     // x and u_x
+  vlasovMesh->hRefine(masks);
+
+  FunctionPtr x = Function::xn(1), t = Function::yn(1);
+  FunctionPtr E_exact = Function::constant(1.0) + 2.0 * x - 3.0 * t + 0.5 * x * t;
+  auto configSoln = box.form->configurationSpaceSolution();
+  VarPtr E_var = box.configForm->E_fieldVar(0);
+  std::map<int,FunctionPtr> projectionMap;
+  projectionMap[E_var->ID()] = E_exact;
+  configSoln->projectOntoMesh(projectionMap);
+
+  auto extrusion = Teuchos::rcp(new PhysicalSolutionExtrusion(configSoln, E_var, vlasovMesh));
+  extrusion->updateValues();
+  FunctionPtr extrusionFunction = extrusion;
+  const double volumeError = (extrusionFunction - E_exact)->l2norm(vlasovMesh);
+  out << "L2 error of the extruded field over the phase-space mesh: " << volumeError << endl;
+  TEST_COMPARE(volumeError, <, 1e-11);
+  int unmatchedCells = 0;
+  auto topology = dynamic_cast<BoxMeshTopology*>(vlasovMesh->getTopology().get());
+  for (GlobalIndexType cellID : vlasovMesh->getActiveCellIDsGlobal()) if (topology->phaseSpaceConfigurationCellID(cellID) == -1) unmatchedCells++;
+  TEST_COMPARE(unmatchedCells, >=, 6);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, MomentsOnUnmatchedCells )
+{
+  // The same polynomial f on two phase-space meshes over the same configuration mesh: every cell bisected in x alone,
+  // and every cell bisected in x and t.  The moments, and so the fields they drive, must agree.
+  const int xElements = 2, vxElements = 2, vyElements = 1, H1Order = 2;
+  double ExNorms[2], ByNorms[2];
+  GlobalIndexType configCells[2];
+  for (int both=0; both<2; both++)
+  {
+    Problem box = problem(true, xElements, vxElements, vyElements, H1Order, drivenDistribution());
+    auto vlasovMesh = box.form->vlasovMesh();
+    std::map<GlobalIndexType,unsigned> masks;
+    for (GlobalIndexType cellID : vlasovMesh->getActiveCellIDsGlobal()) masks[cellID] = (both == 1) ? (1u | 2u) : 1u;
+    vlasovMesh->hRefine(masks);
+    box.form->setInitialAndInflowConditions(drivenDistribution(), drivenDistribution());
+    std::map<int,FunctionPtr> projectionMap;
+    projectionMap[box.form->f()->ID()] = drivenDistribution();
+    box.form->vlasovSolution()->projectOntoMesh(projectionMap);
+    box.form->configurationSpaceSolve();
+    auto configMesh = box.form->configurationSpaceMesh();
+    configCells[both] = configMesh->numActiveElements();
+    ExNorms[both] = Function::solution(box.configForm->E_fieldVar(0), box.form->configurationSpaceSolution())->l2norm(configMesh);
+    ByNorms[both] = Function::solution(box.configForm->B_fieldVar(1), box.form->configurationSpaceSolution())->l2norm(configMesh);
+    out << ((both == 1) ? "x and t: " : "x only:  ") << vlasovMesh->numActiveElements() << " phase cells, " << configCells[both]
+        << " config cells; ||E_x|| = " << ExNorms[both] << ", ||B_y|| = " << ByNorms[both] << endl;
+  }
+  TEST_EQUALITY(configCells[0], configCells[1]);
+  TEST_COMPARE(ExNorms[0], >, 1e-6);
+  TEST_FLOATING_EQUALITY(ExNorms[0], ExNorms[1], 1e-9);
+  TEST_FLOATING_EQUALITY(ByNorms[0] + 1.0, ByNorms[1] + 1.0, 1e-9);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, SolveWithSingleDirectionSpaceTimeRefinement )
+{
+  // the coupled solve with every cell bisected in x alone, against every cell bisected in x and t: close, not equal
+  const int xElements = 2, vxElements = 2, vyElements = 1, H1Order = 2;
+  Diagnostics results[3];
+  const unsigned maskChoices[3] = {1u, 2u, 1u | 2u};
+  const char* labels[3] = {"x only ", "t only ", "x and t"};
+  for (int choice=0; choice<3; choice++)
+  {
+    Problem box = problem(true, xElements, vxElements, vyElements, H1Order, drivenDistribution());
+    auto vlasovMesh = box.form->vlasovMesh();
+    std::map<GlobalIndexType,unsigned> masks;
+    for (GlobalIndexType cellID : vlasovMesh->getActiveCellIDsGlobal()) masks[cellID] = maskChoices[choice];
+    vlasovMesh->hRefine(masks);
+    box.form->setInitialAndInflowConditions(drivenDistribution(), drivenDistribution());
+    box.form->solve();
+    results[choice] = diagnostics(box);
+    print(out, labels[choice], results[choice]);
+  }
+  // The configuration mesh is the same in all three; the phase-space resolution is not, and the problem is far from
+  // resolved on these meshes, so this is only a check that the coupled solves run and land near each other.
+  TEST_EQUALITY(results[0].configCells, results[2].configCells);
+  TEST_EQUALITY(results[1].configCells, results[2].configCells);
+  TEST_FLOATING_EQUALITY(results[0].fNorm, results[2].fNorm, 0.05);
+  TEST_FLOATING_EQUALITY(results[1].fNorm, results[2].fNorm, 0.1);
+  TEST_FLOATING_EQUALITY(results[0].ExNorm, results[2].ExNorm, 0.05);
+  TEST_FLOATING_EQUALITY(results[1].ExNorm, results[2].ExNorm, 0.25);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, SingleDirectionSpaceTimeRefinementMatchesExtrudedMesh )
+{
+  // Free streaming (zero charge), so that the configuration mesh plays no part: every box cell bisected in x alone
+  // must give the solution on the extruded mesh with twice as many x cells, and likewise for t.
+  const int xElements = 2, tElements = 1, vxElements = 2, vyElements = 1, H1Order = 2;
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr ux = MonomialFunction::xi_n(2, 1);
+  FunctionPtr f0 = Function::constant(1.0) + 0.3 * x + 0.1 * ux; // not reproduced exactly: a real comparison
+  for (int direction=0; direction<2; direction++) // 0: x, 1: t
+  {
+    Problem extruded = problem(false, (direction == 0) ? 2 * xElements : xElements, vxElements, vyElements, H1Order, f0, 0.0,
+                               (direction == 1) ? 2 * tElements : tElements);
+    Problem box = problem(true, xElements, vxElements, vyElements, H1Order, f0, 0.0, tElements);
+    std::map<GlobalIndexType,unsigned> masks;
+    for (GlobalIndexType cellID : box.form->vlasovMesh()->getActiveCellIDsGlobal()) masks[cellID] = 1u << direction;
+    box.form->vlasovMesh()->hRefine(masks);
+    box.form->setInitialAndInflowConditions(f0, f0);
+    extruded.form->solve();
+    box.form->solve();
+    Diagnostics de = diagnostics(extruded), db = diagnostics(box);
+    print(out, (direction == 0) ? "extruded, 2x the x cells" : "extruded, 2x the t cells", de);
+    print(out, (direction == 0) ? "box, bisected in x      " : "box, bisected in t      ", db);
+    TEST_EQUALITY(de.vlasovCells, db.vlasovCells);
+    TEST_EQUALITY(de.vlasovDofs, db.vlasovDofs);
+    TEST_FLOATING_EQUALITY(de.fNorm, db.fNorm, 1e-9);
+    TEST_FLOATING_EQUALITY(de.fEnergyError + 1.0, db.fEnergyError + 1.0, 1e-8);
+  }
 }
 
 TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlab )

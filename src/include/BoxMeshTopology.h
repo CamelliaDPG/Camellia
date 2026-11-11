@@ -120,9 +120,9 @@ namespace Camellia
      \brief  Declares this to be a phase-space mesh whose first configurationDimensionCount directions are those of
              the given configuration-space mesh topology (which must have the same root cells in those directions).
 
-     The configuration mesh must be kept at least as fine as this mesh, and a cell of this mesh must be at the same
-     refinement level in every configuration direction, so that its projection is a cell of the configuration mesh's
-     refinement tree (given regular refinement there).  See phaseSpaceConfigurationCellID().
+     The configuration mesh must be kept at least as fine as this mesh (see BoxConfigurationMeshUpdater), so that the
+     projection of each phase-space cell onto configuration space is tiled by active configuration cells.  A
+     phase-space cell may be at different refinement levels in different configuration directions.
      */
     void setConfigurationTopology(MeshTopologyViewPtr configurationTopology, int configurationDimensionCount);
     MeshTopologyViewPtr configurationTopology() const { return _configurationTopology; }
@@ -132,6 +132,10 @@ namespace Camellia
     int phaseSpaceVelocityDimensionCount() const override;
     void phaseSpaceVelocityExtents(double &v0, double &v1, IndexType phaseSpaceCellID, int velocityDimension) const override;
     IndexType phaseSpaceConfigurationCellID(IndexType phaseSpaceCellID) const override;
+    MeshTopologyViewPtr phaseSpaceConfigurationTopology() const override { return _configurationTopology; }
+    std::vector<IndexType> phaseSpaceActiveConfigurationCells(IndexType phaseSpaceCellID) const override;
+    //! (lower, upper) in each configuration direction of a cell of the configuration topology (an axis-aligned box)
+    Extents configurationCellExtents(IndexType configurationCellID) const;
 
     // MeshTopologyView interface
     long long approximateMemoryFootprint() const override;
@@ -149,7 +153,7 @@ namespace Camellia
     std::vector<unsigned> getSidesMatchingTag(IndexType cellIndex, const std::string &tagName, int tagID) const override;
     unsigned getDimension() const override;
     std::vector<IndexType> refineCellInDirections(IndexType cellIndex, unsigned directionMask) override;
-    //! cellsToRefineForBalance(), with masks completed so that phase-space cells are bisected in all configuration directions together
+    //! cellsToRefineForBalance(), as a map
     std::map<IndexType,unsigned> cellsToRefineForRegularity() const override;
     const std::set<IndexType> &getRootCellIndicesLocal() const override;
     bool isDistributed() const override;

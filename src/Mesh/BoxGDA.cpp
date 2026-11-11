@@ -12,6 +12,7 @@
 #include "VarFactory.h"
 
 #include <Teuchos_LAPACK.hpp>
+#include <Teuchos_TimeMonitor.hpp>
 
 #include <cmath>
 
@@ -127,6 +128,7 @@ IndexType BoxGDA::patchCount() const { return IndexType(_fluxDofOffsetForPatch.s
 
 void BoxGDA::rebuildLookups()
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::rebuildLookups");
   initializeVariables();
   _cellMaps.clear();
   _cellSideParitiesForCellID.clear(); // boundary status and hence parities are a function of the topology alone, but be safe
@@ -234,6 +236,7 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
   auto existing = _cellMaps.find(cellID);
   if (existing != _cellMaps.end()) return existing->second;
   TEUCHOS_TEST_FOR_EXCEPTION(_fieldDofOffsetForCell[cellID] < 0, std::invalid_argument, "BoxGDA: dof map requested for an inactive cell");
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::cellMap construction");
 
   const BoxForest &forest = _boxTopology->forest();
   const BoxForest::Skeleton &skeleton = _boxTopology->skeleton();
@@ -327,6 +330,7 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
 void BoxGDA::interpretLocalData(GlobalIndexType cellID, const FC &localData, FC &globalData,
                                 Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::interpretLocalData");
   // as GDAMinimumRule: localData may be a vector, trial x trial, trial x other, or other x trial
   const CellMap &map = cellMap(cellID);
   const int numTrial = int(map.rows.size()), numGlobal = int(map.globalIndices.size());
@@ -386,6 +390,7 @@ void BoxGDA::interpretLocalData(GlobalIndexType cellID, const FC &localData, FC 
 void BoxGDA::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FC &basisCoefficients,
                                              FC &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::interpretLocalBasisCoefficients");
   const CellMap &map = cellMap(cellID);
   auto entry = map.basisMaps.find({varID, sideOrdinal});
   TEUCHOS_TEST_FOR_EXCEPTION(entry == map.basisMaps.end(), std::invalid_argument, "BoxGDA: no basis for the variable on the specified side");
@@ -413,6 +418,7 @@ void BoxGDA::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, 
 
 void BoxGDA::interpretGlobalCoefficients(GlobalIndexType cellID, FC &localCoefficients, const TVectorPtr<double> globalCoefficients)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::interpretGlobalCoefficients");
   using LO = TMap::local_ordinal_type;
   using GO = TMap::global_ordinal_type;
   const CellMap &map = cellMap(cellID);
@@ -474,6 +480,7 @@ vector<GlobalIndexType> BoxGDA::globalDofIndicesForFieldVariable(GlobalIndexType
 bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID, const FC &parentCoefficients,
                                                    const vector<GlobalIndexType> &childIDs, vector<FC> &childCoefficients)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::projectParentCoefficientsOntoChildren");
   initializeVariables();
   DofOrderingPtr trialOrdering = elementType(parentCellID)->trialOrderPtr; // uniform order: the children's ordering too
   const int numTrial = trialOrdering->totalDofs();
@@ -641,7 +648,9 @@ void BoxConfigurationMeshUpdater::didHRefineInDirections(const std::map<GlobalIn
 {
   const int configurationDimensionCount = _boxTopology->configurationDimensionCount();
   const unsigned configurationMask = (1u << configurationDimensionCount) - 1;
-  // repeat, because a configuration cell may need more than one level to catch up with the phase-space children
+  MeshTopologyViewPtr configurationTopology = _configurationMesh->getTopology();
+  // The configuration mesh is refined regularly, so its cells are at one level in every direction.  Under each
+  // refined phase-space cell, it must reach the finest level the children have in any configuration direction.
   bool refinedSome = false;
   while (true)
   {
@@ -650,11 +659,16 @@ void BoxConfigurationMeshUpdater::didHRefineInDirections(const std::map<GlobalIn
     {
       const unsigned mask = entry.second & configurationMask;
       if (mask == 0) continue; // velocity directions only
-      TEUCHOS_TEST_FOR_EXCEPTION(mask != configurationMask, std::invalid_argument,
-                                 "phase-space cells must be bisected in all configuration directions together, or in none");
-      // the configuration cell matching the refined phase-space cell must itself be refined
-      const IndexType configurationCellID = _boxTopology->phaseSpaceConfigurationCellID(entry.first);
-      if (!_configurationMesh->getTopology()->isParent(configurationCellID)) configurationCellsToRefine.insert(configurationCellID);
+      const BoxForest::Box &box = _boxTopology->forest().node(entry.first).box;
+      int requiredLevel = 0;
+      for (int k=0; k<configurationDimensionCount; k++)
+      {
+        requiredLevel = std::max(requiredLevel, int(box.level[k]) + int((mask >> k) & 1u));
+      }
+      for (IndexType configurationCellID : _boxTopology->phaseSpaceActiveConfigurationCells(entry.first))
+      {
+        if (configurationTopology->getCell(configurationCellID)->level() < requiredLevel) configurationCellsToRefine.insert(configurationCellID);
+      }
     }
     if (configurationCellsToRefine.empty()) break;
     _configurationMesh->hRefine(configurationCellsToRefine, false);
@@ -688,14 +702,6 @@ void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, 
     first = false;
   }
 
-  // phase-space meshes bisect in all configuration directions together
-  auto completeMask = [dim](const BoxMeshTopology* topology, unsigned mask)
-  {
-    if (topology->configurationTopology() == Teuchos::null) return mask;
-    const unsigned configurationMask = (1u << topology->configurationDimensionCount()) - 1;
-    return (mask & configurationMask) ? (mask | configurationMask) : mask;
-  };
-
   const unsigned lowerSide = unsigned(fromTopology->sideOrdinalForFace(2 * direction));
   auto counterpart = [&](IndexType fromCellID)
   {
@@ -724,8 +730,6 @@ void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, 
       }
     }
     if (fromMasks.empty() && toMasks.empty()) break;
-    for (auto &entry : fromMasks) entry.second = completeMask(fromTopology, entry.second);
-    for (auto &entry : toMasks) entry.second = completeMask(toTopology, entry.second);
     meshFrom->hRefine(fromMasks);
     meshTo->hRefine(toMasks);
   }
@@ -743,6 +747,7 @@ void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, 
 
 std::vector<MeshPtr> BoxGDA::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::meshesForMultigrid");
   BoxMeshTopology* fineTopology = dynamic_cast<BoxMeshTopology*>(fineMesh->getTopology().get());
   TEUCHOS_TEST_FOR_EXCEPTION(fineTopology == NULL, std::invalid_argument, "fineMesh must use a BoxMeshTopology");
   if (delta_k == -1) delta_k = fineMesh->globalDofAssignment()->getTestOrderEnrichment();
@@ -774,6 +779,7 @@ std::vector<MeshPtr> BoxGDA::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, i
 
 TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coarseMap, TMapPtr fineMap)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::prolongationOperator");
   using GO = TMap::global_ordinal_type;
   BoxGDA* coarseGDA = dynamic_cast<BoxGDA*>(coarseMesh->globalDofAssignment().get());
   TEUCHOS_TEST_FOR_EXCEPTION(coarseGDA == NULL, std::invalid_argument, "the coarse mesh must also have a BoxGDA");

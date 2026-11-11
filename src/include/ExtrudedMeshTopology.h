@@ -113,6 +113,7 @@ namespace Camellia {
       extrusionVerticesForPhaseSpaceCell(v0, v1, phaseSpaceCellID, velocityDimension);
     }
     IndexType phaseSpaceConfigurationCellID(IndexType phaseSpaceCellID) const override { return physicalCellIDForPhaseSpaceCellID(phaseSpaceCellID); }
+    MeshTopologyViewPtr phaseSpaceConfigurationTopology() const override { return physicalMeshTopology(); }
     
     const std::set<IndexType> & phaseSpaceCellIDsForPhysicalCell(const IndexType &componentCellID) const;
     

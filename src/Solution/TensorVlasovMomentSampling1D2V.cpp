@@ -182,19 +182,10 @@ namespace
 
     // The phase-space cell's configuration cell may have been refined (via other phase-space cells over it); then this
     // phase-space cell spans several active configuration cells, and contributes at each of their cubature points.
-    const GlobalIndexType configurationCellID = phaseSpaceTopology->phaseSpaceConfigurationCellID(phaseSpaceCellID);
     std::vector<GlobalIndexType> activeConfigurationCells;
-    if (configurationCellOrdinal.find(configurationCellID) != configurationCellOrdinal.end())
+    for (IndexType configurationCellID : phaseSpaceTopology->phaseSpaceActiveConfigurationCells(phaseSpaceCellID))
     {
       activeConfigurationCells.push_back(configurationCellID);
-    }
-    else
-    {
-      CellPtr configurationCell = configurationMesh->getTopology()->getCell(configurationCellID);
-      for (IndexType descendant : configurationCell->getDescendants(configurationMesh->getTopology()))
-      {
-        activeConfigurationCells.push_back(descendant);
-      }
     }
 
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(phaseSpaceMesh, phaseSpaceCellID);

@@ -23,6 +23,15 @@ namespace Camellia
     return result;
   }
 
+  std::vector<IndexType> PhaseSpaceTopology::phaseSpaceActiveConfigurationCells(IndexType phaseSpaceCellID) const
+  {
+    const IndexType configurationCellID = phaseSpaceConfigurationCellID(phaseSpaceCellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(configurationCellID == -1, std::invalid_argument, "phase-space cell has no matching configuration cell");
+    MeshTopologyViewPtr configurationTopology = phaseSpaceConfigurationTopology();
+    std::set<IndexType> descendants = configurationTopology->getCell(configurationCellID)->getDescendants(configurationTopology);
+    return std::vector<IndexType>(descendants.begin(), descendants.end());
+  }
+
   RefinementPatternPtr ExtrudedMeshTopology::physicalRefinement(RefinementPatternPtr phaseRefinement)
   {
     auto physicalRefinementEntry = _phaseToPhysicalRefinementMap.find(phaseRefinement->getKey());

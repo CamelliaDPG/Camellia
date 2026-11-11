@@ -112,8 +112,7 @@ namespace Camellia
 
      Refines both meshes until each active cell of meshFrom on its lower boundary in the given direction has the same
      extent, in the other directions, as the active cell of meshTo across from it on meshTo's upper boundary.  A cell
-     is bisected only in the directions in which it is coarser than its counterpart (plus whatever the phase-space
-     rule for configuration directions requires).  On return, cellIDMap maps meshFrom's boundary cells to meshTo's, and
+     is bisected only in the directions in which it is coarser than its counterpart.  On return, cellIDMap maps meshFrom's boundary cells to meshTo's, and
      sideOrdinalMap has the single entry (side ordinal in meshFrom, side ordinal in meshTo).  MPI-collective.
      */
     static void hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap,
@@ -150,10 +149,10 @@ namespace Camellia
   /**
    \brief  Keeps a configuration-space mesh at least as fine as a phase-space mesh on a BoxMeshTopology.
 
-   When phase-space cells are bisected in the configuration directions (which must be all of them together, so that
-   a phase-space cell's projection stays a cell of the configuration mesh's refinement tree), the configuration cells
-   under them that are not yet that fine are refined (regular refinement), and one-irregularity of the configuration
-   mesh is then enforced.  Bisection in velocity directions alone leaves the configuration mesh untouched.
+   When phase-space cells are bisected in configuration directions, the active configuration cells under them are
+   refined (regular refinement, so in every configuration direction) until they are at least as fine as the
+   phase-space children in each direction, and one-irregularity of the configuration mesh is then enforced.
+   Bisection in velocity directions alone leaves the configuration mesh untouched.
    */
   class BoxConfigurationMeshUpdater : public RefinementObserver
   {

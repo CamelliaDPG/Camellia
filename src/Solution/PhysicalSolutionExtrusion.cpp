@@ -47,6 +47,16 @@ void PhysicalSolutionExtrusion::updateValues()
   for (const auto & phaseSpaceCellID : phaseSpaceCellIDs)
   {
     auto physicalCellID = phaseSpaceMeshTopo->phaseSpaceConfigurationCellID(phaseSpaceCellID);
+    if (physicalCellID == -1)
+    {
+      // The phase-space cell's projection is not a single configuration cell (see valuesForUnmatchedCells()):
+      // we evaluate on the active configuration cells beneath it, and need their data.
+      for (IndexType activeCellID : phaseSpaceMeshTopo->phaseSpaceActiveConfigurationCells(phaseSpaceCellID))
+      {
+        activePhysicalCellIDDescendants.insert(activeCellID);
+      }
+      continue;
+    }
     physicalCellIDs.insert(physicalCellID);
   }
   
@@ -192,12 +202,21 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> &valu
   auto partitionedOrdinalToFullListCountHost  = Kokkos::create_mirror_view(partitionedOrdinalToFullListCount);
   auto fullListOrdinalsHost                   = Kokkos::create_mirror_view(fullListOrdinals);
   
+  std::vector<int> unmatchedCellOrdinals; // phase-space cells whose projection is not a single configuration cell
   for (int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++)
   {
     auto physicalCellID = extrudedMeshTopology->phaseSpaceConfigurationCellID(phaseSpaceCellIDs[cellOrdinal]);
+    if (physicalCellID == -1)
+    {
+      unmatchedCellOrdinals.push_back(cellOrdinal);
+      continue;
+    }
     physicalCellIDs.insert(physicalCellID);
-    extrudedMeshTopology->phaseSpaceConfigurationCellID(phaseSpaceCellIDs[cellOrdinal]);
     phaseSpaceCellOrdinalsForPhysicalCellID[physicalCellID].push_back(cellOrdinal);
+  }
+  if (unmatchedCellOrdinals.size() > 0)
+  {
+    valuesForUnmatchedCells(values, basisCache, unmatchedCellOrdinals, physicalRefPointComponents, physicalPointCounts);
   }
   
   auto physicalGDA = physicalMesh->globalDofAssignment();
@@ -316,6 +335,126 @@ void PhysicalSolutionExtrusion::values(Intrepid2::Data<double, DeviceType> &valu
   SharedScratchStorage<GlobalIndexType>::sharedScratchStorage().checkinScratchStorage(fullListOrdinals);
   SharedScratchStorage<GlobalIndexType>::sharedScratchStorage().checkinScratchStorage(partitionedOrdinalToFullListOffset);
   SharedScratchStorage<GlobalIndexType>::sharedScratchStorage().checkinScratchStorage(partitionedOrdinalToFullListCount);
+}
+
+void PhysicalSolutionExtrusion::valuesForUnmatchedCells(Intrepid2::Data<double, DeviceType> &values, BasisCachePtr basisCache,
+                                                        const std::vector<int> &cellOrdinals,
+                                                        const std::vector< Kokkos::DynRankView<double, DeviceType> > &physicalRefPointComponents,
+                                                        const std::vector<int> &physicalPointCounts)
+{
+  /*
+   For phase-space cells whose projection onto configuration space is not a single configuration cell but a union of
+   active ones (the configuration mesh being at least as fine as the phase-space mesh): the configuration solution
+   is piecewise polynomial over the projection, and we evaluate it point by point, in the configuration cell that
+   contains each point.  (Points are nudged toward the centre of the projection before they are located, so that a
+   point on the boundary of the phase-space cell, as for a side cache, takes its value from inside the cell.)
+
+   This is a host implementation that writes into values directly; it assumes host-accessible device memory.
+   */
+  auto physicalMesh = _physicalSoln->mesh();
+  auto physicalMeshTopology = physicalMesh->getTopology();
+  const int numPhysicalDimensions = physicalMesh->getDimension();
+  const int numPhaseDimensions = _phaseMesh->getDimension();
+  const int numVelocityDimensions = numPhaseDimensions - numPhysicalDimensions;
+  const int numComponents = int(physicalRefPointComponents.size());
+  TEUCHOS_TEST_FOR_EXCEPTION((numComponents != 2) || (numPhysicalDimensions != 2), std::invalid_argument,
+                             "phase-space cells that do not match a configuration cell are supported for two configuration dimensions (as 1D1T) only");
+  TEUCHOS_TEST_FOR_EXCEPTION((numVelocityDimensions != 1) && (numVelocityDimensions != 2), std::invalid_argument,
+                             "unsupported number of velocity dimensions");
+  // reference coordinates of the points in each configuration direction (one 1D component per direction)
+  std::vector<std::vector<double>> refCoordinates(numComponents);
+  for (int r=0; r<numComponents; r++)
+  {
+    auto componentHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), physicalRefPointComponents[r]);
+    TEUCHOS_TEST_FOR_EXCEPTION(componentHost.extent_int(1) != 1, std::invalid_argument,
+                               "expected one tensor component of reference points per configuration direction");
+    refCoordinates[r].resize(componentHost.extent_int(0));
+    for (int i=0; i<componentHost.extent_int(0); i++) refCoordinates[r][i] = componentHost(i,0);
+  }
+  const int count0 = int(refCoordinates[0].size()), count1 = int(refCoordinates[1].size());
+  TEUCHOS_TEST_FOR_EXCEPTION((count0 != physicalPointCounts[0]) || (count1 != physicalPointCounts[1]), std::invalid_argument, "point counts do not match");
+
+  const vector<GlobalIndexType> &phaseSpaceCellIDs = basisCache->cellIDs();
+  for (int cellOrdinal : cellOrdinals)
+  {
+    const GlobalIndexType phaseSpaceCellID = phaseSpaceCellIDs[cellOrdinal];
+    // the cell's extent in the configuration directions
+    // (verticesForCell() expects the container to be sized already)
+    Camellia::FieldContainer<double> phaseVertices(int(_phaseMesh->getTopology()->getCell(phaseSpaceCellID)->vertices().size()), numPhaseDimensions);
+    _phaseMesh->getTopology()->verticesForCell(phaseVertices, phaseSpaceCellID);
+    double lo[2], hi[2];
+    for (int k=0; k<2; k++)
+    {
+      lo[k] = hi[k] = phaseVertices(0,k);
+      for (int n=1; n<phaseVertices.dimension(0); n++)
+      {
+        lo[k] = std::min(lo[k], phaseVertices(n,k));
+        hi[k] = std::max(hi[k], phaseVertices(n,k));
+      }
+    }
+    // locate each point
+    const int numPoints = count0 * count1;
+    Camellia::FieldContainer<double> points(numPoints, 2), nudgedPoints(numPoints, 2);
+    for (int i0=0; i0<count0; i0++)
+    {
+      for (int i1=0; i1<count1; i1++)
+      {
+        const int pointOrdinal = i0 * count1 + i1;
+        const double ref[2] = {refCoordinates[0][i0], refCoordinates[1][i1]};
+        for (int k=0; k<2; k++)
+        {
+          points(pointOrdinal,k) = lo[k] + 0.5 * (ref[k] + 1.0) * (hi[k] - lo[k]);
+          const double centre = 0.5 * (lo[k] + hi[k]);
+          nudgedPoints(pointOrdinal,k) = points(pointOrdinal,k) + 1e-9 * (centre - points(pointOrdinal,k));
+        }
+      }
+    }
+    std::vector<IndexType> configurationCellForPoint = physicalMeshTopology->cellIDsForPoints(nudgedPoints);
+    std::map<IndexType, std::vector<int>> pointsForConfigurationCell;
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(configurationCellForPoint[pointOrdinal] == -1, std::invalid_argument, "no configuration cell found for a phase-space point");
+      pointsForConfigurationCell[configurationCellForPoint[pointOrdinal]].push_back(pointOrdinal);
+    }
+    for (const auto &entry : pointsForConfigurationCell)
+    {
+      const IndexType configurationCellID = entry.first;
+      const std::vector<int> &pointOrdinals = entry.second;
+      // configuration cells are axis-aligned: map the points to the cell's reference coordinates directly
+      Camellia::FieldContainer<double> configurationVertices(int(physicalMeshTopology->getCell(configurationCellID)->vertices().size()), numPhysicalDimensions);
+      physicalMeshTopology->verticesForCell(configurationVertices, configurationCellID);
+      double cellLo[2], cellHi[2];
+      for (int k=0; k<2; k++)
+      {
+        cellLo[k] = cellHi[k] = configurationVertices(0,k);
+        for (int n=1; n<configurationVertices.dimension(0); n++)
+        {
+          cellLo[k] = std::min(cellLo[k], configurationVertices(n,k));
+          cellHi[k] = std::max(cellHi[k], configurationVertices(n,k));
+        }
+      }
+      const int numCellPoints = int(pointOrdinals.size());
+      Camellia::FieldContainer<double> refPoints(numCellPoints, 2);
+      for (int i=0; i<numCellPoints; i++)
+      {
+        for (int k=0; k<2; k++)
+        {
+          refPoints(i,k) = -1.0 + 2.0 * (points(pointOrdinals[i],k) - cellLo[k]) / (cellHi[k] - cellLo[k]);
+          refPoints(i,k) = std::max(-1.0, std::min(1.0, refPoints(i,k)));
+        }
+      }
+      BasisCachePtr configurationBasisCache = BasisCache::basisCacheForCell(physicalMesh, configurationCellID);
+      configurationBasisCache->setRefCellPointsFC(refPoints);
+      Camellia::FieldContainer<double> cellValues(1, numCellPoints);
+      _physicalSolnFxn->values(cellValues, configurationBasisCache);
+      for (int i=0; i<numCellPoints; i++)
+      {
+        const int i0 = pointOrdinals[i] / count1, i1 = pointOrdinals[i] % count1;
+        if (numVelocityDimensions == 1) values.getWritableEntry(cellOrdinal, i0, i1, 0) = cellValues(0,i);
+        else                            values.getWritableEntry(cellOrdinal, i0, i1, 0, 0) = cellValues(0,i);
+      }
+    }
+  }
 }
 
 bool PhysicalSolutionExtrusion::boundaryValueOnly()
