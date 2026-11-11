@@ -228,4 +228,39 @@ TEUCHOS_UNIT_TEST( BoxForest, Tesseract_VelocityOnlyRefinement )
   }
   TEST_FLOATING_EQUALITY(volume, 8.0, 1e-15);
 }
+TEUCHOS_UNIT_TEST( BoxForest, BalanceIsDirectional )
+{
+  // 3 x 3 x 3 roots; bisect the centre cell's descendants three times in z only.  Balancing should bisect
+  // neighbours in z only, never in x or y.
+  BoxForest forest({3,3,3});
+  std::vector<int> cells = {13};
+  for (int level=0; level<3; level++)
+  {
+    std::vector<int> children;
+    for (int cell : cells)
+    {
+      int first = forest.refine(cell, 4);
+      children.push_back(first);
+      children.push_back(first + 1);
+    }
+    cells = children;
+  }
+  TEST_EQUALITY(forest.maxTangentialLevelDifference(), 3);
+  const int refinementCount = forest.balance();
+  TEST_COMPARE(refinementCount, >, 0);
+  TEST_EQUALITY(forest.maxTangentialLevelDifference(), 1);
+  TEST_EQUALITY(forest.balance(), 0); // idempotent
+  double volume = 0;
+  for (int n : forest.leaves())
+  {
+    const auto &box = forest.node(n).box;
+    TEST_EQUALITY(int(box.level[0]), 0);
+    TEST_EQUALITY(int(box.level[1]), 0);
+    volume += std::ldexp(1.0, -box.level[2]);
+  }
+  TEST_FLOATING_EQUALITY(volume, 27.0, 1e-15);
+  // middle layer: the column (8 cells at z level 3), its four x/y neighbours at level 2 (4 cells each), and the four
+  // corners at level 1 (2 cells each).  The other two layers (18 cells) are untouched: z is normal to their shared faces.
+  TEST_EQUALITY(forest.leaves().size(), 8 + 4 * 4 + 4 * 2 + 18);
+}
 } // namespace

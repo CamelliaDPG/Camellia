@@ -249,6 +249,70 @@ namespace Camellia
       return neighbors;
     }
 
+    /**
+     \brief  Enforces 1-irregularity per direction: across every face, the two neighbours' levels differ by at
+             most maxLevelDifference in each direction tangential to the face.
+
+     A cell that is too coarse in some tangential direction relative to a face neighbour is bisected in that
+     direction only, so that the rule does not turn anisotropic refinements into isotropic ones.  (Levels in the
+     direction normal to the face are not constrained: they do not affect how the face is tiled.)  Returns the number
+     of bisections performed.
+     */
+    int balance(int maxLevelDifference = 1)
+    {
+      int refinementCount = 0;
+      bool changed = true;
+      while (changed)
+      {
+        changed = false;
+        const std::vector<int> leafNodes = leaves(); // copy: refine() invalidates
+        for (int nodeIndex : leafNodes)
+        {
+          unsigned mask = 0;
+          for (int side=0; side<2*_dim; side++)
+          {
+            for (int neighbor : faceNeighbors(nodeIndex, side))
+            {
+              for (int j=0; j<_dim; j++)
+              {
+                if (j == side / 2) continue;
+                if (int(_nodes[neighbor].box.level[j]) > int(_nodes[nodeIndex].box.level[j]) + maxLevelDifference) mask |= (1u << j);
+              }
+            }
+          }
+          if (mask != 0)
+          {
+            // each cell in leafNodes is refined at most once per pass, and faceNeighbors() reads the current tree
+            refine(nodeIndex, mask);
+            refinementCount++;
+            changed = true;
+          }
+        }
+      }
+      return refinementCount;
+    }
+
+    //! The largest difference in level, in a direction tangential to their shared face, between face neighbours.
+    int maxTangentialLevelDifference() const
+    {
+      int maxDifference = 0;
+      for (int nodeIndex : leaves())
+      {
+        for (int side=0; side<2*_dim; side++)
+        {
+          for (int neighbor : faceNeighbors(nodeIndex, side))
+          {
+            for (int j=0; j<_dim; j++)
+            {
+              if (j == side / 2) continue;
+              maxDifference = std::max(maxDifference, std::abs(int(_nodes[neighbor].box.level[j]) - int(_nodes[nodeIndex].box.level[j])));
+            }
+          }
+        }
+      }
+      return maxDifference;
+    }
+
     //! The trace patches of the active mesh (see Patch).  Cost: one tree query per active face.
     Skeleton skeleton() const
     {

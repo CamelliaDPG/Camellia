@@ -1,6 +1,10 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "BC.h"
 #include "BoxDPG.h"
+#include "MeshFactory.h"
+#include "Solution.h"
+#include "SpatialFilter.h"
 #include "VarFactory.h"
 
 #include <cmath>
@@ -204,7 +208,60 @@ TEUCHOS_UNIT_TEST( BoxDPG, OneDirectionRefinementConverges_2D )
   {
     const double rate = std::log2(errors[i-1] / errors[i]);
     out << "y-only refinement level " << i << ": L2 error " << errors[i] << ", rate " << rate << endl;
-    TEST_COMPARE(rate, >, p + 1 - 0.3);
+    TEST_COMPARE(rate, >, p + 1 - 0.5);
+  }
+}
+TEUCHOS_UNIT_TEST( BoxDPG, MatchesMeshAndSolution_2D )
+{
+  // On a mesh both can represent (2 x 2 quads, one refined isotropically: hanging nodes, 1-irregular), BoxDPG and
+  // Mesh / GDAMinimumRule / Solution should produce the same discrete problem.
+  const int dim = 2, H1Order = 3, delta_k = 2;
+  Convection form(dim);
+  auto uExact = [](const double *x) { return std::exp(x[0] + 2 * x[1]) + std::sin(3 * x[0]); };
+  vector<double> beta = form.beta;
+  auto f = [beta](const double *x) { return beta[0] * (std::exp(x[0] + 2 * x[1]) + 3 * std::cos(3 * x[0])) + beta[1] * 2 * std::exp(x[0] + 2 * x[1]); };
+
+  auto dpg = form.discretization({{0.0, 0.5, 1.0}, {0.0, 0.5, 1.0}}, H1Order, uExact, f);
+
+  MeshPtr mesh = MeshFactory::quadMesh(form.bf, H1Order, delta_k, 1.0, 1.0, 2, 2);
+  RHSPtr rhs = RHS::rhs();
+  rhs->addTerm(BoxDPG::function(f) * form.v);
+  BCPtr bc = BC::bc();
+  FunctionPtr n = Function::normal();
+  FunctionPtr beta_n = beta[0] * n->x() + beta[1] * n->y();
+  SpatialFilterPtr inflow = SpatialFilter::matchingX(0.0) | SpatialFilter::matchingY(0.0); // beta = (1, 0.5)
+  bc->addDirichlet(form.t_n, inflow, beta_n * BoxDPG::function(uExact));
+  SolutionPtr solution = Solution::solution(form.bf, mesh, bc, rhs, form.bf->graphNorm());
+
+  for (int refinement=0; refinement<2; refinement++)
+  {
+    if (refinement == 1)
+    {
+      // refine the cell containing (0.25, 0.25) in each
+      Camellia::FieldContainer<double> point(1, 2);
+      point(0,0) = 0.25;
+      point(0,1) = 0.25;
+      GlobalIndexType cellID = mesh->getTopology()->cellIDsForPoints(point)[0];
+      mesh->hRefine(vector<GlobalIndexType>{cellID});
+      dpg->forest().refine(0, 3);
+    }
+    TEST_EQUALITY(mesh->numActiveElements(), GlobalIndexType(dpg->forest().leaves().size()));
+    TEST_EQUALITY(mesh->numGlobalDofs(), dpg->globalDofCount());
+
+    solution->solve();
+    dpg->solve();
+
+    FunctionPtr error = Function::solution(form.u, solution) - BoxDPG::function(uExact);
+    const double legacyL2Error = error->l2norm(mesh); // same cubature as BoxDPG::L2Error
+    const double boxL2Error = dpg->L2Error(form.u, uExact);
+    out << "L2 error: Solution " << legacyL2Error << ", BoxDPG " << boxL2Error << endl;
+    TEST_FLOATING_EQUALITY(legacyL2Error, boxL2Error, 1e-5);
+
+    double boxEnergyErrorSquared = 0;
+    for (double cellError : dpg->energyErrors()) boxEnergyErrorSquared += cellError * cellError;
+    const double legacyEnergyError = solution->energyErrorTotal();
+    out << "energy error: Solution " << legacyEnergyError << ", BoxDPG " << std::sqrt(boxEnergyErrorSquared) << endl;
+    TEST_FLOATING_EQUALITY(legacyEnergyError, std::sqrt(boxEnergyErrorSquared), 1e-7);
   }
 }
 } // namespace

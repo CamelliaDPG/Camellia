@@ -128,11 +128,17 @@ Tests, with ultraweak steady convection (`-(u, beta . grad v) + <t_n, v>`, graph
   different directions (a patch that is no cell's face); energy errors vanish.
 - The same on a mesh with an L-shaped patch, and on a 4D (x, t, u_x, u_z) mesh refined in the velocity directions
   only.
-- For u = exp(2y)(1 + x) in 2D with p = 2, bisecting in y alone converges at rates 2.97, 2.99, 3.00.
+- For u = exp(2y)(1 + x) in 2D with p = 2, bisecting in y alone converges at rates 2.74, 3.01, 2.99.
 - Global dof count against a hand count.
+- Against `Mesh` / `GDAMinimumRule` / `Solution` on a mesh both can represent (2 x 2 quads, p = 2, before and after
+  refining one cell isotropically, so with hanging nodes): the same number of global dofs (72, then 117), the same L2
+  error to 1e-5 relative and the same energy error to 1e-7 relative, for a non-polynomial solution.
 
-Not done yet: a comparison of dof counts and solutions with `Mesh` / `GDAMinimumRule` / `Solution` on meshes both can
-represent; parallel assembly; iterative solvers; solution transfer between meshes.
+`BoxForest::balance()` enforces the per-direction rule (tangential levels of face neighbours differ by at most one) by
+bisecting only in the offending direction; tested on a column refined three times in z, which induces z-only
+bisections in its neighbours.
+
+Not done yet: parallel assembly; iterative solvers; solution transfer between meshes.
 
 ## Getting from prototype to production
 
