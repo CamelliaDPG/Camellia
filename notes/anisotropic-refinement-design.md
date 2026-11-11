@@ -1,7 +1,11 @@
 # Anisotropic refinement for high-dimensional hypercubes: design note
 
-Status: proposal plus a small prototype (`src/include/BoxForest.h`, `unit_tests/BoxForestTests.cpp`).  Nothing in the
-existing mesh, constraint or solver code has been changed.
+Status: prototype.  Nothing in the existing mesh, constraint or solver code has been changed.
+
+- `src/include/BoxForest.h` (`unit_tests/BoxForestTests.cpp`): the mesh.
+- `src/include/BoxDPG.h`, `src/Mesh/BoxDPG.cpp` (`unit_tests/BoxDPGTests.cpp`): a serial DPG discretization and solve
+  on a `BoxForest`, for bilinear forms whose trial variables are L2 fields and L2 fluxes, using the library's own
+  element matrices (`BF::stiffnessMatrix`, `IP::computeInnerProductMatrix`, `RHS`) without a `Mesh`.
 
 ## What the existing code would need
 
@@ -107,6 +111,28 @@ The comparison is not like for like: `MeshTopology` stores every vertex, edge, 2
 relationships, which `GDAMinimumRule` needs for continuous variables, and `BoxForest` computes only what an L2 field
 plus an L2 flux needs.  That difference is the point of the proposal, but it is also why the H1 case is the real test
 of whether the approach stays small.
+
+## DPG solves on box meshes (`BoxDPG`)
+
+`BoxDPG` numbers field dofs per active cell and flux dofs per patch, maps each cell's side coefficients to its
+patches' polynomials, assembles `B G^{-1} B^T` and solves with KLU2.  Cells are quads, hexes, and
+`Line x Line x Line x Line` in 4D (what the extruded phase-space meshes use).  The side-to-patch map is computed as an
+L2 projection with the side basis as Camellia provides it, so it is independent of that basis's ordering and scaling;
+it is exact, and it is the place where the Kronecker form would go for speed.  The flux of a patch is that of the
+cell below the patch's plane (side parity +1 there, -1 above).
+
+Tests, with ultraweak steady convection (`-(u, beta . grad v) + <t_n, v>`, graph norm, `delta_k = 2`):
+
+- A polynomial solution of the trial degree is reproduced to 1e-11 (observed about 1e-13) in 2D (p = 2), 3D (p = 2)
+  and 4D (p = 1), on meshes with non-uniform roots, two levels of anisotropic refinement, and neighbours bisected in
+  different directions (a patch that is no cell's face); energy errors vanish.
+- The same on a mesh with an L-shaped patch, and on a 4D (x, t, u_x, u_z) mesh refined in the velocity directions
+  only.
+- For u = exp(2y)(1 + x) in 2D with p = 2, bisecting in y alone converges at rates 2.97, 2.99, 3.00.
+- Global dof count against a hand count.
+
+Not done yet: a comparison of dof counts and solutions with `Mesh` / `GDAMinimumRule` / `Solution` on meshes both can
+represent; parallel assembly; iterative solvers; solution transfer between meshes.
 
 ## Getting from prototype to production
 
