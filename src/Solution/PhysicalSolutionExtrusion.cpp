@@ -32,6 +32,10 @@ std::string PhysicalSolutionExtrusion::displayString()
 
 void PhysicalSolutionExtrusion::updateValues()
 {
+  // the meshes or the configuration solution may have changed
+  _configurationCellsForUnmatchedCell.clear();
+  _configurationBasisCaches.clear();
+
   auto & phaseSpaceCellIDs = _phaseMesh->cellIDsInPartition();
       
   // determine all active descendants of the physical cells needed locally; import *their* data
@@ -409,30 +413,53 @@ void PhysicalSolutionExtrusion::valuesForUnmatchedCells(Intrepid2::Data<double, 
         }
       }
     }
-    std::vector<IndexType> configurationCellForPoint = physicalMeshTopology->cellIDsForPoints(nudgedPoints);
-    std::map<IndexType, std::vector<int>> pointsForConfigurationCell;
+    // The active configuration cells that tile this cell's projection, with their extents (cached until the next
+    // updateValues()): they are axis-aligned, so points are located by comparing coordinates.
+    auto tilingEntry = _configurationCellsForUnmatchedCell.find(phaseSpaceCellID);
+    if (tilingEntry == _configurationCellsForUnmatchedCell.end())
+    {
+      std::vector<ConfigurationCellBox> tiling;
+      const PhaseSpaceTopology* phaseSpaceTopology = PhaseSpaceTopology::phaseSpaceTopology(_phaseMesh->getTopology().get());
+      for (IndexType configurationCellID : phaseSpaceTopology->phaseSpaceActiveConfigurationCells(phaseSpaceCellID))
+      {
+        Camellia::FieldContainer<double> configurationVertices(int(physicalMeshTopology->getCell(configurationCellID)->vertices().size()), numPhysicalDimensions);
+        physicalMeshTopology->verticesForCell(configurationVertices, configurationCellID);
+        ConfigurationCellBox box;
+        box.cellID = configurationCellID;
+        for (int k=0; k<2; k++)
+        {
+          box.lo[k] = box.hi[k] = configurationVertices(0,k);
+          for (int n=1; n<configurationVertices.dimension(0); n++)
+          {
+            box.lo[k] = std::min(box.lo[k], configurationVertices(n,k));
+            box.hi[k] = std::max(box.hi[k], configurationVertices(n,k));
+          }
+        }
+        tiling.push_back(box);
+      }
+      tilingEntry = _configurationCellsForUnmatchedCell.emplace(phaseSpaceCellID, tiling).first;
+    }
+    const std::vector<ConfigurationCellBox> &tiling = tilingEntry->second;
+    std::map<int, std::vector<int>> pointsForTilingOrdinal;
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(configurationCellForPoint[pointOrdinal] == -1, std::invalid_argument, "no configuration cell found for a phase-space point");
-      pointsForConfigurationCell[configurationCellForPoint[pointOrdinal]].push_back(pointOrdinal);
-    }
-    for (const auto &entry : pointsForConfigurationCell)
-    {
-      const IndexType configurationCellID = entry.first;
-      const std::vector<int> &pointOrdinals = entry.second;
-      // configuration cells are axis-aligned: map the points to the cell's reference coordinates directly
-      Camellia::FieldContainer<double> configurationVertices(int(physicalMeshTopology->getCell(configurationCellID)->vertices().size()), numPhysicalDimensions);
-      physicalMeshTopology->verticesForCell(configurationVertices, configurationCellID);
-      double cellLo[2], cellHi[2];
-      for (int k=0; k<2; k++)
+      int tilingOrdinal = -1;
+      for (int i=0; (i<int(tiling.size())) && (tilingOrdinal < 0); i++)
       {
-        cellLo[k] = cellHi[k] = configurationVertices(0,k);
-        for (int n=1; n<configurationVertices.dimension(0); n++)
-        {
-          cellLo[k] = std::min(cellLo[k], configurationVertices(n,k));
-          cellHi[k] = std::max(cellHi[k], configurationVertices(n,k));
-        }
+        bool inside = true;
+        for (int k=0; k<2; k++) inside = inside && (nudgedPoints(pointOrdinal,k) >= tiling[i].lo[k]) && (nudgedPoints(pointOrdinal,k) <= tiling[i].hi[k]);
+        if (inside) tilingOrdinal = i;
       }
+      TEUCHOS_TEST_FOR_EXCEPTION(tilingOrdinal < 0, std::invalid_argument, "no configuration cell found for a phase-space point");
+      pointsForTilingOrdinal[tilingOrdinal].push_back(pointOrdinal);
+    }
+    for (const auto &entry : pointsForTilingOrdinal)
+    {
+      const ConfigurationCellBox &box = tiling[entry.first];
+      const IndexType configurationCellID = box.cellID;
+      const std::vector<int> &pointOrdinals = entry.second;
+      const double* cellLo = box.lo;
+      const double* cellHi = box.hi;
       const int numCellPoints = int(pointOrdinals.size());
       Camellia::FieldContainer<double> refPoints(numCellPoints, 2);
       for (int i=0; i<numCellPoints; i++)
@@ -443,7 +470,13 @@ void PhysicalSolutionExtrusion::valuesForUnmatchedCells(Intrepid2::Data<double, 
           refPoints(i,k) = std::max(-1.0, std::min(1.0, refPoints(i,k)));
         }
       }
-      BasisCachePtr configurationBasisCache = BasisCache::basisCacheForCell(physicalMesh, configurationCellID);
+      // one BasisCache per configuration cell, reused until the next updateValues()
+      auto cacheEntry = _configurationBasisCaches.find(configurationCellID);
+      if (cacheEntry == _configurationBasisCaches.end())
+      {
+        cacheEntry = _configurationBasisCaches.emplace(configurationCellID, BasisCache::basisCacheForCell(physicalMesh, configurationCellID)).first;
+      }
+      BasisCachePtr configurationBasisCache = cacheEntry->second;
       configurationBasisCache->setRefCellPointsFC(refPoints);
       Camellia::FieldContainer<double> cellValues(1, numCellPoints);
       _physicalSolnFxn->values(cellValues, configurationBasisCache);

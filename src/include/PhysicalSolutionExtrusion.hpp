@@ -32,6 +32,10 @@ namespace Camellia
       }
       return variationDimensions;
     }
+    // for phase-space cells whose projection is a union of several active configuration cells; cleared by updateValues()
+    struct ConfigurationCellBox { IndexType cellID; double lo[2]; double hi[2]; };
+    std::map<GlobalIndexType, std::vector<ConfigurationCellBox>> _configurationCellsForUnmatchedCell;
+    std::map<GlobalIndexType, BasisCachePtr> _configurationBasisCaches;
     //! evaluation for phase-space cells whose projection is a union of several active configuration cells
     void valuesForUnmatchedCells(Intrepid2::Data<double, DeviceType> &values, BasisCachePtr basisCache, const std::vector<int> &cellOrdinals,
                                  const std::vector< Kokkos::DynRankView<double, DeviceType> > &physicalRefPointComponents,

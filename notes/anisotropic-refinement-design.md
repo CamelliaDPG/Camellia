@@ -347,6 +347,42 @@ Not done: unrefinement;
 p-refinement; serendipity bases (the flux space must be a full tensor product); mesh save/load; periodic directions; a spatial mesh that is not a 1D set of root cells; the legacy
 `SolutionMoments` paths other than construction (the tensor-native moment path is the one that works).
 
+### Serendipity, direction selection, and adaptive MITL runs
+
+- **Flux spaces.**  `BoxGDA` finds the flux polynomial space numerically: which products of Legendre polynomials the
+  side basis reproduces.  Any space whose multi-indices form a downward-closed set works, since such a space is
+  preserved under restriction to a sub-box.  Camellia's serendipity L2 space of degree p is of this kind: the
+  products with sum over the directions with index i >= 1 of (i + 1) at most p + 1 (13 functions on a 3D face at
+  p = 3, against 64 for the full tensor space).
+- **Direction selection.**  `BoxGDA::anisotropicRefinementMasks(mesh, f, cells, threshold)`: on each cell, f is sampled
+  at tensor Gauss points and expanded in Legendre polynomials; eta_k is the L2 norm of the part in the highest modes of
+  direction k (top two for p >= 3, top one below); direction k is bisected if eta_k >= threshold * max eta.  This is a
+  cheap heuristic, not the DPG local-residual indicator.  `masksTangentialToTaggedSides` gives, for resolving boundary
+  data, every direction but the normal to the tagged side.  `TRefinementStrategy::setCellRefiner` lets a strategy
+  refine its marked cells through such a function.
+- **Driver.**  `--boxAnisotropicAdaptivity` (default on with `--useBoxMesh --useAdaptivity`), `--boxAnisotropyThreshold`,
+  `--maxRefinementsFirstSlab`.  The adaptive branch now writes the density, phase-space and ACCURACY diagnostics (they
+  were written only on fixed meshes), and its final export no longer passes moment functions to the exporter, which
+  cannot evaluate them (that threw, on either mesh type).
+- `drivers/papers/RelativisticVlasovSpaceTime/production-adaptive-box-phase-space.sh` is an adaptive counterpart of the
+  x32 production run, with a CHECK mode and a comparison of ACCURACY integrals against that run's log.
+
+Tests: polynomial reproduction, exact projection and multigrid with serendipity bases in 3D and 4D; the Vlasov solve
+with serendipity bases and hanging faces against the extruded mesh (agree); direction selection on functions with
+known anisotropy; for a layer in y, anisotropic marking reaches the isotropic run's error with 68 cells where the
+isotropic run has 408.
+
+Observed in small adaptive MITL runs (4 ranks, p = 3, dp = 1, 440-cell base mesh):
+
+- Multigrid-preconditioned CG takes 40-60 iterations on the base mesh and about 200 on meshes with cells bisected in
+  t alone or x alone (condition estimates near 1400 against 200).  Not investigated.
+- The energy error is concentrated in a few cells at the cathode, so Doerfler marking at 0.5 marks one cell per step.
+- Cells bisected in x alone or t alone take `PhysicalSolutionExtrusion`'s point-by-point path.  It was the dominant
+  cost on the rank owning them until the configuration-cell tiling and `BasisCache`s were cached per cell (one-slab run:
+  the last refinement's solve went from 146 s to 86 s, and the imbalance between ranks disappeared).
+- `plot_phase_space.py` runs on the adaptive output, but its "int n dx from samples" (7.82) disagreed with the driver's
+  `phase_reductions` int_f (1.99) in one run.  Unresolved.
+
 ### Cost on the MITL driver
 
 `PlanarMITLRelativisticSpaceTime` on 4 ranks, one slab, three fixed-point substeps, multigrid on (`--timeMonitorSummary`
