@@ -138,7 +138,11 @@ Tests, with ultraweak steady convection (`-(u, beta . grad v) + <t_n, v>`, graph
 bisecting only in the offending direction; tested on a column refined three times in z, which induces z-only
 bisections in its neighbours.
 
-Not done yet: parallel assembly; iterative solvers; solution transfer between meshes.
+Cost, 4D with p = 1 (80 trial and 625 test dofs per cell), one core: about 35 ms per cell for the whole solve
+(256 cells, 14,592 dofs: 9 s).  Nothing here is optimised: the optimal test functions and the side-to-patch
+projections are computed with plain loops, cell by cell, and fields are not condensed out before the global solve.
+
+Not done yet: parallel assembly; static condensation and iterative solvers; solution transfer between meshes.
 
 ## Getting from prototype to production
 
