@@ -85,8 +85,10 @@ X=./drivers/papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime
 SRC=$(grep -m1 "^CMAKE_HOME_DIRECTORY" CMakeCache.txt | cut -d= -f2)
 PLOT=$SRC/drivers/papers/RelativisticVlasovSpaceTime/plot_phase_space.py
 
-if ! $X --help 2>/dev/null | grep -q -- "--maxRefinementsFirstSlab"; then
-  echo "This build of PlanarMITLRelativisticSpaceTime has no --maxRefinementsFirstSlab: build the anisotropic-refinement branch."; exit 1
+# (the driver prints its help to stderr, and exits nonzero after printing it)
+if [ ! -x $X ]; then echo "$X not found: run this from the Camellia build directory."; exit 1; fi
+if ! $X --help 2>&1 | grep -q -- "--maxRefinementsFirstSlab"; then
+  echo "This build of PlanarMITLRelativisticSpaceTime has no --maxRefinementsFirstSlab: rebuild it from the anisotropic-refinement branch (e9ca597e or later)."; exit 1
 fi
 
 if [ -n "$DOERFLER" ]; then MARKING="--doerflerTarget=$DOERFLER"; else MARKING="--refinementThreshold=$THRESH"; fi
