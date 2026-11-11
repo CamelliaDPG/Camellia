@@ -3037,8 +3037,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
       const double gStandardTime = seconds([&]{ ip->computeInnerProductMatrix(gStandard, elemType->testOrderPtr, ipBasisCache); });
       setSumFactorizedLinearTermIntegrationEnabled(true);
       // GEMM statistics for the sum-factorized path: time spent in, and flops issued to, BLAS GEMM
-      // GEMMs record their statistics under Intrepid2::Impl::GemmDeviceType (the execution space BLAS is called on)
-      using PAMatrixType = Intrepid2::PAMatrix<Intrepid2::Impl::GemmDeviceType,double>;
+      // GEMM statistics are process-wide (shared by every PAMatrix instantiation), so any instantiation reads them
+      using PAMatrixType = Intrepid2::PAMatrix<DeviceType,double>;
       const bool gemmStatisticsWereEnabled = PAMatrixType::gemmStatisticsEnabled();
       PAMatrixType::setGEMMStatisticsEnabled(true);
       double gemmFlops0 = PAMatrixType::gemmFlopCount(), gemmTime0 = PAMatrixType::gemmTimeSeconds();
