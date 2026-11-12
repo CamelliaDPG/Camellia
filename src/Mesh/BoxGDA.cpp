@@ -10,12 +10,14 @@
 #include "InducedMeshPartitionPolicy.h"
 #include "MPIWrapper.h"
 #include "Mesh.h"
+#include "Solution.h"
 #include "VarFactory.h"
 
 #include <Teuchos_LAPACK.hpp>
 #include <Teuchos_TimeMonitor.hpp>
 
 #include <cmath>
+#include <limits>
 
 using namespace Camellia;
 using namespace std;
@@ -64,19 +66,33 @@ BoxGDA::BoxGDA(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dof
   _fluxVars = varFactory->fluxVars();
 }
 
-void BoxGDA::initializeVariables()
+int BoxGDA::cellOrder(GlobalIndexType cellID)
 {
-  if (_basisCache != Teuchos::null) return;
-  ElementTypePtr elemType = elementType(*_boxTopology->getLocallyKnownActiveCellIndices().begin());
+  return getH1Order(cellID)[0];
+}
+
+const BoxGDA::OrderData &BoxGDA::orderData(int H1Order) const
+{
+  auto entry = _orderData.find(H1Order);
+  TEUCHOS_TEST_FOR_EXCEPTION(entry == _orderData.end(), std::logic_error, "BoxGDA: no data for H^1 order " << H1Order);
+  return entry->second;
+}
+
+const BoxGDA::OrderData &BoxGDA::orderDataForCell(GlobalIndexType cellID)
+{
+  const int order = cellOrder(cellID);
+  auto existing = _orderData.find(order);
+  if (existing != _orderData.end()) return existing->second;
+  OrderData &data = _orderData[order];
+  ElementTypePtr elemType = elementType(cellID);
+  data.elemType = elemType;
   DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
   const int dim = _boxTopology->getDimension();
   const int sideCount = _boxTopology->cellTopology()->getSideCount();
-  _fieldDofsPerCell = 0;
-  _fluxDofsPerPatch = 0;
   for (VarPtr field : _fieldVars)
   {
-    _fieldOffsets.push_back(_fieldDofsPerCell);
-    _fieldDofsPerCell += trialOrdering->getBasisCardinality(field->ID(), VOLUME_INTERIOR_SIDE_INDEX);
+    data.fieldOffsets.push_back(data.fieldDofs);
+    data.fieldDofs += trialOrdering->getBasisCardinality(field->ID(), VOLUME_INTERIOR_SIDE_INDEX);
   }
   for (VarPtr flux : _fluxVars)
   {
@@ -89,8 +105,8 @@ void BoxGDA::initializeVariables()
     std::vector<std::vector<int>> indexSet;
     int degree = 0;
     {
-      const IndexType sampleCellID = *_boxTopology->getLocallyKnownActiveCellIndices().begin();
-      const int maxDegree = _initialH1OrderTrial[0] + 2; // comfortably above the flux degree
+      const IndexType sampleCellID = cellID;
+      const int maxDegree = order + 2; // comfortably above the flux degree
       // enough quadrature points that a product the basis does not contain cannot match it at all of them
       const int cubatureEnrichment = 2 * maxDegree;
       BasisCachePtr sampleCache = Teuchos::rcp(new BasisCache(elemType, MeshPtr(Teuchos::null), false, cubatureEnrichment));
@@ -173,13 +189,29 @@ void BoxGDA::initializeVariables()
       TEUCHOS_TEST_FOR_EXCEPTION(trialOrdering->getBasisCardinality(flux->ID(), side) != cardinality, std::invalid_argument,
                                  "BoxGDA: flux basis cardinality varies from side to side");
     }
-    _fluxDegrees.push_back(degree);
-    _fluxIndexSets.push_back(indexSet);
-    _fluxOffsets.push_back(_fluxDofsPerPatch);
-    _fluxDofsPerPatch += cardinality;
+    data.fluxDegrees.push_back(degree);
+    data.fluxIndexSets.push_back(indexSet);
+    data.fluxOffsets.push_back(data.fluxDofs);
+    data.fluxDofs += cardinality;
   }
-  _basisCache = Teuchos::rcp(new BasisCache(elemType));
-  _parentBasisCache = Teuchos::rcp(new BasisCache(elemType));
+  // the flux spaces of successive orders must be nested, for the minimum rule
+  for (const auto &[otherOrder, otherData] : _orderData)
+  {
+    if (otherOrder == order) continue;
+    const OrderData &lower = (otherOrder < order) ? otherData : data, &higher = (otherOrder < order) ? data : otherData;
+    for (size_t fluxOrdinal=0; fluxOrdinal<_fluxVars.size(); fluxOrdinal++)
+    {
+      std::set<std::vector<int>> higherSet(higher.fluxIndexSets[fluxOrdinal].begin(), higher.fluxIndexSets[fluxOrdinal].end());
+      for (const auto &index : lower.fluxIndexSets[fluxOrdinal])
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(higherSet.find(index) == higherSet.end(), std::invalid_argument,
+                                   "BoxGDA: flux spaces of different orders are not nested");
+      }
+    }
+  }
+  data.basisCache = Teuchos::rcp(new BasisCache(elemType));
+  data.parentBasisCache = Teuchos::rcp(new BasisCache(elemType));
+  return data;
 }
 
 GlobalDofAssignmentPtr BoxGDA::deepCopy()
@@ -189,9 +221,110 @@ GlobalDofAssignmentPtr BoxGDA::deepCopy()
 
 void BoxGDA::didChangePartitionPolicy() { rebuildLookups(); }
 
+void BoxGDA::didHRefine(const set<GlobalIndexType> &parentCellIDs)
+{
+  for (GlobalIndexType parentCellID : parentCellIDs)
+  {
+    const int parentDeltaP = getPRefinementDegree(parentCellID);
+    if (parentDeltaP == 0) continue;
+    for (IndexType childID : _boxTopology->getCell(parentCellID)->getChildIndices(_meshTopology))
+    {
+      setPRefinementDegree(childID, std::max(parentDeltaP, getPRefinementDegree(childID)));
+    }
+  }
+  this->GlobalDofAssignment::didHRefine(parentCellIDs);
+}
+
 void BoxGDA::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(deltaP != 0, std::invalid_argument, "BoxGDA does not support p-refinement yet");
+  // as GDAMinimumRule: record the old element types, raise the orders, then project the registered solutions
+  std::map<GlobalIndexType, ElementTypePtr> oldTypes;
+  const std::set<IndexType> &knownCells = _boxTopology->getLocallyKnownActiveCellIndices();
+  for (GlobalIndexType cellID : cellIDs)
+  {
+    if (knownCells.find(cellID) != knownCells.end()) oldTypes[cellID] = elementType(cellID);
+  }
+  this->GlobalDofAssignment::didPRefine(cellIDs, deltaP);
+  _cellMaps.clear();
+  const std::set<GlobalIndexType> &myCells = _partitions[_partitionPolicy->Comm()->getRank()];
+  Teuchos::LAPACK<int,double> lapack;
+  for (const auto &[cellID, oldType] : oldTypes)
+  {
+    if (myCells.find(cellID) == myCells.end()) continue; // only owners hold solution coefficients
+    // (Solution's generic projection needs RefinementPatterns.)  The old bases lie in the new spaces, so the L2
+    // projection onto the new basis is exact, on the volume for fields and on each side for fluxes.
+    const OrderData &newData = orderDataForCell(cellID);
+    DofOrderingPtr oldOrdering = oldType->trialOrderPtr, newOrdering = newData.elemType->trialOrderPtr;
+    const BasisCachePtr &cache = newData.basisCache;
+    FC nodes = _boxTopology->physicalCellNodesForCell(cellID, true);
+    cache->setPhysicalCellNodes(nodes, {cellID}, true);
+    // (old basis -> new basis) coefficient matrix for one basis pair on one cache: C (n_new x n_old), column-major
+    auto transfer = [&](BasisCachePtr basisCache, BasisPtr oldBasis, BasisPtr newBasis, std::vector<double> &C)
+    {
+      auto newValues = basisCache->getTransformedValues(newBasis, OP_VALUE);
+      auto oldValues = basisCache->getTransformedValues(oldBasis, OP_VALUE);
+      const FC &weightedMeasures = basisCache->getWeightedMeasures();
+      const int n = newBasis->getCardinality(), m = oldBasis->getCardinality(), P = weightedMeasures.dimension(1);
+      std::vector<double> M(n*n, 0.0);
+      C.assign(n*m, 0.0);
+      for (int i=0; i<n; i++)
+      {
+        for (int j=0; j<n; j++)
+          for (int q=0; q<P; q++) M[j*n+i] += (*newValues)(0,i,q) * (*newValues)(0,j,q) * weightedMeasures(0,q);
+        for (int j=0; j<m; j++)
+          for (int q=0; q<P; q++) C[j*n+i] += (*newValues)(0,i,q) * (*oldValues)(0,j,q) * weightedMeasures(0,q);
+      }
+      int info;
+      lapack.POSV('U', n, m, M.data(), n, C.data(), n, &info);
+      TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA::didPRefine: projection failed");
+    };
+    struct Block { std::vector<int> oldIndices, newIndices; std::vector<double> C; };
+    std::vector<Block> blocks;
+    for (VarPtr field : _fieldVars)
+    {
+      Block block;
+      block.oldIndices = oldOrdering->getDofIndices(field->ID());
+      block.newIndices = newOrdering->getDofIndices(field->ID());
+      transfer(cache, oldOrdering->getBasis(field->ID()), newOrdering->getBasis(field->ID()), block.C);
+      blocks.push_back(block);
+    }
+    const int sideCount = _boxTopology->cellTopology()->getSideCount();
+    for (int side=0; side<sideCount; side++)
+    {
+      for (VarPtr flux : _fluxVars)
+      {
+        Block block;
+        block.oldIndices = oldOrdering->getDofIndices(flux->ID(), side);
+        block.newIndices = newOrdering->getDofIndices(flux->ID(), side);
+        transfer(cache->getSideBasisCache(side), oldOrdering->getBasis(flux->ID(), side), newOrdering->getBasis(flux->ID(), side), block.C);
+        blocks.push_back(block);
+      }
+    }
+    for (SolutionPtr solution : _registeredSolutions)
+    {
+      for (int ordinal=0; ordinal<solution->numSolutions(); ordinal++)
+      {
+        const auto &coefficientsForCell = solution->solutionForCellID()[ordinal];
+        auto entry = coefficientsForCell.find(cellID);
+        if (entry == coefficientsForCell.end()) continue;
+        const FC &oldCoefficients = entry->second;
+        TEUCHOS_TEST_FOR_EXCEPTION(int(oldCoefficients.size()) != oldOrdering->totalDofs(), std::logic_error,
+                                   "BoxGDA::didPRefine: solution coefficients do not match the old element type");
+        FC newCoefficients(newOrdering->totalDofs());
+        for (const Block &block : blocks)
+        {
+          const int n = int(block.newIndices.size()), m = int(block.oldIndices.size());
+          for (int i=0; i<n; i++)
+          {
+            double value = 0;
+            for (int j=0; j<m; j++) value += block.C[j*n+i] * oldCoefficients[block.oldIndices[j]];
+            newCoefficients[block.newIndices[i]] = value;
+          }
+        }
+        solution->setLocalCoefficientsForCell(cellID, newCoefficients, ordinal);
+      }
+    }
+  }
 }
 
 void BoxGDA::setAllowMeshTopologyPruning(bool allowMeshTopologyPruning)
@@ -208,7 +341,6 @@ IndexType BoxGDA::patchCount() const { return IndexType(_fluxDofOffsetForPatch.s
 void BoxGDA::rebuildLookups()
 {
   TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::rebuildLookups");
-  initializeVariables();
   _cellMaps.clear();
   _cellSideParitiesForCellID.clear(); // boundary status and hence parities are a function of the topology alone, but be safe
 
@@ -231,6 +363,18 @@ void BoxGDA::rebuildLookups()
     patchesForPartition[partition].push_back(patchOrdinal);
   }
 
+  // every rank knows every cell's order (p-refinements are applied on all ranks)
+  for (IndexType cellID : _boxTopology->getLocallyKnownActiveCellIndices()) orderDataForCell(cellID);
+  _patchOrder.assign(numPatches, 0);
+  for (int patchOrdinal=0; patchOrdinal<numPatches; patchOrdinal++)
+  {
+    const BoxForest::Patch &patch = skeleton.patches[patchOrdinal];
+    int order = std::numeric_limits<int>::max();
+    for (const auto *faces : {&patch.minusFaces, &patch.plusFaces})
+      for (const BoxForest::Face &face : *faces) order = std::min(order, cellOrder(face.cell));
+    _patchOrder[patchOrdinal] = order;
+  }
+
   _fieldDofOffsetForCell.assign(_boxTopology->cellCount(), -1);
   _fluxDofOffsetForPatch.assign(numPatches, -1);
   _partitionDofOffsets.assign(numPartitions + 1, 0);
@@ -242,17 +386,18 @@ void BoxGDA::rebuildLookups()
     for (GlobalIndexType cellID : _partitions[partition])
     {
       _fieldDofOffsetForCell[cellID] = offset;
-      offset += _fieldDofsPerCell;
+      offset += orderData(cellOrder(cellID)).fieldDofs;
     }
+    const GlobalIndexType fluxStart = offset;
     for (int patchOrdinal : patchesForPartition[partition])
     {
       _fluxDofOffsetForPatch[patchOrdinal] = offset;
-      offset += _fluxDofsPerPatch;
+      offset += orderData(_patchOrder[patchOrdinal]).fluxDofs;
     }
     if (partition == rank)
     {
-      _myFieldDofCount = GlobalIndexType(_partitions[partition].size()) * _fieldDofsPerCell;
-      _myFluxDofCount = GlobalIndexType(patchesForPartition[partition].size()) * _fluxDofsPerPatch;
+      _myFieldDofCount = fluxStart - _partitionDofOffsets[partition];
+      _myFluxDofCount = offset - fluxStart;
     }
   }
   _partitionDofOffsets[numPartitions] = offset;
@@ -291,13 +436,13 @@ GlobalIndexType BoxGDA::numPartitionOwnedGlobalFluxIndices() { return _myFluxDof
 GlobalIndexType BoxGDA::numPartitionOwnedGlobalTraceIndices() { return 0; }
 IndexType BoxGDA::localDofCount() { return IndexType(_myFieldDofCount + _myFluxDofCount); }
 
-void BoxGDA::patchBasisValues(const BoxForest::Patch &patch, int fluxOrdinal, const double *x, vector<double> &values) const
+void BoxGDA::patchBasisValues(const BoxForest::Patch &patch, const OrderData &patchData, int fluxOrdinal, const double *x, vector<double> &values) const
 {
   // products of Legendre polynomials in the tangential physical coordinates, on the patch's bounding box, for the
-  // multi-indices of the flux variable's space
+  // multi-indices of the flux variable's space at the patch's order
   const int dim = _boxTopology->getDimension();
-  const int degree = _fluxDegrees[fluxOrdinal];
-  const std::vector<std::vector<int>> &indexSet = _fluxIndexSets[fluxOrdinal];
+  const int degree = patchData.fluxDegrees[fluxOrdinal];
+  const std::vector<std::vector<int>> &indexSet = patchData.fluxIndexSets[fluxOrdinal];
   double legendreValues[BoxForest::MAX_DIM][32];
   int t = 0;
   for (int k=0; k<dim; k++)
@@ -331,6 +476,8 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
   const int dim = _boxTopology->getDimension();
   const int leafOrdinal = forest.leafOrdinal(cellID);
 
+  const OrderData &cellData = orderDataForCell(cellID);
+  const int myOrder = cellOrder(cellID);
   CellMap &map = _cellMaps[cellID];
   map.rows.assign(numTrial, {});
   for (size_t fieldOrdinal=0; fieldOrdinal<_fieldVars.size(); fieldOrdinal++)
@@ -338,7 +485,7 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
     const int varID = _fieldVars[fieldOrdinal]->ID();
     BasisMap &basisMap = map.basisMaps[{varID, VOLUME_INTERIOR_SIDE_INDEX}];
     basisMap.localDofIndices = trialOrdering->getDofIndices(varID);
-    const GlobalIndexType offset = _fieldDofOffsetForCell[cellID] + _fieldOffsets[fieldOrdinal];
+    const GlobalIndexType offset = _fieldDofOffsetForCell[cellID] + cellData.fieldOffsets[fieldOrdinal];
     for (size_t i=0; i<basisMap.localDofIndices.size(); i++)
     {
       map.rows[basisMap.localDofIndices[i]].push_back({int(map.globalIndices.size()), 1.0});
@@ -349,7 +496,7 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
 
   FC nodes = _boxTopology->physicalCellNodesForCell(cellID, true);
   vector<GlobalIndexType> cellIDs = {cellID};
-  _basisCache->setPhysicalCellNodes(nodes, cellIDs, true);
+  cellData.basisCache->setPhysicalCellNodes(nodes, cellIDs, true);
 
   vector<double> psi, phiValues, psiValues, weights, M;
   Teuchos::LAPACK<int,double> lapack;
@@ -358,7 +505,9 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
     const int side = _boxTopology->sideOrdinalForFace(face);
     const int patchOrdinal = skeleton.patchForFace[forest.faceOrdinal(leafOrdinal, face)];
     const BoxForest::Patch &patch = skeleton.patches[patchOrdinal];
-    BasisCachePtr sideCache = _basisCache->getSideBasisCache(side);
+    const int patchOrder = _patchOrder[patchOrdinal];
+    const OrderData &patchData = orderData(patchOrder);
+    BasisCachePtr sideCache = cellData.basisCache->getSideBasisCache(side);
     const FC &points = sideCache->getPhysicalCubaturePointsFC();
     const FC &weightedMeasures = sideCache->getWeightedMeasures();
     const int P = points.dimension(1);
@@ -370,13 +519,13 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
       const int varID = _fluxVars[fluxOrdinal]->ID();
       BasisPtr fluxBasis = trialOrdering->getBasis(varID, side);
       auto fluxValues = sideCache->getTransformedValues(fluxBasis, OP_VALUE);
-      const int n = fluxBasis->getCardinality(), m = n;
+      const int n = fluxBasis->getCardinality(), m = int(patchData.fluxIndexSets[fluxOrdinal].size());
       phiValues.resize(n*P);
       psiValues.resize(m*P);
       for (int q=0; q<P; q++)
       {
         for (int i=0; i<n; i++) phiValues[i*P+q] = (*fluxValues)(0,i,q);
-        patchBasisValues(patch, int(fluxOrdinal), &points(0,q,0), psi);
+        patchBasisValues(patch, patchData, int(fluxOrdinal), &points(0,q,0), psi);
         for (int j=0; j<m; j++) psiValues[j*P+q] = psi[j];
       }
       // weights(i,j): patch basis function j = sum_i weights(i,j) * side basis function i, on this side (L2 projection, exact)
@@ -392,13 +541,14 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
           for (int q=0; q<P; q++)
             basisMap.weights[j*n+i] += phiValues[i*P+q] * psiValues[j*P+q] * weights[q];
       }
+      if (m < n) basisMap.sideMass = M; // for interpretLocalBasisCoefficients()
       int info;
       lapack.POSV('U', n, m, M.data(), n, basisMap.weights.data(), n, &info);
       TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA: side-to-patch projection failed");
-      if (!_haveVerifiedFluxSpaces)
+      if (_verifiedFluxSpaces.find({myOrder, patchOrder}) == _verifiedFluxSpaces.end())
       {
         // once: the side basis must reproduce the patch basis functions exactly (it does if the flux space is what
-        // initializeVariables() took it to be)
+        // orderDataForCell() took it to be)
         double maxResidual = 0, maxValue = 0;
         for (int q=0; q<P; q++)
         {
@@ -415,7 +565,7 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
       }
 
       basisMap.localDofIndices = trialOrdering->getDofIndices(varID, side);
-      const GlobalIndexType offset = _fluxDofOffsetForPatch[patchOrdinal] + _fluxOffsets[fluxOrdinal];
+      const GlobalIndexType offset = _fluxDofOffsetForPatch[patchOrdinal] + patchData.fluxOffsets[fluxOrdinal];
       // two sides of one cell can belong to the same patch only through periodicity, which is not supported: no repeats
       const int base = int(map.globalIndices.size());
       for (int j=0; j<m; j++)
@@ -427,8 +577,13 @@ const BoxGDA::CellMap &BoxGDA::cellMap(GlobalIndexType cellID)
         for (int j=0; j<m; j++)
           if (std::abs(basisMap.weights[j*n+i]) > 1e-14) map.rows[basisMap.localDofIndices[i]].push_back({base + j, basisMap.weights[j*n+i]});
     }
+    // (verified for every flux variable on this side)
   }
-  _haveVerifiedFluxSpaces = true;
+  for (int face=0; face<2*dim; face++)
+  {
+    const int patchOrdinal = skeleton.patchForFace[forest.faceOrdinal(leafOrdinal, face)];
+    _verifiedFluxSpaces.insert({myOrder, _patchOrder[patchOrdinal]});
+  }
   return map;
 }
 
@@ -510,13 +665,37 @@ void BoxGDA::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, 
     for (int j=0; j<m; j++) globalCoefficients(j) = basisCoefficients[j];
     return;
   }
-  // the patch polynomial restricted to this side is weights * g; the restriction is injective, so solve weights * g = c
-  vector<double> W = basisMap.weights, g(n);
-  for (int i=0; i<n; i++) g[i] = basisCoefficients[i];
-  vector<int> pivots(n);
+  // the patch polynomial restricted to this side is weights * g; the restriction is injective
   Teuchos::LAPACK<int,double> lapack;
   int info;
-  lapack.GESV(n, 1, W.data(), n, pivots.data(), g.data(), n, &info);
+  if (m == n)
+  {
+    // solve weights * g = c
+    vector<double> W = basisMap.weights, g(n);
+    for (int i=0; i<n; i++) g[i] = basisCoefficients[i];
+    vector<int> pivots(n);
+    lapack.GESV(n, 1, W.data(), n, pivots.data(), g.data(), n, &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA: could not interpret side coefficients");
+    for (int j=0; j<m; j++) globalCoefficients(j) = g[j];
+    return;
+  }
+  // the side basis is richer than the patch's (a higher-order cell on a lower-order patch): the L2 projection of the
+  // side function onto the patch space, (W^T M W) g = W^T M c
+  const vector<double> &W = basisMap.weights, &M = basisMap.sideMass;
+  vector<double> Mc(n, 0.0), MW(n*m, 0.0), A(m*m, 0.0), g(m, 0.0);
+  for (int i=0; i<n; i++)
+    for (int k=0; k<n; k++)
+    {
+      Mc[i] += M[k*n+i] * basisCoefficients[k];
+      for (int j=0; j<m; j++) MW[j*n+i] += M[k*n+i] * W[j*n+k];
+    }
+  for (int j=0; j<m; j++)
+  {
+    for (int i=0; i<n; i++) g[j] += W[j*n+i] * Mc[i];
+    for (int l=0; l<m; l++)
+      for (int i=0; i<n; i++) A[l*m+j] += W[j*n+i] * MW[l*n+i];
+  }
+  lapack.POSV('U', m, 1, A.data(), m, g.data(), m, &info);
   TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA: could not interpret side coefficients");
   for (int j=0; j<m; j++) globalCoefficients(j) = g[j];
 }
@@ -586,8 +765,15 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
                                                    const vector<GlobalIndexType> &childIDs, vector<FC> &childCoefficients)
 {
   TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::projectParentCoefficientsOntoChildren");
-  initializeVariables();
-  DofOrderingPtr trialOrdering = elementType(parentCellID)->trialOrderPtr; // uniform order: the children's ordering too
+  // p-refinement ("child" = the cell itself, at a new order): Solution's generic projection handles it
+  if ((childIDs.size() == 1) && (childIDs[0] == parentCellID)) return false;
+  const OrderData &data = orderDataForCell(parentCellID);
+  for (GlobalIndexType childID : childIDs)
+  {
+    // children take the parent's order (didHRefine()); otherwise let Solution's generic projection handle it
+    if ((childID != GlobalIndexType(-1)) && (cellOrder(childID) != cellOrder(parentCellID))) return false;
+  }
+  DofOrderingPtr trialOrdering = data.elemType->trialOrderPtr; // the children's ordering too
   const int numTrial = trialOrdering->totalDofs();
   const int dim = _boxTopology->getDimension();
   const BoxForest &forest = _boxTopology->forest();
@@ -616,7 +802,8 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
   // The parent's flux on each of its sides, as coefficients of the tensor-Legendre basis on that side's box.
   // (This avoids evaluating the parent's side basis at the children's points.)
   FC parentNodes = _boxTopology->physicalCellNodesForCell(parentCellID, true);
-  _parentBasisCache->setPhysicalCellNodes(parentNodes, {parentCellID}, true);
+  const BasisCachePtr &parentBasisCache = data.parentBasisCache, &basisCache = data.basisCache;
+  parentBasisCache->setPhysicalCellNodes(parentNodes, {parentCellID}, true);
   const int sideCount = _boxTopology->cellTopology()->getSideCount();
   vector<BoxForest::Patch> sideBox(sideCount);
   vector<vector<vector<double>>> parentSideLegendre(sideCount, vector<vector<double>>(_fluxVars.size()));
@@ -627,7 +814,7 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
     BoxForest::Patch &patch = sideBox[side];
     patch.normal = k;
     for (int j=0; j<dim; j++) { patch.lo[j] = parentBox.lo[j]; patch.hi[j] = parentBox.hi(j); }
-    BasisCachePtr sideCache = _parentBasisCache->getSideBasisCache(side);
+    BasisCachePtr sideCache = parentBasisCache->getSideBasisCache(side);
     const FC &points = sideCache->getPhysicalCubaturePointsFC();
     const FC &weightedMeasures = sideCache->getWeightedMeasures();
     const int P = points.dimension(1);
@@ -645,7 +832,7 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
       for (int q=0; q<P; q++)
       {
         for (int i=0; i<n; i++) values[q] += parentCoefficients[dofIndices[i]] * (*basisValues)(0,i,q);
-        patchBasisValues(patch, int(fluxOrdinal), &points(0,q,0), psi);
+        patchBasisValues(patch, data, int(fluxOrdinal), &points(0,q,0), psi);
         for (int j=0; j<n; j++) psiValues[j*P+q] = psi[j];
       }
       project(psiValues, values, weights, n, parentSideLegendre[side][fluxOrdinal]);
@@ -663,12 +850,12 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
     const BoxForest::Box &childBox = forest.node(childID).box;
 
     FC childNodes = _boxTopology->physicalCellNodesForCell(childID, true);
-    _basisCache->setPhysicalCellNodes(childNodes, {childID}, true);
+    basisCache->setPhysicalCellNodes(childNodes, {childID}, true);
 
     // fields: evaluate the parent's basis at the child's cubature points, mapped to the parent's reference cell
     {
-      const FC &points = _basisCache->getPhysicalCubaturePointsFC();
-      const FC &weightedMeasures = _basisCache->getWeightedMeasures();
+      const FC &points = basisCache->getPhysicalCubaturePointsFC();
+      const FC &weightedMeasures = basisCache->getWeightedMeasures();
       const int P = points.dimension(1);
       FC parentRefPoints(P, dim);
       for (int q=0; q<P; q++)
@@ -681,12 +868,12 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
         BasisPtr basis = trialOrdering->getBasis(field->ID());
         const vector<int> &dofIndices = trialOrdering->getDofIndices(field->ID());
         const int n = basis->getCardinality();
-        auto childValues = _basisCache->getTransformedValues(basis, OP_VALUE);
+        auto childValues = basisCache->getTransformedValues(basis, OP_VALUE);
         phiValues.resize(n*P);
         for (int i=0; i<n; i++) for (int q=0; q<P; q++) phiValues[i*P+q] = (*childValues)(0,i,q);
-        // the reference points of _parentBasisCache are replaced; its physical nodes are still the parent's
-        _parentBasisCache->setRefCellPointsFC(parentRefPoints);
-        auto parentValues = _parentBasisCache->getTransformedValues(basis, OP_VALUE);
+        // the reference points of parentBasisCache are replaced; its physical nodes are still the parent's
+        parentBasisCache->setRefCellPointsFC(parentRefPoints);
+        auto parentValues = parentBasisCache->getTransformedValues(basis, OP_VALUE);
         values.assign(P, 0.0);
         for (int q=0; q<P; q++)
           for (int i=0; i<n; i++)
@@ -702,7 +889,7 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
       const int face = _boxTopology->faceForSideOrdinal(side), k = face / 2;
       const bool onParentSide = (face % 2 == 1) ? (childBox.hi(k) == parentBox.hi(k)) : (childBox.lo[k] == parentBox.lo[k]);
       if (!onParentSide) continue;
-      BasisCachePtr sideCache = _basisCache->getSideBasisCache(side);
+      BasisCachePtr sideCache = basisCache->getSideBasisCache(side);
       const FC &points = sideCache->getPhysicalCubaturePointsFC();
       const FC &weightedMeasures = sideCache->getWeightedMeasures();
       const int P = points.dimension(1);
@@ -720,7 +907,7 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
         for (int q=0; q<P; q++)
         {
           for (int i=0; i<n; i++) phiValues[i*P+q] = (*childValues)(0,i,q);
-          patchBasisValues(sideBox[side], int(fluxOrdinal), &points(0,q,0), psi);
+          patchBasisValues(sideBox[side], data, int(fluxOrdinal), &points(0,q,0), psi);
           for (int j=0; j<n; j++) values[q] += parentSideLegendre[side][fluxOrdinal][j] * psi[j];
         }
         project(phiValues, values, weights, n, c);
@@ -861,6 +1048,13 @@ std::vector<MeshPtr> BoxGDA::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, i
   BFPtr bf = fineMesh->bilinearForm();
   map<int,int> trialOrderEnhancements = fineMesh->getDofOrderingFactory().getTrialOrderEnhancements();
 
+  // the coarse levels have one order, no higher than the lowest on the fine mesh (so each coarse space is in the next)
+  int fineMinOrder = std::numeric_limits<int>::max();
+  for (IndexType cellID : fineTopology->getLocallyKnownActiveCellIndices())
+  {
+    fineMinOrder = std::min(fineMinOrder, fineMesh->globalDofAssignment()->getH1Order(cellID)[0]);
+  }
+  const int coarseH1Order = std::min(kCoarse + 1, fineMinOrder);
   std::vector<MeshPtr> meshesCoarseToFine;
   for (int level=0; level<=depth; level++)
   {
@@ -875,7 +1069,7 @@ std::vector<MeshPtr> BoxGDA::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, i
       cellIDMap[cellID] = fineTopology->cellIDsForPoints(point)[0];
     }
     MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp(new InducedMeshPartitionPolicy(fineMesh, cellIDMap));
-    meshesCoarseToFine.push_back(BoxGDA::mesh(levelTopology, bf, kCoarse + 1, delta_k, partitionPolicy, Teuchos::null,
+    meshesCoarseToFine.push_back(BoxGDA::mesh(levelTopology, bf, coarseH1Order, delta_k, partitionPolicy, Teuchos::null,
                                               trialOrderEnhancements, map<int,int>()));
   }
   meshesCoarseToFine.push_back(fineMesh);
@@ -889,8 +1083,6 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
   BoxGDA* coarseGDA = dynamic_cast<BoxGDA*>(coarseMesh->globalDofAssignment().get());
   TEUCHOS_TEST_FOR_EXCEPTION(coarseGDA == NULL, std::invalid_argument, "the coarse mesh must also have a BoxGDA");
   BoxMeshTopology* coarseTopology = coarseGDA->_boxTopology;
-  initializeVariables();
-  coarseGDA->initializeVariables();
   TEUCHOS_TEST_FOR_EXCEPTION((_fieldVars.size() != coarseGDA->_fieldVars.size()) || (_fluxVars.size() != coarseGDA->_fluxVars.size()),
                              std::invalid_argument, "coarse and fine meshes must have the same variables");
 
@@ -926,8 +1118,7 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
   };
 
   // ---- fields: the coarse cell's basis functions, expressed in the fine cell's basis (L2 projection; exact)
-  ElementTypePtr coarseElemType = coarseGDA->elementType(*coarseTopology->getLocallyKnownActiveCellIndices().begin());
-  BasisCachePtr coarseBasisCache = Teuchos::rcp(new BasisCache(coarseElemType));
+  std::map<int, BasisCachePtr> coarseBasisCaches; // by coarse order (their reference points are replaced below)
   Teuchos::LAPACK<int,double> lapack;
   std::vector<double> phi, psi, weights, M, C;
   for (GlobalIndexType fineCellID : _partitions[rank])
@@ -937,10 +1128,14 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
     DofOrderingPtr coarseOrdering = coarseGDA->elementType(coarseCellID)->trialOrderPtr;
     const BoxMeshTopology::Extents coarseExtents = coarseTopology->cellExtents(coarseCellID);
 
+    const OrderData &fineData = orderDataForCell(fineCellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(coarseGDA->cellOrder(coarseCellID) > cellOrder(fineCellID), std::invalid_argument,
+                               "BoxGDA::prolongationOperator: a coarse cell has a higher order than a fine cell in it");
+    const BasisCachePtr &fineBasisCache = fineData.basisCache;
     FC fineNodes = _boxTopology->physicalCellNodesForCell(fineCellID, true);
-    _basisCache->setPhysicalCellNodes(fineNodes, {fineCellID}, false);
-    const FC &points = _basisCache->getPhysicalCubaturePointsFC();
-    const FC &weightedMeasures = _basisCache->getWeightedMeasures();
+    fineBasisCache->setPhysicalCellNodes(fineNodes, {fineCellID}, false);
+    const FC &points = fineBasisCache->getPhysicalCubaturePointsFC();
+    const FC &weightedMeasures = fineBasisCache->getWeightedMeasures();
     const int P = points.dimension(1);
     weights.resize(P);
     for (int q=0; q<P; q++) weights[q] = weightedMeasures(0,q);
@@ -948,6 +1143,8 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
     for (int q=0; q<P; q++)
       for (int k=0; k<dim; k++)
         coarseRefPoints(q,k) = -1 + 2 * (points(0,q,k) - coarseExtents[k].first) / (coarseExtents[k].second - coarseExtents[k].first);
+    BasisCachePtr &coarseBasisCache = coarseBasisCaches[coarseGDA->cellOrder(coarseCellID)];
+    if (coarseBasisCache == Teuchos::null) coarseBasisCache = Teuchos::rcp(new BasisCache(coarseGDA->elementType(coarseCellID)));
     FC coarseNodes = coarseTopology->physicalCellNodesForCell(coarseCellID, true);
     coarseBasisCache->setPhysicalCellNodes(coarseNodes, {coarseCellID}, false);
     coarseBasisCache->setRefCellPointsFC(coarseRefPoints);
@@ -957,7 +1154,7 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
       const int varID = _fieldVars[fieldOrdinal]->ID();
       BasisPtr fineBasis = fineOrdering->getBasis(varID), coarseBasis = coarseOrdering->getBasis(varID);
       const int n = fineBasis->getCardinality(), m = coarseBasis->getCardinality();
-      auto fineValues = _basisCache->getTransformedValues(fineBasis, OP_VALUE);
+      auto fineValues = fineBasisCache->getTransformedValues(fineBasis, OP_VALUE);
       auto coarseValues = coarseBasisCache->getTransformedValues(coarseBasis, OP_VALUE);
       M.assign(n*n, 0.0);
       C.assign(n*m, 0.0);
@@ -973,8 +1170,9 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
       int info;
       lapack.POSV('U', n, m, M.data(), n, C.data(), n, &info);
       TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA::prolongationOperator: field projection failed");
-      const GlobalIndexType fineOffset = _fieldDofOffsetForCell[fineCellID] + _fieldOffsets[fieldOrdinal];
-      const GlobalIndexType coarseOffset = coarseGDA->_fieldDofOffsetForCell[coarseCellID] + coarseGDA->_fieldOffsets[fieldOrdinal];
+      const GlobalIndexType fineOffset = _fieldDofOffsetForCell[fineCellID] + fineData.fieldOffsets[fieldOrdinal];
+      const GlobalIndexType coarseOffset = coarseGDA->_fieldDofOffsetForCell[coarseCellID]
+                                         + coarseGDA->orderData(coarseGDA->cellOrder(coarseCellID)).fieldOffsets[fieldOrdinal];
       for (int i=0; i<n; i++)
         for (int j=0; j<m; j++)
           addEntry(fineOffset + i, coarseOffset + j, C[j*n+i]);
@@ -1005,11 +1203,14 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
 
     const int coarsePatchOrdinal = coarseSkeleton.patchForFace[coarseForest.faceOrdinal(coarseForest.leafOrdinal(coarseCellID), face.side)];
     const BoxForest::Patch &coarsePatch = coarseSkeleton.patches[coarsePatchOrdinal];
+    const OrderData &finePatchData = orderData(_patchOrder[patchOrdinal]);
+    const OrderData &coarsePatchData = coarseGDA->orderData(coarseGDA->_patchOrder[coarsePatchOrdinal]);
 
     for (size_t fluxOrdinal=0; fluxOrdinal<_fluxVars.size(); fluxOrdinal++)
     {
-      const int fineDegree = _fluxDegrees[fluxOrdinal], coarseDegree = coarseGDA->_fluxDegrees[fluxOrdinal];
-      TEUCHOS_TEST_FOR_EXCEPTION(coarseDegree > fineDegree, std::invalid_argument, "the coarse mesh must not have a higher polynomial order than the fine mesh");
+      const int fineDegree = finePatchData.fluxDegrees[fluxOrdinal], coarseDegree = coarsePatchData.fluxDegrees[fluxOrdinal];
+      TEUCHOS_TEST_FOR_EXCEPTION(_patchOrder[patchOrdinal] < coarseGDA->_patchOrder[coarsePatchOrdinal], std::invalid_argument,
+                                 "BoxGDA::prolongationOperator: a coarse patch has a higher order than a fine patch on it");
       // one 1D restriction matrix per tangential direction: fine coefficients from coarse ones
       std::vector<std::vector<double>> R;
       for (int k=0; k<dim; k++)
@@ -1021,10 +1222,10 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
         R.push_back(BoxForest::legendreRestriction(fineDegree, a, b)); // (fineDegree+1)^2, row-major
       }
       const int tangentialCount = dim - 1, nf = fineDegree + 1;
-      const std::vector<std::vector<int>> &fineIndexSet = _fluxIndexSets[fluxOrdinal];
-      const std::vector<std::vector<int>> &coarseIndexSet = coarseGDA->_fluxIndexSets[fluxOrdinal];
-      const GlobalIndexType fineOffset = _fluxDofOffsetForPatch[patchOrdinal] + _fluxOffsets[fluxOrdinal];
-      const GlobalIndexType coarseOffset = coarseGDA->_fluxDofOffsetForPatch[coarsePatchOrdinal] + coarseGDA->_fluxOffsets[fluxOrdinal];
+      const std::vector<std::vector<int>> &fineIndexSet = finePatchData.fluxIndexSets[fluxOrdinal];
+      const std::vector<std::vector<int>> &coarseIndexSet = coarsePatchData.fluxIndexSets[fluxOrdinal];
+      const GlobalIndexType fineOffset = _fluxDofOffsetForPatch[patchOrdinal] + finePatchData.fluxOffsets[fluxOrdinal];
+      const GlobalIndexType coarseOffset = coarseGDA->_fluxDofOffsetForPatch[coarsePatchOrdinal] + coarsePatchData.fluxOffsets[fluxOrdinal];
       // The coarse function, restricted, has a unique expansion in the full tensor Legendre basis of the fine box, with
       // coefficients that are products of the 1D restrictions; it lies in the fine space, so those are its coefficients there.
       for (size_t i=0; i<fineIndexSet.size(); i++)
