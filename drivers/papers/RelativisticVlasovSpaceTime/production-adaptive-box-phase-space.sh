@@ -71,7 +71,11 @@
 #           783 k dofs on slab 0 of the first full run), so set it below the size you can afford.
 #   TARGET  relative energy error at which a slab stops refining    (default 0.02; in the small runs the relative
 #           energy error in this test norm was 30-55%, so the step counts above are what ends refinement)
-#   BCTOL   relative L2 error to which the inflow/initial data are resolved before each slab (default 0.1, the driver's)
+#   BCTOL   relative L2 error to which the cathode inflow data are resolved before each slab (default 0.01; the driver's
+#           default is 0.1).  The energy error that drives the adaptive loop does not see this error (boundary data are
+#           imposed by projection onto the trace space), so this pre-refinement is what resolves the inflow.  It
+#           refines only cells on the inflow side, tangentially to it (t, u_x, u_z), so it is cheap.  The initial data
+#           (vacuum) need none, and each later slab's data at t0 are the previous slab's trace, copied exactly.
 #   DP      test enrichment                                          (default 2, as production; 1 roughly halves storage)
 #   NP      MPI ranks                                                (default 16)
 #   SLABS, SAMPLED  as in the production script                      (default 60; CHECK=1 gives 3)
@@ -90,7 +94,7 @@ HP=${HP:-1}
 HP0=${HP0:-1}
 HPMIN=${HPMIN:-0.0025,0.0125,0.025,0.025}
 if [ "$HP" = 1 ]; then HPOPTS="--hpAdaptivity --hpInitialH1Order=$HP0 --hpMinWidths=$HPMIN"; HPTAG=-hp$HP0; else HPOPTS=""; HPTAG=""; fi
-BCTOL=${BCTOL:-0.1}
+BCTOL=${BCTOL:-0.01}
 DP=${DP:-2}
 NP=${NP:-16}
 SLABS=${SLABS:-60}; SAMPLED=${SAMPLED:-0,1,2,3,5,7,10,15,20,30,40,50,59}
@@ -135,6 +139,11 @@ grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov
          END { print ""; print "per slab: final elements, total solve seconds (production: 28160 elements, 926 s/slab mean)";
                for (s=0; s in t; s++) { printf "  slab %3d  %7d elements  %9.1f s\n", s, e[s], t[s]; total += t[s] }
                printf "  all slabs: %.0f s = %.2f h of slab solves\n", total, total/3600 }'
+echo
+echo "inflow data: relative L2 error of the projected inflow trace before each slab's solves (target BCTOL=$BCTOL)"
+awk '/L\^2 norm of BC:/ { if (n > 0) printf "  slab %3d  %s\n", n - 1, last; n++ }
+     /BC.s relErr is/  { last = $0; sub(/.*phase space mesh has /, "", last); sub(/ elements and BC.s relErr is/, " elements, relErr", last) }
+     END { if (n > 0) printf "  slab %3d  %s\n", n - 1, last }' $LOG
 echo
 if [ "$HP" = 1 ]; then
   echo "hp decisions per refinement step:"
