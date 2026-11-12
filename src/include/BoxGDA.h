@@ -56,21 +56,36 @@ namespace Camellia
       std::map<std::pair<int,int>, BasisMap> basisMaps;     // key: (varID, sideOrdinal), -1 for volume
     };
 
-    //! What the dof layout needs to know about one polynomial order (H^1 order of the trial space)
+    //! Multi-indices (one Legendre degree per tangential direction) spanning a flux space on a side
+    using IndexSet = std::vector<std::vector<int>>;
+    //! What the dof layout needs to know about one polynomial order: H^1 order per direction (all equal unless the
+    //! order was raised in some directions only; see pRefineInDirections())
     struct OrderData
     {
       ElementTypePtr elemType;
-      int fieldDofs = 0, fluxDofs = 0;            // per cell, per patch
-      std::vector<int> fieldOffsets, fluxOffsets, fluxDegrees;
-      // For each flux variable, the multi-indices (one Legendre degree per tangential direction) of its patch basis
-      std::vector<std::vector<std::vector<int>>> fluxIndexSets;
+      int fieldDofs = 0;                          // per cell
+      std::vector<int> fieldOffsets;
+      // [normal direction][flux variable]: the cell's side basis on sides normal to that direction, as an index set
+      std::vector<std::vector<IndexSet>> sideIndexSets;
       BasisCachePtr basisCache, parentBasisCache;
+    };
+    //! The flux space of a patch: for each flux variable, the intersection of the index sets of its faces' cells (the
+    //! minimum rule), which lies in each of their side bases
+    struct PatchSpace
+    {
+      std::vector<IndexSet> indexSets;            // per flux variable
+      std::vector<int> degrees, offsets;          // per flux variable: largest index entry; offset within the patch's dofs
+      int dofs = 0;
     };
     BoxMeshTopology* _boxTopology;
     std::vector<VarPtr> _fieldVars, _fluxVars;
-    std::map<int, OrderData> _orderData;                  // key: H^1 order
-    std::vector<int> _patchOrder;                         // H^1 order of each patch: the lowest of its faces' cells
-    std::set<std::pair<int,int>> _verifiedFluxSpaces;     // (cell order, patch order) pairs checked in cellMap()
+    std::map<std::vector<int>, OrderData> _orderData;     // key: H^1 order per direction
+    std::vector<PatchSpace> _patchSpaces;                 // distinct patch spaces
+    std::map<std::vector<IndexSet>, int> _patchSpaceIndex;
+    std::vector<int> _patchSpaceForPatch;                 // index into _patchSpaces, per patch
+    std::set<std::pair<std::vector<int>,int>> _verifiedFluxSpaces; // (cell order, patch space) pairs checked in cellMap()
+    std::map<GlobalIndexType, std::vector<int>> _directionalIncrements; // order raised per direction, beyond the isotropic p-refinements
+    std::map<std::vector<int>, ElementTypePtr> _directionalElementTypes;
     bool _allowPruning = false;
 
     std::vector<GlobalIndexType> _fieldDofOffsetForCell;  // indexed by cell ID; -1 for inactive cells
@@ -81,10 +96,16 @@ namespace Camellia
 
     //! The order data for the cell's order, computed (from that cell) the first time the order is seen
     const OrderData &orderDataForCell(GlobalIndexType cellID);
-    const OrderData &orderData(int H1Order) const;
-    int cellOrder(GlobalIndexType cellID);
+    //! H^1 order per direction
+    std::vector<int> cellOrder(GlobalIndexType cellID);
+    const PatchSpace &patchSpace(int patchOrdinal) const { return _patchSpaces[_patchSpaceForPatch[patchOrdinal]]; }
     const CellMap &cellMap(GlobalIndexType cellID);
-    void patchBasisValues(const BoxForest::Patch &patch, const OrderData &patchData, int fluxOrdinal, const double *x, std::vector<double> &values) const;
+    //! products of Legendre polynomials, on the patch's bounding box, for the multi-indices of the index set
+    void patchBasisValues(const BoxForest::Patch &patch, const IndexSet &indexSet, int degree, const double *x, std::vector<double> &values) const;
+    //! true if the cell topology has one tensorial component per direction, so that orders can differ by direction
+    bool supportsDirectionalOrders() const;
+    //! after the cells' orders changed: projects registered solutions' coefficients from the old element types
+    void projectSolutionsOntoNewOrders(const std::map<GlobalIndexType, ElementTypePtr> &oldTypes);
   public:
     BoxGDA(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
            std::vector<int> initialH1OrderTrial, int testOrderEnhancement);
@@ -93,6 +114,21 @@ namespace Camellia
     void didChangePartitionPolicy() override;
     //! children take their parent's polynomial order
     void didHRefine(const std::set<GlobalIndexType> &parentCellIDs) override;
+    //! the isotropic order (GlobalDofAssignment's) plus any raised by pRefineInDirections(); one entry per direction
+    //! when the latter are present
+    std::vector<int> getH1Order(GlobalIndexType cellID) override;
+    ElementTypePtr elementType(GlobalIndexType cellID) override;
+    //! the partition's cells with the given element type (GlobalDofAssignment's version only knows isotropic types)
+    std::vector<GlobalIndexType> cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr) override;
+    /**
+     \brief  Raises cells' orders by the given amount in each direction (anisotropic p-refinement), and projects the
+             registered solutions onto the new bases.  Increments the same in every direction are applied as isotropic
+             p-refinements.  On meshes whose cells are not tensor products of lines (2D quadrilaterals, 3D hexahedra),
+             orders cannot differ by direction: each cell is raised by its largest increment in every direction.
+     Does not repartition or rebuild; call Mesh::repartitionAndRebuild() afterwards.  Must be called on every rank with
+     the same increments.
+     */
+    static void pRefineInDirections(MeshPtr mesh, const std::map<GlobalIndexType, std::vector<int>> &increments);
     //! raises the cells' orders, and projects registered solutions onto the new bases (exactly: the spaces are nested)
     void didPRefine(const std::set<GlobalIndexType> &cellIDs, int deltaP) override;
 

@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "BC.h"
+#include "BasisFamily.h"
 #include "BoxDPG.h"
 #include "BoxGDA.h"
 #include "BoxMeshTopology.h"
@@ -28,7 +29,7 @@ namespace
     VarPtr u, t_n, v;
     BFPtr bf;
 
-    Convection(int dim_) : dim(dim_)
+    Convection(int dim_, bool serendipity = false) : dim(dim_)
     {
       beta = {1.0, 0.5, -0.75, 0.3};
       beta.resize(dim);
@@ -36,6 +37,7 @@ namespace
       t_n = vf->fluxVar("t_n_hat");
       u = vf->fieldVar("u", L2);
       v = vf->testVar("v", HGRAD);
+      if (serendipity) vf->setBasisFamily(BasisFamily::serendipityBasisFamily());
       bf = Teuchos::rcp(new BF(vf));
       for (int k=0; k<dim; k++) bf->addTerm(-beta[k] * u, v->di(k+1));
       bf->addTerm(t_n, v);
@@ -516,3 +518,144 @@ TEUCHOS_UNIT_TEST( BoxHP, RefineToContainReproducesMesh )
     TEST_EQUALITY(target->numGlobalDofs(), dofs);
   }
 }
+
+namespace
+{
+  //! 1 + x^2 + 0.25 (y + z + w): quadratic in x, linear in the other directions
+  double quadraticInX(const double *x)
+  {
+    return 1 + x[0] * x[0] + 0.25 * (x[1] + x[2] + x[3]);
+  }
+  BoxDPG::PointFunction quadraticInXDerivative(vector<double> beta)
+  {
+    return [beta](const double *x) { return beta[0] * 2 * x[0] + 0.25 * (beta[1] + beta[2] + beta[3]); };
+  }
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, AnisotropicOrdersReproducePolynomial )
+{
+  // 4D, linear to start.  Raising every cell's order in x alone makes 1 + x^2 + ... exact; raising some cells further in
+  // other directions (giving patches with mixed spaces) keeps it exact.  Raising in x alone costs fewer dofs than
+  // raising isotropically.
+  const int dim = 4, H1Order = 2, delta_k = 2;
+  Convection form(dim);
+  Teuchos::RCP<BoxMeshTopology> topology;
+  MeshPtr mesh = variableOrderMesh(form, H1Order, topology); // anisotropic h-refinement and some isotropic p-refinement
+  BCPtr bc = form.inflowBC(topology, quadraticInX);
+  SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(quadraticInXDerivative(form.beta)), form.bf->graphNorm());
+  mesh->registerSolution(solution);
+  FunctionPtr error = Function::solution(form.u, solution) - BoxDPG::function(quadraticInX);
+
+  std::map<GlobalIndexType, std::vector<int>> xOnly, someMore;
+  int count = 0;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+  {
+    // cells already at order 3 or more are quadratic in x already
+    if (mesh->globalDofAssignment()->getH1Order(cellID)[0] < 3) xOnly[cellID] = {1, 0, 0, 0};
+    if (count++ % 3 == 0) someMore[cellID] = {0, 1, 0, 2};
+  }
+  BoxGDA::pRefineInDirections(mesh, xOnly);
+  mesh->repartitionAndRebuild();
+  const GlobalIndexType xOnlyDofs = mesh->numGlobalDofs();
+  solution->solve();
+  const double xOnlyError = error->l2norm(mesh);
+  BoxGDA::pRefineInDirections(mesh, someMore);
+  mesh->repartitionAndRebuild();
+  TEST_COMPARE(error->l2norm(mesh), <, 1e-10); // the projection onto the raised bases is exact
+  solution->solve();
+  const double mixedError = error->l2norm(mesh);
+  out << "raised in x: " << xOnlyDofs << " dofs, L2 error " << xOnlyError << "; some cells raised further in t and u_z: "
+      << mesh->numGlobalDofs() << " dofs, L2 error " << mixedError << endl;
+  TEST_COMPARE(xOnlyError, <, 1e-10);
+  TEST_COMPARE(mixedError, <, 1e-10);
+
+  // the same cells raised isotropically instead
+  Teuchos::RCP<BoxMeshTopology> isotropicTopology;
+  MeshPtr isotropicMesh = variableOrderMesh(form, H1Order, isotropicTopology);
+  set<GlobalIndexType> raise;
+  for (const auto &entry : xOnly) raise.insert(entry.first);
+  isotropicMesh->pRefine(raise, 1);
+  out << "raised isotropically instead: " << isotropicMesh->numGlobalDofs() << " dofs" << endl;
+  TEST_COMPARE(xOnlyDofs, <, isotropicMesh->numGlobalDofs());
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, AnisotropicOrdersEqualInEveryDirectionAreIsotropic )
+{
+  // raising a cell by the same amount in every direction gives it the element type of an isotropic p-refinement
+  const int dim = 4;
+  Convection form(dim);
+  Teuchos::RCP<BoxMeshTopology> topologyA, topologyB;
+  MeshPtr a = variableOrderMesh(form, 2, topologyA), b = variableOrderMesh(form, 2, topologyB);
+  BoxGDA::pRefineInDirections(a, {{4, {1, 1, 1, 1}}});
+  a->repartitionAndRebuild();
+  b->pRefine(set<GlobalIndexType>{4}, 1);
+  TEST_EQUALITY(a->numGlobalDofs(), b->numGlobalDofs());
+  TEST_ASSERT(a->getElementType(4).get() == b->getElementType(4).get() || *a->getElementType(4) == *b->getElementType(4));
+  TEST_EQUALITY(a->globalDofAssignment()->getH1Order(4).size(), b->globalDofAssignment()->getH1Order(4).size());
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, AnisotropicOrdersSurviveRefinement )
+{
+  // a solution survives anisotropic p-refinement and then h-refinement of the raised cell; children take its orders;
+  // multigrid then solves on the mixed mesh
+  const int dim = 4;
+  Convection form(dim);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.6, 1.0})));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 2, 2);
+  BCPtr bc = form.inflowBC(topology, quadraticInX);
+  SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(quadraticInXDerivative(form.beta)), form.bf->graphNorm());
+  mesh->registerSolution(solution);
+  FunctionPtr error = Function::solution(form.u, solution) - BoxDPG::function(quadraticInX);
+  std::map<GlobalIndexType, std::vector<int>> xOnly;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal()) xOnly[cellID] = {1, 0, 0, 0};
+  BoxGDA::pRefineInDirections(mesh, xOnly);
+  mesh->repartitionAndRebuild();
+  solution->solve();
+  TEST_COMPARE(error->l2norm(mesh), <, 1e-10);
+  BoxGDA::pRefineInDirections(mesh, {{0, {0, 0, 1, 0}}});
+  mesh->repartitionAndRebuild();
+  TEST_COMPARE(error->l2norm(mesh), <, 1e-10);
+  const std::vector<int> raised = mesh->globalDofAssignment()->getH1Order(0);
+  TEST_EQUALITY(raised.size(), 4);
+  if (raised.size() == 4) { TEST_EQUALITY(raised[0], 3); TEST_EQUALITY(raised[1], 2); TEST_EQUALITY(raised[2], 3); TEST_EQUALITY(raised[3], 2); }
+  mesh->hRefine(std::map<GlobalIndexType,unsigned>{{0, 1u | 4u}});
+  TEST_COMPARE(error->l2norm(mesh), <, 1e-10);
+  for (IndexType child : topology->getCell(0)->getChildIndices(topology))
+  {
+    TEST_ASSERT(mesh->globalDofAssignment()->getH1Order(child) == raised);
+  }
+  vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(mesh, 0, 1);
+  Teuchos::RCP<GMGSolver> gmgSolver = GMGSolver::gmgSolver(solution, true, meshes, 200, 1e-10, GMGOperator::V_CYCLE, Solver::getDirectSolver(true));
+  gmgSolver->setAztecOutput(0);
+  solution->solve(gmgSolver);
+  out << mesh->numActiveElements() << " cells, " << mesh->numGlobalDofs() << " dofs; " << gmgSolver->iterationCount()
+      << " CG iterations; L2 error " << error->l2norm(mesh) << endl;
+  TEST_COMPARE(gmgSolver->iterationCount(), <, 100);
+  TEST_COMPARE(error->l2norm(mesh), <, 1e-7);
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, AnisotropicOrdersWithSerendipityBasis )
+{
+  // as AnisotropicOrdersReproducePolynomial, with serendipity trial and test spaces (as the MITL driver uses): the
+  // anisotropic serendipity spaces Intrepid2 builds are downward closed, so the patch spaces are found and exact
+  const int dim = 4, H1Order = 2, delta_k = 2;
+  Convection form(dim, true);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.6, 1.0})));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, H1Order, delta_k);
+  mesh->hRefine(std::map<GlobalIndexType,unsigned>{{0, 2u}, {1, 8u}});
+  BCPtr bc = form.inflowBC(topology, quadraticInX);
+  SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(quadraticInXDerivative(form.beta)), form.bf->graphNorm());
+  std::map<GlobalIndexType, std::vector<int>> increments;
+  int count = 0;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+  {
+    increments[cellID] = (count++ % 2 == 0) ? std::vector<int>{1, 0, 0, 0} : std::vector<int>{2, 0, 2, 1};
+  }
+  BoxGDA::pRefineInDirections(mesh, increments);
+  mesh->repartitionAndRebuild();
+  solution->solve();
+  const double error = (Function::solution(form.u, solution) - BoxDPG::function(quadraticInX))->l2norm(mesh);
+  out << mesh->numActiveElements() << " cells, " << mesh->numGlobalDofs() << " dofs; L2 error " << error << endl;
+  TEST_COMPARE(error, <, 1e-10);
+}
+
