@@ -33,6 +33,8 @@
 #include <Ifpack2_BlockRelaxation.hpp>
 #include <Ifpack2_Factory.hpp>
 #include <Ifpack2_Preconditioner.hpp>
+#include <Tpetra_Details_Random.hpp>
+#include <Tpetra_MultiVector.hpp>
 
 #include <chrono>
 
@@ -912,6 +914,11 @@ namespace
            int chebyshevMaxEigenIterations = 10, bool computeConditionNumberEstimate = true)
   {
     int rank = Teuchos::GlobalMPISession::getRank();
+    // Make the iteration counts independent of which tests ran before: the Chebyshev smoother's eigenvalue estimate
+    // starts from Tpetra::MultiVector::randomize(), whose process-wide random pool is seeded once, from std::rand() and
+    // the rank, and then continues from wherever earlier tests left it.
+    std::srand(1);
+    Tpetra::Details::Static_Random_XorShift64_Pool<Tpetra::MultiVector<>::device_type::execution_space>::resetPool(rank);
     if (H1Order_coarse == -1)
     {
       if (hOnly)
