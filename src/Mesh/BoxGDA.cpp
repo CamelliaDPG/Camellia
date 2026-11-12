@@ -1307,12 +1307,69 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
 
   std::vector<std::pair<GlobalIndexType,GlobalIndexType>> myMasks; // (cellID, mask), for cells this rank owns
   const std::set<GlobalIndexType> &myCells = mesh->cellIDsInPartition();
+  const int sideCount = topology->cellTopology()->getSideCount();
+
+  // Piecewise-constant cells have no high modes: for them, the jumps of f's cell means across faces.  The means of the
+  // marked p = 0 cells and their neighbours, gathered from their owners.  (Orders and topology are replicated, so all
+  // ranks agree on whether this is needed.)
+  std::map<GlobalIndexType,double> cellMeans;
+  {
+    std::set<GlobalIndexType> cellsNeedingMeans;
+    for (GlobalIndexType cellID : cellIDs)
+    {
+      if (mesh->globalDofAssignment()->getH1Order(cellID)[0] > 1) continue;
+      cellsNeedingMeans.insert(cellID);
+      for (int side=0; side<sideCount; side++)
+        for (IndexType neighborID : topology->sideNeighbors(cellID, side)) cellsNeedingMeans.insert(neighborID);
+    }
+    if (!cellsNeedingMeans.empty())
+    {
+      std::vector<std::pair<GlobalIndexType,double>> myMeans;
+      for (GlobalIndexType cellID : cellsNeedingMeans)
+      {
+        if (myCells.find(cellID) == myCells.end()) continue;
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+        const FC &weightedMeasures = basisCache->getWeightedMeasures();
+        FC values(1, weightedMeasures.dimension(1));
+        f->values(values, basisCache);
+        double integral = 0, measure = 0;
+        for (int q=0; q<weightedMeasures.dimension(1); q++)
+        {
+          integral += values(0,q) * weightedMeasures(0,q);
+          measure += weightedMeasures(0,q);
+        }
+        myMeans.push_back({cellID, integral / measure});
+      }
+      std::vector<std::pair<GlobalIndexType,double>> gatheredMeans;
+      std::vector<int> meanOffsets;
+      MPIWrapper::allGatherVariable(mesh->Comm(), gatheredMeans, myMeans, meanOffsets);
+      for (const auto &entry : gatheredMeans) cellMeans[entry.first] = entry.second;
+    }
+  }
+
   for (GlobalIndexType cellID : cellIDs)
   {
     if (myCells.find(cellID) == myCells.end()) continue;
     const int p = std::max(mesh->globalDofAssignment()->getH1Order(cellID)[0] - 1, 0); // degree of L2 fields
     unsigned mask = allowedDirections;
-    if (p >= 1)
+    if (p == 0)
+    {
+      std::vector<double> eta(dim, 0.0);
+      const double myMean = cellMeans.at(cellID);
+      for (int side=0; side<sideCount; side++)
+      {
+        const int k = topology->faceForSideOrdinal(side) / 2;
+        for (IndexType neighborID : topology->sideNeighbors(cellID, side)) eta[k] = std::max(eta[k], std::abs(cellMeans.at(neighborID) - myMean));
+      }
+      double maxEta = 0;
+      for (int k=0; k<dim; k++) if (allowedDirections & (1u << k)) maxEta = std::max(maxEta, eta[k]);
+      if (maxEta > 0)
+      {
+        mask = 0;
+        for (int k=0; k<dim; k++) if ((allowedDirections & (1u << k)) && (eta[k] >= threshold * maxEta)) mask |= (1u << k);
+      }
+    }
+    else
     {
       // sample f at tensor Gauss points, and find its Legendre coefficients c(i_0, ..., i_{d-1}) on the cell
       const int n = p + 1;
@@ -1401,4 +1458,72 @@ std::map<GlobalIndexType,unsigned> BoxGDA::masksTangentialToTaggedSides(MeshPtr 
     masks[cellID] = (mask != 0) ? mask : allDirections;
   }
   return masks;
+}
+
+// ---------------------------------------------------------------- hp-refinement
+
+BoxGDA::HPRefinements BoxGDA::hpRefinements(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
+                                            const std::vector<double> &minWidths, int maxH1Order)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::hpRefinements");
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  const int dim = topology->getDimension();
+  TEUCHOS_TEST_FOR_EXCEPTION(int(minWidths.size()) != dim, std::invalid_argument, "minWidths needs one entry per direction");
+  GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
+  auto order = [&](GlobalIndexType cellID) { return gda->getH1Order(cellID)[0]; };
+
+  HPRefinements refinements;
+  std::map<GlobalIndexType,int> targetOrder; // cells to raise, with their new orders
+  for (const auto &[cellID, mask] : directionMasks)
+  {
+    const BoxMeshTopology::Extents extents = topology->cellExtents(cellID);
+    unsigned hMask = 0;
+    for (int k=0; k<dim; k++)
+    {
+      if (!(mask & (1u << k))) continue;
+      const double halfWidth = 0.5 * (extents[k].second - extents[k].first);
+      if (halfWidth >= minWidths[k] * (1 - 1e-12)) hMask |= (1u << k);
+    }
+    if (hMask != 0) refinements.hMasks[cellID] = hMask;
+    else if (order(cellID) < maxH1Order) targetOrder[cellID] = order(cellID) + 1;
+  }
+
+  // neighbours' orders may differ by at most one: raise neighbours more than one below a raised cell, and so on
+  std::vector<GlobalIndexType> queue;
+  for (const auto &entry : targetOrder) queue.push_back(entry.first);
+  auto newOrder = [&](GlobalIndexType cellID)
+  {
+    auto entry = targetOrder.find(cellID);
+    return (entry == targetOrder.end()) ? order(cellID) : entry->second;
+  };
+  const int sideCount = topology->cellTopology()->getSideCount();
+  while (!queue.empty())
+  {
+    const GlobalIndexType cellID = queue.back();
+    queue.pop_back();
+    const int minimumNeighborOrder = newOrder(cellID) - 1;
+    for (int side=0; side<sideCount; side++)
+    {
+      for (IndexType neighborID : topology->sideNeighbors(cellID, side))
+      {
+        if (newOrder(neighborID) < minimumNeighborOrder)
+        {
+          targetOrder[neighborID] = minimumNeighborOrder;
+          queue.push_back(neighborID);
+        }
+      }
+    }
+  }
+  for (const auto &[cellID, target] : targetOrder) refinements.pIncrements[cellID] = target - order(cellID);
+  return refinements;
+}
+
+void BoxGDA::hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repartitionAndRebuild)
+{
+  std::map<int, std::set<GlobalIndexType>> cellsForIncrement;
+  for (const auto &[cellID, increment] : refinements.pIncrements) cellsForIncrement[increment].insert(cellID);
+  for (const auto &[increment, cellIDs] : cellsForIncrement) mesh->pRefine(cellIDs, increment, false);
+  mesh->hRefine(refinements.hMasks, false);
+  if (repartitionAndRebuild) mesh->repartitionAndRebuild();
 }

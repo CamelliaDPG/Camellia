@@ -175,11 +175,33 @@ namespace Camellia
      eta_k >= threshold * max_j eta_j, over the allowed directions (bit k of allowedDirections).  A threshold of 0
      selects every allowed direction; a threshold near 1, only the worst.
 
+     On piecewise-constant cells (p = 0) there are no high modes; there eta_k is the largest jump of f's cell mean
+     across the cell's faces normal to direction k.
      This is a cheap indicator of anisotropy based on the solution's own high modes.  It is not the DPG indicator
      based on local residual reduction.
      */
     static std::map<GlobalIndexType,unsigned> anisotropicRefinementMasks(MeshPtr mesh, FunctionPtr f, const std::vector<GlobalIndexType> &cellIDs,
                                                                          double threshold, unsigned allowedDirections = ~0u);
+
+    //! The h- and p-refinements chosen by hpRefinements()
+    struct HPRefinements
+    {
+      std::map<GlobalIndexType,unsigned> hMasks;   // cells to bisect, with their directions
+      std::map<GlobalIndexType,int> pIncrements;   // cells to raise, with the number of orders to add
+    };
+    /**
+     \brief  hp-refinement: turns the directions in which marked cells should be refined into h- and p-refinements.
+     Each marked cell is bisected in those of its directions in which half its width is at least minWidths[k] (0: no
+     limit).  A marked cell that may be bisected in none of them is raised by one order instead, up to maxH1Order.
+     Then cells are raised wherever needed, transitively, for face neighbours' orders to differ by at most one.
+     (Children take their parent's order, so the rule holds after the bisections too.)  The topology and the cells'
+     orders are replicated, so every rank computes the same result; the masks must be the same on every rank (as
+     anisotropicRefinementMasks() returns them).  No communication.
+     */
+    static HPRefinements hpRefinements(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
+                                       const std::vector<double> &minWidths, int maxH1Order);
+    //! Applies hpRefinements(): the p-refinements, then the h-refinements (whose children inherit the new orders).
+    static void hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repartitionAndRebuild = true);
 
     //! For each given cell, every direction except those normal to its sides carrying the tag: the directions in which
     //! refinement improves the resolution of boundary data on those sides.
