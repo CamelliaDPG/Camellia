@@ -179,6 +179,14 @@ if [ "$HP" = 1 ]; then
   echo "hp decisions per refinement step:"
   grep "^hp: " $LOG | sed 's/^/  /'
   echo
+  echo "directions the indicator chose for the marked cells raised in order (each direction whose indicator is at least"
+  echo "ANISO=$ANISO times the cell's largest), totals over the run.  Mostly 1-2 directions would favour anisotropic p."
+  grep "^hp-p-directions: " $LOG | awk '
+    { for (i = 2; i <= NF; i++) { split($i, kv, "="); total[kv[1]] += kv[2] } steps++ }
+    END { if (steps == 0) { print "  (no cells raised)"; exit }
+          printf "  %d cells raised over %d steps; wanting one direction: %d, two: %d, three: %d, four: %d\n", total["raised"], steps, total["one"], total["two"], total["three"], total["four"]
+          printf "  cells wanting x: %d, t: %d, u_x: %d, u_z: %d\n", total["x"], total["t"], total["u_x"], total["u_z"] }'
+  echo
 fi
 echo "relative energy error after each refinement step:"
 grep -E "solution after refinement [0-9]+: relative error|After re-solve, relative error" $LOG | sed 's/^/  /'

@@ -1193,6 +1193,7 @@ static double s_boxAnisotropyThreshold   = 0.5;   // see BoxGDA::anisotropicRefi
 static bool   s_hpAdaptivity             = false; // h until a minimum width, then p (BoxGDA::hpRefinements())
 static std::vector<double> s_hpMinWidths;         // per direction (x, t, u_x, u_z), computational units
 static int    s_hpMaxH1Order             = 0;
+static bool   s_resolvingBoundaryData    = false; // inside refineForBC(): directions there are fixed (tangential), not chosen
 
 //! With --hpAdaptivity: the cells that refinement in the directions chosen by masksForCells could no longer change (at
 //! the minimum width in those directions and the maximum order), so that marking passes over them.  Collective.
@@ -1232,6 +1233,26 @@ static void refineInDirections(MeshPtr mesh, const std::map<GlobalIndexType,unsi
     std::cout << "hp: of " << masks.size() << " marked cells, " << refinements.hMasks.size() << " bisected, " << raisedMarked
               << " raised in order, " << unchanged << " at the minimum width and the maximum order; "
               << haloRaised << " cells raised to keep neighbours' orders within one\n";
+    // For the marked cells raised in order: the directions the indicator chose for them (each direction whose
+    // indicator is at least --boxAnisotropyThreshold times the largest).  Few directions per cell would favour
+    // raising the order in those directions only (anisotropic p).
+    if ((raisedMarked > 0) && !s_resolvingBoundaryData)
+    {
+      std::vector<int> cellsWantingCount(5, 0), cellsWantingDirection(4, 0);
+      for (const auto &entry : refinements.pIncrements)
+      {
+        auto maskEntry = masks.find(entry.first);
+        if ((maskEntry == masks.end()) || (refinements.hMasks.find(entry.first) != refinements.hMasks.end())) continue;
+        const unsigned mask = maskEntry->second;
+        int count = 0;
+        for (int k=0; k<4; k++) if (mask & (1u << k)) { count++; cellsWantingDirection[k]++; }
+        cellsWantingCount[std::min(count, 4)]++;
+      }
+      // (cells raised; cells wanting one, two, three, four directions; cells wanting x, t, u_x, u_z)
+      std::cout << "hp-p-directions: raised=" << raisedMarked << " one=" << cellsWantingCount[1] << " two=" << cellsWantingCount[2]
+                << " three=" << cellsWantingCount[3] << " four=" << cellsWantingCount[4] << " x=" << cellsWantingDirection[0]
+                << " t=" << cellsWantingDirection[1] << " u_x=" << cellsWantingDirection[2] << " u_z=" << cellsWantingDirection[3] << "\n";
+    }
   }
   BoxGDA::hpRefine(mesh, refinements, false);
 }
@@ -1294,6 +1315,7 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
     int numBCRefinements = 0;
     int numElements = mesh->numActiveElements();
     
+    s_resolvingBoundaryData = true;
     while ((relErr > bcResolutionTolerance) && (numElements < maxElements))
     {
       errorIndicator->measureError();
@@ -1319,6 +1341,7 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
       
 //        form->vlasovMesh()->getTopology()->baseMeshTopology()->printAllEntities();
     }
+    s_resolvingBoundaryData = false;
     errorIndicator->measureError();
 //    bcViz->exportSolution(soln, {cellIDFunction, bcFxnExact, bcFxnSoln * bcRestriction, bcFxnExact * bcRestriction, bc_err * bc_err, bcErrIndicator * bcRestriction}, {"cellID", "bcFxnExact (volume)", "bcFxnSoln", "bcFxnExact", "bcErr^2", "bcErrIndicator"}, numBCRefinements);
     if (rank==0)
