@@ -17,7 +17,7 @@
 #     bisected only in the directions in which f is least resolved on it (--boxAnisotropicAdaptivity).  To resolve the
 #     inflow and initial data, cells are bisected only tangentially to the boundary carrying the data.
 #
-# REQUIRES Camellia branch anisotropic-refinement (github.com/CamelliaDPG/Camellia) at e9ca597e or later, the
+# REQUIRES the latest Camellia branch anisotropic-refinement (github.com/CamelliaDPG/Camellia), the
 # Intrepid2 of trilinos/Trilinos PR 15871 (b93efd4b798), a Trilinos with SuperLU_DIST (for --coarseSolver), and a
 # python3 with numpy and matplotlib.  Run from the Camellia build directory.  The branch is 316-tensor-native-mesh-for-planar-mitl-and-more
 # plus the box-mesh work; it does NOT have n5-separable-test-norm's additions, so:
@@ -58,6 +58,9 @@
 #   DOERFLER  if set (e.g. 0.5), use Doerfler marking with this target instead of THRESH
 #   ANISO   direction selection: bisect in direction k if its indicator is at least this fraction of the largest
 #           direction's (default 0.5).  0 bisects every marked cell in all four directions; near 1, only in the worst.
+#   MAXDOFS a slab stops refining once its phase-space mesh has at least this many dofs (default -1: no limit).  The
+#           solve on the mesh that reaches it is the slab's last.  The last step can nearly double the mesh (421 k ->
+#           783 k dofs on slab 0 of the first full run), so set it below the size you can afford.
 #   TARGET  relative energy error at which a slab stops refining    (default 0.02; in the small runs the relative
 #           energy error in this test norm was 30-55%, so the step counts above are what ends refinement)
 #   BCTOL   relative L2 error to which the inflow/initial data are resolved before each slab (default 0.1, the driver's)
@@ -74,6 +77,7 @@ REF=${REF:-2}
 THRESH=${THRESH:-0.3}
 ANISO=${ANISO:-0.5}
 TARGET=${TARGET:-0.02}
+MAXDOFS=${MAXDOFS:--1}
 BCTOL=${BCTOL:-0.1}
 DP=${DP:-2}
 NP=${NP:-16}
@@ -87,8 +91,8 @@ PLOT=$SRC/drivers/papers/RelativisticVlasovSpaceTime/plot_phase_space.py
 
 # (the driver prints its help to stderr, and exits nonzero after printing it)
 if [ ! -x $X ]; then echo "$X not found: run this from the Camellia build directory."; exit 1; fi
-if ! $X --help 2>&1 | grep -q -- "--maxRefinementsFirstSlab"; then
-  echo "This build of PlanarMITLRelativisticSpaceTime has no --maxRefinementsFirstSlab: rebuild it from the anisotropic-refinement branch (e9ca597e or later)."; exit 1
+if ! $X --help 2>&1 | grep -q -- "--maxVlasovDofs"; then
+  echo "This build of PlanarMITLRelativisticSpaceTime has no --maxVlasovDofs: rebuild it from the latest anisotropic-refinement branch."; exit 1
 fi
 
 if [ -n "$DOERFLER" ]; then MARKING="--doerflerTarget=$DOERFLER"; else MARKING="--refinementThreshold=$THRESH"; fi
@@ -104,14 +108,14 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --phaseSpaceDiagnostic --phaseSpaceDiagnosticSlabs=$SAMPLED \
   --useBoxMesh --useAdaptivity --boxAnisotropicAdaptivity --boxAnisotropyThreshold=$ANISO \
   --maxRefinementsFirstSlab=$REF0 --maxRefinements=$REF --maxRefinementsFinalSlab=$REF \
-  --relErrorTarget=$TARGET $MARKING --bcResolutionTolerance=$BCTOL \
+  --relErrorTarget=$TARGET --maxVlasovDofs=$MAXDOFS $MARKING --bcResolutionTolerance=$BCTOL \
   --outputDir=$OUT --phase0Instrumentation --phase0TimingFile=$OUT/timing.txt --timeMonitorSummary \
   > >(tee -a $OUT/console.log) 2>&1
 
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET BCTOL=$BCTOL DP=$DP NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS BCTOL=$BCTOL DP=$DP NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \

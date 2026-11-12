@@ -1427,6 +1427,9 @@ int main(int argc, char *argv[])
     int maxRefinementsFirstSlab = -1; // defaults to maxRefinements
     cmdp.setOption("maxRefinementsFirstSlab", &maxRefinementsFirstSlab,
                    "adaptive runs: refinement steps on the first slab (default: maxRefinements).  Later slabs start from a mesh matched to the previous slab at the interface, and usually need fewer.");
+    long long maxVlasovDofs = -1; // adaptive runs: no limit
+    cmdp.setOption("maxVlasovDofs", &maxVlasovDofs,
+                   "adaptive runs: a slab stops refining once its phase-space mesh has at least this many dofs (the solve on that mesh is its last); -1 for no limit");
     cmdp.setOption("relErrorTarget", &relErrorTarget);
     cmdp.setOption("relErrorTargetFinalSlab", &relErrorTargetFinalSlab);
     cmdp.setOption("refinementThreshold", &refinementThreshold);
@@ -2881,9 +2884,20 @@ int main(int argc, char *argv[])
           relErrorTarget = relErrorTargetFinalSlab;
         }
         
+        const int maxRefinementsBeforeDofLimit = maxRefinements; // restored after this slab's refinement loop
         for (int refinementNumber=0; refinementNumber<=maxRefinements; refinementNumber++)
         {
           auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
+          if ((maxVlasovDofs >= 0) && (refinementNumber < maxRefinements) && ((long long)numVlasovDofs >= maxVlasovDofs))
+          {
+            // this solve is the slab's last (with the final tolerances)
+            if (rank == 0)
+            {
+              std::cout << "Time slab " << timeSlabOrdinal << ": " << numVlasovDofs << " Vlasov dofs reaches --maxVlasovDofs=" << maxVlasovDofs
+                        << "; no further refinement in this slab.\n";
+            }
+            maxRefinements = refinementNumber;
+          }
           if (numVlasovDofs > maxDofsForDirectSolve)
           {
             if (rank == 0)
@@ -3102,6 +3116,7 @@ int main(int argc, char *argv[])
             break; // exits loop early if error target met
           }
         } // refinement loop
+        maxRefinements = maxRefinementsBeforeDofLimit;
         if ((timeSlabOrdinal == 0) && (timeSlabOrdinal < numTimeSlabs - 1)) maxRefinements = maxRefinementsLaterSlabs;
         {
           // The same per-slab diagnostics as the uniform-mesh branch writes, on the slab's final (adapted) mesh.
