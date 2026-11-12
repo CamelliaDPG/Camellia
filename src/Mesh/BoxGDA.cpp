@@ -189,10 +189,10 @@ const BoxGDA::OrderData &BoxGDA::orderDataForCell(GlobalIndexType cellID)
   }
   const int maxOrder = *std::max_element(order.begin(), order.end());
   const int tangentialCount = dim - 1;
-  // enough quadrature points that a product the basis does not contain cannot match it at all of them
   const int maxDegree = maxOrder + 2; // comfortably above the flux degree
-  const int cubatureEnrichment = 2 * maxDegree;
-  BasisCachePtr sampleCache = Teuchos::rcp(new BasisCache(elemType, MeshPtr(Teuchos::null), false, cubatureEnrichment));
+  // (the side sample points are set explicitly below, so this cache needs no cubature enrichment; a large enrichment
+  // asked Intrepid2 for side cubature degrees one macOS build did not provide)
+  BasisCachePtr sampleCache = Teuchos::rcp(new BasisCache(elemType));
   FC sampleNodes = _boxTopology->physicalCellNodesForCell(cellID, true);
   sampleCache->setPhysicalCellNodes(sampleNodes, {GlobalIndexType(cellID)}, true);
   const BoxMeshTopology::Extents extents = _boxTopology->cellExtents(cellID);
