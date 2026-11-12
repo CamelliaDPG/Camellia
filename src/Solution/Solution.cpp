@@ -4032,7 +4032,9 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
   auto existingCellIt = _solutionForCellID[solutionOrdinal].find(cellID);
   bool cellCoefficientsFound = existingCellIt != _solutionForCellID[solutionOrdinal].end();
   Camellia::FieldContainer<double> solutionForCell;
-  if (cellCoefficientsFound)
+  // (coefficients for an older element type -- the cell was p-refined, and this solution is not registered with the
+  // mesh, so they were not projected -- are discarded rather than written past)
+  if (cellCoefficientsFound && (existingCellIt->second.size() == trialOrder->totalDofs()))
   {
     solutionForCell = existingCellIt->second;
   }

@@ -242,6 +242,10 @@ public:
   //! its root cells.  Default: false.  See notes/anisotropic-refinement-design.md for what is supported.
   static void setUseBoxMeshForPhaseSpace(bool value);
   static bool useBoxMeshForPhaseSpace();
+  //! For box phase-space meshes: the H^1 order their cells start at (0: the formulation's H1Order, the default).  For
+  //! hp-adaptivity, which raises orders from there (BoxGDA::hpRefinements()); the configuration-space mesh keeps H1Order.
+  static void setBoxMeshInitialH1Order(int H1Order);
+  static int boxMeshInitialH1Order();
 
   //! take time step.
   void solve();

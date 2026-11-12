@@ -1633,10 +1633,13 @@ int VlasovSpaceTimeFormulation::H1Order() const
 namespace
 {
   bool s_useBoxMeshForPhaseSpace = false;
+  int s_boxMeshInitialH1Order = 0;
 }
 
 void VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(bool value) { s_useBoxMeshForPhaseSpace = value; }
 bool VlasovSpaceTimeFormulation::useBoxMeshForPhaseSpace() { return s_useBoxMeshForPhaseSpace; }
+void VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(int H1Order) { s_boxMeshInitialH1Order = H1Order; }
+int VlasovSpaceTimeFormulation::boxMeshInitialH1Order() { return s_boxMeshInitialH1Order; }
 
 void VlasovSpaceTimeFormulation::initialize()
 {
@@ -1739,7 +1742,8 @@ void VlasovSpaceTimeFormulation::initialize()
   }
   else
   {
-    vlasovMesh = BoxGDA::mesh(boxMeshTopology, _vlasovBF, _H1Order, _delta_k, partitionPolicy, comm, trialOrderEnhancements(), testOrderEnhancements());
+    const int phaseSpaceH1Order = (s_boxMeshInitialH1Order > 0) ? s_boxMeshInitialH1Order : _H1Order;
+    vlasovMesh = BoxGDA::mesh(boxMeshTopology, _vlasovBF, phaseSpaceH1Order, _delta_k, partitionPolicy, comm, trialOrderEnhancements(), testOrderEnhancements());
   }
   
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
@@ -1968,6 +1972,9 @@ void VlasovSpaceTimeFormulation::initialize()
   }
   
   vlasovMesh->registerSolution(_vlasovSoln);
+  // the previous substep's solution too, so that refinement (p-refinement in particular, which changes a cell's
+  // number of coefficients) projects it rather than leaving it with coefficients of the wrong size
+  vlasovMesh->registerSolution(_vlasovSolnPrev);
   
   _initialized = true;
 }

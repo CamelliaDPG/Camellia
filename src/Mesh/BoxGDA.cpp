@@ -246,11 +246,15 @@ void BoxGDA::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
   }
   this->GlobalDofAssignment::didPRefine(cellIDs, deltaP);
   _cellMaps.clear();
-  const std::set<GlobalIndexType> &myCells = _partitions[_partitionPolicy->Comm()->getRank()];
   Teuchos::LAPACK<int,double> lapack;
   for (const auto &[cellID, oldType] : oldTypes)
   {
-    if (myCells.find(cellID) == myCells.end()) continue; // only owners hold solution coefficients
+    // every cell for which a solution holds coefficients: owners, and other ranks that imported them
+    bool anyCoefficients = false;
+    for (SolutionPtr solution : _registeredSolutions)
+      for (int ordinal=0; ordinal<solution->numSolutions(); ordinal++)
+        if (solution->solutionForCellID()[ordinal].count(cellID) > 0) anyCoefficients = true;
+    if (!anyCoefficients) continue;
     // (Solution's generic projection needs RefinementPatterns.)  The old bases lie in the new spaces, so the L2
     // projection onto the new basis is exact, on the volume for fields and on each side for fluxes.
     const OrderData &newData = orderDataForCell(cellID);
@@ -775,6 +779,9 @@ bool BoxGDA::projectParentCoefficientsOntoChildren(GlobalIndexType parentCellID,
   }
   DofOrderingPtr trialOrdering = data.elemType->trialOrderPtr; // the children's ordering too
   const int numTrial = trialOrdering->totalDofs();
+  TEUCHOS_TEST_FOR_EXCEPTION(int(parentCoefficients.size()) != numTrial, std::invalid_argument,
+                             "BoxGDA::projectParentCoefficientsOntoChildren: cell " << parentCellID << " has " << parentCoefficients.size()
+                             << " coefficients, but its element type has " << numTrial << " (a solution not projected when the cell was p-refined?)");
   const int dim = _boxTopology->getDimension();
   const BoxForest &forest = _boxTopology->forest();
   const BoxMeshTopology::Extents parentExtents = _boxTopology->cellExtents(parentCellID);
@@ -1030,6 +1037,19 @@ void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, 
   for (IndexType fromCellID : fromTopology->getLocallyKnownActiveCellIndices())
   {
     if (fromTopology->sideIsOnBoundary(fromCellID, lowerSide)) cellIDMap[fromCellID] = counterpart(fromCellID);
+  }
+  // orders: meshFrom's boundary cells are raised to their counterparts' orders (with the halo that keeps neighbours
+  // within one order); meshTo is left as it is
+  {
+    std::map<GlobalIndexType,int> targetOrder;
+    for (const auto &[fromCellID, toCellID] : cellIDMap)
+    {
+      const int toOrder = meshTo->globalDofAssignment()->getH1Order(toCellID)[0];
+      if (toOrder > meshFrom->globalDofAssignment()->getH1Order(fromCellID)[0]) targetOrder[fromCellID] = toOrder;
+    }
+    HPRefinements raise;
+    raise.pIncrements = orderIncrementsWithHalo(meshFrom, targetOrder);
+    if (!raise.pIncrements.empty()) hpRefine(meshFrom, raise);
   }
   sideOrdinalMap.clear();
   sideOrdinalMap[int(lowerSide)] = toTopology->sideOrdinalForFace(2 * direction + 1);
@@ -1489,14 +1509,24 @@ BoxGDA::HPRefinements BoxGDA::hpRefinements(MeshPtr mesh, const std::map<GlobalI
     else if (order(cellID) < maxH1Order) targetOrder[cellID] = order(cellID) + 1;
   }
 
-  // neighbours' orders may differ by at most one: raise neighbours more than one below a raised cell, and so on
-  std::vector<GlobalIndexType> queue;
-  for (const auto &entry : targetOrder) queue.push_back(entry.first);
+  refinements.pIncrements = orderIncrementsWithHalo(mesh, targetOrder);
+  return refinements;
+}
+
+std::map<GlobalIndexType,int> BoxGDA::orderIncrementsWithHalo(MeshPtr mesh, std::map<GlobalIndexType,int> targetOrder)
+{
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
+  auto order = [&](GlobalIndexType cellID) { return gda->getH1Order(cellID)[0]; };
   auto newOrder = [&](GlobalIndexType cellID)
   {
     auto entry = targetOrder.find(cellID);
-    return (entry == targetOrder.end()) ? order(cellID) : entry->second;
+    return (entry == targetOrder.end()) ? order(cellID) : std::max(order(cellID), entry->second);
   };
+  // neighbours' orders may differ by at most one: raise neighbours more than one below a raised cell, and so on
+  std::vector<GlobalIndexType> queue;
+  for (const auto &entry : targetOrder) queue.push_back(entry.first);
   const int sideCount = topology->cellTopology()->getSideCount();
   while (!queue.empty())
   {
@@ -1515,8 +1545,12 @@ BoxGDA::HPRefinements BoxGDA::hpRefinements(MeshPtr mesh, const std::map<GlobalI
       }
     }
   }
-  for (const auto &[cellID, target] : targetOrder) refinements.pIncrements[cellID] = target - order(cellID);
-  return refinements;
+  std::map<GlobalIndexType,int> increments;
+  for (const auto &[cellID, target] : targetOrder)
+  {
+    if (target > order(cellID)) increments[cellID] = target - order(cellID);
+  }
+  return increments;
 }
 
 void BoxGDA::hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repartitionAndRebuild)

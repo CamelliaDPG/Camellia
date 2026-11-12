@@ -138,7 +138,8 @@ namespace Camellia
 
      Refines both meshes until each active cell of meshFrom on its lower boundary in the given direction has the same
      extent, in the other directions, as the active cell of meshTo across from it on meshTo's upper boundary.  A cell
-     is bisected only in the directions in which it is coarser than its counterpart.  On return, cellIDMap maps meshFrom's boundary cells to meshTo's, and
+     is bisected only in the directions in which it is coarser than its counterpart, and raised to its counterpart's
+     order if that is higher (with the halo of orderIncrementsWithHalo()).  On return, cellIDMap maps meshFrom's boundary cells to meshTo's, and
      sideOrdinalMap has the single entry (side ordinal in meshFrom, side ordinal in meshTo).  MPI-collective.
      */
     static void hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, std::map<int,int> &sideOrdinalMap,
@@ -200,6 +201,9 @@ namespace Camellia
      */
     static HPRefinements hpRefinements(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
                                        const std::vector<double> &minWidths, int maxH1Order);
+    //! The order increments that raise the given cells to (at least) the given orders, together with those that raise
+    //! other cells, transitively, so that face neighbours' orders differ by at most one.  No communication.
+    static std::map<GlobalIndexType,int> orderIncrementsWithHalo(MeshPtr mesh, std::map<GlobalIndexType,int> targetOrders);
     //! Applies hpRefinements(): the p-refinements, then the h-refinements (whose children inherit the new orders).
     static void hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repartitionAndRebuild = true);
 

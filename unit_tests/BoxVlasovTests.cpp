@@ -1,6 +1,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "BoxMeshTopology.h"
+#include "GlobalDofAssignment.h"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "MeshFactory.h"
 #include "MeshTools.h"
@@ -436,6 +437,49 @@ TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlab )
   TEST_FLOATING_EQUALITY(results[0].fNorm, results[1].fNorm, 1e-8);
   TEST_FLOATING_EQUALITY(results[0].ExNorm, results[1].ExNorm, 1e-7);
 }
+TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesOrders )
+{
+  // The first slab starts at H1 order 1 (piecewise constants) with some cells raised; the second slab's cells at the
+  // interface take the orders of the cells across it.  (The interface flux is copied coefficient by coefficient, so the
+  // orders must agree; they do when the first slab keeps neighbours within one order, as hp-refinement does, since the
+  // second slab's interface cells then have the first slab's tangential neighbour relations.)
+  UseBoxMesh useBoxMesh(true);
+  VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(1);
+  const int xElements = 2, vxElements = 2, vyElements = 2, H1Order = 3;
+  Problem p = problem(true, xElements, vxElements, vyElements, H1Order, drivenDistribution());
+  MeshPtr mesh = p.form->vlasovMesh();
+  auto topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  set<GlobalIndexType> raise;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+  {
+    if (topology->cellExtents(cellID)[2].first < V0 + 0.5 * VWIDTH) raise.insert(cellID); // the cells with u_x below the middle
+  }
+  mesh->pRefine(raise, 1); // order 2 on half the cells, 1 on the rest (neighbours within one order, as hp keeps them)
+  p.form->setInitialAndInflowConditions(drivenDistribution(), drivenDistribution());
+  p.form->solve();
+  auto secondSlab = p.form->nextTimeSlab(TWIDTH, 1);
+  VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(0);
+  MeshPtr nextMesh = secondSlab->vlasovMesh();
+  auto nextTopology = dynamic_cast<BoxMeshTopology*>(nextMesh->getTopology().get());
+  int interfaceCells = 0;
+  for (GlobalIndexType cellID : nextMesh->getActiveCellIDsGlobal())
+  {
+    const auto extents = nextTopology->cellExtents(cellID);
+    const int order = nextMesh->globalDofAssignment()->getH1Order(cellID)[0];
+    if (std::abs(extents[1].first - TWIDTH) < 1e-12) // on the interface (the second slab's t-lower side)
+    {
+      interfaceCells++;
+      TEST_EQUALITY(order, (extents[2].first < V0 + 0.5 * VWIDTH) ? 2 : 1);
+    }
+  }
+  TEST_EQUALITY(interfaceCells, int(nextMesh->numActiveElements())); // one t cell per slab
+  secondSlab->solve();
+  const double fNorm = Function::solution(secondSlab->f(), secondSlab->vlasovSolution())->l2norm(nextMesh);
+  out << "second slab: " << nextMesh->numActiveElements() << " cells, " << nextMesh->numGlobalDofs() << " dofs; ||f|| = " << fNorm << endl;
+  TEST_ASSERT(std::isfinite(fNorm));
+  TEST_COMPARE(fNorm, >, 0.0);
+}
+
 TEUCHOS_UNIT_TEST( BoxVlasov, IsotropicHangingRefinementMatchesExtrudedMesh )
 {
   // One phase-space cell refined in all four directions (hanging faces in every direction; the configuration mesh is

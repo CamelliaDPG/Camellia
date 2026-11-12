@@ -1190,6 +1190,37 @@ std::vector<std::pair<std::pair<FunctionPtr,FunctionPtr>,int> > bcFunctions(Teuc
 // Box-mesh adaptivity settings (set in main from the command line; see --useBoxMesh)
 static bool   s_boxAnisotropicAdaptivity = false; // choose refinement directions per cell
 static double s_boxAnisotropyThreshold   = 0.5;   // see BoxGDA::anisotropicRefinementMasks()
+static bool   s_hpAdaptivity             = false; // h until a minimum width, then p (BoxGDA::hpRefinements())
+static std::vector<double> s_hpMinWidths;         // per direction (x, t, u_x, u_z), computational units
+static int    s_hpMaxH1Order             = 0;
+
+//! Applies refinement directions chosen for marked cells: as hp-refinements with --hpAdaptivity, else as bisections.
+static void refineInDirections(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &masks)
+{
+  if (!s_hpAdaptivity)
+  {
+    mesh->hRefine(masks, false);
+    return;
+  }
+  BoxGDA::HPRefinements refinements = BoxGDA::hpRefinements(mesh, masks, s_hpMinWidths, s_hpMaxH1Order);
+  if (mesh->Comm()->getRank() == 0)
+  {
+    // (a marked cell is either bisected or raised; the halo may raise any cell, bisected ones included)
+    int raisedMarked = 0, haloRaised = 0;
+    for (const auto &entry : refinements.pIncrements)
+    {
+      const bool marked = (masks.find(entry.first) != masks.end());
+      const bool bisected = (refinements.hMasks.find(entry.first) != refinements.hMasks.end());
+      if (marked && !bisected) raisedMarked++;
+      else haloRaised++;
+    }
+    const int unchanged = int(masks.size()) - int(refinements.hMasks.size()) - raisedMarked;
+    std::cout << "hp: of " << masks.size() << " marked cells, " << refinements.hMasks.size() << " bisected, " << raisedMarked
+              << " raised in order, " << unchanged << " at the minimum width and the maximum order; "
+              << haloRaised << " cells raised to keep neighbours' orders within one\n";
+  }
+  BoxGDA::hpRefine(mesh, refinements, false);
+}
 
 void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair<FunctionPtr,FunctionPtr>,int> > &bcFunctionsToResolve,
                  int maxElements, double bcResolutionTolerance)
@@ -1225,7 +1256,7 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
     {
       // To resolve boundary data, bisect only in the directions tangential to the boundary side that carries it.
       refStrategy->setCellRefiner([mesh, tagName, bcTag](std::vector<GlobalIndexType> &cellIDs) {
-        mesh->hRefine(BoxGDA::masksTangentialToTaggedSides(mesh, tagName, bcTag, cellIDs), false);
+        refineInDirections(mesh, BoxGDA::masksTangentialToTaggedSides(mesh, tagName, bcTag, cellIDs));
         return static_cast<int>(cellIDs.size());
       });
     }
@@ -1419,6 +1450,15 @@ int main(int argc, char *argv[])
                    "with --useBoxMesh --useAdaptivity: bisect each marked cell only in the directions in which f is least resolved (and, when resolving boundary data, only tangentially to the boundary)");
     cmdp.setOption("boxAnisotropyThreshold", &boxAnisotropyThreshold,
                    "with --boxAnisotropicAdaptivity: bisect in direction k if its indicator is at least this fraction of the largest direction's (0: all directions; near 1: only the worst)");
+    bool hpAdaptivity = false;
+    int hpInitialH1Order = 1;
+    std::string hpMinWidthsString = "0,0,0,0";
+    cmdp.setOption("hpAdaptivity", "hAdaptivity", &hpAdaptivity,
+                   "with --useBoxMesh --useAdaptivity: start the phase-space mesh at --hpInitialH1Order; bisect a marked cell in its chosen directions "
+                   "while half its width there is at least --hpMinWidths, else raise its order (up to --p); neighbours' orders differ by at most one");
+    cmdp.setOption("hpInitialH1Order", &hpInitialH1Order, "with --hpAdaptivity: the phase-space mesh's starting H^1 order (1: f piecewise constant)");
+    cmdp.setOption("hpMinWidths", &hpMinWidthsString,
+                   "with --hpAdaptivity: minimum cell widths in x, t, u_x, u_z (computational units, comma-separated; 0: no limit)");
     cmdp.setOption("boxVelocityRefinements", &boxVelocityRefinements, "with --useBoxMesh: rounds of u_x-only bisection of the first slab's cells within a band of u_x");
     cmdp.setOption("boxVelocityBandCenter", &boxVelocityBandCenter);
     cmdp.setOption("boxVelocityBandHalfWidth", &boxVelocityBandHalfWidth);
@@ -1804,6 +1844,25 @@ int main(int argc, char *argv[])
     VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(useBoxMesh);
     s_boxAnisotropicAdaptivity = useBoxMesh && boxAnisotropicAdaptivity;
     s_boxAnisotropyThreshold = boxAnisotropyThreshold;
+    s_hpAdaptivity = useBoxMesh && useAdaptivity && hpAdaptivity;
+    TEUCHOS_TEST_FOR_EXCEPTION(hpAdaptivity && !s_hpAdaptivity, std::invalid_argument, "--hpAdaptivity requires --useBoxMesh --useAdaptivity");
+    if (s_hpAdaptivity)
+    {
+      s_hpMinWidths.clear();
+      std::istringstream widthStream(hpMinWidthsString);
+      std::string entry;
+      while (std::getline(widthStream, entry, ',')) s_hpMinWidths.push_back(std::stod(entry));
+      TEUCHOS_TEST_FOR_EXCEPTION(s_hpMinWidths.size() != 4, std::invalid_argument, "--hpMinWidths takes four widths: x, t, u_x, u_z");
+      TEUCHOS_TEST_FOR_EXCEPTION((hpInitialH1Order < 1) || (hpInitialH1Order > H1Order), std::invalid_argument, "--hpInitialH1Order must be in [1, p]");
+      s_hpMaxH1Order = H1Order;
+      if (rank == 0)
+      {
+        std::cout << "hp-adaptivity: phase-space mesh starts at H1 order " << hpInitialH1Order << ", maximum " << H1Order
+                  << "; minimum widths (x, t, u_x, u_z) = (" << s_hpMinWidths[0] << ", " << s_hpMinWidths[1] << ", "
+                  << s_hpMinWidths[2] << ", " << s_hpMinWidths[3] << ")\n";
+      }
+    }
+    VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(s_hpAdaptivity ? hpInitialH1Order : 0);
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
@@ -2033,6 +2092,7 @@ int main(int argc, char *argv[])
       suffix << "_fullTensorBasis";
     }
     suffix << "_p" << H1Order;
+    if (s_hpAdaptivity) suffix << "_hp" << VlasovSpaceTimeFormulation::boxMeshInitialH1Order();
     suffix << "_dp" << delta_k;
     suffix << "_" << xElements << "x" << tElements << "x" << vxElements << "x" << vyElements;
     suffix << "_ratio" << minMagneticFluxRatio;
@@ -2864,7 +2924,7 @@ int main(int argc, char *argv[])
           const double anisotropyThreshold = s_boxAnisotropyThreshold;
           refStrategy->setCellRefiner([vlasovMesh, fSolution, anisotropyThreshold](std::vector<GlobalIndexType> &cellIDs) {
             fSolution->importCellData(cellIDs);
-            vlasovMesh->hRefine(BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cellIDs, anisotropyThreshold), false);
+            refineInDirections(vlasovMesh, BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cellIDs, anisotropyThreshold));
             return static_cast<int>(cellIDs.size());
           });
         }
