@@ -12,6 +12,7 @@
 #include "TensorVlasovMomentSampling1D2V.h"
 
 #include "BasisCache.h"
+#include "BoxMeshTopology.h"
 #include "CamelliaCellTools.h"
 #include "Camellia_FieldContainerConversion.hpp"
 #include "CubatureFactory.h"
@@ -115,6 +116,7 @@ namespace
 
   MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
   auto phaseSpaceTopology = PhaseSpaceTopology::phaseSpaceTopology(phaseSpaceMesh->getTopology().get());
+  const BoxMeshTopology* boxTopology = dynamic_cast<const BoxMeshTopology*>(phaseSpaceMesh->getTopology().get());
   TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceTopology == NULL, std::invalid_argument,
                              "computeVlasovMomentsByPhaseSpaceCell1D2V requires a phase-space mesh topology (ExtrudedMeshTopology or BoxMeshTopology).");
   auto extrudedTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology()); // may be NULL
@@ -216,7 +218,22 @@ namespace
       // One batched inverse map and one evaluation per (phase-space cell, configuration cell): the points are known
       // to lie in this phase-space cell.
       Camellia::FieldContainer<double> refPoints(1, cellPointCount, 4);
-      CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, phaseSpaceMesh->getTopology(), phaseSpaceCellID, cubatureDegree);
+      if (boxTopology != NULL)
+      {
+        // box cells are affine images of the reference cell: invert the map directly (the Newton iteration costs much more)
+        const BoxMeshTopology::Extents extents = boxTopology->cellExtents(phaseSpaceCellID);
+        for (int p=0; p<cellPointCount; p++)
+        {
+          for (int d=0; d<4; d++)
+          {
+            refPoints(0,p,d) = 2.0 * (physicalPoints(0,p,d) - extents[d].first) / (extents[d].second - extents[d].first) - 1.0;
+          }
+        }
+      }
+      else
+      {
+        CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, phaseSpaceMesh->getTopology(), phaseSpaceCellID, cubatureDegree);
+      }
       refPoints.resize(cellPointCount, 4);
       basisCache->setRefCellPointsFC(refPoints);
       Camellia::FieldContainer<double> fValues(1, cellPointCount);
