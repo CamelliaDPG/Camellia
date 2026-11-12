@@ -17,7 +17,8 @@
 #     bisected only in the directions in which f is least resolved on it (--boxAnisotropicAdaptivity).  To resolve the
 #     inflow and initial data, cells are bisected only tangentially to the boundary carrying the data.
 #   - hp (HP=1, the default): the phase-space mesh starts piecewise constant; cells are bisected until they reach the
-#     minimum widths HPMIN in the chosen directions, then raised in order, up to H1 order 4 (as production).
+#     minimum widths HPMIN in the chosen directions, then raised in order, up to H1 order MAXP (default 8; production
+#     is 4 throughout).
 #
 # REQUIRES the latest Camellia branch anisotropic-refinement (github.com/CamelliaDPG/Camellia), the
 # Intrepid2 of trilinos/Trilinos PR 15871 (b93efd4b798), a Trilinos with SuperLU_DIST (for --coarseSolver), and a
@@ -62,7 +63,13 @@
 #           direction's (default 0.5).  0 bisects every marked cell in all four directions; near 1, only in the worst.
 #   HP      1 (default): hp-adaptivity (--hpAdaptivity).  The phase-space mesh starts at H1 order HP0 and a marked cell
 #           is bisected in its chosen directions while half its width there is at least HPMIN, else raised one order,
-#           up to the --p below (4); neighbours' orders stay within one.  0: h-adaptivity at order 4 throughout.
+#           up to MAXP; neighbours' orders stay within one.  0: h-adaptivity at order MAXP throughout.
+#   MAXP    maximum H1 order, the driver's --p                        (default 8: f of degree 7.  Production: 4.  High-order
+#           cells cost much more per dof -- in a 4-rank test a slab's final solve on 60 k dofs, mostly orders 5-8, took
+#           512 s -- and with MAXP > 4 the discretization is no longer coarser than production's anywhere)
+#   REPLAY  1 (default): each later slab starts from slab 0's boundary-data mesh (cells and orders), applied before
+#           matching to the previous slab; the per-slab check of the inflow data then has little or nothing to do.
+#           0: each slab resolves the inflow data from scratch.
 #   HP0     starting H1 order with HP=1                              (default 1: f piecewise constant)
 #   HPMIN   minimum widths x,t,u_x,u_z in computational units        (default 0.0025,0.0125,0.025,0.025: half the
 #           production run's finest widths -- about 0.005 in x at the cathode, 0.05 in t, 0.05 in the velocity core)
@@ -91,6 +98,9 @@ ANISO=${ANISO:-0.5}
 TARGET=${TARGET:-0.02}
 MAXDOFS=${MAXDOFS:--1}
 HP=${HP:-1}
+MAXP=${MAXP:-8}
+REPLAY=${REPLAY:-1}
+if [ "$REPLAY" = 1 ]; then REPLAYOPT=--replayBCRefinement; else REPLAYOPT=--measureBCRefinement; fi
 HP0=${HP0:-1}
 HPMIN=${HPMIN:-0.0025,0.0125,0.025,0.025}
 if [ "$HP" = 1 ]; then HPOPTS="--hpAdaptivity --hpInitialH1Order=$HP0 --hpMinWidths=$HPMIN"; HPTAG=-hp$HP0; else HPOPTS=""; HPTAG=""; fi
@@ -99,7 +109,7 @@ DP=${DP:-2}
 NP=${NP:-16}
 SLABS=${SLABS:-60}; SAMPLED=${SAMPLED:-0,1,2,3,5,7,10,15,20,30,40,50,59}
 PROD=${PROD:-/private/viz/nov2026/mitl/production-scl-graph-transport-a1.8-x32-dp2-phase/console.log}
-OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-dp$DP-ref$REF0-$REF$HPTAG-phase
+OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-p$MAXP-dp$DP-ref$REF0-$REF$HPTAG-phase
 if [ "${CHECK:-0}" = 1 ]; then SLABS=3; SAMPLED=0,2; OUT=$OUT-check; fi
 X=./drivers/papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime
 SRC=$(grep -m1 "^CMAKE_HOME_DIRECTORY" CMakeCache.txt | cut -d= -f2)
@@ -107,8 +117,8 @@ PLOT=$SRC/drivers/papers/RelativisticVlasovSpaceTime/plot_phase_space.py
 
 # (the driver prints its help to stderr, and exits nonzero after printing it)
 if [ ! -x $X ]; then echo "$X not found: run this from the Camellia build directory."; exit 1; fi
-if ! $X --help 2>&1 | grep -q -- "--hpAdaptivity"; then
-  echo "This build of PlanarMITLRelativisticSpaceTime has no --hpAdaptivity: rebuild it from the latest anisotropic-refinement branch."; exit 1
+if ! $X --help 2>&1 | grep -q -- "--replayBCRefinement"; then
+  echo "This build of PlanarMITLRelativisticSpaceTime has no --replayBCRefinement: rebuild it from the latest anisotropic-refinement branch."; exit 1
 fi
 
 if [ -n "$DOERFLER" ]; then MARKING="--doerflerTarget=$DOERFLER"; else MARKING="--refinementThreshold=$THRESH"; fi
@@ -117,7 +127,7 @@ mkdir -p $OUT
 
 CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --gradedVelocityMesh --velocityCoreWidthFactor=2 --velocityCoreHalfWidthFactor=2 --velocityGrowthRatio=3 \
-  --xElements=8 --tElements=1 --numUniformRefinements=0 --maxDofsForDirectSolve=0 --p=4 --dp=$DP \
+  --xElements=8 --tElements=1 --numUniformRefinements=0 --maxDofsForDirectSolve=0 --p=$MAXP --dp=$DP $REPLAYOPT \
   --tWidth=1e-1 --numTimeSlabs=$SLABS --ratio=1.5 --minSubsteps=2 --maxSubsteps=10 --fixedPointTol=1e-4 --J=5e8 \
   --useSerendipityBasis --coarseSolver=SuperLUDist --accuracyDiagnostics --densityDiagnostic \
   --useGraphTestNorm --L2WeightGraph=1e2 --L2WeightGraphTransportScale=1.6 --L2WeightGraphAccelerationBounds=1.8,0.65 \
@@ -131,7 +141,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN BCTOL=$BCTOL DP=$DP NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \

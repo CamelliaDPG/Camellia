@@ -1470,6 +1470,10 @@ int main(int argc, char *argv[])
                    "with --useBoxMesh --useAdaptivity: bisect each marked cell only in the directions in which f is least resolved (and, when resolving boundary data, only tangentially to the boundary)");
     cmdp.setOption("boxAnisotropyThreshold", &boxAnisotropyThreshold,
                    "with --boxAnisotropicAdaptivity: bisect in direction k if its indicator is at least this fraction of the largest direction's (0: all directions; near 1: only the worst)");
+    bool replayBCRefinement = true;
+    cmdp.setOption("replayBCRefinement", "measureBCRefinement", &replayBCRefinement,
+                   "with --useBoxMesh --useAdaptivity: start each later slab from slab 0's boundary-data mesh (cells and orders), "
+                   "applied before matching to the previous slab; the per-slab check of the boundary data still runs");
     bool hpAdaptivity = false;
     int hpInitialH1Order = 1;
     std::string hpMinWidthsString = "0,0,0,0";
@@ -2086,6 +2090,17 @@ int main(int argc, char *argv[])
     refineForBC(form->vlasovSolutionPreviousSubstep(), form->t_n_hat(), bcFunctionsToResolve, maxElements, bcResolutionTolerance);
     // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
     form->configurationSpaceMesh()->repartitionAndRebuild();
+    if (useBoxMesh && useAdaptivity && replayBCRefinement)
+    {
+      // The inflow data have the same shape on every slab: give each later slab the mesh just built to resolve them
+      // (before it is matched to the previous slab at the interface).  refineForBC() still checks each slab.
+      const std::vector<BoxGDA::CellRecord> bcMeshRecords = BoxGDA::cellRecords(form->vlasovMesh());
+      form->setNextSlabPreRefinement([bcMeshRecords](MeshPtr nextSlabMesh) { BoxGDA::refineToContain(nextSlabMesh, bcMeshRecords); });
+      if (rank == 0)
+      {
+        std::cout << "Each later slab will start from slab 0's boundary-data mesh (" << bcMeshRecords.size() << " cells).\n";
+      }
+    }
     if (rank == 0)
     {
       std::cout << "Physical mesh has " << form->configurationSpaceMesh()->numActiveElements() << " elements.\n";

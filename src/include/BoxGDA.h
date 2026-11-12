@@ -208,6 +208,22 @@ namespace Camellia
     //! in every one of them, and at maxH1Order.  No communication.
     static std::set<GlobalIndexType> hpSaturatedCells(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
                                                       const std::vector<double> &minWidths, int maxH1Order);
+    //! An active cell as a location-based record: its box (in the integer coordinates of the root grid) and its order.
+    struct CellRecord
+    {
+      BoxForest::Box box;
+      int H1Order;
+    };
+    //! The active cells of a box mesh, as records that can be applied to another mesh with the same root grid.
+    static std::vector<CellRecord> cellRecords(MeshPtr mesh);
+    /**
+     \brief  Refines a box mesh until each recorded box is a union of its active cells, and raises each active cell inside
+             a recorded box to at least that box's order (with the halo of orderIncrementsWithHalo()).
+     Applied to a mesh that has the recorded mesh's root grid (e.g. the next time slab, whose t root is again root 0) and
+     is no finer, it reproduces the recorded mesh.  A cell is bisected only in the directions in which it is coarser
+     than a recorded box it overlaps.  No communication beyond the refinements' own.
+     */
+    static void refineToContain(MeshPtr mesh, const std::vector<CellRecord> &records);
     //! Applies hpRefinements(): the p-refinements, then the h-refinements (whose children inherit the new orders).
     static void hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repartitionAndRebuild = true);
 

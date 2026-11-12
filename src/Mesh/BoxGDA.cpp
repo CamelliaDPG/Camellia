@@ -1588,3 +1588,68 @@ void BoxGDA::hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repar
   mesh->hRefine(refinements.hMasks, false);
   if (repartitionAndRebuild) mesh->repartitionAndRebuild();
 }
+
+// ---------------------------------------------------------------- recording and replaying a mesh
+
+std::vector<BoxGDA::CellRecord> BoxGDA::cellRecords(MeshPtr mesh)
+{
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  std::vector<CellRecord> records;
+  for (IndexType cellID : topology->getLocallyKnownActiveCellIndices())
+  {
+    records.push_back({topology->forest().node(int(cellID)).box, mesh->globalDofAssignment()->getH1Order(cellID)[0]});
+  }
+  return records;
+}
+
+void BoxGDA::refineToContain(MeshPtr mesh, const std::vector<CellRecord> &records)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::refineToContain");
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  const int dim = topology->getDimension();
+  auto boxBounds = [dim](const BoxForest::Box &box, std::array<BoxForest::Coord,BoxForest::MAX_DIM> &lo, std::array<BoxForest::Coord,BoxForest::MAX_DIM> &hi)
+  {
+    for (int k=0; k<dim; k++) { lo[k] = box.lo[k]; hi[k] = box.hi(k); }
+  };
+  // h: bisect each cell in the directions in which it is coarser than a recorded box it overlaps, until none is
+  bool refined = false;
+  while (true)
+  {
+    std::map<GlobalIndexType,unsigned> masks;
+    std::array<BoxForest::Coord,BoxForest::MAX_DIM> lo, hi;
+    for (const CellRecord &record : records)
+    {
+      boxBounds(record.box, lo, hi);
+      topology->forest().forEachLeafOverlapping(lo, hi, [&](int leaf)
+      {
+        const BoxForest::Box &leafBox = topology->forest().node(leaf).box;
+        unsigned mask = 0;
+        for (int k=0; k<dim; k++) if (leafBox.level[k] < record.box.level[k]) mask |= (1u << k);
+        if (mask != 0) masks[GlobalIndexType(leaf)] |= mask;
+      });
+    }
+    if (masks.empty()) break;
+    // one level at a time: a cell several levels coarser than a record is bisected again on the next pass
+    mesh->hRefine(masks, false);
+    refined = true;
+  }
+  // p: each cell to at least the order of the recorded boxes it lies in
+  std::map<GlobalIndexType,int> targetOrders;
+  std::array<BoxForest::Coord,BoxForest::MAX_DIM> lo, hi;
+  for (const CellRecord &record : records)
+  {
+    boxBounds(record.box, lo, hi);
+    topology->forest().forEachLeafOverlapping(lo, hi, [&](int leaf)
+    {
+      int &target = targetOrders[GlobalIndexType(leaf)];
+      target = std::max(target, record.H1Order);
+    });
+  }
+  HPRefinements raise;
+  raise.pIncrements = orderIncrementsWithHalo(mesh, targetOrders);
+  if (!raise.pIncrements.empty()) hpRefine(mesh, raise, false);
+  if (refined || !raise.pIncrements.empty()) mesh->repartitionAndRebuild();
+}
+

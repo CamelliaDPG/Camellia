@@ -1317,6 +1317,8 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   std::map<int,int> sideOrdinalMap;
   
   const bool boxMeshes = (dynamic_cast<BoxMeshTopology*>(thisSlabVlasovMesh->getTopology().get()) != NULL);
+  nextSlabForm->_nextSlabPreRefinement = _nextSlabPreRefinement;
+  if (_nextSlabPreRefinement) _nextSlabPreRefinement(nextSlabVlasovMesh); // before matching (see setNextSlabPreRefinement())
   if (boxMeshes)
   {
     const int timeDirection = _spaceDim; // coordinates are (x, t, velocity)

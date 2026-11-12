@@ -468,3 +468,51 @@ TEUCHOS_UNIT_TEST( BoxHP, SaturatedCellsAreNotMarked )
   if (marked.size() == 1) TEST_EQUALITY(marked[0], onlyEligible);
 }
 
+
+TEUCHOS_UNIT_TEST( BoxHP, RefineToContainReproducesMesh )
+{
+  // a mesh refined anisotropically and raised in places (neighbours within one order, as hp keeps them), recorded and
+  // replayed on a fresh mesh with the same roots, comes out the same: the same boxes, each with the same order
+  for (int dim : {2, 4})
+  {
+    Convection form(dim);
+    auto makeTopology = [dim]() { return Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.3, 1.0}))); };
+    auto sourceTopology = makeTopology();
+    MeshPtr source = BoxGDA::mesh(sourceTopology, form.bf, 1, 1);
+    source->hRefine(std::map<GlobalIndexType,unsigned>{{0, 1u}, {1, 2u | (1u << (dim-1))}});
+    const IndexType child = sourceTopology->getCell(0)->getChildIndices(sourceTopology)[1];
+    source->hRefine(std::map<GlobalIndexType,unsigned>{{GlobalIndexType(child), 1u}});
+    source->pRefine(set<GlobalIndexType>{GlobalIndexType(sourceTopology->getCell(child)->getChildIndices(sourceTopology)[0])}, 1);
+    source->pRefine(set<GlobalIndexType>{2}, 1);
+    const vector<BoxGDA::CellRecord> records = BoxGDA::cellRecords(source);
+
+    auto targetTopology = makeTopology();
+    MeshPtr target = BoxGDA::mesh(targetTopology, form.bf, 1, 1);
+    BoxGDA::refineToContain(target, records);
+    TEST_EQUALITY(target->numActiveElements(), source->numActiveElements());
+    TEST_EQUALITY(target->numGlobalDofs(), source->numGlobalDofs());
+    auto key = [dim](const BoxForest::Box &box)
+    {
+      vector<BoxForest::Coord> k;
+      for (int d=0; d<dim; d++) { k.push_back(box.lo[d]); k.push_back(box.level[d]); }
+      return k;
+    };
+    std::map<vector<BoxForest::Coord>,int> sourceCells;
+    for (const auto &record : records) sourceCells[key(record.box)] = record.H1Order;
+    int matched = 0;
+    for (const auto &record : BoxGDA::cellRecords(target))
+    {
+      auto entry = sourceCells.find(key(record.box));
+      TEST_ASSERT(entry != sourceCells.end());
+      if (entry == sourceCells.end()) continue;
+      TEST_EQUALITY(record.H1Order, entry->second);
+      if (record.H1Order == entry->second) matched++;
+    }
+    out << dim << "D: " << target->numActiveElements() << " cells; " << matched << " with the recorded order" << endl;
+    TEST_EQUALITY(matched, int(records.size()));
+    // replaying again changes nothing
+    const GlobalIndexType dofs = target->numGlobalDofs();
+    BoxGDA::refineToContain(target, records);
+    TEST_EQUALITY(target->numGlobalDofs(), dofs);
+  }
+}

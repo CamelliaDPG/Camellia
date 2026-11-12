@@ -15,6 +15,7 @@
 #ifndef Camellia_VlasovSpaceTimeFormulation_h
 #define Camellia_VlasovSpaceTimeFormulation_h
 
+#include <functional>
 #include "CamelliaMemoryTools.h"
 #include "TypeDefs.h"
 
@@ -193,6 +194,7 @@ private:
   std::vector< std::pair<double,double> > timeSeriesForSlabSpatialIntegrals(const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > &integrals,
                                                                             const double &t0, const double &dt, const int &numValues) const;
   bool _initialized = false;
+  std::function<void(MeshPtr)> _nextSlabPreRefinement;
 protected:
   //! Called during construction, by the most specialized subclass (allowing the most specialized of overridden methods to be invoked).
   void initialize();
@@ -246,6 +248,11 @@ public:
   //! hp-adaptivity, which raises orders from there (BoxGDA::hpRefinements()); the configuration-space mesh keeps H1Order.
   static void setBoxMeshInitialH1Order(int H1Order);
   static int boxMeshInitialH1Order();
+
+  //! Called with the next slab's phase-space mesh in nextTimeSlab(), before that mesh is matched to this slab's at the
+  //! interface; passed on to the next slab's formulation.  E.g. to repeat refinements known to be needed on every slab
+  //! (BoxGDA::refineToContain() with records of the first slab's boundary-data refinement).
+  void setNextSlabPreRefinement(std::function<void(MeshPtr)> preRefinement) { _nextSlabPreRefinement = preRefinement; }
 
   //! take time step.
   void solve();
