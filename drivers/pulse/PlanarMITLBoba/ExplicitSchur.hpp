@@ -25,6 +25,11 @@ struct ExplicitSchurOptions
   int iterations = 400, every = 10;
   int boundsSteps = 20; double boundsTolerance = 1e-2, lminSafety = 0.8;
   bool zipUp = true;
+  // lambda_max: "power" (Ifpack2-style deterministic power iteration on S~ = P S P, times boostFactor), "bound"
+  // (rigorous element bound, O(n^3) per element), or "lanczos" (the Lanczos Ritz max x 1.05)
+  std::string lambdaMaxMode = "power";
+  int powerIterations = 20; double powerTolerance = 1e-6, powerStop = 1e-3, boostFactor = 1.1;
+  int lambdaMinDiagnosticIterations = 0;   // > 0: shifted power iteration on (lambda_max I - S~) for lambda_min
 };
 
 namespace ExplicitSchurDetail
@@ -179,10 +184,15 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   }
   std::array<Mat, 4> traceMass;
   for (size_t d = 0; d < 4; ++d) traceMass[d] = axes[d].test.transpose() * axes[d].weights.asDiagonal() * axes[d].trace;
-  auto elementB = [&](const std::array<size_t, 4> &c) {
-    Mat B = Mat::Zero(nlocT, nlocTrial);
+  // columns of the selected trial blocks (all if sel is empty), concatenated in block order
+  auto elementBsel = [&](const std::array<size_t, 4> &c, const std::vector<bool> &sel) {
+    std::vector<size_t> soff(nt + 1, 0);
+    for (size_t a = 0; a < nt; ++a) soff[a + 1] = soff[a] + (sel[a] ? blocks[a].localSize() : 0);
+    Mat B = Mat::Zero(nlocT, soff[nt]);
     // field: B_f = -T^T F
     Mat Bf = Mat::Zero(nlocT, nbF[0] * nbF[1] * nbF[2] * nbF[3]);
+    bool needField = false; for (size_t a = 0; a < nt; ++a) if (sel[a] && blocks[a].normal < 0) needField = true;
+    if (needField)
     for (const auto &g : groups)
     {
       if (g.terms.empty()) continue;
@@ -196,7 +206,8 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     }
     for (size_t a = 0; a < nt; ++a)
     {
-      if (blocks[a].normal < 0) { B.middleCols(off[a], blocks[a].localSize()) = Bf; continue; }
+      if (!sel[a]) continue;
+      if (blocks[a].normal < 0) { B.middleCols(soff[a], blocks[a].localSize()) = Bf; continue; }
       const size_t nd = size_t(blocks[a].normal);
       std::array<Mat, 4> f;
       for (size_t d = 0; d < 4; ++d)
@@ -211,10 +222,12 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         }
         else f[d] = cellBlock(traceMass[d], d, c[d], nbT[d], nbJ[d]);
       }
-      B.middleCols(off[a], blocks[a].localSize()) = kron(f[3], kron(f[2], kron(f[1], f[0])));
+      B.middleCols(soff[a], blocks[a].localSize()) = kron(f[3], kron(f[2], kron(f[1], f[0])));
     }
     return B;
   };
+  const std::vector<bool> allBlocks(nt, true);
+  auto elementB = [&](const std::array<size_t, 4> &c) { return elementBsel(c, allBlocks); };
   auto classOf = [&](const std::array<size_t, 4> &c) { return ec.xClass[c[0]] + ec.nClass * (c[2] + cells[2] * c[3]); };
   auto forEachElement = [&](const std::function<void(const std::array<size_t, 4> &)> &f) {
     for (size_t c3 = 0; c3 < cells[3]; ++c3) for (size_t c2 = 0; c2 < cells[2]; ++c2)
@@ -232,6 +245,79 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     long g = 0, stride = 1;
     for (size_t d = 0; d < 4; ++d) { const long k = blocks[a].index(d, c[d], i[d], cells[d]); if (k < 0) return -1; g += k * stride; stride *= long(blocks[a].global[d]); }
     return g;
+  };
+
+  // --- full vectors <-> four-mode TT
+  auto toFull = [&](const TTVector &v) {
+    auto full = v.decompress(); auto in = full.const_view();
+    const size_t n0 = v.sizes(0), n1 = v.sizes(1), n2 = v.sizes(2), n3 = v.sizes(3);
+    Eigen::VectorXd out(n0 * n1 * n2 * n3);
+    for (size_t i3 = 0; i3 < n3; ++i3) for (size_t i2 = 0; i2 < n2; ++i2) for (size_t i1 = 0; i1 < n1; ++i1) for (size_t i0 = 0; i0 < n0; ++i0)
+      out(i0 + n0 * (i1 + n1 * (i2 + n2 * i3))) = in({i0, i1, i2, i3});
+    return out;
+  };
+  auto toTT = [&](const Eigen::VectorXd &x, const Sizes &n, double tol) {
+    host_tensor<4> t(n); auto out = t.view();
+    for (size_t i3 = 0; i3 < n[3]; ++i3) for (size_t i2 = 0; i2 < n[2]; ++i2) for (size_t i1 = 0; i1 < n[1]; ++i1) for (size_t i0 = 0; i0 < n[0]; ++i0)
+      out({i0, i1, i2, i3}) = x(i0 + n[0] * (i1 + n[1] * (i2 + n[2] * i3)));
+    TTVector r(n); r.svd_tolerance_relative = tol; r.svd_tolerance_absolute = 0.0; r.compress(t); return r;
+  };
+  // element-local gather / scatter of test and trial vectors (four-mode linear index, mode 0 fastest)
+  auto testIndex = [&](const std::array<size_t, 4> &c, size_t il) {
+    const auto i = localIndex(nbT, il); size_t g = 0, stride = 1;
+    for (size_t d = 0; d < 4; ++d) { g += (c[d] * nbT[d] + i[d]) * stride; stride *= cells[d] * nbT[d]; }
+    return g;
+  };
+  const Eigen::VectorXd lFull = toFull(rhs(0));
+  // c = B^T G^{-1} l and the exact Jacobi diagonal of S, element-locally
+  std::vector<Eigen::VectorXd> cFull(nt);
+  for (size_t a = 0; a < nt; ++a) cFull[a] = Eigen::VectorXd::Zero(fullSize[a]);
+  forEachElement([&](const std::array<size_t, 4> &c) {
+    Eigen::VectorXd lK(nlocT); for (size_t il = 0; il < nlocT; ++il) lK(il) = lFull(testIndex(c, il));
+    const Mat B = elementB(c);
+    Mat BL(nlocT, nlocTrial + 1); BL << B, lK;
+    const Mat X = separableGramSolve(*sep, classOf(c), BL);          // [G^-1 B, G^-1 l]
+    const Eigen::VectorXd cK = B.transpose() * X.col(nlocTrial);
+    const Eigen::VectorXd dK = (B.array() * X.leftCols(nlocTrial).array()).colwise().sum().transpose();
+    for (size_t a = 0; a < nt; ++a)
+      for (size_t il = 0; il < blocks[a].localSize(); ++il)
+      {
+        const long g = globalLinear(a, c, localIndex(blocks[a].nLocal, il));
+        if (g >= 0) { cFull[a](g) += cK(off[a] + il); diag[a](g) += dK(off[a] + il); }
+      }
+  });
+  // --- scaling P ~ D^{-1/2} (rank-one Kronecker fit of log d over the four modes), S~ = P S P
+  std::vector<std::array<Eigen::VectorXd, 4>> pf(nt);
+  for (size_t a = 0; a < nt; ++a)
+  {
+    std::array<size_t, 4> n = blocks[a].global; std::array<size_t, 4> stride{1, n[0], n[0] * n[1], n[0] * n[1] * n[2]};
+    const Eigen::ArrayXd L = diag[a].array().max(1e-300).log(); const double mean = L.mean();
+    for (size_t d = 0; d < 4; ++d)
+    {
+      Eigen::VectorXd e = Eigen::VectorXd::Zero(n[d]);
+      for (Eigen::Index g = 0; g < L.size(); ++g) e((size_t(g) / stride[d]) % n[d]) += L(g);
+      e = e / double(L.size() / n[d]) - Eigen::VectorXd::Constant(n[d], mean);
+      pf[a][d] = (-0.5 * (e.array() + mean / 4.0)).exp().matrix();
+    }
+  }
+  auto scaleMatrix = [&](const TTMatrix &M, size_t a, size_t b) {
+    TTMatrix R = M;
+    for (size_t d = 0; d < 4; ++d)
+    {
+      auto v = R.cores[d].view(); const size_t r0 = R.cores[d].sizes(0), nr = R.cores[d].sizes(1), nc = R.cores[d].sizes(2), r1 = R.cores[d].sizes(3);
+      for (size_t r = 0; r < r1; ++r) for (size_t j = 0; j < nc; ++j) for (size_t i = 0; i < nr; ++i) for (size_t l = 0; l < r0; ++l)
+        v({l, i, j, r}) *= pf[a][d](i) * pf[b][d](j);
+    }
+    return R;
+  };
+  auto scaleVector = [&](const TTVector &x, size_t a) {
+    TTVector y = x;
+    for (size_t d = 0; d < 4; ++d)
+    {
+      auto v = y.cores[d].view(); const size_t r0 = y.cores[d].sizes(0), n = y.cores[d].sizes(1), r1 = y.cores[d].sizes(2);
+      for (size_t r = 0; r < r1; ++r) for (size_t i = 0; i < n; ++i) for (size_t l = 0; l < r0; ++l) v({l, i, r}) *= pf[a][d](i);
+    }
+    return y;
   };
   std::vector<std::pair<size_t, size_t>> pairs;
   for (size_t a = 0; a < nt; ++a) for (size_t b = a; b < nt; ++b) pairs.push_back({a, b});
@@ -257,17 +343,24 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       T[q].assign(total, 0.0);
     }
     const auto te = clock::now();
+    // only the columns of the blocks in this pass
+    std::vector<bool> sel(nt, false); for (const auto &pr : ps) { sel[pr.first] = true; sel[pr.second] = true; }
+    std::vector<size_t> soff(nt + 1, 0); for (size_t a = 0; a < nt; ++a) soff[a + 1] = soff[a] + (sel[a] ? blocks[a].localSize() : 0);
     forEachElement([&](const std::array<size_t, 4> &c) {
-      const Mat B = elementB(c);
+      const Mat B = elementBsel(c, sel);
       const Mat X = separableGramSolve(*sep, classOf(c), B);
-      const Mat SK = B.transpose() * X;
-      if (pass == 0)
-        for (size_t a = 0; a < nt; ++a)
+      // P_K S_K P_K: the TT-SVD then sees O(1) entries on every cell (graded meshes: unscaled entries span orders of
+      // magnitude, and truncation relative to the largest makes the scaled operator indefinite)
+      Eigen::VectorXd pK(soff[nt]);
+      for (size_t a = 0; a < nt; ++a)
+        if (sel[a])
           for (size_t il = 0; il < blocks[a].localSize(); ++il)
           {
-            const long g = globalLinear(a, c, localIndex(blocks[a].nLocal, il));
-            if (g >= 0) diag[a](g) += SK(off[a] + il, off[a] + il);
+            const auto i = localIndex(blocks[a].nLocal, il); double v = 1.0;
+            for (size_t d = 0; d < 4; ++d) { const long k = blocks[a].index(d, c[d], i[d], cells[d]); v = k < 0 ? 0.0 : v * pf[a][d](size_t(k)); }
+            pK(soff[a] + il) = v;
           }
+      const Mat SK = pK.asDiagonal() * (B.transpose() * X) * pK.asDiagonal();
       for (size_t q = 0; q < ps.size(); ++q)
       {
         const auto &A = blocks[ps[q].first], &Bb = blocks[ps[q].second];
@@ -279,7 +372,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
             const auto i = localIndex(A.nLocal, il);
             size_t lin = 0, stride = 1;
             for (size_t d = 0; d < 4; ++d) { lin += (c[d] + cells[d] * (i[d] + A.nLocal[d] * j[d])) * stride; stride *= tn[q][d]; }
-            T[q][lin] = SK(off[ps[q].first] + il, off[ps[q].second] + jl);
+            T[q][lin] = SK(soff[ps[q].first] + il, soff[ps[q].second] + jl);
           }
         }
       }
@@ -319,79 +412,35 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     ++pass;
   }
   std::cout << "explicit_S assembled: " << pass << " passes, element blocks " << tElements << " s, TT-SVD + expansion " << tSvd << " s" << std::endl;
-
-  // --- scaling P ~ D^{-1/2} (rank-one Kronecker fit of log d over the four modes), S~ = P S P
-  std::vector<std::array<Eigen::VectorXd, 4>> pf(nt);
-  for (size_t a = 0; a < nt; ++a)
+  // S holds S~ = P S P already
+  std::vector<std::vector<TTMatrix>> &St = S;
+  // rigorous upper bound: S~ = sum_K R_K^T (P_K S_K P_K) R_K and a trial dof lies in at most m elements (m = 1 for the
+  // field, 2 for a trace), so lambda_max(S~) <= m_max max_K lambda_max(P_K S_K P_K) (exterior trace dofs: P_K = 0)
+  double lmaxBound = 0;
+  if (opt.lambdaMaxMode == "bound")
   {
-    std::array<size_t, 4> n = blocks[a].global; std::array<size_t, 4> stride{1, n[0], n[0] * n[1], n[0] * n[1] * n[2]};
-    const Eigen::ArrayXd L = diag[a].array().max(1e-300).log(); const double mean = L.mean();
-    for (size_t d = 0; d < 4; ++d)
-    {
-      Eigen::VectorXd e = Eigen::VectorXd::Zero(n[d]);
-      for (Eigen::Index g = 0; g < L.size(); ++g) e((size_t(g) / stride[d]) % n[d]) += L(g);
-      e = e / double(L.size() / n[d]) - Eigen::VectorXd::Constant(n[d], mean);
-      pf[a][d] = (-0.5 * (e.array() + mean / 4.0)).exp().matrix();
-    }
+    const auto tbnd = clock::now();
+    forEachElement([&](const std::array<size_t, 4> &c) {
+      const Mat B = elementB(c);
+      const Mat X = separableGramSolve(*sep, classOf(c), B);
+      Eigen::VectorXd pK = Eigen::VectorXd::Zero(nlocTrial);
+      for (size_t a = 0; a < nt; ++a)
+        for (size_t il = 0; il < blocks[a].localSize(); ++il)
+        {
+          const auto i = localIndex(blocks[a].nLocal, il);
+          double pv = 1.0; bool interior = true;
+          for (size_t d = 0; d < 4; ++d) { const long k = blocks[a].index(d, c[d], i[d], cells[d]); if (k < 0) { interior = false; break; } pv *= pf[a][d](size_t(k)); }
+          pK(off[a] + il) = interior ? pv : 0.0;
+        }
+      const Mat SK = pK.asDiagonal() * (B.transpose() * X) * pK.asDiagonal();
+      const double lK = Eigen::SelfAdjointEigenSolver<Mat>(0.5 * (SK + SK.transpose()), Eigen::EigenvaluesOnly).eigenvalues().maxCoeff();
+      lmaxBound = std::max(lmaxBound, lK);
+    });
+    size_t mMax = 1; for (size_t a = 0; a < nt; ++a) if (blocks[a].normal >= 0) mMax = 2;
+    lmaxBound *= double(mMax);
+    std::cout << "explicit_S lambda_max bound " << lmaxBound << " (" << seconds(tbnd) << " s)" << std::endl;
   }
-  auto scaleMatrix = [&](const TTMatrix &M, size_t a, size_t b) {
-    TTMatrix R = M;
-    for (size_t d = 0; d < 4; ++d)
-    {
-      auto v = R.cores[d].view(); const size_t r0 = R.cores[d].sizes(0), nr = R.cores[d].sizes(1), nc = R.cores[d].sizes(2), r1 = R.cores[d].sizes(3);
-      for (size_t r = 0; r < r1; ++r) for (size_t j = 0; j < nc; ++j) for (size_t i = 0; i < nr; ++i) for (size_t l = 0; l < r0; ++l)
-        v({l, i, j, r}) *= pf[a][d](i) * pf[b][d](j);
-    }
-    return R;
-  };
-  auto scaleVector = [&](const TTVector &x, size_t a) {
-    TTVector y = x;
-    for (size_t d = 0; d < 4; ++d)
-    {
-      auto v = y.cores[d].view(); const size_t r0 = y.cores[d].sizes(0), n = y.cores[d].sizes(1), r1 = y.cores[d].sizes(2);
-      for (size_t r = 0; r < r1; ++r) for (size_t i = 0; i < n; ++i) for (size_t l = 0; l < r0; ++l) v({l, i, r}) *= pf[a][d](i);
-    }
-    return y;
-  };
-  std::vector<std::vector<TTMatrix>> St(nt, std::vector<TTMatrix>(nt));
-  for (size_t a = 0; a < nt; ++a) for (size_t b = 0; b < nt; ++b) St[a][b] = scaleMatrix(S[a][b], a, b);
 
-  // --- full vectors <-> four-mode TT
-  auto toFull = [&](const TTVector &v) {
-    auto full = v.decompress(); auto in = full.const_view();
-    const size_t n0 = v.sizes(0), n1 = v.sizes(1), n2 = v.sizes(2), n3 = v.sizes(3);
-    Eigen::VectorXd out(n0 * n1 * n2 * n3);
-    for (size_t i3 = 0; i3 < n3; ++i3) for (size_t i2 = 0; i2 < n2; ++i2) for (size_t i1 = 0; i1 < n1; ++i1) for (size_t i0 = 0; i0 < n0; ++i0)
-      out(i0 + n0 * (i1 + n1 * (i2 + n2 * i3))) = in({i0, i1, i2, i3});
-    return out;
-  };
-  auto toTT = [&](const Eigen::VectorXd &x, const Sizes &n, double tol) {
-    host_tensor<4> t(n); auto out = t.view();
-    for (size_t i3 = 0; i3 < n[3]; ++i3) for (size_t i2 = 0; i2 < n[2]; ++i2) for (size_t i1 = 0; i1 < n[1]; ++i1) for (size_t i0 = 0; i0 < n[0]; ++i0)
-      out({i0, i1, i2, i3}) = x(i0 + n[0] * (i1 + n[1] * (i2 + n[2] * i3)));
-    TTVector r(n); r.svd_tolerance_relative = tol; r.svd_tolerance_absolute = 0.0; r.compress(t); return r;
-  };
-  // element-local gather / scatter of test and trial vectors (four-mode linear index, mode 0 fastest)
-  auto testIndex = [&](const std::array<size_t, 4> &c, size_t il) {
-    const auto i = localIndex(nbT, il); size_t g = 0, stride = 1;
-    for (size_t d = 0; d < 4; ++d) { g += (c[d] * nbT[d] + i[d]) * stride; stride *= cells[d] * nbT[d]; }
-    return g;
-  };
-  const Eigen::VectorXd lFull = toFull(rhs(0));
-  // c = B^T G^{-1} l
-  std::vector<Eigen::VectorXd> cFull(nt);
-  for (size_t a = 0; a < nt; ++a) cFull[a] = Eigen::VectorXd::Zero(fullSize[a]);
-  forEachElement([&](const std::array<size_t, 4> &c) {
-    Eigen::VectorXd lK(nlocT); for (size_t il = 0; il < nlocT; ++il) lK(il) = lFull(testIndex(c, il));
-    const Mat B = elementB(c);
-    const Eigen::VectorXd cK = B.transpose() * separableGramSolve(*sep, classOf(c), lK);
-    for (size_t a = 0; a < nt; ++a)
-      for (size_t il = 0; il < blocks[a].localSize(); ++il)
-      {
-        const long g = globalLinear(a, c, localIndex(blocks[a].nLocal, il));
-        if (g >= 0) cFull[a](g) += cK(off[a] + il);
-      }
-  });
   std::vector<TTVector> ct(nt), x(nt), r(nt), dlt(nt);
   double cNorm2 = 0;
   for (size_t a = 0; a < nt; ++a)
@@ -422,7 +471,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   auto maxRank4 = [](const TTVector &v) { size_t m = 0; for (size_t d = 1; d < 4; ++d) m = std::max(m, v.ranks(d)); return m; };
 
   // --- spectrum bounds by TT Lanczos (CG coefficients)
-  double lmin, lmax;
+  double lmin, lmax, ritzMax = 0;
   {
     const auto tb = clock::now(); const double bt = opt.boundsTolerance;
     std::vector<TTVector> rr = ct, pp = ct; double rz = dot(rr, rr), alphaPrev = 0, betaPrev = 0;
@@ -439,8 +488,64 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     const size_t m = dd.size(); Mat Tm = Mat::Zero(m, m);
     for (size_t i = 0; i < m; ++i) { Tm(i, i) = dd[i]; if (i + 1 < m) Tm(i, i + 1) = Tm(i + 1, i) = ee[i]; }
     const Eigen::VectorXd ritz = Eigen::SelfAdjointEigenSolver<Mat>(Tm).eigenvalues();
-    lmin = ritz(0) * opt.lminSafety; lmax = ritz(m - 1) * 1.05;
-    std::cout << "explicit_S spectrum Ritz [" << ritz(0) << ", " << ritz(m - 1) << "] (" << seconds(tb) << " s); kappa " << lmax / lmin << std::endl;
+    lmin = ritz(0) * opt.lminSafety;
+    lmax = opt.lambdaMaxMode == "bound" ? lmaxBound : ritz(m - 1) * 1.05;
+    ritzMax = ritz(m - 1);
+    std::cout << "explicit_S spectrum Ritz [" << ritz(0) << ", " << ritz(m - 1) << "] (" << seconds(tb) << " s); using ["
+              << lmin << ", " << lmax << "] (upper: element bound; Ritz max / bound " << ritz(m - 1) / lmaxBound << ") kappa "
+              << lmax / lmin << std::endl;
+  }
+
+  // Ifpack2-style deterministic power iteration (TensorTpetraRowMatrixDiagnostics.hpp): start 1 + (global index mod 97),
+  // normalize every step, stop when the estimate changes by less than powerStop; lambda_max = boostFactor x estimate.
+  // Rounded at powerTolerance (tight: the top eigenvectors are high-rank).
+  auto patternStart = [&]() {
+    std::vector<TTVector> v(nt); size_t g0 = 0;
+    for (size_t a = 0; a < nt; ++a)
+    {
+      Eigen::VectorXd full(fullSize[a]);
+      for (size_t g = 0; g < fullSize[a]; ++g) full(g) = 1.0 + double((g0 + g) % 97);
+      g0 += fullSize[a]; v[a] = toTT(full, system.sizes[a + 1], 1e-12);
+    }
+    return v;
+  };
+  auto normOf = [&](const std::vector<TTVector> &v) { return std::sqrt(dot(v, v)); };
+  if (opt.lambdaMaxMode == "power")
+  {
+    const auto tp = clock::now(); const double pt = opt.powerTolerance;
+    auto v = patternStart(); double nv = normOf(v); for (auto &b : v) b *= 1.0 / nv;
+    double est = 0, old = 0; int it = 0;
+    for (it = 1; it <= opt.powerIterations; ++it)
+    {
+      v = applyS(v, pt); nv = normOf(v); old = est; est = nv;
+      for (auto &b : v) b *= 1.0 / nv;
+      if (it > 1 && std::abs(est - old) < opt.powerStop * est) break;
+    }
+    size_t rk = 0; for (const auto &b : v) rk = std::max(rk, maxRank4(b));
+    lmax = opt.boostFactor * est;
+    std::cout << "explicit_S power iteration lambda_max ~ " << est << " after " << std::min(it, opt.powerIterations)
+              << " its (tol " << pt << ", rank " << rk << ", " << seconds(tp) << " s); Lanczos Ritz max " << ritzMax
+              << "; using lambda_max = " << opt.boostFactor << " x " << est << " = " << lmax << ", kappa " << lmax / lmin << std::endl;
+  }
+  if (opt.lambdaMinDiagnosticIterations > 0)
+  {
+    // shifted power iteration: the top eigenvalue of (sigma I - S~), sigma = lmax, is sigma - lambda_min(S~)
+    const auto tm = clock::now(); const double pt = opt.powerTolerance, shift = lmax;
+    auto v = patternStart(); double nv = normOf(v); for (auto &b : v) b *= 1.0 / nv;
+    double est = 0;
+    for (int it = 1; it <= opt.lambdaMinDiagnosticIterations; ++it)
+    {
+      auto Sv = applyS(v, pt);
+      for (size_t a = 0; a < nt; ++a) { auto w = v[a]; w *= shift; Sv[a] *= -1.0; Sv[a] += w; DpgBoba::round(Sv[a], pt); }
+      const double rq = dot(v, Sv);            // Rayleigh quotient of (shift I - S~)
+      est = shift - rq;
+      nv = normOf(Sv); for (size_t a = 0; a < nt; ++a) { v[a] = Sv[a]; v[a] *= 1.0 / nv; }
+      if (it % 10 == 0 || it == opt.lambdaMinDiagnosticIterations)
+        std::cout << "explicit_S lambda_min diagnostic it=" << it << " Rayleigh estimate " << est << " (Lanczos Ritz min "
+                  << lmin / opt.lminSafety << ")" << std::endl;
+    }
+    std::cout << "explicit_S lambda_min diagnostic: " << est << (est < 0 ? "  NEGATIVE: S~ (as rounded) is indefinite" : "")
+              << " (" << seconds(tm) << " s)" << std::endl;
   }
 
   // --- Chebyshev on S~ y = c~
@@ -448,6 +553,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   double rho = 1.0 / sigma;
   for (size_t a = 0; a < nt; ++a) { r[a] = ct[a]; dlt[a] = r[a]; dlt[a] *= 1.0 / theta; DpgBoba::round(dlt[a], tol); }
   std::vector<double> history; const auto loop = clock::now(); double tS = 0;
+  std::vector<TTVector> xBest = x; double best = 1e300; int bestIt = 0; bool diverged = false;
   for (int k = 1; k <= opt.iterations; ++k)
   {
     for (size_t a = 0; a < nt; ++a) { x[a] += dlt[a]; DpgBoba::round(x[a], tol); }
@@ -458,17 +564,26 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     for (size_t a = 0; a < nt; ++a) { dlt[a] *= rhoNew * rho; auto mr = r[a]; mr *= 2.0 * rhoNew / delta; dlt[a] += mr; DpgBoba::round(dlt[a], tol); }
     rho = rhoNew;
     history.push_back(std::sqrt(rn2) / cNorm);
+    // x_k's residual is r_k (computed from the iterate just updated)
+    if (history.back() < best) { best = history.back(); bestIt = k; xBest = x; }
+    diverged = history.back() > 10.0 * best;
     bool stagnated = false;
     if (k >= 50) { const auto split = history.end() - 25; stagnated = *std::min_element(split, history.end()) > 0.9 * *std::min_element(history.begin(), split); }
-    const bool converged = history.back() < opt.rtol || stagnated;
+    const bool converged = history.back() < opt.rtol || stagnated || diverged;
     if (k % opt.every == 0 || k == 1 || converged || k == opt.iterations)
     {
       std::cout << "explicit_S chebyshev it=" << k << " |r|/|c|=" << history.back() << " rank(x)=";
       for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(x[a]);
       std::cout << " rank(Sx)=" << maxRank4(Sx[0]) << " seconds=" << seconds(loop) << " [S " << tS << "]" << std::endl;
     }
-    if (converged) { std::cout << "explicit_S chebyshev " << (stagnated ? "stagnated" : "converged") << " it=" << k << std::endl; break; }
+    if (converged)
+    {
+      std::cout << "explicit_S chebyshev " << (diverged ? "diverging" : stagnated ? "stagnated" : "converged") << " it=" << k
+                << " (best |r|/|c|=" << best << " at it " << bestIt << ")" << std::endl;
+      break;
+    }
   }
+  x = xBest;   // the best iterate (a stagnating or diverging tail does not improve it)
 
   // --- solution: x = P y; eps = G^{-1}(l - B x) element-locally
   BlockVector solution(system.names.size());

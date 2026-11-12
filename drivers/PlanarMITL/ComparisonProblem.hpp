@@ -43,6 +43,8 @@ struct ComparisonProblem
   double chebJacobiTolerance = 0;
   bool chebScaled = true, chebZipUp = false, chebStructuredField = true;
   bool explicitSchur = false; double explicitSchurTolerance = 1e-6;
+  std::string explicitSchurLambdaMax = "power"; int explicitSchurPowerIterations = 20, explicitSchurLambdaMinIterations = 0;
+  double explicitSchurPowerTolerance = 1e-6, explicitSchurBoost = 1.1;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
@@ -136,6 +138,12 @@ struct ComparisonProblem
                   "Tensor backend (N5 only): form S = B^T G^-1 B once as a four-mode TT matrix and run Chebyshev on the trial "
                   "space (chebTolerance: iterate rounding; chebRtol, chebIterations, chebEvery, chebBounds*, chebLminSafety)");
     cmd.setOption("explicitSchurTolerance", &explicitSchurTolerance, "Explicit Schur: TT-SVD / rounding tolerance of the S blocks");
+    cmd.setOption("explicitSchurLambdaMax", &explicitSchurLambdaMax, "Explicit Schur lambda_max: power (Ifpack2-style), bound, or lanczos");
+    cmd.setOption("explicitSchurPowerIterations", &explicitSchurPowerIterations, "Explicit Schur: power iterations for lambda_max");
+    cmd.setOption("explicitSchurPowerTolerance", &explicitSchurPowerTolerance, "Explicit Schur: TT rounding tolerance of the power iteration");
+    cmd.setOption("explicitSchurBoost", &explicitSchurBoost, "Explicit Schur: lambda_max boost factor (Ifpack2 default 1.1)");
+    cmd.setOption("explicitSchurLambdaMinIterations", &explicitSchurLambdaMinIterations,
+                  "Explicit Schur: > 0: diagnostic shifted power iteration for lambda_min of the rounded S~");
     cmd.setOption("chebZipUp", "no-chebZipUp", &chebZipUp, "Chebyshev: apply the TT blocks B_j, B_j^T by zip-up (core-by-core truncation)");
     cmd.setOption("chebIterations", &chebIterations); cmd.setOption("chebEvery", &chebEvery);
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");

@@ -333,6 +333,9 @@ inline int runTensorComparison(int argc, char **argv)
     ex.sTolerance = problem.explicitSchurTolerance; ex.tolerance = problem.chebTolerance; ex.rtol = problem.chebRtol;
     ex.iterations = problem.chebIterations; ex.every = problem.chebEvery; ex.boundsSteps = problem.chebBoundsSteps;
     ex.boundsTolerance = problem.chebBoundsTolerance; ex.lminSafety = problem.chebLminSafety;
+    ex.lambdaMaxMode = problem.explicitSchurLambdaMax; ex.powerIterations = problem.explicitSchurPowerIterations;
+    ex.powerTolerance = problem.explicitSchurPowerTolerance; ex.boostFactor = problem.explicitSchurBoost;
+    ex.lambdaMinDiagnosticIterations = problem.explicitSchurLambdaMinIterations;
     solution = solveExplicitSchur(system,rhs,axes,h,problem.qOverM,problem.Ex,problem.By,ex,norm);
   }
   else if (problem.schurChebyshev)
