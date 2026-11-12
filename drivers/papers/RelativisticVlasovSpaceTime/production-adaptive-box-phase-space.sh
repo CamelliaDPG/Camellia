@@ -16,6 +16,8 @@
 #   - --useAdaptivity: each slab is solved, the cells carrying the most energy error are marked, and each marked cell is
 #     bisected only in the directions in which f is least resolved on it (--boxAnisotropicAdaptivity).  To resolve the
 #     inflow and initial data, cells are bisected only tangentially to the boundary carrying the data.
+#   - hp (HP=1, the default): the phase-space mesh starts piecewise constant; cells are bisected until they reach the
+#     minimum widths HPMIN in the chosen directions, then raised in order, up to H1 order 4 (as production).
 #
 # REQUIRES the latest Camellia branch anisotropic-refinement (github.com/CamelliaDPG/Camellia), the
 # Intrepid2 of trilinos/Trilinos PR 15871 (b93efd4b798), a Trilinos with SuperLU_DIST (for --coarseSolver), and a
@@ -58,6 +60,12 @@
 #   DOERFLER  if set (e.g. 0.5), use Doerfler marking with this target instead of THRESH
 #   ANISO   direction selection: bisect in direction k if its indicator is at least this fraction of the largest
 #           direction's (default 0.5).  0 bisects every marked cell in all four directions; near 1, only in the worst.
+#   HP      1 (default): hp-adaptivity (--hpAdaptivity).  The phase-space mesh starts at H1 order HP0 and a marked cell
+#           is bisected in its chosen directions while half its width there is at least HPMIN, else raised one order,
+#           up to the --p below (4); neighbours' orders stay within one.  0: h-adaptivity at order 4 throughout.
+#   HP0     starting H1 order with HP=1                              (default 1: f piecewise constant)
+#   HPMIN   minimum widths x,t,u_x,u_z in computational units        (default 0.0025,0.0125,0.025,0.025: half the
+#           production run's finest widths -- about 0.005 in x at the cathode, 0.05 in t, 0.05 in the velocity core)
 #   MAXDOFS a slab stops refining once its phase-space mesh has at least this many dofs (default -1: no limit).  The
 #           solve on the mesh that reaches it is the slab's last.  The last step can nearly double the mesh (421 k ->
 #           783 k dofs on slab 0 of the first full run), so set it below the size you can afford.
@@ -78,12 +86,16 @@ THRESH=${THRESH:-0.3}
 ANISO=${ANISO:-0.5}
 TARGET=${TARGET:-0.02}
 MAXDOFS=${MAXDOFS:--1}
+HP=${HP:-1}
+HP0=${HP0:-1}
+HPMIN=${HPMIN:-0.0025,0.0125,0.025,0.025}
+if [ "$HP" = 1 ]; then HPOPTS="--hpAdaptivity --hpInitialH1Order=$HP0 --hpMinWidths=$HPMIN"; HPTAG=-hp$HP0; else HPOPTS=""; HPTAG=""; fi
 BCTOL=${BCTOL:-0.1}
 DP=${DP:-2}
 NP=${NP:-16}
 SLABS=${SLABS:-60}; SAMPLED=${SAMPLED:-0,1,2,3,5,7,10,15,20,30,40,50,59}
 PROD=${PROD:-/private/viz/nov2026/mitl/production-scl-graph-transport-a1.8-x32-dp2-phase/console.log}
-OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-dp$DP-ref$REF0-$REF-phase
+OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-dp$DP-ref$REF0-$REF$HPTAG-phase
 if [ "${CHECK:-0}" = 1 ]; then SLABS=3; SAMPLED=0,2; OUT=$OUT-check; fi
 X=./drivers/papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime
 SRC=$(grep -m1 "^CMAKE_HOME_DIRECTORY" CMakeCache.txt | cut -d= -f2)
@@ -91,8 +103,8 @@ PLOT=$SRC/drivers/papers/RelativisticVlasovSpaceTime/plot_phase_space.py
 
 # (the driver prints its help to stderr, and exits nonzero after printing it)
 if [ ! -x $X ]; then echo "$X not found: run this from the Camellia build directory."; exit 1; fi
-if ! $X --help 2>&1 | grep -q -- "--maxVlasovDofs"; then
-  echo "This build of PlanarMITLRelativisticSpaceTime has no --maxVlasovDofs: rebuild it from the latest anisotropic-refinement branch."; exit 1
+if ! $X --help 2>&1 | grep -q -- "--hpAdaptivity"; then
+  echo "This build of PlanarMITLRelativisticSpaceTime has no --hpAdaptivity: rebuild it from the latest anisotropic-refinement branch."; exit 1
 fi
 
 if [ -n "$DOERFLER" ]; then MARKING="--doerflerTarget=$DOERFLER"; else MARKING="--refinementThreshold=$THRESH"; fi
@@ -106,7 +118,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --useSerendipityBasis --coarseSolver=SuperLUDist --accuracyDiagnostics --densityDiagnostic \
   --useGraphTestNorm --L2WeightGraph=1e2 --L2WeightGraphTransportScale=1.6 --L2WeightGraphAccelerationBounds=1.8,0.65 \
   --phaseSpaceDiagnostic --phaseSpaceDiagnosticSlabs=$SAMPLED \
-  --useBoxMesh --useAdaptivity --boxAnisotropicAdaptivity --boxAnisotropyThreshold=$ANISO \
+  --useBoxMesh --useAdaptivity --boxAnisotropicAdaptivity --boxAnisotropyThreshold=$ANISO $HPOPTS \
   --maxRefinementsFirstSlab=$REF0 --maxRefinements=$REF --maxRefinementsFinalSlab=$REF \
   --relErrorTarget=$TARGET --maxVlasovDofs=$MAXDOFS $MARKING --bcResolutionTolerance=$BCTOL \
   --outputDir=$OUT --phase0Instrumentation --phase0TimingFile=$OUT/timing.txt --timeMonitorSummary \
@@ -115,7 +127,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS BCTOL=$BCTOL DP=$DP NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN BCTOL=$BCTOL DP=$DP NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \
@@ -124,6 +136,11 @@ grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov
                for (s=0; s in t; s++) { printf "  slab %3d  %7d elements  %9.1f s\n", s, e[s], t[s]; total += t[s] }
                printf "  all slabs: %.0f s = %.2f h of slab solves\n", total, total/3600 }'
 echo
+if [ "$HP" = 1 ]; then
+  echo "hp decisions per refinement step:"
+  grep "^hp: " $LOG | sed 's/^/  /'
+  echo
+fi
 echo "relative energy error after each refinement step:"
 grep -E "solution after refinement [0-9]+: relative error|After re-solve, relative error" $LOG | sed 's/^/  /'
 echo
