@@ -45,6 +45,7 @@ struct ComparisonProblem
   bool explicitSchur = false; double explicitSchurTolerance = 1e-6;
   std::string explicitSchurLambdaMax = "power"; int explicitSchurPowerIterations = 20, explicitSchurLambdaMinIterations = 0;
   double explicitSchurPowerTolerance = 1e-6, explicitSchurBoost = 1.1;
+  std::string explicitSchurSolver = "chebyshev";
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
@@ -142,6 +143,9 @@ struct ComparisonProblem
     cmd.setOption("explicitSchurPowerIterations", &explicitSchurPowerIterations, "Explicit Schur: power iterations for lambda_max");
     cmd.setOption("explicitSchurPowerTolerance", &explicitSchurPowerTolerance, "Explicit Schur: TT rounding tolerance of the power iteration");
     cmd.setOption("explicitSchurBoost", &explicitSchurBoost, "Explicit Schur: lambda_max boost factor (Ifpack2 default 1.1)");
+    cmd.setOption("explicitSchurSolver", &explicitSchurSolver,
+                  "Explicit Schur solver: chebyshev, or amen (block AMEn on S~ with --tolerance, --chebTolerance as the local "
+                  "SVD tolerance, --kickrank, --maxRank, --maxSweeps, --localSolver; --splitAxes for the (basis, cell) split)");
     cmd.setOption("explicitSchurLambdaMinIterations", &explicitSchurLambdaMinIterations,
                   "Explicit Schur: > 0: diagnostic shifted power iteration for lambda_min of the rounded S~");
     cmd.setOption("chebZipUp", "no-chebZipUp", &chebZipUp, "Chebyshev: apply the TT blocks B_j, B_j^T by zip-up (core-by-core truncation)");

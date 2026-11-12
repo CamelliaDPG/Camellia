@@ -28,6 +28,10 @@ struct AmenOptions
   double rieszTolerance = 0.0;
   // Sparse-LU site solves (localSolver 5, 6): sites above this fill use a dense solve; > 1 never.
   double denseFillThreshold = 1.1;
+  // Row scaling of the coupled site systems (BoBa scale_coupled_site_system).  Off for systems that are already
+  // well scaled (the Jacobi-scaled explicit Schur complement): with the matrix-free site solve the row norms cost
+  // (operator rank)^4 x rows x cols per block pair and site, every sweep.
+  bool scaleSites = true;
 };
 
 template <class Tensor>
@@ -116,6 +120,7 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.verbose = options.verbose;
   solver.inf_sup_enrichment_block = options.infSupEnrichment ? 0 : -1;
   solver.coupled_site_dense_fill_threshold = options.denseFillThreshold;
+  solver.scale_coupled_site_system = options.scaleSites;
   if (options.rieszTolerance > 0) { solver.local_solution_svd_tolerance_relative_per_block = {options.rieszTolerance}; }
   std::mt19937 generator(options.seed);
   return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator);

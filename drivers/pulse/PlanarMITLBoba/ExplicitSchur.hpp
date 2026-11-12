@@ -30,6 +30,11 @@ struct ExplicitSchurOptions
   std::string lambdaMaxMode = "power";
   int powerIterations = 20; double powerTolerance = 1e-6, powerStop = 1e-3, boostFactor = 1.1;
   int lambdaMinDiagnosticIterations = 0;   // > 0: shifted power iteration on (lambda_max I - S~) for lambda_min
+  // solver for S~ y = c~: "chebyshev" (above) or "amen" (block AMEn on the SPD trial-space system, optionally with the
+  // (basis, cell) mode split of solveSplitAxes)
+  std::string solver = "chebyshev";
+  DpgBoba::AmenOptions amen;
+  std::array<bool, 4> split{false, false, false, false};
 };
 
 namespace ExplicitSchurDetail
@@ -446,6 +451,9 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   for (size_t a = 0; a < nt; ++a)
   {
     ct[a] = scaleVector(toTT(cFull[a], system.sizes[a + 1], 1e-12), a);
+    std::cout << "explicit_S rhs block " << system.names[a + 1] << " ranks (1e-12)=" << ct[a].ranks_string();
+    { TTVector cr = ct[a]; DpgBoba::round(cr, 1e-6); std::cout << " (1e-6)=" << cr.ranks_string(); }
+    { TTVector cr = ct[a]; DpgBoba::round(cr, 1e-4); std::cout << " (1e-4)=" << cr.ranks_string() << std::endl; }
     cNorm2 += std::pow(boba::norm_frobenius(ct[a]), 2);
     x[a] = zero_tt_vector<4>(system.sizes[a + 1]);
   }
@@ -470,6 +478,32 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   auto dot = [&](const std::vector<TTVector> &u, const std::vector<TTVector> &v) { double s = 0; for (size_t a = 0; a < nt; ++a) s += u[a].inner_product(v[a]); return s; };
   auto maxRank4 = [](const TTVector &v) { size_t m = 0; for (size_t d = 1; d < 4; ++d) m = std::max(m, v.ranks(d)); return m; };
 
+  if (opt.solver == "amen")
+  {
+    // block AMEn on S~ y = c~ (SPD, trial blocks only)
+    const auto ta = clock::now();
+    System sysS;
+    sysS.matrix = BlockMatrix(nt, nt);
+    for (size_t a = 0; a < nt; ++a) for (size_t b = 0; b < nt; ++b) sysS.matrix({a, b}) = St[a][b];
+    for (size_t a = 0; a < nt; ++a) { sysS.names.push_back(system.names[a + 1]); sysS.sizes.push_back(system.sizes[a + 1]); }
+    BlockVector rhsS(nt); for (size_t a = 0; a < nt; ++a) { rhsS(a) = ct[a]; DpgBoba::round(rhsS(a), 0.1 * opt.amen.roundingTolerance); }
+    const bool anySplit = opt.split[0] || opt.split[1] || opt.split[2] || opt.split[3];
+    BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
+                              : DpgBoba::solveAmen(sysS.matrix, rhsS, opt.amen);
+    double rn2 = 0;
+    for (size_t a = 0; a < nt; ++a)
+    {
+      x[a] = yS(a);
+      TTVector ra = ct[a];
+      for (size_t b = 0; b < nt; ++b) { TTVector t = St[a][b] * yS(b); DpgBoba::round(t, 1e-10); ra -= t; DpgBoba::round(ra, 1e-10); }
+      rn2 += std::pow(boba::norm_frobenius(ra), 2);
+    }
+    std::cout << "explicit_S amen |r~|/|c~|=" << std::sqrt(rn2) / cNorm << " rank(y)=";
+    for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(x[a]);
+    std::cout << " split=" << opt.split[0] << opt.split[1] << opt.split[2] << opt.split[3] << " seconds=" << seconds(ta) << std::endl;
+  }
+  else
+  {
   // --- spectrum bounds by TT Lanczos (CG coefficients)
   double lmin, lmax, ritzMax = 0;
   {
@@ -584,6 +618,8 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     }
   }
   x = xBest;   // the best iterate (a stagnating or diverging tail does not improve it)
+
+  }
 
   // --- solution: x = P y; eps = G^{-1}(l - B x) element-locally
   BlockVector solution(system.names.size());
