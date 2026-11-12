@@ -6,6 +6,7 @@
 #include "BoxMeshTopology.h"
 #include "GMGSolver.h"
 #include "MeshFactory.h"
+#include "RefinementStrategy.h"
 #include "Solution.h"
 #include "SpatialFilter.h"
 #include "VarFactory.h"
@@ -426,3 +427,44 @@ TEUCHOS_UNIT_TEST( BoxHP, SolveAfterHPRefinement )
     TEST_COMPARE(error->l2norm(mesh), <, 1e-8);
   }
 }
+
+TEUCHOS_UNIT_TEST( BoxHP, SaturatedCellsAreNotMarked )
+{
+  // cells at the minimum width in their chosen directions and at the maximum order are reported saturated, and a
+  // refinement strategy told so marks the worst of the others instead
+  const int dim = 2;
+  Convection form(dim);
+  auto uExact = [](const double *x) { return std::sin(4 * x[0]) * std::exp(x[1]); };
+  vector<double> beta = form.beta;
+  auto f = [beta](const double *x) { return beta[0] * 4 * std::cos(4 * x[0]) * std::exp(x[1]) + beta[1] * std::sin(4 * x[0]) * std::exp(x[1]); };
+  auto topology = Teuchos::rcp(new BoxMeshTopology({{0.0, 0.25, 0.5, 0.75, 1.0}, {0.0, 0.5, 1.0}}));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 2, 1);
+  BCPtr bc = form.inflowBC(topology, uExact);
+  SolutionPtr solution = Solution::solution(form.bf, mesh, bc, form.rhs(f), form.bf->graphNorm());
+  solution->solve();
+
+  // x widths 0.25, y widths 0.5; minimum widths 0.2: no cell may be bisected in x, every cell in y
+  const vector<double> minWidths = {0.2, 0.2};
+  const int maxH1Order = 2;
+  std::map<GlobalIndexType,unsigned> xOnly, yOnly;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal()) { xOnly[cellID] = 1u; yOnly[cellID] = 2u; }
+  TEST_EQUALITY(BoxGDA::hpSaturatedCells(mesh, xOnly, minWidths, maxH1Order).size(), xOnly.size());
+  TEST_EQUALITY(BoxGDA::hpSaturatedCells(mesh, yOnly, minWidths, maxH1Order).size(), 0);
+  TEST_EQUALITY(BoxGDA::hpSaturatedCells(mesh, xOnly, minWidths, maxH1Order + 1).size(), 0); // may still be raised
+
+  // a greedy strategy marking cells within 1% of the largest error, told that all but one cell are saturated, marks
+  // that one: the threshold is relative to the largest error among the cells that may be refined
+  const GlobalIndexType onlyEligible = *mesh->getActiveCellIDsGlobal().rbegin();
+  auto refStrategy = Teuchos::rcp(new RefinementStrategy(solution, 0.99));
+  std::vector<GlobalIndexType> marked;
+  refStrategy->setCellRefiner([&marked](std::vector<GlobalIndexType> &cellIDs) { marked = cellIDs; return 0; });
+  refStrategy->setIneligibleCells([&]() {
+    std::set<GlobalIndexType> ineligible = mesh->getActiveCellIDsGlobal();
+    ineligible.erase(onlyEligible);
+    return ineligible;
+  });
+  refStrategy->refine(false);
+  TEST_EQUALITY(marked.size(), 1);
+  if (marked.size() == 1) TEST_EQUALITY(marked[0], onlyEligible);
+}
+

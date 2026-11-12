@@ -1482,6 +1482,40 @@ std::map<GlobalIndexType,unsigned> BoxGDA::masksTangentialToTaggedSides(MeshPtr 
 
 // ---------------------------------------------------------------- hp-refinement
 
+namespace
+{
+  //! the directions in the mask in which half the cell's width is at least the minimum width
+  unsigned bisectableDirections(const BoxMeshTopology *topology, GlobalIndexType cellID, unsigned mask, const std::vector<double> &minWidths)
+  {
+    const BoxMeshTopology::Extents extents = topology->cellExtents(cellID);
+    unsigned hMask = 0;
+    for (int k=0; k<int(extents.size()); k++)
+    {
+      if (!(mask & (1u << k))) continue;
+      const double halfWidth = 0.5 * (extents[k].second - extents[k].first);
+      if (halfWidth >= minWidths[k] * (1 - 1e-12)) hMask |= (1u << k);
+    }
+    return hMask;
+  }
+}
+
+std::set<GlobalIndexType> BoxGDA::hpSaturatedCells(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
+                                                   const std::vector<double> &minWidths, int maxH1Order)
+{
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  TEUCHOS_TEST_FOR_EXCEPTION(int(minWidths.size()) != int(topology->getDimension()), std::invalid_argument, "minWidths needs one entry per direction");
+  std::set<GlobalIndexType> saturated;
+  for (const auto &[cellID, mask] : directionMasks)
+  {
+    if ((bisectableDirections(topology, cellID, mask, minWidths) == 0) && (mesh->globalDofAssignment()->getH1Order(cellID)[0] >= maxH1Order))
+    {
+      saturated.insert(cellID);
+    }
+  }
+  return saturated;
+}
+
 BoxGDA::HPRefinements BoxGDA::hpRefinements(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
                                             const std::vector<double> &minWidths, int maxH1Order)
 {
@@ -1497,14 +1531,7 @@ BoxGDA::HPRefinements BoxGDA::hpRefinements(MeshPtr mesh, const std::map<GlobalI
   std::map<GlobalIndexType,int> targetOrder; // cells to raise, with their new orders
   for (const auto &[cellID, mask] : directionMasks)
   {
-    const BoxMeshTopology::Extents extents = topology->cellExtents(cellID);
-    unsigned hMask = 0;
-    for (int k=0; k<dim; k++)
-    {
-      if (!(mask & (1u << k))) continue;
-      const double halfWidth = 0.5 * (extents[k].second - extents[k].first);
-      if (halfWidth >= minWidths[k] * (1 - 1e-12)) hMask |= (1u << k);
-    }
+    const unsigned hMask = bisectableDirections(topology, cellID, mask, minWidths);
     if (hMask != 0) refinements.hMasks[cellID] = hMask;
     else if (order(cellID) < maxH1Order) targetOrder[cellID] = order(cellID) + 1;
   }

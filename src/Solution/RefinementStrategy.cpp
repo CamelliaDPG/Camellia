@@ -387,7 +387,7 @@ void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalInde
   // measure error
   _errorIndicator->measureError();
   
-  double maxError = _errorIndicator->maxError();
+  double maxError = _errorIndicator->maxError(localCellsToExclude); // the largest error among the cells that may be refined
   double errorThreshold = maxError * _relativeErrorThreshold;
   
   vector<GlobalIndexType> cellsAboveThreshold;
@@ -480,6 +480,13 @@ std::set<GlobalIndexType> TRefinementStrategy<Scalar>::localCellsIneligibleForRe
     if (!canHRefine && !canPRefine)
     {
       localCellsToExcludeFromRefinement.insert(cellID);
+    }
+  }
+  if (_ineligibleCells)
+  {
+    for (GlobalIndexType cellID : _ineligibleCells())
+    {
+      if (myCellIDs.find(cellID) != myCellIDs.end()) localCellsToExcludeFromRefinement.insert(cellID);
     }
   }
   return localCellsToExcludeFromRefinement;

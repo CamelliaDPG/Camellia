@@ -48,6 +48,7 @@ protected:
   int _maxElementCount = std::numeric_limits<int>::max();
   bool _enforceOneIrregularity;
   std::function<int(std::vector<GlobalIndexType> &cellIDs)> _cellRefiner; // optional; see setCellRefiner()
+  std::function<std::set<GlobalIndexType>()> _ineligibleCells;           // optional; see setIneligibleCells()
   bool _reportPerCellErrors;
   vector< RefinementResults > _results;
   double _min_h;
@@ -96,6 +97,11 @@ public:
   //! refines the cells it is given (without repartitioning) and returns the number refined.  Use it e.g. to refine
   //! box meshes in directions chosen per cell (BoxGDA::anisotropicRefinementMasks()).
   void setCellRefiner(std::function<int(std::vector<GlobalIndexType> &cellIDs)> cellRefiner) { _cellRefiner = cellRefiner; }
+
+  //! If set, called (on every rank) each time cells are marked; the rank-local cells it returns are excluded from
+  //! marking, as cells at the minimum h and maximum p are.  Use it with a cell refiner whose limits the strategy does
+  //! not know (e.g. hp-refinement with a minimum width per direction, BoxGDA::hpRefinements()).
+  void setIneligibleCells(std::function<std::set<GlobalIndexType>()> ineligibleCells) { _ineligibleCells = ineligibleCells; }
   
   //! request to unrefine the specified cells; the return value indicates the number of cells that were refined (may be different than the number requested, depending on a subclass's implementation).
   virtual int unrefineCells(const std::set<GlobalIndexType> &cellIDs);

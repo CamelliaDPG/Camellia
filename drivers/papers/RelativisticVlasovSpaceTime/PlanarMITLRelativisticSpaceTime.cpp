@@ -1194,6 +1194,20 @@ static bool   s_hpAdaptivity             = false; // h until a minimum width, th
 static std::vector<double> s_hpMinWidths;         // per direction (x, t, u_x, u_z), computational units
 static int    s_hpMaxH1Order             = 0;
 
+//! With --hpAdaptivity: the cells that refinement in the directions chosen by masksForCells could no longer change (at
+//! the minimum width in those directions and the maximum order), so that marking passes over them.  Collective.
+static std::set<GlobalIndexType> hpSaturatedCells(MeshPtr mesh, std::function<std::map<GlobalIndexType,unsigned>(const std::vector<GlobalIndexType> &)> masksForCells)
+{
+  const std::set<GlobalIndexType> activeCells = mesh->getActiveCellIDsGlobal(); // (returned by value: keep one copy)
+  const std::vector<GlobalIndexType> cells(activeCells.begin(), activeCells.end());
+  std::set<GlobalIndexType> saturated = BoxGDA::hpSaturatedCells(mesh, masksForCells(cells), s_hpMinWidths, s_hpMaxH1Order);
+  if ((mesh->Comm()->getRank() == 0) && !saturated.empty())
+  {
+    std::cout << "hp: " << saturated.size() << " of " << cells.size() << " cells at the minimum width and the maximum order; not marked\n";
+  }
+  return saturated;
+}
+
 //! Applies refinement directions chosen for marked cells: as hp-refinements with --hpAdaptivity, else as bisections.
 static void refineInDirections(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &masks)
 {
@@ -1259,6 +1273,12 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
         refineInDirections(mesh, BoxGDA::masksTangentialToTaggedSides(mesh, tagName, bcTag, cellIDs));
         return static_cast<int>(cellIDs.size());
       });
+      if (s_hpAdaptivity)
+      {
+        refStrategy->setIneligibleCells([mesh, tagName, bcTag]() {
+          return hpSaturatedCells(mesh, [&](const std::vector<GlobalIndexType> &cells) { return BoxGDA::masksTangentialToTaggedSides(mesh, tagName, bcTag, cells); });
+        });
+      }
     }
     
     double bc_norm = (bcFxnExact * bcRestriction)->l2norm(mesh, quadratureEnrichment);
@@ -2927,6 +2947,14 @@ int main(int argc, char *argv[])
             refineInDirections(vlasovMesh, BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cellIDs, anisotropyThreshold));
             return static_cast<int>(cellIDs.size());
           });
+          if (s_hpAdaptivity)
+          {
+            refStrategy->setIneligibleCells([vlasovMesh, fSolution, anisotropyThreshold]() {
+              return hpSaturatedCells(vlasovMesh, [&](const std::vector<GlobalIndexType> &cells) {
+                return BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cells, anisotropyThreshold);
+              });
+            });
+          }
         }
         
         double energyError;

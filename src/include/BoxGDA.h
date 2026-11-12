@@ -204,6 +204,10 @@ namespace Camellia
     //! The order increments that raise the given cells to (at least) the given orders, together with those that raise
     //! other cells, transitively, so that face neighbours' orders differ by at most one.  No communication.
     static std::map<GlobalIndexType,int> orderIncrementsWithHalo(MeshPtr mesh, std::map<GlobalIndexType,int> targetOrders);
+    //! The given cells that hpRefinements() would leave alone if marked with the given directions: at the minimum width
+    //! in every one of them, and at maxH1Order.  No communication.
+    static std::set<GlobalIndexType> hpSaturatedCells(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
+                                                      const std::vector<double> &minWidths, int maxH1Order);
     //! Applies hpRefinements(): the p-refinements, then the h-refinements (whose children inherit the new orders).
     static void hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repartitionAndRebuild = true);
 
