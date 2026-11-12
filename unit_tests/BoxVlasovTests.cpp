@@ -10,6 +10,8 @@
 #include "SpatialFilter.h"
 
 #include <cmath>
+#include <iostream>
+#include <sstream>
 
 using namespace Camellia;
 using namespace std;
@@ -36,12 +38,12 @@ namespace
   };
 
   Problem problem(bool boxMesh, int xElements, int vxElements, int vyElements, int H1Order, FunctionPtr f0, double q = Q, int tElements = 1,
-                  EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL)
+                  EBasisFamily basisFamily = BASIS_FAMILY_HIERARCHICAL, double tWidth = TWIDTH)
   {
     UseBoxMesh useBoxMesh(boxMesh);
     const int delta_k = 1, numUniformRefinements = 0;
     auto spatialMeshTopo = MeshFactory::intervalMeshTopology(X0, X0 + XWIDTH, xElements, false);
-    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(T0, TWIDTH, tElements);
+    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(T0, tWidth, tElements);
     std::vector<double> velocityVertices_x = MeshTools::verticesFor1DIntervalMesh(V0, VWIDTH, vxElements);
     std::vector<double> velocityVertices_y = MeshTools::verticesFor1DIntervalMesh(V0, VWIDTH, vyElements);
     std::vector<double> velocityVertices_z;
@@ -228,6 +230,50 @@ TEUCHOS_UNIT_TEST( BoxVlasov, SingleDirectionSpaceTimeRefinement )
   // t only, for a cell over the second configuration cell
   vlasovMesh->hRefine(std::map<GlobalIndexType,unsigned>{{cells.back(), 2u}});
   TEST_EQUALITY(configMesh->numActiveElements(), 8);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, ConfigurationLookupIsQuiet )
+{
+  // A phase-space cell whose configuration cell has been refined further: the centroid of its projection is a vertex
+  // shared by all the children of that configuration cell.  Looking it up must not go through MeshTopology's point
+  // search, which then finds the parent but none of its children and prints a long diagnostic each time.
+  const int xElements = 2, vxElements = 2, vyElements = 1, H1Order = 2;
+  // (a slab width that is not dyadic, as in the MITL driver, so that refined t coordinates are rounded)
+  Problem box = problem(true, xElements, vxElements, vyElements, H1Order, Function::constant(1.0), Q, 1, BASIS_FAMILY_HIERARCHICAL, 0.1);
+  auto vlasovMesh = box.form->vlasovMesh();
+  auto topology = dynamic_cast<BoxMeshTopology*>(vlasovMesh->getTopology().get());
+  const std::set<GlobalIndexType> activeCellSet = vlasovMesh->getActiveCellIDsGlobal();
+  std::vector<GlobalIndexType> cells(activeCellSet.begin(), activeCellSet.end());
+  // refining one cell in x and t twice refines the configuration cell beneath it twice; the other cells over it are unrefined
+  vlasovMesh->hRefine(std::map<GlobalIndexType,unsigned>{{cells.front(), 1u | 2u}});
+  const GlobalIndexType child = topology->getCell(cells.front())->getChildIndices(vlasovMesh->getTopology())[0];
+  vlasovMesh->hRefine(std::map<GlobalIndexType,unsigned>{{child, 1u | 2u}});
+
+  std::ostringstream captured;
+  std::streambuf* previous = std::cout.rdbuf(captured.rdbuf());
+  std::map<GlobalIndexType,std::pair<IndexType,size_t>> lookups;
+  for (GlobalIndexType cellID : vlasovMesh->getActiveCellIDsGlobal())
+  {
+    lookups[cellID] = {topology->phaseSpaceConfigurationCellID(cellID), topology->phaseSpaceActiveConfigurationCells(cellID).size()};
+  }
+  std::cout.rdbuf(previous);
+  TEST_EQUALITY(captured.str(), "");
+
+  int cellsOverSevenConfigurationCells = 0;
+  for (const auto &entry : lookups)
+  {
+    TEST_ASSERT(entry.second.first != IndexType(-1)); // all cells are refined isotropically in (x, t)
+    // each cell's configuration cell, at its level, has the same extents in (x, t) as the cell
+    const auto cellExtents = topology->cellExtents(entry.first);
+    const auto configurationExtents = topology->configurationCellExtents(entry.second.first);
+    for (int k=0; k<2; k++)
+    {
+      TEST_FLOATING_EQUALITY(configurationExtents[k].first + 1.0, cellExtents[k].first + 1.0, 1e-14);
+      TEST_FLOATING_EQUALITY(configurationExtents[k].second, cellExtents[k].second, 1e-14);
+    }
+    if (entry.second.second == 7) cellsOverSevenConfigurationCells++; // 3 children + 4 grandchildren
+  }
+  TEST_EQUALITY(cellsOverSevenConfigurationCells, 1); // the unrefined sibling of cells.front() in velocity
 }
 
 TEUCHOS_UNIT_TEST( BoxVlasov, FieldExtrusionOnUnmatchedCells )

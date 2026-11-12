@@ -79,6 +79,8 @@ namespace Camellia
     mutable std::map<IndexType,IndexType> _configurationCellForCell;
 
     CellPtr createCell(IndexType cellIndex);
+    //! The configuration cell containing the projection (configuration extents) that is smallest, or at level maxLevel
+    CellPtr configurationCellContaining(const Extents &projection, int maxLevel) const;
   public:
     /**
      \param rootVertices  for each direction, the vertex coordinates of the Cartesian root grid

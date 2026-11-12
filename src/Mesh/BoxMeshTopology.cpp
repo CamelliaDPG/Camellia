@@ -7,6 +7,8 @@
 
 #include "BoxMeshTopology.h"
 
+#include <limits>
+
 #include "CamelliaCellTools.h"
 #include "MeshTopology.h"
 #include "PeriodicBC.h"
@@ -443,6 +445,48 @@ BoxMeshTopology::Extents BoxMeshTopology::configurationCellExtents(IndexType con
   return extents;
 }
 
+CellPtr BoxMeshTopology::configurationCellContaining(const Extents &projection, int maxLevel) const
+{
+  // Descend the configuration tree by comparing extents.  (Locating a point instead is fragile: the centroid of a
+  // projection is a vertex shared by all the children of the configuration cell matching it, and MeshTopology's point
+  // search then finds the parent but none of its children, printing a long diagnostic each time.)
+  auto contains = [&](const Extents &outer)
+  {
+    for (int k=0; k<_configurationDimensionCount; k++)
+    {
+      const double tolerance = 1e-10 * (outer[k].second - outer[k].first);
+      if ((projection[k].first < outer[k].first - tolerance) || (projection[k].second > outer[k].second + tolerance)) return false;
+    }
+    return true;
+  };
+  CellPtr cell;
+  for (IndexType rootID : _configurationTopology->getRootCellIndicesLocal())
+  {
+    if (contains(configurationCellExtents(rootID)))
+    {
+      cell = _configurationTopology->getCell(rootID);
+      break;
+    }
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(cell == Teuchos::null, std::invalid_argument,
+                             "BoxMeshTopology: no configuration cell contains the phase-space cell's projection");
+  while ((cell->level() < maxLevel) && cell->isParent(_configurationTopology))
+  {
+    CellPtr containingChild;
+    for (CellPtr child : cell->children())
+    {
+      if (contains(configurationCellExtents(child->cellIndex())))
+      {
+        containingChild = child;
+        break;
+      }
+    }
+    if (containingChild == Teuchos::null) break; // the projection straddles the children
+    cell = containingChild;
+  }
+  return cell;
+}
+
 IndexType BoxMeshTopology::phaseSpaceConfigurationCellID(IndexType phaseSpaceCellID) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_configurationTopology == Teuchos::null, std::invalid_argument, "BoxMeshTopology: no configuration topology has been set");
@@ -456,15 +500,10 @@ IndexType BoxMeshTopology::phaseSpaceConfigurationCellID(IndexType phaseSpaceCel
   auto cached = _configurationCellForCell.find(phaseSpaceCellID);
   if (cached != _configurationCellForCell.end()) return cached->second;
 
-  // the active configuration cell at the centroid of the projection, then up the tree to the projection's level
-  Camellia::FieldContainer<double> centroid(1, _configurationDimensionCount);
-  for (int k=0; k<_configurationDimensionCount; k++) centroid(0,k) = 0.5 * (coordinate(k, box.lo[k]) + coordinate(k, box.hi(k)));
-  IndexType configurationCellID = _configurationTopology->cellIDsForPoints(centroid)[0];
-  TEUCHOS_TEST_FOR_EXCEPTION(configurationCellID == -1, std::invalid_argument, "BoxMeshTopology: no configuration cell found under phase-space cell");
-  CellPtr configurationCell = _configurationTopology->getCell(configurationCellID);
+  // the configuration cell at the projection's level that contains the projection
+  CellPtr configurationCell = configurationCellContaining(cellExtents(phaseSpaceCellID), level);
   TEUCHOS_TEST_FOR_EXCEPTION(configurationCell->level() < level, std::invalid_argument,
                              "BoxMeshTopology: the configuration mesh is coarser than the phase-space mesh");
-  while (configurationCell->level() > level) configurationCell = configurationCell->getParent();
   return _configurationCellForCell[phaseSpaceCellID] = configurationCell->cellIndex();
 }
 
@@ -481,18 +520,8 @@ vector<IndexType> BoxMeshTopology::phaseSpaceActiveConfigurationCells(IndexType 
     }
     return true;
   };
-  // the active configuration cell at the centroid of the projection; then up the tree until the cell contains the projection
-  Camellia::FieldContainer<double> centroid(1, _configurationDimensionCount);
-  for (int k=0; k<_configurationDimensionCount; k++) centroid(0,k) = 0.5 * (projection[k].first + projection[k].second);
-  const IndexType leafID = _configurationTopology->cellIDsForPoints(centroid)[0];
-  TEUCHOS_TEST_FOR_EXCEPTION(leafID == -1, std::invalid_argument, "BoxMeshTopology: no configuration cell found under phase-space cell");
-  CellPtr ancestor = _configurationTopology->getCell(leafID);
-  while (!contains(configurationCellExtents(ancestor->cellIndex()), projection))
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(ancestor->getParent() == Teuchos::null, std::invalid_argument,
-                               "BoxMeshTopology: no configuration cell contains the phase-space cell's projection");
-    ancestor = ancestor->getParent();
-  }
+  // the smallest configuration cell containing the projection
+  CellPtr ancestor = configurationCellContaining(projection, std::numeric_limits<int>::max());
   vector<IndexType> activeCells;
   for (IndexType descendant : ancestor->getDescendants(_configurationTopology))
   {
