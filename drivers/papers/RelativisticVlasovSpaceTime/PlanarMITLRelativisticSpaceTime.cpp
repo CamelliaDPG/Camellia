@@ -1193,6 +1193,7 @@ static double s_boxAnisotropyThreshold   = 0.5;   // see BoxGDA::anisotropicRefi
 static bool   s_hpAdaptivity             = false; // h until a minimum width, then p (BoxGDA::hpRefinements())
 static std::vector<double> s_hpMinWidths;         // per direction (x, t, u_x, u_z), computational units
 static int    s_hpMaxH1Order             = 0;
+static bool   s_anisotropicP             = false; // with hp: raise orders only in the chosen directions
 static bool   s_resolvingBoundaryData    = false; // inside refineForBC(): directions there are fixed (tangential), not chosen
 
 //! With --hpAdaptivity: the cells that refinement in the directions chosen by masksForCells could no longer change (at
@@ -1201,7 +1202,7 @@ static std::set<GlobalIndexType> hpSaturatedCells(MeshPtr mesh, std::function<st
 {
   const std::set<GlobalIndexType> activeCells = mesh->getActiveCellIDsGlobal(); // (returned by value: keep one copy)
   const std::vector<GlobalIndexType> cells(activeCells.begin(), activeCells.end());
-  std::set<GlobalIndexType> saturated = BoxGDA::hpSaturatedCells(mesh, masksForCells(cells), s_hpMinWidths, s_hpMaxH1Order);
+  std::set<GlobalIndexType> saturated = BoxGDA::hpSaturatedCells(mesh, masksForCells(cells), s_hpMinWidths, s_hpMaxH1Order, s_anisotropicP);
   if ((mesh->Comm()->getRank() == 0) && !saturated.empty())
   {
     std::cout << "hp: " << saturated.size() << " of " << cells.size() << " cells at the minimum width and the maximum order; not marked\n";
@@ -1217,41 +1218,62 @@ static void refineInDirections(MeshPtr mesh, const std::map<GlobalIndexType,unsi
     mesh->hRefine(masks, false);
     return;
   }
-  BoxGDA::HPRefinements refinements = BoxGDA::hpRefinements(mesh, masks, s_hpMinWidths, s_hpMaxH1Order);
+  BoxGDA::HPRefinements refinements = BoxGDA::hpRefinements(mesh, masks, s_hpMinWidths, s_hpMaxH1Order, s_anisotropicP);
   if (mesh->Comm()->getRank() == 0)
   {
-    // (a marked cell is either bisected or raised; the halo may raise any cell, bisected ones included)
-    int raisedMarked = 0, haloRaised = 0;
-    for (const auto &entry : refinements.pIncrements)
+    // the directions in which each cell is raised: all four for isotropic raises; per direction otherwise
+    std::map<GlobalIndexType,unsigned> raisedDirections;
+    for (const auto &entry : refinements.pIncrements) raisedDirections[entry.first] = 15u;
+    for (const auto &[cellID, increment] : refinements.pIncrementsInDirections)
     {
-      const bool marked = (masks.find(entry.first) != masks.end());
-      const bool bisected = (refinements.hMasks.find(entry.first) != refinements.hMasks.end());
-      if (marked && !bisected) raisedMarked++;
-      else haloRaised++;
+      unsigned directions = 0;
+      for (int k=0; k<int(increment.size()); k++) if (increment[k] > 0) directions |= (1u << k);
+      raisedDirections[cellID] |= directions;
     }
-    const int unchanged = int(masks.size()) - int(refinements.hMasks.size()) - raisedMarked;
-    std::cout << "hp: of " << masks.size() << " marked cells, " << refinements.hMasks.size() << " bisected, " << raisedMarked
-              << " raised in order, " << unchanged << " at the minimum width and the maximum order; "
-              << haloRaised << " cells raised to keep neighbours' orders within one\n";
-    // For the marked cells raised in order: the directions the indicator chose for them (each direction whose
-    // indicator is at least --boxAnisotropyThreshold times the largest).  Few directions per cell would favour
-    // raising the order in those directions only (anisotropic p).
-    if ((raisedMarked > 0) && !s_resolvingBoundaryData)
+    int bisectedOnly = 0, raisedOnly = 0, both = 0, haloRaised = 0;
+    for (const auto &[cellID, mask] : masks)
     {
-      std::vector<int> cellsWantingCount(5, 0), cellsWantingDirection(4, 0);
-      for (const auto &entry : refinements.pIncrements)
+      const bool bisected = (refinements.hMasks.find(cellID) != refinements.hMasks.end());
+      const bool raised = (raisedDirections.find(cellID) != raisedDirections.end());
+      if (bisected && raised) both++;
+      else if (bisected) bisectedOnly++;
+      else if (raised) raisedOnly++;
+    }
+    for (const auto &entry : raisedDirections) if (masks.find(entry.first) == masks.end()) haloRaised++;
+    const int unchanged = int(masks.size()) - bisectedOnly - raisedOnly - both;
+    std::cout << "hp: of " << masks.size() << " marked cells, " << bisectedOnly << " bisected, " << raisedOnly << " raised in order, "
+              << both << " bisected in some directions and raised in others, " << unchanged
+              << " at the minimum width and the maximum order; " << haloRaised << " other cells raised to keep neighbours' orders within one\n";
+    // For the marked cells raised in order (not bisected): the directions the indicator chose for them (each direction
+    // whose indicator is at least --boxAnisotropyThreshold times the largest), and, with --anisotropicP, the directions
+    // actually raised (the chosen ones below the maximum order).
+    if (((raisedOnly + both) > 0) && !s_resolvingBoundaryData)
+    {
+      std::vector<int> cellsWantingCount(5, 0), cellsWantingDirection(4, 0), cellsRaisedCount(5, 0), cellsRaisedDirection(4, 0);
+      for (const auto &[cellID, directions] : raisedDirections)
       {
-        auto maskEntry = masks.find(entry.first);
-        if ((maskEntry == masks.end()) || (refinements.hMasks.find(entry.first) != refinements.hMasks.end())) continue;
-        const unsigned mask = maskEntry->second;
-        int count = 0;
-        for (int k=0; k<4; k++) if (mask & (1u << k)) { count++; cellsWantingDirection[k]++; }
-        cellsWantingCount[std::min(count, 4)]++;
+        auto maskEntry = masks.find(cellID);
+        if (maskEntry == masks.end()) continue;
+        const unsigned mask = maskEntry->second & ~(refinements.hMasks.count(cellID) ? refinements.hMasks.at(cellID) : 0u);
+        int wanted = 0, raised = 0;
+        for (int k=0; k<4; k++)
+        {
+          if (mask & (1u << k)) { wanted++; cellsWantingDirection[k]++; }
+          if (directions & (1u << k)) { raised++; cellsRaisedDirection[k]++; }
+        }
+        cellsWantingCount[std::min(wanted, 4)]++;
+        cellsRaisedCount[std::min(raised, 4)]++;
       }
       // (cells raised; cells wanting one, two, three, four directions; cells wanting x, t, u_x, u_z)
-      std::cout << "hp-p-directions: raised=" << raisedMarked << " one=" << cellsWantingCount[1] << " two=" << cellsWantingCount[2]
+      std::cout << "hp-p-directions: raised=" << (raisedOnly + both) << " one=" << cellsWantingCount[1] << " two=" << cellsWantingCount[2]
                 << " three=" << cellsWantingCount[3] << " four=" << cellsWantingCount[4] << " x=" << cellsWantingDirection[0]
                 << " t=" << cellsWantingDirection[1] << " u_x=" << cellsWantingDirection[2] << " u_z=" << cellsWantingDirection[3] << "\n";
+      if (s_anisotropicP)
+      {
+        std::cout << "hp-p-raised-directions: raised=" << (raisedOnly + both) << " one=" << cellsRaisedCount[1] << " two=" << cellsRaisedCount[2]
+                  << " three=" << cellsRaisedCount[3] << " four=" << cellsRaisedCount[4] << " x=" << cellsRaisedDirection[0]
+                  << " t=" << cellsRaisedDirection[1] << " u_x=" << cellsRaisedDirection[2] << " u_z=" << cellsRaisedDirection[3] << "\n";
+      }
     }
   }
   BoxGDA::hpRefine(mesh, refinements, false);
@@ -1493,6 +1515,10 @@ int main(int argc, char *argv[])
                    "with --useBoxMesh --useAdaptivity: bisect each marked cell only in the directions in which f is least resolved (and, when resolving boundary data, only tangentially to the boundary)");
     cmdp.setOption("boxAnisotropyThreshold", &boxAnisotropyThreshold,
                    "with --boxAnisotropicAdaptivity: bisect in direction k if its indicator is at least this fraction of the largest direction's (0: all directions; near 1: only the worst)");
+    bool anisotropicP = true;
+    cmdp.setOption("anisotropicP", "isotropicP", &anisotropicP,
+                   "with --hpAdaptivity: raise a cell's order only in the directions chosen for it (where it may not be bisected), "
+                   "rather than in all four");
     bool replayBCRefinement = true;
     cmdp.setOption("replayBCRefinement", "measureBCRefinement", &replayBCRefinement,
                    "with --useBoxMesh --useAdaptivity: start each later slab from slab 0's boundary-data mesh (cells and orders), "
@@ -1902,9 +1928,11 @@ int main(int argc, char *argv[])
       TEUCHOS_TEST_FOR_EXCEPTION(s_hpMinWidths.size() != 4, std::invalid_argument, "--hpMinWidths takes four widths: x, t, u_x, u_z");
       TEUCHOS_TEST_FOR_EXCEPTION((hpInitialH1Order < 1) || (hpInitialH1Order > H1Order), std::invalid_argument, "--hpInitialH1Order must be in [1, p]");
       s_hpMaxH1Order = H1Order;
+      s_anisotropicP = anisotropicP;
       if (rank == 0)
       {
-        std::cout << "hp-adaptivity: phase-space mesh starts at H1 order " << hpInitialH1Order << ", maximum " << H1Order
+        std::cout << "hp-adaptivity" << (anisotropicP ? " (orders raised per direction)" : " (orders raised in all directions)")
+                  << ": phase-space mesh starts at H1 order " << hpInitialH1Order << ", maximum " << H1Order
                   << "; minimum widths (x, t, u_x, u_z) = (" << s_hpMinWidths[0] << ", " << s_hpMinWidths[1] << ", "
                   << s_hpMinWidths[2] << ", " << s_hpMinWidths[3] << ")\n";
       }

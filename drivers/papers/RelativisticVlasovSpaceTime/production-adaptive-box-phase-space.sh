@@ -67,6 +67,8 @@
 #   MAXP    maximum H1 order, the driver's --p                        (default 8: f of degree 7.  Production: 4.  High-order
 #           cells cost much more per dof -- in a 4-rank test a slab's final solve on 60 k dofs, mostly orders 5-8, took
 #           512 s -- and with MAXP > 4 the discretization is no longer coarser than production's anywhere)
+#   ANISOP  1 (default): with HP=1, raise a cell's order only in the directions the indicator chose for it (where it may
+#           not be bisected); 0: in all four directions.
 #   REPLAY  1 (default): each later slab starts from slab 0's boundary-data mesh (cells and orders), applied before
 #           matching to the previous slab; the per-slab check of the inflow data then has little or nothing to do.
 #           0: each slab resolves the inflow data from scratch.
@@ -100,10 +102,12 @@ MAXDOFS=${MAXDOFS:--1}
 HP=${HP:-1}
 MAXP=${MAXP:-8}
 REPLAY=${REPLAY:-1}
+ANISOP=${ANISOP:-1}
 if [ "$REPLAY" = 1 ]; then REPLAYOPT=--replayBCRefinement; else REPLAYOPT=--measureBCRefinement; fi
 HP0=${HP0:-1}
 HPMIN=${HPMIN:-0.0025,0.0125,0.025,0.025}
-if [ "$HP" = 1 ]; then HPOPTS="--hpAdaptivity --hpInitialH1Order=$HP0 --hpMinWidths=$HPMIN"; HPTAG=-hp$HP0; else HPOPTS=""; HPTAG=""; fi
+if [ "$ANISOP" = 1 ]; then ANISOPOPT=--anisotropicP; ANISOPTAG=a; else ANISOPOPT=--isotropicP; ANISOPTAG=""; fi
+if [ "$HP" = 1 ]; then HPOPTS="--hpAdaptivity --hpInitialH1Order=$HP0 --hpMinWidths=$HPMIN $ANISOPOPT"; HPTAG=-hp$HP0$ANISOPTAG; else HPOPTS=""; HPTAG=""; fi
 BCTOL=${BCTOL:-0.01}
 DP=${DP:-2}
 NP=${NP:-16}
@@ -117,8 +121,8 @@ PLOT=$SRC/drivers/papers/RelativisticVlasovSpaceTime/plot_phase_space.py
 
 # (the driver prints its help to stderr, and exits nonzero after printing it)
 if [ ! -x $X ]; then echo "$X not found: run this from the Camellia build directory."; exit 1; fi
-if ! $X --help 2>&1 | grep -q -- "--replayBCRefinement"; then
-  echo "This build of PlanarMITLRelativisticSpaceTime has no --replayBCRefinement: rebuild it from the latest anisotropic-refinement branch."; exit 1
+if ! $X --help 2>&1 | grep -q -- "--anisotropicP"; then
+  echo "This build of PlanarMITLRelativisticSpaceTime has no --anisotropicP: rebuild it from the latest anisotropic-refinement branch."; exit 1
 fi
 
 if [ -n "$DOERFLER" ]; then MARKING="--doerflerTarget=$DOERFLER"; else MARKING="--refinementThreshold=$THRESH"; fi
@@ -141,7 +145,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \
@@ -186,6 +190,14 @@ if [ "$HP" = 1 ]; then
     END { if (steps == 0) { print "  (no cells raised)"; exit }
           printf "  %d cells raised over %d steps; wanting one direction: %d, two: %d, three: %d, four: %d\n", total["raised"], steps, total["one"], total["two"], total["three"], total["four"]
           printf "  cells wanting x: %d, t: %d, u_x: %d, u_z: %d\n", total["x"], total["t"], total["u_x"], total["u_z"] }'
+  if [ "$ANISOP" = 1 ]; then
+    echo "directions actually raised (the chosen ones below the maximum order), totals over the run:"
+    grep "^hp-p-raised-directions: " $LOG | awk '
+      { for (i = 2; i <= NF; i++) { split($i, kv, "="); total[kv[1]] += kv[2] } steps++ }
+      END { if (steps == 0) { print "  (no cells raised)"; exit }
+            printf "  %d cells raised; in one direction: %d, two: %d, three: %d, four: %d\n", total["raised"], total["one"], total["two"], total["three"], total["four"]
+            printf "  raised in x: %d, t: %d, u_x: %d, u_z: %d\n", total["x"], total["t"], total["u_x"], total["u_z"] }'
+  fi
   echo
 fi
 echo "relative energy error after each refinement step:"

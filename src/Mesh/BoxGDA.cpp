@@ -39,6 +39,29 @@ namespace
     return P1;
   }
 
+  void gaussLegendre(int n, std::vector<double> &x, std::vector<double> &w)
+  {
+    x.resize(n);
+    w.resize(n);
+    for (int q=0; q<n; q++)
+    {
+      double xi = std::cos(M_PI * (q + 0.75) / (n + 0.5));
+      double dP = 1;
+      for (int iteration=0; iteration<100; iteration++)
+      {
+        const double Pn = legendre(n, xi), Pnm1 = legendre(n-1, xi);
+        dP = n * (xi * Pn - Pnm1) / (xi * xi - 1.0);
+        const double dx = Pn / dP;
+        xi -= dx;
+        if (std::abs(dx) < 1e-15) break;
+      }
+      const double Pn = legendre(n, xi), Pnm1 = legendre(n-1, xi);
+      dP = n * (xi * Pn - Pnm1) / (xi * xi - 1.0);
+      x[q] = xi;
+      w[q] = 2.0 / ((1.0 - xi * xi) * dP * dP);
+    }
+  }
+
 }
 
 MeshPtr BoxGDA::mesh(Teuchos::RCP<BoxMeshTopology> topology, BFPtr bf, int H1Order, int delta_k,
@@ -175,10 +198,33 @@ const BoxGDA::OrderData &BoxGDA::orderDataForCell(GlobalIndexType cellID)
   const BoxMeshTopology::Extents extents = _boxTopology->cellExtents(cellID);
   Teuchos::LAPACK<int,double> lapack;
   data.sideIndexSets.assign(dim, std::vector<IndexSet>(_fluxVars.size()));
+  // Sample points on each side: a tensor Gauss grid in the side's reference coordinates, set explicitly (rather than
+  // relying on the side cache's own cubature, which on one macOS build came back without points), with enough points
+  // per direction that a product the basis does not contain cannot match it at all of them.
+  const int sideDim = dim - 1, pointsPerDirection = maxDegree + 2;
+  std::vector<double> gaussPoints, gaussWeights;
+  gaussLegendre(pointsPerDirection, gaussPoints, gaussWeights);
+  int sidePointCount = 1;
+  for (int k=0; k<sideDim; k++) sidePointCount *= pointsPerDirection;
+  FC sideRefPoints(sidePointCount, sideDim), sideRefWeights(sidePointCount);
+  for (int q=0; q<sidePointCount; q++)
+  {
+    int remainder = q;
+    double weight = 1.0;
+    for (int k=sideDim-1; k>=0; k--)
+    {
+      const int i = remainder % pointsPerDirection;
+      remainder /= pointsPerDirection;
+      sideRefPoints(q,k) = gaussPoints[i];
+      weight *= gaussWeights[i];
+    }
+    sideRefWeights(q) = weight;
+  }
   for (int normal=0; normal<dim; normal++)
   {
     const int side = _boxTopology->sideOrdinalForFace(2 * normal);
     BasisCachePtr sideCache = sampleCache->getSideBasisCache(side);
+    sideCache->setRefCellPointsFC(sideRefPoints, sideRefWeights);
     const FC &points = sideCache->getPhysicalCubaturePointsFC();
     const FC &weightedMeasures = sideCache->getWeightedMeasures();
     const int P = points.dimension(1);
@@ -1439,28 +1485,7 @@ TMatrixPtr<double> BoxGDA::prolongationOperator(MeshPtr coarseMesh, TMapPtr coar
 
 namespace
 {
-  void gaussLegendre(int n, std::vector<double> &x, std::vector<double> &w)
-  {
-    x.resize(n);
-    w.resize(n);
-    for (int q=0; q<n; q++)
-    {
-      double xi = std::cos(M_PI * (q + 0.75) / (n + 0.5));
-      double dP = 1;
-      for (int iteration=0; iteration<100; iteration++)
-      {
-        const double Pn = legendre(n, xi), Pnm1 = legendre(n-1, xi);
-        dP = n * (xi * Pn - Pnm1) / (xi * xi - 1.0);
-        const double dx = Pn / dP;
-        xi -= dx;
-        if (std::abs(dx) < 1e-15) break;
-      }
-      const double Pn = legendre(n, xi), Pnm1 = legendre(n-1, xi);
-      dP = n * (xi * Pn - Pnm1) / (xi * xi - 1.0);
-      x[q] = xi;
-      w[q] = 2.0 / ((1.0 - xi * xi) * dP * dP);
-    }
-  }
+
 }
 
 std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr mesh, FunctionPtr f, const std::vector<GlobalIndexType> &cellIDs,
