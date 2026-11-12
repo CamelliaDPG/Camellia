@@ -77,6 +77,22 @@ namespace
   }
 }
 
+namespace
+{
+  //! the cell's H^1 order in each direction
+  std::vector<int> ordersPerDirection(MeshPtr mesh, GlobalIndexType cellID, int dim)
+  {
+    std::vector<int> order = mesh->globalDofAssignment()->getH1Order(cellID);
+    if (int(order.size()) == 1) order.assign(dim, order[0]);
+    return order;
+  }
+  bool directionalOrdersFor(MeshPtr mesh, bool anisotropicP)
+  {
+    BoxGDA* gda = dynamic_cast<BoxGDA*>(mesh->globalDofAssignment().get());
+    return anisotropicP && (gda != NULL) && gda->supportsDirectionalOrders();
+  }
+}
+
 bool BoxGDA::supportsDirectionalOrders() const
 {
   // one tensorial component per direction: Line x Line x ... (BoxMeshTopology uses these from 4D up)
@@ -1155,18 +1171,20 @@ void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, 
   {
     if (fromTopology->sideIsOnBoundary(fromCellID, lowerSide)) cellIDMap[fromCellID] = counterpart(fromCellID);
   }
-  // orders: meshFrom's boundary cells are raised to their counterparts' orders (with the halo that keeps neighbours
-  // within one order); meshTo is left as it is
+  // orders: meshFrom's boundary cells are raised to their counterparts' orders, direction by direction (with the halo
+  // that keeps neighbours within one order); meshTo is left as it is
   {
-    std::map<GlobalIndexType,int> targetOrder;
+    std::map<GlobalIndexType, std::vector<int>> targetOrders;
     for (const auto &[fromCellID, toCellID] : cellIDMap)
     {
-      const int toOrder = meshTo->globalDofAssignment()->getH1Order(toCellID)[0];
-      if (toOrder > meshFrom->globalDofAssignment()->getH1Order(fromCellID)[0]) targetOrder[fromCellID] = toOrder;
+      targetOrders[fromCellID] = ordersPerDirection(meshTo, toCellID, dim);
     }
-    HPRefinements raise;
-    raise.pIncrements = orderIncrementsWithHalo(meshFrom, targetOrder);
-    if (!raise.pIncrements.empty()) hpRefine(meshFrom, raise);
+    const auto increments = orderIncrementsWithHaloInDirections(meshFrom, targetOrders);
+    if (!increments.empty())
+    {
+      pRefineInDirections(meshFrom, increments);
+      meshFrom->repartitionAndRebuild();
+    }
   }
   sideOrdinalMap.clear();
   sideOrdinalMap[int(lowerSide)] = toTopology->sideOrdinalForFace(2 * direction + 1);
@@ -1468,7 +1486,8 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
     std::set<GlobalIndexType> cellsNeedingMeans;
     for (GlobalIndexType cellID : cellIDs)
     {
-      if (mesh->globalDofAssignment()->getH1Order(cellID)[0] > 1) continue;
+      const std::vector<int> order = ordersPerDirection(mesh, cellID, dim);
+      if (*std::min_element(order.begin(), order.end()) > 1) continue; // no direction with p = 0
       cellsNeedingMeans.insert(cellID);
       for (int side=0; side<sideCount; side++)
         for (IndexType neighborID : topology->sideNeighbors(cellID, side)) cellsNeedingMeans.insert(neighborID);
@@ -1501,17 +1520,26 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
   for (GlobalIndexType cellID : cellIDs)
   {
     if (myCells.find(cellID) == myCells.end()) continue;
-    const int p = std::max(mesh->globalDofAssignment()->getH1Order(cellID)[0] - 1, 0); // degree of L2 fields
+    // degree of the L2 fields in each direction
+    std::vector<int> p = ordersPerDirection(mesh, cellID, dim);
+    for (int &pk : p) pk = std::max(pk - 1, 0);
+    const bool piecewiseConstant = std::all_of(p.begin(), p.end(), [](int pk) { return pk == 0; });
     unsigned mask = allowedDirections;
-    if (p == 0)
+    // the largest jump of f's cell mean across the cell's faces normal to each direction
+    auto jumps = [&]()
     {
-      std::vector<double> eta(dim, 0.0);
+      std::vector<double> jump(dim, 0.0);
       const double myMean = cellMeans.at(cellID);
       for (int side=0; side<sideCount; side++)
       {
         const int k = topology->faceForSideOrdinal(side) / 2;
-        for (IndexType neighborID : topology->sideNeighbors(cellID, side)) eta[k] = std::max(eta[k], std::abs(cellMeans.at(neighborID) - myMean));
+        for (IndexType neighborID : topology->sideNeighbors(cellID, side)) jump[k] = std::max(jump[k], std::abs(cellMeans.at(neighborID) - myMean));
       }
+      return jump;
+    };
+    if (piecewiseConstant)
+    {
+      std::vector<double> eta = jumps();
       double maxEta = 0;
       for (int k=0; k<dim; k++) if (allowedDirections & (1u << k)) maxEta = std::max(maxEta, eta[k]);
       if (maxEta > 0)
@@ -1522,19 +1550,28 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
     }
     else
     {
-      // sample f at tensor Gauss points, and find its Legendre coefficients c(i_0, ..., i_{d-1}) on the cell
-      const int n = p + 1;
-      std::vector<double> x, w;
-      gaussLegendre(n, x, w);
+      // sample f at tensor Gauss points (p_k + 1 in direction k), and find its Legendre coefficients c(i_0, ..., i_{d-1})
+      std::vector<int> n(dim);
+      std::vector<std::vector<double>> x(dim), w(dim);
       int numPoints = 1;
-      for (int k=0; k<dim; k++) numPoints *= n;
+      for (int k=0; k<dim; k++)
+      {
+        n[k] = p[k] + 1;
+        gaussLegendre(n[k], x[k], w[k]);
+        numPoints *= n[k];
+      }
+      // ordinals are mixed-radix numbers, direction 0 the most significant digit
+      std::vector<int> stride(dim);
+      {
+        int product = 1;
+        for (int k=dim-1; k>=0; k--) { stride[k] = product; product *= n[k]; }
+      }
       FC refPoints(numPoints, dim);
       std::vector<int> index(dim);
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
-        int remainder = pointOrdinal;
-        for (int k=dim-1; k>=0; k--) { index[k] = remainder % n; remainder /= n; }
-        for (int k=0; k<dim; k++) refPoints(pointOrdinal,k) = x[index[k]];
+        for (int k=0; k<dim; k++) index[k] = (pointOrdinal / stride[k]) % n[k];
+        for (int k=0; k<dim; k++) refPoints(pointOrdinal,k) = x[k][index[k]];
       }
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       basisCache->setRefCellPointsFC(refPoints);
@@ -1542,34 +1579,47 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
       f->values(values, basisCache);
       std::vector<double> coefficients(numPoints), next(numPoints);
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) coefficients[pointOrdinal] = values(0,pointOrdinal);
-      // A(i,q) = (2i+1)/2 w_q P_i(x_q): values at the points -> Legendre coefficients, one direction at a time
-      std::vector<double> A(n*n);
-      for (int i=0; i<n; i++) for (int q=0; q<n; q++) A[i*n+q] = 0.5 * (2*i+1) * w[q] * legendre(i, x[q]);
-      int stride = numPoints;
+      // A_k(i,q) = (2i+1)/2 w_q P_i(x_q): values at the points -> Legendre coefficients, one direction at a time
       for (int k=0; k<dim; k++)
       {
-        stride /= n; // direction k is digit k, the first being the most significant
+        std::vector<double> A(n[k]*n[k]);
+        for (int i=0; i<n[k]; i++) for (int q=0; q<n[k]; q++) A[i*n[k]+q] = 0.5 * (2*i+1) * w[k][q] * legendre(i, x[k][q]);
         std::fill(next.begin(), next.end(), 0.0);
         for (int ordinal=0; ordinal<numPoints; ordinal++)
         {
-          const int digit = (ordinal / stride) % n;
-          const int base = ordinal - digit * stride;
-          for (int i=0; i<n; i++) next[base + i * stride] += A[i*n+digit] * coefficients[ordinal];
+          const int digit = (ordinal / stride[k]) % n[k];
+          const int base = ordinal - digit * stride[k];
+          for (int i=0; i<n[k]; i++) next[base + i * stride[k]] += A[i*n[k]+digit] * coefficients[ordinal];
         }
         coefficients.swap(next);
       }
       // eta_k^2: the L2 norm (on the reference cell) of the part of f in the highest Legendre modes of direction k: the
-      // top two for p >= 3, the top one below that (so that the linear mode, which says nothing about resolution, never
-      // counts once there is a quadratic one)
+      // top two for p_k >= 3, the top one below that (so that the linear mode, which says nothing about resolution,
+      // never counts once there is a quadratic one)
       std::vector<double> eta(dim, 0.0);
-      const int lowestHighMode = std::max(std::min(p, 2), p - 1); // p = 1: 1; p = 2: 2; p = 3: 2; p = 4: 3; ...
       for (int ordinal=0; ordinal<numPoints; ordinal++)
       {
-        int remainder = ordinal;
         double weight = 1.0;
-        for (int k=dim-1; k>=0; k--) { index[k] = remainder % n; remainder /= n; weight *= 2.0 / (2 * index[k] + 1); }
+        for (int k=0; k<dim; k++) { index[k] = (ordinal / stride[k]) % n[k]; weight *= 2.0 / (2 * index[k] + 1); }
         const double contribution = coefficients[ordinal] * coefficients[ordinal] * weight;
-        for (int k=0; k<dim; k++) if (index[k] >= lowestHighMode) eta[k] += contribution;
+        for (int k=0; k<dim; k++)
+        {
+          if (p[k] == 0) continue;
+          const int lowestHighMode = std::max(std::min(p[k], 2), p[k] - 1); // p = 1: 1; p = 2: 2; p = 3: 2; p = 4: 3; ...
+          if (index[k] >= lowestHighMode) eta[k] += contribution;
+        }
+      }
+      // In a direction with p_k = 0 (orders raised in other directions only) there are no high modes: there, the jump
+      // of the cell mean across the faces normal to k, as the linear mode it implies (coefficient half the jump), in
+      // the same norm.
+      if (std::any_of(p.begin(), p.end(), [](int pk) { return pk == 0; }))
+      {
+        const std::vector<double> jump = jumps();
+        for (int k=0; k<dim; k++)
+        {
+          if (p[k] != 0) continue;
+          eta[k] = 0.25 * jump[k] * jump[k] * (2.0 / 3.0) * std::ldexp(1.0, dim - 1);
+        }
       }
       double maxEta = 0;
       for (int k=0; k<dim; k++) if (allowedDirections & (1u << k)) maxEta = std::max(maxEta, std::sqrt(eta[k]));
@@ -1631,34 +1681,70 @@ namespace
 }
 
 std::set<GlobalIndexType> BoxGDA::hpSaturatedCells(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
-                                                   const std::vector<double> &minWidths, int maxH1Order)
+                                                   const std::vector<double> &minWidths, int maxH1Order, bool anisotropicP)
 {
   BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
   TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
-  TEUCHOS_TEST_FOR_EXCEPTION(int(minWidths.size()) != int(topology->getDimension()), std::invalid_argument, "minWidths needs one entry per direction");
+  const int dim = topology->getDimension();
+  TEUCHOS_TEST_FOR_EXCEPTION(int(minWidths.size()) != dim, std::invalid_argument, "minWidths needs one entry per direction");
+  const bool directional = directionalOrdersFor(mesh, anisotropicP);
   std::set<GlobalIndexType> saturated;
   for (const auto &[cellID, mask] : directionMasks)
   {
-    if ((bisectableDirections(topology, cellID, mask, minWidths) == 0) && (mesh->globalDofAssignment()->getH1Order(cellID)[0] >= maxH1Order))
+    if (bisectableDirections(topology, cellID, mask, minWidths) != 0) continue;
+    const std::vector<int> order = ordersPerDirection(mesh, cellID, dim);
+    bool atMaximum = true;
+    if (directional)
     {
-      saturated.insert(cellID);
+      // at the maximum in every chosen direction
+      for (int k=0; k<dim; k++) if ((mask & (1u << k)) && (order[k] < maxH1Order)) atMaximum = false;
     }
+    else
+    {
+      atMaximum = (*std::max_element(order.begin(), order.end()) >= maxH1Order);
+    }
+    if (atMaximum) saturated.insert(cellID);
   }
   return saturated;
 }
 
 BoxGDA::HPRefinements BoxGDA::hpRefinements(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
-                                            const std::vector<double> &minWidths, int maxH1Order)
+                                            const std::vector<double> &minWidths, int maxH1Order, bool anisotropicP)
 {
   TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::hpRefinements");
   BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
   TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
   const int dim = topology->getDimension();
   TEUCHOS_TEST_FOR_EXCEPTION(int(minWidths.size()) != dim, std::invalid_argument, "minWidths needs one entry per direction");
-  GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
-  auto order = [&](GlobalIndexType cellID) { return gda->getH1Order(cellID)[0]; };
-
   HPRefinements refinements;
+  if (directionalOrdersFor(mesh, anisotropicP))
+  {
+    // each chosen direction: bisect if the cell is wide enough there, else raise the order in that direction
+    std::map<GlobalIndexType, std::vector<int>> targetOrders;
+    for (const auto &[cellID, mask] : directionMasks)
+    {
+      const unsigned hMask = bisectableDirections(topology, cellID, mask, minWidths);
+      if (hMask != 0) refinements.hMasks[cellID] = hMask;
+      std::vector<int> target = ordersPerDirection(mesh, cellID, dim);
+      bool raise = false;
+      for (int k=0; k<dim; k++)
+      {
+        if ((mask & (1u << k)) && !(hMask & (1u << k)) && (target[k] < maxH1Order))
+        {
+          target[k]++;
+          raise = true;
+        }
+      }
+      if (raise) targetOrders[cellID] = target;
+    }
+    refinements.pIncrementsInDirections = orderIncrementsWithHaloInDirections(mesh, targetOrders);
+    return refinements;
+  }
+  auto order = [&](GlobalIndexType cellID)
+  {
+    const std::vector<int> orders = ordersPerDirection(mesh, cellID, dim);
+    return *std::max_element(orders.begin(), orders.end());
+  };
   std::map<GlobalIndexType,int> targetOrder; // cells to raise, with their new orders
   for (const auto &[cellID, mask] : directionMasks)
   {
@@ -1666,7 +1752,6 @@ BoxGDA::HPRefinements BoxGDA::hpRefinements(MeshPtr mesh, const std::map<GlobalI
     if (hMask != 0) refinements.hMasks[cellID] = hMask;
     else if (order(cellID) < maxH1Order) targetOrder[cellID] = order(cellID) + 1;
   }
-
   refinements.pIncrements = orderIncrementsWithHalo(mesh, targetOrder);
   return refinements;
 }
@@ -1675,8 +1760,12 @@ std::map<GlobalIndexType,int> BoxGDA::orderIncrementsWithHalo(MeshPtr mesh, std:
 {
   BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
   TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
-  GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
-  auto order = [&](GlobalIndexType cellID) { return gda->getH1Order(cellID)[0]; };
+  const int dim = topology->getDimension();
+  auto order = [&](GlobalIndexType cellID)
+  {
+    const std::vector<int> orders = ordersPerDirection(mesh, cellID, dim);
+    return *std::max_element(orders.begin(), orders.end());
+  };
   auto newOrder = [&](GlobalIndexType cellID)
   {
     auto entry = targetOrder.find(cellID);
@@ -1711,11 +1800,71 @@ std::map<GlobalIndexType,int> BoxGDA::orderIncrementsWithHalo(MeshPtr mesh, std:
   return increments;
 }
 
+std::map<GlobalIndexType, std::vector<int>> BoxGDA::orderIncrementsWithHaloInDirections(MeshPtr mesh, std::map<GlobalIndexType, std::vector<int>> targetOrders)
+{
+  BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(topology == NULL, std::invalid_argument, "mesh must use a BoxMeshTopology");
+  const int dim = topology->getDimension();
+  auto newOrder = [&](GlobalIndexType cellID)
+  {
+    std::vector<int> order = ordersPerDirection(mesh, cellID, dim);
+    auto entry = targetOrders.find(cellID);
+    if (entry != targetOrders.end()) for (int k=0; k<dim; k++) order[k] = std::max(order[k], entry->second[k]);
+    return order;
+  };
+  // in each direction, face neighbours' orders may differ by at most one
+  std::vector<GlobalIndexType> queue;
+  for (const auto &entry : targetOrders) queue.push_back(entry.first);
+  const int sideCount = topology->cellTopology()->getSideCount();
+  while (!queue.empty())
+  {
+    const GlobalIndexType cellID = queue.back();
+    queue.pop_back();
+    const std::vector<int> cellOrder = newOrder(cellID);
+    for (int side=0; side<sideCount; side++)
+    {
+      for (IndexType neighborID : topology->sideNeighbors(cellID, side))
+      {
+        std::vector<int> neighborOrder = newOrder(neighborID);
+        bool raised = false;
+        for (int k=0; k<dim; k++)
+        {
+          if (neighborOrder[k] < cellOrder[k] - 1)
+          {
+            neighborOrder[k] = cellOrder[k] - 1;
+            raised = true;
+          }
+        }
+        if (raised)
+        {
+          targetOrders[neighborID] = neighborOrder;
+          queue.push_back(neighborID);
+        }
+      }
+    }
+  }
+  std::map<GlobalIndexType, std::vector<int>> increments;
+  for (const auto &[cellID, target] : targetOrders)
+  {
+    const std::vector<int> order = ordersPerDirection(mesh, cellID, dim);
+    std::vector<int> increment(dim, 0);
+    bool any = false;
+    for (int k=0; k<dim; k++)
+    {
+      increment[k] = std::max(target[k] - order[k], 0);
+      if (increment[k] > 0) any = true;
+    }
+    if (any) increments[cellID] = increment;
+  }
+  return increments;
+}
+
 void BoxGDA::hpRefine(MeshPtr mesh, const HPRefinements &refinements, bool repartitionAndRebuild)
 {
   std::map<int, std::set<GlobalIndexType>> cellsForIncrement;
   for (const auto &[cellID, increment] : refinements.pIncrements) cellsForIncrement[increment].insert(cellID);
   for (const auto &[increment, cellIDs] : cellsForIncrement) mesh->pRefine(cellIDs, increment, false);
+  pRefineInDirections(mesh, refinements.pIncrementsInDirections);
   mesh->hRefine(refinements.hMasks, false);
   if (repartitionAndRebuild) mesh->repartitionAndRebuild();
 }
@@ -1729,7 +1878,7 @@ std::vector<BoxGDA::CellRecord> BoxGDA::cellRecords(MeshPtr mesh)
   std::vector<CellRecord> records;
   for (IndexType cellID : topology->getLocallyKnownActiveCellIndices())
   {
-    records.push_back({topology->forest().node(int(cellID)).box, mesh->globalDofAssignment()->getH1Order(cellID)[0]});
+    records.push_back({topology->forest().node(int(cellID)).box, ordersPerDirection(mesh, cellID, topology->getDimension())});
   }
   return records;
 }
@@ -1766,21 +1915,22 @@ void BoxGDA::refineToContain(MeshPtr mesh, const std::vector<CellRecord> &record
     mesh->hRefine(masks, false);
     refined = true;
   }
-  // p: each cell to at least the order of the recorded boxes it lies in
-  std::map<GlobalIndexType,int> targetOrders;
+  // p: each cell to at least the orders of the recorded boxes it lies in, direction by direction
+  std::map<GlobalIndexType, std::vector<int>> targetOrders;
   std::array<BoxForest::Coord,BoxForest::MAX_DIM> lo, hi;
   for (const CellRecord &record : records)
   {
+    TEUCHOS_TEST_FOR_EXCEPTION(int(record.H1Orders.size()) != dim, std::invalid_argument, "records need one order per direction");
     boxBounds(record.box, lo, hi);
     topology->forest().forEachLeafOverlapping(lo, hi, [&](int leaf)
     {
-      int &target = targetOrders[GlobalIndexType(leaf)];
-      target = std::max(target, record.H1Order);
+      std::vector<int> &target = targetOrders[GlobalIndexType(leaf)];
+      if (target.empty()) target.assign(dim, 0);
+      for (int k=0; k<dim; k++) target[k] = std::max(target[k], record.H1Orders[k]);
     });
   }
-  HPRefinements raise;
-  raise.pIncrements = orderIncrementsWithHalo(mesh, targetOrders);
-  if (!raise.pIncrements.empty()) hpRefine(mesh, raise, false);
-  if (refined || !raise.pIncrements.empty()) mesh->repartitionAndRebuild();
+  const auto increments = orderIncrementsWithHaloInDirections(mesh, targetOrders);
+  pRefineInDirections(mesh, increments);
+  if (refined || !increments.empty()) mesh->repartitionAndRebuild();
 }
 

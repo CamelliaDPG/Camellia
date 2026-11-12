@@ -1,5 +1,6 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "BoxGDA.h"
 #include "BoxMeshTopology.h"
 #include "GlobalDofAssignment.h"
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
@@ -478,6 +479,40 @@ TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesOrders )
   out << "second slab: " << nextMesh->numActiveElements() << " cells, " << nextMesh->numGlobalDofs() << " dofs; ||f|| = " << fNorm << endl;
   TEST_ASSERT(std::isfinite(fNorm));
   TEST_COMPARE(fNorm, >, 0.0);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesAnisotropicOrders )
+{
+  // the first slab's cells raised in u_x only (half of them) or in x and u_z: the second slab's interface cells take
+  // the same orders, direction by direction
+  UseBoxMesh useBoxMesh(true);
+  VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(1);
+  const int xElements = 2, vxElements = 2, vyElements = 2, H1Order = 3;
+  Problem p = problem(true, xElements, vxElements, vyElements, H1Order, drivenDistribution());
+  MeshPtr mesh = p.form->vlasovMesh();
+  auto topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  std::map<GlobalIndexType, std::vector<int>> increments;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+  {
+    increments[cellID] = (topology->cellExtents(cellID)[2].first < V0 + 0.5 * VWIDTH) ? std::vector<int>{0, 0, 1, 0} : std::vector<int>{1, 0, 0, 1};
+  }
+  BoxGDA::pRefineInDirections(mesh, increments);
+  mesh->repartitionAndRebuild();
+  p.form->setInitialAndInflowConditions(drivenDistribution(), drivenDistribution());
+  p.form->solve();
+  auto secondSlab = p.form->nextTimeSlab(TWIDTH, 1);
+  VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(0);
+  MeshPtr nextMesh = secondSlab->vlasovMesh();
+  auto nextTopology = dynamic_cast<BoxMeshTopology*>(nextMesh->getTopology().get());
+  for (GlobalIndexType cellID : nextMesh->getActiveCellIDsGlobal())
+  {
+    const std::vector<int> expected = (nextTopology->cellExtents(cellID)[2].first < V0 + 0.5 * VWIDTH) ? std::vector<int>{1, 1, 2, 1} : std::vector<int>{2, 1, 1, 2};
+    TEST_ASSERT(nextMesh->globalDofAssignment()->getH1Order(cellID) == expected);
+  }
+  secondSlab->solve();
+  const double fNorm = Function::solution(secondSlab->f(), secondSlab->vlasovSolution())->l2norm(nextMesh);
+  out << "second slab: " << nextMesh->numActiveElements() << " cells, " << nextMesh->numGlobalDofs() << " dofs; ||f|| = " << fNorm << endl;
+  TEST_ASSERT(std::isfinite(fNorm));
 }
 
 TEUCHOS_UNIT_TEST( BoxVlasov, IsotropicHangingRefinementMatchesExtrudedMesh )

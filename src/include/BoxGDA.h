@@ -102,8 +102,6 @@ namespace Camellia
     const CellMap &cellMap(GlobalIndexType cellID);
     //! products of Legendre polynomials, on the patch's bounding box, for the multi-indices of the index set
     void patchBasisValues(const BoxForest::Patch &patch, const IndexSet &indexSet, int degree, const double *x, std::vector<double> &values) const;
-    //! true if the cell topology has one tensorial component per direction, so that orders can differ by direction
-    bool supportsDirectionalOrders() const;
     //! after the cells' orders changed: projects registered solutions' coefficients from the old element types
     void projectSolutionsOntoNewOrders(const std::map<GlobalIndexType, ElementTypePtr> &oldTypes);
   public:
@@ -114,6 +112,8 @@ namespace Camellia
     void didChangePartitionPolicy() override;
     //! children take their parent's polynomial order
     void didHRefine(const std::set<GlobalIndexType> &parentCellIDs) override;
+    //! true if the cell topology has one tensorial component per direction, so that orders can differ by direction
+    bool supportsDirectionalOrders() const;
     //! the isotropic order (GlobalDofAssignment's) plus any raised by pRefineInDirections(); one entry per direction
     //! when the latter are present
     std::vector<int> getH1Order(GlobalIndexType cellID) override;
@@ -224,31 +224,41 @@ namespace Camellia
     struct HPRefinements
     {
       std::map<GlobalIndexType,unsigned> hMasks;   // cells to bisect, with their directions
-      std::map<GlobalIndexType,int> pIncrements;   // cells to raise, with the number of orders to add
+      std::map<GlobalIndexType,int> pIncrements;   // cells to raise isotropically, with the number of orders to add
+      std::map<GlobalIndexType, std::vector<int>> pIncrementsInDirections; // cells to raise direction by direction
     };
     /**
      \brief  hp-refinement: turns the directions in which marked cells should be refined into h- and p-refinements.
      Each marked cell is bisected in those of its directions in which half its width is at least minWidths[k] (0: no
      limit).  A marked cell that may be bisected in none of them is raised by one order instead, up to maxH1Order.
-     Then cells are raised wherever needed, transitively, for face neighbours' orders to differ by at most one.
+     With anisotropicP (on meshes whose cells allow orders that differ by direction; see pRefineInDirections()), the
+     choice is made direction by direction instead: each chosen direction in which the cell may be bisected is
+     bisected, and each other chosen direction is raised by one order (up to maxH1Order), so a cell may be bisected in
+     some directions and raised in others.
+     Then cells are raised wherever needed, transitively, for face neighbours' orders to differ by at most one (in
+     each direction, with anisotropicP).
      (Children take their parent's order, so the rule holds after the bisections too.)  The topology and the cells'
      orders are replicated, so every rank computes the same result; the masks must be the same on every rank (as
      anisotropicRefinementMasks() returns them).  No communication.
      */
     static HPRefinements hpRefinements(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
-                                       const std::vector<double> &minWidths, int maxH1Order);
+                                       const std::vector<double> &minWidths, int maxH1Order, bool anisotropicP = false);
     //! The order increments that raise the given cells to (at least) the given orders, together with those that raise
     //! other cells, transitively, so that face neighbours' orders differ by at most one.  No communication.
     static std::map<GlobalIndexType,int> orderIncrementsWithHalo(MeshPtr mesh, std::map<GlobalIndexType,int> targetOrders);
+    //! As orderIncrementsWithHalo(), direction by direction: raises cells to the given orders per direction, and others so
+    //! that in each direction face neighbours' orders differ by at most one.  No communication.
+    static std::map<GlobalIndexType, std::vector<int>> orderIncrementsWithHaloInDirections(MeshPtr mesh,
+                                                                                            std::map<GlobalIndexType, std::vector<int>> targetOrders);
     //! The given cells that hpRefinements() would leave alone if marked with the given directions: at the minimum width
-    //! in every one of them, and at maxH1Order.  No communication.
+    //! in every one of them, and at maxH1Order (in every one of them, with anisotropicP).  No communication.
     static std::set<GlobalIndexType> hpSaturatedCells(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
-                                                      const std::vector<double> &minWidths, int maxH1Order);
+                                                      const std::vector<double> &minWidths, int maxH1Order, bool anisotropicP = false);
     //! An active cell as a location-based record: its box (in the integer coordinates of the root grid) and its order.
     struct CellRecord
     {
       BoxForest::Box box;
-      int H1Order;
+      std::vector<int> H1Orders; // per direction
     };
     //! The active cells of a box mesh, as records that can be applied to another mesh with the same root grid.
     static std::vector<CellRecord> cellRecords(MeshPtr mesh);

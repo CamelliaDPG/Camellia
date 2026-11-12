@@ -499,16 +499,16 @@ TEUCHOS_UNIT_TEST( BoxHP, RefineToContainReproducesMesh )
       for (int d=0; d<dim; d++) { k.push_back(box.lo[d]); k.push_back(box.level[d]); }
       return k;
     };
-    std::map<vector<BoxForest::Coord>,int> sourceCells;
-    for (const auto &record : records) sourceCells[key(record.box)] = record.H1Order;
+    std::map<vector<BoxForest::Coord>,std::vector<int>> sourceCells;
+    for (const auto &record : records) sourceCells[key(record.box)] = record.H1Orders;
     int matched = 0;
     for (const auto &record : BoxGDA::cellRecords(target))
     {
       auto entry = sourceCells.find(key(record.box));
       TEST_ASSERT(entry != sourceCells.end());
       if (entry == sourceCells.end()) continue;
-      TEST_EQUALITY(record.H1Order, entry->second);
-      if (record.H1Order == entry->second) matched++;
+      TEST_ASSERT(record.H1Orders == entry->second);
+      if (record.H1Orders == entry->second) matched++;
     }
     out << dim << "D: " << target->numActiveElements() << " cells; " << matched << " with the recorded order" << endl;
     TEST_EQUALITY(matched, int(records.size()));
@@ -659,3 +659,115 @@ TEUCHOS_UNIT_TEST( BoxHP, AnisotropicOrdersWithSerendipityBasis )
   TEST_COMPARE(error, <, 1e-10);
 }
 
+
+namespace
+{
+  //! the largest difference of order, in any one direction, between face neighbours
+  int maxNeighborOrderJumpInDirections(MeshPtr mesh, BoxMeshTopology *topology)
+  {
+    const int dim = topology->getDimension();
+    auto orders = [&](GlobalIndexType cellID)
+    {
+      std::vector<int> order = mesh->globalDofAssignment()->getH1Order(cellID);
+      if (int(order.size()) == 1) order.assign(dim, order[0]);
+      return order;
+    };
+    int maxJump = 0;
+    const int sideCount = topology->cellTopology()->getSideCount();
+    for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+    {
+      const std::vector<int> mine = orders(cellID);
+      for (int side=0; side<sideCount; side++)
+        for (IndexType neighborID : topology->sideNeighbors(cellID, side))
+        {
+          const std::vector<int> theirs = orders(neighborID);
+          for (int k=0; k<dim; k++) maxJump = std::max(maxJump, std::abs(mine[k] - theirs[k]));
+        }
+    }
+    return maxJump;
+  }
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, AnisotropicHPRefinementsChooseByDirection )
+{
+  // 4D roots of width 0.25 and 0.75 in every direction; minimum widths 0.2 in x and t, 1 in u_x and u_z.  A cell marked
+  // in x and u_x is bisected in x (where wide enough) and raised in u_x (where it may not be bisected); a cell marked
+  // in u_z alone is raised in u_z alone.  The halo keeps each direction's orders within one.
+  const int dim = 4;
+  Convection form(dim);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.25, 1.0})));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 1, 1);
+  const vector<double> minWidths = {0.2, 0.2, 1.0, 1.0};
+  const int maxH1Order = 4;
+  // root 15 is the wide one in every direction (0.75); root 0 the narrow one (0.25)
+  std::map<GlobalIndexType,unsigned> masks = {{15, 1u | 4u}, {0, 8u}};
+  auto refinements = BoxGDA::hpRefinements(mesh, masks, minWidths, maxH1Order, true);
+  TEST_EQUALITY(refinements.pIncrements.size(), 0);
+  TEST_EQUALITY(refinements.hMasks.size(), 1);
+  TEST_EQUALITY(refinements.hMasks[15], 1u);
+  TEST_ASSERT(refinements.pIncrementsInDirections[15] == (std::vector<int>{0, 0, 1, 0}));
+  TEST_ASSERT(refinements.pIncrementsInDirections[0] == (std::vector<int>{0, 0, 0, 1}));
+  BoxGDA::hpRefine(mesh, refinements);
+  for (IndexType child : topology->getCell(15)->getChildIndices(topology))
+  {
+    TEST_ASSERT(mesh->globalDofAssignment()->getH1Order(child) == (std::vector<int>{1, 1, 2, 1}));
+  }
+  TEST_ASSERT(mesh->globalDofAssignment()->getH1Order(0) == (std::vector<int>{1, 1, 1, 2}));
+
+  // raising root 0 in u_z three more times spreads, in u_z only, to its neighbours
+  for (int round=0; round<3; round++) BoxGDA::hpRefine(mesh, BoxGDA::hpRefinements(mesh, {{0, 8u}}, minWidths, 10, true));
+  TEST_ASSERT(mesh->globalDofAssignment()->getH1Order(0) == (std::vector<int>{1, 1, 1, 5}));
+  TEST_EQUALITY(maxNeighborOrderJumpInDirections(mesh, topology.get()), 1);
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+  {
+    std::vector<int> order = mesh->globalDofAssignment()->getH1Order(cellID);
+    if (order.size() == 1) continue; // never raised
+    TEST_EQUALITY(order[0], 1); // never raised in x or t
+    TEST_EQUALITY(order[1], 1);
+  }
+  // saturation is per direction: root 0 at the maximum in u_z is saturated for u_z, not for t
+  TEST_EQUALITY(BoxGDA::hpSaturatedCells(mesh, {{0, 8u}}, minWidths, 5, true).size(), 1);
+  TEST_EQUALITY(BoxGDA::hpSaturatedCells(mesh, {{0, 8u | 2u}}, {0.2, 1.0, 1.0, 1.0}, 5, true).size(), 0);
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, DirectionIndicatorWithMixedOrders )
+{
+  // a cell linear in x and constant in the other directions (H1 orders 2,1,1,1): f = x^3 has high modes in x only, and
+  // f = (t - 0.5)^2 has nothing in x and jumps in t: each picks its own direction
+  const int dim = 4;
+  Convection form(dim);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.25, 0.5, 0.75, 1.0})));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 1, 1);
+  std::map<GlobalIndexType, std::vector<int>> xOnly;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal()) xOnly[cellID] = {1, 0, 0, 0};
+  BoxGDA::pRefineInDirections(mesh, xOnly);
+  mesh->repartitionAndRebuild();
+  const set<GlobalIndexType> activeCells = mesh->getActiveCellIDsGlobal();
+  vector<GlobalIndexType> cells(activeCells.begin(), activeCells.end());
+  auto masksX = BoxGDA::anisotropicRefinementMasks(mesh, BoxDPG::function([](const double *x) { return x[0] * x[0] * x[0]; }), cells, 0.5);
+  auto masksT = BoxGDA::anisotropicRefinementMasks(mesh, BoxDPG::function([](const double *x) { return (x[1] - 0.5) * (x[1] - 0.5) + 2 * x[1]; }), cells, 0.5);
+  int xChosen = 0, tChosen = 0;
+  for (const auto &[cellID, mask] : masksX) if (mask == 1u) xChosen++;
+  for (const auto &[cellID, mask] : masksT) if (mask == 2u) tChosen++;
+  out << "x^3: " << xChosen << " of " << cells.size() << " cells choose x alone; t^2: " << tChosen << " choose t alone" << endl;
+  TEST_EQUALITY(xChosen, int(cells.size()));
+  TEST_EQUALITY(tChosen, int(cells.size()));
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, RefineToContainReproducesAnisotropicOrders )
+{
+  // records carry orders per direction: replaying a mesh with anisotropic orders reproduces them
+  const int dim = 4;
+  Convection form(dim);
+  auto makeTopology = [dim]() { return Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.3, 1.0}))); };
+  auto sourceTopology = makeTopology();
+  MeshPtr source = BoxGDA::mesh(sourceTopology, form.bf, 1, 1);
+  source->hRefine(std::map<GlobalIndexType,unsigned>{{0, 1u}, {3, 4u}});
+  BoxGDA::pRefineInDirections(source, {{2, {0, 1, 0, 0}}, {5, {1, 0, 1, 1}}});
+  source->repartitionAndRebuild();
+  const vector<BoxGDA::CellRecord> records = BoxGDA::cellRecords(source);
+  MeshPtr target = BoxGDA::mesh(makeTopology(), form.bf, 1, 1);
+  BoxGDA::refineToContain(target, records);
+  TEST_EQUALITY(target->numActiveElements(), source->numActiveElements());
+  TEST_EQUALITY(target->numGlobalDofs(), source->numGlobalDofs());
+}
