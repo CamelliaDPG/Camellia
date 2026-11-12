@@ -140,6 +140,26 @@ grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov
                for (s=0; s in t; s++) { printf "  slab %3d  %7d elements  %9.1f s\n", s, e[s], t[s]; total += t[s] }
                printf "  all slabs: %.0f s = %.2f h of slab solves\n", total, total/3600 }'
 echo
+echo "emitted density (n0) after each solve, against production's at the end of the slab.  This is sensitive to resolution"
+echo "near the cathode: values still moving from step to step mean the slab is not yet resolved"
+PRODLOG=$PROD; [ -f "$PRODLOG" ] || PRODLOG=/dev/null
+awk '
+FNR == 1 { file++ }
+file == 1 && /Starting Time Slab/ { slab = $5 + 0; if (slab + 1 > nslabs) nslabs = slab + 1 }
+file == 1 && /space-charge-limited emission:/ { last = $0; sub(/.* -> /, "", last); sub(/ n0.*/, "", last); current[slab] = last }
+file == 1 && /solution after refinement [0-9]+: relative error/ { steps[slab] = steps[slab] " " current[slab] }
+file == 1 && /After re-solve, relative error/ { steps[slab] = steps[slab] " (re-solve " current[slab] ")" }
+file == 2 && /E\(0\) at final time is/ { value = $0; sub(/.*emitted density /, "", value); sub(/ n0.*/, "", value); production[nproduction++] = value }
+END {
+  for (s = 0; s < nslabs; s++)
+  {
+    printf "  slab %3d  after each step:%s", s, steps[s]
+    if (s < nproduction) printf "   (production: %s)", production[s]
+    printf "\n"
+  }
+}
+' $LOG $PRODLOG
+echo
 echo "inflow data: relative L2 error of the projected inflow trace before each slab's solves (target BCTOL=$BCTOL)"
 awk '/L\^2 norm of BC:/ { if (n > 0) printf "  slab %3d  %s\n", n - 1, last; n++ }
      /BC.s relErr is/  { last = $0; sub(/.*phase space mesh has /, "", last); sub(/ elements and BC.s relErr is/, " elements, relErr", last) }
