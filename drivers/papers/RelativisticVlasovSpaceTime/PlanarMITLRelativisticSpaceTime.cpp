@@ -2137,6 +2137,31 @@ int main(int argc, char *argv[])
     }
     
     const std::string directoryPath = outputDir;
+    // Open MPI's shared-file-pointer component copies the path of each HDF5 file it opens into a fixed-size (256-byte)
+    // buffer, and the process is killed if the path does not fit (signal 6 on Linux, "Trace/BPT trap: 5" on macOS).  The
+    // visualization names carry the whole parameter suffix, so a long --outputDir takes the path past that.  When
+    // directory + name would be too long, keep the start of the name and its slab suffix, with a hash of the rest between.
+    bool vizNameShorteningReported = false;
+    auto vizName = [&directoryPath, &vizNameShorteningReported, rank](const std::string &name) -> std::string
+    {
+      const size_t maxLength = 160; // for directory + "/" + name; exporters append some 40 characters more
+      if (directoryPath.size() + 1 + name.size() <= maxLength) return name;
+      unsigned long long hash = 1469598103934665603ULL; // FNV-1a
+      for (unsigned char c : name) { hash ^= c; hash *= 1099511628211ULL; }
+      std::ostringstream hashStream;
+      hashStream << "_" << std::hex << (hash & 0xffffffffULL);
+      const size_t slabPos = name.rfind("_slab");
+      const std::string tail = hashStream.str() + ((slabPos == std::string::npos) ? std::string() : name.substr(slabPos));
+      const size_t budget = (maxLength > directoryPath.size() + 1) ? maxLength - directoryPath.size() - 1 : 0;
+      const size_t headLength = std::max(budget, tail.size() + 24) - tail.size(); // always keep 24 characters of the name
+      const std::string shortName = name.substr(0, std::min(headLength, name.size())) + tail;
+      if ((rank == 0) && !vizNameShorteningReported)
+      {
+        vizNameShorteningReported = true; // the first is enough to show the pattern
+        std::cout << "Visualization name shortened to keep paths within Open MPI's limit:\n  " << name << "\n  -> " << shortName << std::endl;
+      }
+      return shortName;
+    };
     
     if (coarseSolver != "default") form->setCoarseSolverChoice(Solver::solverChoiceFromString(coarseSolver)); // carried to later slabs by nextTimeSlab()
 
@@ -2584,8 +2609,8 @@ int main(int argc, char *argv[])
         
         if (saveViz)
         {
-          std::string  vlasovSlabStr =  vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
-          std::string maxwellSlabStr = maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal);
+          std::string  vlasovSlabStr = vizName( vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal));
+          std::string maxwellSlabStr = vizName(maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal));
           
           //            auto vlasovVizSlab  = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovSlabStr, directoryPath));
           auto maxwellVizSlab = Teuchos::rcp(new HDF5Exporter (form->configurationSpaceMesh(), maxwellSlabStr, directoryPath) );
@@ -2794,8 +2819,8 @@ int main(int argc, char *argv[])
         
         if (saveViz)
         {
-          std::string  vlasovSlabStr =  vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
-          std::string maxwellSlabStr = maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal);
+          std::string  vlasovSlabStr = vizName( vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal));
+          std::string maxwellSlabStr = vizName(maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal));
           
           if (exportVlasov)
           {
@@ -3053,8 +3078,8 @@ int main(int argc, char *argv[])
           {
             if (saveViz)
             {
-              std::string  vlasovSlabStr = "finalRef" + vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
-              std::string maxwellSlabStr = "finalRef" + maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal);
+              std::string  vlasovSlabStr = vizName("finalRef" + vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal));
+              std::string maxwellSlabStr = vizName("finalRef" + maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal));
               
               if (exportVlasov)
               {
