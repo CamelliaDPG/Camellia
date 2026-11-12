@@ -771,3 +771,34 @@ TEUCHOS_UNIT_TEST( BoxHP, RefineToContainReproducesAnisotropicOrders )
   TEST_EQUALITY(target->numActiveElements(), source->numActiveElements());
   TEST_EQUALITY(target->numGlobalDofs(), source->numGlobalDofs());
 }
+
+TEUCHOS_UNIT_TEST( BoxHP, TransferSideCoefficientsRoundTrip )
+{
+  // a flux trace moved to a higher-order cell (as across a slab interface) and back is unchanged: the first transfer
+  // is exact, and the second projects back onto the space it came from
+  const int dim = 4;
+  for (bool serendipity : {false, true})
+  {
+    Convection form(dim, serendipity);
+    auto makeMesh = [&](Teuchos::RCP<BoxMeshTopology> &topology)
+    {
+      topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.4, 1.0})));
+      return BoxGDA::mesh(topology, form.bf, 2, 1);
+    };
+    Teuchos::RCP<BoxMeshTopology> fromTopology, toTopology;
+    MeshPtr from = makeMesh(fromTopology), to = makeMesh(toTopology);
+    BoxGDA::pRefineInDirections(to, {{3, {1, 0, 2, 1}}}); // higher in x, u_x, u_z (tangential to t-sides)
+    to->repartitionAndRebuild();
+    const int cellID = 3, side = fromTopology->sideOrdinalForFace(2 * 1 + 1), varID = form.t_n->ID();
+    const int n = from->getElementType(cellID)->trialOrderPtr->getBasisCardinality(varID, side);
+    FieldContainer<double> coefficients(n);
+    for (int i=0; i<n; i++) coefficients[i] = std::sin(1.0 + 3.7 * i);
+    FieldContainer<double> there = BoxGDA::transferSideCoefficients(from, cellID, side, to, cellID, side, varID, varID, coefficients);
+    TEST_COMPARE(int(there.size()), >, n);
+    FieldContainer<double> back = BoxGDA::transferSideCoefficients(to, cellID, side, from, cellID, side, varID, varID, there);
+    double maxDifference = 0;
+    for (int i=0; i<n; i++) maxDifference = std::max(maxDifference, std::abs(back[i] - coefficients[i]));
+    out << (serendipity ? "serendipity" : "hierarchical") << ": " << n << " -> " << there.size() << " coefficients; round trip max difference " << maxDifference << endl;
+    TEST_COMPARE(maxDifference, <, 1e-11);
+  }
+}

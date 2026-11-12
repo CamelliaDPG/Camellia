@@ -278,6 +278,15 @@ namespace Camellia
     static std::map<GlobalIndexType,unsigned> masksTangentialToTaggedSides(MeshPtr mesh, const std::string &tagName, int tagID,
                                                                            const std::vector<GlobalIndexType> &cellIDs);
 
+    /**
+     \brief  The coefficients, in the side basis of (toCellID, toSide) of toMesh, of the flux variable's function given by
+             fromCoefficients in the side basis of (fromCellID, fromSide) of fromMesh: an L2 projection, exact when the
+             to-side space contains the from-side space (e.g. the next time slab's cell across the interface, at an
+             order at least as high).  The two sides must coincide physically in their tangential extents.
+     */
+    static Camellia::FieldContainer<double> transferSideCoefficients(MeshPtr fromMesh, GlobalIndexType fromCellID, int fromSide,
+                                                                     MeshPtr toMesh, GlobalIndexType toCellID, int toSide,
+                                                                     int fromVarID, int toVarID, const Camellia::FieldContainer<double> &fromCoefficients);
     //! A Mesh on a box topology, with a BoxGDA.
     static MeshPtr mesh(Teuchos::RCP<BoxMeshTopology> topology, BFPtr bf, int H1Order, int delta_k,
                         MeshPartitionPolicyPtr partitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null,

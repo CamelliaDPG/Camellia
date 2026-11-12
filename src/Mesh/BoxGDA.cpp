@@ -1934,3 +1934,84 @@ void BoxGDA::refineToContain(MeshPtr mesh, const std::vector<CellRecord> &record
   if (refined || !increments.empty()) mesh->repartitionAndRebuild();
 }
 
+// ---------------------------------------------------------------- traces between meshes
+
+Camellia::FieldContainer<double> BoxGDA::transferSideCoefficients(MeshPtr fromMesh, GlobalIndexType fromCellID, int fromSide,
+                                                                  MeshPtr toMesh, GlobalIndexType toCellID, int toSide,
+                                                                  int fromVarID, int toVarID, const Camellia::FieldContainer<double> &fromCoefficients)
+{
+  BoxGDA* from = dynamic_cast<BoxGDA*>(fromMesh->globalDofAssignment().get());
+  BoxGDA* to = dynamic_cast<BoxGDA*>(toMesh->globalDofAssignment().get());
+  TEUCHOS_TEST_FOR_EXCEPTION((from == NULL) || (to == NULL), std::invalid_argument, "both meshes must have a BoxGDA");
+  const int normal = from->_boxTopology->faceForSideOrdinal(fromSide) / 2;
+  TEUCHOS_TEST_FOR_EXCEPTION(to->_boxTopology->faceForSideOrdinal(toSide) / 2 != normal, std::invalid_argument, "the sides must have the same normal direction");
+  int fluxOrdinal = -1;
+  for (size_t i=0; i<from->_fluxVars.size(); i++) if (from->_fluxVars[i]->ID() == fromVarID) fluxOrdinal = int(i);
+  TEUCHOS_TEST_FOR_EXCEPTION(fluxOrdinal < 0, std::invalid_argument, "fromVarID is not a flux variable");
+  const int dim = from->_boxTopology->getDimension();
+  Teuchos::LAPACK<int,double> lapack;
+  // solves (phi, phi) c = (phi, values) for the L2 projection onto the functions phi (n x P, point index fastest)
+  auto project = [&](const std::vector<double> &phi, const std::vector<double> &values, const FC &weightedMeasures, int n)
+  {
+    const int P = weightedMeasures.dimension(1);
+    std::vector<double> M(n*n, 0.0), c(n, 0.0);
+    for (int i=0; i<n; i++)
+    {
+      for (int j=0; j<n; j++) for (int q=0; q<P; q++) M[j*n+i] += phi[i*P+q] * phi[j*P+q] * weightedMeasures(0,q);
+      for (int q=0; q<P; q++) c[i] += phi[i*P+q] * values[q] * weightedMeasures(0,q);
+    }
+    int info;
+    lapack.POSV('U', n, 1, M.data(), n, c.data(), n, &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::runtime_error, "BoxGDA::transferSideCoefficients: projection failed");
+    return c;
+  };
+  // the from-side function as tensor-Legendre coefficients on the from cell's side box
+  const OrderData &fromData = from->orderDataForCell(fromCellID);
+  const IndexSet &indexSet = fromData.sideIndexSets[normal][fluxOrdinal];
+  const int degree = indexSetDegree(indexSet);
+  BoxForest::Patch faceBox;
+  faceBox.normal = normal;
+  const BoxForest::Box &fromBox = from->_boxTopology->forest().node(int(fromCellID)).box;
+  for (int k=0; k<dim; k++) { faceBox.lo[k] = fromBox.lo[k]; faceBox.hi[k] = fromBox.hi(k); }
+  std::vector<double> legendreCoefficients;
+  {
+    FC nodes = from->_boxTopology->physicalCellNodesForCell(fromCellID, true);
+    fromData.basisCache->setPhysicalCellNodes(nodes, {fromCellID}, true);
+    BasisCachePtr sideCache = fromData.basisCache->getSideBasisCache(fromSide);
+    BasisPtr basis = fromData.elemType->trialOrderPtr->getBasis(fromVarID, fromSide);
+    auto basisValues = sideCache->getTransformedValues(basis, OP_VALUE);
+    const FC &points = sideCache->getPhysicalCubaturePointsFC();
+    const int P = points.dimension(1), n = basis->getCardinality(), m = int(indexSet.size());
+    TEUCHOS_TEST_FOR_EXCEPTION(int(fromCoefficients.size()) != n, std::invalid_argument, "fromCoefficients must match the from-side basis");
+    std::vector<double> values(P, 0.0), psiValues(m*P), psi;
+    for (int q=0; q<P; q++)
+    {
+      for (int i=0; i<n; i++) values[q] += fromCoefficients[i] * (*basisValues)(0,i,q);
+      from->patchBasisValues(faceBox, indexSet, degree, &points(0,q,0), psi);
+      for (int j=0; j<m; j++) psiValues[j*P+q] = psi[j];
+    }
+    legendreCoefficients = project(psiValues, values, sideCache->getWeightedMeasures(), m);
+  }
+  // evaluated on the to-side and projected onto its basis (the tangential coordinates of the two sides coincide; the
+  // Legendre products do not depend on the normal coordinate)
+  const OrderData &toData = to->orderDataForCell(toCellID);
+  FC nodes = to->_boxTopology->physicalCellNodesForCell(toCellID, true);
+  toData.basisCache->setPhysicalCellNodes(nodes, {toCellID}, true);
+  BasisCachePtr sideCache = toData.basisCache->getSideBasisCache(toSide);
+  BasisPtr basis = toData.elemType->trialOrderPtr->getBasis(toVarID, toSide);
+  auto basisValues = sideCache->getTransformedValues(basis, OP_VALUE);
+  const FC &points = sideCache->getPhysicalCubaturePointsFC();
+  const int P = points.dimension(1), n = basis->getCardinality(), m = int(indexSet.size());
+  std::vector<double> values(P, 0.0), phiValues(n*P), psi;
+  for (int q=0; q<P; q++)
+  {
+    from->patchBasisValues(faceBox, indexSet, degree, &points(0,q,0), psi);
+    for (int j=0; j<m; j++) values[q] += legendreCoefficients[j] * psi[j];
+    for (int i=0; i<n; i++) phiValues[i*P+q] = (*basisValues)(0,i,q);
+  }
+  const std::vector<double> c = project(phiValues, values, sideCache->getWeightedMeasures(), n);
+  FC toCoefficients(n);
+  for (int i=0; i<n; i++) toCoefficients[i] = c[i];
+  return toCoefficients;
+}
+

@@ -515,6 +515,37 @@ TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesAnisotropicOrders )
   TEST_ASSERT(std::isfinite(fNorm));
 }
 
+TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabWithHigherOrderInterface )
+{
+  // The second slab's interface cells end up of higher order than the cells across from them (here by a pre-refinement
+  // raising them in u_x; in practice by the replayed boundary-data mesh or the order halo): the interface trace is
+  // transferred by projection.  The second slab's solution must stay close to the one without the extra order.
+  UseBoxMesh useBoxMesh(true);
+  const int xElements = 2, vxElements = 2, vyElements = 2, H1Order = 2;
+  double fNorms[2];
+  for (int raise=0; raise<2; raise++)
+  {
+    Problem p = problem(true, xElements, vxElements, vyElements, H1Order, drivenDistribution());
+    if (raise == 1)
+    {
+      p.form->setNextSlabPreRefinement([](MeshPtr nextMesh)
+      {
+        std::map<GlobalIndexType, std::vector<int>> increments;
+        for (GlobalIndexType cellID : nextMesh->getActiveCellIDsGlobal()) increments[cellID] = {0, 0, 1, 0};
+        BoxGDA::pRefineInDirections(nextMesh, increments);
+        nextMesh->repartitionAndRebuild();
+      });
+    }
+    p.form->solve();
+    auto secondSlab = p.form->nextTimeSlab(TWIDTH, 1);
+    secondSlab->solve();
+    fNorms[raise] = Function::solution(secondSlab->f(), secondSlab->vlasovSolution())->l2norm(secondSlab->vlasovMesh());
+    out << (raise ? "interface cells raised in u_x: " : "matching orders:              ") << secondSlab->vlasovMesh()->numGlobalDofs()
+        << " dofs; second slab ||f|| = " << fNorms[raise] << endl;
+  }
+  TEST_FLOATING_EQUALITY(fNorms[0], fNorms[1], 0.02);
+}
+
 TEUCHOS_UNIT_TEST( BoxVlasov, IsotropicHangingRefinementMatchesExtrudedMesh )
 {
   // One phase-space cell refined in all four directions (hanging faces in every direction; the configuration mesh is

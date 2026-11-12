@@ -1450,10 +1450,19 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
       
       int currentBasisCardinality = thisSlabVlasovMesh->getElementType(currentCellID)->trialOrderPtr->getBasisCardinality(tn_current->ID(), currentSideIndex);
       int nextBasisCardinality    = nextVlasovMesh->getElementType(nextCellID)->trialOrderPtr->getBasisCardinality(tn_next->ID(), nextSideIndex);
-      TEUCHOS_TEST_FOR_EXCEPTION(currentBasisCardinality != nextBasisCardinality, std::invalid_argument, "Temporal trace basis cardinalities do not match between slabs.");
+      TEUCHOS_TEST_FOR_EXCEPTION(!boxMeshes && (currentBasisCardinality != nextBasisCardinality), std::invalid_argument,
+                                 "Temporal trace basis cardinalities do not match between slabs.");
       
-      FieldContainer<double> coefficients(nextBasisCardinality);
+      FieldContainer<double> coefficients(currentBasisCardinality);
       _vlasovSoln->solnCoeffsForCellID(coefficients, currentCellID, tn_current->ID(), currentSideIndex);
+      if (currentBasisCardinality != nextBasisCardinality)
+      {
+        // On box meshes the next slab's interface cell may have a higher order than the cell across from it (raised
+        // by the order halo, or by a pre-refinement such as the replayed boundary-data mesh): transfer the trace by
+        // projection, which is exact since the next side's space contains this one's.
+        coefficients = BoxGDA::transferSideCoefficients(thisSlabVlasovMesh, currentCellID, currentSideIndex,
+                                                        nextVlasovMesh, nextCellID, nextSideIndex, tn_current->ID(), tn_next->ID(), coefficients);
+      }
       // because tn has an outward-facing normal included, we need to reverse the sign of the coefficients for the cell in the next slab
       for (int i=0; i<nextBasisCardinality; i++)
       {
