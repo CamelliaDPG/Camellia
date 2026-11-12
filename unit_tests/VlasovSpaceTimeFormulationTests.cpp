@@ -2824,6 +2824,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     auto unitForm      = makeForm(1.0, 0.0);
 
     auto mesh = transportForm->vlasovMesh();
+    if (mesh->cellIDsInPartition().empty()) return; // one- or two-cell mesh: ranks without a cell have nothing to check
     auto cellID = *mesh->cellIDsInPartition().begin();
     const bool testVsTest = true;
     auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
@@ -2880,6 +2881,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     auto unitForm    = makeForm(1.0, {});
 
     auto mesh = productForm->vlasovMesh();
+    if (mesh->cellIDsInPartition().empty()) return; // one- or two-cell mesh: ranks without a cell have nothing to check
     auto cellID = *mesh->cellIDsInPartition().begin();
     const bool testVsTest = true;
     auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);

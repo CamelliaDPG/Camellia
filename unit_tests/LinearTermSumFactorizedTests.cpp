@@ -127,6 +127,7 @@ namespace
     BFPtr bf = BF::bf(vf);
     bf->addTerm(u, v);
     MeshPtr mesh = MeshFactory::quadMeshMinRule(bf, 2, 1, 1.0, 1.0, 1, 1, true); // true: triangles
+    if (mesh->cellIDsInPartition().empty()) return; // one- or two-cell mesh: ranks without a cell have nothing to check
     const GlobalIndexType cellID = *mesh->cellIDsInPartition().begin();
     auto elemType = mesh->getElementType(cellID);
     auto basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, 0);
@@ -149,6 +150,7 @@ namespace
 
     auto form = relativisticForm1D2V(BASIS_FAMILY_HIERARCHICAL);
     auto mesh = form->vlasovMesh();
+    if (mesh->cellIDsInPartition().empty()) return; // one- or two-cell mesh: ranks without a cell have nothing to check
     const GlobalIndexType cellID = *mesh->cellIDsInPartition().begin();
     auto elemType = mesh->getElementType(cellID);
     auto ipBasisCache = BasisCache::basisCacheForCell(mesh, cellID, true, 0);
