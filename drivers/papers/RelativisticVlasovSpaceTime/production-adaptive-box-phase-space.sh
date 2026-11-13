@@ -89,6 +89,9 @@
 #   COARSE  direct solver for the coarsest multigrid level: SuperLUDist (default) or KLU.  The coarsest level is
 #           the base mesh at order 1, small enough for KLU2 on one rank; SuperLU_DIST's ParMETIS ordering has
 #           crashed on it (a bus error in libparmetis__Match_Global on macOS).
+#   L2W, L2T  the test norm's L^2 weight, alpha_K = L2W + L2T [(v_x,max/h_x)^2 + 1/h_t^2 + (a_x/h_ux)^2 + (a_z/h_uz)^2]
+#           (defaults 1e2 and 1.6, as production).  Large weights on small cells weaken the norm's control of charge
+#           conservation (see the charge balance in the summary).
 #   SEP     1: the direction-separable graph test norm (--separableGraphTestNorm); 0 (default): the graph norm
 #   DP      test enrichment                                          (default 2, as production; 1 roughly halves storage)
 #   NP      MPI ranks                                                (default 16)
@@ -118,6 +121,8 @@ DP=${DP:-2}
 TEL=${TEL:-1}
 COARSE=${COARSE:-SuperLUDist}
 SEP=${SEP:-0}
+L2W=${L2W:-1e2}
+L2T=${L2T:-1.6}
 if [ "$SEP" = 1 ]; then SEPOPT=--separableGraphTestNorm; else SEPOPT=; fi
 NP=${NP:-16}
 SLABS=${SLABS:-60}; SAMPLED=${SAMPLED:-0,1,2,3,5,7,10,15,20,30,40,50,59}
@@ -125,6 +130,7 @@ PROD=${PROD:-/private/viz/nov2026/mitl/production-scl-graph-transport-a1.8-x32-d
 OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-p$MAXP-dp$DP-ref$REF0-$REF$HPTAG-phase
 [ "$TEL" != 1 ] && OUT=$OUT-tel$TEL
 [ "$SEP" = 1 ] && OUT=$OUT-sep
+{ [ "$L2W" != 1e2 ] || [ "$L2T" != 1.6 ]; } && OUT=$OUT-l2w$L2W-l2t$L2T
 if [ "${CHECK:-0}" = 1 ]; then SLABS=3; SAMPLED=0,2; OUT=$OUT-check; fi
 X=./drivers/papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime
 SRC=$(grep -m1 "^CMAKE_HOME_DIRECTORY" CMakeCache.txt | cut -d= -f2)
@@ -149,7 +155,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --xElements=8 --tElements=$TEL --numUniformRefinements=0 --maxDofsForDirectSolve=0 --p=$MAXP --dp=$DP $REPLAYOPT \
   --tWidth=1e-1 --numTimeSlabs=$SLABS --ratio=1.5 --minSubsteps=2 --maxSubsteps=10 --fixedPointTol=1e-4 --J=5e8 \
   --useSerendipityBasis --coarseSolver=$COARSE $SEPOPT --accuracyDiagnostics --densityDiagnostic \
-  --useGraphTestNorm --L2WeightGraph=1e2 --L2WeightGraphTransportScale=1.6 --L2WeightGraphAccelerationBounds=1.8,0.65 \
+  --useGraphTestNorm --L2WeightGraph=$L2W --L2WeightGraphTransportScale=$L2T --L2WeightGraphAccelerationBounds=1.8,0.65 \
   --phaseSpaceDiagnostic --phaseSpaceDiagnosticSlabs=$SAMPLED \
   --useBoxMesh --useAdaptivity --boxAnisotropicAdaptivity --boxAnisotropyThreshold=$ANISO $HPOPTS \
   --maxRefinementsFirstSlab=$REF0 --maxRefinements=$REF --maxRefinementsFinalSlab=$REF \
@@ -160,7 +166,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP TEL=$TEL COARSE=$COARSE SEP=$SEP NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP TEL=$TEL COARSE=$COARSE SEP=$SEP L2W=$L2W L2T=$L2T NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \
