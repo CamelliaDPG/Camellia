@@ -106,7 +106,7 @@ namespace
   std::vector<int> ordersPerDirection(MeshPtr mesh, GlobalIndexType cellID, int dim)
   {
     std::vector<int> order = mesh->globalDofAssignment()->getH1Order(cellID);
-    if (int(order.size()) == 1) order.assign(dim, order[0]);
+    if (int(order.size()) == 1) order = std::vector<int>(dim, order[0]); // (not assign(): its value argument would refer into the vector being reassigned)
     return order;
   }
   bool directionalOrdersFor(MeshPtr mesh, bool anisotropicP)
@@ -129,7 +129,7 @@ std::vector<int> BoxGDA::getH1Order(GlobalIndexType cellID)
   auto entry = _directionalIncrements.find(cellID);
   if (entry == _directionalIncrements.end()) return order;
   const int dim = _boxTopology->getDimension();
-  if (int(order.size()) == 1) order.assign(dim, order[0]);
+  if (int(order.size()) == 1) order = std::vector<int>(dim, order[0]); // (not assign(): its value argument would refer into the vector being reassigned)
   for (int k=0; k<dim; k++) order[k] += entry->second[k];
   return order;
 }
@@ -168,7 +168,7 @@ std::vector<int> BoxGDA::cellOrder(GlobalIndexType cellID)
 {
   std::vector<int> order = getH1Order(cellID);
   const int dim = _boxTopology->getDimension();
-  if (int(order.size()) == 1) order.assign(dim, order[0]);
+  if (int(order.size()) == 1) order = std::vector<int>(dim, order[0]); // (not assign(): its value argument would refer into the vector being reassigned)
   return order;
 }
 

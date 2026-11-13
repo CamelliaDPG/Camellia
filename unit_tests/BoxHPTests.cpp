@@ -669,7 +669,7 @@ namespace
     auto orders = [&](GlobalIndexType cellID)
     {
       std::vector<int> order = mesh->globalDofAssignment()->getH1Order(cellID);
-      if (int(order.size()) == 1) order.assign(dim, order[0]);
+      if (int(order.size()) == 1) order = std::vector<int>(dim, order[0]); // (not assign(): its value argument would refer into the vector being reassigned)
       return order;
     };
     int maxJump = 0;
