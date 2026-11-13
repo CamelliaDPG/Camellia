@@ -89,6 +89,7 @@
 #   COARSE  direct solver for the coarsest multigrid level: SuperLUDist (default) or KLU.  The coarsest level is
 #           the base mesh at order 1, small enough for KLU2 on one rank; SuperLU_DIST's ParMETIS ordering has
 #           crashed on it (a bus error in libparmetis__Match_Global on macOS).
+#   SEP     1: the direction-separable graph test norm (--separableGraphTestNorm); 0 (default): the graph norm
 #   DP      test enrichment                                          (default 2, as production; 1 roughly halves storage)
 #   NP      MPI ranks                                                (default 16)
 #   SLABS, SAMPLED  as in the production script                      (default 60; CHECK=1 gives 3)
@@ -116,11 +117,14 @@ BCTOL=${BCTOL:-0.01}
 DP=${DP:-2}
 TEL=${TEL:-1}
 COARSE=${COARSE:-SuperLUDist}
+SEP=${SEP:-0}
+if [ "$SEP" = 1 ]; then SEPOPT=--separableGraphTestNorm; else SEPOPT=; fi
 NP=${NP:-16}
 SLABS=${SLABS:-60}; SAMPLED=${SAMPLED:-0,1,2,3,5,7,10,15,20,30,40,50,59}
 PROD=${PROD:-/private/viz/nov2026/mitl/production-scl-graph-transport-a1.8-x32-dp2-phase/console.log}
 OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-p$MAXP-dp$DP-ref$REF0-$REF$HPTAG-phase
 [ "$TEL" != 1 ] && OUT=$OUT-tel$TEL
+[ "$SEP" = 1 ] && OUT=$OUT-sep
 if [ "${CHECK:-0}" = 1 ]; then SLABS=3; SAMPLED=0,2; OUT=$OUT-check; fi
 X=./drivers/papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime
 SRC=$(grep -m1 "^CMAKE_HOME_DIRECTORY" CMakeCache.txt | cut -d= -f2)
@@ -144,7 +148,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --gradedVelocityMesh --velocityCoreWidthFactor=2 --velocityCoreHalfWidthFactor=2 --velocityGrowthRatio=3 \
   --xElements=8 --tElements=$TEL --numUniformRefinements=0 --maxDofsForDirectSolve=0 --p=$MAXP --dp=$DP $REPLAYOPT \
   --tWidth=1e-1 --numTimeSlabs=$SLABS --ratio=1.5 --minSubsteps=2 --maxSubsteps=10 --fixedPointTol=1e-4 --J=5e8 \
-  --useSerendipityBasis --coarseSolver=$COARSE --accuracyDiagnostics --densityDiagnostic \
+  --useSerendipityBasis --coarseSolver=$COARSE $SEPOPT --accuracyDiagnostics --densityDiagnostic \
   --useGraphTestNorm --L2WeightGraph=1e2 --L2WeightGraphTransportScale=1.6 --L2WeightGraphAccelerationBounds=1.8,0.65 \
   --phaseSpaceDiagnostic --phaseSpaceDiagnosticSlabs=$SAMPLED \
   --useBoxMesh --useAdaptivity --boxAnisotropicAdaptivity --boxAnisotropyThreshold=$ANISO $HPOPTS \
@@ -156,7 +160,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP TEL=$TEL COARSE=$COARSE NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP TEL=$TEL COARSE=$COARSE SEP=$SEP NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \
@@ -240,6 +244,21 @@ else
   grep "^ACCURACY" $LOG | sed 's/^/  /'
 fi
 echo
+if grep -q "^CHARGE_BALANCE slab" $LOG; then
+  echo "charge balance per slab, from the flux trace: the charge at the start and end, emitted at the cathode, absorbed at"
+  echo "the anode, and through the velocity limits.  The conservation error is start + emitted - end - absorbed - velocity;"
+  echo "it is zero for an exactly conservative solution (DPG is not exactly conservative), shown relative to start + emitted"
+  awk '
+    function field(line, name,   m) { if (match(line, " " name "=[-0-9.e+]+")) { m = substr(line, RSTART, RLENGTH); sub(/^[^=]*=/, "", m); return m + 0 } return 0 }
+    /^CHARGE_BALANCE_STEP/ { s = field($0, "slab"); trend[s] = trend[s] sprintf(" %+.2e", -field($0, "relative")); if (s + 1 > n) n = s + 1; next }
+    /^CHARGE_BALANCE slab/ { s = field($0, "slab"); start = -field($0, "t0"); end = field($0, "t1"); emitted = -field($0, "cathode"); absorbed = field($0, "anode")
+      velocity = field($0, "velocity_limits"); residual = field($0, "residual"); relative = field($0, "relative")
+      printf "  slab %3d  start %.6f  emitted %.6f  end %.6f  absorbed %.6f  velocity %+.2e   error %+.3e (%+.2e relative)\n", s, start, emitted, end, absorbed, velocity, -residual, -relative }
+    END { if (n > 0) print "  relative conservation error after each refinement step (it should shrink as the mesh adapts):"
+          for (s = 0; s < n; s++) printf "  slab %3d %s\n", s, trend[s] }
+  ' $LOG
+  echo
+fi
 if [ -f $OUT/phase_reductions_start.csv ] && [ -f $OUT/phase_reductions.csv ]; then
   echo "charge across slab boundaries: int f dx du at the end of each slab and at the start of the next.  A jump means f"
   echo "is lost (or gained) in the transfer or right after it; a drift within a slab is the solve"

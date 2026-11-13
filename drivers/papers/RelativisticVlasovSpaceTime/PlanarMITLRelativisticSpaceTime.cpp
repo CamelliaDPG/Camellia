@@ -411,6 +411,72 @@ namespace
     }
   }
 
+  //! Collective.  The charge balance of a slab from the flux trace t_n alone: t_n is single-valued on interior sides, so
+  //! its integral over every cell's boundary is its integral over the slab's boundary, which for exact conservation
+  //! vanishes (the Vlasov equation has no source).  Prints one CHARGE_BALANCE line: the outward flux through each part
+  //! of the boundary -- t0 (minus the charge at the slab start), t1 (the charge at its end), x0 (the cathode: minus the
+  //! charge emitted), x1 (the anode: the charge absorbed), and the velocity limits -- and their sum, the conservation
+  //! error, also relative to the charge that came in (at t0 and through the cathode).  A boundary side is classified
+  //! by the coordinate that is constant on it, so this works on box and extruded meshes alike.
+  void reportChargeBalance(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int speciesOrdinal, int slabOrdinal, int refinementStep = -1)
+  {
+    MeshPtr mesh = form->vlasovMesh();
+    const int rank = mesh->Comm()->getRank();
+    const int dim = mesh->getDimension(); // (x, t, u_x, u_z)
+    const bool weightFluxesBySideParity = true;
+    FunctionPtr tn = Function::solution(form->t_n_hat(speciesOrdinal), form->vlasovSolution(), weightFluxesBySideParity);
+    auto topology = mesh->getTopology();
+    std::vector<double> sums(2 * dim, 0.0); // [2 * direction + upper]
+    for (GlobalIndexType cellID : mesh->cellIDsInPartition())
+    {
+      CellPtr cell = topology->getCell(cellID);
+      BasisCachePtr basisCache;
+      for (unsigned side=0; side<cell->getSideCount(); side++)
+      {
+        if (!cell->isBoundary(side)) continue;
+        if (basisCache == Teuchos::null) basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+        BasisCachePtr sideCache = basisCache->getSideBasisCache(side);
+        const auto &points = sideCache->getPhysicalCubaturePointsFC(); // (1, P, dim)
+        const int pointCount = points.dimension(1);
+        int direction = 0;
+        double smallestSpread = std::numeric_limits<double>::max();
+        for (int d=0; d<dim; d++)
+        {
+          double lo = points(0,0,d), hi = points(0,0,d);
+          for (int p=1; p<pointCount; p++) { lo = std::min(lo, points(0,p,d)); hi = std::max(hi, points(0,p,d)); }
+          if (hi - lo < smallestSpread) { smallestSpread = hi - lo; direction = d; }
+        }
+        const auto &cellPoints = basisCache->getPhysicalCubaturePointsFC();
+        double center = 0;
+        for (int p=0; p<cellPoints.dimension(1); p++) center += cellPoints(0,p,direction);
+        center /= cellPoints.dimension(1);
+        const int upper = (points(0,0,direction) > center) ? 1 : 0;
+        Camellia::FieldContainer<double> values(1, pointCount);
+        tn->values(values, sideCache);
+        const auto &measures = sideCache->getWeightedMeasures();
+        double sideFlux = 0;
+        for (int p=0; p<pointCount; p++) sideFlux += values(0,p) * measures(0,p);
+        sums[2 * direction + upper] += sideFlux;
+      }
+    }
+    std::vector<double> global(sums.size());
+    for (size_t i=0; i<sums.size(); i++) global[i] = MPIWrapper::sum(mesh->Comm(), sums[i]);
+    if (rank == 0)
+    {
+      double velocityFlux = 0, residual = 0;
+      for (int d=0; d<dim; d++) residual += global[2*d] + global[2*d+1];
+      for (int d=2; d<dim; d++) velocityFlux += global[2*d] + global[2*d+1];
+      const double chargeIn = -global[2*1+0] - std::min(global[2*0+0], 0.0); // at t0, and through the cathode
+      std::cout << std::setprecision(10);
+      std::cout << ((refinementStep < 0) ? "CHARGE_BALANCE slab=" : "CHARGE_BALANCE_STEP slab=") << slabOrdinal;
+      if (refinementStep >= 0) std::cout << " step=" << refinementStep;
+      std::cout << " t0=" << global[2] << " t1=" << global[3] << " cathode=" << global[0]
+                << " anode=" << global[1] << " velocity_limits=" << velocityFlux << " residual=" << residual
+                << " relative=" << ((chargeIn != 0) ? residual / chargeIn : 0.0) << std::endl;
+      std::cout << std::setprecision(6);
+    }
+  }
+
   TensorMaxwellRHSMomentData phase8BuildLegacyMomentReferenceData(const std::vector<GlobalIndexType> &configurationCellIDs,
                                                                   MeshPtr configurationMesh,
                                                                   FunctionPtr densityFunction,
@@ -2872,6 +2938,7 @@ int main(int argc, char *argv[])
                       << " int_Jx=" << JxIntegral << " int_n=" << nIntegral << " E0_end=" << E_left << std::endl;
             std::cout << std::setprecision(6);
           }
+          reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal);
         }
         
 //        {
@@ -3213,6 +3280,7 @@ int main(int argc, char *argv[])
             }
             std::cout << "********************************************************************************\n\n";
           }
+          if (accuracyDiagnostics) reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal, refinementNumber); // the trend as the mesh adapts
           
           if (errorTargetMet && (refinementNumber < maxRefinements))
           {
@@ -3355,6 +3423,7 @@ int main(int argc, char *argv[])
                         << " vlasov_elements=" << form->vlasovMesh()->numActiveElements() << " vlasov_dofs=" << form->vlasovMesh()->numGlobalDofs() << std::endl;
               std::cout << std::setprecision(6);
             }
+            reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal);
           }
         }
         
