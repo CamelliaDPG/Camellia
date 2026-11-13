@@ -14,6 +14,7 @@
 // Everything is in the four-mode layout of System (trial blocks: field cell*nbF; flux normal: interior faces; flux
 // other directions: cell*nbJ), so the result plugs into the existing residual check and output.
 #include "SchurChebyshev.hpp"
+#include <fstream>
 
 namespace PlanarMITLBoba
 {
@@ -28,7 +29,11 @@ struct ExplicitSchurOptions
   // lambda_max: "power" (Ifpack2-style deterministic power iteration on S~ = P S P, times boostFactor), "bound"
   // (rigorous element bound, O(n^3) per element), or "lanczos" (the Lanczos Ritz max x 1.05)
   std::string lambdaMaxMode = "power";
-  int powerIterations = 20; double powerTolerance = 1e-6, powerStop = 1e-3, boostFactor = 1.1;
+  // Defaults (11-13): 10 iterations (Ifpack2's default) from a seeded rank-one start, rounded at 1e-4, boost 1.2.  The
+  // Ifpack2 pattern start (1 + index mod 97) is high-rank in TT form (~97), which made 20 iterations at 1e-6 cost
+  // ~1000-2000 s at production shape; 10 iterations reach ~0.9 x the converged lambda_max, hence the larger boost.
+  int powerIterations = 10; double powerTolerance = 1e-4, powerStop = 1e-3, boostFactor = 1.2;
+  std::string powerStart = "random";        // "random" (seeded rank one) or "pattern" (1 + index mod 97)
   int lambdaMinDiagnosticIterations = 0;   // > 0: shifted power iteration on (lambda_max I - S~) for lambda_min
   // solver for S~ y = c~: "chebyshev" (above) or "amen" (block AMEn on the SPD trial-space system, optionally with the
   // (basis, cell) mode split of solveSplitAxes)
@@ -40,6 +45,23 @@ struct ExplicitSchurOptions
 namespace ExplicitSchurDetail
 {
 using Mat = Eigen::MatrixXd;
+
+/// current and peak resident set size (GB) of this process, from /proc/self/status (0 if unavailable)
+inline std::pair<double, double> rssGB()
+{
+  std::ifstream in("/proc/self/status"); std::string key; double now = 0, peak = 0;
+  while (in >> key)
+  {
+    if (key == "VmRSS:") { in >> now; now /= 1048576.0; }
+    else if (key == "VmHWM:") { in >> peak; peak /= 1048576.0; }
+  }
+  return {now, peak};
+}
+inline void reportMemory(const std::string &stage)
+{
+  const auto m = rssGB();
+  std::cout << "explicit_S memory " << stage << ": rss " << m.first << " GB, peak " << m.second << " GB" << std::endl;
+}
 
 inline Mat kron(const Mat &outer, const Mat &inner)
 {
@@ -81,12 +103,13 @@ inline std::vector<Core3> ttSvd(std::vector<double> &T, const std::array<size_t,
   const double delta2 = tol * tol * norm2 / 3.0;
   std::vector<Core3> cores;
   size_t r = 1, rest = T.size();
-  Mat C = Eigen::Map<Mat>(T.data(), Eigen::Index(n[0]), Eigen::Index(rest / n[0]));
-  { std::vector<double>().swap(T); }
+  // the unfoldings are mapped in place (no copies of the element tensor): T for the first, then C
+  std::vector<double> buffer; buffer.swap(T);
+  Mat C; const double *data = buffer.data();
   for (size_t d = 0; d < 3; ++d)
   {
     rest /= n[d];
-    const Mat M = Eigen::Map<const Mat>(C.data(), Eigen::Index(r * n[d]), Eigen::Index(rest));
+    const Eigen::Map<const Mat> M(data, Eigen::Index(r * n[d]), Eigen::Index(rest));
     Mat U; Eigen::VectorXd w; Mat nextC;
     if (M.rows() <= M.cols())
     {
@@ -108,7 +131,9 @@ inline std::vector<Core3> ttSvd(std::vector<double> &T, const std::array<size_t,
     for (Eigen::Index q = 0; q < k; ++q) for (size_t i = 0; i < n[d]; ++i) for (size_t a = 0; a < r; ++a)
       core(a, i, size_t(q)) = U(Eigen::Index(a + r * i), q);
     cores.push_back(core);
-    C = nextC.size() ? Mat(nextC.topRows(k)) : Mat(U.leftCols(k).transpose() * M);    // k x rest
+    Mat Cnew = nextC.size() ? Mat(nextC.topRows(k)) : Mat(U.leftCols(k).transpose() * M);    // k x rest
+    C.swap(Cnew); data = C.data();
+    if (d == 0) std::vector<double>().swap(buffer);
     r = size_t(k);
   }
   Core3 last(r, n[3], 1);
@@ -136,6 +161,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   const size_t nlocT = nbT[0] * nbT[1] * nbT[2] * nbT[3];
   const ElementClasses ec(axes);
   auto sep = separableGramInverseData(axes, cells, ec, nbT, norm);
+  reportMemory("after N5 inverse data");
   // trial blocks, in the order of system.names[1..]
   const std::array<std::string, 4> dirs = {"x", "t", "ux", "uz"};
   std::vector<TrialBlock> blocks;
@@ -291,6 +317,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         if (g >= 0) { cFull[a](g) += cK(off[a] + il); diag[a](g) += dK(off[a] + il); }
       }
   });
+  reportMemory("after rhs + jacobi");
   // --- scaling P ~ D^{-1/2} (rank-one Kronecker fit of log d over the four modes), S~ = P S P
   std::vector<std::array<Eigen::VectorXd, 4>> pf(nt);
   for (size_t a = 0; a < nt; ++a)
@@ -348,6 +375,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       T[q].assign(total, 0.0);
     }
     const auto te = clock::now();
+    reportMemory("pass " + std::to_string(pass) + " element tensors allocated (" + std::to_string(bytes / 1e9) + " GB)");
     // only the columns of the blocks in this pass
     std::vector<bool> sel(nt, false); for (const auto &pr : ps) { sel[pr.first] = true; sel[pr.second] = true; }
     std::vector<size_t> soff(nt + 1, 0); for (size_t a = 0; a < nt; ++a) soff[a + 1] = soff[a] + (sel[a] ? blocks[a].localSize() : 0);
@@ -414,6 +442,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       if (a != b) S[b][a] = M.transpose();
     }
     tSvd += seconds(ts);
+    reportMemory("after S pass " + std::to_string(pass));
     ++pass;
   }
   std::cout << "explicit_S assembled: " << pass << " passes, element blocks " << tElements << " s, TT-SVD + expansion " << tSvd << " s" << std::endl;
@@ -458,6 +487,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     x[a] = zero_tt_vector<4>(system.sizes[a + 1]);
   }
   const double cNorm = std::sqrt(cNorm2);
+  reportMemory("end of setup");
   std::cout << "explicit_S setup_seconds=" << seconds(t0) << std::endl;
 
   // --- S~ applied to a block vector
@@ -526,7 +556,8 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     lmax = opt.lambdaMaxMode == "bound" ? lmaxBound : ritz(m - 1) * 1.05;
     ritzMax = ritz(m - 1);
     std::cout << "explicit_S spectrum Ritz [" << ritz(0) << ", " << ritz(m - 1) << "] (" << seconds(tb) << " s); using ["
-              << lmin << ", " << lmax << "] (upper: element bound; Ritz max / bound " << ritz(m - 1) / lmaxBound << ") kappa "
+              << lmin << ", " << lmax << "] (upper: " << (opt.lambdaMaxMode == "bound" ? "element bound" : opt.lambdaMaxMode == "power" ? "power iteration, below" : "Ritz max x 1.05")
+              << ") kappa "
               << lmax / lmin << std::endl;
   }
 
@@ -544,10 +575,17 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     return v;
   };
   auto normOf = [&](const std::vector<TTVector> &v) { return std::sqrt(dot(v, v)); };
+  auto powerStartVector = [&]() {
+    if (opt.powerStart == "pattern") return patternStart();
+    BlockVector shape(nt); for (size_t a = 0; a < nt; ++a) shape(a) = ct[a];
+    const auto guess = DpgBoba::initialGuess(shape, 11);   // seeded rank-one TT per block
+    std::vector<TTVector> v(nt); for (size_t a = 0; a < nt; ++a) v[a] = guess(a);
+    return v;
+  };
   if (opt.lambdaMaxMode == "power")
   {
     const auto tp = clock::now(); const double pt = opt.powerTolerance;
-    auto v = patternStart(); double nv = normOf(v); for (auto &b : v) b *= 1.0 / nv;
+    auto v = powerStartVector(); double nv = normOf(v); for (auto &b : v) b *= 1.0 / nv;
     double est = 0, old = 0; int it = 0;
     for (it = 1; it <= opt.powerIterations; ++it)
     {
@@ -621,6 +659,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
 
   }
 
+  reportMemory("after solve");
   // --- solution: x = P y; eps = G^{-1}(l - B x) element-locally
   BlockVector solution(system.names.size());
   std::vector<Eigen::VectorXd> xFull(nt);

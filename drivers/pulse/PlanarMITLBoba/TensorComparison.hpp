@@ -335,6 +335,7 @@ inline int runTensorComparison(int argc, char **argv)
     ex.boundsTolerance = problem.chebBoundsTolerance; ex.lminSafety = problem.chebLminSafety;
     ex.lambdaMaxMode = problem.explicitSchurLambdaMax; ex.powerIterations = problem.explicitSchurPowerIterations;
     ex.powerTolerance = problem.explicitSchurPowerTolerance; ex.boostFactor = problem.explicitSchurBoost;
+    ex.powerStart = problem.explicitSchurPowerStart;
     ex.lambdaMinDiagnosticIterations = problem.explicitSchurLambdaMinIterations;
     ex.solver = problem.explicitSchurSolver;
     ex.amen = options; ex.amen.roundingTolerance = problem.chebTolerance; ex.amen.infSupEnrichment = false;

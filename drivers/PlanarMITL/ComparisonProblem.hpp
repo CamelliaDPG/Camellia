@@ -43,8 +43,9 @@ struct ComparisonProblem
   double chebJacobiTolerance = 0;
   bool chebScaled = true, chebZipUp = false, chebStructuredField = true;
   bool explicitSchur = false; double explicitSchurTolerance = 1e-6;
-  std::string explicitSchurLambdaMax = "power"; int explicitSchurPowerIterations = 20, explicitSchurLambdaMinIterations = 0;
-  double explicitSchurPowerTolerance = 1e-6, explicitSchurBoost = 1.1;
+  std::string explicitSchurLambdaMax = "power"; int explicitSchurPowerIterations = 10, explicitSchurLambdaMinIterations = 0;
+  double explicitSchurPowerTolerance = 1e-4, explicitSchurBoost = 1.2;
+  std::string explicitSchurPowerStart = "random";
   std::string explicitSchurSolver = "chebyshev";
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
@@ -142,7 +143,8 @@ struct ComparisonProblem
     cmd.setOption("explicitSchurLambdaMax", &explicitSchurLambdaMax, "Explicit Schur lambda_max: power (Ifpack2-style), bound, or lanczos");
     cmd.setOption("explicitSchurPowerIterations", &explicitSchurPowerIterations, "Explicit Schur: power iterations for lambda_max");
     cmd.setOption("explicitSchurPowerTolerance", &explicitSchurPowerTolerance, "Explicit Schur: TT rounding tolerance of the power iteration");
-    cmd.setOption("explicitSchurBoost", &explicitSchurBoost, "Explicit Schur: lambda_max boost factor (Ifpack2 default 1.1)");
+    cmd.setOption("explicitSchurBoost", &explicitSchurBoost, "Explicit Schur: lambda_max boost factor (Ifpack2 default 1.1; 1.2 for 10 TT iterations)");
+    cmd.setOption("explicitSchurPowerStart", &explicitSchurPowerStart, "Explicit Schur: power start vector, random (rank one) or pattern (1 + index mod 97)");
     cmd.setOption("explicitSchurSolver", &explicitSchurSolver,
                   "Explicit Schur solver: chebyshev, or amen (block AMEn on S~ with --tolerance, --chebTolerance as the local "
                   "SVD tolerance, --kickrank, --maxRank, --maxSweeps, --localSolver; --splitAxes for the (basis, cell) split)");
