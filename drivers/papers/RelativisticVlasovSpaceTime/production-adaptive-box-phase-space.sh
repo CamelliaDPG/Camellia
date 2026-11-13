@@ -85,6 +85,7 @@
 #           imposed by projection onto the trace space), so this pre-refinement is what resolves the inflow.  It
 #           refines only cells on the inflow side, tangentially to it (t, u_x, u_z), so it is cheap.  The initial data
 #           (vacuum) need none, and each later slab's data at t0 are the previous slab's trace, copied exactly.
+#   TEL     time cells per slab in the base mesh                 (default 1; production: 2)
 #   DP      test enrichment                                          (default 2, as production; 1 roughly halves storage)
 #   NP      MPI ranks                                                (default 16)
 #   SLABS, SAMPLED  as in the production script                      (default 60; CHECK=1 gives 3)
@@ -110,10 +111,12 @@ if [ "$ANISOP" = 1 ]; then ANISOPOPT=--anisotropicP; ANISOPTAG=a; else ANISOPOPT
 if [ "$HP" = 1 ]; then HPOPTS="--hpAdaptivity --hpInitialH1Order=$HP0 --hpMinWidths=$HPMIN $ANISOPOPT"; HPTAG=-hp$HP0$ANISOPTAG; else HPOPTS=""; HPTAG=""; fi
 BCTOL=${BCTOL:-0.01}
 DP=${DP:-2}
+TEL=${TEL:-1}
 NP=${NP:-16}
 SLABS=${SLABS:-60}; SAMPLED=${SAMPLED:-0,1,2,3,5,7,10,15,20,30,40,50,59}
 PROD=${PROD:-/private/viz/nov2026/mitl/production-scl-graph-transport-a1.8-x32-dp2-phase/console.log}
 OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-p$MAXP-dp$DP-ref$REF0-$REF$HPTAG-phase
+[ "$TEL" != 1 ] && OUT=$OUT-tel$TEL
 if [ "${CHECK:-0}" = 1 ]; then SLABS=3; SAMPLED=0,2; OUT=$OUT-check; fi
 X=./drivers/papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime
 SRC=$(grep -m1 "^CMAKE_HOME_DIRECTORY" CMakeCache.txt | cut -d= -f2)
@@ -131,7 +134,7 @@ mkdir -p $OUT
 
 CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --gradedVelocityMesh --velocityCoreWidthFactor=2 --velocityCoreHalfWidthFactor=2 --velocityGrowthRatio=3 \
-  --xElements=8 --tElements=1 --numUniformRefinements=0 --maxDofsForDirectSolve=0 --p=$MAXP --dp=$DP $REPLAYOPT \
+  --xElements=8 --tElements=$TEL --numUniformRefinements=0 --maxDofsForDirectSolve=0 --p=$MAXP --dp=$DP $REPLAYOPT \
   --tWidth=1e-1 --numTimeSlabs=$SLABS --ratio=1.5 --minSubsteps=2 --maxSubsteps=10 --fixedPointTol=1e-4 --J=5e8 \
   --useSerendipityBasis --coarseSolver=SuperLUDist --accuracyDiagnostics --densityDiagnostic \
   --useGraphTestNorm --L2WeightGraph=1e2 --L2WeightGraphTransportScale=1.6 --L2WeightGraphAccelerationBounds=1.8,0.65 \
@@ -145,7 +148,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP TEL=$TEL NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \
