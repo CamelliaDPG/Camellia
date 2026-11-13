@@ -2488,6 +2488,7 @@ void VlasovSpaceTimeFormulation::solve()
     const bool recordMemory = static_cast<bool>(_substepSolveProfileCallback);
     MemoryCheckpoints::setEnabled(recordMemory);
     MemoryCheckpoints::clear();
+    if (releaseFreedMemoryRequested()) releaseFreedMemoryToOS(); // CAMELLIA_RELEASE_FREED_MEMORY
     MemoryCheckpoints::record("substep_start");
 
     // solve for f:
@@ -2522,6 +2523,11 @@ void VlasovSpaceTimeFormulation::solve()
     }
     profile.iterationCount = substepIterationCounts[substepOrdinal];
     MemoryCheckpoints::record("vlasov_solve_done"); // after the GMG solver (and its operators) have been released
+    if (releaseFreedMemoryRequested())
+    {
+      releaseFreedMemoryToOS();
+      MemoryCheckpoints::record("freed_memory_released");
+    }
     if (recordMemory)
     {
       profile.memoryCheckpoints = MemoryCheckpoints::checkpoints();

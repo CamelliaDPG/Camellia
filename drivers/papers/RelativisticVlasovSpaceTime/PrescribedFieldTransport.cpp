@@ -19,6 +19,7 @@
 // Reported per slab: relative L^2 error of f, max |f - f_exact|, min f, and the relative error in the integral of f.
 //
 
+#include <sstream>
 #include "Camellia.h"
 #include "ConfigurationSpaceFormulationTrivial.h"
 #include "RelativisticVlasovSpaceTimeFormulation.h"
@@ -131,6 +132,30 @@ namespace
     for (int i=0; i<=n; i++) v[i] = a + (b - a) * double(i) / n;
     return v;
   }
+
+  //! Graded vertices on [a, b]: a uniform core of width-w elements on [center - halfWidth, center + halfWidth] (clipped),
+  //! widths growing by ratio outward; a final element narrower than 1.5x nominal absorbs the remainder.  (As in
+  //! PlanarMITLRelativisticSpaceTime's gradedVertices.)
+  std::vector<double> gradedVertices(double a, double b, double center, double w, double halfWidth, double ratio)
+  {
+    const double lo = std::max(a, center - halfWidth), hi = std::min(b, center + halfWidth);
+    auto side = [&](double start, double end) {
+      std::vector<double> v; const double length = std::abs(end - start), dir = (end > start) ? 1.0 : -1.0;
+      double pos = 0, width = w * ratio;
+      while (length - pos > 0)
+      {
+        if (length - pos <= 1.5 * width) { v.push_back(end); break; }
+        pos += width; v.push_back(start + dir * pos); width *= ratio;
+      }
+      return v;
+    };
+    std::vector<double> v; auto left = side(lo, a);
+    for (auto it = left.rbegin(); it != left.rend(); it++) v.push_back(*it);
+    const int n = std::max(1, int(std::ceil((hi - lo) / w - 1e-10)));
+    for (int i=0; i<=n; i++) v.push_back(lo + (hi - lo) * double(i) / n);
+    for (double x : side(hi, b)) v.push_back(x);
+    return v;
+  }
 }
 
 int main(int argc, char *argv[])
@@ -144,7 +169,8 @@ int main(int argc, char *argv[])
   int H1Order = 3, deltaP = 2, xElements = 8, tElements = 1, uxElements = 8, uzElements = 8, numSlabs = 3;
   double tWidth = 0.1, Ex = 2.0, By = 0.0, L2WeightGraph = 1e6;
   double uMax = 3.0, sigmaX = 0.1, sigmaU = 0.5;
-  bool useL2TestNorm = false, useSerendipity = true, printPoints = false;
+  bool useL2TestNorm = false, useSerendipity = true, printPoints = false, separableGraphTestNorm = false;
+  double L2WeightGraphTransportScale = 0.0; std::string accelerationBoundsString = "";
   cmdp.setOption("p", &H1Order, "H1 order (field degree p-1, trace degree p)");
   cmdp.setOption("dp", &deltaP, "test-space enrichment");
   cmdp.setOption("xElements", &xElements);
@@ -160,6 +186,15 @@ int main(int argc, char *argv[])
   cmdp.setOption("By", &By, "uniform magnetic field (scaled)");
   cmdp.setOption("L2WeightGraph", &L2WeightGraph, "alpha, the weight of the L^2 term in the graph norm");
   cmdp.setOption("useL2TestNorm", "useGraphTestNorm", &useL2TestNorm);
+  cmdp.setOption("L2WeightGraphTransportScale", &L2WeightGraphTransportScale, "transport-scale L^2 weight constant C (0: fixed alpha)");
+  cmdp.setOption("L2WeightGraphAccelerationBounds", &accelerationBoundsString, "comma-separated |a| bounds (u_x, u_z)");
+  cmdp.setOption("separableGraphTestNorm", "fullGraphTestNorm", &separableGraphTestNorm, "direction-separable graph norm (no cross terms)");
+  bool gradedVelocity = false; double coreCenterUx = 0.0, coreWidth = 0.1, coreHalfWidth = 0.5, growthRatio = 4.0;
+  cmdp.setOption("gradedVelocityMesh", "uniformVelocityMesh", &gradedVelocity, "graded velocity mesh (ignores ux/uzElements)");
+  cmdp.setOption("velocityCoreCenterUx", &coreCenterUx, "graded: u_x center of the core (u_z center is 0)");
+  cmdp.setOption("velocityCoreWidth", &coreWidth, "graded: core element width");
+  cmdp.setOption("velocityCoreHalfWidth", &coreHalfWidth, "graded: core half-width");
+  cmdp.setOption("velocityGrowthRatio", &growthRatio, "graded: geometric growth ratio outside the core");
   cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipity);
   cmdp.setOption("printPoints", "noPrintPoints", &printPoints, "print computed and exact f along a line (diagnostic)");
   if (cmdp.parse(argc, argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) return -1;
@@ -177,8 +212,11 @@ int main(int argc, char *argv[])
 
   MeshTopologyPtr spatialMeshTopo = MeshFactory::intervalMeshTopology(0.0, 1.0, xElements, false);
   std::vector<double> temporalVertices = uniformVertices(0.0, tWidth, tElements);
-  std::vector<double> ux = uniformVertices(-uMax, uMax, uxElements);
-  std::vector<double> uz = uniformVertices(-uMax, uMax, uzElements);
+  std::vector<double> ux = gradedVelocity ? gradedVertices(-uMax, uMax, coreCenterUx, coreWidth, coreHalfWidth, growthRatio)
+                                          : uniformVertices(-uMax, uMax, uxElements);
+  std::vector<double> uz = gradedVelocity ? gradedVertices(-uMax, uMax, 0.0, coreWidth, coreHalfWidth, growthRatio)
+                                          : uniformVertices(-uMax, uMax, uzElements);
+  uxElements = int(ux.size()) - 1; uzElements = int(uz.size()) - 1;
   std::vector<double> none;
 
   using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
@@ -187,7 +225,11 @@ int main(int argc, char *argv[])
   Teuchos::RCP<VlasovSpaceTimeFormulation> form =
     Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, q, m, configForm, spatialMeshTopo, temporalVertices, ux, uz, none,
                                                             H1Order, deltaP, 0, testIP, L2WeightGraph,
-                                                            useSerendipity ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL));
+                                                            useSerendipity ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL,
+                                                            0, false, 0.0, {}, L2WeightGraphTransportScale,
+                                                            [&]{ std::vector<double> b; std::stringstream in(accelerationBoundsString); std::string item;
+                                                                 while (std::getline(in, item, ',')) if (!item.empty()) b.push_back(std::stod(item));
+                                                                 return b; }(), separableGraphTestNorm));
   FunctionPtr fInitial = Teuchos::rcp(new PulseInitialCondition(f0));
   form->setInitialAndInflowConditions(fInitial, Function::zero());
 
@@ -209,6 +251,8 @@ int main(int argc, char *argv[])
               << (useL2TestNorm ? std::string("L^2 test norm") : "graph test norm, alpha = " + std::to_string(L2WeightGraph))
               << ", " << (useSerendipity ? "Serendipity" : "full tensor") << ", mesh " << xElements << " x " << tElements << " x "
               << uxElements << " x " << uzElements << ", Ex = " << Ex << ", By = " << By << "\n";
+    std::cout << "test norm: " << (useL2TestNorm ? "L2" : (separableGraphTestNorm ? "separable graph" : "graph")) << ", alpha " << L2WeightGraph
+              << ", transport scale C " << L2WeightGraphTransportScale << ", acceleration bounds '" << accelerationBoundsString << "'\n";
     std::cout << "slab   t_end   rel_L2_err   max_err      min_f        rel_mass_err  vlasov_dofs\n";
   }
   for (int slab=0; slab<numSlabs; slab++)

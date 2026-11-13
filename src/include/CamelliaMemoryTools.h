@@ -19,9 +19,13 @@
 
 #if __APPLE__
 #include <mach/mach.h>
+#include <malloc/malloc.h>
 #include <sys/sysctl.h>
 #else
 #include <unistd.h>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 #endif
 
 namespace Camellia
@@ -66,6 +70,43 @@ namespace Camellia
   #endif
   }
 
+  //! Physical memory footprint of this process, in GB: on macOS the kernel's phys_footprint (what Activity Monitor's
+  //! "Memory" column and the memory-pressure machinery count; unlike resident_size, it excludes pages the allocator has
+  //! freed and marked reusable), elsewhere the current resident size.  0 if unavailable.
+  inline double memoryFootprintInGigabytes()
+  {
+  #if __APPLE__
+    task_vm_info_data_t info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) != KERN_SUCCESS) return 0;
+    return double(info.phys_footprint) / (1024.0 * 1024.0 * 1024.0);
+  #else
+    return memoryCurrentResidentInGigabytes();
+  #endif
+  }
+
+  //! Returns memory the allocator holds in free lists to the operating system (macOS: malloc_zone_pressure_relief on all
+  //! zones; glibc: malloc_trim).  Does not change any live allocation.
+  inline void releaseFreedMemoryToOS()
+  {
+  #if __APPLE__
+    malloc_zone_pressure_relief(NULL, 0);
+  #elif defined(__GLIBC__)
+    malloc_trim(0);
+  #endif
+  }
+
+  //! True if the environment variable CAMELLIA_RELEASE_FREED_MEMORY is set to a value other than "0": callers at phase
+  //! boundaries (e.g., the start and end of each Vlasov substep) then call releaseFreedMemoryToOS().
+  inline bool releaseFreedMemoryRequested()
+  {
+    static const bool requested = []() {
+      const char *value = getenv("CAMELLIA_RELEASE_FREED_MEMORY");
+      return (value != NULL) && (std::string(value) != "0");
+    }();
+    return requested;
+  }
+
   //! System-wide memory pressure.  On macOS, the kernel's memory-pressure level (kern.memorystatus_vm_pressure_level:
   //! 1 = normal, 2 = warning, 4 = critical; the warning/critical states are what precede the OS's out-of-memory warnings and,
   //! under sustained pressure, compressor exhaustion).  On Linux, the percentage of the last 10 seconds in which some task
@@ -93,6 +134,7 @@ namespace Camellia
     std::string name;
     double currentGB;
     double highWaterMarkGB;
+    double footprintGB; // memoryFootprintInGigabytes()
   };
 
   //! Process-wide log of memory checkpoints, recorded at phase boundaries (e.g., within Solution::solve()).  Recording is
@@ -179,7 +221,7 @@ namespace Camellia
       const double limit = limitGB();
       if (!enabledFlag() && (limit <= 0)) return;
       const double current = memoryCurrentResidentInGigabytes();
-      if (enabledFlag()) log().push_back({name, current, memoryHighWaterMarkInGigabytes()});
+      if (enabledFlag()) log().push_back({name, current, memoryHighWaterMarkInGigabytes(), memoryFootprintInGigabytes()});
       abortIfOverLimit(name, current, limit);
     }
 
