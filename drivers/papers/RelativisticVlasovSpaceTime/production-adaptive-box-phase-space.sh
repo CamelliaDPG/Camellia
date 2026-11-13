@@ -135,6 +135,10 @@ fi
 if [ -n "$DOERFLER" ]; then MARKING="--doerflerTarget=$DOERFLER"; else MARKING="--refinementThreshold=$THRESH"; fi
 
 mkdir -p $OUT
+# files the driver and this script append to: keep the previous run's (one generation) rather than mixing the two runs
+for f in console.log timing.txt phase_reductions.csv phase_reductions_start.csv; do
+  if [ -f $OUT/$f ]; then mv $OUT/$f $OUT/$f.prev; fi
+done
 
 CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --gradedVelocityMesh --velocityCoreWidthFactor=2 --velocityCoreHalfWidthFactor=2 --velocityGrowthRatio=3 \
