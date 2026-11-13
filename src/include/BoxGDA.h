@@ -235,7 +235,7 @@ namespace Camellia
      choice is made direction by direction instead: each chosen direction in which the cell may be bisected is
      bisected, and each other chosen direction is raised by one order (up to maxH1Order), so a cell may be bisected in
      some directions and raised in others.
-     Then cells are raised wherever needed, transitively, for face neighbours' orders to differ by at most one (in
+     Then cells are raised wherever needed, transitively, for face neighbors' orders to differ by at most one (in
      each direction, with anisotropicP).
      (Children take their parent's order, so the rule holds after the bisections too.)  The topology and the cells'
      orders are replicated, so every rank computes the same result; the masks must be the same on every rank (as
@@ -244,10 +244,10 @@ namespace Camellia
     static HPRefinements hpRefinements(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &directionMasks,
                                        const std::vector<double> &minWidths, int maxH1Order, bool anisotropicP = false);
     //! The order increments that raise the given cells to (at least) the given orders, together with those that raise
-    //! other cells, transitively, so that face neighbours' orders differ by at most one.  No communication.
+    //! other cells, transitively, so that face neighbors' orders differ by at most one.  No communication.
     static std::map<GlobalIndexType,int> orderIncrementsWithHalo(MeshPtr mesh, std::map<GlobalIndexType,int> targetOrders);
     //! As orderIncrementsWithHalo(), direction by direction: raises cells to the given orders per direction, and others so
-    //! that in each direction face neighbours' orders differ by at most one.  No communication.
+    //! that in each direction face neighbors' orders differ by at most one.  No communication.
     static std::map<GlobalIndexType, std::vector<int>> orderIncrementsWithHaloInDirections(MeshPtr mesh,
                                                                                             std::map<GlobalIndexType, std::vector<int>> targetOrders);
     //! The given cells that hpRefinements() would leave alone if marked with the given directions: at the minimum width

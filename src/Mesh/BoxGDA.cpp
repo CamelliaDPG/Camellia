@@ -1218,7 +1218,7 @@ void BoxGDA::hRefineToMatchAtBoundary(std::map<IndexType,IndexType> &cellIDMap, 
     if (fromTopology->sideIsOnBoundary(fromCellID, lowerSide)) cellIDMap[fromCellID] = counterpart(fromCellID);
   }
   // orders: meshFrom's boundary cells are raised to their counterparts' orders, direction by direction (with the halo
-  // that keeps neighbours within one order); meshTo is left as it is
+  // that keeps neighbors within one order); meshTo is left as it is
   {
     std::map<GlobalIndexType, std::vector<int>> targetOrders;
     for (const auto &[fromCellID, toCellID] : cellIDMap)
@@ -1504,7 +1504,7 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
   const int sideCount = topology->cellTopology()->getSideCount();
 
   // Piecewise-constant cells have no high modes: for them, the jumps of f's cell means across faces.  The means of the
-  // marked p = 0 cells and their neighbours, gathered from their owners.  (Orders and topology are replicated, so all
+  // marked p = 0 cells and their neighbors, gathered from their owners.  (Orders and topology are replicated, so all
   // ranks agree on whether this is needed.)
   std::map<GlobalIndexType,double> cellMeans;
   {
@@ -1796,7 +1796,7 @@ std::map<GlobalIndexType,int> BoxGDA::orderIncrementsWithHalo(MeshPtr mesh, std:
     auto entry = targetOrder.find(cellID);
     return (entry == targetOrder.end()) ? order(cellID) : std::max(order(cellID), entry->second);
   };
-  // neighbours' orders may differ by at most one: raise neighbours more than one below a raised cell, and so on
+  // neighbors' orders may differ by at most one: raise neighbors more than one below a raised cell, and so on
   std::vector<GlobalIndexType> queue;
   for (const auto &entry : targetOrder) queue.push_back(entry.first);
   const int sideCount = topology->cellTopology()->getSideCount();
@@ -1837,7 +1837,7 @@ std::map<GlobalIndexType, std::vector<int>> BoxGDA::orderIncrementsWithHaloInDir
     if (entry != targetOrders.end()) for (int k=0; k<dim; k++) order[k] = std::max(order[k], entry->second[k]);
     return order;
   };
-  // in each direction, face neighbours' orders may differ by at most one
+  // in each direction, face neighbors' orders may differ by at most one
   std::vector<GlobalIndexType> queue;
   for (const auto &entry : targetOrders) queue.push_back(entry.first);
   const int sideCount = topology->cellTopology()->getSideCount();

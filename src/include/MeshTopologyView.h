@@ -107,7 +107,7 @@ namespace Camellia {
     virtual CellPtr getCell(IndexType cellIndex) const;
     virtual std::vector<double> getCellCentroid(IndexType cellIndex) const;
 
-    //! For topologies that determine flux side parities themselves (rather than through peer neighbours, side entities
+    //! For topologies that determine flux side parities themselves (rather than through peer neighbors, side entities
     //! and refinement patterns, as GlobalDofAssignment does by default): fills parities, one per side of the cell, and
     //! returns true.  The default returns false.
     virtual bool getCellSideParities(IndexType cellIndex, std::vector<int> &parities) const { return false; }

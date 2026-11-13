@@ -19,7 +19,7 @@ Findings from reading the branch (`316-tensor-native-mesh-for-planar-mitl-and-mo
   places (`MeshTopology.cpp` ~3722, ~3864) with TODOs on both.  The number of recipes grows like the number of ordered
   set partitions of the refined directions, so this does not extend comfortably to 4D.
 - `GDAMinimumRule` assumes the constraining entity belongs to an *active* cell (see the comments near lines 98-106,
-  1511, 1848).  With anisotropic neighbours that is false: if one neighbour is bisected in y and the other in z, the
+  1511, 1848).  With anisotropic neighbors that is false: if one neighbor is bisected in y and the other in z, the
   minimum-rule trace on their interface is a single polynomial on the whole parent face, which is no active cell's
   face.  The comments suggest inducing a regular refinement there, which would propagate isotropy.
 - The Vlasov phase-space formulation (`VlasovSpaceTimeFormulation`) has an L2 field `f` and a single L2 flux
@@ -45,7 +45,7 @@ clothes, without the requirement that the active set be a full Cartesian product
    candidate refinement are a pure function of the box (`Box::children(mask)`), available without touching the mesh,
    as the local refinement indicator needs.
 3. **The refinement tree is only a spatial index.**  Each node records which directions were cut; a point or box
-   query descends it.  Face neighbours are one such query.
+   query descends it.  Face neighbors are one such query.
 4. **Minimum rule for L2 traces, in any dimension, without a regularity assumption.**  On an interface plane the
    cells on each side tile the plane with their faces.  A single-valued function that is a polynomial on every cell
    face is one polynomial on each connected set of mutually overlapping faces.  Call that set a *patch*; it has one
@@ -66,7 +66,7 @@ clothes, without the requirement that the active set be a full Cartesian product
 Nothing above needs 1-irregularity for correctness.  A rule is still wanted for approximation quality and conditioning:
 with arbitrary refinement, chains of overlapping faces merge into large patches (in the prototype's unbalanced random
 4D test, up to 96 faces in one patch, and 0.4% of patches are L-shaped unions rather than boxes).  The natural rule is
-per direction: across any face, the levels of the two neighbours in each tangential direction differ by at most one.
+per direction: across any face, the levels of the two neighbors in each tangential direction differ by at most one.
 A stricter optional rule forbids crossings (requires one side's face tiling to refine the other's), at the cost of
 some isotropy propagating from where differently-oriented refinements meet.  Both are simple loops over
 `faceNeighbors`.  Which to enforce is a decision to make with the indicator work, since it affects how local a
@@ -85,14 +85,14 @@ mesh.  The configuration-space (x,t) mesh that carries the Maxwell traces is a s
 
 `BoxForest.h` is about 350 lines, standard library only.  Checks (in `unit_tests/BoxForestTests.cpp`):
 
-- 2D, neighbours bisected in x and in y; 3D, neighbours bisected in y and in z: the interface is one patch; the
+- 2D, neighbors bisected in x and in y; 3D, neighbors bisected in y and in z: the interface is one patch; the
   Kronecker constraint reproduces the patch polynomial on each cell face to 3e-15.
 - x-then-y, y-then-x and isotropic refinement give identical active cells and patches.
 - An L-shaped patch is detected as a non-box union.
 
 Timing on one core (random refinement masks, levels up to 3, no balancing):
 
-| d | active cells | refine | skeleton (all neighbours and patches) | patches | peak RSS |
+| d | active cells | refine | skeleton (all neighbors and patches) | patches | peak RSS |
 |---|-------------:|-------:|--------------------------------------:|--------:|---------:|
 | 3 | 101,935      | 0.06 s | 0.24 s                                | 231,341 | 74 MB    |
 | 4 | 100,531      | 0.01 s | 0.22 s                                | 236,575 | 114 MB   |
@@ -124,7 +124,7 @@ cell below the patch's plane (side parity +1 there, -1 above).
 Tests, with ultraweak steady convection (`-(u, beta . grad v) + <t_n, v>`, graph norm, `delta_k = 2`):
 
 - A polynomial solution of the trial degree is reproduced to 1e-11 (observed about 1e-13) in 2D (p = 2), 3D (p = 2)
-  and 4D (p = 1), on meshes with non-uniform roots, two levels of anisotropic refinement, and neighbours bisected in
+  and 4D (p = 1), on meshes with non-uniform roots, two levels of anisotropic refinement, and neighbors bisected in
   different directions (a patch that is no cell's face); energy errors vanish.
 - The same on a mesh with an L-shaped patch, and on a 4D (x, t, u_x, u_z) mesh refined in the velocity directions
   only.
@@ -134,9 +134,9 @@ Tests, with ultraweak steady convection (`-(u, beta . grad v) + <t_n, v>`, graph
   refining one cell isotropically, so with hanging nodes): the same number of global dofs (72, then 117), the same L2
   error to 1e-5 relative and the same energy error to 1e-7 relative, for a non-polynomial solution.
 
-`BoxForest::balance()` enforces the per-direction rule (tangential levels of face neighbours differ by at most one) by
+`BoxForest::balance()` enforces the per-direction rule (tangential levels of face neighbors differ by at most one) by
 bisecting only in the offending direction; tested on a column refined three times in z, which induces z-only
-bisections in its neighbours.
+bisections in its neighbors.
 
 Cost, 4D with p = 1 (80 trial and 625 test dofs per cell), one core: about 35 ms per cell for the whole solve
 (256 cells, 14,592 dofs: 9 s).  Nothing here is optimised: the optimal test functions and the side-to-patch
@@ -158,7 +158,7 @@ There is a precedent: `SubExtrudedMeshTopology` subclasses `MeshTopologyView` wi
 - `BoxMeshTopology : MeshTopologyView`, wrapping a `BoxForest` and per-direction root vertices.  Cell ID = tree node
   index (dense, 32-bit `GlobalIndexType` is enough).  Replicated on every rank (`Comm()` null, `isDistributed()` false),
   which is also how the phase-space topology is used today (`allowPruning = false`, VlasovSpaceTimeFormulation.cpp:1682).
-- `BoxCell : Cell`, overriding the neighbour, boundary, child and entity methods.
+- `BoxCell : Cell`, overriding the neighbor, boundary, child and entity methods.
 - `BoxGDA : GlobalDofAssignment`, holding what `BoxDPG` computes now (numbering, side-to-patch maps).
 
 About 15 `MeshTopologyView` virtuals must be overridden because the defaults dereference the null base topology or
@@ -174,9 +174,9 @@ Caller changes needed (all verified in the source):
 | Where | Problem | Change |
 |---|---|---|
 | Mesh.h:57, Mesh.cpp:55-190 | every public constructor does `new GDAMinimumRule`; the one taking a GDA is private and skips partitioning | a public constructor taking a GDA factory |
-| GlobalDofAssignment.h:93, .cpp:155-282 | `assignParities` is non-virtual and uses a reciprocal peer neighbour, side entity indices, and the parent's `RefinementPattern`; it is called from the base constructor | make side parities virtual; box rule: +1 on the boundary and on upper faces, -1 on lower faces |
+| GlobalDofAssignment.h:93, .cpp:155-282 | `assignParities` is non-virtual and uses a reciprocal peer neighbor, side entity indices, and the parent's `RefinementPattern`; it is called from the base constructor | make side parities virtual; box rule: +1 on the boundary and on upper faces, -1 on lower faces |
 | Boundary.cpp:71-74 | `bcsToImpose` throws for any non-`MeshTopology`, even with no tag BCs | move the cast inside the tag-BC branch (or see stage 3) |
-| Cell.cpp:867-876 | `boundarySides()` is non-virtual and reads stored neighbours, unlike the virtual `isBoundary()` | loop over `isBoundary()` |
+| Cell.cpp:867-876 | `boundarySides()` is non-virtual and reads stored neighbors, unlike the virtual `isBoundary()` | loop over `isBoundary()` |
 | Cell.h | `getActiveNeighborIndices`, `getDescendantsForSide`, `refinementPattern`, `getParent`, `level` are non-virtual and read stored data | make the first two virtual; supply parent and level through `setParent` |
 
 With those, assembly (`interpretLocalData`), legacy spatial-filter BCs, `importSolution`, energy error, `Function::solution`,
@@ -430,7 +430,7 @@ In increasing order of commitment; each step is useful on its own.
    abstract interface that `Solution` talks to.
 3. **Use it under the existing `Mesh` / `Solution`** for the Vlasov phase-space mesh.  The entity-index API of
    `MeshTopologyView` is used almost only by `MeshTopology`, `GDAMinimumRule`, `Cell` and the view itself; the rest of
-   the library mostly asks for cells, their vertices, their neighbours and their sides.  The open question is how
+   the library mostly asks for cells, their vertices, their neighbors and their sides.  The open question is how
    much of `Cell` / `MeshTopologyView` an adapter must present for `Mesh`, `BasisCache`, the partition policy, and
    `ExtrudedMeshTopology`'s component maps (which become trivial: the component cell is the projection of the box).
    This step needs a scoping pass before committing to it.

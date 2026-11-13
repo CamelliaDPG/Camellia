@@ -99,7 +99,7 @@ namespace
     };
   }
 
-  //! The anisotropic refinements used by the tests: neighbours bisected in different directions, and a second level.
+  //! The anisotropic refinements used by the tests: neighbors bisected in different directions, and a second level.
   template<class Refine>
   void refineAnisotropically(int dim, Refine refine)
   {
@@ -169,7 +169,7 @@ TEUCHOS_UNIT_TEST( BoxMesh, TopologyBasics )
   TEST_EQUALITY(cellIDs[0], 0);
   TEST_EQUALITY(cellIDs[1], children[1]);
 
-  // cell 0's right side has the two children as neighbours; its left side is on the boundary
+  // cell 0's right side has the two children as neighbors; its left side is on the boundary
   CellPtr cell0 = topology->getCell(0);
   int boundarySideCount = 0, sidesWithTwoNeighbors = 0;
   for (unsigned side=0; side<cell0->getSideCount(); side++)
@@ -293,7 +293,7 @@ TEUCHOS_UNIT_TEST( BoxMesh, IsotropicRefinementThroughMesh )
 }
 TEUCHOS_UNIT_TEST( BoxMesh, EnforceOneIrregularityIsDirectional )
 {
-  // Mesh::enforceOneIrregularity() on a box mesh bisects neighbours only in the direction in which they are too coarse
+  // Mesh::enforceOneIrregularity() on a box mesh bisects neighbors only in the direction in which they are too coarse
   Convection form(3);
   auto topology = Teuchos::rcp(new BoxMeshTopology({{0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 2.0, 3.0}, {0.0, 1.0, 2.0, 3.0}}));
   MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 2, 2);

@@ -104,7 +104,7 @@ namespace
     dpg->solve();
     TEST_COMPARE(dpg->L2Error(form.u, uExact), <, 1e-11);
 
-    // roots 0 and 1 are neighbours in direction 0.  Bisect them in different tangential directions, so that their
+    // roots 0 and 1 are neighbors in direction 0.  Bisect them in different tangential directions, so that their
     // interface is a single patch that is neither cell's face; then add a second level and a two-direction bisection.
     BoxForest &forest = dpg->forest();
     int child = forest.refine(0, 2);

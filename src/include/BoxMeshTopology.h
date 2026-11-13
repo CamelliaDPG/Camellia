@@ -46,7 +46,7 @@ namespace Camellia
     std::vector<std::pair<IndexType,unsigned>> getDescendantsForSide(int sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true) override;
     //! All active cells sharing part of a side with this cell.
     std::set<GlobalIndexType> getActiveNeighborIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity) override;
-    //! A side can have several neighbours; these return the first active one (and the opposite side ordinal), or -1 on the boundary.
+    //! A side can have several neighbors; these return the first active one (and the opposite side ordinal), or -1 on the boundary.
     Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity) override;
     std::pair<GlobalIndexType,unsigned> getNeighborInfo(unsigned sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity) override;
     bool isBoundary(unsigned sideOrdinal) override;
@@ -104,7 +104,7 @@ namespace Camellia
     //! Bisects an active cell in the directions set in directionMask.  Returns the child cell IDs.
     //! (To refine a cell that belongs to a Mesh, call Mesh::hRefine(); it calls this.)
     std::vector<IndexType> refineCell(IndexType cellIndex, unsigned directionMask);
-    //! Bisects cells so that face neighbours' levels differ by at most one in each tangential direction.
+    //! Bisects cells so that face neighbors' levels differ by at most one in each tangential direction.
     //! Returns the cells that were refined, each with its direction mask.
     std::vector<std::pair<IndexType,unsigned>> cellsToRefineForBalance(int maxLevelDifference = 1) const;
 

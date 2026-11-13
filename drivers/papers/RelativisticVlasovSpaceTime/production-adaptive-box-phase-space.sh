@@ -63,7 +63,7 @@
 #           direction's (default 0.5).  0 bisects every marked cell in all four directions; near 1, only in the worst.
 #   HP      1 (default): hp-adaptivity (--hpAdaptivity).  The phase-space mesh starts at H1 order HP0 and a marked cell
 #           is bisected in its chosen directions while half its width there is at least HPMIN, else raised one order,
-#           up to MAXP; neighbours' orders stay within one.  0: h-adaptivity at order MAXP throughout.
+#           up to MAXP; neighbors' orders stay within one.  0: h-adaptivity at order MAXP throughout.
 #   MAXP    maximum H1 order, the driver's --p                        (default 8: f of degree 7.  Production: 4.  High-order
 #           cells cost much more per dof -- in a 4-rank test a slab's final solve on 60 k dofs, mostly orders 5-8, took
 #           512 s -- and with MAXP > 4 the discretization is no longer coarser than production's anywhere)

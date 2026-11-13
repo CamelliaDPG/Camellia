@@ -10,7 +10,7 @@
 //
 //  The idea: a cell is an axis-aligned dyadic box, identified by integer lower coordinates and a
 //  refinement level per direction.  Nothing else is stored: no vertices, edges or faces, no
-//  entity-to-cell maps, no refinement patterns or recipes.  Neighbours, hanging faces and the
+//  entity-to-cell maps, no refinement patterns or recipes.  Neighbors, hanging faces and the
 //  supports of the minimum-rule trace spaces all follow from integer interval arithmetic and a
 //  descent of the refinement tree, which is kept only as a spatial index.
 //
@@ -83,8 +83,8 @@ namespace Camellia
      On an interface plane the cells on the two sides each tile the plane with their faces.  A
      single-valued function that is a polynomial on every cell face is one polynomial on each connected
      set of faces (faces being connected when they overlap with positive measure).  A patch is such a
-     set.  For isotropic 1-irregular meshes a patch is the coarse neighbour's face; with anisotropic
-     neighbours it can be a union that is no active cell's face (e.g. one neighbour bisected in y, the
+     set.  For isotropic 1-irregular meshes a patch is the coarse neighbor's face; with anisotropic
+     neighbors it can be a union that is no active cell's face (e.g. one neighbor bisected in y, the
      other in z), which is the case the "related recipes" exist to describe in MeshTopology.
      */
     struct Patch
@@ -250,10 +250,10 @@ namespace Camellia
     }
 
     /**
-     \brief  Enforces 1-irregularity per direction: across every face, the two neighbours' levels differ by at
+     \brief  Enforces 1-irregularity per direction: across every face, the two neighbors' levels differ by at
              most maxLevelDifference in each direction tangential to the face.
 
-     A cell that is too coarse in some tangential direction relative to a face neighbour is bisected in that
+     A cell that is too coarse in some tangential direction relative to a face neighbor is bisected in that
      direction only, so that the rule does not turn anisotropic refinements into isotropic ones.  (Levels in the
      direction normal to the face are not constrained: they do not affect how the face is tiled.)  Returns the number
      of bisections performed.
@@ -292,7 +292,7 @@ namespace Camellia
       return refinementCount;
     }
 
-    //! The largest difference in level, in a direction tangential to their shared face, between face neighbours.
+    //! The largest difference in level, in a direction tangential to their shared face, between face neighbors.
     int maxTangentialLevelDifference() const
     {
       int maxDifference = 0;

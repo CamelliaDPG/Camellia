@@ -1243,7 +1243,7 @@ static void refineInDirections(MeshPtr mesh, const std::map<GlobalIndexType,unsi
     const int unchanged = int(masks.size()) - bisectedOnly - raisedOnly - both;
     std::cout << "hp: of " << masks.size() << " marked cells, " << bisectedOnly << " bisected, " << raisedOnly << " raised in order, "
               << both << " bisected in some directions and raised in others, " << unchanged
-              << " at the minimum width and the maximum order; " << haloRaised << " other cells raised to keep neighbours' orders within one\n";
+              << " at the minimum width and the maximum order; " << haloRaised << " other cells raised to keep neighbors' orders within one\n";
     // For the marked cells raised in order (not bisected): the directions the indicator chose for them (each direction
     // whose indicator is at least --boxAnisotropyThreshold times the largest), and, with --anisotropicP, the directions
     // actually raised (the chosen ones below the maximum order).
@@ -1528,7 +1528,7 @@ int main(int argc, char *argv[])
     std::string hpMinWidthsString = "0,0,0,0";
     cmdp.setOption("hpAdaptivity", "hAdaptivity", &hpAdaptivity,
                    "with --useBoxMesh --useAdaptivity: start the phase-space mesh at --hpInitialH1Order; bisect a marked cell in its chosen directions "
-                   "while half its width there is at least --hpMinWidths, else raise its order (up to --p); neighbours' orders differ by at most one");
+                   "while half its width there is at least --hpMinWidths, else raise its order (up to --p); neighbors' orders differ by at most one");
     cmdp.setOption("hpInitialH1Order", &hpInitialH1Order, "with --hpAdaptivity: the phase-space mesh's starting H^1 order (1: f piecewise constant)");
     cmdp.setOption("hpMinWidths", &hpMinWidthsString,
                    "with --hpAdaptivity: minimum cell widths in x, t, u_x, u_z (computational units, comma-separated; 0: no limit)");

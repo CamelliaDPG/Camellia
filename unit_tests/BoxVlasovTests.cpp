@@ -443,8 +443,8 @@ TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesOrders )
 {
   // The first slab starts at H1 order 1 (piecewise constants) with some cells raised; the second slab's cells at the
   // interface take the orders of the cells across it.  (The interface flux is copied coefficient by coefficient, so the
-  // orders must agree; they do when the first slab keeps neighbours within one order, as hp-refinement does, since the
-  // second slab's interface cells then have the first slab's tangential neighbour relations.)
+  // orders must agree; they do when the first slab keeps neighbors within one order, as hp-refinement does, since the
+  // second slab's interface cells then have the first slab's tangential neighbor relations.)
   UseBoxMesh useBoxMesh(true);
   VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(1);
   const int xElements = 2, vxElements = 2, vyElements = 2, H1Order = 3;
@@ -456,7 +456,7 @@ TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesOrders )
   {
     if (topology->cellExtents(cellID)[2].first < V0 + 0.5 * VWIDTH) raise.insert(cellID); // the cells with u_x below the middle
   }
-  mesh->pRefine(raise, 1); // order 2 on half the cells, 1 on the rest (neighbours within one order, as hp keeps them)
+  mesh->pRefine(raise, 1); // order 2 on half the cells, 1 on the rest (neighbors within one order, as hp keeps them)
   p.form->setInitialAndInflowConditions(drivenDistribution(), drivenDistribution());
   p.form->solve();
   auto secondSlab = p.form->nextTimeSlab(TWIDTH, 1);

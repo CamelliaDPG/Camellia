@@ -291,7 +291,7 @@ TEUCHOS_UNIT_TEST( BoxHP, GeometricMultigridOnVariableOrder )
 
 namespace
 {
-  //! the largest difference of order between face neighbours
+  //! the largest difference of order between face neighbors
   int maxNeighborOrderJump(MeshPtr mesh, BoxMeshTopology *topology)
   {
     int maxJump = 0;
@@ -349,13 +349,13 @@ TEUCHOS_UNIT_TEST( BoxHP, HPRefinementsPreferHUntilMinimumWidth )
 
 TEUCHOS_UNIT_TEST( BoxHP, OrderHaloLimitsJumpsToOne )
 {
-  // raising one cell repeatedly raises its neighbours, and theirs, so that face neighbours differ by at most one order
+  // raising one cell repeatedly raises its neighbors, and theirs, so that face neighbors differ by at most one order
   for (int dim : {2, 4})
   {
     Convection form(dim);
     auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 0.25, 0.5, 0.75, 1.0})));
     MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 1, 1);
-    // some anisotropic refinement first, so that neighbours include hanging ones
+    // some anisotropic refinement first, so that neighbors include hanging ones
     mesh->hRefine(std::map<GlobalIndexType,unsigned>{{0, 1u}, {5, 2u}});
     const vector<double> minWidths(dim, 1.0); // no h-refinement
     const GlobalIndexType corner = *mesh->getActiveCellIDsGlobal().begin();
@@ -369,9 +369,9 @@ TEUCHOS_UNIT_TEST( BoxHP, OrderHaloLimitsJumpsToOne )
     TEST_EQUALITY(maxNeighborOrderJump(mesh, topology.get()), 1);
     int raisedCells = 0;
     for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal()) if (mesh->globalDofAssignment()->getH1Order(cellID)[0] > 1) raisedCells++;
-    out << dim << "D: " << raisedCells << " of " << mesh->numActiveElements() << " cells raised; max neighbour jump "
+    out << dim << "D: " << raisedCells << " of " << mesh->numActiveElements() << " cells raised; max neighbor jump "
         << maxNeighborOrderJump(mesh, topology.get()) << endl;
-    TEST_COMPARE(raisedCells, >, 1 + (1 << dim) - 1); // more than the corner and its face neighbours: the halo is transitive
+    TEST_COMPARE(raisedCells, >, 1 + (1 << dim) - 1); // more than the corner and its face neighbors: the halo is transitive
   }
 }
 
@@ -473,7 +473,7 @@ TEUCHOS_UNIT_TEST( BoxHP, SaturatedCellsAreNotMarked )
 
 TEUCHOS_UNIT_TEST( BoxHP, RefineToContainReproducesMesh )
 {
-  // a mesh refined anisotropically and raised in places (neighbours within one order, as hp keeps them), recorded and
+  // a mesh refined anisotropically and raised in places (neighbors within one order, as hp keeps them), recorded and
   // replayed on a fresh mesh with the same roots, comes out the same: the same boxes, each with the same order
   for (int dim : {2, 4})
   {
@@ -662,7 +662,7 @@ TEUCHOS_UNIT_TEST( BoxHP, AnisotropicOrdersWithSerendipityBasis )
 
 namespace
 {
-  //! the largest difference of order, in any one direction, between face neighbours
+  //! the largest difference of order, in any one direction, between face neighbors
   int maxNeighborOrderJumpInDirections(MeshPtr mesh, BoxMeshTopology *topology)
   {
     const int dim = topology->getDimension();
@@ -714,7 +714,7 @@ TEUCHOS_UNIT_TEST( BoxHP, AnisotropicHPRefinementsChooseByDirection )
   }
   TEST_ASSERT(mesh->globalDofAssignment()->getH1Order(0) == (std::vector<int>{1, 1, 1, 2}));
 
-  // raising root 0 in u_z three more times spreads, in u_z only, to its neighbours
+  // raising root 0 in u_z three more times spreads, in u_z only, to its neighbors
   for (int round=0; round<3; round++) BoxGDA::hpRefine(mesh, BoxGDA::hpRefinements(mesh, {{0, 8u}}, minWidths, 10, true));
   TEST_ASSERT(mesh->globalDofAssignment()->getH1Order(0) == (std::vector<int>{1, 1, 1, 5}));
   TEST_EQUALITY(maxNeighborOrderJumpInDirections(mesh, topology.get()), 1);
