@@ -425,8 +425,11 @@ namespace
     const int dim = mesh->getDimension(); // (x, t, u_x, u_z)
     const bool weightFluxesBySideParity = true;
     FunctionPtr tn = Function::solution(form->t_n_hat(speciesOrdinal), form->vlasovSolution(), weightFluxesBySideParity);
+    FunctionPtr fField = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
     auto topology = mesh->getTopology();
     std::vector<double> sums(2 * dim, 0.0); // [2 * direction + upper]
+    std::vector<double> fSums(2 * dim, 0.0); // the field f's integral over each part of the boundary (on the velocity limits:
+                                             // charge against the edge of the velocity domain, where t_n = 0 is imposed)
     for (GlobalIndexType cellID : mesh->cellIDsInPartition())
     {
       CellPtr cell = topology->getCell(cellID);
@@ -457,10 +460,17 @@ namespace
         double sideFlux = 0;
         for (int p=0; p<pointCount; p++) sideFlux += values(0,p) * measures(0,p);
         sums[2 * direction + upper] += sideFlux;
+        Camellia::FieldContainer<double> fValues(1, pointCount);
+        fField->values(fValues, sideCache);
+        double sideF = 0;
+        for (int p=0; p<pointCount; p++) sideF += fValues(0,p) * measures(0,p);
+        fSums[2 * direction + upper] += sideF;
       }
     }
     std::vector<double> global(sums.size());
     for (size_t i=0; i<sums.size(); i++) global[i] = MPIWrapper::sum(mesh->Comm(), sums[i]);
+    std::vector<double> fGlobal(fSums.size());
+    for (size_t i=0; i<fSums.size(); i++) fGlobal[i] = MPIWrapper::sum(mesh->Comm(), fSums[i]);
     if (rank == 0)
     {
       double velocityFlux = 0, residual = 0;
@@ -472,7 +482,11 @@ namespace
       if (refinementStep >= 0) std::cout << " step=" << refinementStep;
       std::cout << " t0=" << global[2] << " t1=" << global[3] << " cathode=" << global[0]
                 << " anode=" << global[1] << " velocity_limits=" << velocityFlux << " residual=" << residual
-                << " relative=" << ((chargeIn != 0) ? residual / chargeIn : 0.0) << std::endl;
+                << " relative=" << ((chargeIn != 0) ? residual / chargeIn : 0.0);
+      // int f over each velocity limit (u_x min, u_x max, u_z min, u_z max), and over the anode for comparison
+      std::cout << " f_at_ux_min=" << fGlobal[4] << " f_at_ux_max=" << fGlobal[5];
+      if (dim > 3) std::cout << " f_at_uz_min=" << fGlobal[6] << " f_at_uz_max=" << fGlobal[7];
+      std::cout << " f_at_anode=" << fGlobal[1] << std::endl;
       std::cout << std::setprecision(6);
     }
   }
