@@ -770,7 +770,7 @@ namespace
 
     auto configurationMesh = form.configurationSpaceMesh();
     auto configurationCellIDs = rankLocalConfigurationCellIDs(configurationMesh);
-    const int velocityQuadratureDegree = defaultVlasovMomentVelocityQuadratureDegree1D2V(form.vlasovSolution());
+    const int velocityQuadratureDegree = 0; // per phase-space cell: each cell's own cubature degree
 
     std::vector<double> speciesCharges;
     std::vector<TensorPlanar1D2VSpeciesMoments> speciesMoments;

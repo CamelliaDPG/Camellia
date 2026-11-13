@@ -10,6 +10,7 @@
 #include "PhysicalSolutionExtrusion.hpp"
 #include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "SpatialFilter.h"
+#include "TensorVlasovMomentSampling1D2V.h"
 
 #include <cmath>
 #include <iostream>
@@ -479,6 +480,61 @@ TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesOrders )
   out << "second slab: " << nextMesh->numActiveElements() << " cells, " << nextMesh->numGlobalDofs() << " dofs; ||f|| = " << fNorm << endl;
   TEST_ASSERT(std::isfinite(fNorm));
   TEST_COMPARE(fNorm, >, 0.0);
+}
+
+TEUCHOS_UNIT_TEST( BoxVlasov, PerCellMomentQuadrature )
+{
+  // Moments with a velocity rule chosen per phase-space cell (degree 0) against the global-maximum rule: identical on a
+  // mesh of uniform order; after raising some cells in x alone and others in u_x, the polynomial moments (density and
+  // proper-velocity, integrated exactly either way) still agree, and the relativistic currents agree to quadrature accuracy.
+  UseBoxMesh useBoxMesh(true);
+  const int xElements = 2, vxElements = 2, vyElements = 2, H1Order = 2;
+  Problem p = problem(true, xElements, vxElements, vyElements, H1Order, drivenDistribution());
+  MeshPtr mesh = p.form->vlasovMesh();
+  MeshPtr configMesh = p.form->configurationSpaceMesh();
+  const auto &configCellSet = configMesh->cellIDsInPartition();
+  std::vector<GlobalIndexType> configCells(configCellSet.begin(), configCellSet.end());
+  auto project = [&]() {
+    std::map<int,FunctionPtr> projectionMap;
+    projectionMap[p.form->f()->ID()] = drivenDistribution();
+    p.form->vlasovSolution()->projectOntoMesh(projectionMap);
+  };
+  auto compare = [&](bool relativistic, double tol, bool expectIdentical) {
+    const int maxDegree = defaultVlasovMomentVelocityQuadratureDegree1D2V(p.form->vlasovSolution());
+    auto global  = computeVlasovMomentsByPhaseSpaceCell1D2V(configCells, configMesh, p.form->vlasovSolution(), p.form->f(), maxDegree, relativistic, C);
+    auto perCell = computeVlasovMomentsByPhaseSpaceCell1D2V(configCells, configMesh, p.form->vlasovSolution(), p.form->f(), 0, relativistic, C);
+    TEST_EQUALITY(global.numPointsPerConfigurationCell, perCell.numPointsPerConfigurationCell);
+    TEST_EQUALITY(global.moments._density.size(), perCell.moments._density.size());
+    double maxDifference = 0.0, maxValue = 0.0;
+    for (size_t i=0; i<global.moments._density.size(); i++)
+    {
+      const double g[3] = {global.moments._density[i], global.moments._xProperVelocityMoment[i], global.moments._zProperVelocityMoment[i]};
+      const double c[3] = {perCell.moments._density[i], perCell.moments._xProperVelocityMoment[i], perCell.moments._zProperVelocityMoment[i]};
+      for (int m=0; m<3; m++)
+      {
+        if (expectIdentical) TEST_EQUALITY(g[m], c[m]);
+        maxDifference = std::max(maxDifference, std::abs(g[m] - c[m]));
+        maxValue = std::max(maxValue, std::abs(g[m]));
+      }
+    }
+    out << (relativistic ? "relativistic" : "proper") << " moments: max |global - per cell| = " << maxDifference << " (max value " << maxValue
+        << ", global degree " << maxDegree << ")" << endl;
+    TEST_COMPARE(maxDifference, <=, tol * maxValue);
+  };
+  project();
+  compare(false, 0.0, true);
+  compare(true,  0.0, true);
+
+  auto topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
+  std::map<GlobalIndexType, std::vector<int>> increments;
+  for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+  {
+    increments[cellID] = (topology->cellExtents(cellID)[2].first < V0 + 0.5 * VWIDTH) ? std::vector<int>{2, 0, 0, 0} : std::vector<int>{0, 0, 1, 0};
+  }
+  BoxGDA::pRefineInDirections(mesh, increments);
+  project();
+  compare(false, 1e-12, false);
+  compare(true,  1e-2,  false);
 }
 
 TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesAnisotropicOrders )

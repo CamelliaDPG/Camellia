@@ -1693,7 +1693,7 @@ int main(int argc, char *argv[])
     cmdp.setOption("phase8MomentCompareStrict", "noPhase8MomentCompareStrict", &phase8MomentCompareStrict,
                    "When enabled, abort if Phase 8 tensor-vs-legacy moment differences exceed tolerances.");
     cmdp.setOption("phase8MomentVelocityQuadratureDegree", &phase8MomentVelocityQuadratureDegree,
-                   "Velocity quadrature degree for Phase 8 sampled Vlasov HostMatrix bridge; negative uses the max local phase-space cell cubature degree.");
+                   "Velocity quadrature degree for Phase 8 sampled Vlasov HostMatrix bridge; negative uses each phase-space cell's own cubature degree (lowered in velocity directions of lower order).");
     cmdp.setOption("phase0TensorGraphSchurXElements",  &phase0TensorGraphSchurXElements,  "Number of x cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurTElements",  &phase0TensorGraphSchurTElements,  "Number of t cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
     cmdp.setOption("phase0TensorGraphSchurUxElements", &phase0TensorGraphSchurUxElements, "Number of ux cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
@@ -2715,8 +2715,7 @@ int main(int argc, char *argv[])
         auto phase0MomentUpdateStart = phase0.now();
         const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
         std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
-        const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                                                               : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
+        const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree : 0; // 0: per cell
         auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                       form->configurationSpaceMesh(),
                                                                       form->vlasovSolution(),
@@ -2749,7 +2748,7 @@ int main(int argc, char *argv[])
                             {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
                             {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
                             {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
-                            {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
+                            {"velocity_quadrature_degree", (phase8VelocityQuadratureDegree > 0) ? std::to_string(phase8VelocityQuadratureDegree) : std::string("per_cell")}});
         
         if (rank == 0)
         {
@@ -3105,8 +3104,7 @@ int main(int argc, char *argv[])
           auto phase0AdaptiveMomentUpdateStart = phase0.now();
           const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
           std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
-          const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                                                                 : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
+          const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree : 0; // 0: per cell
           auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                         form->configurationSpaceMesh(),
                                                                         form->vlasovSolution(),
@@ -3139,7 +3137,7 @@ int main(int argc, char *argv[])
                               {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
                               {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
                               {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
-                              {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
+                              {"velocity_quadrature_degree", (phase8VelocityQuadratureDegree > 0) ? std::to_string(phase8VelocityQuadratureDegree) : std::string("per_cell")}});
           
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
           
@@ -3274,8 +3272,7 @@ int main(int argc, char *argv[])
         if ((timeSlabOrdinal == 0) && (timeSlabOrdinal < numTimeSlabs - 1)) maxRefinements = maxRefinementsLaterSlabs;
         {
           // The same per-slab diagnostics as the uniform-mesh branch writes, on the slab's final (adapted) mesh.
-          const int diagnosticVelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                       : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
+          const int diagnosticVelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree : 0; // 0: per cell
           if (densityDiagnostic)
           {
             const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";

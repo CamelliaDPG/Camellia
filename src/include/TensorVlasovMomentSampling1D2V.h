@@ -49,7 +49,11 @@ namespace Camellia
    * \param phaseSpaceSolution     [in] - solution on an ExtrudedMeshTopology over configurationMesh's topology, with
    *                                      two velocity extrusions
    * \param fVar                   [in] - the distribution-function trial variable
-   * \param velocityQuadratureDegree [in] - Gauss rule degree used in each velocity direction on each velocity cell
+   * \param velocityQuadratureDegree [in] - Gauss rule degree used in each velocity direction on each velocity cell; 0
+   *                                      selects a rule per phase-space cell from that cell's own cubature degree
+   *                                      (lowered in a velocity direction whose order is below the cell's highest),
+   *                                      which equals defaultVlasovMomentVelocityQuadratureDegree1D2V on meshes of
+   *                                      uniform order.  numVelocityPoints is then 0.
    * \param useRelativisticCurrentMoments [in] - if true, first moments are the relativistic currents (weights u/gamma);
    *                                      otherwise, proper-velocity moments (weights u)
    * \param lightSpeed             [in] - light speed used for gamma when useRelativisticCurrentMoments is true

@@ -24,6 +24,7 @@
 #include "TensorMaxwell1D2VMomentReductionPipeline.h"
 #include "Var.h"
 
+#include <algorithm>
 #include <functional>
 #include <map>
 
@@ -112,7 +113,8 @@ namespace
   TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument, "configurationMesh is null");
   TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceSolution == Teuchos::null, std::invalid_argument, "phaseSpaceSolution is null");
   TEUCHOS_TEST_FOR_EXCEPTION(fVar == Teuchos::null, std::invalid_argument, "fVar is null");
-  TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree <= 0, std::invalid_argument, "velocityQuadratureDegree must be positive");
+  TEUCHOS_TEST_FOR_EXCEPTION(velocityQuadratureDegree < 0, std::invalid_argument, "velocityQuadratureDegree must be non-negative");
+  const bool perCellVelocityQuadrature = (velocityQuadratureDegree == 0);
 
   MeshPtr phaseSpaceMesh = phaseSpaceSolution->mesh();
   auto phaseSpaceTopology = PhaseSpaceTopology::phaseSpaceTopology(phaseSpaceMesh->getTopology().get());
@@ -123,10 +125,31 @@ namespace
   TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceTopology->phaseSpaceVelocityDimensionCount() != 2, std::invalid_argument,
                              "computeVlasovMomentsByPhaseSpaceCell1D2V requires exactly two velocity extrusions.");
 
-  std::vector<double> refLinePoints, refLineWeights;
-  referenceLineRule(velocityQuadratureDegree, refLinePoints, refLineWeights);
-  const int linePointCount = static_cast<int>(refLinePoints.size());
-  const int velocityPointsPerCell = linePointCount * linePointCount;
+  // 1D velocity rules, by degree
+  std::map<int,std::pair<std::vector<double>,std::vector<double>>> lineRules;
+  auto lineRule = [&lineRules](int degree) -> const std::pair<std::vector<double>,std::vector<double>> & {
+    auto entry = lineRules.find(degree);
+    if (entry != lineRules.end()) return entry->second;
+    std::pair<std::vector<double>,std::vector<double>> rule;
+    referenceLineRule(degree, rule.first, rule.second);
+    return lineRules.emplace(degree, rule).first->second;
+  };
+  // Velocity rule degrees (u_x, u_z) for a phase-space cell.  Per cell, the cell's own cubature degree, lowered in a
+  // velocity direction by two per order that direction is below the cell's highest order (trial and test each lose
+  // one).  On a mesh of uniform order this is the global maximum that defaultVlasovMomentVelocityQuadratureDegree1D2V
+  // gives, so the result is unchanged there.
+  auto velocityDegrees = [&](GlobalIndexType phaseSpaceCellID) -> std::pair<int,int> {
+    if (!perCellVelocityQuadrature) return {velocityQuadratureDegree, velocityQuadratureDegree};
+    auto gda = phaseSpaceMesh->globalDofAssignment();
+    const int cellDegree = gda->getCubatureDegree(phaseSpaceCellID);
+    const std::vector<int> orders = gda->getH1Order(phaseSpaceCellID);
+    const int dim = phaseSpaceMesh->getDimension();
+    if ((int(orders.size()) != dim) || (dim < 2)) return {cellDegree, cellDegree};
+    const int maxOrder = *std::max_element(orders.begin(), orders.end());
+    const int uxDegree = std::max(1, cellDegree - 2 * (maxOrder - orders[dim-2]));
+    const int uzDegree = std::max(1, cellDegree - 2 * (maxOrder - orders[dim-1]));
+    return {uxDegree, uzDegree};
+  };
 
   // Global, rank-independent indexing of active configuration cells; partial moments are summed in this layout.
   std::set<GlobalIndexType> activeConfigurationCells = configurationMesh->getActiveCellIDsGlobal();
@@ -158,10 +181,6 @@ namespace
   const int momentCount = 3;
   std::vector<double> globalMoments(static_cast<size_t>(globalConfigurationCellCount) * std::max(pointsPerConfigurationCell,0) * momentCount, 0.0);
 
-  // velocity points/weights for one velocity cell, in the (ux-major, uz-minor) order used by the reduction pipeline
-  Pipeline::HostMatrix cellVelocityPoints("velocity cell points", velocityPointsPerCell, 2);
-  Pipeline::HostVector cellVelocityWeights("velocity cell weights", velocityPointsPerCell);
-
   const int fID = fVar->ID();
   const set<GlobalIndexType> &ownedPhaseSpaceCells = phaseSpaceMesh->cellIDsInPartition();
   for (GlobalIndexType phaseSpaceCellID : ownedPhaseSpaceCells)
@@ -171,14 +190,23 @@ namespace
     phaseSpaceTopology->phaseSpaceVelocityExtents(uz0, uz1, phaseSpaceCellID, 1);
     const double uxCenter = 0.5 * (ux0 + ux1), uxScale = 0.5 * std::abs(ux1 - ux0);
     const double uzCenter = 0.5 * (uz0 + uz1), uzScale = 0.5 * std::abs(uz1 - uz0);
-    for (int i=0; i<linePointCount; i++)
+    const std::pair<int,int> degrees = velocityDegrees(phaseSpaceCellID);
+    const auto &uxRule = lineRule(degrees.first);
+    const auto &uzRule = lineRule(degrees.second);
+    const int uxPointCount = static_cast<int>(uxRule.first.size());
+    const int uzPointCount = static_cast<int>(uzRule.first.size());
+    const int velocityPointsPerCell = uxPointCount * uzPointCount;
+    // velocity points/weights for this cell, in the (ux-major, uz-minor) order used by the reduction pipeline
+    Pipeline::HostMatrix cellVelocityPoints("velocity cell points", velocityPointsPerCell, 2);
+    Pipeline::HostVector cellVelocityWeights("velocity cell weights", velocityPointsPerCell);
+    for (int i=0; i<uxPointCount; i++)
     {
-      for (int j=0; j<linePointCount; j++)
+      for (int j=0; j<uzPointCount; j++)
       {
-        const int v = i * linePointCount + j;
-        cellVelocityPoints(v,0) = uxCenter + uxScale * refLinePoints[i];
-        cellVelocityPoints(v,1) = uzCenter + uzScale * refLinePoints[j];
-        cellVelocityWeights(v) = uxScale * refLineWeights[i] * uzScale * refLineWeights[j];
+        const int v = i * uzPointCount + j;
+        cellVelocityPoints(v,0) = uxCenter + uxScale * uxRule.first[i];
+        cellVelocityPoints(v,1) = uzCenter + uzScale * uzRule.first[j];
+        cellVelocityWeights(v) = uxScale * uxRule.second[i] * uzScale * uzRule.second[j];
       }
     }
 
@@ -264,10 +292,16 @@ namespace
   TensorVlasovMoments1D2V result;
   result.numConfigurationCells = static_cast<int>(configurationCellIDs.size());
   result.numPointsPerConfigurationCell = pointsPerConfigurationCell;
-  // informational; defined only when the velocity mesh is a product of 1D meshes
+  // informational; defined only when the velocity mesh is a product of 1D meshes and one velocity rule is used throughout
+  int uniformVelocityPointsPerCell = 0;
+  if ((extrudedTopology != NULL) && !perCellVelocityQuadrature)
+  {
+    const int linePointCount = static_cast<int>(lineRule(velocityQuadratureDegree).first.size());
+    uniformVelocityPointsPerCell = linePointCount * linePointCount;
+  }
   result.numVelocityPoints = (extrudedTopology == NULL) ? 0
                            : static_cast<int>(extrudedTopology->extrusionMeshTopology(0)->activeCellCount()
-                                              * extrudedTopology->extrusionMeshTopology(1)->activeCellCount()) * velocityPointsPerCell;
+                                              * extrudedTopology->extrusionMeshTopology(1)->activeCellCount()) * uniformVelocityPointsPerCell;
   const int entryCount = result.numConfigurationCells * std::max(pointsPerConfigurationCell,0);
   std::vector<double> density(entryCount), xMoment(entryCount), zMoment(entryCount);
   for (int cellOrdinal=0; cellOrdinal<result.numConfigurationCells; cellOrdinal++)
