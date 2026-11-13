@@ -6,13 +6,17 @@
 #include "BoxGDA.h"
 #include "BoxMeshTopology.h"
 #include "GMGSolver.h"
+#include "MPIWrapper.h"
+#include "PolynomialOrder.hpp"
 #include "MeshFactory.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
 #include "SpatialFilter.h"
 #include "VarFactory.h"
 
+#include <algorithm>
 #include <cmath>
+#include <functional>
 
 using namespace Camellia;
 using namespace std;
@@ -800,5 +804,57 @@ TEUCHOS_UNIT_TEST( BoxHP, TransferSideCoefficientsRoundTrip )
     for (int i=0; i<n; i++) maxDifference = std::max(maxDifference, std::abs(back[i] - coefficients[i]));
     out << (serendipity ? "serendipity" : "hierarchical") << ": " << n << " -> " << there.size() << " coefficients; round trip max difference " << maxDifference << endl;
     TEST_COMPARE(maxDifference, <, 1e-11);
+  }
+}
+
+TEUCHOS_UNIT_TEST( BoxHP, AnisotropicSerendipityTracesAreSeenByTheTestSpace )
+{
+  // With a basis family (here serendipity) and a flux order enhancement, as the Vlasov formulation uses, each side's
+  // trace basis must take the orders of the side's own directions.  It once took the cell's whole order vector, which
+  // on a Line^4 cell gave the sides normal to u_x and u_z the orders of the sides normal to t: a trace function of too
+  // high a degree for the test space, a zero column in B, and a singular local stiffness matrix.
+  const int dim = 4, delta_k = 2;
+  Convection form(dim, true);
+  const std::map<int,int> trialEnhancements = {{form.t_n->ID(), 1}};
+  const int sideCount = 2 * dim;
+  for (const std::vector<int> &orders : std::vector<std::vector<int>>{{2,1,4,3}, {1,1,1,4}, {4,1,1,1}, {1,4,2,1}, {3,3,3,3}})
+  {
+    auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>(dim, vector<double>{0.0, 1.0})));
+    MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 1, delta_k, Teuchos::null, MPIWrapper::TeuchosCommWorld(), trialEnhancements);
+    std::vector<int> increments(dim);
+    for (int k=0; k<dim; k++) increments[k] = orders[k] - 1;
+    BoxGDA::pRefineInDirections(mesh, {{0, increments}});
+    std::vector<int> cellOrders = mesh->globalDofAssignment()->getH1Order(0); // (equal orders fold into one isotropic order)
+    if (int(cellOrders.size()) == 1) cellOrders = std::vector<int>(dim, cellOrders[0]);
+    TEST_ASSERT(cellOrders == orders);
+    ElementTypePtr elemType = mesh->getElementType(0);
+    // each side's trace cardinality, against a basis built for that side's own orders (flux enhancement included)
+    std::vector<int> enhanced = orders;
+    for (int &p : enhanced) p += 1;
+    CellTopoPtr cellTopo = topology->cellTopology();
+    for (int side=0; side<sideCount; side++)
+    {
+      std::vector<int> sideOrders = PolynomialOrder::sidePolynomialOrder(enhanced, cellTopo, side);
+      for (int &p : sideOrders) p = std::max(p, 1);
+      bool isotropic = std::adjacent_find(enhanced.begin(), enhanced.end(), std::not_equal_to<int>()) == enhanced.end();
+      BasisPtr expected = form.t_n->getBasis(cellTopo, isotropic ? std::vector<int>{enhanced[0]} : enhanced, side);
+      TEST_EQUALITY(elemType->trialOrderPtr->getBasisCardinality(form.t_n->ID(), side), expected->getCardinality());
+      BasisPtr direct = BasisFamily::serendipityBasisFamily()->getBasis(cellTopo->getSide(side), std::vector<Camellia::EFunctionSpace>{efsForSpace(form.t_n->space())}, sideOrders);
+      TEST_EQUALITY(expected->getCardinality(), direct->getCardinality());
+    }
+    // no trial basis function is invisible to the test space
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 0, true);
+    const int trialCount = elemType->trialOrderPtr->totalDofs(), testCount = elemType->testOrderPtr->totalDofs();
+    Camellia::FieldContainer<double> B(1, testCount, trialCount);
+    form.bf->stiffnessMatrix(B, elemType, basisCache->getCellSideParities(), basisCache);
+    int zeroColumns = 0;
+    for (int j=0; j<trialCount; j++)
+    {
+      double maxEntry = 0;
+      for (int i=0; i<testCount; i++) maxEntry = std::max(maxEntry, std::abs(B(0,i,j)));
+      if (maxEntry < 1e-12) zeroColumns++;
+    }
+    out << "orders " << orders[0] << orders[1] << orders[2] << orders[3] << ": " << trialCount << " trial dofs, " << zeroColumns << " zero columns in B" << endl;
+    TEST_EQUALITY(zeroColumns, 0);
   }
 }

@@ -5,6 +5,10 @@
 #include "Var.h"
 #include "LinearTerm.h"
 #include "BF.h"
+#include "PolynomialOrder.hpp"
+
+#include <algorithm>
+#include <functional>
 
 using namespace Camellia;
 
@@ -306,6 +310,16 @@ BasisPtr Var::getBasis(CellTopoPtr cellTopo, const std::vector<int> &p_H1, const
         p_H1_forSide.pop_back();
       }
       
+    }
+    else if ((p_H1.size() > 1) && (std::adjacent_find(p_H1.begin(), p_H1.end(), std::not_equal_to<int>()) != p_H1.end()))
+    {
+      // Anisotropic order: the side's own directions' orders.  (The tensor bases read an order vector from its end, one
+      // entry per tensorial component, so the cell's vector would give a side the orders of the wrong directions: on a
+      // Line^4 box cell, every side of the first tensorial component would take the orders of the sides normal to its
+      // second direction.)  A Node factor in the side topology takes order 1, the order of a constant.  Orders equal in
+      // every direction give every side the same orders either way, and are passed on unchanged.
+      p_H1_forSide = PolynomialOrder::sidePolynomialOrder(p_H1, cellTopo, sideOrdinal);
+      for (int &p : p_H1_forSide) p = std::max(p, 1);
     }
     return _basisFamily->getBasis(cellTopo->getSide(sideOrdinal), fs, p_H1_forSide);
   }
