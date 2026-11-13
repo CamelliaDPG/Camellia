@@ -43,7 +43,7 @@ struct ComparisonProblem
   double chebJacobiTolerance = 0;
   bool chebScaled = true, chebZipUp = false, chebStructuredField = true;
   bool explicitSchur = false; double explicitSchurTolerance = 1e-6;
-  std::string explicitSchurLambdaMax = "power"; int explicitSchurPowerIterations = 10, explicitSchurLambdaMinIterations = 0;
+  std::string explicitSchurLambdaMax = "fullpower"; int explicitSchurPowerIterations = 10, explicitSchurLambdaMinIterations = 0;
   double explicitSchurPowerTolerance = 1e-4, explicitSchurBoost = 1.2;
   std::string explicitSchurPowerStart = "random";
   std::string explicitSchurSolver = "chebyshev";
@@ -140,7 +140,7 @@ struct ComparisonProblem
                   "Tensor backend (N5 only): form S = B^T G^-1 B once as a four-mode TT matrix and run Chebyshev on the trial "
                   "space (chebTolerance: iterate rounding; chebRtol, chebIterations, chebEvery, chebBounds*, chebLminSafety)");
     cmd.setOption("explicitSchurTolerance", &explicitSchurTolerance, "Explicit Schur: TT-SVD / rounding tolerance of the S blocks");
-    cmd.setOption("explicitSchurLambdaMax", &explicitSchurLambdaMax, "Explicit Schur lambda_max: power (Ifpack2-style), bound, or lanczos");
+    cmd.setOption("explicitSchurLambdaMax", &explicitSchurLambdaMax, "Explicit Schur lambda_max: fullpower (matrix-free Ifpack2-style power iteration on full vectors; default), power (TT), bound, or lanczos");
     cmd.setOption("explicitSchurPowerIterations", &explicitSchurPowerIterations, "Explicit Schur: power iterations for lambda_max");
     cmd.setOption("explicitSchurPowerTolerance", &explicitSchurPowerTolerance, "Explicit Schur: TT rounding tolerance of the power iteration");
     cmd.setOption("explicitSchurBoost", &explicitSchurBoost, "Explicit Schur: lambda_max boost factor (Ifpack2 default 1.1; 1.2 for 10 TT iterations)");

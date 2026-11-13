@@ -396,8 +396,17 @@ inline int runTensorComparison(int argc, char **argv)
   metrics["total_seconds"] = totalSeconds;
   metrics["inverse_gamma_rank"] = h.left.cols();
   metrics["inverse_gamma_svd_error"] = h.relativeError;
-  metrics["mixed_residual"] = DpgBoba::reportResidual(system.matrix,rhs,solution,
-                                                    std::min(1e-14,problem.svdTolerance*0.01));
+  // The explicit-Schur path defines eps element-locally (G eps = l - B x exactly), so the mixed residual reduces to the
+  // reported Schur residual; on large meshes its TT products (G x eps at rounding 1e-14) exhaust memory.  Skipped there
+  // unless PLANAR_MITL_MIXED_RESIDUAL is set.
+  if (problem.explicitSchur && !std::getenv("PLANAR_MITL_MIXED_RESIDUAL"))
+  {
+    std::cout << "relative_mixed_residual skipped (explicit Schur: see the explicit_S residual)" << std::endl;
+    metrics["mixed_residual"] = std::numeric_limits<double>::quiet_NaN();
+  }
+  else
+    metrics["mixed_residual"] = DpgBoba::reportResidual(system.matrix,rhs,solution,
+                                                      std::min(1e-14,problem.svdTolerance*0.01));
   // Diagnostic: true TT ranks of each returned block, by rounding a copy at several relative tolerances.
   for (size_t b = 0; b < solution.block_size; ++b)
   {

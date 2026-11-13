@@ -28,7 +28,7 @@ struct ExplicitSchurOptions
   bool zipUp = true;
   // lambda_max: "power" (Ifpack2-style deterministic power iteration on S~ = P S P, times boostFactor), "bound"
   // (rigorous element bound, O(n^3) per element), or "lanczos" (the Lanczos Ritz max x 1.05)
-  std::string lambdaMaxMode = "power";
+  std::string lambdaMaxMode = "fullpower";
   // Defaults (11-13): 10 iterations (Ifpack2's default) from a seeded rank-one start, rounded at 1e-4, boost 1.2.  The
   // Ifpack2 pattern start (1 + index mod 97) is high-rank in TT form (~97), which made 20 iterations at 1e-6 cost
   // ~1000-2000 s at production shape; 10 iterations reach ~0.9 x the converged lambda_max, hence the larger boost.
@@ -534,8 +534,165 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   }
   else
   {
+  // Matrix-free S~ on FULL trial vectors (Ifpack2-style power iteration, 11-13): S~ v = sum_K R_K^T P_K B_K^T G_K^-1 B_K
+  // P_K R_K v, element by element, with B_K applied in factored form (field: per group the x/t cell factor and the
+  // pre-summed velocity matrix of the velocity cell, two small GEMMs; traces: Kronecker products of the 1D face and
+  // trace-mass factors) and G_K^-1 by fast diagonalization.  Nothing per element is stored; memory is a few full
+  // vectors plus the per-(group, velocity cell) velocity matrices.
+  auto fullBounds = [&]() {
+    const auto tf = clock::now();
+    // velocity matrices V_g(i, j) = sum_tau -c_tau Q3_tau(j) (x) Q2_tau(i), per group and velocity cell
+    std::vector<std::vector<Mat>> Vg(groups.size());
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+      if (groups[g].terms.empty()) continue;
+      Vg[g].resize(cells[2] * cells[3]);
+      for (size_t j = 0; j < cells[3]; ++j)
+        for (size_t i = 0; i < cells[2]; ++i)
+        {
+          Mat V;
+          for (const auto &t : groups[g].terms)
+          {
+            Mat term = (-t.coefficient) * kron(cellBlock(t.Q3, 3, j, nbT[3], nbF[3]), cellBlock(t.Q2, 2, i, nbT[2], nbF[2]));
+            if (V.size() == 0) V = term; else V += term;
+          }
+          Vg[g][i + cells[2] * j] = V;
+        }
+    }
+    const Eigen::Index nT01 = Eigen::Index(nbT[0] * nbT[1]), nT23 = Eigen::Index(nbT[2] * nbT[3]);
+    const Eigen::Index nF01 = Eigen::Index(nbF[0] * nbF[1]), nF23 = Eigen::Index(nbF[2] * nbF[3]);
+    auto traceFactors = [&](size_t a, const std::array<size_t, 4> &c) {
+      const size_t nd = size_t(blocks[a].normal); std::array<Mat, 4> f;
+      for (size_t d = 0; d < 4; ++d)
+      {
+        if (d == nd)
+        {
+          f[d] = Mat::Zero(nbT[d], 2); const Mat &F = axes[d].faces;
+          if (c[d] >= 1) f[d].col(0) = F.block(c[d] * nbT[d], c[d] - 1, nbT[d], 1);
+          if (c[d] + 1 <= cells[d] - 1) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
+        }
+        else f[d] = cellBlock(traceMass[d], d, c[d], nbT[d], nbJ[d]);
+      }
+      return f;
+    };
+    auto applyFull = [&](const std::vector<Eigen::VectorXd> &v) {
+      std::vector<Eigen::VectorXd> out(nt);
+      for (size_t a = 0; a < nt; ++a) out[a] = Eigen::VectorXd::Zero(fullSize[a]);
+      std::vector<std::vector<long>> gidx(nt); std::vector<Eigen::VectorXd> pK(nt), vK(nt);
+      forEachElement([&](const std::array<size_t, 4> &c) {
+        Eigen::VectorXd t = Eigen::VectorXd::Zero(Eigen::Index(nlocT));
+        std::array<Mat, 4> fx;   // per-group x/t factors are formed per element below
+        for (size_t a = 0; a < nt; ++a)
+        {
+          const size_t n = blocks[a].localSize(); gidx[a].resize(n); pK[a].resize(Eigen::Index(n)); vK[a].resize(Eigen::Index(n));
+          for (size_t il = 0; il < n; ++il)
+          {
+            const auto i = localIndex(blocks[a].nLocal, il); double pv = 1.0; long g = 0, stride = 1; bool ok = true;
+            for (size_t d = 0; d < 4; ++d)
+            {
+              const long k = blocks[a].index(d, c[d], i[d], cells[d]);
+              if (k < 0) { ok = false; break; }
+              pv *= pf[a][d](size_t(k)); g += k * stride; stride *= long(blocks[a].global[d]);
+            }
+            gidx[a][il] = ok ? g : -1; pK[a](Eigen::Index(il)) = ok ? pv : 0.0; vK[a](Eigen::Index(il)) = ok ? pv * v[a](g) : 0.0;
+          }
+          if (blocks[a].normal < 0)
+          {
+            Eigen::Map<const Mat> U(vK[a].data(), nF01, nF23);
+            for (size_t g = 0; g < groups.size(); ++g)
+            {
+              if (groups[g].terms.empty()) continue;
+              const Mat XT = kron(cellBlock(groups[g].Q1, 1, c[1], nbT[1], nbF[1]), cellBlock(groups[g].Q0, 0, c[0], nbT[0], nbF[0]));
+              Eigen::Map<Mat> T(t.data(), nT01, nT23);
+              T.noalias() += XT * U * Vg[g][c[2] + cells[2] * c[3]].transpose();
+            }
+          }
+          else t += kroneckerApply(traceFactors(a, c), Mat(vK[a]));
+        }
+        const Eigen::VectorXd w = separableGramSolve(*sep, classOf(c), Mat(t));
+        for (size_t a = 0; a < nt; ++a)
+        {
+          Eigen::VectorXd y;
+          if (blocks[a].normal < 0)
+          {
+            Eigen::Map<const Mat> W(w.data(), nT01, nT23); Mat Y = Mat::Zero(nF01, nF23);
+            for (size_t g = 0; g < groups.size(); ++g)
+            {
+              if (groups[g].terms.empty()) continue;
+              const Mat XT = kron(cellBlock(groups[g].Q1, 1, c[1], nbT[1], nbF[1]), cellBlock(groups[g].Q0, 0, c[0], nbT[0], nbF[0]));
+              Y.noalias() += XT.transpose() * W * Vg[g][c[2] + cells[2] * c[3]];
+            }
+            y = Eigen::Map<const Eigen::VectorXd>(Y.data(), Y.size());
+          }
+          else
+          {
+            auto f = traceFactors(a, c); for (auto &m : f) m.transposeInPlace();
+            y = kroneckerApply(f, Mat(w));
+          }
+          for (size_t il = 0; il < blocks[a].localSize(); ++il)
+            if (gidx[a][il] >= 0) out[a](gidx[a][il]) += pK[a](Eigen::Index(il)) * y(Eigen::Index(il));
+        }
+      });
+      return out;
+    };
+    // Lanczos (CG coefficients) on full vectors from c~, for the Ritz values (lambda_min); exact arithmetic
+    std::array<double, 3> result{0, 0, 0};
+    {
+      const auto tl = clock::now();
+      std::vector<Eigen::VectorXd> rr(nt), pp(nt);
+      for (size_t a = 0; a < nt; ++a) { rr[a] = toFull(ct[a]); pp[a] = rr[a]; }
+      auto fdot = [&](const std::vector<Eigen::VectorXd> &u, const std::vector<Eigen::VectorXd> &w) { double d = 0; for (size_t a = 0; a < nt; ++a) d += u[a].dot(w[a]); return d; };
+      double rz = fdot(rr, rr), alphaPrev = 0, betaPrev = 0; std::vector<double> dd, ee;
+      for (int k = 0; k < opt.boundsSteps; ++k)
+      {
+        const auto q = applyFull(pp); const double alpha = rz / fdot(pp, q);
+        for (size_t a = 0; a < nt; ++a) rr[a] -= alpha * q[a];
+        const double rzNew = fdot(rr, rr), beta = rzNew / rz;
+        dd.push_back(1.0 / alpha + (k > 0 ? betaPrev / alphaPrev : 0.0)); ee.push_back(std::sqrt(std::abs(beta)) / alpha);
+        for (size_t a = 0; a < nt; ++a) pp[a] = rr[a] + beta * pp[a];
+        rz = rzNew; alphaPrev = alpha; betaPrev = beta;
+      }
+      const size_t m = dd.size(); Mat Tm = Mat::Zero(m, m);
+      for (size_t i = 0; i < m; ++i) { Tm(i, i) = dd[i]; if (i + 1 < m) Tm(i, i + 1) = Tm(i + 1, i) = ee[i]; }
+      const Eigen::VectorXd ritz = Eigen::SelfAdjointEigenSolver<Mat>(Tm).eigenvalues();
+      result[0] = ritz(0); result[1] = ritz(m - 1);
+      std::cout << "explicit_S matrix-free Lanczos Ritz [" << ritz(0) << ", " << ritz(m - 1) << "] from " << m << " steps ("
+                << seconds(tl) << " s)" << std::endl;
+    }
+    // Ifpack2-style deterministic power iteration on full vectors
+    std::vector<Eigen::VectorXd> v(nt); size_t g0 = 0; double nrm2 = 0;
+    for (size_t a = 0; a < nt; ++a)
+    {
+      v[a].resize(Eigen::Index(fullSize[a]));
+      for (size_t g = 0; g < fullSize[a]; ++g) v[a](Eigen::Index(g)) = 1.0 + double((g0 + g) % 97);
+      g0 += fullSize[a]; nrm2 += v[a].squaredNorm();
+    }
+    for (auto &b : v) b /= std::sqrt(nrm2);
+    double est = 0, old = 0; int its = 0; double tApply = 0;
+    for (its = 1; its <= opt.powerIterations; ++its)
+    {
+      const auto ta = clock::now(); v = applyFull(v); tApply += seconds(ta);
+      double n2 = 0; for (const auto &b : v) n2 += b.squaredNorm();
+      old = est; est = std::sqrt(n2); for (auto &b : v) b /= est;
+      if (its > 1 && std::abs(est - old) < opt.powerStop * est) break;
+    }
+    its = std::min(its, opt.powerIterations);
+    std::cout << "explicit_S matrix-free power iteration lambda_max ~ " << est << " after " << its << " its ("
+              << tApply / its << " s per full-vector apply, " << seconds(tf) << " s in all)" << std::endl;
+    reportMemory("after matrix-free bounds");
+    result[2] = est;
+    return result;
+  };
   // --- spectrum bounds by TT Lanczos (CG coefficients)
   double lmin, lmax, ritzMax = 0;
+  std::array<double, 3> fullBoundValues{0, 0, 0};
+  if (opt.lambdaMaxMode == "fullpower")
+  {
+    // all bounds matrix-free on full vectors: Lanczos for lambda_min, power iteration for lambda_max (no TT work)
+    fullBoundValues = fullBounds();
+    lmin = fullBoundValues[0] * opt.lminSafety; ritzMax = fullBoundValues[1]; lmax = ritzMax * 1.05;
+  }
+  else
   {
     const auto tb = clock::now(); const double bt = opt.boundsTolerance;
     std::vector<TTVector> rr = ct, pp = ct; double rz = dot(rr, rr), alphaPrev = 0, betaPrev = 0;
@@ -556,7 +713,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     lmax = opt.lambdaMaxMode == "bound" ? lmaxBound : ritz(m - 1) * 1.05;
     ritzMax = ritz(m - 1);
     std::cout << "explicit_S spectrum Ritz [" << ritz(0) << ", " << ritz(m - 1) << "] (" << seconds(tb) << " s); using ["
-              << lmin << ", " << lmax << "] (upper: " << (opt.lambdaMaxMode == "bound" ? "element bound" : opt.lambdaMaxMode == "power" ? "power iteration, below" : "Ritz max x 1.05")
+              << lmin << ", " << lmax << "] (upper: " << (opt.lambdaMaxMode == "bound" ? "element bound" : (opt.lambdaMaxMode == "power" || opt.lambdaMaxMode == "fullpower") ? "power iteration, below" : "Ritz max x 1.05")
               << ") kappa "
               << lmax / lmin << std::endl;
   }
@@ -582,6 +739,14 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     std::vector<TTVector> v(nt); for (size_t a = 0; a < nt; ++a) v[a] = guess(a);
     return v;
   };
+  if (opt.lambdaMaxMode == "fullpower")
+  {
+    const double est = fullBoundValues[2];
+    // the exact Lanczos Ritz max is also a lower bound on lambda_max, and after 20 steps usually the better one
+    lmax = std::max(opt.boostFactor * est, 1.05 * ritzMax);
+    std::cout << "explicit_S using lambda_max = max(" << opt.boostFactor << " x " << est << ", 1.05 x Ritz max " << ritzMax << ") = "
+              << lmax << ", lambda_min = " << opt.lminSafety << " x Ritz min = " << lmin << ", kappa " << lmax / lmin << std::endl;
+  }
   if (opt.lambdaMaxMode == "power")
   {
     const auto tp = clock::now(); const double pt = opt.powerTolerance;
