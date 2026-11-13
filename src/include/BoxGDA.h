@@ -213,12 +213,16 @@ namespace Camellia
      selects every allowed direction; a threshold near 1, only the worst.
 
      On piecewise-constant cells (p = 0) there are no high modes; there eta_k is the largest jump of f's cell mean
-     across the cell's faces normal to direction k.
+     across the cell's faces normal to direction k.  A face on the domain boundary has no neighbor; if boundaryData
+     has an entry for its face of the domain (2k for the lower face normal to direction k, 2k+1 for the upper), the jump
+     there is against that function's mean over the face -- the data f takes on, e.g. the incoming f at a slab's
+     initial time, without which a cell that is the only one across its slab in t could never be refined in t.
      This is a cheap indicator of anisotropy based on the solution's own high modes.  It is not the DPG indicator
      based on local residual reduction.
      */
     static std::map<GlobalIndexType,unsigned> anisotropicRefinementMasks(MeshPtr mesh, FunctionPtr f, const std::vector<GlobalIndexType> &cellIDs,
-                                                                         double threshold, unsigned allowedDirections = ~0u);
+                                                                         double threshold, unsigned allowedDirections = ~0u,
+                                                                         const std::map<int,FunctionPtr> &boundaryData = std::map<int,FunctionPtr>());
 
     //! The h- and p-refinements chosen by hpRefinements()
     struct HPRefinements

@@ -394,6 +394,32 @@ TEUCHOS_UNIT_TEST( BoxHP, PiecewiseConstantDirectionIndicator )
   for (const auto &[cellID, mask] : masks) TEST_EQUALITY(mask, 1u);
 }
 
+TEUCHOS_UNIT_TEST( BoxHP, PiecewiseConstantDirectionIndicatorSeesBoundaryData )
+{
+  // One cell across the domain in t (as in a time slab): on p = 0 cells there is no jump in t between cells, only
+  // against the data at the initial time.  Without that data f, which varies only a little in x, is refined in x;
+  // with data at t = 0 far from f's means, in t.
+  const int dim = 2; // (x, t)
+  Convection form(dim);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>{{0.0, 0.25, 0.5, 0.75, 1.0}, {0.0, 1.0}}));
+  MeshPtr mesh = BoxGDA::mesh(topology, form.bf, 1, 1);
+  FunctionPtr f = BoxDPG::function([](const double *x) { return 1.0 + 0.1 * x[0]; });
+  const set<GlobalIndexType> activeCells = mesh->getActiveCellIDsGlobal();
+  vector<GlobalIndexType> cells(activeCells.begin(), activeCells.end());
+  const int timeDirection = 1;
+  auto withoutData = BoxGDA::anisotropicRefinementMasks(mesh, f, cells, 0.5);
+  auto withData = BoxGDA::anisotropicRefinementMasks(mesh, f, cells, 0.5, ~0u, {{2 * timeDirection, Function::constant(3.0)}});
+  // data equal to f on the face: no jump there, so as without data
+  auto withMatchingData = BoxGDA::anisotropicRefinementMasks(mesh, f, cells, 0.5, ~0u, {{2 * timeDirection, f}});
+  TEST_EQUALITY(withoutData.size(), cells.size());
+  for (GlobalIndexType cellID : cells)
+  {
+    TEST_EQUALITY(withoutData[cellID], 1u);
+    TEST_EQUALITY(withData[cellID], 2u);
+    TEST_EQUALITY(withMatchingData[cellID], 1u);
+  }
+}
+
 TEUCHOS_UNIT_TEST( BoxHP, SolveAfterHPRefinement )
 {
   // piecewise constants to start; one round of hp-refinement from the solution's own indicator, then solve by

@@ -3123,16 +3123,22 @@ int main(int argc, char *argv[])
           MeshPtr vlasovMesh = form->vlasovMesh();
           FunctionPtr fSolution = Function::solution(form->f(), form->vlasovSolution());
           const double anisotropyThreshold = s_boxAnisotropyThreshold;
-          refStrategy->setCellRefiner([vlasovMesh, fSolution, anisotropyThreshold](std::vector<GlobalIndexType> &cellIDs) {
+          // At the slab's initial time the incoming f is the data (minus the outward flux t_n there): on piecewise-constant
+          // cells the indicator measures the jump in t against it, without which a cell spanning the slab in t would have
+          // no jump in t at all.
+          const int timeDirection = 1; // (x, t, u_x, u_z)
+          const bool weightFluxesBySideParity = true;
+          const std::map<int,FunctionPtr> boundaryData = {{2 * timeDirection, -Function::solution(form->t_n_hat(0), form->vlasovSolution(), weightFluxesBySideParity)}};
+          refStrategy->setCellRefiner([vlasovMesh, fSolution, anisotropyThreshold, boundaryData](std::vector<GlobalIndexType> &cellIDs) {
             fSolution->importCellData(cellIDs);
-            refineInDirections(vlasovMesh, BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cellIDs, anisotropyThreshold));
+            refineInDirections(vlasovMesh, BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cellIDs, anisotropyThreshold, ~0u, boundaryData));
             return static_cast<int>(cellIDs.size());
           });
           if (s_hpAdaptivity)
           {
-            refStrategy->setIneligibleCells([vlasovMesh, fSolution, anisotropyThreshold]() {
+            refStrategy->setIneligibleCells([vlasovMesh, fSolution, anisotropyThreshold, boundaryData]() {
               return hpSaturatedCells(vlasovMesh, [&](const std::vector<GlobalIndexType> &cells) {
-                return BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cells, anisotropyThreshold);
+                return BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cells, anisotropyThreshold, ~0u, boundaryData);
               });
             });
           }

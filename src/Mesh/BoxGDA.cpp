@@ -1489,7 +1489,8 @@ namespace
 }
 
 std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr mesh, FunctionPtr f, const std::vector<GlobalIndexType> &cellIDs,
-                                                                      double threshold, unsigned allowedDirections)
+                                                                      double threshold, unsigned allowedDirections,
+                                                                      const std::map<int,FunctionPtr> &boundaryData)
 {
   TEUCHOS_FUNC_TIME_MONITOR("BoxGDA::anisotropicRefinementMasks");
   BoxMeshTopology* topology = dynamic_cast<BoxMeshTopology*>(mesh->getTopology().get());
@@ -1557,8 +1558,24 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
       const double myMean = cellMeans.at(cellID);
       for (int side=0; side<sideCount; side++)
       {
-        const int k = topology->faceForSideOrdinal(side) / 2;
+        const int face = topology->faceForSideOrdinal(side), k = face / 2;
         for (IndexType neighborID : topology->sideNeighbors(cellID, side)) jump[k] = std::max(jump[k], std::abs(cellMeans.at(neighborID) - myMean));
+        auto data = boundaryData.find(face);
+        if ((data != boundaryData.end()) && topology->sideIsOnBoundary(cellID, side))
+        {
+          // the jump against the data on this boundary face: their mean over the face
+          BasisCachePtr sideCache = BasisCache::basisCacheForCell(mesh, cellID)->getSideBasisCache(side);
+          const FC &weightedMeasures = sideCache->getWeightedMeasures();
+          FC values(1, weightedMeasures.dimension(1));
+          data->second->values(values, sideCache);
+          double integral = 0, measure = 0;
+          for (int q=0; q<weightedMeasures.dimension(1); q++)
+          {
+            integral += values(0,q) * weightedMeasures(0,q);
+            measure += weightedMeasures(0,q);
+          }
+          if (measure > 0) jump[k] = std::max(jump[k], std::abs(integral / measure - myMean));
+        }
       }
       return jump;
     };
