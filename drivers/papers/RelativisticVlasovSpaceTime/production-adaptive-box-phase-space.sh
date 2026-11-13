@@ -229,6 +229,20 @@ else
   grep "^ACCURACY" $LOG | sed 's/^/  /'
 fi
 echo
+if [ -f $OUT/phase_reductions_start.csv ] && [ -f $OUT/phase_reductions.csv ]; then
+  echo "charge across slab boundaries: int f dx du at the end of each slab and at the start of the next.  A jump means f"
+  echo "is lost (or gained) in the transfer or right after it; a drift within a slab is the solve"
+  awk -F, '
+    FNR == 1 { next }
+    FNR == NR { endF[$1] = $3; next }
+    { startF[$1] = $3 }
+    END { for (s = 0; (s in endF) || (s in startF); s++) {
+            line = sprintf("  slab %3d  start %s  end %s", s, (s in startF) ? sprintf("%.6e", startF[s]) : "      -     ", (s in endF) ? sprintf("%.6e", endF[s]) : "-")
+            if ((s in startF) && ((s-1) in endF) && (endF[s-1] != 0)) line = line sprintf("   jump from slab %d end %+.3e", s-1, (startF[s]-endF[s-1])/endF[s-1])
+            print line } }
+  ' $OUT/phase_reductions.csv $OUT/phase_reductions_start.csv
+  echo
+fi
 if [ "${CHECK:-0}" = 1 ]; then
   echo "(check run.  Before the full run, look at: elements per slab against 28160 and whether they keep growing; seconds"
   echo " per slab against 926; GMG iterations; and the ACCURACY differences.  More resolution: raise REF0/REF or lower"

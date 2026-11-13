@@ -320,15 +320,17 @@ namespace
   //! Collective.
   void writePhaseSpaceDiagnostic(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int speciesOrdinal, int pointsPerDim,
                                  bool writeSamples, const std::string &prefix, const std::string &reductionsPath,
-                                 int slabOrdinal, double xNear)
+                                 int slabOrdinal, double xNear, bool atSlabStart = false)
   {
+    // atSlabStart: sample f at the slab's initial time instead of its final time (reductions only; no samples written)
+    if (atSlabStart) writeSamples = false;
     MeshPtr mesh = form->vlasovMesh();
     const int rank = mesh->Comm()->getRank();
     const int fID = form->f(speciesOrdinal)->ID();
     FunctionPtr fFunction = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
     const int n = pointsPerDim;
     const int pointCount = n * n * n;
-    // reference coordinates (x, t, u_x, u_y), t = +1 (slab end); x fastest, then u_x, then u_y
+    // reference coordinates (x, t, u_x, u_y), t = +1 (slab end) or -1 (slab start); x fastest, then u_x, then u_y
     FieldContainer<double> refPoints(pointCount, 4);
     for (int k=0; k<n; k++)
       for (int j=0; j<n; j++)
@@ -336,7 +338,7 @@ namespace
         {
           const int p = (k * n + j) * n + i;
           refPoints(p, 0) = -1.0 + 2.0 * i / (n - 1);
-          refPoints(p, 1) = 1.0;
+          refPoints(p, 1) = atSlabStart ? -1.0 : 1.0;
           refPoints(p, 2) = -1.0 + 2.0 * j / (n - 1);
           refPoints(p, 3) = -1.0 + 2.0 * k / (n - 1);
         }
@@ -347,14 +349,15 @@ namespace
     if (writeSamples) samples.reserve(cellIDs.size() * pointCount * 5);
     double sums[5] = {0, 0, 0, 0, 0}; // int f, int f (u_x < 0), int f (x < xNear), int f (x < xNear, u_x < 0), int f^-
     int degree = 0;
-    const double t1 = form->t1();
+    const double t1 = atSlabStart ? form->t0() : form->t1(); // the time sampled
     for (GlobalIndexType cellID : cellIDs)
     {
       degree = std::max(degree, mesh->getElementType(cellID)->trialOrderPtr->getBasis(fID)->getDegree());
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       basisCache->setRefCellPointsFC(refPoints);
       const auto &physicalPoints = basisCache->getPhysicalCubaturePointsFC(); // (1, P, 4): x, t, u_x, u_y
-      // with several time cells per slab, only those ending at the slab's final time carry the slab-end f
+      // with several time cells per slab, only those ending at the slab's final time (starting at its initial time)
+      // carry the slab-end (slab-start) f
       if (std::abs(physicalPoints(0, 0, 1) - t1) > 1e-10 * std::max(1.0, std::abs(t1))) continue;
       FieldContainer<double> fValues(1, pointCount);
       fFunction->values(fValues, basisCache);
@@ -1667,7 +1670,7 @@ int main(int argc, char *argv[])
     double phaseSpaceDiagnosticXNear = 0.0625;
     cmdp.setOption("phaseSpaceDiagnostic", "noPhaseSpaceDiagnostic", &phaseSpaceDiagnostic,
                    "At the end of each time slab, append integrals of f at the slab end (total, u_x < 0, near the cathode, negative "
-                   "part) to <outputDir>/phase_reductions.csv; for the slabs in phaseSpaceDiagnosticSlabs, also write samples of f "
+                   "part) to <outputDir>/phase_reductions.csv, and the same at the slab start to phase_reductions_start.csv; for the slabs in phaseSpaceDiagnosticSlabs, also write samples of f "
                    "on every phase-space cell to <outputDir>/phase_slab<N>_part<rank>.npy (plot with plot_phase_space.py).");
     cmdp.setOption("phaseSpaceDiagnosticSlabs", &phaseSpaceDiagnosticSlabsString,
                    "Comma-separated slab ordinals at whose end f is sampled for phaseSpaceDiagnostic (e.g. 0,1,2,5,10,19); 'all' for every slab.");
@@ -2811,6 +2814,9 @@ int main(int argc, char *argv[])
           writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, writeSamples,
                                     outputDir + "/phase_slab" + to_string(timeSlabOrdinal), outputDir + "/phase_reductions.csv",
                                     timeSlabOrdinal, phaseSpaceDiagnosticXNear);
+          // f at the slab's initial time, to compare with the previous slab's final f: charge lost in the transfer shows here
+          writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, false, "", outputDir + "/phase_reductions_start.csv",
+                                    timeSlabOrdinal, phaseSpaceDiagnosticXNear, true);
         }
 
         auto configMesh = form->configurationSpaceMesh();
@@ -3295,6 +3301,9 @@ int main(int argc, char *argv[])
             writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, writeSamples,
                                       outputDir + "/phase_slab" + to_string(timeSlabOrdinal), outputDir + "/phase_reductions.csv",
                                       timeSlabOrdinal, phaseSpaceDiagnosticXNear);
+            // f at the slab's initial time, to compare with the previous slab's final f: charge lost in the transfer shows here
+            writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, false, "", outputDir + "/phase_reductions_start.csv",
+                                      timeSlabOrdinal, phaseSpaceDiagnosticXNear, true);
           }
           if (accuracyDiagnostics)
           {
