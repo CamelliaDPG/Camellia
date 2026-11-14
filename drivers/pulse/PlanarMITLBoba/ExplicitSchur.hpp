@@ -15,6 +15,8 @@
 // other directions: cell*nbJ), so the result plugs into the existing residual check and output.
 #include "SchurChebyshev.hpp"
 #include <fstream>
+#include <atomic>
+#include <thread>
 
 namespace PlanarMITLBoba
 {
@@ -40,6 +42,9 @@ struct ExplicitSchurOptions
   std::string solver = "chebyshev";
   DpgBoba::AmenOptions amen;
   std::array<bool, 4> split{false, false, false, false};
+  // threads for the setup (element loops, per-pass TT-SVDs); 0: CAMELLIA_EXPLICIT_S_THREADS, else 1.  std::thread
+  // (the build has no OpenMP); each thread works on whole elements, so results are identical to the serial loops.
+  int threads = 0;
 };
 
 namespace ExplicitSchurDetail
@@ -95,9 +100,40 @@ struct Core3
   double operator()(size_t a, size_t i, size_t b) const { return v[a + r0 * (i + n * b)]; }
 };
 
+/// Run f(begin, end, part) on `parts` contiguous ranges of [0, n), one std::thread each (part 0 on the caller).
+inline void splitRange(Eigen::Index n, int parts, const std::function<void(Eigen::Index, Eigen::Index, int)> &f)
+{
+  parts = int(std::max<Eigen::Index>(1, std::min<Eigen::Index>(parts, n)));
+  if (parts == 1) { f(0, n, 0); return; }
+  std::vector<std::thread> pool; std::vector<std::exception_ptr> err(parts);
+  auto run = [&](int t) { try { f(n * t / parts, n * (t + 1) / parts, t); } catch (...) { err[t] = std::current_exception(); } };
+  for (int t = 1; t < parts; ++t) pool.emplace_back(run, t);
+  run(0); for (auto &th : pool) th.join();
+  for (auto &e : err) if (e) std::rethrow_exception(e);
+}
+
+/// Threaded products for the TT-SVD unfoldings M (m x k, column-major): M M^T (split over columns), M^T M (split over
+/// rows), M V (split over rows) and W^T M (split over columns).  Partial Grams are summed in a fixed order.
+inline Mat gramRows(const Eigen::Map<const Mat> &M, int threads)
+{
+  std::vector<Mat> part(std::max(1, threads));
+  splitRange(M.cols(), threads, [&](Eigen::Index b, Eigen::Index e, int t) {
+    part[t] = Mat::Zero(M.rows(), M.rows()); part[t].selfadjointView<Eigen::Lower>().rankUpdate(M.middleCols(b, e - b)); });
+  Mat G = Mat::Zero(M.rows(), M.rows()); for (const auto &P : part) if (P.size()) G += P;
+  G.triangularView<Eigen::StrictlyUpper>() = G.transpose(); return G;
+}
+inline Mat gramCols(const Eigen::Map<const Mat> &M, int threads)
+{
+  std::vector<Mat> part(std::max(1, threads));
+  splitRange(M.rows(), threads, [&](Eigen::Index b, Eigen::Index e, int t) {
+    part[t] = Mat::Zero(M.cols(), M.cols()); part[t].selfadjointView<Eigen::Lower>().rankUpdate(M.middleRows(b, e - b).transpose()); });
+  Mat G = Mat::Zero(M.cols(), M.cols()); for (const auto &P : part) if (P.size()) G += P;
+  G.triangularView<Eigen::StrictlyUpper>() = G.transpose(); return G;
+}
+
 /// TT-SVD of a full tensor T (mode 0 fastest) with sizes n, relative tolerance tol (T is consumed).  Each unfolding is
-/// truncated through the smaller of its two Gram matrices.
-inline std::vector<Core3> ttSvd(std::vector<double> &T, const std::array<size_t, 4> &n, double tol)
+/// truncated through the smaller of its two Gram matrices.  threads > 1: the large products are split over threads.
+inline std::vector<Core3> ttSvd(std::vector<double> &T, const std::array<size_t, 4> &n, double tol, int threads = 1)
 {
   double norm2 = 0; for (double v : T) norm2 += v * v;
   const double delta2 = tol * tol * norm2 / 3.0;
@@ -113,14 +149,15 @@ inline std::vector<Core3> ttSvd(std::vector<double> &T, const std::array<size_t,
     Mat U; Eigen::VectorXd w; Mat nextC;
     if (M.rows() <= M.cols())
     {
-      Eigen::SelfAdjointEigenSolver<Mat> es(Mat(M * M.transpose()));
+      Eigen::SelfAdjointEigenSolver<Mat> es(gramRows(M, threads));
       w = es.eigenvalues().reverse().cwiseMax(0.0); U = es.eigenvectors().rowwise().reverse();
     }
     else
     {
-      Eigen::SelfAdjointEigenSolver<Mat> es(Mat(M.transpose() * M));
+      Eigen::SelfAdjointEigenSolver<Mat> es(gramCols(M, threads));
       w = es.eigenvalues().reverse().cwiseMax(0.0); const Mat V = es.eigenvectors().rowwise().reverse();
-      U = M * V;   // columns scaled by sigma; normalized below for the kept ones
+      U.resize(M.rows(), V.cols());
+      splitRange(M.rows(), threads, [&](Eigen::Index b, Eigen::Index e, int) { U.middleRows(b, e - b).noalias() = M.middleRows(b, e - b) * V; });   // columns scaled by sigma; normalized below for the kept ones
       for (Eigen::Index q = 0; q < U.cols(); ++q) if (w(q) > 0) U.col(q) /= std::sqrt(w(q));
       nextC = w.cwiseSqrt().asDiagonal() * V.transpose();
     }
@@ -131,7 +168,13 @@ inline std::vector<Core3> ttSvd(std::vector<double> &T, const std::array<size_t,
     for (Eigen::Index q = 0; q < k; ++q) for (size_t i = 0; i < n[d]; ++i) for (size_t a = 0; a < r; ++a)
       core(a, i, size_t(q)) = U(Eigen::Index(a + r * i), q);
     cores.push_back(core);
-    Mat Cnew = nextC.size() ? Mat(nextC.topRows(k)) : Mat(U.leftCols(k).transpose() * M);    // k x rest
+    Mat Cnew;    // k x rest
+    if (nextC.size()) Cnew = nextC.topRows(k);
+    else
+    {
+      Cnew.resize(k, M.cols()); const Mat Wt = U.leftCols(k).transpose();
+      splitRange(M.cols(), threads, [&](Eigen::Index b, Eigen::Index e, int) { Cnew.middleCols(b, e - b).noalias() = Wt * M.middleCols(b, e - b); });
+    }
     C.swap(Cnew); data = C.data();
     if (d == 0) std::vector<double>().swap(buffer);
     r = size_t(k);
@@ -267,6 +310,25 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     for (size_t c3 = 0; c3 < cells[3]; ++c3) for (size_t c2 = 0; c2 < cells[2]; ++c2)
       for (size_t c1 = 0; c1 < cells[1]; ++c1) for (size_t c0 = 0; c0 < cells[0]; ++c0) f({c0, c1, c2, c3});
   };
+  const int nThreads = std::max(1, opt.threads > 0 ? opt.threads
+                                   : (std::getenv("CAMELLIA_EXPLICIT_S_THREADS") ? std::atoi(std::getenv("CAMELLIA_EXPLICIT_S_THREADS")) : 1));
+  std::cout << "explicit_S setup threads " << nThreads << std::endl;
+  // run f(i, thread) for i in [0, n) on nThreads threads (dynamic chunks of `chunk`); exceptions rethrown
+  auto parallelFor = [&](size_t n, size_t chunk, const std::function<void(size_t, int)> &f) {
+    if (nThreads == 1 || n <= 1) { for (size_t i = 0; i < n; ++i) f(i, 0); return; }
+    std::atomic<size_t> next{0}; std::vector<std::exception_ptr> err(nThreads);
+    auto work = [&](int t) {
+      try { for (size_t i0; (i0 = next.fetch_add(chunk)) < n;) for (size_t i = i0; i < std::min(n, i0 + chunk); ++i) f(i, t); }
+      catch (...) { err[t] = std::current_exception(); next = n; }
+    };
+    std::vector<std::thread> pool; for (int t = 1; t < nThreads; ++t) pool.emplace_back(work, t);
+    work(0); for (auto &th : pool) th.join();
+    for (auto &e : err) if (e) std::rethrow_exception(e);
+  };
+  auto elementOf = [&](size_t lin) { std::array<size_t, 4> c; for (size_t d = 0; d < 4; ++d) { c[d] = lin % cells[d]; lin /= cells[d]; } return c; };
+  auto parallelForEachElement = [&](const std::function<void(const std::array<size_t, 4> &, int)> &f) {
+    parallelFor(cells[0] * cells[1] * cells[2] * cells[3], 8, [&](size_t lin, int t) { f(elementOf(lin), t); });
+  };
   auto localIndex = [](const std::array<size_t, 4> &n, size_t lin) { std::array<size_t, 4> i; for (size_t d = 0; d < 4; ++d) { i[d] = lin % n[d]; lin /= n[d]; } return i; };
   const size_t nel = cells[0] * cells[1] * cells[2] * cells[3];
 
@@ -308,7 +370,12 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   const auto tRhs = clock::now();
   std::cout << "explicit_S setup before the element loops " << seconds(t0) << " s" << std::endl;
   for (size_t a = 0; a < nt; ++a) cFull[a] = Eigen::VectorXd::Zero(fullSize[a]);
-  forEachElement([&](const std::array<size_t, 4> &c) {
+  // trace dofs are shared by neighbouring elements: per-thread accumulators (thread 0 writes cFull, diag directly)
+  std::vector<std::vector<Eigen::VectorXd>> cT(nThreads), dT(nThreads);
+  for (int t = 1; t < nThreads; ++t)
+    for (size_t a = 0; a < nt; ++a) { cT[t].push_back(Eigen::VectorXd::Zero(fullSize[a])); dT[t].push_back(Eigen::VectorXd::Zero(fullSize[a])); }
+  parallelForEachElement([&](const std::array<size_t, 4> &c, int t) {
+    auto &cAcc = t == 0 ? cFull : cT[t]; auto &dAcc = t == 0 ? diag : dT[t];
     Eigen::VectorXd lK(nlocT); for (size_t il = 0; il < nlocT; ++il) lK(il) = lFull(testIndex(c, il));
     // G_K^-1 = V D V^T: with Z = D^1/2 V^T B and z = D^1/2 V^T l, c_K = Z^T z and diag(S_K) = |Z e_j|^2
     const Eigen::ArrayXd sqrtD = sep->diagonal[classOf(c)].array().sqrt();
@@ -320,9 +387,11 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       for (size_t il = 0; il < blocks[a].localSize(); ++il)
       {
         const long g = globalLinear(a, c, localIndex(blocks[a].nLocal, il));
-        if (g >= 0) { cFull[a](g) += cK(off[a] + il); diag[a](g) += dK(off[a] + il); }
+        if (g >= 0) { cAcc[a](g) += cK(off[a] + il); dAcc[a](g) += dK(off[a] + il); }
       }
   });
+  for (int t = 1; t < nThreads; ++t) for (size_t a = 0; a < nt; ++a) { cFull[a] += cT[t][a]; diag[a] += dT[t][a]; }
+  std::vector<std::vector<Eigen::VectorXd>>().swap(cT); std::vector<std::vector<Eigen::VectorXd>>().swap(dT);
   std::cout << "explicit_S rhs + jacobi element loop " << seconds(tRhs) << " s" << std::endl;
   reportMemory("after rhs + jacobi");
   // --- scaling P ~ D^{-1/2} (rank-one Kronecker fit of log d over the four modes), S~ = P S P
@@ -404,7 +473,10 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         }
       }
     }
-    forEachElement([&](const std::array<size_t, 4> &c) {
+    // each element writes disjoint entries of the T[q]; per-thread timers (summed: thread-seconds)
+    std::vector<std::array<double, 4>> tt(nThreads, std::array<double, 4>{0, 0, 0, 0});
+    parallelForEachElement([&](const std::array<size_t, 4> &c, int th) {
+      double &tB = tt[th][0], &tG = tt[th][1], &tS = tt[th][2], &tScatter = tt[th][3];
       auto tq = clock::now();
       const Mat VtB = elementBsel(c, sel, true);
       tB += seconds(tq); tq = clock::now();
@@ -443,15 +515,22 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         tScatter += seconds(tq);
       }
     });
+    for (const auto &x : tt) { tB += x[0]; tG += x[1]; tS += x[2]; tScatter += x[3]; }
     tElements += seconds(te);
     const auto ts = clock::now();
+    // the TT-SVDs of the pass's pairs are independent (each consumes its own T[q])
+    std::vector<std::vector<Core3>> passCores(ps.size());
+    {
+      auto tq = clock::now();
+      if (ps.size() == 1) passCores[0] = ttSvd(T[0], tn[0], opt.sTolerance, nThreads);
+      else parallelFor(ps.size(), 1, [&](size_t q, int) { passCores[q] = ttSvd(T[q], tn[q], opt.sTolerance); });
+      tTtSvd += seconds(tq);
+    }
     for (size_t q = 0; q < ps.size(); ++q)
     {
       const size_t a = ps[q].first, b = ps[q].second;
       const auto &A = blocks[a], &Bb = blocks[b];
-      auto tq = clock::now();
-      auto cores = ttSvd(T[q], tn[q], opt.sTolerance);
-      tTtSvd += seconds(tq);
+      std::vector<Core3> cores; cores.swap(passCores[q]);
       Sizes rows, cols; for (size_t d = 0; d < 4; ++d) { rows[d] = A.global[d]; cols[d] = Bb.global[d]; }
       TTMatrix M(rows, cols);
       for (size_t d = 0; d < 4; ++d)
@@ -480,7 +559,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     reportMemory("after S pass " + std::to_string(pass));
     ++pass;
   }
-  std::cout << "explicit_S assembled: " << pass << " passes, element blocks " << tElements << " s (V^T B_K " << tB << ", Z = D^1/2 V^T B P " << tG << ", S_K blocks " << tS
+  std::cout << "explicit_S assembled: " << pass << " passes, element blocks " << tElements << " s (thread-seconds: V^T B_K " << tB << ", Z = D^1/2 V^T B P " << tG << ", S_K blocks " << tS
             << ", scatter " << tScatter << "), TT-SVD + expansion " << tSvd << " s (TT-SVD " << tTtSvd << ")" << std::endl;
   // S holds S~ = P S P already
   std::vector<std::vector<TTMatrix>> &St = S;
@@ -878,8 +957,10 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   BlockVector solution(system.names.size());
   std::vector<Eigen::VectorXd> xFull(nt);
   for (size_t a = 0; a < nt; ++a) { solution(a + 1) = scaleVector(x[a], a); DpgBoba::round(solution(a + 1), 1e-12); xFull[a] = toFull(solution(a + 1)); }
+  const auto tEps = clock::now();
   Eigen::VectorXd eps = Eigen::VectorXd::Zero(lFull.size());
-  forEachElement([&](const std::array<size_t, 4> &c) {
+  // test dofs are element-local (discontinuous test space): disjoint writes
+  parallelForEachElement([&](const std::array<size_t, 4> &c, int) {
     Eigen::VectorXd xK = Eigen::VectorXd::Zero(nlocTrial);
     for (size_t a = 0; a < nt; ++a)
       for (size_t il = 0; il < blocks[a].localSize(); ++il)
@@ -892,7 +973,22 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     const Eigen::VectorXd eK = separableGramSolve(*sep, classOf(c), Eigen::VectorXd(lK - B * xK));
     for (size_t il = 0; il < nlocT; ++il) eps(testIndex(c, il)) = eK(il);
   });
-  solution(0) = toTT(eps, system.sizes[0], 1e-10);
+  std::cout << "explicit_S eps = G^-1 (l - B x) element loop " << seconds(tEps) << " s" << std::endl;
+  const auto tEpsTT = clock::now();
+  {
+    // threaded TT-SVD (same truncation rule as toTT: relative Frobenius tolerance)
+    const Sizes &n = system.sizes[0];
+    std::vector<double> T(eps.data(), eps.data() + eps.size()); Eigen::VectorXd().swap(eps);
+    auto cores = ttSvd(T, {n[0], n[1], n[2], n[3]}, 1e-10, nThreads);
+    TTVector r(n);
+    for (size_t d = 0; d < 4; ++d)
+    {
+      const auto &G = cores[d]; r.cores[d].resize({G.r0, G.n, G.r1}); auto v = r.cores[d].view();
+      for (size_t q = 0; q < G.r1; ++q) for (size_t i = 0; i < G.n; ++i) for (size_t l = 0; l < G.r0; ++l) v({l, i, q}) = G(l, i, q);
+    }
+    solution(0) = r;
+  }
+  std::cout << "explicit_S eps to TT " << seconds(tEpsTT) << " s" << std::endl;
   std::cout << "explicit_S total_seconds=" << seconds(t0) << std::endl;
   return solution;
 }
