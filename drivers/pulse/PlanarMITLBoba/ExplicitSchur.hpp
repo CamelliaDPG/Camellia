@@ -667,8 +667,17 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     auto applyFull = [&](const std::vector<Eigen::VectorXd> &v) {
       std::vector<Eigen::VectorXd> out(nt);
       for (size_t a = 0; a < nt; ++a) out[a] = Eigen::VectorXd::Zero(fullSize[a]);
-      std::vector<std::vector<long>> gidx(nt); std::vector<Eigen::VectorXd> pK(nt), vK(nt);
-      forEachElement([&](const std::array<size_t, 4> &c) {
+      // field dofs are element-local (written directly); trace dofs are shared: per-thread accumulators, summed in order
+      std::vector<std::vector<Eigen::VectorXd>> acc(nThreads);
+      for (int th = 1; th < nThreads; ++th)
+      {
+        acc[th].resize(nt);
+        for (size_t a = 0; a < nt; ++a) if (blocks[a].normal >= 0) acc[th][a] = Eigen::VectorXd::Zero(fullSize[a]);
+      }
+      std::vector<std::vector<std::vector<long>>> gidxT(nThreads, std::vector<std::vector<long>>(nt));
+      std::vector<std::vector<Eigen::VectorXd>> pKT(nThreads, std::vector<Eigen::VectorXd>(nt)), vKT(nThreads, std::vector<Eigen::VectorXd>(nt));
+      parallelForEachElement([&](const std::array<size_t, 4> &c, int th) {
+        auto &gidx = gidxT[th]; auto &pK = pKT[th]; auto &vK = vKT[th];
         Eigen::VectorXd t = Eigen::VectorXd::Zero(Eigen::Index(nlocT));
         std::array<Mat, 4> fx;   // per-group x/t factors are formed per element below
         for (size_t a = 0; a < nt; ++a)
@@ -718,10 +727,12 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
             auto f = traceFactors(a, c); for (auto &m : f) m.transposeInPlace();
             y = kroneckerApply(f, Mat(w));
           }
+          Eigen::VectorXd &o = (th == 0 || blocks[a].normal < 0) ? out[a] : acc[th][a];
           for (size_t il = 0; il < blocks[a].localSize(); ++il)
-            if (gidx[a][il] >= 0) out[a](gidx[a][il]) += pK[a](Eigen::Index(il)) * y(Eigen::Index(il));
+            if (gidx[a][il] >= 0) o(gidx[a][il]) += pK[a](Eigen::Index(il)) * y(Eigen::Index(il));
         }
       });
+      for (int th = 1; th < nThreads; ++th) for (size_t a = 0; a < nt; ++a) if (blocks[a].normal >= 0) out[a] += acc[th][a];
       return out;
     };
   if (opt.solver == "amen")
@@ -742,9 +753,11 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       for (size_t a = 0; a < nt; ++a) { const Eigen::VectorXd ca = toFull(rhsS(a)); num += (ca - Sy[a]).squaredNorm(); den += ca.squaredNorm(); }
       return std::sqrt(num / den);
     };
+    DpgBoba::AmenOptions amenOpt = opt.amen;   // the site apply uses the setup's thread count unless set
+    if (amenOpt.siteThreads <= 0 && !std::getenv("BOBA_AMEN_THREADS")) amenOpt.siteThreads = nThreads;
     const bool anySplit = opt.split[0] || opt.split[1] || opt.split[2] || opt.split[3];
     BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
-                              : DpgBoba::solveAmen(sysS.matrix, rhsS, opt.amen, std::function<double(const BlockVector &)>(residualS));
+                              : DpgBoba::solveAmen(sysS.matrix, rhsS, amenOpt, std::function<double(const BlockVector &)>(residualS));
     const double amenSeconds = seconds(ta);
     const auto tr = clock::now();
     double rn2 = 0;

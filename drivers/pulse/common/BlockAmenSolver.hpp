@@ -36,6 +36,8 @@ struct AmenOptions
   bool scaleSites = true;
   // Matrix-free site GMRES (localSolver 4): right-precondition by the inverse diagonal of the site operator.
   bool siteJacobi = false;
+  // Host threads for the matrix-free coupled site apply (BoBa site_apply_threads); 0: BOBA_AMEN_THREADS, else 1.
+  int siteThreads = 0;
   // With a caller residual: stop when it fell by less than this fraction over two sweeps (0: off; < 0: the solver
   // path chooses, 0.1 for the explicit Schur complement).
   double stagnationReduction = -1;
@@ -130,6 +132,7 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.inf_sup_enrichment_block = options.infSupEnrichment ? 0 : -1;
   solver.coupled_site_dense_fill_threshold = options.denseFillThreshold;
   solver.scale_coupled_site_system = options.scaleSites;
+  solver.site_apply_threads = options.siteThreads;
   solver.site_jacobi_preconditioner = options.siteJacobi;
   if (options.rieszTolerance > 0) { solver.local_solution_svd_tolerance_relative_per_block = {options.rieszTolerance}; }
   // a caller residual is cheap: certify by it after every sweep (the largest local residual can stall above the
