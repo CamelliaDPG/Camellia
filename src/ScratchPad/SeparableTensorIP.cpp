@@ -250,11 +250,61 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
   return true;
 }
 
+void SeparableTensorIP::setConstantModeWeight(VarPtr var, FunctionPtr alpha, double ratio)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!(ratio > 0.0) || (ratio > 1.0), std::invalid_argument, "the constant-mode ratio must lie in (0, 1]");
+  TEUCHOS_TEST_FOR_EXCEPTION((ratio < 1.0) && ((var == Teuchos::null) || (alpha == Teuchos::null)), std::invalid_argument,
+                             "the constant-mode weight needs the test variable and its L^2 weight");
+  _constantModeVar = var;
+  _constantModeAlpha = alpha;
+  _constantModeRatio = ratio;
+}
+
+void SeparableTensorIP::applyConstantModeWeight(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache)
+{
+  if (_constantModeRatio >= 1.0) return;
+  if (basisCache->isSideCache()) return;
+  const int varID = _constantModeVar->ID();
+  if (!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_INDEX)) return;
+  BasisPtr basis = dofOrdering->getBasis(varID);
+  const int basisCardinality = basis->getCardinality();
+  const Camellia::FieldContainer<double> &weightedMeasures = basisCache->getWeightedMeasures(); // (C,P)
+  const int numCells = weightedMeasures.dimension(0), numPoints = weightedMeasures.dimension(1);
+  // m(c,i) = int_K phi_i, as a linear term integrated against the basis
+  LinearTermPtr valueTerm = 1.0 * _constantModeVar;
+  Camellia::FieldContainer<double> m(numCells, dofOrdering->totalDofs());
+  valueTerm->integrate(m, dofOrdering, basisCache);
+  // int_K 1/alpha
+  Camellia::FieldContainer<double> alphaValues(numCells, numPoints);
+  _constantModeAlpha->values(alphaValues, basisCache);
+  std::vector<int> dofIndex(basisCardinality);
+  for (int a=0; a<basisCardinality; a++) dofIndex[a] = dofOrdering->getDofIndex(varID, a);
+  for (int c=0; c<numCells; c++)
+  {
+    double inverseAlphaIntegral = 0;
+    for (int p=0; p<numPoints; p++)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(!(alphaValues(c,p) > 0), std::invalid_argument, "the L^2 weight must be positive");
+      inverseAlphaIntegral += weightedMeasures(c,p) / alphaValues(c,p);
+    }
+    const double coefficient = (1.0 - _constantModeRatio) / inverseAlphaIntegral;
+    for (int a=0; a<basisCardinality; a++)
+    {
+      const double ma = m(c, dofIndex[a]);
+      if (ma == 0) continue;
+      for (int b=0; b<basisCardinality; b++) innerProduct(c, dofIndex[a], dofIndex[b]) -= coefficient * ma * m(c, dofIndex[b]);
+    }
+  }
+}
+
 void SeparableTensorIP::computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
                                                   Teuchos::RCP<DofOrdering> dofOrdering,
                                                   Teuchos::RCP<BasisCache> basisCache)
 {
-  if (tryTensorAssembly(innerProduct, dofOrdering, basisCache)) return;
-  _fallbackCellCount += basisCache->getPhysicalCubaturePointsFC().dimension(0);
-  TIP<double>::computeInnerProductMatrix(innerProduct, dofOrdering, basisCache);
+  if (!tryTensorAssembly(innerProduct, dofOrdering, basisCache))
+  {
+    _fallbackCellCount += basisCache->getPhysicalCubaturePointsFC().dimension(0);
+    TIP<double>::computeInnerProductMatrix(innerProduct, dofOrdering, basisCache);
+  }
+  applyConstantModeWeight(innerProduct, dofOrdering, basisCache);
 }

@@ -6,6 +6,7 @@
 #include "BoxMeshTopology.h"
 #include "Function.h"
 #include "SeparableTensorIP.h"
+#include "SerialDenseWrapper.h"
 #include "VarFactory.h"
 
 #include <cmath>
@@ -102,5 +103,76 @@ TEUCHOS_UNIT_TEST( SeparableTensorIP, MatchesQuadrature )
       TEST_COMPARE(relativeDifference, <, 1e-12);
       TEST_COMPARE(tensorCells, >, 0);
     }
+  }
+}
+
+TEUCHOS_UNIT_TEST( SeparableTensorIP, ConstantModeWeight )
+{
+  // alpha ||v||^2 -> alpha ||v - mean v||^2 + ratio alpha |K| (mean v)^2 on each cell: the constant 1 (which the graph
+  // terms do not see) has squared norm alpha |K| without the weakening and ratio alpha |K| with it, on the 1D-factor and
+  // quadrature paths alike, and the Gram matrix stays positive definite.
+  const int dim = 3, H1Order = 2, delta_k = 1;
+  const double ratio = 1e-2;
+  VarFactoryPtr vf = VarFactory::varFactory();
+  VarPtr u = vf->fieldVar("u", L2);
+  VarPtr v = vf->testVar("v", HGRAD);
+  vf->setBasisFamily(BasisFamily::serendipityBasisFamily());
+  BFPtr bf = Teuchos::rcp(new BF(vf));
+  bf->addTerm(u, v);
+  auto topology = Teuchos::rcp(new BoxMeshTopology(vector<vector<double>>{{0.0, 0.5, 2.0}, {0.0, 0.1}, {-1.0, 0.0, 3.0}}));
+  MeshPtr mesh = BoxGDA::mesh(topology, bf, H1Order, delta_k);
+  mesh->hRefine(std::map<GlobalIndexType,unsigned>{{0, 1u | 4u}});
+
+  FunctionPtr alpha = Teuchos::rcp(new CellWidthProduct); // constant on each cell
+  auto makeIP = [&](double constantModeRatio) {
+    auto ip = SeparableTensorIP::ip();
+    ip->addTerm(v->di(2));
+    ip->addTerm(1.5 * v->di(1));
+    ip->addTerm(0.65 * v->di(3));
+    ip->addTerm(Function::sqrtFunction(alpha) * v);
+    if (constantModeRatio < 1.0) ip->setConstantModeWeight(v, alpha, constantModeRatio);
+    return ip;
+  };
+  auto massIP = SeparableTensorIP::ip();
+  massIP->addTerm(v);
+  for (bool tensorAssembly : {true, false})
+  {
+    auto baseIP = makeIP(1.0), weakenedIP = makeIP(ratio);
+    baseIP->setUseTensorAssembly(tensorAssembly);
+    weakenedIP->setUseTensorAssembly(tensorAssembly);
+    double maxRelativeDeviation = 0;
+    for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+    {
+      DofOrderingPtr testOrdering = mesh->getElementType(cellID)->testOrderPtr;
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true);
+      const int n = testOrdering->totalDofs();
+      Camellia::FieldContainer<double> M(1, n, n), G(1, n, n), Gweak(1, n, n), m(1, n);
+      massIP->computeInnerProductMatrix(M, testOrdering, basisCache);
+      baseIP->computeInnerProductMatrix(G, testOrdering, basisCache);
+      weakenedIP->computeInnerProductMatrix(Gweak, testOrdering, basisCache);
+      (1.0 * v)->integrate(m, testOrdering, basisCache);
+      // e: the coefficients of the constant 1 (M e = m, since m_i = int phi_i * 1)
+      Camellia::FieldContainer<double> Mcell(n, n), mcell(n, 1), e(n, 1);
+      for (int i=0; i<n; i++) { mcell(i,0) = m(0,i); for (int j=0; j<n; j++) Mcell(i,j) = M(0,i,j); }
+      const int solveInfo = SerialDenseWrapper::solveSystemMultipleRHS(e, Mcell, mcell);
+      TEST_EQUALITY(solveInfo, 0);
+      double eGe = 0, eGweake = 0;
+      for (int i=0; i<n; i++)
+        for (int j=0; j<n; j++) { eGe += e(i,0) * G(0,i,j) * e(j,0); eGweake += e(i,0) * Gweak(0,i,j) * e(j,0); }
+      Camellia::FieldContainer<double> alphaValues(1, basisCache->getWeightedMeasures().dimension(1));
+      alpha->values(alphaValues, basisCache);
+      double measure = 0;
+      for (int p=0; p<basisCache->getWeightedMeasures().dimension(1); p++) measure += basisCache->getWeightedMeasures()(0,p);
+      const double alphaMeasure = alphaValues(0,0) * measure;
+      maxRelativeDeviation = std::max(maxRelativeDeviation, std::abs(eGe - alphaMeasure) / alphaMeasure);
+      maxRelativeDeviation = std::max(maxRelativeDeviation, std::abs(eGweake - ratio * alphaMeasure) / (ratio * alphaMeasure));
+      // positive definite
+      Camellia::FieldContainer<double> Gcell(n, n), rhs(n, 1);
+      for (int i=0; i<n; i++) { rhs(i,0) = 1.0; for (int j=0; j<n; j++) Gcell(i,j) = Gweak(0,i,j); }
+      const int choleskyInfo = SerialDenseWrapper::solveSPDSystemLAPACKCholesky(rhs, Gcell); // (TEST_EQUALITY evaluates its arguments twice)
+      TEST_EQUALITY(choleskyInfo, 0);
+    }
+    out << (tensorAssembly ? "1D factors" : "quadrature") << ": max relative deviation of the constant's norms " << maxRelativeDeviation << endl;
+    TEST_COMPARE(maxRelativeDeviation, <, 1e-10);
   }
 }

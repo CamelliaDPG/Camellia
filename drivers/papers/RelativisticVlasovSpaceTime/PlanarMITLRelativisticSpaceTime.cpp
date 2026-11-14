@@ -952,7 +952,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const double L2WeightGraphTransportScale,
                                                               const std::vector<double> &L2WeightGraphAccelerationBounds,
                                                               const bool separableGraphTestNorm = false,
-                                                              const int numSpatialRefinements = 0)
+                                                              const int numSpatialRefinements = 0,
+                                                              const double L2WeightGraphConstantModeRatio = 1.0)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -1010,7 +1011,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  L2WeightGraphMeshScale,
                                                                  L2WeightGraphDirectionScales,
                                                                  L2WeightGraphTransportScale,
-                                                                 L2WeightGraphAccelerationBounds, separableGraphTestNorm));
+                                                                 L2WeightGraphAccelerationBounds, separableGraphTestNorm,
+                                                                 L2WeightGraphConstantModeRatio));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -1274,6 +1276,11 @@ int main(int argc, char *argv[])
                    "velocity box and a_u,max from L2WeightGraphAccelerationBounds.  Exclusive with the other L2WeightGraph scalings.");
     std::string L2WeightGraphAccelerationBoundsString = "";
     bool separableGraphTestNorm = false;
+    double L2WeightGraphConstantModeRatio = 1.0;
+    cmdp.setOption("L2WeightGraphConstantModeRatio", &L2WeightGraphConstantModeRatio,
+                   "In (0, 1]; below 1, the graph norm's L^2 term alpha ||w||^2 becomes alpha ||w - mean_K w||^2 + ratio alpha |K| (mean_K w)^2 "
+                   "on each cell K: the residual against a cell's constant (its charge balance) weighs about 1/ratio times as much, while "
+                   "other test functions keep the weight alpha.  1 (default): unchanged.");
     cmdp.setOption("separableGraphTestNorm", "fullGraphTestNorm", &separableGraphTestNorm,
                    "Direction-separable graph norm: sum_d s_d(K)^2 |dw/dz_d|^2 (s = v_x,max(K), 1, acceleration bounds) instead of "
                    "|beta . grad w|^2 (no cross terms; exactly invertible element Grams).  Needs --L2WeightGraphAccelerationBounds.");
@@ -1740,7 +1747,7 @@ int main(int argc, char *argv[])
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
                                      L2WeightGraphMeshScale, L2WeightGraphDirectionScales,
                                      L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds, separableGraphTestNorm,
-                                     numSpatialRefinements);
+                                     numSpatialRefinements, L2WeightGraphConstantModeRatio);
     if (useBoxMesh && (boxVelocityRefinements > 0))
     {
       // anisotropic refinement of the first slab: bisect in u_x only, within a band of u_x that narrows each round.

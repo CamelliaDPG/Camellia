@@ -50,6 +50,19 @@ namespace Camellia
     //! false: always use quadrature (for comparison)
     void setUseTensorAssembly(bool value) { _useTensorAssembly = value; }
 
+    /**
+     \brief Weaken the L^2 term on the constant mode of each cell: alpha ||v||^2 becomes, on each cell K,
+            alpha ||v - mean_K v||^2 + ratio alpha |K| (mean_K v)^2   (0 < ratio <= 1; 1: unchanged).
+
+     A^* 1 = 0 for the graph norm, so a cell's constant has test norm sqrt(ratio alpha |K|): DPG then weighs the residual
+     against it -- for a conservation law, the cell's conservation error -- about 1/ratio times as heavily, while every
+     other test function keeps its weight.  The Gram matrix changes by the rank-one term -c m m^T per cell, m_i = int_K
+     phi_i for the basis of var, c = (1 - ratio) / int_K (1/alpha) (which keeps it positive definite when alpha varies
+     on the cell; for constant alpha, c = (1 - ratio) alpha / |K|).  alpha must be the weight of the IP's L^2 term on var.
+     Applied after either assembly path (1D factors or quadrature).
+     */
+    void setConstantModeWeight(VarPtr var, FunctionPtr alpha, double ratio);
+
     static Teuchos::RCP<SeparableTensorIP> ip() { return Teuchos::rcp(new SeparableTensorIP); }
   private:
     //! a test basis decomposed into one-dimensional components
@@ -67,6 +80,10 @@ namespace Camellia
     std::map<const void*, TensorDecomposition> _decompositions;
     std::mutex _decompositionMutex;
     bool _useTensorAssembly;
+    VarPtr _constantModeVar;
+    FunctionPtr _constantModeAlpha;
+    double _constantModeRatio = 1.0;
+    void applyConstantModeWeight(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache);
     long long _tensorCellCount = 0, _fallbackCellCount = 0;
   };
 }

@@ -236,7 +236,8 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const vector<double> &testSpaceL2WeightDirectionScales,
                                                                                const double testSpaceL2WeightTransportScale,
                                                                                const vector<double> &testSpaceL2WeightAccelerationBounds,
-                                                                               const bool testSpaceSeparableGraphNorm)
+                                                                               const bool testSpaceSeparableGraphNorm,
+                                                                               const double testSpaceL2ConstantModeRatio)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
@@ -246,6 +247,7 @@ _testSpaceL2WeightDirectionScales(testSpaceL2WeightDirectionScales),
 _testSpaceL2WeightTransportScale(testSpaceL2WeightTransportScale),
 _testSpaceL2WeightAccelerationBounds(testSpaceL2WeightAccelerationBounds),
 _testSpaceSeparableGraphNorm(testSpaceSeparableGraphNorm),
+_testSpaceL2ConstantModeRatio(testSpaceL2ConstantModeRatio),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocityVertices_x,
@@ -268,6 +270,10 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
   }
   TEUCHOS_TEST_FOR_EXCEPTION(testSpaceSeparableGraphNorm && (testSpaceIP != GraphTestSpaceInnerProduct), std::invalid_argument,
                              "testSpaceSeparableGraphNorm applies to the graph test-space inner product");
+  TEUCHOS_TEST_FOR_EXCEPTION(!(testSpaceL2ConstantModeRatio > 0.0) || (testSpaceL2ConstantModeRatio > 1.0), std::invalid_argument,
+                             "testSpaceL2ConstantModeRatio must lie in (0, 1]");
+  TEUCHOS_TEST_FOR_EXCEPTION((testSpaceL2ConstantModeRatio < 1.0) && (testSpaceIP != GraphTestSpaceInnerProduct), std::invalid_argument,
+                             "testSpaceL2ConstantModeRatio applies to the graph test-space inner product");
   for (double scale : testSpaceL2WeightDirectionScales)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(scale < 0.0, std::invalid_argument, "testSpaceL2WeightDirectionScales must be nonnegative");
@@ -290,7 +296,10 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
   vector<FunctionPtr> a = this->a();
   
   // the direction-separable graph norm's Gram matrices are assembled from one-dimensional factors on box cells
-  IPPtr ip = _testSpaceSeparableGraphNorm ? IPPtr(SeparableTensorIP::ip()) : IP::ip();
+  // (also when the L^2 term's constant mode is weakened, which SeparableTensorIP applies after either assembly path)
+  const bool weakenedConstantMode = (_testSpaceL2ConstantModeRatio < 1.0);
+  Teuchos::RCP<SeparableTensorIP> separableIP = (_testSpaceSeparableGraphNorm || weakenedConstantMode) ? SeparableTensorIP::ip() : Teuchos::null;
+  IPPtr ip = (separableIP != Teuchos::null) ? IPPtr(separableIP) : IP::ip();
   
   const int numSpecies = this->numSpecies();
   
@@ -338,27 +347,37 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
       }
       
       LinearTermPtr stabilization_term;
+      FunctionPtr l2Weight; // alpha, the weight of the L^2 term
       if (_testSpaceL2WeightTransportScale > 0.0)
       {
         FunctionPtr weight = Teuchos::rcp(new TransportScaleL2Weight(_testSpaceL2Weight, _testSpaceL2WeightTransportScale, _c,
                                                                      spaceDim, velocityDim, _testSpaceL2WeightAccelerationBounds));
         stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
+        l2Weight = weight;
       }
       else if (!_testSpaceL2WeightDirectionScales.empty())
       {
         FunctionPtr weight = Teuchos::rcp(new DirectionProductL2Weight(_testSpaceL2Weight, _testSpaceL2WeightDirectionScales));
         stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
+        l2Weight = weight;
       }
       else if (_testSpaceL2WeightMeshScale > 0.0)
       {
         FunctionPtr weight = Teuchos::rcp(new MeshScaledL2Weight(_testSpaceL2Weight, _testSpaceL2WeightMeshScale));
         stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
+        l2Weight = weight;
       }
       else
       {
         stabilization_term = sqrt(_testSpaceL2Weight) * w;
+        l2Weight = Function::constant(_testSpaceL2Weight);
       }
       ip->addTerm(stabilization_term);
+      if (weakenedConstantMode)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(numSpecies > 1, std::invalid_argument, "testSpaceL2ConstantModeRatio supports one species");
+        separableIP->setConstantModeWeight(w, l2Weight, _testSpaceL2ConstantModeRatio);
+      }
     }
     else if (_testSpaceInnerProduct == L2TestSpaceInnerProduct)
     {
@@ -520,7 +539,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               _testSpaceL2WeightDirectionScales,
                                                                               _testSpaceL2WeightTransportScale,
                                                                               _testSpaceL2WeightAccelerationBounds,
-                                                                              _testSpaceSeparableGraphNorm));
+                                                                              _testSpaceSeparableGraphNorm,
+                                                                              _testSpaceL2ConstantModeRatio));
   
   configureNextSlab(nextSlabForm);
   
