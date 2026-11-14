@@ -1564,7 +1564,9 @@ std::map<GlobalIndexType,unsigned> BoxGDA::anisotropicRefinementMasks(MeshPtr me
         if ((data != boundaryData.end()) && topology->sideIsOnBoundary(cellID, side))
         {
           // the jump against the data on this boundary face: their mean over the face
-          BasisCachePtr sideCache = BasisCache::basisCacheForCell(mesh, cellID)->getSideBasisCache(side);
+          // (the side cache depends on its volume cache, which must outlive it)
+          BasisCachePtr volumeCache = BasisCache::basisCacheForCell(mesh, cellID);
+          BasisCachePtr sideCache = volumeCache->getSideBasisCache(side);
           const FC &weightedMeasures = sideCache->getWeightedMeasures();
           FC values(1, weightedMeasures.dimension(1));
           data->second->values(values, sideCache);

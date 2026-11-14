@@ -537,6 +537,28 @@ TEUCHOS_UNIT_TEST( BoxVlasov, PerCellMomentQuadrature )
   compare(true,  1e-2,  false);
 }
 
+TEUCHOS_UNIT_TEST( BoxVlasov, DirectionIndicatorWithInitialTimeData )
+{
+  // The MITL driver's use of the direction indicator: piecewise-constant cells, one cell across the slab in t, and the
+  // incoming f at the initial time (minus the trace t_n there) as the data on that face.
+  UseBoxMesh useBoxMesh(true);
+  VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(1);
+  Problem p = problem(true, 2, 2, 2, 2, drivenDistribution());
+  VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(0);
+  p.form->solve();
+  MeshPtr mesh = p.form->vlasovMesh();
+  const int timeDirection = 1;
+  FunctionPtr fSolution = Function::solution(p.form->f(), p.form->vlasovSolution());
+  FunctionPtr tn = Function::solution(p.form->t_n_hat(0), p.form->vlasovSolution(), true);
+  const std::set<GlobalIndexType> activeCells = mesh->getActiveCellIDsGlobal();
+  std::vector<GlobalIndexType> cells(activeCells.begin(), activeCells.end());
+  auto masks = BoxGDA::anisotropicRefinementMasks(mesh, fSolution, cells, 0.5, ~0u, {{2 * timeDirection, -tn}});
+  int tChosen = 0;
+  for (const auto &[cellID, mask] : masks) if (mask & (1u << timeDirection)) tChosen++;
+  out << masks.size() << " cells; t chosen on " << tChosen << endl;
+  TEST_EQUALITY(masks.size(), cells.size());
+}
+
 TEUCHOS_UNIT_TEST( BoxVlasov, NextTimeSlabMatchesAnisotropicOrders )
 {
   // the first slab's cells raised in u_x only (half of them) or in x and u_z: the second slab's interface cells take
