@@ -508,39 +508,11 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   auto dot = [&](const std::vector<TTVector> &u, const std::vector<TTVector> &v) { double s = 0; for (size_t a = 0; a < nt; ++a) s += u[a].inner_product(v[a]); return s; };
   auto maxRank4 = [](const TTVector &v) { size_t m = 0; for (size_t d = 1; d < 4; ++d) m = std::max(m, v.ranks(d)); return m; };
 
-  if (opt.solver == "amen")
-  {
-    // block AMEn on S~ y = c~ (SPD, trial blocks only)
-    const auto ta = clock::now();
-    System sysS;
-    sysS.matrix = BlockMatrix(nt, nt);
-    for (size_t a = 0; a < nt; ++a) for (size_t b = 0; b < nt; ++b) sysS.matrix({a, b}) = St[a][b];
-    for (size_t a = 0; a < nt; ++a) { sysS.names.push_back(system.names[a + 1]); sysS.sizes.push_back(system.sizes[a + 1]); }
-    BlockVector rhsS(nt); for (size_t a = 0; a < nt; ++a) { rhsS(a) = ct[a]; DpgBoba::round(rhsS(a), 0.1 * opt.amen.roundingTolerance); }
-    const bool anySplit = opt.split[0] || opt.split[1] || opt.split[2] || opt.split[3];
-    BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
-                              : DpgBoba::solveAmen(sysS.matrix, rhsS, opt.amen);
-    double rn2 = 0;
-    for (size_t a = 0; a < nt; ++a)
-    {
-      x[a] = yS(a);
-      TTVector ra = ct[a];
-      for (size_t b = 0; b < nt; ++b) { TTVector t = St[a][b] * yS(b); DpgBoba::round(t, 1e-10); ra -= t; DpgBoba::round(ra, 1e-10); }
-      rn2 += std::pow(boba::norm_frobenius(ra), 2);
-    }
-    std::cout << "explicit_S amen |r~|/|c~|=" << std::sqrt(rn2) / cNorm << " rank(y)=";
-    for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(x[a]);
-    std::cout << " split=" << opt.split[0] << opt.split[1] << opt.split[2] << opt.split[3] << " seconds=" << seconds(ta) << std::endl;
-  }
-  else
-  {
   // Matrix-free S~ on FULL trial vectors (Ifpack2-style power iteration, 11-13): S~ v = sum_K R_K^T P_K B_K^T G_K^-1 B_K
   // P_K R_K v, element by element, with B_K applied in factored form (field: per group the x/t cell factor and the
   // pre-summed velocity matrix of the velocity cell, two small GEMMs; traces: Kronecker products of the 1D face and
   // trace-mass factors) and G_K^-1 by fast diagonalization.  Nothing per element is stored; memory is a few full
   // vectors plus the per-(group, velocity cell) velocity matrices.
-  auto fullBounds = [&]() {
-    const auto tf = clock::now();
     // velocity matrices V_g(i, j) = sum_tau -c_tau Q3_tau(j) (x) Q2_tau(i), per group and velocity cell
     std::vector<std::vector<Mat>> Vg(groups.size());
     for (size_t g = 0; g < groups.size(); ++g)
@@ -635,6 +607,45 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       });
       return out;
     };
+  if (opt.solver == "amen")
+  {
+    // block AMEn on S~ y = c~ (SPD, trial blocks only)
+    const auto ta = clock::now();
+    System sysS;
+    sysS.matrix = BlockMatrix(nt, nt);
+    for (size_t a = 0; a < nt; ++a) for (size_t b = 0; b < nt; ++b) sysS.matrix({a, b}) = St[a][b];
+    for (size_t a = 0; a < nt; ++a) { sysS.names.push_back(system.names[a + 1]); sysS.sizes.push_back(system.sizes[a + 1]); }
+    BlockVector rhsS(nt); for (size_t a = 0; a < nt; ++a) { rhsS(a) = ct[a]; DpgBoba::round(rhsS(a), 0.1 * opt.amen.roundingTolerance); }
+    // AMEn's convergence certificate by the matrix-free apply on full vectors (the TT product S~ y has ranks
+    // rank(S~) * rank(y) and took ~34 s of a 45 s level-1 solve)
+    const auto residualS = [&](const BlockVector &y) {
+      std::vector<Eigen::VectorXd> yFull(nt); double num = 0, den = 0;
+      for (size_t a = 0; a < nt; ++a) yFull[a] = toFull(y(a));
+      const auto Sy = applyFull(yFull);
+      for (size_t a = 0; a < nt; ++a) { const Eigen::VectorXd ca = toFull(rhsS(a)); num += (ca - Sy[a]).squaredNorm(); den += ca.squaredNorm(); }
+      return std::sqrt(num / den);
+    };
+    const bool anySplit = opt.split[0] || opt.split[1] || opt.split[2] || opt.split[3];
+    BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
+                              : DpgBoba::solveAmen(sysS.matrix, rhsS, opt.amen, std::function<double(const BlockVector &)>(residualS));
+    const double amenSeconds = seconds(ta);
+    const auto tr = clock::now();
+    double rn2 = 0;
+    {
+      // residual by the matrix-free full-vector apply (exact; the TT St*y product was ~40 s at level 1)
+      std::vector<Eigen::VectorXd> yFull(nt), cFullS(nt);
+      for (size_t a = 0; a < nt; ++a) { x[a] = yS(a); yFull[a] = toFull(yS(a)); cFullS[a] = toFull(ct[a]); }
+      const auto Sy = applyFull(yFull);
+      for (size_t a = 0; a < nt; ++a) rn2 += (cFullS[a] - Sy[a]).squaredNorm();
+    }
+    std::cout << "explicit_S amen |r~|/|c~|=" << std::sqrt(rn2) / cNorm << " rank(y)=";
+    for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(x[a]);
+    std::cout << " split=" << opt.split[0] << opt.split[1] << opt.split[2] << opt.split[3] << " seconds=" << seconds(ta) << " (solve " << amenSeconds << ", residual " << seconds(tr) << ")" << std::endl;
+  }
+  else
+  {
+  auto fullBounds = [&]() {
+    const auto tf = clock::now();
     // Lanczos (CG coefficients) on full vectors from c~, for the Ritz values (lambda_min); exact arithmetic
     std::array<double, 3> result{0, 0, 0};
     {

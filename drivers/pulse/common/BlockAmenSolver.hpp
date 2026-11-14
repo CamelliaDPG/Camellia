@@ -2,6 +2,7 @@
 
 #include "BobaTypes.hpp"
 #include <cmath>
+#include <functional>
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -88,12 +89,14 @@ boba::BlockVector<host_tt_vector<D>> initialGuess(
   return guess;
 }
 
-/// Solve all mixed blocks together, including the zero trial diagonal blocks.
+/// Solve all mixed blocks together, including the zero trial diagonal blocks.  globalResidual, when set, returns
+/// |A x - b| / |b| for AMEn's convergence certificate in place of the exact TT product A x (rank(A) * rank(x)).
 template <size_t D>
 boba::BlockVector<host_tt_vector<D>> solveAmen(
     const boba::BlockOperator<host_tt_matrix<D>> &matrix,
     const boba::BlockVector<host_tt_vector<D>> &rhs,
-    const AmenOptions &options)
+    const AmenOptions &options,
+    const std::function<double(const boba::BlockVector<host_tt_vector<D>> &)> &globalResidual = {})
 {
   if (!(options.tolerance > 0) || !(options.roundingTolerance > 0) ||
       options.maxSweeps < 1 || options.kickrank < 1 || options.maxRank < 1 ||
@@ -123,7 +126,8 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.scale_coupled_site_system = options.scaleSites;
   if (options.rieszTolerance > 0) { solver.local_solution_svd_tolerance_relative_per_block = {options.rieszTolerance}; }
   std::mt19937 generator(options.seed);
-  return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator);
+  return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator,
+                      [&](const boba::BlockVector<host_tt_vector<D>> &x) { return globalResidual ? globalResidual(x) : -1.0; });
 }
 
 /// Also report absolute residuals: the trial RHS blocks of a DPG system vanish.
