@@ -160,7 +160,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --useBoxMesh --useAdaptivity --boxAnisotropicAdaptivity --boxAnisotropyThreshold=$ANISO $HPOPTS \
   --maxRefinementsFirstSlab=$REF0 --maxRefinements=$REF --maxRefinementsFinalSlab=$REF \
   --relErrorTarget=$TARGET --maxVlasovDofs=$MAXDOFS $MARKING --bcResolutionTolerance=$BCTOL \
-  --outputDir=$OUT --phase0Instrumentation --phase0TimingFile=$OUT/timing.txt --timeMonitorSummary \
+  --outputDir=$OUT --timingLog --timingFile=$OUT/timing.txt --timeMonitorSummary \
   > >(tee -a $OUT/console.log) 2>&1
 
 LOG=$OUT/console.log
