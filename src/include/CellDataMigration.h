@@ -55,7 +55,17 @@ class CellDataMigration
   // ! have assigned global degrees of freedom to the cell in question by the time we receive the solution coefficients for the cell.)
   // ! This is not an ideal design, for many reasons.  It would be better to communicate solution coefficients independently of Zoltan; that
   // ! way, we only communicate them when we are ready to use them.
-  static std::vector<std::pair<std::pair<GlobalIndexType,bool>,Camellia::FieldContainer<double>>> solutionCoefficients; // ((cellID, coeffsBelongToParent), coefficients)
+  struct MigratedCoefficients
+  {
+    GlobalIndexType cellID;
+    bool belongToParent;
+    int solutionOrdinal; // in the mesh's registered solutions
+    int lhsOrdinal;
+    Camellia::FieldContainer<double> coefficients;
+  };
+  // ! Each entry records which registered solution and which of its LHSes it belongs to: a solution with no coefficients
+  // ! for a cell sends none, so entries cannot be matched to solutions by their order.
+  static std::vector<MigratedCoefficients> solutionCoefficients;
 public:
   // methods for Zoltan's benefit
   static int dataSize(Mesh* mesh, GlobalIndexType cellID, bool willPackParentDofs);
