@@ -38,13 +38,17 @@ namespace Camellia
    * Called from TLinearTerm::integrate(), so bilinear forms, inner products, and other LinearTerm integrals use it
    * automatically.  Disable by setting the environment variable CAMELLIA_DISABLE_SUM_FACTORIZED_LINEAR_TERMS, or by
    * calling setSumFactorizedLinearTermIntegrationEnabled(false).
+   *
+   * Requires a Trilinos whose Intrepid2 provides PAMatrix (CMake option CAMELLIA_ENABLE_PAMATRIX, defining
+   * CAMELLIA_HAVE_PAMATRIX).  Without it, this always returns false, and integration is by quadrature.
    */
   bool integrateLinearTermsSumFactorized(Camellia::FieldContainer<double> &values,
                                                LinearTermPtr u, DofOrderingPtr uOrdering,
                                                LinearTermPtr v, DofOrderingPtr vOrdering,
                                                BasisCachePtr basisCache);
 
-  //! initially false if CAMELLIA_DISABLE_SUM_FACTORIZED_LINEAR_TERMS is set in the environment, true otherwise
+  //! initially false if CAMELLIA_DISABLE_SUM_FACTORIZED_LINEAR_TERMS is set in the environment, true otherwise; always
+  //! false (and not settable) when Camellia is built without Intrepid2::PAMatrix
   bool sumFactorizedLinearTermIntegrationEnabled();
   void setSumFactorizedLinearTermIntegrationEnabled(bool enabled);
 }

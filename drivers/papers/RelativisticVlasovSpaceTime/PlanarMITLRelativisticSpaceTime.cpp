@@ -33,14 +33,10 @@
 #include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "RHS.h"
 #include "Solution.h"
-#include "TensorBilinearForm.h"
-#include "TensorLocalSchurComplement.h"
 #include "TensorMaxwell1D2VMomentReductionPipeline.h"
 #include "TensorMaxwellRHSMomentData.h"
 #include "TensorMesh.h"
-#include "TensorOperatorData.h"
 #include "TensorOperatorFactory.h"
-#include "TensorPlanarMITLMomentComparisonAdapter.h"
 #include "TensorVar.h"
 #include "TensorVarDiscretization.h"
 #include "TensorVlasovMomentSampling1D2V.h"
@@ -70,24 +66,24 @@ namespace
   double gProximalGalerkinAlpha0 = 1.0;
   double gProximalGalerkinAlphaMultiplier = 1.0;
 
-  using Phase0Clock = std::chrono::steady_clock;
-  using Phase0TimePoint = Phase0Clock::time_point;
-  using Phase0Fields = std::vector<std::pair<std::string,std::string>>;
+  using TimingClock = std::chrono::steady_clock;
+  using TimingTimePoint = TimingClock::time_point;
+  using TimingFields = std::vector<std::pair<std::string,std::string>>;
 
-  std::string phase0DoubleString(double value)
+  std::string timingString(double value)
   {
     std::ostringstream os;
     os << std::setprecision(6) << std::scientific << value;
     return os.str();
   }
 
-  class Phase0Instrumentation
+  class TimingLog
   {
     bool _enabled;
     int _rank;
     std::ofstream _file;
   public:
-    Phase0Instrumentation(bool enabled, int rank, const std::string &timingFilePath)
+    TimingLog(bool enabled, int rank, const std::string &timingFilePath)
     : _enabled(enabled), _rank(rank)
     {
       if (_enabled && (_rank == 0) && (timingFilePath != ""))
@@ -95,26 +91,26 @@ namespace
         _file.open(timingFilePath.c_str(), std::ios::out | std::ios::app);
         if (!_file.is_open())
         {
-          std::cout << "WARNING: unable to open Phase 0 timing file '" << timingFilePath << "'; timings will only be written to stdout.\n";
+          std::cout << "WARNING: unable to open timing file '" << timingFilePath << "'; timings will only be written to stdout.\n";
         }
       }
     }
 
     bool enabled() const { return _enabled; }
-    Phase0TimePoint now() const { return Phase0Clock::now(); }
+    TimingTimePoint now() const { return TimingClock::now(); }
 
-    double elapsedSince(const Phase0TimePoint &start) const
+    double elapsedSince(const TimingTimePoint &start) const
     {
-      return std::chrono::duration<double>(Phase0Clock::now() - start).count();
+      return std::chrono::duration<double>(TimingClock::now() - start).count();
     }
 
-    void logDuration(const std::string &event, double seconds, const Phase0Fields &fields = Phase0Fields())
+    void logDuration(const std::string &event, double seconds, const TimingFields &fields = TimingFields())
     {
       if (!_enabled || (_rank != 0)) return;
 
       std::ostringstream line;
-      line << "PHASE0_TIMING event=" << event;
-      line << " seconds=" << phase0DoubleString(seconds);
+      line << "TIMING event=" << event;
+      line << " seconds=" << timingString(seconds);
       for (const auto &field : fields)
       {
         line << " " << field.first << "=" << field.second;
@@ -130,9 +126,9 @@ namespace
     }
   };
 
-  Phase0Fields phase0MeshStats(const Teuchos::RCP<VlasovSpaceTimeFormulation> &form)
+  TimingFields timingMeshStats(const Teuchos::RCP<VlasovSpaceTimeFormulation> &form)
   {
-    Phase0Fields fields;
+    TimingFields fields;
     if (form != Teuchos::null)
     {
       auto vlasovMesh = form->vlasovMesh();
@@ -149,34 +145,6 @@ namespace
       }
     }
     return fields;
-  }
-
-  std::string phase0TensorGraphSchurBackendName(const std::string &backend)
-  {
-    if (backend == "off") return "off";
-    if (backend == "assembled_crs") return "assembled_crs_graph_schur";
-    if (backend == "matrix_free") return "matrix_free_graph_schur";
-    return "invalid";
-  }
-
-  bool phase0TensorGraphSchurBackendIsValid(const std::string &backend)
-  {
-    return (backend == "off") || (backend == "assembled_crs") || (backend == "matrix_free");
-  }
-
-  bool phase8MomentBackendIsValid(const std::string &backend)
-  {
-    return (backend == "legacy") ||
-           (backend == "tensor_native") ||
-           (backend == "dry_run_compare") ||
-           (backend == "compare");
-  }
-
-  bool phase8MomentBackendRequestsDryRunComparison(const std::string &backend)
-  {
-    return (backend == "tensor_native") ||
-           (backend == "dry_run_compare") ||
-           (backend == "compare");
   }
 
   //! Writes the electron density n_e = int f du (and Jx and E_x) on a dense, uniform (pointsPerDim x pointsPerDim) grid of
@@ -491,224 +459,6 @@ namespace
     }
   }
 
-  TensorMaxwellRHSMomentData phase8BuildLegacyMomentReferenceData(const std::vector<GlobalIndexType> &configurationCellIDs,
-                                                                  MeshPtr configurationMesh,
-                                                                  FunctionPtr densityFunction,
-                                                                  FunctionPtr JxFunction,
-                                                                  FunctionPtr JzFunction,
-                                                                  double q,
-                                                                  double eps0,
-                                                                  double n0)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null configuration mesh.");
-    TEUCHOS_TEST_FOR_EXCEPTION(densityFunction == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null density function.");
-    TEUCHOS_TEST_FOR_EXCEPTION(JxFunction == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null Jx function.");
-    TEUCHOS_TEST_FOR_EXCEPTION(JzFunction == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null Jz function.");
-    TEUCHOS_TEST_FOR_EXCEPTION(eps0 == 0.0, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires nonzero eps0.");
-
-    TensorMaxwellRHSMomentData referenceData;
-    int expectedPointCount = -1;
-    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(configurationCellIDs.size()); cellOrdinal++)
-    {
-      const auto cellID = configurationCellIDs[cellOrdinal];
-      auto basisCache = BasisCache::basisCacheForCell(configurationMesh, cellID);
-      const auto &points = basisCache->getPhysicalCubaturePointsFC();
-      const int pointCount = points.dimension(1);
-      if (expectedPointCount < 0)
-      {
-        expectedPointCount = pointCount;
-        referenceData = TensorMaxwellRHSMomentData(static_cast<int>(configurationCellIDs.size()), expectedPointCount);
-      }
-      TEUCHOS_TEST_FOR_EXCEPTION(pointCount != expectedPointCount, std::invalid_argument,
-                                 "Phase 8 legacy moment reference packing requires a uniform configuration point count per cell.");
-
-      FieldContainer<double> densityValues(1, pointCount);
-      FieldContainer<double> JxValues(1, pointCount);
-      FieldContainer<double> JzValues(1, pointCount);
-      densityFunction->values(densityValues, basisCache);
-      JxFunction->values(JxValues, basisCache);
-      JzFunction->values(JzValues, basisCache);
-
-      for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
-      {
-        referenceData.rhoRHS(cellOrdinal, pointOrdinal) = q / eps0 * (densityValues(0, pointOrdinal) - n0);
-        referenceData.Jx(cellOrdinal, pointOrdinal)     = JxValues(0, pointOrdinal);
-        referenceData.Jz(cellOrdinal, pointOrdinal)     = JzValues(0, pointOrdinal);
-      }
-    }
-    if (expectedPointCount < 0)
-    {
-      referenceData = TensorMaxwellRHSMomentData(0, 0);
-    }
-    return referenceData;
-  }
-
-  std::vector<double> phase0UniformVertices(double left, double right, int elementCount)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(elementCount <= 0, std::invalid_argument,
-                               "Phase 0 tensor graph-norm Schur microbenchmark requires positive element counts.");
-    std::vector<double> vertices(elementCount + 1, left);
-    for (int vertexOrdinal=0; vertexOrdinal<=elementCount; vertexOrdinal++)
-    {
-      vertices[vertexOrdinal] = left + (right - left) * static_cast<double>(vertexOrdinal) / static_cast<double>(elementCount);
-    }
-    return vertices;
-  }
-
-  std::vector<ActiveLeafSet1D> phase0RootLeafSets(int elementCount)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(elementCount <= 0, std::invalid_argument,
-                               "Phase 0 tensor graph-norm Schur microbenchmark requires positive element counts.");
-    return std::vector<ActiveLeafSet1D>(elementCount, ActiveLeafSet1D({{0,0}}));
-  }
-
-  TensorVarPtr phase0TensorFieldVar1D1T2V(const std::string &name)
-  {
-    std::vector<VarPtr> componentVars;
-    componentVars.push_back(Teuchos::rcp(new Var(2000, 0, name + "_x",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    componentVars.push_back(Teuchos::rcp(new Var(2001, 0, name + "_t",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    componentVars.push_back(Teuchos::rcp(new Var(2002, 0, name + "_ux", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    componentVars.push_back(Teuchos::rcp(new Var(2003, 0, name + "_uy", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, componentVars));
-  }
-
-  TensorMeshPtr makePhase0TensorGraphSchurMesh1D1T2V(double x0,
-                                                     double xWidth,
-                                                     double t0,
-                                                     double tWidth,
-                                                     double uxMin,
-                                                     double uxMax,
-                                                     double uyMin,
-                                                     double uyMax,
-                                                     int xElementCount,
-                                                     int tElementCount,
-                                                     int uxElementCount,
-                                                     int uyElementCount,
-                                                     int componentPolyOrder,
-                                                     int testSpaceEnrichment)
-  {
-    auto component0 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(x0, x0 + xWidth, xElementCount), phase0RootLeafSets(xElementCount), false, componentPolyOrder));
-    auto component1 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(t0, t0 + tWidth, tElementCount), phase0RootLeafSets(tElementCount), false, componentPolyOrder));
-    auto component2 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(uxMin, uxMax, uxElementCount), phase0RootLeafSets(uxElementCount), false, componentPolyOrder));
-    auto component3 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(uyMin, uyMax, uyElementCount), phase0RootLeafSets(uyElementCount), false, componentPolyOrder));
-    auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2, component3}));
-    auto factory = TensorVarFactory::factory();
-    auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), componentPolyOrder, testSpaceEnrichment));
-    tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(phase0TensorFieldVar1D1T2V("f"), Teuchos::null, std::vector<int>{0,0,0,0})));
-    tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(phase0TensorFieldVar1D1T2V("w"), Teuchos::null, std::vector<int>{0,0,0,0})));
-    return tensorMesh;
-  }
-
-  TensorBilinearFormPtr makePhase0TensorGraphSchurForm1D1T2V(double cScaled)
-  {
-    auto form = Teuchos::rcp(new TensorBilinearForm("phase0-tensor-relativistic-graph-schur"));
-    auto f = phase0TensorFieldVar1D1T2V("f");
-    auto w = phase0TensorFieldVar1D1T2V("w");
-    auto ux = TensorFunction::componentCoordinate(2);
-    auto uy = TensorFunction::componentCoordinate(3);
-    auto gamma = Camellia::sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (cScaled * cScaled)) * (ux * ux + uy * uy));
-    auto vx = TensorFunction::constant(-1.0) * ux * reciprocal(gamma);
-    auto vy = TensorFunction::constant(0.5) * uy * reciprocal(gamma);
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 0), vx));
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 1), TensorFunction::constant(-1.0)));
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 2), TensorFunction::constant(-0.5) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 3), vy + TensorFunction::constant(-0.75) * TensorFunction::componentCoordinate(1)));
-    return form;
-  }
-
-  double phase0VectorL2Norm(const std::vector<double> &values)
-  {
-    double normSquared = 0.0;
-    for (double value : values) normSquared += value * value;
-    return std::sqrt(normSquared);
-  }
-
-  void runPhase0TensorGraphSchurMicroApply(const std::string &backend,
-                                           double cScaled,
-                                           double x0,
-                                           double xWidth,
-                                           double t0,
-                                           double tWidth,
-                                           double uxMin,
-                                           double uxMax,
-                                           double uyMin,
-                                           double uyMax,
-                                           double l2Weight,
-                                           int microXElements,
-                                           int microTElements,
-                                           int microUxElements,
-                                           int microUyElements,
-                                           int microComponentPolyOrder,
-                                           int microTestSpaceEnrichment,
-                                           Phase0Instrumentation &phase0)
-  {
-    if (backend == "off") return;
-    TEUCHOS_TEST_FOR_EXCEPTION(!phase0TensorGraphSchurBackendIsValid(backend), std::invalid_argument,
-                               "Unsupported Phase 0 tensor graph-norm Schur backend option: " + backend);
-
-    auto tensorMesh = makePhase0TensorGraphSchurMesh1D1T2V(x0, xWidth, t0, tWidth, uxMin, uxMax, uyMin, uyMax,
-                                                           microXElements,
-                                                           microTElements,
-                                                           microUxElements,
-                                                           microUyElements,
-                                                           microComponentPolyOrder,
-                                                           microTestSpaceEnrichment);
-    auto dofLayout = tensorMesh->createDofLayout();
-    auto tensorForm = makePhase0TensorGraphSchurForm1D1T2V(cScaled);
-    TensorOperatorData operatorData(tensorMesh, dofLayout);
-    const IndexType trialDofCount = operatorData.coefficientCount(TENSOR_TRIAL_SPACE, "f");
-    std::vector<double> input(trialDofCount, 0.0);
-    for (IndexType gid=0; gid<trialDofCount; gid++) input[gid] = 0.1 + 0.025 * static_cast<double>((gid % 17) + 1);
-
-    const auto applyStart = phase0.now();
-    std::vector<double> output;
-    if (backend == "matrix_free")
-    {
-      MatrixFreeGraphNormSchurTensorOperatorFactory graphFactory(l2Weight);
-      auto graphOp = graphFactory.build(tensorMesh,
-                                        dofLayout,
-                                        tensorForm,
-                                        TENSOR_TRIAL_SPACE,
-                                        "f",
-                                        TENSOR_TRIAL_SPACE,
-                                        "f");
-      graphOp->apply(input, output);
-    }
-    else
-    {
-      auto graphMatrix = TensorLocalSchurComplementBuilder::affineGraphVolumeSchurComplementMatrix(tensorMesh,
-                                                                                                   dofLayout,
-                                                                                                   tensorForm,
-                                                                                                   "f",
-                                                                                                   "w",
-                                                                                                   l2Weight);
-      TVector<double> x(graphMatrix->getDomainMap(), 1);
-      TVector<double> y(graphMatrix->getRangeMap(), 1);
-      auto xHost = x.getLocalViewHost(Tpetra::Access::ReadWrite);
-      for (size_t localOrdinal=0; localOrdinal<graphMatrix->getDomainMap()->getLocalNumElements(); localOrdinal++) xHost(localOrdinal,0) = input[graphMatrix->getDomainMap()->getGlobalElement(localOrdinal)];
-      graphMatrix->apply(x, y);
-      output.assign(trialDofCount, 0.0);
-      auto yHost = y.getLocalViewHost(Tpetra::Access::ReadOnly);
-      for (size_t localOrdinal=0; localOrdinal<graphMatrix->getRangeMap()->getLocalNumElements(); localOrdinal++) output[graphMatrix->getRangeMap()->getGlobalElement(localOrdinal)] = yHost(localOrdinal,0);
-    }
-
-    phase0.logDuration("tensor_graph_schur_micro_apply",
-                       phase0.elapsedSince(applyStart),
-                       {{"backend", phase0TensorGraphSchurBackendName(backend)},
-                        {"micro_x_elements", std::to_string(microXElements)},
-                        {"micro_t_elements", std::to_string(microTElements)},
-                        {"micro_ux_elements", std::to_string(microUxElements)},
-                        {"micro_uy_elements", std::to_string(microUyElements)},
-                        {"micro_component_p", std::to_string(microComponentPolyOrder)},
-                        {"micro_test_enrichment", std::to_string(microTestSpaceEnrichment)},
-                        {"trial_dofs", std::to_string(trialDofCount)},
-                        {"output_norm", phase0DoubleString(phase0VectorL2Norm(output))}});
-  }
 }
 
 class Maxwellian1T2V : public TFunction<double>
@@ -1718,23 +1468,11 @@ int main(int argc, char *argv[])
     double initialTimeDivision = 0;
     cmdp.setOption("initialTimeDivision", &initialTimeDivision);
 
-    bool phase0Instrumentation = false;
-    std::string phase0TimingFile = "";
-    std::string phase0TensorGraphSchurBackend = "off";
-    std::string phase8MomentBackend = "tensor_native";
-    double phase8MomentCompareAbsTol = 1e-10;
-    double phase8MomentCompareRelTol = 1e-8;
-    double phase8MomentCompareRelFloor = 1e-14;
-    bool phase8MomentCompareStrict = false;
-    int phase8MomentVelocityQuadratureDegree = -1;
-    int phase0TensorGraphSchurXElements = 2;
-    int phase0TensorGraphSchurTElements = 1;
-    int phase0TensorGraphSchurUxElements = 1;
-    int phase0TensorGraphSchurUyElements = 2;
-    int phase0TensorGraphSchurComponentP = 2;
-    int phase0TensorGraphSchurTestEnrichment = 1;
-    cmdp.setOption("phase0Instrumentation", "noPhase0Instrumentation", &phase0Instrumentation,
-                   "Emit grep-friendly Phase 0 timing lines for Planar MITL baseline/performance runs.");
+    bool timingLogEnabled = false;
+    std::string timingFile = "";
+    int momentVelocityQuadratureDegree = -1;
+    cmdp.setOption("timingLog", "noTimingLog", &timingLogEnabled,
+                   "Emit grep-friendly timing lines (TIMING event=...) for setup, assembly, solve, and moment phases.");
     std::string emissionModel = "spaceChargeLimited";
     cmdp.setOption("emissionModel", &emissionModel,
                    "cathode emission: spaceChargeLimited (adjust the emitted density within each slab's fixed-point iteration so "
@@ -1786,28 +1524,10 @@ int main(int argc, char *argv[])
                    "phaseSpaceDiagnostic: the near-cathode integrals are over phase-space cells with center x below this.");
     cmdp.setOption("densityDiagnosticPointsPerDim", &densityDiagnosticPointsPerDim,
                    "Points per dimension (x and t, including cell boundaries) on each configuration cell for densityDiagnostic.");
-    cmdp.setOption("phase0TimingFile", &phase0TimingFile,
-                   "Optional rank-0 file for Phase 0 timing lines; stdout is always used when instrumentation is enabled.");
-    cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
-                   "Optional Phase 0 tensor-native graph-norm Schur micro-apply backend: off, assembled_crs, or matrix_free.");
-    cmdp.setOption("phase8MomentBackend", &phase8MomentBackend,
-                   "Compatibility-only Phase 8 Planar MITL moment backend label.  Planar MITL now unconditionally uses tensor-native moment reductions for production Maxwell current sources.");
-    cmdp.setOption("phase8MomentCompareAbsTol", &phase8MomentCompareAbsTol,
-                   "Absolute tolerance for Phase 8 tensor-vs-legacy rhoRHS/Jx/Jz moment comparisons.");
-    cmdp.setOption("phase8MomentCompareRelTol", &phase8MomentCompareRelTol,
-                   "Relative tolerance for Phase 8 tensor-vs-legacy rhoRHS/Jx/Jz moment comparisons.");
-    cmdp.setOption("phase8MomentCompareRelFloor", &phase8MomentCompareRelFloor,
-                   "Positive denominator floor for Phase 8 tensor-vs-legacy relative moment comparisons.");
-    cmdp.setOption("phase8MomentCompareStrict", "noPhase8MomentCompareStrict", &phase8MomentCompareStrict,
-                   "When enabled, abort if Phase 8 tensor-vs-legacy moment differences exceed tolerances.");
-    cmdp.setOption("phase8MomentVelocityQuadratureDegree", &phase8MomentVelocityQuadratureDegree,
-                   "Velocity quadrature degree for Phase 8 sampled Vlasov HostMatrix bridge; negative uses each phase-space cell's own cubature degree (lowered in velocity directions of lower order).");
-    cmdp.setOption("phase0TensorGraphSchurXElements",  &phase0TensorGraphSchurXElements,  "Number of x cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurTElements",  &phase0TensorGraphSchurTElements,  "Number of t cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurUxElements", &phase0TensorGraphSchurUxElements, "Number of ux cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurUyElements", &phase0TensorGraphSchurUyElements, "Number of uy cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurComponentP", &phase0TensorGraphSchurComponentP, "Per-component polynomial order for the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurTestEnrichment", &phase0TensorGraphSchurTestEnrichment, "Test-space enrichment for the optional Phase 0 tensor graph-norm Schur microbenchmark.");
+    cmdp.setOption("timingFile", &timingFile,
+                   "Optional rank-0 file for the timing lines; stdout is always used when the timing log is enabled.");
+    cmdp.setOption("momentVelocityQuadratureDegree", &momentVelocityQuadratureDegree,
+                   "Velocity quadrature degree for tensor-native moment sampling; negative uses each phase-space cell's own cubature degree (lowered in velocity directions of lower order).");
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
@@ -1832,47 +1552,18 @@ int main(int argc, char *argv[])
     {
       for (double slab : parseCommaSeparatedDoubles(phaseSpaceDiagnosticSlabsString)) phaseSpaceDiagnosticSlabs.insert(int(slab));
     }
-    if (!phase0TensorGraphSchurBackendIsValid(phase0TensorGraphSchurBackend))
+    if (momentVelocityQuadratureDegree == 0)
     {
       if (rank == 0)
       {
-        std::cout << "Unsupported phase0TensorGraphSchurBackend='" << phase0TensorGraphSchurBackend
-                  << "'; expected off, assembled_crs, or matrix_free.\n";
-      }
-      return -1;
-    }
-    if (!phase8MomentBackendIsValid(phase8MomentBackend))
-    {
-      if (rank == 0)
-      {
-        std::cout << "Unsupported phase8MomentBackend='" << phase8MomentBackend
-                  << "'; expected legacy, tensor_native, dry_run_compare, or compare.\n";
-      }
-      return -1;
-    }
-    if ((phase8MomentCompareAbsTol < 0.0) || (phase8MomentCompareRelTol < 0.0) ||
-        (phase8MomentCompareRelFloor <= 0.0) || (phase8MomentVelocityQuadratureDegree == 0))
-    {
-      if (rank == 0)
-      {
-        std::cout << "Phase 8 moment comparison requires nonnegative tolerances, a positive relative floor, and a nonzero velocity quadrature degree (negative selects p).\n";
-      }
-      return -1;
-    }
-    if ((phase0TensorGraphSchurXElements <= 0) || (phase0TensorGraphSchurTElements <= 0) ||
-        (phase0TensorGraphSchurUxElements <= 0) || (phase0TensorGraphSchurUyElements <= 0) ||
-        (phase0TensorGraphSchurComponentP < 0) || (phase0TensorGraphSchurTestEnrichment < 0))
-    {
-      if (rank == 0)
-      {
-        std::cout << "Phase 0 tensor graph-norm Schur microbenchmark sizes require positive element counts and nonnegative p/enrichment.\n";
+        std::cout << "momentVelocityQuadratureDegree must be nonzero (negative selects the phase-space cubature degree).\n";
       }
       return -1;
     }
 
-    Phase0Instrumentation phase0(phase0Instrumentation, rank, phase0TimingFile);
-    const auto phase0TotalStart = phase0.now();
-    phase0.logDuration("start", 0.0,
+    TimingLog timing(timingLogEnabled, rank, timingFile);
+    const auto timingTotalStart = timing.now();
+    timing.logDuration("start", 0.0,
                        {{"mpi_ranks", std::to_string(mpiSession.getNProc())},
                         {"x_elements", std::to_string(xElements)},
                         {"v_elements", gradedVelocityMesh ? std::string("graded") : std::to_string(vElements)},
@@ -1882,8 +1573,7 @@ int main(int argc, char *argv[])
                         {"p", std::to_string(H1Order)},
                         {"dp", std::to_string(delta_k)},
                         {"num_time_slabs", std::to_string(numTimeSlabs)},
-                        {"serendipity", useSerendipityBasis ? "1" : "0"},
-                         {"moment_backend", phase8MomentBackend}});
+                        {"serendipity", useSerendipityBasis ? "1" : "0"}});
     
     using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
     const TestIP testIP = useL2TestSpace ? TestIP::L2TestSpaceInnerProduct : TestIP::GraphTestSpaceInnerProduct;
@@ -1900,8 +1590,6 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
       std::cout << "Proximal Galerkin positivity enforcement: " << (gEnforcePositivity ? "enabled" : "disabled") << "\n";
-      std::cout << "Phase 0 tensor graph-norm Schur backend: " << phase0TensorGraphSchurBackendName(phase0TensorGraphSchurBackend)
-                << " (micro-apply selection only; legacy production solve remains active)\n";
       if (gEnforcePositivity)
       {
         std::cout << "  proximalGalerkinAlpha0 = " << gProximalGalerkinAlpha0 << "\n";
@@ -2022,7 +1710,7 @@ int main(int argc, char *argv[])
     
     const bool useGeometricGradedSpatialMesh = true;
     
-    auto phase0FormulationSetupStart = phase0.now();
+    auto timingFormulationSetupStart = timing.now();
     VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(useBoxMesh);
     s_boxAnisotropicAdaptivity = useBoxMesh && boxAnisotropicAdaptivity;
     s_boxAnisotropyThreshold = boxAnisotropyThreshold;
@@ -2083,49 +1771,49 @@ int main(int argc, char *argv[])
       }
     }
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-    phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
+    timing.logDuration("formulation_setup", timing.elapsedSince(timingFormulationSetupStart), timingMeshStats(form));
 
     // Per-substep Vlasov solve breakdown.  G/B/K come from the BF's optimal-test timing callback (rank-local; summed over
     // ranks below to match the Solution timers): G = Gram matrix assembly, B = enriched stiffness assembly,
     // K = per-element Cholesky solve of G and formation of B^T G^{-1} B.
-    double phase0TimeG = 0, phase0TimeB = 0, phase0TimeK = 0;
-    int phase0OptimalTestElementCount = 0;
-    std::function<void(int, double, double, double, double, ElementTypePtr)> phase0OptimalTestTimingCallback =
+    double timingTimeG = 0, timingTimeB = 0, timingTimeK = 0;
+    int timingOptimalTestElementCount = 0;
+    std::function<void(int, double, double, double, double, ElementTypePtr)> timingOptimalTestTimingCallback =
       [&](int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType) {
-        phase0OptimalTestElementCount += numElements;
-        phase0TimeG += timeG;
-        phase0TimeB += timeB;
-        phase0TimeK += timeT + timeK;
+        timingOptimalTestElementCount += numElements;
+        timingTimeG += timeG;
+        timingTimeB += timeB;
+        timingTimeK += timeT + timeK;
       };
-    if (phase0.enabled())
+    if (timing.enabled())
     {
-      form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback);
+      form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback);
       form->setSubstepSolveProfileCallback([&](const VlasovSpaceTimeFormulation::SubstepSolveProfile &profile) {
         auto comm = MPIWrapper::TeuchosCommWorld();
-        Phase0Fields fields;
+        TimingFields fields;
         fields.push_back({"substep",               std::to_string(profile.substepOrdinal)});
         fields.push_back({"solver",                profile.usedGeometricMultigrid ? "gmg" : "direct"});
         fields.push_back({"iterations",            std::to_string(profile.iterationCount)});
         fields.push_back({"global_dofs",           std::to_string(profile.numGlobalDofs)});
-        fields.push_back({"optimal_test_elements", std::to_string(MPIWrapper::sum(comm, phase0OptimalTestElementCount))});
-        fields.push_back({"sum_G",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeG))});
-        fields.push_back({"sum_B",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeB))});
-        fields.push_back({"sum_K",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeK))});
-        fields.push_back({"sum_local_stiffness",   phase0DoubleString(profile.totalTimeLocalStiffness)});
-        fields.push_back({"sum_global_assembly",   phase0DoubleString(profile.totalTimeGlobalAssembly)});
-        fields.push_back({"sum_bc_imposition",     phase0DoubleString(profile.totalTimeBCImposition)});
-        fields.push_back({"sum_linear_solve",      phase0DoubleString(profile.totalTimeSolve)});
-        fields.push_back({"gmg_construction",      phase0DoubleString(profile.wallTimeGMGConstruction)});
-        fields.push_back({"moment_update",         phase0DoubleString(profile.wallTimeMomentUpdate)});
-        fields.push_back({"configuration_solve",   phase0DoubleString(profile.wallTimeConfigurationSolve)});
-        fields.push_back({"configuration_update",  phase0DoubleString(profile.wallTimeConfigurationUpdate)});
+        fields.push_back({"optimal_test_elements", std::to_string(MPIWrapper::sum(comm, timingOptimalTestElementCount))});
+        fields.push_back({"sum_G",                 timingString(MPIWrapper::sum(comm, timingTimeG))});
+        fields.push_back({"sum_B",                 timingString(MPIWrapper::sum(comm, timingTimeB))});
+        fields.push_back({"sum_K",                 timingString(MPIWrapper::sum(comm, timingTimeK))});
+        fields.push_back({"sum_local_stiffness",   timingString(profile.totalTimeLocalStiffness)});
+        fields.push_back({"sum_global_assembly",   timingString(profile.totalTimeGlobalAssembly)});
+        fields.push_back({"sum_bc_imposition",     timingString(profile.totalTimeBCImposition)});
+        fields.push_back({"sum_linear_solve",      timingString(profile.totalTimeSolve)});
+        fields.push_back({"gmg_construction",      timingString(profile.wallTimeGMGConstruction)});
+        fields.push_back({"moment_update",         timingString(profile.wallTimeMomentUpdate)});
+        fields.push_back({"configuration_solve",   timingString(profile.wallTimeConfigurationSolve)});
+        fields.push_back({"configuration_update",  timingString(profile.wallTimeConfigurationUpdate)});
         for (const auto &entry : profile.gmgTimings)
         {
           std::string key = "gmg_" + entry.first;
           std::replace(key.begin(), key.end(), ' ', '_');
-          fields.push_back({key, phase0DoubleString(entry.second)});
+          fields.push_back({key, timingString(entry.second)});
         }
-        phase0.logDuration("vlasov_substep", profile.wallTimeVlasovSolve, fields);
+        timing.logDuration("vlasov_substep", profile.wallTimeVlasovSolve, fields);
         // memory at phase boundaries of the Vlasov solve: max and sum of current resident size over ranks, and max high-water mark
         const int numCheckpoints = profile.memoryCheckpoints.size();
         if (MPIWrapper::min(comm, numCheckpoints) == MPIWrapper::max(comm, numCheckpoints))
@@ -2133,39 +1821,21 @@ int main(int argc, char *argv[])
           for (int i=0; i<numCheckpoints; i++)
           {
             const auto &checkpoint = profile.memoryCheckpoints[i];
-            Phase0Fields memoryFields;
+            TimingFields memoryFields;
             memoryFields.push_back({"substep",       std::to_string(profile.substepOrdinal)});
             memoryFields.push_back({"checkpoint",    checkpoint.name});
-            memoryFields.push_back({"max_rss_gb",    phase0DoubleString(MPIWrapper::max(comm, checkpoint.currentGB))});
-            memoryFields.push_back({"sum_rss_gb",    phase0DoubleString(MPIWrapper::sum(comm, checkpoint.currentGB))});
-            memoryFields.push_back({"max_hwm_gb",    phase0DoubleString(MPIWrapper::max(comm, checkpoint.highWaterMarkGB))});
-            memoryFields.push_back({"max_footprint_gb", phase0DoubleString(MPIWrapper::max(comm, checkpoint.footprintGB))});
-            memoryFields.push_back({"sum_footprint_gb", phase0DoubleString(MPIWrapper::sum(comm, checkpoint.footprintGB))});
-            phase0.logDuration("vlasov_memory", 0.0, memoryFields);
+            memoryFields.push_back({"max_rss_gb",    timingString(MPIWrapper::max(comm, checkpoint.currentGB))});
+            memoryFields.push_back({"sum_rss_gb",    timingString(MPIWrapper::sum(comm, checkpoint.currentGB))});
+            memoryFields.push_back({"max_hwm_gb",    timingString(MPIWrapper::max(comm, checkpoint.highWaterMarkGB))});
+            memoryFields.push_back({"max_footprint_gb", timingString(MPIWrapper::max(comm, checkpoint.footprintGB))});
+            memoryFields.push_back({"sum_footprint_gb", timingString(MPIWrapper::sum(comm, checkpoint.footprintGB))});
+            timing.logDuration("vlasov_memory", 0.0, memoryFields);
           }
         }
-        phase0TimeG = phase0TimeB = phase0TimeK = 0;
-        phase0OptimalTestElementCount = 0;
+        timingTimeG = timingTimeB = timingTimeK = 0;
+        timingOptimalTestElementCount = 0;
       });
     }
-    runPhase0TensorGraphSchurMicroApply(phase0TensorGraphSchurBackend,
-                                        cScaled,
-                                        x0,
-                                        xWidth,
-                                        t0,
-                                        tWidth,
-                                        uxMin,
-                                        uxMax,
-                                        uyMin,
-                                        uyMax,
-                                        L2WeightGraph,
-                                        phase0TensorGraphSchurXElements,
-                                        phase0TensorGraphSchurTElements,
-                                        phase0TensorGraphSchurUxElements,
-                                        phase0TensorGraphSchurUyElements,
-                                        phase0TensorGraphSchurComponentP,
-                                        phase0TensorGraphSchurTestEnrichment,
-                                        phase0);
     
 //    form->setExportViz(true, "/tmp"); // DEBUGGING
     
@@ -2249,7 +1919,7 @@ int main(int argc, char *argv[])
       }
     }
     
-    auto phase0InitialBCRefinementStart = phase0.now();
+    auto timingInitialBCRefinementStart = timing.now();
     refineForBC(form->vlasovSolutionPreviousSubstep(), form->t_n_hat(), bcFunctionsToResolve, maxElements, bcResolutionTolerance);
     // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
     form->configurationSpaceMesh()->repartitionAndRebuild();
@@ -2268,7 +1938,7 @@ int main(int argc, char *argv[])
     {
       std::cout << "Physical mesh has " << form->configurationSpaceMesh()->numActiveElements() << " elements.\n";
     }
-    phase0.logDuration("initial_bc_refinement", phase0.elapsedSince(phase0InitialBCRefinementStart), phase0MeshStats(form));
+    timing.logDuration("initial_bc_refinement", timing.elapsedSince(timingInitialBCRefinementStart), timingMeshStats(form));
     
     std::ostringstream suffix;
     if (!useL2Trace)
@@ -2792,13 +2462,13 @@ int main(int argc, char *argv[])
           form->setUseGeometricMultigrid(false);
         }
         
-        auto phase0SlabSolveStart = phase0.now();
+        auto timingSlabSolveStart = timing.now();
         form->solve();
         {
-          auto fields = phase0MeshStats(form);
+          auto fields = timingMeshStats(form);
           fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
-          fields.push_back({"memory_hwm_gb", phase0DoubleString(memoryHighWaterMarkInGigabytes())});
-          phase0.logDuration("slab_solve", phase0.elapsedSince(phase0SlabSolveStart), fields);
+          fields.push_back({"memory_hwm_gb", timingString(memoryHighWaterMarkInGigabytes())});
+          timing.logDuration("slab_solve", timing.elapsedSince(timingSlabSolveStart), fields);
         }
         
         if (rank == 0)
@@ -2824,15 +2494,15 @@ int main(int argc, char *argv[])
           std::cout << "Updating tensor-native moment diagnostics.\n";
         }
         
-        auto phase0MomentUpdateStart = phase0.now();
+        auto timingMomentUpdateStart = timing.now();
         const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
         std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
-        const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree : 0; // 0: per cell
+        const int velocityQuadratureDegree = (momentVelocityQuadratureDegree > 0) ? momentVelocityQuadratureDegree : 0; // 0: per cell
         auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                       form->configurationSpaceMesh(),
                                                                       form->vlasovSolution(),
                                                                       form->f(speciesOrdinal),
-                                                                      phase8VelocityQuadratureDegree,
+                                                                      velocityQuadratureDegree,
                                                                       true,
                                                                       cScaled);
         const int numTensorEntries = vlasovMoments.numConfigurationCells * vlasovMoments.numPointsPerConfigurationCell;
@@ -2854,13 +2524,13 @@ int main(int argc, char *argv[])
         vx_rel_mean_clipped = vx_rel_mean;
         vz_rel_mean_clipped = vz_rel_mean;
 
-        phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),
+        timing.logDuration("moment_update", timing.elapsedSince(timingMomentUpdateStart),
                            {{"slab", std::to_string(timeSlabOrdinal)},
                             {"moment_backend", "tensor_native"},
                             {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
                             {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
                             {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
-                            {"velocity_quadrature_degree", (phase8VelocityQuadratureDegree > 0) ? std::to_string(phase8VelocityQuadratureDegree) : std::string("per_cell")}});
+                            {"velocity_quadrature_degree", (velocityQuadratureDegree > 0) ? std::to_string(velocityQuadratureDegree) : std::string("per_cell")}});
         
         if (rank == 0)
         {
@@ -2904,7 +2574,7 @@ int main(int argc, char *argv[])
         if (densityDiagnostic)
         {
           const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
-          writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, phase8VelocityQuadratureDegree, cScaled, q);
+          writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, velocityQuadratureDegree, cScaled, q);
           if (rank == 0) std::cout << "Wrote density diagnostic to " << densityPath << ".\n";
         }
         if (phaseSpaceDiagnostic)
@@ -3048,12 +2718,12 @@ int main(int argc, char *argv[])
         f_soln = Teuchos::null;
 
         // next time slab
-        auto phase0NextTimeSlabStart = phase0.now();
+        auto timingNextTimeSlabStart = timing.now();
         if (emissionProfile != Teuchos::null) emissionProfile->advanceToNextSlab(form->t1(), form->t1() + tWidth);
         form = form->nextTimeSlab(tWidth, tElements);
-        phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
+        timing.logDuration("next_time_slab", timing.elapsedSince(timingNextTimeSlabStart),
                            {{"completed_slab", std::to_string(timeSlabOrdinal)}});
-        if (phase0.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
+        if (timing.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
         
         {
           // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
@@ -3207,14 +2877,14 @@ int main(int argc, char *argv[])
             form->setFixedPointMaxSubsteps(maxSubsteps);
           }
           
-          auto phase0AdaptiveSolveStart = phase0.now();
+          auto timingAdaptiveSolveStart = timing.now();
           form->solve();
           {
-            auto fields = phase0MeshStats(form);
+            auto fields = timingMeshStats(form);
             fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
             fields.push_back({"refinement", std::to_string(refinementNumber)});
-            fields.push_back({"memory_hwm_gb", phase0DoubleString(memoryHighWaterMarkInGigabytes())});
-            phase0.logDuration("adaptive_slab_solve", phase0.elapsedSince(phase0AdaptiveSolveStart), fields);
+            fields.push_back({"memory_hwm_gb", timingString(memoryHighWaterMarkInGigabytes())});
+            timing.logDuration("adaptive_slab_solve", timing.elapsedSince(timingAdaptiveSolveStart), fields);
           }
           
           if (rank == 0)
@@ -3223,15 +2893,15 @@ int main(int argc, char *argv[])
             std::cout << "Time slab " << timeSlabOrdinal << ", refinement " << refinementNumber << ", memory HWM (rank 0): " << memoryHWM_GB << " GB\n";
           }
           
-          auto phase0AdaptiveMomentUpdateStart = phase0.now();
+          auto timingAdaptiveMomentUpdateStart = timing.now();
           const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
           std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
-          const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree : 0; // 0: per cell
+          const int velocityQuadratureDegree = (momentVelocityQuadratureDegree > 0) ? momentVelocityQuadratureDegree : 0; // 0: per cell
           auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                         form->configurationSpaceMesh(),
                                                                         form->vlasovSolution(),
                                                                         form->f(speciesOrdinal),
-                                                                        phase8VelocityQuadratureDegree,
+                                                                        velocityQuadratureDegree,
                                                                         true,
                                                                         cScaled);
           const int numTensorEntries = vlasovMoments.numConfigurationCells * vlasovMoments.numPointsPerConfigurationCell;
@@ -3252,14 +2922,14 @@ int main(int argc, char *argv[])
           velocity_z = vz_rel_mean;
           vx_rel_mean_clipped = vx_rel_mean;
           vz_rel_mean_clipped = vz_rel_mean;
-          phase0.logDuration("adaptive_moment_update", phase0.elapsedSince(phase0AdaptiveMomentUpdateStart),
+          timing.logDuration("adaptive_moment_update", timing.elapsedSince(timingAdaptiveMomentUpdateStart),
                              {{"slab", std::to_string(timeSlabOrdinal)},
                               {"refinement", std::to_string(refinementNumber)},
                               {"moment_backend", "tensor_native"},
                               {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
                               {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
                               {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
-                              {"velocity_quadrature_degree", (phase8VelocityQuadratureDegree > 0) ? std::to_string(phase8VelocityQuadratureDegree) : std::string("per_cell")}});
+                              {"velocity_quadrature_degree", (velocityQuadratureDegree > 0) ? std::to_string(velocityQuadratureDegree) : std::string("per_cell")}});
           
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
           
@@ -3309,9 +2979,9 @@ int main(int argc, char *argv[])
             form->setFixedPointTolerance(fixedPointTol);
             form->setFixedPointMinSubsteps(minSubsteps);
             form->setFixedPointMaxSubsteps(maxSubsteps);
-            auto phase0AdaptiveResolveStart = phase0.now();
+            auto timingAdaptiveResolveStart = timing.now();
             form->solve();
-            phase0.logDuration("adaptive_slab_resolve", phase0.elapsedSince(phase0AdaptiveResolveStart),
+            timing.logDuration("adaptive_slab_resolve", timing.elapsedSince(timingAdaptiveResolveStart),
                                {{"slab", std::to_string(timeSlabOrdinal)},
                                 {"refinement", std::to_string(refinementNumber)}});
             
@@ -3348,12 +3018,12 @@ int main(int argc, char *argv[])
           
           if (!errorTargetMet && (refinementNumber < maxRefinements))
           {
-            auto phase0AdaptiveRefinementStart = phase0.now();
+            auto timingAdaptiveRefinementStart = timing.now();
             refStrategy->refine(rank==0);
             
             // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
             form->configurationSpaceMesh()->repartitionAndRebuild();
-            phase0.logDuration("adaptive_refinement", phase0.elapsedSince(phase0AdaptiveRefinementStart),
+            timing.logDuration("adaptive_refinement", timing.elapsedSince(timingAdaptiveRefinementStart),
                                {{"slab", std::to_string(timeSlabOrdinal)},
                                 {"refinement", std::to_string(refinementNumber)}});
             auto maxwellElementCount = form->configurationSpaceMesh()->numActiveElements();
@@ -3395,7 +3065,7 @@ int main(int argc, char *argv[])
         if ((timeSlabOrdinal == 0) && (timeSlabOrdinal < numTimeSlabs - 1)) maxRefinements = maxRefinementsLaterSlabs;
         {
           // The same per-slab diagnostics as the uniform-mesh branch writes, on the slab's final (adapted) mesh.
-          const int diagnosticVelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree : 0; // 0: per cell
+          const int diagnosticVelocityQuadratureDegree = (momentVelocityQuadratureDegree > 0) ? momentVelocityQuadratureDegree : 0; // 0: per cell
           if (densityDiagnostic)
           {
             const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
@@ -3463,11 +3133,11 @@ int main(int argc, char *argv[])
           f_soln = Teuchos::null;
 
           // next time slab
-          auto phase0NextTimeSlabStart = phase0.now();
+          auto timingNextTimeSlabStart = timing.now();
           form = form->nextTimeSlab(tWidth, tElements);
-          phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
+          timing.logDuration("next_time_slab", timing.elapsedSince(timingNextTimeSlabStart),
                              {{"completed_slab", std::to_string(timeSlabOrdinal)}});
-          if (phase0.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
+          if (timing.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
           
           {
             // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
@@ -3487,11 +3157,11 @@ int main(int argc, char *argv[])
           }
           
           // refine the new slab to ensure resolution of the BC.
-          auto phase0AdaptiveBCRefinementStart = phase0.now();
+          auto timingAdaptiveBCRefinementStart = timing.now();
           refineForBC(form->vlasovSolutionPreviousSubstep(), form->t_n_hat(), bcFunctionsToResolve, maxElements, bcResolutionTolerance);
           // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
           form->configurationSpaceMesh()->repartitionAndRebuild();
-          phase0.logDuration("adaptive_bc_refinement", phase0.elapsedSince(phase0AdaptiveBCRefinementStart),
+          timing.logDuration("adaptive_bc_refinement", timing.elapsedSince(timingAdaptiveBCRefinementStart),
                              {{"slab", std::to_string(timeSlabOrdinal + 1)}});
           if (rank == 0)
           {
@@ -3502,7 +3172,7 @@ int main(int argc, char *argv[])
       
     } // end time slab + useAdaptivity
 
-    phase0.logDuration("total", phase0.elapsedSince(phase0TotalStart));
+    timing.logDuration("total", timing.elapsedSince(timingTotalStart));
     if (timeMonitorSummary)
     {
       Teuchos::TimeMonitor::summarize(std::cout, false, true, false, Teuchos::Union);

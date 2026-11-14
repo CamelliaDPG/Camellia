@@ -2263,12 +2263,6 @@ void VlasovSpaceTimeFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
 
 void VlasovSpaceTimeFormulation::seedConfigurationSolution(SolutionPtr previousConfigurationSolution, double previousFinalTime)
 {
-  // the previous slab's final-time data must be available locally for every cell we need; the configuration-space mesh
-  // geometry is not distributed, so import all active cells
-  MeshPtr previousMesh = previousConfigurationSolution->mesh();
-  const auto activeCells = previousMesh->getActiveCellIDsGlobal();
-  previousConfigurationSolution->importSolutionForOffRankCells(activeCells);
-
   std::map<int,FunctionPtr> seedMap;
   auto addSeed = [&](VarPtr var) {
     if (var == Teuchos::null) return;
@@ -2283,7 +2277,16 @@ void VlasovSpaceTimeFormulation::seedConfigurationSolution(SolutionPtr previousC
     addSeed(E_var);
     addSeed(B_var);
   }
+  // (Formulations without E and B fields, e.g. ConfigurationSpaceFormulationTrivial with prescribed fields, have nothing to
+  // seed, and no solution coefficients to import.  The decision is the same on every rank, so the import stays collective.)
   if (seedMap.empty()) return;
+
+  // the previous slab's final-time data must be available locally for every cell we need; the configuration-space mesh
+  // geometry is not distributed, so import all active cells
+  MeshPtr previousMesh = previousConfigurationSolution->mesh();
+  const auto activeCells = previousMesh->getActiveCellIDsGlobal();
+  previousConfigurationSolution->importSolutionForOffRankCells(activeCells);
+
   _configurationSpaceFormulation->solution()->projectOntoMesh(seedMap);
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
   noteTensorConfigurationSolutionChangedIfNeeded(*this);

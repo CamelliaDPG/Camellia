@@ -10,7 +10,7 @@
 namespace Camellia
 {
   /**
-   *  \brief Host-side Phase 0 instrumentation for tensor-native operator apply work.
+   *  \brief Host-side instrumentation for tensor-native operator apply work.
    *
    *  The counters are intentionally lightweight and passive: operator implementations
    *  can add elapsed wall-clock seconds for each stage while callers that do not query

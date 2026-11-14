@@ -34,7 +34,7 @@ namespace Camellia
    *
    * The object represents a Kronecker-style product of one-dimensional component
    * matrices without materializing the full local dense matrix.  It is intentionally
-   * small and host-callable for the current Phase 2 correctness path; later kernels
+   * small and host-callable, for correctness checks; later kernels
    * can consume the same factor data from device views.
    */
   class TensorProductLocalOperator

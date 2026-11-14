@@ -14,7 +14,7 @@ namespace Camellia
   /**
    * \brief Cached one-dimensional basis/quadrature data for one tensor component cell.
    *
-   * This is the first Phase 2 setup object.  It tabulates reference quadrature points,
+   * It tabulates reference quadrature points,
    * weights, basis values, reference derivatives, and affine physical scaling once so
    * later tensor-product kernels can reuse flat Kokkos views rather than repeatedly
    * allocating FieldContainers or rebuilding basis objects inside element loops.

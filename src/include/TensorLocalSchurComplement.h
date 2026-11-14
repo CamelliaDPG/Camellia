@@ -13,7 +13,7 @@
 namespace Camellia
 {
   /**
-   * \brief Host-side Phase 0 helper for explicit local B/G/K block construction.
+   * \brief Host-side helper for explicit local B/G/K block construction.
    *
    * TensorProductLocalOperator keeps a separable local B action in factorized form.
    * These utilities materialize the corresponding dense local blocks only at the

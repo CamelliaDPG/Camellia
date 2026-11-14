@@ -19,7 +19,7 @@ namespace Camellia
   /**
    * \brief Setup-compiled, kernel-facing metadata for tensor-native operators.
    *
-   * TensorOperatorData is the first Phase 1 bridge from the descriptive TensorMesh and
+   * TensorOperatorData bridges the descriptive TensorMesh and
    * TensorDofLayout objects to flat integer/real arrays that can be consumed by later
    * sum-factorized assembly and matrix-free kernels.  It intentionally does no numerical
    * assembly; it records stable ordinals, geometry scalings, boundary-side flags, and

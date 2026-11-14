@@ -154,28 +154,42 @@ ELSE()
   MESSAGE(FATAL_ERROR "Could not find Trilinos!")
 ENDIF()
 
-# The tensor PAMatrix tests and drivers use experimental Intrepid2 headers
-# (e.g. assembly-examples/PAMatrixAssembly.hpp) that Trilinos does not install,
-# so we need the source tree of the PAMatrix-enabled Trilinos fork.
-set(TRILINOS_SOURCE_DIR "$ENV{TRILINOS_SOURCE_DIR}"
-  CACHE PATH "Source directory of the PAMatrix-enabled Trilinos fork (or set the TRILINOS_SOURCE_DIR environment variable)")
-file(TO_CMAKE_PATH "${TRILINOS_SOURCE_DIR}" TRILINOS_SOURCE_DIR_NORMALIZED)
-set(TENSOR_INTREPID2_SOURCE_DIR "${TRILINOS_SOURCE_DIR_NORMALIZED}/packages/intrepid2/src")
-IF(NOT EXISTS "${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples/PAMatrixAssembly.hpp")
-  MESSAGE(FATAL_ERROR "Could not find packages/intrepid2/assembly-examples/PAMatrixAssembly.hpp "
-    "under TRILINOS_SOURCE_DIR = '${TRILINOS_SOURCE_DIR}'. "
-    "Set TRILINOS_SOURCE_DIR (CMake cache or environment variable) to the root of the "
-    "PAMatrix-enabled Trilinos source tree.")
+# Intrepid2::PAMatrix (partial assembly, with sum-factorized assemble()) enables sum-factorized integration of
+# LinearTerms on tensor-product cells (LinearTermSumFactorized).  Without it, Camellia integrates by quadrature.
+#   CAMELLIA_ENABLE_PAMATRIX = AUTO (default): use PAMatrix if the Trilinos install provides it
+#                              ON: require it (configure fails if it is missing); OFF: do not use it
+SET(CAMELLIA_ENABLE_PAMATRIX "AUTO" CACHE STRING "Use Intrepid2::PAMatrix for sum-factorized integration (AUTO, ON, OFF)")
+SET_PROPERTY(CACHE CAMELLIA_ENABLE_PAMATRIX PROPERTY STRINGS AUTO ON OFF)
+SET(CAMELLIA_HAVE_PAMATRIX OFF)
+IF(NOT CAMELLIA_ENABLE_PAMATRIX STREQUAL "OFF")
+  FIND_FILE(CAMELLIA_INTREPID2_PAMATRIX_HEADER Intrepid2_PAMatrix.hpp PATHS ${Trilinos_INCLUDE_DIRS} NO_DEFAULT_PATH)
+  IF(CAMELLIA_INTREPID2_PAMATRIX_HEADER)
+    SET(CAMELLIA_HAVE_PAMATRIX ON)
+  ELSEIF(CAMELLIA_ENABLE_PAMATRIX STREQUAL "ON")
+    MESSAGE(FATAL_ERROR "CAMELLIA_ENABLE_PAMATRIX=ON, but Intrepid2_PAMatrix.hpp was not found in ${Trilinos_INCLUDE_DIRS}")
+  ENDIF()
 ENDIF()
-# Consumers should add these with target_include_directories(... BEFORE PRIVATE ...)
-# so that they take precedence over the installed Intrepid2 headers.
-set(TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIRS
-  ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Integration
-  ${TENSOR_INTREPID2_SOURCE_DIR}/Discretization/Basis
-  ${TENSOR_INTREPID2_SOURCE_DIR}/Shared
-  ${TENSOR_INTREPID2_SOURCE_DIR}/Cell
-  ${TENSOR_INTREPID2_SOURCE_DIR}/../assembly-examples
-)
+IF(CAMELLIA_HAVE_PAMATRIX)
+  MESSAGE("Using Intrepid2::PAMatrix (${CAMELLIA_INTREPID2_PAMATRIX_HEADER}): sum-factorized LinearTerm integration enabled")
+  add_compile_definitions(CAMELLIA_HAVE_PAMATRIX)
+ELSE()
+  MESSAGE("Not using Intrepid2::PAMatrix (CAMELLIA_ENABLE_PAMATRIX=${CAMELLIA_ENABLE_PAMATRIX}): LinearTerms are integrated by quadrature")
+ENDIF()
+
+# Optional: the tensor PAMatrix unit tests compare against Intrepid2's reference assembly (PAMatrixAssembly.hpp), which
+# is in the Intrepid2 source tree (packages/intrepid2/assembly-examples) but not installed.  Set TRILINOS_SOURCE_DIR (CMake
+# cache or environment variable) to the root of the Trilinos source to build those tests; otherwise they are skipped.
+SET(TRILINOS_SOURCE_DIR "$ENV{TRILINOS_SOURCE_DIR}" CACHE PATH "Trilinos source root, for Intrepid2's assembly-examples (optional)")
+SET(CAMELLIA_INTREPID2_ASSEMBLY_EXAMPLES_DIR "")
+IF(CAMELLIA_HAVE_PAMATRIX AND TRILINOS_SOURCE_DIR)
+  FILE(TO_CMAKE_PATH "${TRILINOS_SOURCE_DIR}/packages/intrepid2/assembly-examples" ASSEMBLY_EXAMPLES_CANDIDATE)
+  IF(EXISTS "${ASSEMBLY_EXAMPLES_CANDIDATE}/PAMatrixAssembly.hpp")
+    SET(CAMELLIA_INTREPID2_ASSEMBLY_EXAMPLES_DIR "${ASSEMBLY_EXAMPLES_CANDIDATE}")
+    MESSAGE("Found Intrepid2 assembly-examples in ${CAMELLIA_INTREPID2_ASSEMBLY_EXAMPLES_DIR}: tensor PAMatrix tests enabled")
+  ELSE()
+    MESSAGE("TRILINOS_SOURCE_DIR does not contain packages/intrepid2/assembly-examples/PAMatrixAssembly.hpp: tensor PAMatrix tests skipped")
+  ENDIF()
+ENDIF()
 
 # If you haven't already set the C++ compiler, use the same compiler
 # that was used to build Trilinos on your machine.  

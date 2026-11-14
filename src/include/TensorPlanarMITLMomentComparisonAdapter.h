@@ -11,11 +11,11 @@
 namespace Camellia
 {
   /**
-   * \brief Phase 8 comparison helper for tensor-native Planar MITL moment dry-runs.
+   * \brief Comparison helper for tensor-native Planar MITL moments against the legacy
+   * SolutionMoments path.
    *
-   * The first production-facing Phase 8 backend is intentionally a dry-run/comparison
-   * path: the legacy SolutionMoments update remains authoritative while tensor-native
-   * reductions are sampled, timed, and compared.  This helper keeps the comparison
+   * In comparison mode, both are computed, and the tensor-native reductions are sampled,
+   * timed, and compared with the legacy values.  This helper keeps the comparison
    * policy independent of the Planar MITL driver and of the Maxwell RHS wiring so that
    * tests and instrumentation can share one convention for rho/Jx/Jz error metrics.
    */

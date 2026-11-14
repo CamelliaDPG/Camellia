@@ -1,6 +1,10 @@
 #ifndef Camellia_TensorPAMatrixBridge_h
 #define Camellia_TensorPAMatrixBridge_h
 
+// Requires Intrepid2::PAMatrix: compiled only when Camellia is configured with it (CAMELLIA_HAVE_PAMATRIX; see the
+// CMake option CAMELLIA_ENABLE_PAMATRIX).
+#ifdef CAMELLIA_HAVE_PAMATRIX
+
 #include "TensorBilinearForm.h"
 #include "TensorFunction.h"
 #include "TensorFunctionEvaluationContext.h"
@@ -829,5 +833,7 @@ namespace Camellia
     }
   }
 }
+
+#endif // CAMELLIA_HAVE_PAMATRIX
 
 #endif

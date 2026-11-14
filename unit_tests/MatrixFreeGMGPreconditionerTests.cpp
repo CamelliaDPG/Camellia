@@ -1,3 +1,4 @@
+#include "Teuchos_DefaultSerialComm.hpp"
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "MatrixFreeGMGPreconditioner.h"
@@ -16,7 +17,8 @@ namespace
 {
   TMapConstPtr serialMap(const GlobalIndexType numGlobalEntries)
   {
-    return Teuchos::rcp(new TMap(numGlobalEntries, 0, Teuchos::DefaultComm<int>::getComm()));
+    // a map on this rank alone: these tests exercise the preconditioner logic with fake operators, on every rank
+    return Teuchos::rcp(new TMap(numGlobalEntries, 0, Teuchos::rcp(new Teuchos::SerialComm<int>())));
   }
 
   void fillVector(TVector<double> &x, const double value)

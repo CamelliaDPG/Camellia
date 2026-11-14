@@ -3,7 +3,7 @@ project(UnitTests)
 FILE(GLOB TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
 list(FILTER TEST_SOURCES EXCLUDE REGEX "Epetra_Operator_to_Epetra_MatrixTests\\.cpp$|OverlappingRowMatrixTests\\.cpp$")
 
-# Tensor tests are built into runTensorTests (which also defines the driver path some of them need), not runTests.
+# Tests of the tensor-product (matrix-free) infrastructure are built into runTensorTests, not runTests.
 set(TENSOR_TEST_SOURCES
   Teuchos_StandardParallelUnitTestMain.cpp
   MatrixFreeInfrastructureTests.cpp
@@ -30,18 +30,24 @@ set(TENSOR_TEST_SOURCES
   TensorMaxwell1D2VMomentReductionPipelineTests.cpp
   TensorPlanarMITLMomentComparisonAdapterTests.cpp
   TensorOperatorDataTests.cpp
-  TensorPAMatrixTests.cpp
-  TensorPAMatrixHGRADTests.cpp
-  TensorPAMatrixBridgeTests.cpp
-  TensorVlasovGraphNormChebyshevTests.cpp
   TensorTraceDescriptorTests.cpp
   TensorTraceLayoutTests.cpp
 )
-foreach(tensorTestSource IN LISTS TENSOR_TEST_SOURCES)
+# PAMatrix tests: need Intrepid2::PAMatrix and Intrepid2's (uninstalled) reference assembly header; see the top-level
+# CMakeLists.txt (CAMELLIA_ENABLE_PAMATRIX, TRILINOS_SOURCE_DIR).
+set(TENSOR_PAMATRIX_TEST_SOURCES
+  TensorPAMatrixTests.cpp
+  TensorPAMatrixHGRADTests.cpp
+  TensorPAMatrixBridgeTests.cpp
+)
+foreach(tensorTestSource IN LISTS TENSOR_TEST_SOURCES TENSOR_PAMATRIX_TEST_SOURCES)
   if(NOT tensorTestSource STREQUAL "Teuchos_StandardParallelUnitTestMain.cpp")
     list(REMOVE_ITEM TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${tensorTestSource}")
   endif()
 endforeach()
+if(CAMELLIA_INTREPID2_ASSEMBLY_EXAMPLES_DIR)
+  list(APPEND TENSOR_TEST_SOURCES ${TENSOR_PAMATRIX_TEST_SOURCES})
+endif()
 set_source_files_properties(
   "${CMAKE_CURRENT_SOURCE_DIR}/Epetra_Operator_to_Epetra_MatrixTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/OverlappingRowMatrixTests.cpp"
@@ -55,18 +61,14 @@ target_link_libraries(runTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} C
 
 add_test(NAME runTests COMMAND runTests)
 
-
 add_executable(runTensorTests ${TENSOR_TEST_SOURCES})
 
-target_include_directories(runTensorTests BEFORE PRIVATE ${TENSOR_INTREPID2_PAMATRIX_INCLUDE_DIRS})
+if(CAMELLIA_INTREPID2_ASSEMBLY_EXAMPLES_DIR)
+  target_include_directories(runTensorTests PRIVATE ${CAMELLIA_INTREPID2_ASSEMBLY_EXAMPLES_DIR})
+endif()
 
 target_link_libraries(runTensorTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
 )
-
-if (TARGET TensorPoissonPAMatrixDriver)
-  add_dependencies(runTensorTests TensorPoissonPAMatrixDriver)
-  target_compile_definitions(runTensorTests PRIVATE TENSOR_POISSON_PAMATRIX_DRIVER_PATH=\"$<TARGET_FILE:TensorPoissonPAMatrixDriver>\")
-endif()
 
 add_test(NAME runTensorTests COMMAND runTensorTests)
 

@@ -424,8 +424,7 @@ namespace
   {
     // Keep this correctness comparison within the existing StandardAssembly
     // reference helper's 1D-3D Jacobian flop-estimate support.  The production
-    // Planar MITL target remains the 4-component (x,t,ux,uy) term documented in
-    // FRESH-TENSOR-IMPLEMENTATION-PLAN-PART-2.md; this smoke covers the new
+    // Planar MITL target is the 4-component (x,t,ux,uy) term; this smoke covers the
     // L2/HVOL-trial + HGRAD-test routing without depending on a 4D dense
     // reference helper.
     const int spaceDim = 3;

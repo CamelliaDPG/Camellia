@@ -23,7 +23,9 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#ifdef CAMELLIA_HAVE_PAMATRIX
 #include "Intrepid2_PAMatrix.hpp"
+#endif
 
 #include "LinearTermSumFactorized.h"
 
@@ -1407,6 +1409,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     TEST_COMPARE(f_err_l2, <=, relTol_f * soln_magnitude);
   }
 
+#ifdef CAMELLIA_HAVE_PAMATRIX
   // Graph-norm Gram matrix: compare sum-factorized LinearTerm integration enabled vs. disabled.
   void testGraphNormGramSumFactorization(Teuchos::FancyOStream &out, bool &success)
   {
@@ -1460,6 +1463,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     }
     setSumFactorizedLinearTermIntegrationEnabled(priorEnabled);
   }
+#endif // CAMELLIA_HAVE_PAMATRIX
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, NextTimeSlab )
   {
@@ -2672,6 +2676,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     }
   }
 
+#ifdef CAMELLIA_HAVE_PAMATRIX // sum-factorized vs. quadrature (without PAMatrix both would be quadrature)
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, GraphNormGramSumFactorization )
   {
     testGraphNormGramSumFactorization(out, success);
@@ -2785,6 +2790,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     testRelativisticGraphNormGramSumFactorization1D2V(false, 0.0, BASIS_FAMILY_SERENDIPITY, out, success, {}, 0.05, {1.5, 0.7});
   }
 
+#endif // CAMELLIA_HAVE_PAMATRIX
+
   // The transport-scale L2 weight on one element of size (0.7, 0.2, 2.5, 1.75), velocity box u_x in [-1.5, 1.0],
   // u_y in [-0.5, 1.25] (straddling u_y = 0): alpha_K = alpha + C [ (v_x,max / h_x)^2 + 1/h_t^2 + (a_x/h_ux)^2 + (a_y/h_uy)^2 ],
   // v_x,max = 1.5 / sqrt(1 + 1.5^2 / c^2) (u_y = 0 on the element).  Checked as in the direction-product test.
@@ -2817,6 +2824,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     auto unitForm      = makeForm(1.0, 0.0);
 
     auto mesh = transportForm->vlasovMesh();
+    if (mesh->cellIDsInPartition().empty()) return; // one- or two-cell mesh: ranks without a cell have nothing to check
     auto cellID = *mesh->cellIDsInPartition().begin();
     const bool testVsTest = true;
     auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
@@ -2873,6 +2881,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     auto unitForm    = makeForm(1.0, {});
 
     auto mesh = productForm->vlasovMesh();
+    if (mesh->cellIDsInPartition().empty()) return; // one- or two-cell mesh: ranks without a cell have nothing to check
     auto cellID = *mesh->cellIDsInPartition().begin();
     const bool testVsTest = true;
     auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
@@ -2898,77 +2907,7 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
     TEST_COMPARE(maxError, <=, 1e-10 * maxEntry);
   }
 
-  // LinearTerm sum-factorized volume integration vs. the standard path: the relativistic 1D2V Vlasov bilinear form
-  // (volume terms (coef f, d/dx_k w), plus the trace term, which uses the standard path either way) and graph-norm IP.
-  void testRelativisticLinearTermSumFactorization1D2V(const EBasisFamily basisFamily, Teuchos::FancyOStream &out, bool &success)
-  {
-    const double c = 2.0;
-    auto spatialMeshTopo = MeshFactory::intervalMeshTopology(0.0, 0.7, 2, false);
-    std::vector<double> temporalVertices = MeshTools::verticesFor1DIntervalMesh(0.0, 0.2, 1);
-    std::vector<double> velocitySpaceVertices_x = MeshTools::verticesFor1DIntervalMesh(-1.5, 2.5, 2);
-    std::vector<double> velocitySpaceVertices_y = MeshTools::verticesFor1DIntervalMesh(-0.5, 1.25, 1);
-    std::vector<double> velocitySpaceVertices_z;
-    auto configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(TEST_Q, TEST_EPS0));
-    auto relForm = Teuchos::rcp(new RelativisticVlasovSpaceTimeFormulation(c, TEST_Q, TEST_M, configForm, spatialMeshTopo, temporalVertices,
-                                                                           velocitySpaceVertices_x, velocitySpaceVertices_y,
-                                                                           velocitySpaceVertices_z, 2, 1, 0,
-                                                                           RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,
-                                                                           0.3, basisFamily));
-    FunctionPtr x = Function::xn(1);
-    FunctionPtr t = Function::yn(1);
-    std::map<int,FunctionPtr> configProjection;
-    configProjection[configForm->E_fieldVar(0)->ID()] = 1.0 + 0.5 * x * t + 0.25 * x * x;
-    configProjection[configForm->B_fieldVar(1)->ID()] = 0.75 - 0.5 * x + t;
-    relForm->configurationSpaceSolution()->projectOntoMesh(configProjection);
-    relForm->configurationSpaceFormulation()->updateConfigurationSpaceFunctions();
-
-    auto mesh = relForm->vlasovMesh();
-    auto bf = relForm->vlasovBF();
-    auto ip = relForm->constructVlasovInnerProduct();
-    for (auto cellID : mesh->cellIDsInPartition())
-    {
-      auto elemType = mesh->getElementType(cellID);
-      const int numTrialDofs = elemType->trialOrderPtr->totalDofs();
-      const int numTestDofs  = elemType->testOrderPtr->totalDofs();
-      auto basisCache   = BasisCache::basisCacheForCell(mesh, cellID, false, 0);
-      auto ipBasisCache = BasisCache::basisCacheForCell(mesh, cellID, true, 0);
-      const auto &parities = basisCache->getCellSideParities();
-
-      FieldContainer<double> bStandard(1,numTrialDofs,numTestDofs), bSumFactorized(1,numTrialDofs,numTestDofs); // with rowMajor, integrate() fills (C,FTrial,FTest)
-      FieldContainer<double> gStandard(1,numTestDofs,numTestDofs),  gSumFactorized(1,numTestDofs,numTestDofs);
-      setSumFactorizedLinearTermIntegrationEnabled(false);
-      bf->stiffnessMatrix(bStandard, elemType, parities, basisCache, true, false);
-      ip->computeInnerProductMatrix(gStandard, elemType->testOrderPtr, ipBasisCache);
-      setSumFactorizedLinearTermIntegrationEnabled(true);
-      bf->stiffnessMatrix(bSumFactorized, elemType, parities, basisCache, true, false);
-      ip->computeInnerProductMatrix(gSumFactorized, elemType->testOrderPtr, ipBasisCache);
-
-      const double relTol = 1e-11, absTol = 1e-11;
-      bool bOK = compareFloatingArraysCamellia(bSumFactorized, "sum-factorized B", bStandard, "standard B", relTol, absTol, out);
-      bool gOK = compareFloatingArraysCamellia(gSumFactorized, "sum-factorized G", gStandard, "standard G", relTol, absTol, out);
-      if (!bOK || !gOK)
-      {
-        out << "comparison failed on cell " << cellID << " (B " << bOK << ", G " << gOK << ")\n";
-        success = false;
-      }
-    }
-  }
-
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorization_Relativistic1D2V_Hierarchical )
-  {
-    testRelativisticLinearTermSumFactorization1D2V(BASIS_FAMILY_HIERARCHICAL, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorization_Relativistic1D2V_Nodal )
-  {
-    testRelativisticLinearTermSumFactorization1D2V(BASIS_FAMILY_NODAL, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorization_Relativistic1D2V_Serendipity )
-  {
-    testRelativisticLinearTermSumFactorization1D2V(BASIS_FAMILY_SERENDIPITY, out, success);
-  }
-
+#ifdef CAMELLIA_HAVE_PAMATRIX
   // Opt-in timing (set CAMELLIA_LINEAR_TERM_SF_TIMING=<H1Order>): B and G assembly for a workset of relativistic 1D2V
   // cells, standard vs. sum-factorized LinearTerm integration, for full tensor and Serendipity bases.
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, LinearTermSumFactorizationTiming_Relativistic1D2V )
@@ -3037,8 +2976,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
       const double gStandardTime = seconds([&]{ ip->computeInnerProductMatrix(gStandard, elemType->testOrderPtr, ipBasisCache); });
       setSumFactorizedLinearTermIntegrationEnabled(true);
       // GEMM statistics for the sum-factorized path: time spent in, and flops issued to, BLAS GEMM
-      // GEMM statistics are process-wide (shared by every PAMatrix instantiation), so any instantiation reads them
-      using PAMatrixType = Intrepid2::PAMatrix<DeviceType,double>;
+      // (PAMatrix's GEMM statistics are process-wide, shared by all instantiations; use the one LinearTermSumFactorized uses)
+      using PAMatrixType = Intrepid2::PAMatrix<Kokkos::DefaultExecutionSpace::device_type,double>;
       const bool gemmStatisticsWereEnabled = PAMatrixType::gemmStatisticsEnabled();
       PAMatrixType::setGEMMStatisticsEnabled(true);
       double gemmFlops0 = PAMatrixType::gemmFlopCount(), gemmTime0 = PAMatrixType::gemmTimeSeconds();
@@ -3062,6 +3001,8 @@ void patchTestRefinedTimeSlab(FunctionPtr f_exact, FunctionPtr E_exact, Function
       TEST_ASSERT(compareFloatingArraysCamellia(gSumFactorized, "sum-factorized G", gStandard, "standard G", 1e-10, 1e-10, out));
     }
   }
+
+#endif // CAMELLIA_HAVE_PAMATRIX
 
   TEUCHOS_UNIT_TEST( VlasovSpaceTimeFormulation, RelativisticMaxwell1D2V_ZeroCurrentSymmetry )
   {

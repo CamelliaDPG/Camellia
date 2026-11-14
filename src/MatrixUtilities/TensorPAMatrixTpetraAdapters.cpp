@@ -11,6 +11,8 @@
 
 #include "TensorPAMatrixTpetraAdapters.hpp"
 
+#ifdef CAMELLIA_HAVE_PAMATRIX
+
 #include <Teuchos_CommHelpers.hpp>
 #include <Teuchos_OrdinalTraits.hpp>
 #include <Teuchos_ScalarTraits.hpp>
@@ -700,3 +702,5 @@ namespace Camellia
     }
   }
 }
+
+#endif // CAMELLIA_HAVE_PAMATRIX
