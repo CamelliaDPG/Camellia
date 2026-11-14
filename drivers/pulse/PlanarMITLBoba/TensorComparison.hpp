@@ -340,6 +340,10 @@ inline int runTensorComparison(int argc, char **argv)
     ex.solver = problem.explicitSchurSolver;
     ex.amen = options; ex.amen.roundingTolerance = problem.chebTolerance; ex.amen.infSupEnrichment = false;
     ex.amen.scaleSites = std::getenv("PLANAR_MITL_AMEN_SCALE_SITES") != nullptr;   // S~ is Jacobi-scaled already
+    // site Jacobi halves the site GMRES iterations on S~ (level 1: 177 -> 98 per sweep, same error)
+    ex.amen.siteJacobi = std::getenv("PLANAR_MITL_AMEN_NO_SITE_JACOBI") == nullptr;
+    // |r~| floors near the S~ TT tolerance times a conditioning factor (level 2: ~2e-3 at sTol 1e-4), so stop on stagnation
+    if (ex.amen.stagnationReduction < 0) ex.amen.stagnationReduction = 0.1;
     ex.split = splitMask;
     solution = solveExplicitSchur(system,rhs,axes,h,problem.qOverM,problem.Ex,problem.By,ex,norm);
   }

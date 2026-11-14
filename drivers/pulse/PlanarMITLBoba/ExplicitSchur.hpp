@@ -216,7 +216,9 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   std::array<Mat, 4> traceMass;
   for (size_t d = 0; d < 4; ++d) traceMass[d] = axes[d].test.transpose() * axes[d].weights.asDiagonal() * axes[d].trace;
   // columns of the selected trial blocks (all if sel is empty), concatenated in block order
-  auto elementBsel = [&](const std::array<size_t, 4> &c, const std::vector<bool> &sel) {
+  // half: V^T B in factored form (V the fast-diagonalization basis shared by all elements, V^T applied to each 1D factor)
+  auto elementBsel = [&](const std::array<size_t, 4> &c, const std::vector<bool> &sel, bool half = false) {
+    auto T1 = [&](size_t d, Mat M) { return half ? Mat(sep->VT[d] * M) : M; };
     std::vector<size_t> soff(nt + 1, 0);
     for (size_t a = 0; a < nt; ++a) soff[a + 1] = soff[a] + (sel[a] ? blocks[a].localSize() : 0);
     Mat B = Mat::Zero(nlocT, soff[nt]);
@@ -230,10 +232,10 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       Mat V;
       for (const auto &t : g.terms)
       {
-        Mat term = (-t.coefficient) * kron(cellBlock(t.Q3, 3, c[3], nbT[3], nbF[3]), cellBlock(t.Q2, 2, c[2], nbT[2], nbF[2]));
+        Mat term = (-t.coefficient) * kron(T1(3, cellBlock(t.Q3, 3, c[3], nbT[3], nbF[3])), T1(2, cellBlock(t.Q2, 2, c[2], nbT[2], nbF[2])));
         if (V.size() == 0) V = term; else V += term;
       }
-      Bf += kron(V, kron(cellBlock(g.Q1, 1, c[1], nbT[1], nbF[1]), cellBlock(g.Q0, 0, c[0], nbT[0], nbF[0])));
+      Bf += kron(V, kron(T1(1, cellBlock(g.Q1, 1, c[1], nbT[1], nbF[1])), T1(0, cellBlock(g.Q0, 0, c[0], nbT[0], nbF[0]))));
     }
     for (size_t a = 0; a < nt; ++a)
     {
@@ -252,6 +254,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
           if (c[d] + 1 <= cells[d] - 1) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
         }
         else f[d] = cellBlock(traceMass[d], d, c[d], nbT[d], nbJ[d]);
+        f[d] = T1(d, f[d]);
       }
       B.middleCols(soff[a], blocks[a].localSize()) = kron(f[3], kron(f[2], kron(f[1], f[0])));
     }
@@ -302,14 +305,17 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   const Eigen::VectorXd lFull = toFull(rhs(0));
   // c = B^T G^{-1} l and the exact Jacobi diagonal of S, element-locally
   std::vector<Eigen::VectorXd> cFull(nt);
+  const auto tRhs = clock::now();
+  std::cout << "explicit_S setup before the element loops " << seconds(t0) << " s" << std::endl;
   for (size_t a = 0; a < nt; ++a) cFull[a] = Eigen::VectorXd::Zero(fullSize[a]);
   forEachElement([&](const std::array<size_t, 4> &c) {
     Eigen::VectorXd lK(nlocT); for (size_t il = 0; il < nlocT; ++il) lK(il) = lFull(testIndex(c, il));
-    const Mat B = elementB(c);
-    Mat BL(nlocT, nlocTrial + 1); BL << B, lK;
-    const Mat X = separableGramSolve(*sep, classOf(c), BL);          // [G^-1 B, G^-1 l]
-    const Eigen::VectorXd cK = B.transpose() * X.col(nlocTrial);
-    const Eigen::VectorXd dK = (B.array() * X.leftCols(nlocTrial).array()).colwise().sum().transpose();
+    // G_K^-1 = V D V^T: with Z = D^1/2 V^T B and z = D^1/2 V^T l, c_K = Z^T z and diag(S_K) = |Z e_j|^2
+    const Eigen::ArrayXd sqrtD = sep->diagonal[classOf(c)].array().sqrt();
+    const Mat Z = sqrtD.matrix().asDiagonal() * elementBsel(c, allBlocks, true);
+    const Eigen::VectorXd z = sqrtD.matrix().asDiagonal() * kroneckerApply(sep->VT, Mat(lK));
+    const Eigen::VectorXd cK = Z.transpose() * z;
+    const Eigen::VectorXd dK = Z.colwise().squaredNorm().transpose();
     for (size_t a = 0; a < nt; ++a)
       for (size_t il = 0; il < blocks[a].localSize(); ++il)
       {
@@ -317,6 +323,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         if (g >= 0) { cFull[a](g) += cK(off[a] + il); diag[a](g) += dK(off[a] + il); }
       }
   });
+  std::cout << "explicit_S rhs + jacobi element loop " << seconds(tRhs) << " s" << std::endl;
   reportMemory("after rhs + jacobi");
   // --- scaling P ~ D^{-1/2} (rank-one Kronecker fit of log d over the four modes), S~ = P S P
   std::vector<std::array<Eigen::VectorXd, 4>> pf(nt);
@@ -355,7 +362,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   for (size_t a = 0; a < nt; ++a) for (size_t b = a; b < nt; ++b) pairs.push_back({a, b});
   const double passBytes = 4.0e9;
   size_t pi = 0; int pass = 0;
-  double tElements = 0, tSvd = 0;
+  double tElements = 0, tSvd = 0, tB = 0, tG = 0, tS = 0, tScatter = 0, tTtSvd = 0;
   while (pi < pairs.size())
   {
     std::vector<std::pair<size_t, size_t>> ps; double bytes = 0;
@@ -379,11 +386,32 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     // only the columns of the blocks in this pass
     std::vector<bool> sel(nt, false); for (const auto &pr : ps) { sel[pr.first] = true; sel[pr.second] = true; }
     std::vector<size_t> soff(nt + 1, 0); for (size_t a = 0; a < nt; ++a) soff[a + 1] = soff[a] + (sel[a] ? blocks[a].localSize() : 0);
+    // per pair: the local part of the element-tensor index of entry (il, jl); the cell part is added per element
+    std::vector<std::vector<size_t>> locIdx(ps.size());
+    for (size_t q = 0; q < ps.size(); ++q)
+    {
+      const auto &A = blocks[ps[q].first], &Bb = blocks[ps[q].second];
+      locIdx[q].resize(A.localSize() * Bb.localSize());
+      for (size_t jl = 0; jl < Bb.localSize(); ++jl)
+      {
+        const auto j = localIndex(Bb.nLocal, jl);
+        for (size_t il = 0; il < A.localSize(); ++il)
+        {
+          const auto i = localIndex(A.nLocal, il);
+          size_t lin = 0, stride = 1;
+          for (size_t d = 0; d < 4; ++d) { lin += cells[d] * (i[d] + A.nLocal[d] * j[d]) * stride; stride *= tn[q][d]; }
+          locIdx[q][il + A.localSize() * jl] = lin;
+        }
+      }
+    }
     forEachElement([&](const std::array<size_t, 4> &c) {
-      const Mat B = elementBsel(c, sel);
-      const Mat X = separableGramSolve(*sep, classOf(c), B);
-      // P_K S_K P_K: the TT-SVD then sees O(1) entries on every cell (graded meshes: unscaled entries span orders of
-      // magnitude, and truncation relative to the largest makes the scaled operator indefinite)
+      auto tq = clock::now();
+      const Mat VtB = elementBsel(c, sel, true);
+      tB += seconds(tq); tq = clock::now();
+      // P_K S_K P_K = Z^T Z with Z = D^{1/2} V^T B P_K (fast diagonalization G_K^-1 = V D V^T; V^T B formed factor by
+      // factor in elementBsel); only the blocks of this
+      // pass's pairs are formed.  The scaling lets the TT-SVD see O(1) entries on every cell (graded meshes: unscaled
+      // entries span orders of magnitude, and truncation relative to the largest makes the scaled operator indefinite).
       Eigen::VectorXd pK(soff[nt]);
       for (size_t a = 0; a < nt; ++a)
         if (sel[a])
@@ -393,21 +421,26 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
             for (size_t d = 0; d < 4; ++d) { const long k = blocks[a].index(d, c[d], i[d], cells[d]); v = k < 0 ? 0.0 : v * pf[a][d](size_t(k)); }
             pK(soff[a] + il) = v;
           }
-      const Mat SK = pK.asDiagonal() * (B.transpose() * X) * pK.asDiagonal();
+      const Mat Z = sep->diagonal[classOf(c)].array().sqrt().matrix().asDiagonal() * VtB * pK.asDiagonal();
+      tG += seconds(tq);
       for (size_t q = 0; q < ps.size(); ++q)
       {
-        const auto &A = blocks[ps[q].first], &Bb = blocks[ps[q].second];
-        for (size_t jl = 0; jl < Bb.localSize(); ++jl)
+        tq = clock::now();
+        const size_t a = ps[q].first, b = ps[q].second, na = blocks[a].localSize(), nb = blocks[b].localSize();
+        Mat SKq;
+        if (a == b)
         {
-          const auto j = localIndex(Bb.nLocal, jl);
-          for (size_t il = 0; il < A.localSize(); ++il)
-          {
-            const auto i = localIndex(A.nLocal, il);
-            size_t lin = 0, stride = 1;
-            for (size_t d = 0; d < 4; ++d) { lin += (c[d] + cells[d] * (i[d] + A.nLocal[d] * j[d])) * stride; stride *= tn[q][d]; }
-            T[q][lin] = SK(soff[ps[q].first] + il, soff[ps[q].second] + jl);
-          }
+          SKq = Mat::Zero(na, na);
+          SKq.selfadjointView<Eigen::Lower>().rankUpdate(Z.middleCols(soff[a], na).transpose());
+          SKq.triangularView<Eigen::StrictlyUpper>() = SKq.transpose();
         }
+        else SKq.noalias() = Z.middleCols(soff[a], na).transpose() * Z.middleCols(soff[b], nb);
+        tS += seconds(tq); tq = clock::now();
+        size_t base = 0, stride = 1;
+        for (size_t d = 0; d < 4; ++d) { base += c[d] * stride; stride *= tn[q][d]; }
+        const size_t *loc = locIdx[q].data(); const double *sk = SKq.data(); double *Tq = T[q].data();
+        for (size_t k = 0; k < na * nb; ++k) Tq[base + loc[k]] = sk[k];
+        tScatter += seconds(tq);
       }
     });
     tElements += seconds(te);
@@ -416,7 +449,9 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     {
       const size_t a = ps[q].first, b = ps[q].second;
       const auto &A = blocks[a], &Bb = blocks[b];
+      auto tq = clock::now();
       auto cores = ttSvd(T[q], tn[q], opt.sTolerance);
+      tTtSvd += seconds(tq);
       Sizes rows, cols; for (size_t d = 0; d < 4; ++d) { rows[d] = A.global[d]; cols[d] = Bb.global[d]; }
       TTMatrix M(rows, cols);
       for (size_t d = 0; d < 4; ++d)
@@ -445,7 +480,8 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     reportMemory("after S pass " + std::to_string(pass));
     ++pass;
   }
-  std::cout << "explicit_S assembled: " << pass << " passes, element blocks " << tElements << " s, TT-SVD + expansion " << tSvd << " s" << std::endl;
+  std::cout << "explicit_S assembled: " << pass << " passes, element blocks " << tElements << " s (V^T B_K " << tB << ", Z = D^1/2 V^T B P " << tG << ", S_K blocks " << tS
+            << ", scatter " << tScatter << "), TT-SVD + expansion " << tSvd << " s (TT-SVD " << tTtSvd << ")" << std::endl;
   // S holds S~ = P S P already
   std::vector<std::vector<TTMatrix>> &St = S;
   // rigorous upper bound: S~ = sum_K R_K^T (P_K S_K P_K) R_K and a trial dof lies in at most m elements (m = 1 for the
@@ -477,6 +513,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
 
   std::vector<TTVector> ct(nt), x(nt), r(nt), dlt(nt);
   double cNorm2 = 0;
+  const auto tCt = clock::now();
   for (size_t a = 0; a < nt; ++a)
   {
     ct[a] = scaleVector(toTT(cFull[a], system.sizes[a + 1], 1e-12), a);
@@ -487,6 +524,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     x[a] = zero_tt_vector<4>(system.sizes[a + 1]);
   }
   const double cNorm = std::sqrt(cNorm2);
+  std::cout << "explicit_S rhs to TT " << seconds(tCt) << " s" << std::endl;
   reportMemory("end of setup");
   std::cout << "explicit_S setup_seconds=" << seconds(t0) << std::endl;
 

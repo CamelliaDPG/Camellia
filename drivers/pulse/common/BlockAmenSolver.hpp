@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BobaTypes.hpp"
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <iostream>
@@ -33,6 +34,11 @@ struct AmenOptions
   // well scaled (the Jacobi-scaled explicit Schur complement): with the matrix-free site solve the row norms cost
   // (operator rank)^4 x rows x cols per block pair and site, every sweep.
   bool scaleSites = true;
+  // Matrix-free site GMRES (localSolver 4): right-precondition by the inverse diagonal of the site operator.
+  bool siteJacobi = false;
+  // With a caller residual: stop when it fell by less than this fraction over two sweeps (0: off; < 0: the solver
+  // path chooses, 0.1 for the explicit Schur complement).
+  double stagnationReduction = -1;
 };
 
 template <class Tensor>
@@ -124,7 +130,12 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.inf_sup_enrichment_block = options.infSupEnrichment ? 0 : -1;
   solver.coupled_site_dense_fill_threshold = options.denseFillThreshold;
   solver.scale_coupled_site_system = options.scaleSites;
+  solver.site_jacobi_preconditioner = options.siteJacobi;
   if (options.rieszTolerance > 0) { solver.local_solution_svd_tolerance_relative_per_block = {options.rieszTolerance}; }
+  // a caller residual is cheap: certify by it after every sweep (the largest local residual can stall above the
+  // tolerance while |A x - b| / |b| is already below it)
+  solver.certify_every_sweep = bool(globalResidual);
+  solver.stagnation_reduction = globalResidual ? std::max(0.0, options.stagnationReduction) : 0.0;
   std::mt19937 generator(options.seed);
   return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator,
                       [&](const boba::BlockVector<host_tt_vector<D>> &x) { return globalResidual ? globalResidual(x) : -1.0; });

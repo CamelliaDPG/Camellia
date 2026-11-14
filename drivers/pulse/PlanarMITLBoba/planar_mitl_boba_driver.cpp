@@ -193,6 +193,7 @@ int run(int argc, char **argv)
   cmd.setOption("kickrank", &options.kickrank); cmd.setOption("maxRank", &options.maxRank);
   cmd.setOption("localSolver", &options.localSolver, "0=COD, 1=QR, 2=LU, 3=Eigen GMRES, 4=matrix-free BoBa GMRES");
   cmd.setOption("localTolerance", &options.localTolerance);
+  cmd.setOption("amenStagnation", &options.stagnationReduction, "AMEn with a matrix-free residual: stop when it falls by less than this fraction over two sweeps (0 off; < 0 path default, 0.1 for explicit S)");
   cmd.setOption("maxLocalIterations", &options.maxLocalIterations);
   cmd.setOption("verbose", "quiet", &options.verbose);
   cmd.setOption("solve", "no-solve", &doSolve);
