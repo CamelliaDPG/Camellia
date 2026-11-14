@@ -60,3 +60,9 @@ drivers/*/*.m
 drivers/*/*.dat
 drivers/*/*.vtu
 drivers/*/*.png
+
+# per-environment Claude Code settings, and Python bytecode
+.claude/settings.json
+.claude/settings.local.json
+__pycache__/
+*.pyc
