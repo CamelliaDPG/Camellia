@@ -882,6 +882,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
   SolutionMoments solnMoments(0, soln, f, physicalMesh, -1);
   solnMoments.update();
   RelativisticFirstMomentFunction relativisticMoment(&solnMoments, soln, f, physicalMesh, c, velocityComponent);
+  relativisticMoment.update(); // collective: imports the phase-space cells under this rank's configuration cells
 
   auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(mesh->getTopology()->baseMeshTopology());
   TEST_ASSERT(phaseSpaceMeshTopology != NULL);
@@ -889,14 +890,17 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
   CubatureFactory cubatureFactory;
   const double tol = 1e-10;
   const auto & myCells = physicalMesh->cellIDsInPartition();
-  for (const auto & physicalCellID : myCells)
+  // Every rank visits every configuration cell in the same order, because Solution::solutionValues() at given points
+  // is collective (it sums each rank's contribution); results are compared on the rank that owns the cell.
+  for (const auto & physicalCellID : physicalMesh->getActiveCellIDsGlobal())
   {
+    const bool isMyCell = (myCells.find(physicalCellID) != myCells.end());
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, physicalCellID);
     const auto &configurationPoints = basisCache->getPhysicalCubaturePointsFC();
     const int numPoints = configurationPoints.dimension(1);
 
     FieldContainer<double> actual(1,numPoints);
-    relativisticMoment.values(actual, basisCache);
+    if (isMyCell) relativisticMoment.values(actual, basisCache);
 
     FieldContainer<double> expected(1,numPoints);
     expected.initialize(0.0);
@@ -959,6 +963,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
       }
     }
 
+    if (!isMyCell) continue;
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
       TEST_FLOATING_EQUALITY(expected(0,pointOrdinal), actual(0,pointOrdinal), tol);

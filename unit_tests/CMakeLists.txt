@@ -39,6 +39,7 @@ set(TENSOR_PAMATRIX_TEST_SOURCES
   TensorPAMatrixTests.cpp
   TensorPAMatrixHGRADTests.cpp
   TensorPAMatrixBridgeTests.cpp
+  TensorVlasovGraphNormChebyshevTests.cpp # runs drivers/performance/TensorPoissonPAMatrixDriver
 )
 foreach(tensorTestSource IN LISTS TENSOR_TEST_SOURCES TENSOR_PAMATRIX_TEST_SOURCES)
   if(NOT tensorTestSource STREQUAL "Teuchos_StandardParallelUnitTestMain.cpp")
@@ -69,6 +70,11 @@ endif()
 
 target_link_libraries(runTensorTests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia
 )
+
+if (TARGET TensorPoissonPAMatrixDriver)
+  add_dependencies(runTensorTests TensorPoissonPAMatrixDriver)
+  target_compile_definitions(runTensorTests PRIVATE TENSOR_POISSON_PAMATRIX_DRIVER_PATH=\"$<TARGET_FILE:TensorPoissonPAMatrixDriver>\")
+endif()
 
 add_test(NAME runTensorTests COMMAND runTensorTests)
 
