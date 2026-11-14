@@ -16,6 +16,7 @@
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
 #include "SqrtFunction.h"
+#include "SeparableTensorIP.h"
 #include "SolutionMomentFunction.h"
 
 using namespace Camellia;
@@ -288,7 +289,8 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
   
   vector<FunctionPtr> a = this->a();
   
-  IPPtr ip = IP::ip();
+  // the direction-separable graph norm's Gram matrices are assembled from one-dimensional factors on box cells
+  IPPtr ip = _testSpaceSeparableGraphNorm ? IPPtr(SeparableTensorIP::ip()) : IP::ip();
   
   const int numSpecies = this->numSpecies();
   
