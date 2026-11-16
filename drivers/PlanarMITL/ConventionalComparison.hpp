@@ -36,6 +36,42 @@ public:
   }
 };
 
+/// The inflow Maxwellian of ComparisonProblem (mitlInflow) on phase space (x, t, u_x, u_z)
+class InflowMaxwellianFunction : public Camellia::TFunction<double>
+{
+  const ComparisonProblem &_problem;
+public:
+  explicit InflowMaxwellianFunction(const ComparisonProblem &problem) : _problem(problem) {}
+  void values(Camellia::FieldContainer<double> &values, Camellia::BasisCachePtr basisCache) override
+  {
+    const auto &points = basisCache->getPhysicalCubaturePointsFC();
+    for (int cell = 0; cell < points.dimension(0); ++cell)
+      for (int pt = 0; pt < points.dimension(1); ++pt)
+        values(cell, pt) = _problem.inflowMaxwellian(points(cell, pt, 2), points(cell, pt, 3));
+  }
+};
+
+/// Diagnostic (PLANAR_MITL_CONV_TT_BOUNDARY): the tensor backend's exterior-trace data on phase space -- t_n = v.n f_in
+/// on the cathode face x = x0 (outward n = -e_x, so -v_x f_in), zero on every other exterior face.
+class TensorBoundaryTraceData : public Camellia::TFunction<double>
+{
+  const ComparisonProblem &_problem; double _x0;
+public:
+  TensorBoundaryTraceData(const ComparisonProblem &problem, double x0) : _problem(problem), _x0(x0) {}
+  void values(Camellia::FieldContainer<double> &values, Camellia::BasisCachePtr basisCache) override
+  {
+    const auto &points = basisCache->getPhysicalCubaturePointsFC();
+    for (int cell = 0; cell < points.dimension(0); ++cell)
+      for (int pt = 0; pt < points.dimension(1); ++pt)
+      {
+        const double x = points(cell, pt, 0), ux = points(cell, pt, 2), uz = points(cell, pt, 3);
+        if (std::abs(x - _x0) > 1e-10) { values(cell, pt) = 0.0; continue; }
+        const double c = _problem.c, vx = ux / std::sqrt(1 + (ux * ux + uz * uz) / (c * c));
+        values(cell, pt) = -vx * _problem.inflowMaxwellian(ux, uz);
+      }
+  }
+};
+
 /// Keep the reference formulation and freeze only the electromagnetic fields: constant, or the tensor backend's
 /// (x, t)-varying profile (--fieldVariation).
 class PrescribedFields : public Camellia::ConfigurationSpaceFormulationMaxwell1D2V
@@ -87,9 +123,49 @@ inline int runConventionalComparison(int argc, char **argv)
             << " basis=" << (problem.conventionalSerendipity ? "serendipity" : "full tensor") << '\n';
   auto solution = form.vlasovSolution();
   auto mesh = solution->mesh();
-  auto bc = BC::bc();
-  bc->addDirichlet(form.t_n_hat(), SpatialFilter::allSpace(), Function::zero());
-  solution->setBC(bc);
+  if (std::getenv("PLANAR_MITL_TRACE_BASIS_INFO"))
+  {
+    // which branch of Projector::projectFunctionOntoBasisInterpolating a Dirichlet trace condition takes
+    const auto cellID = *mesh->getActiveCellIDsGlobal().begin();
+    auto trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+    const int numSides = mesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+    for (int side = 0; side < numSides; ++side)
+    {
+      auto basis = trialOrder->getBasis(form.t_n_hat()->ID(), side);
+      const bool wrapsHGRAD = (basis->intrepid2Basis() != Teuchos::null) &&
+                              (basis->intrepid2Basis()->getFunctionSpace() == Intrepid2::FUNCTION_SPACE_HGRAD);
+      std::cout << "t_n_hat side " << side << ": cardinality " << basis->getCardinality() << " degree " << basis->getDegree()
+                << " camellia fs " << int(basis->functionSpace()) << " (HVOL=" << int(FUNCTION_SPACE_HVOL) << ")"
+                << " broken " << Camellia::functionSpaceIsBroken(basis->functionSpace())
+                << " discontinuous " << Camellia::functionSpaceIsDiscontinuous(basis->functionSpace())
+                << " intrepid2 " << (basis->intrepid2Basis() != Teuchos::null)
+                << " wrapsHGRAD " << wrapsHGRAD << " domain dim " << basis->domainTopology()->getDimension() << '\n';
+    }
+    auto imposition = BasisCache::basisCacheForCell(mesh, cellID); // as Boundary::bcsToImpose builds it
+    std::cout << "BC imposition cache: volume cubature degree " << imposition->cubatureDegree()
+              << ", side 0 cubature degree " << imposition->getSideBasisCache(0)->cubatureDegree() << '\n';
+  }
+  if (problem.mitlInflow && std::getenv("PLANAR_MITL_CONV_TT_BOUNDARY"))
+  {
+    // the tensor backend's boundary treatment: every exterior face prescribed (cathode inflow data, zero elsewhere,
+    // outflow parts included) except the final-time face
+    std::cout << "conventional: tensor-backend boundary treatment (all exterior faces but t = T prescribed)\n";
+    auto bc = BC::bc();
+    auto notFinalTime = SpatialFilter::negatedFilter(SpatialFilter::matchingComponent(1, vertices[1].back()));
+    bc->addDirichlet(form.t_n_hat(), notFinalTime, Teuchos::rcp(new TensorBoundaryTraceData(problem, vertices[0].front())));
+    solution->setBC(bc);
+  }
+  else if (problem.mitlInflow)
+    form.setInitialAndInflowConditions(Function::zero(), Teuchos::rcp(new InflowMaxwellianFunction(problem)));
+  else
+  {
+    // PLANAR_MITL_FREE_FINAL_TIME (a test): leave the final-time face free, as the tensor backend can
+    auto bc = BC::bc();
+    auto filter = std::getenv("PLANAR_MITL_FREE_FINAL_TIME") ?
+        SpatialFilter::negatedFilter(SpatialFilter::matchingComponent(1, vertices[1].back())) : SpatialFilter::allSpace();
+    bc->addDirichlet(form.t_n_hat(), filter, Function::zero());
+    solution->setBC(bc);
+  }
   std::array<FunctionPtr,4> bubble, derivative;
   for (int d = 0; d < 4; ++d)
   {
@@ -107,7 +183,7 @@ inline int runConventionalComparison(int argc, char **argv)
     source = source+term;
   }
   auto rhs = RHS::rhs();
-  rhs->addTerm(source*form.w());
+  if (!problem.mitlInflow) rhs->addTerm(source*form.w());
   solution->setRHS(rhs);
   solution->setUseCondensedSolve(false);
   const auto cell = *mesh->getActiveCellIDsGlobal().begin();
@@ -180,7 +256,7 @@ inline int runConventionalComparison(int argc, char **argv)
   if (!out) throw std::runtime_error("Cannot write comparison samples");
   out << std::setprecision(17) << "x,t,ux,uz,weight,f,exact\n";
   auto f = Function::solution(form.f(),solution);
-  double norm2 = 0, error2 = 0;
+  double norm2 = 0, error2 = 0, fNorm2 = 0, fIntegral = 0;
   for (const auto cellID : mesh->getActiveCellIDsGlobal())
   {
     auto cache = BasisCache::basisCacheForCell(mesh,cellID);
@@ -202,20 +278,23 @@ inline int runConventionalComparison(int argc, char **argv)
       for (int d = 0; d < 4; ++d)
       {
         out << points(0,k,d) << ',';
-        exact *= ComparisonProblem::bubble(points(0,k,d),vertices[d].front(),vertices[d].back());
+        exact *= problem.mitlInflow ? 0.0 : ComparisonProblem::bubble(points(0,k,d),vertices[d].front(),vertices[d].back());
       }
       const double value = values(0,k);
       const double weight = jacobian*weights[k];
       out << weight << ',' << value << ',' << exact << '\n';
       norm2 += weight*exact*exact;
       error2 += weight*(value-exact)*(value-exact);
+      fNorm2 += weight*value*value; fIntegral += weight*value;
     }
   }
-  metrics["relative_exact_l2_error"] = std::sqrt(error2/norm2);
+  metrics["relative_exact_l2_error"] = problem.mitlInflow ? std::nan("") : std::sqrt(error2/norm2);
+  metrics["f_l2_norm"] = std::sqrt(fNorm2); metrics["f_integral"] = fIntegral;
   metrics["solve_passed"] = 1;
   writeMetrics(problem.outputPrefix+"_metrics.json",metrics);
   std::cout << std::setprecision(12) << "vanilla total_seconds=" << totalSeconds
-            << " relative_exact_l2_error=" << metrics["relative_exact_l2_error"] << '\n';
+            << " relative_exact_l2_error=" << metrics["relative_exact_l2_error"]
+            << " f_l2_norm=" << metrics["f_l2_norm"] << " f_integral=" << metrics["f_integral"] << '\n';
   return 0;
 }
 } // namespace PlanarMITL

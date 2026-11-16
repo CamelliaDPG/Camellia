@@ -152,6 +152,78 @@ inline void writeSparse(const Eigen::SparseMatrix<double> &A, const std::string 
   out.write(reinterpret_cast<const char*>(vals.data()), std::streamsize(nnz * sizeof(double)));
 }
 
+/// MITL first-substep right-hand side: the known inflow trace at the cathode moved to the load,
+///   l(w) = + int_{x = x0} v_x f_in w dt du   (B's trace term is -t^ w at a lower exterior face, t^ = v_x f_in),
+/// with v_x = u_x / gamma from the weighted SVD of 1/gamma: rank = rank(1/gamma) in (u_x | u_z), one in (x | t | u).
+inline BlockVector inflowRHS(const System &system, const std::vector<Axis> &axes,
+                             const LorentzFactors &h, const PlanarMITL::ComparisonProblem &problem)
+{
+  auto toHost = [](const Eigen::VectorXd &v) {
+    host_vector out({size_t(v.size())}); auto view = out.view();
+    for (Eigen::Index i = 0; i < v.size(); ++i) view(i) = v(i);
+    return out;
+  };
+  const double s2 = problem.inflowSigma * problem.inflowSigma;
+  const double amplitude = problem.inflowDensity / (2 * M_PI * s2);
+  Eigen::VectorXd mx(axes[2].points.size()), mz(axes[3].points.size());
+  for (Eigen::Index i = 0; i < mx.size(); ++i)
+  {
+    const double u = axes[2].points(i);
+    mx(i) = u > 0 ? std::exp(-0.5 * (u - problem.inflowU0) * (u - problem.inflowU0) / s2) : 0.0; // u_x = 0 is a vertex
+  }
+  for (Eigen::Index i = 0; i < mz.size(); ++i) mz(i) = std::exp(-0.5 * axes[3].points(i) * axes[3].points(i) / s2);
+  // PLANAR_MITL_INFLOW_TRACE_PROJECTION=1: replace each 1D data factor g by its L2 projection onto the trace basis, as the
+  // conventional backend's Dirichlet trace condition does (the data are separable, so the 4D projection factors).
+  // PLANAR_MITL_INFLOW_TRACE_PROJECTION_DEGREE=q: project with a q-degree rule (Camellia imposes Dirichlet trace data
+  // with the cell's default cubature, degree 5 at p = 2, which under-integrates sharp data); the projected trace is then
+  // integrated against the test functions exactly.
+  const bool projectToTrace = std::getenv("PLANAR_MITL_INFLOW_TRACE_PROJECTION") != nullptr;
+  const char *projectionDegreeEnv = std::getenv("PLANAR_MITL_INFLOW_TRACE_PROJECTION_DEGREE");
+  const int projectionDegree = projectionDegreeEnv ? std::atoi(projectionDegreeEnv) : problem.quadratureDegree;
+  std::vector<Axis> low;
+  for (size_t d = 0; d < 4; ++d) low.emplace_back(axes[d].vertices, problem.p, problem.dp, projectionDegree);
+  const LorentzFactors hLow(low[2], low[3], problem.c, problem.coefficientTolerance);
+  // g(d, quadrature points of axis a, k): the k-th separable data factor in direction d (k: 1/gamma SVD term)
+  auto factor = [&](size_t d, const Axis &a, const LorentzFactors &hh, Eigen::Index k) -> Eigen::VectorXd {
+    Eigen::VectorXd g(a.points.size());
+    for (Eigen::Index i = 0; i < g.size(); ++i)
+    {
+      const double u = a.points(i);
+      if (d == 1) g(i) = 1.0;
+      else if (d == 2) g(i) = u > 0 ? u * hh.left(i, k) * std::exp(-0.5 * (u - problem.inflowU0) * (u - problem.inflowU0) / s2) : 0.0;
+      else g(i) = hh.right(i, k) * std::exp(-0.5 * u * u / s2);
+    }
+    return g;
+  };
+  auto integrateK = [&](size_t d, Eigen::Index k) -> Eigen::VectorXd {
+    const auto &a = axes[d];
+    if (!projectToTrace) return a.test.transpose() * (a.weights.array() * factor(d, a, h, k).array()).matrix();
+    const auto &l = low[d];
+    const Eigen::MatrixXd M = l.trace.transpose() * l.weights.asDiagonal() * l.trace;   // block diagonal over cells
+    const Eigen::VectorXd c = M.ldlt().solve(l.trace.transpose() * (l.weights.array() * factor(d, l, hLow, k).array()).matrix());
+    return a.test.transpose() * a.weights.asDiagonal() * (a.trace * c);
+  };
+  if (projectToTrace) std::cout << "inflow data projected onto the trace space with quadrature degree " << projectionDegree << "\n";
+  const Eigen::VectorXd xFactor = axes[0].lowerEnd;
+  const Eigen::VectorXd tFactor = integrateK(1, 0);
+  TTVector load = zero_tt_vector<4>(system.sizes[0]);
+  const LorentzFactors &hTerms = projectToTrace ? hLow : h;  // the SVD terms the factors are built from
+  for (Eigen::Index k = 0; k < hTerms.left.cols(); ++k)
+  {
+    boba::Array<host_vector,4> factors;
+    factors[0] = toHost(xFactor);
+    factors[1] = toHost(tFactor);
+    factors[2] = toHost(integrateK(2, k));
+    factors[3] = toHost(integrateK(3, k));
+    load += amplitude * boba::make_tt_from_vectors<4,host_space,double>(factors);
+    DpgBoba::round(load, problem.svdTolerance);
+  }
+  BlockVector rhs(system.sizes.size());
+  for (size_t b = 0; b < rhs.block_size; ++b) rhs(b) = zero_tt_vector<4>(system.sizes[b]);
+  rhs(0) = load;
+  return rhs;
+}
+
 inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &axes,
                                 const LorentzFactors &h, const PlanarMITL::ComparisonProblem &problem)
 {
@@ -227,6 +299,8 @@ inline int runTensorComparison(int argc, char **argv)
   const auto vertices = problem.vertices();
   std::vector<Axis> axes;
   for (const auto &mesh : vertices) axes.emplace_back(mesh,problem.p,problem.dp,problem.quadratureDegree);
+  // the slab's final time is an outflow face; PLANAR_MITL_FREE_FINAL_TIME frees it for the manufactured problem too (a test)
+  if (problem.mitlInflow || std::getenv("PLANAR_MITL_FREE_FINAL_TIME")) axes[1].freeUpperFace();
   LorentzFactors h(axes[2],axes[3],problem.c,problem.coefficientTolerance);
   TestNormWeight norm;
   norm.alpha = problem.alpha; norm.meshScale = problem.alphaMeshScale; norm.transportScale = problem.alphaTransportScale;
@@ -240,7 +314,7 @@ inline int runTensorComparison(int argc, char **argv)
               << "," << norm.accelerationBounds[1] << '\n';
   }
   auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,norm,problem.svdTolerance);
-  auto rhs = comparisonRHS(system,axes,h,problem);
+  auto rhs = problem.mitlInflow ? inflowRHS(system,axes,h,problem) : comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
   if (std::getenv("PLANAR_MITL_G8_RANKS"))
   {
@@ -466,7 +540,7 @@ inline int runTensorComparison(int argc, char **argv)
   out << std::setprecision(17) << "x,t,ux,uz,weight,f,exact\n";
   size_t count = 1;
   for (size_t d = 0; d < 4; ++d) count *= sampleSizes[d];
-  double norm2 = 0, error2 = 0;
+  double norm2 = 0, error2 = 0, fNorm2 = 0, fIntegral = 0;
   for (size_t k = 0; k < count; ++k)
   {
     size_t ordinal = k;
@@ -477,19 +551,22 @@ inline int runTensorComparison(int argc, char **argv)
       const double point = samples[d].points(i);
       out << point << ',';
       weight *= samples[d].weights(i);
-      exact *= problem.bubble(point,vertices[d].front(),vertices[d].back());
+      exact *= problem.mitlInflow ? 0.0 : problem.bubble(point,vertices[d].front(),vertices[d].back());
     }
     const double value = values(k);
     out << weight << ',' << value << ',' << exact << '\n';
     norm2 += weight*exact*exact;
     error2 += weight*(value-exact)*(value-exact);
+    fNorm2 += weight*value*value; fIntegral += weight*value;
   }
-  metrics["relative_exact_l2_error"] = std::sqrt(error2/norm2);
+  metrics["relative_exact_l2_error"] = problem.mitlInflow ? std::nan("") : std::sqrt(error2/norm2);
+  metrics["f_l2_norm"] = std::sqrt(fNorm2); metrics["f_integral"] = fIntegral;
   const bool passed = std::isfinite(metrics["mixed_residual"]) && metrics["mixed_residual"] <= problem.tolerance;
   metrics["solve_passed"] = passed ? 1 : 0;
   writeMetrics(problem.outputPrefix+"_metrics.json",metrics);
   std::cout << std::setprecision(12) << "tensor total_seconds=" << totalSeconds
             << " relative_exact_l2_error=" << metrics["relative_exact_l2_error"]
+            << " f_l2_norm=" << metrics["f_l2_norm"] << " f_integral=" << metrics["f_integral"]
             << " field_compression=" << metrics["field_compression"] << '\n';
   return passed ? 0 : 2; // preserve failed-run diagnostics for the comparison table
 }

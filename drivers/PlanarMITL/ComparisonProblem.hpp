@@ -36,6 +36,11 @@ struct ComparisonProblem
   // (x, t)-varying prescribed fields (both backends; PlanarMITLBoba::FieldProfile): E_x = Ex (1 + v cos(pi x/L)) (1 + v t/T),
   // B_y = By (1 + v (2x/L - 1)) (1 - 0.6 v t/T); 0: constant
   double fieldVariation = 0;
+  // MITL first-substep mode: no manufactured source; the production inflow Maxwellian at the cathode (u_x > 0),
+  // n / (2 pi sigma^2) exp(-((u_x - u0)^2 + u_z^2) / (2 sigma^2)); zero data at t = 0 and on the velocity boundary; the
+  // final-time face is a free (outflow) trace.  Defaults: the production run's scaled n0, u0, sigma.
+  bool mitlInflow = false;
+  double inflowDensity = 185.422, inflowU0 = 0.198801, inflowSigma = 0.0497003;
   bool separableTestNorm = false;   // separable graph norm (graph-oplus), both backends
   bool schurChebyshev = false, chebFactoredField = false;
   double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0, chebBoundsTolerance = 1e-4, chebLminSafety = 0.8;
@@ -156,6 +161,13 @@ struct ComparisonProblem
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
     cmd.setOption("conventionalSolver", &conventionalSolver,
                   "Conventional backend: KLU or SuperLUDist (direct), or GMG (production-style GMG-preconditioned CG on the condensed system)");
+    cmd.setOption("mitlInflow", "manufacturedSolution", &mitlInflow,
+                  "MITL first-substep problem instead of the manufactured bubble: no source, the production inflow Maxwellian at "
+                  "x = 0 for u_x > 0, f = 0 at t = 0, zero on the velocity boundary, free final-time trace (tensor backend: the "
+                  "other exterior faces are held at zero, which is exact while no electrons reach them)");
+    cmd.setOption("inflowDensity", &inflowDensity, "mitlInflow: n (scaled; production n0 = 185.422)");
+    cmd.setOption("inflowU0", &inflowU0, "mitlInflow: Maxwellian mean u_x (production u0 = 0.198801)");
+    cmd.setOption("inflowSigma", &inflowSigma, "mitlInflow: Maxwellian width (production sigma = 0.0497003)");
     cmd.setOption("conventionalSerendipity", "conventionalFullTensor", &conventionalSerendipity,
                   "Conventional backend: Serendipity bases, as the production runs use (a different discrete space from the tensor backend's full tensor-product bases)");
     cmd.setOption("gmgTolerance", &gmgTolerance, "Conventional GMG: CG tolerance (production 1e-9)");
@@ -251,6 +263,13 @@ struct ComparisonProblem
       }
     return v;
   }
+  //! the inflow Maxwellian (mitlInflow), restricted to u_x > 0
+  double inflowMaxwellian(double ux, double uz) const
+  {
+    if (!(ux > 0)) return 0.0;
+    const double s2 = inflowSigma * inflowSigma;
+    return inflowDensity / (2 * M_PI * s2) * std::exp(-0.5 * ((ux - inflowU0) * (ux - inflowU0) + uz * uz) / s2);
+  }
   static double bubble(double y, double a, double b)
   {
     const double z = (y-a)/(b-a);
@@ -267,7 +286,7 @@ struct ComparisonProblem
             {"graded_velocity",double(gradedVelocity)},{"uniform_refinements",double(uniformRefinements)},{"p",p},{"dp",dp},
             {"quadrature_degree",quadratureDegree},{"sample_degree",sampleDegree},
             {"beta0",beta0},{"betaMax",betaMax},{"c",c},{"q_over_m",qOverM},
-            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},{"field_variation",fieldVariation},{"conventional_serendipity",double(conventionalSerendipity)},{"separable_test_norm",double(separableTestNorm)},
+            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},{"field_variation",fieldVariation},{"conventional_serendipity",double(conventionalSerendipity)},{"mitl_inflow",double(mitlInflow)},{"inflow_density",inflowDensity},{"inflow_u0",inflowU0},{"inflow_sigma",inflowSigma},{"separable_test_norm",double(separableTestNorm)},
             {"target",tolerance},{"svd_tolerance",svdTolerance},{"coefficient_tolerance",coefficientTolerance},
             {"max_sweeps",maxSweeps},{"kickrank",kickrank},{"max_rank",maxRank},
             {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"split_x",double(splitX)},{"inf_sup_enrichment",double(infSupEnrichment)},{"riesz_svd_tolerance",rieszSvdTolerance}};

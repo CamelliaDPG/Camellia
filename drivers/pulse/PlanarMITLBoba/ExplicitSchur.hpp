@@ -83,10 +83,12 @@ struct TrialBlock
   int normal = -1;
   std::array<size_t, 4> nLocal{}, global{};
   size_t localSize() const { return nLocal[0] * nLocal[1] * nLocal[2] * nLocal[3]; }
-  /// global four-mode index in direction d of local index i in cell c (-1: exterior face)
+  /// global four-mode index in direction d of local index i in cell c (-1: an exterior face that is not an unknown;
+  /// the faces in the normal direction are the interior ones plus, if Axis::upperFaceFree, the upper exterior face)
   long index(size_t d, size_t c, size_t i, size_t cells) const
   {
-    if (int(d) == normal) { const long f = long(c) - 1 + long(i); return (f < 0 || f > long(cells) - 2) ? -1 : f; }
+    (void) cells;
+    if (int(d) == normal) { const long f = long(c) - 1 + long(i); return (f < 0 || f >= long(global[d])) ? -1 : f; }
     return long(c * nLocal[d] + i);
   }
 };
@@ -216,7 +218,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     for (size_t d = 0; d < 4; ++d)
     {
       if (tb.normal < 0) { tb.nLocal[d] = nbF[d]; tb.global[d] = cells[d] * nbF[d]; }
-      else if (int(d) == tb.normal) { tb.nLocal[d] = 2; tb.global[d] = cells[d] - 1; }
+      else if (int(d) == tb.normal) { tb.nLocal[d] = 2; tb.global[d] = size_t(axes[d].faces.cols()); }
       else { tb.nLocal[d] = nbJ[d]; tb.global[d] = cells[d] * nbJ[d]; }
       if (tb.global[d] != system.sizes[b][d]) throw std::runtime_error("explicit Schur: trial layout mismatch for " + system.names[b]);
     }
@@ -294,7 +296,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
           f[d] = Mat::Zero(nbT[d], 2);
           const Mat &F = axes[d].faces;
           if (c[d] >= 1) f[d].col(0) = F.block(c[d] * nbT[d], c[d] - 1, nbT[d], 1);
-          if (c[d] + 1 <= cells[d] - 1) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
+          if (long(c[d]) < long(F.cols())) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
         }
         else f[d] = cellBlock(traceMass[d], d, c[d], nbT[d], nbJ[d]);
         f[d] = T1(d, f[d]);
@@ -658,7 +660,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         {
           f[d] = Mat::Zero(nbT[d], 2); const Mat &F = axes[d].faces;
           if (c[d] >= 1) f[d].col(0) = F.block(c[d] * nbT[d], c[d] - 1, nbT[d], 1);
-          if (c[d] + 1 <= cells[d] - 1) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
+          if (long(c[d]) < long(F.cols())) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
         }
         else f[d] = cellBlock(traceMass[d], d, c[d], nbT[d], nbJ[d]);
       }

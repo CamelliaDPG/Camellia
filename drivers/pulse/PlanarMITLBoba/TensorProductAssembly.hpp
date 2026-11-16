@@ -70,6 +70,8 @@ struct Axis
   std::vector<double> vertices;
   Eigen::VectorXd points, weights;
   Eigen::MatrixXd test, derivative, field, trace, faces;
+  Eigen::VectorXd lowerEnd;   // test basis values at the lower end of the axis (left end of cell 0), length cells * nb
+  bool upperFaceFree = false; // faces has a last column for the upper exterior face (an outflow face, e.g. t = T)
 
   Axis(const std::vector<double> &mesh, int p, int dp, int quadratureDegree) : vertices(mesh)
   {
@@ -142,7 +144,24 @@ struct Axis
         faces(face * nb + b, face - 1) = -endpointValues(b, 0);
       }
     }
+    lowerEnd = Eigen::VectorXd::Zero(cells * nb);
+    upperEnd = Eigen::VectorXd::Zero(cells * nb);
+    for (int b = 0; b < nb; ++b)
+    {
+      lowerEnd(b) = endpointValues(b, 0);
+      upperEnd((cells - 1) * nb + b) = endpointValues(b, 1);
+    }
   }
+  /// Make the upper exterior face a trace unknown (an outflow face, such as the slab's final time): appends its column
+  /// (the last cell's values at its right end, outward normal +e_d, as for the interior faces' left neighbours).
+  void freeUpperFace()
+  {
+    if (upperFaceFree) return;
+    faces.conservativeResize(Eigen::NoChange, faces.cols() + 1);
+    faces.col(faces.cols() - 1) = upperEnd;
+    upperFaceFree = true;
+  }
+  Eigen::VectorXd upperEnd;   // test basis values at the upper end of the axis (right end of the last cell)
 };
 
 /// Weighted SVD of h(ux,uz); its factors are values on physical quadrature points.
