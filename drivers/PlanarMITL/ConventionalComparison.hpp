@@ -78,11 +78,13 @@ inline int runConventionalComparison(int argc, char **argv)
   RelativisticVlasovSpaceTimeFormulation form(problem.c,problem.qOverM,1,fields,spatial,
       base[1],base[2],base[3],{},problem.p,problem.dp,problem.uniformRefinements,
       RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,problem.alpha,
-      BASIS_FAMILY_HIERARCHICAL,0,false,problem.alphaMeshScale,{},problem.alphaTransportScale,
+      problem.conventionalSerendipity ? BASIS_FAMILY_SERENDIPITY : BASIS_FAMILY_HIERARCHICAL,0,false,
+      problem.alphaMeshScale,{},problem.alphaTransportScale,
       std::vector<double>(bounds.begin(), bounds.end()),problem.separableTestNorm);
   std::cout << "conventional fields: Ex=" << problem.Ex << " By=" << problem.By << " variation=" << problem.fieldVariation
             << " test_norm=" << (problem.separableTestNorm ? "separable (graph-oplus)" : "graph")
-            << " acceleration_bounds=" << bounds[0] << "," << bounds[1] << '\n';
+            << " acceleration_bounds=" << bounds[0] << "," << bounds[1]
+            << " basis=" << (problem.conventionalSerendipity ? "serendipity" : "full tensor") << '\n';
   auto solution = form.vlasovSolution();
   auto mesh = solution->mesh();
   auto bc = BC::bc();

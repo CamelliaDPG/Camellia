@@ -50,6 +50,7 @@ struct ComparisonProblem
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
+  bool conventionalSerendipity = false;   // conventional backend: Serendipity bases, as in production
   double gmgTolerance = 1e-9; int gmgMaxIterations = 5000;
   // production-like meshes: graded velocity (PlanarMITL::gradedVertices, production parameters by default) and uniform
   // refinement of the whole base mesh (as production's --numUniformRefinements; conventional GMG uses it as an h-level)
@@ -155,6 +156,8 @@ struct ComparisonProblem
     cmd.setOption("chebKronecker", &chebKronecker, "Chebyshev: rank-one Kronecker Jacobi factors (tools/schur_chebyshev.py --prec kron8 --write-kron)");
     cmd.setOption("conventionalSolver", &conventionalSolver,
                   "Conventional backend: KLU or SuperLUDist (direct), or GMG (production-style GMG-preconditioned CG on the condensed system)");
+    cmd.setOption("conventionalSerendipity", "conventionalFullTensor", &conventionalSerendipity,
+                  "Conventional backend: Serendipity bases, as the production runs use (a different discrete space from the tensor backend's full tensor-product bases)");
     cmd.setOption("gmgTolerance", &gmgTolerance, "Conventional GMG: CG tolerance (production 1e-9)");
     cmd.setOption("gmgMaxIterations", &gmgMaxIterations);
     cmd.setOption("gradedVelocity", "uniformVelocity", &gradedVelocity,
@@ -264,7 +267,7 @@ struct ComparisonProblem
             {"graded_velocity",double(gradedVelocity)},{"uniform_refinements",double(uniformRefinements)},{"p",p},{"dp",dp},
             {"quadrature_degree",quadratureDegree},{"sample_degree",sampleDegree},
             {"beta0",beta0},{"betaMax",betaMax},{"c",c},{"q_over_m",qOverM},
-            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},{"field_variation",fieldVariation},{"separable_test_norm",double(separableTestNorm)},
+            {"Ex",Ex},{"By",By},{"x_width",xWidth},{"t_width",tWidth},{"alpha",alpha},{"alpha_mesh_scale",alphaMeshScale},{"alpha_transport_scale",alphaTransportScale},{"field_variation",fieldVariation},{"conventional_serendipity",double(conventionalSerendipity)},{"separable_test_norm",double(separableTestNorm)},
             {"target",tolerance},{"svd_tolerance",svdTolerance},{"coefficient_tolerance",coefficientTolerance},
             {"max_sweeps",maxSweeps},{"kickrank",kickrank},{"max_rank",maxRank},
             {"local_solver",localSolver},{"local_tolerance",localTolerance},{"max_local_iterations",maxLocalIterations},{"split_modes",double(splitModes)},{"split_x",double(splitX)},{"inf_sup_enrichment",double(infSupEnrichment)},{"riesz_svd_tolerance",rieszSvdTolerance}};
