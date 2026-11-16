@@ -16,6 +16,9 @@
 #include "SchurChebyshev.hpp"
 #include <fstream>
 #include <atomic>
+#include <map>
+#include <random>
+#include <mutex>
 #include <thread>
 
 namespace PlanarMITLBoba
@@ -97,10 +100,308 @@ struct TrialBlock
 struct Core3
 {
   size_t r0 = 1, n = 1, r1 = 1; std::vector<double> v;
+  Core3() = default;
   Core3(size_t a, size_t b, size_t c) : r0(a), n(b), r1(c), v(a * b * c, 0.0) {}
   double &operator()(size_t a, size_t i, size_t b) { return v[a + r0 * (i + n * b)]; }
   double operator()(size_t a, size_t i, size_t b) const { return v[a + r0 * (i + n * b)]; }
 };
+
+/// A TT-matrix core (r0, n, m, r1), first index fastest.
+struct Core4
+{
+  size_t r0 = 1, n = 1, m = 1, r1 = 1; std::vector<double> v;
+  Core4() = default;
+  Core4(size_t a, size_t b, size_t c, size_t d) : r0(a), n(b), m(c), r1(d), v(a * b * c * d, 0.0) {}
+  double &operator()(size_t l, size_t i, size_t j, size_t r) { return v[l + r0 * (i + n * (j + m * r))]; }
+  double operator()(size_t l, size_t i, size_t j, size_t r) const { return v[l + r0 * (i + n * (j + m * r))]; }
+};
+
+/// S_ab = A^T diag(d) B by zip-up (one pass left to right, truncating each cut through its Gram matrix), with A, B
+/// TT matrices (test x trial) whose cores are block-sparse per cell (test dofs of cell c couple only to trial dofs of
+/// cell c: field, or its faces) and d a TT vector over the test dofs.  The exact product has rank r_A r_d r_B; the
+/// carry has rank r_S r_A r_d r_B and only structurally nonzero (column, column) pairs are stored.
+/// cols(T, d, c): the (local slot, global column) pairs of trial block T in direction d, cell c.
+inline std::array<Core4, 4> zipUpTripleProduct(const std::array<Core4, 4> &A, const std::array<Core3, 4> &D,
+                                               const std::array<Core4, 4> &B, const std::array<size_t, 4> &cells,
+                                               const std::array<size_t, 4> &nbT, const TrialBlock &ta, const TrialBlock &tb,
+                                               double tol, int threads, std::array<size_t, 4> *ranksOut = nullptr)
+{
+  std::array<Core4, 4> S;
+  size_t rs = 1, ra = 1, rd = 1, rb = 1;
+  std::vector<double> R(1, 1.0);                           // carry R[rho + rs (alpha_a + ra (delta + rd alpha_b))]
+  for (size_t d = 0; d < 4; ++d)
+  {
+    const Core4 &Ad = A[d], &Bd = B[d]; const Core3 &Dd = D[d];
+    if (Ad.r0 != ra || Bd.r0 != rb || Dd.r0 != rd) throw std::logic_error("zipUpTripleProduct: rank mismatch");
+    const size_t ra1 = Ad.r1, rb1 = Bd.r1, rd1 = Dd.r1, Rc = ra1 * rd1 * rb1, nb = nbT[d];
+    // Rm(rho + rs (delta + rd alpha_b), alpha_a)
+    Mat Rm(rs * rd * rb, ra);
+    for (size_t ab = 0; ab < rb; ++ab) for (size_t de = 0; de < rd; ++de) for (size_t aa = 0; aa < ra; ++aa) for (size_t rho = 0; rho < rs; ++rho)
+      Rm(rho + rs * (de + rd * ab), aa) = R[rho + rs * (aa + ra * (de + rd * ab))];
+    // slots: (global column a, global column b) -> rs x Rc block, columns (beta_a + ra1 (delta' + rd1 beta_b))
+    std::map<std::pair<long, long>, size_t> slotOf; std::vector<std::pair<long, long>> slotKey;
+    for (size_t c = 0; c < cells[d]; ++c)
+      for (size_t ja = 0; ja < ta.nLocal[d]; ++ja) { const long ga = ta.index(d, c, ja, cells[d]); if (ga < 0) continue;
+        for (size_t jb = 0; jb < tb.nLocal[d]; ++jb) { const long gb = tb.index(d, c, jb, cells[d]); if (gb < 0) continue;
+          if (slotOf.emplace(std::make_pair(ga, gb), slotKey.size()).second) slotKey.push_back({ga, gb}); } }
+    std::vector<Mat> M(slotKey.size(), Mat::Zero(rs, Rc));
+    std::vector<std::mutex> slotLock(slotKey.size());
+    auto cellWork = [&](size_t c) {
+      for (size_t ja = 0; ja < ta.nLocal[d]; ++ja)
+      {
+        const long ga = ta.index(d, c, ja, cells[d]); if (ga < 0) continue;
+        // T1 = Rm As, As(alpha_a, k + nb beta_a) = A(alpha_a, c nb + k, ga, beta_a)
+        Mat As(ra, nb * ra1);
+        for (size_t be = 0; be < ra1; ++be) for (size_t k = 0; k < nb; ++k) for (size_t aa = 0; aa < ra; ++aa)
+          As(aa, k + nb * be) = Ad(aa, c * nb + k, size_t(ga), be);
+        const Mat T1 = Rm * As;                              // rows (rho, delta, alpha_b), cols (k, beta_a)
+        // T2(rho + rs (beta_a + ra1 delta'), alpha_b + rb k) = sum_delta T1(rho, delta, alpha_b; k, beta_a) D(delta, c nb + k, delta')
+        Mat T2(rs * ra1 * rd1, rb * nb);
+        for (size_t k = 0; k < nb; ++k)
+        {
+          Mat Dk(rd, rd1); for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t e0 = 0; e0 < rd; ++e0) Dk(e0, e1) = Dd(e0, c * nb + k, e1);
+          for (size_t be = 0; be < ra1; ++be)
+            for (size_t ab = 0; ab < rb; ++ab)
+            {
+              const Eigen::Map<const Mat> X(T1.data() + T1.rows() * (k + nb * be) + rs * rd * ab, rs, rd);
+              const Mat XD = X * Dk;                         // rs x rd1
+              for (size_t e1 = 0; e1 < rd1; ++e1) T2.block(rs * (be + ra1 * e1), ab + rb * k, rs, 1) = XD.col(e1);
+            }
+        }
+        for (size_t jb = 0; jb < tb.nLocal[d]; ++jb)
+        {
+          const long gb = tb.index(d, c, jb, cells[d]); if (gb < 0) continue;
+          Mat Bs(rb * nb, rb1);                              // Bs(alpha_b + rb k, beta_b)
+          for (size_t bb = 0; bb < rb1; ++bb) for (size_t k = 0; k < nb; ++k) for (size_t ab = 0; ab < rb; ++ab)
+            Bs(ab + rb * k, bb) = Bd(ab, c * nb + k, size_t(gb), bb);
+          const Mat P = T2 * Bs;                             // rows (rho, beta_a, delta'), cols beta_b
+          const size_t s = slotOf.at({ga, gb});
+          std::lock_guard<std::mutex> lock(slotLock[s]);
+          for (size_t bb = 0; bb < rb1; ++bb) for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t be = 0; be < ra1; ++be)
+            M[s].col(be + ra1 * (e1 + rd1 * bb)) += P.block(rs * (be + ra1 * e1), bb, rs, 1);
+        }
+      }
+    };
+    {
+      std::atomic<size_t> next{0}; const int nth = std::max(1, std::min<int>(threads, int(cells[d])));
+      std::vector<std::exception_ptr> err(nth);
+      auto work = [&](int t) { try { for (size_t c; (c = next.fetch_add(1)) < cells[d];) cellWork(c); } catch (...) { err[t] = std::current_exception(); next = cells[d]; } };
+      std::vector<std::thread> pool; for (int t = 1; t < nth; ++t) pool.emplace_back(work, t);
+      work(0); for (auto &th : pool) th.join();
+      for (auto &e : err) if (e) std::rethrow_exception(e);
+    }
+    const size_t rows = ta.global[d], colsB = tb.global[d];
+    if (d == 3)
+    {
+      if (Rc != 1) throw std::logic_error("zipUpTripleProduct: last ranks must be one");
+      S[d] = Core4(rs, rows, colsB, 1);
+      for (size_t s = 0; s < slotKey.size(); ++s) for (size_t rho = 0; rho < rs; ++rho)
+        S[d](rho, size_t(slotKey[s].first), size_t(slotKey[s].second), 0) = M[s](rho, 0);
+      if (ranksOut) (*ranksOut)[d] = rs;
+      break;
+    }
+    // truncate the cut: M_all (rows: slots x rs, cols: Rc) ~ (M_all V_r) V_r^T, V_r the dominant right singular vectors,
+    // from the Gram matrix of whichever side is smaller
+    const size_t nRows = slotKey.size() * rs;
+    Mat Vr; size_t r = 0;
+    auto keep = [&](const Eigen::VectorXd &lam) { const double total = lam.sum(); size_t k = 0; double tail = total;
+      while (k < size_t(lam.size()) && tail > tol * tol * total) { tail -= lam(Eigen::Index(k)); ++k; } return std::max<size_t>(k, 1); };
+    if (Rc <= nRows)
+    {
+      Mat G = Mat::Zero(Rc, Rc);
+      for (const auto &Ms : M) G.selfadjointView<Eigen::Lower>().rankUpdate(Ms.transpose());
+      G.triangularView<Eigen::StrictlyUpper>() = G.transpose();
+      Eigen::SelfAdjointEigenSolver<Mat> eig(G);
+      const Eigen::VectorXd lam = eig.eigenvalues().reverse().cwiseMax(0.0);
+      r = keep(lam); Vr = eig.eigenvectors().rowwise().reverse().leftCols(Eigen::Index(r));
+    }
+    else
+    {
+      // K = M_all M_all^T (nRows^2); M_all = U Sigma V^T  =>  V_r = M_all^T U_r Sigma_r^{-1}
+      Mat K(nRows, nRows);
+      for (size_t s1 = 0; s1 < slotKey.size(); ++s1) for (size_t s2 = 0; s2 <= s1; ++s2)
+      {
+        const Mat blk = M[s1] * M[s2].transpose();
+        K.block(rs * s1, rs * s2, rs, rs) = blk; if (s1 != s2) K.block(rs * s2, rs * s1, rs, rs) = blk.transpose();
+      }
+      Eigen::SelfAdjointEigenSolver<Mat> eig(K);
+      const Eigen::VectorXd lam = eig.eigenvalues().reverse().cwiseMax(0.0);
+      r = keep(lam);
+      const Mat U = eig.eigenvectors().rowwise().reverse().leftCols(Eigen::Index(r));
+      Vr = Mat::Zero(Rc, Eigen::Index(r));
+      for (size_t s1 = 0; s1 < slotKey.size(); ++s1) Vr.noalias() += M[s1].transpose() * U.middleRows(rs * s1, rs);
+      for (size_t q = 0; q < r; ++q) { const double sv = std::sqrt(lam(Eigen::Index(q))); Vr.col(Eigen::Index(q)) /= (sv > 0 ? sv : 1.0); }
+    }
+    S[d] = Core4(rs, rows, colsB, r);
+    for (size_t s = 0; s < slotKey.size(); ++s)
+    {
+      const Mat MV = M[s] * Vr;                              // rs x r
+      for (size_t q = 0; q < r; ++q) for (size_t rho = 0; rho < rs; ++rho)
+        S[d](rho, size_t(slotKey[s].first), size_t(slotKey[s].second), q) = MV(rho, q);
+    }
+    if (ranksOut) (*ranksOut)[d] = rs;
+    // new carry R'(q, beta_a, delta', beta_b) = V_r(beta_a + ra1 (delta' + rd1 beta_b), q)
+    R.assign(r * Rc, 0.0);
+    for (size_t col = 0; col < Rc; ++col) for (size_t q = 0; q < r; ++q) R[q + r * col] = Vr(Eigen::Index(col), Eigen::Index(q));
+    rs = r; ra = ra1; rd = rd1; rb = rb1;
+  }
+  return S;
+}
+
+/// Randomized rounding of the implicit triple product S = A^T diag(d) B (as zipUpTripleProduct; Al Daas, Ballard,
+/// Cazeaux, Hallman, Miedlar, Pasha, Reid, Saibaba, "Randomized algorithms for rounding in the tensor-train format",
+/// randomize-then-orthogonalize): a right-to-left pass contracts the product with a Gaussian TT of rank ell, giving
+/// right sketches Phi_d (cut after core d); the left-to-right pass forms M_d = carry x core_d (as the zip-up), takes the
+/// range of Y_d = M_d Phi_d (orthonormal U, rank by tol on Y's singular values), stores U as the core and carries the
+/// exact projection U^T M_d.  Unlike the plain zip-up, the truncation sees the right part of the product.
+inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &A, const std::array<Core3, 4> &D,
+                                                    const std::array<Core4, 4> &B, const std::array<size_t, 4> &cells,
+                                                    const std::array<size_t, 4> &nbT, const TrialBlock &ta, const TrialBlock &tb,
+                                                    double tol, size_t ell, int threads, unsigned seed,
+                                                    std::array<size_t, 4> *ranksOut = nullptr)
+{
+  // structural (column a, column b) slots per direction, and the cells that touch each
+  std::array<std::vector<std::pair<long, long>>, 4> slotKey; std::array<std::map<std::pair<long, long>, size_t>, 4> slotOf;
+  for (size_t d = 0; d < 4; ++d)
+    for (size_t c = 0; c < cells[d]; ++c)
+      for (size_t ja = 0; ja < ta.nLocal[d]; ++ja) { const long ga = ta.index(d, c, ja, cells[d]); if (ga < 0) continue;
+        for (size_t jb = 0; jb < tb.nLocal[d]; ++jb) { const long gb = tb.index(d, c, jb, cells[d]); if (gb < 0) continue;
+          if (slotOf[d].emplace(std::make_pair(ga, gb), slotKey[d].size()).second) slotKey[d].push_back({ga, gb}); } }
+  auto forCells = [&](size_t d, const std::function<void(size_t)> &f) {
+    std::atomic<size_t> next{0}; const int nth = std::max(1, std::min<int>(threads, int(cells[d])));
+    std::vector<std::exception_ptr> err(nth);
+    auto work = [&](int t) { try { for (size_t c; (c = next.fetch_add(1)) < cells[d];) f(c); } catch (...) { err[t] = std::current_exception(); next = cells[d]; } };
+    std::vector<std::thread> pool; for (int t = 1; t < nth; ++t) pool.emplace_back(work, t);
+    work(0); for (auto &th : pool) th.join();
+    for (auto &e : err) if (e) std::rethrow_exception(e);
+  };
+  // Gaussian sketch cores Omega_e(l_{e-1}, slot, l_e), e = 1..3; ell_3 = 1
+  std::array<size_t, 4> lr{ell, ell, ell, 1};              // lr[d]: sketch rank at the cut after core d (lr[3] = 1)
+  std::mt19937 gen(seed); std::normal_distribution<double> nd;
+  std::array<std::vector<Mat>, 4> Omega;                     // Omega[e][slot]: lr[e-1] x lr[e]
+  for (size_t e = 1; e < 4; ++e)
+  { Omega[e].resize(slotKey[e].size()); for (auto &O : Omega[e]) { O.resize(Eigen::Index(lr[e - 1]), Eigen::Index(lr[e])); for (Eigen::Index q = 0; q < O.size(); ++q) O.data()[q] = nd(gen); } }
+  // right sketches Phi[d] (Rc_d x lr[d]), rows beta_a + ra1 (delta' + rd1 beta_b) with the ranks of the cut after core d
+  std::array<Mat, 4> Phi; Phi[3] = Mat::Ones(1, 1);
+  for (size_t e = 3; e >= 1; --e)
+  {
+    const Core4 &Ae = A[e], &Be = B[e]; const Core3 &De = D[e]; const size_t nb = nbT[e];
+    const size_t ra0 = Ae.r0, rd0 = De.r0, rb0 = Be.r0, ra1 = Ae.r1, rd1 = De.r1, rb1 = Be.r1, L = lr[e - 1];
+    Mat Pd = Mat::Zero(Eigen::Index(ra0 * rd0 * rb0), Eigen::Index(L)); std::mutex lock;
+    forCells(e, [&](size_t c) {
+      Mat local = Mat::Zero(Pd.rows(), Pd.cols());
+      for (size_t ja = 0; ja < ta.nLocal[e]; ++ja) { const long ga = ta.index(e, c, ja, cells[e]); if (ga < 0) continue;
+        for (size_t jb = 0; jb < tb.nLocal[e]; ++jb) { const long gb = tb.index(e, c, jb, cells[e]); if (gb < 0) continue;
+          const size_t s = slotOf[e].at({ga, gb});
+          const Mat T = Phi[e] * Omega[e][s].transpose();  // (ra1 rd1 rb1) x L, rows beta_a + ra1 (delta' + rd1 beta_b)
+          for (size_t k = 0; k < nb; ++k)
+          {
+            const size_t i = c * nb + k;
+            // T1(beta_a, delta', alpha_b; l) = sum_beta_b B(alpha_b, i, gb, beta_b) T(beta_a, delta', beta_b; l)
+            Mat T1 = Mat::Zero(Eigen::Index(ra1 * rd1 * rb0), Eigen::Index(L));
+            for (size_t bb = 0; bb < rb1; ++bb) for (size_t ab = 0; ab < rb0; ++ab)
+            { const double w = Be(ab, i, size_t(gb), bb); if (w == 0) continue;
+              T1.middleRows(Eigen::Index(ra1 * rd1 * ab), Eigen::Index(ra1 * rd1)) += w * T.middleRows(Eigen::Index(ra1 * rd1 * bb), Eigen::Index(ra1 * rd1)); }
+            // T2(beta_a, delta, alpha_b; l) = sum_delta' D(delta, i, delta') T1(beta_a, delta', alpha_b; l)
+            Mat T2 = Mat::Zero(Eigen::Index(ra1 * rd0 * rb0), Eigen::Index(L));
+            for (size_t ab = 0; ab < rb0; ++ab) for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t e0 = 0; e0 < rd0; ++e0)
+            { const double w = De(e0, i, e1); if (w == 0) continue;
+              T2.middleRows(Eigen::Index(ra1 * (e0 + rd0 * ab)), Eigen::Index(ra1)) += w * T1.middleRows(Eigen::Index(ra1 * (e1 + rd1 * ab)), Eigen::Index(ra1)); }
+            // local(alpha_a + ra0 (delta + rd0 alpha_b); l) += sum_beta_a A(alpha_a, i, ga, beta_a) T2(beta_a, delta, alpha_b; l)
+            Mat Ai = Mat(Eigen::Index(ra0), Eigen::Index(ra1));
+            for (size_t be = 0; be < ra1; ++be) for (size_t aa = 0; aa < ra0; ++aa) Ai(Eigen::Index(aa), Eigen::Index(be)) = Ae(aa, i, size_t(ga), be);
+            for (size_t ab = 0; ab < rb0; ++ab) for (size_t e0 = 0; e0 < rd0; ++e0)
+              local.middleRows(Eigen::Index(ra0 * (e0 + rd0 * ab)), Eigen::Index(ra0)).noalias() += Ai * T2.middleRows(Eigen::Index(ra1 * (e0 + rd0 * ab)), Eigen::Index(ra1));
+          }
+        } }
+      std::lock_guard<std::mutex> g(lock); Pd += local;
+    });
+    Phi[e - 1] = Pd;
+  }
+  // left to right
+  std::array<Core4, 4> S;
+  size_t rs = 1, ra = 1, rd = 1, rb = 1;
+  Mat C = Mat::Ones(1, 1);                                   // carry: rs x (alpha_a + ra (delta + rd alpha_b))
+  for (size_t d = 0; d < 4; ++d)
+  {
+    const Core4 &Ad = A[d], &Bd = B[d]; const Core3 &Dd = D[d];
+    const size_t ra1 = Ad.r1, rb1 = Bd.r1, rd1 = Dd.r1, Rc = ra1 * rd1 * rb1, nb = nbT[d];
+    Mat Rm(Eigen::Index(rs * rd * rb), Eigen::Index(ra));     // Rm(rho + rs (delta + rd alpha_b), alpha_a)
+    for (size_t ab = 0; ab < rb; ++ab) for (size_t de = 0; de < rd; ++de) for (size_t aa = 0; aa < ra; ++aa) for (size_t rho = 0; rho < rs; ++rho)
+      Rm(Eigen::Index(rho + rs * (de + rd * ab)), Eigen::Index(aa)) = C(Eigen::Index(rho), Eigen::Index(aa + ra * (de + rd * ab)));
+    const size_t ns = slotKey[d].size();
+    std::vector<Mat> M(ns, Mat::Zero(Eigen::Index(rs), Eigen::Index(Rc))); std::vector<std::mutex> slotLock(ns);
+    forCells(d, [&](size_t c) {
+      for (size_t ja = 0; ja < ta.nLocal[d]; ++ja)
+      {
+        const long ga = ta.index(d, c, ja, cells[d]); if (ga < 0) continue;
+        Mat As(Eigen::Index(ra), Eigen::Index(nb * ra1));
+        for (size_t be = 0; be < ra1; ++be) for (size_t k = 0; k < nb; ++k) for (size_t aa = 0; aa < ra; ++aa)
+          As(Eigen::Index(aa), Eigen::Index(k + nb * be)) = Ad(aa, c * nb + k, size_t(ga), be);
+        const Mat T1 = Rm * As;
+        Mat T2(Eigen::Index(rs * ra1 * rd1), Eigen::Index(rb * nb));
+        for (size_t k = 0; k < nb; ++k)
+        {
+          Mat Dk = Mat(Eigen::Index(rd), Eigen::Index(rd1)); for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t e0 = 0; e0 < rd; ++e0) Dk(Eigen::Index(e0), Eigen::Index(e1)) = Dd(e0, c * nb + k, e1);
+          for (size_t be = 0; be < ra1; ++be) for (size_t ab = 0; ab < rb; ++ab)
+          {
+            const Eigen::Map<const Mat> X(T1.data() + T1.rows() * Eigen::Index(k + nb * be) + Eigen::Index(rs * rd * ab), Eigen::Index(rs), Eigen::Index(rd));
+            const Mat XD = X * Dk;
+            for (size_t e1 = 0; e1 < rd1; ++e1) T2.block(Eigen::Index(rs * (be + ra1 * e1)), Eigen::Index(ab + rb * k), Eigen::Index(rs), 1) = XD.col(Eigen::Index(e1));
+          }
+        }
+        for (size_t jb = 0; jb < tb.nLocal[d]; ++jb)
+        {
+          const long gb = tb.index(d, c, jb, cells[d]); if (gb < 0) continue;
+          Mat Bs(Eigen::Index(rb * nb), Eigen::Index(rb1));
+          for (size_t bb = 0; bb < rb1; ++bb) for (size_t k = 0; k < nb; ++k) for (size_t ab = 0; ab < rb; ++ab)
+            Bs(Eigen::Index(ab + rb * k), Eigen::Index(bb)) = Bd(ab, c * nb + k, size_t(gb), bb);
+          const Mat P = T2 * Bs;
+          const size_t s = slotOf[d].at({ga, gb});
+          std::lock_guard<std::mutex> g(slotLock[s]);
+          for (size_t bb = 0; bb < rb1; ++bb) for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t be = 0; be < ra1; ++be)
+            M[s].col(Eigen::Index(be + ra1 * (e1 + rd1 * bb))) += P.block(Eigen::Index(rs * (be + ra1 * e1)), Eigen::Index(bb), Eigen::Index(rs), 1);
+        }
+      }
+    });
+    const size_t rows = ta.global[d], colsB = tb.global[d];
+    if (ranksOut) (*ranksOut)[d] = rs;
+    if (d == 3)
+    {
+      S[d] = Core4(rs, rows, colsB, 1);
+      for (size_t s = 0; s < ns; ++s) for (size_t rho = 0; rho < rs; ++rho)
+        S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), 0) = M[s](Eigen::Index(rho), 0);
+      break;
+    }
+    // Y = M Phi (rows: slot, rho), range by the Gram matrix of the (small) sketch side
+    const size_t L = lr[d];
+    Mat Yg = Mat::Zero(Eigen::Index(L), Eigen::Index(L)); std::vector<Mat> Y(ns);
+    for (size_t s = 0; s < ns; ++s) { Y[s] = M[s] * Phi[d]; Yg.selfadjointView<Eigen::Lower>().rankUpdate(Y[s].transpose()); }
+    Yg.triangularView<Eigen::StrictlyUpper>() = Yg.transpose();
+    Eigen::SelfAdjointEigenSolver<Mat> eig(Yg);
+    const Eigen::VectorXd lam = eig.eigenvalues().reverse().cwiseMax(0.0);
+    const double total = lam.sum(); size_t r = 0; double tail = total;
+    while (r < size_t(lam.size()) && tail > tol * tol * total) { tail -= lam(Eigen::Index(r)); ++r; }
+    r = std::max<size_t>(r, 1);
+    if (r + 4 > L) std::cout << "explicit_S randomized rounding: sketch rank " << L << " saturated at cut " << d << " (rank " << r << ")" << std::endl;
+    const Mat W = eig.eigenvectors().rowwise().reverse().leftCols(Eigen::Index(r));
+    // U = Y W Lambda^{-1/2}, orthonormalized again (Gram-based range is not exactly orthonormal in floating point)
+    Mat U(Eigen::Index(ns * rs), Eigen::Index(r));
+    for (size_t s = 0; s < ns; ++s) U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs)) = Y[s] * W;
+    { Eigen::HouseholderQR<Mat> qr(U); U = qr.householderQ() * Mat::Identity(U.rows(), U.cols()); }
+    S[d] = Core4(rs, rows, colsB, r);
+    Mat Cn = Mat::Zero(Eigen::Index(r), Eigen::Index(Rc));
+    for (size_t s = 0; s < ns; ++s)
+    {
+      const auto Us = U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs));
+      for (size_t q = 0; q < r; ++q) for (size_t rho = 0; rho < rs; ++rho)
+        S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), q) = Us(Eigen::Index(rho), Eigen::Index(q));
+      Cn.noalias() += Us.transpose() * M[s];
+    }
+    C = Cn; rs = r; ra = ra1; rd = rd1; rb = rb1;
+  }
+  return S;
+}
 
 /// Run f(begin, end, part) on `parts` contiguous ranges of [0, n), one std::thread each (part 0 on the caller).
 inline void splitRange(Eigen::Index n, int parts, const std::function<void(Eigen::Index, Eigen::Index, int)> &f)
@@ -431,9 +732,105 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   };
   std::vector<std::pair<size_t, size_t>> pairs;
   for (size_t a = 0; a < nt; ++a) for (size_t b = a; b < nt; ++b) pairs.push_back({a, b});
+  // --- S~ by TT arithmetic (CAMELLIA_EXPLICIT_S_BUILD=tt; =compare builds both and reports the difference):
+  //   S~_ab = P_a B_a^T V D V^T B_b P_b = (V^T B_a P_a)^T diag(D) (V^T B_b P_b),
+  // B_a the System's exact TT blocks, V^T applied per cell to the test index, D (G^-1 = V D V^T per element class) a TT
+  // vector over the test dofs, one zip-up per block pair.  No element blocks.
+  const char *buildEnv = std::getenv("CAMELLIA_EXPLICIT_S_BUILD");
+  const std::string buildMode = buildEnv ? buildEnv : "dense";
+  std::vector<std::vector<TTMatrix>> Stt(nt, std::vector<TTMatrix>(nt));
+  if (buildMode == "tt" || buildMode == "compare")
+  {
+    const auto tb0 = clock::now();
+    const Sizes tsz = system.sizes[0];
+    Eigen::VectorXd dFull(tsz[0] * tsz[1] * tsz[2] * tsz[3]);
+    forEachElement([&](const std::array<size_t, 4> &c) {
+      const Eigen::VectorXd &dK = sep->diagonal[classOf(c)];
+      for (size_t il = 0; il < nlocT; ++il) dFull(testIndex(c, il)) = dK(il);
+    });
+    const double dTol = std::getenv("CAMELLIA_EXPLICIT_S_DTOL") ? std::atof(std::getenv("CAMELLIA_EXPLICIT_S_DTOL")) : 1e-2 * opt.sTolerance;
+    // D spans orders of magnitude over a graded mesh: compress D w, w a rank-one Kronecker fit of 1/D (log-mean per
+    // mode index), so the truncation sees O(1) entries everywhere; fold 1/w back into the cores (exact, rank one)
+    std::array<Eigen::VectorXd, 4> wf;
+    {
+      const Eigen::ArrayXd L = dFull.array().max(1e-300).log(); const double mean = L.mean();
+      std::array<size_t, 4> stride{1, tsz[0], tsz[0] * tsz[1], tsz[0] * tsz[1] * tsz[2]};
+      for (size_t d = 0; d < 4; ++d)
+      {
+        Eigen::VectorXd e = Eigen::VectorXd::Zero(tsz[d]);
+        for (Eigen::Index g = 0; g < L.size(); ++g) e((size_t(g) / stride[d]) % tsz[d]) += L(g);
+        e = e / double(L.size() / tsz[d]) - Eigen::VectorXd::Constant(tsz[d], mean);
+        wf[d] = (-(e.array() + mean / 4.0)).exp().matrix();
+      }
+      for (Eigen::Index g = 0; g < dFull.size(); ++g)
+      { double w = 1; size_t q = size_t(g); for (size_t d = 0; d < 4; ++d) { w *= wf[d](q % tsz[d]); q /= tsz[d]; } dFull(g) *= w; }
+    }
+    TTVector dTT = toTT(dFull, tsz, dTol);
+    Eigen::VectorXd().swap(dFull);
+    std::cout << "explicit_S tt-build D ranks (" << dTol << ")=" << dTT.ranks_string() << " (" << seconds(tb0) << " s)" << std::endl;
+    std::array<Core3, 4> Dc;
+    for (size_t d = 0; d < 4; ++d)
+    {
+      const size_t r0 = dTT.cores[d].sizes(0), n = dTT.cores[d].sizes(1), r1 = dTT.cores[d].sizes(2);
+      Dc[d] = Core3(r0, n, r1); auto v = dTT.cores[d].const_view();
+      for (size_t r = 0; r < r1; ++r) for (size_t i = 0; i < n; ++i) for (size_t l = 0; l < r0; ++l) Dc[d](l, i, r) = v({l, i, r}) / wf[d](i);
+    }
+    // VB_a = (I (x) V^T) B_a P_a, core by core
+    std::vector<std::array<Core4, 4>> VB(nt);
+    for (size_t a = 0; a < nt; ++a)
+    {
+      TTMatrix Bm = system.matrix({0, a + 1});
+      const double bTol = std::getenv("CAMELLIA_EXPLICIT_S_BTOL") ? std::atof(std::getenv("CAMELLIA_EXPLICIT_S_BTOL")) : dTol;
+      DpgBoba::round(Bm, bTol);  // B enters S linearly
+      for (size_t d = 0; d < 4; ++d)
+      {
+        const size_t r0 = Bm.cores[d].sizes(0), n = Bm.cores[d].sizes(1), m = Bm.cores[d].sizes(2), r1 = Bm.cores[d].sizes(3), nb = nbT[d];
+        if (n != cells[d] * nb || m != blocks[a].global[d]) throw std::runtime_error("explicit Schur tt-build: B layout mismatch");
+        Core4 C(r0, n, m, r1); auto v = Bm.cores[d].const_view(); const Mat &VT = sep->VT[d];
+        for (size_t r = 0; r < r1; ++r) for (size_t j = 0; j < m; ++j)
+        {
+          const double pj = pf[a][d](j);
+          for (size_t c = 0; c < cells[d]; ++c) for (size_t k = 0; k < nb; ++k) for (size_t l = 0; l < r0; ++l)
+          {
+            double acc = 0; for (size_t il = 0; il < nb; ++il) acc += VT(k, il) * v({l, c * nb + il, j, r});
+            C(l, c * nb + k, j, r) = acc * pj;
+          }
+        }
+        VB[a][d] = std::move(C);
+      }
+      std::cout << "explicit_S tt-build B block " << system.names[a + 1] << " ranks=" << Bm.ranks_string() << std::endl;
+    }
+    for (const auto &pr : pairs)
+    {
+      const size_t a = pr.first, b = pr.second; const auto tq = clock::now();
+      std::array<size_t, 4> zr{};
+      const double zTol = std::getenv("CAMELLIA_EXPLICIT_S_ZTOL") ? std::atof(std::getenv("CAMELLIA_EXPLICIT_S_ZTOL")) : 0.3 * opt.sTolerance;
+      const size_t ell = std::getenv("CAMELLIA_EXPLICIT_S_SKETCH") ? size_t(std::atoi(std::getenv("CAMELLIA_EXPLICIT_S_SKETCH"))) : 160;
+      auto cores = std::getenv("CAMELLIA_EXPLICIT_S_ZIPUP")
+          ? zipUpTripleProduct(VB[a], Dc, VB[b], cells, nbT, blocks[a], blocks[b], zTol, nThreads, &zr)
+          : randomizedTripleProduct(VB[a], Dc, VB[b], cells, nbT, blocks[a], blocks[b], 0.5 * opt.sTolerance, ell, nThreads, 7919u + unsigned(a * 31 + b), &zr);
+      Sizes rows, cols; for (size_t d = 0; d < 4; ++d) { rows[d] = blocks[a].global[d]; cols[d] = blocks[b].global[d]; }
+      TTMatrix M(rows, cols);
+      for (size_t d = 0; d < 4; ++d)
+      {
+        const Core4 &C = cores[d];
+        M.cores[d].resize({C.r0, C.n, C.m, C.r1}); auto v = M.cores[d].view();
+        for (size_t r = 0; r < C.r1; ++r) for (size_t j = 0; j < C.m; ++j) for (size_t i = 0; i < C.n; ++i) for (size_t l = 0; l < C.r0; ++l)
+          v({l, i, j, r}) = C(l, i, j, r);
+      }
+      DpgBoba::round(M, opt.sTolerance);
+      std::cout << "explicit_S tt-build block " << system.names[a + 1] << "," << system.names[b + 1] << " ranks=" << M.ranks_string()
+                << " (zip-up " << zr[1] << "," << zr[2] << "," << zr[3] << "; " << seconds(tq) << " s)" << std::endl;
+      Stt[a][b] = M;
+      if (a != b) Stt[b][a] = M.transpose();
+    }
+    std::cout << "explicit_S tt-build total " << seconds(tb0) << " s" << std::endl;
+    reportMemory("after tt-build");
+  }
   const double passBytes = 4.0e9;
   size_t pi = 0; int pass = 0;
   double tElements = 0, tSvd = 0, tB = 0, tG = 0, tS = 0, tScatter = 0, tTtSvd = 0;
+  if (buildMode == "tt") { S = Stt; pi = pairs.size(); }
   while (pi < pairs.size())
   {
     std::vector<std::pair<size_t, size_t>> ps; double bytes = 0;
@@ -563,6 +960,50 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   }
   std::cout << "explicit_S assembled: " << pass << " passes, element blocks " << tElements << " s (thread-seconds: V^T B_K " << tB << ", Z = D^1/2 V^T B P " << tG << ", S_K blocks " << tS
             << ", scatter " << tScatter << "), TT-SVD + expansion " << tSvd << " s (TT-SVD " << tTtSvd << ")" << std::endl;
+  if (buildMode == "compare")
+  {
+    // ||(S_tt - S_exact) x|| and ||(S_dense - S_exact) x||, relative to ||S_exact x||, for a few rank-one random x per
+    // block pair; S_exact applied element by element (S~_K = Z_K^T Z_K, Z_K = D^1/2 V^T B_K P_K)
+    auto exactApply = [&](size_t a, size_t b, const Eigen::VectorXd &xb) {
+      Eigen::VectorXd y = Eigen::VectorXd::Zero(fullSize[a]);
+      forEachElement([&](const std::array<size_t, 4> &c) {
+        Eigen::VectorXd pK(nlocTrial);
+        for (size_t q = 0; q < nt; ++q)
+          for (size_t il = 0; il < blocks[q].localSize(); ++il)
+          {
+            const auto i = localIndex(blocks[q].nLocal, il); double v = 1.0;
+            for (size_t d = 0; d < 4; ++d) { const long k = blocks[q].index(d, c[d], i[d], cells[d]); v = k < 0 ? 0.0 : v * pf[q][d](size_t(k)); }
+            pK(off[q] + il) = v;
+          }
+        const Mat Z = sep->diagonal[classOf(c)].array().sqrt().matrix().asDiagonal() * elementBsel(c, allBlocks, true) * pK.asDiagonal();
+        const size_t na = blocks[a].localSize(), nbl = blocks[b].localSize();
+        Eigen::VectorXd xK(nbl);
+        for (size_t il = 0; il < nbl; ++il) { const long g = globalLinear(b, c, localIndex(blocks[b].nLocal, il)); xK(il) = g < 0 ? 0.0 : xb(g); }
+        const Eigen::VectorXd yK = Z.middleCols(off[a], na).transpose() * (Z.middleCols(off[b], nbl) * xK);
+        for (size_t il = 0; il < na; ++il) { const long g = globalLinear(a, c, localIndex(blocks[a].nLocal, il)); if (g >= 0) y(g) += yK(il); }
+      });
+      return y;
+    };
+    std::mt19937 gen(12345); std::normal_distribution<double> nd;
+    for (const auto &pr : pairs)
+    {
+      const size_t a = pr.first, b = pr.second; double num = 0, den = 0, numTT = 0, numDense = 0, denEx = 0;
+      for (int trial = 0; trial < 3; ++trial)
+      {
+        boba::Array<host_vector, 4> f;
+        for (size_t d = 0; d < 4; ++d)
+        { f[d] = host_vector({blocks[b].global[d]}); auto v = f[d].view(); for (size_t i = 0; i < blocks[b].global[d]; ++i) v(i) = nd(gen); }
+        const TTVector xr = boba::make_tt_from_vectors<4, host_space, double>(f);
+        const Eigen::VectorXd y1 = toFull(TTVector(Stt[a][b] * xr)), y2 = toFull(TTVector(S[a][b] * xr));
+        const Eigen::VectorXd ye = exactApply(a, b, toFull(xr));
+        num += (y1 - y2).squaredNorm(); den += y2.squaredNorm();
+        numTT += (y1 - ye).squaredNorm(); numDense += (y2 - ye).squaredNorm(); denEx += ye.squaredNorm();
+      }
+      std::cout << "explicit_S compare block " << system.names[a + 1] << "," << system.names[b + 1] << ": vs exact: tt "
+                << std::sqrt(numTT / denEx) << ", dense " << std::sqrt(numDense / denEx) << "; tt vs dense " << std::sqrt(num / den)
+                << " (ranks tt " << Stt[a][b].ranks_string() << ", dense " << S[a][b].ranks_string() << ")" << std::endl;
+    }
+  }
   // S holds S~ = P S P already
   std::vector<std::vector<TTMatrix>> &St = S;
   // rigorous upper bound: S~ = sum_K R_K^T (P_K S_K P_K) R_K and a trial dof lies in at most m elements (m = 1 for the
