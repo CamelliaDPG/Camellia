@@ -33,10 +33,10 @@ struct ComparisonProblem
   double beta0 = 0, betaMax = 0.5, c = 1, qOverM = -1, Ex = -1, By = 0.5;
   double xWidth = 1, tWidth = 1, alpha = 1, alphaMeshScale = 0, alphaTransportScale = 0;
   std::string accelerationBounds = "auto";
-  // (x, t)-varying prescribed fields (tensor backend; PlanarMITLBoba::FieldProfile): E_x = Ex (1 + v cos(pi x/L)) (1 + v t/T),
+  // (x, t)-varying prescribed fields (both backends; PlanarMITLBoba::FieldProfile): E_x = Ex (1 + v cos(pi x/L)) (1 + v t/T),
   // B_y = By (1 + v (2x/L - 1)) (1 - 0.6 v t/T); 0: constant
   double fieldVariation = 0;
-  bool separableTestNorm = false;   // N5: direction-separable graph norm (tensor backend)
+  bool separableTestNorm = false;   // separable graph norm (graph-oplus), both backends
   bool schurChebyshev = false, chebFactoredField = false;
   double chebLmin = 0, chebLmax = 0, chebTolerance = 1e-5, chebRtol = 0, chebBoundsTolerance = 1e-4, chebLminSafety = 0.8;
   int chebBoundsSteps = 30;
@@ -94,10 +94,10 @@ struct ComparisonProblem
     cmd.setOption("accelerationBounds", &accelerationBounds,
                   "Bounds a_x,a_z on |acceleration| for alphaTransportScale, or \"auto\": |q/m| (|Ex| + v_max |By|), |q/m| v_max |By|");
     cmd.setOption("fieldVariation", &fieldVariation,
-                  "Tensor backend: relative (x, t) variation v of the prescribed fields, E_x = Ex (1 + v cos(pi x/L))(1 + v t/T), "
+                  "Relative (x, t) variation v of the prescribed fields, E_x = Ex (1 + v cos(pi x/L))(1 + v t/T), "
                   "B_y = By (1 + v (2x/L - 1))(1 - 0.6 v t/T); 0: constant fields");
     cmd.setOption("separableTestNorm", "graphTestNorm", &separableTestNorm,
-                  "Tensor backend: N5 direction-separable graph norm alpha_K |w|^2 + sum_d s_d^2 |d_d w|^2, s = (v_x,max, 1, a_x, a_z) "
+                  "Separable graph norm (graph-oplus) alpha_K |w|^2 + sum_d s_d^2 |d_d w|^2, s = (v_x,max, 1, a_x, a_z) "
                   "(the acceleration bounds; needs alphaTransportScale)");
     cmd.setOption("tolerance", &tolerance); cmd.setOption("svdTolerance", &svdTolerance);
     cmd.setOption("coefficientTolerance", &coefficientTolerance);

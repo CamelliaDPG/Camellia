@@ -10,15 +10,55 @@
 
 namespace PlanarMITL
 {
-/// Keep the reference formulation and freeze only the electromagnetic fields.
+/// (x, t) profile of a prescribed field on phase space (x, t, u_x, u_z), the tensor backend's FieldProfile
+/// (PlanarMITLBoba/TensorProductAssembly.hpp): with s, tau the positions scaled to [0, 1] on the x and t axes and
+/// v = variation,
+///   E_x = Ex (1 + v cos(pi s)) (1 + v tau),   B_y = By (1 + v (2 s - 1)) (1 - 0.6 v tau).
+class PrescribedFieldProfile : public Camellia::TFunction<double>
+{
+  bool _electric;
+  double _amplitude, _variation, _x0, _x1, _t0, _t1;
+public:
+  PrescribedFieldProfile(bool electric, double amplitude, double variation, double x0, double x1, double t0, double t1)
+    : _electric(electric), _amplitude(amplitude), _variation(variation), _x0(x0), _x1(x1), _t0(t0), _t1(t1) {}
+  double value(double x, double t) const
+  {
+    const double s = (x - _x0) / (_x1 - _x0), tau = (t - _t0) / (_t1 - _t0), v = _variation;
+    return _electric ? _amplitude * (1 + v * std::cos(M_PI * s)) * (1 + v * tau)
+                     : _amplitude * (1 + v * (2 * s - 1)) * (1 - 0.6 * v * tau);
+  }
+  void values(Camellia::FieldContainer<double> &values, Camellia::BasisCachePtr basisCache) override
+  {
+    const auto &points = basisCache->getPhysicalCubaturePointsFC();
+    for (int cell = 0; cell < points.dimension(0); ++cell)
+      for (int pt = 0; pt < points.dimension(1); ++pt)
+        values(cell, pt) = value(points(cell, pt, 0), points(cell, pt, 1));
+  }
+};
+
+/// Keep the reference formulation and freeze only the electromagnetic fields: constant, or the tensor backend's
+/// (x, t)-varying profile (--fieldVariation).
 class PrescribedFields : public Camellia::ConfigurationSpaceFormulationMaxwell1D2V
 {
-  double _Ex, _By;
+  Camellia::FunctionPtr _E, _B;
 public:
-  explicit PrescribedFields(const ComparisonProblem &problem)
-    : ConfigurationSpaceFormulationMaxwell1D2V(problem.qOverM,1), _Ex(problem.Ex), _By(problem.By) {}
-  Camellia::FunctionPtr E_i(int i) override { return Camellia::Function::constant(i == 0 ? _Ex : 0); }
-  Camellia::FunctionPtr B_i(int i) override { return Camellia::Function::constant(i == 1 ? _By : 0); }
+  PrescribedFields(const ComparisonProblem &problem, const std::vector<std::vector<double>> &vertices)
+    : ConfigurationSpaceFormulationMaxwell1D2V(problem.qOverM,1)
+  {
+    if (problem.fieldVariation == 0)
+    {
+      _E = Camellia::Function::constant(problem.Ex);
+      _B = Camellia::Function::constant(problem.By);
+    }
+    else
+    {
+      const double x0 = vertices[0].front(), x1 = vertices[0].back(), t0 = vertices[1].front(), t1 = vertices[1].back();
+      _E = Teuchos::rcp(new PrescribedFieldProfile(true, problem.Ex, problem.fieldVariation, x0, x1, t0, t1));
+      _B = Teuchos::rcp(new PrescribedFieldProfile(false, problem.By, problem.fieldVariation, x0, x1, t0, t1));
+    }
+  }
+  Camellia::FunctionPtr E_i(int i) override { return i == 0 ? _E : Camellia::Function::zero(); }
+  Camellia::FunctionPtr B_i(int i) override { return i == 1 ? _B : Camellia::Function::zero(); }
 };
 
 inline int runConventionalComparison(int argc, char **argv)
@@ -27,20 +67,22 @@ inline int runConventionalComparison(int argc, char **argv)
   ComparisonProblem problem;
   int parsed = problem.parse(argc, argv, "vanilla");
   if (parsed) return parsed == 2 ? 0 : parsed;
-  if (problem.fieldVariation != 0 || problem.separableTestNorm)
-    throw std::invalid_argument("conventional comparison: --fieldVariation and --separableTestNorm are tensor-backend options");
   if (Teuchos::GlobalMPISession::getNProc() != 1)
     throw std::invalid_argument("Matched comparison currently requires one MPI rank");
   const auto start = ComparisonClock::now();
   const auto vertices = problem.vertices();            // final mesh (for the exact solution's domain)
   const auto base = problem.baseVertices();            // refined uniformRefinements times by the formulation
   auto spatial = MeshFactory::intervalMeshTopology(base[0]);
-  auto fields = Teuchos::rcp(new PrescribedFields(problem));
+  auto fields = Teuchos::rcp(new PrescribedFields(problem, vertices));
+  const auto bounds = problem.accelerationBoundValues();
   RelativisticVlasovSpaceTimeFormulation form(problem.c,problem.qOverM,1,fields,spatial,
       base[1],base[2],base[3],{},problem.p,problem.dp,problem.uniformRefinements,
       RelativisticVlasovSpaceTimeFormulation::GraphTestSpaceInnerProduct,problem.alpha,
-      BASIS_FAMILY_HIERARCHICAL,0,false,false,problem.alphaMeshScale,problem.alphaTransportScale,
-      [&]{ auto a = problem.accelerationBoundValues(); return std::vector<double>(a.begin(), a.end()); }());
+      BASIS_FAMILY_HIERARCHICAL,0,false,problem.alphaMeshScale,{},problem.alphaTransportScale,
+      std::vector<double>(bounds.begin(), bounds.end()),problem.separableTestNorm);
+  std::cout << "conventional fields: Ex=" << problem.Ex << " By=" << problem.By << " variation=" << problem.fieldVariation
+            << " test_norm=" << (problem.separableTestNorm ? "separable (graph-oplus)" : "graph")
+            << " acceleration_bounds=" << bounds[0] << "," << bounds[1] << '\n';
   auto solution = form.vlasovSolution();
   auto mesh = solution->mesh();
   auto bc = BC::bc();
