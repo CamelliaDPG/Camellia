@@ -267,14 +267,16 @@ inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &
       for (size_t ja = 0; ja < ta.nLocal[d]; ++ja) { const long ga = ta.index(d, c, ja, cells[d]); if (ga < 0) continue;
         for (size_t jb = 0; jb < tb.nLocal[d]; ++jb) { const long gb = tb.index(d, c, jb, cells[d]); if (gb < 0) continue;
           if (slotOf[d].emplace(std::make_pair(ga, gb), slotKey[d].size()).second) slotKey[d].push_back({ga, gb}); } }
-  auto forCells = [&](size_t d, const std::function<void(size_t)> &f) {
-    std::atomic<size_t> next{0}; const int nth = std::max(1, std::min<int>(threads, int(cells[d])));
+  auto nThreadsFor = [&](size_t d) { return std::max(1, std::min<int>(threads, int(cells[d]))); };
+  auto forCellsT = [&](size_t d, const std::function<void(size_t, int)> &f) {
+    std::atomic<size_t> next{0}; const int nth = nThreadsFor(d);
     std::vector<std::exception_ptr> err(nth);
-    auto work = [&](int t) { try { for (size_t c; (c = next.fetch_add(1)) < cells[d];) f(c); } catch (...) { err[t] = std::current_exception(); next = cells[d]; } };
+    auto work = [&](int t) { try { for (size_t c; (c = next.fetch_add(1)) < cells[d];) f(c, t); } catch (...) { err[t] = std::current_exception(); next = cells[d]; } };
     std::vector<std::thread> pool; for (int t = 1; t < nth; ++t) pool.emplace_back(work, t);
     work(0); for (auto &th : pool) th.join();
     for (auto &e : err) if (e) std::rethrow_exception(e);
   };
+  auto forCells = [&](size_t d, const std::function<void(size_t)> &f) { forCellsT(d, [&](size_t c, int) { f(c); }); };
   // Gaussian sketch cores Omega_e(l_{e-1}, slot, l_e), e = 1..3; ell_3 = 1
   std::array<size_t, 4> lr{ell, ell, ell, 1};              // lr[d]: sketch rank at the cut after core d (lr[3] = 1)
   std::mt19937 gen(seed); std::normal_distribution<double> nd;
@@ -330,44 +332,50 @@ inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &
     for (size_t ab = 0; ab < rb; ++ab) for (size_t de = 0; de < rd; ++de) for (size_t aa = 0; aa < ra; ++aa) for (size_t rho = 0; rho < rs; ++rho)
       Rm(Eigen::Index(rho + rs * (de + rd * ab)), Eigen::Index(aa)) = C(Eigen::Index(rho), Eigen::Index(aa + ra * (de + rd * ab)));
     const size_t ns = slotKey[d].size();
-    std::vector<Mat> M(ns, Mat::Zero(Eigen::Index(rs), Eigen::Index(Rc))); std::vector<std::mutex> slotLock(ns);
-    forCells(d, [&](size_t c) {
-      for (size_t ja = 0; ja < ta.nLocal[d]; ++ja)
-      {
-        const long ga = ta.index(d, c, ja, cells[d]); if (ga < 0) continue;
-        Mat As(Eigen::Index(ra), Eigen::Index(nb * ra1));
-        for (size_t be = 0; be < ra1; ++be) for (size_t k = 0; k < nb; ++k) for (size_t aa = 0; aa < ra; ++aa)
-          As(Eigen::Index(aa), Eigen::Index(k + nb * be)) = Ad(aa, c * nb + k, size_t(ga), be);
-        const Mat T1 = Rm * As;
-        Mat T2(Eigen::Index(rs * ra1 * rd1), Eigen::Index(rb * nb));
-        for (size_t k = 0; k < nb; ++k)
+    // per-cell contributions to M_s (rs x Rc, columns beta_a + ra1 (delta' + rd1 beta_b)), handed to consume(s, Mc, thread);
+    // M itself is never stored (it is rs x Rc per slot: ~5 GB at p = 4, level 1)
+    auto contributions = [&](const std::function<void(size_t, const Mat &, int)> &consume) {
+      forCellsT(d, [&](size_t c, int th) {
+        for (size_t ja = 0; ja < ta.nLocal[d]; ++ja)
         {
-          Mat Dk = Mat(Eigen::Index(rd), Eigen::Index(rd1)); for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t e0 = 0; e0 < rd; ++e0) Dk(Eigen::Index(e0), Eigen::Index(e1)) = Dd(e0, c * nb + k, e1);
-          for (size_t be = 0; be < ra1; ++be) for (size_t ab = 0; ab < rb; ++ab)
+          const long ga = ta.index(d, c, ja, cells[d]); if (ga < 0) continue;
+          Mat As(Eigen::Index(ra), Eigen::Index(nb * ra1));
+          for (size_t be = 0; be < ra1; ++be) for (size_t k = 0; k < nb; ++k) for (size_t aa = 0; aa < ra; ++aa)
+            As(Eigen::Index(aa), Eigen::Index(k + nb * be)) = Ad(aa, c * nb + k, size_t(ga), be);
+          const Mat T1 = Rm * As;
+          Mat T2(Eigen::Index(rs * ra1 * rd1), Eigen::Index(rb * nb));
+          for (size_t k = 0; k < nb; ++k)
           {
-            const Eigen::Map<const Mat> X(T1.data() + T1.rows() * Eigen::Index(k + nb * be) + Eigen::Index(rs * rd * ab), Eigen::Index(rs), Eigen::Index(rd));
-            const Mat XD = X * Dk;
-            for (size_t e1 = 0; e1 < rd1; ++e1) T2.block(Eigen::Index(rs * (be + ra1 * e1)), Eigen::Index(ab + rb * k), Eigen::Index(rs), 1) = XD.col(Eigen::Index(e1));
+            Mat Dk = Mat(Eigen::Index(rd), Eigen::Index(rd1)); for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t e0 = 0; e0 < rd; ++e0) Dk(Eigen::Index(e0), Eigen::Index(e1)) = Dd(e0, c * nb + k, e1);
+            for (size_t be = 0; be < ra1; ++be) for (size_t ab = 0; ab < rb; ++ab)
+            {
+              const Eigen::Map<const Mat> X(T1.data() + T1.rows() * Eigen::Index(k + nb * be) + Eigen::Index(rs * rd * ab), Eigen::Index(rs), Eigen::Index(rd));
+              const Mat XD = X * Dk;
+              for (size_t e1 = 0; e1 < rd1; ++e1) T2.block(Eigen::Index(rs * (be + ra1 * e1)), Eigen::Index(ab + rb * k), Eigen::Index(rs), 1) = XD.col(Eigen::Index(e1));
+            }
+          }
+          for (size_t jb = 0; jb < tb.nLocal[d]; ++jb)
+          {
+            const long gb = tb.index(d, c, jb, cells[d]); if (gb < 0) continue;
+            Mat Bs(Eigen::Index(rb * nb), Eigen::Index(rb1));
+            for (size_t bb = 0; bb < rb1; ++bb) for (size_t k = 0; k < nb; ++k) for (size_t ab = 0; ab < rb; ++ab)
+              Bs(Eigen::Index(ab + rb * k), Eigen::Index(bb)) = Bd(ab, c * nb + k, size_t(gb), bb);
+            const Mat P = T2 * Bs;
+            Mat Mc = Mat(Eigen::Index(rs), Eigen::Index(Rc));
+            for (size_t bb = 0; bb < rb1; ++bb) for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t be = 0; be < ra1; ++be)
+              Mc.col(Eigen::Index(be + ra1 * (e1 + rd1 * bb))) = P.block(Eigen::Index(rs * (be + ra1 * e1)), Eigen::Index(bb), Eigen::Index(rs), 1);
+            consume(slotOf[d].at({ga, gb}), Mc, th);
           }
         }
-        for (size_t jb = 0; jb < tb.nLocal[d]; ++jb)
-        {
-          const long gb = tb.index(d, c, jb, cells[d]); if (gb < 0) continue;
-          Mat Bs(Eigen::Index(rb * nb), Eigen::Index(rb1));
-          for (size_t bb = 0; bb < rb1; ++bb) for (size_t k = 0; k < nb; ++k) for (size_t ab = 0; ab < rb; ++ab)
-            Bs(Eigen::Index(ab + rb * k), Eigen::Index(bb)) = Bd(ab, c * nb + k, size_t(gb), bb);
-          const Mat P = T2 * Bs;
-          const size_t s = slotOf[d].at({ga, gb});
-          std::lock_guard<std::mutex> g(slotLock[s]);
-          for (size_t bb = 0; bb < rb1; ++bb) for (size_t e1 = 0; e1 < rd1; ++e1) for (size_t be = 0; be < ra1; ++be)
-            M[s].col(Eigen::Index(be + ra1 * (e1 + rd1 * bb))) += P.block(Eigen::Index(rs * (be + ra1 * e1)), Eigen::Index(bb), Eigen::Index(rs), 1);
-        }
-      }
-    });
+      });
+    };
+    std::vector<std::mutex> slotLock(ns);
     const size_t rows = ta.global[d], colsB = tb.global[d];
     if (ranksOut) (*ranksOut)[d] = rs;
     if (d == 3)
     {
+      std::vector<Mat> M(ns, Mat::Zero(Eigen::Index(rs), 1));
+      contributions([&](size_t s, const Mat &Mc, int) { std::lock_guard<std::mutex> g(slotLock[s]); M[s] += Mc; });
       S[d] = Core4(rs, rows, colsB, 1);
       for (size_t s = 0; s < ns; ++s) for (size_t rho = 0; rho < rs; ++rho)
         S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), 0) = M[s](Eigen::Index(rho), 0);
@@ -375,8 +383,10 @@ inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &
     }
     // Y = M Phi (rows: slot, rho), range by the Gram matrix of the (small) sketch side
     const size_t L = lr[d];
-    Mat Yg = Mat::Zero(Eigen::Index(L), Eigen::Index(L)); std::vector<Mat> Y(ns);
-    for (size_t s = 0; s < ns; ++s) { Y[s] = M[s] * Phi[d]; Yg.selfadjointView<Eigen::Lower>().rankUpdate(Y[s].transpose()); }
+    std::vector<Mat> Y(ns, Mat::Zero(Eigen::Index(rs), Eigen::Index(L)));
+    contributions([&](size_t s, const Mat &Mc, int) { const Mat y = Mc * Phi[d]; std::lock_guard<std::mutex> g(slotLock[s]); Y[s] += y; });
+    Mat Yg = Mat::Zero(Eigen::Index(L), Eigen::Index(L));
+    for (size_t s = 0; s < ns; ++s) Yg.selfadjointView<Eigen::Lower>().rankUpdate(Y[s].transpose());
     Yg.triangularView<Eigen::StrictlyUpper>() = Yg.transpose();
     Eigen::SelfAdjointEigenSolver<Mat> eig(Yg);
     const Eigen::VectorXd lam = eig.eigenvalues().reverse().cwiseMax(0.0);
@@ -390,14 +400,16 @@ inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &
     for (size_t s = 0; s < ns; ++s) U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs)) = Y[s] * W;
     { Eigen::HouseholderQR<Mat> qr(U); U = qr.householderQ() * Mat::Identity(U.rows(), U.cols()); }
     S[d] = Core4(rs, rows, colsB, r);
-    Mat Cn = Mat::Zero(Eigen::Index(r), Eigen::Index(Rc));
     for (size_t s = 0; s < ns; ++s)
     {
       const auto Us = U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs));
       for (size_t q = 0; q < r; ++q) for (size_t rho = 0; rho < rs; ++rho)
         S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), q) = Us(Eigen::Index(rho), Eigen::Index(q));
-      Cn.noalias() += Us.transpose() * M[s];
     }
+    // carry U^T M, from the contributions again (per-thread accumulators, summed in thread order)
+    std::vector<Mat> Ct(size_t(nThreadsFor(d)), Mat::Zero(Eigen::Index(r), Eigen::Index(Rc)));
+    contributions([&](size_t s, const Mat &Mc, int th) { Ct[size_t(th)].noalias() += U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs)).transpose() * Mc; });
+    Mat Cn = Ct[0]; for (size_t t = 1; t < Ct.size(); ++t) Cn += Ct[t];
     C = Cn; rs = r; ra = ra1; rd = rd1; rb = rb1;
   }
   return S;
@@ -830,7 +842,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   const double passBytes = 4.0e9;
   size_t pi = 0; int pass = 0;
   double tElements = 0, tSvd = 0, tB = 0, tG = 0, tS = 0, tScatter = 0, tTtSvd = 0;
-  if (buildMode == "tt") { S = Stt; pi = pairs.size(); }
+  if (buildMode == "tt") { S.swap(Stt); std::vector<std::vector<TTMatrix>>().swap(Stt); pi = pairs.size(); }
   while (pi < pairs.size())
   {
     std::vector<std::pair<size_t, size_t>> ps; double bytes = 0;
