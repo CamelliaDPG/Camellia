@@ -104,7 +104,8 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
     const boba::BlockOperator<host_tt_matrix<D>> &matrix,
     const boba::BlockVector<host_tt_vector<D>> &rhs,
     const AmenOptions &options,
-    const std::function<double(const boba::BlockVector<host_tt_vector<D>> &)> &globalResidual = {})
+    const std::function<double(const boba::BlockVector<host_tt_vector<D>> &)> &globalResidual = {},
+    const std::vector<std::vector<std::vector<boba::CoreSliceSparsity<double>>>> *packedOperator = nullptr)
 {
   if (!(options.tolerance > 0) || !(options.roundingTolerance > 0) ||
       options.maxSweeps < 1 || options.kickrank < 1 || options.maxRank < 1 ||
@@ -134,6 +135,7 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.scale_coupled_site_system = options.scaleSites;
   solver.site_apply_threads = options.siteThreads;
   solver.site_jacobi_preconditioner = options.siteJacobi;
+  solver.packed_operator = packedOperator;   // when set, matrix's cores are placeholders (see TensorTrainAMENBlock)
   if (options.rieszTolerance > 0) { solver.local_solution_svd_tolerance_relative_per_block = {options.rieszTolerance}; }
   // a caller residual is cheap: certify by it after every sweep (the largest local residual can stall above the
   // tolerance while |A x - b| / |b| is already below it)

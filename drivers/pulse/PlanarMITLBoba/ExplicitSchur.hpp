@@ -258,8 +258,26 @@ inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &
                                                     const std::array<Core4, 4> &B, const std::array<size_t, 4> &cells,
                                                     const std::array<size_t, 4> &nbT, const TrialBlock &ta, const TrialBlock &tb,
                                                     double tol, size_t ell, int threads, unsigned seed,
-                                                    std::array<size_t, 4> *ranksOut = nullptr)
+                                                    std::array<size_t, 4> *ranksOut = nullptr,
+                                                    std::array<boba::CoreSliceSparsity<double>, 4> *packedOut = nullptr)
 {
+  // packedOut: write each core as its nonzero (row, column) slices, column-major (column outer, row inner), each
+  // rs x r block contiguous -- the layout BoBa's packed operator kernels read sequentially; the dense cores in the
+  // return value are then left empty.
+  auto emitPacked = [&](size_t d, size_t r0, size_t r1, size_t rowsD, size_t colsD, const std::vector<std::pair<long, long>> &keys,
+                        const std::function<void(size_t, double *)> &fill) {
+    auto &P = (*packedOut)[d];
+    P.ra1 = boba::index_t(r0); P.n = boba::index_t(rowsD); P.m = boba::index_t(colsD); P.ra2 = boba::index_t(r1);
+    std::vector<size_t> order(keys.size()); for (size_t q = 0; q < order.size(); ++q) order[q] = q;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+      return keys[a].second != keys[b].second ? keys[a].second < keys[b].second : keys[a].first < keys[b].first; });
+    P.pairs.clear(); P.pairs.reserve(keys.size()); P.blocks.assign(keys.size() * r0 * r1, 0.0);
+    for (size_t k = 0; k < order.size(); ++k)
+    {
+      P.pairs.push_back({boba::index_t(keys[order[k]].first), boba::index_t(keys[order[k]].second)});
+      fill(order[k], P.blocks.data() + k * r0 * r1);
+    }
+  };
   // structural (column a, column b) slots per direction, and the cells that touch each
   std::array<std::vector<std::pair<long, long>>, 4> slotKey; std::array<std::map<std::pair<long, long>, size_t>, 4> slotOf;
   for (size_t d = 0; d < 4; ++d)
@@ -376,9 +394,14 @@ inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &
     {
       std::vector<Mat> M(ns, Mat::Zero(Eigen::Index(rs), 1));
       contributions([&](size_t s, const Mat &Mc, int) { std::lock_guard<std::mutex> g(slotLock[s]); M[s] += Mc; });
-      S[d] = Core4(rs, rows, colsB, 1);
-      for (size_t s = 0; s < ns; ++s) for (size_t rho = 0; rho < rs; ++rho)
-        S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), 0) = M[s](Eigen::Index(rho), 0);
+      if (packedOut)
+        emitPacked(d, rs, 1, rows, colsB, slotKey[d], [&](size_t s, double *b) { for (size_t rho = 0; rho < rs; ++rho) b[rho] = M[s](Eigen::Index(rho), 0); });
+      else
+      {
+        S[d] = Core4(rs, rows, colsB, 1);
+        for (size_t s = 0; s < ns; ++s) for (size_t rho = 0; rho < rs; ++rho)
+          S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), 0) = M[s](Eigen::Index(rho), 0);
+      }
       break;
     }
     // Y = M Phi (rows: slot, rho), range by the Gram matrix of the (small) sketch side
@@ -399,12 +422,18 @@ inline std::array<Core4, 4> randomizedTripleProduct(const std::array<Core4, 4> &
     Mat U(Eigen::Index(ns * rs), Eigen::Index(r));
     for (size_t s = 0; s < ns; ++s) U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs)) = Y[s] * W;
     { Eigen::HouseholderQR<Mat> qr(U); U = qr.householderQ() * Mat::Identity(U.rows(), U.cols()); }
-    S[d] = Core4(rs, rows, colsB, r);
-    for (size_t s = 0; s < ns; ++s)
+    if (packedOut)
+      emitPacked(d, rs, r, rows, colsB, slotKey[d], [&](size_t s, double *b) {
+        Eigen::Map<Mat>(b, Eigen::Index(rs), Eigen::Index(r)) = U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs)); });
+    else
     {
-      const auto Us = U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs));
-      for (size_t q = 0; q < r; ++q) for (size_t rho = 0; rho < rs; ++rho)
-        S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), q) = Us(Eigen::Index(rho), Eigen::Index(q));
+      S[d] = Core4(rs, rows, colsB, r);
+      for (size_t s = 0; s < ns; ++s)
+      {
+        const auto Us = U.middleRows(Eigen::Index(rs * s), Eigen::Index(rs));
+        for (size_t q = 0; q < r; ++q) for (size_t rho = 0; rho < rs; ++rho)
+          S[d](rho, size_t(slotKey[d][s].first), size_t(slotKey[d][s].second), q) = Us(Eigen::Index(rho), Eigen::Index(q));
+      }
     }
     // carry U^T M, from the contributions again (per-thread accumulators, summed in thread order)
     std::vector<Mat> Ct(size_t(nThreadsFor(d)), Mat::Zero(Eigen::Index(r), Eigen::Index(Rc)));
@@ -751,6 +780,18 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   const char *buildEnv = std::getenv("CAMELLIA_EXPLICIT_S_BUILD");
   const std::string buildMode = buildEnv ? buildEnv : "dense";
   std::vector<std::vector<TTMatrix>> Stt(nt, std::vector<TTMatrix>(nt));
+  // CAMELLIA_EXPLICIT_S_PACKED (with the tt build and the amen solver): S~ stored as its cores' nonzero slices only
+  // (boba::CoreSliceSparsity, column-major, contiguous blocks), handed to BoBa's block AMEn as its packed operator;
+  // the TT matrices in the system are rank-one zero placeholders that carry the mode sizes.
+  const bool packedMode = std::getenv("CAMELLIA_EXPLICIT_S_PACKED") != nullptr && buildMode == "tt";
+  if (packedMode && opt.solver != "amen") throw std::invalid_argument("CAMELLIA_EXPLICIT_S_PACKED needs the amen solver");
+  std::vector<std::vector<std::vector<boba::CoreSliceSparsity<double>>>> packedS(nt, std::vector<std::vector<boba::CoreSliceSparsity<double>>>(nt));
+  double packedBytes = 0;
+  auto placeholderTT = [&](const Sizes &rows, const Sizes &cols) {
+    TTMatrix M(rows, cols);
+    for (size_t d = 0; d < 4; ++d) { M.cores[d].resize({1, rows[d], cols[d], 1}); M.cores[d].fill_with_zeros(); }
+    return M;
+  };
   if (buildMode == "tt" || buildMode == "compare")
   {
     const auto tb0 = clock::now();
@@ -818,10 +859,30 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       std::array<size_t, 4> zr{};
       const double zTol = std::getenv("CAMELLIA_EXPLICIT_S_ZTOL") ? std::atof(std::getenv("CAMELLIA_EXPLICIT_S_ZTOL")) : 0.3 * opt.sTolerance;
       const size_t ell = std::getenv("CAMELLIA_EXPLICIT_S_SKETCH") ? size_t(std::atoi(std::getenv("CAMELLIA_EXPLICIT_S_SKETCH"))) : 160;
+      Sizes rows, cols; for (size_t d = 0; d < 4; ++d) { rows[d] = blocks[a].global[d]; cols[d] = blocks[b].global[d]; }
+      if (packedMode)
+      {
+        std::array<boba::CoreSliceSparsity<double>, 4> pc;
+        randomizedTripleProduct(VB[a], Dc, VB[b], cells, nbT, blocks[a], blocks[b], 0.5 * opt.sTolerance, ell, nThreads, 7919u + unsigned(a * 31 + b), &zr, &pc);
+        double bytes = 0; std::ostringstream rk; rk << "( 1";
+        for (size_t d = 0; d < 4; ++d) { bytes += double(pc[d].blocks.size()) * sizeof(double); rk << ", " << pc[d].ra2; }
+        rk << " )";
+        packedS[a][b].assign(pc.begin(), pc.end());
+        Stt[a][b] = placeholderTT(rows, cols);
+        packedBytes += bytes;
+        if (a != b)
+        {
+          for (size_t d = 0; d < 4; ++d) packedS[b][a].push_back(boba::transpose_core_slices(pc[d]));
+          Stt[b][a] = placeholderTT(cols, rows);
+          packedBytes += bytes;
+        }
+        std::cout << "explicit_S tt-build block " << system.names[a + 1] << "," << system.names[b + 1] << " ranks=" << rk.str()
+                  << " packed " << bytes / 1e6 << " MB (" << seconds(tq) << " s)" << std::endl;
+        continue;
+      }
       auto cores = std::getenv("CAMELLIA_EXPLICIT_S_ZIPUP")
           ? zipUpTripleProduct(VB[a], Dc, VB[b], cells, nbT, blocks[a], blocks[b], zTol, nThreads, &zr)
           : randomizedTripleProduct(VB[a], Dc, VB[b], cells, nbT, blocks[a], blocks[b], 0.5 * opt.sTolerance, ell, nThreads, 7919u + unsigned(a * 31 + b), &zr);
-      Sizes rows, cols; for (size_t d = 0; d < 4; ++d) { rows[d] = blocks[a].global[d]; cols[d] = blocks[b].global[d]; }
       TTMatrix M(rows, cols);
       for (size_t d = 0; d < 4; ++d)
       {
@@ -836,7 +897,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       Stt[a][b] = M;
       if (a != b) Stt[b][a] = M.transpose();
     }
-    std::cout << "explicit_S tt-build total " << seconds(tb0) << " s" << std::endl;
+    std::cout << "explicit_S tt-build total " << seconds(tb0) << " s" << (packedMode ? " (packed S: " + std::to_string(packedBytes / 1e9) + " GB)" : std::string()) << std::endl;
     reportMemory("after tt-build");
   }
   const double passBytes = 4.0e9;
@@ -1212,7 +1273,8 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     if (amenOpt.siteThreads <= 0 && !std::getenv("BOBA_AMEN_THREADS")) amenOpt.siteThreads = nThreads;
     const bool anySplit = opt.split[0] || opt.split[1] || opt.split[2] || opt.split[3];
     BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
-                              : DpgBoba::solveAmen(sysS.matrix, rhsS, amenOpt, std::function<double(const BlockVector &)>(residualS));
+                              : DpgBoba::solveAmen(sysS.matrix, rhsS, amenOpt, std::function<double(const BlockVector &)>(residualS),
+                                                   packedMode ? &packedS : nullptr);
     const double amenSeconds = seconds(ta);
     const auto tr = clock::now();
     double rn2 = 0;
