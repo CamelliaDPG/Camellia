@@ -15,6 +15,7 @@
 #ifndef Camellia_VlasovSpaceTimeFormulation_h
 #define Camellia_VlasovSpaceTimeFormulation_h
 
+#include <functional>
 #include "CamelliaMemoryTools.h"
 #include "TypeDefs.h"
 
@@ -63,7 +64,6 @@ public:
   static const string S_PSI;     // latent trial variable for positivity preservation
   static const string S_PHI;     // latent test variable for positivity preservation
 protected:
-  bool _useSumFactorizedAssembly = false; // TODO: change this to "true" after Trilinos PR 13391 has propagated to master
 private:
   int _spaceDim;
   int _velocityDim;
@@ -194,6 +194,7 @@ private:
   std::vector< std::pair<double,double> > timeSeriesForSlabSpatialIntegrals(const std::vector< Teuchos::RCP<SpatialIntegralOfSpaceTimeSolution> > &integrals,
                                                                             const double &t0, const double &dt, const int &numValues) const;
   bool _initialized = false;
+  std::function<void(MeshPtr)> _nextSlabPreRefinement;
 protected:
   //! Called during construction, by the most specialized subclass (allowing the most specialized of overridden methods to be invoked).
   void initialize();
@@ -237,6 +238,22 @@ public:
                              const bool deferInitialization = false,
                              const bool enforcePositivity = false); // deferInitialization should be set to true for subclasses, which should then call initialize() within their own constructors.
 
+  //! If true, formulations constructed afterwards build their phase-space mesh on a BoxMeshTopology (with a BoxGDA)
+  //! instead of an ExtrudedMeshTopology.  Box meshes support anisotropic refinement, e.g. in the velocity directions
+  //! only: vlasovMesh()->hRefine(std::map<GlobalIndexType,unsigned>).  Requires a non-periodic 1D spatial mesh given by
+  //! its root cells.  Default: false.  See notes/anisotropic-refinement-design.md for what is supported.
+  static void setUseBoxMeshForPhaseSpace(bool value);
+  static bool useBoxMeshForPhaseSpace();
+  //! For box phase-space meshes: the H^1 order their cells start at (0: the formulation's H1Order, the default).  For
+  //! hp-adaptivity, which raises orders from there (BoxGDA::hpRefinements()); the configuration-space mesh keeps H1Order.
+  static void setBoxMeshInitialH1Order(int H1Order);
+  static int boxMeshInitialH1Order();
+
+  //! Called with the next slab's phase-space mesh in nextTimeSlab(), before that mesh is matched to this slab's at the
+  //! interface; passed on to the next slab's formulation.  E.g. to repeat refinements known to be needed on every slab
+  //! (BoxGDA::refineToContain() with records of the first slab's boundary-data refinement).
+  void setNextSlabPreRefinement(std::function<void(MeshPtr)> preRefinement) { _nextSlabPreRefinement = preRefinement; }
+
   //! take time step.
   void solve();
   
@@ -249,13 +266,8 @@ public:
   //! called from constructor, after Vlasov Solution and Mesh objects are constructed from the passed-in BF object.  Subclasses should fill this appropriately by calling addTerm().
   virtual void initializeVlasovBilinearForm(BFPtr emptyVlasovBF);
   
-  //! called from constructor, after Vlasov BF object is initialized.
-  virtual IPPtr constructVlasovInnerProduct(const bool useSumFactorizedAssembly);
-
-  //! Sum-factorized graph-norm Gram assembly: (Lw,Lw) + massWeight (w,w), plus (phi,phi) if includePositivityTestVariable.
-  //! L uses v_i() and a(), so subclasses that override v_i() (e.g., relativistic) get their own operator.  Single species,
-  //! full tensor-product test basis.
-  IPPtr constructSumFactorizedVlasovInnerProduct(double massWeight, bool includePositivityTestVariable);
+  //! called from constructor, after Vlasov BF object is initialized.  Returns the graph norm for the Vlasov BF.
+  virtual IPPtr constructVlasovInnerProduct();
   
   // field variables:
   virtual VarPtr f(int i=0);         // Vlasov distribution (species i)
@@ -552,8 +564,6 @@ public:
   /** \brief Returns the basis family employed by the discretizations.  */
   EBasisFamily basisFamily() const;
   
-  bool useSumFactorizedAssembly() const;
-  
   /** \brief  Returns a Function representing the specified velocity-space coordinate.*/
   virtual FunctionPtr v_i(const int zeroBasedComp) const;
   
@@ -567,9 +577,6 @@ public:
   virtual bool useRelativisticCurrentMoments() const;
   virtual double currentMomentLightSpeed() const;
   
-  void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
-                                                              double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback);
-
   //! Called once per fixed-point substep in solve(), after the Vlasov and configuration-space solves.
   void setSubstepSolveProfileCallback(std::function<void(const SubstepSolveProfile &)> callback);
 

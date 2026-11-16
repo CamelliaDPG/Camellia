@@ -72,6 +72,8 @@ def read_csvs(paths):
             cells.append({"x": cell[:, 1].reshape(shape), "t": cell[:, 2].reshape(shape),
                           "n_e": cell[:, 3].reshape(shape), "Jx": cell[:, 4].reshape(shape),
                           "E_x": cell[:, 5].reshape(shape)})
+            if data.shape[-1] > 6:  # Jz (written since 2026-11-07)
+                cells[-1]["Jz"] = cell[:, 6].reshape(shape)
     return pointsPerDim, degree, cells
 
 
@@ -149,6 +151,10 @@ def main():
     parser.add_argument("--times", type=float, nargs="*", help="times for n_e(x) profiles (default: end of each slab)")
     parser.add_argument("--log", action="store_true", help="logarithmic color scale for the x-t map")
     parser.add_argument("--floor", type=float, default=None, help="lower limit of the log color scale (default: max/1e4)")
+    parser.add_argument("--vmax", type=float, default=None,
+                        help="upper limit of the color scale (default: max of n_e; values above it saturate)")
+    parser.add_argument("--vmin", type=float, default=None,
+                        help="lower limit of the linear color scale (default: min(0, min of n_e); values below it saturate)")
     parser.add_argument("--no-cells", action="store_true", help="do not overlay configuration cell boundaries")
     parser.add_argument("--out", default=None, help="output image (default: <first input dir>/density.png)")
     parser.add_argument("--sampled", action="store_true",
@@ -211,12 +217,14 @@ def main():
 
     plt.rcParams.update({"font.size": 10, "axes.titlesize": 11, "figure.facecolor": SURFACE})
     cmap = LinearSegmentedColormap.from_list("density", BLUE_RAMP)
+    if args.vmax is not None:
+        nMax = args.vmax
     if args.log:
         floor = args.floor if args.floor else nMax * 1e-4
         norm = LogNorm(vmin=floor, vmax=nMax)
         cmap.set_under(SURFACE)
     else:
-        norm = Normalize(vmin=min(0.0, nMin), vmax=nMax)
+        norm = Normalize(vmin=(args.vmin if args.vmin is not None else min(0.0, nMin)), vmax=nMax)
 
     def new_figure():
         fig, (axMap, axProfile) = plt.subplots(2, 1, figsize=(9, 9), gridspec_kw={"height_ratios": [3, 2]})
@@ -248,7 +256,7 @@ def main():
                 x0, x1 = cell["x"][0, 0], cell["x"][0, -1]
                 t0, t1 = cell["t"][0, 0], cell["t"][-1, 0]
                 axMap.plot([x0, x1, x1, x0, x0], [t0, t0, t1, t1, t0], color="#ffffff", linewidth=0.4, alpha=0.6)
-        colorbar = fig.colorbar(mesh, ax=axMap, pad=0.02)
+        colorbar = fig.colorbar(mesh, ax=axMap, pad=0.02, extend=("max" if args.vmax is not None else "neither"))
         colorbar.set_label("electron density $n_e$", color=TEXT_PRIMARY)
         colorbar.ax.tick_params(colors=TEXT_SECONDARY, labelcolor=TEXT_SECONDARY)
         colorbar.outline.set_edgecolor(TEXT_SECONDARY)

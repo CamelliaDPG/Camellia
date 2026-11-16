@@ -19,6 +19,9 @@ using PlanarMITL::uniformVertices;
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
 #include "ConfigurationSpaceFormulationPoisson.h"
+#include "BoxGDA.h"
+#include "BoxMeshTopology.h"
+#include <Teuchos_TimeMonitor.hpp>
 #include "DoerflerRefinementStrategy.h"
 #include "EnergyErrorFunction.h"
 #include "ErrorIndicator.h"
@@ -36,14 +39,10 @@ using PlanarMITL::uniformVertices;
 #include "RelativisticVlasovSpaceTimeFormulation.h"
 #include "RHS.h"
 #include "Solution.h"
-#include "TensorBilinearForm.h"
-#include "TensorLocalSchurComplement.h"
 #include "TensorMaxwell1D2VMomentReductionPipeline.h"
 #include "TensorMaxwellRHSMomentData.h"
 #include "TensorMesh.h"
-#include "TensorOperatorData.h"
 #include "TensorOperatorFactory.h"
-#include "TensorPlanarMITLMomentComparisonAdapter.h"
 #include "TensorVar.h"
 #include "TensorVarDiscretization.h"
 #include "TensorVlasovMomentSampling1D2V.h"
@@ -51,8 +50,11 @@ using PlanarMITL::uniformVertices;
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -70,24 +72,24 @@ namespace
   double gProximalGalerkinAlpha0 = 1.0;
   double gProximalGalerkinAlphaMultiplier = 1.0;
 
-  using Phase0Clock = std::chrono::steady_clock;
-  using Phase0TimePoint = Phase0Clock::time_point;
-  using Phase0Fields = std::vector<std::pair<std::string,std::string>>;
+  using TimingClock = std::chrono::steady_clock;
+  using TimingTimePoint = TimingClock::time_point;
+  using TimingFields = std::vector<std::pair<std::string,std::string>>;
 
-  std::string phase0DoubleString(double value)
+  std::string timingString(double value)
   {
     std::ostringstream os;
     os << std::setprecision(6) << std::scientific << value;
     return os.str();
   }
 
-  class Phase0Instrumentation
+  class TimingLog
   {
     bool _enabled;
     int _rank;
     std::ofstream _file;
   public:
-    Phase0Instrumentation(bool enabled, int rank, const std::string &timingFilePath)
+    TimingLog(bool enabled, int rank, const std::string &timingFilePath)
     : _enabled(enabled), _rank(rank)
     {
       if (_enabled && (_rank == 0) && (timingFilePath != ""))
@@ -95,26 +97,26 @@ namespace
         _file.open(timingFilePath.c_str(), std::ios::out | std::ios::app);
         if (!_file.is_open())
         {
-          std::cout << "WARNING: unable to open Phase 0 timing file '" << timingFilePath << "'; timings will only be written to stdout.\n";
+          std::cout << "WARNING: unable to open timing file '" << timingFilePath << "'; timings will only be written to stdout.\n";
         }
       }
     }
 
     bool enabled() const { return _enabled; }
-    Phase0TimePoint now() const { return Phase0Clock::now(); }
+    TimingTimePoint now() const { return TimingClock::now(); }
 
-    double elapsedSince(const Phase0TimePoint &start) const
+    double elapsedSince(const TimingTimePoint &start) const
     {
-      return std::chrono::duration<double>(Phase0Clock::now() - start).count();
+      return std::chrono::duration<double>(TimingClock::now() - start).count();
     }
 
-    void logDuration(const std::string &event, double seconds, const Phase0Fields &fields = Phase0Fields())
+    void logDuration(const std::string &event, double seconds, const TimingFields &fields = TimingFields())
     {
       if (!_enabled || (_rank != 0)) return;
 
       std::ostringstream line;
-      line << "PHASE0_TIMING event=" << event;
-      line << " seconds=" << phase0DoubleString(seconds);
+      line << "TIMING event=" << event;
+      line << " seconds=" << timingString(seconds);
       for (const auto &field : fields)
       {
         line << " " << field.first << "=" << field.second;
@@ -130,9 +132,9 @@ namespace
     }
   };
 
-  Phase0Fields phase0MeshStats(const Teuchos::RCP<VlasovSpaceTimeFormulation> &form)
+  TimingFields timingMeshStats(const Teuchos::RCP<VlasovSpaceTimeFormulation> &form)
   {
-    Phase0Fields fields;
+    TimingFields fields;
     if (form != Teuchos::null)
     {
       auto vlasovMesh = form->vlasovMesh();
@@ -151,38 +153,10 @@ namespace
     return fields;
   }
 
-  std::string phase0TensorGraphSchurBackendName(const std::string &backend)
-  {
-    if (backend == "off") return "off";
-    if (backend == "assembled_crs") return "assembled_crs_graph_schur";
-    if (backend == "matrix_free") return "matrix_free_graph_schur";
-    return "invalid";
-  }
-
-  bool phase0TensorGraphSchurBackendIsValid(const std::string &backend)
-  {
-    return (backend == "off") || (backend == "assembled_crs") || (backend == "matrix_free");
-  }
-
-  bool phase8MomentBackendIsValid(const std::string &backend)
-  {
-    return (backend == "legacy") ||
-           (backend == "tensor_native") ||
-           (backend == "dry_run_compare") ||
-           (backend == "compare");
-  }
-
-  bool phase8MomentBackendRequestsDryRunComparison(const std::string &backend)
-  {
-    return (backend == "tensor_native") ||
-           (backend == "dry_run_compare") ||
-           (backend == "compare");
-  }
-
   //! Writes the electron density n_e = int f du (and Jx and E_x) on a dense, uniform (pointsPerDim x pointsPerDim) grid of
   //! points on each configuration (x,t) cell, as CSV gathered to rank 0.  The density is the exact velocity moment of the
   //! polynomial f at each point (not an interpolant), so plotting it at fine resolution shows the actual discrete solution.
-  //! Collective.  Columns: cell, x, t, n_e, Jx, E_x; rows are ordered cell, then t-major, x-minor reference point.  The
+  //! Collective.  Columns: cell, x, t, n_e, Jx, E_x, Jz; rows are ordered cell, then t-major, x-minor reference point.  The
   //! header records pointsPerDim and the polynomial degree of f.
   void writeDensityDiagnostic(const std::string &path, Teuchos::RCP<VlasovSpaceTimeFormulation> form,
                               int speciesOrdinal, int pointsPerDim, int velocityQuadratureDegree, double lightSpeed, double q)
@@ -217,7 +191,7 @@ namespace
     fDegree = MPIWrapper::max(phaseSpaceMesh->Comm(), fDegree);
 
     FunctionPtr E = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
-    const int columnCount = 6;
+    const int columnCount = 7;
     std::vector<double> myRows;
     myRows.reserve(cellIDs.size() * pointCount * columnCount);
     for (int cellOrdinal=0; cellOrdinal<static_cast<int>(cellIDs.size()); cellOrdinal++)
@@ -231,7 +205,8 @@ namespace
       {
         const int entry = cellOrdinal * pointCount + p;
         myRows.insert(myRows.end(), {double(cellIDs[cellOrdinal]), physicalPoints(0,p,0), physicalPoints(0,p,1),
-                                     moments.moments._density[entry], q * moments.moments._xProperVelocityMoment[entry], EValues(0,p)});
+                                     moments.moments._density[entry], q * moments.moments._xProperVelocityMoment[entry], EValues(0,p),
+                                     q * moments.moments._zProperVelocityMoment[entry]});
       }
     }
     std::vector<double> allRows;
@@ -242,7 +217,7 @@ namespace
     std::ofstream out(path);
     TEUCHOS_TEST_FOR_EXCEPTION(!out, std::runtime_error, "could not open density diagnostic file " + path);
     out << "# pointsPerDim=" << pointsPerDim << " degree=" << fDegree << "\n";
-    out << "cell,x,t,n_e,Jx,E_x\n";
+    out << "cell,x,t,n_e,Jx,E_x,Jz\n";
     out << std::setprecision(12);
     for (size_t row=0; row<allRows.size() / columnCount; row++)
     {
@@ -253,224 +228,243 @@ namespace
     }
   }
 
-  TensorMaxwellRHSMomentData phase8BuildLegacyMomentReferenceData(const std::vector<GlobalIndexType> &configurationCellIDs,
-                                                                  MeshPtr configurationMesh,
-                                                                  FunctionPtr densityFunction,
-                                                                  FunctionPtr JxFunction,
-                                                                  FunctionPtr JzFunction,
-                                                                  double q,
-                                                                  double eps0,
-                                                                  double n0)
+  //! Writes a 2D float64 array as a NumPy .npy file (format 1.0, C order), so the post-processing can np.load() it.
+  void writeNpy(const std::string &path, const std::vector<double> &values, size_t numRows, size_t numColumns)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(configurationMesh == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null configuration mesh.");
-    TEUCHOS_TEST_FOR_EXCEPTION(densityFunction == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null density function.");
-    TEUCHOS_TEST_FOR_EXCEPTION(JxFunction == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null Jx function.");
-    TEUCHOS_TEST_FOR_EXCEPTION(JzFunction == Teuchos::null, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires a non-null Jz function.");
-    TEUCHOS_TEST_FOR_EXCEPTION(eps0 == 0.0, std::invalid_argument,
-                               "Phase 8 legacy moment reference packing requires nonzero eps0.");
+    std::ostringstream header;
+    header << "{'descr': '<f8', 'fortran_order': False, 'shape': (" << numRows << ", " << numColumns << "), }";
+    std::string headerString = header.str();
+    const size_t preamble = 10; // magic (6) + version (2) + header length (2)
+    headerString.append(64 - (preamble + headerString.size() + 1) % 64, ' ');
+    headerString += '\n';
+    std::ofstream out(path, std::ios::binary);
+    TEUCHOS_TEST_FOR_EXCEPTION(!out, std::runtime_error, "could not open " + path);
+    out.write("\x93NUMPY\x01\x00", 8);
+    const uint16_t headerLength = static_cast<uint16_t>(headerString.size());
+    const char lengthBytes[2] = {static_cast<char>(headerLength & 0xff), static_cast<char>(headerLength >> 8)};
+    out.write(lengthBytes, 2);
+    out.write(headerString.data(), headerString.size());
+    out.write(reinterpret_cast<const char *>(values.data()), sizeof(double) * values.size());
+  }
 
-    TensorMaxwellRHSMomentData referenceData;
-    int expectedPointCount = -1;
-    for (int cellOrdinal=0; cellOrdinal<static_cast<int>(configurationCellIDs.size()); cellOrdinal++)
+  //! Newton-Cotes weights for n equally spaced points on [-1,1], endpoints included: exact for polynomials of degree
+  //! n-1 (n if n is odd).  Used to integrate f over (x, u_x, u_y) from the uniform phase-space samples.
+  std::vector<double> newtonCotesWeights(int n)
+  {
+    // solve sum_j w_j s_j^k = int_{-1}^{1} s^k ds, k = 0..n-1 (Vandermonde, small n)
+    std::vector<double> s(n), A(n * n), b(n);
+    for (int j=0; j<n; j++) s[j] = -1.0 + 2.0 * j / (n - 1);
+    for (int k=0; k<n; k++)
     {
-      const auto cellID = configurationCellIDs[cellOrdinal];
-      auto basisCache = BasisCache::basisCacheForCell(configurationMesh, cellID);
-      const auto &points = basisCache->getPhysicalCubaturePointsFC();
-      const int pointCount = points.dimension(1);
-      if (expectedPointCount < 0)
+      for (int j=0; j<n; j++) A[k * n + j] = std::pow(s[j], k);
+      b[k] = (k % 2 == 0) ? 2.0 / (k + 1) : 0.0;
+    }
+    for (int col=0; col<n; col++) // Gaussian elimination with partial pivoting
+    {
+      int pivot = col;
+      for (int row=col+1; row<n; row++) if (std::abs(A[row * n + col]) > std::abs(A[pivot * n + col])) pivot = row;
+      for (int j=0; j<n; j++) std::swap(A[col * n + j], A[pivot * n + j]);
+      std::swap(b[col], b[pivot]);
+      for (int row=col+1; row<n; row++)
       {
-        expectedPointCount = pointCount;
-        referenceData = TensorMaxwellRHSMomentData(static_cast<int>(configurationCellIDs.size()), expectedPointCount);
-      }
-      TEUCHOS_TEST_FOR_EXCEPTION(pointCount != expectedPointCount, std::invalid_argument,
-                                 "Phase 8 legacy moment reference packing requires a uniform configuration point count per cell.");
-
-      FieldContainer<double> densityValues(1, pointCount);
-      FieldContainer<double> JxValues(1, pointCount);
-      FieldContainer<double> JzValues(1, pointCount);
-      densityFunction->values(densityValues, basisCache);
-      JxFunction->values(JxValues, basisCache);
-      JzFunction->values(JzValues, basisCache);
-
-      for (int pointOrdinal=0; pointOrdinal<pointCount; pointOrdinal++)
-      {
-        referenceData.rhoRHS(cellOrdinal, pointOrdinal) = q / eps0 * (densityValues(0, pointOrdinal) - n0);
-        referenceData.Jx(cellOrdinal, pointOrdinal)     = JxValues(0, pointOrdinal);
-        referenceData.Jz(cellOrdinal, pointOrdinal)     = JzValues(0, pointOrdinal);
+        const double factor = A[row * n + col] / A[col * n + col];
+        for (int j=col; j<n; j++) A[row * n + j] -= factor * A[col * n + j];
+        b[row] -= factor * b[col];
       }
     }
-    if (expectedPointCount < 0)
+    std::vector<double> w(n);
+    for (int row=n-1; row>=0; row--)
     {
-      referenceData = TensorMaxwellRHSMomentData(0, 0);
+      double sum = b[row];
+      for (int j=row+1; j<n; j++) sum -= A[row * n + j] * w[j];
+      w[row] = sum / A[row * n + row];
     }
-    return referenceData;
+    return w;
   }
 
-  std::vector<double> phase0UniformVertices(double left, double right, int elementCount)
+  //! Phase-space diagnostic: samples f at the slab's final time on a uniform (pointsPerDim)^3 grid of reference points in
+  //! (x, u_x, u_y) on every phase-space cell (cell boundaries included), so that with pointsPerDim > degree the
+  //! post-processing can reconstruct each cell's polynomial exactly (as plot_density.py does for n_e).  Only cells whose
+  //! time extent ends at the slab's final time are sampled (one layer when a slab has several time cells).  If writeSamples,
+  //! each rank writes its cells to <prefix>_part<rank>.npy, columns (cell, x, u_x, u_y, f), and rank 0 writes
+  //! <prefix>_meta.txt (pointsPerDim, degree, t).  Every call appends one line of integrals over (x, u) at the slab end,
+  //! from Newton-Cotes weights on the samples, to reductionsPath (rank 0):
+  //!   int f; int f over u_x < 0 (electrons moving back toward the cathode); the same two over x < xNear; and the
+  //!   integral of the negative part of f (sampled, so approximate).
+  //! Collective.
+  void writePhaseSpaceDiagnostic(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int speciesOrdinal, int pointsPerDim,
+                                 bool writeSamples, const std::string &prefix, const std::string &reductionsPath,
+                                 int slabOrdinal, double xNear, bool atSlabStart = false)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(elementCount <= 0, std::invalid_argument,
-                               "Phase 0 tensor graph-norm Schur microbenchmark requires positive element counts.");
-    std::vector<double> vertices(elementCount + 1, left);
-    for (int vertexOrdinal=0; vertexOrdinal<=elementCount; vertexOrdinal++)
+    // atSlabStart: sample f at the slab's initial time instead of its final time (reductions only; no samples written)
+    if (atSlabStart) writeSamples = false;
+    MeshPtr mesh = form->vlasovMesh();
+    const int rank = mesh->Comm()->getRank();
+    const int fID = form->f(speciesOrdinal)->ID();
+    FunctionPtr fFunction = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+    const int n = pointsPerDim;
+    const int pointCount = n * n * n;
+    // reference coordinates (x, t, u_x, u_y), t = +1 (slab end) or -1 (slab start); x fastest, then u_x, then u_y
+    FieldContainer<double> refPoints(pointCount, 4);
+    for (int k=0; k<n; k++)
+      for (int j=0; j<n; j++)
+        for (int i=0; i<n; i++)
+        {
+          const int p = (k * n + j) * n + i;
+          refPoints(p, 0) = -1.0 + 2.0 * i / (n - 1);
+          refPoints(p, 1) = atSlabStart ? -1.0 : 1.0;
+          refPoints(p, 2) = -1.0 + 2.0 * j / (n - 1);
+          refPoints(p, 3) = -1.0 + 2.0 * k / (n - 1);
+        }
+    const std::vector<double> w1 = newtonCotesWeights(n);
+
+    const auto &cellIDs = mesh->cellIDsInPartition();
+    std::vector<double> samples;
+    if (writeSamples) samples.reserve(cellIDs.size() * pointCount * 5);
+    double sums[5] = {0, 0, 0, 0, 0}; // int f, int f (u_x < 0), int f (x < xNear), int f (x < xNear, u_x < 0), int f^-
+    int degree = 0;
+    const double t1 = atSlabStart ? form->t0() : form->t1(); // the time sampled
+    for (GlobalIndexType cellID : cellIDs)
     {
-      vertices[vertexOrdinal] = left + (right - left) * static_cast<double>(vertexOrdinal) / static_cast<double>(elementCount);
+      degree = std::max(degree, mesh->getElementType(cellID)->trialOrderPtr->getBasis(fID)->getDegree());
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      basisCache->setRefCellPointsFC(refPoints);
+      const auto &physicalPoints = basisCache->getPhysicalCubaturePointsFC(); // (1, P, 4): x, t, u_x, u_y
+      // with several time cells per slab, only those ending at the slab's final time (starting at its initial time)
+      // carry the slab-end (slab-start) f
+      if (std::abs(physicalPoints(0, 0, 1) - t1) > 1e-10 * std::max(1.0, std::abs(t1))) continue;
+      FieldContainer<double> fValues(1, pointCount);
+      fFunction->values(fValues, basisCache);
+      // the cell's extent in x, u_x, u_y (affine hypercube cells: corners are the first and last sample points)
+      const double hx  = physicalPoints(0, pointCount - 1, 0) - physicalPoints(0, 0, 0);
+      const double hux = physicalPoints(0, pointCount - 1, 2) - physicalPoints(0, 0, 2);
+      const double huy = physicalPoints(0, pointCount - 1, 3) - physicalPoints(0, 0, 3);
+      const double xCenter  = physicalPoints(0, 0, 0) + 0.5 * hx;
+      const double uxCenter = physicalPoints(0, 0, 2) + 0.5 * hux;
+      const double scale = 0.125 * hx * hux * huy;
+      for (int k=0; k<n; k++)
+        for (int j=0; j<n; j++)
+          for (int i=0; i<n; i++)
+          {
+            const int p = (k * n + j) * n + i;
+            const double f = fValues(0, p);
+            const double weighted = scale * w1[i] * w1[j] * w1[k] * f;
+            sums[0] += weighted;
+            if (uxCenter < 0) sums[1] += weighted;
+            if (xCenter < xNear) sums[2] += weighted;
+            if ((xCenter < xNear) && (uxCenter < 0)) sums[3] += weighted;
+            if (f < 0) sums[4] += weighted;
+            if (writeSamples)
+            {
+              samples.insert(samples.end(), {double(cellID), physicalPoints(0, p, 0), physicalPoints(0, p, 2),
+                                             physicalPoints(0, p, 3), f});
+            }
+          }
     }
-    return vertices;
-  }
-
-  std::vector<ActiveLeafSet1D> phase0RootLeafSets(int elementCount)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(elementCount <= 0, std::invalid_argument,
-                               "Phase 0 tensor graph-norm Schur microbenchmark requires positive element counts.");
-    return std::vector<ActiveLeafSet1D>(elementCount, ActiveLeafSet1D({{0,0}}));
-  }
-
-  TensorVarPtr phase0TensorFieldVar1D1T2V(const std::string &name)
-  {
-    std::vector<VarPtr> componentVars;
-    componentVars.push_back(Teuchos::rcp(new Var(2000, 0, name + "_x",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    componentVars.push_back(Teuchos::rcp(new Var(2001, 0, name + "_t",  Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    componentVars.push_back(Teuchos::rcp(new Var(2002, 0, name + "_ux", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    componentVars.push_back(Teuchos::rcp(new Var(2003, 0, name + "_uy", Camellia::OP_VALUE, L2, FIELD, Teuchos::null, true, UNKNOWN_FS)));
-    return Teuchos::rcp(new TensorVar(name, TENSOR_FIELD, componentVars));
-  }
-
-  TensorMeshPtr makePhase0TensorGraphSchurMesh1D1T2V(double x0,
-                                                     double xWidth,
-                                                     double t0,
-                                                     double tWidth,
-                                                     double uxMin,
-                                                     double uxMax,
-                                                     double uyMin,
-                                                     double uyMax,
-                                                     int xElementCount,
-                                                     int tElementCount,
-                                                     int uxElementCount,
-                                                     int uyElementCount,
-                                                     int componentPolyOrder,
-                                                     int testSpaceEnrichment)
-  {
-    auto component0 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(x0, x0 + xWidth, xElementCount), phase0RootLeafSets(xElementCount), false, componentPolyOrder));
-    auto component1 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(t0, t0 + tWidth, tElementCount), phase0RootLeafSets(tElementCount), false, componentPolyOrder));
-    auto component2 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(uxMin, uxMax, uxElementCount), phase0RootLeafSets(uxElementCount), false, componentPolyOrder));
-    auto component3 = Teuchos::rcp(new ComponentMeshTopology1D(phase0UniformVertices(uyMin, uyMax, uyElementCount), phase0RootLeafSets(uyElementCount), false, componentPolyOrder));
-    auto tensorTopo = Teuchos::rcp(new TensorMeshTopology({component0, component1, component2, component3}));
-    auto factory = TensorVarFactory::factory();
-    auto tensorMesh = Teuchos::rcp(new TensorMesh(tensorTopo, factory, BasisFamily::hierarchicalBasisFamily(), componentPolyOrder, testSpaceEnrichment));
-    tensorMesh->addTrialDiscretization(Teuchos::rcp(new TensorVarDiscretization(phase0TensorFieldVar1D1T2V("f"), Teuchos::null, std::vector<int>{0,0,0,0})));
-    tensorMesh->addTestDiscretization (Teuchos::rcp(new TensorVarDiscretization(phase0TensorFieldVar1D1T2V("w"), Teuchos::null, std::vector<int>{0,0,0,0})));
-    return tensorMesh;
-  }
-
-  TensorBilinearFormPtr makePhase0TensorGraphSchurForm1D1T2V(double cScaled)
-  {
-    auto form = Teuchos::rcp(new TensorBilinearForm("phase0-tensor-relativistic-graph-schur"));
-    auto f = phase0TensorFieldVar1D1T2V("f");
-    auto w = phase0TensorFieldVar1D1T2V("w");
-    auto ux = TensorFunction::componentCoordinate(2);
-    auto uy = TensorFunction::componentCoordinate(3);
-    auto gamma = Camellia::sqrt(TensorFunction::constant(1.0) + TensorFunction::constant(1.0 / (cScaled * cScaled)) * (ux * ux + uy * uy));
-    auto vx = TensorFunction::constant(-1.0) * ux * reciprocal(gamma);
-    auto vy = TensorFunction::constant(0.5) * uy * reciprocal(gamma);
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 0), vx));
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 1), TensorFunction::constant(-1.0)));
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 2), TensorFunction::constant(-0.5) * (TensorFunction::componentCoordinate(0) + TensorFunction::componentCoordinate(1))));
-    form->addTerm(TensorBilinearTerm(f, w, TensorComponentOperatorDescriptor::valueOnly(4), TensorComponentOperatorDescriptor::singleDerivative(4, 3), vy + TensorFunction::constant(-0.75) * TensorFunction::componentCoordinate(1)));
-    return form;
-  }
-
-  double phase0VectorL2Norm(const std::vector<double> &values)
-  {
-    double normSquared = 0.0;
-    for (double value : values) normSquared += value * value;
-    return std::sqrt(normSquared);
-  }
-
-  void runPhase0TensorGraphSchurMicroApply(const std::string &backend,
-                                           double cScaled,
-                                           double x0,
-                                           double xWidth,
-                                           double t0,
-                                           double tWidth,
-                                           double uxMin,
-                                           double uxMax,
-                                           double uyMin,
-                                           double uyMax,
-                                           double l2Weight,
-                                           int microXElements,
-                                           int microTElements,
-                                           int microUxElements,
-                                           int microUyElements,
-                                           int microComponentPolyOrder,
-                                           int microTestSpaceEnrichment,
-                                           Phase0Instrumentation &phase0)
-  {
-    if (backend == "off") return;
-    TEUCHOS_TEST_FOR_EXCEPTION(!phase0TensorGraphSchurBackendIsValid(backend), std::invalid_argument,
-                               "Unsupported Phase 0 tensor graph-norm Schur backend option: " + backend);
-
-    auto tensorMesh = makePhase0TensorGraphSchurMesh1D1T2V(x0, xWidth, t0, tWidth, uxMin, uxMax, uyMin, uyMax,
-                                                           microXElements,
-                                                           microTElements,
-                                                           microUxElements,
-                                                           microUyElements,
-                                                           microComponentPolyOrder,
-                                                           microTestSpaceEnrichment);
-    auto dofLayout = tensorMesh->createDofLayout();
-    auto tensorForm = makePhase0TensorGraphSchurForm1D1T2V(cScaled);
-    TensorOperatorData operatorData(tensorMesh, dofLayout);
-    const IndexType trialDofCount = operatorData.coefficientCount(TENSOR_TRIAL_SPACE, "f");
-    std::vector<double> input(trialDofCount, 0.0);
-    for (IndexType gid=0; gid<trialDofCount; gid++) input[gid] = 0.1 + 0.025 * static_cast<double>((gid % 17) + 1);
-
-    const auto applyStart = phase0.now();
-    std::vector<double> output;
-    if (backend == "matrix_free")
+    double globalSums[5];
+    for (int i=0; i<5; i++) globalSums[i] = MPIWrapper::sum(mesh->Comm(), sums[i]);
+    degree = MPIWrapper::max(mesh->Comm(), degree);
+    if (writeSamples)
     {
-      MatrixFreeGraphNormSchurTensorOperatorFactory graphFactory(l2Weight);
-      auto graphOp = graphFactory.build(tensorMesh,
-                                        dofLayout,
-                                        tensorForm,
-                                        TENSOR_TRIAL_SPACE,
-                                        "f",
-                                        TENSOR_TRIAL_SPACE,
-                                        "f");
-      graphOp->apply(input, output);
+      writeNpy(prefix + "_part" + std::to_string(rank) + ".npy", samples, samples.size() / 5, 5);
+      if (rank == 0)
+      {
+        std::ofstream meta(prefix + "_meta.txt");
+        meta << "pointsPerDim " << n << "\ndegree " << degree << "\nt " << std::setprecision(12) << t1 << "\nslab " << slabOrdinal
+             << "\nranks " << mesh->Comm()->getSize() << "\ncolumns cell x u_x u_y f\n";
+      }
     }
-    else
+    if (rank == 0)
     {
-      auto graphMatrix = TensorLocalSchurComplementBuilder::affineGraphVolumeSchurComplementMatrix(tensorMesh,
-                                                                                                   dofLayout,
-                                                                                                   tensorForm,
-                                                                                                   "f",
-                                                                                                   "w",
-                                                                                                   l2Weight);
-      TVector<double> x(graphMatrix->getDomainMap(), 1);
-      TVector<double> y(graphMatrix->getRangeMap(), 1);
-      auto xHost = x.getLocalViewHost(Tpetra::Access::ReadWrite);
-      for (size_t localOrdinal=0; localOrdinal<graphMatrix->getDomainMap()->getLocalNumElements(); localOrdinal++) xHost(localOrdinal,0) = input[graphMatrix->getDomainMap()->getGlobalElement(localOrdinal)];
-      graphMatrix->apply(x, y);
-      output.assign(trialDofCount, 0.0);
-      auto yHost = y.getLocalViewHost(Tpetra::Access::ReadOnly);
-      for (size_t localOrdinal=0; localOrdinal<graphMatrix->getRangeMap()->getLocalNumElements(); localOrdinal++) output[graphMatrix->getRangeMap()->getGlobalElement(localOrdinal)] = yHost(localOrdinal,0);
+      const bool newFile = !std::ifstream(reductionsPath).good();
+      std::ofstream out(reductionsPath, std::ios::app);
+      if (newFile) out << "slab,t,int_f,int_f_ux_neg,int_f_near,int_f_near_ux_neg,int_f_negative_part,x_near\n";
+      out << std::setprecision(12) << slabOrdinal << "," << t1;
+      for (int i=0; i<5; i++) out << "," << globalSums[i];
+      out << "," << xNear << "\n";
     }
-
-    phase0.logDuration("tensor_graph_schur_micro_apply",
-                       phase0.elapsedSince(applyStart),
-                       {{"backend", phase0TensorGraphSchurBackendName(backend)},
-                        {"micro_x_elements", std::to_string(microXElements)},
-                        {"micro_t_elements", std::to_string(microTElements)},
-                        {"micro_ux_elements", std::to_string(microUxElements)},
-                        {"micro_uy_elements", std::to_string(microUyElements)},
-                        {"micro_component_p", std::to_string(microComponentPolyOrder)},
-                        {"micro_test_enrichment", std::to_string(microTestSpaceEnrichment)},
-                        {"trial_dofs", std::to_string(trialDofCount)},
-                        {"output_norm", phase0DoubleString(phase0VectorL2Norm(output))}});
   }
+
+  //! Collective.  The charge balance of a slab from the flux trace t_n alone: t_n is single-valued on interior sides, so
+  //! its integral over every cell's boundary is its integral over the slab's boundary, which for exact conservation
+  //! vanishes (the Vlasov equation has no source).  Prints one CHARGE_BALANCE line: the outward flux through each part
+  //! of the boundary -- t0 (minus the charge at the slab start), t1 (the charge at its end), x0 (the cathode: minus the
+  //! charge emitted), x1 (the anode: the charge absorbed), and the velocity limits -- and their sum, the conservation
+  //! error, also relative to the charge that came in (at t0 and through the cathode).  A boundary side is classified
+  //! by the coordinate that is constant on it, so this works on box and extruded meshes alike.
+  void reportChargeBalance(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int speciesOrdinal, int slabOrdinal, int refinementStep = -1)
+  {
+    MeshPtr mesh = form->vlasovMesh();
+    const int rank = mesh->Comm()->getRank();
+    const int dim = mesh->getDimension(); // (x, t, u_x, u_z)
+    const bool weightFluxesBySideParity = true;
+    FunctionPtr tn = Function::solution(form->t_n_hat(speciesOrdinal), form->vlasovSolution(), weightFluxesBySideParity);
+    FunctionPtr fField = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+    auto topology = mesh->getTopology();
+    std::vector<double> sums(2 * dim, 0.0); // [2 * direction + upper]
+    std::vector<double> fSums(2 * dim, 0.0); // the field f's integral over each part of the boundary (on the velocity limits:
+                                             // charge against the edge of the velocity domain, where t_n = 0 is imposed)
+    for (GlobalIndexType cellID : mesh->cellIDsInPartition())
+    {
+      CellPtr cell = topology->getCell(cellID);
+      BasisCachePtr basisCache;
+      for (unsigned side=0; side<cell->getSideCount(); side++)
+      {
+        if (!cell->isBoundary(side)) continue;
+        if (basisCache == Teuchos::null) basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+        BasisCachePtr sideCache = basisCache->getSideBasisCache(side);
+        const auto &points = sideCache->getPhysicalCubaturePointsFC(); // (1, P, dim)
+        const int pointCount = points.dimension(1);
+        int direction = 0;
+        double smallestSpread = std::numeric_limits<double>::max();
+        for (int d=0; d<dim; d++)
+        {
+          double lo = points(0,0,d), hi = points(0,0,d);
+          for (int p=1; p<pointCount; p++) { lo = std::min(lo, points(0,p,d)); hi = std::max(hi, points(0,p,d)); }
+          if (hi - lo < smallestSpread) { smallestSpread = hi - lo; direction = d; }
+        }
+        const auto &cellPoints = basisCache->getPhysicalCubaturePointsFC();
+        double center = 0;
+        for (int p=0; p<cellPoints.dimension(1); p++) center += cellPoints(0,p,direction);
+        center /= cellPoints.dimension(1);
+        const int upper = (points(0,0,direction) > center) ? 1 : 0;
+        Camellia::FieldContainer<double> values(1, pointCount);
+        tn->values(values, sideCache);
+        const auto &measures = sideCache->getWeightedMeasures();
+        double sideFlux = 0;
+        for (int p=0; p<pointCount; p++) sideFlux += values(0,p) * measures(0,p);
+        sums[2 * direction + upper] += sideFlux;
+        Camellia::FieldContainer<double> fValues(1, pointCount);
+        fField->values(fValues, sideCache);
+        double sideF = 0;
+        for (int p=0; p<pointCount; p++) sideF += fValues(0,p) * measures(0,p);
+        fSums[2 * direction + upper] += sideF;
+      }
+    }
+    std::vector<double> global(sums.size());
+    for (size_t i=0; i<sums.size(); i++) global[i] = MPIWrapper::sum(mesh->Comm(), sums[i]);
+    std::vector<double> fGlobal(fSums.size());
+    for (size_t i=0; i<fSums.size(); i++) fGlobal[i] = MPIWrapper::sum(mesh->Comm(), fSums[i]);
+    if (rank == 0)
+    {
+      double velocityFlux = 0, residual = 0;
+      for (int d=0; d<dim; d++) residual += global[2*d] + global[2*d+1];
+      for (int d=2; d<dim; d++) velocityFlux += global[2*d] + global[2*d+1];
+      const double chargeIn = -global[2*1+0] - std::min(global[2*0+0], 0.0); // at t0, and through the cathode
+      std::cout << std::setprecision(10);
+      std::cout << ((refinementStep < 0) ? "CHARGE_BALANCE slab=" : "CHARGE_BALANCE_STEP slab=") << slabOrdinal;
+      if (refinementStep >= 0) std::cout << " step=" << refinementStep;
+      std::cout << " t0=" << global[2] << " t1=" << global[3] << " cathode=" << global[0]
+                << " anode=" << global[1] << " velocity_limits=" << velocityFlux << " residual=" << residual
+                << " relative=" << ((chargeIn != 0) ? residual / chargeIn : 0.0);
+      // int f over each velocity limit (u_x min, u_x max, u_z min, u_z max), and over the anode for comparison
+      std::cout << " f_at_ux_min=" << fGlobal[4] << " f_at_ux_max=" << fGlobal[5];
+      if (dim > 3) std::cout << " f_at_uz_min=" << fGlobal[6] << " f_at_uz_max=" << fGlobal[7];
+      std::cout << " f_at_anode=" << fGlobal[1] << std::endl;
+      std::cout << std::setprecision(6);
+    }
+  }
+
 }
 
 class Maxwellian1T2V : public TFunction<double>
@@ -599,6 +593,72 @@ public:
   {
     _uy->setValue(uyValue);
   }
+};
+
+//! Time profile of the emitted density for space-charge-limited emission:
+//!   n(t) = sum_j a_j B_j(s),  s = (t - t0)/(t1 - t0),
+//! with B_j the degree-m Bernstein polynomials on the current time slab [t0, t1] (set per slab with setSlab()).  The
+//! Bernstein basis is nonnegative and sums to one, so a_j >= 0 gives n >= 0; a_0 and a_m are the slab-start and slab-end
+//! values.  Multiplies the inflow Maxwellian, whose amplitude is then 1.  Time is the second coordinate in 1D1T2V.
+class EmissionTimeProfile : public TFunction<double>
+{
+  std::vector<double> _coefficients;
+  double _t0 = 0, _t1 = 1;
+public:
+  explicit EmissionTimeProfile(int degree, double n) : _coefficients(degree + 1, n) {}
+
+  static double bernstein(int m, int j, double s)
+  {
+    double binomial = 1;
+    for (int i=1; i<=j; i++) binomial = binomial * (m - j + i) / i;
+    return binomial * std::pow(s, j) * std::pow(1.0 - s, m - j);
+  }
+
+  void setSlab(double t0, double t1) { _t0 = t0; _t1 = t1; }
+  int degree() const { return int(_coefficients.size()) - 1; }
+  const std::vector<double> &coefficients() const { return _coefficients; }
+  void setCoefficients(const std::vector<double> &a) { _coefficients = a; }
+  double mean() const
+  {
+    double sum = 0;
+    for (double a : _coefficients) sum += a;
+    return sum / _coefficients.size();
+  }
+
+  double valueAtS(double s) const
+  {
+    const int m = degree();
+    double value = 0;
+    for (int j=0; j<=m; j++) value += _coefficients[j] * bernstein(m, j, s);
+    return value;
+  }
+  double value(double t) const { return valueAtS((t - _t0) / (_t1 - _t0)); }
+
+  //! Re-expands the profile for the next slab, of the same width, as the constant equal to its value at the current
+  //! slab's end (the emission at the start of the next slab continues from the end of this one).
+  void advanceToNextSlab(double nextT0, double nextT1)
+  {
+    const double endValue = _coefficients.back();
+    std::fill(_coefficients.begin(), _coefficients.end(), endValue);
+    setSlab(nextT0, nextT1);
+  }
+
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+  {
+    auto & points = basisCache->getPhysicalCubaturePointsFC();
+    const int numCells  = points.dimension(0);
+    const int numPoints = points.dimension(1);
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        values(cellOrdinal,pointOrdinal) = value(points(cellOrdinal,pointOrdinal,1));
+      }
+    }
+  }
+  TFunctionPtr<double> dx() override { return Function::zero(); }
+  TFunctionPtr<double> dy() override { return Function::zero(); }
+  TFunctionPtr<double> dz() override { return Function::zero(); }
 };
 
 class TemporalRamp1D1T : public TFunction<double>
@@ -825,7 +885,12 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const bool usePeriodicBCs, const bool useSerendipity,
                                                               const bool useGradedSpatialMesh,
                                                               const int numUniformRefinements,
-                                                              const bool useSumFactorizedGramAssembly)
+                                                              const double L2WeightGraphMeshScale,
+                                                              const std::vector<double> &L2WeightGraphDirectionScales,
+                                                              const double L2WeightGraphTransportScale,
+                                                              const std::vector<double> &L2WeightGraphAccelerationBounds,
+                                                              const bool separableGraphTestNorm = false,
+                                                              const int numSpatialRefinements = 0)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -833,10 +898,26 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
   if (useGradedSpatialMesh)
   {
     spatialMeshTopo = MeshFactory::geometricGradedIntervalMeshTopology(x0, x0+xWidth, xElements);
+    if (numSpatialRefinements > 0)
+    {
+      // bisect every element of the graded mesh numSpatialRefinements times (same grading ratios, h_min halved each time)
+      std::set<double> vertexSet {x0, x0+xWidth};
+      double right = x0 + xWidth;
+      for (int i=2; i<=xElements; i++) { right = (x0 + right) / 2.0; vertexSet.insert(right); } // as geometricGradedIntervalMeshTopology
+      std::vector<double> vertices(vertexSet.begin(), vertexSet.end());
+      for (int r=0; r<numSpatialRefinements; r++)
+      {
+        std::vector<double> refined;
+        for (int i=0; i+1<(int)vertices.size(); i++) { refined.push_back(vertices[i]); refined.push_back((vertices[i] + vertices[i+1]) / 2.0); }
+        refined.push_back(vertices.back());
+        vertices = refined;
+      }
+      spatialMeshTopo = MeshFactory::intervalMeshTopology(vertices);
+    }
   }
   else
   {
-    spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements, usePeriodicBCs);
+    spatialMeshTopo = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements << std::max(0, numSpatialRefinements), usePeriodicBCs);
   }
   
   std::vector<double> temporalVertices(tElements + 1);
@@ -864,7 +945,10 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  basisFamily,
                                                                  0,
                                                                  gEnforcePositivity,
-                                                                 useSumFactorizedGramAssembly));
+                                                                 L2WeightGraphMeshScale,
+                                                                 L2WeightGraphDirectionScales,
+                                                                 L2WeightGraphTransportScale,
+                                                                 L2WeightGraphAccelerationBounds, separableGraphTestNorm));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -890,6 +974,98 @@ std::vector<std::pair<std::pair<FunctionPtr,FunctionPtr>,int> > bcFunctions(Teuc
   FunctionPtr tn_soln = Function::solution(form->t_n_hat(), form->vlasovSolutionPreviousSubstep(), weightFluxesBySideParity);
   functions.push_back({{tn_leftInflowExact, tn_soln},inflowTag});
   return functions;
+}
+
+// Box-mesh adaptivity settings (set in main from the command line; see --useBoxMesh)
+static bool   s_boxAnisotropicAdaptivity = false; // choose refinement directions per cell
+static double s_boxAnisotropyThreshold   = 0.5;   // see BoxGDA::anisotropicRefinementMasks()
+static bool   s_hpAdaptivity             = false; // h until a minimum width, then p (BoxGDA::hpRefinements())
+static std::vector<double> s_hpMinWidths;         // per direction (x, t, u_x, u_z), computational units
+static int    s_hpMaxH1Order             = 0;
+static bool   s_anisotropicP             = false; // with hp: raise orders only in the chosen directions
+static bool   s_resolvingBoundaryData    = false; // inside refineForBC(): directions there are fixed (tangential), not chosen
+
+//! With --hpAdaptivity: the cells that refinement in the directions chosen by masksForCells could no longer change (at
+//! the minimum width in those directions and the maximum order), so that marking passes over them.  Collective.
+static std::set<GlobalIndexType> hpSaturatedCells(MeshPtr mesh, std::function<std::map<GlobalIndexType,unsigned>(const std::vector<GlobalIndexType> &)> masksForCells)
+{
+  const std::set<GlobalIndexType> activeCells = mesh->getActiveCellIDsGlobal(); // (returned by value: keep one copy)
+  const std::vector<GlobalIndexType> cells(activeCells.begin(), activeCells.end());
+  std::set<GlobalIndexType> saturated = BoxGDA::hpSaturatedCells(mesh, masksForCells(cells), s_hpMinWidths, s_hpMaxH1Order, s_anisotropicP);
+  if ((mesh->Comm()->getRank() == 0) && !saturated.empty())
+  {
+    std::cout << "hp: " << saturated.size() << " of " << cells.size() << " cells at the minimum width and the maximum order; not marked\n";
+  }
+  return saturated;
+}
+
+//! Applies refinement directions chosen for marked cells: as hp-refinements with --hpAdaptivity, else as bisections.
+static void refineInDirections(MeshPtr mesh, const std::map<GlobalIndexType,unsigned> &masks)
+{
+  if (!s_hpAdaptivity)
+  {
+    mesh->hRefine(masks, false);
+    return;
+  }
+  BoxGDA::HPRefinements refinements = BoxGDA::hpRefinements(mesh, masks, s_hpMinWidths, s_hpMaxH1Order, s_anisotropicP);
+  if (mesh->Comm()->getRank() == 0)
+  {
+    // the directions in which each cell is raised: all four for isotropic raises; per direction otherwise
+    std::map<GlobalIndexType,unsigned> raisedDirections;
+    for (const auto &entry : refinements.pIncrements) raisedDirections[entry.first] = 15u;
+    for (const auto &[cellID, increment] : refinements.pIncrementsInDirections)
+    {
+      unsigned directions = 0;
+      for (int k=0; k<int(increment.size()); k++) if (increment[k] > 0) directions |= (1u << k);
+      raisedDirections[cellID] |= directions;
+    }
+    int bisectedOnly = 0, raisedOnly = 0, both = 0, haloRaised = 0;
+    for (const auto &[cellID, mask] : masks)
+    {
+      const bool bisected = (refinements.hMasks.find(cellID) != refinements.hMasks.end());
+      const bool raised = (raisedDirections.find(cellID) != raisedDirections.end());
+      if (bisected && raised) both++;
+      else if (bisected) bisectedOnly++;
+      else if (raised) raisedOnly++;
+    }
+    for (const auto &entry : raisedDirections) if (masks.find(entry.first) == masks.end()) haloRaised++;
+    const int unchanged = int(masks.size()) - bisectedOnly - raisedOnly - both;
+    std::cout << "hp: of " << masks.size() << " marked cells, " << bisectedOnly << " bisected, " << raisedOnly << " raised in order, "
+              << both << " bisected in some directions and raised in others, " << unchanged
+              << " at the minimum width and the maximum order; " << haloRaised << " other cells raised to keep neighbors' orders within one\n";
+    // For the marked cells raised in order (not bisected): the directions the indicator chose for them (each direction
+    // whose indicator is at least --boxAnisotropyThreshold times the largest), and, with --anisotropicP, the directions
+    // actually raised (the chosen ones below the maximum order).
+    if (((raisedOnly + both) > 0) && !s_resolvingBoundaryData)
+    {
+      std::vector<int> cellsWantingCount(5, 0), cellsWantingDirection(4, 0), cellsRaisedCount(5, 0), cellsRaisedDirection(4, 0);
+      for (const auto &[cellID, directions] : raisedDirections)
+      {
+        auto maskEntry = masks.find(cellID);
+        if (maskEntry == masks.end()) continue;
+        const unsigned mask = maskEntry->second & ~(refinements.hMasks.count(cellID) ? refinements.hMasks.at(cellID) : 0u);
+        int wanted = 0, raised = 0;
+        for (int k=0; k<4; k++)
+        {
+          if (mask & (1u << k)) { wanted++; cellsWantingDirection[k]++; }
+          if (directions & (1u << k)) { raised++; cellsRaisedDirection[k]++; }
+        }
+        cellsWantingCount[std::min(wanted, 4)]++;
+        cellsRaisedCount[std::min(raised, 4)]++;
+      }
+      // (cells raised; cells wanting one, two, three, four directions; cells wanting x, t, u_x, u_z)
+      std::cout << "hp-p-directions: raised=" << (raisedOnly + both) << " one=" << cellsWantingCount[1] << " two=" << cellsWantingCount[2]
+                << " three=" << cellsWantingCount[3] << " four=" << cellsWantingCount[4] << " x=" << cellsWantingDirection[0]
+                << " t=" << cellsWantingDirection[1] << " u_x=" << cellsWantingDirection[2] << " u_z=" << cellsWantingDirection[3] << "\n";
+      if (s_anisotropicP)
+      {
+        std::cout << "hp-p-raised-directions: raised=" << (raisedOnly + both) << " one=" << cellsRaisedCount[1] << " two=" << cellsRaisedCount[2]
+                  << " three=" << cellsRaisedCount[3] << " four=" << cellsRaisedCount[4] << " x=" << cellsRaisedDirection[0]
+                  << " t=" << cellsRaisedDirection[1] << " u_x=" << cellsRaisedDirection[2] << " u_z=" << cellsRaisedDirection[3] << "\n";
+      }
+    }
+  }
+  BoxGDA::hpRefine(mesh, refinements, false);
 }
 
 void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair<FunctionPtr,FunctionPtr>,int> > &bcFunctionsToResolve,
@@ -922,6 +1098,20 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
     double refinementThresholdForInitialData = 0.80;
     auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
     refStrategy->setMaxP(H1Order);
+    if (s_boxAnisotropicAdaptivity)
+    {
+      // To resolve boundary data, bisect only in the directions tangential to the boundary side that carries it.
+      refStrategy->setCellRefiner([mesh, tagName, bcTag](std::vector<GlobalIndexType> &cellIDs) {
+        refineInDirections(mesh, BoxGDA::masksTangentialToTaggedSides(mesh, tagName, bcTag, cellIDs));
+        return static_cast<int>(cellIDs.size());
+      });
+      if (s_hpAdaptivity)
+      {
+        refStrategy->setIneligibleCells([mesh, tagName, bcTag]() {
+          return hpSaturatedCells(mesh, [&](const std::vector<GlobalIndexType> &cells) { return BoxGDA::masksTangentialToTaggedSides(mesh, tagName, bcTag, cells); });
+        });
+      }
+    }
     
     double bc_norm = (bcFxnExact * bcRestriction)->l2norm(mesh, quadratureEnrichment);
     double relErr = bc_err->l2norm(mesh, quadratureEnrichment) / bc_norm;
@@ -936,6 +1126,7 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
     int numBCRefinements = 0;
     int numElements = mesh->numActiveElements();
     
+    s_resolvingBoundaryData = true;
     while ((relErr > bcResolutionTolerance) && (numElements < maxElements))
     {
       errorIndicator->measureError();
@@ -961,6 +1152,7 @@ void refineForBC(SolutionPtr soln, VarPtr bcVar, std::vector<std::pair<std::pair
       
 //        form->vlasovMesh()->getTopology()->baseMeshTopology()->printAllEntities();
     }
+    s_resolvingBoundaryData = false;
     errorIndicator->measureError();
 //    bcViz->exportSolution(soln, {cellIDFunction, bcFxnExact, bcFxnSoln * bcRestriction, bcFxnExact * bcRestriction, bc_err * bc_err, bcErrIndicator * bcRestriction}, {"cellID", "bcFxnExact (volume)", "bcFxnSoln", "bcFxnExact", "bcErr^2", "bcErrIndicator"}, numBCRefinements);
     if (rank==0)
@@ -1015,6 +1207,25 @@ int main(int argc, char *argv[])
     
     double L2WeightGraph    = 1e6; // this is much larger than our usual 1.0 factor, but it yields better conditioning for this problem, better fixed-point iteration convergence, and reduced non-physical f negativity.  It appears 1e6 is preferable in each of these regards to 1e4, the value we used for relativistic cold diode, though more careful testing might be warranted.
     cmdp.setOption("L2WeightGraph", &L2WeightGraph, "Weight for the L^2 part of the graph norm");
+    double L2WeightGraphMeshScale = 0; // the transport part of the graph norm scales like (|beta|/h)^2, so on the graded spatial mesh a fixed weight that controls the large elements under-weights the small ones near the cathode (production-scl-graph4e2-x16 blew up there).
+    cmdp.setOption("L2WeightGraphMeshScale", &L2WeightGraphMeshScale,
+                   "If positive, the weight for the L^2 part of the graph norm on element K is max(L2WeightGraph, L2WeightGraphMeshScale / h_x(K)^2)");
+    std::string L2WeightGraphDirectionScalesString = ""; // tensor-product alternative to L2WeightGraphMeshScale: a product of one-dimensional factors adds no tensor rank (matters for low-rank tensor solvers)
+    cmdp.setOption("L2WeightGraphDirectionScales", &L2WeightGraphDirectionScalesString,
+                   "Comma-separated scales s_d for the coordinates (x, t, u_x, u_y); if given, the weight for the L^2 part of the graph norm on element K is "
+                   "L2WeightGraph * prod_d (1 + s_d / (L2WeightGraph h_d(K)^2)).  Omitted trailing scales are zero.  Exclusive with L2WeightGraphMeshScale.");
+    double L2WeightGraphTransportScale = 0; // per-element transport scale, accounting for the element's velocity (slow velocity cells near the cathode need far less weight than 1/h_x^2) and for h_t
+    cmdp.setOption("L2WeightGraphTransportScale", &L2WeightGraphTransportScale,
+                   "If positive, the weight for the L^2 part of the graph norm on element K is "
+                   "L2WeightGraph + C [ (v_x,max(K) / h_x)^2 + (1 / h_t)^2 + sum_u (a_u,max / h_u)^2 ], with v = u / gamma bounded over the element's "
+                   "velocity box and a_u,max from L2WeightGraphAccelerationBounds.  Exclusive with the other L2WeightGraph scalings.");
+    std::string L2WeightGraphAccelerationBoundsString = "";
+    bool separableGraphTestNorm = false;
+    cmdp.setOption("separableGraphTestNorm", "fullGraphTestNorm", &separableGraphTestNorm,
+                   "Direction-separable graph norm: sum_d s_d(K)^2 |dw/dz_d|^2 (s = v_x,max(K), 1, acceleration bounds) instead of "
+                   "|beta . grad w|^2 (no cross terms; exactly invertible element Grams).  Needs --L2WeightGraphAccelerationBounds.");
+    cmdp.setOption("L2WeightGraphAccelerationBounds", &L2WeightGraphAccelerationBoundsString,
+                   "Comma-separated bounds on |a| in the velocity directions (u_x, u_y), for L2WeightGraphTransportScale; omitted ones are zero.");
     
     // proper velocity domain, specified as fraction of speed of light:
     double beta0                = -0.995; // negative: electrons turned around by the magnetic field can return to the cathode
@@ -1026,15 +1237,12 @@ int main(int argc, char *argv[])
     bool enforceQuasiNeutrality = false;
     bool useL2Trace             = true;
     bool useSerendipityBasis    = false;
-    bool useSumFactorizedGramAssembly = false;
-    
+
     cmdp.setOption("ratio", &minMagneticFluxRatio, "magnetic flux ratio; values above 1 are insulated");
-    
+
     cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
-    cmdp.setOption("useSumFactorizedGramAssembly", "useStandardGramAssembly", &useSumFactorizedGramAssembly,
-                   "Assemble the graph-norm Gram matrix with sum factorization (requires --useFullTensorBasis).");
-    
+
     int delta_k = 2;
     int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
 
@@ -1050,6 +1258,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("tElements", &tElements);
     cmdp.setOption("vElements", &vElements);
     cmdp.setOption("numUniformRefinements", &numUniformRefinements, "number of uniform refinements applied to the base mesh");
+    int numSpatialRefinements = 0;
+    cmdp.setOption("numSpatialRefinements", &numSpatialRefinements,
+                   "bisect every spatial element of the base mesh this many times (x only; before numUniformRefinements)");
 
     bool gradedVelocityMesh = false;
     double velocityCoreWidthFactor = 1.0, velocityCoreHalfWidthFactor = 3.0, velocityGrowthRatio = 2.0;
@@ -1095,8 +1306,48 @@ int main(int argc, char *argv[])
     double relErrorTargetFinalSlab = -1.0; // defaults to same as relErrorTarget
 
     cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
+    // Box phase-space mesh (BoxMeshTopology): supports anisotropic refinement.  See notes/anisotropic-refinement-design.md.
+    bool useBoxMesh = false;
+    int boxVelocityRefinements = 0;       // rounds of u_x-only bisection applied to the first slab
+    double boxVelocityBandCenter = 0.0;   // cells whose u_x interval meets [center - halfWidth, center + halfWidth] are bisected;
+    double boxVelocityBandHalfWidth = 0.0; // the half-width halves each round.  A non-positive half-width selects every cell.
+    bool timeMonitorSummary = false;
+    cmdp.setOption("timeMonitorSummary", "noTimeMonitorSummary", &timeMonitorSummary, "print the Teuchos::TimeMonitor summary (all TEUCHOS_FUNC_TIME_MONITOR timers) at the end of the run");
+    cmdp.setOption("useBoxMesh", "useExtrudedMesh", &useBoxMesh, "phase-space mesh on a BoxMeshTopology (anisotropic refinement; no unrefinement)");
+    bool boxAnisotropicAdaptivity = true;
+    double boxAnisotropyThreshold = 0.5;
+    cmdp.setOption("boxAnisotropicAdaptivity", "boxIsotropicAdaptivity", &boxAnisotropicAdaptivity,
+                   "with --useBoxMesh --useAdaptivity: bisect each marked cell only in the directions in which f is least resolved (and, when resolving boundary data, only tangentially to the boundary)");
+    cmdp.setOption("boxAnisotropyThreshold", &boxAnisotropyThreshold,
+                   "with --boxAnisotropicAdaptivity: bisect in direction k if its indicator is at least this fraction of the largest direction's (0: all directions; near 1: only the worst)");
+    bool anisotropicP = true;
+    cmdp.setOption("anisotropicP", "isotropicP", &anisotropicP,
+                   "with --hpAdaptivity: raise a cell's order only in the directions chosen for it (where it may not be bisected), "
+                   "rather than in all four");
+    bool replayBCRefinement = true;
+    cmdp.setOption("replayBCRefinement", "measureBCRefinement", &replayBCRefinement,
+                   "with --useBoxMesh --useAdaptivity: start each later slab from slab 0's boundary-data mesh (cells and orders), "
+                   "applied before matching to the previous slab; the per-slab check of the boundary data still runs");
+    bool hpAdaptivity = false;
+    int hpInitialH1Order = 1;
+    std::string hpMinWidthsString = "0,0,0,0";
+    cmdp.setOption("hpAdaptivity", "hAdaptivity", &hpAdaptivity,
+                   "with --useBoxMesh --useAdaptivity: start the phase-space mesh at --hpInitialH1Order; bisect a marked cell in its chosen directions "
+                   "while half its width there is at least --hpMinWidths, else raise its order (up to --p); neighbors' orders differ by at most one");
+    cmdp.setOption("hpInitialH1Order", &hpInitialH1Order, "with --hpAdaptivity: the phase-space mesh's starting H^1 order (1: f piecewise constant)");
+    cmdp.setOption("hpMinWidths", &hpMinWidthsString,
+                   "with --hpAdaptivity: minimum cell widths in x, t, u_x, u_z (computational units, comma-separated; 0: no limit)");
+    cmdp.setOption("boxVelocityRefinements", &boxVelocityRefinements, "with --useBoxMesh: rounds of u_x-only bisection of the first slab's cells within a band of u_x");
+    cmdp.setOption("boxVelocityBandCenter", &boxVelocityBandCenter);
+    cmdp.setOption("boxVelocityBandHalfWidth", &boxVelocityBandHalfWidth);
     cmdp.setOption("maxRefinements", &maxRefinements);
     cmdp.setOption("maxRefinementsFinalSlab", &maxRefinementsFinalSlab);
+    int maxRefinementsFirstSlab = -1; // defaults to maxRefinements
+    cmdp.setOption("maxRefinementsFirstSlab", &maxRefinementsFirstSlab,
+                   "adaptive runs: refinement steps on the first slab (default: maxRefinements).  Later slabs start from a mesh matched to the previous slab at the interface, and usually need fewer.");
+    long long maxVlasovDofs = -1; // adaptive runs: no limit
+    cmdp.setOption("maxVlasovDofs", &maxVlasovDofs,
+                   "adaptive runs: a slab stops refining once its phase-space mesh has at least this many dofs (the solve on that mesh is its last); -1 for no limit");
     cmdp.setOption("relErrorTarget", &relErrorTarget);
     cmdp.setOption("relErrorTargetFinalSlab", &relErrorTargetFinalSlab);
     cmdp.setOption("refinementThreshold", &refinementThreshold);
@@ -1164,30 +1415,29 @@ int main(int argc, char *argv[])
     double initialTimeDivision = 0;
     cmdp.setOption("initialTimeDivision", &initialTimeDivision);
 
-    bool phase0Instrumentation = false;
-    std::string phase0TimingFile = "";
-    std::string phase0TensorGraphSchurBackend = "off";
-    std::string phase8MomentBackend = "tensor_native";
-    double phase8MomentCompareAbsTol = 1e-10;
-    double phase8MomentCompareRelTol = 1e-8;
-    double phase8MomentCompareRelFloor = 1e-14;
-    bool phase8MomentCompareStrict = false;
-    int phase8MomentVelocityQuadratureDegree = -1;
-    int phase0TensorGraphSchurXElements = 2;
-    int phase0TensorGraphSchurTElements = 1;
-    int phase0TensorGraphSchurUxElements = 1;
-    int phase0TensorGraphSchurUyElements = 2;
-    int phase0TensorGraphSchurComponentP = 2;
-    int phase0TensorGraphSchurTestEnrichment = 1;
-    cmdp.setOption("phase0Instrumentation", "noPhase0Instrumentation", &phase0Instrumentation,
-                   "Emit grep-friendly Phase 0 timing lines for Planar MITL baseline/performance runs.");
+    bool timingLogEnabled = false;
+    std::string timingFile = "";
+    int momentVelocityQuadratureDegree = -1;
+    cmdp.setOption("timingLog", "noTimingLog", &timingLogEnabled,
+                   "Emit grep-friendly timing lines (TIMING event=...) for setup, assembly, solve, and moment phases.");
     std::string emissionModel = "spaceChargeLimited";
     cmdp.setOption("emissionModel", &emissionModel,
                    "cathode emission: spaceChargeLimited (adjust the emitted density within each slab's fixed-point iteration so "
                    "that E(0) = 0 at the slab's final time), taper (fixed per-slab injection with the E(0) taper), or constant");
+    int sclEmissionDegree = -1;
+    cmdp.setOption("sclEmissionDegree", &sclEmissionDegree,
+                   "spaceChargeLimited: -1 (default) holds the emitted density constant within each slab and drives E(0) to zero "
+                   "at the slab's final time; m >= 0 lets the emitted density be a nonnegative degree-m polynomial in time within "
+                   "each slab (Bernstein coefficients a_j >= 0) and imposes the complementarity condition a_j >= 0, g_j <= 0, "
+                   "a_j g_j = 0 on the Bernstein-weighted means g_j of E(0,t)/E0 (with every a_j > 0, the first m+1 Legendre "
+                   "moments of E(0,t) vanish; m = 0: the slab-mean of E(0)).");
+    int sclEmissionQuadraturePoints = 6;
+    cmdp.setOption("sclEmissionQuadraturePoints", &sclEmissionQuadraturePoints,
+                   "spaceChargeLimited with sclEmissionDegree >= 0: Gauss-Legendre points in time for the weighted means of E(0,t)");
     double sclEmissionTolerance = 1e-3;
     cmdp.setOption("sclEmissionTolerance", &sclEmissionTolerance,
-                   "spaceChargeLimited: converged when |E(0)| at the slab's final time is below this fraction of |E0|");
+                   "spaceChargeLimited: converged when |E(0)| at the slab's final time (or, for sclEmissionDegree >= 0, each "
+                   "weighted mean of E(0,t)/E0 off its bound) is below this fraction of |E0|");
     bool taperInjection = true;
     double taperUpperThreshold = 0.50, taperLowerThreshold = 0.10;
     cmdp.setOption("taperInjection", "noTaperInjection", &taperInjection,
@@ -1204,86 +1454,73 @@ int main(int argc, char *argv[])
     int densityDiagnosticPointsPerDim = 16;
     cmdp.setOption("densityDiagnostic", "noDensityDiagnostic", &densityDiagnostic,
                    "At the end of each time slab, write the electron density (exact velocity moment of f), Jx, and E_x on a dense grid of points per (x,t) cell to <outputDir>/density_slab<N>.csv; plot with plot_density.py.");
+    bool phaseSpaceDiagnostic = false;
+    std::string phaseSpaceDiagnosticSlabsString = "";
+    int phaseSpaceDiagnosticPointsPerDim = -1;
+    double phaseSpaceDiagnosticXNear = 0.0625;
+    cmdp.setOption("phaseSpaceDiagnostic", "noPhaseSpaceDiagnostic", &phaseSpaceDiagnostic,
+                   "At the end of each time slab, append integrals of f at the slab end (total, u_x < 0, near the cathode, negative "
+                   "part) to <outputDir>/phase_reductions.csv, and the same at the slab start to phase_reductions_start.csv; for the slabs in phaseSpaceDiagnosticSlabs, also write samples of f "
+                   "on every phase-space cell to <outputDir>/phase_slab<N>_part<rank>.npy (plot with plot_phase_space.py).");
+    cmdp.setOption("phaseSpaceDiagnosticSlabs", &phaseSpaceDiagnosticSlabsString,
+                   "Comma-separated slab ordinals at whose end f is sampled for phaseSpaceDiagnostic (e.g. 0,1,2,5,10,19); 'all' for every slab.");
+    cmdp.setOption("phaseSpaceDiagnosticPointsPerDim", &phaseSpaceDiagnosticPointsPerDim,
+                   "Sample points per dimension (x, u_x, u_y) on each phase-space cell for phaseSpaceDiagnostic; -1 (default): degree + 1, "
+                   "the fewest that determine the polynomial.");
+    cmdp.setOption("phaseSpaceDiagnosticXNear", &phaseSpaceDiagnosticXNear,
+                   "phaseSpaceDiagnostic: the near-cathode integrals are over phase-space cells with center x below this.");
     cmdp.setOption("densityDiagnosticPointsPerDim", &densityDiagnosticPointsPerDim,
                    "Points per dimension (x and t, including cell boundaries) on each configuration cell for densityDiagnostic.");
-    cmdp.setOption("phase0TimingFile", &phase0TimingFile,
-                   "Optional rank-0 file for Phase 0 timing lines; stdout is always used when instrumentation is enabled.");
-    cmdp.setOption("phase0TensorGraphSchurBackend", &phase0TensorGraphSchurBackend,
-                   "Optional Phase 0 tensor-native graph-norm Schur micro-apply backend: off, assembled_crs, or matrix_free.");
-    cmdp.setOption("phase8MomentBackend", &phase8MomentBackend,
-                   "Compatibility-only Phase 8 Planar MITL moment backend label.  Planar MITL now unconditionally uses tensor-native moment reductions for production Maxwell current sources.");
-    cmdp.setOption("phase8MomentCompareAbsTol", &phase8MomentCompareAbsTol,
-                   "Absolute tolerance for Phase 8 tensor-vs-legacy rhoRHS/Jx/Jz moment comparisons.");
-    cmdp.setOption("phase8MomentCompareRelTol", &phase8MomentCompareRelTol,
-                   "Relative tolerance for Phase 8 tensor-vs-legacy rhoRHS/Jx/Jz moment comparisons.");
-    cmdp.setOption("phase8MomentCompareRelFloor", &phase8MomentCompareRelFloor,
-                   "Positive denominator floor for Phase 8 tensor-vs-legacy relative moment comparisons.");
-    cmdp.setOption("phase8MomentCompareStrict", "noPhase8MomentCompareStrict", &phase8MomentCompareStrict,
-                   "When enabled, abort if Phase 8 tensor-vs-legacy moment differences exceed tolerances.");
-    cmdp.setOption("phase8MomentVelocityQuadratureDegree", &phase8MomentVelocityQuadratureDegree,
-                   "Velocity quadrature degree for Phase 8 sampled Vlasov HostMatrix bridge; negative uses the max local phase-space cell cubature degree.");
-    cmdp.setOption("phase0TensorGraphSchurXElements",  &phase0TensorGraphSchurXElements,  "Number of x cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurTElements",  &phase0TensorGraphSchurTElements,  "Number of t cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurUxElements", &phase0TensorGraphSchurUxElements, "Number of ux cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurUyElements", &phase0TensorGraphSchurUyElements, "Number of uy cells in the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurComponentP", &phase0TensorGraphSchurComponentP, "Per-component polynomial order for the optional Phase 0 tensor graph-norm Schur microbenchmark.");
-    cmdp.setOption("phase0TensorGraphSchurTestEnrichment", &phase0TensorGraphSchurTestEnrichment, "Test-space enrichment for the optional Phase 0 tensor graph-norm Schur microbenchmark.");
+    cmdp.setOption("timingFile", &timingFile,
+                   "Optional rank-0 file for the timing lines; stdout is always used when the timing log is enabled.");
+    cmdp.setOption("momentVelocityQuadratureDegree", &momentVelocityQuadratureDegree,
+                   "Velocity quadrature degree for tensor-native moment sampling; negative uses each phase-space cell's own cubature degree (lowered in velocity directions of lower order).");
     
     if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
     {
       return -1;
     }
-    if (!phase0TensorGraphSchurBackendIsValid(phase0TensorGraphSchurBackend))
+    auto parseCommaSeparatedDoubles = [](const std::string &listString)
     {
-      if (rank == 0)
+      std::vector<double> list;
+      std::istringstream listStream(listString);
+      std::string entry;
+      while (std::getline(listStream, entry, ','))
       {
-        std::cout << "Unsupported phase0TensorGraphSchurBackend='" << phase0TensorGraphSchurBackend
-                  << "'; expected off, assembled_crs, or matrix_free.\n";
+        list.push_back(std::stod(entry));
       }
-      return -1;
+      return list;
+    };
+    const std::vector<double> L2WeightGraphDirectionScales    = parseCommaSeparatedDoubles(L2WeightGraphDirectionScalesString);
+    const std::vector<double> L2WeightGraphAccelerationBounds = parseCommaSeparatedDoubles(L2WeightGraphAccelerationBoundsString);
+    const bool phaseSpaceDiagnosticAllSlabs = (phaseSpaceDiagnosticSlabsString == "all");
+    std::set<int> phaseSpaceDiagnosticSlabs;
+    if (!phaseSpaceDiagnosticAllSlabs)
+    {
+      for (double slab : parseCommaSeparatedDoubles(phaseSpaceDiagnosticSlabsString)) phaseSpaceDiagnosticSlabs.insert(int(slab));
     }
-    if (!phase8MomentBackendIsValid(phase8MomentBackend))
+    if (momentVelocityQuadratureDegree == 0)
     {
       if (rank == 0)
       {
-        std::cout << "Unsupported phase8MomentBackend='" << phase8MomentBackend
-                  << "'; expected legacy, tensor_native, dry_run_compare, or compare.\n";
-      }
-      return -1;
-    }
-    if ((phase8MomentCompareAbsTol < 0.0) || (phase8MomentCompareRelTol < 0.0) ||
-        (phase8MomentCompareRelFloor <= 0.0) || (phase8MomentVelocityQuadratureDegree == 0))
-    {
-      if (rank == 0)
-      {
-        std::cout << "Phase 8 moment comparison requires nonnegative tolerances, a positive relative floor, and a nonzero velocity quadrature degree (negative selects p).\n";
-      }
-      return -1;
-    }
-    if ((phase0TensorGraphSchurXElements <= 0) || (phase0TensorGraphSchurTElements <= 0) ||
-        (phase0TensorGraphSchurUxElements <= 0) || (phase0TensorGraphSchurUyElements <= 0) ||
-        (phase0TensorGraphSchurComponentP < 0) || (phase0TensorGraphSchurTestEnrichment < 0))
-    {
-      if (rank == 0)
-      {
-        std::cout << "Phase 0 tensor graph-norm Schur microbenchmark sizes require positive element counts and nonnegative p/enrichment.\n";
+        std::cout << "momentVelocityQuadratureDegree must be nonzero (negative selects the phase-space cubature degree).\n";
       }
       return -1;
     }
 
-    Phase0Instrumentation phase0(phase0Instrumentation, rank, phase0TimingFile);
-    const auto phase0TotalStart = phase0.now();
-    phase0.logDuration("start", 0.0,
+    TimingLog timing(timingLogEnabled, rank, timingFile);
+    const auto timingTotalStart = timing.now();
+    timing.logDuration("start", 0.0,
                        {{"mpi_ranks", std::to_string(mpiSession.getNProc())},
                         {"x_elements", std::to_string(xElements)},
                         {"v_elements", gradedVelocityMesh ? std::string("graded") : std::to_string(vElements)},
                         {"t_elements", std::to_string(tElements)},
                         {"uniform_refinements", std::to_string(numUniformRefinements)},
+                        {"spatial_refinements", std::to_string(numSpatialRefinements)},
                         {"p", std::to_string(H1Order)},
                         {"dp", std::to_string(delta_k)},
                         {"num_time_slabs", std::to_string(numTimeSlabs)},
-                        {"serendipity", useSerendipityBasis ? "1" : "0"},
-                         {"moment_backend", phase8MomentBackend}});
+                        {"serendipity", useSerendipityBasis ? "1" : "0"}});
     
     using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
     const TestIP testIP = useL2TestSpace ? TestIP::L2TestSpaceInnerProduct : TestIP::GraphTestSpaceInnerProduct;
@@ -1300,8 +1537,6 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
       std::cout << "Proximal Galerkin positivity enforcement: " << (gEnforcePositivity ? "enabled" : "disabled") << "\n";
-      std::cout << "Phase 0 tensor graph-norm Schur backend: " << phase0TensorGraphSchurBackendName(phase0TensorGraphSchurBackend)
-                << " (micro-apply selection only; legacy production solve remains active)\n";
       if (gEnforcePositivity)
       {
         std::cout << "  proximalGalerkinAlpha0 = " << gProximalGalerkinAlpha0 << "\n";
@@ -1422,55 +1657,110 @@ int main(int argc, char *argv[])
     
     const bool useGeometricGradedSpatialMesh = true;
     
-    auto phase0FormulationSetupStart = phase0.now();
+    auto timingFormulationSetupStart = timing.now();
+    VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(useBoxMesh);
+    s_boxAnisotropicAdaptivity = useBoxMesh && boxAnisotropicAdaptivity;
+    s_boxAnisotropyThreshold = boxAnisotropyThreshold;
+    s_hpAdaptivity = useBoxMesh && useAdaptivity && hpAdaptivity;
+    TEUCHOS_TEST_FOR_EXCEPTION(hpAdaptivity && !s_hpAdaptivity, std::invalid_argument, "--hpAdaptivity requires --useBoxMesh --useAdaptivity");
+    if (s_hpAdaptivity)
+    {
+      s_hpMinWidths.clear();
+      std::istringstream widthStream(hpMinWidthsString);
+      std::string entry;
+      while (std::getline(widthStream, entry, ',')) s_hpMinWidths.push_back(std::stod(entry));
+      TEUCHOS_TEST_FOR_EXCEPTION(s_hpMinWidths.size() != 4, std::invalid_argument, "--hpMinWidths takes four widths: x, t, u_x, u_z");
+      TEUCHOS_TEST_FOR_EXCEPTION((hpInitialH1Order < 1) || (hpInitialH1Order > H1Order), std::invalid_argument, "--hpInitialH1Order must be in [1, p]");
+      s_hpMaxH1Order = H1Order;
+      s_anisotropicP = anisotropicP;
+      if (rank == 0)
+      {
+        std::cout << "hp-adaptivity" << (anisotropicP ? " (orders raised per direction)" : " (orders raised in all directions)")
+                  << ": phase-space mesh starts at H1 order " << hpInitialH1Order << ", maximum " << H1Order
+                  << "; minimum widths (x, t, u_x, u_z) = (" << s_hpMinWidths[0] << ", " << s_hpMinWidths[1] << ", "
+                  << s_hpMinWidths[2] << ", " << s_hpMinWidths[3] << ")\n";
+      }
+    }
+    VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(s_hpAdaptivity ? hpInitialH1Order : 0);
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
-                                     useSumFactorizedGramAssembly);
+                                     L2WeightGraphMeshScale, L2WeightGraphDirectionScales,
+                                     L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds, separableGraphTestNorm,
+                                     numSpatialRefinements);
+    if (useBoxMesh && (boxVelocityRefinements > 0))
+    {
+      // anisotropic refinement of the first slab: bisect in u_x only, within a band of u_x that narrows each round.
+      // (Later slabs are refined to match at the slab interface.)  The configuration-space mesh is unaffected.
+      auto boxTopology = dynamic_cast<BoxMeshTopology*>(form->vlasovMesh()->getTopology().get());
+      TEUCHOS_TEST_FOR_EXCEPTION(boxTopology == NULL, std::invalid_argument, "expected a BoxMeshTopology");
+      const int uxDirection = 2; // (x, t, u_x, u_z)
+      double halfWidth = boxVelocityBandHalfWidth;
+      for (int round=0; round<boxVelocityRefinements; round++, halfWidth /= 2)
+      {
+        std::map<GlobalIndexType,unsigned> masks;
+        for (GlobalIndexType cellID : form->vlasovMesh()->getActiveCellIDsGlobal())
+        {
+          const auto extents = boxTopology->cellExtents(cellID);
+          const bool inBand = (boxVelocityBandHalfWidth <= 0)
+                            || ((extents[uxDirection].second > boxVelocityBandCenter - halfWidth) && (extents[uxDirection].first < boxVelocityBandCenter + halfWidth));
+          if (inBand) masks[cellID] = 1u << uxDirection;
+        }
+        form->vlasovMesh()->hRefine(masks, false);
+      }
+      form->vlasovMesh()->enforceOneIrregularity(false);
+      form->vlasovMesh()->repartitionAndRebuild();
+      if (rank == 0)
+      {
+        std::cout << "Box mesh: after " << boxVelocityRefinements << " round(s) of u_x-only refinement, "
+                  << form->vlasovMesh()->numActiveElements() << " phase-space cells; "
+                  << form->configurationSpaceMesh()->numActiveElements() << " configuration-space cells.\n";
+      }
+    }
     form->setEnforceQuasiNeutrality(enforceQuasiNeutrality);
-    phase0.logDuration("formulation_setup", phase0.elapsedSince(phase0FormulationSetupStart), phase0MeshStats(form));
+    timing.logDuration("formulation_setup", timing.elapsedSince(timingFormulationSetupStart), timingMeshStats(form));
 
     // Per-substep Vlasov solve breakdown.  G/B/K come from the BF's optimal-test timing callback (rank-local; summed over
     // ranks below to match the Solution timers): G = Gram matrix assembly, B = enriched stiffness assembly,
     // K = per-element Cholesky solve of G and formation of B^T G^{-1} B.
-    double phase0TimeG = 0, phase0TimeB = 0, phase0TimeK = 0;
-    int phase0OptimalTestElementCount = 0;
-    std::function<void(int, double, double, double, double, ElementTypePtr)> phase0OptimalTestTimingCallback =
+    double timingTimeG = 0, timingTimeB = 0, timingTimeK = 0;
+    int timingOptimalTestElementCount = 0;
+    std::function<void(int, double, double, double, double, ElementTypePtr)> timingOptimalTestTimingCallback =
       [&](int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType) {
-        phase0OptimalTestElementCount += numElements;
-        phase0TimeG += timeG;
-        phase0TimeB += timeB;
-        phase0TimeK += timeT + timeK;
+        timingOptimalTestElementCount += numElements;
+        timingTimeG += timeG;
+        timingTimeB += timeB;
+        timingTimeK += timeT + timeK;
       };
-    if (phase0.enabled())
+    if (timing.enabled())
     {
-      form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback);
+      form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback);
       form->setSubstepSolveProfileCallback([&](const VlasovSpaceTimeFormulation::SubstepSolveProfile &profile) {
         auto comm = MPIWrapper::TeuchosCommWorld();
-        Phase0Fields fields;
+        TimingFields fields;
         fields.push_back({"substep",               std::to_string(profile.substepOrdinal)});
         fields.push_back({"solver",                profile.usedGeometricMultigrid ? "gmg" : "direct"});
         fields.push_back({"iterations",            std::to_string(profile.iterationCount)});
         fields.push_back({"global_dofs",           std::to_string(profile.numGlobalDofs)});
-        fields.push_back({"optimal_test_elements", std::to_string(MPIWrapper::sum(comm, phase0OptimalTestElementCount))});
-        fields.push_back({"sum_G",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeG))});
-        fields.push_back({"sum_B",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeB))});
-        fields.push_back({"sum_K",                 phase0DoubleString(MPIWrapper::sum(comm, phase0TimeK))});
-        fields.push_back({"sum_local_stiffness",   phase0DoubleString(profile.totalTimeLocalStiffness)});
-        fields.push_back({"sum_global_assembly",   phase0DoubleString(profile.totalTimeGlobalAssembly)});
-        fields.push_back({"sum_bc_imposition",     phase0DoubleString(profile.totalTimeBCImposition)});
-        fields.push_back({"sum_linear_solve",      phase0DoubleString(profile.totalTimeSolve)});
-        fields.push_back({"gmg_construction",      phase0DoubleString(profile.wallTimeGMGConstruction)});
-        fields.push_back({"moment_update",         phase0DoubleString(profile.wallTimeMomentUpdate)});
-        fields.push_back({"configuration_solve",   phase0DoubleString(profile.wallTimeConfigurationSolve)});
-        fields.push_back({"configuration_update",  phase0DoubleString(profile.wallTimeConfigurationUpdate)});
+        fields.push_back({"optimal_test_elements", std::to_string(MPIWrapper::sum(comm, timingOptimalTestElementCount))});
+        fields.push_back({"sum_G",                 timingString(MPIWrapper::sum(comm, timingTimeG))});
+        fields.push_back({"sum_B",                 timingString(MPIWrapper::sum(comm, timingTimeB))});
+        fields.push_back({"sum_K",                 timingString(MPIWrapper::sum(comm, timingTimeK))});
+        fields.push_back({"sum_local_stiffness",   timingString(profile.totalTimeLocalStiffness)});
+        fields.push_back({"sum_global_assembly",   timingString(profile.totalTimeGlobalAssembly)});
+        fields.push_back({"sum_bc_imposition",     timingString(profile.totalTimeBCImposition)});
+        fields.push_back({"sum_linear_solve",      timingString(profile.totalTimeSolve)});
+        fields.push_back({"gmg_construction",      timingString(profile.wallTimeGMGConstruction)});
+        fields.push_back({"moment_update",         timingString(profile.wallTimeMomentUpdate)});
+        fields.push_back({"configuration_solve",   timingString(profile.wallTimeConfigurationSolve)});
+        fields.push_back({"configuration_update",  timingString(profile.wallTimeConfigurationUpdate)});
         for (const auto &entry : profile.gmgTimings)
         {
           std::string key = "gmg_" + entry.first;
           std::replace(key.begin(), key.end(), ' ', '_');
-          fields.push_back({key, phase0DoubleString(entry.second)});
+          fields.push_back({key, timingString(entry.second)});
         }
-        phase0.logDuration("vlasov_substep", profile.wallTimeVlasovSolve, fields);
+        timing.logDuration("vlasov_substep", profile.wallTimeVlasovSolve, fields);
         // memory at phase boundaries of the Vlasov solve: max and sum of current resident size over ranks, and max high-water mark
         const int numCheckpoints = profile.memoryCheckpoints.size();
         if (MPIWrapper::min(comm, numCheckpoints) == MPIWrapper::max(comm, numCheckpoints))
@@ -1478,37 +1768,21 @@ int main(int argc, char *argv[])
           for (int i=0; i<numCheckpoints; i++)
           {
             const auto &checkpoint = profile.memoryCheckpoints[i];
-            Phase0Fields memoryFields;
+            TimingFields memoryFields;
             memoryFields.push_back({"substep",       std::to_string(profile.substepOrdinal)});
             memoryFields.push_back({"checkpoint",    checkpoint.name});
-            memoryFields.push_back({"max_rss_gb",    phase0DoubleString(MPIWrapper::max(comm, checkpoint.currentGB))});
-            memoryFields.push_back({"sum_rss_gb",    phase0DoubleString(MPIWrapper::sum(comm, checkpoint.currentGB))});
-            memoryFields.push_back({"max_hwm_gb",    phase0DoubleString(MPIWrapper::max(comm, checkpoint.highWaterMarkGB))});
-            phase0.logDuration("vlasov_memory", 0.0, memoryFields);
+            memoryFields.push_back({"max_rss_gb",    timingString(MPIWrapper::max(comm, checkpoint.currentGB))});
+            memoryFields.push_back({"sum_rss_gb",    timingString(MPIWrapper::sum(comm, checkpoint.currentGB))});
+            memoryFields.push_back({"max_hwm_gb",    timingString(MPIWrapper::max(comm, checkpoint.highWaterMarkGB))});
+            memoryFields.push_back({"max_footprint_gb", timingString(MPIWrapper::max(comm, checkpoint.footprintGB))});
+            memoryFields.push_back({"sum_footprint_gb", timingString(MPIWrapper::sum(comm, checkpoint.footprintGB))});
+            timing.logDuration("vlasov_memory", 0.0, memoryFields);
           }
         }
-        phase0TimeG = phase0TimeB = phase0TimeK = 0;
-        phase0OptimalTestElementCount = 0;
+        timingTimeG = timingTimeB = timingTimeK = 0;
+        timingOptimalTestElementCount = 0;
       });
     }
-    runPhase0TensorGraphSchurMicroApply(phase0TensorGraphSchurBackend,
-                                        cScaled,
-                                        x0,
-                                        xWidth,
-                                        t0,
-                                        tWidth,
-                                        uxMin,
-                                        uxMax,
-                                        uyMin,
-                                        uyMax,
-                                        L2WeightGraph,
-                                        phase0TensorGraphSchurXElements,
-                                        phase0TensorGraphSchurTElements,
-                                        phase0TensorGraphSchurUxElements,
-                                        phase0TensorGraphSchurUyElements,
-                                        phase0TensorGraphSchurComponentP,
-                                        phase0TensorGraphSchurTestEnrichment,
-                                        phase0);
     
 //    form->setExportViz(true, "/tmp"); // DEBUGGING
     
@@ -1542,6 +1816,7 @@ int main(int argc, char *argv[])
     FunctionPtr f_leftInflow;
     
     Teuchos::RCP<Maxwellian1T2V> fM_u0;
+    Teuchos::RCP<EmissionTimeProfile> emissionProfile; // spaceChargeLimited with sclEmissionDegree >= 0
     
     {
       {
@@ -1562,6 +1837,13 @@ int main(int argc, char *argv[])
         
         // set a Maxwellian at the inflow:
         fM_u0 = Teuchos::rcp(new Maxwellian1T2V( ux0, uy0, sigma, n0) );
+        if ((emissionModel == "spaceChargeLimited") && (sclEmissionDegree >= 0))
+        {
+          // the Maxwellian has unit amplitude; the (time-varying) emitted density is carried by the profile
+          emissionProfile = Teuchos::rcp(new EmissionTimeProfile(sclEmissionDegree, n0));
+          emissionProfile->setSlab(t0, t0 + tWidth);
+          fM_u0->set_n(1.0);
+        }
         FunctionPtr positiveRestriction = Function::heaviside(0,2); // don't impose right-going conditions for negative velocities, even when Maxwellian extends past v=0
         
         if (temporalRampDuration > 0)
@@ -1573,6 +1855,7 @@ int main(int argc, char *argv[])
         {
           f_leftInflow = FunctionPtr(fM_u0) * positiveRestriction;
         }
+        if (emissionProfile != Teuchos::null) f_leftInflow = f_leftInflow * FunctionPtr(emissionProfile);
         
         form->setInitialAndInflowConditions(f0, f_leftInflow, initialTimeDivision); // no right BC is only for negative velocity, so won't actually get triggered on our mesh
         
@@ -1583,15 +1866,26 @@ int main(int argc, char *argv[])
       }
     }
     
-    auto phase0InitialBCRefinementStart = phase0.now();
+    auto timingInitialBCRefinementStart = timing.now();
     refineForBC(form->vlasovSolutionPreviousSubstep(), form->t_n_hat(), bcFunctionsToResolve, maxElements, bcResolutionTolerance);
     // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
     form->configurationSpaceMesh()->repartitionAndRebuild();
+    if (useBoxMesh && useAdaptivity && replayBCRefinement)
+    {
+      // The inflow data have the same shape on every slab: give each later slab the mesh just built to resolve them
+      // (before it is matched to the previous slab at the interface).  refineForBC() still checks each slab.
+      const std::vector<BoxGDA::CellRecord> bcMeshRecords = BoxGDA::cellRecords(form->vlasovMesh());
+      form->setNextSlabPreRefinement([bcMeshRecords](MeshPtr nextSlabMesh) { BoxGDA::refineToContain(nextSlabMesh, bcMeshRecords); });
+      if (rank == 0)
+      {
+        std::cout << "Each later slab will start from slab 0's boundary-data mesh (" << bcMeshRecords.size() << " cells).\n";
+      }
+    }
     if (rank == 0)
     {
       std::cout << "Physical mesh has " << form->configurationSpaceMesh()->numActiveElements() << " elements.\n";
     }
-    phase0.logDuration("initial_bc_refinement", phase0.elapsedSince(phase0InitialBCRefinementStart), phase0MeshStats(form));
+    timing.logDuration("initial_bc_refinement", timing.elapsedSince(timingInitialBCRefinementStart), timingMeshStats(form));
     
     std::ostringstream suffix;
     if (!useL2Trace)
@@ -1613,6 +1907,7 @@ int main(int argc, char *argv[])
       suffix << "_fullTensorBasis";
     }
     suffix << "_p" << H1Order;
+    if (s_hpAdaptivity) suffix << "_hp" << VlasovSpaceTimeFormulation::boxMeshInitialH1Order();
     suffix << "_dp" << delta_k;
     suffix << "_" << xElements << "x" << tElements << "x" << vxElements << "x" << vyElements;
     suffix << "_ratio" << minMagneticFluxRatio;
@@ -1627,6 +1922,17 @@ int main(int argc, char *argv[])
     else
     {
       suffix << "_GraphL2" << L2WeightGraph;
+      if (L2WeightGraphMeshScale > 0) suffix << "_hScale" << L2WeightGraphMeshScale;
+      if (!L2WeightGraphDirectionScales.empty())
+      {
+        suffix << "_hScales";
+        for (double scale : L2WeightGraphDirectionScales) suffix << "_" << scale;
+      }
+      if (L2WeightGraphTransportScale > 0)
+      {
+        suffix << "_transportScale" << L2WeightGraphTransportScale;
+        for (double bound : L2WeightGraphAccelerationBounds) suffix << "_a" << bound;
+      }
     }
     
     const std::string problemPrefix = "relativistic-planar-MITL";
@@ -1709,53 +2015,344 @@ int main(int argc, char *argv[])
     }
     
     const std::string directoryPath = outputDir;
+    // Open MPI's shared-file-pointer component copies the path of each HDF5 file it opens into a fixed-size (256-byte)
+    // buffer, and the process is killed if the path does not fit (signal 6 on Linux, "Trace/BPT trap: 5" on macOS).  The
+    // visualization names carry the whole parameter suffix, so a long --outputDir takes the path past that.  When
+    // directory + name would be too long, keep the start of the name and its slab suffix, with a hash of the rest between.
+    bool vizNameShorteningReported = false;
+    auto vizName = [&directoryPath, &vizNameShorteningReported, rank](const std::string &name) -> std::string
+    {
+      const size_t maxLength = 160; // for directory + "/" + name; exporters append some 40 characters more
+      if (directoryPath.size() + 1 + name.size() <= maxLength) return name;
+      unsigned long long hash = 1469598103934665603ULL; // FNV-1a
+      for (unsigned char c : name) { hash ^= c; hash *= 1099511628211ULL; }
+      std::ostringstream hashStream;
+      hashStream << "_" << std::hex << (hash & 0xffffffffULL);
+      const size_t slabPos = name.rfind("_slab");
+      const std::string tail = hashStream.str() + ((slabPos == std::string::npos) ? std::string() : name.substr(slabPos));
+      const size_t budget = (maxLength > directoryPath.size() + 1) ? maxLength - directoryPath.size() - 1 : 0;
+      const size_t headLength = std::max(budget, tail.size() + 24) - tail.size(); // always keep 24 characters of the name
+      const std::string shortName = name.substr(0, std::min(headLength, name.size())) + tail;
+      if ((rank == 0) && !vizNameShorteningReported)
+      {
+        vizNameShorteningReported = true; // the first is enough to show the pattern
+        std::cout << "Visualization name shortened to keep paths within Open MPI's limit:\n  " << name << "\n  -> " << shortName << std::endl;
+      }
+      return shortName;
+    };
     
     if (coarseSolver != "default") form->setCoarseSolverChoice(Solver::solverChoiceFromString(coarseSolver)); // carried to later slabs by nextTimeSlab()
 
     // Space-charge-limited emission: within each slab's fixed-point iteration, after each configuration-space solve, adjust
-    // the emitted density so that the cathode field at the slab's final time vanishes.  Secant iteration on
-    // (n_emit, E(0)), safeguarded to keep n_emit >= 0; the fixed-point iteration does not stop until |E(0)| < tol |E0|.
-    // The emitted density then persists into the next slab as its starting value.
+    // the emitted density so that the cathode field at the slab's final time vanishes.  Newton iteration on E(0)(n_emit),
+    // with a slope s = dE(0)/dn_emit that is
+    //   - estimated from the last two (n_emit, E(0)) pairs only when n_emit changed appreciably between them (a secant step
+    //     between equal densities is undefined; this is what stalled the previous secant iteration),
+    //   - kept, rather than replaced, when the estimate is unavailable or non-positive (E(0) increases with n_emit), and
+    //   - carried from slab to slab, since the sheath's response changes slowly.
+    // The density is held while |E(0)| is within tolerance (so that the slab's final f is consistent with the final
+    // density), and updated whenever it is not -- including after an earlier substep converged, since E(0) can drift as f
+    // relaxes -- limited per substep as described below.  The fixed-point iteration does not stop until |E(0)| < sclEmissionTolerance |E0|.  The emitted density
+    // persists into the next slab as its starting value.
     const bool spaceChargeLimitedEmission = (emissionModel == "spaceChargeLimited");
     TEUCHOS_TEST_FOR_EXCEPTION(!spaceChargeLimitedEmission && (emissionModel != "taper") && (emissionModel != "constant"),
                                std::invalid_argument, "emissionModel must be spaceChargeLimited, taper, or constant");
     if (emissionModel == "constant") taperInjection = false;
     if (spaceChargeLimitedEmission)
     {
-      auto sclState = std::make_shared<std::vector<double>>(); // per slab: (n, E(0)) pairs from this slab's substeps
+      struct SCLState
+      {
+        double slope = -1;                      // dE(0)/dn_emit; negative until first estimated
+        bool havePrevious = false;              // previous substep's (n, E) available (within this slab)
+        double nPrevious = 0, EPrevious = 0;
+      };
+      auto sclState = std::make_shared<SCLState>();
+      if (emissionProfile != Teuchos::null)
+      {
+        // Time-varying emission: n_emit(t) = sum_j a_j B_j(s) on each slab (Bernstein basis, a_j >= 0).  Space-charge-
+        // limited emission is a complementarity condition: n_emit >= 0, the cathode field not accelerating electrons off
+        // the cathode (E(0)/E0 <= 0), and n_emit E(0) = 0 -- where the field has reversed, no emission.  Weakly, with
+        //   g_j = (m+1) int_0^1 (E(0, t(s)) / E0) B_j(s) ds,
+        // a weighted mean of E(0)/E0 near the time of coefficient j,
+        //   a_j >= 0,  g_j <= 0,  a_j g_j = 0,  j = 0..m.
+        // When every a_j > 0 this is the vanishing of the first m+1 Legendre moments of E(0, t).  Solved with a semismooth
+        // (active-set) Newton step on min(sigma a_j, -g_j) = 0, with a Jacobian dg/da carried from substep to substep and
+        // slab to slab, initialized as sigma W (W the normalized Bernstein Gram matrix: the field responding locally in time
+        // to the emitted density, with gain sigma estimated from the mean) and refined by Broyden updates.
+        std::vector<double> gaussPoints, gaussWeights;
+        {
+          CubatureFactory cubatureFactory;
+          auto cubature = cubatureFactory.create(CellTopology::line(), std::vector<int>{2 * sclEmissionQuadraturePoints - 1});
+          auto refPoints = cubature->allocateCubaturePoints();
+          auto refWeights = cubature->allocateCubatureWeights();
+          cubature->getCubature(refPoints, refWeights);
+          auto refPointsFC  = FieldContainerConversion<double>::fromTensorPoints(refPoints);
+          auto refWeightsFC = FieldContainerConversion<double>::fromTensorData(refWeights);
+          for (int i=0; i<refPointsFC.dimension(0); i++) { gaussPoints.push_back(refPointsFC(i,0)); gaussWeights.push_back(refWeightsFC(i)); }
+        }
+        struct SCLProfileState
+        {
+          std::vector<double> J;                  // dg/d(a/n0), row major; empty until the gain is first estimated
+          bool havePrevious = false;              // previous substep's (a, g) available (within this slab)
+          std::vector<double> aPrevious, gPrevious;
+        };
+        auto profileState = std::make_shared<SCLProfileState>();
+        auto profile = emissionProfile;
+        form->setSubstepConfigurationCallback([=](VlasovSpaceTimeFormulation &slabForm, int substepOrdinal) -> bool {
+          if (substepOrdinal == 0) profileState->havePrevious = false;
+          const int m = profile->degree();
+          const int N = m + 1;
+          FunctionPtr E = Function::solution(slabForm.configurationSpaceFormulation()->E_fieldVar(0), slabForm.configurationSpaceSolution());
+          const double t0Slab = slabForm.t0(), t1Slab = slabForm.t1();
+          std::vector<double> g(N, 0.0);
+          double maxAbsE = 0;
+          for (size_t q=0; q<gaussPoints.size(); q++)
+          {
+            const double s = 0.5 * (gaussPoints[q] + 1.0);
+            const double Eq = E->evaluate(slabForm.configurationSpaceMesh(), x0, t0Slab + s * (t1Slab - t0Slab)); // collective
+            maxAbsE = std::max(maxAbsE, std::abs(Eq));
+            for (int j=0; j<N; j++) g[j] += 0.5 * N * gaussWeights[q] * (Eq / E0) * EmissionTimeProfile::bernstein(m, j, s);
+          }
+          std::vector<double> a = profile->coefficients();
+          for (double &aj : a) aj /= n0;
+          const double tol = sclEmissionTolerance;
+          bool converged = true;
+          for (int j=0; j<N; j++) converged = converged && ((a[j] > 0) ? (std::abs(g[j]) < tol) : (g[j] < tol));
+
+          // Jacobian: initialized from the gain of the mean, then Broyden updates (accepted only for appreciable changes in
+          // a, since g also moves as f relaxes independently of a, and only if the mean-mode gain stays within a factor of
+          // four of its previous value and negative).
+          auto meanGain = [N](const std::vector<double> &J) { double sum = 0; for (double Jij : J) sum += Jij; return sum / N; };
+          if (profileState->havePrevious)
+          {
+            std::vector<double> da(N), dg(N);
+            double daNorm2 = 0, aMax = 1e-3;
+            for (int j=0; j<N; j++)
+            {
+              da[j] = a[j] - profileState->aPrevious[j];
+              dg[j] = g[j] - profileState->gPrevious[j];
+              daNorm2 += da[j] * da[j];
+              aMax = std::max(aMax, std::max(a[j], profileState->aPrevious[j]));
+            }
+            if (std::sqrt(daNorm2) > 0.02 * aMax)
+            {
+              std::vector<double> JNew = profileState->J;
+              if (JNew.empty())
+              {
+                double daSum = 0, dgSum = 0;
+                for (int j=0; j<N; j++) { daSum += da[j]; dgSum += dg[j]; }
+                const double sigma = (std::abs(daSum) > 0) ? dgSum / daSum : 0.0;
+                if (sigma < 0)
+                {
+                  JNew.assign(N * N, 0.0);
+                  for (int i=0; i<N; i++)
+                    for (int j=0; j<N; j++)
+                    {
+                      // (m+1) int_0^1 B_i B_j ds = (m+1) C(m,i) C(m,j) / ((2m+1) C(2m, i+j))
+                      auto binomial = [](int n, int k) { double b = 1; for (int l=1; l<=k; l++) b = b * (n - k + l) / l; return b; };
+                      JNew[i*N+j] = sigma * N * binomial(m,i) * binomial(m,j) / ((2*m + 1) * binomial(2*m, i+j));
+                    }
+                }
+              }
+              else
+              {
+                for (int i=0; i<N; i++)
+                {
+                  double predicted = 0;
+                  for (int j=0; j<N; j++) predicted += JNew[i*N+j] * da[j];
+                  for (int j=0; j<N; j++) JNew[i*N+j] += (dg[i] - predicted) * da[j] / daNorm2;
+                }
+                const double oldGain = meanGain(profileState->J), newGain = meanGain(JNew);
+                if (!((newGain < 0) && (newGain > 4.0 * oldGain) && (newGain < 0.25 * oldGain))) JNew = profileState->J;
+              }
+              profileState->J = JNew;
+            }
+          }
+          profileState->havePrevious = true;
+          profileState->aPrevious = a;
+          profileState->gPrevious = g;
+
+          std::vector<double> aNext = a;
+          std::vector<bool> active(N, false);
+          if (!converged)
+          {
+            if (profileState->J.empty())
+            {
+              // no gain yet: a proportional step.  g_j is 1 in vacuum (emit more), 0 when space-charge limited, and
+              // negative when the field has reversed (emit less).
+              for (int j=0; j<N; j++) aNext[j] = ((a[j] > 0) ? a[j] : 1e-3) * (1.0 + g[j]);
+            }
+            else
+            {
+              // Newton step for the complementarity problem, with the linear model g' = g + J (a' - a): the linear
+              // complementarity problem a' >= 0, g' <= 0, a'_j g'_j = 0, solved exactly by trying each active set
+              // (2^N of them; N <= 3 or so).  Choosing the active set from the sign of the unconstrained step instead
+              // can fix the wrong coefficient at zero: the field responds mainly to the slab's total emitted charge,
+              // so J is nearly singular and the unconstrained step can make an early coefficient negative even when
+              // the solution needs it positive (and a late one zero).
+              auto solveFree = [&](const std::vector<bool> &isActive, std::vector<double> &aTrial) -> bool {
+                // solve J_FF a'_F = J_FF a_F - g_F + J_FA a_A, with a'_A = 0
+                std::vector<int> F;
+                for (int j=0; j<N; j++) if (!isActive[j]) F.push_back(j);
+                const int nF = int(F.size());
+                aTrial.assign(N, 0.0);
+                if (nF == 0) return true;
+                std::vector<double> A(nF * nF), b(nF);
+                for (int r=0; r<nF; r++)
+                {
+                  const int i = F[r];
+                  b[r] = -g[i];
+                  for (int j=0; j<N; j++) b[r] += profileState->J[i*N+j] * a[j];
+                  for (int c=0; c<nF; c++) A[r*nF+c] = profileState->J[i*N+F[c]];
+                }
+                // Gaussian elimination with partial pivoting
+                for (int k=0; k<nF; k++)
+                {
+                  int pivot = k;
+                  for (int r=k+1; r<nF; r++) if (std::abs(A[r*nF+k]) > std::abs(A[pivot*nF+k])) pivot = r;
+                  if (std::abs(A[pivot*nF+k]) < 1e-14) return false;
+                  for (int c=0; c<nF; c++) std::swap(A[k*nF+c], A[pivot*nF+c]);
+                  std::swap(b[k], b[pivot]);
+                  for (int r=k+1; r<nF; r++)
+                  {
+                    const double factor = A[r*nF+k] / A[k*nF+k];
+                    for (int c=k; c<nF; c++) A[r*nF+c] -= factor * A[k*nF+c];
+                    b[r] -= factor * b[k];
+                  }
+                }
+                std::vector<double> x(nF);
+                for (int r=nF-1; r>=0; r--)
+                {
+                  double sum = b[r];
+                  for (int c=r+1; c<nF; c++) sum -= A[r*nF+c] * x[c];
+                  x[r] = sum / A[r*nF+r];
+                }
+                for (int r=0; r<nF; r++) aTrial[F[r]] = x[r];
+                return true;
+              };
+              // among the active sets satisfying the linearized conditions (there is one when -J is a P-matrix), take
+              // the one with the smallest step; if none does (J inaccurate), the one with the smallest violation
+              std::vector<double> best;
+              double bestViolation = std::numeric_limits<double>::max(), bestStep = std::numeric_limits<double>::max();
+              const double scale = std::max(1e-3, *std::max_element(a.begin(), a.end()));
+              for (int mask=0; mask<(1<<N); mask++)
+              {
+                std::vector<bool> isActive(N);
+                for (int j=0; j<N; j++) isActive[j] = (mask >> j) & 1;
+                std::vector<double> aTrial;
+                if (!solveFree(isActive, aTrial)) continue;
+                double violation = 0, step = 0;
+                for (int j=0; j<N; j++)
+                {
+                  double gPredicted = g[j];
+                  for (int k=0; k<N; k++) gPredicted += profileState->J[j*N+k] * (aTrial[k] - a[k]);
+                  if (isActive[j]) violation = std::max(violation, gPredicted);        // need g'_j <= 0
+                  else             violation = std::max(violation, -aTrial[j] / scale); // need a'_j >= 0
+                  step += (aTrial[j] - a[j]) * (aTrial[j] - a[j]);
+                }
+                const bool better = (violation <= 1e-12) ? ((bestViolation > 1e-12) || (step < bestStep))
+                                                         : ((bestViolation > 1e-12) && (violation < bestViolation));
+                if (better)
+                {
+                  best = aTrial; bestViolation = violation; bestStep = step;
+                  active = isActive;
+                }
+              }
+              std::vector<double> da(N, 0.0);
+              if (!best.empty()) for (int j=0; j<N; j++) da[j] = std::max(0.0, best[j]) - a[j];
+              // Step limits as in the constant-in-slab controller: a coefficient can rise by up to half of n0 (or double)
+              // per substep; never negative.
+              for (int j=0; j<N; j++)
+              {
+                const double aBase = (a[j] > 0) ? a[j] : 1e-3;
+                aNext[j] = std::max(0.0, std::min(a[j] + std::max(aBase, 0.5), a[j] + da[j]));
+              }
+            }
+            std::vector<double> aNextScaled = aNext;
+            for (double &aj : aNextScaled) aj *= n0;
+            profile->setCoefficients(aNextScaled);
+          }
+          if (rank == 0)
+          {
+            std::cout << "space-charge-limited emission (degree " << m << "): substep " << substepOrdinal+1 << ", g =";
+            for (int j=0; j<N; j++) std::cout << " " << g[j];
+            std::cout << ", max |E(0,t)|/|E0| = " << maxAbsE / std::abs(E0) << ", n_emit coefficients/n0 =";
+            for (int j=0; j<N; j++) std::cout << " " << a[j];
+            if (!converged)
+            {
+              std::cout << " ->";
+              for (int j=0; j<N; j++) std::cout << " " << aNext[j] << (active[j] ? "*" : "");
+            }
+            std::cout << ", dg/dn = ";
+            if (profileState->J.empty()) std::cout << "(not yet estimated)";
+            else for (int i=0; i<N*N; i++) std::cout << (i == 0 ? "[" : (i % N == 0 ? "; " : " ")) << profileState->J[i] << (i == N*N-1 ? "]" : "");
+            std::cout << " per n0"
+                      << (converged ? " (converged)\n" : "\n");
+          }
+          return converged;
+        });
+      }
+      else
       form->setSubstepConfigurationCallback([=](VlasovSpaceTimeFormulation &slabForm, int substepOrdinal) -> bool {
-        if (substepOrdinal == 0) sclState->clear();
+        if (substepOrdinal == 0) sclState->havePrevious = false; // the slope is kept across slabs
         FunctionPtr E = Function::solution(slabForm.configurationSpaceFormulation()->E_fieldVar(0), slabForm.configurationSpaceSolution());
         const double tEval = std::nextafter(slabForm.t1(), slabForm.t0());
         const double E_cathode = E->evaluate(slabForm.configurationSpaceMesh(), x0, tEval); // collective
         const double nCurrent = fM_u0->get_n();
-        const bool converged = std::abs(E_cathode) < sclEmissionTolerance * std::abs(E0);
-        sclState->push_back(nCurrent);
-        sclState->push_back(E_cathode);
-        // E0 < 0; too little emitted charge leaves E(0) < 0 (same sign as E0), too much reverses it.  E(0) increases with n.
-        double nNext;
-        const int numPairs = int(sclState->size()) / 2;
-        if (numPairs >= 2)
+        // Space-charge-limited emission is a complementarity condition: n_emit >= 0, the cathode field not accelerating
+        // electrons off the cathode, and n_emit E(0) = 0.  So the state with emission (effectively) off and the field
+        // reversed (E(0)/E0 < 0: more electron charge near the cathode than emission would put there) is converged, as is
+        // E(0) = 0 with emission on.
+        const double nOff = 1e-3 * n0; // emission at or below this is "off"
+        const bool emissionOffFieldReversed = (nCurrent <= nOff) && (E_cathode / E0 < 0);
+        const bool converged = (std::abs(E_cathode) < sclEmissionTolerance * std::abs(E0)) || emissionOffFieldReversed;
+
+        // slope estimate from the last two substeps, if the density changed appreciably between them
+        if (sclState->havePrevious)
         {
-          const double n1 = (*sclState)[2*numPairs-4], E1 = (*sclState)[2*numPairs-3];
-          const double n2 = nCurrent, E2 = E_cathode;
-          nNext = (std::abs(E2 - E1) > 1e-14 * std::abs(E0)) ? n2 - E2 * (n2 - n1) / (E2 - E1) : n2;
-          if (!(nNext > 0) || (nNext > 4.0 * std::max(n2, n0))) nNext = (E2 < 0) ? 2.0 * std::max(n2, 1e-3 * n0) : 0.5 * n2;
+          // Accept a slope only from an appreciable change in n_emit (E(0) also moves as f relaxes, independent of n_emit, so
+          // small changes give noise-dominated estimates), and, once a slope is known, only within a factor of four of it.
+          const double dn = nCurrent - sclState->nPrevious;
+          if (std::abs(dn) > 0.02 * std::max(std::max(nCurrent, sclState->nPrevious), 1e-3 * n0))
+          {
+            const double measuredSlope = (E_cathode - sclState->EPrevious) / dn;
+            const bool plausible = (measuredSlope > 0) &&
+                                   ((sclState->slope <= 0) || ((measuredSlope > 0.25 * sclState->slope) && (measuredSlope < 4.0 * sclState->slope)));
+            if (plausible) sclState->slope = measuredSlope;
+          }
+        }
+        sclState->havePrevious = true;
+        sclState->nPrevious = nCurrent;
+        sclState->EPrevious = E_cathode;
+
+        // E0 < 0; too little emitted charge leaves E(0) < 0 (same sign as E0), too much reverses it.
+        double nNext;
+        const double nBase = (nCurrent > 0) ? nCurrent : 1e-3 * n0;
+        if (sclState->slope > 0)
+        {
+          nNext = nCurrent - E_cathode / sclState->slope;
         }
         else
         {
-          // first substep of the slab: a proportional step from the current density (or n0 when off).  E(0)/E0 is 1 in
-          // vacuum (emit more), 0 when space-charge limited, and negative when the cathode field has reversed (emit less).
-          const double nBase = (nCurrent > 0) ? nCurrent : n0;
-          nNext = nBase * std::max(0.25, std::min(4.0, 1.0 + E_cathode / E0));
+          // no slope yet: a proportional step.  E(0)/E0 is 1 in vacuum (emit more), 0 when space-charge limited, and negative
+          // when the cathode field has reversed (emit less).
+          nNext = nBase * (1.0 + E_cathode / E0);
         }
-        if (!converged) fM_u0->set_n(nNext);
+        // Step limits, relative to n0 rather than to the current density (which can be far below its target): the density
+        // can fall by half, or to the "off" level nOff, per substep, or rise by up to half of n0; never negative.  (A
+        // geometric limit alone, e.g. a factor of ten per substep, lets the density collapse to 1e-30 n0 and below over a
+        // few slabs while the field stays reversed; from there it cannot restart.)
+        const double nMax = nCurrent + std::max(nBase, 0.5 * n0);
+        const double nMin = std::min(nCurrent, std::max(0.5 * nCurrent, nOff));
+        nNext = std::max(nMin, std::min(nMax, nNext));
+        if (converged) nNext = nCurrent;
+        fM_u0->set_n(nNext);
         if (rank == 0)
         {
           std::cout << "space-charge-limited emission: substep " << substepOrdinal+1 << ", E(0) = " << E_cathode
-                    << " (" << E_cathode / E0 << " E0), n_emit = " << nCurrent / n0 << " n0";
-          if (!converged) std::cout << " -> " << nNext / n0 << " n0";
-          std::cout << (converged ? " (converged)\n" : "\n");
+                    << " (" << E_cathode / E0 << " E0), n_emit = " << nCurrent / n0 << " n0 -> " << nNext / n0 << " n0"
+                    << ", dE(0)/dn = " << ((sclState->slope > 0) ? sclState->slope * n0 : 0.0) << " per n0"
+                    << (converged ? " (converged)\n" : "\n");
         }
         return converged;
       });
@@ -1812,13 +2409,13 @@ int main(int argc, char *argv[])
           form->setUseGeometricMultigrid(false);
         }
         
-        auto phase0SlabSolveStart = phase0.now();
+        auto timingSlabSolveStart = timing.now();
         form->solve();
         {
-          auto fields = phase0MeshStats(form);
+          auto fields = timingMeshStats(form);
           fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
-          fields.push_back({"memory_hwm_gb", phase0DoubleString(memoryHighWaterMarkInGigabytes())});
-          phase0.logDuration("slab_solve", phase0.elapsedSince(phase0SlabSolveStart), fields);
+          fields.push_back({"memory_hwm_gb", timingString(memoryHighWaterMarkInGigabytes())});
+          timing.logDuration("slab_solve", timing.elapsedSince(timingSlabSolveStart), fields);
         }
         
         if (rank == 0)
@@ -1844,16 +2441,15 @@ int main(int argc, char *argv[])
           std::cout << "Updating tensor-native moment diagnostics.\n";
         }
         
-        auto phase0MomentUpdateStart = phase0.now();
+        auto timingMomentUpdateStart = timing.now();
         const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
         std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
-        const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                                                               : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
+        const int velocityQuadratureDegree = (momentVelocityQuadratureDegree > 0) ? momentVelocityQuadratureDegree : 0; // 0: per cell
         auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                       form->configurationSpaceMesh(),
                                                                       form->vlasovSolution(),
                                                                       form->f(speciesOrdinal),
-                                                                      phase8VelocityQuadratureDegree,
+                                                                      velocityQuadratureDegree,
                                                                       true,
                                                                       cScaled);
         const int numTensorEntries = vlasovMoments.numConfigurationCells * vlasovMoments.numPointsPerConfigurationCell;
@@ -1875,13 +2471,13 @@ int main(int argc, char *argv[])
         vx_rel_mean_clipped = vx_rel_mean;
         vz_rel_mean_clipped = vz_rel_mean;
 
-        phase0.logDuration("moment_update", phase0.elapsedSince(phase0MomentUpdateStart),
+        timing.logDuration("moment_update", timing.elapsedSince(timingMomentUpdateStart),
                            {{"slab", std::to_string(timeSlabOrdinal)},
                             {"moment_backend", "tensor_native"},
                             {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
                             {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
                             {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
-                            {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
+                            {"velocity_quadrature_degree", (velocityQuadratureDegree > 0) ? std::to_string(velocityQuadratureDegree) : std::string("per_cell")}});
         
         if (rank == 0)
         {
@@ -1890,8 +2486,8 @@ int main(int argc, char *argv[])
         
         if (saveViz)
         {
-          std::string  vlasovSlabStr =  vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
-          std::string maxwellSlabStr = maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal);
+          std::string  vlasovSlabStr = vizName( vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal));
+          std::string maxwellSlabStr = vizName(maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal));
           
           //            auto vlasovVizSlab  = Teuchos::rcp(new HDF5Exporter(form->vlasovMesh(), vlasovSlabStr, directoryPath));
           auto maxwellVizSlab = Teuchos::rcp(new HDF5Exporter (form->configurationSpaceMesh(), maxwellSlabStr, directoryPath) );
@@ -1925,8 +2521,28 @@ int main(int argc, char *argv[])
         if (densityDiagnostic)
         {
           const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
-          writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, phase8VelocityQuadratureDegree, cScaled, q);
+          writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, velocityQuadratureDegree, cScaled, q);
           if (rank == 0) std::cout << "Wrote density diagnostic to " << densityPath << ".\n";
+        }
+        if (phaseSpaceDiagnostic)
+        {
+          int pointsPerDim = phaseSpaceDiagnosticPointsPerDim;
+          if (pointsPerDim < 2)
+          {
+            int fDegree = 0;
+            for (GlobalIndexType cellID : form->vlasovMesh()->cellIDsInPartition())
+            {
+              fDegree = std::max(fDegree, form->vlasovMesh()->getElementType(cellID)->trialOrderPtr->getBasis(form->f(speciesOrdinal)->ID())->getDegree());
+            }
+            pointsPerDim = MPIWrapper::max(form->vlasovMesh()->Comm(), fDegree) + 1;
+          }
+          const bool writeSamples = phaseSpaceDiagnosticAllSlabs || (phaseSpaceDiagnosticSlabs.count(timeSlabOrdinal) > 0);
+          writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, writeSamples,
+                                    outputDir + "/phase_slab" + to_string(timeSlabOrdinal), outputDir + "/phase_reductions.csv",
+                                    timeSlabOrdinal, phaseSpaceDiagnosticXNear);
+          // f at the slab's initial time, to compare with the previous slab's final f: charge lost in the transfer shows here
+          writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, false, "", outputDir + "/phase_reductions_start.csv",
+                                    timeSlabOrdinal, phaseSpaceDiagnosticXNear, true);
         }
 
         auto configMesh = form->configurationSpaceMesh();
@@ -1953,6 +2569,7 @@ int main(int argc, char *argv[])
                       << " int_Jx=" << JxIntegral << " int_n=" << nIntegral << " E0_end=" << E_left << std::endl;
             std::cout << std::setprecision(6);
           }
+          reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal);
         }
         
 //        {
@@ -1962,8 +2579,21 @@ int main(int argc, char *argv[])
         
         if (spaceChargeLimitedEmission)
         {
-          if (rank == 0) std::cout << "E(0) at final time is " << E_left << " (" << E_left / E0 << " E0); emitted density "
-                                   << fM_u0->get_n() / n0 << " n0 (space-charge-limited emission).\n";
+          if (rank == 0)
+          {
+            if (emissionProfile == Teuchos::null)
+            {
+              std::cout << "E(0) at final time is " << E_left << " (" << E_left / E0 << " E0); emitted density "
+                        << fM_u0->get_n() / n0 << " n0 (space-charge-limited emission).\n";
+            }
+            else
+            {
+              // slab-start, slab-mean, and slab-end emitted density, and the slab-end field
+              std::cout << "E(0) at final time is " << E_left << " (" << E_left / E0 << " E0); emitted density "
+                        << emissionProfile->valueAtS(0.0) / n0 << " -> " << emissionProfile->valueAtS(1.0) / n0
+                        << " n0 (mean " << emissionProfile->mean() / n0 << " n0; space-charge-limited emission, degree " << emissionProfile->degree() << ").\n";
+            }
+          }
         }
         else
         {
@@ -2035,11 +2665,12 @@ int main(int argc, char *argv[])
         f_soln = Teuchos::null;
 
         // next time slab
-        auto phase0NextTimeSlabStart = phase0.now();
+        auto timingNextTimeSlabStart = timing.now();
+        if (emissionProfile != Teuchos::null) emissionProfile->advanceToNextSlab(form->t1(), form->t1() + tWidth);
         form = form->nextTimeSlab(tWidth, tElements);
-        phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
+        timing.logDuration("next_time_slab", timing.elapsedSince(timingNextTimeSlabStart),
                            {{"completed_slab", std::to_string(timeSlabOrdinal)}});
-        if (phase0.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
+        if (timing.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
         
         {
           // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
@@ -2069,8 +2700,8 @@ int main(int argc, char *argv[])
         
         if (saveViz)
         {
-          std::string  vlasovSlabStr =  vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
-          std::string maxwellSlabStr = maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal);
+          std::string  vlasovSlabStr = vizName( vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal));
+          std::string maxwellSlabStr = vizName(maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal));
           
           if (exportVlasov)
           {
@@ -2094,7 +2725,7 @@ int main(int argc, char *argv[])
         if (doerflerTarget <= 0)
         {
           refStrategy = Teuchos::rcp(new RefinementStrategy(form->vlasovSolution(), refinementThreshold));
-          refStrategy->setMaxElements(maxElements); // allow unrefinements
+          if (!useBoxMesh) refStrategy->setMaxElements(maxElements); // allow unrefinements (not supported on box meshes)
         }
         else
         {
@@ -2103,9 +2734,41 @@ int main(int argc, char *argv[])
           refStrategy = Teuchos::rcp(new DoerflerRefinementStrategy(errorIndicator, doerflerTarget) );
         }
         
+        if (s_boxAnisotropicAdaptivity)
+        {
+          // bisect each marked cell only in the directions in which f is least resolved there
+          MeshPtr vlasovMesh = form->vlasovMesh();
+          FunctionPtr fSolution = Function::solution(form->f(), form->vlasovSolution());
+          const double anisotropyThreshold = s_boxAnisotropyThreshold;
+          // At the slab's initial time the incoming f is the data (minus the outward flux t_n there): on piecewise-constant
+          // cells the indicator measures the jump in t against it, without which a cell spanning the slab in t would have
+          // no jump in t at all.
+          const int timeDirection = 1; // (x, t, u_x, u_z)
+          const bool weightFluxesBySideParity = true;
+          const std::map<int,FunctionPtr> boundaryData = {{2 * timeDirection, -Function::solution(form->t_n_hat(0), form->vlasovSolution(), weightFluxesBySideParity)}};
+          refStrategy->setCellRefiner([vlasovMesh, fSolution, anisotropyThreshold, boundaryData](std::vector<GlobalIndexType> &cellIDs) {
+            fSolution->importCellData(cellIDs);
+            refineInDirections(vlasovMesh, BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cellIDs, anisotropyThreshold, ~0u, boundaryData));
+            return static_cast<int>(cellIDs.size());
+          });
+          if (s_hpAdaptivity)
+          {
+            refStrategy->setIneligibleCells([vlasovMesh, fSolution, anisotropyThreshold, boundaryData]() {
+              return hpSaturatedCells(vlasovMesh, [&](const std::vector<GlobalIndexType> &cells) {
+                return BoxGDA::anisotropicRefinementMasks(vlasovMesh, fSolution, cells, anisotropyThreshold, ~0u, boundaryData);
+              });
+            });
+          }
+        }
+        
         double energyError;
         auto energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form->vlasovSolution());
         
+        const int maxRefinementsLaterSlabs = maxRefinements;
+        if ((timeSlabOrdinal == 0) && (maxRefinementsFirstSlab >= 0))
+        {
+          maxRefinements = maxRefinementsFirstSlab; // restored after this slab's refinement loop
+        }
         if (timeSlabOrdinal == numTimeSlabs - 1)
         {
           // final time slab
@@ -2113,9 +2776,20 @@ int main(int argc, char *argv[])
           relErrorTarget = relErrorTargetFinalSlab;
         }
         
+        const int maxRefinementsBeforeDofLimit = maxRefinements; // restored after this slab's refinement loop
         for (int refinementNumber=0; refinementNumber<=maxRefinements; refinementNumber++)
         {
           auto numVlasovDofs = form->vlasovSolution()->mesh()->numGlobalDofs();
+          if ((maxVlasovDofs >= 0) && (refinementNumber < maxRefinements) && ((long long)numVlasovDofs >= maxVlasovDofs))
+          {
+            // this solve is the slab's last (with the final tolerances)
+            if (rank == 0)
+            {
+              std::cout << "Time slab " << timeSlabOrdinal << ": " << numVlasovDofs << " Vlasov dofs reaches --maxVlasovDofs=" << maxVlasovDofs
+                        << "; no further refinement in this slab.\n";
+            }
+            maxRefinements = refinementNumber;
+          }
           if (numVlasovDofs > maxDofsForDirectSolve)
           {
             if (rank == 0)
@@ -2150,14 +2824,14 @@ int main(int argc, char *argv[])
             form->setFixedPointMaxSubsteps(maxSubsteps);
           }
           
-          auto phase0AdaptiveSolveStart = phase0.now();
+          auto timingAdaptiveSolveStart = timing.now();
           form->solve();
           {
-            auto fields = phase0MeshStats(form);
+            auto fields = timingMeshStats(form);
             fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
             fields.push_back({"refinement", std::to_string(refinementNumber)});
-            fields.push_back({"memory_hwm_gb", phase0DoubleString(memoryHighWaterMarkInGigabytes())});
-            phase0.logDuration("adaptive_slab_solve", phase0.elapsedSince(phase0AdaptiveSolveStart), fields);
+            fields.push_back({"memory_hwm_gb", timingString(memoryHighWaterMarkInGigabytes())});
+            timing.logDuration("adaptive_slab_solve", timing.elapsedSince(timingAdaptiveSolveStart), fields);
           }
           
           if (rank == 0)
@@ -2166,16 +2840,15 @@ int main(int argc, char *argv[])
             std::cout << "Time slab " << timeSlabOrdinal << ", refinement " << refinementNumber << ", memory HWM (rank 0): " << memoryHWM_GB << " GB\n";
           }
           
-          auto phase0AdaptiveMomentUpdateStart = phase0.now();
+          auto timingAdaptiveMomentUpdateStart = timing.now();
           const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
           std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
-          const int phase8VelocityQuadratureDegree = (phase8MomentVelocityQuadratureDegree > 0) ? phase8MomentVelocityQuadratureDegree
-                                                                                                 : defaultVlasovMomentVelocityQuadratureDegree1D2V(form->vlasovSolution());
+          const int velocityQuadratureDegree = (momentVelocityQuadratureDegree > 0) ? momentVelocityQuadratureDegree : 0; // 0: per cell
           auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
                                                                         form->configurationSpaceMesh(),
                                                                         form->vlasovSolution(),
                                                                         form->f(speciesOrdinal),
-                                                                        phase8VelocityQuadratureDegree,
+                                                                        velocityQuadratureDegree,
                                                                         true,
                                                                         cScaled);
           const int numTensorEntries = vlasovMoments.numConfigurationCells * vlasovMoments.numPointsPerConfigurationCell;
@@ -2196,14 +2869,14 @@ int main(int argc, char *argv[])
           velocity_z = vz_rel_mean;
           vx_rel_mean_clipped = vx_rel_mean;
           vz_rel_mean_clipped = vz_rel_mean;
-          phase0.logDuration("adaptive_moment_update", phase0.elapsedSince(phase0AdaptiveMomentUpdateStart),
+          timing.logDuration("adaptive_moment_update", timing.elapsedSince(timingAdaptiveMomentUpdateStart),
                              {{"slab", std::to_string(timeSlabOrdinal)},
                               {"refinement", std::to_string(refinementNumber)},
                               {"moment_backend", "tensor_native"},
                               {"local_config_cells", std::to_string(vlasovMoments.numConfigurationCells)},
                               {"points_per_cell", std::to_string(vlasovMoments.numPointsPerConfigurationCell)},
                               {"velocity_points", std::to_string(vlasovMoments.numVelocityPoints)},
-                              {"velocity_quadrature_degree", std::to_string(phase8VelocityQuadratureDegree)}});
+                              {"velocity_quadrature_degree", (velocityQuadratureDegree > 0) ? std::to_string(velocityQuadratureDegree) : std::string("per_cell")}});
           
           energyError = refStrategy->computeTotalEnergyError(); // forces update to energyErrorFunction
           
@@ -2244,6 +2917,7 @@ int main(int argc, char *argv[])
             }
             std::cout << "********************************************************************************\n\n";
           }
+          if (accuracyDiagnostics) reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal, refinementNumber); // the trend as the mesh adapts
           
           if (errorTargetMet && (refinementNumber < maxRefinements))
           {
@@ -2252,9 +2926,9 @@ int main(int argc, char *argv[])
             form->setFixedPointTolerance(fixedPointTol);
             form->setFixedPointMinSubsteps(minSubsteps);
             form->setFixedPointMaxSubsteps(maxSubsteps);
-            auto phase0AdaptiveResolveStart = phase0.now();
+            auto timingAdaptiveResolveStart = timing.now();
             form->solve();
-            phase0.logDuration("adaptive_slab_resolve", phase0.elapsedSince(phase0AdaptiveResolveStart),
+            timing.logDuration("adaptive_slab_resolve", timing.elapsedSince(timingAdaptiveResolveStart),
                                {{"slab", std::to_string(timeSlabOrdinal)},
                                 {"refinement", std::to_string(refinementNumber)}});
             
@@ -2291,12 +2965,12 @@ int main(int argc, char *argv[])
           
           if (!errorTargetMet && (refinementNumber < maxRefinements))
           {
-            auto phase0AdaptiveRefinementStart = phase0.now();
+            auto timingAdaptiveRefinementStart = timing.now();
             refStrategy->refine(rank==0);
             
             // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
             form->configurationSpaceMesh()->repartitionAndRebuild();
-            phase0.logDuration("adaptive_refinement", phase0.elapsedSince(phase0AdaptiveRefinementStart),
+            timing.logDuration("adaptive_refinement", timing.elapsedSince(timingAdaptiveRefinementStart),
                                {{"slab", std::to_string(timeSlabOrdinal)},
                                 {"refinement", std::to_string(refinementNumber)}});
             auto maxwellElementCount = form->configurationSpaceMesh()->numActiveElements();
@@ -2310,8 +2984,8 @@ int main(int argc, char *argv[])
           {
             if (saveViz)
             {
-              std::string  vlasovSlabStr = "finalRef" + vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal);
-              std::string maxwellSlabStr = "finalRef" + maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal);
+              std::string  vlasovSlabStr = vizName("finalRef" + vlasovSS.str() + "_slab" + to_string(timeSlabOrdinal));
+              std::string maxwellSlabStr = vizName("finalRef" + maxwellSS.str() + "_slab" + to_string(timeSlabOrdinal));
               
               if (exportVlasov)
               {
@@ -2321,7 +2995,10 @@ int main(int argc, char *argv[])
               
               const int refNumber = 0; // "time" for ParaView
               const int defaultNum1DPoints = 2 * H1Order;
-              maxwellVizSlabFinalRef->exportSolution(form->configurationSpaceSolution(), {density,velocity,velocity_z,Jx,Jz,vx_rel_mean,vz_rel_mean,vx_rel_mean_clipped,vz_rel_mean_clipped,cellIDFunction}, {"n_e","ux_mean","uz_mean_raw","Jx","Jz","vx_rel_mean_signed","vz_rel_mean_signed","vx_rel_mean_clipped","vz_rel_mean_clipped","cell ID (Maxwell)"}, refNumber, defaultNum1DPoints);
+              // As for the uniform-mesh export above: the tensor-native moment functions are defined only at the
+              // configuration-space cubature points of the rank-local cells they were sampled on, so the exporter cannot
+              // evaluate them; export the Maxwell solution fields only.
+              maxwellVizSlabFinalRef->exportSolution(form->configurationSpaceSolution(), {cellIDFunction}, {"cell ID (Maxwell)"}, refNumber, defaultNum1DPoints);
               
               if (exportVlasov)
               {
@@ -2331,6 +3008,61 @@ int main(int argc, char *argv[])
             break; // exits loop early if error target met
           }
         } // refinement loop
+        maxRefinements = maxRefinementsBeforeDofLimit;
+        if ((timeSlabOrdinal == 0) && (timeSlabOrdinal < numTimeSlabs - 1)) maxRefinements = maxRefinementsLaterSlabs;
+        {
+          // The same per-slab diagnostics as the uniform-mesh branch writes, on the slab's final (adapted) mesh.
+          const int diagnosticVelocityQuadratureDegree = (momentVelocityQuadratureDegree > 0) ? momentVelocityQuadratureDegree : 0; // 0: per cell
+          if (densityDiagnostic)
+          {
+            const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
+            writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, diagnosticVelocityQuadratureDegree, cScaled, q);
+            if (rank == 0) std::cout << "Wrote density diagnostic to " << densityPath << ".\n";
+          }
+          if (phaseSpaceDiagnostic)
+          {
+            int pointsPerDim = phaseSpaceDiagnosticPointsPerDim;
+            if (pointsPerDim < 2)
+            {
+              int fDegree = 0;
+              for (GlobalIndexType cellID : form->vlasovMesh()->cellIDsInPartition())
+              {
+                fDegree = std::max(fDegree, form->vlasovMesh()->getElementType(cellID)->trialOrderPtr->getBasis(form->f(speciesOrdinal)->ID())->getDegree());
+              }
+              pointsPerDim = MPIWrapper::max(form->vlasovMesh()->Comm(), fDegree) + 1;
+            }
+            const bool writeSamples = phaseSpaceDiagnosticAllSlabs || (phaseSpaceDiagnosticSlabs.count(timeSlabOrdinal) > 0);
+            writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, writeSamples,
+                                      outputDir + "/phase_slab" + to_string(timeSlabOrdinal), outputDir + "/phase_reductions.csv",
+                                      timeSlabOrdinal, phaseSpaceDiagnosticXNear);
+            // f at the slab's initial time, to compare with the previous slab's final f: charge lost in the transfer shows here
+            writePhaseSpaceDiagnostic(form, speciesOrdinal, pointsPerDim, false, "", outputDir + "/phase_reductions_start.csv",
+                                      timeSlabOrdinal, phaseSpaceDiagnosticXNear, true);
+          }
+          if (accuracyDiagnostics)
+          {
+            auto diagnosticConfigMesh = form->configurationSpaceMesh();
+            FunctionPtr E_diagnostic = Function::solution(form->configurationSpaceFormulation()->E_fieldVar(0), form->configurationSpaceSolution());
+            FunctionPtr f_diagnostic = Function::solution(form->f(speciesOrdinal), form->vlasovSolution());
+            const double tEval = std::nextafter(form->t1(), form->t0());
+            const double E_left = E_diagnostic->evaluate(diagnosticConfigMesh, x0, tEval);
+            const int cubatureEnrichment = 2;
+            const double fIntegral  = f_diagnostic->integrate(form->vlasovMesh(), cubatureEnrichment);
+            const double E2Integral = (E_diagnostic * E_diagnostic)->integrate(diagnosticConfigMesh, cubatureEnrichment);
+            // the tensor-native moment functions are only defined at the configuration cubature points they were sampled on
+            const double JxIntegral = (Jx != Teuchos::null) ? Jx->integrate(diagnosticConfigMesh, 0) : 0.0;
+            const double nIntegral  = (density != Teuchos::null) ? density->integrate(diagnosticConfigMesh, 0) : 0.0;
+            if (rank == 0)
+            {
+              std::cout << std::setprecision(10);
+              std::cout << "ACCURACY slab=" << timeSlabOrdinal << " int_f=" << fIntegral << " int_E2=" << E2Integral
+                        << " int_Jx=" << JxIntegral << " int_n=" << nIntegral << " E0_end=" << E_left
+                        << " vlasov_elements=" << form->vlasovMesh()->numActiveElements() << " vlasov_dofs=" << form->vlasovMesh()->numGlobalDofs() << std::endl;
+              std::cout << std::setprecision(6);
+            }
+            reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal);
+          }
+        }
         
         if (timeSlabOrdinal < numTimeSlabs - 1)
         {
@@ -2348,11 +3080,11 @@ int main(int argc, char *argv[])
           f_soln = Teuchos::null;
 
           // next time slab
-          auto phase0NextTimeSlabStart = phase0.now();
+          auto timingNextTimeSlabStart = timing.now();
           form = form->nextTimeSlab(tWidth, tElements);
-          phase0.logDuration("next_time_slab", phase0.elapsedSince(phase0NextTimeSlabStart),
+          timing.logDuration("next_time_slab", timing.elapsedSince(timingNextTimeSlabStart),
                              {{"completed_slab", std::to_string(timeSlabOrdinal)}});
-          if (phase0.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(phase0OptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
+          if (timing.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
           
           {
             // solutions have been recreated for the new slab.  We need to update anything that depends on the solution.
@@ -2372,11 +3104,11 @@ int main(int argc, char *argv[])
           }
           
           // refine the new slab to ensure resolution of the BC.
-          auto phase0AdaptiveBCRefinementStart = phase0.now();
+          auto timingAdaptiveBCRefinementStart = timing.now();
           refineForBC(form->vlasovSolutionPreviousSubstep(), form->t_n_hat(), bcFunctionsToResolve, maxElements, bcResolutionTolerance);
           // need to repartition and rebuild the physical mesh now (RefStrategy was repartitioning and rebuilding phase space mesh without giving physical mesh a chance to do so).
           form->configurationSpaceMesh()->repartitionAndRebuild();
-          phase0.logDuration("adaptive_bc_refinement", phase0.elapsedSince(phase0AdaptiveBCRefinementStart),
+          timing.logDuration("adaptive_bc_refinement", timing.elapsedSince(timingAdaptiveBCRefinementStart),
                              {{"slab", std::to_string(timeSlabOrdinal + 1)}});
           if (rank == 0)
           {
@@ -2387,7 +3119,11 @@ int main(int argc, char *argv[])
       
     } // end time slab + useAdaptivity
 
-    phase0.logDuration("total", phase0.elapsedSince(phase0TotalStart));
+    timing.logDuration("total", timing.elapsedSince(timingTotalStart));
+    if (timeMonitorSummary)
+    {
+      Teuchos::TimeMonitor::summarize(std::cout, false, true, false, Teuchos::Union);
+    }
   }
   
   const bool printAllocationReport = (rank == 0);

@@ -1129,7 +1129,16 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const Camellia::FieldContainer<
         }
         if (!foundMatchingChild)
         {
-          cout << "parent matches, but none of its children do... will return nearest cell centroid\n";
+          // Points on a boundary shared by the children (to roundoff) take this path; it is harmless, but can happen very
+          // often.  Report the first occurrence on each process, in full, and stay quiet afterwards.
+          static int fallbackCount = 0;
+          const bool report = (fallbackCount++ == 0);
+          if (report)
+          {
+            cout << "parent matches, but none of its children do... will return nearest cell centroid (point:";
+            for (int d=0; d<spaceDim; d++) cout << " " << point[d];
+            cout << "; reported once per process)\n";
+          }
           int numVertices = cell->vertices().size();
           Camellia::FieldContainer<double> vertices(numVertices,spaceDim);
           vector<IndexType> vertexIndices = cell->vertices();
@@ -1143,7 +1152,7 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const Camellia::FieldContainer<
             }
           }
 
-          cout << "parent vertices:\n" << vertices;
+          if (report) cout << "parent vertices:\n" << vertices;
           double minDistance = numeric_limits<double>::max();
           int childSelected = -1;
           for (int childIndex = 0; childIndex < numChildren; childIndex++)
@@ -1161,7 +1170,7 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const Camellia::FieldContainer<
                 vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
               }
             }
-            cout << "child " << childIndex << ", vertices:\n" << vertices;
+            if (report) cout << "child " << childIndex << ", vertices:\n" << vertices;
             vector<double> cellCentroid = getCellCentroid(child->cellIndex());
             double squaredDistance = 0;
             for (int d=0; d<spaceDim; d++)

@@ -1,6 +1,10 @@
 #ifndef Camellia_TensorPAMatrixBridge_h
 #define Camellia_TensorPAMatrixBridge_h
 
+// Requires Intrepid2::PAMatrix: compiled only when Camellia is configured with it (CAMELLIA_HAVE_PAMATRIX; see the
+// CMake option CAMELLIA_ENABLE_PAMATRIX).
+#ifdef CAMELLIA_HAVE_PAMATRIX
+
 #include "TensorBilinearForm.h"
 #include "TensorFunction.h"
 #include "TensorFunctionEvaluationContext.h"
@@ -379,11 +383,9 @@ namespace Camellia
 
     auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
     basis1->getValues(basis1Values, tensorCubaturePoints, op1);
-    basis1Values.setBasis(basis1);
 
     auto basis2Values = basis2->allocateBasisValues(tensorCubaturePoints, op2);
     basis2->getValues(basis2Values, tensorCubaturePoints, op2);
-    basis2Values.setBasis(basis2);
 
     const int numCells = geometry.numCells();
     auto jacobian       = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
@@ -536,11 +538,9 @@ namespace Camellia
 
     auto basis1Values = basis1->allocateBasisValues(tensorCubaturePoints, op1);
     basis1->getValues(basis1Values, tensorCubaturePoints, op1);
-    basis1Values.setBasis(basis1);
 
     auto basis2Values = basis2->allocateBasisValues(tensorCubaturePoints, op2);
     basis2->getValues(basis2Values, tensorCubaturePoints, op2);
-    basis2Values.setBasis(basis2);
 
     const int numCells = geometry.numCells();
     auto jacobian       = geometry.allocateJacobianData(tensorCubaturePoints, 0, numCells);
@@ -833,5 +833,7 @@ namespace Camellia
     }
   }
 }
+
+#endif // CAMELLIA_HAVE_PAMATRIX
 
 #endif

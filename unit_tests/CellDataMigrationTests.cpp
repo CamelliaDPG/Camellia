@@ -12,9 +12,11 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "CellDataMigration.h"
+#include "Function.h"
 #include "MeshFactory.h"
 #include "MPIWrapper.h"
 #include "PoissonFormulation.h"
+#include "Solution.h"
 #include "TypeDefs.h"
 
 using namespace Camellia;
@@ -270,3 +272,50 @@ namespace
     testPackAndUnpackGeometry(mesh, out, success);
   }
 } // namespace
+
+namespace
+{
+  // Two solutions registered with the mesh, one of them holding no coefficients, through refinements that move cells
+  // between ranks: the other keeps its values.  (The migration once handed received coefficients to the registered
+  // solutions in turn, assuming each solution had sent some for every cell; with an empty solution among them, half
+  // the cells' coefficients went to the wrong solution.)  Meaningful on more than one rank.
+  void testMigrationWithAnEmptyRegisteredSolution(bool emptySolutionFirst, Teuchos::FancyOStream &out, bool &success)
+  {
+    const int spaceDim = 2, H1Order = 2, meshWidth = 4;
+    const bool useConformingTraces = true;
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::ULTRAWEAK);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0, 1.0}, {meshWidth, meshWidth}, H1Order);
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    SolutionPtr empty = Solution::solution(form.bf(), mesh);
+    if (emptySolutionFirst) mesh->registerSolution(empty);
+    mesh->registerSolution(solution);
+    if (!emptySolutionFirst) mesh->registerSolution(empty);
+
+    FunctionPtr x = Function::xn(1), y = Function::yn(1);
+    FunctionPtr uExact = 1.0 + x + 2.0 * y; // in the space, so refinement reproduces it exactly
+    std::map<int, FunctionPtr> projectionMap;
+    projectionMap[form.u()->ID()] = uExact;
+    solution->projectOntoMesh(projectionMap);
+
+    // refine half the cells (by ID, which every rank knows; the geometry may be distributed), then all of them: the
+    // partition changes, and cells move between ranks (the mesh stays 1-irregular)
+    std::set<GlobalIndexType> cellsToRefine;
+    for (GlobalIndexType cellID : mesh->getActiveCellIDsGlobal())
+    {
+      if (cellID < GlobalIndexType(meshWidth * meshWidth / 2)) cellsToRefine.insert(cellID);
+    }
+    mesh->hRefine(cellsToRefine);
+    mesh->hRefine(mesh->getActiveCellIDsGlobal());
+    const double error = (Function::solution(form.u(), solution) - uExact)->l2norm(mesh);
+    const double norm = uExact->l2norm(mesh);
+    out << (emptySolutionFirst ? "empty solution registered first" : "empty solution registered second") << ": "
+        << mesh->numActiveElements() << " cells on " << mesh->Comm()->getSize() << " ranks; relative L2 error " << error / norm << endl;
+    TEST_COMPARE(error, <, 1e-12 * norm);
+  }
+}
+
+TEUCHOS_UNIT_TEST( CellDataMigration, RefinementWithAnEmptyRegisteredSolution )
+{
+  testMigrationWithAnEmptyRegisteredSolution(false, out, success);
+  testMigrationWithAnEmptyRegisteredSolution(true, out, success);
+}

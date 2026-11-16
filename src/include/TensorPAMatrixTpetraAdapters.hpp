@@ -1,5 +1,9 @@
 #pragma once
 
+// Requires Intrepid2::PAMatrix: compiled only when Camellia is configured with it (CAMELLIA_HAVE_PAMATRIX; see the
+// CMake option CAMELLIA_ENABLE_PAMATRIX).
+#ifdef CAMELLIA_HAVE_PAMATRIX
+
 #include "TensorPAMatrixBridge.h"
 
 #include <Kokkos_Core.hpp>
@@ -85,3 +89,5 @@ namespace Camellia
                                  const int rowsPerCell);
   };
 }
+
+#endif // CAMELLIA_HAVE_PAMATRIX

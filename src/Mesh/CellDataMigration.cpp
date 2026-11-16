@@ -28,7 +28,7 @@ typedef pair<LabeledRefinementBranch, vector<vector<double>> > RootedLabeledRefi
 #define WRITE_ADVANCE(dataLocation,variable) writeAndAdvance(dataLocation,&variable,sizeof(variable))
 #define WRITE_ADVANCE_ARRAY(dataLocation,array) if (array.size() > 0) writeAndAdvance(dataLocation,array.data(),sizeof(array[0])*array.size())
 
-std::vector<std::pair<std::pair<GlobalIndexType,bool>,Camellia::FieldContainer<double>>> CellDataMigration::solutionCoefficients;
+std::vector<CellDataMigration::MigratedCoefficients> CellDataMigration::solutionCoefficients;
 
 void CellDataMigration::addMigratedGeometry(MeshTopology* meshTopo,
                                             const vector<RootedLabeledRefinementBranch> &rootedLabeledBranches)
@@ -384,44 +384,38 @@ void CellDataMigration::packSolutionData(Mesh *mesh, GlobalIndexType cellID, boo
 void CellDataMigration::processSolutionCoefficients(Mesh* mesh)
 {
   vector<TSolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
-  int numSolutions = solutions.size();
-  int solnOrdinal = 0;
   
-  for (auto entry : solutionCoefficients)
+  for (const auto &entry : solutionCoefficients)
   {
-    GlobalIndexType cellID = entry.first.first;
-    bool coefficientsBelongToParent = entry.first.second;
-    const Camellia::FieldContainer<double>& solnCoeffs = entry.second;
-    
-    int numLHSes = solutions[solnOrdinal]->numSolutions();
-    for (int lhsOrdinal=0; lhsOrdinal<numLHSes; lhsOrdinal++)
+    const GlobalIndexType cellID = entry.cellID;
+    const Camellia::FieldContainer<double>& solnCoeffs = entry.coefficients;
+    TEUCHOS_TEST_FOR_EXCEPTION((entry.solutionOrdinal < 0) || (entry.solutionOrdinal >= int(solutions.size())), std::invalid_argument,
+                               "migrated coefficients for a solution that is not registered");
+    TSolutionPtr<double> solution = solutions[entry.solutionOrdinal];
+    const int lhsOrdinal = entry.lhsOrdinal;
+    if (!entry.belongToParent)
     {
-      if (!coefficientsBelongToParent)
-      {
-        solutions[solnOrdinal]->setSolnCoeffsForCellID(solnCoeffs, cellID, lhsOrdinal);
-      }
-      else
-      {
-        CellPtr cell = mesh->getTopology()->getCell(cellID);
-        CellPtr parent = cell->getParent();
-        int childOrdinal = -1;
-        vector<IndexType> childIndices = parent->getChildIndices(mesh->getTopology());
-        for (int i=0; i<childIndices.size(); i++)
-        {
-          if (childIndices[i]==cellID) childOrdinal = i;
-          else childIndices[i] = -1; // indication that Solution should not compute the projection for this child
-        }
-        if (childOrdinal == -1)
-        {
-          cout << "ERROR: child not found.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
-        }
-        //      cout << "determining cellID " << parent->cellIndex() << "'s child " << childOrdinal << "'s coefficients.\n";
-        solutions[solnOrdinal]->projectOldCellOntoNewCells(parent->cellIndex(), mesh->getElementType(parent->cellIndex()),
-                                                           solnCoeffs, childIndices, lhsOrdinal);
-      }
+      solution->setSolnCoeffsForCellID(solnCoeffs, cellID, lhsOrdinal);
     }
-    solnOrdinal = (solnOrdinal + 1) % numSolutions;
+    else
+    {
+      CellPtr cell = mesh->getTopology()->getCell(cellID);
+      CellPtr parent = cell->getParent();
+      int childOrdinal = -1;
+      vector<IndexType> childIndices = parent->getChildIndices(mesh->getTopology());
+      for (int i=0; i<childIndices.size(); i++)
+      {
+        if (childIndices[i]==cellID) childOrdinal = i;
+        else childIndices[i] = -1; // indication that Solution should not compute the projection for this child
+      }
+      if (childOrdinal == -1)
+      {
+        cout << "ERROR: child not found.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
+      }
+      solution->projectOldCellOntoNewCells(parent->cellIndex(), mesh->getElementType(parent->cellIndex()),
+                                           solnCoeffs, childIndices, lhsOrdinal);
+    }
   }
   solutionCoefficients.clear();
   for (SolutionPtr soln : solutions)
@@ -687,7 +681,7 @@ void CellDataMigration::unpackSolutionData(Mesh* mesh, GlobalIndexType cellID, c
       // the dofs themselves
       dataLocation += localDofs * sizeof(double);
       
-      solutionCoefficients.push_back({{cellID,coefficientsBelongToParent},solnCoeffs});
+      solutionCoefficients.push_back({cellID, coefficientsBelongToParent, solnOrdinal, lhsOrdinal, solnCoeffs});
       //    cout << "setting solution coefficients for cellID " << cellID << endl << solnCoeffs;
     }
   }

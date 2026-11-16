@@ -12,6 +12,7 @@
  *
  */
 
+#include <functional>
 #include "TypeDefs.h"
 
 #include "Camellia_FieldContainer.hpp"
@@ -96,6 +97,15 @@ public:
        bool allowMeshTopologyPruning);
 
   // Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
+  //! Creates the GlobalDofAssignment for a Mesh under construction.
+  using GDAFactory = std::function<Teuchos::RCP<GlobalDofAssignment>(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+                                                                     MeshPartitionPolicyPtr partitionPolicy, std::vector<int> H1Order, int pToAddTest)>;
+
+  //! Constructor for meshes whose GlobalDofAssignment is not GDAMinimumRule (e.g. box meshes; see BoxMeshTopology.h).
+  Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest, GDAFactory gdaFactory,
+       map<int,int> trialOrderEnhancements=map<int,int>(), map<int,int> testOrderEnhancements=map<int,int>(),
+       MeshPartitionPolicyPtr partitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null);
+
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Teuchos_CommPtr Comm = Teuchos::null, bool allowPruning = true);
@@ -195,6 +205,9 @@ public:
   using RefinementObserver::hRefine; // avoid compiler warnings about the hRefine() methods below.
   void hRefine(const vector<GlobalIndexType> &cellIDs, bool repartitionAndRebuild = true);
   void hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild = true);
+  //! Bisects each cell in the coordinate directions set in its mask (bit k: direction k).  For mesh topologies that
+  //! support MeshTopologyView::refineCellInDirections() (e.g. BoxMeshTopology).
+  void hRefine(const std::map<GlobalIndexType,unsigned> &cellDirectionMasks, bool repartitionAndRebuild = true);
 
   void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);

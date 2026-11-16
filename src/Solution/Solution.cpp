@@ -4032,7 +4032,9 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
   auto existingCellIt = _solutionForCellID[solutionOrdinal].find(cellID);
   bool cellCoefficientsFound = existingCellIt != _solutionForCellID[solutionOrdinal].end();
   Camellia::FieldContainer<double> solutionForCell;
-  if (cellCoefficientsFound)
+  // (coefficients for an older element type -- the cell was p-refined, and this solution is not registered with the
+  // mesh, so they were not projected -- are discarded rather than written past)
+  if (cellCoefficientsFound && (existingCellIt->second.size() == trialOrder->totalDofs()))
   {
     solutionForCell = existingCellIt->second;
   }
@@ -4677,6 +4679,20 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
                                                    const Camellia::FieldContainer<Scalar> &oldData,
                                                    const vector<GlobalIndexType> &childIDs, int solutionOrdinal)
 {
+  {
+    // some GlobalDofAssignments (those for meshes without RefinementPatterns) carry out the projection themselves
+    std::vector<Camellia::FieldContainer<double>> childCoefficients;
+    if (_mesh->globalDofAssignment()->projectParentCoefficientsOntoChildren(cellID, oldData, childIDs, childCoefficients))
+    {
+      for (int childOrdinal=0; childOrdinal < childIDs.size(); childOrdinal++)
+      {
+        if (childIDs[childOrdinal] == -1) continue;
+        replaceMapEntry(_solutionForCellID[solutionOrdinal], childIDs[childOrdinal], childCoefficients[childOrdinal]);
+      }
+      clearComputedResiduals();
+      return;
+    }
+  }
   VarFactoryPtr vf;
   if (_bf != Teuchos::null)
     vf = _bf->varFactory();

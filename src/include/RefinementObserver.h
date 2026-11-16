@@ -17,6 +17,7 @@
 
 #include "TypeDefs.h"
 
+#include <map>
 #include "Teuchos_RCP.hpp"
 #include "RefinementPattern.h"
 
@@ -38,6 +39,9 @@ public:
   {
     didHRefine(cellIDs, refPattern, didRepartitionAndRebuild);
   }
+  //! Sent by Mesh::hRefine(const std::map<GlobalIndexType,unsigned> &, bool), for meshes whose cells are bisected in a set of
+  //! coordinate directions (bit k of the mask: direction k) instead of by RefinementPattern.
+  virtual void didHRefineInDirections(const std::map<GlobalIndexType,unsigned> &cellDirectionMasks, bool didRepartitionAndRebuild) {}
   virtual void pRefine(const set<GlobalIndexType> &cellIDs, int pToAdd, bool repartitionAndRebuild) {}
   virtual void hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild) {}
 

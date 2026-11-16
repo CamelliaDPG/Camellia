@@ -12,6 +12,8 @@
 
 #include "SolutionMomentFunction.h"
 
+#include "BasisCache.h"
+#include "CamelliaCellTools.h"
 #include "Camellia_TensorIndices.h"
 #include "ExtrudedMeshTopology.h"
 #include "GlobalDofAssignment.h"
@@ -365,6 +367,22 @@ namespace Camellia
 
   void RelativisticFirstMomentFunction::update()
   {
+    // values() evaluates f directly on the phase-space cells over each rank-local configuration cell; those may be owned
+    // by other ranks, so make their solution coefficients available here (collective: update() is called on every rank,
+    // whereas values() is called per local workset and may not communicate).
+    MeshPtr phaseSpaceMesh = _phaseSpaceSolution->mesh();
+    auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology()->baseMeshTopology());
+    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceMeshTopology == NULL, std::invalid_argument,
+                               "RelativisticFirstMomentFunction requires an ExtrudedMeshTopology phase-space mesh");
+    std::set<GlobalIndexType> phaseSpaceCellIDs;
+    for (GlobalIndexType configurationCellID : _configurationSpaceMesh->cellIDsInPartition())
+    {
+      for (const auto &phaseSpaceCellID : phaseSpaceMeshTopology->phaseSpaceCellIDsForPhysicalCell(configurationCellID))
+      {
+        phaseSpaceCellIDs.insert(phaseSpaceCellID);
+      }
+    }
+    _phaseSpaceSolution->importSolutionForOffRankCells(phaseSpaceCellIDs);
     _hasBeenUpdated = true;
   }
 
@@ -538,8 +556,22 @@ namespace Camellia
           }
         }
 
-        FieldContainer<double> fValues(numPoints * velocityPointCount);
-        _phaseSpaceSolution->solutionValues(fValues, _fieldVar->ID(), phaseSpacePoints);
+        // f at those points, from this phase-space cell's coefficients (imported in update() if the cell is off-rank);
+        // rank-local, unlike point-location-based evaluation, which sums over ranks
+        const int phaseSpacePointCount = numPoints * velocityPointCount;
+        FieldContainer<double> physicalCellPoints(1, phaseSpacePointCount, phaseDim), referenceCellPoints(1, phaseSpacePointCount, phaseDim);
+        for (int pointOrdinal=0; pointOrdinal<phaseSpacePointCount; pointOrdinal++)
+          for (int d=0; d<phaseDim; d++)
+            physicalCellPoints(0,pointOrdinal,d) = phaseSpacePoints(pointOrdinal,d);
+        CamelliaCellTools::mapToReferenceFrame(referenceCellPoints, physicalCellPoints, phaseSpaceMesh->getTopology(), phaseSpaceCellID,
+                                               phaseSpaceMesh->globalDofAssignment()->getCubatureDegree(phaseSpaceCellID));
+        referenceCellPoints.resize(phaseSpacePointCount, phaseDim);
+        BasisCachePtr phaseSpaceCellCache = BasisCache::basisCacheForCell(phaseSpaceMesh, phaseSpaceCellID);
+        phaseSpaceCellCache->setRefCellPointsFC(referenceCellPoints);
+        FieldContainer<double> fCellValues(1, phaseSpacePointCount);
+        _phaseSpaceSolution->solutionValues(fCellValues, _fieldVar->ID(), phaseSpaceCellCache);
+        FieldContainer<double> fValues(phaseSpacePointCount);
+        for (int pointOrdinal=0; pointOrdinal<phaseSpacePointCount; pointOrdinal++) fValues(pointOrdinal) = fCellValues(0,pointOrdinal);
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
         {
           for (int velocityPointOrdinal=0; velocityPointOrdinal<velocityPointCount; velocityPointOrdinal++)

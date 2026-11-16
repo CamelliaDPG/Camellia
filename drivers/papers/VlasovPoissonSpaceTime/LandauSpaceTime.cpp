@@ -137,7 +137,7 @@ vector<pair<double,double>> evaluateTemporalSolutionFunction(SolutionPtr tempora
   
   const double tol = 1e-10;
   
-  int rank = mesh->Comm()->MyPID();
+  int rank = mesh->Comm()->getRank();
   std::map<IndexType, vector<double> > pointsForCell;
   
   vector<double> allPoints;
@@ -605,20 +605,6 @@ int main(int argc, char *argv[])
         totalTimeT_vlasov        += timeT;
         totalTimeK_vlasov        += timeK;
     };
-    double totalTimeG_vlasov_core_integration = 0;
-    int totalElementCount_vlasov_core_integration = 0; // should match totalElementCount_vlasov
-    double totalTime_block1 = 0, totalTime_block2 = 0, totalTime_block3 = 0, totalTime_block4 = 0;
-    std::function<void(int numElements, double timeG_integrate, double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> vlasovGramCoreIntegrationTimingCallback;
-    vlasovGramCoreIntegrationTimingCallback = [&totalTimeG_vlasov_core_integration, &totalElementCount_vlasov_core_integration,
-     &totalTime_block1, &totalTime_block2, &totalTime_block3, &totalTime_block4]
-      (int numElements, double timeCoreIntegration, double time_block1, double time_block2, double time_block3, double time_block4) {
-        totalElementCount_vlasov_core_integration += numElements;
-        totalTimeG_vlasov_core_integration        += timeCoreIntegration;
-        totalTime_block1 += time_block1;
-        totalTime_block2 += time_block2;
-        totalTime_block3 += time_block3;
-        totalTime_block4 += time_block4;
-    };
     double totalTimeG_poisson = 0, totalTimeB_poisson = 0, totalTimeT_poisson = 0, totalTimeK_poisson = 0;
     int totalElementCount_poisson = 0;
     std::function<void(int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType)> poissonOptimalTestTimingCallback;
@@ -633,7 +619,6 @@ int main(int argc, char *argv[])
     // register the timing callbacks
     form->vlasovBF()->setOptimalTestTimingCallback(vlasovOptimalTestTimingCallback);
     form->configurationSpaceSolution()->bf()->setOptimalTestTimingCallback(poissonOptimalTestTimingCallback);
-    form->setVlasovGramAssemblyTimingCallback(vlasovGramCoreIntegrationTimingCallback);
     
     vector<pair<double,double>> fourierPeakValues; // (t, ln(|E1|))
     bool logEFieldSineModeIsIncreasing = false; // if it was increasing, and then decreases: local maximum
@@ -858,20 +843,17 @@ int main(int argc, char *argv[])
           vlasovViz->setMesh(form->vlasovMesh());
         }
       }
-      Epetra_CommPtr Comm = MPIWrapper::CommWorld();
-      totalTimeG_vlasov = MPIWrapper::sum(*Comm, totalTimeG_vlasov);
-      totalTimeB_vlasov = MPIWrapper::sum(*Comm, totalTimeB_vlasov);
-      totalTimeT_vlasov = MPIWrapper::sum(*Comm, totalTimeT_vlasov);
-      totalTimeK_vlasov = MPIWrapper::sum(*Comm, totalTimeK_vlasov);
-      totalElementCount_vlasov = MPIWrapper::sum(*Comm, totalElementCount_vlasov);
-      totalTimeG_poisson = MPIWrapper::sum(*Comm, totalTimeG_poisson);
-      totalTimeB_poisson = MPIWrapper::sum(*Comm, totalTimeB_poisson);
-      totalTimeT_poisson = MPIWrapper::sum(*Comm, totalTimeT_poisson);
-      totalTimeK_poisson = MPIWrapper::sum(*Comm, totalTimeK_poisson);
-      totalElementCount_poisson = MPIWrapper::sum(*Comm, totalElementCount_poisson);
-      
-      totalTimeG_vlasov_core_integration        = MPIWrapper::sum(*Comm, totalTimeG_vlasov_core_integration);
-      totalElementCount_vlasov_core_integration = MPIWrapper::sum(*Comm, totalElementCount_vlasov_core_integration);
+      auto Comm = MPIWrapper::TeuchosCommWorld();
+      totalTimeG_vlasov = MPIWrapper::sum(Comm, totalTimeG_vlasov);
+      totalTimeB_vlasov = MPIWrapper::sum(Comm, totalTimeB_vlasov);
+      totalTimeT_vlasov = MPIWrapper::sum(Comm, totalTimeT_vlasov);
+      totalTimeK_vlasov = MPIWrapper::sum(Comm, totalTimeK_vlasov);
+      totalElementCount_vlasov = MPIWrapper::sum(Comm, totalElementCount_vlasov);
+      totalTimeG_poisson = MPIWrapper::sum(Comm, totalTimeG_poisson);
+      totalTimeB_poisson = MPIWrapper::sum(Comm, totalTimeB_poisson);
+      totalTimeT_poisson = MPIWrapper::sum(Comm, totalTimeT_poisson);
+      totalTimeK_poisson = MPIWrapper::sum(Comm, totalTimeK_poisson);
+      totalElementCount_poisson = MPIWrapper::sum(Comm, totalElementCount_poisson);
       
       if (rank == 0)
       {
@@ -883,16 +865,10 @@ int main(int argc, char *argv[])
 //        cout << "RHS: " << totalTimeRHS / totalRHSElements << " sec.\n";
         
         cout << "Running total time for Vlasov optimal test computations:\n";
-        cout << "G (core): " <<  totalTimeG_vlasov_core_integration << " sec.\n";
         cout << "G:        " <<  totalTimeG_vlasov << " sec.\n";
         cout << "B:        " <<  totalTimeB_vlasov << " sec.\n";
         cout << "K:        " <<  totalTimeK_vlasov << " sec.\n";
-        
-        cout << "totalTime_block1: " << totalTime_block1 << endl;
-        cout << "totalTime_block2: " << totalTime_block2 << endl;
-        cout << "totalTime_block3: " << totalTime_block3 << endl;
-        cout << "totalTime_block4: " << totalTime_block4 << endl;
-        
+
         cout << "Running total time for Poisson optimal test computations:\n";
         cout << "G:   " <<  totalTimeG_poisson << " sec.\n";
         cout << "B:   " <<  totalTimeB_poisson << " sec.\n";
@@ -908,11 +884,11 @@ int main(int argc, char *argv[])
           if (!fileExists)
           {
             std::ofstream file(vlasovTimingsOutputFile);
-            file << "p_test\tworksetSize\tH1Order\tdelta_k\tG_core_time\tG_time\tB_time\tGAlgorithm\n";
+            file << "p_test\tworksetSize\tH1Order\tdelta_k\tG_time\tB_time\tGAlgorithm\n";
             file.close();
           }
           std::ofstream file(vlasovTimingsOutputFile, std::ios::app);
-          file << H1Order + delta_k << "\t" << worksetSize << "\t" << H1Order << "\t" << delta_k << "\t" << roundToThreeSignificantDigits(totalTimeG_vlasov_core_integration);
+          file << H1Order + delta_k << "\t" << worksetSize << "\t" << H1Order << "\t" << delta_k;
           file << "\t" << roundToThreeSignificantDigits(totalTimeG_vlasov) << "\t" << roundToThreeSignificantDigits(totalTimeB_vlasov);
           if (useStandardAssembly)
           {

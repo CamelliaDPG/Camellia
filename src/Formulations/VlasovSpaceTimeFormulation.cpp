@@ -16,6 +16,8 @@
 #include "ConfigurationSpaceFormulationMaxwell1D2V.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
+#include "BoxGDA.h"
+#include "BoxMeshTopology.h"
 #include "ExtrudedMeshTopology.h"
 #include "GlobalDofAssignment.h"
 #include "GMGSolver.h"
@@ -43,18 +45,6 @@
 #include "Intrepid2_DerivedBasisFamily.hpp"
 #include "Intrepid2_FunctionSpaceTools.hpp"
 #include "Intrepid2_IntegrationTools.hpp"
-#include "Intrepid2_PAMatrix.hpp"
-
-// Camellia requires the PAMatrix API from Trilinos' intrepid2-pamatrix branch, in which assemble() is sum-factorized.  (In
-// older PAMatrix versions, assemble() was an IntegrationTools-based placeholder, and the sum-factorized method was named
-// assemble2(); building against those would silently fall back to the slow path.)
-namespace
-{
-  template<class PAMatrixType>
-  constexpr bool hasSumFactorizedPAMatrixAPI = requires(const PAMatrixType &m) { m.leftBasisValues(); };
-}
-static_assert(hasSumFactorizedPAMatrixAPI<Intrepid2::PAMatrix<Kokkos::DefaultExecutionSpace::device_type,double>>,
-              "Camellia requires the PAMatrix API from Trilinos' intrepid2-pamatrix branch (PAMatrix::assemble() sum-factorized)");
 #include "Intrepid2_NodalBasisFamily.hpp"
 
 #include <algorithm>
@@ -780,7 +770,7 @@ namespace
 
     auto configurationMesh = form.configurationSpaceMesh();
     auto configurationCellIDs = rankLocalConfigurationCellIDs(configurationMesh);
-    const int velocityQuadratureDegree = defaultVlasovMomentVelocityQuadratureDegree1D2V(form.vlasovSolution());
+    const int velocityQuadratureDegree = 0; // per phase-space cell: each cell's own cubature degree
 
     std::vector<double> speciesCharges;
     std::vector<TensorPlanar1D2VSpeciesMoments> speciesMoments;
@@ -866,290 +856,7 @@ namespace
     }
   }
 
-  class VlasovSpaceTimeIP : public TIP<double>
-  {
-    vector<FunctionPtr> _acceleration;
-    VlasovSpaceTimeFormulation & _form;
-    int _numConfigSpaceDims;
-    int _numVelocitySpaceDims;
-    double _massWeight;   // weight on (w,w); the graph-norm term (Lw,Lw) has unit weight
-    int _wID;
-    int _phiID;           // -1 if there is no latent positivity test variable; otherwise (phi,phi) is added
-    IPPtr _phiIP;         // (phi,phi), assembled with the standard IP machinery
-    
-    std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataValueValue; // key: (basis polyOrder, numCells)
-    std::map<std::pair<int,int>,Intrepid2::Data<double, DeviceType> > _integralDataGradGrad; // key: (basis polyOrder, numCells)
-    
-    std::function<void(int numElements, double timeG_integrate,
-                                                                double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> _gramAssemblyTimingCallback;
-  public:
-    //! Sum-factorized assembly of (Lw,Lw) + massWeight (w,w) [+ (phi,phi)], with L w = dw/dt + v . grad_x w + a . grad_v w.
-    //! The velocity v is form.v_i() (so relativistic formulations supply u/gamma), and the acceleration is form.a().
-    VlasovSpaceTimeIP(VlasovSpaceTimeFormulation & form, double massWeight = 1.0, bool includePositivityTestVariable = false)
-    :
-    TIP<double>(),
-    _form(form),
-    _massWeight(massWeight)
-    {
-      _numConfigSpaceDims   = form.configurationSpaceMesh()->getDimension(); // note this includes time dimension
-      _numVelocitySpaceDims = form.velocityDim();
-      _wID   = form.w(0)->ID();
-      _phiID = includePositivityTestVariable ? form.phi(0)->ID() : -1;
-      if (includePositivityTestVariable)
-      {
-        _phiIP = IP::ip();
-        _phiIP->addTerm(form.phi(0));
-      }
-      
-      if (form.numSpecies() != 1)
-      {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "VlasovSpaceTimeIP does not yet support multiple species");
-      }
-      int speciesOrdinal = 0;
-      _acceleration = form.a(speciesOrdinal);
-    }
-    
-    //! symmetric (basisValues, basisValues) integral, weighted by cellMeasures; PAMatrix assembly by default, or
-    //! Intrepid2::IntegrationTools::integrate() if CAMELLIA_VLASOV_GRAM_BACKEND=integrate
-    void integrateGram(Intrepid2::Data<double,DeviceType> &integrals,
-                       const Intrepid2::TransformedBasisValues<double,DeviceType> &basisValues,
-                       const Intrepid2::TensorData<double,DeviceType> &cellMeasures,
-                       const bool sumInto, double *flopEstimate) const
-    {
-      static const bool useIntegrate = []() {
-        const char *backend = getenv("CAMELLIA_VLASOV_GRAM_BACKEND");
-        return (backend != NULL) && (std::string(backend) == "integrate");
-      }();
-      if (useIntegrate)
-      {
-        Intrepid2::IntegrationTools<DeviceType>::integrate(integrals, basisValues, cellMeasures, basisValues, sumInto, flopEstimate);
-        return;
-      }
-      TEUCHOS_TEST_FOR_EXCEPTION(sumInto, std::invalid_argument, "PAMatrix Gram assembly does not support sumInto");
-      Intrepid2::PAMatrix<DeviceType,double> paMatrix(basisValues, cellMeasures, basisValues);
-      paMatrix.assemble(integrals);
-    }
-    
-    void computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
-                                   Teuchos::RCP<DofOrdering> dofOrdering,
-                                   Teuchos::RCP<BasisCache> basisCache) override
-    {
-      // the dof ordering should have an H^1 test function w, and (with positivity enforcement) an L^2 test function phi
-      const int expectedVarCount = (_phiID >= 0) ? 2 : 1;
-      TEUCHOS_TEST_FOR_EXCEPTION(dofOrdering->getVarIDs().size() != expectedVarCount, std::invalid_argument, "Unexpected number of test variables");
-      const int wID = _wID;
-      
-      auto timerStart = std::chrono::steady_clock::now();
-      auto elapsedTime = [&timerStart]()
-      {
-        return std::chrono::duration<double>(std::chrono::steady_clock::now() - timerStart).count();
-      };
-      auto resetTimer = [&timerStart]()
-      {
-        timerStart = std::chrono::steady_clock::now();
-      };
-      
-      // evaluate acceleration at quadrature points
-      // we could speed this up for Poisson by only evaluating at physical points
-      // we could also speed it up for Maxwell by evaluating B and v separately, and doing the cross product, etc.
-      
-      const auto & refPoints = basisCache->getRefCellPoints();
-      
-      const int numCells  = innerProduct.dimension(0); // (C,F,F)
-      const int numPoints = refPoints.extent_int(0); // (P,D)
-      const int spaceDim  = refPoints.extent_int(1);
-      
-      auto & scratchStorage = SharedScratchStorage<double>::sharedScratchStorage();
-      
-      // Flat (C,P) values; indexing an Intrepid2::Data with a fixed number of arguments is only valid when that number
-      // matches the Data's logical rank, which depends on the coefficient (e.g., rank 5 for a 1D2V Maxwell acceleration).
-      Kokkos::Array< DeviceView<double>, 3> accelerationValues; // at most 3 components
-      
-      const int numAccelerationComponents = _acceleration.size();
-      for (int vd=0; vd<numAccelerationComponents; vd++)
-      {
-        accelerationValues[vd] = scratchStorage.checkoutScratchStorage({numCells, numPoints}, "accelerationValues");
-        _acceleration[vd]->values(accelerationValues[vd], ASSIGN, basisCache);
-      }
-      
-      Kokkos::Array< DeviceView<double>, 3> velocityValues; // at most 3 components
-      for (int vd=0; vd<_numVelocitySpaceDims; vd++)
-      {
-        velocityValues[vd] = scratchStorage.checkoutScratchStorage({numCells, numPoints}, "velocityValues");
-        auto vdFxn = _form.v_i(vd);
-        vdFxn->values(velocityValues[vd], ASSIGN, basisCache);
-      }
-      
-      auto wBasis = dofOrdering->getBasis(wID);
-//      auto wBasis = wBasisWrapper->intrepid2Basis();
-      const int basisCardinality = wBasis->getCardinality();
-  
-      const auto & basisValues    = basisCache->getValues(wBasis, Intrepid2::OPERATOR_VALUE, false);
-      const auto & basisGradients = basisCache->getValues(wBasis, Intrepid2::OPERATOR_GRAD,  false);
-      
-//      auto basisValues    = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_VALUE);
-//      auto basisGradients = wBasis->allocateBasisValues(refPoints, Intrepid2::OPERATOR_GRAD);
-//      
-//      wBasis->getValues(basisValues,    refPoints, Intrepid2::OPERATOR_VALUE);
-//      wBasis->getValues(basisGradients, refPoints, Intrepid2::OPERATOR_GRAD);
-      
-      auto jacobian    = getJacobianData(basisCache, _numConfigSpaceDims);
-      
-      auto jacobianDet = Intrepid2::CellTools<DeviceType>::allocateJacobianDet(jacobian);
-      auto jacobianInv = Intrepid2::CellTools<DeviceType>::allocateJacobianInv(jacobian);
-      Intrepid2::CellTools<DeviceType>::setJacobianDet(jacobianDet, jacobian);
-      Intrepid2::CellTools<DeviceType>::setJacobianInv(jacobianInv, jacobian);
-      
-      using fst = Intrepid2::FunctionSpaceTools<DeviceType>;
-      auto transformedBasisValues    = fst::getHGRADtransformVALUE(numCells, basisValues);
-      
-      auto cellMeasures = allocateCellMeasure(jacobianDet, basisCache->getCubatureWeights());
-      computeCellMeasure(cellMeasures, jacobianDet, basisCache->getCubatureWeights());
-      
-      std::pair<int,int> integralDataKey {wBasis->getDegree(),numCells};
-      if (_integralDataValueValue.find(integralDataKey) == _integralDataValueValue.end())
-      {
-        _integralDataValueValue[integralDataKey] = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisValues, cellMeasures, transformedBasisValues);
-      }
-      auto & integralDataValueValue = _integralDataValueValue[integralDataKey];
-//      auto integralDataValueValue = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisValues, cellMeasures, transformedBasisValues);
-      
-      double time_block1 = elapsedTime();
-      resetTimer();
-      
-      double coreIntegrationTime = 0;
-      
-      double flopEstimateValueValue = 0;
-      bool sumInto = false;
-      // (w1, w2)
-      resetTimer();
-      integrateGram(integralDataValueValue, transformedBasisValues, cellMeasures, sumInto, &flopEstimateValueValue);
-      coreIntegrationTime = elapsedTime();
-      resetTimer();
-      
-      // (v \cdot grad_x w1 + d/dt w1 + a \cdot grad_v w1, v \cdot grad_x w2 + d/dt w2 + a \cdot grad_v w2)
-      // allocate container for [v 1 a], with shape (C,P,D)
-      auto gradientWeightsView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov gradient vector weights");
-      // fill container:
-      using ExecutionSpace = typename DeviceType::execution_space;
-      int numVelocitySpaceDims = _numVelocitySpaceDims;
-      // coordinates are (x_1,...,x_s, t, u_1,...,u_v); s = spatial dimension (the configuration mesh includes time)
-      const int numSpatialDims = _numConfigSpaceDims - 1;
-      Kokkos::parallel_for(
-        Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>>({0,0},{numCells,numPoints}),
-        KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointOrdinal)
-        {
-          // velocity weights the spatial gradient; only the first numSpatialDims velocity components pair with x:
-          for (int d=0; d<numSpatialDims; d++)
-          {
-            gradientWeightsView(cellOrdinal,pointOrdinal,d) = velocityValues[d](cellOrdinal,pointOrdinal);
-          }
-          // temporal gradient weight is unit:
-          gradientWeightsView(cellOrdinal,pointOrdinal,numSpatialDims) = 1.0;
-          // acceleration weights velocity gradient
-          for (int d=0; d<numAccelerationComponents; d++)
-          {
-            gradientWeightsView(cellOrdinal,pointOrdinal,d+numSpatialDims+1) = accelerationValues[d](cellOrdinal,pointOrdinal);
-          }
-        });
-      
-      // compute mat-vec result between gradientWeightsView and the jacobianInv.  Be careful about the direction of the multiplication.
-      
-      Intrepid2::Data<double,DeviceType> gradientWeightsData(gradientWeightsView);
-      
-      auto transformVectorView = scratchStorage.checkoutScratchStorage({numCells,numPoints,spaceDim}, "Vlasov transform vector");
-      Intrepid2::Data<double,DeviceType> transformVectorData(transformVectorView);
-      
-      transformVectorData.storeMatVec(jacobianInv, gradientWeightsData, true); // true: transpose jacobianInv when multiplying
-      
-      Intrepid2::TransformedBasisValues<double, DeviceType> transformedBasisGradients(transformVectorData, basisGradients);
-      
-      if (_integralDataGradGrad.find(integralDataKey) == _integralDataGradGrad.end())
-      {
-        _integralDataGradGrad[integralDataKey] = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisGradients, cellMeasures, transformedBasisGradients);
-      }
-      auto & integralDataGradGrad = _integralDataGradGrad[integralDataKey];
-//      auto integralDataGradGrad = Intrepid2::IntegrationTools<DeviceType>::allocateIntegralData(transformedBasisGradients, cellMeasures, transformedBasisGradients);
-      double time_block2 = elapsedTime();
-      resetTimer();
-      
-      sumInto = false;
-      double flopEstimateGradGrad = 0;
-      resetTimer();
-      integrateGram(integralDataGradGrad, transformedBasisGradients, cellMeasures, sumInto, &flopEstimateGradGrad);
-      coreIntegrationTime += elapsedTime();
-      resetTimer();
-//      std::cout << "flop estimate for (value, value): " << flopEstimateValueValue << std::endl;
-//      std::cout << "flop estimate for ( grad,  grad): " << flopEstimateGradGrad   << std::endl;
-
-      // scatter the w block (and the phi block, if present) into the test-space ordering
-      const auto &wDofIndicesHost = dofOrdering->getDofIndices(wID);
-      DeviceView<int> wDofIndices("VlasovSpaceTimeIP w dof indices", basisCardinality);
-      {
-        auto wDofIndicesMirror = Kokkos::create_mirror_view(wDofIndices);
-        for (int i=0; i<basisCardinality; i++) wDofIndicesMirror(i) = wDofIndicesHost[i];
-        Kokkos::deep_copy(wDofIndices, wDofIndicesMirror);
-      }
-      const double massWeight = _massWeight;
-      auto ipView = innerProduct.checkoutDeviceView();
-      Kokkos::deep_copy(ipView, 0.0);
-      Kokkos::parallel_for(
-                           Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numCells,basisCardinality,basisCardinality}),
-      KOKKOS_LAMBDA (int cellOrdinal, int i, int j) {
-        ipView(cellOrdinal,wDofIndices(i),wDofIndices(j)) = massWeight * integralDataValueValue(cellOrdinal,i,j) + integralDataGradGrad(cellOrdinal,i,j);
-      });
-      Kokkos::fence();
-      double time_block3 = elapsedTime();
-      resetTimer();
-      
-      innerProduct.checkinDeviceView(true); // true: deep copy to host.  If we could guarantee that caller wouldn't try to access on host, we could eliminate this.  But we can't, and probably shouldn't until we've changed the method signature here to have a DeviceView passed in.  Basically the contract for Camellia::FieldContainer is that it should always be accessible on host.
-
-      if (_phiID >= 0)
-      {
-        // (phi,phi) is an L^2 mass matrix with no coefficient: assemble it with the standard IP machinery (it is small
-        // and cheap relative to the w block), and copy just the phi block into the result.
-        Camellia::FieldContainer<double> phiInnerProduct(numCells, innerProduct.dimension(1), innerProduct.dimension(2));
-        _phiIP->computeInnerProductMatrix(phiInnerProduct, dofOrdering, basisCache);
-        const auto &phiDofIndices = dofOrdering->getDofIndices(_phiID);
-        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-        {
-          for (int i : phiDofIndices)
-          {
-            for (int j : phiDofIndices)
-            {
-              innerProduct(cellOrdinal,i,j) = phiInnerProduct(cellOrdinal,i,j);
-            }
-          }
-        }
-      }
-
-      for (int vd=0; vd<numAccelerationComponents; vd++)
-      {
-        scratchStorage.checkinScratchStorage(accelerationValues[vd]);
-      }
-      
-      for (int vd=0; vd<_numVelocitySpaceDims; vd++)
-      {
-        scratchStorage.checkinScratchStorage(velocityValues[vd]);
-      }
-      scratchStorage.checkinScratchStorage(gradientWeightsView);
-      scratchStorage.checkinScratchStorage(transformVectorView);
-      
-      double time_block4 = elapsedTime();
-      
-      if (_gramAssemblyTimingCallback)
-      {
-        _gramAssemblyTimingCallback(numCells,coreIntegrationTime, time_block1, time_block2, time_block3, time_block4);
-      }
-    }
-    
-    void setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
-                                                                double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback)
-    {
-      _gramAssemblyTimingCallback = gramAssemblyTimingCallback;
-    }
-  };
-}
+} // end anonymous namespace
 
 VlasovSpaceTimeFormulation::VlasovSpaceTimeFormulation(double q, double m,
                                                        Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
@@ -1217,12 +924,6 @@ _numUniformRefinements(numUniformRefinements)
 
   _tensorFunctionEvaluationContext = Teuchos::rcp(new TensorFunctionEvaluationContext(
       TensorFixedPointLifecycle::planarMITLDefaults(_minSubsteps, _maxSubsteps, _fixedPointTolerance)));
-  
-  if (_basisFamily == BASIS_FAMILY_SERENDIPITY)
-  {
-    // at the moment, Intrepid2's sum factorization does not allow us to use Serendipity basis
-    _useSumFactorizedAssembly = false;
-  }
   
   if (_speciesLabels.size() == 0)
   {
@@ -1568,27 +1269,10 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
   return gmgSolver;
 }
 
-bool VlasovSpaceTimeFormulation::useSumFactorizedAssembly() const
+IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct()
 {
-  return _useSumFactorizedAssembly;
-}
-
-IPPtr VlasovSpaceTimeFormulation::constructSumFactorizedVlasovInnerProduct(double massWeight, bool includePositivityTestVariable)
-{
-  return Teuchos::rcp( new VlasovSpaceTimeIP(*this, massWeight, includePositivityTestVariable) );
-}
-
-IPPtr VlasovSpaceTimeFormulation::constructVlasovInnerProduct(const bool useSumFactorizedAssembly)
-{
-  if (useSumFactorizedAssembly)
-  {
-    return constructSumFactorizedVlasovInnerProduct(1.0, _enforcePositivity);
-  }
-  else
-  {
-    auto vlasovBF = this->vlasovSolution()->bf();
-    return vlasovBF->graphNorm();
-  }
+  auto vlasovBF = this->vlasovSolution()->bf();
+  return vlasovBF->graphNorm();
 }
 
 VarFactoryPtr VlasovSpaceTimeFormulation::constructVlasovVarFactory()
@@ -1632,7 +1316,18 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   std::map<IndexType,IndexType> cellIDMap;
   std::map<int,int> sideOrdinalMap;
   
-  MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
+  const bool boxMeshes = (dynamic_cast<BoxMeshTopology*>(thisSlabVlasovMesh->getTopology().get()) != NULL);
+  nextSlabForm->_nextSlabPreRefinement = _nextSlabPreRefinement;
+  if (_nextSlabPreRefinement) _nextSlabPreRefinement(nextSlabVlasovMesh); // before matching (see setNextSlabPreRefinement())
+  if (boxMeshes)
+  {
+    const int timeDirection = _spaceDim; // coordinates are (x, t, velocity)
+    BoxGDA::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, thisSlabVlasovMesh, timeDirection);
+  }
+  else
+  {
+    MeshTools::hRefineToMatchAtBoundary(cellIDMap, sideOrdinalMap, nextSlabVlasovMesh, VLASOV_TAG_TMIN, thisSlabVlasovMesh);
+  }
   
   for (auto sideSetTagFilter : _configurationSpaceSideSetFilters)
   {
@@ -1702,15 +1397,25 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   
   // find cells on next slab's initial-time boundary
   auto initialTimeTag = nextSlabForm->tagVlasovInitialTime();
-  auto meshTopo = Teuchos::rcp(nextSlabForm->vlasovMesh()->getTopology()->baseMeshTopology(), false);
-  auto entitySets = meshTopo->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, initialTimeTag);
-  
   const auto & myCells = nextSlabForm->vlasovMesh()->cellIDsInPartition();
   std::set<IndexType> myInitialTimeCells; // those owned by this MPI rank
-  for (auto entitySet : entitySets)
+  if (boxMeshes)
   {
-    std::set<IndexType> matchingCells = entitySet->cellIDsThatMatch(meshTopo, myCells);
-    myInitialTimeCells.insert(matchingCells.begin(),matchingCells.end());
+    auto nextTopology = nextSlabForm->vlasovMesh()->getTopology();
+    for (IndexType cellID : myCells)
+    {
+      if (nextTopology->getSidesMatchingTag(cellID, DIRICHLET_SET_TAG_NAME, initialTimeTag).size() > 0) myInitialTimeCells.insert(cellID);
+    }
+  }
+  else
+  {
+    auto meshTopo = Teuchos::rcp(nextSlabForm->vlasovMesh()->getTopology()->baseMeshTopology(), false);
+    auto entitySets = meshTopo->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, initialTimeTag);
+    for (auto entitySet : entitySets)
+    {
+      std::set<IndexType> matchingCells = entitySet->cellIDsThatMatch(meshTopo, myCells);
+      myInitialTimeCells.insert(matchingCells.begin(),matchingCells.end());
+    }
   }
   
   auto nextVlasovSoln = nextSlabForm->vlasovSolution();
@@ -1745,10 +1450,19 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
       
       int currentBasisCardinality = thisSlabVlasovMesh->getElementType(currentCellID)->trialOrderPtr->getBasisCardinality(tn_current->ID(), currentSideIndex);
       int nextBasisCardinality    = nextVlasovMesh->getElementType(nextCellID)->trialOrderPtr->getBasisCardinality(tn_next->ID(), nextSideIndex);
-      TEUCHOS_TEST_FOR_EXCEPTION(currentBasisCardinality != nextBasisCardinality, std::invalid_argument, "Temporal trace basis cardinalities do not match between slabs.");
+      TEUCHOS_TEST_FOR_EXCEPTION(!boxMeshes && (currentBasisCardinality != nextBasisCardinality), std::invalid_argument,
+                                 "Temporal trace basis cardinalities do not match between slabs.");
       
-      FieldContainer<double> coefficients(nextBasisCardinality);
+      FieldContainer<double> coefficients(currentBasisCardinality);
       _vlasovSoln->solnCoeffsForCellID(coefficients, currentCellID, tn_current->ID(), currentSideIndex);
+      if (currentBasisCardinality != nextBasisCardinality)
+      {
+        // On box meshes the next slab's interface cell may have a higher order than the cell across from it (raised
+        // by the order halo, or by a pre-refinement such as the replayed boundary-data mesh): transfer the trace by
+        // projection, which is exact since the next side's space contains this one's.
+        coefficients = BoxGDA::transferSideCoefficients(thisSlabVlasovMesh, currentCellID, currentSideIndex,
+                                                        nextVlasovMesh, nextCellID, nextSideIndex, tn_current->ID(), tn_next->ID(), coefficients);
+      }
       // because tn has an outward-facing normal included, we need to reverse the sign of the coefficients for the cell in the next slab
       for (int i=0; i<nextBasisCardinality; i++)
       {
@@ -1927,6 +1641,17 @@ int VlasovSpaceTimeFormulation::H1Order() const
   return _H1Order;
 }
 
+namespace
+{
+  bool s_useBoxMeshForPhaseSpace = false;
+  int s_boxMeshInitialH1Order = 0;
+}
+
+void VlasovSpaceTimeFormulation::setUseBoxMeshForPhaseSpace(bool value) { s_useBoxMeshForPhaseSpace = value; }
+bool VlasovSpaceTimeFormulation::useBoxMeshForPhaseSpace() { return s_useBoxMeshForPhaseSpace; }
+void VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(int H1Order) { s_boxMeshInitialH1Order = H1Order; }
+int VlasovSpaceTimeFormulation::boxMeshInitialH1Order() { return s_boxMeshInitialH1Order; }
+
 void VlasovSpaceTimeFormulation::initialize()
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_initialized, std::invalid_argument, "initialize() should only be called once, during construction");
@@ -1956,7 +1681,28 @@ void VlasovSpaceTimeFormulation::initialize()
     TEUCHOS_TEST_FOR_EXCEPTION(_velocitySpaceVertices_y.size() > 0, std::invalid_argument, "if velocitySpaceVertices_y is empty, then velocitySpaceVertices_z must also be empty");
   }
   
-  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(_configurationSpaceMeshTopology, velocitySpaceVertices);
+  MeshTopologyPtr extrudedMeshTopology;         // phase-space topology, unless a box mesh is used
+  Teuchos::RCP<BoxMeshTopology> boxMeshTopology; // phase-space topology when a box mesh is used
+  if (!s_useBoxMeshForPhaseSpace)
+  {
+    extrudedMeshTopology = MeshFactory::extrudedMeshTopology(_configurationSpaceMeshTopology, velocitySpaceVertices);
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_spatialMeshTopology->getDimension() != 1, std::invalid_argument, "box phase-space meshes require a 1D spatial mesh");
+    TEUCHOS_TEST_FOR_EXCEPTION(_spatialMeshTopology->getPeriodicBCs().size() > 0, std::invalid_argument, "box phase-space meshes do not support periodic BCs");
+    std::set<double> spatialVertexSet;
+    for (IndexType cellID : _spatialMeshTopology->getLocallyKnownActiveCellIndices())
+    {
+      for (IndexType vertexIndex : _spatialMeshTopology->getCell(cellID)->vertices()) spatialVertexSet.insert(_spatialMeshTopology->getVertex(vertexIndex)[0]);
+    }
+    std::vector<std::vector<double>> rootVertices;
+    rootVertices.push_back(std::vector<double>(spatialVertexSet.begin(), spatialVertexSet.end()));
+    rootVertices.push_back(_temporalVertices);
+    for (const auto &vertices : velocitySpaceVertices) rootVertices.push_back(vertices);
+    boxMeshTopology = Teuchos::rcp(new BoxMeshTopology(rootVertices));
+    boxMeshTopology->setConfigurationTopology(_configurationSpaceMeshTopology, _spatialMeshTopology->getDimension() + 1);
+  }
   
   _spaceDim = _spatialMeshTopology->getDimension();
   _velocityDim = velocitySpaceVertices.size();
@@ -2000,7 +1746,16 @@ void VlasovSpaceTimeFormulation::initialize()
   const bool allowPruning = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
   Teuchos_CommPtr comm = MPIWrapper::TeuchosCommWorld();
-  MeshPtr vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements(), testOrderEnhancements(), partitionPolicy, comm, allowPruning) );
+  MeshPtr vlasovMesh;
+  if (boxMeshTopology == Teuchos::null)
+  {
+    vlasovMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _vlasovBF, _H1Order, _delta_k, trialOrderEnhancements(), testOrderEnhancements(), partitionPolicy, comm, allowPruning) );
+  }
+  else
+  {
+    const int phaseSpaceH1Order = (s_boxMeshInitialH1Order > 0) ? s_boxMeshInitialH1Order : _H1Order;
+    vlasovMesh = BoxGDA::mesh(boxMeshTopology, _vlasovBF, phaseSpaceH1Order, _delta_k, partitionPolicy, comm, trialOrderEnhancements(), testOrderEnhancements());
+  }
   
   auto vlasovMeshWeakPtr = Teuchos::rcp(vlasovMesh.get(), false);
   
@@ -2105,7 +1860,7 @@ void VlasovSpaceTimeFormulation::initialize()
   }
   _vlasovSoln->setRHS(vlasovRHS); // zero RHS for vlasov, until we add collisions
     
-  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct(_useSumFactorizedAssembly);
+  IPPtr vlasovTestNorm = this->constructVlasovInnerProduct();
   _vlasovSoln->setIP(vlasovTestNorm);
   
   SpatialFilterPtr inflowFilter = Teuchos::rcp(new SpatialFilterSpatialInflow(_spaceDim,indexOffsetVelocityZeroBased) );
@@ -2133,6 +1888,32 @@ void VlasovSpaceTimeFormulation::initialize()
   std::vector<int> maxVelocityTags {VLASOV_TAG_VXMAX, VLASOV_TAG_VYMAX, VLASOV_TAG_VZMAX};
   
   // create entity sets for BCs:
+  if (boxMeshTopology != Teuchos::null)
+  {
+    // A box mesh has no side entities; boundary sides are tagged by which face of the domain they lie on.
+    using Extents = BoxMeshTopology::Extents;
+    const int timeDirection = indexOffsetTimeZeroBased;
+    boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_TMIN,
+                              [timeDirection](int direction, bool upper, const Extents &) { return (direction == timeDirection) && !upper; });
+    // inflow: (v . n_x) < 0, judged at the cell's velocity centre.  (Cells should not straddle v = 0.)
+    const int spaceDim = _spaceDim, velocityStart = indexOffsetVelocityZeroBased;
+    boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, VLASOV_TAG_SPATIAL_INFLOW,
+                              [spaceDim, velocityStart](int direction, bool upper, const Extents &extents)
+    {
+      if (direction >= spaceDim) return false;
+      const double v = 0.5 * (extents[velocityStart + direction].first + extents[velocityStart + direction].second);
+      return upper ? (v < 0) : (v > 0);
+    });
+    for (int i=0; i<_velocityDim; i++)
+    {
+      const int velocityDirection = indexOffsetVelocityZeroBased + i;
+      boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, minVelocityTags[i],
+                                [velocityDirection](int direction, bool upper, const Extents &) { return (direction == velocityDirection) && !upper; });
+      boxMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, maxVelocityTags[i],
+                                [velocityDirection](int direction, bool upper, const Extents &) { return (direction == velocityDirection) && upper; });
+    }
+  }
+  else
   {
     // Vlasov side sets
     
@@ -2185,7 +1966,14 @@ void VlasovSpaceTimeFormulation::initialize()
     _configurationSpaceMeshTopology->applyTag(DIRICHLET_SET_TAG_NAME, CONFIGURATION_TAG_TMIN, initialTimeSideSet);
   }
   
-  PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  if (boxMeshTopology != Teuchos::null)
+  {
+    BoxConfigurationMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  }
+  else
+  {
+    PhysicalMeshUpdater::registerForUpdates(_vlasovSoln->mesh(), _configurationSpaceFormulation->configurationSpaceMesh());
+  }
   
   for (int uniformRefinementNumber=0; uniformRefinementNumber < _numUniformRefinements; uniformRefinementNumber++)
   {
@@ -2195,6 +1983,9 @@ void VlasovSpaceTimeFormulation::initialize()
   }
   
   vlasovMesh->registerSolution(_vlasovSoln);
+  // the previous substep's solution too, so that refinement (p-refinement in particular, which changes a cell's
+  // number of coefficients) projects it rather than leaving it with coefficients of the wrong size
+  vlasovMesh->registerSolution(_vlasovSolnPrev);
   
   _initialized = true;
 }
@@ -2472,12 +2263,6 @@ void VlasovSpaceTimeFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
 
 void VlasovSpaceTimeFormulation::seedConfigurationSolution(SolutionPtr previousConfigurationSolution, double previousFinalTime)
 {
-  // the previous slab's final-time data must be available locally for every cell we need; the configuration-space mesh
-  // geometry is not distributed, so import all active cells
-  MeshPtr previousMesh = previousConfigurationSolution->mesh();
-  const auto activeCells = previousMesh->getActiveCellIDsGlobal();
-  previousConfigurationSolution->importSolutionForOffRankCells(activeCells);
-
   std::map<int,FunctionPtr> seedMap;
   auto addSeed = [&](VarPtr var) {
     if (var == Teuchos::null) return;
@@ -2492,7 +2277,16 @@ void VlasovSpaceTimeFormulation::seedConfigurationSolution(SolutionPtr previousC
     addSeed(E_var);
     addSeed(B_var);
   }
+  // (Formulations without E and B fields, e.g. ConfigurationSpaceFormulationTrivial with prescribed fields, have nothing to
+  // seed, and no solution coefficients to import.  The decision is the same on every rank, so the import stays collective.)
   if (seedMap.empty()) return;
+
+  // the previous slab's final-time data must be available locally for every cell we need; the configuration-space mesh
+  // geometry is not distributed, so import all active cells
+  MeshPtr previousMesh = previousConfigurationSolution->mesh();
+  const auto activeCells = previousMesh->getActiveCellIDsGlobal();
+  previousConfigurationSolution->importSolutionForOffRankCells(activeCells);
+
   _configurationSpaceFormulation->solution()->projectOntoMesh(seedMap);
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
   noteTensorConfigurationSolutionChangedIfNeeded(*this);
@@ -2697,6 +2491,7 @@ void VlasovSpaceTimeFormulation::solve()
     const bool recordMemory = static_cast<bool>(_substepSolveProfileCallback);
     MemoryCheckpoints::setEnabled(recordMemory);
     MemoryCheckpoints::clear();
+    if (releaseFreedMemoryRequested()) releaseFreedMemoryToOS(); // CAMELLIA_RELEASE_FREED_MEMORY
     MemoryCheckpoints::record("substep_start");
 
     // solve for f:
@@ -2731,6 +2526,11 @@ void VlasovSpaceTimeFormulation::solve()
     }
     profile.iterationCount = substepIterationCounts[substepOrdinal];
     MemoryCheckpoints::record("vlasov_solve_done"); // after the GMG solver (and its operators) have been released
+    if (releaseFreedMemoryRequested())
+    {
+      releaseFreedMemoryToOS();
+      MemoryCheckpoints::record("freed_memory_released");
+    }
     if (recordMemory)
     {
       profile.memoryCheckpoints = MemoryCheckpoints::checkpoints();
@@ -3189,15 +2989,6 @@ void VlasovSpaceTimeFormulation::setSubstepSolveProfileCallback(std::function<vo
   _substepSolveProfileCallback = callback;
 }
 
-void VlasovSpaceTimeFormulation::setVlasovGramAssemblyTimingCallback(std::function<void(int numElements, double timeG_integrate,
-                                                                                        double time_computeCellMeasure, double time_getJacobianData, double time_configSpaceFunction, double time_intrepid2JacobianAllocAndCompute)> &gramAssemblyTimingCallback)
-{
-  VlasovSpaceTimeIP* ip = dynamic_cast<VlasovSpaceTimeIP*>(_vlasovSoln->ip().get());
-  if (ip != NULL)
-  {
-    ip->setVlasovGramAssemblyTimingCallback(gramAssemblyTimingCallback);
-  }
-}
 
 Teuchos::RCP<SolutionMoments> VlasovSpaceTimeFormulation::solutionMoments(int i)
 {

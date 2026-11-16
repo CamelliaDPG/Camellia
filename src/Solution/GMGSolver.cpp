@@ -12,6 +12,7 @@
 #include "CamelliaDebugUtility.h"
 #include "CamelliaMemoryTools.h"
 #include "ConvergenceTestOpNorm.hpp"
+#include "BoxGDA.h"
 #include "GDAMinimumRule.h"
 #include "GMGSolver.h"
 #include "MPIWrapper.h"
@@ -380,6 +381,12 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
   bool jumpToCoarsePolyOrder = parameters.get<bool>("jumpToCoarsePolyOrder",true);
   int kCoarse = parameters.get<int>("kCoarse", 0);
   int delta_k = parameters.get<int>("delta_k",1);
+  
+  if (dynamic_cast<BoxGDA*>(fineMesh->globalDofAssignment().get()) != NULL)
+  {
+    // box meshes build their hierarchy from truncated copies of the topology
+    return BoxGDA::meshesForMultigrid(fineMesh, kCoarse, delta_k);
+  }
   
   MeshPtr curvilinearFineMesh = Teuchos::null;
   if (fineMesh->getTransformationFunction() != Teuchos::null)

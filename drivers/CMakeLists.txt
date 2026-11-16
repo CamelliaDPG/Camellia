@@ -32,8 +32,14 @@ if (BUILD_PAPERS_DRIVERS)
 endif(BUILD_PAPERS_DRIVERS)
 
 if (BUILD_PERFORMANCE_TEST_DRIVERS)
-  MESSAGE("Setting up makefiles for drivers in drivers/performance, because BUILD_PERFORMANCE_TEST_DRIVERS is ON.")
-  add_subdirectory(performance)
+  # the performance-study drivers use Intrepid2::PAMatrix and its (uninstalled) reference assembly; see the top-level
+  # CMakeLists.txt (CAMELLIA_ENABLE_PAMATRIX, TRILINOS_SOURCE_DIR)
+  IF(CAMELLIA_INTREPID2_ASSEMBLY_EXAMPLES_DIR)
+    MESSAGE("Setting up makefiles for drivers in drivers/performance, because BUILD_PERFORMANCE_TEST_DRIVERS is ON.")
+    add_subdirectory(performance)
+  ELSE()
+    MESSAGE("Skipping drivers/performance: it needs Intrepid2 PAMatrix and TRILINOS_SOURCE_DIR (assembly-examples).")
+  ENDIF()
 endif(BUILD_PERFORMANCE_TEST_DRIVERS)
 
 if (BUILD_PRECONDITIONING_DRIVERS)

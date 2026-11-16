@@ -23,9 +23,8 @@ namespace Camellia
    * \brief Metadata-only description of a tensor-native skeleton/trace unknown.
    *
    * The descriptor records the trace family and target unknown without implementing a
-   * boundary kernel or volume-to-trace constraint.  It is meant to keep Phase 7 trace
-   * semantics explicit while the tensor-native adapters are brought up one family at a
-   * time.  In particular, the Maxwell/Poisson 1D H1 traces are point-value interface
+   * boundary kernel or volume-to-trace constraint.  It keeps trace semantics explicit
+   * while the tensor-native adapters are brought up one family at a time.  In particular, the Maxwell/Poisson 1D H1 traces are point-value interface
    * unknowns distinct from the corresponding volume fields.
    */
   class TensorTraceDescriptor

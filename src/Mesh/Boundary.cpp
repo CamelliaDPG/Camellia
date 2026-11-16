@@ -71,7 +71,45 @@ void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndi
   
   MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(_mesh->getTopology().get());
   
-  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopo, std::invalid_argument, "pure MeshTopologyViews are not yet supported by new tag-based BC imposition");
+  if (!meshTopo)
+  {
+    // The topology has no entity sets; it identifies tagged sides itself (see MeshTopologyView::getSidesMatchingTag()).
+    for (auto tagBC : tagBCs)
+    {
+      int tagID = tagBC.first;
+      for (GlobalIndexType cellID : rankLocalCells)
+      {
+        vector<unsigned> taggedSides = _mesh->getTopology()->getSidesMatchingTag(cellID, DIRICHLET_SET_TAG_NAME, tagID);
+        if (taggedSides.size() == 0) continue;
+        ElementTypePtr elemType = _mesh->getElementType(cellID);
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+        for (auto varFunctionPair : tagBC.second)
+        {
+          VarPtr var = varFunctionPair.first;
+          FunctionPtr f = varFunctionPair.second;
+          for (unsigned sideOrdinal : taggedSides)
+          {
+            if (!elemType->trialOrderPtr->hasBasisEntry(var->ID(), sideOrdinal)) continue;
+            BasisPtr basis = elemType->trialOrderPtr->getBasis(var->ID(), sideOrdinal);
+            TEUCHOS_TEST_FOR_EXCEPTION(basis->domainTopology()->getDimension() == _mesh->getDimension(), std::invalid_argument,
+                                       "tag-based BCs on volume variables are not supported for this mesh topology");
+            int numCells = 1;
+            Camellia::FieldContainer<double> basisCoefficients(numCells,basis->getCardinality());
+            Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, f, basis, basisCache->getSideBasisCache(sideOrdinal));
+            basisCoefficients.resize(basis->getCardinality());
+            Camellia::FieldContainer<double> globalData;
+            Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
+            dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficients, globalData, globalDofIndices);
+            for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
+            {
+              bcTagGlobalIndicesAndValues[globalDofIndices(globalDofOrdinal)] = globalData(globalDofOrdinal);
+            }
+          }
+        }
+      }
+    }
+    tagBCs.clear(); // handled
+  }
   
   for (auto tagBC : tagBCs)
   {

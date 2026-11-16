@@ -15,8 +15,9 @@
 #include "BasisCache.h"
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
-#include "SolutionMomentFunction.h"
 #include "SqrtFunction.h"
+#include "SeparableTensorIP.h"
+#include "SolutionMomentFunction.h"
 
 using namespace Camellia;
 using std::vector;
@@ -58,6 +59,51 @@ namespace
       }
     }
     string displayString() override { return "alpha_K"; }
+  };
+
+  //! alpha_K = alpha * prod_d (1 + s_d / (alpha h_d(K)^2)) on each element, where h_d is the element's extent in
+  //! coordinate d (x, t, u_x, u_y, ...) and s_d >= 0 is the scale for that direction (zero, or omitted, to leave d out).
+  //! Each factor depends only on the element's cell in one coordinate direction, so on a tensor-product mesh the
+  //! weighted mass term is a Kronecker product of one-dimensional diagonally scaled masses: it adds no tensor rank.
+  //! Since prod_d (1 + a_d) >= 1 + sum_d a_d, alpha_K is at least alpha + sum_d s_d / h_d^2, the sum over directions of
+  //! the transport scale (|beta_d| / h_d)^2 when s_d ~ C beta_d^2.
+  class DirectionProductL2Weight : public TFunction<double>
+  {
+    double _alpha;
+    vector<double> _scales;
+  public:
+    DirectionProductL2Weight(double alpha, const vector<double> &scales) : TFunction<double>(0), _alpha(alpha), _scales(scales) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
+      const int numCells  = values.dimension(0);
+      const int numPoints = values.dimension(1);
+      const int numNodes  = nodes.dimension(1);
+      TEUCHOS_TEST_FOR_EXCEPTION((nodes.rank() != 3) || (nodes.dimension(0) != numCells) || (numNodes == 0), std::invalid_argument,
+                                 "DirectionProductL2Weight: the BasisCache's physical cell nodes do not match the requested values");
+      const int numScales = std::min(int(_scales.size()), nodes.dimension(2));
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        double weight = _alpha;
+        for (int d=0; d<numScales; d++)
+        {
+          if (_scales[d] == 0.0) continue;
+          double dMin = nodes(cellOrdinal,0,d), dMax = nodes(cellOrdinal,0,d);
+          for (int node=1; node<numNodes; node++)
+          {
+            dMin = std::min(dMin, nodes(cellOrdinal,node,d));
+            dMax = std::max(dMax, nodes(cellOrdinal,node,d));
+          }
+          const double h = dMax - dMin;
+          weight *= 1.0 + _scales[d] / (_alpha * h * h);
+        }
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+        {
+          values(cellOrdinal,pointOrdinal) = weight;
+        }
+      }
+    }
+    string displayString() override { return "alpha_K (direction product)"; }
   };
 
   //! alpha_K = alpha + C [ sum_{d spatial} (v_d,max(K) / h_d)^2 + (1 / h_t)^2 + sum_{d velocity} (a_d,max / h_{u_d})^2 ]: the
@@ -134,6 +180,44 @@ namespace
   };
 }
 
+namespace
+{
+  //! The largest |v_d| = |u_d| / gamma over the element's velocity box, for spatial direction d: the per-element scale of the
+  //! x-transport term in the direction-separable graph norm (as in TransportScaleL2Weight).
+  class VelocityComponentMax : public TFunction<double>
+  {
+    double _c; int _spaceDim, _velocityDim, _d;
+  public:
+    VelocityComponentMax(double c, int spaceDim, int velocityDim, int d)
+    : TFunction<double>(0), _c(c), _spaceDim(spaceDim), _velocityDim(velocityDim), _d(d) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
+      const int numCells = values.dimension(0), numPoints = values.dimension(1), numNodes = nodes.dimension(1);
+      const int dim = _spaceDim + 1 + _velocityDim;
+      vector<double> lo(dim), hi(dim);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        for (int k=0; k<dim; k++)
+        {
+          lo[k] = hi[k] = nodes(cellOrdinal,0,k);
+          for (int node=1; node<numNodes; node++) { lo[k] = std::min(lo[k], nodes(cellOrdinal,node,k)); hi[k] = std::max(hi[k], nodes(cellOrdinal,node,k)); }
+        }
+        double uSquared = 0.0, uMaxD = 0.0;
+        for (int j=0; j<_velocityDim; j++)
+        {
+          const double a = lo[_spaceDim+1+j], b = hi[_spaceDim+1+j];
+          const double uMax = std::max(std::abs(a), std::abs(b)), uMin = (a <= 0.0 && b >= 0.0) ? 0.0 : std::min(std::abs(a), std::abs(b));
+          if (j == _d) { uMaxD = uMax; uSquared += uMax * uMax; } else uSquared += uMin * uMin;
+        }
+        const double vMax = uMaxD / sqrt(1.0 + uSquared / (_c * _c));
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) values(cellOrdinal,pointOrdinal) = vMax;
+      }
+    }
+    string displayString() override { return "v_d,max(K)"; }
+  };
+}
+
 RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(const double c, const double q, const double m,
                                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                                MeshTopologyPtr spatialMeshTopology,
@@ -148,17 +232,20 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const EBasisFamily &basisFamily,
                                                                                const int maxMomentNumberForDriver,
                                                                                const bool enforcePositivity,
-                                                                               const bool useSumFactorizedGramAssembly,
                                                                                const double testSpaceL2WeightMeshScale,
+                                                                               const vector<double> &testSpaceL2WeightDirectionScales,
                                                                                const double testSpaceL2WeightTransportScale,
-                                                                               const vector<double> &testSpaceL2WeightAccelerationBounds)
+                                                                               const vector<double> &testSpaceL2WeightAccelerationBounds,
+                                                                               const bool testSpaceSeparableGraphNorm)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
 _testSpaceL2Weight(testSpaceL2Weight),
 _testSpaceL2WeightMeshScale(testSpaceL2WeightMeshScale),
+_testSpaceL2WeightDirectionScales(testSpaceL2WeightDirectionScales),
 _testSpaceL2WeightTransportScale(testSpaceL2WeightTransportScale),
 _testSpaceL2WeightAccelerationBounds(testSpaceL2WeightAccelerationBounds),
+_testSpaceSeparableGraphNorm(testSpaceSeparableGraphNorm),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocityVertices_x,
@@ -171,31 +258,27 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            true, // true: defer initialization; we call initialize() below.
                            enforcePositivity)
 {
-  // Sum-factorized assembly applies to the graph-norm Gram matrix (the bilinear form uses standard assembly), and
-  // requires a full tensor-product test basis.
-  TEUCHOS_TEST_FOR_EXCEPTION(useSumFactorizedGramAssembly && (basisFamily == BASIS_FAMILY_SERENDIPITY), std::invalid_argument,
-                             "Sum-factorized Gram assembly requires a full tensor-product basis; serendipity bases are not supported.");
-  TEUCHOS_TEST_FOR_EXCEPTION((testSpaceL2WeightMeshScale > 0.0) && (testSpaceL2WeightTransportScale > 0.0), std::invalid_argument,
-                             "Specify at most one of testSpaceL2WeightMeshScale and testSpaceL2WeightTransportScale");
+  const int numWeightOptions = (testSpaceL2WeightMeshScale > 0.0 ? 1 : 0) + (testSpaceL2WeightDirectionScales.empty() ? 0 : 1)
+                             + (testSpaceL2WeightTransportScale > 0.0 ? 1 : 0);
+  TEUCHOS_TEST_FOR_EXCEPTION(numWeightOptions > 1, std::invalid_argument,
+                             "Specify at most one of testSpaceL2WeightMeshScale, testSpaceL2WeightDirectionScales, and testSpaceL2WeightTransportScale");
   for (double bound : testSpaceL2WeightAccelerationBounds)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(bound < 0.0, std::invalid_argument, "testSpaceL2WeightAccelerationBounds must be nonnegative");
   }
-  this->_useSumFactorizedAssembly = useSumFactorizedGramAssembly;
+  TEUCHOS_TEST_FOR_EXCEPTION(testSpaceSeparableGraphNorm && (testSpaceIP != GraphTestSpaceInnerProduct), std::invalid_argument,
+                             "testSpaceSeparableGraphNorm applies to the graph test-space inner product");
+  for (double scale : testSpaceL2WeightDirectionScales)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(scale < 0.0, std::invalid_argument, "testSpaceL2WeightDirectionScales must be nonnegative");
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(!testSpaceL2WeightDirectionScales.empty() && (testSpaceL2Weight <= 0.0), std::invalid_argument,
+                             "testSpaceL2WeightDirectionScales requires a positive testSpaceL2Weight");
   this->initialize();
 }
 
-IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const bool sumFactorizedAssembly)
+IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
 {
-  if (sumFactorizedAssembly)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(_testSpaceInnerProduct != GraphTestSpaceInnerProduct, std::invalid_argument,
-                               "RelativisticVlasovSpaceTimeFormulation supports sum-factorized Gram assembly only for the graph test-space inner product.");
-    TEUCHOS_TEST_FOR_EXCEPTION(this->numSpecies() != 1, std::invalid_argument,
-                               "RelativisticVlasovSpaceTimeFormulation supports sum-factorized Gram assembly only for a single species.");
-    return this->constructSumFactorizedVlasovInnerProduct(_testSpaceL2Weight, this->enforcePositivity());
-  }
-  
   const int spaceDim    = this->spaceDim();
   const int velocityDim = this->velocityDim();
   
@@ -206,7 +289,8 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const 
   
   vector<FunctionPtr> a = this->a();
   
-  IPPtr ip = IP::ip();
+  // the direction-separable graph norm's Gram matrices are assembled from one-dimensional factors on box cells
+  IPPtr ip = _testSpaceSeparableGraphNorm ? IPPtr(SeparableTensorIP::ip()) : IP::ip();
   
   const int numSpecies = this->numSpecies();
   
@@ -216,25 +300,53 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct(const 
     
     if (_testSpaceInnerProduct == GraphTestSpaceInnerProduct)
     {
-      LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
-      for (int d=0; d<spaceDim; d++)
+      if (_testSpaceSeparableGraphNorm)
       {
-        auto  v_d    = v_i(d);
-        auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
-        f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+        // Direction-separable graph norm: sum_d s_d(K)^2 |dw/dz_d|^2 with s_d >= |beta_d| on K (v_x,max(K) in space, 1 in
+        // time, the fixed acceleration bounds in velocity), instead of |beta . grad w|^2.  No cross terms, so each element
+        // Gram matrix is a sum of single-direction Kronecker products (exactly invertible by fast diagonalization), and
+        // by Cauchy-Schwarz it dominates the graph norm: |beta . grad w|^2 <= (spaceDim+1+velocityDim) sum_d s_d^2 |dw/dz_d|^2.
+        ip->addTerm(w->di(indexOffsetTimeOneBased));
+        for (int d=0; d<spaceDim; d++)
+        {
+          FunctionPtr s_d = Teuchos::rcp(new VelocityComponentMax(_c, spaceDim, velocityDim, d));
+          ip->addTerm(s_d * w->di(indexOffsetSpaceOneBased + d));
+        }
+        for (int vd=0; vd<velocityDim; vd++)
+        {
+          const double bound = (vd < int(_testSpaceL2WeightAccelerationBounds.size())) ? _testSpaceL2WeightAccelerationBounds[vd] : 0.0;
+          TEUCHOS_TEST_FOR_EXCEPTION(bound <= 0.0, std::invalid_argument,
+                                     "testSpaceSeparableGraphNorm needs a positive acceleration bound in every velocity direction");
+          ip->addTerm(bound * w->di(indexOffsetVelocityOneBased + vd));
+        }
       }
-      for (int vd=0; vd<velocityDim; vd++)
+      else
       {
-        auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
-        f_term = f_term - a[vd] * dw_dv_vd;
+        LinearTermPtr f_term = - w->di(indexOffsetTimeOneBased); // -dw/dt
+        for (int d=0; d<spaceDim; d++)
+        {
+          auto  v_d    = v_i(d);
+          auto dw_dx_d = w->di(indexOffsetSpaceOneBased + d);
+          f_term = f_term - v_d * dw_dx_d; // - v \cdot dw/dx
+        }
+        for (int vd=0; vd<velocityDim; vd++)
+        {
+          auto dw_dv_vd = w->di(indexOffsetVelocityOneBased + vd);
+          f_term = f_term - a[vd] * dw_dv_vd;
+        }
+        ip->addTerm(f_term);
       }
-      ip->addTerm(f_term);
       
       LinearTermPtr stabilization_term;
       if (_testSpaceL2WeightTransportScale > 0.0)
       {
         FunctionPtr weight = Teuchos::rcp(new TransportScaleL2Weight(_testSpaceL2Weight, _testSpaceL2WeightTransportScale, _c,
                                                                      spaceDim, velocityDim, _testSpaceL2WeightAccelerationBounds));
+        stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
+      }
+      else if (!_testSpaceL2WeightDirectionScales.empty())
+      {
+        FunctionPtr weight = Teuchos::rcp(new DirectionProductL2Weight(_testSpaceL2Weight, _testSpaceL2WeightDirectionScales));
         stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
       }
       else if (_testSpaceL2WeightMeshScale > 0.0)
@@ -404,10 +516,11 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               _testSpaceInnerProduct, _testSpaceL2Weight,
                                                                               basisFamily(),
                                                                               0, this->enforcePositivity(),
-                                                                              this->useSumFactorizedAssembly(),
                                                                               _testSpaceL2WeightMeshScale,
+                                                                              _testSpaceL2WeightDirectionScales,
                                                                               _testSpaceL2WeightTransportScale,
-                                                                              _testSpaceL2WeightAccelerationBounds));
+                                                                              _testSpaceL2WeightAccelerationBounds,
+                                                                              _testSpaceSeparableGraphNorm));
   
   configureNextSlab(nextSlabForm);
   

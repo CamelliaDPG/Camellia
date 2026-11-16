@@ -11,6 +11,8 @@
 
 #include "LinearTermSumFactorized.h"
 
+#ifdef CAMELLIA_HAVE_PAMATRIX
+
 #include "Basis.h"
 #include "BasisCache.h"
 #include "CellTopology.h"
@@ -532,3 +534,26 @@ bool Camellia::integrateLinearTermsSumFactorized(Camellia::FieldContainer<double
   }
   return true;
 }
+
+#else // without Intrepid2::PAMatrix: never supported, so TLinearTerm::integrate() always uses quadrature
+
+bool Camellia::sumFactorizedLinearTermIntegrationEnabled()
+{
+  return false;
+}
+
+void Camellia::setSumFactorizedLinearTermIntegrationEnabled(bool enabled)
+{
+  (void) enabled;
+}
+
+bool Camellia::integrateLinearTermsSumFactorized(Camellia::FieldContainer<double> &values,
+                                                 LinearTermPtr u, DofOrderingPtr uOrdering,
+                                                 LinearTermPtr v, DofOrderingPtr vOrdering,
+                                                 BasisCachePtr basisCache)
+{
+  (void) values; (void) u; (void) uOrdering; (void) v; (void) vOrdering; (void) basisCache;
+  return false;
+}
+
+#endif // CAMELLIA_HAVE_PAMATRIX

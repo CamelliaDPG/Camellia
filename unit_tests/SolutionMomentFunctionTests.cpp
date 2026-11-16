@@ -882,6 +882,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
   SolutionMoments solnMoments(0, soln, f, physicalMesh, -1);
   solnMoments.update();
   RelativisticFirstMomentFunction relativisticMoment(&solnMoments, soln, f, physicalMesh, c, velocityComponent);
+  relativisticMoment.update(); // collective: imports the phase-space cells under this rank's configuration cells
 
   auto phaseSpaceMeshTopology = dynamic_cast<const ExtrudedMeshTopology*>(mesh->getTopology()->baseMeshTopology());
   TEST_ASSERT(phaseSpaceMeshTopology != NULL);
@@ -889,14 +890,17 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
   CubatureFactory cubatureFactory;
   const double tol = 1e-10;
   const auto & myCells = physicalMesh->cellIDsInPartition();
-  for (const auto & physicalCellID : myCells)
+  // Every rank visits every configuration cell in the same order, because Solution::solutionValues() at given points
+  // is collective (it sums each rank's contribution); results are compared on the rank that owns the cell.
+  for (const auto & physicalCellID : physicalMesh->getActiveCellIDsGlobal())
   {
+    const bool isMyCell = (myCells.find(physicalCellID) != myCells.end());
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, physicalCellID);
     const auto &configurationPoints = basisCache->getPhysicalCubaturePointsFC();
     const int numPoints = configurationPoints.dimension(1);
 
     FieldContainer<double> actual(1,numPoints);
-    relativisticMoment.values(actual, basisCache);
+    if (isMyCell) relativisticMoment.values(actual, basisCache);
 
     FieldContainer<double> expected(1,numPoints);
     expected.initialize(0.0);
@@ -959,6 +963,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, DataPathMatchesViewPath_OnSubExtruded
       }
     }
 
+    if (!isMyCell) continue;
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
       TEST_FLOATING_EQUALITY(expected(0,pointOrdinal), actual(0,pointOrdinal), tol);
@@ -1334,7 +1339,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
     const bool refine          = false;
     const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
+    const double tol = 1e-14; // the integral is exact up to rounding, which can slightly exceed 1e-15 relative
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
@@ -1406,7 +1411,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
     const bool refine          = true;
     const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order; here we use 1 because 0 is a bit too easy to pass, since there is then only one dof per cell
-    const double tol = 1e-15;
+    const double tol = 1e-14; // the integral is exact up to rounding, which can slightly exceed 1e-15 relative
     
     FunctionPtr f = Function::constant(1.0);
     // integral in extrusion dimensions results in multiplication by extent in those dimensions:
@@ -1976,7 +1981,7 @@ TEUCHOS_UNIT_TEST( SolutionMomentFunction, AllMoments_Constant_1D1V )
     const bool refine          = false;
     const bool useSerendipity  = false;
     const int polyOrder = 2; // for L^2 fields, one less than H^1 order
-    const double tol = 1e-15;
+    const double tol = 1e-14; // the integral is exact up to rounding, which can slightly exceed 1e-15 relative
     
     FunctionPtr x   = MonomialFunction::xi_n(0,1);
     FunctionPtr t   = MonomialFunction::xi_n(1,1);
