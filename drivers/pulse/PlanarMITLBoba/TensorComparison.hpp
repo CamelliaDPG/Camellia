@@ -414,6 +414,8 @@ inline int runTensorComparison(int argc, char **argv)
     ex.solver = problem.explicitSchurSolver;
     ex.refinements = problem.explicitSchurRefinements; ex.refineRhsTolerance = problem.explicitSchurRefineRhsTolerance;
     ex.refineRounding = problem.explicitSchurRefineRounding;
+    ex.theta = problem.explicitSchurTheta; ex.refineInnerReduction = problem.explicitSchurInnerReduction;
+    ex.energyLanczosSteps = problem.explicitSchurEnergyLanczosSteps;
     ex.amen = options; ex.amen.roundingTolerance = problem.chebTolerance; ex.amen.infSupEnrichment = false;
     ex.amen.scaleSites = std::getenv("PLANAR_MITL_AMEN_SCALE_SITES") != nullptr;   // S~ is Jacobi-scaled already
     // site Jacobi halves the site GMRES iterations on S~ (level 1: 177 -> 98 per sweep, same error)

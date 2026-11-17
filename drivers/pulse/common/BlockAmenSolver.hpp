@@ -105,7 +105,8 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
     const boba::BlockVector<host_tt_vector<D>> &rhs,
     const AmenOptions &options,
     const std::function<double(const boba::BlockVector<host_tt_vector<D>> &)> &globalResidual = {},
-    const std::vector<std::vector<std::vector<boba::CoreSliceSparsity<double>>>> *packedOperator = nullptr)
+    const std::vector<std::vector<std::vector<boba::CoreSliceSparsity<double>>>> *packedOperator = nullptr,
+    const boba::BlockVector<host_tt_vector<D>> *guess = nullptr)   // nullptr: random rank-one blocks
 {
   if (!(options.tolerance > 0) || !(options.roundingTolerance > 0) ||
       options.maxSweeps < 1 || options.kickrank < 1 || options.maxRank < 1 ||
@@ -142,7 +143,7 @@ boba::BlockVector<host_tt_vector<D>> solveAmen(
   solver.certify_every_sweep = bool(globalResidual);
   solver.stagnation_reduction = globalResidual ? std::max(0.0, options.stagnationReduction) : 0.0;
   std::mt19937 generator(options.seed);
-  return solver.solve(matrix, rhs, initialGuess(rhs, options.seed), generator,
+  return solver.solve(matrix, rhs, guess ? *guess : initialGuess(rhs, options.seed), generator,
                       [&](const boba::BlockVector<host_tt_vector<D>> &x) { return globalResidual ? globalResidual(x) : -1.0; });
 }
 

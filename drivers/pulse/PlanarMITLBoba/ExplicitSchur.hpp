@@ -51,7 +51,14 @@ struct ExplicitSchurOptions
   // or 0.1 x it throws the later corrections away: p = 2 level 0 stalled at 1.3e-4 with 1e-5, reached 5.9e-9 with 1e-9).  Removes the floor
   // set by the compression of S~ without a higher-rank S~: each pass reduces |r| by about max(floor, rhs tolerance).
   int refinements = 0;
-  double refineRhsTolerance = 1e-3, refineRounding = 0;
+  double refineRhsTolerance = 3e-2, refineRounding = 0;
+  // staged solve (Sands et al. outer/inner structure, targets from the error representation): theta > 0 stops the
+  // refinement passes once the solver error e_s <= theta * eta (upper e_s estimate vs lower eta estimate), solves each
+  // correction only to a reduction refineInnerReduction (starting from the truncated residual), and rounds y at the
+  // absolute tolerance 0.3 theta eta / sqrt(lambda_max) (its energy-norm effect <= 0.3 theta eta).  theta = 0: fixed
+  // number of passes with the tolerances above.  energyLanczosSteps: Lanczos steps for the e_s / eta brackets.
+  double theta = 0, refineInnerReduction = 0.1;
+  int energyLanczosSteps = 60;
   std::array<bool, 4> split{false, false, false, false};
   // threads for the setup (element loops, per-pass TT-SVDs); 0: CAMELLIA_EXPLICIT_S_THREADS, else 1.  std::thread
   // (the build has no OpenMP); each thread works on whole elements, so results are identical to the serial loops.
@@ -1296,7 +1303,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     for (size_t a = 0; a < nt; ++a) { rr[a] = toFull(ct[a]); pp[a] = rr[a]; }
     auto fdot = [&](const std::vector<Eigen::VectorXd> &u, const std::vector<Eigen::VectorXd> &w) { double d = 0; for (size_t a = 0; a < nt; ++a) d += u[a].dot(w[a]); return d; };
     double rz = fdot(rr, rr), alphaPrev = 0, betaPrev = 0; std::vector<double> dd, ee;
-    for (int k = 0; k < opt.boundsSteps; ++k)
+    for (int k = 0; k < opt.energyLanczosSteps; ++k)
     {
       const auto q = applyFull(pp); const double alpha = rz / fdot(pp, q);
       for (size_t a = 0; a < nt; ++a) rr[a] -= alpha * q[a];
@@ -1314,6 +1321,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
               << J0 << " (" << seconds(tl) << " s)" << std::endl;
   };
   // rn: the absolute |r~| = |c~ - S~ y| (matrix-free, exact S~)
+  struct EnergyBrackets { double J, esLo, esHi, etaLo, etaHi; };
   auto reportEnergy = [&](const std::string &tag, const std::vector<TTVector> &y, double rn) {
     const auto te = clock::now();
     const double J = energyJ(y), lo = rn * rn / ritzLmax, hi = rn * rn / ritzLmin, s0 = std::sqrt(J0);
@@ -1323,6 +1331,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
               << " eta/sqrt(J0) in [" << etaLo / s0 << ", " << etaHi / s0 << "]"
               << " e_s/eta <= " << (etaLo > 0 ? std::sqrt(hi) / etaLo : std::numeric_limits<double>::infinity())
               << " (" << seconds(te) << " s)" << std::endl;
+    return EnergyBrackets{J, std::sqrt(lo), std::sqrt(hi), etaLo, etaHi};
   };
   if (opt.solver == "amen")
   {
@@ -1350,7 +1359,9 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
                                                    packedMode ? &packedS : nullptr);
     auto yVec = [&](const BlockVector &y) { std::vector<TTVector> v(nt); for (size_t a = 0; a < nt; ++a) v[a] = y(a); return v; };
     energySetup();
-    for (int it = 0; it < opt.refinements; ++it)
+    double Jprev = -1;
+    const double s0 = std::sqrt(J0);
+    for (int it = 0;; ++it)
     {
       const auto ti = clock::now();
       std::vector<Eigen::VectorXd> yFull(nt), target(nt);
@@ -1359,12 +1370,24 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       double rn = 0, cn = 0;
       for (size_t a = 0; a < nt; ++a) { const Eigen::VectorXd ca = toFull(ct[a]); target[a] = ca - Sy[a]; rn += target[a].squaredNorm(); cn += ca.squaredNorm(); }
       rn = std::sqrt(rn);
-      reportEnergy(it == 0 ? "solve" : "refinement " + std::to_string(it), yVec(yS), rn);
+      const auto E = reportEnergy(it == 0 ? "solve" : "pass " + std::to_string(it), yVec(yS), rn);
+      // a posteriori: J_prev - J = e_s(prev)^2 - e_s^2 <= e_s(prev)^2 (a lower bound, sharp once e_s << e_s(prev))
+      if (Jprev >= 0)
+        std::cout << "explicit_S energy pass " << it << ": a posteriori e_s(previous)/sqrt(J0) >= "
+                  << std::sqrt(std::max(0.0, Jprev - E.J)) / s0 << std::endl;
+      Jprev = E.J;
+      if (it >= opt.refinements) break;
+      if (opt.theta > 0 && E.esHi <= opt.theta * E.etaLo)
+      {
+        std::cout << "explicit_S staged: stop after " << it << " passes, e_s <= " << E.esHi / s0 << " <= theta eta = "
+                  << opt.theta * E.etaLo / s0 << " (relative to sqrt(J0))" << std::endl;
+        break;
+      }
       BlockVector rhsR(nt);
       for (size_t a = 0; a < nt; ++a) rhsR(a) = toTT(target[a], system.sizes[a + 1], opt.refineRhsTolerance);
-      std::cout << "explicit_S refinement " << it + 1 << ": |r~|/|c~|=" << rn / std::sqrt(cn) << " residual ranks";
+      std::cout << "explicit_S pass " << it + 1 << ": |r~|/|c~|=" << rn / std::sqrt(cn) << " residual ranks";
       for (size_t a = 0; a < nt; ++a) std::cout << " " << maxRank4(rhsR(a));
-      std::cout << " (" << seconds(ti) << " s)" << std::endl;
+      std::cout << " (rhs tolerance " << opt.refineRhsTolerance << ", " << seconds(ti) << " s)" << std::endl;
       // the correction's own certificate: |r - S~ d| / |r|, matrix-free
       const auto residualD = [&](const BlockVector &d) {
         std::vector<Eigen::VectorXd> dFull(nt); double num = 0;
@@ -1373,12 +1396,20 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         for (size_t a = 0; a < nt; ++a) num += (target[a] - Sd[a]).squaredNorm();
         return std::sqrt(num) / rn;
       };
+      DpgBoba::AmenOptions corrOpt = amenOpt;
+      if (opt.theta > 0) corrOpt.tolerance = opt.refineInnerReduction;
       const auto ts = clock::now();
-      BlockVector dS = DpgBoba::solveAmen(sysS.matrix, rhsR, amenOpt, std::function<double(const BlockVector &)>(residualD),
-                                          packedMode ? &packedS : nullptr);
-      const double rr = opt.refineRounding > 0 ? opt.refineRounding : 1e-8;
-      for (size_t a = 0; a < nt; ++a) { yS(a) += dS(a); DpgBoba::round(yS(a), rr); }
-      std::cout << "explicit_S refinement " << it + 1 << ": correction solve " << seconds(ts) << " s, ranks(y)=";
+      // start from the truncated residual (S~ is Jacobi-scaled: a Richardson step), not from rank one
+      const BlockVector guess = rhsR;
+      BlockVector dS = DpgBoba::solveAmen(sysS.matrix, rhsR, corrOpt, std::function<double(const BlockVector &)>(residualD),
+                                          packedMode ? &packedS : nullptr, opt.theta > 0 ? &guess : nullptr);
+      double ynorm2 = 0;
+      for (size_t a = 0; a < nt; ++a) { yS(a) += dS(a); ynorm2 += std::pow(boba::norm_frobenius(yS(a)), 2); }
+      double rr = opt.refineRounding > 0 ? opt.refineRounding : 1e-8;
+      if (opt.theta > 0) rr = std::max(1e-12, 0.3 * opt.theta * E.etaLo / std::sqrt(ritzLmax) / std::sqrt(ynorm2));
+      for (size_t a = 0; a < nt; ++a) DpgBoba::round(yS(a), rr);
+      std::cout << "explicit_S pass " << it + 1 << ": correction solve " << seconds(ts) << " s (to " << corrOpt.tolerance
+                << "), ranks(y)=";
       for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(yS(a));
       std::cout << " (rounding " << rr << ")" << std::endl;
     }
@@ -1392,7 +1423,6 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       const auto Sy = applyFull(yFull);
       for (size_t a = 0; a < nt; ++a) rn2 += (cFullS[a] - Sy[a]).squaredNorm();
     }
-    reportEnergy("final", yVec(yS), std::sqrt(rn2));
     std::cout << "explicit_S amen |r~|/|c~|=" << std::sqrt(rn2) / cNorm << " rank(y)=";
     for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(x[a]);
     std::cout << " split=" << opt.split[0] << opt.split[1] << opt.split[2] << opt.split[3] << " seconds=" << seconds(ta) << " (solve " << amenSeconds << ", residual " << seconds(tr) << ")" << std::endl;
