@@ -15,6 +15,7 @@
 // other directions: cell*nbJ), so the result plugs into the existing residual check and output.
 #include "SchurChebyshev.hpp"
 #include <fstream>
+#include <iomanip>
 #include <atomic>
 #include <map>
 #include <random>
@@ -1258,6 +1259,71 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       for (int th = 1; th < nThreads; ++th) for (size_t a = 0; a < nt; ++a) if (blocks[a].normal >= 0) out[a] += acc[th][a];
       return out;
     };
+  // --- DPG energy functional and error brackets.  With x = P y, J(y) = (l - B x)^T G^{-1} (l - B x) = |eps(x)|_V^2,
+  // and J(y) = eta^2 + e_s^2 with eta^2 = J(y_h) (the discretization error, DPG's estimator) and
+  // e_s^2 = |y - y_h|^2_{S~} = r~^T S~^{-1} r~ (the solver error in the energy norm), so
+  //   |r~|^2 / lambda_max <= e_s^2 <= |r~|^2 / lambda_min,   J - |r~|^2/lambda_min <= eta^2 <= J - |r~|^2/lambda_max.
+  // lambda_min, lambda_max: Ritz values of a short matrix-free Lanczos run from c~ (estimates, not rigorous bounds:
+  // Ritz lambda_min >= lambda_min, so the e_s upper end can be low).  J by the same element loop as eps, element-local.
+  auto energyJ = [&](const std::vector<TTVector> &y) {
+    std::vector<Eigen::VectorXd> xF(nt);
+    for (size_t a = 0; a < nt; ++a) xF[a] = y.empty() ? Eigen::VectorXd() : toFull(scaleVector(y[a], a));
+    std::mutex jLock; double J = 0;
+    parallelForEachElement([&](const std::array<size_t, 4> &c, int) {
+      Eigen::VectorXd lK(nlocT); for (size_t il = 0; il < nlocT; ++il) lK(il) = lFull(testIndex(c, il));
+      Eigen::VectorXd res = lK;
+      if (!y.empty())
+      {
+        Eigen::VectorXd xK = Eigen::VectorXd::Zero(nlocTrial);
+        for (size_t a = 0; a < nt; ++a)
+          for (size_t il = 0; il < blocks[a].localSize(); ++il)
+          {
+            const long g = globalLinear(a, c, localIndex(blocks[a].nLocal, il));
+            if (g >= 0) xK(off[a] + il) = xF[a](g);
+          }
+        res -= elementB(c) * xK;
+      }
+      const Eigen::VectorXd eK = separableGramSolve(*sep, classOf(c), res);
+      const double jK = res.dot(eK);
+      std::lock_guard<std::mutex> g(jLock); J += jK;
+    });
+    return J;
+  };
+  double ritzLmin = 0, ritzLmax = 0, J0 = 0;
+  auto energySetup = [&]() {
+    const auto tl = clock::now();
+    std::vector<Eigen::VectorXd> rr(nt), pp(nt);
+    for (size_t a = 0; a < nt; ++a) { rr[a] = toFull(ct[a]); pp[a] = rr[a]; }
+    auto fdot = [&](const std::vector<Eigen::VectorXd> &u, const std::vector<Eigen::VectorXd> &w) { double d = 0; for (size_t a = 0; a < nt; ++a) d += u[a].dot(w[a]); return d; };
+    double rz = fdot(rr, rr), alphaPrev = 0, betaPrev = 0; std::vector<double> dd, ee;
+    for (int k = 0; k < opt.boundsSteps; ++k)
+    {
+      const auto q = applyFull(pp); const double alpha = rz / fdot(pp, q);
+      for (size_t a = 0; a < nt; ++a) rr[a] -= alpha * q[a];
+      const double rzNew = fdot(rr, rr), beta = rzNew / rz;
+      dd.push_back(1.0 / alpha + (k > 0 ? betaPrev / alphaPrev : 0.0)); ee.push_back(std::sqrt(std::abs(beta)) / alpha);
+      for (size_t a = 0; a < nt; ++a) pp[a] = rr[a] + beta * pp[a];
+      rz = rzNew; alphaPrev = alpha; betaPrev = beta;
+    }
+    const size_t m = dd.size(); Mat Tm = Mat::Zero(m, m);
+    for (size_t i = 0; i < m; ++i) { Tm(i, i) = dd[i]; if (i + 1 < m) Tm(i, i + 1) = Tm(i + 1, i) = ee[i]; }
+    const Eigen::VectorXd ritz = Eigen::SelfAdjointEigenSolver<Mat>(Tm).eigenvalues();
+    ritzLmin = ritz(0); ritzLmax = ritz(m - 1);
+    J0 = energyJ({});
+    std::cout << "explicit_S energy setup: Lanczos Ritz [" << ritzLmin << ", " << ritzLmax << "] (" << m << " steps), J(0)="
+              << J0 << " (" << seconds(tl) << " s)" << std::endl;
+  };
+  // rn: the absolute |r~| = |c~ - S~ y| (matrix-free, exact S~)
+  auto reportEnergy = [&](const std::string &tag, const std::vector<TTVector> &y, double rn) {
+    const auto te = clock::now();
+    const double J = energyJ(y), lo = rn * rn / ritzLmax, hi = rn * rn / ritzLmin, s0 = std::sqrt(J0);
+    const double etaLo = std::sqrt(std::max(0.0, J - hi)), etaHi = std::sqrt(std::max(0.0, J - lo));
+    std::cout << "explicit_S energy " << tag << ": J=" << std::setprecision(12) << J << std::setprecision(6) << " sqrt(J/J0)=" << std::sqrt(J) / s0
+              << " e_s/sqrt(J0) in [" << std::sqrt(lo) / s0 << ", " << std::sqrt(hi) / s0 << "]"
+              << " eta/sqrt(J0) in [" << etaLo / s0 << ", " << etaHi / s0 << "]"
+              << " e_s/eta <= " << (etaLo > 0 ? std::sqrt(hi) / etaLo : std::numeric_limits<double>::infinity())
+              << " (" << seconds(te) << " s)" << std::endl;
+  };
   if (opt.solver == "amen")
   {
     // block AMEn on S~ y = c~ (SPD, trial blocks only)
@@ -1282,6 +1348,8 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
                               : DpgBoba::solveAmen(sysS.matrix, rhsS, amenOpt, std::function<double(const BlockVector &)>(residualS),
                                                    packedMode ? &packedS : nullptr);
+    auto yVec = [&](const BlockVector &y) { std::vector<TTVector> v(nt); for (size_t a = 0; a < nt; ++a) v[a] = y(a); return v; };
+    energySetup();
     for (int it = 0; it < opt.refinements; ++it)
     {
       const auto ti = clock::now();
@@ -1291,6 +1359,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       double rn = 0, cn = 0;
       for (size_t a = 0; a < nt; ++a) { const Eigen::VectorXd ca = toFull(ct[a]); target[a] = ca - Sy[a]; rn += target[a].squaredNorm(); cn += ca.squaredNorm(); }
       rn = std::sqrt(rn);
+      reportEnergy(it == 0 ? "solve" : "refinement " + std::to_string(it), yVec(yS), rn);
       BlockVector rhsR(nt);
       for (size_t a = 0; a < nt; ++a) rhsR(a) = toTT(target[a], system.sizes[a + 1], opt.refineRhsTolerance);
       std::cout << "explicit_S refinement " << it + 1 << ": |r~|/|c~|=" << rn / std::sqrt(cn) << " residual ranks";
@@ -1323,6 +1392,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       const auto Sy = applyFull(yFull);
       for (size_t a = 0; a < nt; ++a) rn2 += (cFullS[a] - Sy[a]).squaredNorm();
     }
+    reportEnergy("final", yVec(yS), std::sqrt(rn2));
     std::cout << "explicit_S amen |r~|/|c~|=" << std::sqrt(rn2) / cNorm << " rank(y)=";
     for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(x[a]);
     std::cout << " split=" << opt.split[0] << opt.split[1] << opt.split[2] << opt.split[3] << " seconds=" << seconds(ta) << " (solve " << amenSeconds << ", residual " << seconds(tr) << ")" << std::endl;
