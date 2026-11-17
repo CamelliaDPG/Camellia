@@ -892,6 +892,18 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
         for (size_t d = 0; d < 4; ++d) { bytes += double(pc[d].blocks.size()) * sizeof(double); rk << ", " << pc[d].ra2; }
         rk << " )";
         packedS[a][b].assign(pc.begin(), pc.end());
+        // opt-in dump for structure studies: <dir>/S_<row>_<col>_core<d>.bin, header int64 ra1 n m ra2 nblocks, then
+        // nblocks (n, m) pairs as int64, then the blocks as doubles (ra1 x ra2 each, column-major), in pair order
+        if (const char *dumpDir = std::getenv("CAMELLIA_EXPLICIT_S_DUMP_DIR"))
+          for (size_t d = 0; d < 4; ++d)
+          {
+            const auto &c = pc[d];
+            std::ofstream out(std::string(dumpDir) + "/S_" + system.names[a + 1] + "_" + system.names[b + 1] + "_core" + std::to_string(d) + ".bin", std::ios::binary);
+            const std::int64_t hdr[5] = {std::int64_t(c.ra1), std::int64_t(c.n), std::int64_t(c.m), std::int64_t(c.ra2), std::int64_t(c.pairs.size())};
+            out.write(reinterpret_cast<const char *>(hdr), sizeof(hdr));
+            for (const auto &q : c.pairs) { const std::int64_t nm[2] = {std::int64_t(q.first), std::int64_t(q.second)}; out.write(reinterpret_cast<const char *>(nm), sizeof(nm)); }
+            out.write(reinterpret_cast<const char *>(c.blocks.data()), std::streamsize(c.blocks.size() * sizeof(double)));
+          }
         Stt[a][b] = placeholderTT(rows, cols);
         packedBytes += bytes;
         if (a != b)
