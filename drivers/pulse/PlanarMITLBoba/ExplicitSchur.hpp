@@ -60,10 +60,12 @@ struct ExplicitSchurOptions
   double theta = 0, refineInnerReduction = 0.1;
   int energyLanczosSteps = 60;
   // e_s^2 = r~^T S~^{-1} r~ estimated by CG on S~ d = r~ from d = 0: the partial sums sum_j alpha_j |r_j|^2 are
-  // monotone lower bounds (Gauss quadrature); stop when the last 4 terms add less than energyCGTolerance of the sum, or
-  // after energyCGSteps.  Upper bound: the sum plus |r_k|^2 / lambda_min.
-  int energyCGSteps = 40;
-  double energyCGTolerance = 1e-2;
+  // monotone lower bounds (Gauss quadrature), the sum plus |r_k|^2 / lambda_min an upper bound.  With theta > 0 CG runs
+  // until the bounds decide the staged test (upper e_s <= theta eta: stop; lower e_s > theta eta: another pass);
+  // otherwise (and as a cap) until the last 4 terms add less than energyCGTolerance of the sum, or energyCGSteps.
+  // p = 4 L1: 40 steps gave a lower bound 13% low; 151 steps converged to 1e-3.
+  int energyCGSteps = 200;
+  double energyCGTolerance = 1e-3;
   // the correction solve starts from the residual right-hand side truncated further, to this relative tolerance
   double refineGuessTolerance = 0.3;
   std::array<bool, 4> split{false, false, false, false};
@@ -1330,7 +1332,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   // rn: the absolute |r~| = |c~ - S~ y| (matrix-free, exact S~)
   struct EnergyBrackets { double J, esLo, esHi, etaLo, etaHi, esEst, etaEst; };
   // e_s^2 = r^T S~^{-1} r by CG from zero (Hestenes-Stiefel / Gauss quadrature): {lower bound, upper bound, steps}
-  auto cgEnergy = [&](const std::vector<Eigen::VectorXd> &r0) {
+  auto cgEnergy = [&](const std::vector<Eigen::VectorXd> &r0, double J) {
     auto fdot = [&](const std::vector<Eigen::VectorXd> &u, const std::vector<Eigen::VectorXd> &w) { double d = 0; for (size_t a = 0; a < nt; ++a) d += u[a].dot(w[a]); return d; };
     std::vector<Eigen::VectorXd> r = r0, p = r0;
     double rz = fdot(r, r), sum = 0;
@@ -1345,6 +1347,12 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       const double rzNew = fdot(r, r);
       for (size_t a = 0; a < nt; ++a) p[a] = r[a] + (rzNew / rz) * p[a];
       rz = rzNew; ++k;
+      if (opt.theta > 0)
+      {
+        const double upper = sum + rz / ritzLmin;
+        const double etaLow = std::sqrt(std::max(0.0, J - upper)), etaHigh = std::sqrt(std::max(0.0, J - sum));
+        if (std::sqrt(upper) <= opt.theta * etaLow || std::sqrt(sum) > opt.theta * etaHigh) break;   // decided
+      }
       if (k >= 4)
       {
         double tail = 0;
@@ -1359,7 +1367,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     const auto te = clock::now();
     double rn2 = 0; for (size_t a = 0; a < nt; ++a) rn2 += r[a].squaredNorm();
     const double J = energyJ(y), lo = rn2 / ritzLmax, hi = rn2 / ritzLmin, s0 = std::sqrt(J0);
-    const auto cg = cgEnergy(r);
+    const auto cg = cgEnergy(r, J);
     const double esEst = std::sqrt(cg[0]), etaEst = std::sqrt(std::max(0.0, J - cg[0]));
     const double etaLo = std::sqrt(std::max(0.0, J - hi)), etaHi = std::sqrt(std::max(0.0, J - lo));
     std::cout << "explicit_S energy " << tag << ": J=" << std::setprecision(12) << J << std::setprecision(6) << " sqrt(J/J0)=" << std::sqrt(J) / s0
@@ -1414,11 +1422,14 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
                   << std::sqrt(std::max(0.0, Jprev - E.J)) / s0 << std::endl;
       Jprev = E.J;
       if (it >= opt.refinements) break;
-      // stop on the CG estimate of e_s (a converged lower bound) against eta = sqrt(J - e_s^2)
-      if (opt.theta > 0 && E.esEst <= opt.theta * E.etaEst)
+      // stop when the CG upper bound on e_s is below theta eta (CG ran until the bounds decided, or converged)
+      const double etaLowCG = std::sqrt(std::max(0.0, E.J - E.esHi * E.esHi));
+      const bool upperDecides = E.esHi <= opt.theta * etaLowCG;
+      const bool convergedEstimate = E.esHi <= 1.25 * E.esEst && E.esEst <= opt.theta * E.etaEst;
+      if (opt.theta > 0 && (upperDecides || convergedEstimate))
       {
-        std::cout << "explicit_S staged: stop after " << it << " passes, e_s ~ " << E.esEst / s0 << " <= theta eta = "
-                  << opt.theta * E.etaEst / s0 << " (relative to sqrt(J0))" << std::endl;
+        std::cout << "explicit_S staged: stop after " << it << " passes, e_s in [" << E.esEst / s0 << ", " << E.esHi / s0
+                  << "] <= theta eta = " << opt.theta * E.etaEst / s0 << " (relative to sqrt(J0))" << std::endl;
         break;
       }
       BlockVector rhsR(nt);

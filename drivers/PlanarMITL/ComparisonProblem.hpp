@@ -54,7 +54,7 @@ struct ComparisonProblem
   std::string explicitSchurSolver = "chebyshev";
   int explicitSchurRefinements = 0; double explicitSchurRefineRhsTolerance = 3e-2, explicitSchurRefineRounding = 0;
   double explicitSchurTheta = 0, explicitSchurInnerReduction = 0.1; int explicitSchurEnergyLanczosSteps = 60;
-  int explicitSchurEnergyCGSteps = 40; double explicitSchurEnergyCGTolerance = 1e-2, explicitSchurRefineGuessTolerance = 0.3;
+  int explicitSchurEnergyCGSteps = 200; double explicitSchurEnergyCGTolerance = 1e-3, explicitSchurRefineGuessTolerance = 0.3;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
