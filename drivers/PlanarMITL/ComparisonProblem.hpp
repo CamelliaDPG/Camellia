@@ -65,6 +65,7 @@ struct ComparisonProblem
   int uniformRefinements = 0;
   double tolerance = 1e-8, svdTolerance = 1e-12, coefficientTolerance = 1e-12;
   int maxSweeps = 100, kickrank = 4, maxRank = 64;
+  double amenStagnation = -1;   // AMEn with a matrix-free residual: stop when it falls by less than this fraction over two sweeps (< 0: path default)
   int localSolver = 0, maxLocalIterations = 300;
   double localTolerance = 1e-6, rieszSvdTolerance = 0, denseFillThreshold = 1.1;
   bool verbose = false, comparison = true, splitModes = false, splitX = false, infSupEnrichment = false, gradedX = false;
@@ -108,6 +109,7 @@ struct ComparisonProblem
     cmd.setOption("tolerance", &tolerance); cmd.setOption("svdTolerance", &svdTolerance);
     cmd.setOption("coefficientTolerance", &coefficientTolerance);
     cmd.setOption("maxSweeps", &maxSweeps); cmd.setOption("kickrank", &kickrank);
+    cmd.setOption("amenStagnation", &amenStagnation, "AMEn with a matrix-free residual: stop when it falls by less than this fraction over two sweeps (0 off; < 0 path default, 0.1 for explicit S)");
     cmd.setOption("maxRank", &maxRank); cmd.setOption("verbose", "quiet", &verbose);
     cmd.setOption("localSolver", &localSolver, "Tensor coupled site solver: 0=COD, 1=QR, 2=LU, 3=Eigen GMRES, 4=matrix-free BoBa GMRES, 5=sparse LU (dense LU if dense), 6=sparse LU (COD if dense)");
     cmd.setOption("localTolerance", &localTolerance);
