@@ -44,6 +44,13 @@ struct ExplicitSchurOptions
   // (basis, cell) mode split of solveSplitAxes)
   std::string solver = "chebyshev";
   DpgBoba::AmenOptions amen;
+  // amen: iterative refinement (defect correction).  After the solve, repeat: r = c~ - S~_exact y by the matrix-free
+  // element apply on full vectors, r to TT (relative refineRhsTolerance), solve S~_tt d = r by block AMEn (same
+  // compressed S~), y += d, round (relative refineRounding; <= 0: 1e-8 -- the AMEn rounding tolerance
+  // or 0.1 x it throws the later corrections away: p = 2 level 0 stalled at 1.3e-4 with 1e-5, reached 5.9e-9 with 1e-9).  Removes the floor
+  // set by the compression of S~ without a higher-rank S~: each pass reduces |r| by about max(floor, rhs tolerance).
+  int refinements = 0;
+  double refineRhsTolerance = 1e-3, refineRounding = 0;
   std::array<bool, 4> split{false, false, false, false};
   // threads for the setup (element loops, per-pass TT-SVDs); 0: CAMELLIA_EXPLICIT_S_THREADS, else 1.  std::thread
   // (the build has no OpenMP); each thread works on whole elements, so results are identical to the serial loops.
@@ -1275,6 +1282,37 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
                               : DpgBoba::solveAmen(sysS.matrix, rhsS, amenOpt, std::function<double(const BlockVector &)>(residualS),
                                                    packedMode ? &packedS : nullptr);
+    for (int it = 0; it < opt.refinements; ++it)
+    {
+      const auto ti = clock::now();
+      std::vector<Eigen::VectorXd> yFull(nt), target(nt);
+      for (size_t a = 0; a < nt; ++a) yFull[a] = toFull(yS(a));
+      const auto Sy = applyFull(yFull);
+      double rn = 0, cn = 0;
+      for (size_t a = 0; a < nt; ++a) { const Eigen::VectorXd ca = toFull(ct[a]); target[a] = ca - Sy[a]; rn += target[a].squaredNorm(); cn += ca.squaredNorm(); }
+      rn = std::sqrt(rn);
+      BlockVector rhsR(nt);
+      for (size_t a = 0; a < nt; ++a) rhsR(a) = toTT(target[a], system.sizes[a + 1], opt.refineRhsTolerance);
+      std::cout << "explicit_S refinement " << it + 1 << ": |r~|/|c~|=" << rn / std::sqrt(cn) << " residual ranks";
+      for (size_t a = 0; a < nt; ++a) std::cout << " " << maxRank4(rhsR(a));
+      std::cout << " (" << seconds(ti) << " s)" << std::endl;
+      // the correction's own certificate: |r - S~ d| / |r|, matrix-free
+      const auto residualD = [&](const BlockVector &d) {
+        std::vector<Eigen::VectorXd> dFull(nt); double num = 0;
+        for (size_t a = 0; a < nt; ++a) dFull[a] = toFull(d(a));
+        const auto Sd = applyFull(dFull);
+        for (size_t a = 0; a < nt; ++a) num += (target[a] - Sd[a]).squaredNorm();
+        return std::sqrt(num) / rn;
+      };
+      const auto ts = clock::now();
+      BlockVector dS = DpgBoba::solveAmen(sysS.matrix, rhsR, amenOpt, std::function<double(const BlockVector &)>(residualD),
+                                          packedMode ? &packedS : nullptr);
+      const double rr = opt.refineRounding > 0 ? opt.refineRounding : 1e-8;
+      for (size_t a = 0; a < nt; ++a) { yS(a) += dS(a); DpgBoba::round(yS(a), rr); }
+      std::cout << "explicit_S refinement " << it + 1 << ": correction solve " << seconds(ts) << " s, ranks(y)=";
+      for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(yS(a));
+      std::cout << " (rounding " << rr << ")" << std::endl;
+    }
     const double amenSeconds = seconds(ta);
     const auto tr = clock::now();
     double rn2 = 0;

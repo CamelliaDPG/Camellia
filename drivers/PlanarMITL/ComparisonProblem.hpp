@@ -52,6 +52,7 @@ struct ComparisonProblem
   double explicitSchurPowerTolerance = 1e-4, explicitSchurBoost = 1.2;
   std::string explicitSchurPowerStart = "random";
   std::string explicitSchurSolver = "chebyshev";
+  int explicitSchurRefinements = 0; double explicitSchurRefineRhsTolerance = 1e-3, explicitSchurRefineRounding = 0;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
   std::string conventionalSolver = "KLU";
@@ -153,6 +154,9 @@ struct ComparisonProblem
     cmd.setOption("explicitSchurPowerTolerance", &explicitSchurPowerTolerance, "Explicit Schur: TT rounding tolerance of the power iteration");
     cmd.setOption("explicitSchurBoost", &explicitSchurBoost, "Explicit Schur: lambda_max boost factor (Ifpack2 default 1.1; 1.2 for 10 TT iterations)");
     cmd.setOption("explicitSchurPowerStart", &explicitSchurPowerStart, "Explicit Schur: power start vector, random (rank one) or pattern (1 + index mod 97)");
+    cmd.setOption("explicitSchurRefinements", &explicitSchurRefinements, "Explicit Schur amen: iterative refinement passes (exact matrix-free residual, correction solved with the compressed S~)");
+    cmd.setOption("explicitSchurRefineRhsTolerance", &explicitSchurRefineRhsTolerance, "Explicit Schur refinement: relative TT tolerance of the residual right-hand side");
+    cmd.setOption("explicitSchurRefineRounding", &explicitSchurRefineRounding, "Explicit Schur refinement: relative rounding of y after each correction (<= 0: 1e-8)");
     cmd.setOption("explicitSchurSolver", &explicitSchurSolver,
                   "Explicit Schur solver: chebyshev, or amen (block AMEn on S~ with --tolerance, --chebTolerance as the local "
                   "SVD tolerance, --kickrank, --maxRank, --maxSweeps, --localSolver; --splitAxes for the (basis, cell) split)");
