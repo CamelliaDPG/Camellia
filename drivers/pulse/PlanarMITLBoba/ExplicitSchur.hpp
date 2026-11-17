@@ -59,6 +59,13 @@ struct ExplicitSchurOptions
   // number of passes with the tolerances above.  energyLanczosSteps: Lanczos steps for the e_s / eta brackets.
   double theta = 0, refineInnerReduction = 0.1;
   int energyLanczosSteps = 60;
+  // e_s^2 = r~^T S~^{-1} r~ estimated by CG on S~ d = r~ from d = 0: the partial sums sum_j alpha_j |r_j|^2 are
+  // monotone lower bounds (Gauss quadrature); stop when the last 4 terms add less than energyCGTolerance of the sum, or
+  // after energyCGSteps.  Upper bound: the sum plus |r_k|^2 / lambda_min.
+  int energyCGSteps = 40;
+  double energyCGTolerance = 1e-2;
+  // the correction solve starts from the residual right-hand side truncated further, to this relative tolerance
+  double refineGuessTolerance = 0.3;
   std::array<bool, 4> split{false, false, false, false};
   // threads for the setup (element loops, per-pass TT-SVDs); 0: CAMELLIA_EXPLICIT_S_THREADS, else 1.  std::thread
   // (the build has no OpenMP); each thread works on whole elements, so results are identical to the serial loops.
@@ -1321,17 +1328,47 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
               << J0 << " (" << seconds(tl) << " s)" << std::endl;
   };
   // rn: the absolute |r~| = |c~ - S~ y| (matrix-free, exact S~)
-  struct EnergyBrackets { double J, esLo, esHi, etaLo, etaHi; };
-  auto reportEnergy = [&](const std::string &tag, const std::vector<TTVector> &y, double rn) {
+  struct EnergyBrackets { double J, esLo, esHi, etaLo, etaHi, esEst, etaEst; };
+  // e_s^2 = r^T S~^{-1} r by CG from zero (Hestenes-Stiefel / Gauss quadrature): {lower bound, upper bound, steps}
+  auto cgEnergy = [&](const std::vector<Eigen::VectorXd> &r0) {
+    auto fdot = [&](const std::vector<Eigen::VectorXd> &u, const std::vector<Eigen::VectorXd> &w) { double d = 0; for (size_t a = 0; a < nt; ++a) d += u[a].dot(w[a]); return d; };
+    std::vector<Eigen::VectorXd> r = r0, p = r0;
+    double rz = fdot(r, r), sum = 0;
+    std::vector<double> terms;
+    int k = 0;
+    while (k < opt.energyCGSteps && rz > 0)
+    {
+      const auto q = applyFull(p);
+      const double alpha = rz / fdot(p, q);
+      terms.push_back(alpha * rz); sum += alpha * rz;
+      for (size_t a = 0; a < nt; ++a) r[a] -= alpha * q[a];
+      const double rzNew = fdot(r, r);
+      for (size_t a = 0; a < nt; ++a) p[a] = r[a] + (rzNew / rz) * p[a];
+      rz = rzNew; ++k;
+      if (k >= 4)
+      {
+        double tail = 0;
+        for (size_t j = terms.size() - 4; j < terms.size(); ++j) tail += terms[j];
+        if (tail < opt.energyCGTolerance * sum) break;
+      }
+    }
+    return std::array<double, 3>{sum, sum + rz / ritzLmin, double(k)};
+  };
+  // r: the residual c~ - S~ y on full vectors (matrix-free, exact S~)
+  auto reportEnergy = [&](const std::string &tag, const std::vector<TTVector> &y, const std::vector<Eigen::VectorXd> &r) {
     const auto te = clock::now();
-    const double J = energyJ(y), lo = rn * rn / ritzLmax, hi = rn * rn / ritzLmin, s0 = std::sqrt(J0);
+    double rn2 = 0; for (size_t a = 0; a < nt; ++a) rn2 += r[a].squaredNorm();
+    const double J = energyJ(y), lo = rn2 / ritzLmax, hi = rn2 / ritzLmin, s0 = std::sqrt(J0);
+    const auto cg = cgEnergy(r);
+    const double esEst = std::sqrt(cg[0]), etaEst = std::sqrt(std::max(0.0, J - cg[0]));
     const double etaLo = std::sqrt(std::max(0.0, J - hi)), etaHi = std::sqrt(std::max(0.0, J - lo));
     std::cout << "explicit_S energy " << tag << ": J=" << std::setprecision(12) << J << std::setprecision(6) << " sqrt(J/J0)=" << std::sqrt(J) / s0
               << " e_s/sqrt(J0) in [" << std::sqrt(lo) / s0 << ", " << std::sqrt(hi) / s0 << "]"
-              << " eta/sqrt(J0) in [" << etaLo / s0 << ", " << etaHi / s0 << "]"
-              << " e_s/eta <= " << (etaLo > 0 ? std::sqrt(hi) / etaLo : std::numeric_limits<double>::infinity())
+              << " CG (" << int(cg[2]) << " steps): e_s/sqrt(J0) in [" << esEst / s0 << ", " << std::sqrt(cg[1]) / s0 << "]"
+              << " eta/sqrt(J0) ~ " << etaEst / s0 << " e_s/eta ~ " << (etaEst > 0 ? esEst / etaEst : std::numeric_limits<double>::infinity())
+              << " (<= " << (etaLo > 0 ? std::sqrt(cg[1]) / std::sqrt(std::max(0.0, J - cg[1])) : std::numeric_limits<double>::infinity()) << ")"
               << " (" << seconds(te) << " s)" << std::endl;
-    return EnergyBrackets{J, std::sqrt(lo), std::sqrt(hi), etaLo, etaHi};
+    return EnergyBrackets{J, std::sqrt(lo), std::sqrt(cg[1]), etaLo, etaHi, esEst, etaEst};
   };
   if (opt.solver == "amen")
   {
@@ -1370,17 +1407,18 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       double rn = 0, cn = 0;
       for (size_t a = 0; a < nt; ++a) { const Eigen::VectorXd ca = toFull(ct[a]); target[a] = ca - Sy[a]; rn += target[a].squaredNorm(); cn += ca.squaredNorm(); }
       rn = std::sqrt(rn);
-      const auto E = reportEnergy(it == 0 ? "solve" : "pass " + std::to_string(it), yVec(yS), rn);
+      const auto E = reportEnergy(it == 0 ? "solve" : "pass " + std::to_string(it), yVec(yS), target);
       // a posteriori: J_prev - J = e_s(prev)^2 - e_s^2 <= e_s(prev)^2 (a lower bound, sharp once e_s << e_s(prev))
       if (Jprev >= 0)
         std::cout << "explicit_S energy pass " << it << ": a posteriori e_s(previous)/sqrt(J0) >= "
                   << std::sqrt(std::max(0.0, Jprev - E.J)) / s0 << std::endl;
       Jprev = E.J;
       if (it >= opt.refinements) break;
-      if (opt.theta > 0 && E.esHi <= opt.theta * E.etaLo)
+      // stop on the CG estimate of e_s (a converged lower bound) against eta = sqrt(J - e_s^2)
+      if (opt.theta > 0 && E.esEst <= opt.theta * E.etaEst)
       {
-        std::cout << "explicit_S staged: stop after " << it << " passes, e_s <= " << E.esHi / s0 << " <= theta eta = "
-                  << opt.theta * E.etaLo / s0 << " (relative to sqrt(J0))" << std::endl;
+        std::cout << "explicit_S staged: stop after " << it << " passes, e_s ~ " << E.esEst / s0 << " <= theta eta = "
+                  << opt.theta * E.etaEst / s0 << " (relative to sqrt(J0))" << std::endl;
         break;
       }
       BlockVector rhsR(nt);
@@ -1400,13 +1438,14 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       if (opt.theta > 0) corrOpt.tolerance = opt.refineInnerReduction;
       const auto ts = clock::now();
       // start from the truncated residual (S~ is Jacobi-scaled: a Richardson step), not from rank one
-      const BlockVector guess = rhsR;
+      BlockVector guess = rhsR;
+      for (size_t a = 0; a < nt; ++a) DpgBoba::round(guess(a), opt.refineGuessTolerance);
       BlockVector dS = DpgBoba::solveAmen(sysS.matrix, rhsR, corrOpt, std::function<double(const BlockVector &)>(residualD),
                                           packedMode ? &packedS : nullptr, opt.theta > 0 ? &guess : nullptr);
       double ynorm2 = 0;
       for (size_t a = 0; a < nt; ++a) { yS(a) += dS(a); ynorm2 += std::pow(boba::norm_frobenius(yS(a)), 2); }
       double rr = opt.refineRounding > 0 ? opt.refineRounding : 1e-8;
-      if (opt.theta > 0) rr = std::max(1e-12, 0.3 * opt.theta * E.etaLo / std::sqrt(ritzLmax) / std::sqrt(ynorm2));
+      if (opt.theta > 0) rr = std::max(1e-12, 0.3 * opt.theta * E.etaEst / std::sqrt(ritzLmax) / std::sqrt(ynorm2));
       for (size_t a = 0; a < nt; ++a) DpgBoba::round(yS(a), rr);
       std::cout << "explicit_S pass " << it + 1 << ": correction solve " << seconds(ts) << " s (to " << corrOpt.tolerance
                 << "), ranks(y)=";
