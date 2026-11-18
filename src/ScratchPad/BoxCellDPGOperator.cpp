@@ -171,6 +171,17 @@ void BoxCellDPGOperator::initializeTypeData(TypeData &data, ElementTypePtr elemT
   for (int a=0; a<int(data.testBasis.tensorIndex.size()); a++)
     data.testDofIndex[data.testBasis.tensorIndex[a]] = testOrder->getDofIndex(data.testVarID, a);
   const int P = product(q);
+  {
+    std::vector<Kokkos::DynRankView<double,Camellia::DeviceType>> components(dim);
+    for (int k=0; k<dim; k++)
+    {
+      components[k] = Kokkos::DynRankView<double,Camellia::DeviceType>("BoxCellDPGOperator 1D points", q[k], 1);
+      auto host = Kokkos::create_mirror_view(components[k]);
+      for (int i=0; i<q[k]; i++) host(i,0) = data.points[k][i];
+      Kokkos::deep_copy(components[k], host);
+    }
+    data.tensorRefPoints = Intrepid2::TensorPoints<double,Camellia::DeviceType>(components);
+  }
   data.refPoints.resize(P, dim);
   {
     std::vector<int> index(dim, 0);
@@ -321,7 +332,7 @@ BoxCellDPGOperator::CellData &BoxCellDPGOperator::cellData(GlobalIndexType cellI
 
   // geometry: an axis-aligned box (diagonal, constant Jacobian)
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
-  basisCache->setRefCellPointsFC(type.refPoints);
+  basisCache->setRefCellPoints(type.tensorRefPoints);
   const Camellia::FieldContainer<double> &jacobian = basisCache->getJacobian(); // (1,P,D,D)
   const int P = type.refPoints.dimension(0);
   data.halfWidths.resize(dim);

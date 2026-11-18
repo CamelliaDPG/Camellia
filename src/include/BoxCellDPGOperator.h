@@ -17,6 +17,8 @@
 #include "SeparableTensorIP.h"
 #include "TensorBasisDecomposition.h"
 
+#include "Intrepid2_TensorPoints.hpp"
+
 #include <map>
 #include <vector>
 
@@ -125,6 +127,9 @@ namespace Camellia
       std::vector<FluxSideData> fluxSides;
       int trialDofCount = 0;
       Camellia::FieldContainer<double> refPoints; // (P, dim), first direction fastest
+      //! the same points as a tensor product of one-dimensional rules (first component fastest), which coefficient
+      //! Functions such as PhysicalSolutionExtrusion require
+      Intrepid2::TensorPoints<double,Camellia::DeviceType> tensorRefPoints;
     };
     struct CellData
     {

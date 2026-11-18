@@ -964,7 +964,9 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   auto seconds = [](std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) { return std::chrono::duration<double>(b - a).count(); };
   // the assembled operator with the current fields, without boundary conditions
   SolutionPtr reference = Solution::solution(form->vlasovBF(), mesh, BC::bc(), RHS::rhs(), ip); // no boundary conditions
-  reference->setCubatureEnrichmentDegree(vlasovSolution->cubatureEnrichmentDegree());
+  // the same enrichment as the matrix-free quadrature (the coefficients, v = u / gamma and the fields, are not
+  // polynomials, so both quadratures carry an error that this lets one compare)
+  reference->setCubatureEnrichmentDegree(std::max(vlasovSolution->cubatureEnrichmentDegree(), quadratureEnrichment));
   const auto assemblyStart = now();
   reference->initializeLHSVector();
   reference->initializeStiffnessAndLoad();
@@ -988,7 +990,8 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   if (rank == 0)
   {
     std::cout << "checkMatrixFreeOperator: " << A->getGlobalNumRows() << " dofs, " << mesh->numActiveElements()
-              << " cells, quadrature enrichment " << quadratureEnrichment << ": |S x - A x| / |A x| = " << relativeError
+              << " cells, quadrature enrichment " << quadratureEnrichment << " (the driver's: " << vlasovSolution->cubatureEnrichmentDegree()
+              << "): |S x - A x| / |A x| = " << relativeError
               << "; assembly " << assemblyTime << " s, matrix-free setup + first application " << firstApplyTime
               << " s, application " << applyTime << " s\n";
   }
