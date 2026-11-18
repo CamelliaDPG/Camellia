@@ -20,3 +20,10 @@ add_test(NAME PlanarMITLBobaGraded
 set_tests_properties(PlanarMITLBobaVolume PlanarMITLBobaInteriorFlux
   PlanarMITLBobaZeroField PlanarMITLBobaGraded PROPERTIES
   ENVIRONMENT "OMP_NUM_THREADS=1;MKL_NUM_THREADS=1;OMP_PROC_BIND=false" TIMEOUT 180)
+
+# The production planar MITL driver with the TT Vlasov backend (--ttVlasov; TensorVlasovBackend.hpp)
+add_executable(PlanarMITLRelativisticSpaceTimeTT
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime.cpp)
+target_compile_features(PlanarMITLRelativisticSpaceTimeTT PRIVATE cxx_std_20)
+target_compile_definitions(PlanarMITLRelativisticSpaceTimeTT PRIVATE CAMELLIA_TT_VLASOV)
+target_link_libraries(PlanarMITLRelativisticSpaceTimeTT PRIVATE Camellia BOBA::BOBA)

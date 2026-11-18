@@ -378,7 +378,10 @@ inline int runTensorComparison(int argc, char **argv)
               << " test_norm=" << (norm.separable ? "separable (N5)" : "graph") << " acceleration_bounds=" << norm.accelerationBounds[0]
               << "," << norm.accelerationBounds[1] << '\n';
   }
-  auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,norm,problem.svdTolerance);
+  if (problem.freeOutflowX && (problem.schurChebyshev || (problem.explicitSchur && problem.explicitSchurSolver != "amen")))
+    throw std::invalid_argument("--freeOutflowX: mixed AMEn or explicit S + amen only");
+  auto system = assemble(axes,h,problem.qOverM,problem.Ex,problem.By,norm,problem.svdTolerance,
+                         OutflowFaces{problem.freeOutflowX, problem.freeOutflowX});
   auto rhs = problem.mitlInflow ? inflowRHS(system,axes,h,problem) : comparisonRHS(system,axes,h,problem);
   const double assemblySeconds = elapsed(start);
   if (std::getenv("PLANAR_MITL_G8_RANKS"))

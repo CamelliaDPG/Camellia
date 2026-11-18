@@ -282,12 +282,31 @@ struct FieldProfile
 };
 inline FieldProfile &fieldProfile() { static FieldProfile profile; return profile; }
 
+/// Layout of a trial block beyond the default (field: cell x basis; flux: faces in its normal direction, cell x basis in
+/// the others).  An exterior-face flux block (exterior = -1 lower, +1 upper face of its normal direction) has one face
+/// in the normal mode; cellStart[d] (if non-empty) restricts mode d to a subset of cells: cell c's dofs start at
+/// cellStart[d][c] in the compact mode (-1: not in the block).
+struct BlockLayout
+{
+  int exterior = 0;
+  std::array<std::vector<long>, 4> cellStart;
+};
+
 struct System
 {
   BlockMatrix matrix;
   TTMatrix transport, fieldValues;
   std::vector<std::string> names;
   std::vector<Sizes> sizes;
+  std::vector<BlockLayout> layouts = {};   // per block (empty: all default)
+};
+
+/// The x-direction outflow parts of the exterior faces that are trial unknowns ("free outflow", as production's
+/// inflow-only boundary condition): cathode x = x0 for u_x < 0, anode x = x1 for u_x > 0.  Needs u_x = 0 at a vertex.
+struct OutflowFaces
+{
+  bool cathode = false, anode = false;
+  bool any() const { return cathode || anode; }
 };
 
 /// Build sqrt(W)*L, then B=-L^T W F and G=L^T W L+alpha*M.
@@ -467,7 +486,8 @@ inline TTMatrix separableStiffness(const std::vector<Axis> &axes, const TestNorm
 }
 
 inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
-                       double qOverM, double Ex, double By, const TestNormWeight &norm, double tolerance)
+                       double qOverM, double Ex, double By, const TestNormWeight &norm, double tolerance,
+                       const OutflowFaces &outflow = {})
 {
   boba::Array<host_matrix, 4> evaluation, fieldEvaluation;
   Sizes testSizes, fieldSizes;
@@ -545,6 +565,50 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
     names.push_back("flux_" + directions[normal]);
     sizes.push_back(traceSizes);
   }
+  std::vector<BlockLayout> layouts(names.size());
+  // free outflow parts of the x exterior faces: one face in x, the u_x cells of one sign (the trace's t^ is the +x flux
+  // v_x f: at the lower face the cell sees -w(x0) t^, at the upper face +w(x1) t^, as for the interior faces)
+  for (int side : {-1, 1})
+  {
+    if ((side < 0 && !outflow.cathode) || (side > 0 && !outflow.anode)) continue;
+    const auto &ux = axes[2];
+    const size_t uCells = ux.vertices.size() - 1, nbJ = size_t(ux.trace.cols()) / uCells;
+    BlockLayout layout; layout.exterior = side;
+    layout.cellStart[2].assign(uCells, -1);
+    long count = 0;
+    for (size_t c = 0; c < uCells; ++c)
+    {
+      const double a = ux.vertices[c], b = ux.vertices[c + 1];
+      if (a < 0.0 && b > 0.0) throw std::invalid_argument("free outflow faces: u_x = 0 must be a vertex");
+      const bool outgoing = side < 0 ? b <= 0.0 : a >= 0.0;
+      if (outgoing) { layout.cellStart[2][c] = count; count += long(nbJ); }
+    }
+    if (count == 0) continue;
+    boba::Array<host_matrix, 4> factors;
+    Sizes traceSizes;
+    for (size_t d = 0; d < 4; ++d)
+    {
+      Eigen::MatrixXd matrix;
+      if (d == 0) { matrix = (side < 0 ? -1.0 : 1.0) * (side < 0 ? axes[0].lowerEnd : axes[0].upperEnd); }
+      else
+      {
+        const Eigen::MatrixXd full = axes[d].test.transpose() * axes[d].weights.asDiagonal() * axes[d].trace;
+        if (d != 2) matrix = full;
+        else
+        {
+          matrix.resize(full.rows(), count);
+          for (size_t c = 0; c < uCells; ++c)
+            if (layout.cellStart[2][c] >= 0) matrix.middleCols(layout.cellStart[2][c], long(nbJ)) = full.middleCols(long(c * nbJ), long(nbJ));
+        }
+      }
+      factors[d] = hostMatrix(matrix);
+      traceSizes[d] = matrix.cols();
+    }
+    bilinear.push_back(boba::make_ttm_from_matrices<4, host_space, double>(factors));
+    names.push_back(side < 0 ? "flux_x_cathode" : "flux_x_anode");
+    sizes.push_back(traceSizes);
+    layouts.push_back(layout);
+  }
   BlockMatrix matrix(names.size(), names.size());
   for (size_t i = 0; i < names.size(); ++i)
   {
@@ -559,6 +623,6 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
     matrix({0, j}) = bilinear[j - 1];
     matrix({j, 0}) = bilinear[j - 1].transpose();
   }
-  return {matrix, transport, fieldValues, names, sizes};
+  return {matrix, transport, fieldValues, names, sizes, layouts};
 }
 } // namespace PlanarMITLBoba

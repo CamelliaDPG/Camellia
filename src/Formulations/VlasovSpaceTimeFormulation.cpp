@@ -2684,7 +2684,7 @@ void VlasovSpaceTimeFormulation::solve()
       }
     }
     
-    _vlasovSolnPrev->setSolution(_vlasovSoln);
+    if (!_vlasovBackend) _vlasovSolnPrev->setSolution(_vlasovSoln); // a backend keeps its own f: _vlasovSoln is unsolved
     
     if (_exportViz)
     {

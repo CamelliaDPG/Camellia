@@ -8,8 +8,8 @@
 //   - moments n, int w_x f, int w_z f at arbitrary (x, t) points (w = u / gamma or u);
 //   - the final-time trace for the next slab.
 //
-// Exterior faces other than t = T are prescribed: the cathode inflow data at x = x0, zero elsewhere (the outflow parts
-// of the anode and velocity faces included; see plan-tt-coupled-production.md).
+// Boundary: cathode inflow data at x = x0 for u_x > 0; free traces on t = T and on the x-face outflow parts (cathode
+// u_x < 0, anode u_x > 0); zero on the velocity-box faces (f ~ 0 there).
 #include "TensorComparison.hpp"
 
 namespace PlanarMITLBoba
@@ -129,7 +129,11 @@ public:
     fieldProfile() = _fields;
     _problem.inflowDensity = _inflowDensity;
     _problem.mitlInflow = true;
-    auto system = assemble(_axes, *_h, _problem.qOverM, _problem.Ex, _problem.By, _norm, _problem.svdTolerance);
+    // the x-face outflow parts are free traces, as production's inflow-only boundary condition (electrons return to the
+    // cathode early on; PLANAR_MITL_TT_PRESCRIBED_OUTFLOW=1: zero, as the single-slab comparisons)
+    const bool freeOutflow = std::getenv("PLANAR_MITL_TT_PRESCRIBED_OUTFLOW") == nullptr;
+    auto system = assemble(_axes, *_h, _problem.qOverM, _problem.Ex, _problem.By, _norm, _problem.svdTolerance,
+                           OutflowFaces{freeOutflow, freeOutflow});
     auto rhs = inflowRHS(system, _axes, *_h, _problem);
     if (_hasInitial) { rhs(0) += _initialLoad; DpgBoba::round(rhs(0), _problem.svdTolerance); }
     _names = system.names;

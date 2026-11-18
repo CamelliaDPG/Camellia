@@ -118,14 +118,21 @@ inline Mat kron(const Mat &outer, const Mat &inner)
 struct TrialBlock
 {
   int normal = -1;
+  int exterior = 0;                          // BlockLayout::exterior: one exterior face in the normal mode
+  std::array<std::vector<long>, 4> cellStart; // BlockLayout::cellStart: a cell subset in a mode
   std::array<size_t, 4> nLocal{}, global{};
   size_t localSize() const { return nLocal[0] * nLocal[1] * nLocal[2] * nLocal[3]; }
   /// global four-mode index in direction d of local index i in cell c (-1: an exterior face that is not an unknown;
   /// the faces in the normal direction are the interior ones plus, if Axis::upperFaceFree, the upper exterior face)
   long index(size_t d, size_t c, size_t i, size_t cells) const
   {
-    (void) cells;
-    if (int(d) == normal) { const long f = long(c) - 1 + long(i); return (f < 0 || f >= long(global[d])) ? -1 : f; }
+    if (int(d) == normal)
+    {
+      if (exterior < 0) return (c == 0 && i == 0) ? 0 : -1;
+      if (exterior > 0) return (c + 1 == cells && i == 1) ? 0 : -1;
+      const long f = long(c) - 1 + long(i); return (f < 0 || f >= long(global[d])) ? -1 : f;
+    }
+    if (!cellStart[d].empty()) { const long s = cellStart[d][c]; return s < 0 ? -1 : s + long(i); }
     return long(c * nLocal[d] + i);
   }
 };
@@ -590,12 +597,19 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   {
     TrialBlock tb;
     if (system.names[b] == "f") tb.normal = -1;
+    else if (system.names[b] == "flux_x_cathode" || system.names[b] == "flux_x_anode") tb.normal = 0;
     else { for (size_t d = 0; d < 4; ++d) if (system.names[b] == "flux_" + dirs[d]) tb.normal = int(d); }
+    if (b < system.layouts.size()) { tb.exterior = system.layouts[b].exterior; tb.cellStart = system.layouts[b].cellStart; }
     for (size_t d = 0; d < 4; ++d)
     {
       if (tb.normal < 0) { tb.nLocal[d] = nbF[d]; tb.global[d] = cells[d] * nbF[d]; }
-      else if (int(d) == tb.normal) { tb.nLocal[d] = 2; tb.global[d] = size_t(axes[d].faces.cols()); }
-      else { tb.nLocal[d] = nbJ[d]; tb.global[d] = cells[d] * nbJ[d]; }
+      else if (int(d) == tb.normal) { tb.nLocal[d] = 2; tb.global[d] = tb.exterior != 0 ? 1 : size_t(axes[d].faces.cols()); }
+      else
+      {
+        tb.nLocal[d] = nbJ[d]; tb.global[d] = cells[d] * nbJ[d];
+        if (!tb.cellStart[d].empty())
+        { tb.global[d] = 0; for (long s : tb.cellStart[d]) if (s >= 0) tb.global[d] += nbJ[d]; }
+      }
       if (tb.global[d] != system.sizes[b][d]) throw std::runtime_error("explicit Schur: trial layout mismatch for " + system.names[b]);
     }
     blocks.push_back(tb);
@@ -639,6 +653,17 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   }
   std::array<Mat, 4> traceMass;
   for (size_t d = 0; d < 4; ++d) traceMass[d] = axes[d].test.transpose() * axes[d].weights.asDiagonal() * axes[d].trace;
+  // a flux block's element factor in its normal direction d on cell c: slot 0 the left face (vertex c), slot 1 the
+  // right face (vertex c + 1), values as in Axis::faces (exterior-face blocks: -lowerEnd on cell 0, +upperEnd on the last)
+  auto normalFaceFactor = [&](const TrialBlock &tb, size_t d, size_t c) {
+    Mat f = Mat::Zero(nbT[d], 2);
+    if (tb.exterior < 0) { if (c == 0) f.col(0) = -axes[d].lowerEnd.head(nbT[d]); return f; }
+    if (tb.exterior > 0) { if (c + 1 == cells[d]) f.col(1) = axes[d].upperEnd.segment(c * nbT[d], nbT[d]); return f; }
+    const Mat &F = axes[d].faces;
+    if (c >= 1) f.col(0) = F.block(c * nbT[d], c - 1, nbT[d], 1);
+    if (long(c) < long(F.cols())) f.col(1) = F.block(c * nbT[d], c, nbT[d], 1);
+    return f;
+  };
   // columns of the selected trial blocks (all if sel is empty), concatenated in block order
   // half: V^T B in factored form (V the fast-diagonalization basis shared by all elements, V^T applied to each 1D factor)
   auto elementBsel = [&](const std::array<size_t, 4> &c, const std::vector<bool> &sel, bool half = false) {
@@ -669,14 +694,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       std::array<Mat, 4> f;
       for (size_t d = 0; d < 4; ++d)
       {
-        if (d == nd)
-        {
-          // slot 0: left face (vertex c), slot 1: right face (vertex c + 1), values as in Axis::faces
-          f[d] = Mat::Zero(nbT[d], 2);
-          const Mat &F = axes[d].faces;
-          if (c[d] >= 1) f[d].col(0) = F.block(c[d] * nbT[d], c[d] - 1, nbT[d], 1);
-          if (long(c[d]) < long(F.cols())) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
-        }
+        if (d == nd) f[d] = normalFaceFactor(blocks[a], d, c[d]);
         else f[d] = cellBlock(traceMass[d], d, c[d], nbT[d], nbJ[d]);
         f[d] = T1(d, f[d]);
       }
@@ -1219,12 +1237,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       const size_t nd = size_t(blocks[a].normal); std::array<Mat, 4> f;
       for (size_t d = 0; d < 4; ++d)
       {
-        if (d == nd)
-        {
-          f[d] = Mat::Zero(nbT[d], 2); const Mat &F = axes[d].faces;
-          if (c[d] >= 1) f[d].col(0) = F.block(c[d] * nbT[d], c[d] - 1, nbT[d], 1);
-          if (long(c[d]) < long(F.cols())) f[d].col(1) = F.block(c[d] * nbT[d], c[d], nbT[d], 1);
-        }
+        if (d == nd) f[d] = normalFaceFactor(blocks[a], d, c[d]);
         else f[d] = cellBlock(traceMass[d], d, c[d], nbT[d], nbJ[d]);
       }
       return f;
@@ -1451,6 +1464,9 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     DpgBoba::AmenOptions amenOpt = opt.amen;   // the site apply uses the setup's thread count unless set
     if (amenOpt.siteThreads <= 0 && !std::getenv("BOBA_AMEN_THREADS")) amenOpt.siteThreads = nThreads;
     const bool anySplit = opt.split[0] || opt.split[1] || opt.split[2] || opt.split[3];
+    for (const auto &tb : blocks)
+      if (anySplit && (tb.exterior != 0 || std::any_of(tb.cellStart.begin(), tb.cellStart.end(), [](const auto &v) { return !v.empty(); })))
+        throw std::invalid_argument("explicit Schur: the mode split does not support exterior-face (free outflow) blocks");
     BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
                               : DpgBoba::solveAmen(sysS.matrix, rhsS, amenOpt, std::function<double(const BlockVector &)>(residualS),
                                                    packedMode ? &packedS : nullptr,

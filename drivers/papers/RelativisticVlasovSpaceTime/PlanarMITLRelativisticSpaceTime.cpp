@@ -5,6 +5,9 @@
 #include "Camellia.h"
 #include "../../PlanarMITL/PlanarMITLCommon.hpp"
 #include "../../PlanarMITL/ConventionalComparison.hpp"
+#ifdef CAMELLIA_TT_VLASOV
+#include "../../pulse/PlanarMITLBoba/TensorVlasovBackend.hpp"
+#endif
 
 using PlanarMITL::gradedVertices;
 using PlanarMITL::ensureVertexAt;
@@ -1168,12 +1171,18 @@ int main(int argc, char *argv[])
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   
   Kokkos::initialize(argc, argv); // initialize Kokkos
+#ifdef CAMELLIA_TT_VLASOV
+  boba::init();
+#endif
 
   if (PlanarMITL::comparisonRequested(argc, argv))
   {
     int status = 0;
     try { status = PlanarMITL::runConventionalComparison(argc, argv); }
     catch (const std::exception &error) { std::cerr << error.what() << std::endl; status = 1; }
+#ifdef CAMELLIA_TT_VLASOV
+    boba::finalize();
+#endif
     Camellia::finalize(false);
     return status;
   }
@@ -1447,6 +1456,17 @@ int main(int argc, char *argv[])
     bool accuracyDiagnostics = false;
     cmdp.setOption("accuracyDiagnostics", "noAccuracyDiagnostics", &accuracyDiagnostics,
                    "At the end of each time slab, print integral quantities (f, E^2, Jx over the slab) for comparing discretizations.");
+#ifdef CAMELLIA_TT_VLASOV
+    bool ttVlasov = false;
+    std::string ttVlasovArgs = "";
+    cmdp.setOption("ttVlasov", "noTTVlasov", &ttVlasov,
+                   "Solve Vlasov by the TT backend (explicit Schur complement + block AMEn, graph-oplus test norm): one MPI rank, "
+                   "tensor-product mesh, no adaptivity; the conventional Vlasov solve and its Solution-based diagnostics are skipped.");
+    cmdp.setOption("ttVlasovArgs", &ttVlasovArgs,
+                   "TT backend settings: PlanarMITLBobaDriver --comparison options, space separated (e.g. \"--p=2 --explicitSchur ...\")");
+#else
+    const bool ttVlasov = false;
+#endif
     std::string coarseSolver = "default";
     cmdp.setOption("coarseSolver", &coarseSolver,
                    "Direct solver for the coarsest GMG level: default (KLU2, or MUMPS if available), KLU, SuperLUDist, or MUMPS.  SuperLUDist distributes the coarse factorization and uses nested-dissection ordering (requires Trilinos built with SuperLU_DIST).");
@@ -2357,6 +2377,43 @@ int main(int argc, char *argv[])
         return converged;
       });
     }
+#ifdef CAMELLIA_TT_VLASOV
+    std::shared_ptr<PlanarMITLBoba::TensorVlasovBackendState> ttState;
+    if (ttVlasov)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(mpiSession.getNProc() != 1, std::invalid_argument, "--ttVlasov: one MPI rank");
+      TEUCHOS_TEST_FOR_EXCEPTION(useAdaptivity, std::invalid_argument, "--ttVlasov: no adaptivity");
+      TEUCHOS_TEST_FOR_EXCEPTION(temporalRampDuration > 0, std::invalid_argument, "--ttVlasov: no temporal ramp");
+      TEUCHOS_TEST_FOR_EXCEPTION(emissionProfile != Teuchos::null, std::invalid_argument, "--ttVlasov: constant emission per slab (sclEmissionDegree < 0)");
+      TEUCHOS_TEST_FOR_EXCEPTION(uy0 != 0.0, std::invalid_argument, "--ttVlasov: inflow centered at u_z = 0");
+      ttState = std::make_shared<PlanarMITLBoba::TensorVlasovBackendState>();
+      // parse the TT settings as the TT driver's command line
+      std::vector<std::string> words {"PlanarMITLBobaDriver", "--comparison", "--mitlInflow", "--separableTestNorm"};
+      {
+        std::istringstream in(ttVlasovArgs); std::string w;
+        while (in >> w) words.push_back(w);
+      }
+      std::vector<char*> ttArgv;
+      for (auto &w : words) ttArgv.push_back(&w[0]);
+      const int parsed = ttState->problem.parse(int(ttArgv.size()), ttArgv.data(), "tensor");
+      TEUCHOS_TEST_FOR_EXCEPTION(parsed != 0, std::invalid_argument, "--ttVlasovArgs: parse failed");
+      ttState->problem.c = cScaled;
+      ttState->problem.qOverM = form->q(0) / form->m(0);
+      ttState->problem.inflowU0 = ux0;
+      ttState->problem.inflowSigma = sigma;
+      ttState->problem.explicitSchur = true;
+      ttState->inflowDensity = [fM_u0]() { return fM_u0->get_n(); };
+      form->setVlasovBackend(PlanarMITLBoba::makeTensorVlasovBackend(ttState));
+      if (rank == 0)
+      {
+        std::cout << "TT Vlasov backend on: p=" << ttState->problem.p << " dp=" << ttState->problem.dp << " c=" << cScaled
+                  << " q/m=" << ttState->problem.qOverM << " acceleration bounds " << ttState->problem.accelerationBoundValues()[0]
+                  << "," << ttState->problem.accelerationBoundValues()[1] << "\n";
+        if (densityDiagnostic || phaseSpaceDiagnostic)
+          std::cout << "TT Vlasov backend: densityDiagnostic / phaseSpaceDiagnostic are skipped (they read the conventional Solution).\n";
+      }
+    }
+#endif
     form->setFixedPointTolerance(fixedPointTol);
     form->setFixedPointMinSubsteps(minSubsteps);
     form->setFixedPointMaxSubsteps(maxSubsteps);
@@ -2424,6 +2481,7 @@ int main(int argc, char *argv[])
           std::cout << "Time slab " << timeSlabOrdinal << ", memory HWM: " << memoryHWM_GB << " GB\n";
         }
         
+        if (!ttVlasov)
         {
           int quadratureEnrichment = 5;
           const double f_min = f_soln->minimumValue(form->vlasovMesh(), quadratureEnrichment);
@@ -2445,7 +2503,12 @@ int main(int argc, char *argv[])
         const auto &configurationCellIDSet = form->configurationSpaceMesh()->cellIDsInPartition();
         std::vector<GlobalIndexType> configurationCellIDs(configurationCellIDSet.begin(), configurationCellIDSet.end());
         const int velocityQuadratureDegree = (momentVelocityQuadratureDegree > 0) ? momentVelocityQuadratureDegree : 0; // 0: per cell
+#ifdef CAMELLIA_TT_VLASOV
+        auto vlasovMoments = ttVlasov ? PlanarMITLBoba::tensorMomentsAtConfigurationCubature(*ttState->slab, form->configurationSpaceMesh(), true)
+                                      : computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
+#else
         auto vlasovMoments = computeVlasovMomentsByPhaseSpaceCell1D2V(configurationCellIDs,
+#endif
                                                                       form->configurationSpaceMesh(),
                                                                       form->vlasovSolution(),
                                                                       form->f(speciesOrdinal),
@@ -2518,13 +2581,13 @@ int main(int argc, char *argv[])
           }
         }
         
-        if (densityDiagnostic)
+        if (densityDiagnostic && !ttVlasov)
         {
           const std::string densityPath = outputDir + "/density_slab" + to_string(timeSlabOrdinal) + ".csv";
           writeDensityDiagnostic(densityPath, form, speciesOrdinal, densityDiagnosticPointsPerDim, velocityQuadratureDegree, cScaled, q);
           if (rank == 0) std::cout << "Wrote density diagnostic to " << densityPath << ".\n";
         }
-        if (phaseSpaceDiagnostic)
+        if (phaseSpaceDiagnostic && !ttVlasov)
         {
           int pointsPerDim = phaseSpaceDiagnosticPointsPerDim;
           if (pointsPerDim < 2)
@@ -2557,11 +2620,11 @@ int main(int argc, char *argv[])
         {
           // integrals over the slab (phase space for f; configuration space-time for E^2, Jx); all collective
           const int cubatureEnrichment = 2;
-          const double fIntegral   = f_soln->integrate(form->vlasovMesh(), cubatureEnrichment);
           const double E2Integral  = (E_soln * E_soln)->integrate(configMesh, cubatureEnrichment);
           // the tensor-native moment functions are only defined at the configuration cubature points they were sampled on
           const double JxIntegral  = Jx->integrate(configMesh, 0);
           const double nIntegral   = density->integrate(configMesh, 0);
+          const double fIntegral   = ttVlasov ? nIntegral : f_soln->integrate(form->vlasovMesh(), cubatureEnrichment);
           if (rank == 0)
           {
             std::cout << std::setprecision(10);
@@ -2569,7 +2632,7 @@ int main(int argc, char *argv[])
                       << " int_Jx=" << JxIntegral << " int_n=" << nIntegral << " E0_end=" << E_left << std::endl;
             std::cout << std::setprecision(6);
           }
-          reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal);
+          if (!ttVlasov) reportChargeBalance(form, speciesOrdinal, timeSlabOrdinal);
         }
         
 //        {
@@ -3127,6 +3190,9 @@ int main(int argc, char *argv[])
   }
   
   const bool printAllocationReport = (rank == 0);
+#ifdef CAMELLIA_TT_VLASOV
+  boba::finalize();
+#endif
   Camellia::finalize(printAllocationReport);
   
   return 0;
