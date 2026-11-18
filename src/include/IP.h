@@ -76,9 +76,9 @@ public:
   //! If this inner product can apply the inverse of its Gram matrix directly, without forming and factoring it, sets
   //! values(c, r, :) <- G_c^{-1} values(c, r, :) for every cell c and row r and returns true; values is (C, R, N), N the
   //! number of dofs in dofOrdering.  Otherwise returns false and leaves values unchanged.  The default returns false.
-  virtual bool applyInverseInnerProductMatrix(Camellia::FieldContainer<Scalar> &values,
-                                              Teuchos::RCP<DofOrdering> dofOrdering,
-                                              Teuchos::RCP<BasisCache> basisCache)
+  virtual bool applyInverseInnerProductMatrix(Camellia::FieldContainer<Scalar> & /*values*/,
+                                              Teuchos::RCP<DofOrdering> /*dofOrdering*/,
+                                              Teuchos::RCP<BasisCache> /*basisCache*/)
   {
     return false;
   }
