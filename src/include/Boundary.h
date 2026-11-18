@@ -36,9 +36,11 @@ public:
   Boundary();
   void setMesh(MeshPtr mesh);
 
+  //! Determine rank-local values to impose for the Dirichlet boundary conditions in bc.  The data are projected onto
+  //! the trial bases with each cell's default cubature degree plus cubatureEnrichment.
   template <typename Scalar>
   void bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndices, Camellia::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                   DofInterpreter* dofInterpreter);
+                   DofInterpreter* dofInterpreter, int cubatureEnrichment = 0);
 
   //! Determine rank-local values to impose for the "point" boundary conditions (e.g., a point condition on a pressure variable)
   /*!
@@ -57,10 +59,11 @@ public:
    \param cellID - (In) the cell on which boundary conditions are requested
    \param singletons - (In) "point" boundary conditions (e.g., a point condition on a pressure variable); pairs are (trialID, vertexOrdinalInCell).
    \param dofInterpreter - (In) the DofInterpreter
+   \param cubatureEnrichment - (In) added to the cell's default cubature degree when projecting the data
    */
   template <typename Scalar>
   void bcsToImpose(std::vector<std::pair<GlobalIndexType,Scalar>> &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
-                   DofInterpreter* dofInterpreter);
+                   DofInterpreter* dofInterpreter, int cubatureEnrichment = 0);
   void buildLookupTables();
 };
 }

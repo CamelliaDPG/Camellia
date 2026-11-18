@@ -35,6 +35,8 @@ class TBC
   
   map< int, pair< vector<double>, Scalar> > _singlePointBCs; // variables on which single-point conditions imposed
 
+  int _cubatureEnrichmentDegree = -1; // for projecting Dirichlet data; -1: the Solution's cubature enrichment
+
 protected:
   map< int, TDirichletBC<Scalar> > &dirichletBCs();
   double _time;
@@ -58,6 +60,14 @@ public:
   virtual vector<double> pointForSpatialPointBC(int varID);
 
   virtual bool shouldImposeZeroMeanConstraint(int varID);
+
+  //! Cubature enrichment for projecting Dirichlet data onto the trial bases: the data are projected with the cell's
+  //! default cubature degree plus this enrichment.  The default (-1) uses the Solution's cubature enrichment
+  //! (TSolution::setCubatureEnrichmentDegree()).  Set this to resolve sharp boundary data without raising the
+  //! cubature of the whole solve; it adds cost only on boundary sides.
+  void setCubatureEnrichmentDegree(int enrichment) { _cubatureEnrichmentDegree = enrichment; }
+  //! The value set by setCubatureEnrichmentDegree(), or -1 if it has not been set.
+  int cubatureEnrichmentDegree() const { return _cubatureEnrichmentDegree; }
 
   bool isLegacySubclass();
 

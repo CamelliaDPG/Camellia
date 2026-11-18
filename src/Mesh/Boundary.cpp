@@ -53,14 +53,14 @@ void Boundary::buildLookupTables()
 template <typename Scalar>
 void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndices,
                            Camellia::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                           DofInterpreter* dofInterpreter)
+                           DofInterpreter* dofInterpreter, int cubatureEnrichment)
 {
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
   vector<pair<GlobalIndexType, double>> bcGlobalIndicesAndValues;
 
   for (GlobalIndexType cellID : rankLocalCells)
   {
-    bcsToImpose(bcGlobalIndicesAndValues, bc, cellID, dofInterpreter);
+    bcsToImpose(bcGlobalIndicesAndValues, bc, cellID, dofInterpreter, cubatureEnrichment);
   }
   singletonBCsToImpose(bcGlobalIndicesAndValues, bc, dofInterpreter);
   
@@ -82,7 +82,7 @@ void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndi
         vector<unsigned> taggedSides = _mesh->getTopology()->getSidesMatchingTag(cellID, DIRICHLET_SET_TAG_NAME, tagID);
         if (taggedSides.size() == 0) continue;
         ElementTypePtr elemType = _mesh->getElementType(cellID);
-        BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, cubatureEnrichment);
         for (auto varFunctionPair : tagBC.second)
         {
           VarPtr var = varFunctionPair.first;
@@ -123,7 +123,7 @@ void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndi
       for (IndexType cellID : matchingCellIDs)
       {
         ElementTypePtr elemType = _mesh->getElementType(cellID);
-        BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, cubatureEnrichment);
         
         for (auto varFunctionPair : tagBC.second)
         {
@@ -263,7 +263,7 @@ void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndi
 
 template <typename Scalar>
 void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndicesAndValues, TBC<Scalar> &bc,
-                            GlobalIndexType cellID, DofInterpreter* dofInterpreter)
+                            GlobalIndexType cellID, DofInterpreter* dofInterpreter, int cubatureEnrichment)
 {
   // this is where we actually compute the BCs; the other bcsToImpose variants call this one.
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
@@ -284,7 +284,7 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
   vector<unsigned> boundarySides = cell->boundarySides();
   if (boundarySides.size() > 0)
   {
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, cubatureEnrichment);
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
     {
       int trialID = *(trialIt);
@@ -636,10 +636,10 @@ namespace Camellia
 {
   template void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndices,
                                       Camellia::FieldContainer<double> &globalValues, TBC<double> &bc,
-                                      DofInterpreter* dofInterpreter);
+                                      DofInterpreter* dofInterpreter, int cubatureEnrichment);
   template void Boundary::bcsToImpose(vector<pair<GlobalIndexType, double>> &globalDofIndicesAndValues,
                                       TBC<double> &bc, GlobalIndexType cellID,
-                                      DofInterpreter* dofInterpreter);
+                                      DofInterpreter* dofInterpreter, int cubatureEnrichment);
   template void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,double>> &dofIndexToValue, TBC<double> &bc,
                                                DofInterpreter* dofInterpreter);
 }

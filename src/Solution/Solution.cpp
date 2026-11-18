@@ -2505,7 +2505,9 @@ void TSolution<Scalar>::imposeBCs()
   Camellia::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
   Camellia::FieldContainer<double> bcGlobalValuesFC;
   
-  _mesh->boundary().bcsToImpose(bcGlobalIndicesFC,bcGlobalValuesFC,*_bc, _dofInterpreter.get());
+  // Dirichlet data are projected with the BC's cubature enrichment if set, else with this Solution's
+  const int bcCubatureEnrichment = (_bc->cubatureEnrichmentDegree() >= 0) ? _bc->cubatureEnrichmentDegree() : _cubatureEnrichmentDegree;
+  _mesh->boundary().bcsToImpose(bcGlobalIndicesFC,bcGlobalValuesFC,*_bc, _dofInterpreter.get(), bcCubatureEnrichment);
   
   map<int,vector<pair<GlobalIndexType,double>>> bcValuesToSend; // key to outer map: recipient PID
   vector<pair<GlobalIndexType,double>> bcsToImposeThisRank;
