@@ -179,7 +179,7 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, GlobalOperatorMatchesSolution )
   bc->addDirichlet(s.t, SpatialFilter::allSpace(), 1.0 + Function::xn(1));
   s.bf->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
   // the assembled system without boundary conditions (with them, Solution builds the Dirichlet rows in)
-  SolutionPtr unconstrainedSolution = Solution::solution(s.bf, s.mesh, Teuchos::null, rhs, s.ip);
+  SolutionPtr unconstrainedSolution = Solution::solution(s.bf, s.mesh, BC::bc(), rhs, s.ip); // no boundary conditions
   unconstrainedSolution->setCubatureEnrichmentDegree(enrichment);
   unconstrainedSolution->initializeLHSVector();
   unconstrainedSolution->initializeStiffnessAndLoad();

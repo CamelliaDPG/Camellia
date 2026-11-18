@@ -963,7 +963,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   auto now = [] { return std::chrono::steady_clock::now(); };
   auto seconds = [](std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) { return std::chrono::duration<double>(b - a).count(); };
   // the assembled operator with the current fields, without boundary conditions
-  SolutionPtr reference = Solution::solution(form->vlasovBF(), mesh, Teuchos::null, RHS::rhs(), ip);
+  SolutionPtr reference = Solution::solution(form->vlasovBF(), mesh, BC::bc(), RHS::rhs(), ip); // no boundary conditions
   reference->setCubatureEnrichmentDegree(vlasovSolution->cubatureEnrichmentDegree());
   const auto assemblyStart = now();
   reference->initializeLHSVector();
