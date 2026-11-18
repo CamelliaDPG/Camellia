@@ -72,6 +72,7 @@ struct Axis
   Eigen::MatrixXd test, derivative, field, trace, faces;
   Eigen::VectorXd lowerEnd;   // test basis values at the lower end of the axis (left end of cell 0), length cells * nb
   bool upperFaceFree = false; // faces has a last column for the upper exterior face (an outflow face, e.g. t = T)
+  Camellia::BasisPtr fieldBasis;  // the 1D field (L2) basis, for evaluation at arbitrary points (fieldValuesAt)
 
   Axis(const std::vector<double> &mesh, int p, int dp, int quadratureDegree) : vertices(mesh)
   {
@@ -127,6 +128,7 @@ struct Axis
     test = evaluate(w, false);
     derivative = evaluate(w, true);
     field = evaluate(f, false);
+    fieldBasis = f;
     trace = evaluate(j, false);
     Kokkos::DynRankView<double, Camellia::DeviceType> endpointStorage("MITL endpoints", 2, 1);
     Intrepid2::TensorPoints<double, Camellia::DeviceType> endpoints(endpointStorage);
@@ -162,6 +164,27 @@ struct Axis
     upperFaceFree = true;
   }
   Eigen::VectorXd upperEnd;   // test basis values at the upper end of the axis (right end of the last cell)
+
+  /// Field basis values at physical points x (each inside [vertices.front(), vertices.back()]): (points x cells * nb),
+  /// columns as in `field` (cell-major); a point on an interior vertex is taken in the cell to its left.
+  Eigen::MatrixXd fieldValuesAt(const Eigen::VectorXd &x) const
+  {
+    const int cells = int(vertices.size()) - 1, nb = fieldBasis->getCardinality();
+    Eigen::MatrixXd out = Eigen::MatrixXd::Zero(x.size(), cells * nb);
+    Kokkos::DynRankView<double, Camellia::DeviceType> refStorage("MITL point", 1, 1);
+    Intrepid2::TensorPoints<double, Camellia::DeviceType> ref(refStorage);
+    for (Eigen::Index i = 0; i < x.size(); ++i)
+    {
+      const auto it = std::lower_bound(vertices.begin() + 1, vertices.end() - 1, x(i));
+      const int cell = int(it - vertices.begin()) - 1;
+      const double a = vertices[size_t(cell)], b = vertices[size_t(cell) + 1];
+      ref(0, 0) = 2.0 * (x(i) - a) / (b - a) - 1.0;
+      auto values = fieldBasis->allocateBasisValues(ref, Intrepid2::OPERATOR_VALUE);
+      fieldBasis->getValues(values, ref, Intrepid2::OPERATOR_VALUE);
+      for (int k = 0; k < nb; ++k) out(i, cell * nb + k) = values(k, 0);
+    }
+    return out;
+  }
 };
 
 /// Weighted SVD of h(ux,uz); its factors are values on physical quadrature points.

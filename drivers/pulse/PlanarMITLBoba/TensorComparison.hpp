@@ -280,12 +280,9 @@ inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &
   return rhs;
 }
 
-inline int runTensorComparison(int argc, char **argv)
+/// block AMEn options from the TT command-line problem
+inline DpgBoba::AmenOptions amenOptions(const PlanarMITL::ComparisonProblem &problem)
 {
-  using namespace PlanarMITL;
-  ComparisonProblem problem;
-  const int parsed = problem.parse(argc,argv,"tensor");
-  if (parsed) return parsed == 2 ? 0 : parsed;
   DpgBoba::AmenOptions options;
   options.tolerance = problem.tolerance; options.roundingTolerance = problem.svdTolerance;
   options.maxSweeps = problem.maxSweeps; options.kickrank = problem.kickrank;
@@ -296,6 +293,44 @@ inline int runTensorComparison(int argc, char **argv)
   options.infSupEnrichment = problem.infSupEnrichment;
   options.rieszTolerance = problem.rieszSvdTolerance;
   options.denseFillThreshold = problem.denseFillThreshold;
+  return options;
+}
+
+/// explicit Schur complement options from the TT command-line problem (the split mask is the caller's)
+inline ExplicitSchurOptions explicitSchurOptions(const PlanarMITL::ComparisonProblem &problem)
+{
+  ExplicitSchurOptions ex;
+  ex.sTolerance = problem.explicitSchurTolerance; ex.tolerance = problem.chebTolerance; ex.rtol = problem.chebRtol;
+  ex.iterations = problem.chebIterations; ex.every = problem.chebEvery; ex.boundsSteps = problem.chebBoundsSteps;
+  ex.boundsTolerance = problem.chebBoundsTolerance; ex.lminSafety = problem.chebLminSafety;
+  ex.lambdaMaxMode = problem.explicitSchurLambdaMax; ex.powerIterations = problem.explicitSchurPowerIterations;
+  ex.powerTolerance = problem.explicitSchurPowerTolerance; ex.boostFactor = problem.explicitSchurBoost;
+  ex.powerStart = problem.explicitSchurPowerStart;
+  ex.lambdaMinDiagnosticIterations = problem.explicitSchurLambdaMinIterations;
+  ex.solver = problem.explicitSchurSolver;
+  ex.refinements = problem.explicitSchurRefinements; ex.refineRhsTolerance = problem.explicitSchurRefineRhsTolerance;
+  ex.refineRounding = problem.explicitSchurRefineRounding;
+  ex.theta = problem.explicitSchurTheta; ex.refineInnerReduction = problem.explicitSchurInnerReduction;
+  ex.energyLanczosSteps = problem.explicitSchurEnergyLanczosSteps;
+  ex.energyCGSteps = problem.explicitSchurEnergyCGSteps; ex.energyCGTolerance = problem.explicitSchurEnergyCGTolerance;
+  ex.refineGuessTolerance = problem.explicitSchurRefineGuessTolerance;
+  ex.amen = amenOptions(problem); ex.amen.roundingTolerance = problem.chebTolerance; ex.amen.infSupEnrichment = false;
+  ex.amen.scaleSites = std::getenv("PLANAR_MITL_AMEN_SCALE_SITES") != nullptr;   // S~ is Jacobi-scaled already
+  // site Jacobi halves the site GMRES iterations on S~ (level 1: 177 -> 98 per sweep, same error)
+  ex.amen.siteJacobi = std::getenv("PLANAR_MITL_AMEN_NO_SITE_JACOBI") == nullptr;
+  // |r~| floors near the S~ TT tolerance times a conditioning factor (level 2: ~2e-3 at sTol 1e-4), so stop on stagnation
+  if (problem.amenStagnation >= 0) ex.amen.stagnationReduction = problem.amenStagnation;
+  if (ex.amen.stagnationReduction < 0) ex.amen.stagnationReduction = 0.1;
+  return ex;
+}
+
+inline int runTensorComparison(int argc, char **argv)
+{
+  using namespace PlanarMITL;
+  ComparisonProblem problem;
+  const int parsed = problem.parse(argc,argv,"tensor");
+  if (parsed) return parsed == 2 ? 0 : parsed;
+  const DpgBoba::AmenOptions options = amenOptions(problem);
   const auto start = ComparisonClock::now();
   basisChoice() = BasisChoice{problem.testBasis, problem.fieldBasis, problem.traceBasis};
   std::cout << "bases test=" << problem.testBasis << " field=" << problem.fieldBasis << " trace=" << problem.traceBasis << '\n';
@@ -433,28 +468,7 @@ inline int runTensorComparison(int argc, char **argv)
   }
   if (problem.explicitSchur)
   {
-    ExplicitSchurOptions ex;
-    ex.sTolerance = problem.explicitSchurTolerance; ex.tolerance = problem.chebTolerance; ex.rtol = problem.chebRtol;
-    ex.iterations = problem.chebIterations; ex.every = problem.chebEvery; ex.boundsSteps = problem.chebBoundsSteps;
-    ex.boundsTolerance = problem.chebBoundsTolerance; ex.lminSafety = problem.chebLminSafety;
-    ex.lambdaMaxMode = problem.explicitSchurLambdaMax; ex.powerIterations = problem.explicitSchurPowerIterations;
-    ex.powerTolerance = problem.explicitSchurPowerTolerance; ex.boostFactor = problem.explicitSchurBoost;
-    ex.powerStart = problem.explicitSchurPowerStart;
-    ex.lambdaMinDiagnosticIterations = problem.explicitSchurLambdaMinIterations;
-    ex.solver = problem.explicitSchurSolver;
-    ex.refinements = problem.explicitSchurRefinements; ex.refineRhsTolerance = problem.explicitSchurRefineRhsTolerance;
-    ex.refineRounding = problem.explicitSchurRefineRounding;
-    ex.theta = problem.explicitSchurTheta; ex.refineInnerReduction = problem.explicitSchurInnerReduction;
-    ex.energyLanczosSteps = problem.explicitSchurEnergyLanczosSteps;
-    ex.energyCGSteps = problem.explicitSchurEnergyCGSteps; ex.energyCGTolerance = problem.explicitSchurEnergyCGTolerance;
-    ex.refineGuessTolerance = problem.explicitSchurRefineGuessTolerance;
-    ex.amen = options; ex.amen.roundingTolerance = problem.chebTolerance; ex.amen.infSupEnrichment = false;
-    ex.amen.scaleSites = std::getenv("PLANAR_MITL_AMEN_SCALE_SITES") != nullptr;   // S~ is Jacobi-scaled already
-    // site Jacobi halves the site GMRES iterations on S~ (level 1: 177 -> 98 per sweep, same error)
-    ex.amen.siteJacobi = std::getenv("PLANAR_MITL_AMEN_NO_SITE_JACOBI") == nullptr;
-    // |r~| floors near the S~ TT tolerance times a conditioning factor (level 2: ~2e-3 at sTol 1e-4), so stop on stagnation
-    if (problem.amenStagnation >= 0) ex.amen.stagnationReduction = problem.amenStagnation;
-    if (ex.amen.stagnationReduction < 0) ex.amen.stagnationReduction = 0.1;
+    ExplicitSchurOptions ex = explicitSchurOptions(problem);
     ex.split = splitMask;
     solution = solveExplicitSchur(system,rhs,axes,h,problem.qOverM,problem.Ex,problem.By,ex,norm);
   }

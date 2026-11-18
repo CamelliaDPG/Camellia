@@ -58,6 +58,12 @@ struct ExplicitSchurOptions
   // absolute tolerance 0.3 theta eta / sqrt(lambda_max) (its energy-norm effect <= 0.3 theta eta).  theta = 0: fixed
   // number of passes with the tolerances above.  energyLanczosSteps: Lanczos steps for the e_s / eta brackets.
   double theta = 0, refineInnerReduction = 0.1;
+  // amen: warm start (in/out).  If set and holding one block per trial variable, its contents (the scaled iterate
+  // y~ of S~ y~ = c~ from an earlier solve, e.g. the previous fixed-point substep) start AMEn; on return it holds this
+  // solve's y~.
+  BlockVector *iterate = nullptr;
+  // false: skip eps = G^{-1}(l - B x) (an element loop plus a full-vector TT-SVD); the returned block 0 is then zero
+  bool computeErrorRepresentation = true;
   // > 0: a separate Lanczos run (from c~) for lambda_min/max at setup.  0 (default): the Ritz values come from the
   // CG runs of the e_s estimate themselves (no extra applies); the bounds decide only after energyCGMinSteps steps,
   // since early Ritz values overestimate lambda_min.  lambda_min/max are kept over all CG runs (S~ is fixed).
@@ -1447,7 +1453,9 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     const bool anySplit = opt.split[0] || opt.split[1] || opt.split[2] || opt.split[3];
     BlockVector yS = anySplit ? solveSplitAxes(sysS, rhsS, axes, opt.split, 1e-14, opt.amen, false)
                               : DpgBoba::solveAmen(sysS.matrix, rhsS, amenOpt, std::function<double(const BlockVector &)>(residualS),
-                                                   packedMode ? &packedS : nullptr);
+                                                   packedMode ? &packedS : nullptr,
+                                                   (opt.iterate && opt.iterate->block_size == nt) ? opt.iterate : nullptr);
+    if (opt.iterate && opt.iterate->block_size == nt) std::cout << "explicit_S amen: warm start from the previous iterate" << std::endl;
     auto yVec = [&](const BlockVector &y) { std::vector<TTVector> v(nt); for (size_t a = 0; a < nt; ++a) v[a] = y(a); return v; };
     energySetup();
     double Jprev = -1;
@@ -1510,6 +1518,7 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       for (size_t a = 0; a < nt; ++a) std::cout << (a ? "," : "") << maxRank4(yS(a));
       std::cout << " (rounding " << rr << ")" << std::endl;
     }
+    if (opt.iterate) *opt.iterate = yS;
     const double amenSeconds = seconds(ta);
     const auto tr = clock::now();
     double rn2 = 0;
@@ -1722,6 +1731,12 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   BlockVector solution(system.names.size());
   std::vector<Eigen::VectorXd> xFull(nt);
   for (size_t a = 0; a < nt; ++a) { solution(a + 1) = scaleVector(x[a], a); DpgBoba::round(solution(a + 1), 1e-12); xFull[a] = toFull(solution(a + 1)); }
+  if (!opt.computeErrorRepresentation)
+  {
+    solution(0) = zero_tt_vector<4>(system.sizes[0]);
+    std::cout << "explicit_S total_seconds=" << seconds(t0) << " (eps skipped)" << std::endl;
+    return solution;
+  }
   const auto tEps = clock::now();
   Eigen::VectorXd eps = Eigen::VectorXd::Zero(lFull.size());
   // test dofs are element-local (discontinuous test space): disjoint writes

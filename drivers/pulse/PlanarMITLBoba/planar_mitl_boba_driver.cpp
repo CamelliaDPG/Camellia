@@ -1,6 +1,7 @@
 #include "Camellia.h"
 #include "TensorProductAssembly.hpp"
 #include "TensorComparison.hpp"
+#include "TensorVlasovSlab.hpp"
 #include <iomanip>
 
 using namespace PlanarMITLBoba;
@@ -288,6 +289,64 @@ int run(int argc, char **argv)
   }
   return 0;
 }
+
+/// PLANAR_MITL_SLAB_TEST: the coupled-loop slab interface (TensorVlasovSlab) on the comparison problem's mesh and fields:
+/// slab 1 on [0, T] (fields sampled from the analytic profile), a repeat solve (warm start: no change expected), then
+/// slab 2 on [T, 2T] from slab 1's final trace.  Reports int f over each slab (compare runTensorComparison's f_integral).
+int runSlabTest(int argc, char **argv)
+{
+  using namespace PlanarMITL;
+  ComparisonProblem problem;
+  const int parsed = problem.parse(argc, argv, "tensor");
+  if (parsed) return parsed == 2 ? 0 : parsed;
+  auto vertices = problem.vertices();
+  FieldProfile analytic; analytic.variation = problem.fieldVariation;
+  analytic.x0 = vertices[0].front(); analytic.x1 = vertices[0].back(); analytic.t0 = vertices[1].front(); analytic.t1 = vertices[1].back();
+  auto sampleFields = [&](TensorVlasovSlab &slab, double tShift) {
+    const auto &xp = slab.xPoints(), &tp = slab.tPoints();
+    Eigen::MatrixXd E(xp.size(), tp.size()), B(xp.size(), tp.size());
+    for (Eigen::Index i = 0; i < xp.size(); ++i)
+      for (Eigen::Index j = 0; j < tp.size(); ++j)
+      {
+        const double t = tp(j) - tShift;   // the profile of slab 1, repeated
+        E(i, j) = problem.Ex * analytic.eX(xp(i)) * analytic.eT(t);
+        B(i, j) = problem.By * analytic.bX(xp(i)) * analytic.bT(t);
+      }
+    slab.setFields(E, B);
+  };
+  // int f over the slab = int int n dx dt at the (x, t) quadrature grid
+  auto integral = [&](const TensorVlasovSlab &slab) {
+    const auto &ax = slab.axes()[0], &at = slab.axes()[1];
+    Eigen::VectorXd x(ax.points.size() * at.points.size()), t(x.size()), w(x.size());
+    for (Eigen::Index j = 0; j < at.points.size(); ++j)
+      for (Eigen::Index i = 0; i < ax.points.size(); ++i)
+      {
+        const Eigen::Index k = i + ax.points.size() * j;
+        x(k) = ax.points(i); t(k) = at.points(j); w(k) = ax.weights(i) * at.weights(j);
+      }
+    const auto m = slab.moments(x, t, true);
+    return std::array<double, 3>{w.dot(m.density), w.dot(m.x), w.dot(m.z)};
+  };
+  auto report = [&](const std::string &tag, const TensorVlasovSlab &slab, double change) {
+    const auto I = integral(slab);
+    std::cout << std::setprecision(12) << "slab_test " << tag << " f_integral=" << I[0] << " int_wx_f=" << I[1]
+              << " int_wz_f=" << I[2] << " rel_change=" << change << std::endl;
+  };
+  TensorVlasovSlab first(problem, vertices);
+  sampleFields(first, 0.0);
+  first.setInflowDensity(problem.inflowDensity);
+  report("slab1", first, first.solve());
+  report("slab1_repeat", first, first.solve());
+  auto next = vertices;
+  const double T = vertices[1].back() - vertices[1].front();
+  for (auto &t : next[1]) t += T;
+  TensorVlasovSlab second(problem, next);
+  sampleFields(second, T);
+  second.setInflowDensity(problem.inflowDensity);
+  second.setInitialTrace(first);
+  report("slab2", second, second.solve());
+  return 0;
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -301,7 +360,7 @@ int main(int argc, char **argv)
   Kokkos::initialize(argc, argv);
   boba::init();
   int status = 0;
-  try { status = PlanarMITL::comparisonRequested(argc, argv) ? runTensorComparison(argc, argv) : run(argc, argv); }
+  try { status = std::getenv("PLANAR_MITL_SLAB_TEST") ? runSlabTest(argc, argv) : PlanarMITL::comparisonRequested(argc, argv) ? runTensorComparison(argc, argv) : run(argc, argv); }
   catch (const std::exception &error) { std::cerr << "PlanarMITLBobaDriver: " << error.what() << '\n'; status = 1; }
   boba::finalize();
   Camellia::finalize(false);
