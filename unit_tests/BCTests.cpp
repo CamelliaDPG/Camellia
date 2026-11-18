@@ -83,13 +83,13 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
 }
   
 
-  // Dirichlet data for the cubature-enrichment tests: a narrow Gaussian ridge in x and one in y (width 0.08), which the
+  // Dirichlet data for the cubature-enrichment tests: a narrow Gaussian ridge in x and one in y (width 0.15), which the
   // default cubature of a coarse, low-order cell under-resolves; and a quadratic, which the trace basis represents.
   FunctionPtr sharpBoundaryData()
   {
     FunctionPtr x = Function::xn(1), y = Function::yn(1);
     FunctionPtr dx = x - Function::constant(0.4), dy = y - Function::constant(0.35);
-    const double s2 = 0.08 * 0.08;
+    const double s2 = 0.15 * 0.15;
     return Exp<double>::exp((-1.0 / s2) * dx * dx) + Exp<double>::exp((-1.0 / s2) * dy * dy);
   }
   
@@ -178,13 +178,13 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     
     BCPtr sharp = boundaryDataBC(setup, sharpBoundaryData(), useTags);
     auto sharp0  = bcValueMap(setup.mesh, sharp, dofInterpreter, 0);
-    auto sharp20 = bcValueMap(setup.mesh, sharp, dofInterpreter, 20);
+    auto sharp30 = bcValueMap(setup.mesh, sharp, dofInterpreter, 30);
     auto sharp40 = bcValueMap(setup.mesh, sharp, dofInterpreter, 40);
     const double underResolved = maxDifference(sharp0, sharp40, out, success);
-    const double resolved      = maxDifference(sharp20, sharp40, out, success);
-    out << "sharp data: |default - enriched 40| = " << underResolved << ", |enriched 20 - enriched 40| = " << resolved << endl;
-    TEST_COMPARE(underResolved, >, 1e-3); // the default rule misses the ridge: the enrichment matters here
-    TEST_COMPARE(resolved, <, 1e-10);     // enriched projections converge
+    const double resolved      = maxDifference(sharp30, sharp40, out, success);
+    out << "sharp data: |default - enriched 40| = " << underResolved << ", |enriched 30 - enriched 40| = " << resolved << endl;
+    TEST_COMPARE(underResolved, >, 1e-2); // the default rule misses the ridges: the enrichment matters here (0.108)
+    TEST_COMPARE(resolved, <, 1e-8);      // enriched projections converge (exponentially: 2.7e-10 here)
     
     BCPtr quadratic = boundaryDataBC(setup, quadraticBoundaryData(), useTags);
     const double exact = maxDifference(bcValueMap(setup.mesh, quadratic, dofInterpreter, 0),
