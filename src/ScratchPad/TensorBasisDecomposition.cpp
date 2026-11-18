@@ -41,12 +41,16 @@ TensorBasisDecomposition TensorBasisDecomposition::decompose(BasisPtr basis, int
   using TensorBasis = Intrepid2::Basis_TensorBasis<Intrepid2Basis>;
   auto tensorBasis = dynamic_cast<const TensorBasis*>(fullBasis.get());
   if (tensorBasis == NULL) return d;
-  auto components = tensorBasis->getTensorBasisComponents();
-  if (int(components.size()) != spaceDim) return d;
-  for (const auto &component : components)
+  // the one-dimensional components; a basis on a side of a tensor-product cell can also carry a component on a point
+  // (domain dimension 0, cardinality 1), which leaves the ordinals unchanged and is dropped
+  std::vector<Teuchos::RCP<Intrepid2Basis>> components;
+  for (const auto &component : tensorBasis->getTensorBasisComponents())
   {
+    if ((component->getDomainDimension() == 0) && (component->getCardinality() == 1)) continue;
     if (component->getDomainDimension() != 1) return d;
+    components.push_back(component);
   }
+  if (int(components.size()) != spaceDim) return d;
   d.components.assign(components.begin(), components.end());
   d.componentCardinality.resize(spaceDim);
   d.fullSize = 1;

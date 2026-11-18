@@ -106,6 +106,7 @@ namespace Camellia
       TensorBasisDecomposition basis;
       std::vector<std::vector<double>> values; // [direction]: q_k x m_k
       std::vector<int> dofIndex;               // [basis ordinal]
+      bool hvol = false; // L^2 (n-form) values: divided by the Jacobian determinant (HVOLtransformVALUE)
     };
     struct TypeData
     {
@@ -129,6 +130,9 @@ namespace Camellia
     {
       std::vector<double> halfWidths;
       std::vector<double> sideParities;
+      //! [flux side]: Camellia's value transform of the flux basis on the side (transformed / reference values), as
+      //! measured from the side BasisCache, so that the flux terms match what BF integrates
+      std::vector<double> fluxTransform;
       std::vector<std::vector<double>> groupCoefficients; // [group]: P values (coefficients times weights, Jacobian, derivative scaling)
     };
 

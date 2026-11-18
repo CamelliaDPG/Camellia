@@ -233,7 +233,9 @@ void BoxCellDPGOperator::initializeTypeData(TypeData &data, ElementTypePtr elemT
   {
     FieldData field;
     field.trialVarID = fieldID;
-    field.basis = TensorBasisDecomposition::decompose(trialOrder->getBasis(fieldID), dim);
+    BasisPtr fieldBasis = trialOrder->getBasis(fieldID);
+    field.hvol = (fieldBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL);
+    field.basis = TensorBasisDecomposition::decompose(fieldBasis, dim);
     if (!field.basis.valid) return decline("a field basis is not a (subset of a) tensor product of one-dimensional bases");
     field.values.resize(dim);
     for (int k=0; k<dim; k++) field.basis.componentValues(k, data.points[k], field.values[k]);
@@ -340,6 +342,47 @@ BoxCellDPGOperator::CellData &BoxCellDPGOperator::cellData(GlobalIndexType cellI
   data.sideParities.resize(type.sides.size());
   for (int s=0; s<int(type.sides.size()); s++) data.sideParities[s] = (parities.rank() == 2) ? parities(0,s) : parities(s);
 
+  // the flux bases' value transforms on the sides (e.g. 1 / |det J J^-T n| for L^2 fluxes), measured
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+  data.fluxTransform.resize(type.fluxSides.size());
+  for (int fs=0; fs<int(type.fluxSides.size()); fs++)
+  {
+    const FluxSideData &fluxSide = type.fluxSides[fs];
+    BasisPtr sideBasis = trialOrder->getBasis(fluxSide.fluxVarID, fluxSide.side);
+    BasisCachePtr sideCache = BasisCache::basisCacheForCell(_mesh, cellID)->getSideBasisCache(fluxSide.side);
+    auto transformed = sideCache->getTransformedValues(sideBasis, OP_VALUE); // (C, F, P)
+    // the reference values at the side cache's points, from the one-dimensional components (the Intrepid2 serendipity
+    // basis does not support the FieldContainer getValues())
+    const Camellia::FieldContainer<double> &sidePoints = sideCache->getRefCellPointsFC(); // (P, dim - 1)
+    const int F = transformed->dimension(1), sidePointCount = transformed->dimension(2);
+    TEUCHOS_TEST_FOR_EXCEPTION(sidePoints.dimension(0) != sidePointCount, std::logic_error, "BoxCellDPGOperator: unexpected side points");
+    std::vector<std::vector<double>> componentTables(dim - 1);
+    for (int i=0; i<dim-1; i++)
+    {
+      std::vector<double> coordinates(sidePointCount);
+      for (int p=0; p<sidePointCount; p++) coordinates[p] = sidePoints(p,i);
+      fluxSide.basis.componentValues(i, coordinates, componentTables[i]);
+    }
+    auto reference = [&](int f, int p) {
+      double value = 1.0;
+      for (int i=0; i<dim-1; i++)
+        value *= componentTables[i][size_t(p) * fluxSide.basis.componentCardinality[i] + fluxSide.basis.componentOrdinals[f][i]];
+      return value;
+    };
+    int fMax = 0, pMax = 0;
+    double largest = 0;
+    for (int f=0; f<F; f++)
+      for (int p=0; p<sidePointCount; p++)
+        if (std::abs(reference(f,p)) > largest) { largest = std::abs(reference(f,p)); fMax = f; pMax = p; }
+    TEUCHOS_TEST_FOR_EXCEPTION(largest == 0, std::logic_error, "BoxCellDPGOperator: flux basis values vanish on a side");
+    const double ratio = (*transformed)(0,fMax,pMax) / reference(fMax,pMax);
+    for (int f=0; f<F; f++)
+      for (int p=0; p<sidePointCount; p++)
+        TEUCHOS_TEST_FOR_EXCEPTION(std::abs((*transformed)(0,f,p) - ratio * reference(f,p)) > 1e-10 * std::abs(ratio) * largest,
+                                   std::invalid_argument, "BoxCellDPGOperator: the flux basis's transform on a side is not a constant scaling");
+    data.fluxTransform[fs] = ratio;
+  }
+
   // the coefficients at the quadrature points, times the weights, the Jacobian, and the derivative scaling 1/(h_k/2)
   std::vector<double> weights(P, J);
   {
@@ -363,7 +406,9 @@ BoxCellDPGOperator::CellData &BoxCellDPGOperator::cellData(GlobalIndexType cellI
       coefficient->values(values, basisCache);
       for (int p=0; p<P; p++) c[p] += values(0,p);
     }
-    const double scale = (group.testDirection >= 0) ? 1.0 / data.halfWidths[group.testDirection] : 1.0;
+    double scale = (group.testDirection >= 0) ? 1.0 / data.halfWidths[group.testDirection] : 1.0;
+    for (const FieldData &field : type.fields)
+      if ((field.trialVarID == group.trialVarID) && field.hvol) scale /= J; // L^2 values: reference values / det J
     for (int p=0; p<P; p++) c[p] *= weights[p] * scale;
   }
   return data;
@@ -434,8 +479,9 @@ void BoxCellDPGOperator::applyB(GlobalIndexType cellID, const double *u, double 
   // flux terms: on each side, the flux at the side's quadrature points, times weights, parity, coefficient, tested
   std::vector<int> testStride(dim, 1);
   for (int k=1; k<dim; k++) testStride[k] = testStride[k-1] * n[k-1];
-  for (const FluxSideData &fluxSide : type.fluxSides)
+  for (int fs=0; fs<int(type.fluxSides.size()); fs++)
   {
+    const FluxSideData &fluxSide = type.fluxSides[fs];
     const SideData &side = type.sides[fluxSide.side];
     x.assign(fluxSide.basis.fullSize, 0.0);
     for (int b=0; b<int(fluxSide.dofIndex.size()); b++) x[fluxSide.basis.tensorIndex[b]] = u[fluxSide.dofIndex[b]];
@@ -447,7 +493,8 @@ void BoxCellDPGOperator::applyB(GlobalIndexType cellID, const double *u, double 
       x.swap(y);
     }
     // weights (in side order), parity, coefficient, side Jacobian
-    double scale = fluxSide.coefficient * cell.sideParities[fluxSide.side];
+    // side measure prod h/2, times the flux basis's value transform on the side, the coefficient and the parity
+    double scale = fluxSide.coefficient * cell.sideParities[fluxSide.side] * cell.fluxTransform[fs];
     for (int i=0; i<dim-1; i++) scale *= cell.halfWidths[side.cellDirection[i]];
     {
       std::vector<int> index(dim - 1, 0);
@@ -531,8 +578,9 @@ void BoxCellDPGOperator::applyBTranspose(GlobalIndexType cellID, const double *v
 
   std::vector<int> testStride(dim, 1);
   for (int k=1; k<dim; k++) testStride[k] = testStride[k-1] * n[k-1];
-  for (const FluxSideData &fluxSide : type.fluxSides)
+  for (int fs=0; fs<int(type.fluxSides.size()); fs++)
   {
+    const FluxSideData &fluxSide = type.fluxSides[fs];
     const SideData &side = type.sides[fluxSide.side];
     std::vector<int> others;
     for (int k=0; k<dim; k++) if (k != side.normal) others.push_back(k);
@@ -565,7 +613,8 @@ void BoxCellDPGOperator::applyBTranspose(GlobalIndexType cellID, const double *v
       order[i] = int(std::find(others.begin(), others.end(), side.cellDirection[i]) - others.begin());
     permuteAxes(dims, order, x, y);
     x.swap(y);
-    double scale = fluxSide.coefficient * cell.sideParities[fluxSide.side];
+    // side measure prod h/2, times the flux basis's value transform on the side, the coefficient and the parity
+    double scale = fluxSide.coefficient * cell.sideParities[fluxSide.side] * cell.fluxTransform[fs];
     for (int i=0; i<dim-1; i++) scale *= cell.halfWidths[side.cellDirection[i]];
     {
       std::vector<int> index(dim - 1, 0);

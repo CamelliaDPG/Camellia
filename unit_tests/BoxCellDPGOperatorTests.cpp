@@ -119,8 +119,8 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, MatchesAssembledMatrices )
         TEST_EQUALITY(op.testSize(cellID), testCount);
         BasisCachePtr basisCache = BasisCache::basisCacheForCell(s.mesh, cellID, false, enrichment);
         BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(s.mesh, cellID, true, enrichment);
-        Camellia::FieldContainer<double> B(1, testCount, trialCount);
-        s.bf->stiffnessMatrix(B, elemType, s.mesh->cellSideParitiesForCell(cellID), basisCache, true, false); // (C, test, trial)
+        Camellia::FieldContainer<double> B(1, trialCount, testCount);
+        s.bf->stiffnessMatrix(B, elemType, s.mesh->cellSideParitiesForCell(cellID), basisCache, true, false); // (C, trial, test)
         Camellia::FieldContainer<double> K(1, trialCount, trialCount), load(1, trialCount);
         s.bf->localStiffnessMatrixAndRHS(K, load, s.ip, ipBasisCache, rhs, basisCache);
 
@@ -138,14 +138,14 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, MatchesAssembledMatrices )
         for (int t=0; t<testCount; t++)
         {
           double expected = 0;
-          for (int j=0; j<trialCount; j++) expected += B(0, testDof[t], j) * u[j];
+          for (int j=0; j<trialCount; j++) expected += B(0, j, testDof[t]) * u[j];
           errorB = std::max(errorB, abs(expected - Bu[t]));
           scaleB = std::max(scaleB, abs(expected));
         }
         for (int j=0; j<trialCount; j++)
         {
           double expectedBT = 0, expectedS = 0;
-          for (int t=0; t<testCount; t++) expectedBT += B(0, testDof[t], j) * w[t];
+          for (int t=0; t<testCount; t++) expectedBT += B(0, j, testDof[t]) * w[t];
           for (int i=0; i<trialCount; i++) expectedS += K(0, j, i) * u[i];
           errorBT = std::max(errorBT, abs(expectedBT - BTw[j]));
           scaleBT = std::max(scaleBT, abs(expectedBT));
@@ -194,6 +194,8 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, GlobalOperatorMatchesSolution )
   A->apply(x, Ax);
   unconstrained.applyUnconstrained(x, Sx);
   unconstrained.load(rhs, L);
+  out << "|x| = " << x.getVector(0)->normInf() << ", |A x| = " << Ax.getVector(0)->normInf() << ", |S x| = " << Sx.getVector(0)->normInf()
+      << ", |L| = " << L.getVector(0)->normInf() << ", |assembled load| = " << assembledLoad->getVector(0)->normInf() << endl;
   Sx.update(-1.0, Ax, 1.0);
   L.update(-1.0, *assembledLoad, 1.0);
   const double operatorError = Sx.getVector(0)->normInf() / Ax.getVector(0)->normInf();
