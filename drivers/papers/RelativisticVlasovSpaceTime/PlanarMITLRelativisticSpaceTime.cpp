@@ -1498,6 +1498,11 @@ int main(int argc, char *argv[])
     cmdp.setOption("sclEmissionTolerance", &sclEmissionTolerance,
                    "spaceChargeLimited: converged when |E(0)| at the slab's final time (or, for sclEmissionDegree >= 0, each "
                    "weighted mean of E(0,t)/E0 off its bound) is below this fraction of |E0|");
+    double sclNewtonStepFactor = 0.0;
+    cmdp.setOption("sclNewtonStepFactor", &sclNewtonStepFactor,
+                   "spaceChargeLimited (constant emission per slab): kappa > 0 lets the emitted density fall by the damped "
+                   "Newton step kappa E(0)/(dE(0)/dn), floored at 1e-3 n0, once the slope estimate is established, instead of "
+                   "by at most half per substep (0: halving only)");
     bool taperInjection = true;
     double taperUpperThreshold = 0.50, taperLowerThreshold = 0.10;
     cmdp.setOption("taperInjection", "noTaperInjection", &taperInjection,
@@ -2403,7 +2408,12 @@ int main(int argc, char *argv[])
         // geometric limit alone, e.g. a factor of ten per substep, lets the density collapse to 1e-30 n0 and below over a
         // few slabs while the field stays reversed; from there it cannot restart.)
         const double nMax = nCurrent + std::max(nBase, 0.5 * n0);
-        const double nMin = std::min(nCurrent, std::max(0.5 * nCurrent, nOff));
+        double nMin = std::min(nCurrent, std::max(0.5 * nCurrent, nOff));
+        // --sclNewtonStepFactor: with an established slope, the downward step may be the damped Newton step (floored at
+        // nOff, which also prevents the collapse described above): the emission falls to its target in a few substeps
+        // after the slab-0 overfill instead of halving for 8-9
+        if ((sclNewtonStepFactor > 0) && (sclState->slope > 0) && (E_cathode / sclState->slope > 0))
+          nMin = std::min(nCurrent, std::max(nOff, nCurrent - sclNewtonStepFactor * E_cathode / sclState->slope));
         nNext = std::max(nMin, std::min(nMax, nNext));
         if (converged) nNext = nCurrent;
         fM_u0->set_n(nNext);
