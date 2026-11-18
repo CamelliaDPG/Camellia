@@ -58,7 +58,11 @@ struct ExplicitSchurOptions
   // absolute tolerance 0.3 theta eta / sqrt(lambda_max) (its energy-norm effect <= 0.3 theta eta).  theta = 0: fixed
   // number of passes with the tolerances above.  energyLanczosSteps: Lanczos steps for the e_s / eta brackets.
   double theta = 0, refineInnerReduction = 0.1;
-  int energyLanczosSteps = 60;
+  // > 0: a separate Lanczos run (from c~) for lambda_min/max at setup.  0 (default): the Ritz values come from the
+  // CG runs of the e_s estimate themselves (no extra applies); the bounds decide only after energyCGMinSteps steps,
+  // since early Ritz values overestimate lambda_min.  lambda_min/max are kept over all CG runs (S~ is fixed).
+  int energyLanczosSteps = 0;
+  int energyCGMinSteps = 8;
   // e_s^2 = r~^T S~^{-1} r~ estimated by CG on S~ d = r~ from d = 0: the partial sums sum_j alpha_j |r_j|^2 are
   // monotone lower bounds (Gauss quadrature), the sum plus |r_k|^2 / lambda_min an upper bound.  With theta > 0 CG runs
   // until the bounds decide the staged test (upper e_s <= theta eta: stop; lower e_s > theta eta: another pass);
@@ -1333,10 +1337,14 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       for (size_t a = 0; a < nt; ++a) pp[a] = rr[a] + beta * pp[a];
       rz = rzNew; alphaPrev = alpha; betaPrev = beta;
     }
-    const size_t m = dd.size(); Mat Tm = Mat::Zero(m, m);
-    for (size_t i = 0; i < m; ++i) { Tm(i, i) = dd[i]; if (i + 1 < m) Tm(i, i + 1) = Tm(i + 1, i) = ee[i]; }
-    const Eigen::VectorXd ritz = Eigen::SelfAdjointEigenSolver<Mat>(Tm).eigenvalues();
-    ritzLmin = ritz(0); ritzLmax = ritz(m - 1);
+    const size_t m = dd.size();
+    if (m > 0)
+    {
+      Mat Tm = Mat::Zero(m, m);
+      for (size_t i = 0; i < m; ++i) { Tm(i, i) = dd[i]; if (i + 1 < m) Tm(i, i + 1) = Tm(i + 1, i) = ee[i]; }
+      const Eigen::VectorXd ritz = Eigen::SelfAdjointEigenSolver<Mat>(Tm).eigenvalues();
+      ritzLmin = ritz(0); ritzLmax = ritz(m - 1);
+    }
     J0 = energyJ({});
     std::cout << "explicit_S energy setup: Lanczos Ritz [" << ritzLmin << ", " << ritzLmax << "] (" << m << " steps), J(0)="
               << J0 << " (" << seconds(tl) << " s)" << std::endl;
@@ -1347,19 +1355,30 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   auto cgEnergy = [&](const std::vector<Eigen::VectorXd> &r0, double J) {
     auto fdot = [&](const std::vector<Eigen::VectorXd> &u, const std::vector<Eigen::VectorXd> &w) { double d = 0; for (size_t a = 0; a < nt; ++a) d += u[a].dot(w[a]); return d; };
     std::vector<Eigen::VectorXd> r = r0, p = r0;
-    double rz = fdot(r, r), sum = 0;
-    std::vector<double> terms;
+    double rz = fdot(r, r), sum = 0, alphaPrev = 0, betaPrev = 0;
+    std::vector<double> terms, dd, ee;
     int k = 0;
+    // Ritz values of the CG (Lanczos) tridiagonal, folded into the run-wide lambda_min/max
+    auto updateRitz = [&]() {
+      const size_t m = dd.size(); Mat Tm = Mat::Zero(m, m);
+      for (size_t i = 0; i < m; ++i) { Tm(i, i) = dd[i]; if (i + 1 < m) Tm(i, i + 1) = Tm(i + 1, i) = ee[i]; }
+      const Eigen::VectorXd ritz = Eigen::SelfAdjointEigenSolver<Mat>(Tm).eigenvalues();
+      ritzLmin = ritzLmin > 0 ? std::min(ritzLmin, ritz(0)) : ritz(0);
+      ritzLmax = std::max(ritzLmax, ritz(m - 1));
+    };
     while (k < opt.energyCGSteps && rz > 0)
     {
       const auto q = applyFull(p);
       const double alpha = rz / fdot(p, q);
       terms.push_back(alpha * rz); sum += alpha * rz;
       for (size_t a = 0; a < nt; ++a) r[a] -= alpha * q[a];
-      const double rzNew = fdot(r, r);
-      for (size_t a = 0; a < nt; ++a) p[a] = r[a] + (rzNew / rz) * p[a];
+      const double rzNew = fdot(r, r), beta = rzNew / rz;
+      dd.push_back(1.0 / alpha + (k > 0 ? betaPrev / alphaPrev : 0.0)); ee.push_back(std::sqrt(std::abs(beta)) / alpha);
+      alphaPrev = alpha; betaPrev = beta;
+      for (size_t a = 0; a < nt; ++a) p[a] = r[a] + beta * p[a];
       rz = rzNew; ++k;
-      if (opt.theta > 0)
+      updateRitz();
+      if (opt.theta > 0 && k >= opt.energyCGMinSteps)
       {
         const double upper = sum + rz / ritzLmin;
         const double etaLow = std::sqrt(std::max(0.0, J - upper)), etaHigh = std::sqrt(std::max(0.0, J - sum));
@@ -1375,11 +1394,23 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
     return std::array<double, 3>{sum, sum + rz / ritzLmin, double(k)};
   };
   // r: the residual c~ - S~ y on full vectors (matrix-free, exact S~)
-  auto reportEnergy = [&](const std::string &tag, const std::vector<TTVector> &y, const std::vector<Eigen::VectorXd> &r) {
+  // J(y) = J(0) - 2 c~^T y + y^T S~ y (exact: S~ y is the exact matrix-free apply the residual already needs), with
+  // J(0) = l^T G^{-1} l from one element loop per run.  CAMELLIA_EXPLICIT_S_J_CHECK: also the element loop, for comparison.
+  auto reportEnergy = [&](const std::string &tag, const std::vector<TTVector> &y, const std::vector<Eigen::VectorXd> &yFull,
+                          const std::vector<Eigen::VectorXd> &cFull, const std::vector<Eigen::VectorXd> &Sy,
+                          const std::vector<Eigen::VectorXd> &r) {
     const auto te = clock::now();
-    double rn2 = 0; for (size_t a = 0; a < nt; ++a) rn2 += r[a].squaredNorm();
-    const double J = energyJ(y), lo = rn2 / ritzLmax, hi = rn2 / ritzLmin, s0 = std::sqrt(J0);
+    double rn2 = 0, cy = 0, ySy = 0;
+    for (size_t a = 0; a < nt; ++a) { rn2 += r[a].squaredNorm(); cy += cFull[a].dot(yFull[a]); ySy += yFull[a].dot(Sy[a]); }
+    const double J = J0 - 2 * cy + ySy, s0 = std::sqrt(J0);
+    if (std::getenv("CAMELLIA_EXPLICIT_S_J_CHECK"))
+    {
+      const double Jloop = energyJ(y);
+      std::cout << "explicit_S energy J check: identity " << std::setprecision(12) << J << " element loop " << Jloop
+                << std::setprecision(6) << " (relative difference " << std::abs(J - Jloop) / Jloop << ")" << std::endl;
+    }
     const auto cg = cgEnergy(r, J);
+    const double lo = rn2 / ritzLmax, hi = rn2 / ritzLmin;
     const double esEst = std::sqrt(cg[0]), etaEst = std::sqrt(std::max(0.0, J - cg[0]));
     const double etaLo = std::sqrt(std::max(0.0, J - hi)), etaHi = std::sqrt(std::max(0.0, J - lo));
     std::cout << "explicit_S energy " << tag << ": J=" << std::setprecision(12) << J << std::setprecision(6) << " sqrt(J/J0)=" << std::sqrt(J) / s0
@@ -1425,9 +1456,10 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
       for (size_t a = 0; a < nt; ++a) yFull[a] = toFull(yS(a));
       const auto Sy = applyFull(yFull);
       double rn = 0, cn = 0;
-      for (size_t a = 0; a < nt; ++a) { const Eigen::VectorXd ca = toFull(ct[a]); target[a] = ca - Sy[a]; rn += target[a].squaredNorm(); cn += ca.squaredNorm(); }
+      std::vector<Eigen::VectorXd> cF(nt);
+      for (size_t a = 0; a < nt; ++a) { cF[a] = toFull(ct[a]); target[a] = cF[a] - Sy[a]; rn += target[a].squaredNorm(); cn += cF[a].squaredNorm(); }
       rn = std::sqrt(rn);
-      const auto E = reportEnergy(it == 0 ? "solve" : "pass " + std::to_string(it), yVec(yS), target);
+      const auto E = reportEnergy(it == 0 ? "solve" : "pass " + std::to_string(it), yVec(yS), yFull, cF, Sy, target);
       // a posteriori: J_prev - J = e_s(prev)^2 - e_s^2 <= e_s(prev)^2 (a lower bound, sharp once e_s << e_s(prev))
       if (Jprev >= 0)
         std::cout << "explicit_S energy pass " << it << ": a posteriori e_s(previous)/sqrt(J0) >= "

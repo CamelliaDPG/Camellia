@@ -53,7 +53,7 @@ struct ComparisonProblem
   std::string explicitSchurPowerStart = "random";
   std::string explicitSchurSolver = "chebyshev";
   int explicitSchurRefinements = 0; double explicitSchurRefineRhsTolerance = 3e-2, explicitSchurRefineRounding = 0;
-  double explicitSchurTheta = 0, explicitSchurInnerReduction = 0.1; int explicitSchurEnergyLanczosSteps = 60;
+  double explicitSchurTheta = 0, explicitSchurInnerReduction = 0.1; int explicitSchurEnergyLanczosSteps = 0;
   int explicitSchurEnergyCGSteps = 200; double explicitSchurEnergyCGTolerance = 1e-3, explicitSchurRefineGuessTolerance = 0.3;
   int chebIterations = 200, chebEvery = 10;
   std::string chebKronecker;
@@ -161,7 +161,7 @@ struct ComparisonProblem
     cmd.setOption("explicitSchurEnergyCGSteps", &explicitSchurEnergyCGSteps, "Explicit Schur: maximum CG steps for the e_s estimate r^T S^-1 r");
     cmd.setOption("explicitSchurEnergyCGTolerance", &explicitSchurEnergyCGTolerance, "Explicit Schur: CG e_s estimate stops when the last 4 terms add less than this fraction");
     cmd.setOption("explicitSchurRefineGuessTolerance", &explicitSchurRefineGuessTolerance, "Explicit Schur staged: relative truncation of the residual used as the correction's starting guess");
-    cmd.setOption("explicitSchurEnergyLanczosSteps", &explicitSchurEnergyLanczosSteps, "Explicit Schur: Lanczos steps for the e_s / eta brackets");
+    cmd.setOption("explicitSchurEnergyLanczosSteps", &explicitSchurEnergyLanczosSteps, "Explicit Schur: separate Lanczos steps for lambda_min/max (0: from the CG of the e_s estimate)");
     cmd.setOption("explicitSchurRefinements", &explicitSchurRefinements, "Explicit Schur amen: iterative refinement passes (exact matrix-free residual, correction solved with the compressed S~)");
     cmd.setOption("explicitSchurRefineRhsTolerance", &explicitSchurRefineRhsTolerance, "Explicit Schur refinement: relative TT tolerance of the residual right-hand side");
     cmd.setOption("explicitSchurRefineRounding", &explicitSchurRefineRounding, "Explicit Schur refinement: relative rounding of y after each correction (<= 0: 1e-8)");
