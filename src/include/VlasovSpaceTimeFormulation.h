@@ -121,6 +121,7 @@ private:
 
   std::function<void(const SubstepSolveProfile &)> _substepSolveProfileCallback;
   std::function<bool(VlasovSpaceTimeFormulation &, int)> _substepConfigurationCallback; // see setSubstepConfigurationCallback()
+  std::function<double(VlasovSpaceTimeFormulation &, int)> _vlasovBackend; // see setVlasovBackend()
 
   // tags for BCs:
   static const int VLASOV_TAG_SPATIAL_INFLOW = 0; // region where (v \cdot n_x) < 0
@@ -585,6 +586,15 @@ public:
   //! returns whether its own iteration has converged, and the fixed-point iteration does not stop (before
   //! fixedPointMaxSubsteps) until it has.  Carried to later slabs by nextTimeSlab().
   void setSubstepConfigurationCallback(std::function<bool(VlasovSpaceTimeFormulation &, int)> callback);
+
+  //! Optional replacement of the Vlasov solve and the moment computation in each fixed-point substep (e.g. a
+  //! tensor-train solver).  Called as backend(*this, substepOrdinal) when the configuration fields are current; it must
+  //! solve for f with those fields and the current inflow data, set the configuration formulation's current sources
+  //! (as the tensor-native moment handoff does), and return the relative L^2 change of f since the previous substep
+  //! (any value on substep 0).  When set, the Camellia Vlasov Solution is not solved (it stays zero), the positivity
+  //! limiter and the conservation diagnostics are skipped, and the backend is carried to the next slab.
+  void setVlasovBackend(std::function<double(VlasovSpaceTimeFormulation &, int)> backend);
+  bool hasVlasovBackend() const { return static_cast<bool>(_vlasovBackend); }
 };
 
 }

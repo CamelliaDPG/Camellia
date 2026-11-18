@@ -1357,6 +1357,7 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   nextSlabForm->_coarseSolverChoice = _coarseSolverChoice;
   nextSlabForm->_substepSolveProfileCallback = _substepSolveProfileCallback;
   nextSlabForm->_substepConfigurationCallback = _substepConfigurationCallback;
+  nextSlabForm->_vlasovBackend = _vlasovBackend;
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
   nextSlabForm->setFixedPointMinSubsteps(_minSubsteps);
   nextSlabForm->setFixedPointTolerance(_fixedPointTolerance);
@@ -2494,8 +2495,16 @@ void VlasovSpaceTimeFormulation::solve()
     if (releaseFreedMemoryRequested()) releaseFreedMemoryToOS(); // CAMELLIA_RELEASE_FREED_MEMORY
     MemoryCheckpoints::record("substep_start");
 
-    // solve for f:
-    if (!_useGeometricMultigrid)
+    // solve for f (and, below, its moments) -- or hand both to the backend:
+    double backendRelDiff = -1;
+    if (_vlasovBackend)
+    {
+      const auto solveStart = ProfileClock::now();
+      backendRelDiff = _vlasovBackend(*this, substepOrdinal);
+      profile.wallTimeVlasovSolve = profileSeconds(solveStart);
+      substepIterationCounts[substepOrdinal] = -1;
+    }
+    else if (!_useGeometricMultigrid)
     {
       const auto solveStart = ProfileClock::now();
       _vlasovSoln->solve();
@@ -2537,7 +2546,7 @@ void VlasovSpaceTimeFormulation::solve()
       MemoryCheckpoints::clear();
       MemoryCheckpoints::setEnabled(false);
     }
-    if (_substepSolveProfileCallback)
+    if (_substepSolveProfileCallback && !_vlasovBackend)
     {
       profile.numGlobalDofs           = _vlasovSoln->mesh()->numGlobalDofs();
       profile.totalTimeLocalStiffness = _vlasovSoln->totalTimeLocalStiffness();
@@ -2545,13 +2554,17 @@ void VlasovSpaceTimeFormulation::solve()
       profile.totalTimeBCImposition   = _vlasovSoln->totalTimeBCImposition();
       profile.totalTimeSolve          = _vlasovSoln->totalTimeSolve();
     }
-    if (_enforcePositivity)
+    if (_enforcePositivity && !_vlasovBackend)
     {
       applyPositivityLimiter();
     }
     
     const auto momentUpdateStart = ProfileClock::now();
-    if (!applyTensorNativeMaxwellCurrentSourcesIfSupported(*this))
+    if (_vlasovBackend)
+    {
+      // the backend has set the current sources
+    }
+    else if (!applyTensorNativeMaxwellCurrentSourcesIfSupported(*this))
     {
       for (auto & solnMoments : _solutionMoments)
       {
@@ -2597,18 +2610,20 @@ void VlasovSpaceTimeFormulation::solve()
     // Copy vlasov, Poisson solution to Prev solutions.  For substepOrdinal > 0, measure difference between the two solutions first.
     if (substepOrdinal > 0)
     {
-      auto vlasovMesh  = _vlasovSoln->mesh();
-      double fDiff_L2_squared = 0, f_L2_squared = 0;
-      for (int i=0; i<_numSpecies; i++)
+      double fRelDiff = backendRelDiff;
+      if (!_vlasovBackend)
       {
-        double fDiff_L2_i = _fDiff[i]->l2norm(vlasovMesh);
-        double f_L2_i     = _fSoln[i]->l2norm(vlasovMesh);
-        fDiff_L2_squared += fDiff_L2_i * fDiff_L2_i;
-        f_L2_squared     += f_L2_i * f_L2_i;
+        auto vlasovMesh  = _vlasovSoln->mesh();
+        double fDiff_L2_squared = 0, f_L2_squared = 0;
+        for (int i=0; i<_numSpecies; i++)
+        {
+          double fDiff_L2_i = _fDiff[i]->l2norm(vlasovMesh);
+          double f_L2_i     = _fSoln[i]->l2norm(vlasovMesh);
+          fDiff_L2_squared += fDiff_L2_i * fDiff_L2_i;
+          f_L2_squared     += f_L2_i * f_L2_i;
+        }
+        fRelDiff = std::sqrt(fDiff_L2_squared) / std::sqrt(f_L2_squared);
       }
-      const double fDiff_L2 = std::sqrt(fDiff_L2_squared);
-      const double f_L2 = std::sqrt(f_L2_squared);
-      const double fRelDiff = fDiff_L2 / f_L2;
       
       substepStepSizesVlasov.push_back(fRelDiff);
       
@@ -2681,7 +2696,7 @@ void VlasovSpaceTimeFormulation::solve()
   _iterationCounts.push_back(substepIterationCounts);
   _fixedPointL2StepSizesVlasov.push_back(substepStepSizesVlasov);
   
-  computeConservationDiagnostics(false); // false: don't update solutionMoments; it was just updated above
+  if (!_vlasovBackend) computeConservationDiagnostics(false); // false: don't update solutionMoments; it was just updated above
 }
 
 void VlasovSpaceTimeFormulation::setInitialConditions(FunctionPtr f0)
@@ -2977,6 +2992,11 @@ void VlasovSpaceTimeFormulation::setMaxMomentForConservationDiagnostics(const in
       }
     }
   }
+}
+
+void VlasovSpaceTimeFormulation::setVlasovBackend(std::function<double(VlasovSpaceTimeFormulation &, int)> backend)
+{
+  _vlasovBackend = backend;
 }
 
 void VlasovSpaceTimeFormulation::setSubstepConfigurationCallback(std::function<bool(VlasovSpaceTimeFormulation &, int)> callback)
