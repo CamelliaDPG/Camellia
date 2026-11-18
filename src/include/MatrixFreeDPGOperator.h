@@ -1,0 +1,83 @@
+#ifndef Camellia_MatrixFreeDPGOperator_h
+#define Camellia_MatrixFreeDPGOperator_h
+
+//
+//  MatrixFreeDPGOperator.h
+//  Camellia
+//
+//  The global DPG operator S = sum_K P_K^T (B_K^T G_K^{-1} B_K) P_K as a Tpetra operator, applied cell by cell with
+//  BoxCellDPGOperator: no global or element matrix is formed.  P_K is the mesh's dof interpretation (including any
+//  constraints, e.g. hanging nodes), so S is the matrix that Solution assembles.
+//
+
+#include "TypeDefs.h"
+
+#include "BC.h"
+#include "BoxCellDPGOperator.h"
+#include "RHS.h"
+
+#include "Tpetra_Export.hpp"
+#include "Tpetra_Import.hpp"
+
+#include <set>
+#include <vector>
+
+namespace Camellia
+{
+  /**
+   \brief y = S x, matrix-free, on the mesh's global dofs (the map Solution::getPartitionMap() gives, without
+   condensation).
+
+   With Dirichlet dofs, the operator is S restricted to the free dofs plus the identity on the Dirichlet dofs (rows and
+   columns), the form Solution's assembled system takes after imposeBCs(); dirichletRightHandSide() gives the
+   corresponding right-hand side.
+   */
+  class MatrixFreeDPGOperator : public TOperator<double>
+  {
+  public:
+    using MV = TVector<double>;
+
+    //! map: the owned global dofs; dirichletDofs: rank-owned global indices of Dirichlet dofs (may be empty)
+    MatrixFreeDPGOperator(MeshPtr mesh, Teuchos::RCP<BoxCellDPGOperator> local, TMapConstPtr map,
+                          const std::set<GlobalIndexType> &dirichletDofs = {});
+
+    //! the Dirichlet dofs and values of bc (as Solution::imposeBCs() determines them), rank-owned
+    static void dirichletData(MeshPtr mesh, BCPtr bc, std::vector<GlobalIndexType> &indices, std::vector<double> &values);
+
+    Teuchos::RCP<const TMap> getDomainMap() const override { return _map; }
+    Teuchos::RCP<const TMap> getRangeMap() const override { return _map; }
+    bool hasTransposeApply() const override { return true; } // S is symmetric
+
+    //! Y = beta Y + alpha Op X
+    void apply(const MV &X, MV &Y, Teuchos::ETransp mode = Teuchos::NO_TRANS, double alpha = 1.0, double beta = 0.0) const override;
+
+    //! Y = S X, without the Dirichlet modification
+    void applyUnconstrained(const MV &X, MV &Y) const;
+
+    /**
+     \brief The right-hand side of the system with Dirichlet values: b = M (L - S x_D) + x_D, M the restriction to the
+     free dofs, L the load (sum_K P_K^T B_K^T G_K^{-1} l_K; zero if rhs is null), x_D the Dirichlet values (zero
+     elsewhere).  The solution of Op x = b is then the DPG solution with those boundary values.
+     */
+    void dirichletRightHandSide(RHSPtr rhs, const std::vector<GlobalIndexType> &dirichletIndices,
+                                const std::vector<double> &dirichletValues, MV &b) const;
+
+    //! the load vector L alone
+    void load(RHSPtr rhs, MV &L) const;
+
+  private:
+    MeshPtr _mesh;
+    Teuchos::RCP<BoxCellDPGOperator> _local;
+    TMapConstPtr _map, _overlapMap;
+    Teuchos::RCP<Tpetra::Import<>> _importer;
+    Teuchos::RCP<Tpetra::Export<>> _exporter;
+    std::vector<GlobalIndexType> _cells;
+    std::vector<TMap::local_ordinal_type> _dirichletLocal; // local indices (in _map) of the Dirichlet dofs
+
+    //! accumulate sum_K P_K^T y_K, given the local vectors computed by cellAction, into Y (owned map)
+    template <typename CellAction>
+    void assemble(const MV *X, MV &Y, CellAction cellAction) const;
+  };
+}
+
+#endif
