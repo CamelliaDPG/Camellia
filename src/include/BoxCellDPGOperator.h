@@ -134,6 +134,7 @@ namespace Camellia
       //! measured from the side BasisCache, so that the flux terms match what BF integrates
       std::vector<double> fluxTransform;
       std::vector<std::vector<double>> groupCoefficients; // [group]: P values (coefficients times weights, Jacobian, derivative scaling)
+      SeparableTensorIP::CellInverse gramInverse;          // G_K^{-1}, in the test basis's tensor layout
     };
 
     BFPtr _bf;

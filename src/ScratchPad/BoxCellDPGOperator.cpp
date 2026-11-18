@@ -342,6 +342,16 @@ BoxCellDPGOperator::CellData &BoxCellDPGOperator::cellData(GlobalIndexType cellI
   data.sideParities.resize(type.sides.size());
   for (int s=0; s<int(type.sides.size()); s++) data.sideParities[s] = (parities.rank() == 2) ? parities(0,s) : parities(s);
 
+  // G_K^{-1}
+  {
+    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true);
+    std::vector<SeparableTensorIP::CellInverse> inverses;
+    const bool invertible = _ip->cellInverses(_mesh->getElementType(cellID)->testOrderPtr, ipBasisCache, inverses);
+    TEUCHOS_TEST_FOR_EXCEPTION(!invertible || (inverses.size() != 1), std::invalid_argument,
+                               "BoxCellDPGOperator: the inner product has no fast inverse on cell " << cellID);
+    data.gramInverse = inverses[0];
+  }
+
   // the flux bases' value transforms on the sides (e.g. 1 / |det J J^-T n| for L^2 fluxes), measured
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
   data.fluxTransform.resize(type.fluxSides.size());
@@ -639,14 +649,8 @@ void BoxCellDPGOperator::applyBTranspose(GlobalIndexType cellID, const double *v
 void BoxCellDPGOperator::applyInverseGram(GlobalIndexType cellID, double *v)
 {
   const TypeData &type = typeData(cellID);
-  const int N = type.testBasis.fullSize;
-  DofOrderingPtr testOrder = _mesh->getElementType(cellID)->testOrderPtr;
-  Camellia::FieldContainer<double> values(1, 1, testOrder->totalDofs());
-  for (int i=0; i<N; i++) values(0,0,type.testDofIndex[i]) = v[i];
-  BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true);
-  const bool inverted = _ip->applyInverseInnerProductMatrix(values, testOrder, ipBasisCache);
-  TEUCHOS_TEST_FOR_EXCEPTION(!inverted, std::invalid_argument, "BoxCellDPGOperator: the inner product has no fast inverse on this cell");
-  for (int i=0; i<N; i++) v[i] = values(0,0,type.testDofIndex[i]);
+  TEUCHOS_TEST_FOR_EXCEPTION(!type.supported, std::invalid_argument, "BoxCellDPGOperator: unsupported cell: " + type.reason);
+  SeparableTensorIP::applyCellInverse(cellData(cellID, type).gramInverse, v);
 }
 
 void BoxCellDPGOperator::applySchur(GlobalIndexType cellID, const double *u, double *Su)

@@ -58,6 +58,21 @@ namespace Camellia
                                         Teuchos::RCP<DofOrdering> dofOrdering,
                                         Teuchos::RCP<BasisCache> basisCache) override;
 
+    //! The data to apply G_c^{-1} on one cell, in the tensor layout of the test basis (first direction fastest): the
+    //! fast-diagonalization inverse, its cell scales, and the Sherman-Morrison data of the constant-mode weight (c = 0
+    //! when there is none).  For matrix-free operators that apply G^{-1} repeatedly.
+    struct CellInverse
+    {
+      std::shared_ptr<SeparableGramInverse> inverse;
+      SeparableGramInverse::Scales scales;
+      double c = 0.0, denominator = 1.0;
+      std::vector<double> m, z; // m = int_K phi (tensor layout), z = G^{-1} m
+    };
+    //! the cell inverses of the cells of basisCache, if the fast inverse applies (false otherwise)
+    bool cellInverses(DofOrderingPtr dofOrdering, BasisCachePtr basisCache, std::vector<CellInverse> &inverses);
+    //! x <- G_c^{-1} x, x: vectorCount vectors in the tensor layout, one after another
+    static void applyCellInverse(const CellInverse &cell, double *x, int vectorCount = 1);
+
     //! the number of cells whose Gram matrices were assembled from one-dimensional factors, and by quadrature
     long long tensorCellCount() const { return _tensorCellCount; }
     long long fallbackCellCount() const { return _fallbackCellCount; }

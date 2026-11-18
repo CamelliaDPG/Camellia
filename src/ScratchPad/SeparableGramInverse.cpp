@@ -10,6 +10,10 @@
 #include <stdexcept>
 #include <string>
 
+extern "C" void dgemm_(const char *transa, const char *transb, const int *m, const int *n, const int *k, const double *alpha,
+                       const double *a, const int *lda, const double *b, const int *ldb, const double *beta, double *c,
+                       const int *ldc);
+
 using namespace Camellia;
 
 namespace
@@ -162,27 +166,33 @@ void SeparableGramInverse::checkScales(const Scales &scales) const
     if (!(b >= 0)) throw std::invalid_argument("SeparableGramInverse: derivative weights must be nonnegative");
 }
 
-void SeparableGramInverse::modeProduct(int direction, const std::vector<double> &A, bool transpose, double *x, double *work) const
+void SeparableGramInverse::modeProduct(int direction, const std::vector<double> &A, bool transpose, double *x, double *work,
+                                       int vectorCount) const
 {
-  const int n = _n[direction], inner = _stride[direction], outer = _size / (inner * n);
-  for (int o=0; o<outer; o++)
+  // x holds vectorCount tensors one after another, so as an array it is (outer, n, inner) with inner fastest, outer
+  // counting the directions after this one and the vectors.  In column-major terms each outer slab is X_o (inner x n),
+  // and the mode product is Y_o = X_o op(A)^T, where A is row-major (so column-major A^T).
+  const int n = _n[direction], inner = _stride[direction];
+  const int outer = (_size / (inner * n)) * vectorCount;
+  const double one = 1.0, zero = 0.0;
+  // column-major view of row-major A is A^T; we need op(A)^T: A^T when !transpose, A when transpose
+  const char transA = transpose ? 'T' : 'N';
+  if (inner == 1)
   {
-    const double *xo = x + o * n * inner;
-    double *yo = work + o * n * inner;
-    for (int i=0; i<n; i++)
+    // all slabs at once: X (n x outer) column-major, Y = op(A) X
+    const char t = transpose ? 'N' : 'T';
+    dgemm_(&t, "N", &n, &outer, &n, &one, A.data(), &n, x, &n, &zero, work, &n);
+  }
+  else
+  {
+    for (int o=0; o<outer; o++)
     {
-      double *y = yo + i * inner;
-      for (int r=0; r<inner; r++) y[r] = 0.0;
-      for (int j=0; j<n; j++)
-      {
-        const double a = transpose ? A[j*n+i] : A[i*n+j];
-        if (a == 0.0) continue;
-        const double *xj = xo + j * inner;
-        for (int r=0; r<inner; r++) y[r] += a * xj[r];
-      }
+      const double *xo = x + size_t(o) * n * inner;
+      double *yo = work + size_t(o) * n * inner;
+      dgemm_("N", &transA, &inner, &n, &n, &one, xo, &inner, A.data(), &n, &zero, yo, &inner);
     }
   }
-  std::copy(work, work + _size, x);
+  std::copy(work, work + size_t(_size) * vectorCount, x);
 }
 
 std::vector<double> SeparableGramInverse::eigenvalueDiagonal(const Scales &scales) const
@@ -203,14 +213,14 @@ std::vector<double> SeparableGramInverse::eigenvalueDiagonal(const Scales &scale
 void SeparableGramInverse::applyInverse(const Scales &scales, double *x, int vectorCount) const
 {
   const std::vector<double> D = eigenvalueDiagonal(scales);
-  std::vector<double> work(_size);
+  std::vector<double> work(size_t(_size) * vectorCount);
+  for (int k=0; k<directionCount(); k++) modeProduct(k, _V[k], true, x, work.data(), vectorCount);  // V^T x
   for (int v=0; v<vectorCount; v++)
   {
     double *xv = x + size_t(v) * _size;
-    for (int k=0; k<directionCount(); k++) modeProduct(k, _V[k], true, xv, work.data());  // V^T x
     for (int i=0; i<_size; i++) xv[i] /= D[i];
-    for (int k=0; k<directionCount(); k++) modeProduct(k, _V[k], false, xv, work.data()); // V z
   }
+  for (int k=0; k<directionCount(); k++) modeProduct(k, _V[k], false, x, work.data(), vectorCount); // V z
 }
 
 void SeparableGramInverse::apply(const Scales &scales, double *x, int vectorCount) const
@@ -222,14 +232,14 @@ void SeparableGramInverse::apply(const Scales &scales, double *x, int vectorCoun
   {
     double *xv = x + size_t(v) * _size;
     std::copy(xv, xv + _size, massApplied.data());
-    for (int k=0; k<d; k++) modeProduct(k, _M[k], false, massApplied.data(), work.data());
+    for (int k=0; k<d; k++) modeProduct(k, _M[k], false, massApplied.data(), work.data(), 1);
     for (int i=0; i<_size; i++) result[i] = scales.valueWeight * massApplied[i];
     for (int k=0; k<d; k++)
     {
       const double b = scales.derivativeWeights[k];
       if (b == 0.0) continue;
       std::copy(xv, xv + _size, term.data());
-      for (int e=0; e<d; e++) modeProduct(e, (e == k) ? _K[e] : _M[e], false, term.data(), work.data());
+      for (int e=0; e<d; e++) modeProduct(e, (e == k) ? _K[e] : _M[e], false, term.data(), work.data(), 1);
       for (int i=0; i<_size; i++) result[i] += b * term[i];
     }
     for (int i=0; i<_size; i++) xv[i] = scales.jacobian * result[i];

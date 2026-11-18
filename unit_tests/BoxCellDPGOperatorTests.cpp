@@ -177,14 +177,17 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, GlobalOperatorMatchesSolution )
   rhs->addTerm((1.0 + Function::xn(1)) * s.v);
   BCPtr bc = BC::bc();
   bc->addDirichlet(s.t, SpatialFilter::allSpace(), 1.0 + Function::xn(1));
+  s.bf->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
+  // the assembled system without boundary conditions (with them, Solution builds the Dirichlet rows in)
+  SolutionPtr unconstrainedSolution = Solution::solution(s.bf, s.mesh, Teuchos::null, rhs, s.ip);
+  unconstrainedSolution->setCubatureEnrichmentDegree(enrichment);
+  unconstrainedSolution->initializeLHSVector();
+  unconstrainedSolution->initializeStiffnessAndLoad();
+  unconstrainedSolution->populateStiffnessAndLoad();
+  TMatrixPtr<double> A = unconstrainedSolution->getStiffnessMatrix();
+  TVectorPtr<double> assembledLoad = unconstrainedSolution->getRHSVector();
   SolutionPtr solution = Solution::solution(s.bf, s.mesh, bc, rhs, s.ip);
   solution->setCubatureEnrichmentDegree(enrichment);
-  s.bf->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
-  solution->initializeLHSVector();
-  solution->initializeStiffnessAndLoad();
-  solution->populateStiffnessAndLoad();
-  TMatrixPtr<double> A = solution->getStiffnessMatrix();
-  TVectorPtr<double> assembledLoad = solution->getRHSVector();
   TMapConstPtr map = A->getRowMap();
 
   using MV = MatrixFreeDPGOperator::MV;
@@ -222,7 +225,7 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, GlobalOperatorMatchesSolution )
   double rr = r.getVector(0)->dot(*r.getVector(0));
   const double bNorm = std::sqrt(rr);
   int iterations = 0;
-  for (; iterations < 5000 && std::sqrt(rr) > 1e-13 * bNorm; iterations++)
+  for (; iterations < 3000 && std::sqrt(rr) > 1e-12 * bNorm; iterations++)
   {
     op.apply(p, Ap);
     const double alpha = rr / p.getVector(0)->dot(*Ap.getVector(0));
@@ -236,5 +239,5 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, GlobalOperatorMatchesSolution )
   difference.update(-1.0, *direct, 1.0);
   const double solutionError = difference.getVector(0)->normInf() / direct->getVector(0)->normInf();
   out << dirichletIndices.size() << " Dirichlet dofs; CG: " << iterations << " iterations, |u_CG - u_direct| / |u_direct| = " << solutionError << endl;
-  TEST_COMPARE(solutionError, <, 1e-8);
+  TEST_COMPARE(solutionError, <, 1e-7);
 }

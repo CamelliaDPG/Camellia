@@ -37,6 +37,9 @@
 #include "TensorMaxwellRHSMomentData.h"
 #include "TensorMesh.h"
 #include "TensorOperatorFactory.h"
+#include "BoxCellDPGOperator.h"
+#include "MatrixFreeDPGOperator.h"
+#include "SeparableTensorIP.h"
 #include "TensorVar.h"
 #include "TensorVarDiscretization.h"
 #include "TensorVlasovMomentSampling1D2V.h"
@@ -934,6 +937,63 @@ std::vector<double> uniformVertices(const double left, const double width, const
   return vertices;
 }
 
+//! Checks the matrix-free Vlasov operator (sum-factorized B, fast-diagonalization G^{-1}) against the assembled
+//! stiffness matrix with the current fields: |S x - A x| / |A x| for a random x, and the time per application.
+//! Needs the separable graph norm and a full tensor-product test space (--separableGraphTestNorm --useFullTensorTestBasis).
+void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int quadratureEnrichment, int rank)
+{
+  SolutionPtr vlasovSolution = form->vlasovSolution();
+  auto ip = Teuchos::rcp_dynamic_cast<SeparableTensorIP>(vlasovSolution->ip());
+  if (ip.is_null())
+  {
+    if (rank == 0) std::cout << "checkMatrixFreeOperator: needs the separable graph norm (--separableGraphTestNorm); skipped.\n";
+    return;
+  }
+  MeshPtr mesh = form->vlasovMesh();
+  auto local = Teuchos::rcp(new BoxCellDPGOperator(form->vlasovBF(), ip, mesh, quadratureEnrichment));
+  for (GlobalIndexType cellID : mesh->cellIDsInPartition())
+  {
+    std::string reason;
+    if (!local->supports(cellID, &reason))
+    {
+      std::cout << "checkMatrixFreeOperator: cell " << cellID << " is not supported (" << reason << "); skipped.\n";
+      return;
+    }
+  }
+  auto now = [] { return std::chrono::steady_clock::now(); };
+  auto seconds = [](std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) { return std::chrono::duration<double>(b - a).count(); };
+  // the assembled operator with the current fields, without boundary conditions
+  SolutionPtr reference = Solution::solution(form->vlasovBF(), mesh, Teuchos::null, RHS::rhs(), ip);
+  reference->setCubatureEnrichmentDegree(vlasovSolution->cubatureEnrichmentDegree());
+  const auto assemblyStart = now();
+  reference->initializeLHSVector();
+  reference->initializeStiffnessAndLoad();
+  reference->populateStiffnessAndLoad();
+  const double assemblyTime = seconds(assemblyStart, now());
+  TMatrixPtr<double> A = reference->getStiffnessMatrix();
+  const auto setupStart = now();
+  MatrixFreeDPGOperator op(mesh, local, A->getRowMap());
+  using MV = MatrixFreeDPGOperator::MV;
+  MV x(A->getRowMap(), 1), Ax(A->getRowMap(), 1), Sx(A->getRowMap(), 1);
+  x.randomize();
+  op.applyUnconstrained(x, Sx); // the first application also samples the coefficients and builds the cell inverses
+  const double firstApplyTime = seconds(setupStart, now());
+  const auto applyStart = now();
+  op.applyUnconstrained(x, Sx);
+  const double applyTime = seconds(applyStart, now());
+  A->apply(x, Ax);
+  const double AxNorm = Ax.getVector(0)->normInf();
+  Sx.update(-1.0, Ax, 1.0);
+  const double relativeError = Sx.getVector(0)->normInf() / AxNorm;
+  if (rank == 0)
+  {
+    std::cout << "checkMatrixFreeOperator: " << A->getGlobalNumRows() << " dofs, " << mesh->numActiveElements()
+              << " cells, quadrature enrichment " << quadratureEnrichment << ": |S x - A x| / |A x| = " << relativeError
+              << "; assembly " << assemblyTime << " s, matrix-free setup + first application " << firstApplyTime
+              << " s, application " << applyTime << " s\n";
+  }
+}
+
 Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const double  x0, const double  xWidth,
                                                               const double  t0, const double  tWidth,
@@ -1305,6 +1365,13 @@ int main(int argc, char *argv[])
     cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
     bool useFullTensorTestBasis = false;
+    bool checkMatrixFreeOperator = false;
+    int matrixFreeQuadratureEnrichment = 2;
+    cmdp.setOption("checkMatrixFreeOperator", "noCheckMatrixFreeOperator", &checkMatrixFreeOperator,
+                   "After the first slab's solve, compare the matrix-free Vlasov operator (sum-factorized B, fast-diagonalization "
+                   "G^{-1}) with the assembled stiffness matrix.  Needs --separableGraphTestNorm --useFullTensorTestBasis.");
+    cmdp.setOption("matrixFreeQuadratureEnrichment", &matrixFreeQuadratureEnrichment,
+                   "Quadrature enrichment of the matrix-free operator: n_k + ceil(enrichment / 2) Gauss points per direction");
     cmdp.setOption("useFullTensorTestBasis", "useTrialFamilyTestBasis", &useFullTensorTestBasis,
                    "Full tensor-product test space Q_k, also when the trial basis is serendipity.  With --separableGraphTestNorm "
                    "the test Gram matrices are then inverted exactly by fast diagonalization, with nothing formed or factored.");
@@ -2479,6 +2546,7 @@ int main(int argc, char *argv[])
         
         auto timingSlabSolveStart = timing.now();
         form->solve();
+        if (checkMatrixFreeOperator && (timeSlabOrdinal == 0)) checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, rank);
         {
           auto fields = timingMeshStats(form);
           fields.push_back({"slab", std::to_string(timeSlabOrdinal)});

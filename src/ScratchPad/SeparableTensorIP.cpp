@@ -284,9 +284,7 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
   return true;
 }
 
-bool SeparableTensorIP::applyInverseInnerProductMatrix(Camellia::FieldContainer<double> &values,
-                                                       Teuchos::RCP<DofOrdering> dofOrdering,
-                                                       Teuchos::RCP<BasisCache> basisCache)
+bool SeparableTensorIP::cellInverses(DofOrderingPtr dofOrdering, BasisCachePtr basisCache, std::vector<CellInverse> &inverses)
 {
   if (!_useFastInverse) return false;
   SeparableCellData data;
@@ -295,17 +293,16 @@ bool SeparableTensorIP::applyInverseInnerProductMatrix(Camellia::FieldContainer<
   if (!d.fullTensor || (d.inverse == nullptr)) return false;
   const SeparableGramInverse &inverse = *d.inverse;
   const int spaceDim = inverse.directionCount(), N = inverse.size();
-  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 3, std::invalid_argument, "values must have shape (C, R, N)");
-  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != data.numCells, std::invalid_argument, "values must have one entry per cell of basisCache");
-  TEUCHOS_TEST_FOR_EXCEPTION((values.dimension(2) != dofOrdering->totalDofs()) || (dofOrdering->totalDofs() != N), std::invalid_argument,
-                             "the last dimension of values must be the number of test dofs");
+  if (dofOrdering->totalDofs() != N) return false;
 
   // G = J ( a M^{(x)} + sum_k b_k K_(k) ) on the reference factors: a mass factor is scaled by h_k/2, a derivative factor
   // by 2/h_k, so with J = prod_k h_k/2, a = sum of value terms' c_t^2 and b_k = sum of d_k terms' c_t^2 / (h_k/2)^2
-  std::vector<SeparableGramInverse::Scales> scales(data.numCells);
+  std::vector<CellInverse> result(data.numCells);
   for (int c=0; c<data.numCells; c++)
   {
-    SeparableGramInverse::Scales &s = scales[c];
+    CellInverse &cell = result[c];
+    cell.inverse = d.inverse;
+    SeparableGramInverse::Scales &s = cell.scales;
     s.jacobian = 1.0;
     for (int k=0; k<spaceDim; k++) s.jacobian *= data.halfWidths[c][k];
     s.valueWeight = 0.0;
@@ -325,41 +322,70 @@ bool SeparableTensorIP::applyInverseInnerProductMatrix(Camellia::FieldContainer<
   // one more fast-diagonalization solve per cell.  (1 - c m^T z > 0 exactly when G - c m m^T is positive definite.)
   Camellia::FieldContainer<double> m;
   std::vector<double> coefficient;
-  const bool rankOneCorrection = constantModeCorrection(dofOrdering, basisCache, m, coefficient);
+  if (constantModeCorrection(dofOrdering, basisCache, m, coefficient))
+  {
+    for (int c=0; c<data.numCells; c++)
+    {
+      if (coefficient[c] == 0.0) continue;
+      CellInverse &cell = result[c];
+      cell.c = coefficient[c];
+      cell.m.resize(N);
+      for (int a=0; a<N; a++) cell.m[d.tensorIndex[a]] = m(c, dofOrdering->getDofIndex(data.varID, a));
+      cell.z = cell.m;
+      inverse.applyInverse(cell.scales, cell.z.data(), 1);
+      double mz = 0;
+      for (int i=0; i<N; i++) mz += cell.m[i] * cell.z[i];
+      cell.denominator = 1.0 - cell.c * mz;
+      TEUCHOS_TEST_FOR_EXCEPTION(!(cell.denominator > 0), std::invalid_argument,
+                                 "the constant-mode weight made the Gram matrix indefinite (1 - c m^T G^{-1} m <= 0)");
+    }
+  }
+  inverses = std::move(result);
+  _inverseCellCount += data.numCells;
+  return true;
+}
+
+void SeparableTensorIP::applyCellInverse(const CellInverse &cell, double *x, int vectorCount)
+{
+  const int N = cell.inverse->size();
+  cell.inverse->applyInverse(cell.scales, x, vectorCount);
+  if (cell.c == 0.0) return;
+  for (int r=0; r<vectorCount; r++)
+  {
+    double *y = x + size_t(r) * N;
+    double my = 0;
+    for (int i=0; i<N; i++) my += cell.m[i] * y[i];
+    const double scale = cell.c * my / cell.denominator;
+    for (int i=0; i<N; i++) y[i] += scale * cell.z[i];
+  }
+}
+
+bool SeparableTensorIP::applyInverseInnerProductMatrix(Camellia::FieldContainer<double> &values,
+                                                       Teuchos::RCP<DofOrdering> dofOrdering,
+                                                       Teuchos::RCP<BasisCache> basisCache)
+{
+  std::vector<CellInverse> inverses;
+  if (!cellInverses(dofOrdering, basisCache, inverses)) return false;
+  const int N = dofOrdering->totalDofs(), numCells = int(inverses.size());
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 3, std::invalid_argument, "values must have shape (C, R, N)");
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != numCells, std::invalid_argument, "values must have one entry per cell of basisCache");
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != N, std::invalid_argument, "the last dimension of values must be the number of test dofs");
+  const int varID = *dofOrdering->getVarIDs().begin();
+  const TensorDecomposition &d = decomposition(dofOrdering->getBasis(varID), basisCache->getSpaceDim());
 
   // gather each row into the tensor ordering, apply, scatter back
   const int rowCount = values.dimension(1);
   std::vector<int> dofIndex(N);
-  for (int a=0; a<N; a++) dofIndex[a] = dofOrdering->getDofIndex(data.varID, a);
-  std::vector<double> rows(size_t(rowCount) * N), mTensor(N), z(N);
-  for (int c=0; c<data.numCells; c++)
+  for (int a=0; a<N; a++) dofIndex[a] = dofOrdering->getDofIndex(varID, a);
+  std::vector<double> rows(size_t(rowCount) * N);
+  for (int c=0; c<numCells; c++)
   {
     for (int r=0; r<rowCount; r++)
       for (int a=0; a<N; a++) rows[size_t(r) * N + d.tensorIndex[a]] = values(c, r, dofIndex[a]);
-    inverse.applyInverse(scales[c], rows.data(), rowCount);
-    if (rankOneCorrection && (coefficient[c] != 0.0))
-    {
-      for (int a=0; a<N; a++) mTensor[d.tensorIndex[a]] = m(c, dofIndex[a]);
-      z = mTensor;
-      inverse.applyInverse(scales[c], z.data(), 1);
-      double mz = 0;
-      for (int i=0; i<N; i++) mz += mTensor[i] * z[i];
-      const double denominator = 1.0 - coefficient[c] * mz;
-      TEUCHOS_TEST_FOR_EXCEPTION(!(denominator > 0), std::invalid_argument,
-                                 "the constant-mode weight made the Gram matrix indefinite (1 - c m^T G^{-1} m <= 0)");
-      for (int r=0; r<rowCount; r++)
-      {
-        double *y = &rows[size_t(r) * N];
-        double my = 0;
-        for (int i=0; i<N; i++) my += mTensor[i] * y[i];
-        const double scale = coefficient[c] * my / denominator;
-        for (int i=0; i<N; i++) y[i] += scale * z[i];
-      }
-    }
+    applyCellInverse(inverses[c], rows.data(), rowCount);
     for (int r=0; r<rowCount; r++)
       for (int a=0; a<N; a++) values(c, r, dofIndex[a]) = rows[size_t(r) * N + d.tensorIndex[a]];
   }
-  _inverseCellCount += data.numCells;
   return true;
 }
 

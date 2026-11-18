@@ -7,8 +7,8 @@
 //
 //  Exact inverse, by fast diagonalization, of a Gram matrix that is a Kronecker sum on a full tensor-product space.
 //  (Lynch, Rice and Thomas, Numer. Math. 6 (1964); for the Vlasov separable graph norm, see the separable-graph-norm
-//  notes, Theorem 6.1.)  Deliberately free of Trilinos dependencies, so that it can be used by matrix-free operators
-//  as well as by the assembled local solves.
+//  notes, Theorem 6.1.)  Free of Trilinos dependencies (it needs only BLAS dgemm), so that matrix-free operators can use it
+//  as well as the assembled local solves.
 //
 
 #include <vector>
@@ -79,8 +79,9 @@ namespace Camellia
     std::vector<std::vector<double>> _M, _K, _V, _lambda;
 
     void checkScales(const Scales &scales) const;
-    //! x <- (I (x) ... (x) A (x) ... (x) I) x in direction k, A row-major n_k x n_k (transpose: use A^T); work has size N
-    void modeProduct(int direction, const std::vector<double> &A, bool transpose, double *x, double *work) const;
+    //! x <- (I (x) ... (x) A (x) ... (x) I) x in direction k for each of vectorCount consecutive vectors, A row-major
+    //! n_k x n_k (transpose: use A^T), by BLAS dgemm; work has size N vectorCount
+    void modeProduct(int direction, const std::vector<double> &A, bool transpose, double *x, double *work, int vectorCount) const;
   };
 }
 
