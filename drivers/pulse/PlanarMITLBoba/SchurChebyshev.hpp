@@ -150,14 +150,14 @@ inline CellsFirstSystem assembleCellsFirst(const std::vector<Axis> &axes, const 
   // transport (rows: quadrature points, cols: test), as in assemble()
   TTMatrix8 transport; bool first = true;
   const auto &profile = fieldProfile();
-  auto term = [&](size_t derivativeAxis, const Eigen::VectorXd &ux, const Eigen::VectorXd &uz, double coefficient, int field = -1) {
+  auto term = [&](size_t derivativeAxis, const Eigen::VectorXd &ux, const Eigen::VectorXd &uz, double coefficient, int field = -1, int r = 0) {
     std::array<CellBasisSplit, 4> f;
     for (size_t d = 0; d < 4; ++d)
     {
       Eigen::VectorXd weight = Eigen::VectorXd::Ones(axes[d].points.size());
       if (d == 2) weight = ux;
       if (d == 3) weight = uz;
-      if (field >= 0 && profile.varying() && d < 2) weight.array() *= profile.values(axes[d].points, field, int(d)).array();
+      if (field >= 0 && profile.varying() && d < 2) weight.array() *= profile.values(axes[d].points, field, int(d), r).array();
       if (d == 0) weight *= coefficient;
       f[d] = evaluated(d, d == derivativeAxis ? axes[d].derivative : axes[d].test, weight, nbT[d]);
     }
@@ -166,13 +166,13 @@ inline CellsFirstSystem assembleCellsFirst(const std::vector<Axis> &axes, const 
   const Eigen::VectorXd onesX = Eigen::VectorXd::Ones(axes[2].points.size());
   const Eigen::VectorXd onesZ = Eigen::VectorXd::Ones(axes[3].points.size());
   term(1, onesX, onesZ, 1.0);
-  if (Ex != 0.0) term(2, onesX, onesZ, qOverM * Ex, 0);
+  if (Ex != 0.0) for (int r = 0; r < profile.rank(0); ++r) term(2, onesX, onesZ, qOverM * Ex, 0, r);
   for (Eigen::Index k = 0; k < h.left.cols(); ++k)
   {
     Eigen::VectorXd vx = h.left.col(k).array() * axes[2].points.array();
     Eigen::VectorXd vz = h.right.col(k).array() * axes[3].points.array();
     term(0, vx, h.right.col(k), 1.0);
-    if (By != 0.0) { term(2, h.left.col(k), vz, -qOverM * By, 1); term(3, vx, h.right.col(k), qOverM * By, 1); }
+    if (By != 0.0) for (int r = 0; r < profile.rank(1); ++r) { term(2, h.left.col(k), vz, -qOverM * By, 1, r); term(3, vx, h.right.col(k), qOverM * By, 1, r); }
   }
   // field block: B_f = -T^T F
   {
@@ -630,13 +630,13 @@ inline StructuredLocalOperator structuredVaryingFieldBlock(const std::vector<Axi
   std::vector<Group> groups(4);
   const Eigen::VectorXd onesX = Eigen::VectorXd::Ones(axes[0].points.size()), onesT = Eigen::VectorXd::Ones(axes[1].points.size());
   const Eigen::VectorXd onesUx = Eigen::VectorXd::Ones(axes[2].points.size()), onesUz = Eigen::VectorXd::Ones(axes[3].points.size());
-  auto profileOr1 = [&](size_t d, int field) { return profile.varying() ? profile.values(axes[d].points, field, int(d)) : Eigen::VectorXd(d == 0 ? onesX : onesT); };
+  auto profileOr1 = [&](size_t d, int field, int r) { return profile.varying() ? profile.values(axes[d].points, field, int(d), r) : Eigen::VectorXd(d == 0 ? onesX : onesT); };
   groups[0].Q0 = factor(0, false, onesX); groups[0].Q1 = factor(1, true, onesT);                       // d_t
   groups[0].terms.push_back({1.0, factor(2, false, onesUx), factor(3, false, onesUz)});
   groups[1].Q0 = factor(0, true, onesX); groups[1].Q1 = factor(1, false, onesT);                       // v_x d_x
-  groups[2].Q0 = factor(0, false, profileOr1(0, 0)); groups[2].Q1 = factor(1, false, profileOr1(1, 0)); // E_x
-  if (Ex != 0.0) groups[2].terms.push_back({qOverM * Ex, factor(2, true, onesUx), factor(3, false, onesUz)});
-  groups[3].Q0 = factor(0, false, profileOr1(0, 1)); groups[3].Q1 = factor(1, false, profileOr1(1, 1)); // B_y
+  // E_x and B_y groups: one per (x, t) term of the field profile
+  std::vector<VelocityTerm> eTerms, bTerms;
+  if (Ex != 0.0) eTerms.push_back({qOverM * Ex, factor(2, true, onesUx), factor(3, false, onesUz)});
   for (Eigen::Index k = 0; k < h.left.cols(); ++k)
   {
     const Eigen::VectorXd vx = h.left.col(k).array() * axes[2].points.array();
@@ -644,10 +644,13 @@ inline StructuredLocalOperator structuredVaryingFieldBlock(const std::vector<Axi
     groups[1].terms.push_back({1.0, factor(2, false, vx), factor(3, false, h.right.col(k))});
     if (By != 0.0)
     {
-      groups[3].terms.push_back({-qOverM * By, factor(2, true, h.left.col(k)), factor(3, false, vz)});
-      groups[3].terms.push_back({qOverM * By, factor(2, false, vx), factor(3, true, h.right.col(k))});
+      bTerms.push_back({-qOverM * By, factor(2, true, h.left.col(k)), factor(3, false, vz)});
+      bTerms.push_back({qOverM * By, factor(2, false, vx), factor(3, true, h.right.col(k))});
     }
   }
+  groups.resize(2);
+  for (int r = 0; r < profile.rank(0); ++r) groups.push_back({factor(0, false, profileOr1(0, 0, r)), factor(1, false, profileOr1(1, 0, r)), eTerms});
+  for (int r = 0; r < profile.rank(1); ++r) groups.push_back({factor(0, false, profileOr1(0, 1, r)), factor(1, false, profileOr1(1, 1, r)), bTerms});
   auto width = [&](size_t d, size_t c) { return axes[d].vertices[c + 1] - axes[d].vertices[c]; };
   // split the x and t factors over cells; one operator group per (group, s, s')
   struct OpGroup { Eigen::VectorXd wx, wt; Eigen::MatrixXd X, T; size_t group; };
@@ -1189,9 +1192,10 @@ inline BlockVector solveSchurChebyshev(const System &system, const BlockVector &
   std::unique_ptr<System> frozen;
   if (varying)
   {
-    auto &profile = fieldProfile(); const double v0 = profile.variation; profile.variation = 0;
+    auto &profile = fieldProfile(); const double v0 = profile.variation; const bool lr0 = profile.lowRank;
+    profile.variation = 0; profile.lowRank = false;   // constant fields (also with low-rank field factors)
     frozen = std::make_unique<System>(assemble(axes, h, qOverM, Ex, By, norm, opt.operatorTolerance));
-    profile.variation = v0;
+    profile.variation = v0; profile.lowRank = lr0;
   }
   const System &jacobiSystem = varying ? *frozen : system;
   std::vector<TTMatrix8> Minv, Dmh;      // M^{-1} (unscaled mode) or D^{-1/2} (scaled mode)

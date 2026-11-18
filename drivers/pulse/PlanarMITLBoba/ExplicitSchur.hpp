@@ -611,22 +611,25 @@ inline BlockVector solveExplicitSchur(const System &system, const BlockVector &r
   {
     const Eigen::VectorXd oX = Eigen::VectorXd::Ones(axes[0].points.size()), oT = Eigen::VectorXd::Ones(axes[1].points.size());
     const Eigen::VectorXd oUx = Eigen::VectorXd::Ones(axes[2].points.size()), oUz = Eigen::VectorXd::Ones(axes[3].points.size());
-    auto prof = [&](size_t d, int field) { return profile.varying() ? profile.values(axes[d].points, field, int(d)) : Eigen::VectorXd(d == 0 ? oX : oT); };
+    auto prof = [&](size_t d, int field, int r) { return profile.varying() ? profile.values(axes[d].points, field, int(d), r) : Eigen::VectorXd(d == 0 ? oX : oT); };
     groups[0] = {factor(0, false, oX), factor(1, true, oT), {{1.0, factor(2, false, oUx), factor(3, false, oUz)}}};
     groups[1].Q0 = factor(0, true, oX); groups[1].Q1 = factor(1, false, oT);
-    groups[2].Q0 = factor(0, false, prof(0, 0)); groups[2].Q1 = factor(1, false, prof(1, 0));
-    if (Ex != 0.0) groups[2].terms.push_back({qOverM * Ex, factor(2, true, oUx), factor(3, false, oUz)});
-    groups[3].Q0 = factor(0, false, prof(0, 1)); groups[3].Q1 = factor(1, false, prof(1, 1));
+    // field groups: one per (x, t) term of the field profile (rank one unless the profile is low rank)
+    std::vector<VTerm> eTerms, bTerms;
+    if (Ex != 0.0) eTerms.push_back({qOverM * Ex, factor(2, true, oUx), factor(3, false, oUz)});
     for (Eigen::Index k = 0; k < h.left.cols(); ++k)
     {
       const Eigen::VectorXd vx = h.left.col(k).array() * axes[2].points.array(), vz = h.right.col(k).array() * axes[3].points.array();
       groups[1].terms.push_back({1.0, factor(2, false, vx), factor(3, false, h.right.col(k))});
       if (By != 0.0)
       {
-        groups[3].terms.push_back({-qOverM * By, factor(2, true, h.left.col(k)), factor(3, false, vz)});
-        groups[3].terms.push_back({qOverM * By, factor(2, false, vx), factor(3, true, h.right.col(k))});
+        bTerms.push_back({-qOverM * By, factor(2, true, h.left.col(k)), factor(3, false, vz)});
+        bTerms.push_back({qOverM * By, factor(2, false, vx), factor(3, true, h.right.col(k))});
       }
     }
+    groups.resize(2);
+    for (int r = 0; r < profile.rank(0); ++r) groups.push_back({factor(0, false, prof(0, 0, r)), factor(1, false, prof(1, 0, r)), eTerms});
+    for (int r = 0; r < profile.rank(1); ++r) groups.push_back({factor(0, false, prof(0, 1, r)), factor(1, false, prof(1, 1, r)), bTerms});
   }
   std::array<Mat, 4> traceMass;
   for (size_t d = 0; d < 4; ++d) traceMass[d] = axes[d].test.transpose() * axes[d].weights.asDiagonal() * axes[d].trace;

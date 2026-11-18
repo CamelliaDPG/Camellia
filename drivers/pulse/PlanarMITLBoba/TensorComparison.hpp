@@ -240,14 +240,14 @@ inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &
   }
   const auto &profile = fieldProfile();
   auto term = [&](size_t direction, const Eigen::VectorXd &ux,
-                  const Eigen::VectorXd &uz, double coefficient, int field = -1) {
+                  const Eigen::VectorXd &uz, double coefficient, int field = -1, int r = 0) {
     boba::Array<host_vector,4> factors;
     for (size_t d = 0; d < 4; ++d)
     {
       Eigen::VectorXd weighted = axes[d].weights.array()*(d == direction ? derivative[d] : value[d]).array();
       if (d == 2) weighted.array() *= ux.array();
       if (d == 3) weighted.array() *= uz.array();
-      if (field >= 0 && profile.varying() && d < 2) weighted.array() *= profile.values(axes[d].points, field, int(d)).array();
+      if (field >= 0 && profile.varying() && d < 2) weighted.array() *= profile.values(axes[d].points, field, int(d), r).array();
       Eigen::VectorXd integral = axes[d].test.transpose()*weighted;
       factors[d] = host_vector({size_t(integral.size())});
       auto view = factors[d].view();
@@ -258,7 +258,7 @@ inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &
   const Eigen::VectorXd onesX = Eigen::VectorXd::Ones(axes[2].points.size());
   const Eigen::VectorXd onesZ = Eigen::VectorXd::Ones(axes[3].points.size());
   auto source = term(1,onesX,onesZ,1);
-  if (problem.Ex != 0) source += term(2,onesX,onesZ,problem.qOverM*problem.Ex,0);
+  if (problem.Ex != 0) for (int r = 0; r < profile.rank(0); ++r) source += term(2,onesX,onesZ,problem.qOverM*problem.Ex,0,r);
   for (Eigen::Index k = 0; k < h.left.cols(); ++k)
   {
     Eigen::VectorXd vx = h.left.col(k).array()*axes[2].points.array();
@@ -266,8 +266,11 @@ inline BlockVector comparisonRHS(const System &system, const std::vector<Axis> &
     source += term(0,vx,h.right.col(k),1);
     if (problem.By != 0)
     {
-      source += term(2,h.left.col(k),vz,-problem.qOverM*problem.By,1);
-      source += term(3,vx,h.right.col(k),problem.qOverM*problem.By,1);
+      for (int r = 0; r < profile.rank(1); ++r)
+      {
+        source += term(2,h.left.col(k),vz,-problem.qOverM*problem.By,1,r);
+        source += term(3,vx,h.right.col(k),problem.qOverM*problem.By,1,r);
+      }
     }
     DpgBoba::round(source,problem.svdTolerance);
   }
@@ -309,6 +312,33 @@ inline int runTensorComparison(int argc, char **argv)
     auto &profile = fieldProfile();
     profile.variation = problem.fieldVariation;
     profile.x0 = vertices[0].front(); profile.x1 = vertices[0].back(); profile.t0 = vertices[1].front(); profile.t1 = vertices[1].back();
+    // test of the low-rank field path (as the coupled driver will feed Maxwell fields): sample the analytic profile on
+    // the (x, t) quadrature grid, compress by SVD, and switch the analytic profile off
+    if (std::getenv("PLANAR_MITL_FIELD_LOWRANK_TEST") && profile.variation != 0.0)
+    {
+      const Eigen::VectorXd &xp = axes[0].points, &tp = axes[1].points;
+      std::array<Eigen::MatrixXd, 2> F;
+      for (int field = 0; field < 2; ++field)
+      {
+        F[size_t(field)].resize(xp.size(), tp.size());
+        for (Eigen::Index i = 0; i < xp.size(); ++i)
+          for (Eigen::Index j = 0; j < tp.size(); ++j)
+            F[size_t(field)](i, j) = profile.values(xp.segment(i, 1), field, 0)(0) * profile.values(tp.segment(j, 1), field, 1)(0);
+      }
+      for (int field = 0; field < 2; ++field)
+        std::cout << "field low-rank test: field " << field << " rank " << profile.fromGrid(field, F[size_t(field)], 1e-13) << std::endl;
+      // PLANAR_MITL_FIELD_LOWRANK_TEST=2: the same fields written as two equal half terms (exercises rank > 1)
+      if (std::string(std::getenv("PLANAR_MITL_FIELD_LOWRANK_TEST")) == "2")
+        for (int field = 0; field < 2; ++field)
+        {
+          const Eigen::MatrixXd X1 = profile.X[size_t(field)], T1 = profile.T[size_t(field)];
+          Eigen::MatrixXd X2(X1.rows(), 2 * X1.cols()), T2(T1.rows(), 2 * T1.cols());
+          X2 << 0.5 * X1, 0.5 * X1; T2 << T1, T1;
+          profile.setLowRank(field, X2, T2);
+          std::cout << "field low-rank test: field " << field << " written as rank " << profile.rank(field) << std::endl;
+        }
+      profile.variation = 0.0;
+    }
     std::cout << "fields: Ex=" << problem.Ex << " By=" << problem.By << " variation=" << profile.variation
               << " test_norm=" << (norm.separable ? "separable (N5)" : "graph") << " acceleration_bounds=" << norm.accelerationBounds[0]
               << "," << norm.accelerationBounds[1] << '\n';

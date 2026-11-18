@@ -199,29 +199,63 @@ struct LorentzFactors
   }
 };
 
-/// (x, t) profiles of the prescribed fields: E_x(x, t) = Ex eX(x) eT(t), B_y(x, t) = By bX(x) bT(t), each rank one in
-/// (x, t); with s, tau the positions scaled to [0, 1] on the x and t axes and v = variation:
-///   eX = 1 + v cos(pi s), eT = 1 + v tau, bX = 1 + v (2 s - 1), bT = 1 - 0.6 v tau.
-/// variation = 0 (the default): constant fields.  Set by the comparison driver; read by the assembly routines.
+/// (x, t) profiles of the prescribed fields, multiplying the constants Ex, By:
+///   analytic (variation != 0): E_x(x, t) = Ex eX(x) eT(t), B_y(x, t) = By bX(x) bT(t), each rank one in (x, t); with
+///     s, tau the positions scaled to [0, 1] on the x and t axes and v = variation:
+///     eX = 1 + v cos(pi s), eT = 1 + v tau, bX = 1 + v (2 s - 1), bT = 1 - 0.6 v tau;
+///   low rank (setLowRank / fromGrid): E_x(x, t) = Ex sum_r X_r(x) T_r(t), given at the x and t axes' quadrature points
+///     (e.g. from Maxwell fields sampled on that grid and compressed by an SVD).
+/// variation = 0 and no low-rank factors (the default): constant fields.  Set by the driver; read by the assembly.
 struct FieldProfile
 {
   double variation = 0, x0 = 0, x1 = 1, t0 = 0, t1 = 1;
+  bool lowRank = false;
+  std::array<Eigen::MatrixXd, 2> X, T;   // per field (0 = E, 1 = B): (x points x rank), (t points x rank)
+  std::array<double, 2> maxAbs{1, 1};    // max |profile| over the grid (low rank)
   double eX(double x) const { return 1 + variation * std::cos(M_PI * (x - x0) / (x1 - x0)); }
   double eT(double t) const { return 1 + variation * (t - t0) / (t1 - t0); }
   double bX(double x) const { return 1 + variation * (2 * (x - x0) / (x1 - x0) - 1); }
   double bT(double t) const { return 1 - 0.6 * variation * (t - t0) / (t1 - t0); }
-  bool varying() const { return variation != 0.0; }
-  /// profile values at an axis's quadrature points: field 0 = E, 1 = B; axis 0 = x, 1 = t
-  Eigen::VectorXd values(const Eigen::VectorXd &points, int field, int axis) const
+  bool varying() const { return lowRank || variation != 0.0; }
+  /// number of (x, t) terms of field 0 = E, 1 = B
+  int rank(int field) const { return lowRank ? int(X[size_t(field)].cols()) : 1; }
+  /// term r of the profile at an axis's quadrature points: field 0 = E, 1 = B; axis 0 = x, 1 = t
+  Eigen::VectorXd values(const Eigen::VectorXd &points, int field, int axis, int r = 0) const
   {
+    if (lowRank)
+    {
+      const Eigen::MatrixXd &F = axis == 0 ? X[size_t(field)] : T[size_t(field)];
+      if (F.rows() != points.size()) throw std::runtime_error("FieldProfile: low-rank factors are not at these points");
+      return F.col(r);
+    }
+    if (r != 0) throw std::runtime_error("FieldProfile: the analytic profile has rank one");
     Eigen::VectorXd v(points.size());
     for (Eigen::Index i = 0; i < points.size(); ++i)
       v(i) = field == 0 ? (axis == 0 ? eX(points(i)) : eT(points(i))) : (axis == 0 ? bX(points(i)) : bT(points(i)));
     return v;
   }
-  /// max over the domain of E_x / Ex and B_y / By (variation >= 0)
-  double maxE() const { return std::pow(1 + std::abs(variation), 2); }
-  double maxB() const { return 1 + std::abs(variation); }
+  /// set field 0 = E or 1 = B from factors at the x and t quadrature points
+  void setLowRank(int field, const Eigen::MatrixXd &Xf, const Eigen::MatrixXd &Tf)
+  {
+    if (Xf.cols() != Tf.cols()) throw std::runtime_error("FieldProfile::setLowRank: factor ranks differ");
+    lowRank = true; X[size_t(field)] = Xf; T[size_t(field)] = Tf;
+    maxAbs[size_t(field)] = (Xf * Tf.transpose()).cwiseAbs().maxCoeff();
+  }
+  /// set field 0 = E or 1 = B from its values F(i, j) at x point i and t point j, compressed by an SVD to a relative
+  /// Frobenius tolerance; returns the rank kept
+  int fromGrid(int field, const Eigen::MatrixXd &F, double tolerance = 1e-12)
+  {
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(F, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    const Eigen::VectorXd sv = svd.singularValues();
+    const double total = sv.squaredNorm(); double tail = total; int r = 0;
+    while (r < int(sv.size()) && tail > tolerance * tolerance * total && sv(r) > 1e-14 * sv(0)) { tail -= sv(r) * sv(r); ++r; }
+    r = std::max(r, 1);
+    setLowRank(field, svd.matrixU().leftCols(r) * sv.head(r).asDiagonal(), svd.matrixV().leftCols(r));
+    return r;
+  }
+  /// max over the domain of E_x / Ex and B_y / By
+  double maxE() const { return lowRank ? maxAbs[0] : std::pow(1 + std::abs(variation), 2); }
+  double maxB() const { return lowRank ? maxAbs[1] : 1 + std::abs(variation); }
 };
 inline FieldProfile &fieldProfile() { static FieldProfile profile; return profile; }
 
@@ -428,14 +462,14 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
   // field: -1 none, 0 E_x, 1 B_y: the (x, t) profile (FieldProfile) multiplies the x and t weights
   const auto &profile = fieldProfile();
   auto term = [&](size_t derivativeAxis, const Eigen::VectorXd &ux,
-                  const Eigen::VectorXd &uz, double coefficient, int field = -1) {
+                  const Eigen::VectorXd &uz, double coefficient, int field = -1, int r = 0) {
     auto factors = evaluation;
     for (size_t d = 0; d < 4; ++d)
     {
       Eigen::VectorXd weight = axes[d].weights.array().sqrt();
       if (d == 2) { weight.array() *= ux.array(); }
       if (d == 3) { weight.array() *= uz.array(); }
-      if (field >= 0 && profile.varying() && d < 2) { weight.array() *= profile.values(axes[d].points, field, int(d)).array(); }
+      if (field >= 0 && profile.varying() && d < 2) { weight.array() *= profile.values(axes[d].points, field, int(d), r).array(); }
       factors[d] = hostMatrix(weight.asDiagonal() *
                               (d == derivativeAxis ? axes[d].derivative : axes[d].test));
     }
@@ -444,7 +478,7 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
   const Eigen::VectorXd onesX = Eigen::VectorXd::Ones(axes[2].points.size());
   const Eigen::VectorXd onesZ = Eigen::VectorXd::Ones(axes[3].points.size());
   auto transport = term(1, onesX, onesZ, 1.0);
-  if (Ex != 0.0) { transport += term(2, onesX, onesZ, qOverM * Ex, 0); }
+  if (Ex != 0.0) { for (int r = 0; r < profile.rank(0); ++r) transport += term(2, onesX, onesZ, qOverM * Ex, 0, r); }
   for (Eigen::Index k = 0; k < h.left.cols(); ++k)
   {
     Eigen::VectorXd vx = h.left.col(k).array() * axes[2].points.array();
@@ -452,8 +486,11 @@ inline System assemble(const std::vector<Axis> &axes, const LorentzFactors &h,
     transport += term(0, vx, h.right.col(k), 1.0);
     if (By != 0.0)
     {
-      transport += term(2, h.left.col(k), vz, -qOverM * By, 1);
-      transport += term(3, vx, h.right.col(k), qOverM * By, 1);
+      for (int r = 0; r < profile.rank(1); ++r)
+      {
+        transport += term(2, h.left.col(k), vz, -qOverM * By, 1, r);
+        transport += term(3, vx, h.right.col(k), qOverM * By, 1, r);
+      }
     }
     DpgBoba::round(transport, tolerance);
   }
