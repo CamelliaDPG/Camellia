@@ -132,19 +132,52 @@ the non-polynomial coefficients (v = u / gamma, the fields), mostly on the assem
 enrichment 0; the matrix-free rule uses n_k (+ enrichment/2) points per direction.  At p = 4 one application costs about
 1 ms per cell, against 0.74 s per cell to assemble.  One core, -O1 build.
 
+## Jacobi preconditioning in the shared eigenbasis (implemented)
+
+The diagonal of the global operator is computed without forming anything.  For each cell K and each global dof g
+touching it, take u = P_K e_g, the cell's coefficients of global basis function g, from the dof interpretation
+(constraints included).  Then
+
+    (P_K e_g)^T S_K (P_K e_g) = sum_i ((V^T B_K u)_i)^2 / D_i   (+ c (z^T B_K u)^2 / (1 - c m^T z) with the constant-mode weight),
+
+which costs one sum-factorized B and half a fast inverse (V^T only) per (cell, dof).  This is
+`MatrixFreeDPGOperator::diagonal()`, with `BoxCellDPGOperator::schurQuadraticForms()` and
+`SeparableTensorIP::inverseQuadraticForms()` underneath.  `DiagonalScalingOperator` is the Jacobi preconditioner.
+
+- Unit test: diag(S) matches the assembled diagonal to 1.3e-12.  Jacobi PCG takes 72 iterations against 1028 for CG
+  and matches the direct solve to 7.9e-11.
+- Driver check (`--checkMatrixFreeOperator`): the first slab's system, with its BCs, load and current fields, is
+  solved by matrix-free Jacobi PCG to relative residual 1e-10 and compared with a direct solve of the assembled system
+  (p = 2, Delta p = 2, serendipity trial, full tensor test, one core):
+
+| cells (x t ux uz) | dofs  | enrichment | PCG iterations | PCG time (setup) | direct (with assembly) | \|u_PCG - u_direct\| / \|u_direct\| |
+|-------------------|-------|------------|----------------|------------------|------------------------|-------------------------------------|
+| 4 1 4 4           | 2896  | 0          | 92             | 1.8 s (0.66 s)   | 2.1 s                  | 3.1e-2                              |
+| 4 1 4 4           | 2896  | 4          | 92             | 2.4 s (0.82 s)   | 10.4 s                 | 1.3e-3                              |
+| 4 1 4 4           | 2896  | 8          | 92             | 3.4 s (1.2 s)    | 35 s                   | 4.6e-5                              |
+| 8 1 8 8           | 21824 | 4          | 170            | 37 s (6.6 s)     | 91 s                   | 1.1e-4                              |
+
+  The PCG/direct difference tracks the operators' quadrature difference (5e-4, 4e-5, 1.6e-6 on 64 cells; 1.7e-6 on
+  512 cells at enrichment 4), so it is quadrature error, amplified by the conditioning, and not a solver error.
+  Iteration counts do not depend on the quadrature.  They grow like h^-1 (92 -> 170 when x, u_x and u_z are halved),
+  as expected for a diagonal preconditioner.
+- Note: at the driver's default quadrature (enrichment 0) the assembled and matrix-free solutions differ by 3%.  Both
+  converge to each other under enrichment, so at least one of them, probably the assembled one, which uses fewer points
+  per direction, under-integrates the non-polynomial coefficients v = u / gamma and a(u) by about that much.  This is
+  worth checking against the production runs.
+
 ## Next steps
 
-1. **Preconditioning.**  Unpreconditioned CG took about 1000 iterations on the 219-dof unit test, so this is now the
-   critical piece.  Options, in order of effort:
-   - diag(S) for Jacobi or Chebyshev: diag_j = sum_i (V^T b_j)_i^2 / D_i in the eigenbasis, with no factorization;
-   - trace-block Jacobi, from per-element S_K blocks;
-   - `MatrixFreeGMGPreconditioner` with the existing GMG hierarchy (assembled coarse levels).
+1. **A preconditioner that does not degrade with h.**  Jacobi's iterations grow like h^-1.  Options:
+   - Chebyshev-Jacobi smoothing within `MatrixFreeGMGPreconditioner`, on the existing GMG hierarchy, with assembled
+     coarse levels;
+   - trace-block Jacobi, i.e. per-face blocks of S, from the same eigenbasis quadratic forms with off-diagonal pairs.
 2. **Solve integration:** a matrix-free option in `VlasovSpaceTimeFormulation::solve()` (Belos CG on
-   `MatrixFreeDPGOperator`, with the Dirichlet data from `dirichletData()`), validated against the direct solve
-   slab by slab.
-3. **Static condensation** of the field dofs: a per-element factor of the (serendipity-sized) field-field block of
-   S_K.
-4. **Performance:** the coefficient sampling at setup (the `BasisCache` per cell) dominates the first application.
-   Exploit the separable structure of the Vlasov coefficients: v_x(u), a(u) = E_x(x,t) - v_z(u) B_y(x,t), and so on.
-   Batch cells of equal shape through the BLAS mode products.  Check MPI runs (the operator imports and exports
-   through overlap maps, but only one rank has been tested).
+   `MatrixFreeDPGOperator` with `DiagonalScalingOperator`, Dirichlet data from `dirichletData()`), validated slab by
+   slab against the direct solve.
+3. **Static condensation** of the field dofs: a per-element factor of the (serendipity-sized) field-field block.
+4. **Performance:**
+   - coefficient sampling at setup dominates the first application: exploit the separable structure of the Vlasov
+     coefficients;
+   - batch cells of equal shape through the BLAS mode products;
+   - test MPI (overlap-map import/export is in place; only one rank has been run).
