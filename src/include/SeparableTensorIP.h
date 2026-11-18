@@ -72,6 +72,10 @@ namespace Camellia
     bool cellInverses(DofOrderingPtr dofOrdering, BasisCachePtr basisCache, std::vector<CellInverse> &inverses);
     //! x <- G_c^{-1} x, x: vectorCount vectors in the tensor layout, one after another
     static void applyCellInverse(const CellInverse &cell, double *x, int vectorCount = 1);
+    //! values[r] = b_r^T G_c^{-1} b_r for vectorCount vectors b (tensor layout, one after another; overwritten), in the
+    //! shared eigenbasis: sum_i (V^T b)_i^2 / D_i, plus the Sherman-Morrison term c (z^T b)^2 / (1 - c m^T z).  Half the
+    //! cost of applyCellInverse().
+    static void inverseQuadraticForms(const CellInverse &cell, double *b, int vectorCount, double *values);
 
     //! the number of cells whose Gram matrices were assembled from one-dimensional factors, and by quadrature
     long long tensorCellCount() const { return _tensorCellCount; }

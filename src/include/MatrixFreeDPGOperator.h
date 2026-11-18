@@ -65,6 +65,16 @@ namespace Camellia
     //! the load vector L alone
     void load(RHSPtr rhs, MV &L) const;
 
+    /**
+     \brief The diagonal of the operator (one column of d): exactly diag(S) = sum_K (P_K e_g)^T S_K (P_K e_g) for each
+     global dof g, constraints included, with 1 on the Dirichlet dofs.
+
+     P_K e_g, the cell's coefficients of global basis function g, comes from the dof interpretation; each quadratic form
+     is evaluated in the shared eigenbasis of the separable Gram matrices (BoxCellDPGOperator::schurQuadraticForms()),
+     so nothing is factored or stored: per cell, one sum-factorized B and half a G^{-1} per global dof touching the cell.
+     */
+    void diagonal(MV &d) const;
+
   private:
     MeshPtr _mesh;
     Teuchos::RCP<BoxCellDPGOperator> _local;
@@ -77,6 +87,23 @@ namespace Camellia
     //! accumulate sum_K P_K^T y_K, given the local vectors computed by cellAction, into Y (owned map)
     template <typename CellAction>
     void assemble(const MV *X, MV &Y, CellAction cellAction) const;
+  };
+
+  /**
+   \brief Y = beta Y + alpha D^{-1} X for a diagonal D (e.g. MatrixFreeDPGOperator::diagonal()): Jacobi preconditioning.
+   */
+  class DiagonalScalingOperator : public TOperator<double>
+  {
+  public:
+    using MV = TVector<double>;
+    //! diagonal: one column; its entries must be nonzero
+    explicit DiagonalScalingOperator(Teuchos::RCP<const MV> diagonal);
+    Teuchos::RCP<const TMap> getDomainMap() const override { return _inverseDiagonal->getMap(); }
+    Teuchos::RCP<const TMap> getRangeMap() const override { return _inverseDiagonal->getMap(); }
+    bool hasTransposeApply() const override { return true; }
+    void apply(const MV &X, MV &Y, Teuchos::ETransp mode = Teuchos::NO_TRANS, double alpha = 1.0, double beta = 0.0) const override;
+  private:
+    Teuchos::RCP<MV> _inverseDiagonal;
   };
 }
 

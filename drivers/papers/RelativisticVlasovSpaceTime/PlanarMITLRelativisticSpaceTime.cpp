@@ -987,13 +987,72 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   const double AxNorm = Ax.getVector(0)->normInf();
   Sx.update(-1.0, Ax, 1.0);
   const double relativeError = Sx.getVector(0)->normInf() / AxNorm;
+  // the Jacobi diagonal, in the shared eigenbasis
+  const auto diagonalStart = now();
+  MV matrixFreeDiagonal(A->getRowMap(), 1), assembledDiagonal(A->getRowMap(), 1);
+  op.diagonal(matrixFreeDiagonal);
+  const double diagonalTime = seconds(diagonalStart, now());
+  A->getLocalDiagCopy(*assembledDiagonal.getVectorNonConst(0));
+  const double diagonalNorm = assembledDiagonal.getVector(0)->normInf();
+  matrixFreeDiagonal.update(-1.0, assembledDiagonal, 1.0);
+  const double diagonalError = matrixFreeDiagonal.getVector(0)->normInf() / diagonalNorm;
   if (rank == 0)
   {
     std::cout << "checkMatrixFreeOperator: " << A->getGlobalNumRows() << " dofs, " << mesh->numActiveElements()
               << " cells, quadrature enrichment " << quadratureEnrichment << " (the driver's: " << vlasovSolution->cubatureEnrichmentDegree()
               << "): |S x - A x| / |A x| = " << relativeError
               << "; assembly " << assemblyTime << " s, matrix-free setup + first application " << firstApplyTime
-              << " s, application " << applyTime << " s\n";
+              << " s, application " << applyTime << " s; |diag(S) - diag(A)| / |diag(A)| = " << diagonalError
+              << ", diagonal " << diagonalTime << " s\n";
+  }
+
+  // the slab's system (its boundary conditions and load, the current fields): Jacobi-preconditioned CG on the
+  // matrix-free operator against a direct solve of the assembled system
+  SolutionPtr direct = Solution::solution(form->vlasovBF(), mesh, vlasovSolution->bc(), vlasovSolution->rhs(), ip);
+  direct->setCubatureEnrichmentDegree(std::max(vlasovSolution->cubatureEnrichmentDegree(), quadratureEnrichment));
+  const auto directStart = now();
+  direct->solve();
+  const double directTime = seconds(directStart, now());
+  TVectorPtr<double> uDirect = direct->getLHSVector();
+  std::vector<GlobalIndexType> dirichletIndices;
+  std::vector<double> dirichletValues;
+  MatrixFreeDPGOperator::dirichletData(mesh, vlasovSolution->bc(), dirichletIndices, dirichletValues);
+  const auto pcgSetupStart = now();
+  MatrixFreeDPGOperator constrained(mesh, local, A->getRowMap(), std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end()));
+  MV b(A->getRowMap(), 1), u(A->getRowMap(), 1);
+  constrained.dirichletRightHandSide(vlasovSolution->rhs(), dirichletIndices, dirichletValues, b);
+  auto diagonal = Teuchos::rcp(new MV(A->getRowMap(), 1));
+  constrained.diagonal(*diagonal);
+  DiagonalScalingOperator jacobi(diagonal);
+  const double pcgSetupTime = seconds(pcgSetupStart, now());
+  const auto pcgStart = now();
+  MV r(b, Teuchos::Copy), z(A->getRowMap(), 1), pDirection(A->getRowMap(), 1), Ap(A->getRowMap(), 1);
+  u.putScalar(0.0);
+  jacobi.apply(r, z);
+  pDirection.assign(z);
+  double rz = r.getVector(0)->dot(*z.getVector(0));
+  const double bNorm = b.getVector(0)->norm2();
+  int iterations = 0;
+  for (; iterations < 20000 && r.getVector(0)->norm2() > 1e-10 * bNorm; iterations++)
+  {
+    constrained.apply(pDirection, Ap);
+    const double alpha = rz / pDirection.getVector(0)->dot(*Ap.getVector(0));
+    u.update(alpha, pDirection, 1.0);
+    r.update(-alpha, Ap, 1.0);
+    jacobi.apply(r, z);
+    const double rzNew = r.getVector(0)->dot(*z.getVector(0));
+    pDirection.update(1.0, z, rzNew / rz);
+    rz = rzNew;
+  }
+  const double pcgTime = seconds(pcgStart, now());
+  MV difference(u, Teuchos::Copy);
+  difference.update(-1.0, *uDirect, 1.0);
+  const double solveError = difference.getVector(0)->normInf() / uDirect->getVector(0)->normInf();
+  if (rank == 0)
+  {
+    std::cout << "checkMatrixFreeOperator: Jacobi PCG (shared-eigenbasis diagonal) to relative residual 1e-10: " << iterations
+              << " iterations, " << pcgTime << " s (setup " << pcgSetupTime << " s); direct solve (assembly included) " << directTime
+              << " s; |u_PCG - u_direct| / |u_direct| = " << solveError << " (" << dirichletIndices.size() << " Dirichlet dofs)\n";
   }
 }
 

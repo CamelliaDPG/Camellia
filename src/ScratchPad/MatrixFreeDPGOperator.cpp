@@ -9,6 +9,8 @@
 #include "GlobalDofAssignment.h"
 #include "Mesh.h"
 
+#include <map>
+
 using namespace Camellia;
 
 namespace
@@ -150,4 +152,60 @@ void MatrixFreeDPGOperator::dirichletRightHandSide(RHSPtr rhs, const std::vector
     const LO lid = _map->getLocalElement(static_cast<GO>(dirichletIndices[i]));
     for (size_t c=0; c<vectorCount; c++) bView(lid,c) = xView(lid,c);
   }
+}
+
+void MatrixFreeDPGOperator::diagonal(MV &d) const
+{
+  GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
+  MV dOverlap(_overlapMap, 1);
+  dOverlap.putScalar(0.0);
+  for (GlobalIndexType cellID : _cells)
+  {
+    // P_K e_g for each global dof g touching the cell, from the interpretation of each local unit vector (row l of P_K)
+    const int trialCount = _local->trialDofCount(cellID);
+    std::map<GlobalIndexType, std::vector<std::pair<int,double>>> columns;
+    Camellia::FieldContainer<double> unit(trialCount), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<trialCount; l++)
+    {
+      unit.initialize(0.0);
+      unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      for (int i=0; i<globalIndices.size(); i++)
+        if (globalData[i] != 0.0) columns[globalIndices[i]].push_back({l, globalData[i]});
+    }
+    std::vector<std::vector<std::pair<int,double>>> vectors;
+    std::vector<GlobalIndexType> globals;
+    for (auto &entry : columns)
+    {
+      globals.push_back(entry.first);
+      vectors.push_back(std::move(entry.second));
+    }
+    std::vector<double> values(vectors.size());
+    _local->schurQuadraticForms(cellID, vectors, values.data());
+    for (size_t i=0; i<globals.size(); i++) dOverlap.sumIntoGlobalValue(static_cast<GO>(globals[i]), 0, values[i]);
+  }
+  d.putScalar(0.0);
+  d.doExport(dOverlap, *_exporter, Tpetra::ADD);
+  auto dView = d.getLocalViewHost(Tpetra::Access::ReadWrite);
+  for (LO lid : _dirichletLocal) dView(lid,0) = 1.0;
+}
+
+DiagonalScalingOperator::DiagonalScalingOperator(Teuchos::RCP<const MV> diagonal)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(diagonal->getNumVectors() != 1, std::invalid_argument, "the diagonal must have one column");
+  _inverseDiagonal = Teuchos::rcp(new MV(diagonal->getMap(), 1));
+  _inverseDiagonal->reciprocal(*diagonal);
+}
+
+void DiagonalScalingOperator::apply(const MV &X, MV &Y, Teuchos::ETransp /*mode*/, double alpha, double beta) const
+{
+  const size_t vectorCount = X.getNumVectors();
+  auto inverse = _inverseDiagonal->getLocalViewHost(Tpetra::Access::ReadOnly);
+  auto x = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+  auto y = Y.getLocalViewHost(Tpetra::Access::ReadWrite);
+  const size_t localLength = X.getLocalLength();
+  for (size_t c=0; c<vectorCount; c++)
+    for (size_t i=0; i<localLength; i++)
+      y(i,c) = ((beta == 0.0) ? 0.0 : beta * y(i,c)) + alpha * inverse(i,0) * x(i,c);
 }

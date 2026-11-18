@@ -223,6 +223,12 @@ void SeparableGramInverse::applyInverse(const Scales &scales, double *x, int vec
   for (int k=0; k<directionCount(); k++) modeProduct(k, _V[k], false, x, work.data(), vectorCount); // V z
 }
 
+void SeparableGramInverse::applyEigenbasisTranspose(double *x, int vectorCount) const
+{
+  std::vector<double> work(size_t(_size) * vectorCount);
+  for (int k=0; k<directionCount(); k++) modeProduct(k, _V[k], true, x, work.data(), vectorCount);
+}
+
 void SeparableGramInverse::apply(const Scales &scales, double *x, int vectorCount) const
 {
   checkScales(scales);

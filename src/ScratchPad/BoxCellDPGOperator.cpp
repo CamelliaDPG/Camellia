@@ -686,3 +686,21 @@ void BoxCellDPGOperator::applyLoad(GlobalIndexType cellID, RHSPtr rhs, double *l
   applyInverseGram(cellID, v.data());
   applyBTranspose(cellID, v.data(), load);
 }
+
+void BoxCellDPGOperator::schurQuadraticForms(GlobalIndexType cellID, const std::vector<std::vector<std::pair<int,double>>> &vectors,
+                                             double *values)
+{
+  const TypeData &type = typeData(cellID);
+  TEUCHOS_TEST_FOR_EXCEPTION(!type.supported, std::invalid_argument, "BoxCellDPGOperator: unsupported cell: " + type.reason);
+  const CellData &cell = cellData(cellID, type);
+  const int N = type.testBasis.fullSize, count = int(vectors.size());
+  if (count == 0) return;
+  std::vector<double> u(type.trialDofCount, 0.0), Bu(size_t(N) * count);
+  for (int c=0; c<count; c++)
+  {
+    for (const auto &entry : vectors[c]) u[entry.first] = entry.second;
+    applyB(cellID, u.data(), &Bu[size_t(c) * N]);
+    for (const auto &entry : vectors[c]) u[entry.first] = 0.0;
+  }
+  SeparableTensorIP::inverseQuadraticForms(cell.gramInverse, Bu.data(), count, values);
+}

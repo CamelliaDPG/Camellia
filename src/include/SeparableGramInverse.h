@@ -63,6 +63,10 @@ namespace Camellia
     //! x <- G^{-1} x, for each of the vectorCount vectors stored consecutively in x
     void applyInverse(const Scales &scales, double *x, int vectorCount = 1) const;
 
+    //! x <- V^T x, V = V_1 (x) ... (x) V_d: coefficients in the eigenbasis, where G is diagonal (eigenvalueDiagonal());
+    //! so x^T G^{-1} x = sum_i (V^T x)_i^2 / D_i
+    void applyEigenbasisTranspose(double *x, int vectorCount = 1) const;
+
     //! x <- G x (from the one-dimensional factors; for verification and for matrix-free residuals)
     void apply(const Scales &scales, double *x, int vectorCount = 1) const;
 

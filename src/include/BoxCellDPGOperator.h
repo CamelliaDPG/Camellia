@@ -66,6 +66,11 @@ namespace Camellia
     void applySchur(GlobalIndexType cellID, const double *u, double *Su);
     //! v <- G_K^{-1} v (test, tensor layout)
     void applyInverseGram(GlobalIndexType cellID, double *v);
+    //! values[c] = u_c^T S_K u_c for local trial vectors u_c given sparsely as (trial dof index, coefficient) pairs, with
+    //! S_K = B_K^T G_K^{-1} B_K evaluated in the shared eigenbasis (SeparableTensorIP::inverseQuadraticForms()): one
+    //! sum-factorized B and half a G^{-1} per vector.  With u_c the cell's restrictions of global basis functions, the
+    //! sum over cells is the diagonal of the global DPG operator (MatrixFreeDPGOperator::diagonal()).
+    void schurQuadraticForms(GlobalIndexType cellID, const std::vector<std::vector<std::pair<int,double>>> &vectors, double *values);
     //! load (trial dof ordering) = B_K^T G_K^{-1} l_K, l_K the right-hand side tested against the test basis (by the
     //! element's standard quadrature, enriched by the operator's quadratureEnrichment)
     void applyLoad(GlobalIndexType cellID, RHSPtr rhs, double *load);
