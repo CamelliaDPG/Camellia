@@ -53,7 +53,10 @@ namespace
     gaussLegendreRule(pointCount, x, w);
     using PointView = typename Intrepid2Basis::PointViewType;
     using OutputView = typename Intrepid2Basis::OutputViewType;
-    PointView points("1D points", pointCount, 1);
+    // allocate with the default (contiguous) layout: PointViewType is LayoutStride, and a LayoutStride view built from
+    // extents alone has no valid strides (its zero-fill can run past the allocation)
+    Kokkos::DynRankView<double,Camellia::DeviceType> pointsAllocation("1D points", pointCount, 1);
+    PointView points = pointsAllocation;
     auto pointsHost = Kokkos::create_mirror_view(points);
     for (int q=0; q<pointCount; q++) pointsHost(q,0) = x[q];
     Kokkos::deep_copy(points, pointsHost);
