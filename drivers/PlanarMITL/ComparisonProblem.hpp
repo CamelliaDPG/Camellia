@@ -40,6 +40,7 @@ struct ComparisonProblem
   // n / (2 pi sigma^2) exp(-((u_x - u0)^2 + u_z^2) / (2 sigma^2)); zero data at t = 0 and on the velocity boundary; the
   // final-time face is a free (outflow) trace.  Defaults: the production run's scaled n0, u0, sigma.
   bool mitlInflow = false;
+  bool inflowTraceProjection = true;   // tensor backend: inflow data L2-projected onto the trace space (else exact data in the load)
   bool freeOutflowX = false;   // tensor backend: x-face outflow parts are trial unknowns (cathode u_x < 0, anode u_x > 0)
   double inflowDensity = 185.422, inflowU0 = 0.198801, inflowSigma = 0.0497003;
   bool separableTestNorm = false;   // separable graph norm (graph-oplus), both backends
@@ -180,6 +181,9 @@ struct ComparisonProblem
                   "MITL first-substep problem instead of the manufactured bubble: no source, the production inflow Maxwellian at "
                   "x = 0 for u_x > 0, f = 0 at t = 0, zero on the velocity boundary, free final-time trace (tensor backend: the "
                   "other exterior faces are held at zero, which is exact while no electrons reach them)");
+    cmd.setOption("inflowTraceProjection", "inflowExactLoad", &inflowTraceProjection,
+                  "tensor backend, mitlInflow: L2-project the inflow data onto the trace space (default, as the conventional "
+                  "backend imposes it), or put the exact data in the load (--inflowExactLoad: the results before 2026-11-18)");
     cmd.setOption("freeOutflowX", "prescribedOutflowX", &freeOutflowX,
                   "tensor backend: the outflow parts of the x faces (cathode u_x < 0, anode u_x > 0) are free traces, as production; default: prescribed (zero)");
     cmd.setOption("inflowDensity", &inflowDensity, "mitlInflow: n (scaled; production n0 = 185.422)");

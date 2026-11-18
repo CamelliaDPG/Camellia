@@ -172,12 +172,13 @@ inline BlockVector inflowRHS(const System &system, const std::vector<Axis> &axes
     mx(i) = u > 0 ? std::exp(-0.5 * (u - problem.inflowU0) * (u - problem.inflowU0) / s2) : 0.0; // u_x = 0 is a vertex
   }
   for (Eigen::Index i = 0; i < mz.size(); ++i) mz(i) = std::exp(-0.5 * axes[3].points(i) * axes[3].points(i) / s2);
-  // PLANAR_MITL_INFLOW_TRACE_PROJECTION=1: replace each 1D data factor g by its L2 projection onto the trace basis, as the
-  // conventional backend's Dirichlet trace condition does (the data are separable, so the 4D projection factors).
-  // PLANAR_MITL_INFLOW_TRACE_PROJECTION_DEGREE=q: project with a q-degree rule (Camellia imposes Dirichlet trace data
-  // with the cell's default cubature, degree 5 at p = 2, which under-integrates sharp data); the projected trace is then
-  // integrated against the test functions exactly.
-  const bool projectToTrace = std::getenv("PLANAR_MITL_INFLOW_TRACE_PROJECTION") != nullptr;
+  // problem.inflowTraceProjection (default): replace each 1D data factor g by its L2 projection onto the trace basis, as
+  // the conventional backend imposes Dirichlet trace data (the data are separable, so the 4D projection factors); the
+  // projected trace is then integrated against the test functions exactly.  --inflowExactLoad: the exact data in the load.
+  // PLANAR_MITL_INFLOW_TRACE_PROJECTION_DEGREE=q: project with a q-degree rule (default: --quadratureDegree).  To match
+  // conventional runs from before the BC cubature fix (bc-cubature-enrichment), use its default side degree (6 at
+  // p = 2, dp = 2).
+  const bool projectToTrace = problem.inflowTraceProjection || std::getenv("PLANAR_MITL_INFLOW_TRACE_PROJECTION") != nullptr;
   const char *projectionDegreeEnv = std::getenv("PLANAR_MITL_INFLOW_TRACE_PROJECTION_DEGREE");
   const int projectionDegree = projectionDegreeEnv ? std::atoi(projectionDegreeEnv) : problem.quadratureDegree;
   std::vector<Axis> low;
