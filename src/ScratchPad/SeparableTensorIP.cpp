@@ -319,16 +319,43 @@ bool SeparableTensorIP::applyInverseInnerProductMatrix(Camellia::FieldContainer<
     if (!(s.valueWeight > 0)) return false; // G singular on the constants (or not positive definite)
   }
 
+  // The constant-mode weight (setConstantModeWeight()) makes the Gram matrix G - c m m^T on each cell; its inverse is
+  // the Sherman-Morrison update of G^{-1}:
+  //   (G - c m m^T)^{-1} x = y + (c m^T y / (1 - c m^T z)) z,   y = G^{-1} x,  z = G^{-1} m,
+  // one more fast-diagonalization solve per cell.  (1 - c m^T z > 0 exactly when G - c m m^T is positive definite.)
+  Camellia::FieldContainer<double> m;
+  std::vector<double> coefficient;
+  const bool rankOneCorrection = constantModeCorrection(dofOrdering, basisCache, m, coefficient);
+
   // gather each row into the tensor ordering, apply, scatter back
   const int rowCount = values.dimension(1);
   std::vector<int> dofIndex(N);
   for (int a=0; a<N; a++) dofIndex[a] = dofOrdering->getDofIndex(data.varID, a);
-  std::vector<double> rows(size_t(rowCount) * N);
+  std::vector<double> rows(size_t(rowCount) * N), mTensor(N), z(N);
   for (int c=0; c<data.numCells; c++)
   {
     for (int r=0; r<rowCount; r++)
       for (int a=0; a<N; a++) rows[size_t(r) * N + d.tensorIndex[a]] = values(c, r, dofIndex[a]);
     inverse.applyInverse(scales[c], rows.data(), rowCount);
+    if (rankOneCorrection && (coefficient[c] != 0.0))
+    {
+      for (int a=0; a<N; a++) mTensor[d.tensorIndex[a]] = m(c, dofIndex[a]);
+      z = mTensor;
+      inverse.applyInverse(scales[c], z.data(), 1);
+      double mz = 0;
+      for (int i=0; i<N; i++) mz += mTensor[i] * z[i];
+      const double denominator = 1.0 - coefficient[c] * mz;
+      TEUCHOS_TEST_FOR_EXCEPTION(!(denominator > 0), std::invalid_argument,
+                                 "the constant-mode weight made the Gram matrix indefinite (1 - c m^T G^{-1} m <= 0)");
+      for (int r=0; r<rowCount; r++)
+      {
+        double *y = &rows[size_t(r) * N];
+        double my = 0;
+        for (int i=0; i<N; i++) my += mTensor[i] * y[i];
+        const double scale = coefficient[c] * my / denominator;
+        for (int i=0; i<N; i++) y[i] += scale * z[i];
+      }
+    }
     for (int r=0; r<rowCount; r++)
       for (int a=0; a<N; a++) values(c, r, dofIndex[a]) = rows[size_t(r) * N + d.tensorIndex[a]];
   }
@@ -346,25 +373,23 @@ void SeparableTensorIP::setConstantModeWeight(VarPtr var, FunctionPtr alpha, dou
   _constantModeRatio = ratio;
 }
 
-void SeparableTensorIP::applyConstantModeWeight(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache)
+bool SeparableTensorIP::constantModeCorrection(DofOrderingPtr dofOrdering, BasisCachePtr basisCache,
+                                               Camellia::FieldContainer<double> &m, std::vector<double> &coefficient)
 {
-  if (_constantModeRatio >= 1.0) return;
-  if (basisCache->isSideCache()) return;
+  if (_constantModeRatio >= 1.0) return false;
+  if (basisCache->isSideCache()) return false;
   const int varID = _constantModeVar->ID();
-  if (!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_INDEX)) return;
-  BasisPtr basis = dofOrdering->getBasis(varID);
-  const int basisCardinality = basis->getCardinality();
+  if (!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_INDEX)) return false;
   const Camellia::FieldContainer<double> &weightedMeasures = basisCache->getWeightedMeasures(); // (C,P)
   const int numCells = weightedMeasures.dimension(0), numPoints = weightedMeasures.dimension(1);
   // m(c,i) = int_K phi_i, as a linear term integrated against the basis
   LinearTermPtr valueTerm = 1.0 * _constantModeVar;
-  Camellia::FieldContainer<double> m(numCells, dofOrdering->totalDofs());
+  m.resize(numCells, dofOrdering->totalDofs());
   valueTerm->integrate(m, dofOrdering, basisCache);
-  // int_K 1/alpha
+  // c = (1 - ratio) / int_K 1/alpha
   Camellia::FieldContainer<double> alphaValues(numCells, numPoints);
   _constantModeAlpha->values(alphaValues, basisCache);
-  std::vector<int> dofIndex(basisCardinality);
-  for (int a=0; a<basisCardinality; a++) dofIndex[a] = dofOrdering->getDofIndex(varID, a);
+  coefficient.resize(numCells);
   for (int c=0; c<numCells; c++)
   {
     double inverseAlphaIntegral = 0;
@@ -373,12 +398,27 @@ void SeparableTensorIP::applyConstantModeWeight(Camellia::FieldContainer<double>
       TEUCHOS_TEST_FOR_EXCEPTION(!(alphaValues(c,p) > 0), std::invalid_argument, "the L^2 weight must be positive");
       inverseAlphaIntegral += weightedMeasures(c,p) / alphaValues(c,p);
     }
-    const double coefficient = (1.0 - _constantModeRatio) / inverseAlphaIntegral;
+    coefficient[c] = (1.0 - _constantModeRatio) / inverseAlphaIntegral;
+  }
+  return true;
+}
+
+void SeparableTensorIP::applyConstantModeWeight(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache)
+{
+  Camellia::FieldContainer<double> m;
+  std::vector<double> coefficient;
+  if (!constantModeCorrection(dofOrdering, basisCache, m, coefficient)) return;
+  const int varID = _constantModeVar->ID();
+  const int basisCardinality = dofOrdering->getBasis(varID)->getCardinality();
+  std::vector<int> dofIndex(basisCardinality);
+  for (int a=0; a<basisCardinality; a++) dofIndex[a] = dofOrdering->getDofIndex(varID, a);
+  for (int c=0; c<int(coefficient.size()); c++)
+  {
     for (int a=0; a<basisCardinality; a++)
     {
       const double ma = m(c, dofIndex[a]);
       if (ma == 0) continue;
-      for (int b=0; b<basisCardinality; b++) innerProduct(c, dofIndex[a], dofIndex[b]) -= coefficient * ma * m(c, dofIndex[b]);
+      for (int b=0; b<basisCardinality; b++) innerProduct(c, dofIndex[a], dofIndex[b]) -= coefficient[c] * ma * m(c, dofIndex[b]);
     }
   }
 }

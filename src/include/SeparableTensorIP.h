@@ -52,6 +52,8 @@ namespace Camellia
 
     //! values(c, r, :) <- G_c^{-1} values(c, r, :) by fast diagonalization, where that is exact: the conditions of the
     //! one-dimensional assembly, a full tensor-product test basis, and a positive value term.  Otherwise returns false.
+    //! With a constant-mode weight (setConstantModeWeight()), G_c is the weakened Gram matrix G - c m m^T, inverted by a
+    //! Sherman-Morrison update (one more fast-diagonalization solve per cell).
     bool applyInverseInnerProductMatrix(Camellia::FieldContainer<double> &values,
                                         Teuchos::RCP<DofOrdering> dofOrdering,
                                         Teuchos::RCP<BasisCache> basisCache) override;
@@ -118,6 +120,9 @@ namespace Camellia
     VarPtr _constantModeVar;
     FunctionPtr _constantModeAlpha;
     double _constantModeRatio = 1.0;
+    //! the constant-mode correction -c m m^T on these cells, if any: m (C, totalDofs) and c per cell
+    bool constantModeCorrection(DofOrderingPtr dofOrdering, BasisCachePtr basisCache, Camellia::FieldContainer<double> &m,
+                                std::vector<double> &coefficient);
     void applyConstantModeWeight(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache);
     long long _tensorCellCount = 0, _fallbackCellCount = 0, _inverseCellCount = 0;
   };

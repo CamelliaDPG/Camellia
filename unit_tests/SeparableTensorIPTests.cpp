@@ -50,7 +50,8 @@ namespace
     Teuchos::RCP<SeparableTensorIP> ip;
   };
 
-  SeparableSetup separableSetup(bool serendipity, const vector<int> &increments)
+  //! constantModeRatio < 1: also weaken the L^2 term on each cell's constant mode (setConstantModeWeight())
+  SeparableSetup separableSetup(bool serendipity, const vector<int> &increments, double constantModeRatio = 1.0)
   {
     const int H1Order = 2, delta_k = 2;
     VarFactoryPtr vf = VarFactory::varFactory();
@@ -73,6 +74,7 @@ namespace
     ip->addTerm(1.8 * v->di(3));
     ip->addTerm(0.65 * v->di(4));
     ip->addTerm(Function::sqrtFunction(weight * 3.0) * v);
+    if (constantModeRatio < 1.0) ip->setConstantModeWeight(v, weight * 3.0, constantModeRatio);
     return {mesh, bf, v, ip};
   }
 
@@ -356,12 +358,14 @@ TEUCHOS_UNIT_TEST( SeparableGramInverse, InverseInequalityConstants )
 TEUCHOS_UNIT_TEST( SeparableTensorIP, FastInverseInvertsGramMatrix )
 {
   // On full tensor-product test bases, applyInverseInnerProductMatrix() applied to the rows of the (symmetric) Gram matrix
-  // gives the identity, on every cell; on serendipity test bases it declines.
+  // gives the identity, on every cell -- also with the constant-mode weight, whose rank-one correction it inverts by
+  // Sherman-Morrison; on serendipity test bases it declines.
+  for (double constantModeRatio : {1.0, 1e-2})
   for (bool serendipity : {false, true})
   {
     for (const vector<int> &increments : vector<vector<int>>{{0,0,0,0}, {2,0,1,0}})
     {
-      SeparableSetup setup = separableSetup(serendipity, increments);
+      SeparableSetup setup = separableSetup(serendipity, increments, constantModeRatio);
       double maxError = 0;
       int declined = 0, cells = 0;
       for (GlobalIndexType cellID : setup.mesh->getActiveCellIDsGlobal())
@@ -404,7 +408,7 @@ TEUCHOS_UNIT_TEST( SeparableTensorIP, FastInverseInvertsGramMatrix )
         }
       }
       out << (serendipity ? "serendipity" : "hierarchical") << ", increments " << increments[0] << increments[1] << increments[2]
-          << increments[3] << ": " << cells - declined << " of " << cells << " cells inverted; backward error of G^{-1} = " << maxError << endl;
+          << increments[3] << ", constant-mode ratio " << constantModeRatio << ": " << cells - declined << " of " << cells << " cells inverted; backward error of G^{-1} = " << maxError << endl;
       if (serendipity)
       {
         TEST_EQUALITY(declined, cells);
@@ -422,38 +426,41 @@ TEUCHOS_UNIT_TEST( SeparableTensorIP, FastInverseInvertsGramMatrix )
 TEUCHOS_UNIT_TEST( SeparableTensorIP, LocalStiffnessFastInverseMatchesCholesky )
 {
   // BF's factored-Cholesky local solve takes the fast inverse when the inner product offers it: the local stiffness
-  // matrices and load vectors agree with the Cholesky path to roundoff.
-  SeparableSetup setup = separableSetup(false, {1,0,2,0});
-  RHSPtr rhs = RHS::rhs();
-  rhs->addTerm(1.0 * setup.v + Function::xn(1) * setup.v->di(3));
-  setup.bf->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
-  double maxDifference = 0, maxEntry = 0;
-  for (GlobalIndexType cellID : setup.mesh->getActiveCellIDsGlobal())
+  // matrices and load vectors agree with the Cholesky path to roundoff, with and without the constant-mode weight.
+  for (double constantModeRatio : {1.0, 1e-2})
   {
-    ElementTypePtr elemType = setup.mesh->getElementType(cellID);
-    const int trialCount = elemType->trialOrderPtr->totalDofs();
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(setup.mesh, cellID);
-    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(setup.mesh, cellID, true);
-    Camellia::FieldContainer<double> stiffnessFast(1, trialCount, trialCount), rhsFast(1, trialCount);
-    Camellia::FieldContainer<double> stiffnessCholesky(1, trialCount, trialCount), rhsCholesky(1, trialCount);
-    const long long invertedBefore = setup.ip->inverseCellCount();
-    setup.ip->setUseFastInverse(true);
-    setup.bf->localStiffnessMatrixAndRHS(stiffnessFast, rhsFast, setup.ip, ipBasisCache, rhs, basisCache);
-    TEST_COMPARE(setup.ip->inverseCellCount(), >, invertedBefore);
-    setup.ip->setUseFastInverse(false);
-    setup.bf->localStiffnessMatrixAndRHS(stiffnessCholesky, rhsCholesky, setup.ip, ipBasisCache, rhs, basisCache);
-    for (int i=0; i<trialCount; i++)
+    SeparableSetup setup = separableSetup(false, {1,0,2,0}, constantModeRatio);
+    RHSPtr rhs = RHS::rhs();
+    rhs->addTerm(1.0 * setup.v + Function::xn(1) * setup.v->di(3));
+    setup.bf->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
+    double maxDifference = 0, maxEntry = 0;
+    for (GlobalIndexType cellID : setup.mesh->getActiveCellIDsGlobal())
     {
-      for (int j=0; j<trialCount; j++)
+      ElementTypePtr elemType = setup.mesh->getElementType(cellID);
+      const int trialCount = elemType->trialOrderPtr->totalDofs();
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(setup.mesh, cellID);
+      BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(setup.mesh, cellID, true);
+      Camellia::FieldContainer<double> stiffnessFast(1, trialCount, trialCount), rhsFast(1, trialCount);
+      Camellia::FieldContainer<double> stiffnessCholesky(1, trialCount, trialCount), rhsCholesky(1, trialCount);
+      const long long invertedBefore = setup.ip->inverseCellCount();
+      setup.ip->setUseFastInverse(true);
+      setup.bf->localStiffnessMatrixAndRHS(stiffnessFast, rhsFast, setup.ip, ipBasisCache, rhs, basisCache);
+      TEST_COMPARE(setup.ip->inverseCellCount(), >, invertedBefore);
+      setup.ip->setUseFastInverse(false);
+      setup.bf->localStiffnessMatrixAndRHS(stiffnessCholesky, rhsCholesky, setup.ip, ipBasisCache, rhs, basisCache);
+      for (int i=0; i<trialCount; i++)
       {
-        maxDifference = std::max(maxDifference, abs(stiffnessFast(0,i,j) - stiffnessCholesky(0,i,j)));
-        maxEntry = std::max(maxEntry, abs(stiffnessCholesky(0,i,j)));
+        for (int j=0; j<trialCount; j++)
+        {
+          maxDifference = std::max(maxDifference, abs(stiffnessFast(0,i,j) - stiffnessCholesky(0,i,j)));
+          maxEntry = std::max(maxEntry, abs(stiffnessCholesky(0,i,j)));
+        }
+        maxDifference = std::max(maxDifference, abs(rhsFast(0,i) - rhsCholesky(0,i)));
+        maxEntry = std::max(maxEntry, abs(rhsCholesky(0,i)));
       }
-      maxDifference = std::max(maxDifference, abs(rhsFast(0,i) - rhsCholesky(0,i)));
-      maxEntry = std::max(maxEntry, abs(rhsCholesky(0,i)));
     }
+    out << "constant-mode ratio " << constantModeRatio << ": max |fast - Cholesky| / max |entry| = " << maxDifference / maxEntry << endl;
+    // (the two paths differ by the forward error of the solves, up to cond(G) times roundoff)
+    TEST_COMPARE(maxDifference / maxEntry, <, 1e-8);
   }
-  out << "max |fast - Cholesky| / max |entry| = " << maxDifference / maxEntry << endl;
-  // (the two paths differ by the forward error of the solves, up to cond(G) times roundoff)
-  TEST_COMPARE(maxDifference / maxEntry, <, 1e-8);
 }
