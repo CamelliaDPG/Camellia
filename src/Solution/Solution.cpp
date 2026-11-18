@@ -3136,9 +3136,22 @@ void TSolution<Scalar>::computeErrorRepresentation()
 
     int numTestDofs = testOrdering->totalDofs();
 
+    Camellia::FieldContainer<double> errorRepresentation = _residualForCell[cellID];
+    if (!_ip->hasBCsImposed())
+    {
+      // an inner product whose Gram matrix has a cheap exact inverse (e.g. SeparableTensorIP on full tensor-product test
+      // bases) applies it directly, without forming or factoring the Gram matrix
+      errorRepresentation.resize(1, 1, numTestDofs);
+      if (_ip->applyInverseInnerProductMatrix(errorRepresentation, testOrdering, ipBasisCache))
+      {
+        errorRepresentation.resize(1,numTestDofs);
+        replaceMapEntry(_errorRepresentationForCell, cellID, errorRepresentation);
+        continue;
+      }
+    }
+
     Camellia::FieldContainer<Scalar> ipMatrix(1,numTestDofs,numTestDofs);
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
-    Camellia::FieldContainer<double> errorRepresentation = _residualForCell[cellID];
     errorRepresentation.resize(numTestDofs, 1);
     
     // strip cell dimension:

@@ -953,7 +953,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const std::vector<double> &L2WeightGraphAccelerationBounds,
                                                               const bool separableGraphTestNorm = false,
                                                               const int numSpatialRefinements = 0,
-                                                              const double L2WeightGraphConstantModeRatio = 1.0)
+                                                              const double L2WeightGraphConstantModeRatio = 1.0,
+                                                              const bool fullTensorTestBasis = false)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -1012,7 +1013,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  L2WeightGraphDirectionScales,
                                                                  L2WeightGraphTransportScale,
                                                                  L2WeightGraphAccelerationBounds, separableGraphTestNorm,
-                                                                 L2WeightGraphConstantModeRatio));
+                                                                 L2WeightGraphConstantModeRatio,
+                                                                 fullTensorTestBasis));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -1302,6 +1304,10 @@ int main(int argc, char *argv[])
 
     cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
     cmdp.setOption("useSerendipityBasis", "useFullTensorBasis", &useSerendipityBasis);
+    bool useFullTensorTestBasis = false;
+    cmdp.setOption("useFullTensorTestBasis", "useTrialFamilyTestBasis", &useFullTensorTestBasis,
+                   "Full tensor-product test space Q_k, also when the trial basis is serendipity.  With --separableGraphTestNorm "
+                   "the test Gram matrices are then inverted exactly by fast diagonalization, with nothing formed or factored.");
 
     int delta_k = 2;
     int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
@@ -1580,7 +1586,8 @@ int main(int argc, char *argv[])
                         {"p", std::to_string(H1Order)},
                         {"dp", std::to_string(delta_k)},
                         {"num_time_slabs", std::to_string(numTimeSlabs)},
-                        {"serendipity", useSerendipityBasis ? "1" : "0"}});
+                        {"serendipity", useSerendipityBasis ? "1" : "0"},
+                        {"full_tensor_test", useFullTensorTestBasis ? "1" : "0"}});
     
     using TestIP = RelativisticVlasovSpaceTimeFormulation::TestSpaceInnerProduct;
     const TestIP testIP = useL2TestSpace ? TestIP::L2TestSpaceInnerProduct : TestIP::GraphTestSpaceInnerProduct;
@@ -1747,7 +1754,7 @@ int main(int argc, char *argv[])
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
                                      L2WeightGraphMeshScale, L2WeightGraphDirectionScales,
                                      L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds, separableGraphTestNorm,
-                                     numSpatialRefinements, L2WeightGraphConstantModeRatio);
+                                     numSpatialRefinements, L2WeightGraphConstantModeRatio, useFullTensorTestBasis);
     if (useBoxMesh && (boxVelocityRefinements > 0))
     {
       // anisotropic refinement of the first slab: bisect in u_x only, within a band of u_x that narrows each round.
@@ -1961,6 +1968,7 @@ int main(int argc, char *argv[])
     if (useSerendipityBasis)
     {
       suffix << "_serendipity";
+      if (useFullTensorTestBasis) suffix << "_fullTensorTest";
     }
     else
     {

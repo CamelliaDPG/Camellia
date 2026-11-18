@@ -143,13 +143,27 @@ const SeparableTensorIP::TensorDecomposition &SeparableTensorIP::decomposition(B
       remainder /= d.componentCardinality[k];
     }
   }
+  int fullCardinality = 1;
+  for (int k=0; k<spaceDim; k++) fullCardinality *= d.componentCardinality[k];
+  d.tensorIndex = fullOrdinals; // the composite ordinal of Basis_TensorBasis is the first-direction-fastest index
+  d.fullTensor = (int(fullOrdinals.size()) == fullCardinality);
+  if (d.fullTensor)
+  {
+    try
+    {
+      d.inverse = std::make_shared<SeparableGramInverse>(d.mass, d.derivative);
+    }
+    catch (const std::invalid_argument &)
+    {
+      d.inverse = nullptr; // (a singular one-dimensional mass matrix; not expected)
+    }
+  }
   d.valid = true;
   return d;
 }
 
-bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache)
+bool SeparableTensorIP::separableCellData(DofOrderingPtr dofOrdering, BasisCachePtr basisCache, SeparableCellData &data)
 {
-  if (!_useTensorAssembly) return false;
   if (!getBoundaryTerms().empty() || !getZeroMeanTerms().empty() || hasBCsImposed()) return false;
   if (basisCache->isSideCache()) return false;
   const std::set<int> &varIDs = dofOrdering->getVarIDs();
@@ -158,8 +172,8 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
   const int spaceDim = basisCache->getSpaceDim();
 
   // the terms: c_t * v or c_t * d_k v
-  struct Term { FunctionPtr coefficient; int direction; }; // direction -1: the value
-  std::vector<Term> terms;
+  std::vector<FunctionPtr> coefficients;
+  std::vector<int> directions; // -1: the value
   for (const auto &lt : getLinearTerms())
   {
     const auto &summands = lt->summands();
@@ -171,14 +185,14 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
     if (op == OP_VALUE) direction = -1;
     else if ((op >= OP_DI1) && (op < OP_DI1 + spaceDim)) direction = op - OP_DI1;
     else return false;
-    terms.push_back({summands[0].first, direction});
+    coefficients.push_back(summands[0].first);
+    directions.push_back(direction);
   }
-  if (terms.empty()) return false;
+  if (coefficients.empty()) return false;
 
   BasisPtr basis = dofOrdering->getBasis(varID);
   const TensorDecomposition &d = decomposition(basis, spaceDim);
   if (!d.valid) return false;
-  const int basisCardinality = basis->getCardinality();
 
   // axis-aligned boxes: diagonal, positive, constant Jacobian
   const Camellia::FieldContainer<double> &jacobian = basisCache->getJacobian(); // (C,P,D,D)
@@ -200,11 +214,11 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
         }
   }
   // the coefficients, constant on each cell
-  std::vector<std::vector<double>> coefficientSquared(terms.size(), std::vector<double>(numCells));
-  for (size_t t=0; t<terms.size(); t++)
+  std::vector<std::vector<double>> coefficientSquared(coefficients.size(), std::vector<double>(numCells));
+  for (size_t t=0; t<coefficients.size(); t++)
   {
     Camellia::FieldContainer<double> values(numCells, numPoints);
-    terms[t].coefficient->values(values, basisCache);
+    coefficients[t]->values(values, basisCache);
     for (int c=0; c<numCells; c++)
     {
       const double value = values(c,0);
@@ -212,23 +226,40 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
       coefficientSquared[t][c] = value * value;
     }
   }
+  data.varID = varID;
+  data.decomposition = &d;
+  data.directions = directions;
+  data.halfWidths = std::move(halfWidths);
+  data.coefficientSquared = std::move(coefficientSquared);
+  data.numCells = numCells;
+  return true;
+}
+
+bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache)
+{
+  if (!_useTensorAssembly) return false;
+  SeparableCellData data;
+  if (!separableCellData(dofOrdering, basisCache, data)) return false;
+  const TensorDecomposition &d = *data.decomposition;
+  const int varID = data.varID, spaceDim = int(d.componentCardinality.size());
+  const int basisCardinality = int(d.componentOrdinals.size());
 
   // G(a,b) = sum_t c_t^2 prod_k F_{t,k}(a_k, b_k)
   std::vector<int> dofIndex(basisCardinality);
   for (int a=0; a<basisCardinality; a++) dofIndex[a] = dofOrdering->getDofIndex(varID, a);
   innerProduct.initialize(0.0);
   std::vector<std::vector<double>> factor(spaceDim); // per direction: the scaled mass matrix, then the scaled derivative matrix
-  for (int c=0; c<numCells; c++)
+  for (int c=0; c<data.numCells; c++)
   {
-    for (size_t t=0; t<terms.size(); t++)
+    for (size_t t=0; t<data.directions.size(); t++)
     {
-      const double coefficient = coefficientSquared[t][c];
+      const double coefficient = data.coefficientSquared[t][c];
       if (coefficient == 0) continue;
       for (int k=0; k<spaceDim; k++)
       {
         const int n = d.componentCardinality[k];
-        const bool differentiated = (terms[t].direction == k);
-        const double scale = differentiated ? 1.0 / halfWidths[c][k] : halfWidths[c][k];
+        const bool differentiated = (data.directions[t] == k);
+        const double scale = differentiated ? 1.0 / data.halfWidths[c][k] : data.halfWidths[c][k];
         const std::vector<double> &reference = differentiated ? d.derivative[k] : d.mass[k];
         factor[k].resize(n * n);
         for (int i=0; i<n*n; i++) factor[k][i] = scale * reference[i];
@@ -249,7 +280,59 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
       for (int b=a+1; b<basisCardinality; b++)
         innerProduct(c, dofIndex[b], dofIndex[a]) = innerProduct(c, dofIndex[a], dofIndex[b]);
   }
-  _tensorCellCount += numCells;
+  _tensorCellCount += data.numCells;
+  return true;
+}
+
+bool SeparableTensorIP::applyInverseInnerProductMatrix(Camellia::FieldContainer<double> &values,
+                                                       Teuchos::RCP<DofOrdering> dofOrdering,
+                                                       Teuchos::RCP<BasisCache> basisCache)
+{
+  if (!_useFastInverse) return false;
+  SeparableCellData data;
+  if (!separableCellData(dofOrdering, basisCache, data)) return false;
+  const TensorDecomposition &d = *data.decomposition;
+  if (!d.fullTensor || (d.inverse == nullptr)) return false;
+  const SeparableGramInverse &inverse = *d.inverse;
+  const int spaceDim = inverse.directionCount(), N = inverse.size();
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 3, std::invalid_argument, "values must have shape (C, R, N)");
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != data.numCells, std::invalid_argument, "values must have one entry per cell of basisCache");
+  TEUCHOS_TEST_FOR_EXCEPTION((values.dimension(2) != dofOrdering->totalDofs()) || (dofOrdering->totalDofs() != N), std::invalid_argument,
+                             "the last dimension of values must be the number of test dofs");
+
+  // G = J ( a M^{(x)} + sum_k b_k K_(k) ) on the reference factors: a mass factor is scaled by h_k/2, a derivative factor
+  // by 2/h_k, so with J = prod_k h_k/2, a = sum of value terms' c_t^2 and b_k = sum of d_k terms' c_t^2 / (h_k/2)^2
+  std::vector<SeparableGramInverse::Scales> scales(data.numCells);
+  for (int c=0; c<data.numCells; c++)
+  {
+    SeparableGramInverse::Scales &s = scales[c];
+    s.jacobian = 1.0;
+    for (int k=0; k<spaceDim; k++) s.jacobian *= data.halfWidths[c][k];
+    s.valueWeight = 0.0;
+    s.derivativeWeights.assign(spaceDim, 0.0);
+    for (size_t t=0; t<data.directions.size(); t++)
+    {
+      const int k = data.directions[t];
+      if (k < 0) s.valueWeight += data.coefficientSquared[t][c];
+      else s.derivativeWeights[k] += data.coefficientSquared[t][c] / (data.halfWidths[c][k] * data.halfWidths[c][k]);
+    }
+    if (!(s.valueWeight > 0)) return false; // G singular on the constants (or not positive definite)
+  }
+
+  // gather each row into the tensor ordering, apply, scatter back
+  const int rowCount = values.dimension(1);
+  std::vector<int> dofIndex(N);
+  for (int a=0; a<N; a++) dofIndex[a] = dofOrdering->getDofIndex(data.varID, a);
+  std::vector<double> rows(size_t(rowCount) * N);
+  for (int c=0; c<data.numCells; c++)
+  {
+    for (int r=0; r<rowCount; r++)
+      for (int a=0; a<N; a++) rows[size_t(r) * N + d.tensorIndex[a]] = values(c, r, dofIndex[a]);
+    inverse.applyInverse(scales[c], rows.data(), rowCount);
+    for (int r=0; r<rowCount; r++)
+      for (int a=0; a<N; a++) values(c, r, dofIndex[a]) = rows[size_t(r) * N + d.tensorIndex[a]];
+  }
+  _inverseCellCount += data.numCells;
   return true;
 }
 

@@ -76,8 +76,14 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment)
       cout << "RieszRep: LinearTerm values for cell " << cellID << ":\n " << rhsValues << endl;
     }
 
+    // an inner product whose Gram matrix has a cheap exact inverse (e.g. SeparableTensorIP on full tensor-product test
+    // bases) applies it directly, without forming or factoring the Gram matrix
+    Camellia::FieldContainer<Scalar> fastRieszRepDofs(1,1,numTestDofs);
+    for (int i=0; i<numTestDofs; i++) fastRieszRepDofs(0,0,i) = rhsValues(0,i);
+    const bool usedFastInverse = !_ip->hasBCsImposed() && _ip->applyInverseInnerProductMatrix(fastRieszRepDofs, testOrderingPtr, basisCache);
+
     Camellia::FieldContainer<Scalar> ipMatrix(1,numTestDofs,numTestDofs);
-    _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
+    if (!usedFastInverse) _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
 
     bool printOutRiesz = false;
     if (printOutRiesz)
@@ -102,7 +108,15 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment)
       }
     }
     
-    int success = SerialDenseWrapper::solveSPDSystemLAPACKCholesky(rieszRepDofs, ipMatrix);// solveSystemUsingQR(rieszRepDofs, ipMatrix, rhsValues);
+    int success = 0;
+    if (usedFastInverse)
+    {
+      for (int i=0; i<numTestDofs; i++) rieszRepDofs(i,0) = fastRieszRepDofs(0,0,i);
+    }
+    else
+    {
+      success = SerialDenseWrapper::solveSPDSystemLAPACKCholesky(rieszRepDofs, ipMatrix);// solveSystemUsingQR(rieszRepDofs, ipMatrix, rhsValues);
+    }
 
     if (success != 0)
     {

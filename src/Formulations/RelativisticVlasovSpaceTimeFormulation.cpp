@@ -237,7 +237,8 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const double testSpaceL2WeightTransportScale,
                                                                                const vector<double> &testSpaceL2WeightAccelerationBounds,
                                                                                const bool testSpaceSeparableGraphNorm,
-                                                                               const double testSpaceL2ConstantModeRatio)
+                                                                               const double testSpaceL2ConstantModeRatio,
+                                                                               const bool fullTensorTestBasis)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
@@ -248,6 +249,7 @@ _testSpaceL2WeightTransportScale(testSpaceL2WeightTransportScale),
 _testSpaceL2WeightAccelerationBounds(testSpaceL2WeightAccelerationBounds),
 _testSpaceSeparableGraphNorm(testSpaceSeparableGraphNorm),
 _testSpaceL2ConstantModeRatio(testSpaceL2ConstantModeRatio),
+_fullTensorTestBasis(fullTensorTestBasis),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocityVertices_x,
@@ -428,7 +430,10 @@ VarFactoryPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovVarFactory(
   }
   
   vlasovVF->setTrialBasisFamily(basisFamily);
-  vlasovVF->setTestBasisFamily(basisFamily);
+  // A full tensor-product test space (with, e.g., serendipity trial spaces): the larger test space can only help stability,
+  // and with the separable graph norm its Gram matrices are Kronecker sums, inverted exactly by fast diagonalization
+  // (SeparableTensorIP::applyInverseInnerProductMatrix), so that the test space costs no stored or factored matrices.
+  vlasovVF->setTestBasisFamily(_fullTensorTestBasis ? BasisFamily::basisFamily(BASIS_FAMILY_HIERARCHICAL) : basisFamily);
   
   return vlasovVF;
 }
@@ -540,7 +545,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               _testSpaceL2WeightTransportScale,
                                                                               _testSpaceL2WeightAccelerationBounds,
                                                                               _testSpaceSeparableGraphNorm,
-                                                                              _testSpaceL2ConstantModeRatio));
+                                                                              _testSpaceL2ConstantModeRatio,
+                                                                              _fullTensorTestBasis));
   
   configureNextSlab(nextSlabForm);
   

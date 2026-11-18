@@ -1355,14 +1355,56 @@ namespace Camellia
         localStiffnessDim[0] = localStiffness.dimension(1);
         localStiffnessDim[1] = localStiffness.dimension(2);
         
-        Camellia::FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
         DofOrderingPtr testOrder = elemType->testOrderPtr;
+        Camellia::FieldContainer<Scalar> rhsEnriched(numCells,numTestDofs);
+        rhs->integrateAgainstStandardBasis(rhsEnriched,testOrder,basisCache);
+        
+        // A test norm whose Gram matrices have a cheap exact inverse (e.g. SeparableTensorIP: Kronecker-sum Gram matrices on
+        // box cells with full tensor-product test bases, inverted by fast diagonalization) is applied directly, without
+        // forming or factoring the Gram matrices: T = G^{-1} B, K = B^T T, rhs = B^T G^{-1} l.
+        bool usedFastInverse = false;
+        if (!ip->hasBCsImposed())
+        {
+          timer.ResetStartTime();
+          Camellia::FieldContainer<Scalar> optimalTestWeights = stiffnessEnriched; // (C, trial, test): the rows are B's columns
+          Camellia::FieldContainer<Scalar> inverseAppliedToRHS(numCells, 1, numTestDofs);
+          for (int cellIndex=0; cellIndex < numCells; cellIndex++)
+            for (int i=0; i<numTestDofs; i++) inverseAppliedToRHS(cellIndex,0,i) = rhsEnriched(cellIndex,i);
+          if (ip->applyInverseInnerProductMatrix(optimalTestWeights, testOrder, ipBasisCache))
+          {
+            usedFastInverse = true;
+            const bool appliedToRHS = ip->applyInverseInnerProductMatrix(inverseAppliedToRHS, testOrder, ipBasisCache);
+            TEUCHOS_TEST_FOR_EXCEPTION(!appliedToRHS, std::logic_error, "the inner product inverted its Gram matrix for B but not for the RHS");
+            timeG = 0;
+            timeT = timer.ElapsedTime();
+            timer.ResetStartTime();
+            Teuchos::BLAS<int, Scalar> blas;
+            for (int cellIndex=0; cellIndex < numCells; cellIndex++)
+            {
+              // column-major views: B^T is (test x trial) with leading dimension numTestDofs
+              const Scalar *B = &stiffnessEnriched(cellIndex,0,0);
+              const Scalar *T = &optimalTestWeights(cellIndex,0,0);
+              // K = B^T G^{-1} B (symmetric, so the storage order does not matter)
+              blas.GEMM(Teuchos::TRANS, Teuchos::NO_TRANS, numTrialDofs, numTrialDofs, numTestDofs, Scalar(1.0), B, numTestDofs,
+                        T, numTestDofs, Scalar(0.0), &localStiffness(cellIndex,0,0), numTrialDofs);
+              // rhs = B^T (G^{-1} l)
+              blas.GEMV(Teuchos::TRANS, numTestDofs, numTrialDofs, Scalar(1.0), B, numTestDofs, &inverseAppliedToRHS(cellIndex,0,0), 1,
+                        Scalar(0.0), &rhsVector(cellIndex,0), 1);
+            }
+            timeK = timer.ElapsedTime();
+            if (_optimalTestTimingCallback)
+            {
+              _optimalTestTimingCallback(numCells,timeG,timeB,timeT,timeK,elemType);
+            }
+          }
+        }
+        
+        if (!usedFastInverse)
+        {
+        Camellia::FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
         timer.ResetStartTime();
         ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
         timeG = timer.ElapsedTime();
-        
-        Camellia::FieldContainer<Scalar> rhsEnriched(numCells,numTestDofs);
-        rhs->integrateAgainstStandardBasis(rhsEnriched,testOrder,basisCache);
         
         Teuchos::Array<int> localRHSEnrichedDim(2);
         localRHSEnrichedDim[0] = rhsEnriched.dimension(1);
@@ -1414,6 +1456,7 @@ namespace Camellia
         {
           _optimalTestTimingCallback(numCells,timeG,timeB,timeT,timeK,elemType);
         }
+        } // !usedFastInverse
       }
       else
       {
