@@ -2627,7 +2627,7 @@ int main(int argc, char *argv[])
         if (checkMatrixFreeOperator && matrixFreeCheckBeforeSolve && (timeSlabOrdinal == 0))
         {
           checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, rank);
-          return 0;
+          break; // stop after the check (and shut down normally)
         }
         auto timingSlabSolveStart = timing.now();
         form->solve();
