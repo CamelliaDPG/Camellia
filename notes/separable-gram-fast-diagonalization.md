@@ -203,13 +203,48 @@ GMGOperator's cell-block additive Schwarz, the same p = 1 coarse level, toleranc
 - Each matrix-free two-level iteration costs about 2 x degree + 1 operator applications.  At 512 cells, Chebyshev-4
   with element Schwarz took 29 s (setup 5 s) against 32 s for 183 trace-block Jacobi iterations.
 
+## The full hierarchy, and what it says about production GMG (measured 11-19)
+
+The matrix-free fine level now sits on top of the conventional GMG (`--matrixFreeCoarseGMG`):
+- the p = 2 fine level, matrix-free;
+- the fine mesh at p = 1, with its exact Galerkin operator computed matrix-free;
+- below that, GMGSolver on the p = 1 h-hierarchy (`numUniformRefinements`), down to the base mesh.
+
+The base mesh is 2 1 2 2 cells, with uniform refinements in all directions (t included).  Chebyshev degree 4:
+
+| refinements | cells | dofs  | MF element Schwarz | MF trace-block | production GMG             |
+|-------------|-------|-------|--------------------|----------------|----------------------------|
+| 1           | 128   | 5344  | 9 (kappa 1.5)      | 19 (4.3)       | 47 (solve 0.45 s)          |
+| 2           | 2048  | 76544 | 20 (4.9)           | 39 (16.9)      | 88 (solve 14.5 s)          |
+
+- Iterations grow about 2x per refinement for all three, production included.
+- At p = 2 the matrix-free wall time is far worse: 176 s solve plus 101 s setup at 2048 cells, against 14.5 s.  Each
+  iteration costs about 9 fine applications, about 1 s each, and the assembled p = 2 matrices are cheap.  The setup
+  is prolongation 29 s, Schwarz blocks 25 s, coarse GMG 21 s, lambda_max 14 s, coarse operator 12 s.  The decisive
+  comparison is at p = 4.
+
+Production GMG's smoother (`CAMELLIA_ADDITIVE_SCHWARZ`, overlap 0) has the same blocks as the element Schwarz here.  It
+is applied as damped Richardson: one application, weight 1 / lambda_max(M A).  Repeating it (`--gmgSmootherApplications`):
+
+| sweeps | 4 1 4 4 | 8 1 8 8 |
+|--------|---------|---------|
+| 1      | 27 its, 0.063 s | 40 its, 1.73 s |
+| 2      | 23 its, 0.095 s | 33 its, 2.16 s |
+| 4      | 18 its, 0.150 s | 26 its, 3.07 s |
+
+The same four Schwarz applications combined by Chebyshev take 7 and 13 iterations.  The polynomial, not the blocks,
+makes the difference.  Suggestion for production: a Chebyshev recurrence in `GMGOperator::ApplySmoother` when the
+sweep count exceeds 1, with a Lanczos lambda_max, since an underestimate makes high degrees indefinite.  On one core at
+p = 2 that is roughly break-even in time.  The payoff should come where per-iteration costs outside smoothing
+dominate: MPI reductions, coarse solves and deep hierarchies.
+
 ## Next steps
 
-1. **The full hierarchy, as production does it:** halve p on the fine mesh (4 -> 2 -> 1), then h-coarsen to the base
-   mesh, one grid per h-level.  The matrix-free Galerkin construction serves between p-levels; the p = 1 levels can be
-   assembled and handed to the existing GMG.  Build the refinement study with numUniformRefinements on one base mesh,
-   so that h-levels exist.
-2. **A cheaper strong smoother for p = 4:** element Schwarz with inexact (matrix-free) block solves, or with blocks
-   that keep fields with their own element's traces but at lower order.
-3. **Solve integration:** a matrix-free option in `VlasovSpaceTimeFormulation::solve()`, validated slab by slab.
-4. **Static condensation, performance** (separable coefficient sampling, batching cells), **MPI**.
+1. **p = 4 against production** on the same uniformly refined meshes: wall time and memory, with the direct
+   p = 4 -> p = 1 jump first.  Then rediscretized intermediate p-levels (`BoxCellDPGOperator` at p = 2) if the
+   iterations call for them; a Galerkin intermediate level would cost a fine application each time it is applied.
+2. **A cheaper strong smoother:** element Schwarz stores about n_K^2 per element.  Try inexact block solves with the
+   matrix-free element action.
+3. **Setup cost:** the prolongation (GMGOperator) and the Schwarz blocks dominate.
+4. **Solve integration** in `VlasovSpaceTimeFormulation::solve()`; **static condensation**; **MPI**.
+5. **For production GMG:** an opt-in Chebyshev-accelerated Schwarz smoother, to test on MPI runs.
