@@ -10,7 +10,9 @@ measurements"). Notation is the PDF's:
 
 **Headline.** Used as the smoother inside the existing GMG h-hierarchy, the transport sweep gives h-independent
 convergence under uniform refinement: 7 iterations and kappa about 1.10 at both 128 and 2,048 cells. Element Schwarz in
-the same place gives 9 -> 20 iterations, and production GMG gives 47 -> 88.
+the same place gives 9 -> 20 iterations, and production GMG gives 47 -> 88. **Caveat (Section 3a):** on the deeply
+graded cathode mesh, with cell Courant numbers up to about 15,000, the sweep smoother is much worse than element
+Schwarz (107 against 17 iterations).
 
 ## Setting for every number below
 
@@ -104,6 +106,28 @@ exposes the t-face modes behind it. So the characteristic faces are not what lim
 The option stays in the code (`upwindCellOrder(..., characteristicFace, tolerance)` and
 `transportSweep(..., characteristicFace, multiplicative)`), but it is not used by default.
 
+## 3a. On the high-Courant-number cathode mesh the sweep smoother is worse (added after the first version)
+
+Two-level runs with an exact p = 1 coarse solve, Chebyshev degree 4, on the 16 graded x-element mesh (512 cells,
+nu up to about 15,000):
+
+| Smoother | Iterations (kappa) | Solve |
+|---|---|---|
+| Transport sweep | 107 (196) | 327 s |
+| Element Schwarz | **17 (11.1)** | 45 s |
+
+There, P S has spectrum [1, about 6,640]. Chebyshev with eigenvalue ratio 20 smooths only [332, 6,640], so everything
+in [1, 332] is left to the coarse space, which cannot handle it. On that mesh the sweep is a poor smoother and element
+Schwarz is clearly better.
+
+Section 1's h-independence therefore holds on meshes with moderate cell Courant numbers (up to about 15 here). It does
+not hold on the deeply graded cathode mesh.
+
+What to try next:
+- a hybrid smoother: the sweep where nu is moderate, element (or column) blocks in the high-nu cells;
+- better shaped time cells near the cathode;
+- a Chebyshev interval adapted to the spectrum of P S.
+
 ## 4. Relevance to the tensor-train side (my reading)
 
 - **Structure.** The useful structure is causal: inflow-to-outflow transport, in upwind order. The time direction is
@@ -111,15 +135,15 @@ The option stays in the code (`upwindCellOrder(..., characteristicFace, toleranc
 - **What a TT preconditioner should capture.** Something that resolves transport along characteristics plus a coarse
   correction. A purely local or additive smoother did not scale here.
 - **Courant number in the discretization.** Cells with |v_x| Δt / h_x >> 1 (thin cells at the cathode against long time
-  cells) are where the sweep degrades. This is a property of the DPG discretization on those meshes, not of the matrix-free
+  cells) are where the sweep degrades, alone and as a smoother. This is a property of the DPG discretization on those meshes, not of the matrix-free
   implementation, so it presumably affects any solver.
 - **Not yet tested:** nonzero fields. Those turn the u-faces into genuine inflow/outflow faces, and the v × B rotation
   creates cyclic dependencies between cells of one time layer, which the sweep lags. That is the first thing to check.
 
 ## Status and next runs
 
-Running now: two-level (exact p = 1 coarse) on the 16 graded x-element mesh, with the sweep against element Schwarz as
-the smoother. This shows whether the coarse correction also absorbs the high-nu cathode cells.
+The two-level run on the 16 graded x-element mesh is done (Section 3a): the coarse correction does not absorb the
+high-nu cathode cells when the sweep is the smoother.
 
 Next:
 1. The same checks on a later slab with nonzero fields (`--matrixFreeCheckSlab=N`).
