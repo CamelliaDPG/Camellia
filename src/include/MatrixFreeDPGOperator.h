@@ -24,6 +24,8 @@
 
 namespace Camellia
 {
+  class ElementMultiplicativeSchwarz;
+
   /**
    \brief y = S x, matrix-free, on the mesh's global dofs (the map Solution::getPartitionMap() gives, without
    condensation).
@@ -107,7 +109,57 @@ namespace Camellia
      */
     Teuchos::RCP<TOperator<double>> elementAdditiveSchwarz() const;
 
+    /**
+     \brief The same element blocks as elementAdditiveSchwarz(), applied multiplicatively (block Gauss-Seidel with
+     overlapping blocks), symmetrized: a forward sweep over the cells in a given order, then a backward sweep.  See
+     ElementMultiplicativeSchwarz.  The residual updates use each cell's dense S_K (stored, n_K^2 per cell, from the
+     shared-eigenbasis coordinates), so storage is about twice elementAdditiveSchwarz()'s.  The initial order is the
+     cell order of cells(); set another with ElementMultiplicativeSchwarz::setOrder().  One rank.
+     */
+    //! With fluxOwner (from upwindCellOrder()), each cell's block is instead its fields and the fluxes it owns (its
+    //! outflow faces): non-overlapping blocks, the block analogue of a transport sweep.
+    Teuchos::RCP<ElementMultiplicativeSchwarz> elementMultiplicativeSchwarz(const std::vector<int> *fluxOwner = nullptr) const;
+
+    /**
+     \brief An upwind ordering of the cells (indices into cells()), for ultraweak transport forms -(beta u, grad v) + <t, v>.
+
+     Each pair of cells sharing a face is oriented by the sign of beta . n on the face, estimated as the sum of the two
+     cells' averages of beta_k (BoxCellDPGOperator::testDerivativeCoefficientAverages()), k the face's normal direction;
+     the cells are then topologically sorted (Kahn).  Where the face graph has cycles, the remaining cell with the fewest
+     unvisited upwind neighbors is taken next, which lags its remaining in-edges; cyclesBroken (if given) counts those
+     choices and laggedFaces the faces lagged.  Neighbors are found through shared flux dofs.
+     */
+    //! fluxOwner (if given): [map lid] the cell (index into cells()) owning each flux dof, the upwind one of the two
+    //! cells sharing its face (the only cell on a boundary face); -1 for field dofs.
+    std::vector<int> upwindCellOrder(int *cyclesBroken = nullptr, int *laggedFaces = nullptr, std::vector<int> *fluxOwner = nullptr) const;
+
+    /**
+     \brief The transport-sweep preconditioner P = R^{-1} W^{-1} R^{-T} (notes/static-condensation-trace-structure.tex,
+     uncondensed form).
+
+     Each cell K owns its field dofs and the flux dofs fluxOwner assigns it (its outflow faces); its other flux dofs are
+     its inflow, owned by upwind cells.  With S_K the cell's local DPG matrix split into owned (u) and inflow (i) parts,
+     T_K = -S_uu^{-1} S_ui (the local DPG solve from inflow data) and W = diag(S_uu,K), the global operator is exactly
+     S = R^T W R + Q with (R x)_K = x_K - T_K x_{i,K} and Q >= 0; P is applied by a backward sweep (R^T), the cell solves,
+     and a forward sweep (R).  order must be upwind (upwindCellOrder()); in-edges against it (lagged faces in a cycle)
+     are dropped from R in both sweeps, which keeps P symmetric positive definite.  Stores per cell the Cholesky factor
+     of S_uu and T_K.  One rank.
+     */
+    Teuchos::RCP<TOperator<double>> transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner) const;
+
+    //! the rank's cells, in the order the operator visits them
+    const std::vector<GlobalIndexType> &cells() const { return _cells; }
+
   private:
+    //! the element blocks: for each cell (in cells() order), its non-Dirichlet owned dofs (local indices in the map) and
+    //! the lower Cholesky factor of A_K = R_K S R_K^T (column-major); and, if cellDofs is given, for each cell its local
+    //! trial dofs' (local trial dof, map lid, coefficient) triples, Dirichlet dofs excluded
+    struct CellDof { int local; TMap::local_ordinal_type lid; double coefficient; };
+    //! each cell's dense S_K (n x n, column-major, local trial dofs) and its (local, lid, coefficient) triples
+    void cellMatrices(std::vector<std::vector<CellDof>> &cellDofs, std::vector<std::vector<double>> &matrices) const;
+    void elementBlocks(std::vector<std::vector<TMap::local_ordinal_type>> &lids, std::vector<std::vector<double>> &factors,
+                       std::vector<std::vector<CellDof>> *cellDofs, const std::vector<int> *fluxOwner = nullptr) const;
+
     MeshPtr _mesh;
     Teuchos::RCP<BoxCellDPGOperator> _local;
     TMapConstPtr _map, _overlapMap;
@@ -119,6 +171,52 @@ namespace Camellia
     //! accumulate sum_K P_K^T y_K, given the local vectors computed by cellAction, into Y (owned map)
     template <typename CellAction>
     void assemble(const MV *X, MV &Y, CellAction cellAction) const;
+  };
+
+  /**
+   \brief Symmetric multiplicative Schwarz (overlapping block Gauss-Seidel) with element blocks, as a preconditioner:
+   Y = beta Y + alpha M^{-1} X, where M^{-1} X is the result of a forward sweep over the blocks in order() and a backward
+   sweep, from a zero initial guess, on S z = X.  Each block correction z_K += A_K^{-1} R_K r is followed by the residual
+   update r -= S R_K^T delta, computed as sum over the cells K' sharing a dof with the block of P_K'^T S_K' P_K' R_K^T delta
+   with the stored dense S_K'.  With exact block solves the symmetrized sweep is symmetric positive definite.  Dirichlet
+   dofs (identity rows and columns) are copied.  setAdditive(true) applies the same blocks additively instead (then
+   identical to MatrixFreeDPGOperator::elementAdditiveSchwarz()).
+   */
+  class ElementMultiplicativeSchwarz : public TOperator<double>
+  {
+  public:
+    using MV = TVector<double>;
+    using LO = TMap::local_ordinal_type;
+    struct CellMatrix
+    {
+      std::vector<int> local;          // [entry]: local trial dof
+      std::vector<LO> lid;             // [entry]: map lid
+      std::vector<double> coefficient; // [entry]
+      int n = 0;                       // local trial dofs
+      std::vector<double> S;           // n x n, column-major: S_K in the local trial dofs
+    };
+    ElementMultiplicativeSchwarz(TMapConstPtr map, std::vector<std::vector<LO>> blockLids, std::vector<std::vector<double>> blockFactors,
+                                 std::vector<CellMatrix> cells, std::vector<LO> dirichletLids);
+    Teuchos::RCP<const TMap> getDomainMap() const override { return _map; }
+    Teuchos::RCP<const TMap> getRangeMap() const override { return _map; }
+    bool hasTransposeApply() const override { return true; }
+    void apply(const MV &X, MV &Y, Teuchos::ETransp mode = Teuchos::NO_TRANS, double alpha = 1.0, double beta = 0.0) const override;
+    //! the block order of the forward sweep (a permutation of the block indices)
+    void setOrder(const std::vector<int> &order) { _order = order; }
+    const std::vector<int> &order() const { return _order; }
+    void setAdditive(bool additive) { _additive = additive; }
+    //! only the forward sweep (not symmetric: for experiments)
+    void setForwardOnly(bool forwardOnly) { _forwardOnly = forwardOnly; }
+  private:
+    TMapConstPtr _map;
+    std::vector<std::vector<LO>> _blockLids;
+    std::vector<std::vector<double>> _blockFactors;
+    std::vector<CellMatrix> _cells;
+    std::vector<std::vector<int>> _touching; // [block]: the cells sharing a dof with it
+    std::vector<LO> _dirichletLids;
+    std::vector<int> _order;
+    bool _additive = false, _forwardOnly = false;
+    void correct(int block, std::vector<double> &r, std::vector<double> &z, std::vector<double> &scratch) const;
   };
 
   //! the outcome of conjugateGradient(): iterations, relative residual |b - A x| / |b|, and the extreme eigenvalues of

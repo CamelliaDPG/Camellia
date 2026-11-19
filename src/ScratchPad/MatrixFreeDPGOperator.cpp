@@ -9,6 +9,7 @@
 #include "GlobalDofAssignment.h"
 #include "Mesh.h"
 
+#include "Teuchos_BLAS.hpp"
 #include "Teuchos_LAPACK.hpp"
 
 #include <algorithm>
@@ -514,14 +515,16 @@ TMatrixPtr<double> MatrixFreeDPGOperator::galerkinCoarseOperator(TMatrixPtr<doub
   return Sc;
 }
 
-Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::elementAdditiveSchwarz() const
+void MatrixFreeDPGOperator::elementBlocks(std::vector<std::vector<LO>> &lids, std::vector<std::vector<double>> &factors,
+                                          std::vector<std::vector<CellDof>> *cellDofs, const std::vector<int> *fluxOwner) const
 {
   GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
   std::set<LO> dirichlet(_dirichletLocal.begin(), _dirichletLocal.end());
   // pass 1: each cell's (non-Dirichlet, owned) dofs, as sparse local vectors
-  std::vector<std::vector<LO>> cellDofs(_cells.size());
+  std::vector<std::vector<LO>> blockDofs(_cells.size()), cellLids(_cells.size());
   std::vector<std::vector<std::vector<std::pair<int,double>>>> cellVectors(_cells.size());
   std::map<LO, std::vector<int>> blocksOfDof; // dof -> the cells (blocks) that contain it
+  if (cellDofs != nullptr) cellDofs->assign(_cells.size(), {});
   for (size_t k=0; k<_cells.size(); k++)
   {
     const GlobalIndexType cellID = _cells[k];
@@ -540,12 +543,16 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::elementAdditiveSchwarz() 
         const LO lid = _map->getLocalElement(static_cast<GO>(globalIndices[i]));
         if ((lid == Teuchos::OrdinalTraits<LO>::invalid()) || (dirichlet.count(lid) > 0)) continue;
         columns[lid].push_back({l, globalData[i]});
+        if (cellDofs != nullptr) (*cellDofs)[k].push_back({l, lid, globalData[i]});
       }
     }
     for (auto &entry : columns)
     {
-      cellDofs[k].push_back(entry.first);
+      cellLids[k].push_back(entry.first);
       cellVectors[k].push_back(std::move(entry.second));
+      const int owner = (fluxOwner == nullptr) ? -1 : (*fluxOwner)[entry.first];
+      if ((owner >= 0) && (owner != int(k))) continue; // a flux owned by another cell
+      blockDofs[k].push_back(entry.first);
       blocksOfDof[entry.first].push_back(int(k));
     }
   }
@@ -556,7 +563,7 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::elementAdditiveSchwarz() 
     std::vector<double> w;
     int stride = 0;
     _local->schurFactorCoordinates(_cells[k], cellVectors[k], w, stride);
-    const std::vector<LO> &dofs = cellDofs[k];
+    const std::vector<LO> &dofs = cellLids[k];
     for (size_t a=0; a<dofs.size(); a++)
     {
       const std::vector<int> &blocksA = blocksOfDof[dofs[a]];
@@ -571,19 +578,423 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::elementAdditiveSchwarz() 
     }
   }
   Teuchos::LAPACK<int,double> lapack;
+  lids = blockDofs;
+  factors.assign(_cells.size(), {});
+  for (size_t k=0; k<_cells.size(); k++)
+  {
+    const int n = int(blockDofs[k].size());
+    std::map<LO,int> position;
+    for (int i=0; i<n; i++) position[blockDofs[k][i]] = i;
+    factors[k].assign(size_t(n) * n, 0.0);
+    for (const auto &entry : blockEntries[k])
+      factors[k][size_t(position[entry.first.second]) * n + position[entry.first.first]] = entry.second;
+    blockEntries[k].clear();
+    int info = 0;
+    if (n > 0) lapack.POTRF('L', n, factors[k].data(), n, &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "elementBlocks: an element block is not positive definite");
+  }
+}
+
+Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::elementAdditiveSchwarz() const
+{
+  std::vector<std::vector<LO>> lids;
+  std::vector<std::vector<double>> factors;
+  elementBlocks(lids, factors, nullptr);
   std::vector<BlockJacobiOperator::Block> blocks(_cells.size());
   for (size_t k=0; k<_cells.size(); k++)
   {
-    const int n = int(cellDofs[k].size());
-    std::map<LO,int> position;
-    for (int i=0; i<n; i++) position[cellDofs[k][i]] = i;
-    blocks[k].lids = cellDofs[k];
-    blocks[k].factor.assign(size_t(n) * n, 0.0);
-    for (const auto &entry : blockEntries[k])
-      blocks[k].factor[size_t(position[entry.first.second]) * n + position[entry.first.first]] = entry.second;
-    int info = 0;
-    if (n > 0) lapack.POTRF('L', n, blocks[k].factor.data(), n, &info);
-    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "elementAdditiveSchwarz: an element block is not positive definite");
+    blocks[k].lids = std::move(lids[k]);
+    blocks[k].factor = std::move(factors[k]);
   }
   return Teuchos::rcp(new BlockJacobiOperator(_map, std::move(blocks)));
+}
+
+Teuchos::RCP<ElementMultiplicativeSchwarz> MatrixFreeDPGOperator::elementMultiplicativeSchwarz(const std::vector<int> *fluxOwner) const
+{
+  std::vector<std::vector<LO>> lids;
+  std::vector<std::vector<double>> factors;
+  std::vector<std::vector<CellDof>> cellDofs;
+  elementBlocks(lids, factors, &cellDofs, fluxOwner);
+  // each cell's dense S_K in its local trial dofs, from the shared-eigenbasis coordinates of the unit vectors
+  std::vector<ElementMultiplicativeSchwarz::CellMatrix> cells(_cells.size());
+  Teuchos::BLAS<int,double> blas;
+  for (size_t k=0; k<_cells.size(); k++)
+  {
+    ElementMultiplicativeSchwarz::CellMatrix &cell = cells[k];
+    const int n = _local->trialDofCount(_cells[k]);
+    cell.n = n;
+    for (const CellDof &dof : cellDofs[k])
+    {
+      cell.local.push_back(dof.local);
+      cell.lid.push_back(dof.lid);
+      cell.coefficient.push_back(dof.coefficient);
+    }
+    std::vector<std::vector<std::pair<int,double>>> units(n);
+    for (int l=0; l<n; l++) units[l] = {{l, 1.0}};
+    std::vector<double> w;
+    int stride = 0;
+    _local->schurFactorCoordinates(_cells[k], units, w, stride); // w: n rows of length stride
+    cell.S.assign(size_t(n) * n, 0.0);
+    // S = W W^T with W (n x stride, row-major) = W^T (stride x n, column-major): S = (W^T)^T (W^T)
+    blas.GEMM(Teuchos::TRANS, Teuchos::NO_TRANS, n, n, stride, 1.0, w.data(), stride, w.data(), stride, 0.0, cell.S.data(), n);
+  }
+  return Teuchos::rcp(new ElementMultiplicativeSchwarz(_map, std::move(lids), std::move(factors), std::move(cells), _dirichletLocal));
+}
+
+void MatrixFreeDPGOperator::cellMatrices(std::vector<std::vector<CellDof>> &cellDofs, std::vector<std::vector<double>> &matrices) const
+{
+  GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
+  std::set<LO> dirichlet(_dirichletLocal.begin(), _dirichletLocal.end());
+  Teuchos::BLAS<int,double> blas;
+  cellDofs.assign(_cells.size(), {});
+  matrices.assign(_cells.size(), {});
+  for (size_t k=0; k<_cells.size(); k++)
+  {
+    const GlobalIndexType cellID = _cells[k];
+    const int n = _local->trialDofCount(cellID);
+    Camellia::FieldContainer<double> unit(n), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<n; l++)
+    {
+      unit.initialize(0.0);
+      unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      for (int i=0; i<globalIndices.size(); i++)
+      {
+        if (globalData[i] == 0.0) continue;
+        const LO lid = _map->getLocalElement(static_cast<GO>(globalIndices[i]));
+        TEUCHOS_TEST_FOR_EXCEPTION(lid == Teuchos::OrdinalTraits<LO>::invalid(), std::invalid_argument, "cellMatrices: one rank only");
+        if (dirichlet.count(lid) > 0) continue;
+        cellDofs[k].push_back({l, lid, globalData[i]});
+      }
+    }
+    std::vector<std::vector<std::pair<int,double>>> units(n);
+    for (int l=0; l<n; l++) units[l] = {{l, 1.0}};
+    std::vector<double> w;
+    int stride = 0;
+    _local->schurFactorCoordinates(cellID, units, w, stride);
+    matrices[k].assign(size_t(n) * n, 0.0);
+    blas.GEMM(Teuchos::TRANS, Teuchos::NO_TRANS, n, n, stride, 1.0, w.data(), stride, w.data(), stride, 0.0, matrices[k].data(), n);
+  }
+}
+
+namespace
+{
+  //! P = R^{-1} W^{-1} R^{-T}: see MatrixFreeDPGOperator::transportSweep()
+  class TransportSweepOperator : public TOperator<double>
+  {
+  public:
+    using MV = TVector<double>;
+    struct Cell
+    {
+      std::vector<LO> owned, inflow;  // map lids
+      std::vector<double> factor;     // Cholesky factor (lower, column-major) of S_uu, in global coordinates
+      std::vector<double> transport;  // T (owned x inflow, column-major), in global coordinates
+    };
+    TransportSweepOperator(TMapConstPtr map, std::vector<Cell> cells, std::vector<int> order, std::vector<LO> dirichlet)
+    : _map(map), _cells(std::move(cells)), _order(std::move(order)), _dirichlet(std::move(dirichlet)) {}
+    Teuchos::RCP<const TMap> getDomainMap() const override { return _map; }
+    Teuchos::RCP<const TMap> getRangeMap() const override { return _map; }
+    bool hasTransposeApply() const override { return true; }
+    void apply(const MV &X, MV &Y, Teuchos::ETransp, double alpha, double beta) const override
+    {
+      Teuchos::BLAS<int,double> blas;
+      Teuchos::LAPACK<int,double> lapack;
+      const size_t localCount = _map->getLocalNumElements();
+      MV result(_map, X.getNumVectors());
+      auto xView = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+      auto resultView = result.getLocalViewHost(Tpetra::Access::ReadWrite);
+      std::vector<double> y(localCount), z(localCount), a, b;
+      for (size_t column=0; column<X.getNumVectors(); column++)
+      {
+        for (size_t i=0; i<localCount; i++) { y[i] = xView(i,column); z[i] = 0.0; }
+        // backward sweep, R^T y = r: y_K = r_K + sum over downwind K' of (T_K'^T y_K')|_K
+        for (auto it = _order.rbegin(); it != _order.rend(); ++it)
+        {
+          const Cell &cell = _cells[*it];
+          const int nu = int(cell.owned.size()), ni = int(cell.inflow.size());
+          if ((nu == 0) || (ni == 0)) continue;
+          a.resize(nu); b.assign(ni, 0.0);
+          for (int i=0; i<nu; i++) a[i] = y[cell.owned[i]];
+          blas.GEMV(Teuchos::TRANS, nu, ni, 1.0, cell.transport.data(), nu, a.data(), 1, 0.0, b.data(), 1);
+          for (int i=0; i<ni; i++) if (_lagged.empty() || !_lagged[*it][i]) y[cell.inflow[i]] += b[i];
+        }
+        // cell solves z_K = S_uu^{-1} y_K, then the forward sweep x_K = z_K + T_K x_{i,K}
+        for (int k : _order)
+        {
+          const Cell &cell = _cells[k];
+          const int nu = int(cell.owned.size()), ni = int(cell.inflow.size());
+          if (nu == 0) continue;
+          a.resize(nu);
+          for (int i=0; i<nu; i++) a[i] = y[cell.owned[i]];
+          int info = 0;
+          lapack.POTRS('L', nu, 1, cell.factor.data(), nu, a.data(), nu, &info);
+          if (ni > 0)
+          {
+            b.resize(ni);
+            for (int i=0; i<ni; i++) b[i] = (_lagged.empty() || !_lagged[k][i]) ? z[cell.inflow[i]] : 0.0;
+            blas.GEMV(Teuchos::NO_TRANS, nu, ni, 1.0, cell.transport.data(), nu, b.data(), 1, 1.0, a.data(), 1);
+          }
+          for (int i=0; i<nu; i++) z[cell.owned[i]] = a[i];
+        }
+        for (LO lid : _dirichlet) z[lid] = xView(lid,column);
+        for (size_t i=0; i<localCount; i++) resultView(i,column) = z[i];
+      }
+      Y.update(alpha, result, beta);
+    }
+    //! [cell][inflow entry]: whether its owner comes later in the order (a lagged face), to be dropped from R
+    void setLagged(std::vector<std::vector<bool>> lagged) { _lagged = std::move(lagged); }
+  private:
+    TMapConstPtr _map;
+    std::vector<Cell> _cells;
+    std::vector<int> _order;
+    std::vector<LO> _dirichlet;
+    std::vector<std::vector<bool>> _lagged;
+  };
+}
+
+Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner) const
+{
+  std::vector<std::vector<CellDof>> cellDofs;
+  std::vector<std::vector<double>> matrices;
+  cellMatrices(cellDofs, matrices);
+  const int cellCount = int(_cells.size());
+  std::vector<int> position(cellCount);
+  for (int i=0; i<cellCount; i++) position[order[i]] = i;
+  std::vector<TransportSweepOperator::Cell> cells(cellCount);
+  std::vector<std::vector<bool>> lagged(cellCount);
+  bool anyLagged = false;
+  Teuchos::LAPACK<int,double> lapack;
+  for (int k=0; k<cellCount; k++)
+  {
+    const int n = _local->trialDofCount(_cells[k]);
+    // owned (u) and inflow (i) local dofs, with their global lids and coefficients (one lid per local dof)
+    std::vector<int> uLocal, iLocal;
+    std::vector<double> uCoefficient, iCoefficient;
+    TransportSweepOperator::Cell &cell = cells[k];
+    std::vector<int> seen(n, 0);
+    for (const CellDof &dof : cellDofs[k])
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(seen[dof.local]++ > 0, std::invalid_argument, "transportSweep: a local dof with several global dofs (constraints) is not supported");
+      const int owner = fluxOwner[dof.lid];
+      if ((owner < 0) || (owner == k))
+      {
+        uLocal.push_back(dof.local); uCoefficient.push_back(dof.coefficient); cell.owned.push_back(dof.lid);
+      }
+      else
+      {
+        iLocal.push_back(dof.local); iCoefficient.push_back(dof.coefficient); cell.inflow.push_back(dof.lid);
+        const bool isLagged = position[owner] > position[k];
+        lagged[k].push_back(isLagged);
+        anyLagged = anyLagged || isLagged;
+      }
+    }
+    const int nu = int(uLocal.size()), ni = int(iLocal.size());
+    const std::vector<double> &S = matrices[k];
+    // global coordinates: x_local = c x_global, so S^g_ab = c_a S_ab c_b
+    cell.factor.assign(size_t(nu) * nu, 0.0);
+    for (int b=0; b<nu; b++)
+      for (int a=0; a<nu; a++) cell.factor[size_t(b) * nu + a] = uCoefficient[a] * S[size_t(uLocal[b]) * n + uLocal[a]] * uCoefficient[b];
+    std::vector<double> Sui(size_t(nu) * std::max(ni,1), 0.0);
+    for (int b=0; b<ni; b++)
+      for (int a=0; a<nu; a++) Sui[size_t(b) * nu + a] = uCoefficient[a] * S[size_t(iLocal[b]) * n + uLocal[a]] * iCoefficient[b];
+    int info = 0;
+    if (nu > 0) lapack.POTRF('L', nu, cell.factor.data(), nu, &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "transportSweep: a cell's owned block S_uu is not positive definite");
+    if ((nu > 0) && (ni > 0))
+    {
+      lapack.POTRS('L', nu, ni, cell.factor.data(), nu, Sui.data(), nu, &info);
+      for (double &value : Sui) value = -value;
+      cell.transport = std::move(Sui);
+    }
+    matrices[k].clear();
+  }
+  auto sweep = Teuchos::rcp(new TransportSweepOperator(_map, std::move(cells), order, _dirichletLocal));
+  if (anyLagged) sweep->setLagged(std::move(lagged));
+  return sweep;
+}
+
+std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *laggedFaces, std::vector<int> *fluxOwner) const
+{
+  GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
+  const int cellCount = int(_cells.size());
+  // the cells' average beta_k (the negated averages of the coefficients against d_k v)
+  std::vector<std::vector<double>> beta(cellCount);
+  for (int k=0; k<cellCount; k++)
+  {
+    beta[k] = _local->testDerivativeCoefficientAverages(_cells[k]);
+    for (double &b : beta[k]) b = -b;
+  }
+  // neighbors through shared flux dofs: lid -> (cell, side)
+  std::map<LO, std::vector<std::pair<int,int>>> fluxDofCells;
+  for (int k=0; k<cellCount; k++)
+  {
+    const GlobalIndexType cellID = _cells[k];
+    const int trialCount = _local->trialDofCount(cellID);
+    Camellia::FieldContainer<double> unit(trialCount), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<trialCount; l++)
+    {
+      const int side = _local->dofSide(cellID, l);
+      if (side < 0) continue;
+      unit.initialize(0.0);
+      unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      for (int i=0; i<globalIndices.size(); i++)
+      {
+        if (globalData[i] == 0.0) continue;
+        const LO lid = _map->getLocalElement(static_cast<GO>(globalIndices[i]));
+        if (lid == Teuchos::OrdinalTraits<LO>::invalid()) continue;
+        auto &entries = fluxDofCells[lid];
+        if (std::find(entries.begin(), entries.end(), std::make_pair(k, side)) == entries.end()) entries.push_back({k, side});
+      }
+    }
+  }
+  // directed edges upwind -> downwind, one per neighboring pair
+  std::set<std::pair<int,int>> edges;
+  std::set<std::pair<int,int>> pairs;
+  if (fluxOwner != nullptr) fluxOwner->assign(_map->getLocalNumElements(), -1);
+  for (const auto &entry : fluxDofCells)
+  {
+    const auto &cellSides = entry.second;
+    if (fluxOwner != nullptr) (*fluxOwner)[entry.first] = cellSides[0].first; // a boundary face: its only cell
+    for (size_t a=0; a<cellSides.size(); a++)
+      for (size_t b=a+1; b<cellSides.size(); b++)
+      {
+        int k1 = cellSides[a].first, k2 = cellSides[b].first;
+        if (k1 == k2) continue;
+        int normal, endpoint;
+        _local->sideNormal(_cells[k1], cellSides[a].second, normal, endpoint);
+        // k1's side is its upper face (endpoint 1) in direction normal: the face normal from k1 to k2 is +e_normal
+        const double betaN = (beta[k1][normal] + beta[k2][normal]) * ((endpoint == 1) ? 1.0 : -1.0); // beta . n_{k1 -> k2}
+        if (fluxOwner != nullptr) (*fluxOwner)[entry.first] = (betaN >= 0) ? k1 : k2;
+        if (!pairs.insert({std::min(k1,k2), std::max(k1,k2)}).second) continue;
+        if (betaN >= 0) edges.insert({k1, k2});
+        else edges.insert({k2, k1});
+      }
+  }
+  std::vector<std::vector<int>> downwind(cellCount);
+  std::vector<int> inDegree(cellCount, 0);
+  for (const auto &edge : edges) { downwind[edge.first].push_back(edge.second); inDegree[edge.second]++; }
+  // Kahn's algorithm; on a cycle, take the remaining cell with the fewest unvisited upwind neighbors
+  std::set<std::pair<int,int>> remaining; // (in-degree, cell)
+  for (int k=0; k<cellCount; k++) remaining.insert({inDegree[k], k});
+  std::vector<int> order;
+  std::vector<bool> visited(cellCount, false);
+  int broken = 0, lagged = 0;
+  while (!remaining.empty())
+  {
+    auto first = remaining.begin();
+    const int k = first->second;
+    if (first->first > 0) { broken++; lagged += first->first; }
+    remaining.erase(first);
+    visited[k] = true;
+    order.push_back(k);
+    for (int next : downwind[k])
+    {
+      if (visited[next]) continue;
+      remaining.erase({inDegree[next], next});
+      inDegree[next]--;
+      remaining.insert({inDegree[next], next});
+    }
+  }
+  if (cyclesBroken != nullptr) *cyclesBroken = broken;
+  if (laggedFaces != nullptr) *laggedFaces = lagged;
+  return order;
+}
+
+ElementMultiplicativeSchwarz::ElementMultiplicativeSchwarz(TMapConstPtr map, std::vector<std::vector<LO>> blockLids,
+                                                           std::vector<std::vector<double>> blockFactors,
+                                                           std::vector<CellMatrix> cells, std::vector<LO> dirichletLids)
+: _map(map), _blockLids(std::move(blockLids)), _blockFactors(std::move(blockFactors)), _cells(std::move(cells)),
+  _dirichletLids(std::move(dirichletLids))
+{
+  std::map<LO, std::vector<int>> cellsOfDof;
+  for (int c=0; c<int(_cells.size()); c++)
+    for (LO lid : _cells[c].lid)
+    {
+      auto &list = cellsOfDof[lid];
+      if (list.empty() || (list.back() != c)) list.push_back(c);
+    }
+  _touching.resize(_blockLids.size());
+  for (size_t b=0; b<_blockLids.size(); b++)
+  {
+    std::set<int> touching;
+    for (LO lid : _blockLids[b]) for (int c : cellsOfDof[lid]) touching.insert(c);
+    _touching[b].assign(touching.begin(), touching.end());
+  }
+  _order.resize(_blockLids.size());
+  for (size_t b=0; b<_order.size(); b++) _order[b] = int(b);
+}
+
+void ElementMultiplicativeSchwarz::correct(int block, std::vector<double> &r, std::vector<double> &z, std::vector<double> &scratch) const
+{
+  Teuchos::LAPACK<int,double> lapack;
+  Teuchos::BLAS<int,double> blas;
+  const std::vector<LO> &lids = _blockLids[block];
+  const int n = int(lids.size());
+  if (n == 0) return;
+  std::vector<double> delta(n);
+  for (int i=0; i<n; i++) delta[i] = r[lids[i]];
+  int info = 0;
+  lapack.POTRS('L', n, 1, _blockFactors[block].data(), n, delta.data(), n, &info);
+  TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "ElementMultiplicativeSchwarz: POTRS failed");
+  for (int i=0; i<n; i++) { z[lids[i]] += delta[i]; scratch[lids[i]] = delta[i]; }
+  // r -= S R^T delta, cell by cell
+  std::vector<double> x, y;
+  for (int c : _touching[block])
+  {
+    const CellMatrix &cell = _cells[c];
+    x.assign(cell.n, 0.0);
+    bool any = false;
+    for (size_t e=0; e<cell.lid.size(); e++)
+    {
+      const double value = scratch[cell.lid[e]];
+      if (value != 0.0) { x[cell.local[e]] += cell.coefficient[e] * value; any = true; }
+    }
+    if (!any) continue;
+    y.assign(cell.n, 0.0);
+    blas.GEMV(Teuchos::NO_TRANS, cell.n, cell.n, 1.0, cell.S.data(), cell.n, x.data(), 1, 0.0, y.data(), 1);
+    for (size_t e=0; e<cell.lid.size(); e++) r[cell.lid[e]] -= cell.coefficient[e] * y[cell.local[e]];
+  }
+  for (int i=0; i<n; i++) scratch[lids[i]] = 0.0;
+}
+
+void ElementMultiplicativeSchwarz::apply(const MV &X, MV &Y, Teuchos::ETransp /*mode*/, double alpha, double beta) const
+{
+  Teuchos::LAPACK<int,double> lapack;
+  const size_t localCount = _map->getLocalNumElements();
+  MV result(_map, X.getNumVectors());
+  auto xView = X.getLocalViewHost(Tpetra::Access::ReadOnly);
+  auto resultView = result.getLocalViewHost(Tpetra::Access::ReadWrite);
+  std::vector<bool> isDirichlet(localCount, false);
+  for (LO lid : _dirichletLids) isDirichlet[lid] = true;
+  for (size_t column=0; column<X.getNumVectors(); column++)
+  {
+    std::vector<double> r(localCount), z(localCount, 0.0), scratch(localCount, 0.0);
+    for (size_t i=0; i<localCount; i++) r[i] = xView(i,column);
+    for (LO lid : _dirichletLids) { z[lid] = r[lid]; r[lid] = 0.0; } // identity rows and columns
+    if (_additive)
+    {
+      for (size_t b=0; b<_blockLids.size(); b++)
+      {
+        const std::vector<LO> &lids = _blockLids[b];
+        const int n = int(lids.size());
+        if (n == 0) continue;
+        std::vector<double> delta(n);
+        for (int i=0; i<n; i++) delta[i] = r[lids[i]];
+        int info = 0;
+        lapack.POTRS('L', n, 1, _blockFactors[b].data(), n, delta.data(), n, &info);
+        for (int i=0; i<n; i++) z[lids[i]] += delta[i];
+      }
+    }
+    else
+    {
+      for (int b : _order) correct(b, r, z, scratch);
+      if (!_forwardOnly)
+        for (auto it = _order.rbegin(); it != _order.rend(); ++it) correct(*it, r, z, scratch);
+    }
+    for (size_t i=0; i<localCount; i++) resultView(i,column) = z[i];
+  }
+  Y.update(alpha, result, beta);
 }

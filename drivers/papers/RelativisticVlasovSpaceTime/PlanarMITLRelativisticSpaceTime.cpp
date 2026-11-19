@@ -41,6 +41,9 @@
 #include "GMGSolver.h"
 #include "MatrixFreeDPGMultigrid.h"
 #include "MatrixFreeDPGOperator.h"
+
+#include <algorithm>
+#include <random>
 #include "SeparableTensorIP.h"
 #include "TensorVar.h"
 #include "TensorVarDiscretization.h"
@@ -949,6 +952,8 @@ struct MatrixFreeSolveOptions
 {
   bool oneLevel = true;
   bool coarseGMG = false; // below the fine level: the conventional GMG on the lowest-order h-hierarchy, instead of an exact solve
+  bool twoLevelSolve = true;
+  bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1041,7 +1046,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   std::vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(mesh, 0, 1);
   Teuchos::RCP<MatrixFreeDPGTwoLevel> twoLevel;
   double twoLevelSetupTime = 0;
-  if (meshes.size() >= 2)
+  if ((meshes.size() >= 2) && solveOptions.twoLevelSolve)
   {
     t0 = now();
     auto opPtr = Teuchos::rcp(new MatrixFreeDPGOperator(mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end())));
@@ -1062,6 +1067,78 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     t0 = now();
     block = conjugateGradient(op, traceBlockJacobi.get(), b, uBlock, 1e-10, 20000);
     blockTime = seconds(t0, now());
+  }
+  if (solveOptions.multiplicativeSchwarz)
+  {
+    t0 = now();
+    int cyclesBroken = 0, laggedFaces = 0;
+    std::vector<int> fluxOwner;
+    const std::vector<int> upwind = op.upwindCellOrder(&cyclesBroken, &laggedFaces, &fluxOwner);
+    const double orderTime = seconds(t0, now());
+    t0 = now();
+    Teuchos::RCP<ElementMultiplicativeSchwarz> schwarz = op.elementMultiplicativeSchwarz();
+    const double schwarzSetupTime = seconds(t0, now());
+    std::vector<int> cellOrder(upwind.size()), randomOrder(upwind.size());
+    for (size_t i=0; i<cellOrder.size(); i++) cellOrder[i] = randomOrder[i] = int(i);
+    std::mt19937 generator(12345);
+    std::shuffle(randomOrder.begin(), randomOrder.end(), generator);
+    if (rank == 0)
+      std::cout << "checkMatrixFreeOperator: element Schwarz, one level (setup " << schwarzSetupTime << " s; upwind order "
+                << orderTime << " s, " << cyclesBroken << " cycle breaks lagging " << laggedFaces << " faces):\n";
+    {
+      // the range of the cell averages of beta_k (k: x, t, u_x, u_y), which orients the faces
+      std::vector<double> lo, hi;
+      for (GlobalIndexType cellID : op.cells())
+      {
+        std::vector<double> beta = local->testDerivativeCoefficientAverages(cellID);
+        if (lo.empty()) { lo.assign(beta.size(), 1e300); hi.assign(beta.size(), -1e300); }
+        for (size_t k=0; k<beta.size(); k++) { lo[k] = std::min(lo[k], -beta[k]); hi[k] = std::max(hi[k], -beta[k]); }
+      }
+      if (rank == 0)
+      {
+        std::cout << "  cell-average beta_k ranges:";
+        for (size_t k=0; k<lo.size(); k++) std::cout << " [" << lo[k] << ", " << hi[k] << "]";
+        std::cout << "\n";
+      }
+    }
+    struct Variant { std::string name; bool additive; const std::vector<int> *order; };
+    const std::vector<Variant> variants = {{"additive", true, &cellOrder}, {"multiplicative, cell-ID order", false, &cellOrder},
+                                           {"multiplicative, random order", false, &randomOrder},
+                                           {"multiplicative, upwind order", false, &upwind}};
+    auto runVariants = [&](const std::string &blocks) {
+      for (const Variant &variant : variants)
+      {
+        schwarz->setAdditive(variant.additive);
+        schwarz->setOrder(*variant.order);
+        MV u(map, 1);
+        t0 = now();
+        ConjugateGradientResult result = conjugateGradient(op, schwarz.get(), b, u, 1e-10, 20000);
+        const double time = seconds(t0, now());
+        if (rank == 0)
+          std::cout << "  " << blocks << ", " << variant.name << ": " << result.iterations << " iterations, kappa ~ " << result.conditionNumber()
+                    << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s\n";
+      }
+    };
+    runVariants("element blocks");
+    schwarz = Teuchos::null;
+    t0 = now();
+    schwarz = op.elementMultiplicativeSchwarz(&fluxOwner);
+    const double ownerSetupTime = seconds(t0, now());
+    if (rank == 0) std::cout << "  owner blocks (fields + outflow fluxes, non-overlapping; setup " << ownerSetupTime << " s):\n";
+    runVariants("owner blocks");
+    schwarz = Teuchos::null;
+    t0 = now();
+    Teuchos::RCP<TOperator<double>> sweep = op.transportSweep(upwind, fluxOwner);
+    const double sweepSetupTime = seconds(t0, now());
+    {
+      MV u(map, 1);
+      t0 = now();
+      ConjugateGradientResult result = conjugateGradient(op, sweep.get(), b, u, 1e-10, 20000);
+      const double time = seconds(t0, now());
+      if (rank == 0)
+        std::cout << "  transport sweep P = R^{-1} W^{-1} R^{-T}: " << result.iterations << " iterations, kappa ~ " << result.conditionNumber()
+                  << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s (setup " << sweepSetupTime << " s)\n";
+    }
   }
   ConjugateGradientResult twoLevelResult;
   double twoLevelTime = 0;
@@ -1501,6 +1578,11 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeLambdaMaxBoost", &matrixFreeSolveOptions.twoLevel.lambdaMaxBoost, "Two-level matrix-free: lambda_max estimate times this");
     cmdp.setOption("matrixFreeElementSchwarzSmoother", "matrixFreeDiagonalSmoother", &matrixFreeSolveOptions.twoLevel.elementSchwarz,
                    "Two-level matrix-free: Chebyshev with element-block additive Schwarz (fields and face fluxes of each element)");
+    cmdp.setOption("matrixFreeTwoLevel", "noMatrixFreeTwoLevel", &matrixFreeSolveOptions.twoLevelSolve,
+                   "With --checkMatrixFreeOperator: run the multigrid-preconditioned PCG");
+    cmdp.setOption("matrixFreeMultiplicativeSchwarz", "noMatrixFreeMultiplicativeSchwarz", &matrixFreeSolveOptions.multiplicativeSchwarz,
+                   "With --checkMatrixFreeOperator: one-level PCG with element Schwarz, additive and symmetric multiplicative "
+                   "(cell-ID, random and upwind orders)");
     cmdp.setOption("matrixFreeCoarseGMG", "matrixFreeCoarseDirect", &matrixFreeSolveOptions.coarseGMG,
                    "Matrix-free multigrid: below the fine level, the conventional GMG on the lowest-order h-hierarchy (needs "
                    "--numUniformRefinements > 0), or an exact solve of the lowest order on the fine mesh");

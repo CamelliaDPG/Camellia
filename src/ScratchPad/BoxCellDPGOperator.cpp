@@ -728,6 +728,31 @@ void BoxCellDPGOperator::schurFactorCoordinates(GlobalIndexType cellID, const st
   SeparableTensorIP::inverseFactorCoordinates(cell.gramInverse, Bu.data(), count, w);
 }
 
+std::vector<double> BoxCellDPGOperator::testDerivativeCoefficientAverages(GlobalIndexType cellID)
+{
+  const TypeData &type = typeData(cellID);
+  const CellData &cell = cellData(cellID, type);
+  const int dim = type.dim;
+  double J = 1.0;
+  for (int k=0; k<dim; k++) J *= cell.halfWidths[k];
+  double referenceVolume = 1.0;
+  for (int k=0; k<dim; k++) referenceVolume *= 2.0;
+  std::vector<double> averages(dim, 0.0);
+  for (int g=0; g<int(type.groups.size()); g++)
+  {
+    const FieldGroup &group = type.groups[g];
+    if (group.testDirection < 0) continue;
+    // undo the scaling of cellData(): weights (summing to J times the reference volume), 1/(h_k/2), and 1/J for L^2 values
+    double scale = 1.0 / cell.halfWidths[group.testDirection];
+    for (const FieldData &field : type.fields)
+      if ((field.trialVarID == group.trialVarID) && field.hvol) scale /= J;
+    double sum = 0;
+    for (double c : cell.groupCoefficients[g]) sum += c;
+    averages[group.testDirection] += sum / (scale * J * referenceVolume);
+  }
+  return averages;
+}
+
 int BoxCellDPGOperator::dofSide(GlobalIndexType cellID, int localDof)
 {
   return typeData(cellID).dofSide[localDof];

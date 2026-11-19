@@ -79,6 +79,10 @@ namespace Camellia
     int dofSide(GlobalIndexType cellID, int localDof);
     //! the cell direction normal to a side, and its endpoint (0: lower, 1: upper)
     void sideNormal(GlobalIndexType cellID, int side, int &normal, int &endpoint);
+    //! [cell direction k]: the cell average of the summed coefficients of the field (volume) terms against the k-th
+    //! derivative of the test function, in physical scaling.  For an ultraweak transport form -(beta u, grad v) this is
+    //! -beta_k averaged over the cell; MatrixFreeDPGOperator::upwindCellOrder() uses it to orient the faces.
+    std::vector<double> testDerivativeCoefficientAverages(GlobalIndexType cellID);
     //! load (trial dof ordering) = B_K^T G_K^{-1} l_K, l_K the right-hand side tested against the test basis (by the
     //! element's standard quadrature, enriched by the operator's quadratureEnrichment)
     void applyLoad(GlobalIndexType cellID, RHSPtr rhs, double *load);
