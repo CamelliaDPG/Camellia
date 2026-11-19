@@ -944,7 +944,15 @@ std::vector<double> uniformVertices(const double left, const double width, const
 //! system by matrix-free CG with point and trace-block Jacobi, reporting iterations and condition-number estimates (and
 //! the difference from a direct solve).  With compareAssembled false, only the matrix-free solves are run.
 //! Needs the separable graph norm and a full tensor-product test space (--separableGraphTestNorm --useFullTensorTestBasis).
-void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int quadratureEnrichment, bool compareAssembled, int rank)
+//! options of the matrix-free check's solves: the one-level (Jacobi) solves, and the two-level smoother
+struct MatrixFreeSolveOptions
+{
+  bool oneLevel = true;
+  MatrixFreeDPGTwoLevel::Options twoLevel;
+};
+
+void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int quadratureEnrichment, bool compareAssembled,
+                                   const MatrixFreeSolveOptions &solveOptions, int rank)
 {
   SolutionPtr vlasovSolution = form->vlasovSolution();
   auto ip = Teuchos::rcp_dynamic_cast<SeparableTensorIP>(vlasovSolution->ip());
@@ -1036,16 +1044,21 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   {
     t0 = now();
     auto opPtr = Teuchos::rcp(new MatrixFreeDPGOperator(mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end())));
-    twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, meshes[meshes.size() - 2]));
+    twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, meshes[meshes.size() - 2], solveOptions.twoLevel));
     twoLevelSetupTime = seconds(t0, now());
   }
   MV uPoint(map, 1), uBlock(map, 1), uTwoLevel(map, 1);
-  t0 = now();
-  const ConjugateGradientResult point = conjugateGradient(op, &pointJacobi, b, uPoint, 1e-10, 20000);
-  const double pointTime = seconds(t0, now());
-  t0 = now();
-  const ConjugateGradientResult block = conjugateGradient(op, traceBlockJacobi.get(), b, uBlock, 1e-10, 20000);
-  const double blockTime = seconds(t0, now());
+  ConjugateGradientResult point, block;
+  double pointTime = 0, blockTime = 0;
+  if (solveOptions.oneLevel)
+  {
+    t0 = now();
+    point = conjugateGradient(op, &pointJacobi, b, uPoint, 1e-10, 20000);
+    pointTime = seconds(t0, now());
+    t0 = now();
+    block = conjugateGradient(op, traceBlockJacobi.get(), b, uBlock, 1e-10, 20000);
+    blockTime = seconds(t0, now());
+  }
   ConjugateGradientResult twoLevelResult;
   double twoLevelTime = 0;
   if (!twoLevel.is_null())
@@ -1057,14 +1070,17 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   if (rank == 0)
   {
     std::cout << "checkMatrixFreeOperator: " << map->getGlobalNumElements() << " dofs (" << dirichletIndices.size() << " Dirichlet), "
-              << mesh->numActiveElements() << " cells; PCG to relative residual 1e-10 (right-hand side " << rhsTime << " s):\n"
-              << "  point Jacobi:       " << point.iterations << " iterations, kappa ~ " << point.conditionNumber()
+              << mesh->numActiveElements() << " cells; PCG to relative residual 1e-10 (right-hand side " << rhsTime << " s):\n";
+    if (solveOptions.oneLevel)
+      std::cout << "  point Jacobi:       " << point.iterations << " iterations, kappa ~ " << point.conditionNumber()
               << " (lambda in [" << point.lambdaMin << ", " << point.lambdaMax << "]), " << pointTime << " s (setup " << pointSetupTime << " s)\n"
               << "  trace-block Jacobi: " << block.iterations << " iterations, kappa ~ " << block.conditionNumber()
               << " (lambda in [" << block.lambdaMin << ", " << block.lambdaMax << "]), " << blockTime << " s (setup " << blockSetupTime << " s)\n";
     if (!twoLevel.is_null())
     {
-      std::cout << "  two-level (Chebyshev-trace-block, Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs): "
+      std::cout << "  two-level (Chebyshev degree " << solveOptions.twoLevel.chebyshevDegree << ", eigenvalue ratio "
+                << solveOptions.twoLevel.eigenRatio << ", " << (solveOptions.twoLevel.traceBlockDiagonal ? "trace-block" : "point")
+                << " diagonal; Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs): "
                 << twoLevelResult.iterations << " iterations, kappa ~ " << twoLevelResult.conditionNumber() << " (lambda in ["
                 << twoLevelResult.lambdaMin << ", " << twoLevelResult.lambdaMax << "]), " << twoLevelTime << " s (setup " << twoLevelSetupTime << " s:";
       for (const auto &entry : twoLevel->setupTimes()) std::cout << " " << entry.first << " " << entry.second;
@@ -1463,6 +1479,14 @@ int main(int argc, char *argv[])
     cmdp.setOption("checkMatrixFreeOperator", "noCheckMatrixFreeOperator", &checkMatrixFreeOperator,
                    "After the first slab's solve, compare the matrix-free Vlasov operator (sum-factorized B, fast-diagonalization "
                    "G^{-1}) with the assembled stiffness matrix.  Needs --separableGraphTestNorm --useFullTensorTestBasis.");
+    MatrixFreeSolveOptions matrixFreeSolveOptions;
+    cmdp.setOption("matrixFreeOneLevel", "noMatrixFreeOneLevel", &matrixFreeSolveOptions.oneLevel,
+                   "With --checkMatrixFreeOperator: also run point and trace-block Jacobi PCG");
+    cmdp.setOption("matrixFreeChebyshevDegree", &matrixFreeSolveOptions.twoLevel.chebyshevDegree, "Two-level matrix-free: Chebyshev smoother degree");
+    cmdp.setOption("matrixFreeChebyshevEigenRatio", &matrixFreeSolveOptions.twoLevel.eigenRatio,
+                   "Two-level matrix-free: Chebyshev interval [lambda_max / ratio, lambda_max]");
+    cmdp.setOption("matrixFreeTraceBlockSmoother", "matrixFreePointSmoother", &matrixFreeSolveOptions.twoLevel.traceBlockDiagonal,
+                   "Two-level matrix-free: Chebyshev with the trace-block or the point diagonal");
     bool matrixFreeCheckBeforeSolve = false;
     cmdp.setOption("matrixFreeCheckBeforeSolve", "matrixFreeCheckAfterSolve", &matrixFreeCheckBeforeSolve,
                    "With --checkMatrixFreeOperator: run the check before the first slab's solve (the initial fields), then stop");
@@ -2655,12 +2679,12 @@ int main(int argc, char *argv[])
         
         if (checkMatrixFreeOperator && matrixFreeCheckBeforeSolve && (timeSlabOrdinal == 0))
         {
-          checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, rank);
+          checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, matrixFreeSolveOptions, rank);
           break; // stop after the check (and shut down normally)
         }
         auto timingSlabSolveStart = timing.now();
         form->solve();
-        if (checkMatrixFreeOperator && (timeSlabOrdinal == 0)) checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, rank);
+        if (checkMatrixFreeOperator && (timeSlabOrdinal == 0)) checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, matrixFreeSolveOptions, rank);
         {
           auto fields = timingMeshStats(form);
           fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
