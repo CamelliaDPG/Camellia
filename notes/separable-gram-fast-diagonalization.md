@@ -166,18 +166,50 @@ which costs one sum-factorized B and half a fast inverse (V^T only) per (cell, d
   per direction, under-integrates the non-polynomial coefficients v = u / gamma and a(u) by about that much.  This is
   worth checking against the production runs.
 
+## One-level vs two-level preconditioning (measured 11-18/19)
+
+All runs are on the PlanarMITL first slab with its initial fields: separable norm, H^1 order p = 2, Delta p = 2,
+serendipity trial, full tensor test, PCG to relative residual 1e-10, one core.  The meshes are built directly (no
+uniform refinements), so "two-level" means the fine mesh at p = 2 plus the same mesh at p = 1, solved exactly.
+
+One-level (point / trace-block Jacobi), refining x, u_x, u_z with one time element:
+
+| cells (x t ux uz) | dofs   | point Jacobi | trace-block Jacobi |
+|-------------------|--------|--------------|--------------------|
+| 4 1 4 4           | 2896   | 89 (kappa 97)   | 87 (93)         |
+| 8 1 8 8           | 21824  | 188 (663)       | 183 (653)       |
+| 16 1 16 16        | 169216 | 243 (1660)      | 234 (1614)      |
+
+Trace-block Jacobi is barely better than point Jacobi, and no one-level method removes the h-dependence, as the
+preconditioning notes predicted.
+
+Two-level.  Fine level: Chebyshev, lambda_max from 20 Lanczos (CG) steps times 1.1 (power iteration underestimated it,
+and Chebyshev degrees >= 3 then made the preconditioner indefinite).  Coarse level: the exact Galerkin P^T Op P,
+assembled element by element from the eigenbasis coordinates, KLU2.  Compared with production GMG (assembled,
+GMGOperator's cell-block additive Schwarz, the same p = 1 coarse level, tolerance 1e-9):
+
+| cells (x t ux uz) | dofs  | production GMG | MF Chebyshev-4, element Schwarz | MF Chebyshev-4, trace-block | MF Chebyshev-2, trace-block |
+|-------------------|-------|----------------|---------------------------------|-----------------------------|-----------------------------|
+| 4 1 4 4           | 2896  | 27             | 7 (kappa 1.1)                   | 12 (2.2)                    | 18 (3.9)                    |
+| 8 1 8 8           | 21824 | 40             | 13 (3.7)                        | 22 (8.7)                    | 33 (16.8)                   |
+| 8 2 8 8           | 40064 | 46             | 15 (4.0)                        | 24 (7.1)                    | -                           |
+
+- The growth with h is a property of this two-level configuration (p-coarsening to p = 1 on the fine mesh), not of the
+  smoother: production GMG shows it too, and it does not depend on cell anisotropy (8 2 8 8 is isotropic, like 4 1 4 4).
+- Element-block additive Schwarz (each element's fields with the fluxes on all its faces) roughly halves the
+  iterations against the trace-block diagonal: fields must share a block with their element's traces.  As
+  implemented it stores element-sized dense factors, the cost of element matrices.  At p = 4 it needs a cheaper form:
+  inexact block solves with the matrix-free element action, or Schwarz on lower-order levels only.
+- Each matrix-free two-level iteration costs about 2 x degree + 1 operator applications.  At 512 cells, Chebyshev-4
+  with element Schwarz took 29 s (setup 5 s) against 32 s for 183 trace-block Jacobi iterations.
+
 ## Next steps
 
-1. **A preconditioner that does not degrade with h.**  Jacobi's iterations grow like h^-1.  Options:
-   - Chebyshev-Jacobi smoothing within `MatrixFreeGMGPreconditioner`, on the existing GMG hierarchy, with assembled
-     coarse levels;
-   - trace-block Jacobi, i.e. per-face blocks of S, from the same eigenbasis quadratic forms with off-diagonal pairs.
-2. **Solve integration:** a matrix-free option in `VlasovSpaceTimeFormulation::solve()` (Belos CG on
-   `MatrixFreeDPGOperator` with `DiagonalScalingOperator`, Dirichlet data from `dirichletData()`), validated slab by
-   slab against the direct solve.
-3. **Static condensation** of the field dofs: a per-element factor of the (serendipity-sized) field-field block.
-4. **Performance:**
-   - coefficient sampling at setup dominates the first application: exploit the separable structure of the Vlasov
-     coefficients;
-   - batch cells of equal shape through the BLAS mode products;
-   - test MPI (overlap-map import/export is in place; only one rank has been run).
+1. **The full hierarchy, as production does it:** halve p on the fine mesh (4 -> 2 -> 1), then h-coarsen to the base
+   mesh, one grid per h-level.  The matrix-free Galerkin construction serves between p-levels; the p = 1 levels can be
+   assembled and handed to the existing GMG.  Build the refinement study with numUniformRefinements on one base mesh,
+   so that h-levels exist.
+2. **A cheaper strong smoother for p = 4:** element Schwarz with inexact (matrix-free) block solves, or with blocks
+   that keep fields with their own element's traces but at lower order.
+3. **Solve integration:** a matrix-free option in `VlasovSpaceTimeFormulation::solve()`, validated slab by slab.
+4. **Static condensation, performance** (separable coefficient sampling, batching cells), **MPI**.
