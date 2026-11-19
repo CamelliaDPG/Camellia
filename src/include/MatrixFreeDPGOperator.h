@@ -98,6 +98,15 @@ namespace Camellia
      */
     TMatrixPtr<double> galerkinCoarseOperator(TMatrixPtr<double> P) const;
 
+    /**
+     \brief Additive Schwarz with one block per element: the element's (non-Dirichlet) dofs, fields and the fluxes on
+     all its faces, so that the blocks overlap on faces.  y = sum_K R_K^T A_K^{-1} R_K x, A_K = R_K S R_K^T: the global
+     operator's entries among the element's dofs, including the neighbors' contributions on shared faces (as
+     GMGOperator's cell-block additive Schwarz takes them from the assembled matrix).  The entries are inner products
+     of the shared-eigenbasis coordinates; the cost and storage are those of the element matrices.  One rank.
+     */
+    Teuchos::RCP<TOperator<double>> elementAdditiveSchwarz() const;
+
   private:
     MeshPtr _mesh;
     Teuchos::RCP<BoxCellDPGOperator> _local;

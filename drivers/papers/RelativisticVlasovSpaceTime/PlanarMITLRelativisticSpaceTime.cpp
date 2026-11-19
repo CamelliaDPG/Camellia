@@ -1079,7 +1079,8 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     if (!twoLevel.is_null())
     {
       std::cout << "  two-level (Chebyshev degree " << solveOptions.twoLevel.chebyshevDegree << ", eigenvalue ratio "
-                << solveOptions.twoLevel.eigenRatio << ", " << (solveOptions.twoLevel.traceBlockDiagonal ? "trace-block" : "point")
+                << solveOptions.twoLevel.eigenRatio << ", "
+                << (solveOptions.twoLevel.elementSchwarz ? "element Schwarz" : (solveOptions.twoLevel.traceBlockDiagonal ? "trace-block" : "point"))
                 << " diagonal, lambda_max " << twoLevel->lambdaMax() << "; Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs): "
                 << twoLevelResult.iterations << " iterations, kappa ~ " << twoLevelResult.conditionNumber() << " (lambda in ["
                 << twoLevelResult.lambdaMin << ", " << twoLevelResult.lambdaMax << "]), " << twoLevelTime << " s (setup " << twoLevelSetupTime << " s:";
@@ -1490,6 +1491,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeLanczosLambdaMax", "matrixFreePowerLambdaMax", &matrixFreeSolveOptions.twoLevel.lanczosLambdaMax,
                    "Two-level matrix-free: estimate the smoother's lambda_max by Lanczos (CG) or by power iteration");
     cmdp.setOption("matrixFreeLambdaMaxBoost", &matrixFreeSolveOptions.twoLevel.lambdaMaxBoost, "Two-level matrix-free: lambda_max estimate times this");
+    cmdp.setOption("matrixFreeElementSchwarzSmoother", "matrixFreeDiagonalSmoother", &matrixFreeSolveOptions.twoLevel.elementSchwarz,
+                   "Two-level matrix-free: Chebyshev with element-block additive Schwarz (fields and face fluxes of each element)");
     bool matrixFreeCheckBeforeSolve = false;
     cmdp.setOption("matrixFreeCheckBeforeSolve", "matrixFreeCheckAfterSolve", &matrixFreeCheckBeforeSolve,
                    "With --checkMatrixFreeOperator: run the check before the first slab's solve (the initial fields), then stop");

@@ -145,7 +145,11 @@ MatrixFreeDPGTwoLevel::MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator>
   // the smoother
   t0 = Clock::now();
   Teuchos::RCP<const TOperator<double>> Dinv;
-  if (options.traceBlockDiagonal)
+  if (options.elementSchwarz)
+  {
+    Dinv = fineOperator->elementAdditiveSchwarz();
+  }
+  else if (options.traceBlockDiagonal)
   {
     Dinv = fineOperator->traceBlockJacobi();
   }

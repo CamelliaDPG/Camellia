@@ -217,7 +217,8 @@ void DiagonalScalingOperator::apply(const MV &X, MV &Y, Teuchos::ETransp /*mode*
 
 namespace
 {
-  //! block Jacobi: y = beta y + alpha M^{-1} x, M block diagonal (Cholesky-factored blocks), the identity elsewhere
+  //! block Jacobi / additive Schwarz: y = beta y + alpha sum_b R_b^T A_b^{-1} R_b x (Cholesky-factored blocks, which may
+  //! overlap), the identity on dofs in no block
   class BlockJacobiOperator : public TOperator<double>
   {
   public:
@@ -243,7 +244,7 @@ namespace
       auto r = result.getLocalViewHost(Tpetra::Access::ReadWrite);
       for (size_t c=0; c<X.getNumVectors(); c++)
       {
-        for (size_t i=0; i<_inBlock.size(); i++) if (!_inBlock[i]) r(i,c) = x(i,c);
+        for (size_t i=0; i<_inBlock.size(); i++) r(i,c) = _inBlock[i] ? 0.0 : x(i,c);
         std::vector<double> rhs;
         for (const Block &block : _blocks)
         {
@@ -253,7 +254,7 @@ namespace
           int info = 0;
           lapack.POTRS('L', n, 1, block.factor.data(), n, rhs.data(), n, &info);
           TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "BlockJacobiOperator: POTRS failed");
-          for (int i=0; i<n; i++) r(block.lids[i],c) = rhs[i];
+          for (int i=0; i<n; i++) r(block.lids[i],c) += rhs[i]; // additive (overlapping blocks sum)
         }
       }
       Y.update(alpha, result, beta);
@@ -511,4 +512,78 @@ TMatrixPtr<double> MatrixFreeDPGOperator::galerkinCoarseOperator(TMatrixPtr<doub
   }
   Sc->fillComplete(coarseMap, coarseMap);
   return Sc;
+}
+
+Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::elementAdditiveSchwarz() const
+{
+  GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
+  std::set<LO> dirichlet(_dirichletLocal.begin(), _dirichletLocal.end());
+  // pass 1: each cell's (non-Dirichlet, owned) dofs, as sparse local vectors
+  std::vector<std::vector<LO>> cellDofs(_cells.size());
+  std::vector<std::vector<std::vector<std::pair<int,double>>>> cellVectors(_cells.size());
+  std::map<LO, std::vector<int>> blocksOfDof; // dof -> the cells (blocks) that contain it
+  for (size_t k=0; k<_cells.size(); k++)
+  {
+    const GlobalIndexType cellID = _cells[k];
+    const int trialCount = _local->trialDofCount(cellID);
+    std::map<LO, std::vector<std::pair<int,double>>> columns;
+    Camellia::FieldContainer<double> unit(trialCount), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<trialCount; l++)
+    {
+      unit.initialize(0.0);
+      unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      for (int i=0; i<globalIndices.size(); i++)
+      {
+        if (globalData[i] == 0.0) continue;
+        const LO lid = _map->getLocalElement(static_cast<GO>(globalIndices[i]));
+        if ((lid == Teuchos::OrdinalTraits<LO>::invalid()) || (dirichlet.count(lid) > 0)) continue;
+        columns[lid].push_back({l, globalData[i]});
+      }
+    }
+    for (auto &entry : columns)
+    {
+      cellDofs[k].push_back(entry.first);
+      cellVectors[k].push_back(std::move(entry.second));
+      blocksOfDof[entry.first].push_back(int(k));
+    }
+  }
+  // pass 2: each cell's pair entries go to every block containing both dofs
+  std::vector<std::map<std::pair<LO,LO>, double>> blockEntries(_cells.size());
+  for (size_t k=0; k<_cells.size(); k++)
+  {
+    std::vector<double> w;
+    int stride = 0;
+    _local->schurFactorCoordinates(_cells[k], cellVectors[k], w, stride);
+    const std::vector<LO> &dofs = cellDofs[k];
+    for (size_t a=0; a<dofs.size(); a++)
+    {
+      const std::vector<int> &blocksA = blocksOfDof[dofs[a]];
+      for (size_t b=0; b<dofs.size(); b++)
+      {
+        double value = 0;
+        for (int i=0; i<stride; i++) value += w[a * stride + i] * w[b * stride + i];
+        const std::vector<int> &blocksB = blocksOfDof[dofs[b]];
+        for (int block : blocksA)
+          if (std::find(blocksB.begin(), blocksB.end(), block) != blocksB.end()) blockEntries[block][{dofs[a], dofs[b]}] += value;
+      }
+    }
+  }
+  Teuchos::LAPACK<int,double> lapack;
+  std::vector<BlockJacobiOperator::Block> blocks(_cells.size());
+  for (size_t k=0; k<_cells.size(); k++)
+  {
+    const int n = int(cellDofs[k].size());
+    std::map<LO,int> position;
+    for (int i=0; i<n; i++) position[cellDofs[k][i]] = i;
+    blocks[k].lids = cellDofs[k];
+    blocks[k].factor.assign(size_t(n) * n, 0.0);
+    for (const auto &entry : blockEntries[k])
+      blocks[k].factor[size_t(position[entry.first.second]) * n + position[entry.first.first]] = entry.second;
+    int info = 0;
+    if (n > 0) lapack.POTRF('L', n, blocks[k].factor.data(), n, &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "elementAdditiveSchwarz: an element block is not positive definite");
+  }
+  return Teuchos::rcp(new BlockJacobiOperator(_map, std::move(blocks)));
 }

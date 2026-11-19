@@ -63,6 +63,7 @@ namespace Camellia
       bool lanczosLambdaMax = true;  // estimate lambda_max by Lanczos (CG) instead of power iteration
       int lanczosIterations = 20;
       bool traceBlockDiagonal = true; // false: the point (shared-eigenbasis) diagonal
+      bool elementSchwarz = false;    // true: element-block additive Schwarz (overrides traceBlockDiagonal)
     };
 
     //! fineSolution: the fine Solution (mesh, dof interpreter, partition map, BCs, inner product); fineOperator on its map
