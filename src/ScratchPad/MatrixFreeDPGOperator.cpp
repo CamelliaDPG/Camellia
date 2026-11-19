@@ -426,3 +426,89 @@ Camellia::ConjugateGradientResult Camellia::conjugateGradient(const TOperator<do
   }
   return result;
 }
+
+TMatrixPtr<double> MatrixFreeDPGOperator::galerkinCoarseOperator(TMatrixPtr<double> P) const
+{
+  GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
+  std::set<LO> dirichlet(_dirichletLocal.begin(), _dirichletLocal.end());
+  auto colMap = P->getColMap();
+  // P's row of a fine dof: (coarse global index, value)
+  auto prolongationRow = [&](LO fineLid, std::vector<std::pair<GO,double>> &row) {
+    row.clear();
+    typename TMatrix<double>::local_inds_host_view_type indices;
+    typename TMatrix<double>::values_host_view_type values;
+    P->getLocalRowView(fineLid, indices, values);
+    for (size_t i=0; i<indices.extent(0); i++)
+      if (values(i) != 0.0) row.push_back({colMap->getGlobalElement(indices(i)), values(i)});
+  };
+  std::map<GO, std::map<GO, double>> entries;
+  std::vector<std::pair<GO,double>> row;
+  for (GlobalIndexType cellID : _cells)
+  {
+    const int trialCount = _local->trialDofCount(cellID);
+    // the cell's local coefficients of each coarse basis function: sum over fine dofs g of P_gc P_K e_g
+    std::map<GO, std::map<int,double>> coarseColumns;
+    Camellia::FieldContainer<double> unit(trialCount), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<trialCount; l++)
+    {
+      unit.initialize(0.0);
+      unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      for (int i=0; i<globalIndices.size(); i++)
+      {
+        if (globalData[i] == 0.0) continue;
+        const LO lid = _map->getLocalElement(static_cast<GO>(globalIndices[i]));
+        TEUCHOS_TEST_FOR_EXCEPTION(lid == Teuchos::OrdinalTraits<LO>::invalid(), std::invalid_argument,
+                                   "galerkinCoarseOperator: only single-rank (all dofs owned) is supported");
+        if (dirichlet.count(lid) > 0) continue; // the Dirichlet dofs are masked out of the S part
+        prolongationRow(lid, row);
+        for (const auto &entry : row) coarseColumns[entry.first][l] += entry.second * globalData[i];
+      }
+    }
+    std::vector<std::vector<std::pair<int,double>>> vectors;
+    std::vector<GO> coarse;
+    for (const auto &entry : coarseColumns)
+    {
+      std::vector<std::pair<int,double>> vector;
+      for (const auto &localEntry : entry.second) if (localEntry.second != 0.0) vector.push_back(localEntry);
+      if (vector.empty()) continue;
+      coarse.push_back(entry.first);
+      vectors.push_back(vector);
+    }
+    std::vector<double> w;
+    int stride = 0;
+    _local->schurFactorCoordinates(cellID, vectors, w, stride);
+    for (size_t a=0; a<coarse.size(); a++)
+      for (size_t b=0; b<coarse.size(); b++)
+      {
+        double value = 0;
+        for (int i=0; i<stride; i++) value += w[a * stride + i] * w[b * stride + i];
+        entries[coarse[a]][coarse[b]] += value;
+      }
+  }
+  // the identity on the Dirichlet dofs: sum_g P_gc P_gc'
+  for (LO lid : _dirichletLocal)
+  {
+    prolongationRow(lid, row);
+    for (const auto &a : row)
+      for (const auto &b : row) entries[a.first][b.first] += a.second * b.second;
+  }
+  auto coarseMap = P->getDomainMap();
+  size_t maxRowLength = 1;
+  for (const auto &entry : entries) maxRowLength = std::max(maxRowLength, entry.second.size());
+  TMatrixPtr<double> Sc = Teuchos::rcp(new TMatrix<double>(coarseMap, maxRowLength));
+  for (size_t i=0; i<coarseMap->getLocalNumElements(); i++)
+  {
+    const GO gid = coarseMap->getGlobalElement(i);
+    std::vector<GO> columns;
+    std::vector<double> values;
+    auto found = entries.find(gid);
+    if (found != entries.end())
+      for (const auto &entry : found->second) { columns.push_back(entry.first); values.push_back(entry.second); }
+    if (columns.empty()) { columns.push_back(gid); values.push_back(1.0); } // (a coarse dof seen by no cell)
+    Sc->insertGlobalValues(gid, Teuchos::ArrayView<const GO>(columns), Teuchos::ArrayView<const double>(values));
+  }
+  Sc->fillComplete(coarseMap, coarseMap);
+  return Sc;
+}

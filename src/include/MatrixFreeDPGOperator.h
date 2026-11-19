@@ -87,6 +87,17 @@ namespace Camellia
      */
     Teuchos::RCP<TOperator<double>> traceBlockJacobi() const;
 
+    /**
+     \brief The Galerkin coarse operator P^T Op P for a prolongation P (rows: this operator's dofs; columns: coarse dofs),
+     assembled without forming the fine operator.
+
+     For each cell and each coarse dof c touching it, u_c = P_K P e_c (P_K e_g from the dof interpretation, the
+     Dirichlet dofs masked out) and the entries u_c^T S_K u_c' are inner products of the shared-eigenbasis coordinates;
+     the Dirichlet rows' identity contributes sum_{g Dirichlet} P_gc P_gc'.  Exact: the coarse matrix that
+     P^T A P gives for the assembled, Dirichlet-modified A.  Rank-local (one rank).
+     */
+    TMatrixPtr<double> galerkinCoarseOperator(TMatrixPtr<double> P) const;
+
   private:
     MeshPtr _mesh;
     Teuchos::RCP<BoxCellDPGOperator> _local;

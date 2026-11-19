@@ -38,6 +38,8 @@
 #include "TensorMesh.h"
 #include "TensorOperatorFactory.h"
 #include "BoxCellDPGOperator.h"
+#include "GMGSolver.h"
+#include "MatrixFreeDPGMultigrid.h"
 #include "MatrixFreeDPGOperator.h"
 #include "SeparableTensorIP.h"
 #include "TensorVar.h"
@@ -1026,13 +1028,32 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   t0 = now();
   Teuchos::RCP<TOperator<double>> traceBlockJacobi = op.traceBlockJacobi();
   const double blockSetupTime = seconds(t0, now());
-  MV uPoint(map, 1), uBlock(map, 1);
+  // two-level: Chebyshev (trace-block diagonal) smoothing; Galerkin coarse operator on the lowest order, same cells
+  std::vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(mesh, 0, 1);
+  Teuchos::RCP<MatrixFreeDPGTwoLevel> twoLevel;
+  double twoLevelSetupTime = 0;
+  if (meshes.size() >= 2)
+  {
+    t0 = now();
+    auto opPtr = Teuchos::rcp(new MatrixFreeDPGOperator(mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end())));
+    twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, meshes[meshes.size() - 2]));
+    twoLevelSetupTime = seconds(t0, now());
+  }
+  MV uPoint(map, 1), uBlock(map, 1), uTwoLevel(map, 1);
   t0 = now();
   const ConjugateGradientResult point = conjugateGradient(op, &pointJacobi, b, uPoint, 1e-10, 20000);
   const double pointTime = seconds(t0, now());
   t0 = now();
   const ConjugateGradientResult block = conjugateGradient(op, traceBlockJacobi.get(), b, uBlock, 1e-10, 20000);
   const double blockTime = seconds(t0, now());
+  ConjugateGradientResult twoLevelResult;
+  double twoLevelTime = 0;
+  if (!twoLevel.is_null())
+  {
+    t0 = now();
+    twoLevelResult = conjugateGradient(op, twoLevel->preconditioner().get(), b, uTwoLevel, 1e-10, 20000);
+    twoLevelTime = seconds(t0, now());
+  }
   if (rank == 0)
   {
     std::cout << "checkMatrixFreeOperator: " << map->getGlobalNumElements() << " dofs (" << dirichletIndices.size() << " Dirichlet), "
@@ -1041,6 +1062,14 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
               << " (lambda in [" << point.lambdaMin << ", " << point.lambdaMax << "]), " << pointTime << " s (setup " << pointSetupTime << " s)\n"
               << "  trace-block Jacobi: " << block.iterations << " iterations, kappa ~ " << block.conditionNumber()
               << " (lambda in [" << block.lambdaMin << ", " << block.lambdaMax << "]), " << blockTime << " s (setup " << blockSetupTime << " s)\n";
+    if (!twoLevel.is_null())
+    {
+      std::cout << "  two-level (Chebyshev-trace-block, Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs): "
+                << twoLevelResult.iterations << " iterations, kappa ~ " << twoLevelResult.conditionNumber() << " (lambda in ["
+                << twoLevelResult.lambdaMin << ", " << twoLevelResult.lambdaMax << "]), " << twoLevelTime << " s (setup " << twoLevelSetupTime << " s:";
+      for (const auto &entry : twoLevel->setupTimes()) std::cout << " " << entry.first << " " << entry.second;
+      std::cout << ")\n";
+    }
   }
   if (compareAssembled)
   {

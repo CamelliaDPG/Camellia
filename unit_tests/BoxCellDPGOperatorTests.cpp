@@ -8,6 +8,8 @@
 #include "BoxMeshTopology.h"
 #include "ElementType.h"
 #include "Function.h"
+#include "GMGSolver.h"
+#include "MatrixFreeDPGMultigrid.h"
 #include "MatrixFreeDPGOperator.h"
 #include "Solution.h"
 #include "SpatialFilter.h"
@@ -252,4 +254,20 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, GlobalOperatorMatchesSolution )
   TEST_COMPARE(solutionError(uBlock), <, 1e-7);
   TEST_COMPARE(pointJacobi.iterations, <, cg.iterations);
   TEST_COMPARE(traceBlock.iterations, <=, pointJacobi.iterations);
+
+  // two-level: Chebyshev (trace-block diagonal) smoothing, Galerkin coarse operator on the lowest order
+  std::vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(s.mesh, 0, 1);
+  TEST_COMPARE(meshes.size(), >=, 2);
+  if (meshes.size() >= 2)
+  {
+    auto opPtr = Teuchos::rcp(new MatrixFreeDPGOperator(s.mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end())));
+    MatrixFreeDPGTwoLevel twoLevel(opPtr, solution, meshes[meshes.size() - 2]);
+    MV uTwoLevel(map, 1);
+    const ConjugateGradientResult twoLevelResult = conjugateGradient(*opPtr, twoLevel.preconditioner().get(), b, uTwoLevel, 1e-12, 3000);
+    out << "two-level (" << twoLevel.coarseDofCount() << " coarse dofs, lambda_max " << twoLevel.lambdaMax() << "): "
+        << twoLevelResult.iterations << " iterations, kappa ~ " << twoLevelResult.conditionNumber() << ", |u - u_direct| / |u_direct| = "
+        << solutionError(uTwoLevel) << endl;
+    TEST_COMPARE(solutionError(uTwoLevel), <, 1e-7);
+    TEST_COMPARE(twoLevelResult.iterations, <, traceBlock.iterations);
+  }
 }
