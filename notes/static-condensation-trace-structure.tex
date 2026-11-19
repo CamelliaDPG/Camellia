@@ -1,0 +1,555 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{pdftitle={Static condensation and the trace structure of ultraweak DPG for Vlasov}}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}[proposition]{Lemma}
+\newtheorem{conjecture}[proposition]{Conjecture}
+\theoremstyle{remark}
+\newtheorem{remark}[proposition]{Remark}
+\theoremstyle{definition}
+\newtheorem{definition}[proposition]{Definition}
+
+\newcommand{\bbeta}{\boldsymbol{\beta}}
+\newcommand{\bn}{\boldsymbol{n}}
+\newcommand{\bz}{\boldsymbol{z}}
+\newcommand{\bu}{\boldsymbol{u}}
+\newcommand{\bv}{\boldsymbol{v}}
+\newcommand{\bE}{\boldsymbol{E}}
+\newcommand{\bB}{\boldsymbol{B}}
+\newcommand{\ba}{\boldsymbol{a}}
+\newcommand{\bsigma}{\boldsymbol{\sigma}}
+\newcommand{\that}{\hat{t}}
+\newcommand{\Shat}{\widehat{S}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{\mathsf{T}}
+\newcommand{\Tr}{\mathcal{T}}
+\newcommand{\Gin}{\Gamma_{\mathrm{in}}}
+\newcommand{\Gout}{\Gamma_{\mathrm{out}}}
+\newcommand{\ip}[2]{\left(#1,#2\right)}
+\newcommand{\dual}[2]{\left\langle #1,#2\right\rangle}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\divz}{div}
+
+\title{Static condensation and the trace structure of\texorpdfstring{\\}{} ultraweak DPG for Vlasov:\texorpdfstring{\\}{} toward a matrix-free planar MITL solver}
+\author{}
+\date{November 19, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+These notes work out, as explicitly as I can, (i) how static condensation of the ultraweak DPG system for the
+space--time Vlasov equation is carried out matrix-free with the separable graph norm; (ii) what the resulting
+trace-only problem is, using the fact that the phase-space flow is divergence-free; and (iii) what that structure
+suggests for preconditioning.  The main point is an exact algebraic identity: once each cell's faces are split into
+``inflow'' and ``outflow'' sets, the condensed operator is a sum $R^\T W R + Q$ in which $R$ is a block
+unit-lower-triangular \emph{sweep} operator and $Q\ge 0$ collects local inflow Schur complements that vanish in the
+continuous limit.  Then $P=(R^\T W R)^{-1}$, applied by one backward and one forward sweep, satisfies
+$\lambda_{\min}(P\Shat)\ge 1$, and its quality is governed by a single measurable quantity.  I also explain why the
+observed $\kappa\sim h^{-2}$ growth of the current multigrid preconditioners is what one should expect from this
+structure, and list experiments in order.  Statements are labelled as proved, standard, or conjectural.
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{Setting}
+%======================================================================
+
+\subsection{Equation and phase-space flow}
+
+Phase-space--time coordinates are ordered as in the code,
+\[
+  \bz = (x_1,\dots,x_s,\;t,\;u_1,\dots,u_v)\in\Omega\subset\R^{n},\qquad n=s+1+v .
+\]
+For the planar MITL, $s=1$ and $v=2$, so $n=4$ and $\bz=(x,t,u_x,u_y)$.  For one species with charge $q$ and mass
+$m$, the Vlasov equation is $\bbeta\cdot\nabla_{\bz} f = 0$ with
+\[
+  \bbeta(\bz) = \bigl(\bv(\bu),\;1,\;\tfrac{q}{m}\ba(\bz)\bigr),\qquad
+  \ba = \bE(x,t) + \bv(\bu)\times\bB(x,t),\qquad
+  \bv(\bu) = \frac{\bu}{\gamma(\bu)},\quad \gamma=\sqrt{1+|\bu|^2/c^2}.
+\]
+(Components of $\bv\times\bB$ not represented in the $v$ velocity dimensions are dropped, as in the planar reduction.)
+
+\begin{lemma}[Liouville; proved]\label{lem:div}
+$\divz_{\bz}\bbeta = 0$.  Moreover $\beta_t\equiv 1$, and $\beta_{x_d}=v_d(\bu)$ does not depend on $(x,t)$.
+\end{lemma}
+\begin{proof}
+$\partial_{x_d} v_d(\bu)=0$ and $\partial_t 1 = 0$.  For the velocity part, $\bE$ does not depend on $\bu$, and
+$\bv = \nabla_{\bu}\varepsilon$ with $\varepsilon(\bu)=c^2\gamma(\bu)$.  Hence
+$\nabla_{\bu}\cdot(\bv\times\bB) = \bB\cdot(\nabla_{\bu}\times\nabla_{\bu}\varepsilon)
+ - \nabla_{\bu}\varepsilon\cdot(\nabla_{\bu}\times\bB) = 0$, since a gradient is curl-free and $\bB$ does not
+depend on $\bu$.  (The same holds after restricting to the planar components, since the restricted $\bv$ is still the
+gradient of $\varepsilon$ restricted to the plane.)
+\end{proof}
+
+Note that $\partial_{u_d}\beta_{u_d}$ is \emph{not} zero individually in the relativistic case ($\partial v_y/\partial
+u_x = -u_x u_y/(\gamma^3c^2)$); only the total divergence vanishes.  Nonrelativistically each $\beta_{z_d}$ is
+independent of $z_d$.
+
+\subsection{Ultraweak DPG formulation}
+
+The mesh $\Omega_h$ consists of axis-aligned boxes $K$.  The skeleton is $\Gamma_h=\bigcup_K\partial K$.  Each face
+$F$ is orthogonal to one coordinate direction $d(F)\in\{1,\dots,n\}$.
+
+\paragraph{Unknowns.}
+\begin{itemize}[nosep]
+  \item Field $f\in U_f = \prod_K U_f(K)$, with $U_f(K)$ polynomials of $L^2$-degree $p-1$ (serendipity or full
+        tensor), discontinuous across cells.
+  \item Flux $\that\in U_t$, the discrete normal trace of $\bsigma=\bbeta f$.  In Camellia, \texttt{fluxVar} defaults
+        to the space \texttt{L2} on sides, so $U_t=\prod_F U_t(F)$: each flux degree of freedom lives on exactly one
+        face, and there is no coupling through face boundaries (edges, vertices of faces).  Each global face carries
+        a fixed orientation; a cell sees $\that$ with sign $\epsilon_{K,F}=\pm1$ (the side parity) so that locally
+        $\that$ is the flux in the direction of the outward normal $\bn_K$.
+\end{itemize}
+(With positivity enabled there is also the cell-constant latent field $\psi$; it is cell-local and is condensed in the
+same way as $f$, but the problem is then nonlinear and I leave it aside.)
+
+\paragraph{Test space.}  Broken: $V=\prod_K V(K)$, with $V(K)=Q_{p+\Delta p}(K)$, the full tensor-product space
+(H$^1$ order $p+\Delta p$).
+
+\paragraph{Bilinear form.}  Matching the terms in \texttt{RelativisticVlasovSpaceTimeFormulation},
+\[
+  b\bigl((f,\that),w\bigr) = \sum_K b_K\bigl((f,\that),w\bigr),\qquad
+  b_K\bigl((f,\that),w\bigr) = -\ip{f}{\bbeta\cdot\nabla w}_K + \dual{\that}{w}_{\partial K}.
+\]
+Integrating by parts and using $\divz\bbeta=0$, for smooth $f$ the exact flux is $\that = (\bbeta\cdot\bn_K) f$ on
+$\partial K$.
+
+\paragraph{Test norm (separable surrogate).}  On each cell,
+\[
+  \|w\|_{V(K)}^2 = \alpha_K\|w\|_K^2 + \sum_{d=1}^n s_{K,d}^2\,\|\partial_d w\|_K^2 \;-\; c_K\Bigl(\int_K w\Bigr)^2,
+\]
+where $s_{K,d}\ge\sup_K|\beta_d|$ (so by Cauchy--Schwarz the separable norm dominates the graph norm up to the factor
+$n$), $\alpha_K$ is the transport-scaled $L^2$ weight, and $c_K\ge0$ is the constant-mode weight.  Its Gram matrix
+is a Kronecker sum plus a rank-one term:
+\[
+  G_K = G_K^{\otimes} - c_K\, \mathbf{m}\mathbf{m}^\T,\qquad
+  G_K^{\otimes} = J_K\Bigl(\alpha_K \widehat M^{\otimes n} + \sum_d \xi_{K,d}\,\widehat K_{(d)}\Bigr).
+\]
+Here $\widehat M$, $\widehat K$ are the 1D reference mass and stiffness matrices, $\widehat K_{(d)}$ has $\widehat K$ in
+slot $d$ and $\widehat M$ elsewhere, $J_K$ is the cell Jacobian, and $\xi_{K,d}=s_{K,d}^2/h_{K,d}^2$ (half-widths).
+
+%======================================================================
+\section{The DPG system in eigenbasis coordinates}
+%======================================================================
+
+Let $V_1$ solve the 1D generalized eigenproblem $\widehat K V_1 = \widehat M V_1\Lambda_1$, $V_1^\T\widehat M V_1=I$,
+and let $\mathcal V = V_1^{\otimes n}$.  Then, exactly,
+\[
+  (G_K^{\otimes})^{-1} = \mathcal V\, D_K^{-1}\,\mathcal V^\T,\qquad
+  (D_K)_{\mathbf j} = J_K\Bigl(\alpha_K + \sum_d \xi_{K,d}\,\lambda_{j_d}\Bigr).
+\]
+With $\mathbf z_K = (G_K^\otimes)^{-1}\mathbf m$ and $\delta_K = 1-c_K\mathbf m^\T\mathbf z_K>0$, Sherman--Morrison
+gives $G_K^{-1} = (G_K^\otimes)^{-1} + (c_K/\delta_K)\,\mathbf z_K\mathbf z_K^\T$.
+
+\begin{definition}[Eigenbasis coordinates]
+For a test-space vector $\mathbf b\in\R^{n_V}$ ($n_V=\dim V(K)$), let
+\[
+  \Omega_K\mathbf b = \begin{bmatrix} D_K^{-1/2}\mathcal V^\T\mathbf b \\ \sqrt{c_K/\delta_K}\;\mathbf z_K^\T\mathbf b\end{bmatrix}
+  \in\R^{n_V+1},
+  \qquad\text{so that}\qquad \mathbf b^\T G_K^{-1}\mathbf b' = (\Omega_K\mathbf b)\cdot(\Omega_K\mathbf b').
+\]
+\end{definition}
+
+Write the local matrix of $b_K$ (rows: test functions, columns: trial functions) as
+$B_K = [\,B_{f}\;\;B_{t}\,]$, with
+\[
+  (B_f)_{ij} = -\ip{\varphi_j}{\bbeta\cdot\nabla\psi_i}_K,\qquad
+  (B_t)_{ij} = \epsilon_{K,F(j)}\,\dual{\chi_j}{\psi_i}_{F(j)},
+\]
+and the local load $\mathbf l_K$ (from the right-hand side; zero for homogeneous Vlasov except through boundary data).
+Define
+\[
+  W_K = \Omega_K B_K = [\,W_f\;\;W_t\,]\in\R^{(n_V+1)\times(n_f+n_t)},\qquad \mathbf e_K = \Omega_K\mathbf l_K.
+\]
+The DPG solution minimizes the residual
+\[
+  \mathcal J(f,\that) = \sum_K \bigl\| W_f\,\mathbf f_K + W_t\,\that_K - \mathbf e_K\bigr\|^2 ,
+\]
+where $\mathbf f_K$ and $\that_K = E_K\that$ are the cell's coefficient vectors ($E_K$ gathers, with the signs
+$\epsilon_{K,F}$).  The normal equations are $S\mathbf u=\mathbf r$ with $S=\sum_K P_K^\T W_K^\T W_K P_K$; this is the
+operator the current matrix-free code applies, with $W_K$ applied by sum factorization and never stored.
+
+%======================================================================
+\section{Static condensation, matrix-free}
+%======================================================================
+
+\subsection{Algebra}
+
+For fixed $\that_K$, minimizing the cell term over $\mathbf f_K$ is a linear least-squares problem:
+\[
+  \mathbf f_K^\star = A_{ff}^{-1}W_f^\T(\mathbf e_K - W_t\that_K),\qquad A_{ff}=W_f^\T W_f = B_f^\T G_K^{-1}B_f.
+\]
+Let $\Pi_K = I - W_f A_{ff}^{-1}W_f^\T$ be the orthogonal projector onto $\operatorname{range}(W_f)^\perp$.  The
+condensed functional is
+\[
+  \widehat{\mathcal J}(\that) = \sum_K \bigl\|\Pi_K(W_t\,\that_K - \mathbf e_K)\bigr\|^2,
+\]
+and the condensed system is
+\begin{equation}\label{eq:condensed}
+  \Shat\,\that = \hat{\mathbf r},\qquad
+  \Shat = \sum_K E_K^\T\,\Shat_K\,E_K,\quad \Shat_K = W_t^\T\Pi_K W_t = A_{tt} - A_{tf}A_{ff}^{-1}A_{ft},\quad
+  \hat{\mathbf r} = \sum_K E_K^\T W_t^\T\Pi_K\mathbf e_K .
+\end{equation}
+After solving, $\mathbf f_K$ is recovered cell by cell from $\mathbf f_K^\star$.
+
+\subsection{Matrix-free application}
+
+To apply $\Shat_K$ to $\that_K$:
+\begin{enumerate}[nosep]
+  \item $\mathbf y = W_t\that_K$: the existing flux-to-test sum-factorized path, then $\Omega_K$ (mode products with
+        $V_1^\T$, a diagonal scaling, one dot product).
+  \item $\mathbf g = W_f^\T\mathbf y$: the existing field path, transposed.
+  \item $\mathbf s = A_{ff}^{-1}\mathbf g$: a dense Cholesky solve with a stored factor.
+  \item Return $W_t^\T(\mathbf y - W_f\mathbf s)$.
+\end{enumerate}
+The cost is about one current cell application plus one more application of $W_f$, and an $n_f\times n_f$ triangular
+solve pair.  Storage is $\tfrac12 n_f^2$ per cell for the Cholesky factor of $A_{ff}$.  With serendipity fields $n_f$
+is a few hundred at most at $p=4$, so this is a fraction of the stored element-Schwarz blocks, which are
+$(n_f+n_t)^2$ per cell.
+
+\paragraph{Forming $A_{ff}$.}  $A_{ff}$ is formed once per cell by applying $W_f$ to the $n_f$ unit vectors (or, more
+cheaply, by forming the dense $W_f$ once and a SYRK).  Its cost is the same kind as the current Schwarz-block setup
+but over fields only.
+
+\paragraph{Inexact alternative.}  $A_{ff}$ should be well conditioned: since $\beta_t=1$, the time derivative of the
+test functions controls $f$ on every cell, so the field-only energy $f\mapsto\sup_w \ip{f}{\bbeta\cdot\nabla w}/\|w\|_V$
+is expected to be equivalent to a scaled $L^2$ norm of $f$ (to be measured; not proved here).  Then $A_{ff}^{-1}$
+can be replaced by a fixed-degree Chebyshev iteration preconditioned by the (diagonal, in a Legendre basis) field mass
+matrix.  A fixed polynomial keeps the condensed operator linear and symmetric, so outer CG remains valid; an
+adaptive inner tolerance would require flexible CG instead.
+
+\subsection{What condensation alone does to conditioning}
+
+\begin{proposition}[standard]\label{prop:schur}
+If $S$ is symmetric positive definite and $\Shat$ is its Schur complement onto the flux block, then
+$\lambda_{\min}(S)\le\lambda(\Shat)\le\lambda_{\max}(S)$; hence $\kappa(\Shat)\le\kappa(S)$.
+\end{proposition}
+\begin{proof}
+$\Shat \le A_{tt}$ gives the upper bound; $\Shat^{-1} = (S^{-1})_{tt}$ gives $\lambda_{\max}(\Shat^{-1})\le
+\lambda_{\max}(S^{-1})$.
+\end{proof}
+So condensation can only help, but it does not change asymptotics in $h$: a gain by a bounded factor, consistent with
+experience that the gains are modest.  The value of condensation is structural, which is the subject of the rest of
+these notes.
+
+%======================================================================
+\section{The trace-only problem}
+%======================================================================
+
+\subsection{Exact characterization of the local kernel (continuous broken setting)}
+
+Consider one cell $K$ with the broken test space $H^1(K)$ (any norm on it; they are all equivalent on a fixed cell).
+For $\that\in H^{-1/2}(\partial K)$ consider
+\[
+  \ell_{f,\that}(w) = -\ip{f}{\bbeta\cdot\nabla w}_K + \dual{\that}{w}_{\partial K}.
+\]
+
+\begin{proposition}[proved]\label{prop:kernel}
+There exists $f\in L^2(K)$ with $\ell_{f,\that}=0$ in $H^1(K)'$ if and only if there is $f\in L^2(K)$ with
+$\bbeta\cdot\nabla f=0$ in $\mathcal D'(K)$ and $\that = \gamma_{\bn}(\bbeta f)$, the normal trace of $\bbeta f\in
+H(\mathrm{div},K)$.
+\end{proposition}
+\begin{proof}
+Taking $w\in C_c^\infty(K)$ in $\ell_{f,\that}(w)=0$ gives $\divz(\bbeta f)=0$ in $\mathcal D'(K)$, i.e.\ $\bbeta f\in
+H(\mathrm{div},K)$ with zero divergence; since $\divz\bbeta=0$, $\divz(\bbeta f)=\bbeta\cdot\nabla f$ in the
+distributional sense.  Then for every $w\in H^1(K)$, Green's formula in $H(\mathrm{div},K)$ gives
+$-\ip{\bbeta f}{\nabla w}_K = \ip{\divz(\bbeta f)}{w}_K - \dual{\gamma_{\bn}(\bbeta f)}{w}_{\partial K}
+= -\dual{\gamma_{\bn}(\bbeta f)}{w}_{\partial K}$, so $\ell_{f,\that}(w) = \dual{\that-\gamma_{\bn}(\bbeta f)}{w}_{\partial K}$.
+This vanishes for all $w\in H^1(K)$ iff $\that=\gamma_{\bn}(\bbeta f)$, because the trace map $H^1(K)\to
+H^{1/2}(\partial K)$ is onto.  The converse is the same computation read backwards.
+\end{proof}
+
+So the kernel of the continuous condensed form $\that\mapsto\inf_f\|\ell_{f,\that}\|^2_{V(K)'}$ is exactly the set
+of fluxes of solutions of the homogeneous transport equation in $K$.
+
+\subsection{The kernel is a graph over the inflow data}
+
+Let $\Gin(K)=\{\bz\in\partial K:\bbeta\cdot\bn_K<0\}$ and $\Gout(K)=\{\bbeta\cdot\bn_K>0\}$.  Because $\beta_t=1$,
+every characteristic through a point of $K$ enters $K$ through $\Gin(K)$ and leaves through $\Gout(K)$ within time
+$\Delta t_K$ (the cell's extent in $t$); no characteristic is trapped.  A solution of $\bbeta\cdot\nabla f=0$ is
+constant along characteristics, so it is determined by its values on $\Gin$, and its outflow flux is determined by its
+inflow flux:
+\[
+  \that|_{\Gout} = \Tr_K\bigl(\that|_{\Gin}\bigr),
+\]
+where $\Tr_K$ transports $f=\that/(\bbeta\cdot\bn)$ along characteristics and multiplies by $\bbeta\cdot\bn$ on the
+outflow side.  The kernel is the graph of $\Tr_K$.
+
+\begin{lemma}[standard trace theory; stated, not proved here]\label{lem:trace}
+For $f$ in the graph space $\{f\in L^2(K):\bbeta\cdot\nabla f\in L^2(K)\}$, with no trapped characteristics, the trace
+of $f$ lies in $L^2(\partial K,|\bbeta\cdot\bn|)$.  Equivalently, the flux $\that=(\bbeta\cdot\bn)f$ lies in the
+weighted space $L^2(\partial K,|\bbeta\cdot\bn|^{-1})$, with norm $\|\that\|^2 = \int_{\partial K}|\that|^2/|\bbeta\cdot\bn|$.
+(See the classical work of Bardos on traces for transport, and the analysis of DPG for transport by Broersen,
+Dahmen and Stevenson.)
+\end{lemma}
+
+\begin{lemma}[proved, given smoothness]\label{lem:isometry}
+$\Tr_K$ is an isometry $L^2(\Gin,|\bbeta\cdot\bn|^{-1})\to L^2(\Gout,|\bbeta\cdot\bn|^{-1})$.
+\end{lemma}
+\begin{proof}
+If $\bbeta\cdot\nabla f=0$ then $\divz(\bbeta f^2) = f^2\divz\bbeta + 2f\,\bbeta\cdot\nabla f = 0$, so
+$0=\int_{\partial K}(\bbeta\cdot\bn)f^2 = \int_{\Gout}|\bbeta\cdot\bn|f^2 - \int_{\Gin}|\bbeta\cdot\bn| f^2$, and
+$|\bbeta\cdot\bn|f^2 = |\that|^2/|\bbeta\cdot\bn|$.
+\end{proof}
+
+\paragraph{Consequence for the functional setting.}  For transport the flux is not really an $H^{-1/2}$ object: the
+natural trace norm is a weighted $L^2$ norm, face by face.  The condensed form is (in the continuous limit) a norm of
+the distance of $\that$ from the graph of $\Tr_K$, for instance $\|\that|_{\Gout}-\Tr_K\that|_{\Gin}\|$, which by
+Lemma~\ref{lem:isometry} is the same as $\|\Tr_K^{-1}\that|_{\Gout}-\that|_{\Gin}\|$.  There is no fractional-order
+difficulty; all of the difficulty is directional.
+
+\subsection{Trace classes in the Vlasov setting}
+
+On a box mesh, the face classes are determined by the orthogonal direction.  On a face orthogonal to direction $d$,
+$\bn_K=\pm\mathbf e_d$ and $\that=\pm\beta_d f$.  All classes are normal components of the one vector field
+$\bsigma=\bbeta f$; equivalently, weighted traces of $f$.
+
+\begin{center}
+\begin{tabular}{@{}llp{1.45in}p{2.0in}@{}}
+\toprule
+face normal & flux $\that$ (outward $+\mathbf e_d$) & $\beta_d$ depends on & sign of $\beta_d$ on the face\\
+\midrule
+$t$ & $f$ & nothing ($\beta_t=1$) & always $+$: bottom is inflow, top is outflow \\
+$x_d$ & $v_d(\bu)\,f$ & $\bu$ only (tangential) & $\operatorname{sign}(u_d)$; constant if $u_d=0$ is a mesh plane\\
+$u_d$ & $\frac{q}{m}a_d(\bz)\,f$ & $x,t$, other $u$; also $u_d$ via $\gamma$ & can change within a face \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{$t$-faces carry the state.}  Their flux is the value of $f$ itself.  The bottom face of every cell is
+        inflow and the top is outflow, without exception.  This gives a causal ordering of the cells by time layer
+        inside a slab.
+  \item \textbf{$x$-faces carry the spatial particle flux} $v_x f$.  By Lemma~\ref{lem:div}, $\beta_x$ is the same
+        function of $\bu$ on every face of a stack of $x$-faces, so the inflow/outflow pattern is coherent along the
+        stack.  If $u_x=0$ is a mesh plane, each $x$-face is entirely inflow or entirely outflow.
+  \item \textbf{$u$-faces carry the acceleration flux.}  The sign of $a_d$ may change within a face, and the magnetic
+        rotation $\bv\times\bB$ in the $(u_x,u_y)$ plane produces cyclic dependencies between cells of one time
+        layer (Section~\ref{sec:cycles}).
+\end{itemize}
+
+%======================================================================
+\section{An exact sweep factorization of the condensed operator}
+%======================================================================
+
+\subsection{Local identity}
+
+Fix a cell $K$ and split its flux unknowns into an ``in'' set $\mathcal I_K$ and an ``out'' set $\mathcal O_K$, by
+faces.  The split is a choice; ideally it matches the sign of $\bbeta\cdot\bn_K$ on each face.  Partition
+\[
+  \Shat_K = \begin{bmatrix}\Shat_{ii} & \Shat_{io}\\ \Shat_{oi} & \Shat_{oo}\end{bmatrix}
+\]
+and assume $\Shat_{oo}$ is positive definite.  (In the continuous setting a compatible flux with zero inflow is zero,
+so the out block has no kernel; discretely this is to be checked.)  Define the \emph{discrete cell transport map} and
+the \emph{inflow Schur complement}
+\[
+  \Tr_K := -\Shat_{oo}^{-1}\Shat_{oi},\qquad \Sigma_K := \Shat_{ii}-\Shat_{io}\Shat_{oo}^{-1}\Shat_{oi}\;\succeq 0 .
+\]
+$\Tr_K\that_i$ is exactly the outflow flux that the local DPG problem on $K$ produces from the inflow flux $\that_i$:
+it minimizes $\Shat_K$ over $\that_o$ with $\that_i$ fixed, i.e.\ it is the local DPG solve with inflow data.
+
+\begin{proposition}[proved; block $LDL^\T$]\label{prop:local}
+For every $\that_K=(\that_i,\that_o)$,
+\[
+  \that_K^\T\Shat_K\that_K = \bigl\|\that_o-\Tr_K\that_i\bigr\|^2_{\Shat_{oo}} + \bigl\|\that_i\bigr\|^2_{\Sigma_K}.
+\]
+\end{proposition}
+\begin{proof}
+Expand: $\|\that_o-\Tr_K\that_i\|^2_{\Shat_{oo}} = \that_o^\T\Shat_{oo}\that_o + 2\that_o^\T\Shat_{oi}\that_i
++ \that_i^\T\Shat_{io}\Shat_{oo}^{-1}\Shat_{oi}\that_i$, and add $\that_i^\T\Sigma_K\that_i$.
+\end{proof}
+
+\begin{remark}
+In the continuous limit with the ideal split, Proposition~\ref{prop:kernel} and the graph structure give
+$\Sigma_K=0$: for any inflow data, the compatible outflow data make the residual zero.  Discretely $\Sigma_K\ne0$ for
+two reasons: the polynomial spaces do not contain the exact transported solutions, and the chosen split may disagree
+with the sign of $\bbeta\cdot\bn$ on some faces.  The size of $\Sigma_K$ relative to the first term is the quantity
+that decides everything below.
+\end{remark}
+
+\subsection{Global assembly: ownership and the sweep operator}
+
+Require that every interior face be ``out'' for exactly one of its two cells and ``in'' for the other.  Call the first
+cell its \emph{owner}.  Boundary faces whose fluxes are prescribed (Dirichlet data, in particular all inflow
+boundary faces) carry data; every other boundary face is owned by its only cell.  Then
+every flux unknown has exactly one owner, and the unknowns are partitioned by owner:
+$\that = (\that_{\mathcal O_K})_K$.
+
+\begin{definition}
+Let $R$ be the block matrix with block rows and columns indexed by cells, defined by
+\[
+  (R\that)_K = \that_{\mathcal O_K} - \Tr_K\,\that_{\mathcal I_K},
+\]
+where $\that_{\mathcal I_K}$ consists of unknowns owned by $K$'s upwind neighbours (boundary data contribute to the
+right-hand side).  Let $W=\diag_K(\Shat_{oo,K})$ and $Q=\sum_K E_{\mathcal I_K}^\T\Sigma_K E_{\mathcal I_K}$.
+\end{definition}
+
+\begin{proposition}[proved]\label{prop:global}
+$\Shat = R^\T W R + Q$, with $Q\succeq0$.  The diagonal blocks of $R$ are identities.  If the directed graph ``$K'\to
+K$ when $K'$ owns a face in $\mathcal I_K$'' is acyclic, then in a topological order $R$ is block unit
+lower triangular, and $R^{-1}$ is applied by a forward sweep:
+\[
+  \text{for $K$ in upwind-to-downwind order:}\qquad \that_{\mathcal O_K} = \mathbf g_K + \Tr_K\,\that_{\mathcal I_K}.
+\]
+\end{proposition}
+\begin{proof}
+Sum Proposition~\ref{prop:local} over cells; each unknown appears as an out unknown exactly once.  The rest is
+forward substitution.
+\end{proof}
+
+\subsection{The sweep preconditioner}
+
+Let $P=(R^\T WR)^{-1} = R^{-1}W^{-1}R^{-\T}$.  Applying $P$ to a residual $\mathbf r$:
+\begin{enumerate}[nosep]
+  \item Backward sweep (downwind to upwind): solve $R^\T\mathbf y=\mathbf r$, i.e.\ for $K$ in reverse order,
+        $\mathbf y_K = \mathbf r_K + \sum_{K'' :\,K\text{ owns a face in }\mathcal I_{K''}}
+        \bigl(\Tr_{K''}^\T\mathbf y_{K''}\bigr)\big|_{\mathcal O_K}$.
+  \item Cell-local solves: $\mathbf y_K\leftarrow\Shat_{oo,K}^{-1}\mathbf y_K$.
+  \item Forward sweep (upwind to downwind): solve $R\mathbf x=\mathbf y$ as in Proposition~\ref{prop:global}.
+\end{enumerate}
+$P$ is symmetric positive definite and fixed, so it can be used in CG or as a multigrid smoother.
+
+\begin{proposition}[proved]\label{prop:bound}
+$\lambda_{\min}(P\Shat)\ge1$ and
+\[
+  \kappa(P\Shat)\le\lambda_{\max}(P\Shat) = 1+\rho,\qquad
+  \rho = \sup_{\that\ne0}\frac{\that^\T Q\,\that}{\that^\T R^\T WR\,\that}.
+\]
+\end{proposition}
+\begin{proof}
+$\Shat = R^\T WR + Q\succeq R^\T WR$, and the Rayleigh quotient of $P\Shat$ in the $R^\T WR$ inner product is
+$1+\that^\T Q\that/\that^\T R^\T WR\that$.
+\end{proof}
+
+\begin{conjecture}\label{conj:rho}
+With the split chosen by the sign of $\bbeta\cdot\bn$ (face-averaged where it changes sign), $\rho$ is bounded
+independently of $h$, and is small when the cell Courant numbers $\nu_{K,d}=|\beta_d|\Delta t_K/h_{K,d}$ are small
+on the faces where the split disagrees with the flow.
+\end{conjecture}
+
+This is the claim to test.  If it holds, sweeps give $h$-independent iteration counts, which no local (additive)
+smoother can, and $\rho$ is a single computable number per mesh: the largest eigenvalue of a generalized eigenproblem
+$Q\mathbf x=\mu R^\T WR\mathbf x$, estimated by Lanczos within PCG exactly as we already estimate $\kappa$.
+
+\subsection{Equivalent uncondensed form}
+
+Because fields are cell-local, the same preconditioner can be written without condensing: for each cell, given the
+inflow fluxes, solve the local DPG problem for $(f_K,\that_{\mathcal O_K})$.  This is a sweep of local DPG solves,
+the DPG analogue of an upwind DG sweep.  The condensed form is cleaner to analyse and cheaper to store.
+
+\subsection{Cost}
+
+Per cell: a Cholesky factor of $\Shat_{oo}$ ($\tfrac12 n_o^2$) and $\Tr_K$ ($n_o\times n_i$), with $n_i+n_o=n_t$.  One
+application of $P$ costs two products with $\Tr_K$ or $\Tr_K^\T$ and one triangular solve pair per cell, i.e.\
+$O(n_t^2)$ flops per cell.  That is far cheaper than one matrix-free application of $\Shat$.  The blocks are formed
+once from $\Shat_K$, which is assembled densely per cell from the eigenbasis coordinates
+($\Shat_K=W_t^\T\Pi_KW_t$); transient memory is one $(n_V+1)\times(n_f+n_t)$ matrix.  Storage is comparable to the
+current element-Schwarz blocks, which measured about 2.6~MB per cell at $p=4$.
+
+%======================================================================
+\section{Cycles, mixed faces, and time-step size}\label{sec:cycles}
+%======================================================================
+
+\paragraph{Time layers are always acyclic.}  The bottom face is in and the top face is out for every cell, so the
+dependency graph restricted to $t$-faces goes strictly upward.  Cycles can only come from lateral faces within one
+time layer.
+
+\paragraph{Magnetic rotation.}  With $\bE=0$ and $\bB=B\mathbf e_z$, $\beta_{(u_x,u_y)}=\frac{qB}{m}(v_y,-v_x)$:
+circular flow about $\bu=0$.  Four cells of one time layer around the origin in $(u_x,u_y)$ then feed one another in a
+cycle.  The same happens elsewhere in the gyration region.
+
+\paragraph{Breaking cycles costs only $\rho$.}  Proposition~\ref{prop:global} needs only an acyclic ownership; the
+split need not match the flow.  One can always choose an acyclic split, e.g.\ order cells within a layer and give each
+lateral face to the earlier cell.  A face assigned against the flow does not break the identity
+$\Shat=R^\T WR+Q$; it increases $\Sigma_K$ and hence $\rho$.  Mixed-sign faces are treated the same way.
+
+\paragraph{Heuristic size of the penalty.}  A characteristic entering through the bottom of $K$ crosses a lateral
+face orthogonal to $d$ only if it travels farther than the distance to that face in time $\Delta t_K$.  The fraction of
+the flux that leaves $K$ laterally is therefore about $\min\bigl(1,\sum_d\nu_{K,d}\bigr)$.  A cycle through $k$ cells
+passes on a fraction of order $\nu^k$.  For thin time cells ($\nu\ll1$) the lateral coupling, and hence the penalty for
+misassigned faces, is small.  For magnetized electrons in the $u$ directions,
+$\nu_{K,u}\approx\omega_c\Delta t_K\,|\bu|/h_{K,u}$ (nonrelativistically), i.e.\ the gyro-angle per time cell times
+$|\bu|/h_u$.  This may not be small in the MITL; it should be computed for the meshes we use.
+
+\paragraph{Parallelism.}  Sweeps are sequential within a layer.  Standard remedies from neutron transport (KBA
+pipelining across subdomains, lagging across processor boundaries) apply.  Lagging across subdomains is again a
+choice of split, so it shows up as a contribution to $\rho$.
+
+%======================================================================
+\section{\texorpdfstring{Why the current preconditioners show $\kappa\sim h^{-2}$}{Why the current preconditioners show kappa ~ h**(-2)}}
+%======================================================================
+
+Proposition~\ref{prop:global} says that $\Shat$ is, up to $Q$, a weighted least-squares form of the sweep equations
+$R\that=\mathbf g$.  Least-squares forms of a first-order transport operator behave like a second-order operator
+along $\bbeta$ that is nearly decoupled across $\bbeta$.  Their low-energy modes are smooth along characteristics but
+may be rough across them.  Isotropic $h$-coarsening cannot represent such modes, and additive local smoothers (point,
+trace-block, element Schwarz, Chebyshev-accelerated or not) cannot remove them.  The expected result is the behaviour
+of a method without coarse correction in the direction along $\bbeta$, i.e.\ $\kappa\sim h^{-2}$.  That is what we
+measure, for matrix-free and production GMG alike:
+
+\begin{center}
+\begin{tabular}{@{}lrrlll@{}}
+\toprule
+case & cells & dofs & MF element Schwarz & MF trace-block & production GMG\\
+ & & & its ($\kappa$) & its ($\kappa$) & its\\
+\midrule
+$p=2$, $r=1$ & 128  & 5\,344   & 9 (1.5)  & 19 (4.3)  & 47\\
+$p=2$, $r=2$ & 2048 & 76\,544  & 20 (4.9) & 39 (16.9) & 88\\
+$p=4$, $r=1$ & 128  & 17\,216  & 11 (1.9) & 24 (6.4)  & 71\\
+$p=4$, $r=2$ & 2048 & 247\,296 & 23 (6.5) & 47 (25.2) & (too large here)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Base mesh $2\times1\times2\times2$ in $(x,t,u_x,u_y)$, $r$ uniform refinements, $\Delta p=2$, separable norm, full GMG
+$h$-hierarchy to the coarsest mesh at $p=1$, Chebyshev degree 4 for the matrix-free runs.  Each refinement multiplies
+$\kappa$ by about 3.5--4 and doubles the iterations.
+
+This explanation is a hypothesis.  It predicts that the eigenvector of the smallest eigenvalue of the preconditioned
+operator is smooth along $\bbeta$ and oscillatory across it, which is directly checkable (Experiment~1 below).
+
+%======================================================================
+\section{Experiments, in order}
+%======================================================================
+
+\begin{enumerate}
+  \item \textbf{Diagnose the slow mode.}  From the PCG Lanczos data, recover the Ritz vector for $\lambda_{\min}$ of
+        the current GMG-preconditioned operator, and measure its variation along and across $\bbeta$ (e.g.\ the
+        ratio $\|\bbeta\cdot\nabla f\|/\|\nabla_\perp f\|$ of the recovered field).  Cheap; tests the hypothesis of
+        the previous section.
+  \item \textbf{Sweeps without condensation.}  Symmetric multiplicative element Schwarz, ordered by time layer and
+        then by an acyclic upwind order within the layer, using the element blocks we already store.  Matrix-free
+        residual updates: after correcting cell $K$, only $K$ and its face neighbours' contributions to the residual
+        change, so one keeps per-cell eigenbasis coordinates $\mathbf y_{K'}=W_{K'}\mathbf u_{K'}$ and updates them on
+        shared faces.  Use it as a preconditioner alone and as the GMG smoother; record $\kappa$ for $r=1,2,3$.
+  \item \textbf{Condensation and the sweep preconditioner $P$.}  Implement (\ref{eq:condensed}) matrix-free; form
+        $\Tr_K$, $\Shat_{oo,K}$, $\Sigma_K$ per cell; apply $P$ by two sweeps.  Measure $\rho$
+        (Proposition~\ref{prop:bound}) and $\kappa(P\Shat)$ under refinement, and their dependence on $\Delta t_K$ and
+        on the cell Courant numbers.  Compare face-block Jacobi on $\Shat$ as the local baseline.
+  \item \textbf{Combine with coarse correction.}  If $\rho$ grows (because of cycles or under-resolution), use $P$ as
+        the smoother in a trace-only GMG hierarchy, so that the coarse space handles what the sweep leaves.
+        \texttt{GMGOperator} already supports static condensation.
+  \item \textbf{Production.}  If Experiments 2 and 3 show bounded $\kappa$, an ordered multiplicative Schwarz
+        smoother
+        for production GMG is a small change relative to the existing additive Schwarz, and would test the same
+        idea at scale.
+\end{enumerate}
+
+\section*{Summary of what is proved and what is not}
+\begin{itemize}[nosep]
+  \item Proved here: Lemma~\ref{lem:div}, Propositions~\ref{prop:schur}, \ref{prop:kernel}, \ref{prop:local},
+        \ref{prop:global}, \ref{prop:bound}, Lemma~\ref{lem:isometry} (for smooth solutions).
+  \item Standard, cited: the weighted-$L^2$ trace space (Lemma~\ref{lem:trace}).
+  \item Expected, to be measured: conditioning of $A_{ff}$; positive definiteness of $\Shat_{oo}$.
+  \item Conjectural: Conjecture~\ref{conj:rho} ($h$-independence of $\rho$), and the explanation of the observed
+        $h^{-2}$ growth.
+\end{itemize}
+
+\end{document}
