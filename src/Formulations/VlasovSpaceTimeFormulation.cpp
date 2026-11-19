@@ -1259,6 +1259,7 @@ Teuchos::RCP<GMGSolver> VlasovSpaceTimeFormulation::constructGMGSolver()
                                                  coarseSolver, useCondensedSolve) );
     
     gmgSolver->setSmootherType(smootherChoice);
+    if (_gmgSmootherApplicationCount != 1) gmgSolver->setSmootherApplicationCount(_gmgSmootherApplicationCount);
     
     gmgSolver->setAztecOutput(_aztecOutputLevel);
     
@@ -1355,6 +1356,7 @@ void VlasovSpaceTimeFormulation::configureNextSlab(Teuchos::RCP<VlasovSpaceTimeF
   }
   nextSlabForm->setIterativeSolveMaxIterations(_maxIters);
   nextSlabForm->_coarseSolverChoice = _coarseSolverChoice;
+  nextSlabForm->_gmgSmootherApplicationCount = _gmgSmootherApplicationCount;
   nextSlabForm->_substepSolveProfileCallback = _substepSolveProfileCallback;
   nextSlabForm->_substepConfigurationCallback = _substepConfigurationCallback;
   nextSlabForm->setFixedPointMaxSubsteps(_maxSubsteps);
@@ -2291,6 +2293,12 @@ void VlasovSpaceTimeFormulation::seedConfigurationSolution(SolutionPtr previousC
   _configurationSpaceFormulation->updateConfigurationSpaceFunctions();
   noteTensorConfigurationSolutionChangedIfNeeded(*this);
   _configurationSolutionSeeded = true;
+}
+
+void VlasovSpaceTimeFormulation::setGMGSmootherApplicationCount(int count)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(count < 1, std::invalid_argument, "the smoother application count must be positive");
+  _gmgSmootherApplicationCount = count;
 }
 
 void VlasovSpaceTimeFormulation::setCoarseSolverChoice(Solver::SolverChoice coarseSolverChoice)

@@ -119,6 +119,21 @@ MatrixFreeDPGTwoLevel::MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator>
 MatrixFreeDPGTwoLevel::MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator> fineOperator, SolutionPtr fineSolution, MeshPtr coarseMesh,
                                              const Options &options)
 {
+  construct(fineOperator, fineSolution, std::vector<MeshPtr>{coarseMesh}, options);
+}
+
+MatrixFreeDPGTwoLevel::MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator> fineOperator, SolutionPtr fineSolution,
+                                             const std::vector<MeshPtr> &coarseMeshesCoarseToFine, const Options &options)
+{
+  construct(fineOperator, fineSolution, coarseMeshesCoarseToFine, options);
+}
+
+void MatrixFreeDPGTwoLevel::construct(Teuchos::RCP<MatrixFreeDPGOperator> fineOperator, SolutionPtr fineSolution,
+                                      const std::vector<MeshPtr> &coarseMeshesCoarseToFine, const Options &options)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(coarseMeshesCoarseToFine.empty(), std::invalid_argument, "MatrixFreeDPGTwoLevel: no coarse mesh");
+  MeshPtr coarseMesh = coarseMeshesCoarseToFine.back();
+  _coarseLevelCount = int(coarseMeshesCoarseToFine.size());
   using MV = TVector<double>;
   using Clock = std::chrono::steady_clock;
   auto seconds = [](Clock::time_point a) { return std::chrono::duration<double>(Clock::now() - a).count(); };
@@ -139,8 +154,23 @@ MatrixFreeDPGTwoLevel::MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator>
   _coarseDofCount = coarseOperator->getGlobalNumRows();
   _setupTimes.push_back({"coarse operator", seconds(t0)});
   t0 = Clock::now();
-  auto coarseInverse = Teuchos::rcp(new DirectInverse(coarseOperator));
-  _setupTimes.push_back({"coarse factorization", seconds(t0)});
+  Teuchos::RCP<const TOperator<double>> coarseInverse;
+  if (coarseMeshesCoarseToFine.size() == 1)
+  {
+    coarseInverse = Teuchos::rcp(new DirectInverse(coarseOperator));
+    _setupTimes.push_back({"coarse factorization", seconds(t0)});
+  }
+  else
+  {
+    // the conventional GMG on the coarse level's Solution (whose map is P's domain), given the Galerkin operator
+    SolutionPtr coarseSolution = gmgOperator.getCoarseSolution();
+    _coarseGMG = Teuchos::rcp(new GMGSolver(coarseSolution, coarseMeshesCoarseToFine, 1, 0.0, GMGOperator::V_CYCLE,
+                                            GMGOperator::DEFAULT_ADDITIVE_SCHWARZ, Solver::getDirectSolver(true), false));
+    _coarseGMG->setSmootherType(GMGOperator::DEFAULT_ADDITIVE_SCHWARZ);
+    _coarseGMG->gmgOperator()->setFineStiffnessMatrix(coarseOperator);
+    coarseInverse = _coarseGMG->gmgOperator();
+    _setupTimes.push_back({"coarse GMG hierarchy", seconds(t0)});
+  }
 
   // the smoother
   t0 = Clock::now();
@@ -177,6 +207,6 @@ MatrixFreeDPGTwoLevel::MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator>
   fine.prolongateCorrection = [P](const MV &coarse, MV &correction) { P->apply(coarse, correction, Teuchos::NO_TRANS); };
   GMG::Level coarse;
   coarse.map = coarseOperator->getRangeMap();
-  coarse.coarseSolve = [coarseInverse](const MV &b, MV &x) { coarseInverse->apply(b, x); };
+  coarse.coarseSolve = [coarseInverse](const MV &b, MV &x) { coarseInverse->apply(b, x, Teuchos::NO_TRANS, 1.0, 0.0); };
   _preconditioner = Teuchos::rcp(new GMG(std::vector<GMG::Level>{fine, coarse}, "MatrixFreeDPGTwoLevel"));
 }

@@ -948,6 +948,7 @@ std::vector<double> uniformVertices(const double left, const double width, const
 struct MatrixFreeSolveOptions
 {
   bool oneLevel = true;
+  bool coarseGMG = false; // below the fine level: the conventional GMG on the lowest-order h-hierarchy, instead of an exact solve
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1044,7 +1045,10 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   {
     t0 = now();
     auto opPtr = Teuchos::rcp(new MatrixFreeDPGOperator(mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end())));
-    twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, meshes[meshes.size() - 2], solveOptions.twoLevel));
+    // the levels below the fine one: the lowest order on the fine mesh only (exact solve), or with its h-hierarchy
+    std::vector<MeshPtr> coarseMeshes = solveOptions.coarseGMG ? std::vector<MeshPtr>(meshes.begin(), meshes.end() - 1)
+                                                               : std::vector<MeshPtr>{meshes[meshes.size() - 2]};
+    twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, coarseMeshes, solveOptions.twoLevel));
     twoLevelSetupTime = seconds(t0, now());
   }
   MV uPoint(map, 1), uBlock(map, 1), uTwoLevel(map, 1);
@@ -1081,7 +1085,8 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
       std::cout << "  two-level (Chebyshev degree " << solveOptions.twoLevel.chebyshevDegree << ", eigenvalue ratio "
                 << solveOptions.twoLevel.eigenRatio << ", "
                 << (solveOptions.twoLevel.elementSchwarz ? "element Schwarz" : (solveOptions.twoLevel.traceBlockDiagonal ? "trace-block" : "point"))
-                << " diagonal, lambda_max " << twoLevel->lambdaMax() << "; Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs): "
+                << " diagonal, lambda_max " << twoLevel->lambdaMax() << "; Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs, "
+                << twoLevel->coarseLevelCount() << " coarse level(s)" << ((twoLevel->coarseLevelCount() > 1) ? " by GMG" : ", exact") << "): "
                 << twoLevelResult.iterations << " iterations, kappa ~ " << twoLevelResult.conditionNumber() << " (lambda in ["
                 << twoLevelResult.lambdaMin << ", " << twoLevelResult.lambdaMax << "]), " << twoLevelTime << " s (setup " << twoLevelSetupTime << " s:";
       for (const auto &entry : twoLevel->setupTimes()) std::cout << " " << entry.first << " " << entry.second;
@@ -1480,6 +1485,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("checkMatrixFreeOperator", "noCheckMatrixFreeOperator", &checkMatrixFreeOperator,
                    "After the first slab's solve, compare the matrix-free Vlasov operator (sum-factorized B, fast-diagonalization "
                    "G^{-1}) with the assembled stiffness matrix.  Needs --separableGraphTestNorm --useFullTensorTestBasis.");
+    int gmgSmootherApplications = 1;
+    cmdp.setOption("gmgSmootherApplications", &gmgSmootherApplications,
+                   "GMG (assembled) smoother applications before and after each coarse correction");
     MatrixFreeSolveOptions matrixFreeSolveOptions;
     cmdp.setOption("matrixFreeOneLevel", "noMatrixFreeOneLevel", &matrixFreeSolveOptions.oneLevel,
                    "With --checkMatrixFreeOperator: also run point and trace-block Jacobi PCG");
@@ -1493,6 +1501,9 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeLambdaMaxBoost", &matrixFreeSolveOptions.twoLevel.lambdaMaxBoost, "Two-level matrix-free: lambda_max estimate times this");
     cmdp.setOption("matrixFreeElementSchwarzSmoother", "matrixFreeDiagonalSmoother", &matrixFreeSolveOptions.twoLevel.elementSchwarz,
                    "Two-level matrix-free: Chebyshev with element-block additive Schwarz (fields and face fluxes of each element)");
+    cmdp.setOption("matrixFreeCoarseGMG", "matrixFreeCoarseDirect", &matrixFreeSolveOptions.coarseGMG,
+                   "Matrix-free multigrid: below the fine level, the conventional GMG on the lowest-order h-hierarchy (needs "
+                   "--numUniformRefinements > 0), or an exact solve of the lowest order on the fine mesh");
     bool matrixFreeCheckBeforeSolve = false;
     cmdp.setOption("matrixFreeCheckBeforeSolve", "matrixFreeCheckAfterSolve", &matrixFreeCheckBeforeSolve,
                    "With --checkMatrixFreeOperator: run the check before the first slab's solve (the initial fields), then stop");
@@ -2311,6 +2322,7 @@ int main(int argc, char *argv[])
     };
     
     if (coarseSolver != "default") form->setCoarseSolverChoice(Solver::solverChoiceFromString(coarseSolver)); // carried to later slabs by nextTimeSlab()
+    if (gmgSmootherApplications != 1) form->setGMGSmootherApplicationCount(gmgSmootherApplications); // carried to later slabs
 
     // Space-charge-limited emission: within each slab's fixed-point iteration, after each configuration-space solve, adjust
     // the emitted density so that the cathode field at the slab's final time vanishes.  Newton iteration on E(0)(n_emit),

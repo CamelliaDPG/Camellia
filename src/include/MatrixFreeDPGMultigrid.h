@@ -14,6 +14,7 @@
 #include "TypeDefs.h"
 
 #include "MatrixFreeDPGOperator.h"
+#include "GMGSolver.h"
 
 #include <functional>
 
@@ -69,6 +70,15 @@ namespace Camellia
     //! fineSolution: the fine Solution (mesh, dof interpreter, partition map, BCs, inner product); fineOperator on its map
     MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator> fineOperator, SolutionPtr fineSolution, MeshPtr coarseMesh,
                           const Options &options);
+    /**
+     coarseMeshesCoarseToFine: the meshes below the fine level, coarsest first, the last one the coarse level of P (e.g.
+     GMGSolver::meshesForMultigrid(fineMesh, 0, 1) without its last, fine, entry: the h-hierarchy at the lowest order).
+     With more than one, the coarse correction is one V-cycle of the conventional GMG (GMGSolver on those meshes: Galerkin
+     h-coarsening, cell-block additive Schwarz, a direct solve on the coarsest) applied to the matrix-free Galerkin coarse
+     operator, instead of an exact solve.
+     */
+    MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator> fineOperator, SolutionPtr fineSolution,
+                          const std::vector<MeshPtr> &coarseMeshesCoarseToFine, const Options &options);
     MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator> fineOperator, SolutionPtr fineSolution, MeshPtr coarseMesh);
 
     //! the V-cycle, as a Tpetra operator (a preconditioner for fineOperator)
@@ -76,6 +86,8 @@ namespace Camellia
 
     double lambdaMax() const { return _lambdaMax; }
     GlobalIndexType coarseDofCount() const { return _coarseDofCount; }
+    //! the number of levels below the fine one (1: an exact coarse solve)
+    int coarseLevelCount() const { return _coarseLevelCount; }
     //! setup times: prolongation, coarse operator, coarse factorization, smoother diagonal, lambda_max
     std::vector<std::pair<std::string,double>> setupTimes() const { return _setupTimes; }
 
@@ -83,6 +95,10 @@ namespace Camellia
     Teuchos::RCP<TOperator<double>> _preconditioner;
     double _lambdaMax = 0;
     GlobalIndexType _coarseDofCount = 0;
+    int _coarseLevelCount = 1;
+    Teuchos::RCP<GMGSolver> _coarseGMG; // kept alive for the coarse correction
+    void construct(Teuchos::RCP<MatrixFreeDPGOperator> fineOperator, SolutionPtr fineSolution,
+                   const std::vector<MeshPtr> &coarseMeshesCoarseToFine, const Options &options);
     std::vector<std::pair<std::string,double>> _setupTimes;
   };
 }

@@ -117,6 +117,7 @@ private:
   std::vector<double> _cgTols; // one per substep; allows looser CG tolerances for early fixed-point steps
   int _maxIters = 10000;
   int _coarseSolverChoice = -1; // a Solver::SolverChoice; -1 means Solver::getDirectSolver()
+  int _gmgSmootherApplicationCount = 1; // GMG smoother applications (pre and post) per level
   bool _configurationSolutionSeeded = false; // true once seedConfigurationSolution() has been called
 
   std::function<void(const SubstepSolveProfile &)> _substepSolveProfileCallback;
@@ -410,6 +411,8 @@ public:
   //! SuperLUDist distributes the coarse factorization and uses a fill-reducing nested-dissection ordering; it requires
   //! Trilinos built with SuperLU_DIST.
   void setCoarseSolverChoice(Solver::SolverChoice coarseSolverChoice);
+  //! the number of times the GMG smoother is applied before and after each coarse correction (default 1); carried to later slabs
+  void setGMGSmootherApplicationCount(int count);
 
   //! Sets this slab's configuration-space E and B fields to those of previousConfigurationSolution at previousFinalTime,
   //! constant in time; called by configureNextSlab().  Without a seed, solve() first does a configuration-space solve
