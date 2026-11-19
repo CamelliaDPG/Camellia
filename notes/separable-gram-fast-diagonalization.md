@@ -238,6 +238,24 @@ sweep count exceeds 1, with a Lanczos lambda_max, since an underestimate makes h
 p = 2 that is roughly break-even in time.  The payoff should come where per-iteration costs outside smoothing
 dominate: MPI reductions, coarse solves and deep hierarchies.
 
+## p = 4 against production (measured 11-19)
+
+Base 2 1 2 2, one uniform refinement: 128 cells, 17216 dofs, H^1 order p = 4, Delta p = 2, separable norm, one core.
+Matrix-free: Chebyshev degree 4, the GMG h-hierarchy below.  Peak memory is the maximum RSS of the process.  The
+matrix-free runs stop after the check; the production runs do the whole slab.
+
+| solver                                        | iterations | setup / assembly | solve  | total  | peak memory |
+|-----------------------------------------------|------------|------------------|--------|--------|-------------|
+| production GMG, serendipity test (its usual)  | 71         | 14 s assembly    | 3.8 s  | ~18 s  | 2.66 GB     |
+| production GMG, full tensor test              | 71         | 89 s assembly    | 3.6 s  | ~93 s  | 0.90 GB     |
+| MF, element Schwarz                           | 11         | 34 s             | 20.5 s | 55 s   | 0.38 GB     |
+| MF, trace-block                               | 24         | 21 s             | 40.9 s | 62 s   | 0.17 GB     |
+
+At this size the matrix-free solver is about 3x slower than production's usual configuration, and uses 7-15x less
+memory.  An iteration is about 9 fine applications at about 1.6 ms per cell.  The element-Schwarz blocks take 25 s to
+set up.  The full tensor test space, which matrix-free needs, is also the larger and more accurate test space;
+production with serendipity test is not the same discretization.
+
 ## Next steps
 
 1. **p = 4 against production** on the same uniformly refined meshes: wall time and memory, with the direct
