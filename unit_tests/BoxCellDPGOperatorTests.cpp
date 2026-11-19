@@ -229,43 +229,27 @@ TEUCHOS_UNIT_TEST( BoxCellDPGOperator, GlobalOperatorMatchesSolution )
   MatrixFreeDPGOperator op(s.mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end()));
   MV b(map, 1);
   op.dirichletRightHandSide(rhs, dirichletIndices, dirichletValues, b);
-  // (preconditioned) conjugate gradients to a relative residual of 1e-12
-  auto pcg = [&](Teuchos::RCP<const TOperator<double>> preconditioner, MV &u) {
-    MV r(b, Teuchos::Copy), z(map, 1), p(map, 1), Ap(map, 1);
-    u.putScalar(0.0);
-    if (preconditioner.is_null()) z.assign(r); else preconditioner->apply(r, z);
-    p.assign(z);
-    double rz = r.getVector(0)->dot(*z.getVector(0));
-    const double bNorm = b.getVector(0)->norm2();
-    int iterations = 0;
-    for (; iterations < 3000 && r.getVector(0)->norm2() > 1e-12 * bNorm; iterations++)
-    {
-      op.apply(p, Ap);
-      const double alpha = rz / p.getVector(0)->dot(*Ap.getVector(0));
-      u.update(alpha, p, 1.0);
-      r.update(-alpha, Ap, 1.0);
-      if (preconditioner.is_null()) z.assign(r); else preconditioner->apply(r, z);
-      const double rzNew = r.getVector(0)->dot(*z.getVector(0));
-      p.update(1.0, z, rzNew / rz);
-      rz = rzNew;
-    }
-    return iterations;
-  };
   auto solutionError = [&](const MV &u) {
     MV difference(u, Teuchos::Copy);
     difference.update(-1.0, *direct, 1.0);
     return difference.getVector(0)->normInf() / direct->getVector(0)->normInf();
   };
-  MV uCG(map, 1), uJacobi(map, 1);
-  const int cgIterations = pcg(Teuchos::null, uCG);
+  // CG, point Jacobi (the shared-eigenbasis diagonal) and trace-block Jacobi, to a relative residual of 1e-12
   auto diagonal = Teuchos::rcp(new MV(map, 1));
   op.diagonal(*diagonal);
-  auto jacobi = Teuchos::rcp(new DiagonalScalingOperator(diagonal));
-  const int jacobiIterations = pcg(jacobi, uJacobi);
-  const double cgError = solutionError(uCG), jacobiError = solutionError(uJacobi);
-  out << dirichletIndices.size() << " Dirichlet dofs; CG: " << cgIterations << " iterations, |u - u_direct| / |u_direct| = " << cgError
-      << "; Jacobi PCG: " << jacobiIterations << " iterations, " << jacobiError << endl;
-  TEST_COMPARE(cgError, <, 1e-7);
-  TEST_COMPARE(jacobiError, <, 1e-7);
-  TEST_COMPARE(jacobiIterations, <, cgIterations);
+  DiagonalScalingOperator jacobi(diagonal);
+  Teuchos::RCP<TOperator<double>> blockJacobi = op.traceBlockJacobi();
+  MV uCG(map, 1), uJacobi(map, 1), uBlock(map, 1);
+  const ConjugateGradientResult cg = conjugateGradient(op, nullptr, b, uCG, 1e-12, 3000);
+  const ConjugateGradientResult pointJacobi = conjugateGradient(op, &jacobi, b, uJacobi, 1e-12, 3000);
+  const ConjugateGradientResult traceBlock = conjugateGradient(op, blockJacobi.get(), b, uBlock, 1e-12, 3000);
+  out << dirichletIndices.size() << " Dirichlet dofs; iterations (kappa estimate, |u - u_direct| / |u_direct|): CG " << cg.iterations
+      << " (" << cg.conditionNumber() << ", " << solutionError(uCG) << "), point Jacobi " << pointJacobi.iterations << " ("
+      << pointJacobi.conditionNumber() << ", " << solutionError(uJacobi) << "), trace-block Jacobi " << traceBlock.iterations << " ("
+      << traceBlock.conditionNumber() << ", " << solutionError(uBlock) << ")" << endl;
+  TEST_COMPARE(solutionError(uCG), <, 1e-7);
+  TEST_COMPARE(solutionError(uJacobi), <, 1e-7);
+  TEST_COMPARE(solutionError(uBlock), <, 1e-7);
+  TEST_COMPARE(pointJacobi.iterations, <, cg.iterations);
+  TEST_COMPARE(traceBlock.iterations, <=, pointJacobi.iterations);
 }

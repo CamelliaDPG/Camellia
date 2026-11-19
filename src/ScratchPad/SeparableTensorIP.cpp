@@ -360,21 +360,35 @@ void SeparableTensorIP::applyCellInverse(const CellInverse &cell, double *x, int
   }
 }
 
-void SeparableTensorIP::inverseQuadraticForms(const CellInverse &cell, double *b, int vectorCount, double *values)
+void SeparableTensorIP::inverseFactorCoordinates(const CellInverse &cell, double *b, int vectorCount, std::vector<double> &w)
 {
   const int N = cell.inverse->size();
-  std::vector<double> zb(vectorCount, 0.0);
+  w.assign(size_t(vectorCount) * (N + 1), 0.0);
   if (cell.c != 0.0)
+  {
+    const double scale = std::sqrt(cell.c / cell.denominator);
     for (int r=0; r<vectorCount; r++)
-      for (int i=0; i<N; i++) zb[r] += cell.z[i] * b[size_t(r) * N + i];
+    {
+      double zb = 0;
+      for (int i=0; i<N; i++) zb += cell.z[i] * b[size_t(r) * N + i];
+      w[size_t(r) * (N + 1) + N] = scale * zb;
+    }
+  }
   const std::vector<double> D = cell.inverse->eigenvalueDiagonal(cell.scales);
   cell.inverse->applyEigenbasisTranspose(b, vectorCount);
   for (int r=0; r<vectorCount; r++)
+    for (int i=0; i<N; i++) w[size_t(r) * (N + 1) + i] = b[size_t(r) * N + i] / std::sqrt(D[i]);
+}
+
+void SeparableTensorIP::inverseQuadraticForms(const CellInverse &cell, double *b, int vectorCount, double *values)
+{
+  const int N = cell.inverse->size();
+  std::vector<double> w;
+  inverseFactorCoordinates(cell, b, vectorCount, w);
+  for (int r=0; r<vectorCount; r++)
   {
-    const double *y = b + size_t(r) * N;
     double value = 0;
-    for (int i=0; i<N; i++) value += y[i] * y[i] / D[i];
-    if (cell.c != 0.0) value += cell.c * zb[r] * zb[r] / cell.denominator;
+    for (int i=0; i<=N; i++) value += w[size_t(r) * (N + 1) + i] * w[size_t(r) * (N + 1) + i];
     values[r] = value;
   }
 }

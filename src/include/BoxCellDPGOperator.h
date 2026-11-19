@@ -71,6 +71,14 @@ namespace Camellia
     //! sum-factorized B and half a G^{-1} per vector.  With u_c the cell's restrictions of global basis functions, the
     //! sum over cells is the diagonal of the global DPG operator (MatrixFreeDPGOperator::diagonal()).
     void schurQuadraticForms(GlobalIndexType cellID, const std::vector<std::vector<std::pair<int,double>>> &vectors, double *values);
+    //! coordinates w_c (stride N + 1, row by row) with u_a^T S_K u_b = w_a . w_b, for the same sparse local vectors
+    //! (SeparableTensorIP::inverseFactorCoordinates() of B_K u_c): the blocks of S_K are inner products of these
+    void schurFactorCoordinates(GlobalIndexType cellID, const std::vector<std::vector<std::pair<int,double>>> &vectors,
+                                std::vector<double> &w, int &stride);
+    //! the side ordinal of a local trial dof of a flux variable, or -1 for a field (volume) dof
+    int dofSide(GlobalIndexType cellID, int localDof);
+    //! the cell direction normal to a side, and its endpoint (0: lower, 1: upper)
+    void sideNormal(GlobalIndexType cellID, int side, int &normal, int &endpoint);
     //! load (trial dof ordering) = B_K^T G_K^{-1} l_K, l_K the right-hand side tested against the test basis (by the
     //! element's standard quadrature, enriched by the operator's quadratureEnrichment)
     void applyLoad(GlobalIndexType cellID, RHSPtr rhs, double *load);
@@ -131,6 +139,7 @@ namespace Camellia
       std::vector<SideData> sides;
       std::vector<FluxSideData> fluxSides;
       int trialDofCount = 0;
+      std::vector<int> dofSide; // [local trial dof]: side ordinal of a flux dof, -1 otherwise
       Camellia::FieldContainer<double> refPoints; // (P, dim), first direction fastest
       //! the same points as a tensor product of one-dimensional rules (first component fastest), which coefficient
       //! Functions such as PhysicalSolutionExtrusion require

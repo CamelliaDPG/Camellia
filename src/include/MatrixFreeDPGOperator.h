@@ -75,6 +75,18 @@ namespace Camellia
      */
     void diagonal(MV &d) const;
 
+    /**
+     \brief Trace-block Jacobi: the dense diagonal blocks of the operator for a partition of the dofs into each face's
+     flux dofs and each element's field dofs (identity on the Dirichlet dofs), Cholesky-factored.
+
+     Entries (P_K e_a)^T S_K (P_K e_b) are inner products of the shared-eigenbasis coordinates
+     (BoxCellDPGOperator::schurFactorCoordinates()), summed over cells; nothing global is formed.  A flux dof's face
+     is that of the first local dof it is met through (on meshes with hanging faces a constrained face's dofs can land in
+     neighboring blocks, which is still a valid block Jacobi).  Rank-owned dofs only, with this rank's cells (exact on
+     one rank).
+     */
+    Teuchos::RCP<TOperator<double>> traceBlockJacobi() const;
+
   private:
     MeshPtr _mesh;
     Teuchos::RCP<BoxCellDPGOperator> _local;
@@ -88,6 +100,20 @@ namespace Camellia
     template <typename CellAction>
     void assemble(const MV *X, MV &Y, CellAction cellAction) const;
   };
+
+  //! the outcome of conjugateGradient(): iterations, relative residual |b - A x| / |b|, and the extreme eigenvalues of
+  //! M^{-1} A estimated from the Lanczos tridiagonal of the iteration (Ritz values: lambdaMin from above, lambdaMax from
+  //! below), whose ratio estimates the condition number
+  struct ConjugateGradientResult
+  {
+    int iterations = 0;
+    double relativeResidual = 0, lambdaMin = 0, lambdaMax = 0;
+    double conditionNumber() const { return lambdaMax / lambdaMin; }
+  };
+
+  //! preconditioned conjugate gradients from x = 0 (M may be null), to |b - A x| <= tolerance |b|
+  ConjugateGradientResult conjugateGradient(const TOperator<double> &A, const TOperator<double> *M, const TVector<double> &b,
+                                            TVector<double> &x, double tolerance, int maxIterations);
 
   /**
    \brief Y = beta Y + alpha D^{-1} X for a diagonal D (e.g. MatrixFreeDPGOperator::diagonal()): Jacobi preconditioning.

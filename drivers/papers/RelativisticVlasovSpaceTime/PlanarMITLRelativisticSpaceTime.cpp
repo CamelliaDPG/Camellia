@@ -938,9 +938,11 @@ std::vector<double> uniformVertices(const double left, const double width, const
 }
 
 //! Checks the matrix-free Vlasov operator (sum-factorized B, fast-diagonalization G^{-1}) against the assembled
-//! stiffness matrix with the current fields: |S x - A x| / |A x| for a random x, and the time per application.
+//! stiffness matrix with the current fields (|S x - A x| / |A x| for a random x, the diagonal), and solves the slab's
+//! system by matrix-free CG with point and trace-block Jacobi, reporting iterations and condition-number estimates (and
+//! the difference from a direct solve).  With compareAssembled false, only the matrix-free solves are run.
 //! Needs the separable graph norm and a full tensor-product test space (--separableGraphTestNorm --useFullTensorTestBasis).
-void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int quadratureEnrichment, int rank)
+void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int quadratureEnrichment, bool compareAssembled, int rank)
 {
   SolutionPtr vlasovSolution = form->vlasovSolution();
   auto ip = Teuchos::rcp_dynamic_cast<SeparableTensorIP>(vlasovSolution->ip());
@@ -962,97 +964,97 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   }
   auto now = [] { return std::chrono::steady_clock::now(); };
   auto seconds = [](std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) { return std::chrono::duration<double>(b - a).count(); };
-  // the assembled operator with the current fields, without boundary conditions
-  SolutionPtr reference = Solution::solution(form->vlasovBF(), mesh, BC::bc(), RHS::rhs(), ip); // no boundary conditions
-  // the same enrichment as the matrix-free quadrature (the coefficients, v = u / gamma and the fields, are not
-  // polynomials, so both quadratures carry an error that this lets one compare)
-  reference->setCubatureEnrichmentDegree(std::max(vlasovSolution->cubatureEnrichmentDegree(), quadratureEnrichment));
-  const auto assemblyStart = now();
-  reference->initializeLHSVector();
-  reference->initializeStiffnessAndLoad();
-  reference->populateStiffnessAndLoad();
-  const double assemblyTime = seconds(assemblyStart, now());
-  TMatrixPtr<double> A = reference->getStiffnessMatrix();
-  const auto setupStart = now();
-  MatrixFreeDPGOperator op(mesh, local, A->getRowMap());
   using MV = MatrixFreeDPGOperator::MV;
-  MV x(A->getRowMap(), 1), Ax(A->getRowMap(), 1), Sx(A->getRowMap(), 1);
-  x.randomize();
-  op.applyUnconstrained(x, Sx); // the first application also samples the coefficients and builds the cell inverses
-  const double firstApplyTime = seconds(setupStart, now());
-  const auto applyStart = now();
-  op.applyUnconstrained(x, Sx);
-  const double applyTime = seconds(applyStart, now());
-  A->apply(x, Ax);
-  const double AxNorm = Ax.getVector(0)->normInf();
-  Sx.update(-1.0, Ax, 1.0);
-  const double relativeError = Sx.getVector(0)->normInf() / AxNorm;
-  // the Jacobi diagonal, in the shared eigenbasis
-  const auto diagonalStart = now();
-  MV matrixFreeDiagonal(A->getRowMap(), 1), assembledDiagonal(A->getRowMap(), 1);
-  op.diagonal(matrixFreeDiagonal);
-  const double diagonalTime = seconds(diagonalStart, now());
-  A->getLocalDiagCopy(*assembledDiagonal.getVectorNonConst(0));
-  const double diagonalNorm = assembledDiagonal.getVector(0)->normInf();
-  matrixFreeDiagonal.update(-1.0, assembledDiagonal, 1.0);
-  const double diagonalError = matrixFreeDiagonal.getVector(0)->normInf() / diagonalNorm;
-  if (rank == 0)
+  const int enrichment = std::max(vlasovSolution->cubatureEnrichmentDegree(), quadratureEnrichment);
+  TMapConstPtr map = vlasovSolution->getPartitionMap();
+
+  if (compareAssembled)
   {
-    std::cout << "checkMatrixFreeOperator: " << A->getGlobalNumRows() << " dofs, " << mesh->numActiveElements()
-              << " cells, quadrature enrichment " << quadratureEnrichment << " (the driver's: " << vlasovSolution->cubatureEnrichmentDegree()
-              << "): |S x - A x| / |A x| = " << relativeError
-              << "; assembly " << assemblyTime << " s, matrix-free setup + first application " << firstApplyTime
-              << " s, application " << applyTime << " s; |diag(S) - diag(A)| / |diag(A)| = " << diagonalError
-              << ", diagonal " << diagonalTime << " s\n";
+    // the assembled operator with the current fields, without boundary conditions
+    SolutionPtr reference = Solution::solution(form->vlasovBF(), mesh, BC::bc(), RHS::rhs(), ip); // no boundary conditions
+    reference->setCubatureEnrichmentDegree(enrichment); // the same enrichment as the matrix-free quadrature
+    const auto assemblyStart = now();
+    reference->initializeLHSVector();
+    reference->initializeStiffnessAndLoad();
+    reference->populateStiffnessAndLoad();
+    const double assemblyTime = seconds(assemblyStart, now());
+    TMatrixPtr<double> A = reference->getStiffnessMatrix();
+    map = A->getRowMap();
+    const auto setupStart = now();
+    MatrixFreeDPGOperator op(mesh, local, map);
+    MV x(map, 1), Ax(map, 1), Sx(map, 1);
+    x.randomize();
+    op.applyUnconstrained(x, Sx); // the first application also samples the coefficients and builds the cell inverses
+    const double firstApplyTime = seconds(setupStart, now());
+    const auto applyStart = now();
+    op.applyUnconstrained(x, Sx);
+    const double applyTime = seconds(applyStart, now());
+    A->apply(x, Ax);
+    const double AxNorm = Ax.getVector(0)->normInf();
+    Sx.update(-1.0, Ax, 1.0);
+    const double relativeError = Sx.getVector(0)->normInf() / AxNorm;
+    MV matrixFreeDiagonal(map, 1), assembledDiagonal(map, 1);
+    op.diagonal(matrixFreeDiagonal);
+    A->getLocalDiagCopy(*assembledDiagonal.getVectorNonConst(0));
+    const double diagonalNorm = assembledDiagonal.getVector(0)->normInf();
+    matrixFreeDiagonal.update(-1.0, assembledDiagonal, 1.0);
+    const double diagonalError = matrixFreeDiagonal.getVector(0)->normInf() / diagonalNorm;
+    if (rank == 0)
+    {
+      std::cout << "checkMatrixFreeOperator: " << A->getGlobalNumRows() << " dofs, " << mesh->numActiveElements()
+                << " cells, quadrature enrichment " << quadratureEnrichment << " (the driver's: " << vlasovSolution->cubatureEnrichmentDegree()
+                << "): |S x - A x| / |A x| = " << relativeError << ", |diag(S) - diag(A)| / |diag(A)| = " << diagonalError
+                << "; assembly " << assemblyTime << " s, matrix-free setup + first application " << firstApplyTime
+                << " s, application " << applyTime << " s\n";
+    }
   }
 
-  // the slab's system (its boundary conditions and load, the current fields): Jacobi-preconditioned CG on the
-  // matrix-free operator against a direct solve of the assembled system
-  SolutionPtr direct = Solution::solution(form->vlasovBF(), mesh, vlasovSolution->bc(), vlasovSolution->rhs(), ip);
-  direct->setCubatureEnrichmentDegree(std::max(vlasovSolution->cubatureEnrichmentDegree(), quadratureEnrichment));
-  const auto directStart = now();
-  direct->solve();
-  const double directTime = seconds(directStart, now());
-  TVectorPtr<double> uDirect = direct->getLHSVector();
+  // the slab's system (its boundary conditions and load, the current fields), matrix-free
   std::vector<GlobalIndexType> dirichletIndices;
   std::vector<double> dirichletValues;
   MatrixFreeDPGOperator::dirichletData(mesh, vlasovSolution->bc(), dirichletIndices, dirichletValues);
-  const auto pcgSetupStart = now();
-  MatrixFreeDPGOperator constrained(mesh, local, A->getRowMap(), std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end()));
-  MV b(A->getRowMap(), 1), u(A->getRowMap(), 1);
-  constrained.dirichletRightHandSide(vlasovSolution->rhs(), dirichletIndices, dirichletValues, b);
-  auto diagonal = Teuchos::rcp(new MV(A->getRowMap(), 1));
-  constrained.diagonal(*diagonal);
-  DiagonalScalingOperator jacobi(diagonal);
-  const double pcgSetupTime = seconds(pcgSetupStart, now());
-  const auto pcgStart = now();
-  MV r(b, Teuchos::Copy), z(A->getRowMap(), 1), pDirection(A->getRowMap(), 1), Ap(A->getRowMap(), 1);
-  u.putScalar(0.0);
-  jacobi.apply(r, z);
-  pDirection.assign(z);
-  double rz = r.getVector(0)->dot(*z.getVector(0));
-  const double bNorm = b.getVector(0)->norm2();
-  int iterations = 0;
-  for (; iterations < 20000 && r.getVector(0)->norm2() > 1e-10 * bNorm; iterations++)
-  {
-    constrained.apply(pDirection, Ap);
-    const double alpha = rz / pDirection.getVector(0)->dot(*Ap.getVector(0));
-    u.update(alpha, pDirection, 1.0);
-    r.update(-alpha, Ap, 1.0);
-    jacobi.apply(r, z);
-    const double rzNew = r.getVector(0)->dot(*z.getVector(0));
-    pDirection.update(1.0, z, rzNew / rz);
-    rz = rzNew;
-  }
-  const double pcgTime = seconds(pcgStart, now());
-  MV difference(u, Teuchos::Copy);
-  difference.update(-1.0, *uDirect, 1.0);
-  const double solveError = difference.getVector(0)->normInf() / uDirect->getVector(0)->normInf();
+  MatrixFreeDPGOperator op(mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end()));
+  MV b(map, 1);
+  auto t0 = now();
+  op.dirichletRightHandSide(vlasovSolution->rhs(), dirichletIndices, dirichletValues, b);
+  const double rhsTime = seconds(t0, now());
+  t0 = now();
+  auto diagonal = Teuchos::rcp(new MV(map, 1));
+  op.diagonal(*diagonal);
+  DiagonalScalingOperator pointJacobi(diagonal);
+  const double pointSetupTime = seconds(t0, now());
+  t0 = now();
+  Teuchos::RCP<TOperator<double>> traceBlockJacobi = op.traceBlockJacobi();
+  const double blockSetupTime = seconds(t0, now());
+  MV uPoint(map, 1), uBlock(map, 1);
+  t0 = now();
+  const ConjugateGradientResult point = conjugateGradient(op, &pointJacobi, b, uPoint, 1e-10, 20000);
+  const double pointTime = seconds(t0, now());
+  t0 = now();
+  const ConjugateGradientResult block = conjugateGradient(op, traceBlockJacobi.get(), b, uBlock, 1e-10, 20000);
+  const double blockTime = seconds(t0, now());
   if (rank == 0)
   {
-    std::cout << "checkMatrixFreeOperator: Jacobi PCG (shared-eigenbasis diagonal) to relative residual 1e-10: " << iterations
-              << " iterations, " << pcgTime << " s (setup " << pcgSetupTime << " s); direct solve (assembly included) " << directTime
-              << " s; |u_PCG - u_direct| / |u_direct| = " << solveError << " (" << dirichletIndices.size() << " Dirichlet dofs)\n";
+    std::cout << "checkMatrixFreeOperator: " << map->getGlobalNumElements() << " dofs (" << dirichletIndices.size() << " Dirichlet), "
+              << mesh->numActiveElements() << " cells; PCG to relative residual 1e-10 (right-hand side " << rhsTime << " s):\n"
+              << "  point Jacobi:       " << point.iterations << " iterations, kappa ~ " << point.conditionNumber()
+              << " (lambda in [" << point.lambdaMin << ", " << point.lambdaMax << "]), " << pointTime << " s (setup " << pointSetupTime << " s)\n"
+              << "  trace-block Jacobi: " << block.iterations << " iterations, kappa ~ " << block.conditionNumber()
+              << " (lambda in [" << block.lambdaMin << ", " << block.lambdaMax << "]), " << blockTime << " s (setup " << blockSetupTime << " s)\n";
+  }
+  if (compareAssembled)
+  {
+    SolutionPtr direct = Solution::solution(form->vlasovBF(), mesh, vlasovSolution->bc(), vlasovSolution->rhs(), ip);
+    direct->setCubatureEnrichmentDegree(enrichment);
+    t0 = now();
+    direct->solve();
+    const double directTime = seconds(t0, now());
+    TVectorPtr<double> uDirect = direct->getLHSVector();
+    MV difference(uBlock, Teuchos::Copy);
+    difference.update(-1.0, *uDirect, 1.0);
+    const double solveError = difference.getVector(0)->normInf() / uDirect->getVector(0)->normInf();
+    if (rank == 0)
+      std::cout << "  direct solve (assembly included) " << directTime << " s; |u_PCG - u_direct| / |u_direct| = " << solveError << "\n";
   }
 }
 
@@ -1432,6 +1434,12 @@ int main(int argc, char *argv[])
     cmdp.setOption("checkMatrixFreeOperator", "noCheckMatrixFreeOperator", &checkMatrixFreeOperator,
                    "After the first slab's solve, compare the matrix-free Vlasov operator (sum-factorized B, fast-diagonalization "
                    "G^{-1}) with the assembled stiffness matrix.  Needs --separableGraphTestNorm --useFullTensorTestBasis.");
+    bool matrixFreeCheckBeforeSolve = false;
+    cmdp.setOption("matrixFreeCheckBeforeSolve", "matrixFreeCheckAfterSolve", &matrixFreeCheckBeforeSolve,
+                   "With --checkMatrixFreeOperator: run the check before the first slab's solve (the initial fields), then stop");
+    bool matrixFreeCheckAssembled = true;
+    cmdp.setOption("matrixFreeCheckAssembled", "noMatrixFreeCheckAssembled", &matrixFreeCheckAssembled,
+                   "With --checkMatrixFreeOperator: also assemble the operator and solve directly, for comparison (off: matrix-free solves only)");
     cmdp.setOption("matrixFreeQuadratureEnrichment", &matrixFreeQuadratureEnrichment,
                    "Quadrature enrichment of the matrix-free operator: n_k + ceil(enrichment / 2) Gauss points per direction");
     cmdp.setOption("useFullTensorTestBasis", "useTrialFamilyTestBasis", &useFullTensorTestBasis,
@@ -2616,9 +2624,14 @@ int main(int argc, char *argv[])
           form->setUseGeometricMultigrid(false);
         }
         
+        if (checkMatrixFreeOperator && matrixFreeCheckBeforeSolve && (timeSlabOrdinal == 0))
+        {
+          checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, rank);
+          return 0;
+        }
         auto timingSlabSolveStart = timing.now();
         form->solve();
-        if (checkMatrixFreeOperator && (timeSlabOrdinal == 0)) checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, rank);
+        if (checkMatrixFreeOperator && (timeSlabOrdinal == 0)) checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, rank);
         {
           auto fields = timingMeshStats(form);
           fields.push_back({"slab", std::to_string(timeSlabOrdinal)});

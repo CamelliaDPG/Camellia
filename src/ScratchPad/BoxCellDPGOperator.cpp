@@ -320,6 +320,9 @@ void BoxCellDPGOperator::initializeTypeData(TypeData &data, ElementTypePtr elemT
       data.fluxSides.push_back(fluxSide);
     }
   }
+  data.dofSide.assign(data.trialDofCount, -1);
+  for (const FluxSideData &fluxSide : data.fluxSides)
+    for (int dof : fluxSide.dofIndex) data.dofSide[dof] = fluxSide.side;
   data.supported = true;
 }
 
@@ -703,4 +706,36 @@ void BoxCellDPGOperator::schurQuadraticForms(GlobalIndexType cellID, const std::
     for (const auto &entry : vectors[c]) u[entry.first] = 0.0;
   }
   SeparableTensorIP::inverseQuadraticForms(cell.gramInverse, Bu.data(), count, values);
+}
+
+void BoxCellDPGOperator::schurFactorCoordinates(GlobalIndexType cellID, const std::vector<std::vector<std::pair<int,double>>> &vectors,
+                                                std::vector<double> &w, int &stride)
+{
+  const TypeData &type = typeData(cellID);
+  TEUCHOS_TEST_FOR_EXCEPTION(!type.supported, std::invalid_argument, "BoxCellDPGOperator: unsupported cell: " + type.reason);
+  const CellData &cell = cellData(cellID, type);
+  const int N = type.testBasis.fullSize, count = int(vectors.size());
+  stride = N + 1;
+  w.clear();
+  if (count == 0) return;
+  std::vector<double> u(type.trialDofCount, 0.0), Bu(size_t(N) * count);
+  for (int c=0; c<count; c++)
+  {
+    for (const auto &entry : vectors[c]) u[entry.first] = entry.second;
+    applyB(cellID, u.data(), &Bu[size_t(c) * N]);
+    for (const auto &entry : vectors[c]) u[entry.first] = 0.0;
+  }
+  SeparableTensorIP::inverseFactorCoordinates(cell.gramInverse, Bu.data(), count, w);
+}
+
+int BoxCellDPGOperator::dofSide(GlobalIndexType cellID, int localDof)
+{
+  return typeData(cellID).dofSide[localDof];
+}
+
+void BoxCellDPGOperator::sideNormal(GlobalIndexType cellID, int side, int &normal, int &endpoint)
+{
+  const TypeData &type = typeData(cellID);
+  normal = type.sides[side].normal;
+  endpoint = type.sides[side].endpoint;
 }

@@ -76,6 +76,10 @@ namespace Camellia
     //! shared eigenbasis: sum_i (V^T b)_i^2 / D_i, plus the Sherman-Morrison term c (z^T b)^2 / (1 - c m^T z).  Half the
     //! cost of applyCellInverse().
     static void inverseQuadraticForms(const CellInverse &cell, double *b, int vectorCount, double *values);
+    //! Coordinates w with v^T G_c^{-1} b = w(v) . w(b): w = [ D^{-1/2} V^T b ; sqrt(c / (1 - c m^T z)) z^T b ] (the last
+    //! entry is zero without the constant-mode weight).  b: vectorCount vectors (tensor layout; overwritten); w:
+    //! vectorCount x (N + 1), row by row.  Block entries of B^T G^{-1} B are then inner products of these coordinates.
+    static void inverseFactorCoordinates(const CellInverse &cell, double *b, int vectorCount, std::vector<double> &w);
 
     //! the number of cells whose Gram matrices were assembled from one-dimensional factors, and by quadrature
     long long tensorCellCount() const { return _tensorCellCount; }
