@@ -131,7 +131,11 @@ namespace Camellia
      */
     //! fluxOwner (if given): [map lid] the cell (index into cells()) owning each flux dof, the upwind one of the two
     //! cells sharing its face (the only cell on a boundary face); -1 for field dofs.
-    std::vector<int> upwindCellOrder(int *cyclesBroken = nullptr, int *laggedFaces = nullptr, std::vector<int> *fluxOwner = nullptr) const;
+    //! characteristicFace (if given): [map lid] a face index for the flux dofs on characteristic faces, where
+    //! |beta . n| <= characteristicTolerance * max_k |beta_k| (cell averages; for an interior face, of the two cells'
+    //! mean), -1 elsewhere.  Those faces get fluxOwner -2 (owned by neither cell) and give no dependency.
+    std::vector<int> upwindCellOrder(int *cyclesBroken = nullptr, int *laggedFaces = nullptr, std::vector<int> *fluxOwner = nullptr,
+                                     std::vector<int> *characteristicFace = nullptr, double characteristicTolerance = 0.0) const;
 
     /**
      \brief The transport-sweep preconditioner P = R^{-1} W^{-1} R^{-T} (notes/static-condensation-trace-structure.tex,
@@ -145,7 +149,14 @@ namespace Camellia
      are dropped from R in both sweeps, which keeps P symmetric positive definite.  Stores per cell the Cholesky factor
      of S_uu and T_K.  One rank.
      */
-    Teuchos::RCP<TOperator<double>> transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner) const;
+    //! Flux dofs with fluxOwner -2 (characteristic faces, upwindCellOrder()) are left out of every cell's split, so the
+    //! sweep acts on the rest (S_ss = R^T W R + Q there); with characteristicFace given they are preconditioned by
+    //! their face blocks of S (Cholesky), additively (block diagonal over {sweep dofs, characteristic dofs}), or, with
+    //! characteristicMultiplicative, by the symmetric product: face blocks, sweep, face blocks (two more applications
+    //! of S per application, through op).
+    Teuchos::RCP<TOperator<double>> transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner,
+                                                   const std::vector<int> *characteristicFace = nullptr,
+                                                   bool characteristicMultiplicative = false) const;
 
     //! the rank's cells, in the order the operator visits them
     const std::vector<GlobalIndexType> &cells() const { return _cells; }

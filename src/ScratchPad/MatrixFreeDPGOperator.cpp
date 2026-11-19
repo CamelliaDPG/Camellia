@@ -691,6 +691,11 @@ namespace
       std::vector<double> factor;     // Cholesky factor (lower, column-major) of S_uu, in global coordinates
       std::vector<double> transport;  // T (owned x inflow, column-major), in global coordinates
     };
+    struct FaceBlock
+    {
+      std::vector<LO> lids;
+      std::vector<double> factor;
+    };
     TransportSweepOperator(TMapConstPtr map, std::vector<Cell> cells, std::vector<int> order, std::vector<LO> dirichlet)
     : _map(map), _cells(std::move(cells)), _order(std::move(order)), _dirichlet(std::move(dirichlet)) {}
     Teuchos::RCP<const TMap> getDomainMap() const override { return _map; }
@@ -698,62 +703,124 @@ namespace
     bool hasTransposeApply() const override { return true; }
     void apply(const MV &X, MV &Y, Teuchos::ETransp, double alpha, double beta) const override
     {
-      Teuchos::BLAS<int,double> blas;
-      Teuchos::LAPACK<int,double> lapack;
       const size_t localCount = _map->getLocalNumElements();
       MV result(_map, X.getNumVectors());
       auto xView = X.getLocalViewHost(Tpetra::Access::ReadOnly);
-      auto resultView = result.getLocalViewHost(Tpetra::Access::ReadWrite);
-      std::vector<double> y(localCount), z(localCount), a, b;
+      std::vector<double> r(localCount), z(localCount);
       for (size_t column=0; column<X.getNumVectors(); column++)
       {
-        for (size_t i=0; i<localCount; i++) { y[i] = xView(i,column); z[i] = 0.0; }
-        // backward sweep, R^T y = r: y_K = r_K + sum over downwind K' of (T_K'^T y_K')|_K
-        for (auto it = _order.rbegin(); it != _order.rend(); ++it)
+        for (size_t i=0; i<localCount; i++) r[i] = xView(i,column);
+        std::fill(z.begin(), z.end(), 0.0);
+        if (!_multiplicative || _faces.empty())
         {
-          const Cell &cell = _cells[*it];
-          const int nu = int(cell.owned.size()), ni = int(cell.inflow.size());
-          if ((nu == 0) || (ni == 0)) continue;
-          a.resize(nu); b.assign(ni, 0.0);
-          for (int i=0; i<nu; i++) a[i] = y[cell.owned[i]];
-          blas.GEMV(Teuchos::TRANS, nu, ni, 1.0, cell.transport.data(), nu, a.data(), 1, 0.0, b.data(), 1);
-          for (int i=0; i<ni; i++) if (_lagged.empty() || !_lagged[*it][i]) y[cell.inflow[i]] += b[i];
+          sweep(r, z);
+          faceSolve(r, z);
         }
-        // cell solves z_K = S_uu^{-1} y_K, then the forward sweep x_K = z_K + T_K x_{i,K}
-        for (int k : _order)
+        else
         {
-          const Cell &cell = _cells[k];
-          const int nu = int(cell.owned.size()), ni = int(cell.inflow.size());
-          if (nu == 0) continue;
-          a.resize(nu);
-          for (int i=0; i<nu; i++) a[i] = y[cell.owned[i]];
-          int info = 0;
-          lapack.POTRS('L', nu, 1, cell.factor.data(), nu, a.data(), nu, &info);
-          if (ni > 0)
-          {
-            b.resize(ni);
-            for (int i=0; i<ni; i++) b[i] = (_lagged.empty() || !_lagged[k][i]) ? z[cell.inflow[i]] : 0.0;
-            blas.GEMV(Teuchos::NO_TRANS, nu, ni, 1.0, cell.transport.data(), nu, b.data(), 1, 1.0, a.data(), 1);
-          }
-          for (int i=0; i<nu; i++) z[cell.owned[i]] = a[i];
+          // symmetric product: face blocks, sweep, face blocks, with residual updates by the operator
+          faceSolve(r, z);
+          std::vector<double> residual = residualOf(r, z);
+          sweep(residual, z);
+          residual = residualOf(r, z);
+          faceSolve(residual, z);
         }
-        for (LO lid : _dirichlet) z[lid] = xView(lid,column);
+        for (LO lid : _dirichlet) z[lid] = r[lid];
+        auto resultView = result.getLocalViewHost(Tpetra::Access::ReadWrite);
         for (size_t i=0; i<localCount; i++) resultView(i,column) = z[i];
       }
       Y.update(alpha, result, beta);
     }
     //! [cell][inflow entry]: whether its owner comes later in the order (a lagged face), to be dropped from R
     void setLagged(std::vector<std::vector<bool>> lagged) { _lagged = std::move(lagged); }
+    void setFaces(std::vector<FaceBlock> faces, const TOperator<double> *op, bool multiplicative)
+    {
+      _faces = std::move(faces); _op = op; _multiplicative = multiplicative;
+    }
   private:
     TMapConstPtr _map;
     std::vector<Cell> _cells;
     std::vector<int> _order;
     std::vector<LO> _dirichlet;
     std::vector<std::vector<bool>> _lagged;
+    std::vector<FaceBlock> _faces;
+    const TOperator<double> *_op = nullptr;
+    bool _multiplicative = false;
+
+    //! z += P r on the sweep dofs (r is not changed)
+    void sweep(const std::vector<double> &r, std::vector<double> &z) const
+    {
+      Teuchos::BLAS<int,double> blas;
+      Teuchos::LAPACK<int,double> lapack;
+      std::vector<double> y(r), x(r.size(), 0.0), a, b;
+      // backward sweep, R^T y = r: y_K = r_K + sum over downwind K' of (T_K'^T y_K')|_K
+      for (auto it = _order.rbegin(); it != _order.rend(); ++it)
+      {
+        const Cell &cell = _cells[*it];
+        const int nu = int(cell.owned.size()), ni = int(cell.inflow.size());
+        if ((nu == 0) || (ni == 0)) continue;
+        a.resize(nu); b.assign(ni, 0.0);
+        for (int i=0; i<nu; i++) a[i] = y[cell.owned[i]];
+        blas.GEMV(Teuchos::TRANS, nu, ni, 1.0, cell.transport.data(), nu, a.data(), 1, 0.0, b.data(), 1);
+        for (int i=0; i<ni; i++) if (_lagged.empty() || !_lagged[*it][i]) y[cell.inflow[i]] += b[i];
+      }
+      // cell solves z_K = S_uu^{-1} y_K, then the forward sweep x_K = z_K + T_K x_{i,K}
+      for (int k : _order)
+      {
+        const Cell &cell = _cells[k];
+        const int nu = int(cell.owned.size()), ni = int(cell.inflow.size());
+        if (nu == 0) continue;
+        a.resize(nu);
+        for (int i=0; i<nu; i++) a[i] = y[cell.owned[i]];
+        int info = 0;
+        lapack.POTRS('L', nu, 1, cell.factor.data(), nu, a.data(), nu, &info);
+        if (ni > 0)
+        {
+          b.resize(ni);
+          for (int i=0; i<ni; i++) b[i] = (_lagged.empty() || !_lagged[k][i]) ? x[cell.inflow[i]] : 0.0;
+          blas.GEMV(Teuchos::NO_TRANS, nu, ni, 1.0, cell.transport.data(), nu, b.data(), 1, 1.0, a.data(), 1);
+        }
+        for (int i=0; i<nu; i++) x[cell.owned[i]] = a[i];
+      }
+      for (const Cell &cell : _cells) for (LO lid : cell.owned) z[lid] += x[lid];
+    }
+    //! z += D_c^{-1} r on the characteristic-face dofs
+    void faceSolve(const std::vector<double> &r, std::vector<double> &z) const
+    {
+      Teuchos::LAPACK<int,double> lapack;
+      std::vector<double> a;
+      for (const FaceBlock &face : _faces)
+      {
+        const int n = int(face.lids.size());
+        a.resize(n);
+        for (int i=0; i<n; i++) a[i] = r[face.lids[i]];
+        int info = 0;
+        lapack.POTRS('L', n, 1, face.factor.data(), n, a.data(), n, &info);
+        for (int i=0; i<n; i++) z[face.lids[i]] += a[i];
+      }
+    }
+    //! r - S z (Dirichlet rows: zero, since z is zero there)
+    std::vector<double> residualOf(const std::vector<double> &r, const std::vector<double> &z) const
+    {
+      MV zv(_map, 1), Sz(_map, 1);
+      {
+        auto view = zv.getLocalViewHost(Tpetra::Access::ReadWrite);
+        for (size_t i=0; i<z.size(); i++) view(i,0) = z[i];
+        for (LO lid : _dirichlet) view(lid,0) = 0.0;
+      }
+      _op->apply(zv, Sz);
+      auto view = Sz.getLocalViewHost(Tpetra::Access::ReadOnly);
+      std::vector<double> residual(r.size());
+      for (size_t i=0; i<r.size(); i++) residual[i] = r[i] - view(i,0);
+      for (LO lid : _dirichlet) residual[lid] = 0.0;
+      return residual;
+    }
   };
 }
 
-Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner) const
+Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner,
+                                                                      const std::vector<int> *characteristicFace,
+                                                                      bool characteristicMultiplicative) const
 {
   std::vector<std::vector<CellDof>> cellDofs;
   std::vector<std::vector<double>> matrices;
@@ -765,19 +832,33 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std:
   std::vector<std::vector<bool>> lagged(cellCount);
   bool anyLagged = false;
   Teuchos::LAPACK<int,double> lapack;
+  // the characteristic faces' blocks: [face] lid -> position, and entries
+  std::set<LO> dirichlet(_dirichletLocal.begin(), _dirichletLocal.end());
+  std::map<int, std::vector<LO>> faceLids;
+  if (characteristicFace != nullptr)
+    for (size_t lid=0; lid<characteristicFace->size(); lid++)
+      if (((*characteristicFace)[lid] >= 0) && (dirichlet.count(LO(lid)) == 0)) faceLids[(*characteristicFace)[lid]].push_back(LO(lid));
+  std::map<int, std::vector<double>> faceMatrices;
+  for (const auto &entry : faceLids) faceMatrices[entry.first].assign(entry.second.size() * entry.second.size(), 0.0);
   for (int k=0; k<cellCount; k++)
   {
     const int n = _local->trialDofCount(_cells[k]);
     // owned (u) and inflow (i) local dofs, with their global lids and coefficients (one lid per local dof)
     std::vector<int> uLocal, iLocal;
     std::vector<double> uCoefficient, iCoefficient;
+    std::vector<std::pair<int,double>> cLocal; // characteristic: (local dof, coefficient), with lids in cLids
+    std::vector<LO> cLids;
     TransportSweepOperator::Cell &cell = cells[k];
     std::vector<int> seen(n, 0);
     for (const CellDof &dof : cellDofs[k])
     {
       TEUCHOS_TEST_FOR_EXCEPTION(seen[dof.local]++ > 0, std::invalid_argument, "transportSweep: a local dof with several global dofs (constraints) is not supported");
       const int owner = fluxOwner[dof.lid];
-      if ((owner < 0) || (owner == k))
+      if (owner == -2)
+      {
+        cLocal.push_back({dof.local, dof.coefficient}); cLids.push_back(dof.lid);
+      }
+      else if ((owner < 0) || (owner == k))
       {
         uLocal.push_back(dof.local); uCoefficient.push_back(dof.coefficient); cell.owned.push_back(dof.lid);
       }
@@ -791,6 +872,19 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std:
     }
     const int nu = int(uLocal.size()), ni = int(iLocal.size());
     const std::vector<double> &S = matrices[k];
+    // the characteristic-face blocks: this cell's contributions
+    if (characteristicFace != nullptr)
+      for (size_t a=0; a<cLids.size(); a++)
+        for (size_t b=0; b<cLids.size(); b++)
+        {
+          const int face = (*characteristicFace)[cLids[a]];
+          if ((*characteristicFace)[cLids[b]] != face) continue;
+          const std::vector<LO> &lids = faceLids[face];
+          const size_t m = lids.size();
+          const size_t pa = std::find(lids.begin(), lids.end(), cLids[a]) - lids.begin();
+          const size_t pb = std::find(lids.begin(), lids.end(), cLids[b]) - lids.begin();
+          faceMatrices[face][pb * m + pa] += cLocal[a].second * S[size_t(cLocal[b].first) * n + cLocal[a].first] * cLocal[b].second;
+        }
     // global coordinates: x_local = c x_global, so S^g_ab = c_a S_ab c_b
     cell.factor.assign(size_t(nu) * nu, 0.0);
     for (int b=0; b<nu; b++)
@@ -811,10 +905,27 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std:
   }
   auto sweep = Teuchos::rcp(new TransportSweepOperator(_map, std::move(cells), order, _dirichletLocal));
   if (anyLagged) sweep->setLagged(std::move(lagged));
+  if (characteristicFace != nullptr)
+  {
+    std::vector<TransportSweepOperator::FaceBlock> faces;
+    for (auto &entry : faceLids)
+    {
+      TransportSweepOperator::FaceBlock face;
+      face.lids = entry.second;
+      face.factor = std::move(faceMatrices[entry.first]);
+      const int m = int(face.lids.size());
+      int info = 0;
+      lapack.POTRF('L', m, face.factor.data(), m, &info);
+      TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "transportSweep: a characteristic face block is not positive definite");
+      faces.push_back(std::move(face));
+    }
+    sweep->setFaces(std::move(faces), this, characteristicMultiplicative);
+  }
   return sweep;
 }
 
-std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *laggedFaces, std::vector<int> *fluxOwner) const
+std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *laggedFaces, std::vector<int> *fluxOwner,
+                                                       std::vector<int> *characteristicFace, double characteristicTolerance) const
 {
   GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
   const int cellCount = int(_cells.size());
@@ -854,10 +965,27 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
   std::set<std::pair<int,int>> edges;
   std::set<std::pair<int,int>> pairs;
   if (fluxOwner != nullptr) fluxOwner->assign(_map->getLocalNumElements(), -1);
+  if (characteristicFace != nullptr) characteristicFace->assign(_map->getLocalNumElements(), -1);
+  std::map<std::pair<int,int>, int> faceIDs; // (cell, -1 - side) for a boundary face, (k1, k2) for an interior one
+  auto betaScale = [&](int k) { double scale = 0; for (double b : beta[k]) scale = std::max(scale, std::abs(b)); return scale; };
+  auto markCharacteristic = [&](LO lid, std::pair<int,int> key) {
+    if (characteristicFace == nullptr) return;
+    auto found = faceIDs.find(key);
+    const int id = (found == faceIDs.end()) ? (faceIDs[key] = int(faceIDs.size())) : found->second;
+    (*characteristicFace)[lid] = id;
+    if (fluxOwner != nullptr) (*fluxOwner)[lid] = -2;
+  };
   for (const auto &entry : fluxDofCells)
   {
     const auto &cellSides = entry.second;
     if (fluxOwner != nullptr) (*fluxOwner)[entry.first] = cellSides[0].first; // a boundary face: its only cell
+    if ((cellSides.size() == 1) && (characteristicFace != nullptr))
+    {
+      const int k = cellSides[0].first;
+      int normal, endpoint;
+      _local->sideNormal(_cells[k], cellSides[0].second, normal, endpoint);
+      if (std::abs(beta[k][normal]) <= characteristicTolerance * betaScale(k)) markCharacteristic(entry.first, {k, -1 - cellSides[0].second});
+    }
     for (size_t a=0; a<cellSides.size(); a++)
       for (size_t b=a+1; b<cellSides.size(); b++)
       {
@@ -867,6 +995,11 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
         _local->sideNormal(_cells[k1], cellSides[a].second, normal, endpoint);
         // k1's side is its upper face (endpoint 1) in direction normal: the face normal from k1 to k2 is +e_normal
         const double betaN = (beta[k1][normal] + beta[k2][normal]) * ((endpoint == 1) ? 1.0 : -1.0); // beta . n_{k1 -> k2}
+        if ((characteristicFace != nullptr) && (0.5 * std::abs(betaN) <= characteristicTolerance * std::max(betaScale(k1), betaScale(k2))))
+        {
+          markCharacteristic(entry.first, {std::min(k1,k2), std::max(k1,k2)});
+          continue; // no ownership and no dependency: the face is in neither cell's sweep split
+        }
         if (fluxOwner != nullptr) (*fluxOwner)[entry.first] = (betaN >= 0) ? k1 : k2;
         if (!pairs.insert({std::min(k1,k2), std::max(k1,k2)}).second) continue;
         if (betaN >= 0) edges.insert({k1, k2});

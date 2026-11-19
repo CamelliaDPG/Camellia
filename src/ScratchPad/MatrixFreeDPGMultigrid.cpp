@@ -175,7 +175,13 @@ void MatrixFreeDPGTwoLevel::construct(Teuchos::RCP<MatrixFreeDPGOperator> fineOp
   // the smoother
   t0 = Clock::now();
   Teuchos::RCP<const TOperator<double>> Dinv;
-  if (options.elementSchwarz)
+  if (options.transportSweep)
+  {
+    std::vector<int> fluxOwner;
+    const std::vector<int> order = fineOperator->upwindCellOrder(nullptr, nullptr, &fluxOwner);
+    Dinv = fineOperator->transportSweep(order, fluxOwner);
+  }
+  else if (options.elementSchwarz)
   {
     Dinv = fineOperator->elementAdditiveSchwarz();
   }

@@ -956,6 +956,8 @@ struct MatrixFreeSolveOptions
   bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
   bool sweepOnly = false;             // with multiplicativeSchwarz: only the transport sweep
   bool sweepDiagnose = false;         // the top eigenvector of P S: where it lives
+  int sweepDiagnoseVariant = 1;       // which sweep variant to diagnose (0: plain, 1: additive face blocks, 2: multiplicative)
+  double characteristicTolerance = 1e-8; // faces with |beta . n| <= this * max |beta|: out of the sweep, face blocks
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1133,17 +1135,35 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
       runVariants("owner blocks");
     }
     schwarz = Teuchos::null;
-    t0 = now();
-    Teuchos::RCP<TOperator<double>> sweep = op.transportSweep(upwind, fluxOwner);
-    const double sweepSetupTime = seconds(t0, now());
+    // the characteristic faces: a second ordering, with those faces out of the split
+    std::vector<int> characteristicFace, fluxOwnerC;
+    int cyclesC = 0, laggedC = 0;
+    const std::vector<int> upwindC = op.upwindCellOrder(&cyclesC, &laggedC, &fluxOwnerC, &characteristicFace, solveOptions.characteristicTolerance);
     {
+      int count = 0;
+      for (int face : characteristicFace) if (face >= 0) count++;
+      if (rank == 0) std::cout << "  characteristic faces (|beta . n| <= " << solveOptions.characteristicTolerance << " max |beta|): "
+                               << count << " flux dofs; " << cyclesC << " cycle breaks lagging " << laggedC << " faces without them\n";
+    }
+    Teuchos::RCP<TOperator<double>> sweep;
+    struct SweepVariant { std::string name; int kind; };
+    const std::vector<SweepVariant> sweepVariants = {{"transport sweep P = R^{-1} W^{-1} R^{-T}", 0},
+                                                     {"sweep without characteristic faces + their face blocks, additive", 1},
+                                                     {"sweep without characteristic faces + their face blocks, symmetric multiplicative", 2}};
+    for (const SweepVariant &variant : sweepVariants)
+    {
+      t0 = now();
+      Teuchos::RCP<TOperator<double>> candidate = (variant.kind == 0) ? op.transportSweep(upwind, fluxOwner)
+                                                                      : op.transportSweep(upwindC, fluxOwnerC, &characteristicFace, variant.kind == 2);
+      const double sweepSetupTime = seconds(t0, now());
       MV u(map, 1);
       t0 = now();
-      ConjugateGradientResult result = conjugateGradient(op, sweep.get(), b, u, 1e-10, 20000);
+      ConjugateGradientResult result = conjugateGradient(op, candidate.get(), b, u, 1e-10, 20000);
       const double time = seconds(t0, now());
       if (rank == 0)
-        std::cout << "  transport sweep P = R^{-1} W^{-1} R^{-T}: " << result.iterations << " iterations, kappa ~ " << result.conditionNumber()
+        std::cout << "  " << variant.name << ": " << result.iterations << " iterations, kappa ~ " << result.conditionNumber()
                   << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s (setup " << sweepSetupTime << " s)\n";
+      if (variant.kind == solveOptions.sweepDiagnoseVariant) sweep = candidate;
     }
     if (solveOptions.sweepDiagnose)
     {
@@ -1237,7 +1257,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     {
       std::cout << "  two-level (Chebyshev degree " << solveOptions.twoLevel.chebyshevDegree << ", eigenvalue ratio "
                 << solveOptions.twoLevel.eigenRatio << ", "
-                << (solveOptions.twoLevel.elementSchwarz ? "element Schwarz" : (solveOptions.twoLevel.traceBlockDiagonal ? "trace-block" : "point"))
+                << (solveOptions.twoLevel.transportSweep ? "transport sweep" : (solveOptions.twoLevel.elementSchwarz ? "element Schwarz" : (solveOptions.twoLevel.traceBlockDiagonal ? "trace-block" : "point")))
                 << " diagonal, lambda_max " << twoLevel->lambdaMax() << "; Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs, "
                 << twoLevel->coarseLevelCount() << " coarse level(s)" << ((twoLevel->coarseLevelCount() > 1) ? " by GMG" : ", exact") << "): "
                 << twoLevelResult.iterations << " iterations, kappa ~ " << twoLevelResult.conditionNumber() << " (lambda in ["
@@ -1654,6 +1674,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeLambdaMaxBoost", &matrixFreeSolveOptions.twoLevel.lambdaMaxBoost, "Two-level matrix-free: lambda_max estimate times this");
     cmdp.setOption("matrixFreeElementSchwarzSmoother", "matrixFreeDiagonalSmoother", &matrixFreeSolveOptions.twoLevel.elementSchwarz,
                    "Two-level matrix-free: Chebyshev with element-block additive Schwarz (fields and face fluxes of each element)");
+    cmdp.setOption("matrixFreeSweepSmoother", "noMatrixFreeSweepSmoother", &matrixFreeSolveOptions.twoLevel.transportSweep,
+                   "Matrix-free multigrid: Chebyshev with the transport sweep as its preconditioner (overrides the other smoother options)");
     cmdp.setOption("matrixFreeTwoLevel", "noMatrixFreeTwoLevel", &matrixFreeSolveOptions.twoLevelSolve,
                    "With --checkMatrixFreeOperator: run the multigrid-preconditioned PCG");
     cmdp.setOption("matrixFreeMultiplicativeSchwarz", "noMatrixFreeMultiplicativeSchwarz", &matrixFreeSolveOptions.multiplicativeSchwarz,
@@ -1661,12 +1683,19 @@ int main(int argc, char *argv[])
                    "(cell-ID, random and upwind orders)");
     cmdp.setOption("matrixFreeSweepDiagnose", "noMatrixFreeSweepDiagnose", &matrixFreeSolveOptions.sweepDiagnose,
                    "With --matrixFreeMultiplicativeSchwarz: power iteration for the top eigenvector of the sweep-preconditioned operator");
+    cmdp.setOption("matrixFreeCharacteristicTolerance", &matrixFreeSolveOptions.characteristicTolerance,
+                   "Transport sweep: faces with |beta . n| <= this times max |beta| are characteristic (face blocks, outside the sweep)");
+    cmdp.setOption("matrixFreeSweepDiagnoseVariant", &matrixFreeSolveOptions.sweepDiagnoseVariant,
+                   "--matrixFreeSweepDiagnose: 0 the plain sweep, 1 with additive characteristic face blocks, 2 multiplicative");
     cmdp.setOption("matrixFreeSweepOnly", "noMatrixFreeSweepOnly", &matrixFreeSolveOptions.sweepOnly,
                    "With --matrixFreeMultiplicativeSchwarz: only the transport-sweep preconditioner");
     cmdp.setOption("matrixFreeCoarseGMG", "matrixFreeCoarseDirect", &matrixFreeSolveOptions.coarseGMG,
                    "Matrix-free multigrid: below the fine level, the conventional GMG on the lowest-order h-hierarchy (needs "
                    "--numUniformRefinements > 0), or an exact solve of the lowest order on the fine mesh");
     bool matrixFreeCheckBeforeSolve = false;
+    int matrixFreeCheckSlab = 0;
+    cmdp.setOption("matrixFreeCheckSlab", &matrixFreeCheckSlab,
+                   "--checkMatrixFreeOperator: the time slab whose operator is checked (the earlier slabs are solved as usual)");
     cmdp.setOption("matrixFreeCheckBeforeSolve", "matrixFreeCheckAfterSolve", &matrixFreeCheckBeforeSolve,
                    "With --checkMatrixFreeOperator: run the check before the first slab's solve (the initial fields), then stop");
     bool matrixFreeCheckAssembled = true;
@@ -2857,14 +2886,14 @@ int main(int argc, char *argv[])
           form->setUseGeometricMultigrid(false);
         }
         
-        if (checkMatrixFreeOperator && matrixFreeCheckBeforeSolve && (timeSlabOrdinal == 0))
+        if (checkMatrixFreeOperator && matrixFreeCheckBeforeSolve && (timeSlabOrdinal == matrixFreeCheckSlab))
         {
           checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, matrixFreeSolveOptions, rank);
           break; // stop after the check (and shut down normally)
         }
         auto timingSlabSolveStart = timing.now();
         form->solve();
-        if (checkMatrixFreeOperator && (timeSlabOrdinal == 0)) checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, matrixFreeSolveOptions, rank);
+        if (checkMatrixFreeOperator && (timeSlabOrdinal == matrixFreeCheckSlab)) checkMatrixFreeVlasovOperator(form, matrixFreeQuadratureEnrichment, matrixFreeCheckAssembled, matrixFreeSolveOptions, rank);
         {
           auto fields = timingMeshStats(form);
           fields.push_back({"slab", std::to_string(timeSlabOrdinal)});
