@@ -134,11 +134,15 @@ namespace Camellia
     //! characteristicFace (if given): [map lid] a face index for the flux dofs on characteristic faces, where
     //! |beta . n| <= characteristicTolerance * max_k |beta_k| (cell averages; for an interior face, of the two cells'
     //! mean), -1 elsewhere.  Those faces get fluxOwner -2 (owned by neither cell) and give no dependency.
+    //! weightedCycleBreaking: on a cycle, take next the remaining cell whose unvisited in-edges have the smallest total
+    //! weight |beta . n| / h_n (the face's share of the downstream cell's inflow rate), instead of the fewest in-edges;
+    //! laggedWeightFraction (if given) is the lagged edges' share of the total weight.
     //! component (if given): [cell] its strongly connected component of the face graph (Tarjan), numbered in an upwind
     //! (topological) order of the components; cells on no cycle are components of size one.
     std::vector<int> upwindCellOrder(int *cyclesBroken = nullptr, int *laggedFaces = nullptr, std::vector<int> *fluxOwner = nullptr,
                                      std::vector<int> *characteristicFace = nullptr, double characteristicTolerance = 0.0,
-                                     std::vector<int> *component = nullptr) const;
+                                     std::vector<int> *component = nullptr, bool weightedCycleBreaking = false,
+                                     double *laggedWeightFraction = nullptr) const;
 
     /**
      \brief The transport-sweep preconditioner P = R^{-1} W^{-1} R^{-T} (notes/static-condensation-trace-structure.tex,

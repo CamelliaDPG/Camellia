@@ -66,6 +66,7 @@ namespace Camellia
       bool traceBlockDiagonal = true; // false: the point (shared-eigenbasis) diagonal
       bool elementSchwarz = false;    // true: element-block additive Schwarz (overrides traceBlockDiagonal)
       bool transportSweep = false;    // true: the transport sweep P = R^{-1} W^{-1} R^{-T} (overrides the others)
+      bool weightedCycleBreaking = false; // the sweep's cycle breaking (MatrixFreeDPGOperator::upwindCellOrder())
     };
 
     //! fineSolution: the fine Solution (mesh, dof interpreter, partition map, BCs, inner product); fineOperator on its map

@@ -958,7 +958,8 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std:
 
 std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *laggedFaces, std::vector<int> *fluxOwner,
                                                        std::vector<int> *characteristicFace, double characteristicTolerance,
-                                                       std::vector<int> *component) const
+                                                       std::vector<int> *component, bool weightedCycleBreaking,
+                                                       double *laggedWeightFraction) const
 {
   GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
   const int cellCount = int(_cells.size());
@@ -996,7 +997,21 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
   }
   // directed edges upwind -> downwind, one per neighboring pair
   std::set<std::pair<int,int>> edges;
+  std::map<std::pair<int,int>, double> edgeWeight; // |beta . n| / h_n of the downstream cell
   std::set<std::pair<int,int>> pairs;
+  std::vector<std::vector<double>> widths(cellCount);
+  for (int k=0; k<cellCount; k++)
+  {
+    Camellia::FieldContainer<double> nodes = _mesh->physicalCellNodesForCell(_cells[k]);
+    const int dim = nodes.dimension(2);
+    widths[k].assign(dim, 0.0);
+    for (int d=0; d<dim; d++)
+    {
+      double lo = nodes(0,0,d), hi = nodes(0,0,d);
+      for (int node=1; node<nodes.dimension(1); node++) { lo = std::min(lo, nodes(0,node,d)); hi = std::max(hi, nodes(0,node,d)); }
+      widths[k][d] = hi - lo;
+    }
+  }
   if (fluxOwner != nullptr) fluxOwner->assign(_map->getLocalNumElements(), -1);
   if (characteristicFace != nullptr) characteristicFace->assign(_map->getLocalNumElements(), -1);
   std::map<std::pair<int,int>, int> faceIDs; // (cell, -1 - side) for a boundary face, (k1, k2) for an interior one
@@ -1035,8 +1050,9 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
         }
         if (fluxOwner != nullptr) (*fluxOwner)[entry.first] = (betaN >= 0) ? k1 : k2;
         if (!pairs.insert({std::min(k1,k2), std::max(k1,k2)}).second) continue;
-        if (betaN >= 0) edges.insert({k1, k2});
-        else edges.insert({k2, k1});
+        const std::pair<int,int> edge = (betaN >= 0) ? std::make_pair(k1, k2) : std::make_pair(k2, k1);
+        edges.insert(edge);
+        edgeWeight[edge] = 0.5 * std::abs(betaN) / widths[edge.second][normal];
       }
   }
   std::vector<std::vector<int>> downwind(cellCount);
@@ -1083,9 +1099,14 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
     }
     for (int &c : *component) c = components - 1 - c; // upwind first
   }
-  // Kahn's algorithm; on a cycle, take the remaining cell with the fewest unvisited upwind neighbors
-  std::set<std::pair<int,int>> remaining; // (in-degree, cell)
-  for (int k=0; k<cellCount; k++) remaining.insert({inDegree[k], k});
+  // Kahn's algorithm; on a cycle, take the remaining cell with the fewest unvisited upwind neighbors (or the least
+  // unvisited in-edge weight)
+  std::vector<double> inWeight(cellCount, 0.0);
+  double totalWeight = 0, laggedWeight = 0;
+  for (const auto &entry : edgeWeight) { inWeight[entry.first.second] += entry.second; totalWeight += entry.second; }
+  auto key = [&](int k) { return std::make_pair(inDegree[k] > 0 ? (weightedCycleBreaking ? inWeight[k] : double(inDegree[k])) : -1.0, k); };
+  std::set<std::pair<double,int>> remaining; // (0 if ready, else the cycle-breaking key; cell)
+  for (int k=0; k<cellCount; k++) remaining.insert(key(k));
   std::vector<int> order;
   std::vector<bool> visited(cellCount, false);
   int broken = 0, lagged = 0;
@@ -1093,18 +1114,20 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
   {
     auto first = remaining.begin();
     const int k = first->second;
-    if (first->first > 0) { broken++; lagged += first->first; }
+    if (inDegree[k] > 0) { broken++; lagged += inDegree[k]; laggedWeight += inWeight[k]; }
     remaining.erase(first);
     visited[k] = true;
     order.push_back(k);
     for (int next : downwind[k])
     {
       if (visited[next]) continue;
-      remaining.erase({inDegree[next], next});
+      remaining.erase(key(next));
       inDegree[next]--;
-      remaining.insert({inDegree[next], next});
+      inWeight[next] -= edgeWeight[{k, next}];
+      remaining.insert(key(next));
     }
   }
+  if (laggedWeightFraction != nullptr) *laggedWeightFraction = (totalWeight > 0) ? laggedWeight / totalWeight : 0.0;
   if (cyclesBroken != nullptr) *cyclesBroken = broken;
   if (laggedFaces != nullptr) *laggedFaces = lagged;
   return order;

@@ -959,6 +959,7 @@ struct MatrixFreeSolveOptions
   int sweepDiagnoseVariant = 1;       // which sweep variant to diagnose (0: plain, 1: additive face blocks, 2: multiplicative)
   double characteristicTolerance = 1e-8; // faces with |beta . n| <= this * max |beta|: out of the sweep, face blocks
   int maxSweepBlockCells = 64;        // the component block sweep: skipped if a strongly connected component is larger
+  bool weightedCycleBreaking = false; // lag the weakest couplings (|beta . n| / h_n) on cycles
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1058,7 +1059,9 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     // the levels below the fine one: the lowest order on the fine mesh only (exact solve), or with its h-hierarchy
     std::vector<MeshPtr> coarseMeshes = solveOptions.coarseGMG ? std::vector<MeshPtr>(meshes.begin(), meshes.end() - 1)
                                                                : std::vector<MeshPtr>{meshes[meshes.size() - 2]};
-    twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, coarseMeshes, solveOptions.twoLevel));
+    MatrixFreeDPGTwoLevel::Options twoLevelOptions = solveOptions.twoLevel;
+    twoLevelOptions.weightedCycleBreaking = solveOptions.weightedCycleBreaking;
+    twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, coarseMeshes, twoLevelOptions));
     twoLevelSetupTime = seconds(t0, now());
   }
   MV uPoint(map, 1), uBlock(map, 1), uTwoLevel(map, 1);
@@ -1079,7 +1082,12 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     int cyclesBroken = 0, laggedFaces = 0;
     std::vector<int> fluxOwner;
     std::vector<int> component;
-    const std::vector<int> upwind = op.upwindCellOrder(&cyclesBroken, &laggedFaces, &fluxOwner, nullptr, 0.0, &component);
+    double laggedWeightFraction = 0;
+    const std::vector<int> upwind = op.upwindCellOrder(&cyclesBroken, &laggedFaces, &fluxOwner, nullptr, 0.0, &component,
+                                                       solveOptions.weightedCycleBreaking, &laggedWeightFraction);
+    if (rank == 0) std::cout << "  upwind order: " << cyclesBroken << " cycle breaks, " << laggedFaces << " lagged faces, "
+                             << laggedWeightFraction << " of the coupling weight lagged ("
+                             << (solveOptions.weightedCycleBreaking ? "weighted" : "count") << " cycle breaking)\n";
     {
       std::map<int,int> sizes;
       for (int c : component) sizes[c]++;
@@ -1714,6 +1722,8 @@ int main(int argc, char *argv[])
                    "Transport sweep: faces with |beta . n| <= this times max |beta| are characteristic (face blocks, outside the sweep)");
     cmdp.setOption("matrixFreeSweepDiagnoseVariant", &matrixFreeSolveOptions.sweepDiagnoseVariant,
                    "--matrixFreeSweepDiagnose: 0 the plain sweep, 1 with additive characteristic face blocks, 2 multiplicative");
+    cmdp.setOption("matrixFreeWeightedCycleBreaking", "matrixFreeCountCycleBreaking", &matrixFreeSolveOptions.weightedCycleBreaking,
+                   "Transport sweep: on cycles, lag the weakest couplings |beta . n| / h_n (or the fewest faces)");
     cmdp.setOption("matrixFreeMaxSweepBlockCells", &matrixFreeSolveOptions.maxSweepBlockCells,
                    "Component block sweep: the largest strongly connected component (cells) to factor densely");
     cmdp.setOption("matrixFreeSweepOnly", "noMatrixFreeSweepOnly", &matrixFreeSolveOptions.sweepOnly,

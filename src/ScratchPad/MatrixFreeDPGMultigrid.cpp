@@ -178,7 +178,7 @@ void MatrixFreeDPGTwoLevel::construct(Teuchos::RCP<MatrixFreeDPGOperator> fineOp
   if (options.transportSweep)
   {
     std::vector<int> fluxOwner;
-    const std::vector<int> order = fineOperator->upwindCellOrder(nullptr, nullptr, &fluxOwner);
+    const std::vector<int> order = fineOperator->upwindCellOrder(nullptr, nullptr, &fluxOwner, nullptr, 0.0, nullptr, options.weightedCycleBreaking);
     Dinv = fineOperator->transportSweep(order, fluxOwner);
   }
   else if (options.elementSchwarz)
