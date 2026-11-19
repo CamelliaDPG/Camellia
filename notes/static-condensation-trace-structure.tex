@@ -2,6 +2,7 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsthm,mathtools}
 \usepackage{booktabs}
+\usepackage{graphicx}
 \usepackage{enumitem}
 \usepackage[hidelinks]{hyperref}
 \hypersetup{pdftitle={Static condensation and the trace structure of ultraweak DPG for Vlasov}}
@@ -542,14 +543,107 @@ operator is smooth along $\bbeta$ and oscillatory across it, which is directly c
         idea at scale.
 \end{enumerate}
 
+%======================================================================
+\section{First measurements (Experiments 2 and 3, uncondensed)}\label{sec:measurements}
+%======================================================================
+
+\paragraph{What was run.}  All runs: $p=2$, $\Delta p=2$, separable norm, full-tensor test space, serendipity trial,
+one core, PCG to relative residual $10^{-10}$, \emph{one level} (no coarse space).  The operator is that of the first
+time slab before its solve.  In that slab the fields are zero, so $\beta_{u_x}=\beta_{u_y}=0$: transport is in $x$ and
+$t$ only, the $u$-faces are characteristic ($\bbeta\cdot\bn=0$), and the upwind graph has no cycles.  Entries are
+``iterations ($\kappa$)''.  Code: \texttt{ElementMultiplicativeSchwarz}, \texttt{upwindCellOrder()} and
+\texttt{transportSweep()} in \texttt{MatrixFreeDPGOperator}; driver option \texttt{--matrixFreeMultiplicativeSchwarz}.
+
+\begin{itemize}[nosep]
+  \item \emph{Element blocks}: each cell's fields and all its face fluxes (overlapping), $A_K=R_KSR_K^\T$.
+  \item \emph{Owner blocks}: each cell's fields and the fluxes it owns (non-overlapping), $A_K=R_KSR_K^\T$.
+  \item \emph{Multiplicative}: symmetric block Gauss--Seidel (forward then backward sweep) in the given order.
+  \item \emph{Transport sweep}: $P=R^{-1}W^{-1}R^{-\T}$ of Proposition~\ref{prop:global}, uncondensed: $W$ and $\Tr_K$
+        come from each cell's \emph{own} $S_K$ split into owned (fields, outflow fluxes) and inflow parts.
+\end{itemize}
+
+\paragraph{Uniform refinement.}  Base mesh $2\times1\times2\times2$ in $(x,t,u_x,u_y)$, $r$ uniform refinements.
+\begin{center}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+preconditioner & $r=0$ (8 cells) & $r=1$ (128) & $r=2$ (2048) & $\kappa$ growth per $r$\\
+\midrule
+element blocks, additive & 19 (6.0) & 56 (33) & 117 (141) & $\times4.3$\\
+element blocks, multiplicative, upwind order & 9 (1.6) & 20 (5.0) & 39 (16.3) & $\times3.2$\\
+element blocks, multiplicative, cell-ID order & 9 (1.6) & 21 (5.0) & 40 (16.5) & \\
+element blocks, multiplicative, random order & 9 (1.6) & 23 (5.7) & 42 (18.4) & \\
+owner blocks, multiplicative, upwind order & 13 (3.1) & 35 (12.8) & 69 (48) & $\times3.8$\\
+\textbf{transport sweep} $P$ & 15 (2.9) & 21 (4.5) & \textbf{24 (7.1)} & $\times1.6$\\
+\midrule
+for reference: matrix-free GMG, element Schwarz & --- & 9 (1.5) & 20 (4.9) & $\times3.3$\\
+\bottomrule
+\end{tabular}}
+\end{center}
+At 2048 cells the sweep also had the smallest cost of the one-level methods: 17~s solve and 21~s setup, against 31~s
+and 41~s for multiplicative element blocks.
+
+\paragraph{One direction at a time.}  From $4\times2\times4\times4$ (128 cells; ``$v$'' refines both $u$ directions).
+The spatial mesh is geometrically graded toward the cathode ($x=0$); \texttt{--numSpatialRefinements} bisects every
+$x$-element and keeps the grading.
+\begin{center}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+mesh change & additive & multiplicative (upwind) & transport sweep\\
+\midrule
+none (128 cells) & 56 (32) & 20 (4.9) & 22 (5.2)\\
+$x$ bisected once / twice & 83 (87) / 130 (284) & 29 (10.7) / 46 (31.6) & 26 (7.4) / 32 (13.3)\\
+$t$ doubled / quadrupled & 80 (63) / 120 (139) & 27 (7.9) / 38 (15.1) & 25 (6.8) / 28 (9.0)\\
+$u_x,u_y$ doubled & 61 (36) & 21 (4.9) & 22 (5.8)\\
+\midrule
+$x$ grading deepened: 8, 16 elements ($h_{\min}=2^{-7}$, $2^{-15}$) & 93 (192), 113 (683) & 36 (24), 45 (81) & 44 (27), 236 (6036)\\
+\bottomrule
+\end{tabular}}
+\end{center}
+With 16 graded $x$-elements, shortening the slab to a $t$ width of $1$, $\tfrac12$, $\tfrac14$ and $\tfrac18$ gives
+sweep condition numbers of about 6036, 3790, 2063 and 1059.  Holding the cell Courant number fixed (refining $x$ grading and $t$ together)
+does not help.
+
+\paragraph{Where the sweep's bad mode lives.}  Power iteration on $P S$ gives its top eigenvector.  On the mesh with
+$x$ bisected twice ($\kappa=13.3$): 97\% of $|x|^2$ is on $u_y$-face fluxes (1.3\% $u_x$-face, 1\% each $t$- and
+$x$-face, $<10^{-4}$ fields), in the bottom time layer, at the largest $u_x$ (the fastest transport in $+x$), spread
+along $x$.  The same holds on the deep graded mesh, concentrated in the thin cells at the cathode.
+
+\paragraph{What this says.}
+\begin{enumerate}[nosep]
+  \item The identity $S=R^\T WR+Q$ holds: $\lambda_{\min}(PS)=1$ to five digits in every run.
+  \item $\rho$ is not bounded, so Conjecture~\ref{conj:rho} is false as stated.  But it grows far more slowly than for
+        any local or Gauss--Seidel method (about $\times1.6$ per uniform refinement against $\times3$--$4$), and one level
+        of the sweep is already competitive with the full GMG hierarchy at 2048 cells.
+  \item Ordering barely matters for block Gauss--Seidel on $S$, as expected: Gauss--Seidel on the normal-equations
+        operator is not the sweep.  The sweep needs $R$, i.e.\ each cell's \emph{own} local solve with inflow data.
+  \item The growth is on \textbf{characteristic faces}, where $\bbeta\cdot\bn=0$ and the in/out split is undefined.
+        In the continuous problem the compatible flux there is zero, and \emph{neither} neighbour's data determines it.
+        The sweep must nevertheless give the face to one cell, which turns it into inconsistent inflow data for the
+        other and makes $\Sigma_K$ large.  This is exactly a trace class in the sense of Section~4.3: in a field-free
+        slab, the $u$-faces.
+  \item Thin cells (the deep cathode grading) make the characteristic-face problem much worse.
+\end{enumerate}
+
+\paragraph{Next steps suggested by this.}
+\begin{itemize}[nosep]
+  \item Take characteristic-face fluxes ($|\bbeta\cdot\bn|$ small on the face) out of the sweep: sweep the other
+        unknowns and treat the characteristic-face class by its own face blocks, combined multiplicatively and
+        symmetrically with $P$.  Then measure $\rho$ again.
+  \item Repeat on a later slab with nonzero fields, where $u$-faces carry real transport and the $\bv\times\bB$ cycles
+        appear.
+  \item Use the sweep as the smoother in the existing hierarchy.
+\end{itemize}
+
 \section*{Summary of what is proved and what is not}
 \begin{itemize}[nosep]
   \item Proved here: Lemma~\ref{lem:div}, Propositions~\ref{prop:schur}, \ref{prop:kernel}, \ref{prop:local},
         \ref{prop:global}, \ref{prop:bound}, Lemma~\ref{lem:isometry} (for smooth solutions).
   \item Standard, cited: the weighted-$L^2$ trace space (Lemma~\ref{lem:trace}).
   \item Expected, to be measured: conditioning of $A_{ff}$; positive definiteness of $\Shat_{oo}$.
-  \item Conjectural: Conjecture~\ref{conj:rho} ($h$-independence of $\rho$), and the explanation of the observed
-        $h^{-2}$ growth.
+  \item Conjectural: the explanation of the observed $h^{-2}$ growth.  Conjecture~\ref{conj:rho} is contradicted by the
+        measurements of Section~\ref{sec:measurements} (Experiment 3 there, uncondensed).
 \end{itemize}
 
 \end{document}

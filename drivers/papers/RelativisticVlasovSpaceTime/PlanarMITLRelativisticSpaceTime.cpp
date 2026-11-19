@@ -955,6 +955,7 @@ struct MatrixFreeSolveOptions
   bool twoLevelSolve = true;
   bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
   bool sweepOnly = false;             // with multiplicativeSchwarz: only the transport sweep
+  bool sweepDiagnose = false;         // the top eigenvector of P S: where it lives
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1143,6 +1144,76 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
       if (rank == 0)
         std::cout << "  transport sweep P = R^{-1} W^{-1} R^{-T}: " << result.iterations << " iterations, kappa ~ " << result.conditionNumber()
                   << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s (setup " << sweepSetupTime << " s)\n";
+    }
+    if (solveOptions.sweepDiagnose)
+    {
+      // power iteration x <- P S x for the top eigenvector (the mode where Q dominates R^T W R)
+      MV x(map, 1), Sx(map, 1), PSx(map, 1);
+      x.randomize();
+      double lambda = 0;
+      for (int it=0; it<60; it++)
+      {
+        const double norm = x.getVector(0)->norm2();
+        x.scale(1.0 / norm);
+        op.apply(x, Sx);
+        sweep->apply(Sx, PSx);
+        Teuchos::Array<double> dots(1);
+        // Rayleigh quotient in the S inner product: (Sx . P S x) / (x . S x)
+        PSx.dot(Sx, dots());
+        Teuchos::Array<double> xSx(1);
+        x.dot(Sx, xSx());
+        lambda = dots[0] / xSx[0];
+        Tpetra::deep_copy(x, PSx); // (MultiVector assignment would alias)
+      }
+      x.scale(1.0 / x.getVector(0)->norm2());
+      // classify the dofs: field, or a flux on a face normal to direction d (x, t, u_x, u_y); and the cells
+      GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
+      const char *names[] = {"x-face", "t-face", "ux-face", "uy-face"};
+      std::map<std::string, double> byClass;
+      std::vector<double> byCell(op.cells().size(), 0.0);
+      std::vector<bool> counted(map->getLocalNumElements(), false);
+      auto xv = x.getLocalViewHost(Tpetra::Access::ReadOnly);
+      for (size_t k=0; k<op.cells().size(); k++)
+      {
+        const GlobalIndexType cellID = op.cells()[k];
+        const int n = local->trialDofCount(cellID);
+        Camellia::FieldContainer<double> unit(n), globalData;
+        Camellia::FieldContainer<GlobalIndexType> globalIndices;
+        for (int l=0; l<n; l++)
+        {
+          unit.initialize(0.0); unit[l] = 1.0;
+          gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+          for (int i=0; i<globalIndices.size(); i++)
+          {
+            if (globalData[i] == 0.0) continue;
+            const auto lid = map->getLocalElement(globalIndices[i]);
+            const double value = xv(lid,0) * xv(lid,0);
+            byCell[k] += value;
+            if (counted[lid]) continue;
+            counted[lid] = true;
+            const int side = local->dofSide(cellID, l);
+            std::string name = "field";
+            if (side >= 0) { int normal, endpoint; local->sideNormal(cellID, side, normal, endpoint); name = names[normal]; }
+            byClass[name] += value;
+          }
+        }
+      }
+      if (rank == 0)
+      {
+        std::cout << "  top eigenvector of P S (Rayleigh quotient " << lambda << "): |x|^2 by dof class:";
+        for (const auto &entry : byClass) std::cout << " " << entry.first << " " << entry.second;
+        std::cout << "\n  cells with the largest |x|^2 (cell centroid x, t, u_x, u_y: weight):\n";
+        std::vector<int> index(byCell.size());
+        for (size_t i=0; i<index.size(); i++) index[i] = int(i);
+        std::sort(index.begin(), index.end(), [&](int a, int b) { return byCell[a] > byCell[b]; });
+        for (int i=0; i<std::min<int>(12, int(index.size())); i++)
+        {
+          std::vector<double> centroid = mesh->getCellCentroid(op.cells()[index[i]]);
+          std::cout << "   ";
+          for (double c : centroid) std::cout << " " << c;
+          std::cout << ": " << byCell[index[i]] << "\n";
+        }
+      }
     }
   }
   ConjugateGradientResult twoLevelResult;
@@ -1588,6 +1659,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeMultiplicativeSchwarz", "noMatrixFreeMultiplicativeSchwarz", &matrixFreeSolveOptions.multiplicativeSchwarz,
                    "With --checkMatrixFreeOperator: one-level PCG with element Schwarz, additive and symmetric multiplicative "
                    "(cell-ID, random and upwind orders)");
+    cmdp.setOption("matrixFreeSweepDiagnose", "noMatrixFreeSweepDiagnose", &matrixFreeSolveOptions.sweepDiagnose,
+                   "With --matrixFreeMultiplicativeSchwarz: power iteration for the top eigenvector of the sweep-preconditioned operator");
     cmdp.setOption("matrixFreeSweepOnly", "noMatrixFreeSweepOnly", &matrixFreeSolveOptions.sweepOnly,
                    "With --matrixFreeMultiplicativeSchwarz: only the transport-sweep preconditioner");
     cmdp.setOption("matrixFreeCoarseGMG", "matrixFreeCoarseDirect", &matrixFreeSolveOptions.coarseGMG,
