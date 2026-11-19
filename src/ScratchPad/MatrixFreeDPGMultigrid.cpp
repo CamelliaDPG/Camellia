@@ -71,6 +71,16 @@ double ChebyshevSmoother::estimateLambdaMax(const TOperator<double> &A, const TO
   return boost * lambda;
 }
 
+double ChebyshevSmoother::estimateLambdaMaxLanczos(const TOperator<double> &A, const TOperator<double> &Dinv, int iterations, double boost)
+{
+  auto map = A.getDomainMap();
+  MV b(map, 1), x(map, 1);
+  b.randomize();
+  const ConjugateGradientResult result = conjugateGradient(A, &Dinv, b, x, 0.0, iterations);
+  TEUCHOS_TEST_FOR_EXCEPTION(!(result.lambdaMax > 0), std::logic_error, "estimateLambdaMaxLanczos: no Ritz value");
+  return boost * result.lambdaMax;
+}
+
 namespace
 {
   //! an Amesos2 factorization of a matrix, applied as its inverse
@@ -147,7 +157,8 @@ MatrixFreeDPGTwoLevel::MatrixFreeDPGTwoLevel(Teuchos::RCP<MatrixFreeDPGOperator>
   }
   _setupTimes.push_back({"smoother diagonal", seconds(t0)});
   t0 = Clock::now();
-  _lambdaMax = ChebyshevSmoother::estimateLambdaMax(*fineOperator, *Dinv, options.powerIterations, options.lambdaMaxBoost);
+  _lambdaMax = options.lanczosLambdaMax ? ChebyshevSmoother::estimateLambdaMaxLanczos(*fineOperator, *Dinv, options.lanczosIterations, options.lambdaMaxBoost)
+                                        : ChebyshevSmoother::estimateLambdaMax(*fineOperator, *Dinv, options.powerIterations, options.lambdaMaxBoost);
   _setupTimes.push_back({"lambda_max", seconds(t0)});
   auto smoother = std::make_shared<ChebyshevSmoother>(fineOperator, Dinv, options.chebyshevDegree, _lambdaMax, options.eigenRatio);
 

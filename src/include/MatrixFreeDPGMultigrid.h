@@ -34,6 +34,10 @@ namespace Camellia
     void smooth(const MV &b, MV &x) const;
     //! power iteration on D^{-1} A from a random vector, times boost (Ifpack2 uses 1.1)
     static double estimateLambdaMax(const TOperator<double> &A, const TOperator<double> &Dinv, int iterations, double boost);
+    //! the largest Ritz value of D^{-1} A from iterations of D^{-1}-preconditioned CG on a random right-hand side (Lanczos),
+    //! times boost: far more accurate than power iteration for the same number of applications (a Ritz value
+    //! underestimates lambda_max, and Chebyshev amplifies whatever lies above its interval)
+    static double estimateLambdaMaxLanczos(const TOperator<double> &A, const TOperator<double> &Dinv, int iterations, double boost);
   private:
     Teuchos::RCP<const TOperator<double>> _A, _Dinv;
     int _degree;
@@ -55,7 +59,9 @@ namespace Camellia
       int chebyshevDegree = 2;
       double eigenRatio = 20.0;
       double lambdaMaxBoost = 1.1;
-      int powerIterations = 10;
+      int powerIterations = 10;     // for the power-iteration estimate
+      bool lanczosLambdaMax = true;  // estimate lambda_max by Lanczos (CG) instead of power iteration
+      int lanczosIterations = 20;
       bool traceBlockDiagonal = true; // false: the point (shared-eigenbasis) diagonal
     };
 

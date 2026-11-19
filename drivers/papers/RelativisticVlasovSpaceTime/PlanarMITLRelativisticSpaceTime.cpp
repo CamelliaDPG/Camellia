@@ -1080,7 +1080,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     {
       std::cout << "  two-level (Chebyshev degree " << solveOptions.twoLevel.chebyshevDegree << ", eigenvalue ratio "
                 << solveOptions.twoLevel.eigenRatio << ", " << (solveOptions.twoLevel.traceBlockDiagonal ? "trace-block" : "point")
-                << " diagonal; Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs): "
+                << " diagonal, lambda_max " << twoLevel->lambdaMax() << "; Galerkin coarse, " << twoLevel->coarseDofCount() << " coarse dofs): "
                 << twoLevelResult.iterations << " iterations, kappa ~ " << twoLevelResult.conditionNumber() << " (lambda in ["
                 << twoLevelResult.lambdaMin << ", " << twoLevelResult.lambdaMax << "]), " << twoLevelTime << " s (setup " << twoLevelSetupTime << " s:";
       for (const auto &entry : twoLevel->setupTimes()) std::cout << " " << entry.first << " " << entry.second;
@@ -1487,6 +1487,9 @@ int main(int argc, char *argv[])
                    "Two-level matrix-free: Chebyshev interval [lambda_max / ratio, lambda_max]");
     cmdp.setOption("matrixFreeTraceBlockSmoother", "matrixFreePointSmoother", &matrixFreeSolveOptions.twoLevel.traceBlockDiagonal,
                    "Two-level matrix-free: Chebyshev with the trace-block or the point diagonal");
+    cmdp.setOption("matrixFreeLanczosLambdaMax", "matrixFreePowerLambdaMax", &matrixFreeSolveOptions.twoLevel.lanczosLambdaMax,
+                   "Two-level matrix-free: estimate the smoother's lambda_max by Lanczos (CG) or by power iteration");
+    cmdp.setOption("matrixFreeLambdaMaxBoost", &matrixFreeSolveOptions.twoLevel.lambdaMaxBoost, "Two-level matrix-free: lambda_max estimate times this");
     bool matrixFreeCheckBeforeSolve = false;
     cmdp.setOption("matrixFreeCheckBeforeSolve", "matrixFreeCheckAfterSolve", &matrixFreeCheckBeforeSolve,
                    "With --checkMatrixFreeOperator: run the check before the first slab's solve (the initial fields), then stop");
