@@ -958,6 +958,7 @@ struct MatrixFreeSolveOptions
   bool sweepDiagnose = false;         // the top eigenvector of P S: where it lives
   int sweepDiagnoseVariant = 1;       // which sweep variant to diagnose (0: plain, 1: additive face blocks, 2: multiplicative)
   double characteristicTolerance = 1e-8; // faces with |beta . n| <= this * max |beta|: out of the sweep, face blocks
+  int maxSweepBlockCells = 64;        // the component block sweep: skipped if a strongly connected component is larger
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1077,7 +1078,20 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     t0 = now();
     int cyclesBroken = 0, laggedFaces = 0;
     std::vector<int> fluxOwner;
-    const std::vector<int> upwind = op.upwindCellOrder(&cyclesBroken, &laggedFaces, &fluxOwner);
+    std::vector<int> component;
+    const std::vector<int> upwind = op.upwindCellOrder(&cyclesBroken, &laggedFaces, &fluxOwner, nullptr, 0.0, &component);
+    {
+      std::map<int,int> sizes;
+      for (int c : component) sizes[c]++;
+      std::map<int,int> histogram; // component size -> count
+      for (const auto &entry : sizes) histogram[entry.second]++;
+      if (rank == 0)
+      {
+        std::cout << "  strongly connected components of the face graph: " << sizes.size() << "; sizes (size x count):";
+        for (const auto &entry : histogram) std::cout << " " << entry.first << "x" << entry.second;
+        std::cout << "\n";
+      }
+    }
     const double orderTime = seconds(t0, now());
     t0 = now();
     Teuchos::RCP<ElementMultiplicativeSchwarz> schwarz;
@@ -1149,11 +1163,24 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     struct SweepVariant { std::string name; int kind; };
     const std::vector<SweepVariant> sweepVariants = {{"transport sweep P = R^{-1} W^{-1} R^{-T}", 0},
                                                      {"sweep without characteristic faces + their face blocks, additive", 1},
-                                                     {"sweep without characteristic faces + their face blocks, symmetric multiplicative", 2}};
+                                                     {"sweep without characteristic faces + their face blocks, symmetric multiplicative", 2},
+                                                     {"block sweep over the strongly connected components (no lagging)", 3}};
+    int largestComponent = 0;
+    {
+      std::map<int,int> sizes;
+      for (int c : component) largestComponent = std::max(largestComponent, ++sizes[c]);
+    }
     for (const SweepVariant &variant : sweepVariants)
     {
+      if ((variant.kind == 3) && (largestComponent > solveOptions.maxSweepBlockCells))
+      {
+        if (rank == 0) std::cout << "  " << variant.name << ": skipped (largest component " << largestComponent << " cells)\n";
+        continue;
+      }
+      if ((variant.kind == 1 || variant.kind == 2) && (cyclesBroken > 0 || characteristicFace.empty())) continue; // (only informative without fields)
       t0 = now();
       Teuchos::RCP<TOperator<double>> candidate = (variant.kind == 0) ? op.transportSweep(upwind, fluxOwner)
+                                                : (variant.kind == 3) ? op.transportSweep(upwind, fluxOwner, nullptr, false, &component)
                                                                       : op.transportSweep(upwindC, fluxOwnerC, &characteristicFace, variant.kind == 2);
       const double sweepSetupTime = seconds(t0, now());
       MV u(map, 1);
@@ -1165,7 +1192,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
                   << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s (setup " << sweepSetupTime << " s)\n";
       if (variant.kind == solveOptions.sweepDiagnoseVariant) sweep = candidate;
     }
-    if (solveOptions.sweepDiagnose)
+    if (solveOptions.sweepDiagnose && !sweep.is_null())
     {
       // power iteration x <- P S x for the top eigenvector (the mode where Q dominates R^T W R)
       MV x(map, 1), Sx(map, 1), PSx(map, 1);
@@ -1687,6 +1714,8 @@ int main(int argc, char *argv[])
                    "Transport sweep: faces with |beta . n| <= this times max |beta| are characteristic (face blocks, outside the sweep)");
     cmdp.setOption("matrixFreeSweepDiagnoseVariant", &matrixFreeSolveOptions.sweepDiagnoseVariant,
                    "--matrixFreeSweepDiagnose: 0 the plain sweep, 1 with additive characteristic face blocks, 2 multiplicative");
+    cmdp.setOption("matrixFreeMaxSweepBlockCells", &matrixFreeSolveOptions.maxSweepBlockCells,
+                   "Component block sweep: the largest strongly connected component (cells) to factor densely");
     cmdp.setOption("matrixFreeSweepOnly", "noMatrixFreeSweepOnly", &matrixFreeSolveOptions.sweepOnly,
                    "With --matrixFreeMultiplicativeSchwarz: only the transport-sweep preconditioner");
     cmdp.setOption("matrixFreeCoarseGMG", "matrixFreeCoarseDirect", &matrixFreeSolveOptions.coarseGMG,

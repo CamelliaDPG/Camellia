@@ -820,90 +820,122 @@ namespace
 
 Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner,
                                                                       const std::vector<int> *characteristicFace,
-                                                                      bool characteristicMultiplicative) const
+                                                                      bool characteristicMultiplicative,
+                                                                      const std::vector<int> *blockOf) const
 {
   std::vector<std::vector<CellDof>> cellDofs;
   std::vector<std::vector<double>> matrices;
   cellMatrices(cellDofs, matrices);
   const int cellCount = int(_cells.size());
-  std::vector<int> position(cellCount);
-  for (int i=0; i<cellCount; i++) position[order[i]] = i;
-  std::vector<TransportSweepOperator::Cell> cells(cellCount);
-  std::vector<std::vector<bool>> lagged(cellCount);
-  bool anyLagged = false;
+  // the blocks, and their sweep order
+  std::vector<int> block(cellCount);
+  int blockCount = 0;
+  std::vector<int> blockOrder;
+  if (blockOf != nullptr)
+  {
+    block = *blockOf;
+    for (int b : block) blockCount = std::max(blockCount, b + 1);
+    for (int b=0; b<blockCount; b++) blockOrder.push_back(b);
+  }
+  else
+  {
+    for (int k=0; k<cellCount; k++) block[k] = k;
+    blockCount = cellCount;
+    blockOrder = order;
+  }
+  std::vector<int> position(blockCount);
+  for (int i=0; i<blockCount; i++) position[blockOrder[i]] = i;
+  std::vector<std::vector<int>> blockCells(blockCount);
+  for (int k=0; k<cellCount; k++) blockCells[block[k]].push_back(k);
+
   Teuchos::LAPACK<int,double> lapack;
-  // the characteristic faces' blocks: [face] lid -> position, and entries
   std::set<LO> dirichlet(_dirichletLocal.begin(), _dirichletLocal.end());
+  // the characteristic faces' blocks
   std::map<int, std::vector<LO>> faceLids;
   if (characteristicFace != nullptr)
     for (size_t lid=0; lid<characteristicFace->size(); lid++)
       if (((*characteristicFace)[lid] >= 0) && (dirichlet.count(LO(lid)) == 0)) faceLids[(*characteristicFace)[lid]].push_back(LO(lid));
   std::map<int, std::vector<double>> faceMatrices;
   for (const auto &entry : faceLids) faceMatrices[entry.first].assign(entry.second.size() * entry.second.size(), 0.0);
-  for (int k=0; k<cellCount; k++)
+
+  std::vector<TransportSweepOperator::Cell> blocks(blockCount);
+  std::vector<std::vector<bool>> lagged(blockCount);
+  bool anyLagged = false;
+  for (int b=0; b<blockCount; b++)
   {
-    const int n = _local->trialDofCount(_cells[k]);
-    // owned (u) and inflow (i) local dofs, with their global lids and coefficients (one lid per local dof)
-    std::vector<int> uLocal, iLocal;
-    std::vector<double> uCoefficient, iCoefficient;
-    std::vector<std::pair<int,double>> cLocal; // characteristic: (local dof, coefficient), with lids in cLids
-    std::vector<LO> cLids;
-    TransportSweepOperator::Cell &cell = cells[k];
-    std::vector<int> seen(n, 0);
-    for (const CellDof &dof : cellDofs[k])
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(seen[dof.local]++ > 0, std::invalid_argument, "transportSweep: a local dof with several global dofs (constraints) is not supported");
-      const int owner = fluxOwner[dof.lid];
-      if (owner == -2)
+    TransportSweepOperator::Cell &sweepBlock = blocks[b];
+    // owned (u) and inflow (i) lids of the block
+    std::map<LO,int> ownedPosition, inflowPosition;
+    for (int k : blockCells[b])
+      for (const CellDof &dof : cellDofs[k])
       {
-        cLocal.push_back({dof.local, dof.coefficient}); cLids.push_back(dof.lid);
-      }
-      else if ((owner < 0) || (owner == k))
-      {
-        uLocal.push_back(dof.local); uCoefficient.push_back(dof.coefficient); cell.owned.push_back(dof.lid);
-      }
-      else
-      {
-        iLocal.push_back(dof.local); iCoefficient.push_back(dof.coefficient); cell.inflow.push_back(dof.lid);
-        const bool isLagged = position[owner] > position[k];
-        lagged[k].push_back(isLagged);
-        anyLagged = anyLagged || isLagged;
-      }
-    }
-    const int nu = int(uLocal.size()), ni = int(iLocal.size());
-    const std::vector<double> &S = matrices[k];
-    // the characteristic-face blocks: this cell's contributions
-    if (characteristicFace != nullptr)
-      for (size_t a=0; a<cLids.size(); a++)
-        for (size_t b=0; b<cLids.size(); b++)
+        const int owner = fluxOwner[dof.lid];
+        if (owner == -2) continue;
+        if ((owner == -1) || (block[owner] == b))
         {
-          const int face = (*characteristicFace)[cLids[a]];
-          if ((*characteristicFace)[cLids[b]] != face) continue;
+          if (ownedPosition.insert({dof.lid, int(sweepBlock.owned.size())}).second) sweepBlock.owned.push_back(dof.lid);
+        }
+        else if (inflowPosition.insert({dof.lid, int(sweepBlock.inflow.size())}).second)
+        {
+          sweepBlock.inflow.push_back(dof.lid);
+          const bool isLagged = position[block[owner]] > position[b];
+          lagged[b].push_back(isLagged);
+          anyLagged = anyLagged || isLagged;
+        }
+      }
+    const int nu = int(sweepBlock.owned.size()), ni = int(sweepBlock.inflow.size());
+    std::vector<double> Suu(size_t(nu) * nu, 0.0), Sui(size_t(nu) * std::max(ni,1), 0.0);
+    // assemble the block's S_uu and S_ui in global coordinates (x_local = c x_global: S^g_ab = c_a S_ab c_b)
+    for (int k : blockCells[b])
+    {
+      const int n = _local->trialDofCount(_cells[k]);
+      const std::vector<double> &S = matrices[k];
+      std::vector<int> seen(n, 0);
+      for (const CellDof &dof : cellDofs[k])
+        TEUCHOS_TEST_FOR_EXCEPTION(seen[dof.local]++ > 0, std::invalid_argument, "transportSweep: a local dof with several global dofs (constraints) is not supported");
+      for (const CellDof &a : cellDofs[k])
+      {
+        auto ua = ownedPosition.find(a.lid);
+        if (ua == ownedPosition.end()) continue;
+        for (const CellDof &c : cellDofs[k])
+        {
+          const double value = a.coefficient * S[size_t(c.local) * n + a.local] * c.coefficient;
+          auto uc = ownedPosition.find(c.lid);
+          if (uc != ownedPosition.end()) { Suu[size_t(uc->second) * nu + ua->second] += value; continue; }
+          auto ic = inflowPosition.find(c.lid);
+          if (ic != inflowPosition.end()) Sui[size_t(ic->second) * nu + ua->second] += value;
+        }
+      }
+      // the characteristic-face blocks: this cell's contributions
+      if (characteristicFace != nullptr)
+        for (const CellDof &a : cellDofs[k])
+        {
+          if (fluxOwner[a.lid] != -2) continue;
+          const int face = (*characteristicFace)[a.lid];
           const std::vector<LO> &lids = faceLids[face];
           const size_t m = lids.size();
-          const size_t pa = std::find(lids.begin(), lids.end(), cLids[a]) - lids.begin();
-          const size_t pb = std::find(lids.begin(), lids.end(), cLids[b]) - lids.begin();
-          faceMatrices[face][pb * m + pa] += cLocal[a].second * S[size_t(cLocal[b].first) * n + cLocal[a].first] * cLocal[b].second;
+          const size_t pa = std::find(lids.begin(), lids.end(), a.lid) - lids.begin();
+          for (const CellDof &c : cellDofs[k])
+          {
+            if ((fluxOwner[c.lid] != -2) || ((*characteristicFace)[c.lid] != face)) continue;
+            const size_t pc = std::find(lids.begin(), lids.end(), c.lid) - lids.begin();
+            faceMatrices[face][pc * m + pa] += a.coefficient * S[size_t(c.local) * n + a.local] * c.coefficient;
+          }
         }
-    // global coordinates: x_local = c x_global, so S^g_ab = c_a S_ab c_b
-    cell.factor.assign(size_t(nu) * nu, 0.0);
-    for (int b=0; b<nu; b++)
-      for (int a=0; a<nu; a++) cell.factor[size_t(b) * nu + a] = uCoefficient[a] * S[size_t(uLocal[b]) * n + uLocal[a]] * uCoefficient[b];
-    std::vector<double> Sui(size_t(nu) * std::max(ni,1), 0.0);
-    for (int b=0; b<ni; b++)
-      for (int a=0; a<nu; a++) Sui[size_t(b) * nu + a] = uCoefficient[a] * S[size_t(iLocal[b]) * n + uLocal[a]] * iCoefficient[b];
+    }
     int info = 0;
-    if (nu > 0) lapack.POTRF('L', nu, cell.factor.data(), nu, &info);
-    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "transportSweep: a cell's owned block S_uu is not positive definite");
+    if (nu > 0) lapack.POTRF('L', nu, Suu.data(), nu, &info);
+    TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "transportSweep: a block's owned part S_uu is not positive definite");
     if ((nu > 0) && (ni > 0))
     {
-      lapack.POTRS('L', nu, ni, cell.factor.data(), nu, Sui.data(), nu, &info);
+      lapack.POTRS('L', nu, ni, Suu.data(), nu, Sui.data(), nu, &info);
       for (double &value : Sui) value = -value;
-      cell.transport = std::move(Sui);
+      sweepBlock.transport = std::move(Sui);
     }
-    matrices[k].clear();
+    sweepBlock.factor = std::move(Suu);
   }
-  auto sweep = Teuchos::rcp(new TransportSweepOperator(_map, std::move(cells), order, _dirichletLocal));
+  matrices.clear();
+  auto sweep = Teuchos::rcp(new TransportSweepOperator(_map, std::move(blocks), blockOrder, _dirichletLocal));
   if (anyLagged) sweep->setLagged(std::move(lagged));
   if (characteristicFace != nullptr)
   {
@@ -925,7 +957,8 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std:
 }
 
 std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *laggedFaces, std::vector<int> *fluxOwner,
-                                                       std::vector<int> *characteristicFace, double characteristicTolerance) const
+                                                       std::vector<int> *characteristicFace, double characteristicTolerance,
+                                                       std::vector<int> *component) const
 {
   GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
   const int cellCount = int(_cells.size());
@@ -1009,6 +1042,47 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
   std::vector<std::vector<int>> downwind(cellCount);
   std::vector<int> inDegree(cellCount, 0);
   for (const auto &edge : edges) { downwind[edge.first].push_back(edge.second); inDegree[edge.second]++; }
+  if (component != nullptr)
+  {
+    // Tarjan's strongly connected components (iterative); Tarjan finds them in reverse topological order
+    component->assign(cellCount, -1);
+    std::vector<int> index(cellCount, -1), low(cellCount, 0), stack;
+    std::vector<bool> onStack(cellCount, false);
+    int counter = 0, components = 0;
+    for (int root=0; root<cellCount; root++)
+    {
+      if (index[root] >= 0) continue;
+      std::vector<std::pair<int,size_t>> call{{root, 0}};
+      index[root] = low[root] = counter++; stack.push_back(root); onStack[root] = true;
+      while (!call.empty())
+      {
+        int v = call.back().first;
+        size_t &next = call.back().second;
+        if (next < downwind[v].size())
+        {
+          const int w = downwind[v][next++];
+          if (index[w] < 0)
+          {
+            index[w] = low[w] = counter++; stack.push_back(w); onStack[w] = true;
+            call.push_back({w, 0});
+          }
+          else if (onStack[w]) low[v] = std::min(low[v], index[w]);
+        }
+        else
+        {
+          if (low[v] == index[v])
+          {
+            int w;
+            do { w = stack.back(); stack.pop_back(); onStack[w] = false; (*component)[w] = components; } while (w != v);
+            components++;
+          }
+          call.pop_back();
+          if (!call.empty()) low[call.back().first] = std::min(low[call.back().first], low[v]);
+        }
+      }
+    }
+    for (int &c : *component) c = components - 1 - c; // upwind first
+  }
   // Kahn's algorithm; on a cycle, take the remaining cell with the fewest unvisited upwind neighbors
   std::set<std::pair<int,int>> remaining; // (in-degree, cell)
   for (int k=0; k<cellCount; k++) remaining.insert({inDegree[k], k});
