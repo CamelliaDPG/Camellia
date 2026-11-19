@@ -256,10 +256,29 @@ memory.  An iteration is about 9 fine applications at about 1.6 ms per cell.  Th
 set up.  The full tensor test space, which matrix-free needs, is also the larger and more accurate test space;
 production with serendipity test is not the same discretization.
 
+Two uniform refinements (2048 cells, 247296 dofs), matrix-free only.  Production would need roughly 16x the 128-cell
+memory: about 40 GB with serendipity test, about 14 GB with full tensor test, beyond this container's 15 GB.
+
+| solver              | iterations (kappa) | setup                               | solve  | total  | peak memory |
+|---------------------|--------------------|-------------------------------------|--------|--------|-------------|
+| MF, element Schwarz | 23 (6.5)           | 658 s (Schwarz blocks 484 s)        | 664 s  | 1322 s | 5.4 GB      |
+| MF, trace-block     | 47 (25.2)          | 396 s (trace blocks 218 s)          | 1297 s | 1693 s | 1.2 GB      |
+
+- Cost per cell per iteration is flat: about 14.5 ms at 128 cells and at 2048.  Setup per cell is also roughly flat
+  (Schwarz blocks 0.19 s, then 0.24 s per cell).
+- Element-Schwarz memory is the stored element factors, about 2.6 MB per cell.  Trace-block keeps memory low.
+- **Iterations double, and kappa grows about 4x, per refinement**, for both smoothers (element Schwarz 1.9 -> 6.5,
+  trace-block 6.4 -> 25).  That is h^-2 behaviour, as for a one-level method, despite the full h-hierarchy.  Production
+  GMG at p = 2 shows the same doubling (47 -> 88).  So the h-hierarchy is not giving mesh-independent convergence for
+  this problem, matrix-free or not; finding out why matters more than the smoother.
+
 ## Next steps
 
-1. **p = 4 against production** on the same uniformly refined meshes: wall time and memory, with the direct
-   p = 4 -> p = 1 jump first.  Then rediscretized intermediate p-levels (`BoxCellDPGOperator` at p = 2) if the
+1. **Why kappa grows like h^-2** under the h-hierarchy, in production and matrix-free alike.  Candidates: the trace
+   prolongation; the coarse spaces missing the transport (characteristic) modes; the alpha weighting of the graph
+   norm (production smoothers were tuned at alpha = 1e6).  Test: kappa of the two-level method with an exact coarse
+   solve at each mesh pair, and the eigenvector of its smallest eigenvalue.
+   Then rediscretized intermediate p-levels (`BoxCellDPGOperator` at p = 2) if the
    iterations call for them; a Galerkin intermediate level would cost a fine application each time it is applied.
 2. **A cheaper strong smoother:** element Schwarz stores about n_K^2 per element.  Try inexact block solves with the
    matrix-free element action.
