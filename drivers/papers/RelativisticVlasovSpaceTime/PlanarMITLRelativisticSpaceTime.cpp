@@ -954,6 +954,7 @@ struct MatrixFreeSolveOptions
   bool coarseGMG = false; // below the fine level: the conventional GMG on the lowest-order h-hierarchy, instead of an exact solve
   bool twoLevelSolve = true;
   bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
+  bool sweepOnly = false;             // with multiplicativeSchwarz: only the transport sweep
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1076,7 +1077,8 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     const std::vector<int> upwind = op.upwindCellOrder(&cyclesBroken, &laggedFaces, &fluxOwner);
     const double orderTime = seconds(t0, now());
     t0 = now();
-    Teuchos::RCP<ElementMultiplicativeSchwarz> schwarz = op.elementMultiplicativeSchwarz();
+    Teuchos::RCP<ElementMultiplicativeSchwarz> schwarz;
+    if (!solveOptions.sweepOnly) schwarz = op.elementMultiplicativeSchwarz();
     const double schwarzSetupTime = seconds(t0, now());
     std::vector<int> cellOrder(upwind.size()), randomOrder(upwind.size());
     for (size_t i=0; i<cellOrder.size(); i++) cellOrder[i] = randomOrder[i] = int(i);
@@ -1119,13 +1121,16 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
                     << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s\n";
       }
     };
-    runVariants("element blocks");
-    schwarz = Teuchos::null;
-    t0 = now();
-    schwarz = op.elementMultiplicativeSchwarz(&fluxOwner);
-    const double ownerSetupTime = seconds(t0, now());
-    if (rank == 0) std::cout << "  owner blocks (fields + outflow fluxes, non-overlapping; setup " << ownerSetupTime << " s):\n";
-    runVariants("owner blocks");
+    if (!solveOptions.sweepOnly)
+    {
+      runVariants("element blocks");
+      schwarz = Teuchos::null;
+      t0 = now();
+      schwarz = op.elementMultiplicativeSchwarz(&fluxOwner);
+      const double ownerSetupTime = seconds(t0, now());
+      if (rank == 0) std::cout << "  owner blocks (fields + outflow fluxes, non-overlapping; setup " << ownerSetupTime << " s):\n";
+      runVariants("owner blocks");
+    }
     schwarz = Teuchos::null;
     t0 = now();
     Teuchos::RCP<TOperator<double>> sweep = op.transportSweep(upwind, fluxOwner);
@@ -1583,6 +1588,8 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeMultiplicativeSchwarz", "noMatrixFreeMultiplicativeSchwarz", &matrixFreeSolveOptions.multiplicativeSchwarz,
                    "With --checkMatrixFreeOperator: one-level PCG with element Schwarz, additive and symmetric multiplicative "
                    "(cell-ID, random and upwind orders)");
+    cmdp.setOption("matrixFreeSweepOnly", "noMatrixFreeSweepOnly", &matrixFreeSolveOptions.sweepOnly,
+                   "With --matrixFreeMultiplicativeSchwarz: only the transport-sweep preconditioner");
     cmdp.setOption("matrixFreeCoarseGMG", "matrixFreeCoarseDirect", &matrixFreeSolveOptions.coarseGMG,
                    "Matrix-free multigrid: below the fine level, the conventional GMG on the lowest-order h-hierarchy (needs "
                    "--numUniformRefinements > 0), or an exact solve of the lowest order on the fine mesh");
