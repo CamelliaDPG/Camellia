@@ -56,8 +56,8 @@ of α_K.
 | Variant A, θ = 1.6 | 34,871 | 4,275 | 3,507 |
 | Variant A, θ = 0.1 | 2,576 | 7,069 | 7,042 |
 | Variant A, θ = 0.01 | 287 | 9,486 | 9,500 |
-| Variant A, θ = 0.001 | (running) | | |
-| Fixed α = 100, no x/t transport terms, no outflow terms (earlier run) | 6.2 | (not measured; queued) | |
+| Variant A, θ = 0.001 | 32.8 | 4,736 | 4,743 |
+| **Fixed α = 100**, no x/t transport terms, no outflow terms | **6.2** | **415,010** | **415,581** |
 
 On this mesh α'_K ≈ 100, because the (a_u/h_u)² terms are small with 4 wide velocity cells. So variant A differs from the
 fixed-α run only by the outflow-face terms.
@@ -79,7 +79,22 @@ fixed-α run only by the outflow-face terms.
      μ ≈ |β| than to θ s²/h.
    - So the dimensional correction is right, but μ ~ s²/h appears to set the strength too high.
 4. **For the TT/AMEn question, the relevant column is the Jacobi one.** No variant-A θ tried improves κ(S) with Jacobi on
-   this mesh. Measuring κ(S) for the fixed-α norm is queued; it is the obvious comparison.
+   this mesh.
+
+**Update: the fixed-α baseline is in, and it reverses the picture for Jacobi.** The norm the sweep likes best
+(fixed α = 100, κ(PS) = 6.2) gives κ(S) ≈ 415,000 with point or trace-block Jacobi. That is 134× worse than today's
+transport-scaled α_K (3,089). So there is a clear trade-off:
+- **A large, transport-scaled L² weight** (α_K ~ C(|β|/h)²) makes S nearly mass-like and well scaled from cell to cell,
+  which is good for Jacobi and AMEn. It also makes the local problems non-causal, which is bad for the sweep.
+- **A small L² weight** leaves S as the normal equations of transport. Its smallest eigenvalues belong to modes smooth
+  along characteristics, which the sweep removes exactly and Jacobi cannot.
+- Variant A at the θ values tried sits in between and is not better than today's norm for either solver.
+
+**Consequence for the TT side:** for a Jacobi-preconditioned TT solve, today's transport-scaled α_K is the better norm of
+those tried here. Weakening the x and t parts of α_K, by moving them to faces or removing them, would make κ(S̃) worse,
+not better. Variant A should not be expected to help the p = 4 AMEn problem. If anything, the measurements argue for
+keeping or strengthening α_K's scaling there. Caveat: this is the deep-cathode stress mesh with zero fields. The
+production L0 version of this table is next.
 
 ## 3. Other results since the proposal (production mesh family, p = 2)
 
