@@ -822,7 +822,8 @@ namespace
 Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner,
                                                                       const std::vector<int> *characteristicFace,
                                                                       bool characteristicMultiplicative,
-                                                                      const std::vector<int> *blockOf) const
+                                                                      const std::vector<int> *blockOf,
+                                                                      const TOperator<double> *residualOperator) const
 {
   std::vector<std::vector<CellDof>> cellDofs;
   std::vector<std::vector<double>> matrices;
@@ -952,7 +953,7 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std:
       TEUCHOS_TEST_FOR_EXCEPTION(info != 0, std::logic_error, "transportSweep: a characteristic face block is not positive definite");
       faces.push_back(std::move(face));
     }
-    sweep->setFaces(std::move(faces), this, characteristicMultiplicative);
+    sweep->setFaces(std::move(faces), (residualOperator != nullptr) ? residualOperator : this, characteristicMultiplicative);
   }
   return sweep;
 }
@@ -960,7 +961,7 @@ Teuchos::RCP<TOperator<double>> MatrixFreeDPGOperator::transportSweep(const std:
 std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *laggedFaces, std::vector<int> *fluxOwner,
                                                        std::vector<int> *characteristicFace, double characteristicTolerance,
                                                        std::vector<int> *component, bool weightedCycleBreaking,
-                                                       double *laggedWeightFraction) const
+                                                       double *laggedWeightFraction, const std::vector<bool> *sweepDirections) const
 {
   GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
   const int cellCount = int(_cells.size());
@@ -1033,7 +1034,8 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
       const int k = cellSides[0].first;
       int normal, endpoint;
       _local->sideNormal(_cells[k], cellSides[0].second, normal, endpoint);
-      if (std::abs(beta[k][normal]) <= characteristicTolerance * betaScale(k)) markCharacteristic(entry.first, {k, -1 - cellSides[0].second});
+      const bool excluded = (sweepDirections != nullptr) && !(*sweepDirections)[normal];
+      if (excluded || (std::abs(beta[k][normal]) <= characteristicTolerance * betaScale(k))) markCharacteristic(entry.first, {k, -1 - cellSides[0].second});
     }
     for (size_t a=0; a<cellSides.size(); a++)
       for (size_t b=a+1; b<cellSides.size(); b++)
@@ -1044,7 +1046,8 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
         _local->sideNormal(_cells[k1], cellSides[a].second, normal, endpoint);
         // k1's side is its upper face (endpoint 1) in direction normal: the face normal from k1 to k2 is +e_normal
         const double betaN = (beta[k1][normal] + beta[k2][normal]) * ((endpoint == 1) ? 1.0 : -1.0); // beta . n_{k1 -> k2}
-        if ((characteristicFace != nullptr) && (0.5 * std::abs(betaN) <= characteristicTolerance * std::max(betaScale(k1), betaScale(k2))))
+        const bool excluded = (sweepDirections != nullptr) && !(*sweepDirections)[normal];
+        if ((characteristicFace != nullptr) && (excluded || (0.5 * std::abs(betaN) <= characteristicTolerance * std::max(betaScale(k1), betaScale(k2)))))
         {
           markCharacteristic(entry.first, {std::min(k1,k2), std::max(k1,k2)});
           continue; // no ownership and no dependency: the face is in neither cell's sweep split

@@ -954,6 +954,7 @@ struct MatrixFreeSolveOptions
   bool coarseGMG = false; // below the fine level: the conventional GMG on the lowest-order h-hierarchy, instead of an exact solve
   bool twoLevelSolve = true;
   bool compareSmoothers = false; // after the multigrid solve, repeat it with the other of {transport sweep, element Schwarz}
+  bool txSweep = false; // one-level PCG with a t-x-only sweep (velocity faces as face blocks), actual and frozen (zero-field) coefficients
   bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
   bool sweepOnly = false;             // with multiplicativeSchwarz: only the transport sweep
   bool sweepDiagnose = false;         // the top eigenvector of P S: where it lives
@@ -1296,6 +1297,46 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
         }
       }
     }
+  }
+  if (solveOptions.txSweep)
+  {
+    // the t-x-only sweep: the upwind graph from the t and x faces (acyclic: beta_t = 1, beta_x = v_x(u) with u_x = 0 a
+    // vertex); the velocity faces' traces are left out of the sweep and preconditioned by their face blocks
+    const int dim = mesh->getDimension(), spaceDim = form->spaceDim();
+    std::vector<bool> directions(dim, false);
+    for (int d=0; d<=spaceDim; d++) directions[d] = true; // x_1..x_s, t
+    std::vector<int> characteristicFace, fluxOwnerTx;
+    int breaks = 0, lagged = 0;
+    t0 = now();
+    const std::vector<int> orderTx = op.upwindCellOrder(&breaks, &lagged, &fluxOwnerTx, &characteristicFace, 0.0, nullptr, false, nullptr, &directions);
+    int faceDofs = 0;
+    for (int face : characteristicFace) if (face >= 0) faceDofs++;
+    if (rank == 0)
+      std::cout << "checkMatrixFreeOperator: t-x-only sweep (" << breaks << " cycle breaks, " << lagged << " lagged faces; "
+                << faceDofs << " velocity-face flux dofs in face blocks; order " << seconds(t0, now()) << " s):\n";
+    // the frozen-coefficient operator: the acceleration terms (test derivatives in the velocity directions) dropped
+    auto localFrozen = Teuchos::rcp(new BoxCellDPGOperator(form->vlasovBF(), ip, mesh, quadratureEnrichment));
+    std::vector<int> velocityDirections;
+    for (int d=spaceDim+1; d<dim; d++) velocityDirections.push_back(d);
+    localFrozen->setDroppedTestDirections(velocityDirections);
+    MatrixFreeDPGOperator opFrozen(mesh, localFrozen, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end()));
+    for (bool frozen : {false, true})
+      for (bool multiplicative : {false, true})
+      {
+        t0 = now();
+        Teuchos::RCP<TOperator<double>> P = frozen ? opFrozen.transportSweep(orderTx, fluxOwnerTx, &characteristicFace, multiplicative, nullptr, &op)
+                                                   : op.transportSweep(orderTx, fluxOwnerTx, &characteristicFace, multiplicative);
+        const double setupTime = seconds(t0, now());
+        MV u(map, 1);
+        t0 = now();
+        ConjugateGradientResult result = conjugateGradient(op, P.get(), b, u, 1e-10, 20000);
+        const double time = seconds(t0, now());
+        if (rank == 0)
+          std::cout << "  t-x sweep, " << (frozen ? "fields frozen at zero in P" : "actual fields") << ", velocity-face blocks "
+                    << (multiplicative ? "symmetric multiplicative" : "additive") << ": " << result.iterations << " iterations, kappa ~ "
+                    << result.conditionNumber() << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time
+                    << " s (setup " << setupTime << " s)\n";
+      }
   }
   ConjugateGradientResult twoLevelResult;
   double twoLevelTime = 0;
@@ -1763,6 +1804,9 @@ int main(int argc, char *argv[])
                    "Two-level matrix-free: Chebyshev with element-block additive Schwarz (fields and face fluxes of each element)");
     cmdp.setOption("matrixFreeSweepSmoother", "noMatrixFreeSweepSmoother", &matrixFreeSolveOptions.twoLevel.transportSweep,
                    "Matrix-free multigrid: Chebyshev with the transport sweep as its preconditioner (overrides the other smoother options)");
+    cmdp.setOption("matrixFreeTxSweep", "noMatrixFreeTxSweep", &matrixFreeSolveOptions.txSweep,
+                   "With --checkMatrixFreeOperator: one-level PCG with a t-x-only transport sweep (velocity-face traces as face "
+                   "blocks), with the operator's coefficients and with the acceleration frozen at zero in the preconditioner");
     cmdp.setOption("matrixFreeCompareSmoothers", "noMatrixFreeCompareSmoothers", &matrixFreeSolveOptions.compareSmoothers,
                    "With the multigrid-preconditioned PCG: repeat it with the other smoother (transport sweep / element Schwarz)");
     cmdp.setOption("matrixFreeTwoLevel", "noMatrixFreeTwoLevel", &matrixFreeSolveOptions.twoLevelSolve,

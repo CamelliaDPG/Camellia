@@ -434,6 +434,8 @@ BoxCellDPGOperator::CellData &BoxCellDPGOperator::cellData(GlobalIndexType cellI
     for (const FieldData &field : type.fields)
       if ((field.trialVarID == group.trialVarID) && field.hvol) scale /= J; // L^2 values: reference values / det J
     for (int p=0; p<P; p++) c[p] *= weights[p] * scale;
+    if (std::find(_droppedTestDirections.begin(), _droppedTestDirections.end(), group.testDirection) != _droppedTestDirections.end())
+      c.assign(P, 0.0);
   }
   return data;
 }

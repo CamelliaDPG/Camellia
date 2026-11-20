@@ -93,6 +93,11 @@ namespace Camellia
     //! the fields in a fixed-point iteration
     void clearCellData() { _cellData.clear(); }
 
+    //! drop the field terms against the derivatives of the test function in these directions (their coefficients become
+    //! zero), e.g. the acceleration terms of a Vlasov form: the operator with those coefficients frozen at zero, for
+    //! approximate (field-independent) preconditioners.  Clears the cell data.
+    void setDroppedTestDirections(const std::vector<int> &directions) { _droppedTestDirections = directions; _cellData.clear(); }
+
   private:
     struct FieldGroup // the volume terms of one field (trial) variable against one test operator
     {
@@ -168,6 +173,7 @@ namespace Camellia
     int _quadratureEnrichment;
     std::map<const ElementType*, TypeData> _typeData;
     std::map<GlobalIndexType, CellData> _cellData;
+    std::vector<int> _droppedTestDirections;
 
     TypeData &typeData(GlobalIndexType cellID);
     void initializeTypeData(TypeData &data, ElementTypePtr elemType);

@@ -137,12 +137,14 @@ namespace Camellia
     //! weightedCycleBreaking: on a cycle, take next the remaining cell whose unvisited in-edges have the smallest total
     //! weight |beta . n| / h_n (the face's share of the downstream cell's inflow rate), instead of the fewest in-edges;
     //! laggedWeightFraction (if given) is the lagged edges' share of the total weight.
+    //! sweepDirections (if given, with characteristicFace): [direction] false leaves that direction's faces out of the
+    //! upwind graph, as characteristic faces (e.g. a t-x-only sweep: the velocity faces are face blocks, not swept).
     //! component (if given): [cell] its strongly connected component of the face graph (Tarjan), numbered in an upwind
     //! (topological) order of the components; cells on no cycle are components of size one.
     std::vector<int> upwindCellOrder(int *cyclesBroken = nullptr, int *laggedFaces = nullptr, std::vector<int> *fluxOwner = nullptr,
                                      std::vector<int> *characteristicFace = nullptr, double characteristicTolerance = 0.0,
                                      std::vector<int> *component = nullptr, bool weightedCycleBreaking = false,
-                                     double *laggedWeightFraction = nullptr) const;
+                                     double *laggedWeightFraction = nullptr, const std::vector<bool> *sweepDirections = nullptr) const;
 
     /**
      \brief The transport-sweep preconditioner P = R^{-1} W^{-1} R^{-T} (notes/static-condensation-trace-structure.tex,
@@ -161,6 +163,8 @@ namespace Camellia
     //! their face blocks of S (Cholesky), additively (block diagonal over {sweep dofs, characteristic dofs}), or, with
     //! characteristicMultiplicative, by the symmetric product: face blocks, sweep, face blocks (two more applications
     //! of S per application, through op).
+    //! residualOperator (if given): the operator whose residuals the multiplicative face composition uses, instead of
+    //! this one (when the sweep is built from an approximate operator, e.g. with frozen coefficients).
     //! blockOf (if given): [cell] a block index, blocks numbered in sweep order (e.g. the strongly connected components
     //! from upwindCellOrder(), so that the sweep over blocks needs no lagging).  A block owns its cells' fields and the
     //! fluxes any of its cells owns (so faces between its cells are interior); the sweep then runs over blocks with
@@ -168,7 +172,8 @@ namespace Camellia
     Teuchos::RCP<TOperator<double>> transportSweep(const std::vector<int> &order, const std::vector<int> &fluxOwner,
                                                    const std::vector<int> *characteristicFace = nullptr,
                                                    bool characteristicMultiplicative = false,
-                                                   const std::vector<int> *blockOf = nullptr) const;
+                                                   const std::vector<int> *blockOf = nullptr,
+                                                   const TOperator<double> *residualOperator = nullptr) const;
 
     /**
      \brief Blocks for transportSweep(): cells merged (union-find) across every face where beta . n changes sign, judged by
