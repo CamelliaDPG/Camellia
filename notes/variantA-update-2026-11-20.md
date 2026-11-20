@@ -96,6 +96,33 @@ not better. Variant A should not be expected to help the p = 4 AMEn problem. If 
 keeping or strengthening α_K's scaling there. Caveat: this is the deep-cathode stress mesh with zero fields. The
 production L0 version of this table is next.
 
+## 2b. The same comparison on production L0 with the fields on (added)
+
+The mesh is production L0 (880 cells, p = 2, Δp = 2), with the production norm settings α = 100, C = 1.6 and
+a = (1.8, 0.65). The operator is checked after slab 0's solve (2 substeps), so the fields are on. The sweep uses weighted
+cycle breaking.
+
+| Test norm | Sweep κ(PS) | Point-Jacobi κ | Trace-block-Jacobi κ |
+|---|---|---|---|
+| **Current: transport-scaled α_K** | **109** | **425** | **417** |
+| Variant A, θ = 1.6 | 128 | 520 | 471 |
+| Variant A, θ = 0.01 | 135 | 774 | 766 |
+| Fixed α = 100 | 164 | 2,226 | 2,225 |
+
+- **Today's norm is the best of the four for both solvers on the production mesh.**
+- Variant A at θ = 1.6 costs about 20% in Jacobi κ and 17% in sweep κ.
+- At small θ, variant A is worse for Jacobi (×1.8).
+- Fixed α is 5× worse for Jacobi.
+- The differences are much smaller than on the deep-cathode stress mesh, as expected with ν ≈ 13 instead of ~15,000.
+- With the fields on, what limits the sweep here is the acceleration-scale domination and the cycles, not α_K. Compare
+  κ(PS) = 43 with a = (6.11, 4.15) in Section 3.
+
+**Bottom line for the local session:** on this evidence, variant A gives no solver benefit, for TT/Jacobi or for the
+sweep, on production meshes. It could still be worth revisiting only as a stability or accuracy choice, which the local
+side's tests decide. For the TT p = 4 conditioning, keep today's α_K. The norm change that did help the solvers is the
+acceleration scales: a = (6.11, 4.15), or the planned per-cell a_u(K). Its Jacobi κ is not yet measured; queued on this
+side.
+
 ## 3. Other results since the proposal (production mesh family, p = 2)
 
 These are L0 runs (880 cells), with fields on: the check runs after slab 0's solve, with 2 substeps.
