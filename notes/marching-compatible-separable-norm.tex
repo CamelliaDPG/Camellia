@@ -1,0 +1,259 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{pdftitle={A marching-compatible separable test norm}}
+
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem{remark}[proposition]{Remark}
+
+\newcommand{\bbeta}{\boldsymbol{\beta}}
+\newcommand{\bn}{\boldsymbol{n}}
+\newcommand{\bv}{\boldsymbol{v}}
+\newcommand{\T}{\mathsf{T}}
+\newcommand{\R}{\mathbb{R}}
+\DeclareMathOperator{\diag}{diag}
+
+\title{A marching-compatible separable test norm\\[2pt]\large proposal, for the tensor-train and conventional planar MITL solvers}
+\author{}
+\date{November 20, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The transport-sweep experiments point at the test norm, rather than the solver, as the source of two of the three
+degradations we found.  The manuscript ``The DPG Method for the Convection--Reaction Problem, Revisited''
+(Demkowicz, Roberts, Mu\~noz-Matute) recalls an inner product that replaces the $L^2$ term by an \emph{outflow-boundary}
+term, and with which the ideal DPG method coincides with a marching (sweep) scheme in 1D and on a class of 2D meshes.
+These notes propose a direction-separable version of that norm.  Its element Gram matrix is still a Kronecker sum, so
+its inverse is still exact by fast diagonalization.  What changes is that the one-dimensional eigenbases become
+cell-dependent: they depend on one or two scalars per direction and cell.  The proposal is untested.  It changes the
+discretization, so it needs the accuracy and coupled-stability tests as well as solver tests.
+\end{abstract}
+
+%======================================================================
+\section{Background: the current separable norm and what the sweep found}
+%======================================================================
+
+\paragraph{Current norm (TT ``graph$\oplus$'').}  Coordinates $\mathbf z=(x,t,u_x,u_z)$, $n=4$.  On a box cell $K$ with
+widths $h_{K,d}$:
+\[
+  \|w\|_{V(K)}^2 = \alpha_K\|w\|_K^2 + \sum_{d=1}^n s_{K,d}^2\,\|\partial_d w\|_K^2\;\bigl[-\,c_K\bigl(\textstyle\int_K w\bigr)^2\bigr],
+\]
+where:
+\begin{itemize}[nosep]
+  \item $s_K=(v_{x,\max}(K),\,1,\,a_x,\,a_z)$ are the derivative scales, with $a=(1.8,0.65)$ fixed;
+  \item $\alpha_K=\alpha+C\bigl[(v_{x,\max}/h_x)^2+1/h_t^2+\sum_u(a_u/h_u)^2\bigr]$ is the transport-scaled $L^2$
+        weight, with $\alpha=10^2$ and $C=1.6$;
+  \item the bracketed constant-mode term is optional.
+\end{itemize}
+On the reference cell $[-1,1]^n$, with Jacobian $J_K=\prod_d h_{K,d}/2$, the Gram matrix is
+\[
+  G_K = J_K\Bigl(\alpha_K\,\widehat M^{\otimes n}+\sum_d \xi_{K,d}\,\widehat K_{(d)}\Bigr),\qquad \xi_{K,d}=s_{K,d}^2\,(2/h_{K,d})^2 .
+\]
+Here $\widehat M$ and $\widehat K$ are the 1D mass and stiffness matrices of the test basis, and $\widehat K_{(d)}$ has
+$\widehat K$ in slot $d$ and $\widehat M$ elsewhere.  One 1D generalized eigenbasis $V$, with $\widehat KV=\widehat MV\Lambda$,
+diagonalizes every cell: $G_K^{-1}=V^{\otimes n}\diag\bigl(1/(J_K(\alpha_K+\sum_d\xi_{K,d}\lambda_{j_d}))\bigr)(V^\T)^{\otimes n}$.
+
+\paragraph{The sweep and what limits it.}  The notes \texttt{static-condensation-trace-structure.pdf} split each
+cell's faces into inflow and outflow.  For that split they show that the DPG operator is exactly
+\[
+  S = R^\T W R + Q,\qquad Q\succeq 0,
+\]
+where $R$ is the sweep (each cell's local DPG solve from its inflow data, in upwind order) and $Q$ collects the cells'
+inflow Schur complements.  The sweep preconditioner $P=(R^\T WR)^{-1}$ then has $\kappa(PS)\le 1+\rho$, with
+$\rho=\sup\, x^\T Qx/x^\T R^\T WRx$.  $Q$ vanishes in the continuous limit, so $\rho$ measures how far the
+\emph{discrete} local problems are from causal ``inflow determines outflow'' behaviour.  Measured ($p=2$):
+\begin{center}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llll@{}}
+\toprule
+case & what dominated $\rho$ & test & effect\\
+\midrule
+fields zero, 16 graded $x$-cells (thin cathode cells) & t-face fluxes in the thinnest cells & $\alpha_K$ fixed at $10^2$
+  & sweep $\kappa$: 6036 $\to$ 6.2\\
+fields on, production L0 (880 cells) & $u_x$-face fluxes, cathode cells, $|\beta_{u_x}|\approx4$--6 $>$ $a_x=1.8$
+  & $a=(6.11,4.15)$ & sweep $\kappa$: 109 $\to$ 43\\
+ & & & two-level: 15 $\to$ 8 iterations\\
+fields on, production L0 & cycles from $\bv\times\mathbf B$ (one strongly connected component) & weighted lagging
+  & sweep $\kappa$: 769 $\to$ 109\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The first two are properties of the norm:
+\begin{enumerate}[nosep]
+  \item \textbf{$\alpha_K$ dominating the time derivative.}  In a thin cathode cell,
+        $\alpha_K\approx C(v_x/h_x)^2$, while the time-derivative weight is $1/h_t^2$.  Relative to the $L^2$ term,
+        $\partial_t$ is down by about $1/(C\nu^2)$, with $\nu=|v_x|h_t/h_x$ the cell Courant number.  An
+        $L^2$-dominated local problem is close to a least-squares fit that is symmetric in $t$.  It does not ``know''
+        that the bottom face is inflow and the top face is outflow.  (Production meshes have $\nu\approx13$ at the
+        cathode, where $\alpha_K\approx10^5$ against $C/h_t^2=640$ at L1.)
+  \item \textbf{Domination failure} where $s_{K,d}<|\beta_d|$ (the fixed acceleration scales).
+\end{enumerate}
+
+%======================================================================
+\section{The manuscript's inner product}
+%======================================================================
+
+For $\mathbf b\cdot\nabla u+cu=f$, the manuscript recalls, from its reference [12], the element inner product
+\begin{equation}\label{eq:11}
+  (v,\delta v)_{V(K)} = \int_K \operatorname{div}(\mathbf b v)\operatorname{div}(\mathbf b\,\delta v) + \int_{\partial K_+} v\,\delta v .
+\end{equation}
+\begin{itemize}[nosep]
+  \item With \eqref{eq:11}, the optimal test functions are explicit.  The ideal DPG method then delivers exactly the
+        solution of the marching scheme, which solves element by element from inflow to outflow, in 1D and for a class of
+        2D meshes.  For general 2D meshes the two differ slightly.
+  \item \eqref{eq:11} is \emph{not} uniformly equivalent in $h$ to the adjoint graph norm.  This is footnote 2, citing
+        Broersen, Dahmen and Stevenson, who use a corrected version.
+  \item Their discrete stability argument (Section 6) is itself a layer-by-layer sweep.  The global constant is a
+        product of element constants $\beta_h^{-2}$ along characteristic chains, and it needs $\beta_h^{-2}\le1+Ch$.
+        $\beta_h$ degenerates for elements with more than one outflow face when the test space is a plain enriched
+        polynomial space.  Their fix is a composite test space, split along a streamline so that each piece has one
+        outflow face.
+  \item Trace stability degenerates on faces nearly parallel to the streamlines, and it is much weaker at $p=4$ with
+        $\Delta p=1$ (Table 5).  $\Delta p=2$ restores $h$-independence.
+\end{itemize}
+In our notation, marching equivalence means $Q=0$: the sweep is then an exact solver.  The hope is that a separable
+version of \eqref{eq:11} keeps $Q$, and therefore $\rho$, small.
+
+%======================================================================
+\section{The proposal: a separable, marching-compatible norm}
+%======================================================================
+
+\subsection{Definition}
+
+For each cell $K$ and direction $d$, let $F^+_{K,d}$ be the outflow face of $K$ normal to $\mathbf e_d$: the upper face
+if $\beta_d>0$ on $K$ and the lower face if $\beta_d<0$.  Let $\mu_{K,d}\ge0$ be a weight for it.  Define
+\begin{equation}\label{eq:norm}
+  \|w\|_{V(K)}^2 = \sum_{d=1}^n s_{K,d}^2\,\|\partial_d w\|_K^2 + \sum_{d=1}^n \mu_{K,d}\int_{F^+_{K,d}} w^2
+  \;+\;\alpha_K'\|w\|_K^2 \;\bigl[-\,c_K\bigl(\textstyle\int_K w\bigr)^2\bigr].
+\end{equation}
+\begin{itemize}[nosep]
+  \item The first two sums are the separable surrogate of \eqref{eq:11}.  The derivative term dominates
+        $\|\bbeta\cdot\nabla w\|^2/n$ when $s_{K,d}\ge|\beta_d|$ on $K$, and $\operatorname{div}\bbeta=0$.  The
+        outflow term is \eqref{eq:11}'s boundary term.  The natural weight is $\mu_{K,d}\approx|\beta_d|$ on the face,
+        since $\int_{\partial K_+}(\bbeta\cdot\bn)\,w^2$ is the weighted form used in the manuscript's trace lemmas.
+  \item $\alpha_K'\ge0$ is an optional, \emph{small} $L^2$ term.  With $\alpha_K'=0$, \eqref{eq:norm} is still a norm
+        on the test space: a zero derivative term forces $w$ to be constant, and the outflow term then forces the
+        constant to be zero.
+  \item The constant-mode correction stays a rank-one update, handled by Sherman--Morrison as now.
+\end{itemize}
+
+\subsection{The Gram matrix is still a Kronecker sum}
+
+On the reference cell, the face normal to $d$ at endpoint $\pm1$ has $\int_F w^2 = J_K\,(2/h_{K,d})\int_{\widehat F}\hat w^2$.
+Its 1D factor in direction $d$ is the endpoint mass matrix
+$E_\pm=\boldsymbol\phi(\pm1)\boldsymbol\phi(\pm1)^\T$ (rank one), with $\widehat M$ in the other slots.  Splitting
+$\alpha_K'$ evenly over the directions,
+\begin{equation}\label{eq:gram}
+  G_K = J_K\sum_{d=1}^n \widehat M\otimes\cdots\otimes\underbrace{A_{K,d}}_{\text{slot }d}\otimes\cdots\otimes\widehat M,
+  \qquad A_{K,d} = \xi_{K,d}\,\widehat K + \eta_{K,d}\,E_{\pm} + \tfrac{\alpha_K'}{n}\,\widehat M,
+\end{equation}
+with $\xi_{K,d}=s_{K,d}^2(2/h_{K,d})^2$, $\eta_{K,d}=\mu_{K,d}\,(2/h_{K,d})$, and $\pm$ the outflow side.
+
+\begin{proposition}[exact inverse; proved]
+Let $A_{K,d}V_{K,d}=\widehat M V_{K,d}\Lambda_{K,d}$ with $V_{K,d}^\T\widehat MV_{K,d}=I$, one $m\times m$ generalized
+eigenproblem per direction, where $m=p+\Delta p+1$.  Then
+\[
+  G_K^{-1} = \Bigl(\bigotimes_d V_{K,d}\Bigr)\,\diag\Bigl(\frac{1}{J_K\sum_d\lambda_{K,d,j_d}}\Bigr)\Bigl(\bigotimes_d V_{K,d}\Bigr)^{\!\T}.
+\]
+\end{proposition}
+\begin{proof}
+Each term of \eqref{eq:gram} is diagonalized by $\bigotimes_dV_{K,d}$, because $V_{K,d'}^\T\widehat MV_{K,d'}=I$ in
+every slot $d'\ne d$ and $V_{K,d}^\T A_{K,d}V_{K,d}=\Lambda_{K,d}$ in slot $d$.
+\end{proof}
+
+\paragraph{What changes in practice.}
+\begin{itemize}[nosep]
+  \item The 1D eigenbasis is no longer shared by all cells.  $V_{K,d}$ depends on the ratio
+        $\eta_{K,d}/\xi_{K,d}$ (and $\alpha'_K/\xi_{K,d}$), on the outflow side, and on nothing else.  Per cell this means
+        $n$ eigenproblems of size $m\le9$ (negligible), or a table over a few ratios.
+  \item The sum-factorized application is unchanged: mode products, now with per-cell $V_{K,d}$.
+  \item The ``shared-eigenbasis coordinates'' used by the matrix-free diagonal and block computations become
+        per-cell coordinates.  They are still cheap.
+\end{itemize}
+
+\paragraph{Field dependence (relevant for TT reuse).}  The outflow sides in $t$ and $x$ do not depend on the fields:
+$\beta_t=1$ (always the upper face), and $\beta_x=v_x(\mathbf u)$ has the sign of $u_x$, with $u_x=0$ a mesh vertex.
+Only the $u$-directions' outflow sides and weights depend on the fields, through $a_u=(q/m)(E+v\times B)_u$.  So:
+\begin{itemize}[nosep]
+  \item \textbf{Variant A, field-independent:} outflow terms in $t$ and $x$ only.  Keep the $u$-directions as now:
+        derivative scales $s_{K,u}$ (preferably the planned per-velocity-cell $a_u(K)$), plus a small $L^2$ term if
+        wanted.  The element inverse stays reusable across substeps.
+  \item \textbf{Variant B, full:} outflow terms in every direction, with $F^+_{K,u}$ from the sign of the current
+        $a_u$ on $K$.  Where $a_u$ changes sign within a cell, use both faces with weights $|a_u|$ restricted to each
+        sign, or fall back to variant A in that direction.  The inverses then have to be rebuilt when the signs
+        change, i.e.\ at slab boundaries or on change.
+\end{itemize}
+Variant A already addresses degradation 1 (the $t$--$x$ causality in the thin cathode cells).  Per-cell $a_u(K)$
+addresses degradation 2.
+
+%======================================================================
+\section{Why it should help, and the caveats}
+%======================================================================
+
+\paragraph{Expected effect on the solver (hypothesis).}  The degradations we measured came from local problems that
+are not causal: an $L^2$-dominated norm, or one that under-weights a transport direction.  \eqref{eq:norm} penalizes
+only derivatives and outflow traces, which is the structure under which DPG reduces to marching.  So the local DPG
+solves should behave like ``inflow determines outflow'', $\Sigma_K$ and $Q$ should shrink, and $P$ should approach
+$S^{-1}$.  The same structure should improve any preconditioner that relies on local, causal solves.  This is
+plausible, not proved.  Even for \eqref{eq:11}, marching equivalence is known only in 1D and on special 2D meshes.
+Our boxes have several outflow faces per cell, which is the manuscript's degenerate case.
+
+\paragraph{Caveats.}
+\begin{enumerate}[nosep]
+  \item \textbf{It changes the discretization.}  The norm sets the optimal test functions and therefore the solution.
+        \eqref{eq:11} is not uniformly equivalent to the graph norm in $h$, which affects robustness of the error
+        estimates.  The separable surrogate adds its usual domination factor (at most $n$ when $s_{K,d}\ge|\beta_d|$).
+  \item \textbf{Coupled stability.}  The current $\alpha_K$ was tuned to remove growing modes:
+        \begin{itemize}[nosep]
+          \item a fixed $\alpha=4\cdot10^2$ grew a negative-density mode in the cathode cells;
+          \item $\max(10^2, 1.6/h_x^2)$ grew a mode in the anode cells;
+          \item the $(a_u/h_u)^2$ terms removed both.
+        \end{itemize}
+        A norm with little or no $L^2$ term has to pass those tests again.
+  \item \textbf{Several outflow faces.}  The manuscript's stability argument needs composite (sub-grid) test spaces
+        for elements with more than one outflow face.  A tensor sub-grid test space, piecewise polynomial in each 1D
+        factor, keeps \eqref{eq:gram}'s Kronecker structure.  It only approximates the streamline split, because
+        $v_x$ varies with $\mathbf u$ inside a cell.
+  \item \textbf{Characteristic faces} ($\beta_d\approx0$ on a face, e.g.\ $x$-faces near $u_x=0$).  $\mu_{K,d}$ should
+        vanish with $|\beta_d|$ there, and the derivative scale $s_{K,d}$ keeps the norm definite.
+\end{enumerate}
+
+%======================================================================
+\section{Suggested tests}
+%======================================================================
+
+\begin{enumerate}[nosep]
+  \item \textbf{Implementation}: a \texttt{SeparableTensorIP} option for \eqref{eq:norm}, with per-cell 1D
+        eigenbases.  The current shared-basis path stays the default.
+  \item \textbf{Solver (cloud side)}: sweep $\rho$ and $\kappa(PS)$, and two-level and GMG iterations with the sweep
+        and element-Schwarz smoothers, on:
+        \begin{itemize}[nosep]
+          \item production L0 and L1 with the fields on;
+          \item the zero-field deep cathode mesh;
+          \item $p=2$ and $p=4$.
+        \end{itemize}
+        Compare variant A, variant B and the current norm.
+  \item \textbf{Accuracy (either side)}: single-slab errors against the current norm and the full graph norm, in
+        particular on the $x$-refined test where $C=1.6$ was found dissipative.
+  \item \textbf{Coupled stability (local side)}: the cathode and anode mode tests.
+\end{enumerate}
+
+\paragraph{Where the measurements come from.}  {\sloppy The table is from the cloud branch
+\texttt{separable-gram-fast-diagonalization}.  The code is in \texttt{MatrixFreeDPGOperator}: \texttt{transportSweep()},
+and \texttt{upwindCellOrder()} with weighted cycle breaking.  The driver options are:
+\begin{itemize}[nosep]
+  \item \texttt{--matrixFreeMultiplicativeSchwarz}
+  \item \texttt{--matrixFreeSweepSmoother}
+  \item \texttt{--matrixFreeWeightedCycleBreaking}
+  \item \texttt{--matrixFreeCheckAfterSolve}
+\end{itemize}
+All runs are at $p=2$, $\Delta p=2$, on one core.  The L1 runs with fields on are in progress.\par}
+
+\end{document}
