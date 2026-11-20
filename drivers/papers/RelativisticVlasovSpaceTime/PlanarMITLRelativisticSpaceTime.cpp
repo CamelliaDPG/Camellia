@@ -953,6 +953,7 @@ struct MatrixFreeSolveOptions
   bool oneLevel = true;
   bool coarseGMG = false; // below the fine level: the conventional GMG on the lowest-order h-hierarchy, instead of an exact solve
   bool twoLevelSolve = true;
+  bool compareSmoothers = false; // after the multigrid solve, repeat it with the other of {transport sweep, element Schwarz}
   bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
   bool sweepOnly = false;             // with multiplicativeSchwarz: only the transport sweep
   bool sweepDiagnose = false;         // the top eigenvector of P S: where it lives
@@ -1325,6 +1326,31 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
       for (const auto &entry : twoLevel->setupTimes()) std::cout << " " << entry.first << " " << entry.second;
       std::cout << ")\n";
     }
+  }
+  if (!twoLevel.is_null() && solveOptions.compareSmoothers)
+  {
+    twoLevel = Teuchos::null; // (release the first hierarchy's memory)
+    t0 = now();
+    auto opPtr = Teuchos::rcp(new MatrixFreeDPGOperator(mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end())));
+    std::vector<MeshPtr> coarseMeshes = solveOptions.coarseGMG ? std::vector<MeshPtr>(meshes.begin(), meshes.end() - 1)
+                                                               : std::vector<MeshPtr>{meshes[meshes.size() - 2]};
+    MatrixFreeDPGTwoLevel::Options otherOptions = solveOptions.twoLevel;
+    otherOptions.weightedCycleBreaking = solveOptions.weightedCycleBreaking;
+    otherOptions.mixedFaceTolerance = solveOptions.mixedFaceTolerance;
+    const bool otherIsSweep = !solveOptions.twoLevel.transportSweep;
+    otherOptions.transportSweep = otherIsSweep;
+    otherOptions.elementSchwarz = !otherIsSweep;
+    auto other = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, coarseMeshes, otherOptions));
+    const double otherSetupTime = seconds(t0, now());
+    MV u(map, 1);
+    t0 = now();
+    ConjugateGradientResult result = conjugateGradient(op, other->preconditioner().get(), b, u, 1e-10, 20000);
+    const double time = seconds(t0, now());
+    if (rank == 0)
+      std::cout << "  two-level, other smoother (Chebyshev degree " << otherOptions.chebyshevDegree << ", "
+                << (otherIsSweep ? "transport sweep" : "element Schwarz") << " diagonal, lambda_max " << other->lambdaMax() << "; "
+                << other->coarseLevelCount() << " coarse level(s)): " << result.iterations << " iterations, kappa ~ " << result.conditionNumber()
+                << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s (setup " << otherSetupTime << " s)\n";
   }
   if (compareAssembled)
   {
@@ -1737,6 +1763,8 @@ int main(int argc, char *argv[])
                    "Two-level matrix-free: Chebyshev with element-block additive Schwarz (fields and face fluxes of each element)");
     cmdp.setOption("matrixFreeSweepSmoother", "noMatrixFreeSweepSmoother", &matrixFreeSolveOptions.twoLevel.transportSweep,
                    "Matrix-free multigrid: Chebyshev with the transport sweep as its preconditioner (overrides the other smoother options)");
+    cmdp.setOption("matrixFreeCompareSmoothers", "noMatrixFreeCompareSmoothers", &matrixFreeSolveOptions.compareSmoothers,
+                   "With the multigrid-preconditioned PCG: repeat it with the other smoother (transport sweep / element Schwarz)");
     cmdp.setOption("matrixFreeTwoLevel", "noMatrixFreeTwoLevel", &matrixFreeSolveOptions.twoLevelSolve,
                    "With --checkMatrixFreeOperator: run the multigrid-preconditioned PCG");
     cmdp.setOption("matrixFreeMultiplicativeSchwarz", "noMatrixFreeMultiplicativeSchwarz", &matrixFreeSolveOptions.multiplicativeSchwarz,
