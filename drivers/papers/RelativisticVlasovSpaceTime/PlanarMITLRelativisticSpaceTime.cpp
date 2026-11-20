@@ -1362,7 +1362,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                               const bool separableGraphTestNorm = false,
                                                               const int numSpatialRefinements = 0,
                                                               const double L2WeightGraphConstantModeRatio = 1.0,
-                                                              const bool fullTensorTestBasis = false)
+                                                              const bool fullTensorTestBasis = false,
+                                                              const double outflowFaceTheta = 0.0)
 {
   Teuchos::RCP<ConfigurationSpaceFormulationMaxwell1D2V> configForm = Teuchos::rcp(new ConfigurationSpaceFormulationMaxwell1D2V(q, eps0) );
   
@@ -1422,7 +1423,7 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> getFormulation1D1T2V(const double c,
                                                                  L2WeightGraphTransportScale,
                                                                  L2WeightGraphAccelerationBounds, separableGraphTestNorm,
                                                                  L2WeightGraphConstantModeRatio,
-                                                                 fullTensorTestBasis));
+                                                                 fullTensorTestBasis, outflowFaceTheta));
   if (gEnforcePositivity)
   {
     form->setProximalGalerkinParameters(gProximalGalerkinAlpha0, gProximalGalerkinAlphaMultiplier);
@@ -1770,6 +1771,11 @@ int main(int argc, char *argv[])
                    "With --checkMatrixFreeOperator: also assemble the operator and solve directly, for comparison (off: matrix-free solves only)");
     cmdp.setOption("matrixFreeQuadratureEnrichment", &matrixFreeQuadratureEnrichment,
                    "Quadrature enrichment of the matrix-free operator: n_k + ceil(enrichment / 2) Gauss points per direction");
+    double L2WeightGraphOutflowFaceTheta = 0.0;
+    cmdp.setOption("L2WeightGraphOutflowFaceTheta", &L2WeightGraphOutflowFaceTheta,
+                   "Separable graph norm with the transport-scale weight: if positive, move the weight's x- and t-parts to outflow-face "
+                   "terms theta s_d^2 / h_d int_{F+} w^2 (the marching-compatible norm, variant A; theta = L2WeightGraphTransportScale "
+                   "keeps the same strength)");
     cmdp.setOption("useFullTensorTestBasis", "useTrialFamilyTestBasis", &useFullTensorTestBasis,
                    "Full tensor-product test space Q_k, also when the trial basis is serendipity.  With --separableGraphTestNorm "
                    "the test Gram matrices are then inverted exactly by fast diagonalization, with nothing formed or factored.");
@@ -2224,7 +2230,8 @@ int main(int argc, char *argv[])
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
                                      L2WeightGraphMeshScale, L2WeightGraphDirectionScales,
                                      L2WeightGraphTransportScale, L2WeightGraphAccelerationBounds, separableGraphTestNorm,
-                                     numSpatialRefinements, L2WeightGraphConstantModeRatio, useFullTensorTestBasis);
+                                     numSpatialRefinements, L2WeightGraphConstantModeRatio, useFullTensorTestBasis,
+                                     L2WeightGraphOutflowFaceTheta);
     if (useBoxMesh && (boxVelocityRefinements > 0))
     {
       // anisotropic refinement of the first slab: bisect in u_x only, within a band of u_x that narrows each round.
@@ -2439,6 +2446,7 @@ int main(int argc, char *argv[])
     {
       suffix << "_serendipity";
       if (useFullTensorTestBasis) suffix << "_fullTensorTest";
+      if (L2WeightGraphOutflowFaceTheta > 0.0) suffix << "_outflowTheta" << L2WeightGraphOutflowFaceTheta;
     }
     else
     {

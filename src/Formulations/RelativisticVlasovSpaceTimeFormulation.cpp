@@ -118,8 +118,11 @@ namespace
     int _spaceDim, _velocityDim;
     vector<double> _accelerationBounds;
   public:
-    TransportScaleL2Weight(double alpha, double scale, double c, int spaceDim, int velocityDim, const vector<double> &accelerationBounds)
-    : TFunction<double>(0), _alpha(alpha), _scale(scale), _c(c), _spaceDim(spaceDim), _velocityDim(velocityDim), _accelerationBounds(accelerationBounds) {}
+    bool _velocityTermsOnly = false; // the x- and t-terms moved to outflow-face terms (OutflowFaceWeight)
+    TransportScaleL2Weight(double alpha, double scale, double c, int spaceDim, int velocityDim, const vector<double> &accelerationBounds,
+                           bool velocityTermsOnly = false)
+    : TFunction<double>(0), _alpha(alpha), _scale(scale), _c(c), _spaceDim(spaceDim), _velocityDim(velocityDim), _accelerationBounds(accelerationBounds),
+      _velocityTermsOnly(velocityTermsOnly) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
     {
       const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
@@ -160,10 +163,10 @@ namespace
           }
           const double vMax = uMax[d] / sqrt(1.0 + uSquared / (_c * _c));
           const double h = hi[d] - lo[d];
-          transport += (vMax / h) * (vMax / h);
+          if (!_velocityTermsOnly) transport += (vMax / h) * (vMax / h);
         }
         const double h_t = hi[_spaceDim] - lo[_spaceDim];
-        transport += 1.0 / (h_t * h_t);
+        if (!_velocityTermsOnly) transport += 1.0 / (h_t * h_t);
         for (int j=0; j<_velocityDim && j<int(_accelerationBounds.size()); j++)
         {
           const double h = hi[_spaceDim+1+j] - lo[_spaceDim+1+j];
@@ -218,6 +221,64 @@ namespace
   };
 }
 
+namespace
+{
+  //! theta s_d(K)^2 / h_d(K) for direction d (0-based: x_1..x_s, then t): the outflow-face weight that replaces the
+  //! transport-scale L^2 weight's (s_d / h_d)^2 term with a face term of the same strength (s_x = v_x,max(K), s_t = 1)
+  class OutflowFaceWeight : public TFunction<double>
+  {
+    double _theta, _c; int _spaceDim, _velocityDim, _direction;
+  public:
+    OutflowFaceWeight(double theta, double c, int spaceDim, int velocityDim, int direction)
+    : TFunction<double>(0), _theta(theta), _c(c), _spaceDim(spaceDim), _velocityDim(velocityDim), _direction(direction) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
+      const int numCells = values.dimension(0), numPoints = values.dimension(1), numNodes = nodes.dimension(1);
+      const int dim = _spaceDim + 1 + _velocityDim;
+      vector<double> lo(dim), hi(dim);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        for (int k=0; k<dim; k++)
+        {
+          lo[k] = hi[k] = nodes(cellOrdinal,0,k);
+          for (int node=1; node<numNodes; node++) { lo[k] = std::min(lo[k], nodes(cellOrdinal,node,k)); hi[k] = std::max(hi[k], nodes(cellOrdinal,node,k)); }
+        }
+        double s = 1.0; // the time direction
+        if (_direction < _spaceDim)
+        {
+          double uSquared = 0.0, uMaxD = 0.0;
+          for (int j=0; j<_velocityDim; j++)
+          {
+            const double a = lo[_spaceDim+1+j], b = hi[_spaceDim+1+j];
+            const double uMax = std::max(std::abs(a), std::abs(b)), uMin = (a <= 0.0 && b >= 0.0) ? 0.0 : std::min(std::abs(a), std::abs(b));
+            if (j == _direction) { uMaxD = uMax; uSquared += uMax * uMax; } else uSquared += uMin * uMin;
+          }
+          s = uMaxD / sqrt(1.0 + uSquared / (_c * _c));
+        }
+        const double h = hi[_direction] - lo[_direction];
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) values(cellOrdinal,pointOrdinal) = _theta * s * s / h;
+      }
+    }
+    string displayString() override { return "theta s_d^2 / h_d"; }
+  };
+
+  //! the physical coordinate k (0-based) at the points: the outflow side of x_d is the sign of u_d
+  class CoordinateValue : public TFunction<double>
+  {
+    int _k;
+  public:
+    CoordinateValue(int k) : TFunction<double>(0), _k(k) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &points = basisCache->getPhysicalCubaturePointsFC();
+      for (int c=0; c<values.dimension(0); c++)
+        for (int p=0; p<values.dimension(1); p++) values(c,p) = points(c,p,_k);
+    }
+    string displayString() override { return "z_k"; }
+  };
+}
+
 RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(const double c, const double q, const double m,
                                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                                MeshTopologyPtr spatialMeshTopology,
@@ -238,7 +299,8 @@ RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(c
                                                                                const vector<double> &testSpaceL2WeightAccelerationBounds,
                                                                                const bool testSpaceSeparableGraphNorm,
                                                                                const double testSpaceL2ConstantModeRatio,
-                                                                               const bool fullTensorTestBasis)
+                                                                               const bool fullTensorTestBasis,
+                                                                               const double testSpaceOutflowFaceTheta)
 :
 _c(c),
 _testSpaceInnerProduct(testSpaceIP),
@@ -250,6 +312,7 @@ _testSpaceL2WeightAccelerationBounds(testSpaceL2WeightAccelerationBounds),
 _testSpaceSeparableGraphNorm(testSpaceSeparableGraphNorm),
 _testSpaceL2ConstantModeRatio(testSpaceL2ConstantModeRatio),
 _fullTensorTestBasis(fullTensorTestBasis),
+_testSpaceOutflowFaceTheta(testSpaceOutflowFaceTheta),
 VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
                            spatialMeshTopology, temporalVertices,
                            velocityVertices_x,
@@ -270,6 +333,9 @@ VlasovSpaceTimeFormulation(q, m, configurationSpaceFormulation,
   {
     TEUCHOS_TEST_FOR_EXCEPTION(bound < 0.0, std::invalid_argument, "testSpaceL2WeightAccelerationBounds must be nonnegative");
   }
+  TEUCHOS_TEST_FOR_EXCEPTION((testSpaceOutflowFaceTheta > 0.0) && (!testSpaceSeparableGraphNorm || !(testSpaceL2WeightTransportScale > 0.0)),
+                             std::invalid_argument, "testSpaceOutflowFaceTheta needs the separable graph norm and the transport-scale L^2 weight");
+  TEUCHOS_TEST_FOR_EXCEPTION(testSpaceOutflowFaceTheta < 0.0, std::invalid_argument, "testSpaceOutflowFaceTheta must be nonnegative");
   TEUCHOS_TEST_FOR_EXCEPTION(testSpaceSeparableGraphNorm && (testSpaceIP != GraphTestSpaceInnerProduct), std::invalid_argument,
                              "testSpaceSeparableGraphNorm applies to the graph test-space inner product");
   TEUCHOS_TEST_FOR_EXCEPTION(!(testSpaceL2ConstantModeRatio > 0.0) || (testSpaceL2ConstantModeRatio > 1.0), std::invalid_argument,
@@ -352,10 +418,25 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
       FunctionPtr l2Weight; // alpha, the weight of the L^2 term
       if (_testSpaceL2WeightTransportScale > 0.0)
       {
+        const bool outflowFaces = (_testSpaceOutflowFaceTheta > 0.0);
         FunctionPtr weight = Teuchos::rcp(new TransportScaleL2Weight(_testSpaceL2Weight, _testSpaceL2WeightTransportScale, _c,
-                                                                     spaceDim, velocityDim, _testSpaceL2WeightAccelerationBounds));
+                                                                     spaceDim, velocityDim, _testSpaceL2WeightAccelerationBounds,
+                                                                     outflowFaces));
         stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
         l2Weight = weight;
+        if (outflowFaces)
+        {
+          // variant A of the marching-compatible norm: the x- and t-parts of the transport-scale weight become outflow-face
+          // terms theta s_d^2 / h_d int_{F+} w^2; t: always the upper face; x_d: the face the sign of u_d points to
+          TEUCHOS_TEST_FOR_EXCEPTION(separableIP == Teuchos::null || numSpecies > 1, std::invalid_argument,
+                                     "testSpaceOutflowFaceTheta needs the separable graph norm and one species");
+          const int timeDirection = spaceDim;
+          separableIP->addOutflowFaceTerm(timeDirection, Teuchos::rcp(new OutflowFaceWeight(_testSpaceOutflowFaceTheta, _c, spaceDim, velocityDim, timeDirection)),
+                                          Function::constant(1.0));
+          for (int d=0; d<spaceDim; d++)
+            separableIP->addOutflowFaceTerm(d, Teuchos::rcp(new OutflowFaceWeight(_testSpaceOutflowFaceTheta, _c, spaceDim, velocityDim, d)),
+                                            Teuchos::rcp(new CoordinateValue(spaceDim + 1 + d)));
+        }
       }
       else if (!_testSpaceL2WeightDirectionScales.empty())
       {
@@ -546,7 +627,8 @@ Teuchos::RCP<VlasovSpaceTimeFormulation> RelativisticVlasovSpaceTimeFormulation:
                                                                               _testSpaceL2WeightAccelerationBounds,
                                                                               _testSpaceSeparableGraphNorm,
                                                                               _testSpaceL2ConstantModeRatio,
-                                                                              _fullTensorTestBasis));
+                                                                              _fullTensorTestBasis,
+                                                                              _testSpaceOutflowFaceTheta));
   
   configureNextSlab(nextSlabForm);
   

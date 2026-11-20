@@ -423,6 +423,150 @@ TEUCHOS_UNIT_TEST( SeparableTensorIP, FastInverseInvertsGramMatrix )
   }
 }
 
+namespace
+{
+  //! the physical coordinate k at the points (an outflow-face side function)
+  class CoordinateValueFunction : public TFunction<double>
+  {
+    int _k;
+  public:
+    CoordinateValueFunction(int k) : TFunction<double>(0), _k(k) {}
+    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const auto &points = basisCache->getPhysicalCubaturePointsFC();
+      for (int c=0; c<values.dimension(0); c++)
+        for (int p=0; p<values.dimension(1); p++) values(c,p) = points(c,p,_k);
+    }
+  };
+
+  //! on a side cache: sqrt(weight) on the face of the cell with outward normal side * e_direction, zero elsewhere; side is
+  //! +1 or, with sideCoordinate >= 0, the sign of the cell centre's coordinate sideCoordinate.  The reference for the
+  //! outflow-face terms, as an ordinary boundary term integrated by quadrature.
+  class FaceIndicatorRoot : public TFunction<double>
+  {
+    int _direction, _sideCoordinate;
+    FunctionPtr _weight;
+  public:
+    FaceIndicatorRoot(int direction, int sideCoordinate, FunctionPtr weight)
+    : TFunction<double>(0), _direction(direction), _sideCoordinate(sideCoordinate), _weight(weight) {}
+    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      values.initialize(0.0);
+      if (!basisCache->isSideCache()) return;
+      const auto &nodes = basisCache->getPhysicalCellNodes();
+      const auto &normals = basisCache->getSideNormals();
+      Camellia::FieldContainer<double> weights(values.dimension(0), values.dimension(1));
+      _weight->values(weights, basisCache);
+      for (int c=0; c<values.dimension(0); c++)
+      {
+        double side = 1.0;
+        if (_sideCoordinate >= 0)
+        {
+          double centre = 0;
+          for (int n=0; n<nodes.dimension(1); n++) centre += nodes(c,n,_sideCoordinate);
+          side = (centre > 0) ? 1.0 : -1.0;
+        }
+        for (int p=0; p<values.dimension(1); p++)
+          values(c,p) = (side * normals(c,p,_direction) > 0.5) ? std::sqrt(weights(c,p)) : 0.0;
+      }
+    }
+  };
+}
+
+TEUCHOS_UNIT_TEST( SeparableTensorIP, OutflowFaceTerms )
+{
+  // Outflow-face terms weight(K) int_F v^2 (the marching-compatible norm): the Gram matrix from 1D factors matches an
+  // ordinary IP whose boundary term is restricted to the same faces (quadrature on the sides), with faces chosen by a
+  // constant side (direction 1) and by the sign of a coordinate (direction 0, side by z_2, which changes sign across
+  // cells); and on full tensor-product bases the fast inverse (the cached K + r E_side eigenbases) inverts it.
+  for (bool serendipity : {false, true})
+  {
+    for (const vector<int> &increments : vector<vector<int>>{{0,0,0,0}, {2,0,1,0}})
+    {
+      SeparableSetup setup = separableSetup(serendipity, increments);
+      FunctionPtr weight = Teuchos::rcp(new CellWidthProduct);
+      FunctionPtr xWeight = weight * 0.7, tWeight = Function::constant(2.0);
+      setup.ip->addOutflowFaceTerm(0, xWeight, Teuchos::rcp(new CoordinateValueFunction(2)));
+      setup.ip->addOutflowFaceTerm(1, tWeight, Function::constant(1.0));
+      // the reference: the same volume terms, and the face terms as boundary terms, by quadrature
+      IPPtr reference = IP::ip();
+      VarPtr v = setup.v;
+      reference->addTerm(v->di(2));
+      reference->addTerm(weight * v->di(1));
+      reference->addTerm(1.8 * v->di(3));
+      reference->addTerm(0.65 * v->di(4));
+      reference->addTerm(Function::sqrtFunction(weight * 3.0) * v);
+      reference->addBoundaryTerm(FunctionPtr(Teuchos::rcp(new FaceIndicatorRoot(0, 2, xWeight))) * v);
+      reference->addBoundaryTerm(FunctionPtr(Teuchos::rcp(new FaceIndicatorRoot(1, -1, tWeight))) * v);
+      double maxDifference = 0, maxEntry = 0, maxInverseError = 0, faceEntry = 0;
+      int inverted = 0, cells = 0;
+      for (GlobalIndexType cellID : setup.mesh->getActiveCellIDsGlobal())
+      {
+        DofOrderingPtr testOrdering = setup.mesh->getElementType(cellID)->testOrderPtr;
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(setup.mesh, cellID, true);
+        const int n = testOrdering->totalDofs();
+        Camellia::FieldContainer<double> gram(1, n, n), expected(1, n, n);
+        setup.ip->computeInnerProductMatrix(gram, testOrdering, basisCache);
+        reference->computeInnerProductMatrix(expected, testOrdering, basisCache);
+        for (int i=0; i<n; i++)
+          for (int j=0; j<n; j++)
+          {
+            maxDifference = std::max(maxDifference, std::abs(gram(0,i,j) - expected(0,i,j)));
+            maxEntry = std::max(maxEntry, std::abs(expected(0,i,j)));
+          }
+        cells++;
+        Camellia::FieldContainer<double> product = gram;
+        if (setup.ip->applyInverseInnerProductMatrix(product, testOrdering, basisCache))
+        {
+          inverted++;
+          double normG = 0;
+          for (int i=0; i<n; i++)
+          {
+            double rowSum = 0;
+            for (int j=0; j<n; j++) rowSum += abs(gram(0,i,j));
+            normG = std::max(normG, rowSum);
+          }
+          for (int r=0; r<n; r++)
+          {
+            double xNorm = 0, residual = 0;
+            for (int j=0; j<n; j++) xNorm = std::max(xNorm, abs(product(0,r,j)));
+            for (int i=0; i<n; i++)
+            {
+              double Gx = 0;
+              for (int j=0; j<n; j++) Gx += gram(0,i,j) * product(0,r,j);
+              residual = std::max(residual, abs(Gx - gram(0,r,i)));
+            }
+            maxInverseError = std::max(maxInverseError, residual / (normG * xNorm));
+          }
+        }
+      }
+      // the face terms must actually matter: compare with the Gram matrix without them
+      SeparableSetup plain = separableSetup(serendipity, increments);
+      for (GlobalIndexType cellID : setup.mesh->getActiveCellIDsGlobal())
+      {
+        DofOrderingPtr testOrdering = setup.mesh->getElementType(cellID)->testOrderPtr;
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(setup.mesh, cellID, true);
+        const int n = testOrdering->totalDofs();
+        Camellia::FieldContainer<double> with(1, n, n), without(1, n, n);
+        setup.ip->computeInnerProductMatrix(with, testOrdering, basisCache);
+        plain.ip->computeInnerProductMatrix(without, testOrdering, basisCache);
+        for (int i=0; i<n; i++) for (int j=0; j<n; j++) faceEntry = std::max(faceEntry, std::abs(with(0,i,j) - without(0,i,j)));
+      }
+      out << (serendipity ? "serendipity" : "hierarchical") << ", increments " << increments[0] << increments[1] << increments[2]
+          << increments[3] << ": max |G - G_quadrature| / max |G| = " << maxDifference / maxEntry << " (face terms' largest entry "
+          << faceEntry / maxEntry << " of max |G|); " << inverted << " of " << cells << " cells inverted, backward error " << maxInverseError << endl;
+      TEST_COMPARE(maxDifference / maxEntry, <, 1e-12);
+      TEST_COMPARE(faceEntry / maxEntry, >, 1e-3);
+      if (serendipity) { TEST_EQUALITY(inverted, 0); }
+      else
+      {
+        TEST_EQUALITY(inverted, cells);
+        TEST_COMPARE(maxInverseError, <, 1e-14);
+      }
+    }
+  }
+}
+
 TEUCHOS_UNIT_TEST( SeparableTensorIP, LocalStiffnessFastInverseMatchesCholesky )
 {
   // BF's factored-Cholesky local solve takes the fast inverse when the inner product offers it: the local stiffness

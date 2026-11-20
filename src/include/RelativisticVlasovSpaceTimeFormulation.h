@@ -38,6 +38,7 @@ protected:
   const bool _testSpaceSeparableGraphNorm; // if true, the graph term |beta . grad w|^2 is replaced by sum_d s_d(K)^2 |dw/dz_d|^2
   const double _testSpaceL2ConstantModeRatio; // if below 1, the L^2 term alpha ||w||^2 becomes alpha ||w - mean_K w||^2 + ratio alpha |K| mean_K w^2 on each cell (see SeparableTensorIP::setConstantModeWeight())
   const bool _fullTensorTestBasis; // if true, the test space is the full tensor-product space Q_k even when the trial basis family is serendipity
+  const double _testSpaceOutflowFaceTheta; // if positive (with the separable graph norm and the transport-scale weight), the x- and t-parts of the transport-scale L^2 weight move to outflow-face terms theta s_d^2 / h_d int_{F+} w^2 (the marching-compatible norm, variant A)
   const TestSpaceInnerProduct _testSpaceInnerProduct;
   
   // Cache one relativistic first-moment Function per (velocity component, species).
@@ -67,7 +68,8 @@ public:
                                          const std::vector<double> &testSpaceL2WeightAccelerationBounds = {},
                                          const bool testSpaceSeparableGraphNorm = false,
                                          const double testSpaceL2ConstantModeRatio = 1.0,
-                                         const bool fullTensorTestBasis = false);
+                                         const bool fullTensorTestBasis = false,
+                                         const double testSpaceOutflowFaceTheta = 0.0);
   
   //! called during initialization of Vlasov Solution objects.  Subclasses must define a distribution field variable (f) with name VlasovSpaceTimeFormulation::S_F, a trace variable (t_n) with name VlasovSpaceTimeFormulation::S_T_N_HAT.  The former is used for moment computations, conservation diagnostics, and convergence criteria for the fixed-point iteration; the latter is used for boundary condition imposition.
   VarFactoryPtr constructVlasovVarFactory() override;

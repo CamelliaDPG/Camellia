@@ -84,6 +84,30 @@ namespace
   }
 }
 
+namespace
+{
+  //! the values of a one-dimensional basis at -1 and +1: 2 x n, row-major
+  std::vector<double> oneDimensionalEndpointValues(Teuchos::RCP<Intrepid2Basis> basis)
+  {
+    const int n = basis->getCardinality();
+    using PointView = typename Intrepid2Basis::PointViewType;
+    using OutputView = typename Intrepid2Basis::OutputViewType;
+    Kokkos::DynRankView<double,Camellia::DeviceType> pointsAllocation("1D endpoints", 2, 1); // (contiguous; see above)
+    PointView points = pointsAllocation;
+    auto pointsHost = Kokkos::create_mirror_view(points);
+    pointsHost(0,0) = -1.0;
+    pointsHost(1,0) = 1.0;
+    Kokkos::deep_copy(points, pointsHost);
+    OutputView values = basis->allocateOutputView(2, Intrepid2::OPERATOR_VALUE);
+    basis->getValues(values, points, Intrepid2::OPERATOR_VALUE);
+    auto valuesHost = Kokkos::create_mirror_view(values);
+    Kokkos::deep_copy(valuesHost, values);
+    std::vector<double> endpoints(2 * n);
+    for (int i=0; i<n; i++) { endpoints[i] = valuesHost(i,0); endpoints[n + i] = valuesHost(i,1); }
+    return endpoints;
+  }
+}
+
 const SeparableTensorIP::TensorDecomposition &SeparableTensorIP::decomposition(BasisPtr basis, int spaceDim)
 {
   std::lock_guard<std::mutex> lock(_decompositionMutex);
@@ -128,10 +152,12 @@ const SeparableTensorIP::TensorDecomposition &SeparableTensorIP::decomposition(B
   d.componentCardinality.resize(spaceDim);
   d.mass.resize(spaceDim);
   d.derivative.resize(spaceDim);
+  d.endpointValues.resize(spaceDim);
   for (int k=0; k<spaceDim; k++)
   {
     d.componentCardinality[k] = components[k]->getCardinality();
     oneDimensionalMatrices(components[k], d.mass[k], d.derivative[k]);
+    d.endpointValues[k] = oneDimensionalEndpointValues(components[k]);
   }
   d.componentOrdinals.resize(fullOrdinals.size(), std::vector<int>(spaceDim));
   for (size_t i=0; i<fullOrdinals.size(); i++)
@@ -226,6 +252,27 @@ bool SeparableTensorIP::separableCellData(DofOrderingPtr dofOrdering, BasisCache
       coefficientSquared[t][c] = value * value;
     }
   }
+  // the outflow-face terms: a weight constant on each cell, and the side by the sign of the cell average of side
+  data.outflowWeight.assign(_outflowTerms.size(), std::vector<double>(numCells, 0.0));
+  data.outflowSide.assign(_outflowTerms.size(), std::vector<int>(numCells, 0));
+  for (size_t t=0; t<_outflowTerms.size(); t++)
+  {
+    const OutflowTerm &term = _outflowTerms[t];
+    if ((term.direction < 0) || (term.direction >= spaceDim)) return false;
+    Camellia::FieldContainer<double> weights(numCells, numPoints), sides(numCells, numPoints);
+    term.weight->values(weights, basisCache);
+    term.side->values(sides, basisCache);
+    for (int c=0; c<numCells; c++)
+    {
+      const double value = weights(c,0);
+      for (int p=1; p<numPoints; p++) if (std::abs(weights(c,p) - value) > 1e-12 * std::max(1.0, std::abs(value))) return false;
+      TEUCHOS_TEST_FOR_EXCEPTION(value < 0.0, std::invalid_argument, "an outflow-face weight is negative");
+      double sideSum = 0;
+      for (int p=0; p<numPoints; p++) sideSum += sides(c,p);
+      data.outflowWeight[t][c] = value;
+      data.outflowSide[t][c] = (sideSum > 0) ? 1 : ((sideSum < 0) ? -1 : 0);
+    }
+  }
   data.varID = varID;
   data.decomposition = &d;
   data.directions = directions;
@@ -276,6 +323,39 @@ bool SeparableTensorIP::tryTensorAssembly(Camellia::FieldContainer<double> &inne
         }
       }
     }
+    // the outflow-face terms: weight int_F v^2 = weight prod_{k != d} (h_k/2) M_k (x) E_side in direction d
+    for (size_t t=0; t<_outflowTerms.size(); t++)
+    {
+      const int side = data.outflowSide[t][c];
+      const double weight = data.outflowWeight[t][c];
+      if ((side == 0) || (weight == 0.0)) continue;
+      const int direction = _outflowTerms[t].direction;
+      for (int k=0; k<spaceDim; k++)
+      {
+        const int n = d.componentCardinality[k];
+        factor[k].resize(n * n);
+        if (k == direction)
+        {
+          const double *phi = d.endpointValues[k].data() + ((side > 0) ? n : 0);
+          for (int i=0; i<n; i++) for (int j=0; j<n; j++) factor[k][i*n+j] = phi[i] * phi[j];
+        }
+        else
+        {
+          for (int i=0; i<n*n; i++) factor[k][i] = data.halfWidths[c][k] * d.mass[k][i];
+        }
+      }
+      for (int a=0; a<basisCardinality; a++)
+      {
+        const std::vector<int> &ia = d.componentOrdinals[a];
+        for (int b=a; b<basisCardinality; b++)
+        {
+          const std::vector<int> &ib = d.componentOrdinals[b];
+          double product = weight;
+          for (int k=0; (k<spaceDim) && (product != 0); k++) product *= factor[k][ia[k] * d.componentCardinality[k] + ib[k]];
+          innerProduct(c, dofIndex[a], dofIndex[b]) += product;
+        }
+      }
+    }
     for (int a=0; a<basisCardinality; a++)
       for (int b=a+1; b<basisCardinality; b++)
         innerProduct(c, dofIndex[b], dofIndex[a]) = innerProduct(c, dofIndex[a], dofIndex[b]);
@@ -314,6 +394,42 @@ bool SeparableTensorIP::cellInverses(DofOrderingPtr dofOrdering, BasisCachePtr b
       else s.derivativeWeights[k] += data.coefficientSquared[t][c] / (data.halfWidths[c][k] * data.halfWidths[c][k]);
     }
     if (!(s.valueWeight > 0)) return false; // G singular on the constants (or not positive definite)
+    if (!_outflowTerms.empty())
+    {
+      // the outflow-face terms: weight / (h_d/2) E_side in direction d, relative to J; as K_d + r E_side with r = eta / b_d
+      std::vector<double> eta(spaceDim, 0.0);
+      std::vector<int> sides(spaceDim, 0);
+      for (size_t t=0; t<_outflowTerms.size(); t++)
+      {
+        const int k = _outflowTerms[t].direction, side = data.outflowSide[t][c];
+        const double weight = data.outflowWeight[t][c];
+        if ((side == 0) || (weight == 0.0)) continue;
+        TEUCHOS_TEST_FOR_EXCEPTION((sides[k] != 0) && (sides[k] != side), std::invalid_argument,
+                                   "outflow-face terms on both faces of one direction are not supported by the fast inverse");
+        sides[k] = side;
+        eta[k] += weight / data.halfWidths[c][k];
+      }
+      std::vector<std::pair<int,double>> pattern(spaceDim, {0, 0.0});
+      bool any = false;
+      for (int k=0; k<spaceDim; k++)
+      {
+        if (sides[k] == 0) continue;
+        any = true;
+        if (s.derivativeWeights[k] > 0)
+        {
+          // r, rounded to 12 significant digits so that cells with the same ratio share the inverse
+          const double r = eta[k] / s.derivativeWeights[k];
+          const double magnitude = std::pow(10.0, std::floor(std::log10(r)) - 11);
+          pattern[k] = {sides[k], std::round(r / magnitude) * magnitude};
+        }
+        else
+        {
+          pattern[k] = {sides[k], -1.0}; // no derivative term: the endpoint term alone, with weight eta
+          s.derivativeWeights[k] = eta[k];
+        }
+      }
+      if (any) cell.inverse = outflowInverse(d, pattern);
+    }
   }
 
   // The constant-mode weight (setConstantModeWeight()) makes the Gram matrix G - c m m^T on each cell; its inverse is
@@ -332,7 +448,7 @@ bool SeparableTensorIP::cellInverses(DofOrderingPtr dofOrdering, BasisCachePtr b
       cell.m.resize(N);
       for (int a=0; a<N; a++) cell.m[d.tensorIndex[a]] = m(c, dofOrdering->getDofIndex(data.varID, a));
       cell.z = cell.m;
-      inverse.applyInverse(cell.scales, cell.z.data(), 1);
+      cell.inverse->applyInverse(cell.scales, cell.z.data(), 1);
       double mz = 0;
       for (int i=0; i<N; i++) mz += cell.m[i] * cell.z[i];
       cell.denominator = 1.0 - cell.c * mz;
@@ -343,6 +459,36 @@ bool SeparableTensorIP::cellInverses(DofOrderingPtr dofOrdering, BasisCachePtr b
   inverses = std::move(result);
   _inverseCellCount += data.numCells;
   return true;
+}
+
+std::shared_ptr<SeparableGramInverse> SeparableTensorIP::outflowInverse(const TensorDecomposition &d,
+                                                                       const std::vector<std::pair<int,double>> &pattern)
+{
+  std::lock_guard<std::mutex> lock(_decompositionMutex);
+  TensorDecomposition &mutableD = const_cast<TensorDecomposition &>(d);
+  auto found = mutableD.outflowInverses.find(pattern);
+  if (found != mutableD.outflowInverses.end()) return found->second;
+  std::vector<std::vector<double>> stiffness = d.derivative;
+  for (size_t k=0; k<pattern.size(); k++)
+  {
+    const int side = pattern[k].first;
+    if (side == 0) continue;
+    const int n = d.componentCardinality[k];
+    const double *phi = d.endpointValues[k].data() + ((side > 0) ? n : 0);
+    const double r = pattern[k].second;
+    if (r < 0) stiffness[k].assign(n * n, 0.0); // the endpoint term alone (scaled by the derivative weight eta)
+    const double scale = (r < 0) ? 1.0 : r;
+    for (int i=0; i<n; i++) for (int j=0; j<n; j++) stiffness[k][i*n+j] += scale * phi[i] * phi[j];
+  }
+  auto inverse = std::make_shared<SeparableGramInverse>(d.mass, stiffness);
+  mutableD.outflowInverses[pattern] = inverse;
+  return inverse;
+}
+
+void SeparableTensorIP::addOutflowFaceTerm(int direction, FunctionPtr weight, FunctionPtr side)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION((weight == Teuchos::null) || (side == Teuchos::null), std::invalid_argument, "addOutflowFaceTerm: null function");
+  _outflowTerms.push_back({direction, weight, side});
 }
 
 void SeparableTensorIP::applyCellInverse(const CellInverse &cell, double *x, int vectorCount)
@@ -488,6 +634,8 @@ void SeparableTensorIP::computeInnerProductMatrix(Camellia::FieldContainer<doubl
 {
   if (!tryTensorAssembly(innerProduct, dofOrdering, basisCache))
   {
+    TEUCHOS_TEST_FOR_EXCEPTION(!_outflowTerms.empty(), std::invalid_argument,
+                               "SeparableTensorIP: outflow-face terms need the one-dimensional assembly path (box cells, tensor-product test bases)");
     _fallbackCellCount += basisCache->getPhysicalCubaturePointsFC().dimension(0);
     TIP<double>::computeInnerProductMatrix(innerProduct, dofOrdering, basisCache);
   }

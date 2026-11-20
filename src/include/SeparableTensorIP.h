@@ -103,6 +103,21 @@ namespace Camellia
      */
     void setConstantModeWeight(VarPtr var, FunctionPtr alpha, double ratio);
 
+    /**
+     \brief Add an outflow-face term weight(K) int_F v^2, F the face of K normal to direction (0-based): the upper face where
+            side(K) > 0, the lower face where side(K) < 0, none where side(K) == 0.
+
+     weight must be constant on each cell; side is taken by the sign of its cell average.  The term is assembled from
+     one-dimensional factors (the endpoint mass matrix of the 1D basis in that direction, the scaled mass matrices in the
+     others), so it applies only where the one-dimensional path does (box cells, tensor-product or serendipity test bases);
+     anywhere else computeInnerProductMatrix() throws.  The Gram matrix stays a Kronecker sum: in that direction the
+     stiffness K becomes K + r E_side with r = (weight / (h/2)) / b, b the direction's derivative weight, and the fast
+     inverse caches one SeparableGramInverse per distinct (side, r) pattern.  With weight = theta s^2 / h for a derivative
+     term s^2 |d v|^2, r = theta / 2 on every cell, so there is one basis per outflow side.  (The marching-compatible norm:
+     see notes/marching-compatible-separable-norm.tex.)  Applies to the IP's single test variable.
+     */
+    void addOutflowFaceTerm(int direction, FunctionPtr weight, FunctionPtr side);
+
     //! false: applyInverseInnerProductMatrix() always returns false, so that callers form and factor the Gram matrix (for
     //! comparison).  (The environment variable CAMELLIA_SEPARABLE_IP_NO_FAST_INVERSE, if set, makes false the default.)
     void setUseFastInverse(bool value) { _useFastInverse = value; }
@@ -116,10 +131,13 @@ namespace Camellia
       BasisPtr basis; // kept alive, so that its address (the key) is not reused
       std::vector<std::vector<int>> componentOrdinals;   // [basisOrdinal][direction]
       std::vector<std::vector<double>> mass, derivative; // [direction]: row-major n_k x n_k, on the reference [-1,1]
+      std::vector<std::vector<double>> endpointValues;   // [direction]: 2 x n_k, the basis values at -1, then +1
       std::vector<int> componentCardinality;
       bool fullTensor = false; // every basis function of the full tensor-product basis is present
       std::vector<int> tensorIndex; // [basisOrdinal]: sum_k componentOrdinals[k] * stride_k, first direction fastest
       std::shared_ptr<SeparableGramInverse> inverse; // when fullTensor
+      //! with outflow-face terms: [per direction (side, r)] -> the inverse with stiffness K + r E_side in those directions
+      std::map<std::vector<std::pair<int,double>>, std::shared_ptr<SeparableGramInverse>> outflowInverses;
     };
     const TensorDecomposition &decomposition(BasisPtr basis, int spaceDim);
 
@@ -131,11 +149,21 @@ namespace Camellia
       std::vector<int> directions;                       // [term]: k_t, or -1 for the value
       std::vector<std::vector<double>> halfWidths;       // [cell][direction]
       std::vector<std::vector<double>> coefficientSquared; // [term][cell]
+      std::vector<std::vector<double>> outflowWeight;      // [outflow term][cell]
+      std::vector<std::vector<int>> outflowSide;           // [outflow term][cell]: +1 upper, -1 lower, 0 none
       int numCells = 0;
     };
     bool separableCellData(DofOrderingPtr dofOrdering, BasisCachePtr basisCache, SeparableCellData &data);
     bool tryTensorAssembly(Camellia::FieldContainer<double> &innerProduct, DofOrderingPtr dofOrdering, BasisCachePtr basisCache);
 
+    struct OutflowTerm
+    {
+      int direction;
+      FunctionPtr weight, side;
+    };
+    std::vector<OutflowTerm> _outflowTerms;
+    //! the inverse for a pattern of outflow directions (cached in d)
+    std::shared_ptr<SeparableGramInverse> outflowInverse(const TensorDecomposition &d, const std::vector<std::pair<int,double>> &pattern);
     std::map<const void*, TensorDecomposition> _decompositions;
     std::mutex _decompositionMutex;
     bool _useTensorAssembly;
