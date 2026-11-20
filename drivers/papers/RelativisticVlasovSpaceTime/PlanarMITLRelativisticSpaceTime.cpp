@@ -960,6 +960,7 @@ struct MatrixFreeSolveOptions
   double characteristicTolerance = 1e-8; // faces with |beta . n| <= this * max |beta|: out of the sweep, face blocks
   int maxSweepBlockCells = 64;        // the component block sweep: skipped if a strongly connected component is larger
   bool weightedCycleBreaking = false; // lag the weakest couplings (|beta . n| / h_n) on cycles
+  double mixedFaceTolerance = 0.01;   // the merged-block sweep: faces where beta . n changes sign by more than this * max|beta|
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1061,6 +1062,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
                                                                : std::vector<MeshPtr>{meshes[meshes.size() - 2]};
     MatrixFreeDPGTwoLevel::Options twoLevelOptions = solveOptions.twoLevel;
     twoLevelOptions.weightedCycleBreaking = solveOptions.weightedCycleBreaking;
+    twoLevelOptions.mixedFaceTolerance = solveOptions.mixedFaceTolerance;
     twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, coarseMeshes, twoLevelOptions));
     twoLevelSetupTime = seconds(t0, now());
   }
@@ -1172,7 +1174,12 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     const std::vector<SweepVariant> sweepVariants = {{"transport sweep P = R^{-1} W^{-1} R^{-T}", 0},
                                                      {"sweep without characteristic faces + their face blocks, additive", 1},
                                                      {"sweep without characteristic faces + their face blocks, symmetric multiplicative", 2},
-                                                     {"block sweep over the strongly connected components (no lagging)", 3}};
+                                                     {"block sweep over the strongly connected components (no lagging)", 3},
+                                                     {"block sweep, cells merged across mixed-sign faces", 4}};
+    int mergedFaces = 0, largestMerged = 0;
+    const std::vector<int> mixedBlocks = op.mixedFaceBlocks(upwind, solveOptions.mixedFaceTolerance, &mergedFaces, &largestMerged);
+    if (rank == 0) std::cout << "  mixed-sign faces (tolerance " << solveOptions.mixedFaceTolerance << "): " << mergedFaces
+                             << " merged; largest block " << largestMerged << " cells\n";
     int largestComponent = 0;
     {
       std::map<int,int> sizes;
@@ -1180,6 +1187,11 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
     }
     for (const SweepVariant &variant : sweepVariants)
     {
+      if ((variant.kind == 4) && (largestMerged > solveOptions.maxSweepBlockCells))
+      {
+        if (rank == 0) std::cout << "  " << variant.name << ": skipped (largest block " << largestMerged << " cells)\n";
+        continue;
+      }
       if ((variant.kind == 3) && (largestComponent > solveOptions.maxSweepBlockCells))
       {
         if (rank == 0) std::cout << "  " << variant.name << ": skipped (largest component " << largestComponent << " cells)\n";
@@ -1189,6 +1201,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
       t0 = now();
       Teuchos::RCP<TOperator<double>> candidate = (variant.kind == 0) ? op.transportSweep(upwind, fluxOwner)
                                                 : (variant.kind == 3) ? op.transportSweep(upwind, fluxOwner, nullptr, false, &component)
+                                                : (variant.kind == 4) ? op.transportSweep(upwind, fluxOwner, nullptr, false, &mixedBlocks)
                                                                       : op.transportSweep(upwindC, fluxOwnerC, &characteristicFace, variant.kind == 2);
       const double sweepSetupTime = seconds(t0, now());
       MV u(map, 1);
@@ -1264,9 +1277,21 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
         for (int i=0; i<std::min<int>(12, int(index.size())); i++)
         {
           std::vector<double> centroid = mesh->getCellCentroid(op.cells()[index[i]]);
+          std::vector<double> minima, maxima;
+          local->testDerivativeCoefficientRanges(op.cells()[index[i]], minima, maxima);
+          Camellia::FieldContainer<double> nodes = mesh->physicalCellNodesForCell(op.cells()[index[i]]);
           std::cout << "   ";
           for (double c : centroid) std::cout << " " << c;
-          std::cout << ": " << byCell[index[i]] << "\n";
+          std::cout << ": " << byCell[index[i]] << "; widths";
+          for (int d=0; d<nodes.dimension(2); d++)
+          {
+            double lo = nodes(0,0,d), hi = nodes(0,0,d);
+            for (int node=1; node<nodes.dimension(1); node++) { lo = std::min(lo, nodes(0,node,d)); hi = std::max(hi, nodes(0,node,d)); }
+            std::cout << " " << hi - lo;
+          }
+          std::cout << "; beta ranges";
+          for (size_t d=0; d<minima.size(); d++) std::cout << " [" << -maxima[d] << ", " << -minima[d] << "]";
+          std::cout << "\n";
         }
       }
     }
@@ -1724,6 +1749,9 @@ int main(int argc, char *argv[])
                    "--matrixFreeSweepDiagnose: 0 the plain sweep, 1 with additive characteristic face blocks, 2 multiplicative");
     cmdp.setOption("matrixFreeWeightedCycleBreaking", "matrixFreeCountCycleBreaking", &matrixFreeSolveOptions.weightedCycleBreaking,
                    "Transport sweep: on cycles, lag the weakest couplings |beta . n| / h_n (or the fewest faces)");
+    cmdp.setOption("matrixFreeMixedFaceTolerance", &matrixFreeSolveOptions.mixedFaceTolerance,
+                   "Merged-block sweep: merge cells across faces where beta . n changes sign (beyond this times max |beta|); "
+                   "as the smoother (--matrixFreeSweepSmoother), <= 0 sweeps cells");
     cmdp.setOption("matrixFreeMaxSweepBlockCells", &matrixFreeSolveOptions.maxSweepBlockCells,
                    "Component block sweep: the largest strongly connected component (cells) to factor densely");
     cmdp.setOption("matrixFreeSweepOnly", "noMatrixFreeSweepOnly", &matrixFreeSolveOptions.sweepOnly,

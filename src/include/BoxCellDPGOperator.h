@@ -83,6 +83,8 @@ namespace Camellia
     //! derivative of the test function, in physical scaling.  For an ultraweak transport form -(beta u, grad v) this is
     //! -beta_k averaged over the cell; MatrixFreeDPGOperator::upwindCellOrder() uses it to orient the faces.
     std::vector<double> testDerivativeCoefficientAverages(GlobalIndexType cellID);
+    //! the same coefficients' minimum and maximum over the cell's quadrature points, per cell direction
+    void testDerivativeCoefficientRanges(GlobalIndexType cellID, std::vector<double> &minima, std::vector<double> &maxima);
     //! load (trial dof ordering) = B_K^T G_K^{-1} l_K, l_K the right-hand side tested against the test basis (by the
     //! element's standard quadrature, enriched by the operator's quadratureEnrichment)
     void applyLoad(GlobalIndexType cellID, RHSPtr rhs, double *load);

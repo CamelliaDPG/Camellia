@@ -753,6 +753,47 @@ std::vector<double> BoxCellDPGOperator::testDerivativeCoefficientAverages(Global
   return averages;
 }
 
+void BoxCellDPGOperator::testDerivativeCoefficientRanges(GlobalIndexType cellID, std::vector<double> &minima, std::vector<double> &maxima)
+{
+  const TypeData &type = typeData(cellID);
+  const CellData &cell = cellData(cellID, type);
+  const int dim = type.dim;
+  double J = 1.0;
+  for (int k=0; k<dim; k++) J *= cell.halfWidths[k];
+  // the quadrature weights (times J), as in cellData()
+  std::vector<int> count(dim);
+  size_t P = 1;
+  for (int k=0; k<dim; k++) { count[k] = int(type.points[k].size()); P *= count[k]; }
+  std::vector<double> weights(P, J);
+  {
+    std::vector<int> index(dim, 0);
+    for (size_t p=0; p<P; p++)
+    {
+      for (int k=0; k<dim; k++) weights[p] *= type.weights[k][index[k]];
+      for (int k=0; k<dim; k++) { if (++index[k] < count[k]) break; index[k] = 0; }
+    }
+  }
+  std::vector<std::vector<double>> sums(dim, std::vector<double>(P, 0.0));
+  std::vector<bool> present(dim, false);
+  for (int g=0; g<int(type.groups.size()); g++)
+  {
+    const FieldGroup &group = type.groups[g];
+    if (group.testDirection < 0) continue;
+    double scale = 1.0 / cell.halfWidths[group.testDirection];
+    for (const FieldData &field : type.fields)
+      if ((field.trialVarID == group.trialVarID) && field.hvol) scale /= J;
+    for (size_t p=0; p<P; p++) sums[group.testDirection][p] += cell.groupCoefficients[g][p] / (weights[p] * scale);
+    present[group.testDirection] = true;
+  }
+  minima.assign(dim, 0.0); maxima.assign(dim, 0.0);
+  for (int k=0; k<dim; k++)
+    if (present[k])
+    {
+      minima[k] = *std::min_element(sums[k].begin(), sums[k].end());
+      maxima[k] = *std::max_element(sums[k].begin(), sums[k].end());
+    }
+}
+
 int BoxCellDPGOperator::dofSide(GlobalIndexType cellID, int localDof)
 {
   return typeData(cellID).dofSide[localDof];

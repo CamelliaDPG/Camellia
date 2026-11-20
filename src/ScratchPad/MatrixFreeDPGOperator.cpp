@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -1131,6 +1132,89 @@ std::vector<int> MatrixFreeDPGOperator::upwindCellOrder(int *cyclesBroken, int *
   if (cyclesBroken != nullptr) *cyclesBroken = broken;
   if (laggedFaces != nullptr) *laggedFaces = lagged;
   return order;
+}
+
+std::vector<int> MatrixFreeDPGOperator::mixedFaceBlocks(const std::vector<int> &order, double tolerance, int *mergedFaces,
+                                                        int *largestBlock) const
+{
+  GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
+  const int cellCount = int(_cells.size());
+  // beta_k ranges (the negated coefficient ranges)
+  std::vector<std::vector<double>> lo(cellCount), hi(cellCount);
+  std::vector<double> scale(cellCount, 0.0);
+  for (int k=0; k<cellCount; k++)
+  {
+    std::vector<double> minima, maxima;
+    _local->testDerivativeCoefficientRanges(_cells[k], minima, maxima);
+    lo[k].resize(minima.size()); hi[k].resize(minima.size());
+    for (size_t d=0; d<minima.size(); d++)
+    {
+      lo[k][d] = -maxima[d]; hi[k][d] = -minima[d];
+      scale[k] = std::max(scale[k], std::max(std::abs(lo[k][d]), std::abs(hi[k][d])));
+    }
+  }
+  // face neighbors through shared flux dofs
+  std::map<LO, std::vector<std::pair<int,int>>> fluxDofCells;
+  for (int k=0; k<cellCount; k++)
+  {
+    const GlobalIndexType cellID = _cells[k];
+    const int trialCount = _local->trialDofCount(cellID);
+    Camellia::FieldContainer<double> unit(trialCount), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<trialCount; l++)
+    {
+      const int side = _local->dofSide(cellID, l);
+      if (side < 0) continue;
+      unit.initialize(0.0); unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      for (int i=0; i<globalIndices.size(); i++)
+      {
+        if (globalData[i] == 0.0) continue;
+        const LO lid = _map->getLocalElement(static_cast<GO>(globalIndices[i]));
+        if (lid == Teuchos::OrdinalTraits<LO>::invalid()) continue;
+        auto &entries = fluxDofCells[lid];
+        if (std::find(entries.begin(), entries.end(), std::make_pair(k, side)) == entries.end()) entries.push_back({k, side});
+      }
+    }
+  }
+  std::vector<int> parent(cellCount);
+  for (int k=0; k<cellCount; k++) parent[k] = k;
+  std::function<int(int)> find = [&](int k) { while (parent[k] != k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
+  std::set<std::pair<int,int>> pairs;
+  int merged = 0;
+  for (const auto &entry : fluxDofCells)
+  {
+    const auto &cellSides = entry.second;
+    for (size_t a=0; a<cellSides.size(); a++)
+      for (size_t b=a+1; b<cellSides.size(); b++)
+      {
+        const int k1 = cellSides[a].first, k2 = cellSides[b].first;
+        if ((k1 == k2) || !pairs.insert({std::min(k1,k2), std::max(k1,k2)}).second) continue;
+        int normal, endpoint;
+        _local->sideNormal(_cells[k1], cellSides[a].second, normal, endpoint);
+        const double low = std::min(lo[k1][normal], lo[k2][normal]), high = std::max(hi[k1][normal], hi[k2][normal]);
+        const double threshold = tolerance * std::max(scale[k1], scale[k2]);
+        if ((low < -threshold) && (high > threshold))
+        {
+          merged++;
+          parent[find(k1)] = find(k2);
+        }
+      }
+  }
+  // number the blocks by first appearance in order
+  std::map<int,int> blockOfRoot;
+  std::vector<int> blockOf(cellCount, -1), sizes;
+  for (int k : order)
+  {
+    const int root = find(k);
+    auto found = blockOfRoot.find(root);
+    if (found == blockOfRoot.end()) { found = blockOfRoot.insert({root, int(blockOfRoot.size())}).first; sizes.push_back(0); }
+    blockOf[k] = found->second;
+    sizes[found->second]++;
+  }
+  if (mergedFaces != nullptr) *mergedFaces = merged;
+  if (largestBlock != nullptr) *largestBlock = sizes.empty() ? 0 : *std::max_element(sizes.begin(), sizes.end());
+  return blockOf;
 }
 
 ElementMultiplicativeSchwarz::ElementMultiplicativeSchwarz(TMapConstPtr map, std::vector<std::vector<LO>> blockLids,

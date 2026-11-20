@@ -170,6 +170,16 @@ namespace Camellia
                                                    bool characteristicMultiplicative = false,
                                                    const std::vector<int> *blockOf = nullptr) const;
 
+    /**
+     \brief Blocks for transportSweep(): cells merged (union-find) across every face where beta . n changes sign, judged by
+     the two cells' ranges of beta_n over their quadrature points (both a value below -tolerance max|beta| and one above
+     +tolerance max|beta|).  Blocks are numbered by the first appearance of their cells in order (an upwind order), so
+     that transportSweep() lags exactly the inflow from blocks later in that order.  mergedFaces and largestBlock (cells)
+     if given.
+     */
+    std::vector<int> mixedFaceBlocks(const std::vector<int> &order, double tolerance, int *mergedFaces = nullptr,
+                                     int *largestBlock = nullptr) const;
+
     //! the rank's cells, in the order the operator visits them
     const std::vector<GlobalIndexType> &cells() const { return _cells; }
 
