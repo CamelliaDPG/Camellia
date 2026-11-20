@@ -18,7 +18,8 @@
 \newcommand{\R}{\mathbb{R}}
 \DeclareMathOperator{\diag}{diag}
 
-\title{A marching-compatible separable test norm\\[2pt]\large proposal, for the tensor-train and conventional planar MITL solvers}
+\title{A marching-compatible separable test norm\\[2pt]\large proposal, for the tensor-train and conventional planar MITL solvers\\[2pt]
+\normalsize version 2: revised after the TT session's review}
 \author{}
 \date{November 20, 2026}
 
@@ -31,9 +32,20 @@ degradations we found.  The manuscript ``The DPG Method for the Convection--Reac
 (Demkowicz, Roberts, Mu\~noz-Matute) recalls an inner product that replaces the $L^2$ term by an \emph{outflow-boundary}
 term, and with which the ideal DPG method coincides with a marching (sweep) scheme in 1D and on a class of 2D meshes.
 These notes propose a direction-separable version of that norm.  Its element Gram matrix is still a Kronecker sum, so
-its inverse is still exact by fast diagonalization.  What changes is that the one-dimensional eigenbases become
-cell-dependent: they depend on one or two scalars per direction and cell.  The proposal is untested.  It changes the
-discretization, so it needs the accuracy and coupled-stability tests as well as solver tests.
+its inverse is still exact by fast diagonalization.  With the outflow weight scaled like the derivative terms
+(Section 3.1), the one-dimensional eigenbasis is again shared by all cells, with one basis per outflow side.  The
+proposal is untested.  It changes the discretization, so it needs the accuracy and coupled-stability tests as well as
+solver tests.
+
+\emph{Changes from version 1}, following the TT session's review:
+\begin{itemize}[nosep]
+  \item The outflow weight is now $\mu_{K,d}=\theta s_{K,d}^2/h_{K,d}$.  The earlier $\mu\approx|\beta_d|$ was
+        dimensionally inconsistent and negligible in the cathode cells.
+  \item The 1D eigenbasis is shared again.
+  \item The claim about marching is weakened: $Q$ is not zero for the separable surrogate.
+  \item Variant A explicitly moves the $x$- and $t$-parts of $\alpha_K$ to outflow faces.
+  \item Section 5 distinguishes $\kappa(PS)$, which the sweep sees, from $\kappa(S)$, which TT/AMEn with Jacobi sees.
+\end{itemize}
 \end{abstract}
 
 %======================================================================
@@ -135,13 +147,27 @@ if $\beta_d>0$ on $K$ and the lower face if $\beta_d<0$.  Let $\mu_{K,d}\ge0$ be
 \end{equation}
 \begin{itemize}[nosep]
   \item The first two sums are the separable surrogate of \eqref{eq:11}.  The derivative term dominates
-        $\|\bbeta\cdot\nabla w\|^2/n$ when $s_{K,d}\ge|\beta_d|$ on $K$, and $\operatorname{div}\bbeta=0$.  The
-        outflow term is \eqref{eq:11}'s boundary term.  The natural weight is $\mu_{K,d}\approx|\beta_d|$ on the face,
-        since $\int_{\partial K_+}(\bbeta\cdot\bn)\,w^2$ is the weighted form used in the manuscript's trace lemmas.
+        $\|\bbeta\cdot\nabla w\|^2/n$ when $s_{K,d}\ge|\beta_d|$ on $K$, and $\operatorname{div}\bbeta=0$.  (This
+        holds for the relativistic 1D2V force in momentum variables: the $\bv\times\mathbf B$ terms cancel in
+        $\partial_{u_x}a_x+\partial_{u_z}a_z$.)  The outflow term is \eqref{eq:11}'s boundary term.
+  \item \textbf{The weight.}  Take
+        \[ \mu_{K,d} = \theta\, s_{K,d}^2/h_{K,d},\qquad \theta=O(1)\ \text{dimensionless}. \]
+        Dimensionally, $s_d^2\|\partial_dw\|^2\sim(s_d/h_d)^2\,|K|\,w^2$ while $\mu\int_Fw^2\sim(\mu/h_d)\,|K|\,w^2$,
+        so $\mu$ needs the units of $s^2/h$.  The ``natural'' $\mu=|\beta_d|$ gives an outflow-to-derivative ratio
+        of $h/(2|\beta_d|)$, about $2\cdot10^{-3}$ in $x$ in the cathode cells.  The causal term would then be
+        negligible exactly where it is wanted.  The choice is free in principle: in 1D the ideal test space of
+        \eqref{eq:11} does not depend on the boundary weight.  The Riesz problem
+        $(A^*v,A^*\delta v)+w\,v(\mathrm{out})\delta v(\mathrm{out})=(u,A^*\delta v)+b\hat u\,\delta v(\mathrm{out})$
+        is solved by $A^*v=u$, $v(\mathrm{out})=b\hat u/w$, for any $w>0$.  So the weight can be chosen for the
+        surrogate.  This choice is exactly ``replace the symmetric $L^2$ part of $\alpha_K$, of strength
+        $C\sum_d(s_d/h_d)^2$, by outflow-face terms of the same strength''.  It also vanishes like $\beta^2$ on
+        characteristic faces.
   \item $\alpha_K'\ge0$ is an optional, \emph{small} $L^2$ term.  With $\alpha_K'=0$, \eqref{eq:norm} is still a norm
         on the test space: a zero derivative term forces $w$ to be constant, and the outflow term then forces the
         constant to be zero.
-  \item The constant-mode correction stays a rank-one update, handled by Sherman--Morrison as now.
+  \item The constant-mode correction stays a rank-one update, handled by Sherman--Morrison as now.  But $c_K$ must stay
+        below the strength of the outflow terms, or the norm becomes indefinite: with little $L^2$ term, the outflow
+        terms are what control the constant mode.
 \end{itemize}
 
 \subsection{The Gram matrix is still a Kronecker sum}
@@ -154,7 +180,9 @@ $\alpha_K'$ evenly over the directions,
   G_K = J_K\sum_{d=1}^n \widehat M\otimes\cdots\otimes\underbrace{A_{K,d}}_{\text{slot }d}\otimes\cdots\otimes\widehat M,
   \qquad A_{K,d} = \xi_{K,d}\,\widehat K + \eta_{K,d}\,E_{\pm} + \tfrac{\alpha_K'}{n}\,\widehat M,
 \end{equation}
-with $\xi_{K,d}=s_{K,d}^2(2/h_{K,d})^2$, $\eta_{K,d}=\mu_{K,d}\,(2/h_{K,d})$, and $\pm$ the outflow side.
+with $\xi_{K,d}=s_{K,d}^2(2/h_{K,d})^2$, $\eta_{K,d}=\mu_{K,d}\,(2/h_{K,d})$, and $\pm$ the outflow side.  With
+$\mu_{K,d}=\theta s_{K,d}^2/h_{K,d}$, the ratio $\eta_{K,d}/\xi_{K,d}=\theta/2$ is the same in every cell and direction:
+\[ A_{K,d} = \xi_{K,d}\bigl(\widehat K+\tfrac\theta2E_\pm\bigr)+\tfrac{\alpha'_K}{n}\widehat M . \]
 
 \begin{proposition}[exact inverse; proved]
 Let $A_{K,d}V_{K,d}=\widehat M V_{K,d}\Lambda_{K,d}$ with $V_{K,d}^\T\widehat MV_{K,d}=I$, one $m\times m$ generalized
@@ -170,25 +198,32 @@ every slot $d'\ne d$ and $V_{K,d}^\T A_{K,d}V_{K,d}=\Lambda_{K,d}$ in slot $d$.
 
 \paragraph{What changes in practice.}
 \begin{itemize}[nosep]
-  \item The 1D eigenbasis is no longer shared by all cells.  $V_{K,d}$ depends on the ratio
-        $\eta_{K,d}/\xi_{K,d}$ (and $\alpha'_K/\xi_{K,d}$), on the outflow side, and on nothing else.  Per cell this means
-        $n$ eigenproblems of size $m\le9$ (negligible), or a table over a few ratios.
-  \item The sum-factorized application is unchanged: mode products, now with per-cell $V_{K,d}$.
-  \item The ``shared-eigenbasis coordinates'' used by the matrix-free diagonal and block computations become
-        per-cell coordinates.  They are still cheap.
+  \item \textbf{The 1D eigenbasis is shared again}, one per outflow side: $(\widehat K+\tfrac\theta2E_+)V^+=\widehat MV^+\Lambda$.
+        For a parity-symmetric 1D basis (hierarchical or Legendre), $V^-=DV^+$ with $D=\diag((-1)^j)$ and the same
+        $\Lambda$.  The $\alpha'_K$ term only shifts the eigenvalues.  There are no per-cell eigenproblems.
+  \item In a direction without an outflow term (the $u$-directions in variant A), the slot keeps today's
+        $(\widehat K,\widehat M)$ basis.  The Kronecker product mixes the bases per direction, which the matrix-free
+        code's 1D-factored Gram inverse (\texttt{Separable\-Gram\-Inverse}) already allows.
+  \item The sum-factorized application and the shared-eigenbasis coordinates of the matrix-free code are unchanged,
+        apart from choosing $V^+$ or $V^-$ per direction and cell.
 \end{itemize}
 
 \paragraph{Field dependence (relevant for TT reuse).}  The outflow sides in $t$ and $x$ do not depend on the fields:
 $\beta_t=1$ (always the upper face), and $\beta_x=v_x(\mathbf u)$ has the sign of $u_x$, with $u_x=0$ a mesh vertex.
 Only the $u$-directions' outflow sides and weights depend on the fields, through $a_u=(q/m)(E+v\times B)_u$.  So:
 \begin{itemize}[nosep]
-  \item \textbf{Variant A, field-independent:} outflow terms in $t$ and $x$ only.  Keep the $u$-directions as now:
-        derivative scales $s_{K,u}$ (preferably the planned per-velocity-cell $a_u(K)$), plus a small $L^2$ term if
-        wanted.  The element inverse stays reusable across substeps.
+  \item \textbf{Variant A, field-independent:} outflow terms in $t$ and $x$.  The $x$- and $t$-parts of $\alpha_K$,
+        $C(v_{x,\max}/h_x)^2$ and $C/h_t^2$, move to the corresponding outflow faces.  The $x$-part is essential: in the
+        cathode cells it is about $10^5$, and a $t$-outflow term alone, about $400\theta$, would be swamped.  The
+        $u$-directions stay as now: derivative scales $s_{K,u}$ (preferably the planned per-velocity-cell $a_u(K)$) and
+        their $C(a_u/h_u)^2$ $L^2$ terms.  The element inverse stays reusable across substeps.  For TT, the only new
+        ingredient is the $x$ outflow side.  It is a sign flip $D_x$ of the odd $x$-test functions on $u_x<0$ cells,
+        $S_K=B^\T D_xG_+^{-1}D_xB$: a diagonal $\pm1$ that couples the $x$-test index with the $u_x$ cell, of TT rank 2.
   \item \textbf{Variant B, full:} outflow terms in every direction, with $F^+_{K,u}$ from the sign of the current
         $a_u$ on $K$.  Where $a_u$ changes sign within a cell, use both faces with weights $|a_u|$ restricted to each
         sign, or fall back to variant A in that direction.  The inverses then have to be rebuilt when the signs
-        change, i.e.\ at slab boundaries or on change.
+        change, i.e.\ at slab boundaries or on change.  This does not fit TT well: the sign of $a_u(x,t,\mathbf u)$ is
+        non-separable, changes inside cells and between substeps, and breaks the shared basis and inverse reuse.
 \end{itemize}
 Variant A already addresses degradation 1 (the $t$--$x$ causality in the thin cathode cells).  Per-cell $a_u(K)$
 addresses degradation 2.
@@ -198,12 +233,19 @@ addresses degradation 2.
 %======================================================================
 
 \paragraph{Expected effect on the solver (hypothesis).}  The degradations we measured came from local problems that
-are not causal: an $L^2$-dominated norm, or one that under-weights a transport direction.  \eqref{eq:norm} penalizes
-only derivatives and outflow traces, which is the structure under which DPG reduces to marching.  So the local DPG
-solves should behave like ``inflow determines outflow'', $\Sigma_K$ and $Q$ should shrink, and $P$ should approach
-$S^{-1}$.  The same structure should improve any preconditioner that relies on local, causal solves.  This is
-plausible, not proved.  Even for \eqref{eq:11}, marching equivalence is known only in 1D and on special 2D meshes.
-Our boxes have several outflow faces per cell, which is the manuscript's degenerate case.
+are not causal: an $L^2$-dominated norm, or one that under-weights a transport direction.
+\begin{itemize}[nosep]
+  \item \eqref{eq:norm} is \emph{not} the structure under which DPG reduces to marching.  \eqref{eq:11} penalizes only
+        the streamline derivative.  \eqref{eq:norm} penalizes every axis derivative, and $\bbeta=(v_x,1,a_x,a_z)$ is
+        oblique to the cells.  Its Riesz problem is an anisotropic Laplacian $-\sum_ds_d^2\partial_{dd}$, with Robin
+        conditions on the outflow faces and Neumann conditions on the inflow faces.  That problem is elliptic, and its
+        only $t$/$x$ asymmetry comes from the face terms.  So $Q\ne0$.
+  \item The claim is only that $Q$, and so $\rho$, should \emph{shrink} relative to an $L^2$-dominated norm.  The
+        fixed-$\alpha$ measurement supports that empirically (sweep $\kappa$: 6036 $\to$ 6.2), but it is a
+        hypothesis to measure.
+  \item Even for \eqref{eq:11}, marching equivalence is known only in 1D and on special 2D meshes.  Our cells have up
+        to four outflow faces ($t$, $x$, $u_x$, $u_z$), the manuscript's degenerate case.
+\end{itemize}
 
 \paragraph{Caveats.}
 \begin{enumerate}[nosep]
@@ -244,6 +286,19 @@ Our boxes have several outflow faces per cell, which is the manuscript's degener
         particular on the $x$-refined test where $C=1.6$ was found dissipative.
   \item \textbf{Coupled stability (local side)}: the cathode and anode mode tests.
 \end{enumerate}
+
+\paragraph{$\kappa(PS)$ against $\kappa(S)$.}
+\begin{itemize}[nosep]
+  \item The sweep results measure $\kappa(PS)$ for the sweep preconditioner, not $\kappa(S)$.  A TT solver with Jacobi
+        (AMEn) sees $\kappa(\widetilde S)$, and that is what has to beat its compression tolerance.
+  \item $S$'s own conditioning, about $h^{-2}$ for the normal equations, is structural, and a norm change need not remove
+        it.  The effect on $\kappa(\widetilde S)$ could go either way, so the cloud side should report $\kappa(S)$ with point
+        and trace-block Jacobi alongside the sweep numbers.  The TT side can measure it with its exact-operator Lanczos on
+        the $p=4$ dump.
+  \item Order of gates: solver measurements, then single-slab accuracy (the $x$-refined case), then the coupled cathode
+        and anode mode tests.  The $(v_x/h_x)^2$ term of $\alpha_K$ was the cathode-mode fix, so coupled stability is
+        the real gate.  The conventional side needs an outflow-face boundary term in Camellia's IP for those tests.
+\end{itemize}
 
 \paragraph{Where the measurements come from.}  {\sloppy The table is from the cloud branch
 \texttt{separable-gram-fast-diagonalization}.  The code is in \texttt{MatrixFreeDPGOperator}: \texttt{transportSweep()},
