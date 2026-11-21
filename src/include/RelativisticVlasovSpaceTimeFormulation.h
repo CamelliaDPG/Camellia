@@ -45,6 +45,7 @@ protected:
   // |(q/m) a_u|, cached per cell box; cleared before each Vlasov solve, when the fields have changed
   std::shared_ptr<std::map<std::vector<long long>, std::vector<double>>> _perCellAccelerationCache;
   static double s_perCellAccelerationFloorFraction;
+  static int s_perCellAccelerationNeighborhood;
   
   // Cache one relativistic first-moment Function per (velocity component, species).
   // The Function objects themselves own the persistent weighted-solution / weighted-moments state,
@@ -92,6 +93,9 @@ public:
    */
   static void setPerCellAccelerationScales(double floorFraction) { s_perCellAccelerationFloorFraction = floorFraction; }
   static double perCellAccelerationFloorFraction() { return s_perCellAccelerationFloorFraction; }
+  //! the per-cell scale from the cell and its face neighbors: 0 the cell alone, 1 with its neighbors across velocity faces,
+  //! 2 with all its face neighbors (the maximum of the cells' maxima)
+  static void setPerCellAccelerationNeighborhood(int neighborhood) { s_perCellAccelerationNeighborhood = neighborhood; }
   //! forget the per-cell scales (the fields changed); the next evaluation of the norm recomputes them
   void clearPerCellAccelerationScales() { if (_perCellAccelerationCache) _perCellAccelerationCache->clear(); }
   //! [velocity direction]: the smallest and largest per-cell scale currently cached (empty if none)

@@ -13,6 +13,9 @@
 
 #include "AbsFunction.h"
 #include "BasisCache.h"
+#include "Cell.h"
+#include "Mesh.h"
+#include "MeshTopologyView.h"
 #include "MeshTools.h"
 #include "MonomialFunctions.h"
 #include "SqrtFunction.h"
@@ -198,40 +201,99 @@ namespace
   //! every evaluation in a substep (the solve's Gram matrices, GMG's coarse levels, the matrix-free check) agrees.
   class PerCellAccelerationScale : public TFunction<double>
   {
-    vector<FunctionPtr> _a; int _direction; double _floor;
-    std::shared_ptr<std::map<std::vector<long long>, std::vector<double>>> _cache;
+    using Cache = std::map<std::vector<long long>, std::vector<double>>;
+    vector<FunctionPtr> _a; int _direction; double _floor; int _spaceDim, _neighborhood;
+    std::shared_ptr<Cache> _cache;
+    // the cell's box as a key, with a last entry: 0 for the cell's own maxima, the neighborhood mode for the combined ones
+    static std::vector<long long> boxKey(const FieldContainer<double> &nodes, int c, std::vector<double> *lo = nullptr, std::vector<double> *hi = nullptr)
+    {
+      const int numNodes = nodes.dimension(1), dim = nodes.dimension(2);
+      std::vector<long long> key;
+      if (lo) { lo->resize(dim); hi->resize(dim); }
+      for (int k=0; k<dim; k++)
+      {
+        double l = nodes(c,0,k), h = l;
+        for (int n=1; n<numNodes; n++) { l = std::min(l, nodes(c,n,k)); h = std::max(h, nodes(c,n,k)); }
+        key.push_back(std::llround(l * 1e10)); key.push_back(std::llround(h * 1e10));
+        if (lo) { (*lo)[k] = l; (*hi)[k] = h; }
+      }
+      key.push_back(0);
+      return key;
+    }
+    // the cell's own maxima of |a_j| over the quadrature points of basisCache's cell c (evaluated on demand)
+    const std::vector<double> &ownMaxima(const std::vector<long long> &key, BasisCachePtr basisCache, int c,
+                                         std::vector<FieldContainer<double>> &aValues)
+    {
+      auto it = _cache->find(key);
+      if (it != _cache->end()) return it->second;
+      const int numCells = basisCache->getPhysicalCellNodes().dimension(0), numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
+      if (aValues.empty())
+      {
+        aValues.resize(_a.size());
+        for (size_t j=0; j<_a.size(); j++) { aValues[j].resize(numCells, numPoints); _a[j]->values(aValues[j], basisCache); }
+      }
+      std::vector<double> maxima(_a.size(), 0.0);
+      for (size_t j=0; j<_a.size(); j++)
+        for (int p=0; p<numPoints; p++) maxima[j] = std::max(maxima[j], std::abs(aValues[j](c,p)));
+      return _cache->emplace(key, maxima).first->second;
+    }
   public:
-    PerCellAccelerationScale(const vector<FunctionPtr> &a, int direction, double floor,
-                             std::shared_ptr<std::map<std::vector<long long>, std::vector<double>>> cache)
-    : TFunction<double>(0), _a(a), _direction(direction), _floor(floor), _cache(cache) {}
+    PerCellAccelerationScale(const vector<FunctionPtr> &a, int direction, double floor, int spaceDim, int neighborhood,
+                             std::shared_ptr<Cache> cache)
+    : TFunction<double>(0), _a(a), _direction(direction), _floor(floor), _spaceDim(spaceDim), _neighborhood(neighborhood), _cache(cache) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
     {
       const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
-      const int numCells = values.dimension(0), numPoints = values.dimension(1), numNodes = nodes.dimension(1), dim = nodes.dimension(2);
+      const int numCells = values.dimension(0), numPoints = values.dimension(1);
       std::vector<FieldContainer<double>> aValues; // evaluated only if some cell is not cached
+      MeshPtr mesh = (_neighborhood > 0) ? basisCache->mesh() : Teuchos::null;
+      TEUCHOS_TEST_FOR_EXCEPTION((_neighborhood > 0) && (mesh.is_null() || (int(basisCache->cellIDs().size()) != numCells)), std::invalid_argument,
+                                 "per-cell acceleration scales with a neighborhood need a BasisCache with its mesh and cell IDs");
       for (int c=0; c<numCells; c++)
       {
-        std::vector<long long> key;
-        for (int k=0; k<dim; k++)
+        std::vector<double> lo, hi;
+        std::vector<long long> key = boxKey(nodes, c, &lo, &hi);
+        const std::vector<double> *scales = &ownMaxima(key, basisCache, c, aValues);
+        if (_neighborhood > 0)
         {
-          double lo = nodes(c,0,k), hi = lo;
-          for (int n=1; n<numNodes; n++) { lo = std::min(lo, nodes(c,n,k)); hi = std::max(hi, nodes(c,n,k)); }
-          key.push_back(std::llround(lo * 1e10)); key.push_back(std::llround(hi * 1e10));
-        }
-        auto it = _cache->find(key);
-        if (it == _cache->end())
-        {
-          if (aValues.empty())
+          std::vector<long long> combinedKey = key;
+          combinedKey.back() = _neighborhood;
+          auto it = _cache->find(combinedKey);
+          if (it == _cache->end())
           {
-            aValues.resize(_a.size());
-            for (size_t j=0; j<_a.size(); j++) { aValues[j].resize(numCells, numPoints); _a[j]->values(aValues[j], basisCache); }
+            // the maximum over the cell and its face neighbors: across velocity faces only (1), or all faces (2)
+            std::vector<double> combined = *scales;
+            MeshTopologyViewPtr topology = mesh->getTopology();
+            const GlobalIndexType cellID = basisCache->cellIDs()[c];
+            CellPtr cell = topology->getCell(cellID);
+            for (unsigned side=0; side<cell->getSideCount(); side++)
+            {
+              const GlobalIndexType neighborID = cell->getNeighborInfo(side, topology).first;
+              if (neighborID == GlobalIndexType(-1)) continue;
+              FieldContainer<double> neighborNodes = mesh->physicalCellNodesForCell(neighborID);
+              std::vector<double> nlo, nhi;
+              std::vector<long long> neighborKey = boxKey(neighborNodes, 0, &nlo, &nhi);
+              int normal = -1; // the direction in which the two boxes touch
+              for (int k=0; k<int(lo.size()); k++)
+                if ((std::abs(nhi[k] - lo[k]) < 1e-12 * (1 + std::abs(lo[k]))) || (std::abs(nlo[k] - hi[k]) < 1e-12 * (1 + std::abs(hi[k])))) normal = k;
+              if ((_neighborhood == 1) && (normal < _spaceDim + 1)) continue;
+              BasisCachePtr neighborCache;
+              std::vector<FieldContainer<double>> neighborValues;
+              const std::vector<double> *neighborMaxima;
+              auto nit = _cache->find(neighborKey);
+              if (nit != _cache->end()) neighborMaxima = &nit->second;
+              else
+              {
+                neighborCache = BasisCache::basisCacheForCell(mesh, neighborID);
+                neighborMaxima = &ownMaxima(neighborKey, neighborCache, 0, neighborValues);
+              }
+              for (size_t j=0; j<combined.size(); j++) combined[j] = std::max(combined[j], (*neighborMaxima)[j]);
+            }
+            it = _cache->emplace(combinedKey, combined).first;
           }
-          std::vector<double> maxima(_a.size(), 0.0);
-          for (size_t j=0; j<_a.size(); j++)
-            for (int p=0; p<numPoints; p++) maxima[j] = std::max(maxima[j], std::abs(aValues[j](c,p)));
-          it = _cache->emplace(key, maxima).first;
+          scales = &it->second;
         }
-        const double value = std::max(it->second[_direction], _floor);
+        const double value = std::max((*scales)[_direction], _floor);
         for (int p=0; p<numPoints; p++) values(c,p) = value;
       }
     }
@@ -336,6 +398,7 @@ namespace
 }
 
 double RelativisticVlasovSpaceTimeFormulation::s_perCellAccelerationFloorFraction = 0.0;
+int RelativisticVlasovSpaceTimeFormulation::s_perCellAccelerationNeighborhood = 0;
 
 void RelativisticVlasovSpaceTimeFormulation::perCellAccelerationScaleRanges(std::vector<double> &minima, std::vector<double> &maxima, int &cellCount) const
 {
@@ -344,6 +407,7 @@ void RelativisticVlasovSpaceTimeFormulation::perCellAccelerationScaleRanges(std:
   const int velocityDim = int(_testSpaceL2WeightAccelerationBounds.size());
   for (const auto &entry : *_perCellAccelerationCache)
   {
+    if (entry.first.back() != s_perCellAccelerationNeighborhood) continue; // the scales in use (own or combined maxima)
     if (minima.empty()) { minima.assign(entry.second.size(), std::numeric_limits<double>::max()); maxima.assign(entry.second.size(), 0.0); }
     for (size_t j=0; j<entry.second.size(); j++)
     {
@@ -447,7 +511,7 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
     if (!_perCellAccelerationCache) _perCellAccelerationCache = std::make_shared<std::map<std::vector<long long>, std::vector<double>>>();
     for (int vd=0; vd<velocityDim; vd++)
       accelerationScales.push_back(Teuchos::rcp(new PerCellAccelerationScale(a, vd, s_perCellAccelerationFloorFraction * _testSpaceL2WeightAccelerationBounds[vd],
-                                                                            _perCellAccelerationCache)));
+                                                                            spaceDim, s_perCellAccelerationNeighborhood, _perCellAccelerationCache)));
   }
   
   // the direction-separable graph norm's Gram matrices are assembled from one-dimensional factors on box cells

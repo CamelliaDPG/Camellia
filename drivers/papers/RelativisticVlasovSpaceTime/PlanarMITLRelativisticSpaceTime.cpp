@@ -2024,6 +2024,10 @@ int main(int argc, char *argv[])
                    "Quadrature enrichment of the matrix-free operator: n_k + ceil(enrichment / 2) Gauss points per direction");
     double L2WeightGraphOutflowFaceTheta = 0.0;
     double L2WeightGraphPerCellAccelerationFloor = 0.0;
+    int L2WeightGraphPerCellAccelerationNeighborhood = 0;
+    cmdp.setOption("L2WeightGraphPerCellAccelerationNeighborhood", &L2WeightGraphPerCellAccelerationNeighborhood,
+                   "Per-cell acceleration scales from the cell and its face neighbors: 0 the cell alone, 1 with its neighbors across "
+                   "velocity faces, 2 with all face neighbors");
     cmdp.setOption("L2WeightGraphPerCellAccelerationFloor", &L2WeightGraphPerCellAccelerationFloor,
                    "If positive: per-cell acceleration scales a_u(K) = max(max_K |(q/m) a_u|, floor A_u) in the separable graph norm "
                    "and the transport-scale weight, in place of the box-wide bounds A_u (L2WeightGraphAccelerationBounds), "
@@ -2482,6 +2486,7 @@ int main(int argc, char *argv[])
     }
     VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(s_hpAdaptivity ? hpInitialH1Order : 0);
     RelativisticVlasovSpaceTimeFormulation::setPerCellAccelerationScales(L2WeightGraphPerCellAccelerationFloor);
+    RelativisticVlasovSpaceTimeFormulation::setPerCellAccelerationNeighborhood(L2WeightGraphPerCellAccelerationNeighborhood);
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
@@ -2705,6 +2710,7 @@ int main(int argc, char *argv[])
       if (useFullTensorTestBasis) suffix << "_fullTensorTest";
       if (L2WeightGraphOutflowFaceTheta > 0.0) suffix << "_outflowTheta" << L2WeightGraphOutflowFaceTheta;
       if (L2WeightGraphPerCellAccelerationFloor > 0.0) suffix << "_perCellA" << L2WeightGraphPerCellAccelerationFloor;
+      if (L2WeightGraphPerCellAccelerationNeighborhood > 0) suffix << "_nbhd" << L2WeightGraphPerCellAccelerationNeighborhood;
     }
     else
     {
