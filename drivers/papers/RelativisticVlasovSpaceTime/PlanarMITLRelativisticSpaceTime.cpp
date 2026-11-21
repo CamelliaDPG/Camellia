@@ -965,6 +965,7 @@ struct MatrixFreeSolveOptions
   int maxSweepBlockCells = 64;        // the component block sweep: skipped if a strongly connected component is larger
   bool weightedCycleBreaking = false; // lag the weakest couplings (|beta . n| / h_n) on cycles
   double mixedFaceTolerance = 0.01;   // the merged-block sweep: faces where beta . n changes sign by more than this * max|beta|
+  double smootherMixedFaceTolerance = 0.0; // the sweep smoother: > 0 merges cells across mixed-sign faces (off by default)
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
 
@@ -1135,7 +1136,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
                                                                : std::vector<MeshPtr>{meshes[meshes.size() - 2]};
     MatrixFreeDPGTwoLevel::Options twoLevelOptions = solveOptions.twoLevel;
     twoLevelOptions.weightedCycleBreaking = solveOptions.weightedCycleBreaking;
-    twoLevelOptions.mixedFaceTolerance = solveOptions.mixedFaceTolerance;
+    twoLevelOptions.mixedFaceTolerance = solveOptions.smootherMixedFaceTolerance;
     twoLevel = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, coarseMeshes, twoLevelOptions));
     twoLevelSetupTime = seconds(t0, now());
   }
@@ -1389,7 +1390,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
                                                                : std::vector<MeshPtr>{meshes[meshes.size() - 2]};
     MatrixFreeDPGTwoLevel::Options otherOptions = solveOptions.twoLevel;
     otherOptions.weightedCycleBreaking = solveOptions.weightedCycleBreaking;
-    otherOptions.mixedFaceTolerance = solveOptions.mixedFaceTolerance;
+    otherOptions.mixedFaceTolerance = solveOptions.smootherMixedFaceTolerance;
     const bool otherIsSweep = !solveOptions.twoLevel.transportSweep;
     otherOptions.transportSweep = otherIsSweep;
     otherOptions.elementSchwarz = !otherIsSweep;
@@ -1417,7 +1418,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
       std::getline(fields, kind, ':'); std::getline(fields, degree, ':'); std::getline(fields, ratio, ':');
       MatrixFreeDPGTwoLevel::Options variant = solveOptions.twoLevel;
       variant.weightedCycleBreaking = solveOptions.weightedCycleBreaking;
-      variant.mixedFaceTolerance = solveOptions.mixedFaceTolerance;
+      variant.mixedFaceTolerance = solveOptions.smootherMixedFaceTolerance;
       variant.transportSweep = (kind == "sweep");
       variant.elementSchwarz = (kind == "es");
       if (!degree.empty()) variant.chebyshevDegree = std::stoi(degree);
@@ -1895,8 +1896,11 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeWeightedCycleBreaking", "matrixFreeCountCycleBreaking", &matrixFreeSolveOptions.weightedCycleBreaking,
                    "Transport sweep: on cycles, lag the weakest couplings |beta . n| / h_n (or the fewest faces)");
     cmdp.setOption("matrixFreeMixedFaceTolerance", &matrixFreeSolveOptions.mixedFaceTolerance,
-                   "Merged-block sweep: merge cells across faces where beta . n changes sign (beyond this times max |beta|); "
-                   "as the smoother (--matrixFreeSweepSmoother), <= 0 sweeps cells");
+                   "Merged-block sweep (the one-level comparison): merge cells across faces where beta . n changes sign (beyond this "
+                   "times max |beta|)");
+    cmdp.setOption("matrixFreeSmootherMixedFaceTolerance", &matrixFreeSolveOptions.smootherMixedFaceTolerance,
+                   "The sweep smoother: if positive, merge cells across mixed-sign faces (as --matrixFreeMixedFaceTolerance); 0 (the "
+                   "default) sweeps cells");
     cmdp.setOption("matrixFreeMaxSweepBlockCells", &matrixFreeSolveOptions.maxSweepBlockCells,
                    "Component block sweep: the largest strongly connected component (cells) to factor densely");
     cmdp.setOption("matrixFreeSweepOnly", "noMatrixFreeSweepOnly", &matrixFreeSolveOptions.sweepOnly,

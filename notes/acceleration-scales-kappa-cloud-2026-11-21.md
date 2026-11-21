@@ -69,14 +69,19 @@ a = (6.11, 4.15), Chebyshev degree 4, and the full h-hierarchy.
 
 | smoother | L0 (880 cells) | L1 (14,080 cells, 529,488 dofs) |
 |---|---|---|
-| transport sweep | 8 iterations (κ 1.37) | 42 iterations (κ 19.2) |
+| transport sweep | 8 iterations (κ 1.37) | ~~42 iterations (κ 19.2)~~ **invalid, see the correction below** |
 | element Schwarz | 8 iterations (κ 1.42) | 20 iterations (κ 4.7) |
 
 The comparison is not entirely like for like:
 - the L0 coarse solve was exact, while L1 used the GMG hierarchy below p = 1;
 - L1 was checked after 1 substep, L0 after 2.
 
-Even so, neither smoother is mesh-independent with the fields on, unlike the zero-field case. The sweep is the worse one
-at L1. Its preconditioned spectrum reaches λ_max ≈ 57, so Chebyshev on [λ_max/20, λ_max] leaves the modes near λ ≈ 1
-undamped, and those are most of the modes the sweep handles well. Diagnostics are running: Chebyshev intervals reaching
-down to λ_min(PS), and the slowest error mode of the V-cycle by power iteration.
+**Correction (cloud side).** The L1 sweep run did not use the plain cell-by-cell sweep. A driver default passed a
+mixed-face tolerance of 0.01 to the smoother, which switched it to the merged-block sweep. We had already found that
+variant worse: its block order lags more faces. At L0 the same mistake turns 8 iterations into 15. The L0 sweep number
+in the table (8) is from the plain sweep, so the L1 sweep number is not comparable to it. The element-Schwarz numbers
+are unaffected.
+
+So the only valid L1 result is element Schwarz: 8 → 20 iterations from L0 to L1. That is not mesh-independent with the
+fields on, with the caveats above. The default is fixed: the smoother now merges blocks only when asked. The L1 sweep
+runs are being redone, together with the Chebyshev-interval and slow-mode diagnostics.
