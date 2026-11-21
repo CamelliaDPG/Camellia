@@ -1050,6 +1050,21 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   }
   MeshPtr mesh = form->vlasovMesh();
   auto local = Teuchos::rcp(new BoxCellDPGOperator(form->vlasovBF(), ip, mesh, quadratureEnrichment));
+  if (rank == 0)
+  {
+    // the trial and test spaces of the first cell: each variable's basis cardinality and degree
+    const GlobalIndexType firstCell = *mesh->cellIDsInPartition().begin();
+    ElementTypePtr elemType = mesh->getElementType(firstCell);
+    std::cout << "checkMatrixFreeOperator: cell " << firstCell << " trial dofs " << elemType->trialOrderPtr->totalDofs() << " (";
+    for (int varID : elemType->trialOrderPtr->getVarIDs())
+    {
+      const auto &sides = elemType->trialOrderPtr->getSidesForVarID(varID);
+      BasisPtr basis = elemType->trialOrderPtr->getBasis(varID, sides[0]);
+      std::cout << form->vlasovBF()->varFactory()->trial(varID)->name() << ": " << sides.size() << " x " << basis->getCardinality()
+                << " (degree " << basis->getDegree() << ") ";
+    }
+    std::cout << "), test dofs " << elemType->testOrderPtr->totalDofs() << "\n";
+  }
   for (GlobalIndexType cellID : mesh->cellIDsInPartition())
   {
     std::string reason;
