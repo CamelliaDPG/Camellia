@@ -954,6 +954,8 @@ struct MatrixFreeSolveOptions
   bool coarseGMG = false; // below the fine level: the conventional GMG on the lowest-order h-hierarchy, instead of an exact solve
   bool twoLevelSolve = true;
   bool compareSmoothers = false; // after the multigrid solve, repeat it with the other of {transport sweep, element Schwarz}
+  std::string smootherVariants; // comma-separated kind:degree:ratio (kind sweep or es): multigrid PCG with each, one production solve
+  bool slowModeDiagnose = false; // with smootherVariants: power iteration on I - M^{-1} S for each, and where its slow mode lives
   bool txSweep = false; // one-level PCG with a t-x-only sweep (velocity faces as face blocks), actual and frozen (zero-field) coefficients
   bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
   bool sweepOnly = false;             // with multiplicativeSchwarz: only the transport sweep
@@ -965,6 +967,75 @@ struct MatrixFreeSolveOptions
   double mixedFaceTolerance = 0.01;   // the merged-block sweep: faces where beta . n changes sign by more than this * max|beta|
   MatrixFreeDPGTwoLevel::Options twoLevel;
 };
+
+//! where a mode lives: |x|^2 by dof class (field, or the flux on faces normal to x, t, u_x, u_y), and the cells with the
+//! largest |x|^2 with their centroids, widths and beta ranges
+void describeMode(const TVector<double> &xIn, MeshPtr mesh, Teuchos::RCP<BoxCellDPGOperator> local, const MatrixFreeDPGOperator &op,
+                  TMapConstPtr map, const std::string &title, int rank)
+{
+  TVector<double> x(xIn, Teuchos::Copy);
+  x.scale(1.0 / x.getVector(0)->norm2());
+  // classify the dofs: field, or a flux on a face normal to direction d (x, t, u_x, u_y); and the cells
+  GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
+  const char *names[] = {"x-face", "t-face", "ux-face", "uy-face"};
+  std::map<std::string, double> byClass;
+  std::vector<double> byCell(op.cells().size(), 0.0);
+  std::vector<bool> counted(map->getLocalNumElements(), false);
+  auto xv = x.getLocalViewHost(Tpetra::Access::ReadOnly);
+  for (size_t k=0; k<op.cells().size(); k++)
+  {
+    const GlobalIndexType cellID = op.cells()[k];
+    const int n = local->trialDofCount(cellID);
+    Camellia::FieldContainer<double> unit(n), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<n; l++)
+    {
+      unit.initialize(0.0); unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      for (int i=0; i<globalIndices.size(); i++)
+      {
+        if (globalData[i] == 0.0) continue;
+        const auto lid = map->getLocalElement(globalIndices[i]);
+        const double value = xv(lid,0) * xv(lid,0);
+        byCell[k] += value;
+        if (counted[lid]) continue;
+        counted[lid] = true;
+        const int side = local->dofSide(cellID, l);
+        std::string name = "field";
+        if (side >= 0) { int normal, endpoint; local->sideNormal(cellID, side, normal, endpoint); name = names[normal]; }
+        byClass[name] += value;
+      }
+    }
+  }
+  if (rank == 0)
+  {
+    std::cout << "  " << title << ": |x|^2 by dof class:";
+    for (const auto &entry : byClass) std::cout << " " << entry.first << " " << entry.second;
+    std::cout << "\n  cells with the largest |x|^2 (cell centroid x, t, u_x, u_y: weight):\n";
+    std::vector<int> index(byCell.size());
+    for (size_t i=0; i<index.size(); i++) index[i] = int(i);
+    std::sort(index.begin(), index.end(), [&](int a, int b) { return byCell[a] > byCell[b]; });
+    for (int i=0; i<std::min<int>(12, int(index.size())); i++)
+    {
+      std::vector<double> centroid = mesh->getCellCentroid(op.cells()[index[i]]);
+      std::vector<double> minima, maxima;
+      local->testDerivativeCoefficientRanges(op.cells()[index[i]], minima, maxima);
+      Camellia::FieldContainer<double> nodes = mesh->physicalCellNodesForCell(op.cells()[index[i]]);
+      std::cout << "   ";
+      for (double c : centroid) std::cout << " " << c;
+      std::cout << ": " << byCell[index[i]] << "; widths";
+      for (int d=0; d<nodes.dimension(2); d++)
+      {
+        double lo = nodes(0,0,d), hi = nodes(0,0,d);
+        for (int node=1; node<nodes.dimension(1); node++) { lo = std::min(lo, nodes(0,node,d)); hi = std::max(hi, nodes(0,node,d)); }
+        std::cout << " " << hi - lo;
+      }
+      std::cout << "; beta ranges";
+      for (size_t d=0; d<minima.size(); d++) std::cout << " [" << -maxima[d] << ", " << -minima[d] << "]";
+      std::cout << "\n";
+    }
+  }
+}
 
 void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form, int quadratureEnrichment, bool compareAssembled,
                                    const MatrixFreeSolveOptions &solveOptions, int rank)
@@ -1236,66 +1307,7 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
         Tpetra::deep_copy(x, PSx); // (MultiVector assignment would alias)
       }
       x.scale(1.0 / x.getVector(0)->norm2());
-      // classify the dofs: field, or a flux on a face normal to direction d (x, t, u_x, u_y); and the cells
-      GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
-      const char *names[] = {"x-face", "t-face", "ux-face", "uy-face"};
-      std::map<std::string, double> byClass;
-      std::vector<double> byCell(op.cells().size(), 0.0);
-      std::vector<bool> counted(map->getLocalNumElements(), false);
-      auto xv = x.getLocalViewHost(Tpetra::Access::ReadOnly);
-      for (size_t k=0; k<op.cells().size(); k++)
-      {
-        const GlobalIndexType cellID = op.cells()[k];
-        const int n = local->trialDofCount(cellID);
-        Camellia::FieldContainer<double> unit(n), globalData;
-        Camellia::FieldContainer<GlobalIndexType> globalIndices;
-        for (int l=0; l<n; l++)
-        {
-          unit.initialize(0.0); unit[l] = 1.0;
-          gda->interpretLocalData(cellID, unit, globalData, globalIndices);
-          for (int i=0; i<globalIndices.size(); i++)
-          {
-            if (globalData[i] == 0.0) continue;
-            const auto lid = map->getLocalElement(globalIndices[i]);
-            const double value = xv(lid,0) * xv(lid,0);
-            byCell[k] += value;
-            if (counted[lid]) continue;
-            counted[lid] = true;
-            const int side = local->dofSide(cellID, l);
-            std::string name = "field";
-            if (side >= 0) { int normal, endpoint; local->sideNormal(cellID, side, normal, endpoint); name = names[normal]; }
-            byClass[name] += value;
-          }
-        }
-      }
-      if (rank == 0)
-      {
-        std::cout << "  top eigenvector of P S (Rayleigh quotient " << lambda << "): |x|^2 by dof class:";
-        for (const auto &entry : byClass) std::cout << " " << entry.first << " " << entry.second;
-        std::cout << "\n  cells with the largest |x|^2 (cell centroid x, t, u_x, u_y: weight):\n";
-        std::vector<int> index(byCell.size());
-        for (size_t i=0; i<index.size(); i++) index[i] = int(i);
-        std::sort(index.begin(), index.end(), [&](int a, int b) { return byCell[a] > byCell[b]; });
-        for (int i=0; i<std::min<int>(12, int(index.size())); i++)
-        {
-          std::vector<double> centroid = mesh->getCellCentroid(op.cells()[index[i]]);
-          std::vector<double> minima, maxima;
-          local->testDerivativeCoefficientRanges(op.cells()[index[i]], minima, maxima);
-          Camellia::FieldContainer<double> nodes = mesh->physicalCellNodesForCell(op.cells()[index[i]]);
-          std::cout << "   ";
-          for (double c : centroid) std::cout << " " << c;
-          std::cout << ": " << byCell[index[i]] << "; widths";
-          for (int d=0; d<nodes.dimension(2); d++)
-          {
-            double lo = nodes(0,0,d), hi = nodes(0,0,d);
-            for (int node=1; node<nodes.dimension(1); node++) { lo = std::min(lo, nodes(0,node,d)); hi = std::max(hi, nodes(0,node,d)); }
-            std::cout << " " << hi - lo;
-          }
-          std::cout << "; beta ranges";
-          for (size_t d=0; d<minima.size(); d++) std::cout << " [" << -maxima[d] << ", " << -minima[d] << "]";
-          std::cout << "\n";
-        }
-      }
+      describeMode(x, mesh, local, op, map, "top eigenvector of P S (Rayleigh quotient " + std::to_string(lambda) + ")", rank);
     }
   }
   if (solveOptions.txSweep)
@@ -1392,6 +1404,61 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
                 << (otherIsSweep ? "transport sweep" : "element Schwarz") << " diagonal, lambda_max " << other->lambdaMax() << "; "
                 << other->coarseLevelCount() << " coarse level(s)): " << result.iterations << " iterations, kappa ~ " << result.conditionNumber()
                 << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), " << time << " s (setup " << otherSetupTime << " s)\n";
+  }
+  if (!solveOptions.smootherVariants.empty() && (meshes.size() >= 2))
+  {
+    twoLevel = Teuchos::null;
+    std::stringstream list(solveOptions.smootherVariants);
+    std::string entry;
+    while (std::getline(list, entry, ','))
+    {
+      std::stringstream fields(entry);
+      std::string kind, degree, ratio;
+      std::getline(fields, kind, ':'); std::getline(fields, degree, ':'); std::getline(fields, ratio, ':');
+      MatrixFreeDPGTwoLevel::Options variant = solveOptions.twoLevel;
+      variant.weightedCycleBreaking = solveOptions.weightedCycleBreaking;
+      variant.mixedFaceTolerance = solveOptions.mixedFaceTolerance;
+      variant.transportSweep = (kind == "sweep");
+      variant.elementSchwarz = (kind == "es");
+      if (!degree.empty()) variant.chebyshevDegree = std::stoi(degree);
+      if (!ratio.empty()) variant.eigenRatio = std::stod(ratio);
+      t0 = now();
+      auto opPtr = Teuchos::rcp(new MatrixFreeDPGOperator(mesh, local, map, std::set<GlobalIndexType>(dirichletIndices.begin(), dirichletIndices.end())));
+      std::vector<MeshPtr> coarseMeshes = solveOptions.coarseGMG ? std::vector<MeshPtr>(meshes.begin(), meshes.end() - 1)
+                                                                 : std::vector<MeshPtr>{meshes[meshes.size() - 2]};
+      auto mg = Teuchos::rcp(new MatrixFreeDPGTwoLevel(opPtr, vlasovSolution, coarseMeshes, variant));
+      const double setupTime = seconds(t0, now());
+      MV u(map, 1);
+      t0 = now();
+      ConjugateGradientResult result = conjugateGradient(op, mg->preconditioner().get(), b, u, 1e-10, 20000);
+      const double time = seconds(t0, now());
+      if (rank == 0)
+        std::cout << "  multigrid variant " << entry << " (lambda_max " << mg->lambdaMax() << ", Chebyshev interval ["
+                  << mg->lambdaMax() / variant.eigenRatio << ", " << mg->lambdaMax() << "], " << mg->coarseLevelCount() << " coarse level(s)): "
+                  << result.iterations << " iterations, kappa ~ " << result.conditionNumber() << " (lambda in [" << result.lambdaMin
+                  << ", " << result.lambdaMax << "]), " << time << " s (setup " << setupTime << " s)\n";
+      if (solveOptions.slowModeDiagnose)
+      {
+        // power iteration on the error propagator E = I - M^{-1} S: its dominant mode is the slowest error mode
+        MV x(map, 1), Sx(map, 1), MSx(map, 1);
+        x.randomize();
+        {
+          auto view = x.getLocalViewHost(Tpetra::Access::ReadWrite);
+          for (GlobalIndexType dof : dirichletIndices) view(map->getLocalElement(dof), 0) = 0.0;
+        }
+        double factor = 0;
+        for (int it=0; it<30; it++)
+        {
+          x.scale(1.0 / x.getVector(0)->norm2());
+          op.apply(x, Sx);
+          mg->preconditioner()->apply(Sx, MSx);
+          x.update(-1.0, MSx, 1.0); // x <- (I - M^{-1} S) x
+          factor = x.getVector(0)->norm2();
+        }
+        if (rank == 0) std::cout << "  slowest error mode of variant " << entry << ": reduction per V-cycle ~ " << factor << "\n";
+        describeMode(x, mesh, local, op, map, "slowest error mode (" + entry + ")", rank);
+      }
+    }
   }
   if (compareAssembled)
   {
@@ -1804,6 +1871,11 @@ int main(int argc, char *argv[])
                    "Two-level matrix-free: Chebyshev with element-block additive Schwarz (fields and face fluxes of each element)");
     cmdp.setOption("matrixFreeSweepSmoother", "noMatrixFreeSweepSmoother", &matrixFreeSolveOptions.twoLevel.transportSweep,
                    "Matrix-free multigrid: Chebyshev with the transport sweep as its preconditioner (overrides the other smoother options)");
+    cmdp.setOption("matrixFreeSmootherVariants", &matrixFreeSolveOptions.smootherVariants,
+                   "Matrix-free multigrid: comma-separated smoother variants kind:degree:eigenRatio (kind: sweep or es), each run "
+                   "with the same operator (e.g. sweep:4:20,sweep:4:120,sweep:8:120,es:4:20)");
+    cmdp.setOption("matrixFreeSlowModeDiagnose", "noMatrixFreeSlowModeDiagnose", &matrixFreeSolveOptions.slowModeDiagnose,
+                   "With --matrixFreeSmootherVariants: power iteration on the multigrid error propagator, and where its slowest mode lives");
     cmdp.setOption("matrixFreeTxSweep", "noMatrixFreeTxSweep", &matrixFreeSolveOptions.txSweep,
                    "With --checkMatrixFreeOperator: one-level PCG with a t-x-only transport sweep (velocity-face traces as face "
                    "blocks), with the operator's coefficients and with the acceleration frozen at zero in the preconditioner");
