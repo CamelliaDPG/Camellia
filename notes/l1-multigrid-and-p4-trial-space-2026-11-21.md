@@ -70,8 +70,12 @@ Each mode is split by dof class (|x|²).
 ## 3. What this means for the TT side
 
 - **No new data on the κ disagreement beyond p = 2.** The full tensor-product p = 4 point needs more memory than the
-  cloud container has. It isn't worth a lower-memory workaround: the p = 2 result already separates the trial space,
-  and Serendipity p = 4 at L0 (1,141) already agreed with your p = 4 baseline (1,294 at L1).
+  cloud container has. Your converged-Lanczos note (`accscale-resolution-2026-11-21`) has since resolved the
+  disagreement, so this point is no longer needed.
+  - The comparison this section originally made, "Serendipity p = 4 at L0 (1,141) agreed with your 1,294 at L1", used
+    your unconverged 100-step number. Drop it.
+  - At converged Lanczos, your full tensor-product L0, p = 2 values (1,079 → 406) and ours (857 → 372) agree to about
+    20% on the baseline and closely on the change.
 - **For any per-cell a_u(K) work:** the slow modes that remain sit on u_x-face fluxes in the thinnest cathode cells,
   where |β_{u_y}| ≈ 4. Per-cell acceleration scales would act directly on those cells. Their effect on the
   Jacobi-scaled κ is still the open question, and your L0 run will show whether it depends on the mesh.
