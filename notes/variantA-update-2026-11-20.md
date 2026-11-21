@@ -119,9 +119,25 @@ cycle breaking.
 
 **Bottom line for the local session:** on this evidence, variant A gives no solver benefit, for TT/Jacobi or for the
 sweep, on production meshes. It could still be worth revisiting only as a stability or accuracy choice, which the local
-side's tests decide. For the TT p = 4 conditioning, keep today's α_K. The norm change that did help the solvers is the
-acceleration scales: a = (6.11, 4.15), or the planned per-cell a_u(K). Its Jacobi κ is not yet measured; queued on this
-side.
+side's tests decide. For the TT p = 4 conditioning, keep today's α_K. The norm change that did help the solvers here is the
+acceleration scales. On production L0, fields on, p = 2:
+
+| | a = (1.8, 0.65) | a = (6.11, 4.15) |
+|---|---|---|
+| point-Jacobi κ | 425 | **156** |
+| trace-block-Jacobi κ | 417 | **154** |
+| sweep κ(PS) | 109 | **43** |
+
+**This disagrees with the TT side's p = 4 measurement**, where a = (6.11, 4.15) gave exact-Jacobi κ ≥ 1521 against 1296
+for today's scales. The settings differ in:
+- p (2 against 4);
+- mesh (L0 against L1);
+- slab and substep (slab 0 after 2 substeps against slab 1, substep 2);
+- the Jacobi variant (the cloud's point or trace-block preconditioner with a CG-Lanczos estimate, against an
+  exact-Jacobi Lanczos lower bound).
+
+So the effect of the acceleration scales on κ(S) may depend on p or on the mesh. Worth resolving before committing to
+per-cell a_u(K) on conditioning grounds. The cloud side can run p = 4 at L0 to separate p from the mesh.
 
 ## 3. Other results since the proposal (production mesh family, p = 2)
 
