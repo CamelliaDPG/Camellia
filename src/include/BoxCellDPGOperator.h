@@ -77,6 +77,11 @@ namespace Camellia
                                 std::vector<double> &w, int &stride);
     //! the side ordinal of a local trial dof of a flux variable, or -1 for a field (volume) dof
     int dofSide(GlobalIndexType cellID, int localDof);
+    //! per local trial dof: the flux side's normal direction (-1 for a field dof) and endpoint, and per cell direction its
+    //! one-dimensional component sampled at points (cell reference coordinates, so the side's orientation is undone);
+    //! empty for the normal direction.  Basis functions are products of the components.
+    struct TrialDofLayout { int normal = -1; int endpoint = 0; std::vector<std::vector<double>> component; };
+    void trialDofLayout(GlobalIndexType cellID, const std::vector<double> &points, std::vector<TrialDofLayout> &layout);
     //! the cell direction normal to a side, and its endpoint (0: lower, 1: upper)
     void sideNormal(GlobalIndexType cellID, int side, int &normal, int &endpoint);
     //! [cell direction k]: the cell average of the summed coefficients of the field (volume) terms against the k-th

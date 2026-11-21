@@ -801,6 +801,52 @@ int BoxCellDPGOperator::dofSide(GlobalIndexType cellID, int localDof)
   return typeData(cellID).dofSide[localDof];
 }
 
+void BoxCellDPGOperator::trialDofLayout(GlobalIndexType cellID, const std::vector<double> &points, std::vector<TrialDofLayout> &layout)
+{
+  const TypeData &type = typeData(cellID);
+  const int dim = type.dim, Q = int(points.size());
+  layout.assign(trialDofCount(cellID), TrialDofLayout());
+  for (const FieldData &field : type.fields)
+  {
+    std::vector<std::vector<double>> tables(dim);
+    for (int k=0; k<dim; k++) field.basis.componentValues(k, points, tables[k]);
+    for (size_t a=0; a<field.dofIndex.size(); a++)
+    {
+      TrialDofLayout &entry = layout[field.dofIndex[a]];
+      entry.normal = -1;
+      entry.component.assign(dim, std::vector<double>());
+      for (int k=0; k<dim; k++)
+      {
+        const int n = field.basis.componentCardinality[k], ordinal = field.basis.componentOrdinals[a][k];
+        for (int q=0; q<Q; q++) entry.component[k].push_back(tables[k][size_t(q) * n + ordinal]);
+      }
+    }
+  }
+  for (const FluxSideData &fluxSide : type.fluxSides)
+  {
+    const SideData &side = type.sides[fluxSide.side];
+    std::vector<std::vector<double>> tables(dim - 1);
+    for (int i=0; i<dim-1; i++)
+    {
+      std::vector<double> sidePoints(Q);
+      for (int q=0; q<Q; q++) sidePoints[q] = side.sign[i] * points[q]; // side coordinate = sign * cell coordinate
+      fluxSide.basis.componentValues(i, sidePoints, tables[i]);
+    }
+    for (size_t a=0; a<fluxSide.dofIndex.size(); a++)
+    {
+      TrialDofLayout &entry = layout[fluxSide.dofIndex[a]];
+      entry.normal = side.normal;
+      entry.endpoint = side.endpoint;
+      entry.component.assign(dim, std::vector<double>());
+      for (int i=0; i<dim-1; i++)
+      {
+        const int n = fluxSide.basis.componentCardinality[i], ordinal = fluxSide.basis.componentOrdinals[a][i];
+        for (int q=0; q<Q; q++) entry.component[side.cellDirection[i]].push_back(tables[i][size_t(q) * n + ordinal]);
+      }
+    }
+  }
+}
+
 void BoxCellDPGOperator::sideNormal(GlobalIndexType cellID, int side, int &normal, int &endpoint)
 {
   const TypeData &type = typeData(cellID);

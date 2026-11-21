@@ -119,6 +119,7 @@ namespace
     vector<double> _accelerationBounds;
   public:
     bool _velocityTermsOnly = false; // the x- and t-terms moved to outflow-face terms (OutflowFaceWeight)
+    vector<FunctionPtr> _accelerationScales; // if nonempty: per-cell scales (constant on each cell) in place of the bounds
     TransportScaleL2Weight(double alpha, double scale, double c, int spaceDim, int velocityDim, const vector<double> &accelerationBounds,
                            bool velocityTermsOnly = false)
     : TFunction<double>(0), _alpha(alpha), _scale(scale), _c(c), _spaceDim(spaceDim), _velocityDim(velocityDim), _accelerationBounds(accelerationBounds),
@@ -133,6 +134,12 @@ namespace
       TEUCHOS_TEST_FOR_EXCEPTION((nodes.rank() != 3) || (nodes.dimension(0) != numCells) || (numNodes == 0) || (nodes.dimension(2) != dim),
                                  std::invalid_argument, "TransportScaleL2Weight: the BasisCache's physical cell nodes do not match the requested values");
       vector<double> lo(dim), hi(dim);
+      vector<FieldContainer<double>> scaleValues(_accelerationScales.size());
+      for (size_t j=0; j<_accelerationScales.size(); j++)
+      {
+        scaleValues[j].resize(numCells, numPoints);
+        _accelerationScales[j]->values(scaleValues[j], basisCache);
+      }
       for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
       {
         for (int d=0; d<dim; d++)
@@ -170,7 +177,8 @@ namespace
         for (int j=0; j<_velocityDim && j<int(_accelerationBounds.size()); j++)
         {
           const double h = hi[_spaceDim+1+j] - lo[_spaceDim+1+j];
-          transport += (_accelerationBounds[j] / h) * (_accelerationBounds[j] / h);
+          const double scale = _accelerationScales.empty() ? _accelerationBounds[j] : scaleValues[j](cellOrdinal,0);
+          transport += (scale / h) * (scale / h);
         }
         const double weight = _alpha + _scale * transport;
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
@@ -180,6 +188,54 @@ namespace
       }
     }
     string displayString() override { return "alpha_K (transport scale)"; }
+  };
+}
+
+namespace
+{
+  //! a_u(K) = max(safety-free max over the cell's points of |a_u|, floor), constant on each cell: the per-cell acceleration
+  //! scale of velocity direction u.  The cell maxima (all directions) are cached per cell box in a shared cache, so that
+  //! every evaluation in a substep (the solve's Gram matrices, GMG's coarse levels, the matrix-free check) agrees.
+  class PerCellAccelerationScale : public TFunction<double>
+  {
+    vector<FunctionPtr> _a; int _direction; double _floor;
+    std::shared_ptr<std::map<std::vector<long long>, std::vector<double>>> _cache;
+  public:
+    PerCellAccelerationScale(const vector<FunctionPtr> &a, int direction, double floor,
+                             std::shared_ptr<std::map<std::vector<long long>, std::vector<double>>> cache)
+    : TFunction<double>(0), _a(a), _direction(direction), _floor(floor), _cache(cache) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
+    {
+      const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
+      const int numCells = values.dimension(0), numPoints = values.dimension(1), numNodes = nodes.dimension(1), dim = nodes.dimension(2);
+      std::vector<FieldContainer<double>> aValues; // evaluated only if some cell is not cached
+      for (int c=0; c<numCells; c++)
+      {
+        std::vector<long long> key;
+        for (int k=0; k<dim; k++)
+        {
+          double lo = nodes(c,0,k), hi = lo;
+          for (int n=1; n<numNodes; n++) { lo = std::min(lo, nodes(c,n,k)); hi = std::max(hi, nodes(c,n,k)); }
+          key.push_back(std::llround(lo * 1e10)); key.push_back(std::llround(hi * 1e10));
+        }
+        auto it = _cache->find(key);
+        if (it == _cache->end())
+        {
+          if (aValues.empty())
+          {
+            aValues.resize(_a.size());
+            for (size_t j=0; j<_a.size(); j++) { aValues[j].resize(numCells, numPoints); _a[j]->values(aValues[j], basisCache); }
+          }
+          std::vector<double> maxima(_a.size(), 0.0);
+          for (size_t j=0; j<_a.size(); j++)
+            for (int p=0; p<numPoints; p++) maxima[j] = std::max(maxima[j], std::abs(aValues[j](c,p)));
+          it = _cache->emplace(key, maxima).first;
+        }
+        const double value = std::max(it->second[_direction], _floor);
+        for (int p=0; p<numPoints; p++) values(c,p) = value;
+      }
+    }
+    string displayString() override { return "a_u(K)"; }
   };
 }
 
@@ -279,6 +335,26 @@ namespace
   };
 }
 
+double RelativisticVlasovSpaceTimeFormulation::s_perCellAccelerationFloorFraction = 0.0;
+
+void RelativisticVlasovSpaceTimeFormulation::perCellAccelerationScaleRanges(std::vector<double> &minima, std::vector<double> &maxima, int &cellCount) const
+{
+  minima.clear(); maxima.clear(); cellCount = 0;
+  if (!_perCellAccelerationCache) return;
+  const int velocityDim = int(_testSpaceL2WeightAccelerationBounds.size());
+  for (const auto &entry : *_perCellAccelerationCache)
+  {
+    if (minima.empty()) { minima.assign(entry.second.size(), std::numeric_limits<double>::max()); maxima.assign(entry.second.size(), 0.0); }
+    for (size_t j=0; j<entry.second.size(); j++)
+    {
+      const double floor = (int(j) < velocityDim) ? s_perCellAccelerationFloorFraction * _testSpaceL2WeightAccelerationBounds[j] : 0.0;
+      const double value = std::max(entry.second[j], floor);
+      minima[j] = std::min(minima[j], value); maxima[j] = std::max(maxima[j], value);
+    }
+    cellCount++;
+  }
+}
+
 RelativisticVlasovSpaceTimeFormulation::RelativisticVlasovSpaceTimeFormulation(const double c, const double q, const double m,
                                                                                Teuchos::RCP<ConfigurationSpaceFormulation> configurationSpaceFormulation,
                                                                                MeshTopologyPtr spatialMeshTopology,
@@ -362,6 +438,17 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
   const int indexOffsetVelocityOneBased = indexOffsetTimeOneBased + 1;
   
   vector<FunctionPtr> a = this->a();
+  // per-cell acceleration scales (setPerCellAccelerationScales()), in place of the box-wide bounds
+  vector<FunctionPtr> accelerationScales;
+  if (s_perCellAccelerationFloorFraction > 0.0)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(int(_testSpaceL2WeightAccelerationBounds.size()) < velocityDim, std::invalid_argument,
+                               "per-cell acceleration scales need a box-wide bound in every velocity direction (for the floor)");
+    if (!_perCellAccelerationCache) _perCellAccelerationCache = std::make_shared<std::map<std::vector<long long>, std::vector<double>>>();
+    for (int vd=0; vd<velocityDim; vd++)
+      accelerationScales.push_back(Teuchos::rcp(new PerCellAccelerationScale(a, vd, s_perCellAccelerationFloorFraction * _testSpaceL2WeightAccelerationBounds[vd],
+                                                                            _perCellAccelerationCache)));
+  }
   
   // the direction-separable graph norm's Gram matrices are assembled from one-dimensional factors on box cells
   // (also when the L^2 term's constant mode is weakened, which SeparableTensorIP applies after either assembly path)
@@ -394,7 +481,8 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
           const double bound = (vd < int(_testSpaceL2WeightAccelerationBounds.size())) ? _testSpaceL2WeightAccelerationBounds[vd] : 0.0;
           TEUCHOS_TEST_FOR_EXCEPTION(bound <= 0.0, std::invalid_argument,
                                      "testSpaceSeparableGraphNorm needs a positive acceleration bound in every velocity direction");
-          ip->addTerm(bound * w->di(indexOffsetVelocityOneBased + vd));
+          if (accelerationScales.empty()) ip->addTerm(bound * w->di(indexOffsetVelocityOneBased + vd));
+          else ip->addTerm(accelerationScales[vd] * w->di(indexOffsetVelocityOneBased + vd));
         }
       }
       else
@@ -422,6 +510,7 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
         FunctionPtr weight = Teuchos::rcp(new TransportScaleL2Weight(_testSpaceL2Weight, _testSpaceL2WeightTransportScale, _c,
                                                                      spaceDim, velocityDim, _testSpaceL2WeightAccelerationBounds,
                                                                      outflowFaces));
+        if (!accelerationScales.empty()) dynamic_cast<TransportScaleL2Weight&>(*weight)._accelerationScales = accelerationScales;
         stabilization_term = Teuchos::rcp(new SqrtFunction<double>(weight)) * w;
         l2Weight = weight;
         if (outflowFaces)

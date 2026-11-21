@@ -2502,6 +2502,7 @@ void VlasovSpaceTimeFormulation::solve()
     if (releaseFreedMemoryRequested()) releaseFreedMemoryToOS(); // CAMELLIA_RELEASE_FREED_MEMORY
     MemoryCheckpoints::record("substep_start");
 
+    prepareVlasovSolve();
     // solve for f:
     if (!_useGeometricMultigrid)
     {

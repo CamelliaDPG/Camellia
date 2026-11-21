@@ -198,6 +198,52 @@ void MatrixFreeDPGOperator::diagonal(MV &d) const
   for (LO lid : _dirichletLocal) dView(lid,0) = 1.0;
 }
 
+void MatrixFreeDPGOperator::dofLayout(std::vector<DofLayout> &layout) const
+{
+  GlobalDofAssignmentPtr gda = _mesh->globalDofAssignment();
+  layout.assign(_map->getLocalNumElements(), DofLayout());
+  const std::vector<double> points = {-0.93, -0.61, -0.17, 0.29, 0.71, 0.97}; // asymmetric, so x and -x differ
+  std::map<std::vector<long long>, int> labels;
+  auto labelOf = [&](const std::vector<double> &values) {
+    double sign = 0, scale = 0;
+    for (double v : values) scale = std::max(scale, std::abs(v));
+    for (double v : values) if (std::abs(v) > 1e-8 * scale) { sign = (v > 0) ? 1 : -1; break; }
+    std::vector<long long> key;
+    for (double v : values) key.push_back(std::llround(1e8 * sign * v / ((scale > 0) ? scale : 1.0)));
+    auto it = labels.find(key);
+    if (it != labels.end()) return it->second;
+    const int label = int(labels.size());
+    labels[key] = label;
+    return label;
+  };
+  for (GlobalIndexType cellID : _cells)
+  {
+    std::vector<BoxCellDPGOperator::TrialDofLayout> local;
+    _local->trialDofLayout(cellID, points, local);
+    const int trialCount = int(local.size());
+    Camellia::FieldContainer<double> unit(trialCount), globalData;
+    Camellia::FieldContainer<GlobalIndexType> globalIndices;
+    for (int l=0; l<trialCount; l++)
+    {
+      unit.initialize(0.0);
+      unit[l] = 1.0;
+      gda->interpretLocalData(cellID, unit, globalData, globalIndices);
+      int count = 0, which = -1;
+      for (int i=0; i<globalIndices.size(); i++) if (globalData[i] != 0.0) { count++; which = i; }
+      if ((count != 1) || (std::abs(std::abs(globalData[which]) - 1.0) > 1e-10)) continue;
+      const LO lid = _map->getLocalElement(static_cast<GO>(globalIndices[which]));
+      if ((lid == Teuchos::OrdinalTraits<LO>::invalid()) || (layout[lid].cellID >= 0)) continue;
+      DofLayout &entry = layout[lid];
+      entry.cellID = static_cast<long long>(cellID);
+      entry.normal = local[l].normal;
+      entry.endpoint = local[l].endpoint;
+      entry.label.assign(local[l].component.size(), -1);
+      for (size_t k=0; k<local[l].component.size(); k++)
+        if (!local[l].component[k].empty()) entry.label[k] = labelOf(local[l].component[k]);
+    }
+  }
+}
+
 DiagonalScalingOperator::DiagonalScalingOperator(Teuchos::RCP<const MV> diagonal)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(diagonal->getNumVectors() != 1, std::invalid_argument, "the diagonal must have one column");

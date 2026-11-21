@@ -257,6 +257,8 @@ public:
 
   //! take time step.
   void solve();
+  //! called in solve() before each substep's Vlasov solve (the fields of the substep are set): e.g. to refresh field-dependent norms
+  virtual void prepareVlasovSolve() {}
   
   //! clear previously computed solution
   void clearSolution();

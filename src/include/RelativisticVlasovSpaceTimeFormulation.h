@@ -40,6 +40,11 @@ protected:
   const bool _fullTensorTestBasis; // if true, the test space is the full tensor-product space Q_k even when the trial basis family is serendipity
   const double _testSpaceOutflowFaceTheta; // if positive (with the separable graph norm and the transport-scale weight), the x- and t-parts of the transport-scale L^2 weight move to outflow-face terms theta s_d^2 / h_d int_{F+} w^2 (the marching-compatible norm, variant A)
   const TestSpaceInnerProduct _testSpaceInnerProduct;
+
+  // per-cell acceleration scales a_u(K) (see setPerCellAccelerationScales()): max over the cell's quadrature points of
+  // |(q/m) a_u|, cached per cell box; cleared before each Vlasov solve, when the fields have changed
+  std::shared_ptr<std::map<std::vector<long long>, std::vector<double>>> _perCellAccelerationCache;
+  static double s_perCellAccelerationFloorFraction;
   
   // Cache one relativistic first-moment Function per (velocity component, species).
   // The Function objects themselves own the persistent weighted-solution / weighted-moments state,
@@ -79,6 +84,19 @@ public:
   
   //! called from constructor, after Vlasov BF object is initialized.  Returns the inner product for the Vlasov BF.
   IPPtr constructVlasovInnerProduct() override;
+
+  /**
+   \brief Per-cell acceleration scales in the separable graph norm and the transport-scale L^2 weight (all slabs created
+   afterwards): a_u(K) = max(max_K |(q/m) a_u|, floorFraction A_u), A_u the box-wide bound, in place of A_u.  The
+   maximum is over the quadrature points of the cell, with the fields of the current substep.  0 (default): the box-wide bounds.
+   */
+  static void setPerCellAccelerationScales(double floorFraction) { s_perCellAccelerationFloorFraction = floorFraction; }
+  static double perCellAccelerationFloorFraction() { return s_perCellAccelerationFloorFraction; }
+  //! forget the per-cell scales (the fields changed); the next evaluation of the norm recomputes them
+  void clearPerCellAccelerationScales() { if (_perCellAccelerationCache) _perCellAccelerationCache->clear(); }
+  //! [velocity direction]: the smallest and largest per-cell scale currently cached (empty if none)
+  void perCellAccelerationScaleRanges(std::vector<double> &minima, std::vector<double> &maxima, int &cellCount) const;
+  void prepareVlasovSolve() override { clearPerCellAccelerationScales(); }
   
   //! Constructs and returns a VlasovSpaceTimeFormulation for the time slab following the present.  Should be called after all refinements and solves have been completed on the present time slab; modifications to the present time slab after the next slab is created may result in an invalid/incorrect application of boundary conditions in the next slab.  Subclasses should override.
   Teuchos::RCP<VlasovSpaceTimeFormulation> nextTimeSlab(double tWidth, int numTemporalElements) override;

@@ -185,6 +185,14 @@ namespace Camellia
     std::vector<int> mixedFaceBlocks(const std::vector<int> &order, double tolerance, int *mergedFaces = nullptr,
                                      int *largestBlock = nullptr) const;
 
+    //! per map lid (rank-owned dofs): the cell it is first met through (cellID -1 if none), its flux side's normal
+    //! direction (-1 for a field dof) and endpoint, and per cell direction a label for its one-dimensional component
+    //! (BoxCellDPGOperator::trialDofLayout()): equal labels are the same function up to sign, in cell reference
+    //! coordinates; -1 in the normal direction.  For tensor-product layouts of the dofs (e.g. low-rank fits of the
+    //! diagonal).  Dofs met through a constraint (coefficient other than +-1) are not assigned.
+    struct DofLayout { long long cellID = -1; int normal = -1, endpoint = 0; std::vector<int> label; };
+    void dofLayout(std::vector<DofLayout> &layout) const;
+
     //! the rank's cells, in the order the operator visits them
     const std::vector<GlobalIndexType> &cells() const { return _cells; }
 

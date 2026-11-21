@@ -55,6 +55,7 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <thread>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -956,6 +957,8 @@ struct MatrixFreeSolveOptions
   bool compareSmoothers = false; // after the multigrid solve, repeat it with the other of {transport sweep, element Schwarz}
   std::string smootherVariants; // comma-separated kind:degree:ratio (kind sweep or es): multigrid PCG with each, one production solve
   bool slowModeDiagnose = false; // with smootherVariants: power iteration on I - M^{-1} S for each, and where its slow mode lives
+  std::string diagonalFitPath; // write the exact diagonal with each dof's tensor layout here, wait for <path>.ready (a list of
+                               // "name file" lines: fitted diagonals, "lid value" per line), and run Jacobi PCG with each
   bool txSweep = false; // one-level PCG with a t-x-only sweep (velocity faces as face blocks), actual and frozen (zero-field) coefficients
   bool multiplicativeSchwarz = false; // one-level PCG with element Schwarz: additive, and multiplicative in several orders
   bool sweepOnly = false;             // with multiplicativeSchwarz: only the transport sweep
@@ -1042,6 +1045,9 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
                                    const MatrixFreeSolveOptions &solveOptions, int rank)
 {
   SolutionPtr vlasovSolution = form->vlasovSolution();
+  // per-cell acceleration scales: from the current fields (those of the operator checked)
+  auto relativisticForm = Teuchos::rcp_dynamic_cast<RelativisticVlasovSpaceTimeFormulation>(form);
+  if (!relativisticForm.is_null()) relativisticForm->clearPerCellAccelerationScales();
   auto ip = Teuchos::rcp_dynamic_cast<SeparableTensorIP>(vlasovSolution->ip());
   if (ip.is_null())
   {
@@ -1135,6 +1141,85 @@ void checkMatrixFreeVlasovOperator(Teuchos::RCP<VlasovSpaceTimeFormulation> form
   op.diagonal(*diagonal);
   DiagonalScalingOperator pointJacobi(diagonal);
   const double pointSetupTime = seconds(t0, now());
+  if (!relativisticForm.is_null() && (RelativisticVlasovSpaceTimeFormulation::perCellAccelerationFloorFraction() > 0.0) && (rank == 0))
+  {
+    std::vector<double> minima, maxima;
+    int cellCount;
+    relativisticForm->perCellAccelerationScaleRanges(minima, maxima, cellCount);
+    std::cout << "checkMatrixFreeOperator: per-cell acceleration scales (floor fraction "
+              << RelativisticVlasovSpaceTimeFormulation::perCellAccelerationFloorFraction() << ", " << cellCount << " cells):";
+    for (size_t j=0; j<minima.size(); j++) std::cout << " a_" << j << " in [" << minima[j] << ", " << maxima[j] << "]";
+    std::cout << "\n";
+  }
+  if (!solveOptions.diagonalFitPath.empty())
+  {
+    // the exact diagonal, with each dof's place in a tensor-product layout: its cell's box, flux normal and endpoint, and
+    // per direction a label of its one-dimensional component (MatrixFreeDPGOperator::dofLayout())
+    TEUCHOS_TEST_FOR_EXCEPTION(MPIWrapper::TeuchosCommWorld()->getSize() != 1, std::invalid_argument, "matrixFreeDiagonalFit runs on one rank");
+    using LO = TMap::local_ordinal_type;
+    const int dim = mesh->getDimension();
+    std::vector<MatrixFreeDPGOperator::DofLayout> layout;
+    op.dofLayout(layout);
+    std::set<GlobalIndexType> dirichletSet(dirichletIndices.begin(), dirichletIndices.end());
+    auto dView = diagonal->getLocalViewHost(Tpetra::Access::ReadOnly);
+    {
+      std::ofstream out(solveOptions.diagonalFitPath);
+      out << std::setprecision(17);
+      out << "# lid dirichlet diagonal normal endpoint lower[" << dim << "] width[" << dim << "] label[" << dim << "]\n";
+      std::map<long long, Camellia::FieldContainer<double>> nodesOf;
+      for (size_t lid=0; lid<layout.size(); lid++)
+      {
+        const auto &entry = layout[lid];
+        const bool isDirichlet = dirichletSet.count(GlobalIndexType(map->getGlobalElement(LO(lid)))) > 0;
+        out << lid << " " << (isDirichlet ? 1 : 0) << " " << dView(lid,0) << " " << entry.normal << " " << entry.endpoint;
+        std::vector<double> lo(dim, 0.0), hi(dim, 0.0);
+        if (entry.cellID >= 0)
+        {
+          if (!nodesOf.count(entry.cellID)) nodesOf[entry.cellID] = mesh->physicalCellNodesForCell(GlobalIndexType(entry.cellID));
+          const auto &nodes = nodesOf[entry.cellID]; // (1, nodes, dim)
+          for (int k=0; k<dim; k++)
+          {
+            lo[k] = hi[k] = nodes(0,0,k);
+            for (int n=1; n<nodes.dimension(1); n++) { lo[k] = std::min(lo[k], nodes(0,n,k)); hi[k] = std::max(hi[k], nodes(0,n,k)); }
+          }
+        }
+        for (int k=0; k<dim; k++) out << " " << lo[k];
+        for (int k=0; k<dim; k++) out << " " << hi[k] - lo[k];
+        for (int k=0; k<dim; k++) out << " " << ((entry.cellID >= 0) ? entry.label[k] : -2);
+        out << "\n";
+      }
+    }
+    if (rank == 0) std::cout << "checkMatrixFreeOperator: wrote the diagonal and the dof layout to " << solveOptions.diagonalFitPath
+                             << "; waiting for " << solveOptions.diagonalFitPath << ".ready" << std::endl;
+    const std::string readyPath = solveOptions.diagonalFitPath + ".ready";
+    struct stat buffer;
+    while (stat(readyPath.c_str(), &buffer) != 0) std::this_thread::sleep_for(std::chrono::seconds(10));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::ifstream ready(readyPath);
+    std::string name, file;
+    while (ready >> name >> file)
+    {
+      auto fitted = Teuchos::rcp(new MV(map, 1));
+      fitted->putScalar(1.0);
+      {
+        auto fView = fitted->getLocalViewHost(Tpetra::Access::ReadWrite);
+        std::ifstream in(file);
+        long long lid; double value;
+        int count = 0;
+        while (in >> lid >> value) { fView(lid,0) = value; count++; }
+        if (rank == 0) std::cout << "  fitted diagonal " << name << ": " << count << " values read" << std::endl;
+      }
+      for (GlobalIndexType dof : dirichletIndices) fitted->getLocalViewHost(Tpetra::Access::ReadWrite)(map->getLocalElement(dof), 0) = 1.0;
+      DiagonalScalingOperator fittedJacobi(fitted);
+      MV u(map, 1);
+      t0 = now();
+      ConjugateGradientResult result = conjugateGradient(op, &fittedJacobi, b, u, 1e-12, 50000);
+      if (rank == 0)
+        std::cout << "  Jacobi with diagonal " << name << ": " << result.iterations << " iterations to 1e-12, kappa ~ "
+                  << result.conditionNumber() << " (lambda in [" << result.lambdaMin << ", " << result.lambdaMax << "]), "
+                  << seconds(t0, now()) << " s" << std::endl;
+    }
+  }
   t0 = now();
   Teuchos::RCP<TOperator<double>> traceBlockJacobi = op.traceBlockJacobi();
   const double blockSetupTime = seconds(t0, now());
@@ -1892,6 +1977,9 @@ int main(int argc, char *argv[])
                    "with the same operator (e.g. sweep:4:20,sweep:4:120,sweep:8:120,es:4:20)");
     cmdp.setOption("matrixFreeSlowModeDiagnose", "noMatrixFreeSlowModeDiagnose", &matrixFreeSolveOptions.slowModeDiagnose,
                    "With --matrixFreeSmootherVariants: power iteration on the multigrid error propagator, and where its slowest mode lives");
+    cmdp.setOption("matrixFreeDiagonalFit", &matrixFreeSolveOptions.diagonalFitPath,
+                   "With --checkMatrixFreeOperator: write the exact diagonal and the dofs' tensor layout to this path, wait for "
+                   "<path>.ready (lines 'name file', each file 'lid value' lines of a fitted diagonal), and run Jacobi PCG with each");
     cmdp.setOption("matrixFreeTxSweep", "noMatrixFreeTxSweep", &matrixFreeSolveOptions.txSweep,
                    "With --checkMatrixFreeOperator: one-level PCG with a t-x-only transport sweep (velocity-face traces as face "
                    "blocks), with the operator's coefficients and with the acceleration frozen at zero in the preconditioner");
@@ -1935,6 +2023,11 @@ int main(int argc, char *argv[])
     cmdp.setOption("matrixFreeQuadratureEnrichment", &matrixFreeQuadratureEnrichment,
                    "Quadrature enrichment of the matrix-free operator: n_k + ceil(enrichment / 2) Gauss points per direction");
     double L2WeightGraphOutflowFaceTheta = 0.0;
+    double L2WeightGraphPerCellAccelerationFloor = 0.0;
+    cmdp.setOption("L2WeightGraphPerCellAccelerationFloor", &L2WeightGraphPerCellAccelerationFloor,
+                   "If positive: per-cell acceleration scales a_u(K) = max(max_K |(q/m) a_u|, floor A_u) in the separable graph norm "
+                   "and the transport-scale weight, in place of the box-wide bounds A_u (L2WeightGraphAccelerationBounds), "
+                   "from each substep's fields");
     cmdp.setOption("L2WeightGraphOutflowFaceTheta", &L2WeightGraphOutflowFaceTheta,
                    "Separable graph norm with the transport-scale weight: if positive, move the weight's x- and t-parts to outflow-face "
                    "terms theta s_d^2 / h_d int_{F+} w^2 (the marching-compatible norm, variant A; theta = L2WeightGraphTransportScale "
@@ -2388,6 +2481,7 @@ int main(int argc, char *argv[])
       }
     }
     VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(s_hpAdaptivity ? hpInitialH1Order : 0);
+    RelativisticVlasovSpaceTimeFormulation::setPerCellAccelerationScales(L2WeightGraphPerCellAccelerationFloor);
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
@@ -2610,6 +2704,7 @@ int main(int argc, char *argv[])
       suffix << "_serendipity";
       if (useFullTensorTestBasis) suffix << "_fullTensorTest";
       if (L2WeightGraphOutflowFaceTheta > 0.0) suffix << "_outflowTheta" << L2WeightGraphOutflowFaceTheta;
+      if (L2WeightGraphPerCellAccelerationFloor > 0.0) suffix << "_perCellA" << L2WeightGraphPerCellAccelerationFloor;
     }
     else
     {
