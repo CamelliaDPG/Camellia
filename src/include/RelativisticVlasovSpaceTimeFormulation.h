@@ -46,6 +46,7 @@ protected:
   std::shared_ptr<std::map<std::vector<long long>, std::vector<double>>> _perCellAccelerationCache;
   static double s_perCellAccelerationFloorFraction;
   static int s_perCellAccelerationNeighborhood;
+  static double s_perCellAccelerationMixedSignFactor;
   
   // Cache one relativistic first-moment Function per (velocity component, species).
   // The Function objects themselves own the persistent weighted-solution / weighted-moments state,
@@ -96,6 +97,9 @@ public:
   //! the per-cell scale from the cell and its face neighbors: 0 the cell alone, 1 with its neighbors across velocity faces,
   //! 2 with all its face neighbors (the maximum of the cells' maxima)
   static void setPerCellAccelerationNeighborhood(int neighborhood) { s_perCellAccelerationNeighborhood = neighborhood; }
+  //! multiply a_u(K) by this factor on cells where (q/m) a_u takes both signs over the cell's quadrature points (the cell's
+  //! u-faces have mixed orientation, which the transport sweep gets wrong); 1: no change
+  static void setPerCellAccelerationMixedSignFactor(double factor) { s_perCellAccelerationMixedSignFactor = factor; }
   //! forget the per-cell scales (the fields changed); the next evaluation of the norm recomputes them
   void clearPerCellAccelerationScales() { if (_perCellAccelerationCache) _perCellAccelerationCache->clear(); }
   //! [velocity direction]: the smallest and largest per-cell scale currently cached (empty if none)

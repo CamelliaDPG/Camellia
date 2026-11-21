@@ -2025,6 +2025,9 @@ int main(int argc, char *argv[])
     double L2WeightGraphOutflowFaceTheta = 0.0;
     double L2WeightGraphPerCellAccelerationFloor = 0.0;
     int L2WeightGraphPerCellAccelerationNeighborhood = 0;
+    double L2WeightGraphPerCellAccelerationMixedSignFactor = 1.0;
+    cmdp.setOption("L2WeightGraphPerCellAccelerationMixedSignFactor", &L2WeightGraphPerCellAccelerationMixedSignFactor,
+                   "Per-cell acceleration scales: multiply a_u(K) by this factor on cells where (q/m) a_u changes sign over the cell");
     cmdp.setOption("L2WeightGraphPerCellAccelerationNeighborhood", &L2WeightGraphPerCellAccelerationNeighborhood,
                    "Per-cell acceleration scales from the cell and its face neighbors: 0 the cell alone, 1 with its neighbors across "
                    "velocity faces, 2 with all face neighbors");
@@ -2487,6 +2490,7 @@ int main(int argc, char *argv[])
     VlasovSpaceTimeFormulation::setBoxMeshInitialH1Order(s_hpAdaptivity ? hpInitialH1Order : 0);
     RelativisticVlasovSpaceTimeFormulation::setPerCellAccelerationScales(L2WeightGraphPerCellAccelerationFloor);
     RelativisticVlasovSpaceTimeFormulation::setPerCellAccelerationNeighborhood(L2WeightGraphPerCellAccelerationNeighborhood);
+    RelativisticVlasovSpaceTimeFormulation::setPerCellAccelerationMixedSignFactor(L2WeightGraphPerCellAccelerationMixedSignFactor);
     auto form = getFormulation1D1T2V(cScaled, x0, xWidth, t0, tWidth, velocitySpaceVertices_x, velocitySpaceVertices_y, xElements, tElements,
                                      q, eps0, m, H1Order, delta_k, testIP, L2WeightGraph, usePeriodicBCs,
                                      useSerendipityBasis, useGeometricGradedSpatialMesh, numUniformRefinements,
@@ -2711,6 +2715,7 @@ int main(int argc, char *argv[])
       if (L2WeightGraphOutflowFaceTheta > 0.0) suffix << "_outflowTheta" << L2WeightGraphOutflowFaceTheta;
       if (L2WeightGraphPerCellAccelerationFloor > 0.0) suffix << "_perCellA" << L2WeightGraphPerCellAccelerationFloor;
       if (L2WeightGraphPerCellAccelerationNeighborhood > 0) suffix << "_nbhd" << L2WeightGraphPerCellAccelerationNeighborhood;
+      if (L2WeightGraphPerCellAccelerationMixedSignFactor != 1.0) suffix << "_mixedSign" << L2WeightGraphPerCellAccelerationMixedSignFactor;
     }
     else
     {

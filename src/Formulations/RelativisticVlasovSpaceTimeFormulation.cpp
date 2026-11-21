@@ -202,7 +202,7 @@ namespace
   class PerCellAccelerationScale : public TFunction<double>
   {
     using Cache = std::map<std::vector<long long>, std::vector<double>>;
-    vector<FunctionPtr> _a; int _direction; double _floor; int _spaceDim, _neighborhood;
+    vector<FunctionPtr> _a; int _direction; double _floor; int _spaceDim, _neighborhood; double _mixedSignFactor;
     std::shared_ptr<Cache> _cache;
     // the cell's box as a key, with a last entry: 0 for the cell's own maxima, the neighborhood mode for the combined ones
     static std::vector<long long> boxKey(const FieldContainer<double> &nodes, int c, std::vector<double> *lo = nullptr, std::vector<double> *hi = nullptr)
@@ -232,15 +232,27 @@ namespace
         aValues.resize(_a.size());
         for (size_t j=0; j<_a.size(); j++) { aValues[j].resize(numCells, numPoints); _a[j]->values(aValues[j], basisCache); }
       }
-      std::vector<double> maxima(_a.size(), 0.0);
-      for (size_t j=0; j<_a.size(); j++)
-        for (int p=0; p<numPoints; p++) maxima[j] = std::max(maxima[j], std::abs(aValues[j](c,p)));
+      // [j]: max |a_j| over the points; [n + j]: 1 if a_j takes both signs there (the cell's j-faces have mixed orientation)
+      const size_t n = _a.size();
+      std::vector<double> maxima(2 * n, 0.0);
+      for (size_t j=0; j<n; j++)
+      {
+        double lo = std::numeric_limits<double>::max(), hi = -lo;
+        for (int p=0; p<numPoints; p++)
+        {
+          const double value = aValues[j](c,p);
+          maxima[j] = std::max(maxima[j], std::abs(value));
+          lo = std::min(lo, value); hi = std::max(hi, value);
+        }
+        maxima[n + j] = ((lo < 0.0) && (hi > 0.0)) ? 1.0 : 0.0;
+      }
       return _cache->emplace(key, maxima).first->second;
     }
   public:
     PerCellAccelerationScale(const vector<FunctionPtr> &a, int direction, double floor, int spaceDim, int neighborhood,
-                             std::shared_ptr<Cache> cache)
-    : TFunction<double>(0), _a(a), _direction(direction), _floor(floor), _spaceDim(spaceDim), _neighborhood(neighborhood), _cache(cache) {}
+                             double mixedSignFactor, std::shared_ptr<Cache> cache)
+    : TFunction<double>(0), _a(a), _direction(direction), _floor(floor), _spaceDim(spaceDim), _neighborhood(neighborhood),
+      _mixedSignFactor(mixedSignFactor), _cache(cache) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
     {
       const FieldContainer<double> &nodes = basisCache->getPhysicalCellNodes();
@@ -287,13 +299,15 @@ namespace
                 neighborCache = BasisCache::basisCacheForCell(mesh, neighborID);
                 neighborMaxima = &ownMaxima(neighborKey, neighborCache, 0, neighborValues);
               }
-              for (size_t j=0; j<combined.size(); j++) combined[j] = std::max(combined[j], (*neighborMaxima)[j]);
+              for (size_t j=0; j<combined.size()/2; j++) combined[j] = std::max(combined[j], (*neighborMaxima)[j]); // the cell's own sign flags kept
             }
             it = _cache->emplace(combinedKey, combined).first;
           }
           scales = &it->second;
         }
-        const double value = std::max((*scales)[_direction], _floor);
+        const size_t n = _a.size();
+        const double factor = ((*scales)[n + _direction] > 0.0) ? _mixedSignFactor : 1.0;
+        const double value = std::max(factor * (*scales)[_direction], _floor);
         for (int p=0; p<numPoints; p++) values(c,p) = value;
       }
     }
@@ -399,6 +413,7 @@ namespace
 
 double RelativisticVlasovSpaceTimeFormulation::s_perCellAccelerationFloorFraction = 0.0;
 int RelativisticVlasovSpaceTimeFormulation::s_perCellAccelerationNeighborhood = 0;
+double RelativisticVlasovSpaceTimeFormulation::s_perCellAccelerationMixedSignFactor = 1.0;
 
 void RelativisticVlasovSpaceTimeFormulation::perCellAccelerationScaleRanges(std::vector<double> &minima, std::vector<double> &maxima, int &cellCount) const
 {
@@ -408,11 +423,13 @@ void RelativisticVlasovSpaceTimeFormulation::perCellAccelerationScaleRanges(std:
   for (const auto &entry : *_perCellAccelerationCache)
   {
     if (entry.first.back() != s_perCellAccelerationNeighborhood) continue; // the scales in use (own or combined maxima)
-    if (minima.empty()) { minima.assign(entry.second.size(), std::numeric_limits<double>::max()); maxima.assign(entry.second.size(), 0.0); }
-    for (size_t j=0; j<entry.second.size(); j++)
+    const size_t n = entry.second.size() / 2;
+    if (minima.empty()) { minima.assign(n, std::numeric_limits<double>::max()); maxima.assign(n, 0.0); }
+    for (size_t j=0; j<n; j++)
     {
       const double floor = (int(j) < velocityDim) ? s_perCellAccelerationFloorFraction * _testSpaceL2WeightAccelerationBounds[j] : 0.0;
-      const double value = std::max(entry.second[j], floor);
+      const double factor = (entry.second[n + j] > 0.0) ? s_perCellAccelerationMixedSignFactor : 1.0;
+      const double value = std::max(factor * entry.second[j], floor);
       minima[j] = std::min(minima[j], value); maxima[j] = std::max(maxima[j], value);
     }
     cellCount++;
@@ -511,7 +528,8 @@ IPPtr RelativisticVlasovSpaceTimeFormulation::constructVlasovInnerProduct()
     if (!_perCellAccelerationCache) _perCellAccelerationCache = std::make_shared<std::map<std::vector<long long>, std::vector<double>>>();
     for (int vd=0; vd<velocityDim; vd++)
       accelerationScales.push_back(Teuchos::rcp(new PerCellAccelerationScale(a, vd, s_perCellAccelerationFloorFraction * _testSpaceL2WeightAccelerationBounds[vd],
-                                                                            spaceDim, s_perCellAccelerationNeighborhood, _perCellAccelerationCache)));
+                                                                            spaceDim, s_perCellAccelerationNeighborhood,
+                                                                            s_perCellAccelerationMixedSignFactor, _perCellAccelerationCache)));
   }
   
   // the direction-separable graph norm's Gram matrices are assembled from one-dimensional factors on box cells
