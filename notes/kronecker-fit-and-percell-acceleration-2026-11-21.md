@@ -11,8 +11,9 @@ Re: `reply2-accscale-2026-11-21.md`. These are the two runs you asked for:
    - TT rank 4 per block comes within 9% (a1) and 25% (a2) of the exact diagonal.
    - Tolerance-based TT truncation is not monotone in κ, because a Frobenius error in d^-1/2 does not control the
      entrywise ratio d_fit/d, and κ follows that ratio.
-2. **Per-cell a_u(K) costs nothing for Jacobi or element Schwarz at L0.** Against the box-wide (6.11, 4.15), Jacobi takes
-   119 iterations instead of 123, element Schwarz 8 instead of 8.
+2. **Per-cell a_u(K) costs little for Jacobi and element Schwarz.** Against the box-wide (6.11, 4.15):
+   - L0: Jacobi 119 iterations instead of 123, element Schwarz 8 instead of 8.
+   - L1: Jacobi 266 instead of 245 (+9%, κ 914 against 703), element Schwarz 22 instead of 20.
 3. **Per-cell a_u(K) makes the sweep smoother's λ_max(PS) larger, but this does not grow under refinement.**
    - λ_max(PS) is about 52–57 at L0 against 22.5 box-wide. The top mode sits on u_x-face fluxes in the thin cathode
      cells.
@@ -110,16 +111,19 @@ Code: `RelativisticVlasovSpaceTimeFormulation::setPerCellAccelerationScales(floo
 
 | scales | Jacobi κ (its) | λ_max(PS) | sweep:4:20 | sweep:8:120 | es:4:20 |
 |---|---|---|---|---|---|
-| box-wide (6.11, 4.15) | PENDING | 20.3 | 10 (637 s) | 8 (884 s) | 20 (1,286 s) |
-| per-cell | 914 (266) | 37.2 | 14 (935 s) | 8 (905 s) | 22 (1,348 s) |
+| box-wide (6.11, 4.15) | 703 (245), 1,199 s | 20.3 | 10 (637 s) | 8 (884 s) | 20 (1,286 s) |
+| per-cell | 914 (266), 1,345 s | 37.2 | 14 (935 s) | 8 (905 s) | 22 (1,348 s) |
 
-Times are PCG solve times without setup. Trace-block Jacobi at L1, per-cell: κ 899 (263 iterations), again within a few
-percent of point Jacobi.
+Times are PCG solve times without setup. Trace-block Jacobi at L1 is again within a few percent of point Jacobi: κ 694
+(243 iterations) box-wide, 899 (263) per-cell.
 
 **Observations.**
-- **Jacobi.** κ with per-cell scales is 17% higher than box-wide at L0, but takes 3% fewer iterations. The per-cell κ
-  grows ×5.0 from L0 to L1. The box-wide L1 number will show whether that is the per-cell scales or the Serendipity
-  operator; your exact-diagonal growth on the full tensor-product space was ×3.2.
+- **Jacobi.**
+  - κ with per-cell scales is 17% higher than box-wide at L0 but takes 3% fewer iterations. At L1 it is 30% higher and
+    takes 9% more iterations (1.12× the solve time).
+  - From L0 to L1, κ grows ×4.5 box-wide (156 → 703) and ×5.0 per-cell (182 → 914). So most of the growth beyond your
+    ×3.2 (exact diagonal, full tensor-product space) belongs to our Serendipity operator, not to the per-cell scales.
+    The per-cell scales add a little on top.
 - **Element Schwarz** is unaffected by the per-cell scales. It degrades under refinement either way (8 → 20–22).
 - **The sweep.**
   - The per-cell scales roughly double λ_max(PS), so a Chebyshev interval fixed by ratio gets wider at the top.
@@ -139,6 +143,7 @@ percent of point Jacobi.
 
 **What this means for the choice.**
 - At L0 and L1, per-cell scales do not improve conditioning over the wide box-wide a for any of our preconditioners.
+  For Jacobi they are slightly worse at L1, and the gap may widen with refinement.
 - They cost the sweep smoother a constant factor that does not grow under refinement.
 - Their case is the accuracy and robustness argument: the norm tracks the fields cell by cell and needs no box-wide
   bound. That is the coupled-accuracy question you raised, not a solver one.
