@@ -1,6 +1,10 @@
 # Per-cell acceleration scales: anode and cathode mode tests at L0, p = 3 (cloud side, 2026-11-22)
 
-Re: `answers-mode-tests-2026-11-22.md`. This covers the p = 3 pair. The p = 4 pair is still running (see the end).
+Re: `answers-mode-tests-2026-11-22.md`. This covers the p = 3 pair in full, and the p = 4 pair through slab 18 of 25
+(still running).
+
+**Update, p = 4 at slab 18: the production box-wide weight grows the anode mode at L0, and per-cell scales hold.** At
+p = 3 the order is the reverse (per-cell worse, both bounded). See "p = 4, interim" below.
 
 **Summary.**
 - **Cathode mode: none in either run.** ∫n⁻ over the cathode cells is −0.02 at slabs 1–2 (start-up), then zero from slab 4
@@ -95,8 +99,55 @@ Re: `answers-mode-tests-2026-11-22.md`. This covers the p = 3 pair. The p = 4 pa
 - `--vlasovCellBatchSize=2` keeps a run under 2 GB (L0, p = 3 and 4), against about 6 GB with the automatic batch.
   - Before commit 8adfdb7 it applied only to slab 0, because `nextTimeSlab()` builds new solutions.
 
+## p = 4, interim (slab 18 of 25)
+
+Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
+
+| slab | 5 | 7 | 9 | 11 | 13 | 14 | 15 | 16 | 17 | 18 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| base ∫n⁻ | −0.0026 | −0.0225 | −0.0177 | −0.0115 | −0.0108 | −0.0134 | −0.0211 | −0.0428 | −0.0983 | **−0.236** |
+| base growth | | | | | | 1.24× | 1.6× | 2.0× | 2.3× | 2.4× |
+| per-cell ∫n⁻ | −0.0035 | −0.0443 | −0.033 | −0.0243 | −0.0219 | −0.0227 | −0.0251 | −0.0287 | −0.0334 | −0.0398 |
+| per-cell growth | | | | | | 1.04× | 1.1× | 1.15× | 1.16× | 1.19× |
+
+- **Base (production a = (1.8, 0.65) box-wide) has the anode-mode signature from slab 14:**
+  - rising growth, 2.4× per slab by slab 18;
+  - min n −1.15 at x ≈ 0.87–0.93, in the anode cell;
+  - ∫f⁻ accelerating, −1.27 → −3.02 over slabs 15–18;
+  - the charge-balance error growing to −0.0097;
+  - the gap's ∫n falling from 2.32 to 1.88.
+- **Per-cell (floor 0.1, factor 1.0):**
+  - ∫n⁻ about 2× base through slab 13, then slow growth of 1.1–1.2× per slab;
+  - ∫f⁻ improving, −1.17 → −0.81;
+  - charge balance about 0.002;
+  - min n −0.13 at slab 18, now at x = 0.5, the face between the last two cells.
+- Emission (0.028–0.035 n0) and E(0) (within ±0.0009 E0) are the same in both runs so far.
+- **Why base fails here, though your L1 p = 4 run with the same weight was stable (our reading, not checked):**
+  - The L0 anode cell has h_x = 1/2, against 1/4 at L1, so the weight's (v_x,max/h_x)² term there is 4× smaller.
+  - That is the situation of your mesh-scale anode failure.
+  - Per-cell scales put more weight where the fields exceed the box-wide bound.
+- CG iterations per substep are similar in both runs (20–75) and not yet rising.
+
+## The p = 3 variants (slab 24 of 30)
+
+Anode side (x ≥ 0.5) ∫n⁻ at slab end:
+
+| slab | 18 | 19 | 20 | 21 | 22 | 23 | 24 |
+|---|---|---|---|---|---|---|---|
+| base | 0 | 0 | 0 | −0.00015 | −0.00065 | −0.0012 | −0.0016 |
+| per-cell | −0.00027 | −0.0025 | −0.0073 | −0.0142 | −0.0218 | −0.0288 | −0.0344 |
+| per-cell, floor 1.0 | 0 | −0.00056 | −0.0032 | −0.0076 | −0.0125 | −0.0174 | −0.0215 |
+| per-cell, neighborhood 2 | −0.0015 | −0.0049 | −0.0112 | −0.0196 | −0.0286 | −0.0372 | −0.0439 |
+
+- **Floor 1.0** starts one slab later and is about 40% smaller than plain per-cell at slab 24. It is still about 13×
+  base. Its slab 4–9 transient is the same as plain per-cell's (−0.0036, −0.0039, −0.0022 at slabs 4–6).
+  - So cells with a_u(K) below the box-wide bound explain only a small part of the p = 3 difference. The guess above
+    is mostly wrong.
+- **The neighborhood maximum** is worse than plain per-cell: it starts at slab 15 and is larger.
+- So at p = 3 the extra anode-side negative density comes from where per-cell scales are larger than box-wide or from
+  their variation between cells, not from cells where they are smaller.
+
 ## Still running
 
-- **p = 4 pair** (L0, 25 slabs, base and per-cell floor 0.1): at slab 6 of 25, about 43 min per slab. Base and per-cell
-  agree so far.
-- **The two p = 3 variants** above: about 8 hours.
+- The p = 4 pair: slabs 19–24, about 4.5 hours.
+- The p = 3 variants: slabs 25–29, about 1.5 hours.
