@@ -3500,6 +3500,7 @@ int main(int argc, char *argv[])
         auto timingNextTimeSlabStart = timing.now();
         if (emissionProfile != Teuchos::null) emissionProfile->advanceToNextSlab(form->t1(), form->t1() + tWidth);
         form = form->nextTimeSlab(tWidth, tElements);
+        if (vlasovCellBatchSize > 0) form->vlasovSolution()->setCellBatchSize(vlasovCellBatchSize); // the new slab has new solutions
         timing.logDuration("next_time_slab", timing.elapsedSince(timingNextTimeSlabStart),
                            {{"completed_slab", std::to_string(timeSlabOrdinal)}});
         if (timing.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
@@ -3914,6 +3915,7 @@ int main(int argc, char *argv[])
           // next time slab
           auto timingNextTimeSlabStart = timing.now();
           form = form->nextTimeSlab(tWidth, tElements);
+          if (vlasovCellBatchSize > 0) form->vlasovSolution()->setCellBatchSize(vlasovCellBatchSize); // the new slab has new solutions
           timing.logDuration("next_time_slab", timing.elapsedSince(timingNextTimeSlabStart),
                              {{"completed_slab", std::to_string(timeSlabOrdinal)}});
           if (timing.enabled()) form->vlasovBF()->setOptimalTestTimingCallback(timingOptimalTestTimingCallback); // the substep profile callback is carried by nextTimeSlab()
