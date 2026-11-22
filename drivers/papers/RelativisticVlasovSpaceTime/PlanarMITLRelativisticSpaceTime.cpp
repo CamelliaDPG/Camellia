@@ -2026,6 +2026,10 @@ int main(int argc, char *argv[])
     double L2WeightGraphPerCellAccelerationFloor = 0.0;
     int L2WeightGraphPerCellAccelerationNeighborhood = 0;
     double L2WeightGraphPerCellAccelerationMixedSignFactor = 1.0;
+    int vlasovCellBatchSize = -1;
+    cmdp.setOption("vlasovCellBatchSize", &vlasovCellBatchSize,
+                   "Cells per batch in the Vlasov local stiffness computation (-1: Camellia's automatic choice, which bounds the "
+                   "element matrices to 128 MB but not the basis caches; a smaller batch lowers the peak memory)");
     cmdp.setOption("L2WeightGraphPerCellAccelerationMixedSignFactor", &L2WeightGraphPerCellAccelerationMixedSignFactor,
                    "Per-cell acceleration scales: multiply a_u(K) by this factor on cells where (q/m) a_u changes sign over the cell");
     cmdp.setOption("L2WeightGraphPerCellAccelerationNeighborhood", &L2WeightGraphPerCellAccelerationNeighborhood,
@@ -3181,6 +3185,7 @@ int main(int argc, char *argv[])
     form->setFixedPointTolerance(fixedPointTol);
     form->setFixedPointMinSubsteps(minSubsteps);
     form->setFixedPointMaxSubsteps(maxSubsteps);
+    if (vlasovCellBatchSize > 0) form->vlasovSolution()->setCellBatchSize(vlasovCellBatchSize);
     
     //  form->vlasovSolution()->setWriteMatrixToFile(true, "/tmp/A_Vlasov.dat");
     
