@@ -3,7 +3,8 @@
 Re: `answers-mode-tests-2026-11-22.md`. This covers the p = 3 pair in full, and the p = 4 pair through slab 18 of 25
 (still running).
 
-**Update, p = 4 at slab 18: the production box-wide weight grows the anode mode at L0, and per-cell scales hold.** At
+**Update, p = 4 at slab 20: the production box-wide weight grows the anode mode at L0 and fails by slab 20; per-cell
+scales hold, with slow growth (1.17× per slab).** At
 p = 3 the order is the reverse (per-cell worse, both bounded). See "p = 4, interim" below.
 
 **Summary.**
@@ -99,7 +100,7 @@ p = 3 the order is the reverse (per-cell worse, both bounded). See "p = 4, inter
 - `--vlasovCellBatchSize=2` keeps a run under 2 GB (L0, p = 3 and 4), against about 6 GB with the automatic batch.
   - Before commit 8adfdb7 it applied only to slab 0, because `nextTimeSlab()` builds new solutions.
 
-## p = 4, interim (slab 18 of 25)
+## p = 4, interim (slab 20 of 25)
 
 Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
 
@@ -107,10 +108,16 @@ Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
 |---|---|---|---|---|---|---|---|---|---|---|
 | base ∫n⁻ | −0.0026 | −0.0225 | −0.0177 | −0.0115 | −0.0108 | −0.0134 | −0.0211 | −0.0428 | −0.0983 | **−0.236** |
 | base growth | | | | | | 1.24× | 1.6× | 2.0× | 2.3× | 2.4× |
+
+Slabs 19–20: base −0.533, −1.13 (2.3×, 2.1×); per-cell −0.0475, −0.0554 (1.19×, 1.17×).
 | per-cell ∫n⁻ | −0.0035 | −0.0443 | −0.033 | −0.0243 | −0.0219 | −0.0227 | −0.0251 | −0.0287 | −0.0334 | −0.0398 |
 | per-cell growth | | | | | | 1.04× | 1.1× | 1.15× | 1.16× | 1.19× |
 
-- **Base (production a = (1.8, 0.65) box-wide) has the anode-mode signature from slab 14:**
+- **Base (production a = (1.8, 0.65) box-wide) has the anode mode from slab 14, and by slab 20 it has failed:**
+  - gap ∫n 0.64 at slab 20, from 2.32 at slab 14; ∫f⁻ −8.4; charge-balance error −4.4%; CG iterations per substep
+    rising to 80;
+  - from slab 19 the minimum of n is at x = 0.5, so the negative density has spread past the anode cell.
+- Its earlier signs, slabs 14–18:
   - rising growth, 2.4× per slab by slab 18;
   - min n −1.15 at x ≈ 0.87–0.93, in the anode cell;
   - ∫f⁻ accelerating, −1.27 → −3.02 over slabs 15–18;
@@ -128,26 +135,31 @@ Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
   - Per-cell scales put more weight where the fields exceed the box-wide bound.
 - CG iterations per substep are similar in both runs (20–75) and not yet rising.
 
-## The p = 3 variants (slab 24 of 30)
+## The p = 3 variants (finished, 30 slabs)
 
 Anode side (x ≥ 0.5) ∫n⁻ at slab end:
 
-| slab | 18 | 19 | 20 | 21 | 22 | 23 | 24 |
-|---|---|---|---|---|---|---|---|
-| base | 0 | 0 | 0 | −0.00015 | −0.00065 | −0.0012 | −0.0016 |
-| per-cell | −0.00027 | −0.0025 | −0.0073 | −0.0142 | −0.0218 | −0.0288 | −0.0344 |
-| per-cell, floor 1.0 | 0 | −0.00056 | −0.0032 | −0.0076 | −0.0125 | −0.0174 | −0.0215 |
-| per-cell, neighborhood 2 | −0.0015 | −0.0049 | −0.0112 | −0.0196 | −0.0286 | −0.0372 | −0.0439 |
+| slab | 18 | 19 | 20 | 21 | 22 | 24 | 26 | 28 | 29 | peak |
+|---|---|---|---|---|---|---|---|---|---|---|
+| base | 0 | 0 | 0 | −0.00015 | −0.00065 | −0.0016 | −0.0016 | −0.0010 | −0.00007 | −0.0016 |
+| per-cell | −0.00027 | −0.0025 | −0.0073 | −0.0142 | −0.0218 | −0.0344 | −0.0386 | −0.0332 | −0.0281 | −0.0386 (26) |
+| per-cell, floor 1.0 | 0 | −0.00056 | −0.0032 | −0.0076 | −0.0125 | −0.0215 | −0.0246 | −0.0203 | −0.0160 | −0.0246 (26) |
+| per-cell, neighborhood 2 | −0.0015 | −0.0049 | −0.0112 | −0.0196 | −0.0286 | −0.0439 | −0.0498 | −0.0428 | −0.0355 | −0.0498 (26) |
 
-- **Floor 1.0** starts one slab later and is about 40% smaller than plain per-cell at slab 24. It is still about 13×
-  base. Its slab 4–9 transient is the same as plain per-cell's (−0.0036, −0.0039, −0.0022 at slabs 4–6).
-  - So cells with a_u(K) below the box-wide bound explain only a small part of the p = 3 difference. The guess above
-    is mostly wrong.
-- **The neighborhood maximum** is worse than plain per-cell: it starts at slab 15 and is larger.
-- So at p = 3 the extra anode-side negative density comes from where per-cell scales are larger than box-wide or from
+- All four are bounded: each peaks at slab 26 and decays.
+- **Floor 1.0** starts one slab later than plain per-cell, and its peak is about 35% smaller. It is still 15× base. Its
+  slab 4–9 transient is the same as plain per-cell's (−0.0036, −0.0039, −0.0022 at slabs 4–6).
+  - So cells with a_u(K) below the box-wide bound explain only a small part of the p = 3 difference. The guess under
+    "Reading" is mostly wrong.
+- **The neighborhood maximum** is worse than plain per-cell: it starts at slab 15, and its peak is 30% larger.
+- So at p = 3 the extra anode-side negative density comes from where per-cell scales exceed the box-wide ones, or from
   their variation between cells, not from cells where they are smaller.
 
 ## Still running
 
-- The p = 4 pair: slabs 19–24, about 4.5 hours.
-- The p = 3 variants: slabs 25–29, about 1.5 hours.
+- The p = 4 pair: slabs 21–24, about 3 hours.
+- Two new p = 4 runs (25 slabs, about 18 hours):
+  - **per-cell, floor 1.0**, the better variant at p = 3. If it also holds at p = 4, it is the definition we would
+    recommend: never less weight than production.
+  - **box-wide a = (6.11, 4.15)**, the bound from the conditioning study. It tests whether per-cell holds only because it
+    adds weight.
