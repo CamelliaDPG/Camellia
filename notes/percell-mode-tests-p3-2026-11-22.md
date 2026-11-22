@@ -3,8 +3,9 @@
 Re: `answers-mode-tests-2026-11-22.md`. This covers the p = 3 pair in full, and the p = 4 pair through slab 18 of 25
 (still running).
 
-**Update, p = 4 at slab 20: the production box-wide weight grows the anode mode at L0 and fails by slab 20; per-cell
-scales hold, with slow growth (1.17× per slab).** At
+**Update, p = 4 (finished): the production box-wide weight grows the anode mode at L0 and has failed by slab 20 (gap
+∫n < 0 by slab 21). Per-cell scales hold through slab 24: anode-side ∫n⁻ grows ever more slowly, 1.19× per slab at
+slab 19 down to 1.02× at slab 24, and peaks at −0.070.** At
 p = 3 the order is the reverse (per-cell worse, both bounded). See "p = 4, interim" below.
 
 **Summary.**
@@ -100,7 +101,7 @@ p = 3 the order is the reverse (per-cell worse, both bounded). See "p = 4, inter
 - `--vlasovCellBatchSize=2` keeps a run under 2 GB (L0, p = 3 and 4), against about 6 GB with the automatic batch.
   - Before commit 8adfdb7 it applied only to slab 0, because `nextTimeSlab()` builds new solutions.
 
-## p = 4, interim (slab 20 of 25)
+## p = 4 (per-cell finished; base stopped after slab 23)
 
 Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
 
@@ -109,7 +110,17 @@ Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
 | base ∫n⁻ | −0.0026 | −0.0225 | −0.0177 | −0.0115 | −0.0108 | −0.0134 | −0.0211 | −0.0428 | −0.0983 | **−0.236** |
 | base growth | | | | | | 1.24× | 1.6× | 2.0× | 2.3× | 2.4× |
 
-Slabs 19–20: base −0.533, −1.13 (2.3×, 2.1×); per-cell −0.0475, −0.0554 (1.19×, 1.17×).
+| slab | 19 | 20 | 21 | 22 | 23 | 24 |
+|---|---|---|---|---|---|---|
+| base ∫n⁻ | −0.533 | −1.13 | −2.27 | −4.42 | −8.40 | (stopped) |
+| base gap ∫n | 1.45 | 0.64 | −0.89 | −3.70 | −8.79 | |
+| per-cell ∫n⁻ | −0.0475 | −0.0554 | −0.0618 | −0.0661 | −0.0685 | −0.0700 |
+| per-cell growth | 1.19× | 1.17× | 1.12× | 1.07× | 1.04× | 1.02× |
+| per-cell min n (whole slab) | −0.15 | −0.16 | −0.17 | −0.24 | −0.32 | −0.38 |
+
+- Base at slab 23: min n −44, ∫f⁻ −47, charge-balance error −23%, emission 0.14 n0. We stopped it there.
+- Per-cell through slab 24: gap ∫n 2.17–2.19, ∫f⁻ −0.73 to −0.79, charge balance 0.002–0.003, emission 0.024–0.032 n0.
+  Its min n, at x = 0.5 from slab 22, still drifts down (−0.38 at slab 24) while ∫n⁻ levels off.
 | per-cell ∫n⁻ | −0.0035 | −0.0443 | −0.033 | −0.0243 | −0.0219 | −0.0227 | −0.0251 | −0.0287 | −0.0334 | −0.0398 |
 | per-cell growth | | | | | | 1.04× | 1.1× | 1.15× | 1.16× | 1.19× |
 
@@ -157,7 +168,8 @@ Anode side (x ≥ 0.5) ∫n⁻ at slab end:
 
 ## Still running
 
-- The p = 4 pair: slabs 21–24, about 3 hours.
+- The p = 3 counterpart of the large-bound control: box-wide a = (6.11, 4.15), 30 slabs. At p = 3 per-cell was worse
+  than base. This shows whether more weight alone does that, or the variation between cells.
 - Two new p = 4 runs (25 slabs, about 18 hours):
   - **per-cell, floor 1.0**, the better variant at p = 3. If it also holds at p = 4, it is the definition we would
     recommend: never less weight than production.
