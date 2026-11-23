@@ -174,7 +174,7 @@ The control for "more weight" without variation between cells. At p = 3 it is th
 |---|---|---|---|---|---|---|---|---|
 | cathode ∫n⁻ | −0.0009 | −0.0033 | 0 | 0 | 0 | 0 | 0 | 0 |
 | anode-side ∫n⁻ | 0 | −0.00015 | −0.0001 to −0.0007 | 0 | −0.00052 | −0.00069 | −0.00041 | 0 |
-| slab-end min n | −3.5 | −2.3 | −0.01 to 0.02 | 0.02–0.25 | −0.031 | −0.041 | −0.024 | 0.014–0.12 |
+| slab-end min n | −3.5 | −2.3 | −0.010 to −0.001 | 0.004–0.25 | −0.031 | −0.041 | −0.024 | 0.014–0.12 |
 
 - **The start-up undershoot at the cathode is 18× smaller** than with (1.8, 0.65): −0.0009 against −0.016 at slab 1.
 - **The late anode-side negative density is the smallest of all p = 3 runs:** a peak of −0.0007, against −0.0016 base and
