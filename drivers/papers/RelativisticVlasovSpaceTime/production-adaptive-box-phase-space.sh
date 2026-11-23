@@ -95,6 +95,8 @@
 #   L2C     in (0, 1]: on each cell, the L^2 term's weight on the cell mean is L2C times alpha_K (default 1: unchanged).
 #           The residual against a cell's constant is its charge balance, so L2C < 1 weighs conservation about 1/L2C
 #           times as heavily while the other test functions keep alpha_K (try 1e-2, 1e-4 with the default L2T).
+#   ACC     the acceleration scales (a_x, a_z) of the transport-scale weight and the separable norm (default 1.8,0.65,
+#           as production; the separable-gram-fast-diagonalization study recommends 6.11,4.15)
 #   SEP     1: the direction-separable graph test norm (--separableGraphTestNorm); 0 (default): the graph norm
 #   DP      test enrichment                                          (default 2, as production; 1 roughly halves storage)
 #   NP      MPI ranks                                                (default 16)
@@ -127,6 +129,7 @@ SEP=${SEP:-0}
 L2W=${L2W:-1e2}
 L2T=${L2T:-1.6}
 L2C=${L2C:-1}
+ACC=${ACC:-1.8,0.65}
 if [ "$SEP" = 1 ]; then SEPOPT=--separableGraphTestNorm; else SEPOPT=; fi
 NP=${NP:-16}
 SLABS=${SLABS:-60}; SAMPLED=${SAMPLED:-0,1,2,3,5,7,10,15,20,30,40,50,59}
@@ -135,6 +138,7 @@ OUT=/private/viz/nov2026/mitl/adaptive-box-scl-graph-transport-a1.8-p$MAXP-dp$DP
 [ "$TEL" != 1 ] && OUT=$OUT-tel$TEL
 [ "$SEP" = 1 ] && OUT=$OUT-sep
 [ "$L2C" != 1 ] && OUT=$OUT-l2c$L2C
+[ "$ACC" != 1.8,0.65 ] && OUT=$OUT-acc${ACC/,/-}
 { [ "$L2W" != 1e2 ] || [ "$L2T" != 1.6 ]; } && OUT=$OUT-l2w$L2W-l2t$L2T
 if [ "${CHECK:-0}" = 1 ]; then SLABS=3; SAMPLED=0,2; OUT=$OUT-check; fi
 X=./drivers/papers/RelativisticVlasovSpaceTime/PlanarMITLRelativisticSpaceTime
@@ -160,7 +164,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
   --xElements=8 --tElements=$TEL --numUniformRefinements=0 --maxDofsForDirectSolve=0 --p=$MAXP --dp=$DP $REPLAYOPT \
   --tWidth=1e-1 --numTimeSlabs=$SLABS --ratio=1.5 --minSubsteps=2 --maxSubsteps=10 --fixedPointTol=1e-4 --J=5e8 \
   --useSerendipityBasis --coarseSolver=$COARSE $SEPOPT --accuracyDiagnostics --densityDiagnostic \
-  --useGraphTestNorm --L2WeightGraph=$L2W --L2WeightGraphTransportScale=$L2T --L2WeightGraphConstantModeRatio=$L2C --L2WeightGraphAccelerationBounds=1.8,0.65 \
+  --useGraphTestNorm --L2WeightGraph=$L2W --L2WeightGraphTransportScale=$L2T --L2WeightGraphConstantModeRatio=$L2C --L2WeightGraphAccelerationBounds=$ACC \
   --phaseSpaceDiagnostic --phaseSpaceDiagnosticSlabs=$SAMPLED \
   --useBoxMesh --useAdaptivity --boxAnisotropicAdaptivity --boxAnisotropyThreshold=$ANISO $HPOPTS \
   --maxRefinementsFirstSlab=$REF0 --maxRefinements=$REF --maxRefinementsFinalSlab=$REF \
@@ -171,7 +175,7 @@ CAMELLIA_MEMORY_PRESSURE_ABORT=critical OMP_NUM_THREADS=1 mpirun -np $NP $X \
 LOG=$OUT/console.log
 echo
 echo "================================ summary ($(date)) ================================"
-echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP TEL=$TEL COARSE=$COARSE SEP=$SEP L2W=$L2W L2T=$L2T L2C=$L2C NP=$NP"
+echo "settings: REF0=$REF0 REF=$REF marking=[$MARKING] ANISO=$ANISO TARGET=$TARGET MAXDOFS=$MAXDOFS HP=$HP HP0=$HP0 HPMIN=$HPMIN MAXP=$MAXP ANISOP=$ANISOP REPLAY=$REPLAY BCTOL=$BCTOL DP=$DP TEL=$TEL COARSE=$COARSE SEP=$SEP L2W=$L2W L2T=$L2T L2C=$L2C ACC=$ACC NP=$NP"
 echo
 echo "per solve: slab, refinement step, phase-space elements, dofs, configuration elements, wall seconds"
 grep "event=adaptive_slab_solve" $LOG | sed -E 's/.*seconds=([0-9.e+-]+).*vlasov_dofs=([0-9]+) vlasov_elements=([0-9]+).*config_elements=([0-9]+) slab=([0-9]+) refinement=([0-9]+).*/\5 \6 \3 \2 \4 \1/' \
