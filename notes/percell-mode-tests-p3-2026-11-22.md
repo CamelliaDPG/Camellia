@@ -166,10 +166,40 @@ Anode side (x ≥ 0.5) ∫n⁻ at slab end:
 - So at p = 3 the extra anode-side negative density comes from where per-cell scales exceed the box-wide ones, or from
   their variation between cells, not from cells where they are smaller.
 
-## Still running
+## p = 3 with the larger box-wide bound a = (6.11, 4.15) (finished, 30 slabs)
 
-- The p = 3 counterpart of the large-bound control: box-wide a = (6.11, 4.15), 30 slabs. At p = 3 per-cell was worse
-  than base. This shows whether more weight alone does that, or the variation between cells.
+The control for "more weight" without variation between cells. At p = 3 it is the cleanest of all five runs.
+
+| slab | 1 | 2 | 4–7 | 8–23 | 24 | 25 | 26 | 27–29 |
+|---|---|---|---|---|---|---|---|---|
+| cathode ∫n⁻ | −0.0009 | −0.0033 | 0 | 0 | 0 | 0 | 0 | 0 |
+| anode-side ∫n⁻ | 0 | −0.00015 | −0.0001 to −0.0007 | 0 | −0.00052 | −0.00069 | −0.00041 | 0 |
+| slab-end min n | −3.5 | −2.3 | −0.01 to 0.02 | 0.02–0.25 | −0.031 | −0.041 | −0.024 | 0.014–0.12 |
+
+- **The start-up undershoot at the cathode is 18× smaller** than with (1.8, 0.65): −0.0009 against −0.016 at slab 1.
+- **The late anode-side negative density is the smallest of all p = 3 runs:** a peak of −0.0007, against −0.0016 base and
+  −0.039 per-cell.
+- The charge-balance error in slabs 18–29 is 0.0008–0.009, larger than base (0.0001–0.0015) and similar to per-cell.
+- Mean CG iterations per substep: 41.7, against 46.7 base and 45.9 per-cell. Wall time 5:43 for 30 slabs, against 7:30
+  for base (part of base ran with the shared-core binding, so this comparison is rough).
+
+**So at p = 3 the amount of weight is not the problem.** Ranked by the anode-side peak:
+
+| run | weight compared with production | peak anode-side ∫n⁻ |
+|---|---|---|
+| box-wide (6.11, 4.15) | more, everywhere | −0.0007 |
+| box-wide (1.8, 0.65), production | same | −0.0016 |
+| per-cell, floor 1.0 | never less | −0.025 |
+| per-cell | less in some cells | −0.039 |
+| per-cell, neighborhood maximum | less in some cells | −0.050 |
+
+- Per-cell with floor 1.0 has at least production's weight in every cell, yet it is 15× worse than production.
+- Per-cell values lie mostly between (1.8, 0.65) and (6.11, 4.15). At L0 slab 0, a_x(K) is 1.50–6.53 and a_y(K) is
+  0.09–4.16.
+- So at p = 3 what costs accuracy is the variation of the weight between cells, not its size.
+- Where the variation does its damage we have not looked.
+
+## Still running
 - Two new p = 4 runs (25 slabs, about 18 hours):
   - **per-cell, floor 1.0**, the better variant at p = 3. If it also holds at p = 4, it is the definition we would
     recommend: never less weight than production.
