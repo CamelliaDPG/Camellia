@@ -1,7 +1,11 @@
 # Per-cell acceleration scales: anode and cathode mode tests at L0, p = 3 (cloud side, 2026-11-22)
 
-Re: `answers-mode-tests-2026-11-22.md`. This covers the p = 3 pair in full, and the p = 4 pair through slab 18 of 25
-(still running).
+Re: `answers-mode-tests-2026-11-22.md`. All runs are finished: five at p = 3 (30 slabs) and four at p = 4 (25 slabs),
+all on L0.
+
+**Update, p = 4 follow-ups (finished, 2026-11-23): at p = 4 every variant with more weight holds, and production fails.**
+Anode-side ∫n⁻ peaks at −0.070 (per-cell), −0.074 (per-cell, floor 1.0) and −0.088 (box-wide a = (6.11, 4.15), slab 23,
+then decaying). Production reaches −8.4 by slab 23. See "p = 4 follow-ups" at the end.
 
 **Update, p = 4 (finished): the production box-wide weight grows the anode mode at L0 and has failed by slab 20 (gap
 ∫n < 0 by slab 21). Per-cell scales hold through slab 24: anode-side ∫n⁻ grows ever more slowly, 1.19× per slab at
@@ -109,6 +113,8 @@ Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
 |---|---|---|---|---|---|---|---|---|---|---|
 | base ∫n⁻ | −0.0026 | −0.0225 | −0.0177 | −0.0115 | −0.0108 | −0.0134 | −0.0211 | −0.0428 | −0.0983 | **−0.236** |
 | base growth | | | | | | 1.24× | 1.6× | 2.0× | 2.3× | 2.4× |
+| per-cell ∫n⁻ | −0.0035 | −0.0443 | −0.033 | −0.0243 | −0.0219 | −0.0227 | −0.0251 | −0.0287 | −0.0334 | −0.0398 |
+| per-cell growth | | | | | | 1.04× | 1.1× | 1.15× | 1.16× | 1.19× |
 
 | slab | 19 | 20 | 21 | 22 | 23 | 24 |
 |---|---|---|---|---|---|---|
@@ -121,8 +127,6 @@ Same setting as above with p = 4 (25 slabs). Anode side (x ≥ 0.5), slab end:
 - Base at slab 23: min n −44, ∫f⁻ −47, charge-balance error −23%, emission 0.14 n0. We stopped it there.
 - Per-cell through slab 24: gap ∫n 2.17–2.19, ∫f⁻ −0.73 to −0.79, charge balance 0.002–0.003, emission 0.024–0.032 n0.
   Its min n, at x = 0.5 from slab 22, still drifts down (−0.38 at slab 24) while ∫n⁻ levels off.
-| per-cell ∫n⁻ | −0.0035 | −0.0443 | −0.033 | −0.0243 | −0.0219 | −0.0227 | −0.0251 | −0.0287 | −0.0334 | −0.0398 |
-| per-cell growth | | | | | | 1.04× | 1.1× | 1.15× | 1.16× | 1.19× |
 
 - **Base (production a = (1.8, 0.65) box-wide) has the anode mode from slab 14, and by slab 20 it has failed:**
   - gap ∫n 0.64 at slab 20, from 2.32 at slab 14; ∫f⁻ −8.4; charge-balance error −4.4%; CG iterations per substep
@@ -199,9 +203,44 @@ The control for "more weight" without variation between cells. At p = 3 it is th
 - So at p = 3 what costs accuracy is the variation of the weight between cells, not its size.
 - Where the variation does its damage we have not looked.
 
-## Still running
-- Two new p = 4 runs (25 slabs, about 18 hours):
-  - **per-cell, floor 1.0**, the better variant at p = 3. If it also holds at p = 4, it is the definition we would
-    recommend: never less weight than production.
-  - **box-wide a = (6.11, 4.15)**, the bound from the conditioning study. It tests whether per-cell holds only because it
-    adds weight.
+## p = 4 follow-ups (finished, 25 slabs)
+
+Same setting as "p = 4" above. Anode side (x ≥ 0.5) ∫n⁻ at slab end, growth per slab in brackets:
+
+| slab | 14 | 16 | 18 | 19 | 20 | 21 | 22 | 23 | 24 |
+|---|---|---|---|---|---|---|---|---|---|
+| base (production) | −0.0134 | −0.0428 | −0.236 | −0.533 | −1.13 | −2.27 | −4.42 | −8.40 | (stopped) |
+| per-cell | −0.0227 | −0.0287 | −0.0398 | −0.0475 (1.19) | −0.0554 (1.17) | −0.0618 (1.12) | −0.0661 (1.07) | −0.0685 (1.04) | −0.0700 (1.02) |
+| per-cell, floor 1.0 | −0.0228 | −0.0291 | −0.0403 | −0.0479 (1.19) | −0.0566 (1.18) | −0.0646 (1.14) | −0.0701 (1.09) | −0.0729 (1.04) | −0.0738 (1.01) |
+| box-wide (6.11, 4.15) | −0.0258 | −0.0357 | −0.0542 | −0.0645 (1.19) | −0.0732 (1.13) | −0.0795 (1.09) | −0.0851 (1.07) | −0.0879 (1.03) | −0.0856 (0.97) |
+
+Other diagnostics, slabs 17–24:
+
+| run | min n over the slab (where) | ∫f⁻ at slab 24 | f min | charge rel. | CG its per substep, mean (max) | wall time |
+|---|---|---|---|---|---|---|
+| base | −44 at slab 23 | −47 (slab 23) | | −23% (slab 23) | 64.3 (113) | stopped after slab 23 |
+| per-cell | −0.13 → −0.38, at x = 0.5 from slab 22 | −0.74 | −112 to −141 | 0.0019–0.0032 | 58.3 (102) | 13:25 |
+| per-cell, floor 1.0 | −0.11 → −0.33, at x = 0.5 from slab 23 | −0.69 | −103 to −120 | 0.0001–0.0016 | 56.7 (102) | 12:22 |
+| box-wide (6.11, 4.15) | −0.16 → −0.30 (slab 22) → −0.28, at x = 0.73–0.90 | −0.66 | −75 to −86 | −0.0021 to 0.0067 | 48.8 (91) | 13:13 |
+
+- **All three hold where production fails.** Each one's growth falls steadily from 1.19× at slab 19 to about 1.0× at
+  slab 24. That is far below production's 2–2.4× and your 3–4× fail threshold.
+- **Floor 1.0 matches plain per-cell within 1–6%**, as at p = 3 (where it was the better of the two). Its charge-balance
+  error and ∫f⁻ are a little better. At both p, the cells where per-cell scales fall below the box-wide bound matter little.
+- **The larger box-wide bound** has a peak 25% larger than per-cell, but it is the only run whose ∫n⁻ has turned over
+  (slab 23 → 24). Its minimum of n stays inside the anode cell and stops falling at slab 22. With per-cell scales it sits
+  at the x = 0.5 face and still drifts down at slab 24. It also has the fewest CG iterations (16% fewer than per-cell,
+  24% fewer than base) and the smallest |f min|.
+- Emission (0.024–0.035 n0) and E(0) (within ±0.001 E0) are the same in all three.
+
+**Reading, across p = 3 and p = 4 (L0 only):**
+- At p = 4 the size of the weight decides. Production's (1.8, 0.65) is too little in the L0 anode cell (h_x = 1/2), and
+  any of the three larger weights fixes it.
+- At p = 3 the variation between cells costs accuracy: per-cell is 15–25× production's anode-side peak, while the larger
+  box-wide bound is 2× better than production.
+- So on this evidence **box-wide a = (6.11, 4.15) is the better choice of the two ideas.** It is the best run at p = 3,
+  holds at p = 4, decays first, needs the fewest CG iterations, and has no per-substep norm change (your point under 4).
+  Per-cell with floor 1.0 is the runner-up: never less than production, a slightly smaller peak at p = 4, much worse at p = 3.
+- **Caveat:** all of this is L0. At L1 production's p = 4 weight was stable on your side, so the p = 4 ranking needs your
+  L1 runs. The cheap L1 check we would ask for: p = 4, 25 slabs, box-wide (6.11, 4.15) against per-cell floor 1.0.
+  The cathode mode never appeared at L0, so it is untested by these runs.
