@@ -67,6 +67,9 @@ or unit tests, unless stated.
   5e-4 relative, and the solutions by about 3%. Both converge to each other as quadrature is enriched. The coefficients
   v = u/γ and the fields are not polynomial, and the assembled side uses fewer points per direction. This probably
   affects production runs too, and nobody has checked it there.
+  - This is separate from d5c085f on `development-2.0`, which makes the Dirichlet-data projection use the Solution's
+    enrichment. That fix is not on either branch yet. Our comparison applied both operators to a random vector, with no
+    boundary data, so the fix does not change it. The Vlasov solve's enrichment is still 0 on both branches.
 
 ## 3. Preconditioning: what works
 
@@ -206,7 +209,7 @@ All of these are matrix-free PCG on the Vlasov system.
    ordering, such as KBA pipelining or lagging across subdomains.
 2. A hybrid smoother: the sweep where ν is moderate, element blocks in high-ν cells.
 3. An L1 confirmation, on the local side, of the p = 4 mode-test ranking.
-4. The assembled-path quadrature error at enrichment 0 (Section 2).
+4. The assembled-path quadrature error at enrichment 0 (Section 2): measure its effect on a production run.
 
 ## Notes on the branch, in order
 
