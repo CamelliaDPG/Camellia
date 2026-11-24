@@ -278,7 +278,7 @@ start-up undershoot, slab-0 cathode ∫n⁻ −0.0081 against −0.017.
 - **The L0 p = 4 failure of production's weight does not carry over to L1.** That fits the reading above: the L0 anode
   cell (h_x = 1/2) is coarser than L1's (1/4), so the (v_x,max/h_x)² term there is 4× smaller. It fits; it is not proven.
 - **At p = 4 the two candidates rank the same way at L0 and L1.** Box-wide has the slightly deeper, later anode-side peak
-  than per-cell floor 1.0: −0.088 against −0.074 at L0, −0.034 against −0.032 at L1. Both are 3–5× shallower at L1
+  than per-cell floor 1.0: −0.088 against −0.074 at L0, −0.034 against −0.032 at L1. Both are 2–3× shallower at L1
   than at L0.
 - **At p = 3, L0, box-wide was better than production on the anode side. At p = 4, L1, it is about 1.5× deeper.** So
   "more weight, everywhere" does not uniformly lower the anode-side undershoot. What does hold at every p and mesh tried
