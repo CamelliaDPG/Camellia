@@ -174,9 +174,14 @@ All of these are matrix-free PCG on the Vlasov system.
     per-cell variants are 15–30× worse. At p = 3 the cell-to-cell variation of the weight costs accuracy.
   - **Our recommendation: box-wide (6.11, 4.15)**, which is best at p = 3, holds at p = 4, needs the fewest CG
     iterations, and keeps the norm fixed within a slab.
-  - **Caveat:** L0 is one level coarser than production. The local (TT) session found production's weight stable at L1,
-    p = 4, so the p = 4 failure may be specific to L0, where the anode cell has h_x = 1/2. The cathode mode never
-    appeared at L0.
+  - **L1, p = 4, the production mesh (local runs, 16 ranks, 11-24):** no mode with any of the three weights. Production's
+    p = 4 failure is therefore specific to L0, where the anode cell has h_x = 1/2.
+    - Anode-side peaks: production −0.022 (slab 9), box-wide (6.11, 4.15) −0.034 (slab 13), per-cell floor 1.0 −0.032
+      (slab 10). All three plateau and then decay from slab ~18. No cathode mode appeared.
+    - Box-wide needs about 25% fewer CG iterations than production and has the smallest start-up undershoot at the
+      cathode. Its cost is the deeper, later anode-side plateau.
+    - Slab-24 gap charge and ∫f agree to 0.1% across the three.
+    - The per-cell option also ran under MPI there (16 ranks).
 - **Diagonal approximations (for the TT side, but general).**
   - A rank-one Kronecker (log-additive) fit of the exact Jacobi diagonal costs 4.5–8.9× in κ. A TT rank-4 diagonal comes
     within 9–25%.
@@ -208,7 +213,7 @@ All of these are matrix-free PCG on the Vlasov system.
 1. Integrate the matrix-free solve into `VlasovSpaceTimeFormulation::solve()`, then MPI. The sweep needs a parallel
    ordering, such as KBA pipelining or lagging across subdomains.
 2. A hybrid smoother: the sweep where ν is moderate, element blocks in high-ν cells.
-3. An L1 confirmation, on the local side, of the p = 4 mode-test ranking.
+3. ~~An L1 confirmation of the p = 4 mode tests~~: done on the local side (11-24). See Section 4.
 4. The assembled-path quadrature error at enrichment 0 (Section 2): measure its effect on a production run.
 
 ## Notes on the branch, in order

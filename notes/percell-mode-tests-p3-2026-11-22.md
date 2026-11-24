@@ -3,6 +3,11 @@
 Re: `answers-mode-tests-2026-11-22.md`. All runs are finished: five at p = 3 (30 slabs) and four at p = 4 (25 slabs),
 all on L0.
 
+**Update, L1, p = 4 (local runs, 2026-11-24; full section at the end): at the production mesh, nothing fails.**
+Production, box-wide (6.11, 4.15) and per-cell floor 1.0 all plateau and decay, with anode-side peaks of −0.022, −0.034
+and −0.032. So the p = 4 failure in our L0 runs comes from the coarse L0 anode cell. Box-wide needs about 25% fewer CG
+iterations than production at L1.
+
 **Update, p = 4 follow-ups (finished, 2026-11-23): at p = 4 every variant with more weight holds, and production fails.**
 Anode-side ∫n⁻ peaks at −0.070 (per-cell), −0.074 (per-cell, floor 1.0) and −0.088 (box-wide a = (6.11, 4.15), slab 23,
 then decaying). Production reaches −8.4 by slab 23. See "p = 4 follow-ups" at the end.
@@ -244,3 +249,48 @@ Other diagnostics, slabs 17–24:
 - **Caveat:** all of this is L0. At L1 production's p = 4 weight was stable on your side, so the p = 4 ranking needs your
   L1 runs. The cheap L1 check we would ask for: p = 4, 25 slabs, box-wide (6.11, 4.15) against per-cell floor 1.0.
   The cathode mode never appeared at L0, so it is untested by these runs.
+
+## L1, p = 4: the local runs (2026-11-24)
+
+From `mode-tests-L1-p4-results-2026-11-24.md` (local session). Mac Studio, 16 ranks, this branch at 4cc856a. Production
+configuration: L1, p = 4, Δp = 2, Serendipity, transport-scale graph norm, 25 slabs, SCL. Production's and a = (3.6, 1.3)
+rows are the 11-06 baselines, from older code.
+
+Anode side (x ≥ 0.5), slab-end ∫n⁻:
+
+| slab | 8 | 9 | 10 | 13 | 17 | 19 | 21 | 24 | peak |
+|---|---|---|---|---|---|---|---|---|---|
+| production (1.8, 0.65) | −0.012 | −0.0221 | −0.0214 | −0.0185 | −0.0166 | −0.014 | −0.0085 | −0.0021 | −0.022 (9) |
+| a = (3.6, 1.3) | −0.011 | −0.0205 | −0.0195 | −0.0184 | −0.0201 | −0.0181 | −0.0121 | −0.0035 | −0.021 (9) |
+| box-wide (6.11, 4.15) | −0.014 | −0.0254 | −0.0264 | −0.0335 | −0.0328 | −0.0276 | −0.0166 | −0.0040 | −0.034 (13) |
+| per-cell, floor 1.0 | −0.014 | −0.0292 | −0.0317 | −0.0266 | −0.023 | −0.0155 | −0.0063 | −0.0007 | −0.032 (10) |
+
+| | CG its per slab | wall | peak Σ RSS | slab-24 gap ∫n | slab-24 ∫f | slab-24 ∫J_x |
+|---|---|---|---|---|---|---|
+| production | 390–440 | 3.85 h | 96 GB | 2.198 | 0.218719 | −0.01833 |
+| box-wide (6.11, 4.15) | 290–340 | 3.64 h | 80 GB | 2.199 | 0.218920 | −0.01914 |
+| per-cell, floor 1.0 | 365–415 | 3.77 h | 82 GB | 2.201 | 0.218896 | −0.02020 |
+
+The local session also reports: no cathode mode in any run, with cathode ∫n⁻ zero from slab 2. Box-wide has the smallest
+start-up undershoot, slab-0 cathode ∫n⁻ −0.0081 against −0.017.
+
+**Against our L0 runs:**
+- **The L0 p = 4 failure of production's weight does not carry over to L1.** That fits the reading above: the L0 anode
+  cell (h_x = 1/2) is coarser than L1's (1/4), so the (v_x,max/h_x)² term there is 4× smaller. It fits; it is not proven.
+- **At p = 4 the two candidates rank the same way at L0 and L1.** Box-wide has the slightly deeper, later anode-side peak
+  than per-cell floor 1.0: −0.088 against −0.074 at L0, −0.034 against −0.032 at L1. Both are 3–5× shallower at L1
+  than at L0.
+- **At p = 3, L0, box-wide was better than production on the anode side. At p = 4, L1, it is about 1.5× deeper.** So
+  "more weight, everywhere" does not uniformly lower the anode-side undershoot. What does hold at every p and mesh tried
+  is the smaller start-up undershoot at the cathode (18× at L0 p = 3, 2× at L1 p = 4) and the fewer CG iterations (L0:
+  16–24%; L1: about 25%).
+- **CG iterations fall 25%, but wall time only 5%.** At p = 4 the solve is a small share of the slab. Assembly and the
+  local solves dominate, so the conditioning gain matters little for production wall time today. It would matter more
+  in the matrix-free or TT solvers, where the solve is most of the cost.
+- **∫J_x at slab 24 differs more than the other integrals:** −0.0183, −0.0191 (+4%) and −0.0202 (+10%). This is a single
+  slab-end value, so it may just be the timing of an oscillation. A comparison over several slabs would tell.
+
+**Recommendation, unchanged: box-wide (6.11, 4.15).** It is stable at both meshes and at both p. It needs the fewest CG
+iterations and keeps the norm fixed within a slab. Its only cost seen so far is a deeper, but decaying, anode-side
+transient at p = 4. Per-cell floor 1.0 is equally stable, with no advantage over it, and it was much worse at p = 3.
+
